@@ -4,10 +4,14 @@ import { BrowserRouter } from 'react-router-dom';
 import { Layout } from '../../../src/components/layout/Layout';
 import { AuthProvider } from '../../../src/auth/context';
 
-// Mock useAuth to provide a user
+// Mock useAuth to provide an admin user so all nav items are visible
 vi.mock('../../../src/auth/hooks', () => ({
   useAuth: () => ({
-    user: { id: '1', email: 'test@example.com', name: 'Test User' },
+    user: { id: '1', email: 'test@example.com', name: 'Test User', role: 'ADMIN', mustChangePassword: false },
+    token: 'mock-token',
+    isLoading: false,
+    isAuthenticated: true,
+    login: vi.fn(),
     logout: vi.fn(),
   }),
 }));

@@ -15,7 +15,7 @@ import {
   createDeleteAudit,
 } from '../../services/mcp/index.js';
 import { addToolRegistrar } from './registry.js';
-import { getMcpUserId } from './helpers.js';
+import { requireMcpAdmin } from './helpers.js';
 
 const log = createLogger('mcp:tools:delete-definition');
 
@@ -84,7 +84,11 @@ function registerDeleteDefinitionTool(server: McpServer): void {
     },
     async (args, extra) => {
       const requestId = String(extra.requestId ?? crypto.randomUUID());
-      const userId = getMcpUserId();
+      const mcpUser = requireMcpAdmin();
+      if ('content' in mcpUser) {
+        return mcpUser;
+      }
+      const userId = mcpUser.id;
 
       log.debug({
         definitionId: args.definition_id,

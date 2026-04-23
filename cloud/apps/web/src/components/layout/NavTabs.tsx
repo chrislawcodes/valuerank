@@ -3,6 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { Activity, Archive, ChevronDown, ChevronRight, Cpu, FolderTree, Library, Settings } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { useClickOutside } from '../../hooks/useClickOutside';
+import { useAuth } from '../../auth/hooks';
 
 const utilityTabs: { name: string; path: string; icon: React.ComponentType<{ className?: string }>; aliases?: string[] }[] = [
   { name: 'Status', path: '/status', icon: Activity, aliases: ['/domains/status'] },
@@ -47,7 +48,7 @@ const archiveMenuItems: MenuItem[] = [
   { name: 'Legacy Survey Results', path: '/archive/survey-results' },
 ];
 
-const settingsMenuItems: MenuItem[] = [
+const adminSettingsMenuItems: MenuItem[] = [
   {
     name: 'Research Setup',
     children: [
@@ -60,6 +61,7 @@ const settingsMenuItems: MenuItem[] = [
   { name: 'LLM Models', path: '/settings/models' },
   { name: 'Infrastructure', path: '/settings/infrastructure' },
   { name: 'API Keys', path: '/settings/api-keys' },
+  { name: 'User Management', path: '/settings/users' },
 ];
 
 function isMenuGroupItem(item: MenuItem): item is MenuGroupItem {
@@ -67,7 +69,9 @@ function isMenuGroupItem(item: MenuItem): item is MenuGroupItem {
 }
 
 export function NavTabs() {
+  const { user } = useAuth();
   const location = useLocation();
+  const isAdmin = user?.role === 'ADMIN';
   const [isVignettesMenuOpen, setIsVignettesMenuOpen] = useState(false);
   const [isDomainsMenuOpen, setIsDomainsMenuOpen] = useState(false);
   const [isModelsMenuOpen, setIsModelsMenuOpen] = useState(false);
@@ -94,10 +98,14 @@ export function NavTabs() {
   ), [isTabActive]);
 
   const isVignettesActive = vignettesMenuItems.some((item) => isMenuItemActive(item));
-  const isDomainsActive = domainMenuItems.some((item) => isMenuItemActive(item));
+  const visibleDomainMenuItems = isAdmin
+    ? domainMenuItems
+    : domainMenuItems.filter((item) => !isMenuGroupItem(item) && item.path !== '/domains/manage');
+  const isDomainsActive = visibleDomainMenuItems.some((item) => isMenuItemActive(item));
   const isModelsActive = modelsMenuItems.some((item) => isMenuItemActive(item));
-  const isArchiveActive = archiveMenuItems.some((item) => isMenuItemActive(item));
-  const isSettingsActive = settingsMenuItems.some((item) => isMenuItemActive(item));
+  const isArchiveActive = isAdmin && archiveMenuItems.some((item) => isMenuItemActive(item));
+  const visibleSettingsMenuItems = isAdmin ? adminSettingsMenuItems : [];
+  const isSettingsActive = visibleSettingsMenuItems.some((item) => isMenuItemActive(item));
 
   useEffect(() => {
     setIsVignettesMenuOpen(false);
@@ -234,10 +242,10 @@ export function NavTabs() {
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex gap-1">
           {renderMenu(modelsMenuRef, 'Models', '/models', Cpu, modelsMenuItems, isModelsActive, isModelsMenuOpen, setIsModelsMenuOpen)}
-          {renderMenu(domainMenuRef, 'Domains', '/domains', FolderTree, domainMenuItems, isDomainsActive, isDomainsMenuOpen, setIsDomainsMenuOpen)}
+          {renderMenu(domainMenuRef, 'Domains', '/domains', FolderTree, visibleDomainMenuItems, isDomainsActive, isDomainsMenuOpen, setIsDomainsMenuOpen)}
           {renderMenu(vignettesMenuRef, 'Vignettes', '/definitions', Library, vignettesMenuItems, isVignettesActive, isVignettesMenuOpen, setIsVignettesMenuOpen)}
-          {renderMenu(archiveMenuRef, 'Archive', '/archive', Archive, archiveMenuItems, isArchiveActive, isArchiveMenuOpen, setIsArchiveMenuOpen)}
-          {renderMenu(settingsMenuRef, 'Settings', '/settings/account', Settings, settingsMenuItems, isSettingsActive, isSettingsMenuOpen, setIsSettingsMenuOpen)}
+          {isAdmin ? renderMenu(archiveMenuRef, 'Archive', '/archive', Archive, archiveMenuItems, isArchiveActive, isArchiveMenuOpen, setIsArchiveMenuOpen) : null}
+          {isAdmin ? renderMenu(settingsMenuRef, 'Settings', '/settings/account', Settings, visibleSettingsMenuItems, isSettingsActive, isSettingsMenuOpen, setIsSettingsMenuOpen) : null}
 
           {utilityTabs.map((tab) => {
             const Icon = tab.icon;

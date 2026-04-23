@@ -1,0 +1,17 @@
+## Findings
+- [MEDIUM][UNVERIFIED] Slice 2 and Slice 3 do not define a real server-side session revocation path. Role changes and password changes only update new tokens, but the plan never says to reject older JWTs using `passwordChangedAt`, a token version, or a DB lookup. That means a demoted admin or a user who just changed passwords can keep using an already-issued token until it expires.
+
+- [MEDIUM][UNVERIFIED] Slice 2 defaults any JWT missing `role` to `ADMIN`. That is a broad trust fallback. If any token is minted outside the updated login flow, or if a partially migrated token slips through, it will be treated as privileged instead of being rejected or reloaded.
+
+- [MEDIUM][UNVERIFIED] `requireAdmin(ctx)` and `requireAdminRest(req, res, next)` are specified only as role checks. The task does not say what happens when `ctx.user` or `req.user` is missing, or what middleware order is required. If they run before authentication, the result could be a 500 or inconsistent 401/403 behavior instead of a clean denial.
+
+- [MEDIUM][UNVERIFIED] Slice 4 applies admin gating at the file level for a long list of mutation modules, but it does not prove that every resolver in those files is actually admin-only. If even one module contains a legitimate non-admin or visitor-facing resolver, this plan will break it. The spec should name the exact resolvers to protect, not just the files.
+
+- [MEDIUM][UNVERIFIED] The user-creation flows are inconsistent. Slice 4 expects `createUser` to set `mustChangePassword: true`, but Slice 3’s CLI `create-user` task never says to force a password reset. That leaves one provisioning path bypassing the first-login password-change rule.
+
+## Residual Risks
+- I could not verify whether other write paths exist outside the listed GraphQL mutations, REST routes, and MCP tools. Any unlisted DB write surface would still need role enforcement.
+
+- I could not verify whether the existing auth layer already checks token age or password-change time. If it does not, the `iat = passwordChangedAt + 1` instruction will not actually invalidate old sessions.
+
+- I could not verify whether any of the listed mutation files contain mixed-use resolvers. The file-level admin rule may still be too coarse even if the individual names look right.

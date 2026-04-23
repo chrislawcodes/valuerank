@@ -29,6 +29,13 @@ export class AuthenticationError extends AppError {
   }
 }
 
+export class ForbiddenError extends AppError {
+  constructor(message: string = 'Forbidden', context?: Record<string, unknown>) {
+    super(message, 'FORBIDDEN', 403, context);
+    this.name = 'ForbiddenError';
+  }
+}
+
 // Queue-specific errors
 export class QueueError extends AppError {
   constructor(message: string, context?: Record<string, unknown>) {

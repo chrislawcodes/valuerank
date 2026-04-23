@@ -1,3 +1,4 @@
+import type { EnumRef } from '@pothos/core';
 import { builder } from '../builder.js';
 
 // RunStatus enum - mirrors Prisma RunStatus
@@ -25,4 +26,10 @@ builder.enumType('RunPriority', {
 builder.enumType('LlmModelStatus', {
   values: ['ACTIVE', 'DEPRECATED'] as const,
   description: 'Lifecycle status of an LLM model',
+});
+
+// UserRole enum - mirrors Prisma UserRole
+export const UserRoleEnum: EnumRef<'ADMIN' | 'VISITOR'> = builder.enumType('UserRole', {
+  values: ['ADMIN', 'VISITOR'] as const,
+  description: 'Role assigned to a user account',
 });

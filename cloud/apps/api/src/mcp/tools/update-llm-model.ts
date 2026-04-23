@@ -11,7 +11,7 @@ import { updateModel, getModelById } from '@valuerank/db';
 import { createLogger, NotFoundError } from '@valuerank/shared';
 import { logAuditEvent, createLlmAudit } from '../../services/mcp/index.js';
 import { addToolRegistrar } from './registry.js';
-import { getMcpUserId } from './helpers.js';
+import { requireMcpAdmin } from './helpers.js';
 
 const log = createLogger('mcp:tools:update-llm-model');
 
@@ -116,7 +116,11 @@ function registerUpdateLlmModelTool(server: McpServer): void {
     },
     async (args, extra) => {
       const requestId = String(extra.requestId ?? crypto.randomUUID());
-      const userId = getMcpUserId();
+      const mcpUser = requireMcpAdmin();
+      if ('content' in mcpUser) {
+        return mcpUser;
+      }
+      const userId = mcpUser.id;
 
       log.debug(
         {

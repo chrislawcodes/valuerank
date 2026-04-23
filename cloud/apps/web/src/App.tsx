@@ -1,5 +1,6 @@
 // NOTE: The term "Vignette" is used throughout the UI for user-friendliness.
 // However, the underlying codebase, API, and database still use the term "Definition".
+import type { ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Provider } from 'urql';
 import { AuthProvider } from './auth/context';
@@ -35,6 +36,7 @@ import { SettingsSystemHealth } from './pages/SettingsSystemHealth';
 import { SettingsModels } from './pages/SettingsModels';
 import { SettingsInfrastructure } from './pages/SettingsInfrastructure';
 import { SettingsApiKeys } from './pages/SettingsApiKeys';
+import { SettingsUsers } from './pages/SettingsUsers';
 import { Preambles } from './pages/Preambles';
 import { LevelPresets } from './pages/LevelPresets';
 import { DomainContexts } from './pages/DomainContexts';
@@ -47,9 +49,17 @@ import { client } from './api/client';
 import { useHorizontalScrollOnWheel } from './hooks/useHorizontalScrollOnWheel';
 
 // Protected layout wrapper
-function ProtectedLayout({ children, fullWidth = false }: { children: React.ReactNode; fullWidth?: boolean }) {
+function ProtectedLayout({
+  children,
+  fullWidth = false,
+  requiredRole,
+}: {
+  children: ReactNode;
+  fullWidth?: boolean;
+  requiredRole?: 'ADMIN';
+}) {
   return (
-    <ProtectedRoute>
+    <ProtectedRoute requiredRole={requiredRole}>
       <Layout fullWidth={fullWidth}>{children}</Layout>
     </ProtectedRoute>
   );
@@ -103,7 +113,7 @@ function App() {
             <Route
               path="/domains/manage"
               element={
-                <ProtectedLayout>
+                <ProtectedLayout requiredRole="ADMIN">
                   <DomainsManage />
                 </ProtectedLayout>
               }
@@ -111,7 +121,7 @@ function App() {
             <Route
               path="/archive"
               element={
-                <ProtectedLayout>
+                <ProtectedLayout requiredRole="ADMIN">
                   <ArchiveHome />
                 </ProtectedLayout>
               }
@@ -119,7 +129,7 @@ function App() {
             <Route
               path="/domains/start/:domainId"
               element={
-                <ProtectedLayout>
+                <ProtectedLayout requiredRole="ADMIN">
                   <DomainStartBatches />
                 </ProtectedLayout>
               }
@@ -127,7 +137,7 @@ function App() {
             <Route
               path="/domains/start"
               element={
-                <ProtectedLayout>
+                <ProtectedLayout requiredRole="ADMIN">
                   <StartRedirect />
                 </ProtectedLayout>
               }
@@ -271,7 +281,7 @@ function App() {
             <Route
               path="/archive/surveys"
               element={
-                <ProtectedLayout>
+                <ProtectedLayout requiredRole="ADMIN">
                   <Survey />
                 </ProtectedLayout>
               }
@@ -279,7 +289,7 @@ function App() {
             <Route
               path="/archive/survey-results"
               element={
-                <ProtectedLayout>
+                <ProtectedLayout requiredRole="ADMIN">
                   <SurveyResults />
                 </ProtectedLayout>
               }
@@ -296,7 +306,7 @@ function App() {
             <Route
               path="/settings/system-health"
               element={
-                <ProtectedLayout>
+                <ProtectedLayout requiredRole="ADMIN">
                   <SettingsSystemHealth />
                 </ProtectedLayout>
               }
@@ -304,7 +314,7 @@ function App() {
             <Route
               path="/settings/models"
               element={
-                <ProtectedLayout>
+                <ProtectedLayout requiredRole="ADMIN">
                   <SettingsModels />
                 </ProtectedLayout>
               }
@@ -312,7 +322,7 @@ function App() {
             <Route
               path="/settings/infrastructure"
               element={
-                <ProtectedLayout>
+                <ProtectedLayout requiredRole="ADMIN">
                   <SettingsInfrastructure />
                 </ProtectedLayout>
               }
@@ -320,15 +330,23 @@ function App() {
             <Route
               path="/settings/api-keys"
               element={
-                <ProtectedLayout>
+                <ProtectedLayout requiredRole="ADMIN">
                   <SettingsApiKeys />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/settings/users"
+              element={
+                <ProtectedLayout requiredRole="ADMIN">
+                  <SettingsUsers />
                 </ProtectedLayout>
               }
             />
             <Route
               path="/preambles"
               element={
-                <ProtectedLayout>
+                <ProtectedLayout requiredRole="ADMIN">
                   <Preambles />
                 </ProtectedLayout>
               }
@@ -336,7 +354,7 @@ function App() {
             <Route
               path="/level-presets"
               element={
-                <ProtectedLayout>
+                <ProtectedLayout requiredRole="ADMIN">
                   <LevelPresets />
                 </ProtectedLayout>
               }
@@ -344,7 +362,7 @@ function App() {
             <Route
               path="/domain-contexts"
               element={
-                <ProtectedLayout>
+                <ProtectedLayout requiredRole="ADMIN">
                   <DomainContexts />
                 </ProtectedLayout>
               }
@@ -352,13 +370,13 @@ function App() {
             <Route
               path="/value-statements"
               element={
-                <ProtectedLayout>
+                <ProtectedLayout requiredRole="ADMIN">
                   <ValueStatements />
                 </ProtectedLayout>
               }
             />
-            {['/paired/new', '/paired/:id/edit'].map((path) => (
-              <Route key={path} path={path} element={<ProtectedLayout><PairedVignetteNew /></ProtectedLayout>} />
+            {['/paired/new', '/paired/:id/edit', '/definitions/:id/start-paired-batch'].map((path) => (
+              <Route key={path} path={path} element={<ProtectedLayout requiredRole="ADMIN"><PairedVignetteNew /></ProtectedLayout>} />
             ))}
             <Route path="*" element={<ProtectedLayout><NotFound /></ProtectedLayout>} />
           </Routes>

@@ -4,6 +4,8 @@
  * JWT payload structure, auth context, and request/response types
  */
 
+export type UserRole = 'ADMIN' | 'VISITOR';
+
 /**
  * JWT token payload structure
  * Stored in the token and available after validation
@@ -13,6 +15,10 @@ export type JWTPayload = {
   sub: string;
   /** User email */
   email: string;
+  /** User role */
+  role?: UserRole;
+  /** Whether the user must change their password */
+  mustChangePassword?: boolean;
   /** Issued at (Unix timestamp) */
   iat: number;
   /** Expiry (Unix timestamp) */
@@ -25,6 +31,8 @@ export type JWTPayload = {
 export type AuthUser = {
   id: string;
   email: string;
+  role: UserRole;
+  mustChangePassword: boolean;
 };
 
 /**
@@ -57,6 +65,10 @@ export type LoginResponse = {
     id: string;
     email: string;
     name: string | null;
+    role: UserRole;
+    mustChangePassword: boolean;
+    createdAt: Date;
+    lastLoginAt: Date | null;
   };
 };
 

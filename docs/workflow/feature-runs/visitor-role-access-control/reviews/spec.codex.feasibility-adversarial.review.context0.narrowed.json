@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/apps/api/src/auth/middleware.ts",
+  "source_artifact_sha256": "42dbace061cffc19f4c11e85486959e80d14ec9154989707262a13d3210e4d77",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/visitor-role-access-control/reviews/spec.codex.feasibility-adversarial.review.context0.narrowed.txt",
+  "narrowed_artifact_sha256": "d01d373948a0cf43ba46e2504ddb4341335f96ff2374ee56d0937cc10ab866a8",
+  "strategy": "head-tail-numbered-lines"
+}

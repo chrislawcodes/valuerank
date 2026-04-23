@@ -17,7 +17,7 @@ import {
 } from '../../services/mcp/index.js';
 import { queueScenarioExpansion } from '../../services/scenario/index.js';
 import { addToolRegistrar } from './registry.js';
-import { getMcpUserId } from './helpers.js';
+import { requireMcpAdmin } from './helpers.js';
 
 const log = createLogger('mcp:tools:fork-definition');
 
@@ -149,7 +149,11 @@ Example:
     },
     async (args, extra) => {
       const requestId = String(extra.requestId ?? crypto.randomUUID());
-      const userId = getMcpUserId();
+      const mcpUser = requireMcpAdmin();
+      if ('content' in mcpUser) {
+        return mcpUser;
+      }
+      const userId = mcpUser.id;
 
       log.debug({ parentId: args.parent_id, name: args.name, requestId }, 'fork_definition called');
 

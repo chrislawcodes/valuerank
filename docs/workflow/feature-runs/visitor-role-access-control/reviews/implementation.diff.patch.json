@@ -1,0 +1,19 @@
+{
+  "repo_root": ".",
+  "git_head_sha": "888e5e01c614f9bb4d8a2adf9bb64fb5577e2303",
+  "git_base_ref": "origin/main",
+  "git_base_sha": "dad8d079e504382e926300071f03251c43172eae",
+  "paths": [
+    "cloud/apps/api/src/auth",
+    "cloud/apps/api/src/graphql",
+    "cloud/apps/api/src/routes",
+    "cloud/apps/web/src/App.tsx",
+    "cloud/apps/web/src/components/layout",
+    "cloud/apps/web/src/pages",
+    "cloud/packages/db/prisma/schema.prisma"
+  ],
+  "allowed_dirty_paths": [],
+  "untracked_files_included": [],
+  "artifact_path": "docs/workflow/feature-runs/visitor-role-access-control/reviews/implementation.diff.patch",
+  "allow_empty_diff": false
+}

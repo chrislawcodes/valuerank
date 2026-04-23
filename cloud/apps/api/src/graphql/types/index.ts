@@ -16,6 +16,7 @@ import './transcript.js';
 import './experiment.js';
 import './tag.js';
 import './domain.js';
+import './user.js';
 
 // Queue-related types
 import './queue-status.js';

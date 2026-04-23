@@ -1,0 +1,9 @@
+## Findings
+- Medium: Slice 3 leaves the `cloud/apps/api/src/cli/create-user.ts` bootstrap path without setting `mustChangePassword`. That means a newly created admin can keep a permanent password, which is inconsistent with the forced-reset flow added for other account creation paths and weakens the initial credential policy.
+- Medium [UNVERIFIED]: Slice 2 says `requireAdminRest(req, res, next)` should return 403 when `req.user.role !== 'ADMIN'`, but it does not say what happens when `req.user` is missing. If implemented literally, an unauthenticated request can throw before returning 403 and become a 500 instead.
+- Medium [UNVERIFIED]: Slice 4’s file-by-file `requireAdmin` rollout is brittle. It only covers the listed files and relies on a manual scan for “actual mutation resolver definitions.” That can miss write entry points exposed through other files, generated resolver maps, or wrapper functions, and it can also over-block files that mix read and write resolvers. Both bypass and regression risk remain unless enforcement is centralized or exhaustively tested.
+
+## Residual Risks
+- I could not verify that every write path in GraphQL, REST, and MCP is covered. Any unlisted route or tool can still remain visitor-writable.
+- The plan depends on client and server agreeing on the new auth payload shape. During rollout, mixed old/new tokens can produce stale role or password-reset state.
+- The password-change JWT reissue depends on timestamp comparison behavior in the auth layer. If the verifier uses a different time resolution than the issuer, freshly rotated tokens could be rejected.

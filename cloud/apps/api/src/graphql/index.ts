@@ -92,6 +92,33 @@ function useQueryLogging(): Plugin {
   };
 }
 
+function useMutationAuthorization(): Plugin {
+  return {
+    onExecute({ args }) {
+      const { document, contextValue } = args as { document: DocumentNode; contextValue: unknown };
+      const operation = getOperationAST(document);
+
+      if (operation?.operation !== 'mutation') {
+        return undefined;
+      }
+
+      const ctx = (contextValue as Partial<Context> | undefined) ?? {};
+      if (ctx.user?.role !== 'ADMIN') {
+        throw createGraphQLError('Admin access required', {
+          extensions: {
+            code: 'FORBIDDEN',
+            http: {
+              status: 403,
+            },
+          },
+        });
+      }
+
+      return undefined;
+    },
+  };
+}
+
 function getOriginalError(value: unknown): unknown {
   if (value === null || typeof value !== 'object') {
     return null;
@@ -135,7 +162,7 @@ export const yoga = createYoga<{
   schema,
   context: ({ req }) => createContext(req),
   graphiql: process.env.NODE_ENV !== 'production',
-  plugins: [useQueryLogging()],
+  plugins: [useMutationAuthorization(), useQueryLogging()],
   logging: {
     debug: (...args) => log.debug(args, 'GraphQL debug'),
     info: (...args) => log.info(args, 'GraphQL info'),

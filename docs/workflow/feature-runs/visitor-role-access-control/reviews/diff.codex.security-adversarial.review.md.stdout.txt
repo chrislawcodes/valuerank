@@ -1,0 +1,8 @@
+## Findings
+- **Medium [UNVERIFIED]** `signToken()` and `authMiddleware()` both treat a missing `role` claim as `ADMIN`, and `mustChangePassword` as `false`. That is a dangerous default for an auth boundary: any legacy token format, alternate signer, or incomplete call site that omits these fields is silently elevated instead of being rejected.
+- **Medium [UNVERIFIED]** Role changes are not tied to token/session revocation. If an admin is demoted, any already-issued JWTs or API-key-backed sessions remain valid until they expire, so the removed privilege still works for a window after the change.
+- **Medium [UNVERIFIED]** The new `mustChangePassword` flag is added to the DB model, token payload, and request user object, but there is no server-side enforcement in the shown auth path. If the intent is to force first-login rotation, a user can still keep using the issued password and reach privileged APIs until some other layer blocks them.
+
+## Residual Risks
+- I could not verify whether every token-issuing path populates `role` and `mustChangePassword`, whether there is any token revocation mechanism, or whether other non-admin GraphQL mutations exist elsewhere in the codebase. Those unknowns affect the real impact of the findings above.
+- If older tokens or API keys are already expired everywhere, the first two issues shrink materially; if not, they are a live privilege-retention risk.

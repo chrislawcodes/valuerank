@@ -16,7 +16,7 @@ import {
   createRunAudit,
 } from '../../services/mcp/index.js';
 import { addToolRegistrar } from './registry.js';
-import { getMcpUser } from '../request-context.js';
+import { requireMcpAdmin } from './helpers.js';
 
 const log = createLogger('mcp:tools:start-run');
 
@@ -128,8 +128,11 @@ Example:
     },
     async (args, extra) => {
       const requestId = String(extra.requestId ?? crypto.randomUUID());
-      const mcpUser = getMcpUser();
-      const userId = mcpUser?.id ?? null;
+      const mcpUser = requireMcpAdmin();
+      if ('content' in mcpUser) {
+        return mcpUser;
+      }
+      const userId = mcpUser.id;
 
       log.debug(
         {

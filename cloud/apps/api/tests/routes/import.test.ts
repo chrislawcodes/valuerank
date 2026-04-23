@@ -135,12 +135,12 @@ describe('Import Endpoint', () => {
       createdDefinitionIds.push(response.body.id);
     });
 
-    it('returns 401 without authentication', async () => {
+    it('returns 403 without authentication', async () => {
       const response = await request(app)
         .post('/api/import/definition')
         .send({ content: VALID_MD_FULL });
 
-      expect(response.status).toBe(401);
+      expect(response.status).toBe(403);
     });
 
     it('returns 400 for missing content', async () => {

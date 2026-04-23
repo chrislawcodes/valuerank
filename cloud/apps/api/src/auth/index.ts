@@ -41,3 +41,8 @@ export {
   graphqlAuthMiddleware,
   isIntrospectionQuery,
 } from './middleware.js';
+
+export {
+  requireAdmin,
+  requireAdminRest,
+} from './require-admin.js';

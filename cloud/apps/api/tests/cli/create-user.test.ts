@@ -48,11 +48,11 @@ describe('Create User CLI', () => {
 
   describe('validatePassword', () => {
     it('accepts password with minimum length', () => {
-      expect(() => validatePassword('12345678')).not.toThrow();
+      expect(() => validatePassword('123456789012')).not.toThrow(); // exactly 12 chars
     });
 
     it('accepts password longer than minimum', () => {
-      expect(() => validatePassword('password123')).not.toThrow();
+      expect(() => validatePassword('password12345')).not.toThrow(); // 13 chars
       expect(() => validatePassword('a very long password with spaces')).not.toThrow();
     });
 

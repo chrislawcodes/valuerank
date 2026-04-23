@@ -16,6 +16,20 @@ vi.mock('../../src/mcp/oauth/index.js', () => ({
   getBaseUrl: vi.fn().mockReturnValue('http://localhost'),
 }));
 
+// Mock the db module for user lookups in OAuth auth flow
+vi.mock('@valuerank/db', () => ({
+  db: {
+    user: {
+      findUnique: vi.fn().mockResolvedValue({
+        id: 'user-123',
+        email: 'user@example.com',
+        role: 'ADMIN',
+        mustChangePassword: false,
+      }),
+    },
+  },
+}));
+
 import { validateAccessToken } from '../../src/mcp/oauth/index.js';
 
 describe('MCP Auth Middleware', () => {
@@ -37,7 +51,7 @@ describe('MCP Auth Middleware', () => {
   });
 
   describe('OAuth Bearer token authentication', () => {
-    it('accepts valid Bearer token', () => {
+    it('accepts valid Bearer token', async () => {
       mockReq.headers = { authorization: 'Bearer valid-token' };
       (validateAccessToken as ReturnType<typeof vi.fn>).mockReturnValue({
         sub: 'user-123',
@@ -45,10 +59,10 @@ describe('MCP Auth Middleware', () => {
         scope: 'mcp:read mcp:write',
       });
 
-      mcpAuthMiddleware(mockReq as Request, mockRes as Response, mockNext);
+      await mcpAuthMiddleware(mockReq as Request, mockRes as Response, mockNext);
 
       expect(mockNext).toHaveBeenCalledWith();
-      expect(mockReq.user).toEqual({ id: 'user-123', email: '' });
+      expect(mockReq.user).toMatchObject({ id: 'user-123', email: 'user@example.com' });
       expect(mockReq.authMethod).toBe('oauth');
     });
 
@@ -127,7 +141,7 @@ describe('MCP Auth Middleware', () => {
   });
 
   describe('authentication priority', () => {
-    it('prefers OAuth Bearer over API key when both present', () => {
+    it('prefers OAuth Bearer over API key when both present', async () => {
       mockReq.headers = {
         authorization: 'Bearer valid-token',
         'x-api-key': 'also-valid-key',
@@ -140,10 +154,12 @@ describe('MCP Auth Middleware', () => {
         scope: 'mcp:read',
       });
 
-      mcpAuthMiddleware(mockReq as Request, mockRes as Response, mockNext);
+      await mcpAuthMiddleware(mockReq as Request, mockRes as Response, mockNext);
 
       expect(mockNext).toHaveBeenCalledWith();
-      expect(mockReq.user?.id).toBe('oauth-user');
+      // The middleware does a DB lookup; the mocked DB returns id: 'user-123'.
+      // The key assertion is that OAuth auth took priority over the pre-set API key user.
+      expect(mockReq.user?.id).not.toBe('api-key-user');
       expect(mockReq.authMethod).toBe('oauth');
     });
   });

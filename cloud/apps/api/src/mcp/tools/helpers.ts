@@ -6,6 +6,7 @@
  */
 
 import type { AuditEntry, AuditAction } from '../../services/mcp/index.js';
+import { getMcpUser } from '../request-context.js';
 
 // ============================================================================
 // RESPONSE FORMATTING
@@ -66,6 +67,15 @@ export function formatSuccess(data: unknown): McpResponse {
  */
 export function getMcpUserId(): string {
   return 'mcp-user';
+}
+
+export function requireMcpAdmin(): { id: string } | McpResponse {
+  const user = getMcpUser();
+  if (user === null || user === undefined || user.role !== 'ADMIN') {
+    return formatError('FORBIDDEN', 'Admin access required');
+  }
+
+  return { id: user.id };
 }
 
 // ============================================================================

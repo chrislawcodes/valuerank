@@ -1,0 +1,128 @@
+# Tasks
+
+## Slice 1: Database Schema + Migration [CHECKPOINT]
+
+- [ ] Add `UserRole` enum (`ADMIN`, `VISITOR`) to `cloud/packages/db/prisma/schema.prisma`.
+- [ ] Add `role UserRole @default(ADMIN) @map("role")` and `mustChangePassword Boolean @default(false) @map("must_change_password")` fields to the `User` model.
+- [ ] Run `prisma migrate dev --name add_user_role` to generate the migration file; verify the migration SQL includes a backfill that sets `role = 'ADMIN'` for all existing rows.
+
+Estimated diff size: ~40 lines in schema + migration SQL.
+
+Verification:
+
+- `npm run db:test:setup` (apply migration to test DB)
+- Confirm all existing user rows have `role = 'ADMIN'` after migration
+- Confirm `mustChangePassword` defaults to `false` for new rows
+
+## Slice 2: Auth Layer [CHECKPOINT]
+
+- [ ] Read `cloud/apps/api/src/auth/types.ts` and add `role: 'ADMIN' | 'VISITOR'` and `mustChangePassword: boolean` to `AuthUser`.
+- [ ] Read `cloud/apps/api/src/routes/auth.ts` (login endpoint). Find the JWT signing call. Add `role` and `mustChangePassword` to the JWT payload **and** to the login response body. Both must be present or the web client cannot hydrate auth state.
+- [ ] If `GET /api/auth/me` exists, update its response to also include `role` and `mustChangePassword`.
+- [ ] Update `cloud/apps/api/src/auth/middleware.ts` JWT decode path: read `role` from payload (default to `'ADMIN'` if absent — pre-migration tokens); read `mustChangePassword` from payload (default to `false` if absent). Update API key auth branch to fetch `role` and `mustChangePassword` from DB after resolving the user.
+- [ ] Create `cloud/apps/api/src/auth/require-admin.ts` with two exports: `requireAdmin(ctx: Context): void` (throws `ForbiddenError` if `ctx.user.role !== 'ADMIN'`) and `requireAdminRest(req, res, next)` (returns HTTP 403 if `req.user.role !== 'ADMIN'`).
+- [ ] Check `cloud/packages/shared/src/` for `ForbiddenError`. If absent, add it as a one-liner extending `AppError`.
+- [ ] Check `cloud/apps/api/src/auth/__tests__/` for a JWT-signing test helper. If absent, create one.
+
+Estimated diff size: ~120 lines across 4-5 files.
+
+Verification:
+
+- Unit test: JWT with no `role` claim → `req.user.role === 'ADMIN'`
+- Unit test: JWT with `role: 'VISITOR'` → `req.user.role === 'VISITOR'`
+- Unit test: API key auth → DB queried for role; result on `req.user`
+- Unit test: `requireAdmin()` throws `ForbiddenError` for VISITOR, passes for ADMIN
+- `npm run build --workspace @valuerank/api`
+
+## Slice 3: Password Service Updates [CHECKPOINT]
+
+- [ ] Update `cloud/apps/api/src/routes/auth.ts` `PUT /api/auth/password`:
+  - Increase `MIN_PASSWORD_LENGTH` from 8 to 12.
+  - After updating `passwordHash`, check if `mustChangePassword` was `true` for this user.
+  - If yes: set `mustChangePassword: false` in the same DB update; issue a fresh JWT signed with `iat = Math.floor(passwordChangedAt.getTime() / 1000) + 1` (read `passwordChangedAt` from the update result); return the fresh JWT in the response body alongside `{ success: true }`.
+  - If no: return `{ success: true }` unchanged.
+- [ ] Update `cloud/apps/api/src/cli/create-user.ts`: add `--role` CLI argument defaulting to `ADMIN`; include `role` in the DB `create` call; update `MIN_PASSWORD_LENGTH` to 12.
+
+Estimated diff size: ~60 lines across 2 files.
+
+Verification:
+
+- Integration test: `PUT /api/auth/password` with `mustChangePassword: true` → response includes new JWT; DB has `mustChangePassword: false`
+- Integration test: `PUT /api/auth/password` with `mustChangePassword: false` → response is `{ success: true }`, no JWT
+- Integration test: password < 12 chars → 400 validation error
+- CLI: `create-user --role VISITOR` → user created with VISITOR role
+- `npm run build --workspace @valuerank/api`
+
+## Slice 4: GraphQL Mutation Enforcement + User Mutations [CHECKPOINT]
+
+- [ ] Add `requireAdmin(ctx)` as the first call in every resolver in the following files (scan each file for actual mutation resolver definitions before editing; skip helper/type-only files):
+  - `cloud/apps/api/src/graphql/mutations/api-key.ts`
+  - `cloud/apps/api/src/graphql/mutations/analysis.ts`
+  - `cloud/apps/api/src/graphql/mutations/definition-tags.ts`
+  - `cloud/apps/api/src/graphql/mutations/definition/create-and-fork.ts`
+  - `cloud/apps/api/src/graphql/mutations/definition/maintenance.ts`
+  - `cloud/apps/api/src/graphql/mutations/definition/updates.ts`
+  - `cloud/apps/api/src/graphql/mutations/domain/analysis.ts`
+  - `cloud/apps/api/src/graphql/mutations/domain/crud.ts`
+  - `cloud/apps/api/src/graphql/mutations/domain/evaluation.ts`
+  - `cloud/apps/api/src/graphql/mutations/domain/settings.ts`
+  - `cloud/apps/api/src/graphql/mutations/domain-context.ts`
+  - `cloud/apps/api/src/graphql/mutations/ensure-domain-vignette-pair.ts`
+  - `cloud/apps/api/src/graphql/mutations/export.ts`
+  - `cloud/apps/api/src/graphql/mutations/level-preset.ts`
+  - `cloud/apps/api/src/graphql/mutations/llm.ts`
+  - `cloud/apps/api/src/graphql/mutations/paired-vignette.ts`
+  - `cloud/apps/api/src/graphql/mutations/preamble.ts`
+  - `cloud/apps/api/src/graphql/mutations/queue.ts`
+  - `cloud/apps/api/src/graphql/mutations/run/lifecycle.ts`
+  - `cloud/apps/api/src/graphql/mutations/run/maintenance.ts`
+  - `cloud/apps/api/src/graphql/mutations/run/recovery.ts`
+  - `cloud/apps/api/src/graphql/mutations/run/summarization.ts`
+  - `cloud/apps/api/src/graphql/mutations/survey.ts`
+  - `cloud/apps/api/src/graphql/mutations/tag.ts`
+  - `cloud/apps/api/src/graphql/mutations/value-statement.ts`
+- [ ] Create `cloud/apps/api/src/graphql/mutations/user.ts` with `createUser`, `updateUserRole` (SERIALIZABLE transaction for last-admin check), and `listUsers` (Admin-only). Register in the mutations/queries index files.
+- [ ] Update `cloud/apps/api/src/routes/import.ts`: apply `requireAdminRest` middleware to the POST /api/import route.
+- [ ] Read `cloud/apps/api/src/mcp/` middleware to understand how user role is resolved in MCP tool handlers. Add role enforcement (return FORBIDDEN for VISITOR) to MCP write tools: `create-definition.ts`, `update-llm-model.ts`, `reactivate-llm-model.ts`, `set-summarization-parallelism.ts`, `trigger-recovery.ts`, `add-tags-to-definitions.ts`. Scan all other MCP tools for DB write calls and add enforcement there too.
+
+Estimated diff size: ~200 lines for requireAdmin additions + ~150 lines for user.ts + ~50 lines for MCP tools.
+
+Verification:
+
+- Integration test: VISITOR JWT → `startRun` returns GraphQL FORBIDDEN
+- Integration test: ADMIN JWT → `startRun` succeeds (no regression)
+- Integration test: VISITOR JWT → `POST /api/import` returns HTTP 403
+- Integration test: `createUser` → user created with `mustChangePassword: true`
+- Integration test: `updateUserRole` on last Admin → validation error
+- Integration test: `listUsers` from VISITOR → GraphQL FORBIDDEN
+- Integration test: `listUsers` from ADMIN → response has `mustChangePassword`; no `passwordHash`
+- Integration test (concurrent last-admin): `Promise.all` of two demote-last-admin calls → exactly one succeeds
+- Schema-aware introspection test: all mutations return FORBIDDEN for VISITOR
+- `npm run test --workspace @valuerank/api`
+- `npm run build --workspace @valuerank/api`
+
+## Slice 5: Web — Role-Aware UI [CHECKPOINT]
+
+- [ ] Read `cloud/apps/web/src/auth/context.tsx`. Update `AuthProvider` to store `role` and `mustChangePassword`. Add `setToken` / `updateUser` to the auth context if no mid-session token update mechanism exists.
+- [ ] Update `cloud/apps/web/src/types/index.ts`: add `role: 'ADMIN' | 'VISITOR'` and `mustChangePassword: boolean` to the `User` type.
+- [ ] Update `cloud/apps/web/src/hooks/useAuth.ts`: expose `role` and `mustChangePassword` from the auth context.
+- [ ] Update `cloud/apps/web/src/components/ProtectedRoute.tsx`: add `requiredRole: 'ADMIN'` prop; redirect to `/` if role does not match.
+- [ ] Update `cloud/apps/web/src/App.tsx`: wrap `/archive/*`, `/settings/system-health/*`, `/settings/models/*`, `/settings/infrastructure/*`, `/settings/api-keys/*`, `/settings/users/*`, `/preambles/*`, `/level-presets/*`, `/domains/manage/*` with `<ProtectedRoute requiredRole="ADMIN">`. Add top-level redirect to `/settings/account` when `mustChangePassword === true` and current path is not `/settings/account`.
+- [ ] Update `cloud/apps/web/src/components/layout/NavTabs.tsx`: hide Archive tab, non-Account Settings items, and Manage Domains for VISITOR; add User Management item for ADMIN.
+- [ ] Create `cloud/apps/web/src/pages/SettingsUsers.tsx`: User Management page with user table, Create User form, inline role editor, and "Role changes take effect on next login" notice.
+- [ ] Create `cloud/apps/web/src/api/operations/user.ts`: `listUsers`, `createUser`, `updateUserRole` GQL operations. Import in `cloud/apps/api/src/graphql/queries/index.ts` if needed.
+- [ ] Update `cloud/apps/web/src/components/settings/AccountPanel.tsx`: show `mustChangePassword` banner; when password change response includes a fresh JWT, store it via the auth context token-update mechanism and redirect to `/` instead of logging out.
+- [ ] Hide (not disable) write-action buttons on pages visible to Visitors.
+
+Estimated diff size: ~300 lines across 8-9 files.
+
+Verification (manual UI check):
+
+- Log in as VISITOR: Archive absent, Settings shows only Account, no Manage Domains
+- Navigate to `/archive` as VISITOR: redirected to `/`
+- Navigate to `/settings/models` as VISITOR: redirected to `/`
+- Navigate to `/settings/account` as VISITOR: page loads and password change works
+- Log in as new user with `mustChangePassword: true`: redirected to `/settings/account`; after password change, can navigate normally
+- Log in as ADMIN: all tabs visible; `/settings/users` page loads and is functional
+- `npm run test --workspace @valuerank/web`
+- `npm run build --workspace @valuerank/web`

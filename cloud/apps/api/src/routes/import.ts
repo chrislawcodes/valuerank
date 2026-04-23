@@ -11,8 +11,9 @@ import type { Request, Response, NextFunction } from 'express';
 
 import { db } from '@valuerank/db';
 import type { DefinitionContent } from '@valuerank/db';
-import { createLogger, AuthenticationError, ValidationError } from '@valuerank/shared';
+import { createLogger, ValidationError } from '@valuerank/shared';
 
+import { requireAdminRest } from '../auth/require-admin.js';
 import { parseMdToDefinition, isValidMdFormat } from '../services/import/md.js';
 import { validateImport } from '../services/import/validation.js';
 
@@ -50,11 +51,12 @@ type ImportDefinitionBody = {
  */
 importRouter.post(
   '/definition',
+  requireAdminRest,
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      // Check authentication
-      if (!req.user) {
-        throw new AuthenticationError('Authentication required');
+      // requireAdminRest already verified user is authenticated and ADMIN
+      if (req.user === null || req.user === undefined) {
+        throw new Error('Authentication required');
       }
 
       const body = req.body as ImportDefinitionBody;

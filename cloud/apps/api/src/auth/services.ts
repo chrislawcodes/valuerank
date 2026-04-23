@@ -20,6 +20,8 @@ const BCRYPT_COST_FACTOR = 12;
 /** Clock skew tolerance in seconds for JWT validation */
 const CLOCK_SKEW_SECONDS = 30;
 
+type TokenUser = Pick<AuthUser, 'id' | 'email'> & Partial<Pick<AuthUser, 'role' | 'mustChangePassword'>>;
+
 /**
  * Hash a password using bcrypt
  *
@@ -48,13 +50,20 @@ export async function verifyPassword(
  * Sign a JWT token for a user
  *
  * @param user - User to create token for
+ * @param issuedAtSeconds - Optional issued-at override for special flows
  * @returns Signed JWT token
  */
-export function signToken(user: AuthUser): string {
-  const payload = {
+export function signToken(user: TokenUser, issuedAtSeconds?: number): string {
+  const payload: Record<string, unknown> = {
     sub: user.id,
     email: user.email,
+    role: user.role ?? 'ADMIN',
+    mustChangePassword: user.mustChangePassword ?? false,
   };
+
+  if (issuedAtSeconds !== undefined) {
+    payload.iat = issuedAtSeconds;
+  }
 
   return jwt.sign(payload, config.JWT_SECRET, {
     expiresIn: config.JWT_EXPIRES_IN,

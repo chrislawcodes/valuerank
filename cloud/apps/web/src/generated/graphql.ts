@@ -442,6 +442,18 @@ export type CreateApiKeyInput = {
   name: Scalars['String']['input'];
 };
 
+export type CreateUserInput = {
+  email: Scalars['String']['input'];
+  name: Scalars['String']['input'];
+  password: Scalars['String']['input'];
+  role: UserRole;
+};
+
+export type UpdateUserRoleInput = {
+  role: UserRole;
+  userId: Scalars['ID']['input'];
+};
+
 /** Result of creating a new API key. The full key is only available in this response. */
 export type CreateApiKeyResult = {
   __typename?: 'CreateApiKeyResult';
@@ -1333,6 +1345,11 @@ export type LlmModelStatus =
   | 'ACTIVE'
   | 'DEPRECATED';
 
+/** Role assigned to a user account */
+export type UserRole =
+  | 'ADMIN'
+  | 'VISITOR';
+
 /** An LLM API provider with rate limiting and parallelism settings */
 export type LlmProvider = {
   __typename?: 'LlmProvider';
@@ -1499,6 +1516,8 @@ export type Mutation = {
    *
    */
   createApiKey: CreateApiKeyResult;
+  /** Create a new user account. Admin only. */
+  createUser: User;
   /** Create a new definition. Automatically adds schema_version to content if not present. */
   createDefinition: Definition;
   createDomain: Domain;
@@ -1733,6 +1752,8 @@ export type Mutation = {
    *
    */
   updateTranscriptDecision: Transcript;
+  /** Update a user role. Admin only. */
+  updateUserRole: User;
   updateValueStatement: ValueStatement;
 };
 
@@ -1791,6 +1812,11 @@ export type MutationCreateAndAssignTagArgs = {
 
 export type MutationCreateApiKeyArgs = {
   input: CreateApiKeyInput;
+};
+
+
+export type MutationCreateUserArgs = {
+  input: CreateUserInput;
 };
 
 
@@ -2153,6 +2179,11 @@ export type MutationUpdateTranscriptDecisionArgs = {
 };
 
 
+export type MutationUpdateUserRoleArgs = {
+  input: UpdateUserRoleInput;
+};
+
+
 export type MutationUpdateValueStatementArgs = {
   id: Scalars['ID']['input'];
   input: UpdateValueStatementInput;
@@ -2421,6 +2452,8 @@ export type Query = {
    *       Returns null if not authenticated.
    *
    */
+  /** List all users. Admin only. */
+  listUsers: Array<User>;
   me?: Maybe<User>;
   /** Get token statistics for specific models. Useful for understanding prediction quality. */
   modelTokenStats: Array<ModelTokenStats>;
@@ -3538,8 +3571,12 @@ export type User = {
   id: Scalars['ID']['output'];
   /** When the user last logged in */
   lastLoginAt?: Maybe<Scalars['DateTime']['output']>;
+  /** Whether the user must change their password on next login */
+  mustChangePassword: Scalars['Boolean']['output'];
   /** User display name */
   name?: Maybe<Scalars['String']['output']>;
+  /** User role */
+  role: UserRole;
 };
 
 export type ValueFaultLine = {
@@ -3647,6 +3684,25 @@ export type RevokeApiKeyMutationVariables = Exact<{
 
 
 export type RevokeApiKeyMutation = { __typename?: 'Mutation', revokeApiKey: boolean };
+
+export type ListUsersQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type ListUsersQuery = { __typename?: 'Query', listUsers: Array<{ __typename?: 'User', id: string, email: string, name?: string | null, role: UserRole, mustChangePassword: boolean, lastLoginAt?: string | null, createdAt: string }> };
+
+export type CreateUserMutationVariables = Exact<{
+  input: CreateUserInput;
+}>;
+
+
+export type CreateUserMutation = { __typename?: 'Mutation', createUser: { __typename?: 'User', id: string, email: string, name?: string | null, role: UserRole, mustChangePassword: boolean, lastLoginAt?: string | null, createdAt: string } };
+
+export type UpdateUserRoleMutationVariables = Exact<{
+  input: UpdateUserRoleInput;
+}>;
+
+
+export type UpdateUserRoleMutation = { __typename?: 'Mutation', updateUserRole: { __typename?: 'User', id: string, email: string, name?: string | null, role: UserRole, mustChangePassword: boolean, lastLoginAt?: string | null, createdAt: string } };
 
 export type MeQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -7061,4 +7117,55 @@ export const DeleteValueStatementDocument = gql`
 
 export function useDeleteValueStatementMutation() {
   return Urql.useMutation<DeleteValueStatementMutation, DeleteValueStatementMutationVariables>(DeleteValueStatementDocument);
+};
+export const ListUsersDocument = gql`
+    query ListUsers {
+  listUsers {
+    id
+    email
+    name
+    role
+    mustChangePassword
+    lastLoginAt
+    createdAt
+  }
+}
+    `;
+
+export function useListUsersQuery(options?: Omit<Urql.UseQueryArgs<ListUsersQueryVariables>, 'query'>) {
+  return Urql.useQuery<ListUsersQuery, ListUsersQueryVariables>({ query: ListUsersDocument, ...options });
+};
+export const CreateUserDocument = gql`
+    mutation CreateUser($input: CreateUserInput!) {
+  createUser(input: $input) {
+    id
+    email
+    name
+    role
+    mustChangePassword
+    lastLoginAt
+    createdAt
+  }
+}
+    `;
+
+export function useCreateUserMutation() {
+  return Urql.useMutation<CreateUserMutation, CreateUserMutationVariables>(CreateUserDocument);
+};
+export const UpdateUserRoleDocument = gql`
+    mutation UpdateUserRole($input: UpdateUserRoleInput!) {
+  updateUserRole(input: $input) {
+    id
+    email
+    name
+    role
+    mustChangePassword
+    lastLoginAt
+    createdAt
+  }
+}
+    `;
+
+export function useUpdateUserRoleMutation() {
+  return Urql.useMutation<UpdateUserRoleMutation, UpdateUserRoleMutationVariables>(UpdateUserRoleDocument);
 };

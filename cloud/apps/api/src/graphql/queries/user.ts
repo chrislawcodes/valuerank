@@ -9,6 +9,7 @@ import { db } from '@valuerank/db';
 import { AuthenticationError } from '@valuerank/shared';
 import { UserRef } from '../types/user.js';
 import { ApiKeyRef } from '../types/api-key.js';
+import { requireAdmin } from '../../auth/require-admin.js';
 
 const MAX_LIMIT = 100;
 const DEFAULT_LIMIT = 50;
@@ -39,9 +40,36 @@ builder.queryField('me', (t) =>
         id: user.id,
         email: user.email,
         name: user.name,
+        role: user.role,
+        mustChangePassword: user.mustChangePassword,
         lastLoginAt: user.lastLoginAt,
         createdAt: user.createdAt,
       };
+    },
+  })
+);
+
+builder.queryField('listUsers', (t) =>
+  t.field({
+    type: [UserRef],
+    description: 'List all users. Admin only.',
+    resolve: async (_root, _args, ctx) => {
+      requireAdmin(ctx);
+
+      const users = await db.user.findMany({
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          mustChangePassword: true,
+          lastLoginAt: true,
+          createdAt: true,
+        },
+      });
+
+      return users;
     },
   })
 );
