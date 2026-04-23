@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import {
@@ -8,6 +8,7 @@ import {
   formatEvidenceWeight,
   formatPointShift,
   getDefaultModelId,
+  sortHeatmapRows,
 } from '../../src/pages/DomainValueShiftHeatmap';
 import { MODELS_ANALYSIS_QUERY, type ModelsAnalysisModelResult } from '../../src/api/operations/modelsAnalysis';
 
@@ -144,6 +145,37 @@ describe('DomainValueShiftHeatmap helpers', () => {
     expect(formatEvidenceWeight(3)).toBe('3');
   });
 
+  it('sorts domain columns by the visible metric mode', () => {
+    const heatmap = buildDomainShiftHeatmap(makeModel({
+      values: [
+        {
+          valueKey: 'Achievement',
+          pooledWinRate: 30,
+          stabilityScore: null,
+          eligibleDomainCount: 2,
+          domains: [
+            { domainId: 'city', domainName: 'City Planning', winRate: 60, evidenceWeight: 2 },
+            { domainId: 'jobs', domainName: 'Jobs', winRate: 0, evidenceWeight: 2 },
+          ],
+        },
+        {
+          valueKey: 'Tradition',
+          pooledWinRate: 79,
+          stabilityScore: null,
+          eligibleDomainCount: 2,
+          domains: [
+            { domainId: 'city', domainName: 'City Planning', winRate: 80, evidenceWeight: 2 },
+            { domainId: 'jobs', domainName: 'Jobs', winRate: 78, evidenceWeight: 2 },
+          ],
+        },
+      ],
+    }));
+    const sort = { key: 'domain:city' as const, direction: 'desc' as const };
+
+    expect(sortHeatmapRows(heatmap.rows, sort, 'shift')[0]?.valueKey).toBe('Achievement');
+    expect(sortHeatmapRows(heatmap.rows, sort, 'winRate')[0]?.valueKey).toBe('Tradition');
+  });
+
   it('defaults to the sorted first available model and preserves a valid current selection', () => {
     const models = [
       makeModel({ modelId: 'model-b', label: 'Zulu' }),
@@ -171,11 +203,39 @@ describe('DomainValueShiftHeatmap page', () => {
       expect(screen.getByRole('heading', { name: 'Domain Shifts by Value' })).toBeInTheDocument();
     });
     expect(screen.getByRole('button', { name: /model a/i })).toBeInTheDocument();
-    expect(screen.getByLabelText(/Achievement in City Planning: \+20 pts/i)).toHaveAccessibleName(
-      /Domain win rate 80%; average 60%; evidence vignettes —/i,
+    expect(screen.getByLabelText(/Achievement in City Planning: raw win rate 80%; shift \+20 pts/i)).toHaveAccessibleName(
+      /average 60%; evidence vignettes —/i,
     );
     expect(screen.getByText('Metric:')).toBeInTheDocument();
     expect(screen.getByText(/percentage-point shift, not percent change/i)).toBeInTheDocument();
+  });
+
+  it('toggles cells from shifts to raw win rates', async () => {
+    const user = userEvent.setup({ delay: null });
+    installModels([makeModel()]);
+
+    renderPage();
+
+    expect(await screen.findByText('+20 pts')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Raw win rate' }));
+
+    expect(screen.getByRole('button', { name: 'Raw win rate' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('80%')).toBeInTheDocument();
+    expect(screen.getByText(/raw domain win rate/i)).toBeInTheDocument();
+  });
+
+  it('sorts table rows when a domain column header is clicked', async () => {
+    const user = userEvent.setup({ delay: null });
+    installModels([makeModel()]);
+
+    renderPage();
+
+    await screen.findByRole('button', { name: /Sort by City Planning descending/i });
+    await user.click(screen.getByRole('button', { name: /Sort by City Planning descending/i }));
+
+    const firstDataRow = screen.getAllByRole('row')[1];
+    expect(firstDataRow).toBeDefined();
+    expect(within(firstDataRow as HTMLElement).getByRole('columnheader', { name: 'Achievement' })).toBeInTheDocument();
   });
 
   it('lets the user select a different model', async () => {

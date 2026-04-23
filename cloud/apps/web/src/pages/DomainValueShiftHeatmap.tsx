@@ -2,161 +2,38 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from 'urql';
 import {
   MODELS_ANALYSIS_QUERY,
-  type ModelsAnalysisDomainBreakdown,
-  type ModelsAnalysisModelResult,
   type ModelsAnalysisQueryResult,
-  type ModelsAnalysisValueResult,
 } from '../api/operations/modelsAnalysis';
+import { Button } from '../components/ui/Button';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Loading } from '../components/ui/Loading';
 import { Select } from '../components/ui/Select';
-import { VALUE_LABELS, VALUES, type ValueKey } from '../data/domainAnalysisData';
+import { cn } from '../lib/utils';
+import {
+  DEFAULT_DOMAIN_SHIFT_SORT,
+  buildDomainShiftHeatmap,
+  formatEvidenceWeight,
+  formatPercent,
+  formatPointShift,
+  getDefaultModelId,
+  getNextDomainShiftSort,
+  sortHeatmapRows,
+  type DomainShiftCell,
+  type DomainShiftDisplayMode,
+  type DomainShiftSort,
+  type DomainShiftSortKey,
+} from './domainValueShiftHeatmapUtils';
 
-const AVERAGE_PARITY_TOLERANCE = 0.05;
 const MAX_COLOR_SHIFT = 25;
 
-export type DomainShiftColumn = {
-  domainId: string;
-  domainName: string;
-};
-
-export type DomainShiftCell = {
-  domainId: string;
-  domainName: string;
-  winRate: number;
-  averageWinRate: number;
-  shift: number;
-  evidenceWeight: number | null;
-};
-
-export type DomainShiftRow = {
-  valueKey: string;
-  valueLabel: string;
-  pooledWinRate: number | null;
-  averageWinRate: number | null;
-  averageMatchesPooled: boolean | null;
-  comparableDomainCount: number;
-  cells: Map<string, DomainShiftCell>;
-};
-
-export type DomainShiftHeatmap = {
-  columns: DomainShiftColumn[];
-  rows: DomainShiftRow[];
-  eligibleDomainCount: number;
-};
-
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value);
-}
-
-function isValueKey(value: string): value is ValueKey {
-  return (VALUES as string[]).includes(value);
-}
-
-function formatValueLabel(valueKey: string): string {
-  return isValueKey(valueKey) ? VALUE_LABELS[valueKey] : valueKey;
-}
-
-export function formatPointShift(value: number | null): string {
-  if (value == null || !Number.isFinite(value)) return 'n/a';
-  const rounded = Math.round(value);
-  if (rounded === 0) return '0 pts';
-  return `${rounded > 0 ? '+' : ''}${rounded} pts`;
-}
-
-export function formatPercent(value: number | null): string {
-  if (value == null || !Number.isFinite(value)) return 'n/a';
-  return `${Math.round(value)}%`;
-}
-
-export function formatEvidenceWeight(value: number | null): string {
-  if (value == null || !Number.isFinite(value) || value <= 0) return '—';
-  return `${Math.round(value)}`;
-}
-
-export function getDefaultModelId(models: ModelsAnalysisModelResult[], currentModelId: string | null): string | null {
-  const sorted = [...models].sort((left, right) => left.label.localeCompare(right.label));
-  if (currentModelId != null && sorted.some((model) => model.modelId === currentModelId)) {
-    return currentModelId;
-  }
-  return sorted[0]?.modelId ?? null;
-}
-
-function sortValueKeys(valueKeys: Set<string>): string[] {
-  const canonical = VALUES.filter((valueKey) => valueKeys.has(valueKey));
-  const unknown = [...valueKeys]
-    .filter((valueKey) => !isValueKey(valueKey))
-    .sort((left, right) => left.localeCompare(right));
-  return [...canonical, ...unknown];
-}
-
-function eligibleDomainsForValue(value: ModelsAnalysisValueResult): ModelsAnalysisDomainBreakdown[] {
-  return value.domains.filter((domain) => isFiniteNumber(domain.winRate));
-}
-
-function computeAverage(domains: ModelsAnalysisDomainBreakdown[]): number | null {
-  if (domains.length === 0) return null;
-  const total = domains.reduce((sum, domain) => sum + domain.winRate, 0);
-  return total / domains.length;
-}
-
-export function buildDomainShiftHeatmap(model: ModelsAnalysisModelResult | null): DomainShiftHeatmap {
-  if (model == null) {
-    return { columns: [], rows: [], eligibleDomainCount: 0 };
-  }
-
-  const valueKeys = new Set<string>(VALUES);
-
-  for (const value of model.values) {
-    valueKeys.add(value.valueKey);
-  }
-
-  const rowsByValue = new Map(model.values.map((value) => [value.valueKey, value]));
-  const domainById = new Map<string, DomainShiftColumn>();
-  const rows = sortValueKeys(valueKeys).map((valueKey) => {
-    const value = rowsByValue.get(valueKey);
-    const eligibleDomains = value == null ? [] : eligibleDomainsForValue(value);
-    const comparableDomainCount = eligibleDomains.length;
-    const averageWinRate = comparableDomainCount >= 2 ? computeAverage(eligibleDomains) : null;
-    const cells = new Map<string, DomainShiftCell>();
-
-    if (value != null && averageWinRate != null) {
-      for (const domain of eligibleDomains) {
-        domainById.set(domain.domainId, {
-          domainId: domain.domainId,
-          domainName: domain.domainName,
-        });
-        cells.set(domain.domainId, {
-          domainId: domain.domainId,
-          domainName: domain.domainName,
-          winRate: domain.winRate,
-          averageWinRate,
-          shift: domain.winRate - averageWinRate,
-          evidenceWeight: isFiniteNumber(domain.evidenceWeight) ? domain.evidenceWeight : null,
-        });
-      }
-    }
-
-    return {
-      valueKey,
-      valueLabel: formatValueLabel(valueKey),
-      pooledWinRate: value?.pooledWinRate ?? null,
-      averageWinRate,
-      averageMatchesPooled: averageWinRate == null || value?.pooledWinRate == null
-        ? null
-        : Math.abs(averageWinRate - value.pooledWinRate) <= AVERAGE_PARITY_TOLERANCE,
-      comparableDomainCount,
-      cells,
-    };
-  });
-  const columns = [...domainById.values()].sort((left, right) => left.domainName.localeCompare(right.domainName));
-
-  return {
-    columns,
-    rows,
-    eligibleDomainCount: columns.length,
-  };
-}
+export {
+  buildDomainShiftHeatmap,
+  formatEvidenceWeight,
+  formatPercent,
+  formatPointShift,
+  getDefaultModelId,
+  sortHeatmapRows,
+} from './domainValueShiftHeatmapUtils';
 
 function getCellTone(shift: number): string {
   const clamped = Math.max(-MAX_COLOR_SHIFT, Math.min(MAX_COLOR_SHIFT, shift));
@@ -178,7 +55,116 @@ function getCellTone(shift: number): string {
       : 'border-rose-100 bg-rose-50/60 text-rose-700';
 }
 
-function Cell({ cell, valueLabel }: { cell: DomainShiftCell | null; valueLabel: string }) {
+function getWinRateTone(winRate: number): string {
+  if (winRate >= 75) return 'border-sky-300 bg-sky-100 text-sky-950';
+  if (winRate >= 50) return 'border-sky-200 bg-sky-50 text-sky-900';
+  if (winRate >= 25) return 'border-gray-200 bg-gray-50 text-gray-800';
+  return 'border-slate-200 bg-slate-50 text-slate-700';
+}
+
+function getSortDirectionLabel(direction: DomainShiftSort['direction']): 'ascending' | 'descending' {
+  return direction === 'asc' ? 'ascending' : 'descending';
+}
+
+function getNextSortDirectionLabel(sort: DomainShiftSort, key: DomainShiftSortKey): 'ascending' | 'descending' {
+  if (sort.key !== key) return key === 'value' ? 'ascending' : 'descending';
+  return sort.direction === 'asc' ? 'descending' : 'ascending';
+}
+
+function SortableHeader({
+  label,
+  sortKey,
+  sort,
+  onSort,
+  align = 'center',
+  className,
+}: {
+  label: string;
+  sortKey: DomainShiftSortKey;
+  sort: DomainShiftSort;
+  onSort: (sort: DomainShiftSort) => void;
+  align?: 'left' | 'center' | 'right';
+  className?: string;
+}) {
+  const isActive = sort.key === sortKey;
+  const nextDirection = getNextSortDirectionLabel(sort, sortKey);
+
+  return (
+    <th
+      aria-sort={isActive ? getSortDirectionLabel(sort.direction) : 'none'}
+      className={cn(
+        'border-b border-gray-200 bg-white px-3 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500',
+        className,
+      )}
+    >
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={() => onSort(getNextDomainShiftSort(sort, sortKey))}
+        className={cn(
+          'inline-flex w-full items-center gap-1 rounded px-1 py-1 hover:bg-gray-100 hover:text-gray-900',
+          align === 'left' && 'justify-start text-left',
+          align === 'center' && 'justify-center text-center',
+          align === 'right' && 'justify-end text-right',
+        )}
+        aria-label={`Sort by ${label} ${nextDirection}`}
+      >
+        <span>{label}</span>
+        <span aria-hidden="true" className={cn('text-gray-400', isActive && 'text-teal-700')}>
+          {isActive ? (sort.direction === 'asc' ? '↑' : '↓') : '↕'}
+        </span>
+      </Button>
+    </th>
+  );
+}
+
+function DisplayModeToggle({
+  displayMode,
+  onChange,
+}: {
+  displayMode: DomainShiftDisplayMode;
+  onChange: (displayMode: DomainShiftDisplayMode) => void;
+}) {
+  return (
+    <fieldset className="space-y-2">
+      <legend className="block text-sm font-medium text-gray-700">Cell metric</legend>
+      <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
+        {([
+          ['shift', 'Shift vs avg'],
+          ['winRate', 'Raw win rate'],
+        ] as const).map(([mode, label]) => (
+          <Button
+            key={mode}
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-pressed={displayMode === mode}
+            onClick={() => onChange(mode)}
+            className={cn(
+              'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+              displayMode === mode
+                ? 'bg-white text-teal-800 shadow-sm ring-1 ring-teal-200'
+                : 'text-gray-600 hover:text-gray-900',
+            )}
+          >
+            {label}
+          </Button>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+function Cell({
+  cell,
+  valueLabel,
+  displayMode,
+}: {
+  cell: DomainShiftCell | null;
+  valueLabel: string;
+  displayMode: DomainShiftDisplayMode;
+}) {
   if (cell == null) {
     return (
       <span className="inline-flex min-w-[82px] justify-center rounded-md border border-gray-100 bg-gray-50 px-2 py-1 text-sm text-gray-400">
@@ -187,15 +173,17 @@ function Cell({ cell, valueLabel }: { cell: DomainShiftCell | null; valueLabel: 
     );
   }
 
-  const detail = `${valueLabel} in ${cell.domainName}: ${formatPointShift(cell.shift)} versus this value's equal-domain average. Domain win rate ${formatPercent(cell.winRate)}; average ${formatPercent(cell.averageWinRate)}; evidence vignettes ${formatEvidenceWeight(cell.evidenceWeight)}.`;
+  const detail = `${valueLabel} in ${cell.domainName}: raw win rate ${formatPercent(cell.winRate)}; shift ${formatPointShift(cell.shift)} versus this value's equal-domain average; average ${formatPercent(cell.averageWinRate)}; evidence vignettes ${formatEvidenceWeight(cell.evidenceWeight)}.`;
+  const visibleValue = displayMode === 'shift' ? formatPointShift(cell.shift) : formatPercent(cell.winRate);
+  const tone = displayMode === 'shift' ? getCellTone(cell.shift) : getWinRateTone(cell.winRate);
 
   return (
     <span
-      className={`inline-flex min-w-[82px] justify-center rounded-md border px-2 py-1 text-sm font-semibold ${getCellTone(cell.shift)}`}
+      className={`inline-flex min-w-[82px] justify-center rounded-md border px-2 py-1 text-sm font-semibold ${tone}`}
       title={detail}
       aria-label={detail}
     >
-      {formatPointShift(cell.shift)}
+      {visibleValue}
     </span>
   );
 }
@@ -211,6 +199,8 @@ export function DomainValueShiftHeatmap() {
     [data],
   );
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
+  const [displayMode, setDisplayMode] = useState<DomainShiftDisplayMode>('shift');
+  const [sort, setSort] = useState<DomainShiftSort>(DEFAULT_DOMAIN_SHIFT_SORT);
 
   useEffect(() => {
     const nextModelId = getDefaultModelId(models, selectedModelId);
@@ -223,6 +213,10 @@ export function DomainValueShiftHeatmap() {
     ? null
     : models.find((model) => model.modelId === selectedModelId) ?? null;
   const heatmap = useMemo(() => buildDomainShiftHeatmap(selectedModel), [selectedModel]);
+  const sortedRows = useMemo(
+    () => sortHeatmapRows(heatmap.rows, sort, displayMode),
+    [heatmap.rows, sort, displayMode],
+  );
   const modelOptions = models.map((model) => ({ value: model.modelId, label: model.label }));
   const loading = fetching && data == null;
 
@@ -232,8 +226,8 @@ export function DomainValueShiftHeatmap() {
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-teal-700">Models</p>
         <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Domain Shifts by Value</h1>
         <p className="max-w-3xl text-sm text-gray-600">
-          Exploratory heatmap for domain-associated value shifts. Each cell shows a percentage-point shift
-          versus the selected model&apos;s equal-domain average for that value.
+          Exploratory heatmap for domain-associated value shifts. Toggle between percentage-point shifts and
+          straight domain win rates, then click any column header to sort.
         </p>
       </div>
 
@@ -242,15 +236,18 @@ export function DomainValueShiftHeatmap() {
       )}
 
       <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
-        <div className="max-w-sm">
-          <Select
-            label="Model"
-            options={modelOptions}
-            value={selectedModelId ?? undefined}
-            onChange={setSelectedModelId}
-            placeholder={loading ? 'Loading models...' : 'Select a model'}
-            disabled={loading || modelOptions.length === 0}
-          />
+        <div className="flex flex-wrap items-end gap-5">
+          <div className="min-w-[260px] max-w-sm flex-1">
+            <Select
+              label="Model"
+              options={modelOptions}
+              value={selectedModelId ?? undefined}
+              onChange={setSelectedModelId}
+              placeholder={loading ? 'Loading models...' : 'Select a model'}
+              disabled={loading || modelOptions.length === 0}
+            />
+          </div>
+          <DisplayModeToggle displayMode={displayMode} onChange={setDisplayMode} />
         </div>
       </section>
 
@@ -279,12 +276,13 @@ export function DomainValueShiftHeatmap() {
             <div>
               <h2 className="text-lg font-semibold text-gray-900">{selectedModel.label}</h2>
               <p className="text-sm text-gray-600">
-                Values are rows. Domains are columns. Green means above this model&apos;s usual win rate for that value;
-                red means below. Evidence counts are shown in each cell detail.
+                Values are rows. Domains are columns. Click any column header to sort. Evidence counts are shown
+                in each cell detail.
               </p>
             </div>
             <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
-              <span className="font-semibold text-gray-800">Metric:</span> percentage-point shift, not percent change
+              <span className="font-semibold text-gray-800">Metric:</span>{' '}
+              {displayMode === 'shift' ? 'percentage-point shift, not percent change' : 'raw domain win rate'}
             </div>
           </div>
 
@@ -292,31 +290,48 @@ export function DomainValueShiftHeatmap() {
             <table className="min-w-[900px] border-separate border-spacing-0 text-sm">
               <thead>
                 <tr>
-                  <th className="sticky left-0 z-20 border-b border-gray-200 bg-white px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    Value
-                  </th>
-                  {heatmap.columns.map((domain) => (
-                    <th
-                      key={domain.domainId}
-                      className="border-b border-gray-200 bg-white px-3 py-3 text-center text-xs font-semibold uppercase tracking-wide text-gray-500"
-                    >
-                      {domain.domainName}
-                    </th>
-                  ))}
-                  <th className="border-b border-gray-200 bg-white px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    Avg
-                  </th>
+                  <SortableHeader
+                    label="Value"
+                    sortKey="value"
+                    sort={sort}
+                    onSort={setSort}
+                    align="left"
+                    className="sticky left-0 z-20"
+                  />
+                  {heatmap.columns.map((domain) => {
+                    const domainSortKey: DomainShiftSortKey = `domain:${domain.domainId}`;
+                    return (
+                      <SortableHeader
+                        key={domain.domainId}
+                        label={domain.domainName}
+                        sortKey={domainSortKey}
+                        sort={sort}
+                        onSort={setSort}
+                      />
+                    );
+                  })}
+                  <SortableHeader
+                    label="Avg"
+                    sortKey="average"
+                    sort={sort}
+                    onSort={setSort}
+                    align="right"
+                  />
                 </tr>
               </thead>
               <tbody>
-                {heatmap.rows.map((row) => (
+                {sortedRows.map((row) => (
                   <tr key={row.valueKey}>
                     <th className="sticky left-0 z-10 border-b border-gray-100 bg-white px-3 py-3 text-left font-medium text-gray-900">
                       {row.valueLabel}
                     </th>
                     {heatmap.columns.map((domain) => (
                       <td key={domain.domainId} className="border-b border-gray-100 px-2 py-2 text-center">
-                        <Cell cell={row.cells.get(domain.domainId) ?? null} valueLabel={row.valueLabel} />
+                        <Cell
+                          cell={row.cells.get(domain.domainId) ?? null}
+                          valueLabel={row.valueLabel}
+                          displayMode={displayMode}
+                        />
                       </td>
                     ))}
                     <td className="border-b border-gray-100 px-3 py-3 text-right font-mono text-gray-700">
