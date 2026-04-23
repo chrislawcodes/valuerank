@@ -12,6 +12,7 @@ type MenuLinkItem = {
   name: string;
   path: string;
   aliases?: string[];
+  match?: 'exact' | 'prefix';
 };
 
 type MenuGroupItem = {
@@ -34,7 +35,8 @@ const domainMenuItems: MenuItem[] = [
 ];
 
 const modelsMenuItems: MenuItem[] = [
-  { name: 'Matrix', path: '/models' },
+  { name: 'Matrix', path: '/models', match: 'exact' },
+  { name: 'Domain Shifts', path: '/models/domain-shifts' },
   { name: 'Consistency', path: '/models/consistency' },
   { name: 'Circumplex', path: '/models/circumplex' },
 ];
@@ -77,18 +79,18 @@ export function NavTabs() {
   const archiveMenuRef = useRef<HTMLDivElement>(null);
   const settingsMenuRef = useRef<HTMLDivElement>(null);
 
-  const isPathActive = useCallback((path: string) => (
-    location.pathname === path || location.pathname.startsWith(`${path}/`)
+  const isPathActive = useCallback((path: string, match: 'exact' | 'prefix' = 'prefix') => (
+    location.pathname === path || (match === 'prefix' && location.pathname.startsWith(`${path}/`))
   ), [location.pathname]);
 
-  const isTabActive = useCallback((tabPath: string, aliases: string[] = []) => (
-    isPathActive(tabPath) || aliases.some((alias) => isPathActive(alias))
+  const isTabActive = useCallback((tabPath: string, aliases: string[] = [], match: 'exact' | 'prefix' = 'prefix') => (
+    isPathActive(tabPath, match) || aliases.some((alias) => isPathActive(alias, match))
   ), [isPathActive]);
 
   const isMenuItemActive = useCallback((item: MenuItem) => (
     isMenuGroupItem(item)
-      ? item.children.some((child) => isTabActive(child.path, child.aliases ?? []))
-      : isTabActive(item.path, item.aliases ?? [])
+      ? item.children.some((child) => isTabActive(child.path, child.aliases ?? [], child.match ?? 'prefix'))
+      : isTabActive(item.path, item.aliases ?? [], item.match ?? 'prefix')
   ), [isTabActive]);
 
   const isVignettesActive = vignettesMenuItems.some((item) => isMenuItemActive(item));
@@ -193,7 +195,7 @@ export function NavTabs() {
                     <div className="absolute left-full top-0 z-50 min-w-[180px] pl-1 opacity-0 invisible pointer-events-none group-hover/submenu:opacity-100 group-hover/submenu:visible group-hover/submenu:pointer-events-auto transition-all duration-150">
                       <div className="rounded-md border border-gray-700 bg-[#1A1A1A] shadow-lg py-1">
                         {item.children.map((child) => {
-                          const childActive = isTabActive(child.path, child.aliases ?? []);
+                          const childActive = isTabActive(child.path, child.aliases ?? [], child.match ?? 'prefix');
                           return (
                             <NavLink
                               key={child.path}
@@ -210,7 +212,7 @@ export function NavTabs() {
                 );
               }
 
-              const itemActive = isTabActive(item.path, item.aliases ?? []);
+              const itemActive = isTabActive(item.path, item.aliases ?? [], item.match ?? 'prefix');
               return (
                 <NavLink
                   key={item.path}

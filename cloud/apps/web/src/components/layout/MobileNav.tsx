@@ -9,12 +9,25 @@ type NavItem = {
   icon: LucideIcon;
   path?: string;
   aliases?: string[];
+  match?: 'exact' | 'prefix';
+  activateWithChildren?: boolean;
   children?: NavItem[];
 };
 
 const navItems: NavItem[] = [
   { name: 'Home', path: '/', icon: Home },
-  { name: 'Models', path: '/models', icon: Cpu },
+  {
+    name: 'Models',
+    path: '/models',
+    icon: Cpu,
+    activateWithChildren: true,
+    children: [
+      { name: 'Matrix', path: '/models', icon: Cpu, match: 'exact' },
+      { name: 'Domain Shifts', path: '/models/domain-shifts', icon: BarChart2 },
+      { name: 'Consistency', path: '/models/consistency', icon: BarChart2 },
+      { name: 'Circumplex', path: '/models/circumplex', icon: BarChart2 },
+    ],
+  },
   {
     name: 'Domains',
     path: '/domains',
@@ -72,7 +85,7 @@ function matchesNavPath(pathname: string, item: NavItem) {
 
   return (
     pathname === item.path
-    || pathname.startsWith(`${item.path}/`)
+    || (item.match !== 'exact' && pathname.startsWith(`${item.path}/`))
     || (item.aliases ?? []).some((alias) => pathname === alias || pathname.startsWith(`${alias}/`))
   );
 }
@@ -125,7 +138,8 @@ export function MobileNav({ className }: MobileNavProps) {
   }, [isOpen]);
 
   const isNavActive = (item: NavItem, includeChildren = true): boolean => {
-    const itemMatches = (!includeChildren && item.children && item.path)
+    const shouldIncludeChildren = includeChildren || item.activateWithChildren === true;
+    const itemMatches = (!shouldIncludeChildren && item.children && item.path)
       ? (
         item.path === '/'
           ? location.pathname === '/'
@@ -133,7 +147,7 @@ export function MobileNav({ className }: MobileNavProps) {
       )
       : matchesNavPath(location.pathname, item);
 
-    if (includeChildren && item.children) {
+    if (shouldIncludeChildren && item.children) {
       return item.children.some((child) => isNavActive(child, true)) || itemMatches;
     }
 

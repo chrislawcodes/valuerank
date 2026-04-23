@@ -11,10 +11,15 @@ vi.mock('../src/api/client', () => ({
   },
 }));
 
+vi.mock('../src/pages/DomainValueShiftHeatmap', () => ({
+  DomainValueShiftHeatmap: () => <div>Domain shifts route smoke</div>,
+}));
+
 // Mock localStorage
 beforeEach(() => {
   localStorage.clear();
   window.history.pushState({}, '', '/');
+  vi.stubGlobal('fetch', vi.fn());
   vi.resetAllMocks();
 });
 
@@ -49,4 +54,18 @@ describe('App Routing', () => {
     });
   });
 
+  it('should render the protected domain shifts route when authenticated', async () => {
+    localStorage.setItem('valuerank_token', 'test-token');
+    window.history.pushState({}, '', '/models/domain-shifts');
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 'user-1', email: 'researcher@example.com', name: 'Researcher' }),
+    } as Response);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Domain shifts route smoke')).toBeInTheDocument();
+    });
+  });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { NavTabs } from '../../../src/components/layout/NavTabs';
@@ -23,6 +23,7 @@ describe('NavTabs Component', () => {
     renderNavTabs();
 
     expect(screen.queryByRole('link', { name: 'Home' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Models' })).toHaveAttribute('href', '/models');
     expect(screen.getByRole('link', { name: 'Domains' })).toHaveAttribute('href', '/domains');
     expect(screen.getByRole('link', { name: 'Vignettes' })).toHaveAttribute('href', '/definitions');
     expect(screen.getByRole('link', { name: 'Archive' })).toHaveAttribute('href', '/archive');
@@ -32,6 +33,37 @@ describe('NavTabs Component', () => {
     expect(screen.queryByRole('button', { name: 'Toggle Validation menu' })).not.toBeInTheDocument();
     // Compare was removed
     expect(screen.queryByRole('link', { name: 'Compare' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the model report links available from the models menu', async () => {
+    renderNavTabs('/models/domain-shifts');
+    const toggle = screen.getByRole('button', { name: 'Toggle Models menu' });
+    const menuRoot = toggle.closest('.relative');
+    if (menuRoot === null) {
+      throw new Error('Missing Models menu root');
+    }
+    fireEvent.mouseEnter(menuRoot);
+
+    expect(toggle).toHaveAttribute('aria-haspopup', 'menu');
+    await waitFor(() => {
+      expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    });
+    expect(screen.getByRole('link', { name: 'Models' })).toHaveAttribute('href', '/models');
+    expect(screen.getByRole('link', { name: 'Matrix' })).toHaveAttribute('href', '/models');
+    expect(screen.getByRole('link', { name: 'Domain Shifts' })).toHaveAttribute('href', '/models/domain-shifts');
+    expect(screen.getByRole('link', { name: 'Consistency' })).toHaveAttribute('href', '/models/consistency');
+    expect(screen.getByRole('link', { name: 'Circumplex' })).toHaveAttribute('href', '/models/circumplex');
+  });
+
+  it('highlights only Domain Shifts inside the models menu on the domain shifts route', async () => {
+    renderNavTabs('/models/domain-shifts');
+    await openMenu('Models');
+
+    expect(screen.getByRole('link', { name: 'Models' }).parentElement?.className).toContain('border-teal-500');
+    expect(screen.getByRole('link', { name: 'Matrix' }).className).not.toContain('bg-teal-600/20');
+    expect(screen.getByRole('link', { name: 'Domain Shifts' }).className).toContain('bg-teal-600/20');
+    expect(screen.getByRole('link', { name: 'Consistency' }).className).not.toContain('bg-teal-600/20');
+    expect(screen.getByRole('link', { name: 'Circumplex' }).className).not.toContain('bg-teal-600/20');
   });
 
   it('keeps the vignettes menu links available from the vignettes menu', async () => {
