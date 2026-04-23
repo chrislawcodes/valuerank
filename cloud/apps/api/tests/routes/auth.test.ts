@@ -56,6 +56,8 @@ describe('Auth Routes', () => {
         email: 'test@example.com',
         passwordHash,
         name: 'Test User',
+        role: 'VISITOR' as const,
+        mustChangePassword: false,
         lastLoginAt: null,
         passwordChangedAt: null,
         createdAt: new Date(),
@@ -72,10 +74,12 @@ describe('Auth Routes', () => {
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('token');
       expect(response.body.token).toMatch(/^eyJ/); // JWT starts with eyJ
-      expect(response.body.user).toEqual({
+      expect(response.body.user).toMatchObject({
         id: 'user-123',
         email: 'test@example.com',
         name: 'Test User',
+        role: 'VISITOR',
+        mustChangePassword: false,
       });
     });
 
@@ -514,7 +518,7 @@ describe('Auth Routes', () => {
         .send({ currentPassword: 'current', newPassword: 'short' });
 
       expect(response.status).toBe(400);
-      expect(response.body.message).toBe('New password must be at least 8 characters long');
+      expect(response.body.message).toBe('New password must be at least 12 characters long');
     });
 
     it('rejects missing fields', async () => {

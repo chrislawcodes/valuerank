@@ -7,6 +7,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
+// Mock request context so requireMcpAdmin() sees an admin user
+vi.mock('../../../src/mcp/request-context.js', () => ({
+  getMcpUser: vi.fn(() => ({
+    id: 'mock-admin-user',
+    email: 'admin@example.com',
+    role: 'ADMIN' as const,
+    mustChangePassword: false,
+  })),
+  runWithMcpContext: vi.fn((_ctx: unknown, fn: () => unknown) => fn()),
+}));
+
 // Mock db before importing the tool
 vi.mock('@valuerank/db', () => ({
   softDeleteDefinition: vi.fn(),
