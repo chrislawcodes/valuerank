@@ -8,7 +8,7 @@ approval: never
 sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
 reasoning effort: high
 reasoning summaries: none
-session id: 019dc11d-8d21-7b53-9067-5bf10c422501
+session id: 019dc122-e3fb-7443-a60f-dc9522e9eef1
 --------
 user
 Review this spec artifact using a edge-cases-adversarial lens.
@@ -127,40 +127,51 @@ Three known gaps from the post-PR-#744 adversarial review and leftover backlog:
 
 ### Fix 1 — Completeness veto (US1)
 
-- **FR-001**: The judge-tally code path in `factory_cmd_judge.py` MUST detect a `completeness` judge block that cites an unaddressed HIGH reviewer finding. Detection: `verdict.verdict == "block"` AND `verdict.judge == "completeness"` AND the reasoning string contains a pattern indicating an unaddressed HIGH (see FR-002).
-- **FR-002**: The "unaddressed HIGH" pattern MUST be matched with care. Prefer a structured signal if the judge prompt is updated to emit one (e.g., a dedicated `verdict.reasons.unaddressed_high_ids` array). For this feature, the regex fallback is: the reasoning contains (case-insensitive) the substrings `"unaddressed"` AND (`"high"` as a severity marker — word-boundary `\bhigh\b` that is followed by something finding-like within 80 chars, OR a concern id `[a-f0-9]{12}` referenced). Add a negative test for prose mentions.
-- **FR-003**: When FR-001's condition matches AND `proceed_count >= 2`, the tally MUST override the majority: `outcome_value = "rejudge"`, `next_action = "edit_and_rerun_judge"`, `stage_state["judge_next_action"] = "edit_and_rerun_judge"`. Reason text: `"completeness judge veto: unaddressed HIGH finding — majority override"`.
-- **FR-004**: When all `unresolved_concerns` for the stage are resolved (each has `addressed_at OR deferred_reason OR dismissed_reason`), the veto MUST NOT fire. That path restores normal majority-rules behavior.
-- **FR-005**: `deliver --override-judges --reason "<text>"` MUST continue to bypass the veto (it already bypasses concern gates; this just confirms the escape hatch stays intact).
+**Changed in spec round-1 reconcile:** all three reviewers flagged the regex-based veto as too brittle for a safety gate (HIGH in all 3 reviews). The veto now depends on a **structured signal from the completeness judge prompt** — regex is NOT a fallback. A prompt update is part of this feature's scope.
+
+- **FR-001**: `judge-prompts/completeness.md` MUST be updated to emit a JSON verdict that includes a `unaddressed_high_finding_ids: [string]` array alongside the existing `verdict`/`reasoning` fields. When the judge votes `block` specifically because HIGH reviewer findings remain unaddressed, it populates this array with the concern `id`s (or reviewer-finding references) that are still open. An empty array means "I blocked for a different reason." The array is the veto's single source of truth; reasoning text is audit detail only.
+- **FR-002**: `factory_cmd_judge._validate_json_output` (or the schema validator) MUST accept the new `unaddressed_high_finding_ids` field and ignore unknown fields from older judge prompts (back-compat). `judge_schema.json` is updated to include the new field.
+- **FR-003**: The tally code MUST detect the veto condition by checking: `verdict.verdict == "block"` AND `verdict.judge == "completeness"` AND `len(verdict.get("unaddressed_high_finding_ids", [])) > 0` AND the referenced ids have no `addressed_at OR deferred_reason OR dismissed_reason` in the current `stage_state.unresolved_concerns` (ground-truth cross-check — Gemini LOW #4). If any listed id is already resolved in state, the veto DOES NOT fire (judge was looking at stale context).
+- **FR-004**: When FR-003's condition matches AND `proceed_count >= 2`, the tally MUST override majority: `outcome_value = "rejudge"`, `next_action = "edit_and_rerun_judge"`, `stage_state["judge_next_action"] = "edit_and_rerun_judge"`. Reason text includes the specific id(s) cited: `"completeness judge veto: unaddressed HIGH concerns {id1,id2} — majority override"`.
+- **FR-005**: When all `unresolved_concerns` for the stage are resolved, the veto MUST NOT fire. Verified via the cross-check in FR-003.
+- **FR-006**: `deliver --override-judges --reason "<text>"` MUST continue to bypass the veto (existing escape hatch).
+- **FR-007**: A test MUST cover the legacy-reasoning path: if an older judge run produced a verdict without the structured field, the tally defaults to majority-rules (no veto). This prevents the structured-signal change from breaking replay of historical state.
 
 ### Fix 2 — Auto-register mutating commands (US2)
 
-- **FR-006**: A new module `factory_mutating.py` (sibling of `factory_invariants.py`) MUST define `@mutates_state(command_name: str)` and `@readonly_command(command_name: str)` decorators. Each decorator attaches a `__ff_mutates_state__` or `__ff_readonly_command__` attribute to the wrapped function with the canonical subcommand name.
-- **FR-007**: `factory_mutating.collect_mutating_command_names()` MUST scan a list of module-exported functions for those attributes and return a `frozenset[str]` of canonical subcommand names. `run_factory.py` replaces the literal `_STATE_MUTATING_COMMANDS` with this computed set.
-- **FR-008**: Every current `command_*` function (`command_init`, `command_status`, `command_doctor`, `command_repair`, `command_checkpoint`, `command_reconcile`, `command_auto_reconcile`, `command_block`, `command_discover`, `command_parallel`, `command_implement`, `command_deliver`, `command_closeout`, plus `run_judge` which is invoked via a lambda) MUST be tagged via the appropriate decorator. Mutating commands: `checkpoint, judge, reconcile, auto-reconcile, implement, deliver, block, repair, closeout, discover, parallel`. Read-only: `init` (runs before any stages exist — documented edge case), `status, doctor`.
-- **FR-009**: A new test in `tests/test_mutating_registry.py` MUST scan all `command_*` functions exported from the scripts package and assert each one has exactly one of the two decorators. If a function has neither, the test MUST fail with a message naming the function.
-- **FR-010**: The invariant post-check in `run_factory.main()` MUST continue to work exactly as before — the change is purely mechanical (literal set → computed set).
+**Changed in spec round-1 reconcile:** Gemini and Codex flagged that `command_*` scan isn't authoritative — the argparse dispatcher is. And `init` was mis-labeled read-only despite creating state. Fixes below.
+
+- **FR-008**: A new module `factory_mutating.py` (sibling of `factory_invariants.py`) MUST define `@mutates_state(command_name: str)` and `@readonly_command(command_name: str)` decorators. Each decorator attaches `__ff_mutates_state__` (with canonical subcommand name) or `__ff_readonly_command__` to the wrapped function.
+- **FR-009**: The authoritative source for "every subcommand the runner exposes" is the argparse subparser registry in `build_parser()`. The test in FR-012 enumerates subcommands from argparse (not from a function-name scan) and asserts each corresponding handler is decorated. This closes the "a command with a non-`command_*` name bypasses the test" gap Gemini flagged.
+- **FR-010**: `factory_mutating.collect_mutating_command_names(handlers)` takes an iterable of handler callables (e.g., `[command_checkpoint, command_judge_wrapped, ...]`) and returns a `frozenset[str]` built from the `__ff_mutates_state__` attribute. `run_factory.py` replaces the literal `_STATE_MUTATING_COMMANDS` with this computed set, seeded from the dispatch map built in `build_parser()`.
+- **FR-011**: Every subcommand handler MUST be decorated. For `judge` which is dispatched via `lambda args: run_judge(...)`, we wrap it in a named function `command_judge(args)` that applies the decorator and delegates to `run_judge`. No more lambdas in `set_defaults(func=...)`.
+  - Mutating (`@mutates_state`): `checkpoint, judge, reconcile, auto-reconcile, implement, deliver, block, repair, closeout, discover, parallel, init` — **init is reclassified as mutating** per Codex edge-cases MEDIUM #3 (it creates the workflow directory and seeds state.json; excluding it reintroduced the drift hole). The invariant self-check on init is harmless because there are no stages yet to detect contradiction in — the check runs, finds no stages, emits no warning.
+  - Read-only (`@readonly_command`): `status, doctor`.
+- **FR-012**: A new test in `tests/test_mutating_registry.py` MUST enumerate subcommands from `build_parser()`, resolve each to its handler, and assert each handler has exactly one decorator. If any subcommand's handler is undecorated, the test MUST fail with a message naming the subcommand AND the handler function.
+- **FR-013**: The invariant post-check in `run_factory.main()` MUST continue to behave identically for existing commands — the change is purely mechanical.
 
 ### Fix 3 — Review-intermediate GC (US3)
 
-- **FR-011**: `command_checkpoint` MUST, at the top of its execution (after parsing args, before dispatching reviews), delete the following for the target stage:
+**Changed in spec round-1 reconcile:** Gemini flagged a race if GC runs before the state lock (MEDIUM #3). Codex flagged summary/FR-011/US3 inconsistency on the intermediate count (MEDIUM). Both fixed below.
+
+- **FR-014**: `command_checkpoint` MUST acquire the state lock via `with_locked_state(slug)` BEFORE running GC. Sequence is: parse args → acquire lock → GC → dispatch reviews → release lock. This closes the concurrent-runner race Gemini flagged. Note: `with_locked_state` is already used by other paths; the new code just calls it earlier.
+- **FR-015**: Inside the lock, `command_checkpoint` MUST delete the following files for the target stage (5 globs, canonical list; summary, FRs, and US3 scenarios all reference this list):
   - `reviews/{stage}.*.narrowed.txt`
   - `reviews/{stage}.*.narrowed.json`
   - `reviews/{stage}.*.raw.txt`
   - `reviews/{stage}.*.stdout.txt`
   - `reviews/{stage}.*.stderr.txt`
-- **FR-012**: The GC MUST NOT delete:
+- **FR-016**: The GC MUST NOT delete:
   - `reviews/{stage}.*.review.md` (authoritative, resolution-bearing)
   - `reviews/{stage}.checkpoint.json` (manifest)
   - Any file not matching the target stage prefix (so `diff.*` files survive a `checkpoint --stage spec`).
-- **FR-013**: A new argparse flag `--keep-intermediates` on the `checkpoint` subcommand MUST opt out of the GC for a single invocation (for debugging or forensic purposes).
-- **FR-014**: A test MUST verify the GC happens with matching fixtures, the preserved files are untouched, and `--keep-intermediates` suppresses the delete.
+- **FR-017**: A new argparse flag `--keep-intermediates` on the `checkpoint` subcommand MUST opt out of the GC for a single invocation (debugging or forensic purposes). When omitted, GC always runs (after lock acquisition).
+- **FR-018**: A test MUST verify (a) the 5 globs are deleted for the target stage, (b) preserved files are untouched, (c) `--keep-intermediates` suppresses deletion, (d) other-stage intermediates are NOT touched, (e) GC runs inside the state lock (assertion: a concurrent invocation blocks on the lock, does not race on GC).
 
 ### Shared
 
-- **FR-015**: No change to reviewer or judge prompts other than the minimal completeness-judge prompt update (FR-016).
-- **FR-016** (OPTIONAL, scope-permitting): update `judge-prompts/completeness.md` so it emits a machine-readable `unaddressed_high_finding_ids` array alongside the verdict. This provides a structured signal for FR-002 that doesn't rely on regex. If included, the regex fallback is kept for back-compat with prior runs. If the scope is already large, defer this to follow-up.
-- **FR-017**: All 167 existing runner tests MUST continue to pass. Target total: ~190.
+- **FR-019**: No change to reviewer prompts. The ONLY prompt change is `judge-prompts/completeness.md` to emit the new `unaddressed_high_finding_ids` structured field (FR-001); this is required, not optional.
+- **FR-020**: All 167 existing runner tests MUST continue to pass. Target total: ~190.
 
 ## Success criteria
 
@@ -218,16 +229,17 @@ Return only markdown with exactly these sections:
 ## Residual Risks
 Do not include any other sections.
 codex
+I’m reviewing the spec itself for contradictions, missing edge cases, and brittle assumptions. I’ll stay scoped to the artifact and flag any codebase-dependent concern as `[UNVERIFIED]`.
+codex
 ## Findings
-- High: FR-002 makes the completeness veto depend on free-form judge prose plus an optional regex fallback. That is too brittle for a safety gate. A wording change, prompt tweak, or copy edit can either fire the veto on the wrong case or miss a real unaddressed HIGH. Because FR-016 is optional, the spec still allows the feature to ship with regex as the only enforcement path.
-- Medium [UNVERIFIED]: The mutating-command registry only covers `command_*` functions, but the spec already exempts `run_judge` as a lambda-invoked path. If the current codebase has any state-mutating entrypoint outside that naming pattern, this fix will not register it and the invariant self-check can still be bypassed. This depends on existing code shape.
-- Medium [UNVERIFIED]: FR-008 marks `init` as read-only without stating that it has zero persistent side effects. If `init` creates or seeds state, excluding it from `mutates_state` reintroduces the same drift hole this feature is trying to close. The spec needs to pin down that `init` is truly side-effect free, or classify it as mutating.
-- Medium: US3 is internally inconsistent about the cleanup target set. The summary, FR-011, and the US3 test/scenario text disagree on whether there are four or five intermediates and which suffixes are authoritative. That ambiguity makes it easy to ship a GC that misses `.narrowed.json` or deletes the wrong file class without the spec clearly failing it.
+- **High**: FR-003 makes the veto all-or-nothing on the cited IDs. It says the veto does not fire if *any* listed ID is already resolved in `stage_state.unresolved_concerns`. That means one stale or already-closed ID can suppress the veto even when other cited HIGH findings are still open. That is a direct bypass of the safety gate.
+- **High**: The completeness-veto rules contradict each other. FR-001/FR-019 say the structured `unaddressed_high_finding_ids` field is the single source of truth and that regex is not a fallback, but the edge-case section still requires regex matching when the judge says “some HIGHs remain unaddressed” without IDs. The spec does not define which rule wins, so the implementation can easily drift back into the brittle regex path or ignore the edge case entirely.
+- **Medium**: US3 does not actually close the corruption class it cites. The proposed GC only deletes stale intermediates at the start of the next checkpoint and explicitly preserves `*.review.md`. If a run is interrupted mid-write, the corrupted `.review.md` can remain in place and still be the file the next run sees. Deleting intermediates alone does not guarantee the corruption problem is gone.
+- **[UNVERIFIED] Medium**: FR-009/FR-012 assume `build_parser()` is the authoritative list of runnable subcommands. If the current codebase has any state-mutating entrypoint that is not surfaced through that parser path, this registry test will miss it. I cannot verify that assumption from the artifact alone.
 
 ## Residual Risks
-- If FR-016 stays out of scope, completeness veto behavior will still be sensitive to prompt wording and reasoning format drift.
-- The GC still only covers the explicitly named suffixes in FR-011, so any future intermediate file shape will need an explicit spec update.
-- The registry approach still assumes the project keeps using the `command_*` naming convention; any new mutation path outside that pattern will need a manual convention update.
-2026-04-24T20:11:30.562580Z ERROR codex_core::session: failed to record rollout items: thread 019dc11d-8d21-7b53-9067-5bf10c422501 not found
+- Legacy judge state without the new structured completeness field still falls back to majority rules per FR-007, so historical runs can still advance past an unresolved HIGH until they are re-evaluated.
+- The GC and mutating-registry protections depend on implementation details that are not fully specified here, especially lock scope and subcommand wiring. If those assumptions are wrong in the codebase, the safety net will be weaker than the spec implies.
+2026-04-24T20:16:59.649376Z ERROR codex_core::session: failed to record rollout items: thread 019dc122-e3fb-7443-a60f-dc9522e9eef1 not found
 tokens used
-17,700
+12,209

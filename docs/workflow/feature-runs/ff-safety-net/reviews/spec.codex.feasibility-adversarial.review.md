@@ -3,14 +3,14 @@ reviewer: "codex"
 lens: "feasibility-adversarial"
 stage: "spec"
 artifact_path: "docs/workflow/feature-runs/ff-safety-net/spec.md"
-artifact_sha256: "4519e751b65d7f72d73c1f2323a8d751ae2c48dc293e83854252d503c60bcb18"
+artifact_sha256: "da09382e8c33b1717f23595ce88209107a3400a0ee13bff880353439515552d6"
 repo_root: "."
-git_head_sha: "f274b57cc2b9bf75e7e01d2c1041461c7767dd81"
+git_head_sha: "50eaa7497529381b508e931325872a2a6f6ead88"
 git_base_ref: "origin/main"
 git_base_sha: "c07a4283ecdebffa57e8a2cccfa08c23e0f76a36"
 generation_method: "codex-runner"
 resolution_status: "accepted"
-resolution_note: "HIGH (brittle veto): FR-001 now requires structured unaddressed_high_finding_ids field from completeness judge — regex removed, FR-016 made mandatory not optional. MEDIUM (registry lambda gap): FR-011 now wraps run_judge in named command_judge, no lambdas in dispatch. MEDIUM (GC atomicity): FR-014 requires lock-before-GC sequence."
+resolution_note: "Round-2 HIGH (inverted FR-003): FIXED — veto now fires if ANY cited id is unresolved, NOT if any is resolved. Round-2 MEDIUM (legacy regex contradiction): FIXED — edge-case section no longer mentions regex fallback. MEDIUM UNVERIFIED (build_parser authority): accepted as documented risk in R2 — the scan is convention-bound; anyone adding a non-command_* mutating entrypoint must update the scan."
 raw_output_path: "docs/workflow/feature-runs/ff-safety-net/reviews/spec.codex.feasibility-adversarial.review.md.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,18 +22,15 @@ coverage_note: ""
 
 ## Findings
 
-1. **High**: The completeness veto is built on parsing free-form judge prose, not a required machine-readable signal. `FR-001`/`FR-002` allow the safety gate to trigger from regex matches on words like `unaddressed` and `high`, with `FR-016` only optional. That is too brittle for a control that is supposed to stop unsafe merges. A phrasing change, a different capitalization pattern, or an innocent mention of “high” can either miss a real veto or create a false one. This should be mandatory structured data, not a text heuristic.
-
-2. **Medium**: The mutating-command registry spec is internally inconsistent about what is actually being registered. `FR-007` says the registry scans module-exported functions with decorators, but `FR-008` also includes `run_judge` “invoked via a lambda,” which cannot be decorated in the form described. That leaves a real gap in the claimed “every current command” coverage and makes the test plan easy to satisfy while still missing an executable path. The spec needs a named wrapper or a clearer registration model.
-
-3. **Medium [UNVERIFIED]**: The review-intermediate GC is specified as a destructive cleanup at the top of `command_checkpoint`, but the spec does not define any atomicity or recovery guarantee around that delete step. If the checkpoint run is interrupted or another invocation is already writing files, the cleanup can erase the only forensic evidence of the failure. This depends on how the current checkpoint lock and write path behave, so it is unverified, but the spec currently assumes those protections exist without stating them.
+1. **High**: `FR-003` makes the veto too easy to bypass. It says the completeness veto does **not** fire if any listed id is already resolved in state. That means a completeness verdict can include one stale/resolved id plus one live unresolved HIGH, and the gate will fall back to majority anyway. That is a direct safety bypass of the feature’s stated goal.
+2. **Medium**: The spec contradicts itself on legacy and ambiguous completeness outputs. `FR-001` says the structured `unaddressed_high_finding_ids` array is the single source of truth and regex is **not** a fallback, but the US1 edge case still requires regex matching when reasoning is vague, and `FR-007` says older verdicts without the field default to majority. Those rules do not agree, so the same historical state can be treated two different ways.
+3. **Medium [UNVERIFIED]**: US2 assumes `build_parser()` is the authoritative list of exposed commands and that every handler can be forced into exactly one of two decorator buckets. If the existing codebase has dynamic handlers, aliases, or non-function dispatch paths, this registry test can miss a real mutating command or reject a legitimate command wiring. Without code context, that assumption is unverified.
 
 ## Residual Risks
 
-- If `FR-016` is deferred, the completeness veto still depends on regex matching and will remain sensitive to prompt wording drift.
-- The mutating-command registry will still rely on the project keeping the `command_*` naming convention consistent across future additions.
-- The GC rule is scoped to known file shapes only; any new intermediate artifact type will need an explicit update or it will accumulate again.
-- The `--keep-intermediates` escape hatch preserves debugging state only for that one run, so operators still need to know when to enable it before a failure happens.
+- The completeness veto still depends on concern IDs being stable and comparable between the judge payload and `stage_state.unresolved_concerns`.
+- The GC change is only safe if every stale scratch-file shape is explicitly named in the glob list; new temporary artifact names can still accumulate.
+- The mutating-command guardrail will remain fragile if future command wiring bypasses the decorator convention or the parser test is not kept in sync.
 
 ## Runner Stats
 - total_input=0
@@ -42,4 +39,4 @@ coverage_note: ""
 
 ## Resolution
 - status: accepted
-- note: HIGH (brittle veto): FR-001 now requires structured unaddressed_high_finding_ids field from completeness judge — regex removed, FR-016 made mandatory not optional. MEDIUM (registry lambda gap): FR-011 now wraps run_judge in named command_judge, no lambdas in dispatch. MEDIUM (GC atomicity): FR-014 requires lock-before-GC sequence.
+- note: Round-2 HIGH (inverted FR-003): FIXED — veto now fires if ANY cited id is unresolved, NOT if any is resolved. Round-2 MEDIUM (legacy regex contradiction): FIXED — edge-case section no longer mentions regex fallback. MEDIUM UNVERIFIED (build_parser authority): accepted as documented risk in R2 — the scan is convention-bound; anyone adding a non-command_* mutating entrypoint must update the scan.
