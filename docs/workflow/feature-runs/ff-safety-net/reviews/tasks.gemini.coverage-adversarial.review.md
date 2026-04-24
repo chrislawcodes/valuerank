@@ -3,14 +3,14 @@ reviewer: "gemini"
 lens: "coverage-adversarial"
 stage: "tasks"
 artifact_path: "docs/workflow/feature-runs/ff-safety-net/tasks.md"
-artifact_sha256: "c263def1d49bff82ef6af78464c6cdede19479f75d0f092fae66fad031b34b74"
+artifact_sha256: "d2a0b32ba24a43fed1299cdc5ee764e79186d87c51270085ebeb2863df90ca6b"
 repo_root: "."
-git_head_sha: "c6ec7b7929903a6a9a4c8fea6819b6aa2f1cba03"
+git_head_sha: "2b6558ee1c419e962fa35df03d175ab68715997a"
 git_base_ref: "origin/main"
 git_base_sha: "c07a4283ecdebffa57e8a2cccfa08c23e0f76a36"
 generation_method: "gemini-cli"
-resolution_status: "accepted"
-resolution_note: "No actionable findings detected — auto-accepted"
+resolution_status: "open"
+resolution_note: ""
 raw_output_path: "docs/workflow/feature-runs/ff-safety-net/reviews/tasks.gemini.coverage-adversarial.review.md.json"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -24,24 +24,24 @@ coverage_note: ""
 
 | Severity | ID | Finding |
 | --- | --- | --- |
-| HIGH | FF-S-H01 | The completeness veto can be silently bypassed if the `completeness` judge fails to produce a verdict for any reason (e.g., runtime error, misconfiguration). The logic retrieves `next((v for v in verdicts if v.get("judge") == "completeness"), None)`. If this is `None`, the entire veto mechanism is skipped, and the outcome falls back to a simple majority vote, potentially allowing advancement even with open high-severity findings. |
-| MEDIUM | FF-S-M01 | The command auto-registration mechanism in T1.3 and T1.6 relies on inspecting internal, undocumented attributes of the `argparse` library (e.g., `_SubParsersAction`, `subparsers.choices[name]._defaults["func"]`). This is a brittle implementation that is liable to break with future updates to `argparse`, causing the safety check to fail. |
-| MEDIUM | FF-S-M02 | [UNVERIFIED] The garbage collection of intermediate review files in Slice 2 is based on a hardcoded list of 5 glob patterns. The task description states this is "per FR-015," an external document. If other types of intermediate files exist, or if new ones are added in the future without updating this logic, they will not be garbage collected, leading to artifact bloat and potential confusion. |
-| LOW | FF-S-L01 | The completeness veto logic does not validate the format of finding IDs from the LLM verdict. If the LLM hallucinates a malformed ID while attempting to flag a valid, open concern, the veto will fail to trigger because the ID won't match any unresolved concern. The system fails safe (by falling back to majority rule) but misses an opportunity to log a warning about a potential prompt-following or data-quality issue from the judge. |
-| LOW | FF-S-L02 | The decorator-based system for classifying commands as mutating or readonly (Slice 1) only inspects the top-level command handler. It cannot detect mutations that occur in downstream functions called by the handler. This creates a potential loophole where a `readonly` command could inadvertently modify state through its call stack, weakening the integrity of the safeguard over time. |
+| **HIGH** | F-01 | **Completeness Veto Can Be Bypassed by an Incomplete LLM Response.** The veto logic in `T3.3` only checks if at least one of the `unaddressed_high_finding_ids` provided by the `completeness` judge corresponds to an unresolved concern. It does not validate that the LLM has identified *all* unresolved HIGH concerns. A lazy or faulty LLM could block but only list one of three open HIGH concerns. If a developer addresses only that single concern, the veto will not fire on the next run, and the artifact will advance despite the remaining two open HIGH concerns. This undermines the feature's core safety guarantee. |
+| **MEDIUM** | F-02 | **Critical Safety Check is Only Applied to One of Twelve Mutating Commands.** The "init safety" test (`T1.7`) validates that `check_judge_advance_vs_recommended` passes on the state produced by `command_init`. However, this slice introduces eleven other state-mutating commands (`checkpoint`, `judge`, `reconcile`, etc.). The plan does not include tests to verify that these other commands do not leave the system in a state that would cause the judge to make a bad recommendation. This is a significant gap in test coverage for a critical cross-command invariant. |
+| **MEDIUM** | F-03 | **[UNVERIFIED] Stale Data Can Cause Veto Failure.** The `completeness` judge relies on review files to populate `unaddressed_high_finding_ids`. The veto logic in `T3.3` compares these IDs against the current `stage_state`. If a new HIGH concern can be added to the state *after* the review files are generated but *before* the judge runs, the judge will be operating on stale data. It will not be aware of the new concern and cannot include it in its verdict, rendering the veto ineffective for that concern. |
+| **LOW** | F-04 | **Intermediate File Cleanup is Brittle.** The garbage collection logic in `T2.2` relies on a hardcoded glob of 5 specific file patterns. If future development introduces new types of intermediate review artifacts, the `_gc_review_intermediates` function will not be aware of them. They will not be cleaned up, leading to repository bloat and potential confusion from stale files. |
+| **LOW** | F-05 | **[UNVERIFIED] Command Discovery Relies on Fragile Implementation Details.** The `enumerate_subparser_handlers` helper in `T1.3` is specified to inspect internal attributes of the `argparse` module (`_actions`, `_SubParsersAction`, `choices[name]._defaults["func"]`). This creates a brittle dependency on the library's internal implementation, which is not guaranteed to be stable across different Python versions and could break with a future update. |
 
 ## Residual Risks
 
-- **Prompt Adherence Drift:** The new completeness veto feature (Slice 3) increases the complexity of the instructions the LLM judge must follow. It now has to correctly identify unaddressed findings, extract their specific 12-character hex IDs, and format them into a JSON array. While there is a fail-open guard (T3.4) for one failure mode (blocking with an empty array), other subtle failures (e.g., malformed IDs, blocking but forgetting the field) could degrade the effectiveness of the veto over time as the model or prompts evolve.
-- **Maintainability of Command Registry:** The reliance on `argparse` internals (FF-S-M01) means that a future `pip update` could break the build in a non-obvious way. The team will need to remember this dependency exists during future maintenance or library upgrades. The test in T1.7, which ensures all subcommands are decorated, provides a crucial safety net but won't prevent the underlying enumeration logic from failing.
+- **LLM Reliability:** The entire completeness veto feature (`Slice 3`) is dependent on an LLM correctly interpreting and following the system prompt's instructions to populate the `unaddressed_high_finding_ids` field. While the fail-open guard (`T3.4`) provides a fallback, a sufficiently erratic or non-compliant model could consistently fail to provide the structured data, degrading the veto to a simple warning and relying on the less-safe majority-rules outcome.
+- **Human Override:** The safety net can be intentionally bypassed using the `--override-judges` flag on the `deliver` command (`T3.6`, US1.4). While the tasks add a check for a non-blank reason (`T3.5`), this remains a permanent backdoor that subverts the entire automated check. The risk is that this override is used for convenience rather than in a true emergency, negating the feature's benefit.
 
 ## Token Stats
 
-- total_input=2749
-- total_output=720
-- total_tokens=17221
-- `gemini-2.5-pro`: input=2749, output=720, total=17221
+- total_input=2973
+- total_output=835
+- total_tokens=17930
+- `gemini-2.5-pro`: input=2973, output=835, total=17930
 
 ## Resolution
-- status: accepted
-- note: No actionable findings detected — auto-accepted
+- status: open
+- note:

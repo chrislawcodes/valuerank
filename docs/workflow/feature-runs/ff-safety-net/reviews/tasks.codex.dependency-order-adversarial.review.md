@@ -3,14 +3,14 @@ reviewer: "codex"
 lens: "dependency-order-adversarial"
 stage: "tasks"
 artifact_path: "docs/workflow/feature-runs/ff-safety-net/tasks.md"
-artifact_sha256: "c263def1d49bff82ef6af78464c6cdede19479f75d0f092fae66fad031b34b74"
+artifact_sha256: "d2a0b32ba24a43fed1299cdc5ee764e79186d87c51270085ebeb2863df90ca6b"
 repo_root: "."
-git_head_sha: "c6ec7b7929903a6a9a4c8fea6819b6aa2f1cba03"
+git_head_sha: "2b6558ee1c419e962fa35df03d175ab68715997a"
 git_base_ref: "origin/main"
 git_base_sha: "c07a4283ecdebffa57e8a2cccfa08c23e0f76a36"
 generation_method: "codex-runner"
-resolution_status: "accepted"
-resolution_note: "Findings addressed in spec/plan/tasks updates (see plan.md Review Reconciliation section for cross-stage rollup)."
+resolution_status: "open"
+resolution_note: ""
 raw_output_path: "docs/workflow/feature-runs/ff-safety-net/reviews/tasks.codex.dependency-order-adversarial.review.md.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,15 +22,16 @@ coverage_note: ""
 
 ## Findings
 
-- [UNVERIFIED] Medium: T1.6 is order-fragile because `_STATE_MUTATING_COMMANDS` is computed at import time from `build_parser()`. If that line lands before all `command_*` handlers and subparser wiring are fully defined, the registry can be incomplete or the import can fail. The task should require either lazy evaluation or an explicit placement guarantee after parser construction is complete.
-- [UNVERIFIED] Medium: T2.4 does not fully prove the GC runs under the lock. It only asserts that delete syscalls happen after `with_locked_state` is entered, but it does not cover the file-discovery phase. If globbing happens before the lock, the race the task is trying to prevent is still present.
-- [UNVERIFIED] Medium: T1.7’s “every subparser” invariant is snapshot-based and only inspects `build_parser()` once. That means it will miss commands that are added, wrapped, or mutated after the parser snapshot is taken. The safety net is only complete if parser construction is strictly frozen at that point, which the tasks do not state.
+- **High**: `T1.2` / `T1.3` / `T1.6` have a contract mismatch. `collect_mutating_command_names()` is specified to accept `Iterable[Callable]`, but `_get_mutating_commands()` is told to pass `enumerate_subparser_handlers(build_parser())`, which yields `(subcommand_name, handler_callable)` tuples. As written, the cache path cannot work without another projection step, so the registry either crashes or classifies the wrong objects.
+- **High**: `T3.3` mixes dict and attribute access on the same data. The slice treats verdicts as dicts elsewhere (`v.get(...)`, “verdict dict missing field”), but the veto logic uses `completeness_verdict.verdict` and `stage_state.unresolved_concerns`. That path will fail unless those are custom objects, which the artifact never establishes.
+- **Medium [UNVERIFIED]**: `T3.3` does not define how a `unaddressed_high_finding_ids` entry is matched to an item in `stage_state["unresolved_concerns"]`. The veto needs a stable key comparison, but the task only defines “open” status fields, not the identifier field to compare against. If the existing state shape does not already provide that mapping, the veto cannot be implemented correctly.
+- **Medium**: `T2.4`’s lock-order test is too weak. Mocking `_gc_review_intermediates` only proves `command_checkpoint` called the helper while the lock was held. It does not prove the helper’s glob/delete work stays under the lock, so the exact ordering bug this checkpoint is meant to guard against is still untested.
 
 ## Residual Risks
 
-- The plan still assumes the existing parser and review-file naming conventions line up with the new helpers, but that is not verified here.
-- The completeness veto can still behave badly if `stage_state["unresolved_concerns"]` is stale or inconsistently maintained, because the new logic trusts that list as the source of truth.
-- The new fail-open warning in T3.4 reduces silent failure, but it still allows a malformed completeness response to fall back to majority voting.
+- [UNVERIFIED] The existing parser and state shapes may differ from what these tasks assume, especially for subparser defaults and `unresolved_concerns` entries.
+- `T3.4` intentionally fails open when completeness blocks without structured IDs. That means a malformed judge prompt can still let a stage advance if majority voting says proceed.
+- The new tests will only catch the intended regressions if they exercise the real parser/state plumbing, not just isolated mocks.
 
 ## Runner Stats
 - total_input=0
@@ -38,5 +39,5 @@ coverage_note: ""
 - total_tokens=0
 
 ## Resolution
-- status: accepted
-- note: Findings addressed in spec/plan/tasks updates (see plan.md Review Reconciliation section for cross-stage rollup).
+- status: open
+- note: 

@@ -8,7 +8,7 @@ approval: never
 sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
 reasoning effort: high
 reasoning summaries: none
-session id: 019dc13a-2607-7872-be14-11e0e9f77706
+session id: 019dc13d-cf62-7423-9551-b92d6dca9aa3
 --------
 user
 Review this tasks artifact using a dependency-order-adversarial lens.
@@ -31,12 +31,13 @@ Artifact: tasks.md
 - [ ] T1.3 Add `enumerate_subparser_handlers(parser)` helper that walks `parser._actions`, finds the `_SubParsersAction`, and yields `(subcommand_name, handler_callable)` tuples from `subparsers.choices[name]._defaults["func"]`.
 - [ ] T1.4 In `run_factory.py`, define a new `command_judge(args)` function that wraps `run_judge(args.slug, args.stage, json_output=args.json, prompt_override=args.prompt_override, override_reason=args.override_reason, migration_bypass=args.migration_bypass)`. Apply `@mutates_state("judge")`. Update the judge subparser to use `set_defaults(func=command_judge)` instead of the lambda.
 - [ ] T1.5 Apply `@mutates_state("<name>")` to: `command_init`, `command_checkpoint`, `command_reconcile`, `command_auto_reconcile`, `command_block`, `command_repair`, `command_closeout`, `command_discover`, `command_parallel`, `command_implement`, `command_deliver`, `command_judge`. Apply `@readonly_command("<name>")` to: `command_status`, `command_doctor`.
-- [ ] T1.6 Replace the literal `_STATE_MUTATING_COMMANDS` in `run_factory.py` with `_STATE_MUTATING_COMMANDS = collect_mutating_command_names(enumerate_subparser_handlers(build_parser()))`. This is computed once at module load after `build_parser()` is importable.
+- [ ] T1.6 Replace the literal `_STATE_MUTATING_COMMANDS` in `run_factory.py` with a lazy-computed set. Use a module-level `_MUTATING_CACHE: frozenset[str] | None = None` and a `_get_mutating_commands() -> frozenset[str]` helper that calls `collect_mutating_command_names(enumerate_subparser_handlers(build_parser()))` on first access. This avoids import-order fragility (tasks dependency-order review finding): if `build_parser()` is called before all `command_*` handlers + subparser wiring are fully imported, the first call initializes the cache correctly after argument parsing. The invariant post-check in `main()` calls `_get_mutating_commands()` — by then all parsing has happened.
 - [ ] T1.7 Add `tests/test_mutating_registry.py` covering:
   - every subparser in `build_parser()` has a decorated handler (no bare lambdas, no undecorated functions);
   - a fake test scenario adds an undecorated function to a mock parser and asserts the test fails with a message naming the subcommand;
-  - `collect_mutating_command_names` returns exactly the 12 mutating names;
-  - `init` has the decorator and its presence in the set produces no invariant-check error on empty state (asserts `check_judge_advance_vs_recommended({}, "")` returns `[]`).
+  - `collect_mutating_command_names` returns exactly the 12 mutating names `{init, checkpoint, judge, reconcile, auto-reconcile, implement, deliver, block, repair, closeout, discover, parallel}`;
+  - **decorator attachment**: directly assert `getattr(command_init, "__ff_mutates_state__") == "init"` and same for each of the 12 mutating handlers; assert `__ff_readonly_command__` for `command_status` and `command_doctor`. This proves each function is really decorated, not just that the aggregate set has the right size (per tasks execution-adversarial MEDIUM #2).
+  - **init safety**: a full run of `check_judge_advance_vs_recommended` against a state matching what `command_init` produces (empty stages dict) returns `[]`.
 - [ ] T1.8 Run `pytest docs/workflow/operations/codex-skills/feature-factory/scripts/tests/` — all 167 existing + new tests pass.
 - [ ] T1.9 Commit.
 
@@ -50,7 +51,7 @@ Artifact: tasks.md
   - preservation: `.review.md` and `.checkpoint.json` for the same stage are untouched;
   - stage-scoping: a `diff.codex.*.raw.txt` is NOT deleted when running `checkpoint --stage spec`;
   - `--keep-intermediates` suppresses the delete;
-  - lock-ordering: assertion via a mock that `with_locked_state` is entered before any delete syscall.
+  - lock-ordering: assertion via a mock that `with_locked_state` is entered before BOTH the globbing phase AND the delete syscalls. Mock `_gc_review_intermediates` to record the call sequence; assert the lock `__enter__` fires first (per tasks dependency-order MEDIUM #2).
 - [ ] T2.5 Run `pytest tests/` — all pass.
 - [ ] T2.6 Commit.
 
@@ -90,17 +91,18 @@ Return only markdown with exactly these sections:
 ## Residual Risks
 Do not include any other sections.
 codex
-I’m reviewing the task list only, with a dependency-order lens. I’m checking for places where one slice silently assumes another slice is already in place, or where the order of execution makes the plan fragile.
+I’m reviewing the task list as if I had to break it by order-of-operations and hidden dependencies, not by implementation detail. I’ll focus on places where the tasks assume something about existing wiring, state shape, or execution flow that the artifact itself does not prove.
 codex
 ## Findings
-- [UNVERIFIED] Medium: T1.6 is order-fragile because `_STATE_MUTATING_COMMANDS` is computed at import time from `build_parser()`. If that line lands before all `command_*` handlers and subparser wiring are fully defined, the registry can be incomplete or the import can fail. The task should require either lazy evaluation or an explicit placement guarantee after parser construction is complete.
-- [UNVERIFIED] Medium: T2.4 does not fully prove the GC runs under the lock. It only asserts that delete syscalls happen after `with_locked_state` is entered, but it does not cover the file-discovery phase. If globbing happens before the lock, the race the task is trying to prevent is still present.
-- [UNVERIFIED] Medium: T1.7’s “every subparser” invariant is snapshot-based and only inspects `build_parser()` once. That means it will miss commands that are added, wrapped, or mutated after the parser snapshot is taken. The safety net is only complete if parser construction is strictly frozen at that point, which the tasks do not state.
+- **High**: `T1.2` / `T1.3` / `T1.6` have a contract mismatch. `collect_mutating_command_names()` is specified to accept `Iterable[Callable]`, but `_get_mutating_commands()` is told to pass `enumerate_subparser_handlers(build_parser())`, which yields `(subcommand_name, handler_callable)` tuples. As written, the cache path cannot work without another projection step, so the registry either crashes or classifies the wrong objects.
+- **High**: `T3.3` mixes dict and attribute access on the same data. The slice treats verdicts as dicts elsewhere (`v.get(...)`, “verdict dict missing field”), but the veto logic uses `completeness_verdict.verdict` and `stage_state.unresolved_concerns`. That path will fail unless those are custom objects, which the artifact never establishes.
+- **Medium [UNVERIFIED]**: `T3.3` does not define how a `unaddressed_high_finding_ids` entry is matched to an item in `stage_state["unresolved_concerns"]`. The veto needs a stable key comparison, but the task only defines “open” status fields, not the identifier field to compare against. If the existing state shape does not already provide that mapping, the veto cannot be implemented correctly.
+- **Medium**: `T2.4`’s lock-order test is too weak. Mocking `_gc_review_intermediates` only proves `command_checkpoint` called the helper while the lock was held. It does not prove the helper’s glob/delete work stays under the lock, so the exact ordering bug this checkpoint is meant to guard against is still untested.
 
 ## Residual Risks
-- The plan still assumes the existing parser and review-file naming conventions line up with the new helpers, but that is not verified here.
-- The completeness veto can still behave badly if `stage_state["unresolved_concerns"]` is stale or inconsistently maintained, because the new logic trusts that list as the source of truth.
-- The new fail-open warning in T3.4 reduces silent failure, but it still allows a malformed completeness response to fall back to majority voting.
-2026-04-24T20:42:33.629134Z ERROR codex_core::session: failed to record rollout items: thread 019dc13a-2607-7872-be14-11e0e9f77706 not found
+- [UNVERIFIED] The existing parser and state shapes may differ from what these tasks assume, especially for subparser defaults and `unresolved_concerns` entries.
+- `T3.4` intentionally fails open when completeness blocks without structured IDs. That means a malformed judge prompt can still let a stage advance if majority voting says proceed.
+- The new tests will only catch the intended regressions if they exercise the real parser/state plumbing, not just isolated mocks.
+2026-04-24T20:46:43.583493Z ERROR codex_core::session: failed to record rollout items: thread 019dc13d-cf62-7423-9551-b92d6dca9aa3 not found
 tokens used
-9,965
+12,341
