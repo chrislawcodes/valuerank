@@ -36,6 +36,8 @@ import {
   atomicDeduct,
   deductProviderBalancesForRun,
   deductActualProviderBalancesForRun,
+  deductSingleTranscriptBalance,
+  reverseDeductionForRun,
 } from '../../../src/services/budget/deduct.js';
 
 describe('groupCostByProvider', () => {
@@ -375,5 +377,130 @@ describe('deductActualProviderBalancesForRun', () => {
 
     // Single provider → one deduction call (aggregated cost)
     expect(executeRawMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('deductSingleTranscriptBalance', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('charges a transcript once and marks it as debited', async () => {
+    const findUniqueMock = vi.fn();
+    const findFirstMock = vi.fn();
+    const executeRawMock = vi.fn();
+    const updateMock = vi.fn();
+
+    const tx = {
+      transcript: {
+        findUnique: findUniqueMock,
+        update: updateMock,
+      },
+      llmModel: {
+        findFirst: findFirstMock,
+      },
+      $executeRaw: executeRawMock,
+    };
+
+    findUniqueMock.mockResolvedValue({
+      id: 'transcript-1',
+      modelId: 'gpt-5.1',
+      content: { costSnapshot: { estimatedCost: 0.05 } },
+      summarizedAt: new Date(),
+      summarizeFailedAt: null,
+      costDebitedAt: null,
+    } as never);
+
+    findFirstMock.mockResolvedValue({
+      provider: { name: 'openai', balance: new Prisma.Decimal(10) },
+    } as never);
+
+    executeRawMock.mockResolvedValue(1);
+    updateMock.mockResolvedValue({} as never);
+
+    await deductSingleTranscriptBalance('transcript-1', tx as never);
+
+    expect(executeRawMock).toHaveBeenCalledOnce();
+    expect(updateMock).toHaveBeenCalledWith({
+      where: { id: 'transcript-1' },
+      data: { costDebitedAt: expect.any(Date) },
+    });
+  });
+
+  it('no-ops when the transcript was already debited', async () => {
+    const findUniqueMock = vi.fn();
+    const findFirstMock = vi.fn();
+    const executeRawMock = vi.fn();
+    const updateMock = vi.fn();
+
+    const tx = {
+      transcript: {
+        findUnique: findUniqueMock,
+        update: updateMock,
+      },
+      llmModel: {
+        findFirst: findFirstMock,
+      },
+      $executeRaw: executeRawMock,
+    };
+
+    findUniqueMock.mockResolvedValue({
+      id: 'transcript-1',
+      modelId: 'gpt-5.1',
+      content: { costSnapshot: { estimatedCost: 0.05 } },
+      summarizedAt: new Date(),
+      summarizeFailedAt: null,
+      costDebitedAt: new Date(),
+    } as never);
+
+    await deductSingleTranscriptBalance('transcript-1', tx as never);
+
+    expect(findFirstMock).not.toHaveBeenCalled();
+    expect(executeRawMock).not.toHaveBeenCalled();
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('reverseDeductionForRun', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('credits provider balances and clears transcript debit markers in a transaction', async () => {
+    const transcriptFindManyMock = vi.fn();
+    const modelFindManyMock = vi.fn();
+    const executeRawMock = vi.fn();
+    const updateManyMock = vi.fn();
+
+    const tx = {
+      transcript: {
+        findMany: transcriptFindManyMock,
+        updateMany: updateManyMock,
+      },
+      llmModel: {
+        findMany: modelFindManyMock,
+      },
+      $executeRaw: executeRawMock,
+    };
+
+    transcriptFindManyMock.mockResolvedValue([
+      { modelId: 'gpt-5.1', content: { costSnapshot: { estimatedCost: 0.02 } } },
+      { modelId: 'gpt-5.1', content: { costSnapshot: { estimatedCost: 0.03 } } },
+    ] as never);
+
+    modelFindManyMock.mockResolvedValue([
+      { modelId: 'gpt-5.1', provider: { name: 'openai', balance: new Prisma.Decimal(10) } },
+    ] as never);
+
+    executeRawMock.mockResolvedValue(1);
+    updateManyMock.mockResolvedValue({} as never);
+
+    await reverseDeductionForRun('run-123', tx as never);
+
+    expect(executeRawMock).toHaveBeenCalledOnce();
+    expect(updateManyMock).toHaveBeenCalledWith({
+      where: { runId: 'run-123' },
+      data: { costDebitedAt: null },
+    });
   });
 });

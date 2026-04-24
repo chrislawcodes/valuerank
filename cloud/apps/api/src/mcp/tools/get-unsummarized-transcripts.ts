@@ -185,10 +185,10 @@ how many exist even if only 'limit' are returned.`,
             created_at: t.createdAt.toISOString(),
             ...(includeFailed
               ? {
-                summary_status: t.summarizedAt === null
-                  ? 'pending'
-                  : t.summarizeFailedAt !== null
-                    ? 'failed'
+                summary_status: t.summarizeFailedAt !== null
+                  ? 'failed'
+                  : t.summarizedAt === null
+                    ? 'pending'
                     : 'completed',
               }
               : {}),
