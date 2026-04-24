@@ -321,9 +321,9 @@ def build_parser() -> argparse.ArgumentParser:
     checkpoint_parser.add_argument("--no-auto-context", action="store_true",
                                    help="Disable automatic context file extraction from the artifact")
     checkpoint_parser.add_argument("--allow-dirty-path", action="append", default=[])
-    checkpoint_parser.add_argument("--max-artifact-chars", type=int)
-    checkpoint_parser.add_argument("--max-context-chars", type=int)
-    checkpoint_parser.add_argument("--max-total-chars", type=int)
+    checkpoint_parser.add_argument("--max-artifact-chars", type=int, default=50000)
+    checkpoint_parser.add_argument("--max-context-chars", type=int, default=60000)
+    checkpoint_parser.add_argument("--max-total-chars", type=int, default=250000)
     checkpoint_parser.add_argument("--gemini-timeout-seconds", type=int, default=120)
     checkpoint_parser.add_argument("--gemini-retries", type=int, default=1)
     checkpoint_parser.add_argument("--repair-timeout-seconds", type=int, default=300)
@@ -337,6 +337,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     checkpoint_parser.add_argument("--fast", action="store_true",
         help="Fast path: skip prerequisites, run 1 Gemini + 1 Codex review. Requires --stage diff.")
+    checkpoint_parser.add_argument("--validation-only", action="store_true",
+        help="Re-seal the manifest against the current artifact SHA without dispatching any reviewer. "
+             "Used to re-sync after post-cap edits. Mutually exclusive with --fallback, --address, --defer, --dismiss.")
     checkpoint_parser.set_defaults(func=command_checkpoint)
 
     reconcile_parser = subparsers.add_parser("reconcile")
@@ -389,10 +392,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Remove an item from unresolved[] by exact text match")
     discover_parser.add_argument("--defer", type=str,
         help="Mark an unresolved item as deferred by exact text match")
-    discover_parser.add_argument("--non-goal", type=str, dest="non_goal",
-        help="Add a string to non_goals[]")
-    discover_parser.add_argument("--acceptance-criteria", type=str, dest="acceptance_criteria",
-        help="Add a string to acceptance_criteria[]")
+    discover_parser.add_argument("--non-goal", action="append", dest="non_goal", default=None,
+        help="Add a string to non_goals[]. Repeat the flag to append multiple values. "
+             "If --clear-non-goals is also set, the clear applies BEFORE these appends in the same invocation. "
+             "Empty/whitespace-only values are rejected.")
+    discover_parser.add_argument("--acceptance-criteria", action="append", dest="acceptance_criteria", default=None,
+        help="Add a string to acceptance_criteria[]. Repeat the flag to append multiple values. "
+             "If --clear-acceptance-criteria is also set, the clear applies BEFORE these appends in the same invocation. "
+             "Empty/whitespace-only values are rejected.")
+    discover_parser.add_argument("--clear-non-goals", action="store_true",
+        help="Empty discovery.non_goals[] BEFORE any --non-goal appends in the same invocation.")
+    discover_parser.add_argument("--clear-acceptance-criteria", action="store_true",
+        help="Empty discovery.acceptance_criteria[] BEFORE any --acceptance-criteria appends in the same invocation.")
     discover_parser.add_argument("--answer", nargs=2, metavar=("QUESTION", "ANSWER"),
         help="Record answers[QUESTION] = ANSWER")
     discover_parser.add_argument("--force-complete", action="store_true")

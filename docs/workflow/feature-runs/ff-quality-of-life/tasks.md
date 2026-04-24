@@ -1,0 +1,62 @@
+# Tasks — FF Quality of Life
+
+## Slice 1 — Char budgets + restatement prompt `[CHECKPOINT]`
+
+- [x] T1.1 In `run_factory.py` checkpoint subparser, add `default=50000` to `--max-artifact-chars`, `default=60000` to `--max-context-chars`, `default=250000` to `--max-total-chars`.
+- [x] T1.2 In `judge-prompts/restatement.md`, under the "diminishing-returns case" rule, add: "When citing severity drop as a proceed justification, the verdict reasoning MUST quote the prior-round reasoning text verbatim — at least 60 characters, OR the full reasoning text if it is shorter than 60 characters — and name the specific finding whose severity allegedly dropped (per Gemini tasks HIGH F-02). If you cannot quote a prior round's text for the finding in question, severity-drop is not a valid proceed basis — fall back to other rules."
+- [x] T1.3 Add `tests/test_char_budget_defaults.py` — parse args with no budget flags, assert defaults resolve to 50000/60000/250000.
+- [x] T1.4 Add `tests/test_restatement_prompt.py` — read judge-prompts/restatement.md, assert it contains both the new quote-evidence phrase AND the unchanged first-round-proceed-with-annotation + true-saturation rules.
+- [x] T1.5 Run `pytest docs/workflow/operations/codex-skills/feature-factory/scripts/tests/` — 183 existing + 2 new pass.
+- [x] T1.6 Commit.
+
+## Slice 2 — Discover CLI append semantics `[CHECKPOINT]`
+
+- [x] T2.1 In `run_factory.py` discover subparser, change `--non-goal` and `--acceptance-criteria` to `action="append"`. Use `default=None` so an empty list is the sentinel.
+- [x] T2.2 Add `--clear-non-goals` and `--clear-acceptance-criteria` as `action="store_true"` flags. Update argparse help text to explicitly document "clear happens BEFORE appends in the same invocation."
+- [x] T2.3 In `factory_cmd_discover.command_discover`, update the handler:
+  - If `args.clear_non_goals`: empty `state.discovery.non_goals`.
+  - If `args.clear_acceptance_criteria`: empty `state.discovery.acceptance_criteria`.
+  - For each value in `args.non_goal or []`: reject if `value.strip()` is empty (exit 2 with "--non-goal cannot be empty/whitespace"); append stripped value to state list if not already present (dedup by exact match).
+  - Same for `args.acceptance_criteria or []`.
+- [x] T2.4 Add `tests/test_discover_append.py` — integration-level via argparse CLI invocation. Scenarios:
+  - US4.1: `--non-goal A --non-goal B` → `["A", "B"]`.
+  - US4.2: existing `["A"]` + `--non-goal B --non-goal C` → `["A", "B", "C"]`.
+  - US4.3: existing `["A", "B", "C"]` + `--clear-non-goals` → `[]`.
+  - US4.4: `--clear-non-goals --non-goal D` → `["D"]`.
+  - US4.5: same semantics for `--acceptance-criteria` / `--clear-acceptance-criteria`.
+  - Edge: `--non-goal ""` → exit 2.
+  - Edge: `--non-goal "   "` → exit 2.
+  - Edge: `--non-goal "A" --clear-non-goals --non-goal "B"` → `["B"]` (clear first).
+  - Edge: dedup — `--non-goal "A" --non-goal "A"` → `["A"]`.
+- [x] T2.5 Run pytest — all pass.
+- [x] T2.6 Commit.
+
+## Slice 3 — `--validation-only` flag `[CHECKPOINT]`
+
+- [x] T3.1 In `run_factory.py` checkpoint subparser, add `--validation-only` as `action="store_true"`. Add argparse mutual-exclusion: `--validation-only` cannot be combined with `--fallback`, `--address`, `--defer`, or `--dismiss` (argparse raises on any combination).
+- [x] T3.2 In `factory_cmd_checkpoint.command_checkpoint`, at the top (after args parse, before prereq check), if `args.validation_only` → call new helper `_run_validation_only(args.slug, args.stage)` and return its exit code.
+- [x] T3.3 Implement `_run_validation_only(slug, stage) -> int` in `factory_cmd_checkpoint.py`:
+  - Load manifest at `checkpoint_manifest_path(slug, stage)`. Missing → print `no manifest to validate for stage={stage} — run checkpoint first`, return 2.
+  - Compute current artifact SHA via `normalized_artifact_hash(default_artifact_path(slug, stage))`.
+  - Pre-check: for each review in `manifest["required_reviews"]`, check `review["path"]` exists AND `os.access(path, W_OK)`. Any failure → print `pre-check failed: {path} not writable`, return 2 BEFORE any write.
+  - Read each review's YAML frontmatter, extract existing `artifact_sha256`.
+  - If all existing == current: print `manifest already matches artifact (sha={sha[:12]})`, return 0.
+  - Otherwise, for each review that needs update: write to temp file in the same directory, set the new `artifact_sha256`, `os.replace` atomic rename. If any `os.replace` raises: print `reseal partial failure at {path}: {err}` and return 2 (already-written reviews keep their new SHA per accepted Risk P3).
+  - On full success: append `{type: "validation-only-reseal", old_sha, new_sha, at: int(time.time()), files_updated: N}` to `stages[stage].annotations[]` via `update_stage_state`. Print `manifest re-sealed: {N} review files updated to sha={new_sha[:12]}`, return 0.
+- [x] T3.4 Add `tests/test_validation_only.py` — integration-level CLI invocation. Scenarios:
+  - US2.1: drift → reseal happens, 0 subprocess calls, annotation appended, exit 0.
+  - US2.2: `--validation-only` NOT passed on same drifted state → existing behavior unchanged (3-round cap or repair path).
+  - US2.3: no drift → no-op, exit 0, zero writes.
+  - US2.4: no manifest → exit 2.
+  - Pre-check failure: one review file read-only → exit 2, no writes to other files.
+  - Mid-run failure (per Gemini CRITICAL F-01): mock `os.replace` to raise on the 2nd of 3 files. Assert exit 2, clear error message, annotation NOT appended. Also assert the resulting file state: file[0] has new SHA, file[1] has old SHA (raise happened mid-write), file[2] has old SHA (never reached). This explicitly documents + tests the accepted-partial-state behavior per Gemini tasks LOW F-06.
+  - Parametrized mutex (per Gemini MEDIUM F-03): `--validation-only --fallback`, `--validation-only --address X --evidence Y`, `--validation-only --defer X --reason Y`, `--validation-only --dismiss X --reason Y` → argparse error exit 2 for each.
+  - Exit code + error message assertions on each failure path.
+- [x] T3.5 Run pytest — all pass.
+- [x] T3.6 Commit.
+
+## Slice 4 — Closeout + docs `[CHECKPOINT]`
+
+- [x] T4.1 Write `closeout.md`.
+- [x] T4.2 Write `postmortem.md`.
+- [x] T4.3 Commit. STATUS.md post-merge.

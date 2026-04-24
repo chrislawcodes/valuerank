@@ -4,7 +4,7 @@
 - repo root: `/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7`
 
 ## split-queue-orchestrator
-- state: `/var/folders/29/btkltdrj223_q4857sdj5s0m0000gn/T/tmplrx0i7ke/split-queue-orchestrator/state.json`
+- state: `/var/folders/29/btkltdrj223_q4857sdj5s0m0000gn/T/tmpkcc6fm9g/split-queue-orchestrator/state.json`
 - stage judged: `plan`
 - stage reason: stage_state.judge_next_action=edit_and_rerun_judge
 - vote tally: proceed=2 block=1
