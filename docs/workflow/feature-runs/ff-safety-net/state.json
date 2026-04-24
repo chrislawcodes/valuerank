@@ -1,0 +1,70 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": true,
+    "complete": true,
+    "question_count": 0,
+    "asked_count": 0,
+    "questions": [],
+    "assumptions": [
+      "Scope: 3 fixes only (completeness veto, auto-register, GC reviews). Do NOT include --force-advance, rename repair_X_checkpoint, --validation-only, char budgets, embedding IDs, fenced-code regex, or structured reviewer output.",
+      "Completeness veto: when completeness judge votes block due to unaddressed HIGH reviewer finding, that block overrides majority vote from other judges. Escape hatches remain: checkpoint --address/--defer/--dismiss on the concern, OR deliver --override-judges --reason for emergency ship.",
+      "Auto-register: mutating commands register via a @mutates_state decorator on their command_* function. run_factory.py _STATE_MUTATING_COMMANDS becomes a computed frozenset derived from decorator metadata, not a literal. Test asserts every command_* function is decorated or explicitly tagged non-mutating.",
+      "GC reviews: at the start of checkpoint --stage X, delete reviews/X.*.narrowed.* and reviews/X.*.raw.txt and reviews/X.*.stdout.txt/.stderr.txt UNLESS --keep-intermediates is passed. Preserve reviews/X.*.review.md (the resolution-bearing file) and reviews/X.checkpoint.json (manifest).",
+      "All 167 existing runner tests must pass. Target ~190 total after this feature.",
+      "Codex implements slices after spec/plan/tasks checkpoints are healthy. Claude is orchestrator only \u2014 per ~/.claude/rules/agent-invocation.md token-saving rules.",
+      "Spec FR-005b Findings Pushed Aside section was shipped in PR #744 and will auto-surface any deferred/dismissed concerns for this feature."
+    ],
+    "summary": "Feature A = FF Safety Net. Three fixes from the leftover backlog after PR #744: (1) completeness judge veto on unaddressed HIGH concerns, (2) auto-register of mutating commands instead of hand-kept frozenset, (3) garbage-collect stale review intermediates between runs. All three reinforce each other by making the FF workflow itself more trustworthy.",
+    "updated_at": 1777061262,
+    "answers": {},
+    "non_goals": [
+      "Fenced-code-block regex false positive (Risk R1) \u2014 rare, pinned.",
+      "Rename repair_X_checkpoint (plan Fix 4) \u2014 still deferred.",
+      "--force-advance CLI (plan Fix 3) \u2014 mostly subsumed by --override-judges + concern-lifecycle CLI; still deferred.",
+      "--validation-only flag past 3-round cap (plan Fix 5) \u2014 Feature B.",
+      "Raise default char budgets (plan Fix 7) \u2014 Feature B.",
+      "Embedding-based concern IDs (Risk R5) \u2014 Feature C.",
+      "Structured JSON reviewer output (Risk R7) \u2014 larger project."
+    ],
+    "acceptance_criteria": [
+      "review.md and checkpoint.json files are never deleted by the GC \u2014 test verifies with fixture files of each type.",
+      "completeness judge block on unaddressed HIGH overrides majority proceed; test asserts judge panel with 2 proceed + 1 completeness block returns edit_and_rerun_judge not advance.",
+      "completeness veto still permits --address/--defer/--dismiss resolution; test asserts once the HIGH concern is marked resolved, panel advances normally.",
+      "_STATE_MUTATING_COMMANDS set derived from @mutates_state decorator; test asserts every existing command_* function is either decorated mutating or explicitly marked non-mutating.",
+      "Test asserts adding a fake new command_ function without decoration triggers a test failure, not a silent miss.",
+      "checkpoint --stage X at invocation deletes stale narrowed/raw/stdout/stderr files for that stage unless --keep-intermediates passed; test verifies."
+    ],
+    "unresolved": []
+  },
+  "delivery": {},
+  "dirty_overrides": {},
+  "checkpoint_fallback": {},
+  "parallel_analysis": {
+    "reviewed": false,
+    "found": false,
+    "note": "",
+    "updated_at": 0
+  },
+  "init_head_sha": "c07a4283ecdebffa57e8a2cccfa08c23e0f76a36",
+  "token_usage": [],
+  "stages": {},
+  "invariant_warnings": [],
+  "schema_version": 1,
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  }
+}
