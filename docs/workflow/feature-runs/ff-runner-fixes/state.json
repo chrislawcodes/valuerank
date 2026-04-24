@@ -1,0 +1,66 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": true,
+    "complete": true,
+    "question_count": 0,
+    "asked_count": 0,
+    "questions": [],
+    "assumptions": [
+      "Scope = Fixes 1, 2, 8 from the plan; Fixes 3, 4, 5-7 deferred to separate features.",
+      "Fix 1 includes a new state.json schema for unresolved_concerns carry-forward: stored under stages.<stage>.unresolved_concerns as a list of {id, severity, summary, source_review, raised_at, addressed_at, addressed_by}; written when judges vote advance with open concerns; verified-cleared by the next stage's checkpoint runner reading and requiring each id be either marked addressed or explicitly deferred in annotations[].",
+      "Fix 1 reseals the manifest at advance time when artifact SHA has drifted, and records the drift (old_sha, new_sha, reason) in stages.<stage>.annotations[].",
+      "Fix 2 regex uses structural anchoring \u2014 start-of-line + specific finding-block prefixes \u2014 to avoid false-positives from prose that mentions HIGH in passing. Negative-case tests required.",
+      "Fix 8 self-check runs as a post-command hook after checkpoint/judge/reconcile/auto-reconcile; writes a WARN to state.json under invariant_warnings[] and prints the contradiction message to stdout; does not abort the command.",
+      "Regression test uses a captured state.json snapshot from feature run 033; task 0 of tasks.md is 'capture and commit the snapshot to scripts/tests/fixtures/'.",
+      "Out of scope: changes to sync-codex-skills.py, review-lens scripts, reviewer prompts, product-surface changes, any PgBoss/scheduler changes."
+    ],
+    "summary": "Discovery carried in from skeptical-TL review of docs/workflow/plans/feature-factory-runner-fixes.md. Scope is Fixes 1, 2, 8 only; Fixes 3, 4, 5-7 explicitly deferred. No new questions needed \u2014 assumptions captured via --assumption flags. If implementation surfaces ambiguity in the unresolved_concerns schema, block for human decision.",
+    "updated_at": 1776989839,
+    "answers": {},
+    "non_goals": [
+      "Raise default character budgets (Fix 7) \u2014 deferred.",
+      "Rename repair_X_checkpoint \u2192 run_X_checkpoint (Fix 4) \u2014 deferred.",
+      "Add --force-advance / advance CLI subcommand (Fix 3) \u2014 deferred.",
+      "--validation-only flag past 3-round cap (Fix 5) \u2014 deferred.",
+      "Garbage-collect reviews/ intermediates (Fix 6) \u2014 deferred."
+    ],
+    "acceptance_criteria": [
+      "Run-033 state.json snapshot committed as a test fixture; regression test replays it and asserts advance is honored.",
+      "factory_next_action honors judge_next_action='advance' and routes to next stage action instead of repair_<stage>_checkpoint, including when artifact SHA has drifted.",
+      "unresolved_concerns carried from stage N to stage N+1 in state.json under a documented schema; next stage's checkpoint verifies they are addressed or deferred.",
+      "detect_actionable_findings catches numbered-list, heading, bold-prefix, and inline Severity: shapes; does not false-positive on prose mentioning HIGH.",
+      "Post-run self-check emits a WARN and console message when judge_next_action==advance contradicts recommended_next_action==repair_<same stage>_checkpoint."
+    ],
+    "unresolved": []
+  },
+  "delivery": {},
+  "dirty_overrides": {},
+  "checkpoint_fallback": {},
+  "parallel_analysis": {
+    "reviewed": false,
+    "found": false,
+    "note": "",
+    "updated_at": 0
+  },
+  "init_head_sha": "424c0605a8158acfe0b3912840a6c5b2da057c84",
+  "token_usage": [],
+  "stages": {},
+  "schema_version": 1,
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  }
+}
