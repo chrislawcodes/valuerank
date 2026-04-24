@@ -11,13 +11,11 @@ import {
   detectSummarizingStall,
   countOrphanTranscripts,
   findOrphanTranscripts,
-  type AnomalyDraft,
   type RunSnapshot,
 } from '../../services/run/anomaly-detection.js';
 import {
-  persistAnomalyDrafts,
   repairScheduledCount,
-  resolveAnomaly,
+  syncAnomalies,
 } from '../../services/run/anomaly-persistence.js';
 import { ORPHAN_RECONSTRUCTION_CAP_PER_TICK } from '../../services/run/anomaly-thresholds.js';
 import { recordProbeSuccess } from '../../services/probe-result/index.js';
@@ -90,22 +88,6 @@ async function enqueueSummarizeTranscriptJob(runId: string, transcriptId: string
       singletonKey: transcriptId,
     }
   );
-}
-
-async function syncAnomalies(runId: string, type: AnomalyDraft['type'], drafts: AnomalyDraft[]): Promise<void> {
-  await persistAnomalyDrafts(runId, drafts);
-
-  const currentSubjects = new Set(drafts.map((draft) => draft.subject));
-  const existing = await db.runAnomaly.findMany({
-    where: { runId, type },
-    select: { subject: true },
-  });
-
-  for (const anomaly of existing) {
-    if (!currentSubjects.has(anomaly.subject)) {
-      await resolveAnomaly({ runId, type, subject: anomaly.subject });
-    }
-  }
 }
 
 async function reconstructOrphans(runId: string): Promise<{ orphanIds: string[]; failedIds: string[]; reconstructedCount: number }> {
@@ -216,9 +198,9 @@ export function createRunStateReconcileHandler(): PgBoss.WorkHandler<RunStateRec
                 transcriptIds: orphanResult.orphanIds,
                 malformedTranscriptIds: orphanResult.failedIds,
               },
-            }]);
+            }], 'default');
           } else {
-            await syncAnomalies(runId, 'ORPHAN_TRANSCRIPT', []);
+            await syncAnomalies(runId, 'ORPHAN_TRANSCRIPT', [], 'default');
           }
         } catch (error) {
           log.warn({ runId, err: error }, 'Orphan transcript reconciliation failed');
@@ -242,9 +224,9 @@ export function createRunStateReconcileHandler(): PgBoss.WorkHandler<RunStateRec
               await enqueueSummarizeTranscriptJob(runId, transcript.id);
             }
 
-            await syncAnomalies(runId, stranded.type, [stranded]);
+            await syncAnomalies(runId, stranded.type, [stranded], 'default');
           } else {
-            await syncAnomalies(runId, 'STRANDED_TRANSCRIPT', []);
+            await syncAnomalies(runId, 'STRANDED_TRANSCRIPT', [], 'default');
           }
         } catch (error) {
           log.warn({ runId, err: error }, 'Late transcript rescue failed');
@@ -263,35 +245,35 @@ export function createRunStateReconcileHandler(): PgBoss.WorkHandler<RunStateRec
         if (run.status === 'COMPLETED') {
           try {
             const pair = await detectPairAsymmetry(run);
-            await syncAnomalies(runId, 'PAIR_ASYMMETRY', pair === null ? [] : [pair]);
+            await syncAnomalies(runId, 'PAIR_ASYMMETRY', pair === null ? [] : [pair], 'default');
           } catch (error) {
             log.warn({ runId, err: error }, 'Pair asymmetry detection failed');
           }
 
           try {
             const shortfalls = await detectModelTranscriptShortfall(run);
-            await syncAnomalies(runId, 'MODEL_TRANSCRIPT_SHORTFALL', shortfalls);
+            await syncAnomalies(runId, 'MODEL_TRANSCRIPT_SHORTFALL', shortfalls, 'default');
           } catch (error) {
             log.warn({ runId, err: error }, 'Model shortfall detection failed');
           }
         } else {
           try {
             const pair = await detectPairAsymmetry(run);
-            await syncAnomalies(runId, 'PAIR_ASYMMETRY', pair === null ? [] : [pair]);
+            await syncAnomalies(runId, 'PAIR_ASYMMETRY', pair === null ? [] : [pair], 'default');
           } catch (error) {
             log.warn({ runId, err: error }, 'Pair asymmetry detection failed');
           }
 
           try {
             const stall = detectSummarizingStall(run);
-            await syncAnomalies(runId, 'SUMMARIZING_STALL', stall === null ? [] : [stall]);
+            await syncAnomalies(runId, 'SUMMARIZING_STALL', stall === null ? [] : [stall], 'default');
           } catch (error) {
             log.warn({ runId, err: error }, 'Summarizing stall detection failed');
           }
 
           try {
             const scheduled = await detectScheduledCountMismatch(run);
-            await syncAnomalies(runId, 'SCHEDULED_COUNT_MISMATCH', scheduled.draft === null ? [] : [scheduled.draft]);
+            await syncAnomalies(runId, 'SCHEDULED_COUNT_MISMATCH', scheduled.draft === null ? [] : [scheduled.draft], 'default');
             if (scheduled.draft !== null) {
               await repairScheduledCount(runId, scheduled.canonicalTotal);
             }
@@ -301,7 +283,7 @@ export function createRunStateReconcileHandler(): PgBoss.WorkHandler<RunStateRec
 
           try {
             const shortfalls = await detectModelTranscriptShortfall(run);
-            await syncAnomalies(runId, 'MODEL_TRANSCRIPT_SHORTFALL', shortfalls);
+            await syncAnomalies(runId, 'MODEL_TRANSCRIPT_SHORTFALL', shortfalls, 'default');
           } catch (error) {
             log.warn({ runId, err: error }, 'Model shortfall detection failed');
           }

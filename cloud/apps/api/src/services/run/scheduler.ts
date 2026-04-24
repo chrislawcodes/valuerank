@@ -315,6 +315,20 @@ function startActivityTimeout(): void {
   }, RECOVERY_ACTIVITY_WINDOW_MS);
 }
 
+async function registerRunStateAuditSchedule(): Promise<void> {
+  try {
+    const boss = getBoss();
+    await boss.unschedule('run_state_audit').catch(() => undefined);
+    await boss.schedule('run_state_audit', '0 9 * * *', {});
+    log.info(
+      { jobType: 'run_state_audit', cron: '0 9 * * *' },
+      'Registered run_state_audit schedule'
+    );
+  } catch (error) {
+    log.error({ error }, 'Failed to register run_state_audit schedule');
+  }
+}
+
 /**
  * Stops only the recovery interval (not the activity tracking).
  */
@@ -367,6 +381,8 @@ export async function startRecoveryScheduler(): Promise<void> {
     { intervalMs: RECOVERY_INTERVAL_MS, activityWindowMs: RECOVERY_ACTIVITY_WINDOW_MS },
     'Starting recovery scheduler'
   );
+
+  await registerRunStateAuditSchedule();
 
   // Run startup recovery first
   let hasActiveRuns = false;

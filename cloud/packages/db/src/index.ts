@@ -46,6 +46,7 @@ export type {
   ProviderBalanceSyncLog,
   RunAnomaly,
   RunAnomalyType,
+  RunAnomalySource,
   ValueStatementVersion,
   DomainConfigSnapshot,
 } from '@prisma/client';
