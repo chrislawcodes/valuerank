@@ -13,10 +13,17 @@ const logger = vi.hoisted(() => ({
 
 const dbMock = vi.hoisted(() => ({
   run: {
+    findUnique: vi.fn(),
     findMany: vi.fn(),
     update: vi.fn(),
   },
+  probeResult: {
+    groupBy: vi.fn(),
+  },
   runScenarioSelection: {
+    count: vi.fn(),
+  },
+  transcript: {
     count: vi.fn(),
   },
   $queryRaw: vi.fn(),
@@ -150,11 +157,17 @@ describe('stall detection service', () => {
         id: 'run-1',
         stalledModels: [],
         startedAt: new Date(now - STALL_THRESHOLD_MS - 1000),
-        progress: { total: 6, completed: 3, failed: 1 },
         config: { models: ['model-a'], samplesPerScenario: 2 },
       },
     ]);
+    vi.mocked(db.run.findUnique).mockResolvedValue({ progress: { total: 6 } });
+    vi.mocked(db.probeResult.groupBy).mockResolvedValue([
+      { status: 'SUCCESS', _count: { _all: 3 } },
+      { status: 'FAILED', _count: { _all: 1 } },
+    ]);
+    vi.mocked(db.transcript.count).mockResolvedValue(0);
     vi.mocked(db.$queryRaw)
+      .mockResolvedValueOnce([])
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([{ model_id: 'model-a', cnt: 4n }]);
@@ -171,11 +184,11 @@ describe('stall detection service', () => {
       data: { stalledModels: ['model-a'] },
     });
     expect(logger.warn).toHaveBeenCalledWith(
-      {
+      expect.objectContaining({
         runId: 'run-1',
         stalledModels: ['model-a'],
-        progress: { total: 6, completed: 3, failed: 1 },
-      },
+        progress: expect.objectContaining({ total: 6, completed: 3, failed: 1 }),
+      }),
       'Progress stall detected: incomplete progress with no pending jobs'
     );
   });
@@ -186,10 +199,15 @@ describe('stall detection service', () => {
         id: 'run-1',
         stalledModels: [],
         startedAt: new Date(now - STALL_THRESHOLD_MS - 1000),
-        progress: { total: 4, completed: 3, failed: 1 },
         config: { models: ['model-a'] },
       },
     ]);
+    vi.mocked(db.run.findUnique).mockResolvedValue({ progress: { total: 4 } });
+    vi.mocked(db.probeResult.groupBy).mockResolvedValue([
+      { status: 'SUCCESS', _count: { _all: 3 } },
+      { status: 'FAILED', _count: { _all: 1 } },
+    ]);
+    vi.mocked(db.transcript.count).mockResolvedValue(0);
     vi.mocked(db.$queryRaw).mockResolvedValueOnce([]);
     vi.mocked(db.run.update).mockResolvedValue({} as never);
 
@@ -206,10 +224,15 @@ describe('stall detection service', () => {
         id: 'run-1',
         stalledModels: [],
         startedAt: new Date(now - STALL_THRESHOLD_MS - 1000),
-        progress: { total: 6, completed: 3, failed: 1 },
         config: { models: ['model-a'], samplesPerScenario: 2 },
       },
     ]);
+    vi.mocked(db.run.findUnique).mockResolvedValue({ progress: { total: 6 } });
+    vi.mocked(db.probeResult.groupBy).mockResolvedValue([
+      { status: 'SUCCESS', _count: { _all: 3 } },
+      { status: 'FAILED', _count: { _all: 1 } },
+    ]);
+    vi.mocked(db.transcript.count).mockResolvedValue(0);
     vi.mocked(db.$queryRaw)
       .mockResolvedValueOnce([{ model_id: 'model-a' }])
       .mockResolvedValueOnce([{ model_id: 'model-a', last_completion: new Date(now - 1000) }])
@@ -227,6 +250,7 @@ describe('stall detection service', () => {
     vi.mocked(db.run.findMany).mockResolvedValue([
       { id: 'run-1', stalledModels: [], startedAt: null },
     ]);
+    vi.mocked(db.run.findUnique).mockResolvedValue({ progress: { total: 0 } });
     vi.mocked(db.run.update).mockResolvedValue({} as never);
 
     const result = await detectAndUpdateStalledRuns();

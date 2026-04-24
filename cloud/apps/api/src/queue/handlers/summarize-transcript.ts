@@ -17,6 +17,7 @@ import { spawnPython, type SpawnPythonResult } from '../spawn.js';
 import { getSummarizerModel, type InfraModelConfig } from '../../services/infra-models.js';
 import { getMaxParallelSummarizations } from '../../services/summarization-parallelism/index.js';
 import { schedule as rateLimitSchedule, getLimiterStats, type ScheduleOptions } from '../../services/rate-limiter/index.js';
+import { maybeAdvanceRunStatus } from '../../services/run/index.js';
 import { resolveTranscriptDecisionModel } from '../../graphql/queries/domain/shared.js';
 import type { SummarizeTranscriptJobData } from '../types.js';
 import {
@@ -193,7 +194,7 @@ async function resolveSummarizeJob(
     return { kind: 'missing' };
   }
 
-  const wasAlreadySummarized = transcript.summarizedAt !== null;
+  const isTerminal = transcript.summarizedAt !== null || transcript.summarizeFailedAt !== null;
   const responseSha256 = computeTranscriptResponseSha256(transcript.content);
   const transcriptDecisionMetadata = isPlainJsonObject(transcript.decisionMetadata)
     ? transcript.decisionMetadata
@@ -208,14 +209,14 @@ async function resolveSummarizeJob(
   if (!forceSummarize && summaryCache && isCacheRecordMatch(summaryCache, responseSha256, parserVersion, modelId)) {
     log.info({ jobId: job.id, transcriptId, modelId }, 'Transcript summary cache hit');
 
-    if (!wasAlreadySummarized) {
+    if (!isTerminal) {
       await persistCachedSummary(job, transcript, summaryCache, responseSha256, parserVersion, modelId);
     }
 
     return { kind: 'cache-hit' };
   }
 
-  if (!forceSummarize && !hasSummaryCacheField && wasAlreadySummarized) {
+  if (!forceSummarize && !hasSummaryCacheField && isTerminal) {
     log.info({ jobId: job.id, transcriptId }, 'Transcript already summarized, skipping');
     return { kind: 'skipped' };
   }
@@ -462,8 +463,10 @@ export function createSummarizeTranscriptHandler(): PgBoss.WorkHandler<Summarize
 
       if (resolved.kind === 'cache-hit') {
         cacheHitCount++;
+        await maybeAdvanceRunStatus(job.data.runId);
       } else if (resolved.kind === 'skipped') {
         skippedCount++;
+        await maybeAdvanceRunStatus(job.data.runId);
       }
     }
 

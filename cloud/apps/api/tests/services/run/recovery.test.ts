@@ -37,6 +37,7 @@ describe('run recovery service', () => {
   const createdRunIds: string[] = [];
   const createdScenarioIds: string[] = [];
   const createdTranscriptIds: string[] = [];
+  const createdProbeResultIds: string[] = [];
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -49,6 +50,13 @@ describe('run recovery service', () => {
         where: { id: { in: createdTranscriptIds } },
       });
       createdTranscriptIds.length = 0;
+    }
+
+    if (createdProbeResultIds.length > 0) {
+      await db.probeResult.deleteMany({
+        where: { id: { in: createdProbeResultIds } },
+      });
+      createdProbeResultIds.length = 0;
     }
 
     if (createdRunIds.length > 0) {
@@ -146,6 +154,20 @@ describe('run recovery service', () => {
     });
     createdTranscriptIds.push(transcript.id);
     return transcript;
+  }
+
+  async function createTestProbeResult(runId: string, scenarioId: string, modelId: string) {
+    const probeResult = await db.probeResult.create({
+      data: {
+        runId,
+        scenarioId,
+        modelId,
+        sampleIndex: 0,
+        status: 'SUCCESS',
+      },
+    });
+    createdProbeResultIds.push(probeResult.id);
+    return probeResult;
   }
 
   describe('RECOVERY_INTERVAL_MS', () => {
@@ -273,6 +295,8 @@ describe('run recovery service', () => {
           scenarioId: scenario.id,
         },
       });
+
+      await createTestProbeResult(run.id, scenario.id, 'openai:gpt-4o');
 
       // Create transcript for this scenario+model
       await createTestTranscript(run.id, 'openai:gpt-4o', scenario.id);

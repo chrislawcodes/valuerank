@@ -1,0 +1,45 @@
+---
+reviewer: "codex"
+lens: "implementation-adversarial"
+stage: "plan"
+artifact_path: "docs/workflow/feature-runs/035-audit-sweep/plan.md"
+artifact_sha256: "422279cfe9d693de84c4302d95cc32eb59945b9b9ee4ca057c0bcbe8504978fc"
+repo_root: "."
+git_head_sha: "67082dc3d4eeede3775a50ee4769cb22d2cb7e09"
+git_base_ref: "origin/main"
+git_base_sha: "67082dc3d4eeede3775a50ee4769cb22d2cb7e09"
+generation_method: "codex-runner"
+resolution_status: "accepted"
+resolution_note: "No actionable findings detected — auto-accepted"
+raw_output_path: "docs/workflow/feature-runs/035-audit-sweep/reviews/plan.codex.implementation-adversarial.review.md.raw.txt"
+narrowed_artifact_path: ""
+narrowed_artifact_sha256: ""
+coverage_status: "full"
+coverage_note: ""
+---
+
+# Review: plan implementation-adversarial
+
+## Findings
+
+- **High**: The audit sweep as written will only inspect the same narrow set of completed runs that `run_state_reconcile` already queues, so it will miss completed runs that have pair-asymmetry or model-shortfall issues but no stranded/orphan transcript signal. In [`scheduler.ts`](\/Users\/chrislaw\/valuerank\/.claude\/worktrees\/distracted-noyce-64917e\/cloud\/apps\/api\/src\/services\/run\/scheduler.ts), `enqueueRunStateReconcileJobs()` only includes `COMPLETED` runs when they already have stranded transcripts or orphan backlog; a daily audit that “finds runs matching reconcile scope” inherits that blind spot. [CODE-CONFIRMED]
+
+- **High**: The proposed “zero-threshold” audit mode for `detectModelTranscriptShortfall()` does not actually widen detection. In [`anomaly-detection.ts`](\/Users\/chrislaw\/valuerank\/.claude\/worktrees\/distracted-noyce-64917e\/cloud\/apps\/api\/src\/services\/run\/anomaly-detection.ts), the detector only fires when `rate < MODEL_SHORTFALL_ABSOLUTE_RATE` or `rate < MODEL_SHORTFALL_RELATIVE_RATE`; setting both to `0` still makes `0%` success and any positive rate fail the `< 0` test, so the audit sweep would never flag the shortfall cases the plan claims to cover. [CODE-CONFIRMED]
+
+- **Medium**: The registration step points at the wrong file. [`index.ts`](\/Users\/chrislaw\/valuerank\/.claude\/worktrees\/distracted-noyce-64917e\/cloud\/apps\/api\/src\/queue\/handlers\/index.ts) only consumes `handlerRegistrations` from `handler-config.js`; it does not define that registry. If the new `run_state_audit` entry is not added in the actual registry source, the handler will never be wired even if the new code compiles. [CODE-CONFIRMED]
+
+- **Medium**: The plan leaves the existing minimum-probe gates untouched, so “audit everything” is still not true for low-volume runs. In [`anomaly-detection.ts`](\/Users\/chrislaw\/valuerank\/.claude\/worktrees\/distracted-noyce-64917e\/cloud\/apps\/api\/src\/services\/run\/anomaly-detection.ts), `detectPairAsymmetry()` skips runs below `PAIR_ASYMMETRY_MIN_PROBES`, and `detectModelTranscriptShortfall()` returns `[]` below `MODEL_SHORTFALL_MIN_PROBES`. Those hard gates remain even with the proposed audit overrides, so small runs will still be invisible to the new audit sweep. [CODE-CONFIRMED]
+
+## Residual Risks
+
+- The plan still depends on a new daily scheduler hook and does not show how duplicate schedule entries will be prevented across restarts or multiple workers.
+- The source-splitting change introduces a new row shape for `RunAnomaly`; any other consumers outside the provided code may still assume the old uniqueness and should be checked before shipping.
+
+## Runner Stats
+- total_input=0
+- total_output=0
+- total_tokens=0
+
+## Resolution
+- status: accepted
+- note: No actionable findings detected — auto-accepted

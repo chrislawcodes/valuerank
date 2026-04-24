@@ -1,0 +1,9 @@
+## Findings
+- **High**: `T1-2` is not rollout-safe. It drops `run_anomalies_run_id_type_subject_key` in the same migration that introduces the new `(runId, type, subject, source)` key. Any old API worker, queue consumer, or partially deployed instance still using the legacy upsert shape will start failing as soon as that index is removed. This needs a compatibility window or a two-step deploy, not a hard cutover.
+- **High**: The audit SQL in `T5-2` is written with `NOW() - INTERVAL $windowDays`, which is not valid PostgreSQL bind syntax as written. That query will likely fail at runtime unless it is rewritten to use a proper parameterized interval expression.
+- **Medium [UNVERIFIED]**: `T5-4` schedules `run_state_audit` on startup without any explicit leader-election or singleton guard. If this API runs on more than one instance, each boot can unschedule/reschedule the same job and create duplicate or unstable daily audit execution. If `boss` already serializes this across instances, fine; otherwise the plan is missing a protection step.
+
+## Residual Risks
+- The new tests around `run { anomalies { ... } }` should assert on a set or explicit sort order; otherwise mixed `default`/`audit` rows can make the GraphQL test flaky.
+- `T2-4` should verify the true re-detection path by resolving a row first, then upserting it again. As written, the test idea does not fully prove that `resolvedAt` is cleared after a prior resolution.
+- The migration and audit sweep may still be lock-heavy on a large `run_anomalies` table, even if the SQL itself is corrected.

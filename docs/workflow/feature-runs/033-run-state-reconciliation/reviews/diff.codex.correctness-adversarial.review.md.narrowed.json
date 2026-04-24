@@ -1,0 +1,24 @@
+{
+  "source_artifact_path": "docs/workflow/feature-runs/033-run-state-reconciliation/reviews/implementation.diff.patch",
+  "source_artifact_sha256": "ca11349d52249e5df76e293593a66aa165dff8db4bb5ecceac8e1ad8e739746d",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/033-run-state-reconciliation/reviews/diff.codex.correctness-adversarial.review.md.narrowed.txt",
+  "narrowed_artifact_sha256": "de4aa25cf4a3bb733fc17a56d4c6fc5a36c4cb0064359a3baea3f31ca29a7700",
+  "strategy": "diff-head-tail-chunks",
+  "head_chunks": [
+    "diff --git a/cloud/apps/api/src/queue/handlers/handler-config.ts b/cloud/apps/api/src/queue/handlers/handler-config.ts",
+    "diff --git a/cloud/apps/api/src/queue/handlers/probe-dead-letter.ts b/cloud/apps/api/src/queue/handlers/probe-dead-letter.ts",
+    "diff --git a/cloud/apps/api/src/queue/handlers/probe-scenario/handler.ts b/cloud/apps/api/src/queue/handlers/probe-scenario/handler.ts",
+    "diff --git a/cloud/apps/api/src/queue/handlers/probe-scenario/retry.ts b/cloud/apps/api/src/queue/handlers/probe-scenario/retry.ts",
+    "diff --git a/cloud/apps/api/src/queue/handlers/run-state-reconcile.ts b/cloud/apps/api/src/queue/handlers/run-state-reconcile.ts"
+  ],
+  "tail_chunks": [
+    "diff --git a/cloud/apps/api/src/services/run/recovery-jobs.ts b/cloud/apps/api/src/services/run/recovery-jobs.ts",
+    "diff --git a/cloud/apps/api/src/services/run/recovery.ts b/cloud/apps/api/src/services/run/recovery.ts",
+    "diff --git a/cloud/apps/api/src/services/run/scheduler.ts b/cloud/apps/api/src/services/run/scheduler.ts",
+    "diff --git a/cloud/apps/api/src/services/run/stall-detection.ts b/cloud/apps/api/src/services/run/stall-detection.ts",
+    "diff --git a/cloud/apps/api/src/services/run/start-queue.ts b/cloud/apps/api/src/services/run/start-queue.ts",
+    "diff --git a/cloud/apps/api/src/services/run/summarization.ts b/cloud/apps/api/src/services/run/summarization.ts",
+    "diff --git a/cloud/apps/api/src/services/run/summarize-progress.ts b/cloud/apps/api/src/services/run/summarize-progress.ts",
+    "diff --git a/cloud/packages/db/prisma/schema.prisma b/cloud/packages/db/prisma/schema.prisma"
+  ]
+}

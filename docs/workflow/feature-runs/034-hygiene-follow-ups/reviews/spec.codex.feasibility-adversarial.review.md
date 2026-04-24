@@ -1,0 +1,45 @@
+---
+reviewer: "codex"
+lens: "feasibility-adversarial"
+stage: "spec"
+artifact_path: "docs/workflow/feature-runs/034-hygiene-follow-ups/spec.md"
+artifact_sha256: "bd099523508989de3adde43e86bcae06c9f0cf3a2c19e1fa426c98e17baaf753"
+repo_root: "."
+git_head_sha: "42b7bb726d5992b7810c0346673e7f795365c4c9"
+git_base_ref: "origin/main"
+git_base_sha: "42b7bb726d5992b7810c0346673e7f795365c4c9"
+generation_method: "codex-runner"
+resolution_status: "accepted"
+resolution_note: "No actionable findings detected — auto-accepted"
+raw_output_path: "docs/workflow/feature-runs/034-hygiene-follow-ups/reviews/spec.codex.feasibility-adversarial.review.md.raw.txt"
+narrowed_artifact_path: ""
+narrowed_artifact_sha256: ""
+coverage_status: "full"
+coverage_note: ""
+---
+
+# Review: spec feasibility-adversarial
+
+## Findings
+
+1. High [CODE-CONFIRMED]: US-4 can strand the orphan backlog after the first capped sweep. In `scheduler.ts`, `runRecoveryJob()` only re-arms the activity window when `hasRecoveryActivity()` sees active runs or a stranded transcript. Orphan transcripts are not part of that check, so a run that only has orphan backlog can stop the scheduler before the next tick and never drain the remaining orphans.
+
+2. Medium [CODE-CONFIRMED]: US-1 targets the wrong predicate and misses one of the two places the window is enforced. The current `scheduler.ts` does not contain a `runs.updated_at > NOW() - INTERVAL 'N days'` activity check. The 30-day window is used in both `hasRecoveryActivity()` and `enqueueRunStateReconcileJobs()`. If the spec only parameterizes the activity check, older completed runs still will not be enqueued for reconciliation.
+
+3. Medium [CODE-CONFIRMED]: US-2 changes the orphan anomaly payload shape without reconciling the existing contract. The current code writes `ORPHAN_TRANSCRIPT` drafts with `details.transcriptIds` in both `run-state-reconcile.ts` and `anomaly-detection.ts`. The spec switches to `details.failedIds`, but nothing in the provided code consumes that field, so this is a breaking schema change unless the persistence and readers are updated together.
+
+4. Medium [CODE-CONFIRMED]: US-3 omits the current minimum-probe guard when extending pair asymmetry to multiple siblings. The existing detector refuses to compare either side unless both runs have at least `PAIR_ASYMMETRY_MIN_PROBES`. The spec says to take the maximum delta across all siblings, but does not say how to preserve that noise filter per sibling pair. Without that, a low-coverage sibling can create false positives.
+
+## Residual Risks
+
+- I could not verify downstream consumers of anomaly `details` payloads from the provided code, so any payload-shape change still needs a repo-wide search before merge.
+- The exact behavior of `recoverOrphanedRuns()` and `runStartupRecovery()` was not provided, so the scheduler lifetime impact of US-4 could be even worse if those helpers do not keep recovery alive on orphan-only backlogs.
+
+## Runner Stats
+- total_input=0
+- total_output=0
+- total_tokens=0
+
+## Resolution
+- status: accepted
+- note: No actionable findings detected — auto-accepted

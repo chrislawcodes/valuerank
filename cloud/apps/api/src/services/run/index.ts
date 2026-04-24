@@ -8,16 +8,13 @@ export { startRun } from './start.js';
 export type { StartRunInput, StartRunResult } from './start.js';
 
 export {
-  updateProgress,
-  incrementCompleted,
-  incrementFailed,
+  maybeAdvanceRunStatus,
   getProgress,
   calculatePercentComplete,
-  updateSummarizeProgress,
-  incrementSummarizeCompleted,
-  incrementSummarizeFailed,
 } from './progress.js';
-export type { ProgressUpdate, ProgressData } from './progress.js';
+export type { ProgressData } from './progress.js';
+export { computeRunProgress } from './derived-progress.js';
+export type { RunProgress } from './derived-progress.js';
 
 export {
   pauseRun,

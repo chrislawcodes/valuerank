@@ -13,6 +13,8 @@ export type JobType =
   | 'expand_scenarios'
   | 'compute_token_stats'
   | 'probe_dead_letter'
+  | 'run_state_reconcile'
+  | 'run_state_audit'
   | 'aggregate_analysis'
   | 'refresh_domain_analysis_snapshot';
 
@@ -56,6 +58,12 @@ export type ComputeTokenStatsJobData = {
   runId: string;
 };
 
+export type RunStateReconcileJobData = {
+  runId: string;
+};
+
+export type RunStateAuditJobData = Record<string, never>;
+
 export type AggregateAnalysisJobData = {
   definitionId: string;
   preambleVersionId: string | null;
@@ -83,6 +91,8 @@ export type JobData =
   | AnalyzeBasicJobData
   | ExpandScenariosJobData
   | ComputeTokenStatsJobData
+  | RunStateReconcileJobData
+  | RunStateAuditJobData
   | AggregateAnalysisJobData
   | RefreshDomainAnalysisSnapshotJobData;
 
@@ -133,6 +143,14 @@ export const DEFAULT_JOB_OPTIONS: Record<JobType, JobOptions> = {
     retryBackoff: true,
     expireInSeconds: 120, // 2 minutes - stats computation is quick
     singletonKey: 'run', // Only one stats computation per run at a time
+  },
+  'run_state_reconcile': {
+    retryLimit: 0,
+    expireInSeconds: 120,
+  },
+  'run_state_audit': {
+    retryLimit: 0,
+    expireInSeconds: 1800,
   },
   'aggregate_analysis': {
     retryLimit: 3,

@@ -4,7 +4,7 @@
  * Handles cancel and restart operations for the summarization phase.
  */
 
-import { db, Prisma } from '@valuerank/db';
+import { db } from '@valuerank/db';
 import { createLogger, NotFoundError, RunStateError } from '@valuerank/shared';
 import { getBoss } from '../../queue/boss.js';
 import { invalidateCache } from '../analysis/cache.js';
@@ -194,16 +194,12 @@ export async function restartSummarization(
 
   // Get transcripts to re-summarize
   const whereClause = force
-    ? { runId }
+    ? { runId, deletedAt: null }
     : {
       runId,
-      OR: [
-        { summarizedAt: null },
-        {
-          summarizedAt: { not: null },
-          decisionMetadata: { equals: Prisma.DbNull },
-        },
-      ],
+      deletedAt: null,
+      summarizedAt: null,
+      summarizeFailedAt: null,
     };
 
   const transcriptsToQueue = await db.transcript.findMany({
@@ -228,9 +224,10 @@ export async function restartSummarization(
   // This ensures the job handler doesn't skip them
   const transcriptIds = transcriptsToQueue.map((t) => t.id);
   await db.transcript.updateMany({
-    where: { id: { in: transcriptIds } },
+    where: { id: { in: transcriptIds }, deletedAt: null },
     data: {
       summarizedAt: null,
+      summarizeFailedAt: null,
       decisionText: null,
       // The legacy transcripts.decision_code column drop is deferred to a
       // follow-up PR (spec out-of-scope). We stop writing to it here so the
@@ -276,7 +273,10 @@ export async function restartSummarization(
         transcriptId: transcript.id,
         ...(force ? { forceSummarize: true } : {}),
       },
-      jobOptions
+      {
+        ...jobOptions,
+        singletonKey: transcript.id,
+      }
     );
   }
 

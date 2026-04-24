@@ -1,0 +1,9 @@
+## Findings
+- **Medium [UNVERIFIED]** `cloud/apps/api/src/services/run/summarization.ts` now narrows the restart set to `deletedAt: null, summarizedAt: null, summarizeFailedAt: null` and drops the old `decisionMetadata = DbNull` retry branch. That means transcripts that were already marked summarized but still need a rerun because they never got valid decision metadata will now be skipped instead of being re-queued.
+- **Medium [UNVERIFIED]** `cloud/apps/api/src/services/run/recovery.ts` stopped explicitly queueing summarize jobs when it detects a run should enter `SUMMARIZING`, and now relies on `maybeAdvanceRunStatus()` to do the right thing. If that helper only updates state and does not enqueue jobs, a recovered run can get stuck in `SUMMARIZING` with no transcript work scheduled. The new `run-state-reconcile.ts` path makes the same assumption for late-arriving transcripts.
+- **Medium [UNVERIFIED]** The new reconciliation and late-probe paths call `getBoss().send(...)` without the old null guard. If these jobs run before the boss is initialized, or during shutdown/recovery windows, they will now throw instead of skipping cleanly, which can drop the repair action entirely.
+
+## Residual Risks
+- The refactor replaces counter-based progress with derived reads, but the artifact does not show `maybeAdvanceRunStatus()` or `computeRunProgress()`. If either one counts deleted, failed, or legacy rows differently from the old logic, run-state transitions can still drift.
+- `updateSummarizeProgress()` in `cloud/apps/api/src/services/run/summarize-progress.ts` is now read-only. Any remaining caller that still expects it to mutate progress will silently stop making forward progress.
+- The new recovery scheduler is broader and more opinionated. Even if it is correct, it may add extra queue traffic and more chances for duplicate recovery work when multiple recovery paths overlap.

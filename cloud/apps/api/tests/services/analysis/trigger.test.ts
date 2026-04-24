@@ -17,6 +17,7 @@ vi.mock('../../../src/queue/boss.js', () => ({
   getBoss: vi.fn(() => ({
     send: mockBossSend,
   })),
+  isBossRunning: vi.fn(() => true),
 }));
 
 describe('analysis trigger service', () => {

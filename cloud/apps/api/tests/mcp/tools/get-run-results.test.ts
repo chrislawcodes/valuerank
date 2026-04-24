@@ -4,13 +4,16 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 vi.mock('@valuerank/db', () => ({
   db: {
     run: {
+      findFirst: vi.fn(),
       findUnique: vi.fn(),
     },
     probeResult: {
       count: vi.fn(),
+      groupBy: vi.fn(),
       findMany: vi.fn(),
     },
     transcript: {
+      count: vi.fn(),
       findMany: vi.fn(),
     },
   },
@@ -82,11 +85,21 @@ describe('get_run_results tool', () => {
   });
 
   it('returns paginated results for in-progress run', async () => {
+    vi.mocked(db.run.findFirst).mockResolvedValue({
+      id: 'run-1',
+      status: 'RUNNING',
+      progress: { total: 10, completed: 3, failed: 1 },
+    } as never);
     vi.mocked(db.run.findUnique).mockResolvedValue({
       id: 'run-1',
       status: 'RUNNING',
       progress: { total: 10, completed: 3, failed: 1 },
     } as never);
+    vi.mocked(db.probeResult.groupBy).mockResolvedValue([
+      { status: 'SUCCESS', _count: { _all: 3 } },
+      { status: 'FAILED', _count: { _all: 1 } },
+    ] as never);
+    vi.mocked(db.transcript.count).mockResolvedValue(0);
     vi.mocked(db.probeResult.count).mockResolvedValue(2);
     vi.mocked(db.probeResult.findMany).mockResolvedValue([
       {
@@ -141,11 +154,21 @@ describe('get_run_results tool', () => {
   });
 
   it('clamps percentComplete to 100 on inconsistent progress', async () => {
+    vi.mocked(db.run.findFirst).mockResolvedValue({
+      id: 'run-1',
+      status: 'RUNNING',
+      progress: { total: 10, completed: 9, failed: 5 },
+    } as never);
     vi.mocked(db.run.findUnique).mockResolvedValue({
       id: 'run-1',
       status: 'RUNNING',
       progress: { total: 10, completed: 9, failed: 5 },
     } as never);
+    vi.mocked(db.probeResult.groupBy).mockResolvedValue([
+      { status: 'SUCCESS', _count: { _all: 9 } },
+      { status: 'FAILED', _count: { _all: 5 } },
+    ] as never);
+    vi.mocked(db.transcript.count).mockResolvedValue(0);
     vi.mocked(db.probeResult.count).mockResolvedValue(0);
     vi.mocked(db.probeResult.findMany).mockResolvedValue([]);
     vi.mocked(db.transcript.findMany).mockResolvedValue([]);
@@ -163,11 +186,20 @@ describe('get_run_results tool', () => {
   it('truncates long decisionText in row payloads', async () => {
     const longText = 'x'.repeat(700);
 
+    vi.mocked(db.run.findFirst).mockResolvedValue({
+      id: 'run-1',
+      status: 'RUNNING',
+      progress: { total: 1, completed: 1, failed: 0 },
+    } as never);
     vi.mocked(db.run.findUnique).mockResolvedValue({
       id: 'run-1',
       status: 'RUNNING',
       progress: { total: 1, completed: 1, failed: 0 },
     } as never);
+    vi.mocked(db.probeResult.groupBy).mockResolvedValue([
+      { status: 'SUCCESS', _count: { _all: 1 } },
+    ] as never);
+    vi.mocked(db.transcript.count).mockResolvedValue(0);
     vi.mocked(db.probeResult.count).mockResolvedValue(1);
     vi.mocked(db.probeResult.findMany).mockResolvedValue([
       {
@@ -202,11 +234,18 @@ describe('get_run_results tool', () => {
   });
 
   it('applies status/model filters', async () => {
+    vi.mocked(db.run.findFirst).mockResolvedValue({
+      id: 'run-1',
+      status: 'RUNNING',
+      progress: null,
+    } as never);
     vi.mocked(db.run.findUnique).mockResolvedValue({
       id: 'run-1',
       status: 'RUNNING',
       progress: null,
     } as never);
+    vi.mocked(db.probeResult.groupBy).mockResolvedValue([] as never);
+    vi.mocked(db.transcript.count).mockResolvedValue(0);
     vi.mocked(db.probeResult.count).mockResolvedValue(0);
     vi.mocked(db.probeResult.findMany).mockResolvedValue([]);
     vi.mocked(db.transcript.findMany).mockResolvedValue([]);
@@ -219,6 +258,7 @@ describe('get_run_results tool', () => {
     expect(db.probeResult.count).toHaveBeenCalledWith({
       where: {
         runId: 'run-1',
+        deletedAt: null,
         modelId: 'gpt-4',
         status: 'FAILED',
       },
@@ -226,6 +266,7 @@ describe('get_run_results tool', () => {
   });
 
   it('returns NOT_FOUND for unknown run', async () => {
+    vi.mocked(db.run.findFirst).mockResolvedValue(null);
     vi.mocked(db.run.findUnique).mockResolvedValue(null);
 
     const result = await toolHandler(
@@ -240,6 +281,11 @@ describe('get_run_results tool', () => {
   });
 
   it('returns empty result set when offset exceeds available rows', async () => {
+    vi.mocked(db.run.findFirst).mockResolvedValue({
+      id: 'run-1',
+      status: 'RUNNING',
+      progress: { total: 10, completed: 3, failed: 1 },
+    } as never);
     vi.mocked(db.run.findUnique).mockResolvedValue({
       id: 'run-1',
       status: 'RUNNING',

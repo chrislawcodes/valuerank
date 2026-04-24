@@ -8,7 +8,7 @@
 import { z } from 'zod';
 import crypto from 'crypto';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { db, Prisma } from '@valuerank/db';
+import { db } from '@valuerank/db';
 import { createLogger, NotFoundError } from '@valuerank/shared';
 import { logAuditEvent } from '../../services/mcp/index.js';
 import { formatError, formatSuccess, createOperationsAudit, getMcpUserId } from './helpers.js';
@@ -110,21 +110,21 @@ how many exist even if only 'limit' are returned.`,
 
         // Build query conditions.
         // Unsummarized transcripts have summarizedAt = null.
-        // Failed summaries have summarizedAt set but no persisted decision metadata.
+        // Failed summaries now set summarizeFailedAt and leave summarizedAt null.
         const where = includeFailed
           ? {
             runId: args.run_id,
+            deletedAt: null,
             OR: [
-              { summarizedAt: null },
-              {
-                summarizedAt: { not: null },
-                decisionMetadata: { equals: Prisma.DbNull },
-              },
+              { summarizedAt: null, summarizeFailedAt: null },
+              { summarizeFailedAt: { not: null } },
             ],
           }
           : {
             runId: args.run_id,
+            deletedAt: null,
             summarizedAt: null,
+            summarizeFailedAt: null,
           };
 
         // Get total count
@@ -139,6 +139,7 @@ how many exist even if only 'limit' are returned.`,
             scenarioId: true,
             createdAt: true,
             summarizedAt: true,
+            summarizeFailedAt: true,
             decisionMetadata: true,
           },
           orderBy: { createdAt: 'asc' },
@@ -185,10 +186,10 @@ how many exist even if only 'limit' are returned.`,
             created_at: t.createdAt.toISOString(),
             ...(includeFailed
               ? {
-                summary_status: t.summarizedAt === null
-                  ? 'pending'
-                  : t.decisionMetadata === null
-                    ? 'failed'
+                summary_status: t.summarizeFailedAt !== null
+                  ? 'failed'
+                  : t.summarizedAt === null
+                    ? 'pending'
                     : 'completed',
               }
               : {}),

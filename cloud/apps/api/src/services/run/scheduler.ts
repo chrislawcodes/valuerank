@@ -11,7 +11,7 @@
  * - This prevents wasting resources checking for orphaned runs when no runs are active
  */
 
-import { db } from '@valuerank/db';
+import { db, Prisma } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 import {
   recoverOrphanedRuns,
@@ -20,8 +20,14 @@ import {
   runStartupRecovery
 } from './recovery.js';
 import { detectAndUpdateStalledRuns } from './stall-detection.js';
+import {
+  ORPHAN_TRANSCRIPT_MIN_AGE_SECONDS,
+  RECENT_COMPLETED_RUN_WINDOW_DAYS,
+} from './anomaly-thresholds.js';
 import { PROBE_QUEUE_DEPTH_PER_PROVIDER } from './start-queue.js';
 import { enqueueTopUpProbesSingleton } from '../../queue/handlers/top-up-probes.js';
+import { DEFAULT_JOB_OPTIONS } from '../../queue/types.js';
+import { getBoss } from '../../queue/boss.js';
 import { getQueueNameForModel } from '../parallelism/index.js';
 
 const log = createLogger('services:run:scheduler');
@@ -33,12 +39,58 @@ type RunConfig = {
 let recoveryInterval: NodeJS.Timeout | null = null;
 let activityTimeout: NodeJS.Timeout | null = null;
 let isRecovering = false;
+let reconcileWindowDaysCache: number | null = null;
 
 // How long to keep recovery running after the last run was started (1 hour)
 export const RECOVERY_ACTIVITY_WINDOW_MS = 60 * 60 * 1000;
 
 function parseRunConfig(config: unknown): RunConfig {
   return config !== null && typeof config === 'object' ? (config as RunConfig) : {};
+}
+
+function resolveReconcileWindowDays(): number {
+  const rawValue = process.env.RUN_RECONCILE_WINDOW_DAYS;
+  if (rawValue === undefined) {
+    return RECENT_COMPLETED_RUN_WINDOW_DAYS;
+  }
+
+  const parsed = Number.parseInt(rawValue, 10);
+  if (Number.isNaN(parsed) || parsed < 0) {
+    log.warn(
+      { rawValue, fallbackDays: RECENT_COMPLETED_RUN_WINDOW_DAYS },
+      'Invalid RUN_RECONCILE_WINDOW_DAYS, falling back to default'
+    );
+    return RECENT_COMPLETED_RUN_WINDOW_DAYS;
+  }
+
+  return parsed;
+}
+
+// Read once at module load. Changing RUN_RECONCILE_WINDOW_DAYS requires a process restart.
+reconcileWindowDaysCache = resolveReconcileWindowDays();
+
+export function getReconcileWindowDays(): number {
+  return reconcileWindowDaysCache ?? RECENT_COMPLETED_RUN_WINDOW_DAYS;
+}
+
+function buildOrphanBacklogExistsClause(): Prisma.Sql {
+  return Prisma.sql`
+    EXISTS (
+      SELECT 1
+      FROM transcripts t
+      LEFT JOIN probe_results p
+        ON p.run_id = t.run_id
+       AND p.scenario_id = t.scenario_id
+       AND p.model_id = t.model_id
+       AND p.sample_index = t.sample_index
+       AND p.deleted_at IS NULL
+      WHERE t.run_id = r.id
+        AND t.deleted_at IS NULL
+        AND t.created_at < NOW() - (${ORPHAN_TRANSCRIPT_MIN_AGE_SECONDS} || ' seconds')::interval
+        AND p.id IS NULL
+      LIMIT 1
+    )
+  `;
 }
 
 async function getPendingJobsForQueue(runId: string, queueName: string): Promise<number> {
@@ -76,6 +128,105 @@ async function sweepRunForTopUp(run: { id: string; config: unknown }): Promise<b
   return false;
 }
 
+async function hasRecoveryActivity(): Promise<boolean> {
+  const windowDays = getReconcileWindowDays();
+  const activeRuns = await db.run.findFirst({
+    where: {
+      deletedAt: null,
+      status: { in: ['RUNNING', 'SUMMARIZING', 'PAUSED'] },
+    },
+    select: { id: true },
+  });
+
+  if (activeRuns !== null) {
+    return true;
+  }
+
+  const strandedTranscript = await db.transcript.findFirst({
+    where: {
+      deletedAt: null,
+      summarizedAt: null,
+      summarizeFailedAt: null,
+      run: {
+        deletedAt: null,
+        status: 'COMPLETED',
+        updatedAt: {
+          gt: new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000),
+        },
+      },
+    },
+    select: { id: true },
+  });
+
+  if (strandedTranscript !== null) {
+    return true;
+  }
+
+  const orphanBacklog = await db.$queryRaw<Array<{ run_id: string }>>`
+    SELECT r.id AS run_id
+    FROM runs r
+    WHERE r.deleted_at IS NULL
+      AND r.status = 'COMPLETED'
+      AND r.updated_at > NOW() - (${windowDays} || ' days')::interval
+      AND ${buildOrphanBacklogExistsClause()}
+    LIMIT 1
+  `;
+
+  return orphanBacklog.length > 0;
+}
+
+async function enqueueRunStateReconcileJobs(): Promise<number> {
+  const boss = getBoss();
+  const jobOptions = DEFAULT_JOB_OPTIONS['run_state_reconcile'];
+  const windowDays = getReconcileWindowDays();
+
+  const runs = await db.$queryRaw<Array<{ run_id: string }>>`
+    SELECT id AS run_id
+    FROM runs
+    WHERE deleted_at IS NULL
+      AND status IN ('RUNNING', 'SUMMARIZING', 'PAUSED')
+
+    UNION
+
+    SELECT DISTINCT r.id AS run_id
+    FROM runs r
+    WHERE r.deleted_at IS NULL
+      AND r.status = 'COMPLETED'
+      AND r.updated_at > NOW() - (${windowDays} || ' days')::interval
+      AND (
+        EXISTS (
+          SELECT 1
+          FROM transcripts stranded_t
+          WHERE stranded_t.run_id = r.id
+            AND stranded_t.deleted_at IS NULL
+            AND stranded_t.summarized_at IS NULL
+            AND stranded_t.summarize_failed_at IS NULL
+          LIMIT 1
+        )
+        OR ${buildOrphanBacklogExistsClause()}
+      )
+  `;
+
+  let queued = 0;
+  for (const run of runs) {
+    await boss.send(
+      'run_state_reconcile',
+      { runId: run.run_id },
+      {
+        ...jobOptions,
+        singletonKey: run.run_id,
+      }
+    );
+    queued++;
+  }
+
+  if (queued > 0) {
+    log.info({ queued }, 'Queued run_state_reconcile jobs');
+  }
+
+  return queued;
+}
+
 /**
  * Runs the recovery job, preventing concurrent executions.
  */
@@ -102,11 +253,14 @@ async function runRecoveryJob(): Promise<void> {
       }
     }
 
+    const reconcileQueued = await enqueueRunStateReconcileJobs();
+
     if (
       result.detected.length > 0 ||
       result.errors.length > 0 ||
       zombieResult.recovered > 0 ||
-      topUpQueued > 0
+      topUpQueued > 0 ||
+      reconcileQueued > 0
     ) {
       log.info(
         {
@@ -115,9 +269,14 @@ async function runRecoveryJob(): Promise<void> {
           zombiesKilled: zombieResult.recovered,
           errors: result.errors.length + zombieResult.errors,
           recoveryTopUps: topUpQueued,
+          reconcileQueued,
         },
         'Recovery job completed'
       );
+    }
+
+    if (await hasRecoveryActivity()) {
+      signalRunActivity();
     }
 
     if (stallResult.totalStalled > 0) {
@@ -154,6 +313,20 @@ function startActivityTimeout(): void {
     );
     stopRecoveryInterval();
   }, RECOVERY_ACTIVITY_WINDOW_MS);
+}
+
+async function registerRunStateAuditSchedule(): Promise<void> {
+  try {
+    const boss = getBoss();
+    await boss.unschedule('run_state_audit').catch(() => undefined);
+    await boss.schedule('run_state_audit', '0 9 * * *', {});
+    log.info(
+      { jobType: 'run_state_audit', cron: '0 9 * * *' },
+      'Registered run_state_audit schedule'
+    );
+  } catch (error) {
+    log.error({ error }, 'Failed to register run_state_audit schedule');
+  }
 }
 
 /**
@@ -209,6 +382,8 @@ export async function startRecoveryScheduler(): Promise<void> {
     'Starting recovery scheduler'
   );
 
+  await registerRunStateAuditSchedule();
+
   // Run startup recovery first
   let hasActiveRuns = false;
   try {
@@ -224,6 +399,9 @@ export async function startRecoveryScheduler(): Promise<void> {
       );
       // If we found orphaned runs, keep recovery running
       hasActiveRuns = true;
+    }
+    if (!hasActiveRuns) {
+      hasActiveRuns = await hasRecoveryActivity();
     }
   } catch (error) {
     log.error({ error }, 'Startup recovery failed');

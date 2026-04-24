@@ -1,0 +1,43 @@
+---
+reviewer: "codex"
+lens: "feasibility-adversarial"
+stage: "spec"
+artifact_path: "docs/workflow/feature-runs/033-run-state-reconciliation/spec.md"
+artifact_sha256: "32613ca457104617746d439d696403206c0d704d3d3391d4cf3414a4c4dcd282"
+repo_root: "."
+git_head_sha: "424c0605a8158acfe0b3912840a6c5b2da057c84"
+git_base_ref: "origin/main"
+git_base_sha: "424c0605a8158acfe0b3912840a6c5b2da057c84"
+generation_method: "codex-runner"
+resolution_status: "accepted"
+resolution_note: "Judge panel voted advance (2 proceed, 1 block); HIGH findings addressed in spec rev 4 — see spec Design section and Files in Scope; remaining items deferred to plan phase via Open Questions"
+raw_output_path: "docs/workflow/feature-runs/033-run-state-reconciliation/reviews/spec.codex.feasibility-adversarial.review.md.raw.txt"
+narrowed_artifact_path: ""
+narrowed_artifact_sha256: ""
+coverage_status: "full"
+coverage_note: ""
+---
+
+# Review: spec feasibility-adversarial
+
+## Findings
+
+| Severity | Finding | Evidence |
+|---|---|---|
+| HIGH | The spec does not fully remove the old summarize-queue setup path. `cloud/apps/api/src/services/run/progress.ts` still has `queueSummarizeJobs()` waiting for transcript settle and then writing `summarizeProgress.total` from a snapshot of visible transcripts. If the new flow reuses that helper, the feature keeps the legacy counter write and the 5-second settle race, which conflicts with the spec’s “derive from authoritative tables” design and US-2. | [CODE-CONFIRMED] [/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/services/run/progress.ts](/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/services/run/progress.ts) |
+| HIGH | The spec still leaves a direct completion bypass in `cloud/apps/api/src/services/run/recovery.ts`. That file has a branch that updates a `SUMMARIZING` run straight to `COMPLETED` once queue state looks finished, which bypasses the new CAS-based completion gate unless it is explicitly removed. That is a second completion path outside the new derived-count rule. | [CODE-CONFIRMED] [/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/services/run/recovery.ts](/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/services/run/recovery.ts) |
+| MEDIUM | The migration backfill keys off `decision_text LIKE 'Summary failed%'`, but `decisionText` is just a free-form display string in the current code, not a machine status field. Any historical failure row whose text was edited, localized, or formatted differently will miss the backfill and stay misclassified after cutover. | [CODE-CONFIRMED] [/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/queue/handlers/summarize-persistence.ts](/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/queue/handlers/summarize-persistence.ts) |
+
+## Residual Risks
+
+- The reconciliation sweep still depends on scheduler activation logic that is not shown in the provided code. If `runRecoveryJob` still idles out on quiet systems, `run_state_reconcile` will not fire and stranded transcripts will stay stranded. [UNVERIFIED]
+- The pair/model anomaly queries will likely need careful indexing or query shaping, especially where the spec depends on JSON-path lookups from `Run.config`. The provided code does not show the final query shape, so performance risk remains. [UNVERIFIED]
+
+## Runner Stats
+- total_input=0
+- total_output=0
+- total_tokens=0
+
+## Resolution
+- status: accepted
+- note: Judge panel voted advance (2 proceed, 1 block); HIGH findings addressed in spec rev 4 — see spec Design section and Files in Scope; remaining items deferred to plan phase via Open Questions

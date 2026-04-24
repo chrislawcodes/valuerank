@@ -403,6 +403,7 @@ model Run {
   comparisonFor   RunComparison[]  @relation("ComparisonRun")
   scenarioSelections RunScenarioSelection[]
   probeResults    ProbeResult[]
+  anomalies       RunAnomaly[]
 
   // Audit relations
   createdBy User? @relation("RunCreator", fields: [createdByUserId], references: [id])
@@ -492,6 +493,20 @@ enum RunCategory {
   UNKNOWN_LEGACY
 }
 
+enum RunAnomalyType {
+  STRANDED_TRANSCRIPT
+  ORPHAN_TRANSCRIPT
+  PAIR_ASYMMETRY
+  SUMMARIZING_STALL
+  MODEL_TRANSCRIPT_SHORTFALL
+  SCHEDULED_COUNT_MISMATCH
+}
+
+enum RunAnomalySource {
+  default
+  audit
+}
+
 model Transcript {
   id                 String    @id @default(cuid())
   runId              String    @map("run_id")
@@ -521,6 +536,8 @@ model Transcript {
   decisionText       String?   @map("decision_text")     // LLM-generated summary
   decisionMetadata   Json?     @map("decision_metadata") @db.JsonB
   summarizedAt       DateTime? @map("summarized_at")     // When summary was generated
+  summarizeFailedAt  DateTime?  @map("summarize_failed_at")
+  costDebitedAt      DateTime?  @map("cost_debited_at")
   // Soft delete
   deletedAt          DateTime? @map("deleted_at")
 
@@ -532,6 +549,7 @@ model Transcript {
   @@index([modelId])
   @@index([deletedAt])
   @@index([sampleIndex])
+  @@index([runId, summarizedAt])
   @@map("transcripts")
 }
 
@@ -638,11 +656,32 @@ model ProbeResult {
   // Updated unique constraint to include sampleIndex for multi-sample runs
   @@unique([runId, scenarioId, modelId, sampleIndex])
   @@index([runId])
+  @@index([runId, status])
   @@index([scenarioId])
   @@index([modelId])
   @@index([status])
   @@index([sampleIndex])
   @@map("probe_results")
+}
+
+model RunAnomaly {
+  id                   String         @id @default(cuid())
+  runId                String         @map("run_id")
+  type                 RunAnomalyType
+  subject              String         @default("")
+  source               RunAnomalySource @default(default)
+  details              Json           @db.JsonB
+  firstSeenAt          DateTime       @default(now()) @map("first_seen_at")
+  lastSeenAt           DateTime       @default(now()) @map("last_seen_at")
+  resolvedAt           DateTime?      @map("resolved_at")
+  acknowledgedByUserId String?        @map("acknowledged_by_user_id")
+
+  run Run @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, type, subject, source])
+  @@index([runId])
+  @@index([type, resolvedAt])
+  @@map("run_anomalies")
 }
 
 enum ProbeResultStatus {

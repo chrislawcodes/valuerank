@@ -48,6 +48,12 @@
 ### Follow-up Cleanup
 
 - ✅ First/second wording removed from all analysis surfaces, backend contracts, and export/worker paths (PRs #432, #434, #440, #445, #448).
+- 🟡 **Run-state reconciliation sweep is scoped to runs updated in the past 30 days.** Stranded transcripts on runs older than that need manual `recover_run` (via MCP). If operators investigate older runs often, widen the window in `cloud/apps/api/src/services/run/scheduler.ts` (search for `30 days`). Added 2026-04-23 with [PR #745](https://github.com/chrislawcodes/valuerank/pull/745).
+- 🟡 **Run-state reconciliation accumulates SUPERSEDED `AnalysisResult` rows** on runs that receive late-rescue re-analyses. Not a correctness issue — queries filter `status='CURRENT'` — but the table grows. Add a janitor if growth becomes visible. Added 2026-04-23 with [PR #745](https://github.com/chrislawcodes/valuerank/pull/745).
+- 🟡 **`extractTranscriptTokenUsage` silent-zero fallback** — when an orphan transcript's content is malformed (missing `costSnapshot`, empty `turns`), `cloud/apps/api/src/queue/handlers/run-state-reconcile.ts:64` falls back to `outputTokens = fallbackTokenCount` (often 0). Reconstructed `ProbeResult` rows carry 0 tokens, corrupting downstream cost and shortfall math. Fix: add strict mode that fails reconstruction for malformed orphans and records `ORPHAN_TRANSCRIPT` anomaly instead. Added 2026-04-23 from PR #745 review.
+- 🟡 **`detectPairAsymmetry` picks first sibling only** — `cloud/apps/api/src/services/run/anomaly-detection.ts:170`. If a `jobChoiceBatchGroupId` ever has more than two runs (seed variation, re-runs, etc.), the first non-self run wins arbitrarily. Fix: compare against every sibling or aggregate. Added 2026-04-23 from PR #745 review.
+- 🟡 **`reconstructOrphans` unbounded per tick** — a run with 10k orphan transcripts would serially call `recordProbeSuccess` past the 120-second PgBoss expiration. Fix: per-tick cap (e.g., 500 orphans) and let multiple ticks drain the backlog. Added 2026-04-23 from PR #745 review.
+- 🟡 **`maybeAdvanceRunStatus` concurrency under real load unverified** — the two CAS UPDATEs are atomic but the summarize-job fan-out after the first-CAS win is app-level. Relies on PgBoss singleton-key dedup to prevent duplicates. Needs a load test to confirm singleton keys are set correctly on every enqueue path. Added 2026-04-23 from PR #745 review.
 
 ### Validation Gate
 
