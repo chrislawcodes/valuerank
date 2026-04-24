@@ -103,7 +103,7 @@ Both PR #744 and PR #749's discovery phases hit the same footgun: passing multip
 
 **Why P2**: low-probability attack, but the mitigation is almost free (prompt text change). Hardens a known soft spot from PR #744 adversarial review.
 
-**Independent test**: mock a restatement-judge call with verdict reasoning that cites severity drop but does NOT quote any prior-round text. Assert the judge schema validation fails the verdict (or the reasoning is flagged as non-conforming — the exact enforcement mechanism is prompt-level).
+**Independent test**: behavioral — inspect the updated `judge-prompts/restatement.md` file and assert it contains the quote-requirement instruction text. This is prompt-level enforcement only (per FR-011 below), so test is textual, not schema-level. Corrected in spec round-1 per Gemini HIGH — earlier draft promised "schema validation fails the verdict" which contradicted FR-011's "no schema change."
 
 **Acceptance scenarios**:
 
@@ -133,7 +133,7 @@ Both PR #744 and PR #749's discovery phases hit the same footgun: passing multip
 
 ### Fix 1 — Raise default char budgets (US1)
 
-- **FR-001**: In `factory_cmd_checkpoint.py` argparse setup for the `checkpoint` subcommand, change defaults to `--max-artifact-chars 40000`, `--max-context-chars 50000`, `--max-total-chars 200000`.
+- **FR-001**: In `run_factory.py` argparse setup for the `checkpoint` subcommand, set defaults to `--max-artifact-chars 50000`, `--max-context-chars 60000`, `--max-total-chars 250000`. Corrected in spec round-1 per Codex feasibility MEDIUM — earlier draft proposed 40k artifact which would have LOWERED the review-lens scripts' current 50k default. These new values are raises-or-equal across the chain.
 - **FR-002**: Operator-passed explicit values MUST still override the defaults (no change to precedence).
 - **FR-003**: Existing tests using smaller budgets MUST continue to pass (they pass explicit values, not defaults).
 
@@ -142,10 +142,11 @@ Both PR #744 and PR #749's discovery phases hit the same footgun: passing multip
 - **FR-004**: Add `--validation-only` to the `checkpoint` subcommand. Mutually exclusive with `--fallback` (reviewer replacement) — validation-only is purely a manifest-sync path.
 - **FR-005**: When `--validation-only` is set, `command_checkpoint` MUST:
   - NOT dispatch any reviewer (no `codex exec`, no `gemini` subprocess).
-  - Load the stage's checkpoint manifest (`reviews/{stage}.checkpoint.json`).
+  - Load the stage's checkpoint manifest (`reviews/{stage}.checkpoint.json`) to get the list of `required_reviews`.
   - Compute the current artifact SHA via `workflow_utils.normalized_artifact_hash`.
-  - If SHAs match: print `manifest already matches artifact (sha={sha})`, exit 0.
-  - If SHAs differ: rewrite the manifest's `artifact_sha256` field AND update each referenced `.review.md` file's frontmatter `artifact_sha256` field to match. Print `manifest re-sealed from {old} to {new}`. Exit 0.
+  - Read each review file's frontmatter `artifact_sha256`. **Note: `checkpoint_manifest()` itself does not currently store an `artifact_sha256` field** (per Codex feasibility HIGH finding) — the review-file frontmatter is the authoritative SHA source. Validation reads each `required_reviews[].path` and checks its frontmatter.
+  - If ALL review frontmatter SHAs match the current artifact SHA: print `manifest already matches artifact (sha={sha})`, exit 0.
+  - If ANY review frontmatter SHA differs: update the frontmatter `artifact_sha256` field on every review file in `required_reviews`. Use `atomic_json_write`-equivalent for each file (write to temp file then `os.replace`) to avoid the partial-write inconsistency Gemini flagged. Before any writes, compute the full set of (path, old_sha, new_sha) tuples and validate every target file exists and is writable; if any fails pre-check, exit 2 BEFORE writing any file. Print `manifest re-sealed: {N} review files updated from {old} to {new}`. Exit 0.
   - If manifest doesn't exist: print `no manifest to validate — run checkpoint first`, exit 2.
 - **FR-006**: `--validation-only` MUST NOT bypass the lifecycle-concern gate from PR #749 — if prior-stage open concerns exist, deliver/next-checkpoint still blocks. This is a manifest-sync tool, not a workflow bypass.
 - **FR-007**: An annotation MUST be appended to `stages[stage].annotations[]` with type `"validation-only-reseal"` recording `{old_sha, new_sha, at: <epoch>}` when a reseal happens.
@@ -161,7 +162,7 @@ Both PR #744 and PR #749's discovery phases hit the same footgun: passing multip
 
 - **FR-012**: In `factory_cmd_discover.py` argparse setup, change `--non-goal` and `--acceptance-criteria` from `action="store"` to `action="append"` (or equivalent — match existing codebase patterns). Each flag occurrence appends to an internal list.
 - **FR-013**: When `discover` runs, for each value in the appended list: add it to `state.discovery.non_goals` (or `acceptance_criteria`) if not already present (dedup by exact string match). Order preserved.
-- **FR-014**: Add new flags `--clear-non-goals` and `--clear-acceptance-criteria` (boolean). When set, the corresponding list is emptied BEFORE any append operations in the same invocation. This lets `discover --clear-non-goals --non-goal D` produce `["D"]`.
+- **FR-014**: Add new flags `--clear-non-goals` and `--clear-acceptance-criteria` (boolean). When set, the corresponding list is emptied BEFORE any append operations in the same invocation. This lets `discover --clear-non-goals --non-goal D` produce `["D"]`. Per Gemini LOW #3, the command's argparse help text MUST document this clear-then-append order explicitly.
 - **FR-015**: No other discovery flags change behavior. `--assumption`, `--unresolved`, `--resolve`, `--defer`, `--answer`, `--question`, etc. keep their current semantics.
 
 ### Shared
@@ -184,7 +185,7 @@ Both PR #744 and PR #749's discovery phases hit the same footgun: passing multip
 - **Char budgets**: if a spec is genuinely larger than 40k (rare), explicit `--max-artifact-chars` still works. No regression.
 - **`--validation-only` on first-ever checkpoint**: no manifest exists → exit 2 with clear message.
 - **`--validation-only` with `--fallback`**: mutually exclusive argparse error.
-- **`--validation-only` with `--address`/`--defer`/`--dismiss`**: those are concern-lifecycle flags; they're unchanged by this feature. If combined, the concern-lifecycle path runs (earlier in command_checkpoint) and `--validation-only` becomes a no-op.
+- **`--validation-only` with `--address`/`--defer`/`--dismiss`**: mutually exclusive. Argparse rejects the combination (per Gemini LOW #4). Operators must run the concern-lifecycle action in one invocation, then `--validation-only` in a separate one. This avoids the "implicit order of operations" fragility.
 - **Restatement prompt rollback**: if a reviewer's output format drifts and can't be quoted, judge falls through to other rules — doesn't break.
 - **`discover` append + dedup**: `discover --non-goal A --non-goal A` once stores just `["A"]`, not `["A", "A"]`. Dedup is an explicit design choice per FR-013.
 

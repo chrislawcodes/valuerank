@@ -56,13 +56,80 @@
     "updated_at": 0
   },
   "init_head_sha": "29476d513f705290496288c4e580ba6890bc87ad",
-  "token_usage": [],
-  "stages": {},
+  "token_usage": [
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T21:14:52.917779Z",
+      "started_at": "2026-04-24T21:12:11.742025Z",
+      "ended_at": "2026-04-24T21:14:52.917779Z",
+      "duration_seconds": 161.174395,
+      "agent_id": null,
+      "artifact_sha_at_time": "70c7715a932eaa6c8e8ac5f56422eaf2b5dd7ea3bdbd67841e9a4d584f670261",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T21:17:52.893591Z",
+      "started_at": "2026-04-24T21:14:53.135532Z",
+      "ended_at": "2026-04-24T21:17:52.893591Z",
+      "duration_seconds": 179.756513,
+      "agent_id": null,
+      "artifact_sha_at_time": "70c7715a932eaa6c8e8ac5f56422eaf2b5dd7ea3bdbd67841e9a4d584f670261",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T21:18:31.372528Z",
+      "started_at": "2026-04-24T21:17:53.069706Z",
+      "ended_at": "2026-04-24T21:18:31.372528Z",
+      "duration_seconds": 38.30238,
+      "agent_id": null,
+      "artifact_sha_at_time": "70c7715a932eaa6c8e8ac5f56422eaf2b5dd7ea3bdbd67841e9a4d584f670261",
+      "parse_error": "no Gemini token stats found in stdout"
+    }
+  ],
+  "stages": {
+    "spec": {
+      "adversarial_rounds": 1,
+      "judge_rounds": 0,
+      "judge_verdicts": [],
+      "annotations": [],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [
+        "70c7715a932eaa6c8e8ac5f56422eaf2b5dd7ea3bdbd67841e9a4d584f670261"
+      ],
+      "initial_sha": "70c7715a932eaa6c8e8ac5f56422eaf2b5dd7ea3bdbd67841e9a4d584f670261"
+    }
+  },
   "invariant_warnings": [],
-  "schema_version": 1,
+  "schema_version": 2,
   "checkpoint_progress": {
     "index": 0,
     "markers_sha": "",
     "last_diff_head_sha": ""
+  },
+  "spec_adversarial_rounds": 1,
+  "last_action_result": {
+    "next": "author_plan",
+    "reason": "spec checkpoint completed",
+    "blockers": []
   }
 }
