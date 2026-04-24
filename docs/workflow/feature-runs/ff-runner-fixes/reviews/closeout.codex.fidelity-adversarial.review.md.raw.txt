@@ -1,0 +1,10 @@
+## Findings
+1. **Medium [UNVERIFIED]** The closeout overstates completion relative to its own workflow state. It says `checks: pass`, but the same artifact says `merge-state: CONFLICTING` and also says no plan checkpoint, tasks checkpoint, diff checkpoint, judge panel, or closeout checkpoint were run. That is not a fully closed loop. As written, the artifact presents the feature as shipped without the normal final gates that would justify that claim.
+
+2. **Medium [UNVERIFIED]** The new invariant is described as catching only one narrow contradiction shape: `judge_next_action == "advance"` plus a repair recommendation “for that same stage.” That leaves open other contradiction forms, like a repair on a different stage, a different recommendation label, or a contradiction introduced through a non-mutating path. The artifact treats this as if it covers the run-033 class broadly, but the described condition is narrower than that.
+
+## Residual Risks
+- The deferred concern-lifecycle CLI means the new concern fields and “Resolved Concerns” rendering cannot be fully exercised through the intended runner workflow yet.
+- The severity-regex fix may still miss new reviewer formats that do not match the known shapes listed here.
+- The invariant only reports after state-mutating commands, so a contradiction can exist for some time before it is surfaced.
+- Because no final workflow checkpoints were run, the closeout depends heavily on the reported unit tests rather than an end-to-end closeout verification.
