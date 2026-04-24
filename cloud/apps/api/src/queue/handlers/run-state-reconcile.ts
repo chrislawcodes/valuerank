@@ -68,7 +68,12 @@ function extractTranscriptTokenUsage(
 }
 
 async function enqueueSummarizeTranscriptJob(runId: string, transcriptId: string): Promise<void> {
-  const boss = (await import('../boss.js')).getBoss();
+  const bossModule = await import('../boss.js');
+  if (!bossModule.isBossRunning()) {
+    log.warn({ runId, transcriptId }, 'Boss not running, skipping summarize enqueue');
+    return;
+  }
+  const boss = bossModule.getBoss();
   await boss.send(
     'summarize_transcript',
     { runId, transcriptId },
@@ -168,6 +173,28 @@ export function createRunStateReconcileHandler(): PgBoss.WorkHandler<RunStateRec
           return;
         }
 
+        // Reconstruct orphan transcripts FIRST so their ProbeResult rows exist
+        // before we compute derived progress (maybeAdvanceRunStatus) and before
+        // the stranded-transcript rescue fans out summarize jobs. Without this
+        // ordering, orphans reconstructed on COMPLETED runs would wait a full
+        // sweep cycle (5-10 min) before getting summarized.
+        try {
+          const orphanResult = await reconstructOrphans(runId);
+          if (orphanResult.failedIds.length > 0) {
+            await syncAnomalies(runId, 'ORPHAN_TRANSCRIPT', [{
+              type: 'ORPHAN_TRANSCRIPT',
+              subject: '',
+              details: {
+                transcriptIds: orphanResult.failedIds,
+              },
+            }]);
+          } else {
+            await syncAnomalies(runId, 'ORPHAN_TRANSCRIPT', []);
+          }
+        } catch (error) {
+          log.warn({ runId, err: error }, 'Orphan transcript reconciliation failed');
+        }
+
         try {
           const stranded = await detectStrandedTranscript(runId);
           if (stranded !== null) {
@@ -202,29 +229,6 @@ export function createRunStateReconcileHandler(): PgBoss.WorkHandler<RunStateRec
           } catch (error) {
             log.warn({ runId, err: error }, 'Failed to advance run state during reconciliation');
           }
-        }
-
-        try {
-          const orphanResult = await reconstructOrphans(runId);
-          if (orphanResult.failedIds.length > 0) {
-            await syncAnomalies(runId, 'ORPHAN_TRANSCRIPT', [{
-              type: 'ORPHAN_TRANSCRIPT',
-              subject: '',
-              details: {
-                transcriptIds: orphanResult.failedIds,
-              },
-            }]);
-          } else {
-            await syncAnomalies(runId, 'ORPHAN_TRANSCRIPT', []);
-          }
-
-          if (orphanResult.reconstructedCount > 0 && run.status !== 'COMPLETED') {
-            const postRepairAdvance = await maybeAdvanceRunStatus(runId);
-            log.debug({ runId, postRepairAdvance }, 'Advanced run after orphan repair');
-            run = (await getRunSnapshot(runId)) ?? run;
-          }
-        } catch (error) {
-          log.warn({ runId, err: error }, 'Orphan transcript reconciliation failed');
         }
 
         if (run.status === 'COMPLETED') {

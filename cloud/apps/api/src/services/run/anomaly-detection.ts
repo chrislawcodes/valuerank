@@ -306,9 +306,12 @@ export async function detectModelTranscriptShortfall(run: RunSnapshot): Promise<
     };
   });
 
-  const peerMedianRate = [...rates]
-    .map((rate) => rate.rate)
-    .sort((left, right) => left - right)[Math.floor(rates.length / 2)] ?? 0;
+  const sorted = [...rates].map((rate) => rate.rate).sort((left, right) => left - right);
+  const peerMedianRate = sorted.length === 0
+    ? 0
+    : sorted.length % 2 === 0
+      ? ((sorted[sorted.length / 2 - 1] ?? 0) + (sorted[sorted.length / 2] ?? 0)) / 2
+      : sorted[Math.floor(sorted.length / 2)] ?? 0;
 
   return rates
     .filter((rate) => rate.rate < MODEL_SHORTFALL_ABSOLUTE_RATE || (

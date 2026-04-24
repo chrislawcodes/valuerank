@@ -45,10 +45,18 @@ ADD CONSTRAINT "run_anomalies_run_id_fkey"
 FOREIGN KEY ("run_id") REFERENCES "runs"("id")
 ON DELETE CASCADE ON UPDATE CASCADE;
 
--- Backfill historical summarize failures
+-- Backfill historical summarize failures.
+-- Predicate widened per adversarial review (2026-04-23): the old pattern
+-- `decision_text LIKE 'Summary failed%'` depended on a text convention that
+-- may have drifted historically. `decision_metadata IS NULL AND summarized_at
+-- IS NOT NULL` is the structural signature of a terminal failure (every
+-- success path writes a non-null decisionMetadata). Anything matching that
+-- signature is a failure that was written before the summarize_failed_at
+-- column existed. `summarize_failed_at IS NULL` ensures idempotency.
 UPDATE "transcripts"
 SET "summarize_failed_at" = "summarized_at",
     "summarized_at" = NULL
-WHERE "decision_text" LIKE 'Summary failed%'
-  AND "decision_metadata" IS NULL
-  AND "summarize_failed_at" IS NULL;
+WHERE "decision_metadata" IS NULL
+  AND "summarized_at" IS NOT NULL
+  AND "summarize_failed_at" IS NULL
+  AND "deleted_at" IS NULL;
