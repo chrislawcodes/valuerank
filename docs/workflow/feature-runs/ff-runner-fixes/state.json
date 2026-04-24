@@ -807,6 +807,102 @@
       "agent_id": null,
       "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
       "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:57:21.878908Z",
+      "started_at": "2026-04-24T05:56:58.471095Z",
+      "ended_at": "2026-04-24T05:57:21.878908Z",
+      "duration_seconds": 23.407532,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:57:24.185491Z",
+      "started_at": "2026-04-24T05:56:58.471292Z",
+      "ended_at": "2026-04-24T05:57:24.185491Z",
+      "duration_seconds": 25.714039,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:57:43.450280Z",
+      "started_at": "2026-04-24T05:57:21.881408Z",
+      "ended_at": "2026-04-24T05:57:43.450280Z",
+      "duration_seconds": 21.568745,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:58:09.136083Z",
+      "started_at": "2026-04-24T05:57:24.187169Z",
+      "ended_at": "2026-04-24T05:58:09.136083Z",
+      "duration_seconds": 44.948594,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:58:20.374772Z",
+      "started_at": "2026-04-24T05:56:58.471357Z",
+      "ended_at": "2026-04-24T05:58:20.374772Z",
+      "duration_seconds": 81.902813,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:59:48.411840Z",
+      "started_at": "2026-04-24T05:58:20.375977Z",
+      "ended_at": "2026-04-24T05:59:48.411840Z",
+      "duration_seconds": 88.035236,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Claude token counts found in stdout or stderr"
     }
   ],
   "stages": {
@@ -1077,69 +1173,64 @@
           {
             "judge": "completeness",
             "model": "gpt-5.4",
-            "verdict": "proceed-with-annotation",
-            "confidence": 4,
-            "reasoning": "spec.codex.edge-cases-adversarial.review#high-1 is not mitigated in the spec itself, but it is explicitly acknowledged in the plan as an accepted limitation: the fenced-code-block regex case is \u201cpinned as documented limitation with explicit test.\u201d That is specific enough as a limitation, though not an implementation plan. spec.codex.feasibility-adversarial.review#high-1 is addressed by FR-011a and T3.5, which require backfilling the stable `id` field for existing `unresolved_concerns` entries that lack one on read; that is a named mitigation and is specific enough to implement. spec.gemini.requirements-adversarial.review#high-3 is explicitly acknowledged in Risk R7 as a known architectural limitation, with structured-output migration out of scope; that is a clear acceptance, not a mitigation, and it is specific enough as an accepted limitation.",
+            "verdict": "proceed",
+            "confidence": 3,
+            "reasoning": "spec.codex.edge-cases-adversarial.review#high-1 is addressed as an accepted limitation in the plan's Review Reconciliation note; it names the fenced-code-block case and says it is pinned with an explicit test, which is specific enough for this audit. spec.codex.feasibility-adversarial.review#high-1 is addressed in FR-011a (and reinforced in T3.5): existing unresolved_concerns entries without id are backfilled on read, including the run-033 fixture path, which is specific enough to implement. spec.gemini.requirements-adversarial.review#high-3 is addressed as an accepted limitation in Risk R7: the regex is format-bound, the durable fix is structured JSON findings, and the change is explicitly out of scope. All HIGH findings are either named mitigations or explicit limitation acknowledgements, so the gate can proceed.",
             "evidence": [
               {
-                "artifact": "docs/workflow/feature-runs/ff-runner-fixes/plan.md",
+                "artifact": "docs/workflow/plans/feature-factory-runner-fixes.md",
                 "section": "Review Reconciliation",
                 "quote": "LOW fenced-code-block regex match \u2014 pinned as documented limitation with explicit test."
               },
               {
                 "artifact": "docs/workflow/feature-runs/ff-runner-fixes/spec.md",
                 "section": "FR-011a",
-                "quote": "backfill the stable `id` field for any existing `unresolved_concerns` entry that lacks one."
+                "quote": "The loader MUST backfill the stable `id` field for any existing `unresolved_concerns` entry that lacks one ... so in-flight runs (including the run-033 fixture) transparently gain the new fields."
               },
               {
                 "artifact": "docs/workflow/feature-runs/ff-runner-fixes/spec.md",
-                "section": "Residual risks (with verification) - Risk R7",
-                "quote": "accepted as a known architectural limitation; out of scope for this feature"
+                "section": "Residual risks (Risk R7)",
+                "quote": "accepted as a known architectural limitation; out of scope for this feature since it would require changes to reviewer prompts (explicitly out-of-scope per FR-013)."
               }
             ],
             "timestamp": "2026-04-23T00:00:00Z"
           },
           {
             "judge": "restatement",
-            "model": "gpt-5.5",
+            "model": "GPT-5.5",
             "verdict": "block",
             "confidence": 5,
-            "reasoning": "All latest-round findings are NEW because the provided history explicitly says there were no earlier findings, so none can be a restatement under the stated rule. The round surfaces multiple distinct failure modes that were not previously covered: code-fence bypass in auto-reconcile parsing, missing invariant coverage for mutating commands, lack of backfill IDs for existing unresolved concerns, an internal spec contradiction about what closes concerns, brittle/paraphrase-sensitive concern ID generation, regex-maintenance risk for severity parsing, weak audit-trail assumptions under artifact drift, possible silent ignoring of contradiction warnings, and misuse paths in the concern lifecycle. Because substantial new concerns are still surfacing, the loop is still producing signal rather than cosmetic repetition.",
+            "reasoning": "There were no earlier rounds, so none of the latest findings can be classified as RESTATEMENT under the stated rule. Every latest finding is NEW because the required precondition for restatement is missing: no earlier round raised the same concern, and there was no orchestrator response that addressed it. Per-finding classification: spec.codex.edge-cases-adversarial.review#high-1 = NEW; uncovered failure mode: fenced code blocks containing literal '- HIGH:' lines are still parsed as actionable findings. spec.codex.edge-cases-adversarial.review#medium-2 = NEW; uncovered failure mode: FR-009 omits mutating commands such as discover, parallel, and init from invariant enforcement. spec.codex.feasibility-adversarial.review#high-1 = NEW; uncovered failure mode: existing unresolved concerns without ids are not backfilled, so lifecycle commands cannot operate on preexisting runs. spec.codex.feasibility-adversarial.review#medium-2 = NEW; uncovered failure mode: discover and parallel remain outside the required invariant coverage despite mutating state. spec.codex.feasibility-adversarial.review#medium-3 = NEW; uncovered failure mode: the spec internally disagrees on whether plan annotations alone close concerns. spec.codex.feasibility-adversarial.review#medium-4 = NEW; uncovered failure mode: FR-006/FR-007 overclaim false-positive protection because fenced code blocks still match severity lines. spec.gemini.requirements-adversarial.review#medium-1 = NEW; uncovered failure mode: concern-id generation may not survive paraphrased findings. spec.gemini.requirements-adversarial.review#medium-2 = NEW; uncovered failure mode: severity detection depends on a fragile regex strategy. spec.gemini.requirements-adversarial.review#high-3 = NEW; uncovered failure mode: the overall regex-based parsing approach creates an arms race and does not solve the lack of structured findings. spec.gemini.requirements-adversarial.review#medium-4 = NEW; uncovered failure mode: artifact-drift advancement relies on an unverified audit-trail assumption. spec.gemini.requirements-adversarial.review#low-5 = NEW; uncovered failure mode: automated agents may ignore contradiction warnings. spec.gemini.requirements-adversarial.review#low-6 = NEW; uncovered failure mode: the concern lifecycle adds a misuse path without enough controls. Since 0% of the latest round's findings are restatements, the loop is still producing new signal and should be blocked.",
             "evidence": [
               {
-                "artifact": "earlier-rounds",
-                "section": "history",
-                "quote": "No prior findings yet."
+                "artifact": "prompt",
+                "section": "Earlier rounds",
+                "quote": "Earlier rounds' findings (with orchestrator responses): - No prior findings yet."
               },
               {
-                "artifact": "latest-round",
-                "section": "spec.codex.edge-cases-adversarial.review#high-1",
+                "artifact": "spec.codex.edge-cases-adversarial.review.md",
+                "section": "high-1",
                 "quote": "The auto-reconcile regex still has a code-fence bypass."
               },
               {
-                "artifact": "latest-round",
-                "section": "spec.codex.edge-cases-adversarial.review#medium-2",
+                "artifact": "spec.codex.edge-cases-adversarial.review.md",
+                "section": "medium-2",
                 "quote": "FR-009 under-specifies the state-mutating commands that must get the post-run invariant check."
               },
               {
-                "artifact": "latest-round",
-                "section": "spec.codex.feasibility-adversarial.review#high-1",
+                "artifact": "spec.codex.feasibility-adversarial.review.md",
+                "section": "high-1",
                 "quote": "do not backfill `id` for existing `unresolved_concerns`."
               },
               {
-                "artifact": "latest-round",
-                "section": "spec.codex.feasibility-adversarial.review#medium-3",
+                "artifact": "spec.codex.feasibility-adversarial.review.md",
+                "section": "medium-3",
                 "quote": "the spec is internally inconsistent and will force a choice later."
               },
               {
-                "artifact": "latest-round",
-                "section": "spec.gemini.requirements-adversarial.review#medium-1",
-                "quote": "Concern ID generation is brittle and may fail to track paraphrased findings"
-              },
-              {
-                "artifact": "latest-round",
-                "section": "spec.gemini.requirements-adversarial.review#high-3",
-                "quote": "The root problem\u2014a lack of a structured format for review findings\u2014is not addressed"
+                "artifact": "spec.gemini.requirements-adversarial.review.md",
+                "section": "high-3",
+                "quote": "The root problem\u2014a lack of a structured format for review findings\u2014is not addressed, leading to a tactical patch rather than a robust, long-term solution."
               }
             ],
             "timestamp": "2026-04-23T00:00:00-07:00"
@@ -1149,32 +1240,42 @@
             "model": "claude-sonnet-4-5",
             "verdict": "block",
             "confidence": 4,
-            "reasoning": "Five load-bearing ambiguities that would cause wrong code or a stuck implementer. Two are direct contradictions between the plan's architecture table and the spec/tasks (module location, stderr routing). One is an underspecified encoding that produces silently wrong IDs. Two leave the implementer with no way to satisfy the stated call-site contract without guessing at existing API surface.",
+            "reasoning": "Four concrete snags would stop or mis-direct a cold implementer. Two are load-bearing blockers: (1) `workflow_utils.normalized_artifact_hash` is called in T3.3 with no documented signature or confirmation it exists \u2014 the implementer cannot write the reseal helper without knowing what arguments to pass. (2) The reconcile review note in the plan says 'init/discover/parallel added to _STATE_MUTATING_COMMANDS' but the authoritative frozenset in T2.4 omits `init` entirely and the spec FR-009 list also omits it \u2014 the implementer must guess whether to include it. Two additional risks are lower severity but still cause a wrong implementation on first read: (3) The plan architecture section says 'Emit to stderr when --json is in effect; stdout otherwise' which directly contradicts T2.3's 'Emit invariant warnings to stderr ALWAYS' \u2014 a cold reader of the plan hits the architecture section before the task detail. (4) T3.4 says to call the reseal helper from `factory_stages.prerequisite_failure` but FR-002 says the reseal happens 'lazily the next time the advance is taken' and the advance-gate lives in `factory_next_action.recommended_next_action` \u2014 the call-graph relationship between `prerequisite_failure` and 'taking an advance' is not documented, so the implementer cannot confirm the reseal fires at the right moment without reading existing source.",
             "evidence": [
               {
-                "artifact": "PLAN",
-                "section": "Architecture table / Slice 2 description vs. SPEC FR-009 and TASKS T2.2",
-                "quote": "Plan architecture table: '| 8 | new helper in `factory_state.py` | `run_invariant_checks(state, command)`'. But FR-009: 'A new helper `factory_invariants.run_invariant_checks(...)` (in a NEW module `factory_invariants.py`, sibling of `factory_state.py`)'. And T2.2: 'Create NEW module `factory_invariants.py`\u2026 Do NOT put this helper in `factory_state.py`.' Direct contradiction on which file to create the helper in."
+                "artifact": "TASKS",
+                "section": "Slice 3 \u2014 T3.3",
+                "quote": "reads the current artifact sha via `workflow_utils.normalized_artifact_hash`"
               },
               {
                 "artifact": "PLAN",
-                "section": "Slice 2 narrative vs. SPEC FR-009, TASKS T2.3, PLAN Risk P3",
-                "quote": "Slice 2: 'Emit to stderr when `--json` is in effect; stdout otherwise. Detect via a context var or explicit parameter threaded from the caller.' But FR-009: 'always stderr, so machine-readable stdout is never contaminated'. T2.3: 'Emit invariant warnings to stderr ALWAYS (no conditional routing).' Risk P3: 'Warnings go to stderr *always* \u2014 no conditional routing.' Conditional routing is specified and simultaneously forbidden."
-              },
-              {
-                "artifact": "SPEC / TASKS",
-                "section": "FR-003 and T3.5 \u2014 concern ID encoding",
-                "quote": "FR-003: 'id = sha256(stage|judge|round_raised|<first-48-chars-of-reasoning-stripped-of-whitespace>)[:12]'. T3.5: 'sha256(f\"{stage}|{judge}|{round_raised}|\" + \"\".join(reasoning.split())[:48])[:12]'. Neither specifies `.hexdigest()` vs `.digest()`. IDs are stored in state.json and passed as CLI arguments (`checkpoint --address <id>`), so bytes vs hex string is load-bearing \u2014 a bytes slice produces a binary string that breaks JSON serialization and CLI round-trips."
+                "section": "Review Reconciliation \u2014 edge-cases-adversarial note",
+                "quote": "M#1 init/discover/parallel added to _STATE_MUTATING_COMMANDS"
               },
               {
                 "artifact": "TASKS",
-                "section": "T3.3 \u2014 checkpoint_manifest_path assumed to exist",
-                "quote": "T3.3: 'The manifest lives at `docs/workflow/feature-runs/<slug>/reviews/<stage>.checkpoint.json` (resolve via `factory_state.checkpoint_manifest_path(slug, stage)`).' No other artifact confirms this function exists in `factory_state.py`. If it does not exist, the implementer must invent the path-resolution logic rather than call a known API \u2014 and the path shown in the parenthetical may not match how the existing codebase actually constructs it."
+                "section": "Slice 2 \u2014 T2.4",
+                "quote": "Contents (exact, in alphabetic order for easy diff): `auto-reconcile, block, checkpoint, closeout, deliver, discover, implement, judge, parallel, reconcile, repair`"
+              },
+              {
+                "artifact": "PLAN",
+                "section": "Architecture \u2014 Fix 8 row",
+                "quote": "Emit to stderr when `--json` is in effect; stdout otherwise. Detect via a context var or explicit parameter threaded from the caller."
               },
               {
                 "artifact": "TASKS",
-                "section": "T3.3 / T3.4 \u2014 manifest_state parameter provenance at call site",
-                "quote": "T3.3 defines: 'record_advance_with_drift_if_needed(slug, stage, stage_state, manifest_state)'. T3.4 says: 'Call the reseal helper from `factory_stages.prerequisite_failure` when a prereq stage is unhealthy BUT has `judge_next_action == \"advance\"`. No artifact explains where `prerequisite_failure` gets `manifest_state` from \u2014 the caller would have to read the manifest file itself, but then it is unclear whether the helper still reads it too (double read) or takes the pre-read dict as a caller responsibility."
+                "section": "Slice 2 \u2014 T2.3",
+                "quote": "Emit invariant warnings to stderr ALWAYS (no conditional routing). Preserve the module-level `JSON_MODE` flag + `set_json_mode()` API for back-compat but do not use them to switch emit targets \u2014 `_emit_target()` always returns `sys.stderr`."
+              },
+              {
+                "artifact": "TASKS",
+                "section": "Slice 3 \u2014 T3.4",
+                "quote": "Call the reseal helper from `factory_stages.prerequisite_failure` when a prereq stage is unhealthy BUT has `judge_next_action == \"advance\"` \u2014 at that point the drift is about to be tolerated so we record it once."
+              },
+              {
+                "artifact": "SPEC",
+                "section": "FR-002",
+                "quote": "This reseal happens lazily the next time the advance is taken (not eagerly at judge-write time)."
               }
             ],
             "timestamp": "2026-04-23T00:00:00Z"
@@ -1215,16 +1316,21 @@
           "confidence": 4,
           "reasoning": "spec.codex.edge-cases-adversarial.review#high-1 is not mitigated in the spec itself, but it is explicitly acknowledged in the plan as an accepted limitation: the fenced-code-block regex case is \u201cpinned as documented limitation with explicit test.\u201d That is specific enough as a limitation, though not an implementation plan. spec.codex.feasibility-adversarial.review#high-1 is addressed by FR-011a and T3.5, which require backfilling the stable `id` field for existing `unresolved_concerns` entries that lack one on read; that is a named mitigation and is specific enough to implement. spec.gemini.requirements-adversarial.review#high-3 is explicitly acknowledged in Risk R7 as a known architectural limitation, with structured-output migration out of scope; that is a clear acceptance, not a mitigation, and it is specific enough as an accepted limitation.",
           "artifact_sha_at_time": "102b8ce6a77244e43e05a3efddf9007ef8b1a547fb68030d98fe5288c928d5b6"
+        },
+        {
+          "type": "judge-reset",
+          "reason": "third reset after plan architecture table aligned",
+          "at": 1777010218.345984
         }
       ],
       "unresolved_concerns": [
         {
-          "id": "72abbcb01f61",
+          "id": "5d0b8ff8ac73",
           "stage": "spec",
           "judge": "restatement",
-          "model": "gpt-5.5",
+          "model": "GPT-5.5",
           "confidence": 5,
-          "reasoning": "All latest-round findings are NEW because the provided history explicitly says there were no earlier findings, so none can be a restatement under the stated rule. The round surfaces multiple distinct failure modes that were not previously covered: code-fence bypass in auto-reconcile parsing, missing invariant coverage for mutating commands, lack of backfill IDs for existing unresolved concerns, an internal spec contradiction about what closes concerns, brittle/paraphrase-sensitive concern ID generation, regex-maintenance risk for severity parsing, weak audit-trail assumptions under artifact drift, possible silent ignoring of contradiction warnings, and misuse paths in the concern lifecycle. Because substantial new concerns are still surfacing, the loop is still producing signal rather than cosmetic repetition.",
+          "reasoning": "There were no earlier rounds, so none of the latest findings can be classified as RESTATEMENT under the stated rule. Every latest finding is NEW because the required precondition for restatement is missing: no earlier round raised the same concern, and there was no orchestrator response that addressed it. Per-finding classification: spec.codex.edge-cases-adversarial.review#high-1 = NEW; uncovered failure mode: fenced code blocks containing literal '- HIGH:' lines are still parsed as actionable findings. spec.codex.edge-cases-adversarial.review#medium-2 = NEW; uncovered failure mode: FR-009 omits mutating commands such as discover, parallel, and init from invariant enforcement. spec.codex.feasibility-adversarial.review#high-1 = NEW; uncovered failure mode: existing unresolved concerns without ids are not backfilled, so lifecycle commands cannot operate on preexisting runs. spec.codex.feasibility-adversarial.review#medium-2 = NEW; uncovered failure mode: discover and parallel remain outside the required invariant coverage despite mutating state. spec.codex.feasibility-adversarial.review#medium-3 = NEW; uncovered failure mode: the spec internally disagrees on whether plan annotations alone close concerns. spec.codex.feasibility-adversarial.review#medium-4 = NEW; uncovered failure mode: FR-006/FR-007 overclaim false-positive protection because fenced code blocks still match severity lines. spec.gemini.requirements-adversarial.review#medium-1 = NEW; uncovered failure mode: concern-id generation may not survive paraphrased findings. spec.gemini.requirements-adversarial.review#medium-2 = NEW; uncovered failure mode: severity detection depends on a fragile regex strategy. spec.gemini.requirements-adversarial.review#high-3 = NEW; uncovered failure mode: the overall regex-based parsing approach creates an arms race and does not solve the lack of structured findings. spec.gemini.requirements-adversarial.review#medium-4 = NEW; uncovered failure mode: artifact-drift advancement relies on an unverified audit-trail assumption. spec.gemini.requirements-adversarial.review#low-5 = NEW; uncovered failure mode: automated agents may ignore contradiction warnings. spec.gemini.requirements-adversarial.review#low-6 = NEW; uncovered failure mode: the concern lifecycle adds a misuse path without enough controls. Since 0% of the latest round's findings are restatements, the loop is still producing new signal and should be blocked.",
           "round_raised": 3,
           "also_raised_in_round": [],
           "addressed_at": null,
@@ -1233,12 +1339,12 @@
           "dismissed_reason": null
         },
         {
-          "id": "394aa8cd151b",
+          "id": "152680565b2f",
           "stage": "spec",
           "judge": "implementation-risk",
           "model": "claude-sonnet-4-5",
           "confidence": 4,
-          "reasoning": "Five load-bearing ambiguities that would cause wrong code or a stuck implementer. Two are direct contradictions between the plan's architecture table and the spec/tasks (module location, stderr routing). One is an underspecified encoding that produces silently wrong IDs. Two leave the implementer with no way to satisfy the stated call-site contract without guessing at existing API surface.",
+          "reasoning": "Four concrete snags would stop or mis-direct a cold implementer. Two are load-bearing blockers: (1) `workflow_utils.normalized_artifact_hash` is called in T3.3 with no documented signature or confirmation it exists \u2014 the implementer cannot write the reseal helper without knowing what arguments to pass. (2) The reconcile review note in the plan says 'init/discover/parallel added to _STATE_MUTATING_COMMANDS' but the authoritative frozenset in T2.4 omits `init` entirely and the spec FR-009 list also omits it \u2014 the implementer must guess whether to include it. Two additional risks are lower severity but still cause a wrong implementation on first read: (3) The plan architecture section says 'Emit to stderr when --json is in effect; stdout otherwise' which directly contradicts T2.3's 'Emit invariant warnings to stderr ALWAYS' \u2014 a cold reader of the plan hits the architecture section before the task detail. (4) T3.4 says to call the reseal helper from `factory_stages.prerequisite_failure` but FR-002 says the reseal happens 'lazily the next time the advance is taken' and the advance-gate lives in `factory_next_action.recommended_next_action` \u2014 the call-graph relationship between `prerequisite_failure` and 'taking an advance' is not documented, so the implementer cannot confirm the reseal fires at the right moment without reading existing source.",
           "round_raised": 3,
           "also_raised_in_round": [],
           "addressed_at": null,
@@ -1279,16 +1385,16 @@
   "spec_adversarial_rounds": 3,
   "invariant_warnings": [],
   "last_action_result": {
-    "next": "record_parallel_analysis",
+    "next": "repair_plan_checkpoint",
     "reason": "judge panel exhausted; advancing with unresolved concerns",
     "blockers": [
-      "All latest-round findings are NEW because the provided history explicitly says there were no earlier findings, so none can be a restatement under the stated rule. The round surfaces multiple distinct failure modes that were not previously covered: code-fence bypass in auto-reconcile parsing, missing invariant coverage for mutating commands, lack of backfill IDs for existing unresolved concerns, an internal spec contradiction about what closes concerns, brittle/paraphrase-sensitive concern ID generation, regex-maintenance risk for severity parsing, weak audit-trail assumptions under artifact drift, possible silent ignoring of contradiction warnings, and misuse paths in the concern lifecycle. Because substantial new concerns are still surfacing, the loop is still producing signal rather than cosmetic repetition.",
-      "Five load-bearing ambiguities that would cause wrong code or a stuck implementer. Two are direct contradictions between the plan's architecture table and the spec/tasks (module location, stderr routing). One is an underspecified encoding that produces silently wrong IDs. Two leave the implementer with no way to satisfy the stated call-site contract without guessing at existing API surface."
+      "There were no earlier rounds, so none of the latest findings can be classified as RESTATEMENT under the stated rule. Every latest finding is NEW because the required precondition for restatement is missing: no earlier round raised the same concern, and there was no orchestrator response that addressed it. Per-finding classification: spec.codex.edge-cases-adversarial.review#high-1 = NEW; uncovered failure mode: fenced code blocks containing literal '- HIGH:' lines are still parsed as actionable findings. spec.codex.edge-cases-adversarial.review#medium-2 = NEW; uncovered failure mode: FR-009 omits mutating commands such as discover, parallel, and init from invariant enforcement. spec.codex.feasibility-adversarial.review#high-1 = NEW; uncovered failure mode: existing unresolved concerns without ids are not backfilled, so lifecycle commands cannot operate on preexisting runs. spec.codex.feasibility-adversarial.review#medium-2 = NEW; uncovered failure mode: discover and parallel remain outside the required invariant coverage despite mutating state. spec.codex.feasibility-adversarial.review#medium-3 = NEW; uncovered failure mode: the spec internally disagrees on whether plan annotations alone close concerns. spec.codex.feasibility-adversarial.review#medium-4 = NEW; uncovered failure mode: FR-006/FR-007 overclaim false-positive protection because fenced code blocks still match severity lines. spec.gemini.requirements-adversarial.review#medium-1 = NEW; uncovered failure mode: concern-id generation may not survive paraphrased findings. spec.gemini.requirements-adversarial.review#medium-2 = NEW; uncovered failure mode: severity detection depends on a fragile regex strategy. spec.gemini.requirements-adversarial.review#high-3 = NEW; uncovered failure mode: the overall regex-based parsing approach creates an arms race and does not solve the lack of structured findings. spec.gemini.requirements-adversarial.review#medium-4 = NEW; uncovered failure mode: artifact-drift advancement relies on an unverified audit-trail assumption. spec.gemini.requirements-adversarial.review#low-5 = NEW; uncovered failure mode: automated agents may ignore contradiction warnings. spec.gemini.requirements-adversarial.review#low-6 = NEW; uncovered failure mode: the concern lifecycle adds a misuse path without enough controls. Since 0% of the latest round's findings are restatements, the loop is still producing new signal and should be blocked.",
+      "Four concrete snags would stop or mis-direct a cold implementer. Two are load-bearing blockers: (1) `workflow_utils.normalized_artifact_hash` is called in T3.3 with no documented signature or confirmation it exists \u2014 the implementer cannot write the reseal helper without knowing what arguments to pass. (2) The reconcile review note in the plan says 'init/discover/parallel added to _STATE_MUTATING_COMMANDS' but the authoritative frozenset in T2.4 omits `init` entirely and the spec FR-009 list also omits it \u2014 the implementer must guess whether to include it. Two additional risks are lower severity but still cause a wrong implementation on first read: (3) The plan architecture section says 'Emit to stderr when --json is in effect; stdout otherwise' which directly contradicts T2.3's 'Emit invariant warnings to stderr ALWAYS' \u2014 a cold reader of the plan hits the architecture section before the task detail. (4) T3.4 says to call the reseal helper from `factory_stages.prerequisite_failure` but FR-002 says the reseal happens 'lazily the next time the advance is taken' and the advance-gate lives in `factory_next_action.recommended_next_action` \u2014 the call-graph relationship between `prerequisite_failure` and 'taking an advance' is not documented, so the implementer cannot confirm the reseal fires at the right moment without reading existing source."
     ],
     "outcome": "advance",
     "proceed_count": 1,
     "block_count": 2,
-    "timestamp": "2026-04-24T05:56:29.422180Z",
+    "timestamp": "2026-04-24T05:59:48.501455Z",
     "judge_round": 3
   },
   "spec_judge_rounds": 3,

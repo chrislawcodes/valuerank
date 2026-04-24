@@ -5,12 +5,12 @@ stage: "spec"
 artifact_path: "docs/workflow/feature-runs/ff-runner-fixes/spec.md"
 artifact_sha256: "102b8ce6a77244e43e05a3efddf9007ef8b1a547fb68030d98fe5288c928d5b6"
 repo_root: "."
-git_head_sha: "2b700ed1b77fe279b9abd511995359cf791dcbb5"
+git_head_sha: "846e5ba953723957aaffc5727ed3834dfe44a1a5"
 git_base_ref: "origin/main"
 git_base_sha: "424c0605a8158acfe0b3912840a6c5b2da057c84"
 generation_method: "judge-panel"
 resolution_status: "open"
-resolution_note: "Five load-bearing ambiguities that would cause wrong code or a stuck implementer. Two are direct contradictions between the plan's architecture table and the spec/tasks (module location, stderr routing). One is an underspecified encoding..."
+resolution_note: "Four concrete snags would stop or mis-direct a cold implementer. Two are load-bearing blockers: (1) `workflow_utils.normalized_artifact_hash` is called in T3.3 with no documented signature or confirmation it exists — the implementer cann..."
 raw_output_path: "docs/workflow/feature-runs/ff-runner-fixes/reviews/judge.implementation-risk.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,15 +22,17 @@ coverage_note: ""
 
 ## Findings
 
-Five load-bearing ambiguities that would cause wrong code or a stuck implementer. Two are direct contradictions between the plan's architecture table and the spec/tasks (module location, stderr routing). One is an underspecified encoding that produces silently wrong IDs. Two leave the implementer with no way to satisfy the stated call-site contract without guessing at existing API surface.
+Four concrete snags would stop or mis-direct a cold implementer. Two are load-bearing blockers: (1) `workflow_utils.normalized_artifact_hash` is called in T3.3 with no documented signature or confirmation it exists — the implementer cannot write the reseal helper without knowing what arguments to pass. (2) The reconcile review note in the plan says 'init/discover/parallel added to _STATE_MUTATING_COMMANDS' but the authoritative frozenset in T2.4 omits `init` entirely and the spec FR-009 list also omits it — the implementer must guess whether to include it. Two additional risks are lower severity but still cause a wrong implementation on first read: (3) The plan architecture section says 'Emit to stderr when --json is in effect; stdout otherwise' which directly contradicts T2.3's 'Emit invariant warnings to stderr ALWAYS' — a cold reader of the plan hits the architecture section before the task detail. (4) T3.4 says to call the reseal helper from `factory_stages.prerequisite_failure` but FR-002 says the reseal happens 'lazily the next time the advance is taken' and the advance-gate lives in `factory_next_action.recommended_next_action` — the call-graph relationship between `prerequisite_failure` and 'taking an advance' is not documented, so the implementer cannot confirm the reseal fires at the right moment without reading existing source.
 
 ## Residual Risks
 
-- PLAN :: Architecture table / Slice 2 description vs. SPEC FR-009 and TASKS T2.2 - Plan architecture table: '| 8 | new helper in `factory_state.py` | `run_invariant_checks(state, command)`'. But FR-009: 'A new helper `factory_invariants.run_invariant_checks(...)` (in a NEW module `factory_invariants.py`, sibling of `factory_state.py`)'. And T2.2: 'Create NEW module `factory_invariants.py`… Do NOT put this helper in `factory_state.py`.' Direct contradiction on which file to create the helper in.
-- PLAN :: Slice 2 narrative vs. SPEC FR-009, TASKS T2.3, PLAN Risk P3 - Slice 2: 'Emit to stderr when `--json` is in effect; stdout otherwise. Detect via a context var or explicit parameter threaded from the caller.' But FR-009: 'always stderr, so machine-readable stdout is never contaminated'. T2.3: 'Emit invariant warnings to stderr ALWAYS (no conditional routing).' Risk P3: 'Warnings go to stderr *always* — no conditional routing.' Conditional routing is specified and simultaneously forbidden.
-- SPEC / TASKS :: FR-003 and T3.5 — concern ID encoding - FR-003: 'id = sha256(stage|judge|round_raised|<first-48-chars-of-reasoning-stripped-of-whitespace>)[:12]'. T3.5: 'sha256(f"{stage}|{judge}|{round_raised}|" + "".join(reasoning.split())[:48])[:12]'. Neither specifies `.hexdigest()` vs `.digest()`. IDs are stored in state.json and passed as CLI arguments (`checkpoint --address <id>`), so bytes vs hex string is load-bearing — a bytes slice produces a binary string that breaks JSON serialization and CLI round-trips.
-- TASKS :: T3.3 — checkpoint_manifest_path assumed to exist - T3.3: 'The manifest lives at `docs/workflow/feature-runs/<slug>/reviews/<stage>.checkpoint.json` (resolve via `factory_state.checkpoint_manifest_path(slug, stage)`).' No other artifact confirms this function exists in `factory_state.py`. If it does not exist, the implementer must invent the path-resolution logic rather than call a known API — and the path shown in the parenthetical may not match how the existing codebase actually constructs it.
-- TASKS :: T3.3 / T3.4 — manifest_state parameter provenance at call site - T3.3 defines: 'record_advance_with_drift_if_needed(slug, stage, stage_state, manifest_state)'. T3.4 says: 'Call the reseal helper from `factory_stages.prerequisite_failure` when a prereq stage is unhealthy BUT has `judge_next_action == "advance"`. No artifact explains where `prerequisite_failure` gets `manifest_state` from — the caller would have to read the manifest file itself, but then it is unclear whether the helper still reads it too (double read) or takes the pre-read dict as a caller responsibility.
+- TASKS :: Slice 3 — T3.3 - reads the current artifact sha via `workflow_utils.normalized_artifact_hash`
+- PLAN :: Review Reconciliation — edge-cases-adversarial note - M#1 init/discover/parallel added to _STATE_MUTATING_COMMANDS
+- TASKS :: Slice 2 — T2.4 - Contents (exact, in alphabetic order for easy diff): `auto-reconcile, block, checkpoint, closeout, deliver, discover, implement, judge, parallel, reconcile, repair`
+- PLAN :: Architecture — Fix 8 row - Emit to stderr when `--json` is in effect; stdout otherwise. Detect via a context var or explicit parameter threaded from the caller.
+- TASKS :: Slice 2 — T2.3 - Emit invariant warnings to stderr ALWAYS (no conditional routing). Preserve the module-level `JSON_MODE` flag + `set_json_mode()` API for back-compat but do not use them to switch emit targets — `_emit_target()` always returns `sys.stderr`.
+- TASKS :: Slice 3 — T3.4 - Call the reseal helper from `factory_stages.prerequisite_failure` when a prereq stage is unhealthy BUT has `judge_next_action == "advance"` — at that point the drift is about to be tolerated so we record it once.
+- SPEC :: FR-002 - This reseal happens lazily the next time the advance is taken (not eagerly at judge-write time).
 
 ## Verdict (structured)
 
@@ -39,34 +41,44 @@ Five load-bearing ambiguities that would cause wrong code or a stuck implementer
   "confidence": 4,
   "evidence": [
     {
-      "artifact": "PLAN",
-      "quote": "Plan architecture table: '| 8 | new helper in `factory_state.py` | `run_invariant_checks(state, command)`'. But FR-009: 'A new helper `factory_invariants.run_invariant_checks(...)` (in a NEW module `factory_invariants.py`, sibling of `factory_state.py`)'. And T2.2: 'Create NEW module `factory_invariants.py`\u2026 Do NOT put this helper in `factory_state.py`.' Direct contradiction on which file to create the helper in.",
-      "section": "Architecture table / Slice 2 description vs. SPEC FR-009 and TASKS T2.2"
+      "artifact": "TASKS",
+      "quote": "reads the current artifact sha via `workflow_utils.normalized_artifact_hash`",
+      "section": "Slice 3 \u2014 T3.3"
     },
     {
       "artifact": "PLAN",
-      "quote": "Slice 2: 'Emit to stderr when `--json` is in effect; stdout otherwise. Detect via a context var or explicit parameter threaded from the caller.' But FR-009: 'always stderr, so machine-readable stdout is never contaminated'. T2.3: 'Emit invariant warnings to stderr ALWAYS (no conditional routing).' Risk P3: 'Warnings go to stderr *always* \u2014 no conditional routing.' Conditional routing is specified and simultaneously forbidden.",
-      "section": "Slice 2 narrative vs. SPEC FR-009, TASKS T2.3, PLAN Risk P3"
-    },
-    {
-      "artifact": "SPEC / TASKS",
-      "quote": "FR-003: 'id = sha256(stage|judge|round_raised|<first-48-chars-of-reasoning-stripped-of-whitespace>)[:12]'. T3.5: 'sha256(f\"{stage}|{judge}|{round_raised}|\" + \"\".join(reasoning.split())[:48])[:12]'. Neither specifies `.hexdigest()` vs `.digest()`. IDs are stored in state.json and passed as CLI arguments (`checkpoint --address <id>`), so bytes vs hex string is load-bearing \u2014 a bytes slice produces a binary string that breaks JSON serialization and CLI round-trips.",
-      "section": "FR-003 and T3.5 \u2014 concern ID encoding"
+      "quote": "M#1 init/discover/parallel added to _STATE_MUTATING_COMMANDS",
+      "section": "Review Reconciliation \u2014 edge-cases-adversarial note"
     },
     {
       "artifact": "TASKS",
-      "quote": "T3.3: 'The manifest lives at `docs/workflow/feature-runs/<slug>/reviews/<stage>.checkpoint.json` (resolve via `factory_state.checkpoint_manifest_path(slug, stage)`).' No other artifact confirms this function exists in `factory_state.py`. If it does not exist, the implementer must invent the path-resolution logic rather than call a known API \u2014 and the path shown in the parenthetical may not match how the existing codebase actually constructs it.",
-      "section": "T3.3 \u2014 checkpoint_manifest_path assumed to exist"
+      "quote": "Contents (exact, in alphabetic order for easy diff): `auto-reconcile, block, checkpoint, closeout, deliver, discover, implement, judge, parallel, reconcile, repair`",
+      "section": "Slice 2 \u2014 T2.4"
+    },
+    {
+      "artifact": "PLAN",
+      "quote": "Emit to stderr when `--json` is in effect; stdout otherwise. Detect via a context var or explicit parameter threaded from the caller.",
+      "section": "Architecture \u2014 Fix 8 row"
     },
     {
       "artifact": "TASKS",
-      "quote": "T3.3 defines: 'record_advance_with_drift_if_needed(slug, stage, stage_state, manifest_state)'. T3.4 says: 'Call the reseal helper from `factory_stages.prerequisite_failure` when a prereq stage is unhealthy BUT has `judge_next_action == \"advance\"`. No artifact explains where `prerequisite_failure` gets `manifest_state` from \u2014 the caller would have to read the manifest file itself, but then it is unclear whether the helper still reads it too (double read) or takes the pre-read dict as a caller responsibility.",
-      "section": "T3.3 / T3.4 \u2014 manifest_state parameter provenance at call site"
+      "quote": "Emit invariant warnings to stderr ALWAYS (no conditional routing). Preserve the module-level `JSON_MODE` flag + `set_json_mode()` API for back-compat but do not use them to switch emit targets \u2014 `_emit_target()` always returns `sys.stderr`.",
+      "section": "Slice 2 \u2014 T2.3"
+    },
+    {
+      "artifact": "TASKS",
+      "quote": "Call the reseal helper from `factory_stages.prerequisite_failure` when a prereq stage is unhealthy BUT has `judge_next_action == \"advance\"` \u2014 at that point the drift is about to be tolerated so we record it once.",
+      "section": "Slice 3 \u2014 T3.4"
+    },
+    {
+      "artifact": "SPEC",
+      "quote": "This reseal happens lazily the next time the advance is taken (not eagerly at judge-write time).",
+      "section": "FR-002"
     }
   ],
   "judge": "implementation-risk",
   "model": "claude-sonnet-4-5",
-  "reasoning": "Five load-bearing ambiguities that would cause wrong code or a stuck implementer. Two are direct contradictions between the plan's architecture table and the spec/tasks (module location, stderr routing). One is an underspecified encoding that produces silently wrong IDs. Two leave the implementer with no way to satisfy the stated call-site contract without guessing at existing API surface.",
+  "reasoning": "Four concrete snags would stop or mis-direct a cold implementer. Two are load-bearing blockers: (1) `workflow_utils.normalized_artifact_hash` is called in T3.3 with no documented signature or confirmation it exists \u2014 the implementer cannot write the reseal helper without knowing what arguments to pass. (2) The reconcile review note in the plan says 'init/discover/parallel added to _STATE_MUTATING_COMMANDS' but the authoritative frozenset in T2.4 omits `init` entirely and the spec FR-009 list also omits it \u2014 the implementer must guess whether to include it. Two additional risks are lower severity but still cause a wrong implementation on first read: (3) The plan architecture section says 'Emit to stderr when --json is in effect; stdout otherwise' which directly contradicts T2.3's 'Emit invariant warnings to stderr ALWAYS' \u2014 a cold reader of the plan hits the architecture section before the task detail. (4) T3.4 says to call the reseal helper from `factory_stages.prerequisite_failure` but FR-002 says the reseal happens 'lazily the next time the advance is taken' and the advance-gate lives in `factory_next_action.recommended_next_action` \u2014 the call-graph relationship between `prerequisite_failure` and 'taking an advance' is not documented, so the implementer cannot confirm the reseal fires at the right moment without reading existing source.",
   "timestamp": "2026-04-23T00:00:00Z",
   "verdict": "block"
 }
@@ -74,4 +86,4 @@ Five load-bearing ambiguities that would cause wrong code or a stuck implementer
 
 ## Resolution
 - status: open
-- note: Five load-bearing ambiguities that would cause wrong code or a stuck implementer. Two are direct contradictions between the plan's architecture table and the spec/tasks (module location, stderr routing). One is an underspecified encoding...
+- note: Four concrete snags would stop or mis-direct a cold implementer. Two are load-bearing blockers: (1) `workflow_utils.normalized_artifact_hash` is called in T3.3 with no documented signature or confirmation it exists — the implementer cann...
