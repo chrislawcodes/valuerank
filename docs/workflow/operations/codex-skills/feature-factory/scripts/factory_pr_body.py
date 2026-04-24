@@ -29,6 +29,71 @@ def _excerpt(text: object, limit: int = 120) -> str:
     return textwrap.shorten(normalized, width=limit, placeholder="...")
 
 
+def _findings_pushed_aside(resolved_concerns: list[dict]) -> list[dict]:
+    """Return just the deferred + dismissed concerns, in stage order.
+
+    These are the findings the operator explicitly chose NOT to fix — either
+    pushed to follow-up (`deferred`) or judged invalid (`dismissed`). They
+    render in a dedicated PR-body section with plain-language explanations so
+    a human reviewer can see the compromises before merging.
+    """
+    stage_order = {"spec": 0, "plan": 1, "tasks": 2, "diff": 3, "closeout": 4}
+    pushed: list[dict] = []
+    for concern in resolved_concerns:
+        if concern.get("deferred_reason") or concern.get("dismissed_reason"):
+            pushed.append(concern)
+    pushed.sort(key=lambda c: (stage_order.get(str(c.get("stage", "")), 99), str(c.get("judge", ""))))
+    return pushed
+
+
+def render_findings_pushed_aside_block(resolved_concerns: list[dict]) -> list[str]:
+    """Render the plain-language 'Findings Pushed Aside' PR-body section.
+
+    Produces the same human-readable summary for every feature the Factory
+    ships. Reviewers reading a PR should never have to dig through state.json
+    or review files to see which adversarial findings got waved off.
+    """
+    pushed = _findings_pushed_aside(resolved_concerns)
+    if not pushed:
+        return []
+
+    lines: list[str] = [
+        "## Findings Pushed Aside",
+        "",
+        "These are concerns that reviewers or judges flagged during the Feature "
+        "Factory review cycle that the feature author explicitly chose **not to fix** "
+        "in this PR. Each has a reason. Read them before merging.",
+        "",
+    ]
+    for concern in pushed:
+        stage = str(concern.get("stage", "") or "?")
+        judge = str(concern.get("judge", "") or "?")
+        concern_id = str(concern.get("id", "") or "")
+        round_raised = concern.get("round_raised", concern.get("round", "?"))
+        reasoning = str(concern.get("reasoning", "") or "").strip()
+        summary = _excerpt(reasoning, limit=160) or "(no reasoning captured)"
+        if concern.get("dismissed_reason"):
+            action = "dismissed"
+            reason = str(concern.get("dismissed_reason", "") or "").strip()
+            action_label = "Why it was dismissed (reviewer was wrong)"
+        else:
+            action = "deferred"
+            reason = str(concern.get("deferred_reason", "") or "").strip()
+            action_label = "Why it was deferred (fix is follow-up work)"
+
+        id_label = f" `{concern_id}`" if concern_id else ""
+        lines.extend(
+            [
+                f"### {stage} stage — {judge} judge{id_label} ({action})",
+                f"- **What was flagged:** {summary}",
+                f"- **{action_label}:** {reason or '(no reason provided — operator should add one)'}",
+                f"- **Round raised:** {round_raised}",
+                "",
+            ]
+        )
+    return lines
+
+
 def _concern_is_resolved(concern: dict) -> bool:
     """FR-005a — a concern is resolved once addressed, deferred, or dismissed.
 
@@ -129,6 +194,10 @@ def render_judge_panel_block(state: dict) -> str:
             ]
         )
         lines.extend(concern_lines)
+
+    # Plain-language summary of deferred/dismissed findings — rendered BEFORE
+    # the full resolved-concerns dump so a human reviewer sees it first.
+    lines.extend(render_findings_pushed_aside_block(resolved_concerns))
 
     if resolved_concerns:
         lines.append("## Resolved Concerns")
