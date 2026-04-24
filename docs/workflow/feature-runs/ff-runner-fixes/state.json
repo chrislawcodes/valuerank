@@ -49,10 +49,10 @@
   "dirty_overrides": {},
   "checkpoint_fallback": {},
   "parallel_analysis": {
-    "reviewed": false,
+    "reviewed": true,
     "found": false,
-    "note": "",
-    "updated_at": 0
+    "note": "Three fixes land in three separate modules (factory_next_action/factory_cmd_judge/factory_stages for Fix 1; factory_review_specs for Fix 2; factory_invariants for Fix 8). They share one state field (invariant_warnings) but are mergeable independently. Implementation is already complete in a single commit history \u2014 no need to re-parallelize the already-shipped implementation.",
+    "updated_at": 1777010970
   },
   "init_head_sha": "424c0605a8158acfe0b3912840a6c5b2da057c84",
   "token_usage": [
@@ -903,6 +903,101 @@
       "agent_id": null,
       "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
       "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T06:05:44.131527Z",
+      "started_at": "2026-04-24T06:02:44.122175Z",
+      "ended_at": "2026-04-24T06:05:44.131527Z",
+      "duration_seconds": 180.007937,
+      "agent_id": null,
+      "artifact_sha_at_time": "dc061ea73545a86c8e1a615660bbab41b7247ccd464641c6a2d4090f1490c2e6",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": 1500,
+      "output_tokens": 700,
+      "cost_usd_estimate": 0.0029,
+      "timestamp": "2026-04-24T06:08:00.429223Z",
+      "started_at": "2026-04-24T06:05:44.298434Z",
+      "ended_at": "2026-04-24T06:08:00.429223Z",
+      "duration_seconds": 136.129664,
+      "agent_id": null,
+      "artifact_sha_at_time": "dc061ea73545a86c8e1a615660bbab41b7247ccd464641c6a2d4090f1490c2e6"
+    },
+    {
+      "stage": "plan",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T06:08:47.465650Z",
+      "started_at": "2026-04-24T06:08:00.600151Z",
+      "ended_at": "2026-04-24T06:08:47.465650Z",
+      "duration_seconds": 46.865119,
+      "agent_id": null,
+      "artifact_sha_at_time": "dc061ea73545a86c8e1a615660bbab41b7247ccd464641c6a2d4090f1490c2e6",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "tasks",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T06:10:19.882462Z",
+      "started_at": "2026-04-24T06:09:39.175195Z",
+      "ended_at": "2026-04-24T06:10:19.882462Z",
+      "duration_seconds": 40.706881,
+      "agent_id": null,
+      "artifact_sha_at_time": "2bcb85d7575f8c1c9a11aa344f662c30280feeba496b385cda84783f9c14d2c9",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T06:10:57.603840Z",
+      "started_at": "2026-04-24T06:10:20.086027Z",
+      "ended_at": "2026-04-24T06:10:57.603840Z",
+      "duration_seconds": 37.517411,
+      "agent_id": null,
+      "artifact_sha_at_time": "2bcb85d7575f8c1c9a11aa344f662c30280feeba496b385cda84783f9c14d2c9",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T06:11:38.185092Z",
+      "started_at": "2026-04-24T06:10:57.807948Z",
+      "ended_at": "2026-04-24T06:11:38.185092Z",
+      "duration_seconds": 40.376743,
+      "agent_id": null,
+      "artifact_sha_at_time": "2bcb85d7575f8c1c9a11aa344f662c30280feeba496b385cda84783f9c14d2c9",
+      "parse_error": "no Gemini token stats found in stdout"
     }
   ],
   "stages": {
@@ -1371,9 +1466,21 @@
       "annotations": [],
       "unresolved_concerns": [],
       "adversarial_sha_history": [
-        "a260b8ebd806f71193a11b024ab25896b974da30fb8a754b3a8529e3b695a142"
+        "a260b8ebd806f71193a11b024ab25896b974da30fb8a754b3a8529e3b695a142",
+        "dc061ea73545a86c8e1a615660bbab41b7247ccd464641c6a2d4090f1490c2e6"
       ],
       "initial_sha": "a260b8ebd806f71193a11b024ab25896b974da30fb8a754b3a8529e3b695a142"
+    },
+    "tasks": {
+      "adversarial_rounds": 1,
+      "judge_rounds": 0,
+      "judge_verdicts": [],
+      "annotations": [],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [
+        "2bcb85d7575f8c1c9a11aa344f662c30280feeba496b385cda84783f9c14d2c9"
+      ],
+      "initial_sha": "2bcb85d7575f8c1c9a11aa344f662c30280feeba496b385cda84783f9c14d2c9"
     }
   },
   "schema_version": 2,
@@ -1385,18 +1492,11 @@
   "spec_adversarial_rounds": 3,
   "invariant_warnings": [],
   "last_action_result": {
-    "next": "repair_plan_checkpoint",
-    "reason": "judge panel exhausted; advancing with unresolved concerns",
-    "blockers": [
-      "There were no earlier rounds, so none of the latest findings can be classified as RESTATEMENT under the stated rule. Every latest finding is NEW because the required precondition for restatement is missing: no earlier round raised the same concern, and there was no orchestrator response that addressed it. Per-finding classification: spec.codex.edge-cases-adversarial.review#high-1 = NEW; uncovered failure mode: fenced code blocks containing literal '- HIGH:' lines are still parsed as actionable findings. spec.codex.edge-cases-adversarial.review#medium-2 = NEW; uncovered failure mode: FR-009 omits mutating commands such as discover, parallel, and init from invariant enforcement. spec.codex.feasibility-adversarial.review#high-1 = NEW; uncovered failure mode: existing unresolved concerns without ids are not backfilled, so lifecycle commands cannot operate on preexisting runs. spec.codex.feasibility-adversarial.review#medium-2 = NEW; uncovered failure mode: discover and parallel remain outside the required invariant coverage despite mutating state. spec.codex.feasibility-adversarial.review#medium-3 = NEW; uncovered failure mode: the spec internally disagrees on whether plan annotations alone close concerns. spec.codex.feasibility-adversarial.review#medium-4 = NEW; uncovered failure mode: FR-006/FR-007 overclaim false-positive protection because fenced code blocks still match severity lines. spec.gemini.requirements-adversarial.review#medium-1 = NEW; uncovered failure mode: concern-id generation may not survive paraphrased findings. spec.gemini.requirements-adversarial.review#medium-2 = NEW; uncovered failure mode: severity detection depends on a fragile regex strategy. spec.gemini.requirements-adversarial.review#high-3 = NEW; uncovered failure mode: the overall regex-based parsing approach creates an arms race and does not solve the lack of structured findings. spec.gemini.requirements-adversarial.review#medium-4 = NEW; uncovered failure mode: artifact-drift advancement relies on an unverified audit-trail assumption. spec.gemini.requirements-adversarial.review#low-5 = NEW; uncovered failure mode: automated agents may ignore contradiction warnings. spec.gemini.requirements-adversarial.review#low-6 = NEW; uncovered failure mode: the concern lifecycle adds a misuse path without enough controls. Since 0% of the latest round's findings are restatements, the loop is still producing new signal and should be blocked.",
-      "Four concrete snags would stop or mis-direct a cold implementer. Two are load-bearing blockers: (1) `workflow_utils.normalized_artifact_hash` is called in T3.3 with no documented signature or confirmation it exists \u2014 the implementer cannot write the reseal helper without knowing what arguments to pass. (2) The reconcile review note in the plan says 'init/discover/parallel added to _STATE_MUTATING_COMMANDS' but the authoritative frozenset in T2.4 omits `init` entirely and the spec FR-009 list also omits it \u2014 the implementer must guess whether to include it. Two additional risks are lower severity but still cause a wrong implementation on first read: (3) The plan architecture section says 'Emit to stderr when --json is in effect; stdout otherwise' which directly contradicts T2.3's 'Emit invariant warnings to stderr ALWAYS' \u2014 a cold reader of the plan hits the architecture section before the task detail. (4) T3.4 says to call the reseal helper from `factory_stages.prerequisite_failure` but FR-002 says the reseal happens 'lazily the next time the advance is taken' and the advance-gate lives in `factory_next_action.recommended_next_action` \u2014 the call-graph relationship between `prerequisite_failure` and 'taking an advance' is not documented, so the implementer cannot confirm the reseal fires at the right moment without reading existing source."
-    ],
-    "outcome": "advance",
-    "proceed_count": 1,
-    "block_count": 2,
-    "timestamp": "2026-04-24T05:59:48.501455Z",
-    "judge_round": 3
+    "next": "dispatch_next_slice_to_codex",
+    "reason": "tasks checkpoint completed",
+    "blockers": []
   },
   "spec_judge_rounds": 3,
-  "plan_adversarial_rounds": 1
+  "plan_adversarial_rounds": 1,
+  "tasks_adversarial_rounds": 1
 }

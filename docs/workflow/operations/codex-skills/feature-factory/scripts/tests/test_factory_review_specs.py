@@ -165,6 +165,17 @@ class ActionableFindingRegexNegativeTests(unittest.TestCase):
             )
         )
 
+    def test_crlf_line_endings_do_not_break_detection(self) -> None:
+        """Windows-style line endings should still detect findings (Gemini coverage F-5)."""
+        self.assertTrue(
+            FRS.detect_actionable_findings(_review("- HIGH: some finding\r\n"))
+        )
+
+    def test_leading_tab_whitespace(self) -> None:
+        """Lines with unusual leading whitespace (tabs, mixed) still match."""
+        self.assertTrue(FRS.detect_actionable_findings(_review("\t- HIGH: finding\n")))
+        self.assertTrue(FRS.detect_actionable_findings(_review("  - HIGH: finding\n")))
+
     def test_heading_high_availability_is_not_actionable(self) -> None:
         """Spec round-2 Codex edge-cases LOW: '### HIGH availability' is a section title."""
         self.assertFalse(

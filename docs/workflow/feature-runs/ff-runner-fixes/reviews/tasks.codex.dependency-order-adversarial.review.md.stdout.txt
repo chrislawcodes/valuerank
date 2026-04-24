@@ -1,0 +1,8 @@
+## Findings
+- [UNVERIFIED][MEDIUM] T3.1 and T3.4 are ordered in a way that can strand the drift-reseal hook. T3.1 moves `judge_next_action == "advance"` ahead of the unhealthy branches, but T3.4 relies on `prerequisite_failure` being reached when the prereq is unhealthy. If that function is only entered from the branch T3.1 bypasses, the new `advance-with-drift` annotation never gets written.
+- [UNVERIFIED][MEDIUM] T3.5 only backfills `id`, not the new resolution fields. Existing `unresolved_concerns` entries that were already addressed, deferred, or dismissed will still look open unless there is a migration rule for those states. That can block checkpointing in T3.7 and misrender the PR body in T3.8.
+- [UNVERIFIED][MEDIUM] T2.1 and T2.5 add persisted `invariant_warnings`, but the tasks do not cover compatibility at the load/save boundary beyond default-filling. If the workflow state schema is strict, older fixtures or serializers may reject the new field or drop it, which would make the new status section empty even after warnings are emitted.
+
+## Residual Risks
+- The regex work in T1.1 and T1.2 is still sensitive to false positives in prose that mention severity terms. The regression suite needs examples from more than this feature’s own reviews to prove the structural anchors are really working.
+- The run-033 regression in T3.10 only protects one known failure mode. If the underlying bug also appears on plan or tasks stages, this artifact does not explicitly add a fixture or test for those variants.
