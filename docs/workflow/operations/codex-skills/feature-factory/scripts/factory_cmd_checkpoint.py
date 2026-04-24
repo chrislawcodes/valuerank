@@ -80,6 +80,7 @@ from factory_emit import _emit_next_action  # noqa: E402
 from factory_heartbeat import HeartbeatEmitter, set_activity as heartbeat_set_activity  # noqa: E402
 from factory_next_action import recommended_next_action  # noqa: E402
 from workflow_utils import normalized_artifact_hash  # noqa: E402
+from factory_mutating import mutates_state  # noqa: E402
 
 
 def _ensure_stage_state_blob(state: dict, stage: str) -> dict:
@@ -198,6 +199,24 @@ def _concern_reasoning_snippet(concern: dict, limit: int = 60) -> str:
     if not reasoning:
         return "(no reasoning)"
     return reasoning[:limit]
+
+
+def _gc_review_intermediates(slug: str, stage: str, keep: bool) -> list[Path]:
+    if keep:
+        return []
+    reviews = reviews_dir(slug)
+    deleted: list[Path] = []
+    for suffix in (
+        ".narrowed.txt",
+        ".narrowed.json",
+        ".raw.txt",
+        ".stdout.txt",
+        ".stderr.txt",
+    ):
+        for path in sorted(reviews.glob(f"{stage}.*{suffix}")):
+            path.unlink(missing_ok=True)
+            deleted.append(path)
+    return deleted
 
 
 def _find_concerns_by_id(state: dict, concern_id: str) -> list[tuple[str, dict]]:
@@ -332,6 +351,7 @@ def _handle_concern_lifecycle(args: argparse.Namespace) -> int | None:
     return 0
 
 
+@mutates_state("checkpoint")
 def command_checkpoint(args: argparse.Namespace) -> int:
     fast = getattr(args, "fast", False)
     if fast and args.stage != "diff":
@@ -345,6 +365,9 @@ def command_checkpoint(args: argparse.Namespace) -> int:
     reviews = reviews_dir(args.slug)
     root.mkdir(parents=True, exist_ok=True)
     reviews.mkdir(parents=True, exist_ok=True)
+    keep_intermediates = getattr(args, "keep_intermediates", False)
+    with with_locked_state(args.slug):
+        _gc_review_intermediates(args.slug, args.stage, keep_intermediates)
 
     if not fast:
         prereq_error = prerequisite_failure(args.slug, args.stage)

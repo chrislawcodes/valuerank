@@ -66,6 +66,8 @@ from factory_pr_body import (  # noqa: E402
 )
 
 from factory_emit import _emit_next_action  # noqa: E402
+from factory_mutating import mutates_state  # noqa: E402
+from factory_cmd_checkpoint import _nonblank  # noqa: E402
 
 
 def _base_pr_body(slug: str) -> str:
@@ -231,11 +233,12 @@ def _resume_merge_wait_if_needed(slug: str, delivery: dict) -> int:
     return 0
 
 
+@mutates_state("deliver")
 def command_deliver(args: argparse.Namespace) -> int:
     ensure_sync()
     if not command_path("gh"):
         raise SystemExit("deliver requires the gh CLI to be installed")
-    if args.override_judges and not args.reason:
+    if args.override_judges and _nonblank(getattr(args, "reason", None)) is None:
         print("deliver --override-judges requires --reason", file=sys.stderr)
         raise SystemExit(2)
 
@@ -514,6 +517,7 @@ def command_deliver(args: argparse.Namespace) -> int:
     return 0
 
 
+@mutates_state("closeout")
 def command_closeout(args: argparse.Namespace) -> int:
     from factory_cmd_checkpoint import command_checkpoint  # noqa: E402
     ensure_sync()

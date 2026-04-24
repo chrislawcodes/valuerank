@@ -21,6 +21,11 @@ Blocking one round costs less than shipping an unaddressed HIGH.
 
 Output JSON matching the schema. Reasoning must cite each HIGH
 finding by its ID and state where (or whether) it is addressed.
+If you vote block because HIGH reviewer findings remain unaddressed,
+populate `unaddressed_high_finding_ids` with the concern ids copied
+verbatim from the review files. If you block for a different reason,
+emit `[]`. Self-validate before emitting: a block based on HIGH
+findings must include at least one id in that array.
 
 # User Prompt Template
 HIGH findings from adversarial rounds:
@@ -41,3 +46,29 @@ For each HIGH finding, state:
 3. Whether that addressing is specific enough to implement
 
 Then emit verdict JSON.
+
+Concrete examples:
+```json
+{{
+  "judge": "completeness",
+  "model": "gpt-5.4-mini",
+  "verdict": "block",
+  "confidence": 4,
+  "reasoning": "Unaddressed HIGH finding remains open.",
+  "unaddressed_high_finding_ids": ["0123456789ab"],
+  "evidence": [],
+  "timestamp": "2026-04-18T10:15:30Z"
+}}
+```
+```json
+{{
+  "judge": "completeness",
+  "model": "gpt-5.4-mini",
+  "verdict": "block",
+  "confidence": 4,
+  "reasoning": "Blocking for a different reason.",
+  "unaddressed_high_finding_ids": [],
+  "evidence": [],
+  "timestamp": "2026-04-18T10:15:30Z"
+}}
+```
