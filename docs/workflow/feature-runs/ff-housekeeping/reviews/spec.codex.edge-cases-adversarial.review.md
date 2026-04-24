@@ -1,0 +1,44 @@
+---
+reviewer: "codex"
+lens: "edge-cases-adversarial"
+stage: "spec"
+artifact_path: "docs/workflow/feature-runs/ff-housekeeping/spec.md"
+artifact_sha256: "1fe8c29e6d371698154c77e2dcf33fe8254b6459aef37da8fe13ed20920ee8e1"
+repo_root: "."
+git_head_sha: "1a289b5df079426cc7cec40fe87a8b72eefa06de"
+git_base_ref: "origin/main"
+git_base_sha: "85a91778b3c3de491fd6b326879d29fa5dc6d0fa"
+generation_method: "codex-runner"
+resolution_status: "accepted"
+resolution_note: "HIGH (atomicity): FIXED. HIGH (sticky override): FIXED — head_sha scope. MEDIUM (line count summing): FIXED — explicit added-only. MEDIUM (smoke test): FIXED — explicit harness contract. MEDIUM (quota too broad): FIXED — combined patterns + canonical helper."
+raw_output_path: "docs/workflow/feature-runs/ff-housekeeping/reviews/spec.codex.edge-cases-adversarial.review.md.raw.txt"
+narrowed_artifact_path: ""
+narrowed_artifact_sha256: ""
+coverage_status: "full"
+coverage_note: ""
+---
+
+# Review: spec edge-cases-adversarial
+
+## Findings
+
+- **High**: Fix 1 is not actually atomic or fully idempotent as written. The spec says the helper should update frontmatter, the in-body Resolution block, and `plan.md`, but only the body rewrite is explicitly protected from duplication. There is no defined rollback path if the review write succeeds and the plan write fails, and no dedupe rule for the plan entry. That means the feature can still leave the exact drift it is supposed to eliminate.
+- **High**: Fix 4 makes the override sticky at slug scope. FR-012/FR-014 say the warning is suppressed whenever `implementation_rule_override` exists, and that override is stored in `state.json` with no expiry or per-deliver scope. One legitimate override can silently disable the safeguard for every later deliver on that slug.
+- **Medium**: The implementation-rule line-count heuristic is underspecified and likely wrong for refactors. FR-016 says to use `git diff --numstat` and “summed” counts, while the trigger condition is “non-test lines added > 200.” If “summed” includes deletions or churn from renames/moves, the warning will fire on large refactors that did not add 200 lines and miss large additions offset by deletions.
+- **Medium**: **[UNVERIFIED]** The `--validation-only` smoke test command is brittle because the spec does not define the working directory or how `run_factory.py` is located when the fixture is tmpdir-rooted. As written, `subprocess.run([sys.executable, "run_factory.py", ...])` only works if the repo root is the current directory or the test harness injects a matching path.
+- **Medium**: The quota-to-deferred mapping is too broad for a status-changing heuristic. FR-005/FR-006 rely on substring matches in stderr/stdout plus HTTP 402, so any unrelated failure that echoes “usage limit” or 402 can be downgraded to `deferred` even when the run was not quota-exhausted.
+
+## Residual Risks
+
+- The quota detector will still need maintenance if the upstream provider changes wording or status codes.
+- The implementation-rule warning is advisory, so a human can still ignore it even when it is correct.
+- The reconcile helper still depends on the review-file and plan-file formats staying stable; a later schema change will require updating this entry point in lockstep.
+
+## Runner Stats
+- total_input=0
+- total_output=0
+- total_tokens=0
+
+## Resolution
+- status: accepted
+- note: HIGH (atomicity): FIXED. HIGH (sticky override): FIXED — head_sha scope. MEDIUM (line count summing): FIXED — explicit added-only. MEDIUM (smoke test): FIXED — explicit harness contract. MEDIUM (quota too broad): FIXED — combined patterns + canonical helper.
