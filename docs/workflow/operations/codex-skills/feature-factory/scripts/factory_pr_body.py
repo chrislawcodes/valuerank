@@ -132,7 +132,10 @@ def render_judge_panel_block(state: dict) -> str:
             stage = str(concern.get("stage", "") or "")
             judge = str(concern.get("judge", "") or "")
             concern_id = str(concern.get("id", "") or "")
-            if concern.get("addressed_at") is not None or concern.get("addressed_by"):
+            if concern.get("addressed_at") is not None:
+                # addressed_at is the state-bearing field; addressed_by is evidence.
+                # Keep the two aligned with _concern_is_resolved so the PR body
+                # and the checkpoint gate (FR-004) never disagree.
                 status = "addressed"
                 detail = str(concern.get("addressed_by", "") or "").strip() or "(no evidence)"
             elif concern.get("deferred_reason"):

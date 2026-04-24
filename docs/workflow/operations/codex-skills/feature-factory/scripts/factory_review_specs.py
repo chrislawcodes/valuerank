@@ -66,11 +66,17 @@ _ACTIONABLE_FINDING_RE = re.compile(
     # 5. Table cell with bold severity: "| **high** |"
     r"^\|\s*\*\*" + _SEV + r"\*\*"
     r"|"
-    # 6. Numbered list + bold severity: "1. **high**:"
+    # 6a. Numbered list + bold severity: "1. **high**:"
     r"^\s*\d+\.\s+\*\*" + _SEV + r"\*\*\s*:"
     r"|"
-    # 7. Heading with severity word: "### high:" or "### 1. high"
-    r"^#+\s+(?:\d+\.\s+)?" + _SEV + r"\b"
+    # 6b. Numbered list + plain severity + colon (no bold): "1. high:" or "1. HIGH [tag]:"
+    r"^\s*\d+\.\s+" + _SEV + r"(?:\s+\[[^\]]+\])?\s*:"
+    r"|"
+    # 7. Heading with severity word followed by colon or end-of-line.
+    # Must be `### HIGH:` or `### HIGH` on its own line — NOT `### HIGH availability
+    # target` (false-positive from section titles). Colon is the only delimiter
+    # allowed since `-` or `--` can appear in compound words like `MEDIUM-term`.
+    r"^#+\s+(?:\d+\.\s+)?" + _SEV + r"\s*(?::|$)"
     r"|"
     # 9-10. Paragraph start with bold prefix: "**high**:" or "**high [code-confirmed]**:"
     r"^\s*\*\*" + _SEV + r"(?:\s*\[[^\]]+\])?\*\*\s*:"

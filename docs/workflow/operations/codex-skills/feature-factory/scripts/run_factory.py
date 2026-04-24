@@ -113,6 +113,8 @@ _STATE_MUTATING_COMMANDS: frozenset[str] = frozenset(
         "block",
         "repair",
         "closeout",
+        "discover",
+        "parallel",
     }
 )
 

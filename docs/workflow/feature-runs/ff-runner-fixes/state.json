@@ -183,11 +183,59 @@
       "agent_id": null,
       "artifact_sha_at_time": "ff794bfed6a87cc28adc461c386aabe6163b4aaaf74d4b4dd84a740555925377",
       "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T04:57:41.653156Z",
+      "started_at": "2026-04-24T04:55:20.711743Z",
+      "ended_at": "2026-04-24T04:57:41.653156Z",
+      "duration_seconds": 140.94034,
+      "agent_id": null,
+      "artifact_sha_at_time": "026757984d1f921d93c5a73e8885d9882a5c0c36b55f767bdabe655968cbeae0",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:00:24.933694Z",
+      "started_at": "2026-04-24T04:57:41.793330Z",
+      "ended_at": "2026-04-24T05:00:24.933694Z",
+      "duration_seconds": 163.139122,
+      "agent_id": null,
+      "artifact_sha_at_time": "026757984d1f921d93c5a73e8885d9882a5c0c36b55f767bdabe655968cbeae0",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:01:20.747221Z",
+      "started_at": "2026-04-24T05:00:25.123096Z",
+      "ended_at": "2026-04-24T05:01:20.747221Z",
+      "duration_seconds": 55.62362,
+      "agent_id": null,
+      "artifact_sha_at_time": "026757984d1f921d93c5a73e8885d9882a5c0c36b55f767bdabe655968cbeae0",
+      "parse_error": "no Gemini token stats found in stdout"
     }
   ],
   "stages": {
     "spec": {
-      "adversarial_rounds": 1,
+      "adversarial_rounds": 2,
       "judge_rounds": 0,
       "judge_verdicts": [],
       "annotations": [],
@@ -196,7 +244,8 @@
         "4ab997afabde09d73e0680a192ec0043e351c24cf51bb3a5166a324de5aba32a",
         "a82f14b19712743bcdce071c4b6ca8eab51000fe4a7304d2fc203dfb82676f6f",
         "a82f14b19712743bcdce071c4b6ca8eab51000fe4a7304d2fc203dfb82676f6f",
-        "ff794bfed6a87cc28adc461c386aabe6163b4aaaf74d4b4dd84a740555925377"
+        "ff794bfed6a87cc28adc461c386aabe6163b4aaaf74d4b4dd84a740555925377",
+        "026757984d1f921d93c5a73e8885d9882a5c0c36b55f767bdabe655968cbeae0"
       ],
       "initial_sha": "4ab997afabde09d73e0680a192ec0043e351c24cf51bb3a5166a324de5aba32a"
     }
@@ -207,6 +256,11 @@
     "markers_sha": "",
     "last_diff_head_sha": ""
   },
-  "spec_adversarial_rounds": 1,
-  "invariant_warnings": []
+  "spec_adversarial_rounds": 2,
+  "invariant_warnings": [],
+  "last_action_result": {
+    "next": "repair_plan_checkpoint",
+    "reason": "spec checkpoint completed",
+    "blockers": []
+  }
 }

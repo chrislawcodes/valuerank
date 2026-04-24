@@ -72,11 +72,28 @@ class ActionableFindingRegexPositiveTests(unittest.TestCase):
             FRS.detect_actionable_findings(_review("1. **HIGH**: missing index on foo\n"))
         )
 
+    def test_numbered_list_plain_severity(self) -> None:
+        """Plain numbered list: '1. MEDIUM: text' without bold — produced by Codex edge-cases lens."""
+        self.assertTrue(
+            FRS.detect_actionable_findings(_review("1. MEDIUM: something is wrong\n"))
+        )
+        self.assertTrue(
+            FRS.detect_actionable_findings(_review("2. HIGH: another issue\n"))
+        )
+
+    def test_numbered_list_plain_with_bracket_tag(self) -> None:
+        self.assertTrue(
+            FRS.detect_actionable_findings(_review("1. HIGH [CODE-CONFIRMED]: bug\n"))
+        )
+
     def test_heading_severity(self) -> None:
         self.assertTrue(FRS.detect_actionable_findings(_review("### HIGH: missing index\n")))
 
-    def test_heading_with_rank_prefix(self) -> None:
-        self.assertTrue(FRS.detect_actionable_findings(_review("### 1. HIGH concern\n")))
+    def test_heading_with_rank_prefix_and_colon(self) -> None:
+        """Rank-prefixed heading with colon is actionable — but bare trailing
+        word (``### 1. HIGH concern``) is NOT, to avoid title false positives
+        like ``### HIGH availability target`` (round-2 Codex edge-cases LOW)."""
+        self.assertTrue(FRS.detect_actionable_findings(_review("### 1. HIGH: concern\n")))
 
     def test_paragraph_bold_prefix(self) -> None:
         self.assertTrue(FRS.detect_actionable_findings(_review("**HIGH**: broken join\n")))
@@ -147,6 +164,34 @@ class ActionableFindingRegexNegativeTests(unittest.TestCase):
                 _review("For example, the pattern **HIGH severity findings** in docs...\n")
             )
         )
+
+    def test_heading_high_availability_is_not_actionable(self) -> None:
+        """Spec round-2 Codex edge-cases LOW: '### HIGH availability' is a section title."""
+        self.assertFalse(
+            FRS.detect_actionable_findings(_review("### HIGH availability target\n"))
+        )
+        self.assertFalse(
+            FRS.detect_actionable_findings(_review("## MEDIUM-term plan\n"))
+        )
+
+    def test_fenced_code_block_with_literal_severity_line_is_documented_limitation(self) -> None:
+        """Known limitation: lines inside fenced code blocks are NOT excluded.
+
+        A review that quotes a literal ``- HIGH:`` example inside a code fence
+        will match. This is called out in spec residual risks; the test pins
+        the current behavior so a future fix can intentionally flip it.
+        """
+        body = (
+            "Here is an example of the pattern:\n"
+            "```\n"
+            "- HIGH: example finding line for docs\n"
+            "```\n"
+            "This review itself has no real findings.\n"
+        )
+        # Current behavior: matches. If this test starts failing, someone has
+        # tightened the regex to exclude code fences — delete this test and
+        # add a negative one asserting False.
+        self.assertTrue(FRS.detect_actionable_findings(_review(body)))
 
 
 class ActionableFindingRegexRealReviewTests(unittest.TestCase):
