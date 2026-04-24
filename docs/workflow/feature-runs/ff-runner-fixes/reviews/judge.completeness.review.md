@@ -3,14 +3,14 @@ reviewer: "gpt-5.4"
 lens: "completeness-judge"
 stage: "spec"
 artifact_path: "docs/workflow/feature-runs/ff-runner-fixes/spec.md"
-artifact_sha256: "8d699036faefbe0a7ddef56824dae633ec6d49fb020dc5e24e7a756b21889553"
+artifact_sha256: "a0a6eb61aa484ae52c7ef756d98963fdd609dcf59fd80704cd23c2d5f6cd169d"
 repo_root: "."
-git_head_sha: "10bcb0bba915d6a6b917a78091afbca232a3e34f"
+git_head_sha: "221e9cffa80ea251479986bcb2240237ef841a57"
 git_base_ref: "origin/main"
 git_base_sha: "424c0605a8158acfe0b3912840a6c5b2da057c84"
 generation_method: "judge-panel"
 resolution_status: "accepted"
-resolution_note: "spec.codex.edge-cases-adversarial.review#high-1 is explicitly acknowledged as a documented limitation for fenced code-block matches in the plan reconciliation notes, so it is not left unaddressed. spec.codex.feasibility-adversarial.revie..."
+resolution_note: "spec.codex.edge-cases-adversarial.review#high-1: acknowledged as a documented limitation in the plan reconciliation note, which explicitly pins the fenced-code-block regex match with a test; that is specific enough to count as an accepte..."
 raw_output_path: "docs/workflow/feature-runs/ff-runner-fixes/reviews/judge.completeness.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,13 +22,13 @@ coverage_note: ""
 
 ## Findings
 
-spec.codex.edge-cases-adversarial.review#high-1 is explicitly acknowledged as a documented limitation for fenced code-block matches in the plan reconciliation notes, so it is not left unaddressed. spec.codex.feasibility-adversarial.review#high-1 is directly mitigated by FR-011a and T3.5, which backfill unresolved_concerns ids on read so older runs remain usable. spec.gemini.requirements-adversarial.review#high-3 is explicitly accepted as a format-bound limitation in Residual Risk R7 and is deferred because prompt/structured-output changes are out of scope. Every HIGH finding has either a named mitigation or an explicit limitation note, so the chain is complete, with annotations for the accepted limitations.
+spec.codex.edge-cases-adversarial.review#high-1: acknowledged as a documented limitation in the plan reconciliation note, which explicitly pins the fenced-code-block regex match with a test; that is specific enough to count as an accepted limitation, not a missing mitigation. spec.codex.feasibility-adversarial.review#high-1: addressed in FR-011a and task T3.5, which require read-time backfill of missing `unresolved_concerns.id` for existing snapshots, including run-033; this is specific enough to implement. spec.gemini.requirements-adversarial.review#high-3: acknowledged in Risk R7 as a format-bound regex limitation, with structured-output reviewer prompts named as the durable fix and explicitly out of scope; this is specific enough as an accepted limitation.
 
 ## Residual Risks
 
-- docs/workflow/feature-runs/ff-runner-fixes/plan.md :: Review Reconciliation - LOW fenced-code-block regex match — pinned as documented limitation with explicit test.
-- docs/workflow/feature-runs/ff-runner-fixes/spec.md :: FR-011a / FR-003 - The loader MUST backfill the stable `id` field for any existing `unresolved_concerns` entry that lacks one.
-- docs/workflow/feature-runs/ff-runner-fixes/spec.md :: Residual risks R7 - accepted as a known architectural limitation; out of scope ... `factory_review_specs.ACTIONABLE_FINDING_SHAPES` manifest + test coverage mitigates near-term impact.
+- /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/plans/feature-factory-runner-fixes.md :: Review Reconciliation - fenced-code-block regex match — pinned as documented limitation with explicit test.
+- /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/spec.md :: FR-011a - the loader MUST backfill the stable `id` field for any existing `unresolved_concerns` entry that lacks one.
+- /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/spec.md :: Residual risks (with verification) / R7 - A durable fix would require reviewer prompts to emit structured output (JSON findings).
 
 ## Verdict (structured)
 
@@ -37,29 +37,29 @@ spec.codex.edge-cases-adversarial.review#high-1 is explicitly acknowledged as a 
   "confidence": 4,
   "evidence": [
     {
-      "artifact": "docs/workflow/feature-runs/ff-runner-fixes/plan.md",
-      "quote": "LOW fenced-code-block regex match \u2014 pinned as documented limitation with explicit test.",
+      "artifact": "/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/plans/feature-factory-runner-fixes.md",
+      "quote": "fenced-code-block regex match \u2014 pinned as documented limitation with explicit test.",
       "section": "Review Reconciliation"
     },
     {
-      "artifact": "docs/workflow/feature-runs/ff-runner-fixes/spec.md",
-      "quote": "The loader MUST backfill the stable `id` field for any existing `unresolved_concerns` entry that lacks one.",
-      "section": "FR-011a / FR-003"
+      "artifact": "/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/spec.md",
+      "quote": "the loader MUST backfill the stable `id` field for any existing `unresolved_concerns` entry that lacks one.",
+      "section": "FR-011a"
     },
     {
-      "artifact": "docs/workflow/feature-runs/ff-runner-fixes/spec.md",
-      "quote": "accepted as a known architectural limitation; out of scope ... `factory_review_specs.ACTIONABLE_FINDING_SHAPES` manifest + test coverage mitigates near-term impact.",
-      "section": "Residual risks R7"
+      "artifact": "/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/spec.md",
+      "quote": "A durable fix would require reviewer prompts to emit structured output (JSON findings).",
+      "section": "Residual risks (with verification) / R7"
     }
   ],
   "judge": "completeness",
   "model": "gpt-5.4",
-  "reasoning": "spec.codex.edge-cases-adversarial.review#high-1 is explicitly acknowledged as a documented limitation for fenced code-block matches in the plan reconciliation notes, so it is not left unaddressed. spec.codex.feasibility-adversarial.review#high-1 is directly mitigated by FR-011a and T3.5, which backfill unresolved_concerns ids on read so older runs remain usable. spec.gemini.requirements-adversarial.review#high-3 is explicitly accepted as a format-bound limitation in Residual Risk R7 and is deferred because prompt/structured-output changes are out of scope. Every HIGH finding has either a named mitigation or an explicit limitation note, so the chain is complete, with annotations for the accepted limitations.",
-  "timestamp": "2026-04-23T00:00:00-07:00",
+  "reasoning": "spec.codex.edge-cases-adversarial.review#high-1: acknowledged as a documented limitation in the plan reconciliation note, which explicitly pins the fenced-code-block regex match with a test; that is specific enough to count as an accepted limitation, not a missing mitigation. spec.codex.feasibility-adversarial.review#high-1: addressed in FR-011a and task T3.5, which require read-time backfill of missing `unresolved_concerns.id` for existing snapshots, including run-033; this is specific enough to implement. spec.gemini.requirements-adversarial.review#high-3: acknowledged in Risk R7 as a format-bound regex limitation, with structured-output reviewer prompts named as the durable fix and explicitly out of scope; this is specific enough as an accepted limitation.",
+  "timestamp": "2026-04-23T00:00:00Z",
   "verdict": "proceed-with-annotation"
 }
 ```
 
 ## Resolution
 - status: accepted
-- note: spec.codex.edge-cases-adversarial.review#high-1 is explicitly acknowledged as a documented limitation for fenced code-block matches in the plan reconciliation notes, so it is not left unaddressed. spec.codex.feasibility-adversarial.revie...
+- note: spec.codex.edge-cases-adversarial.review#high-1: acknowledged as a documented limitation in the plan reconciliation note, which explicitly pins the fenced-code-block regex match with a test; that is specific enough to count as an accepte...

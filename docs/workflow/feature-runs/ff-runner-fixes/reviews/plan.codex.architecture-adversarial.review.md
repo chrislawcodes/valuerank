@@ -1,0 +1,41 @@
+---
+reviewer: "codex"
+lens: "architecture-adversarial"
+stage: "plan"
+artifact_path: "docs/workflow/feature-runs/ff-runner-fixes/plan.md"
+artifact_sha256: "a260b8ebd806f71193a11b024ab25896b974da30fb8a754b3a8529e3b695a142"
+repo_root: "."
+git_head_sha: "221e9cffa80ea251479986bcb2240237ef841a57"
+git_base_ref: "origin/claude/friendly-aryabhata-9efbf7"
+git_base_sha: "6f5ed232c83bbd0f51ac8419ac6fb9688b8b8fad"
+generation_method: "codex-runner"
+resolution_status: "open"
+resolution_note: ""
+raw_output_path: "docs/workflow/feature-runs/ff-runner-fixes/reviews/plan.codex.architecture-adversarial.review.md.raw.txt"
+narrowed_artifact_path: ""
+narrowed_artifact_sha256: ""
+coverage_status: "full"
+coverage_note: ""
+---
+
+# Review: plan architecture-adversarial
+
+## Findings
+
+- **HIGH [CODE-CONFIRMED]** The plan under-scopes the invariant hook surface. Slice 2 says to run `run_invariant_checks` after `checkpoint`, `judge`, `reconcile`, `auto-reconcile`, `implement`, `deliver`, and `block`, but the runner treats `discover`, `parallel`, `repair`, and `closeout` as mutating too. `discover` and `parallel` write state directly, and `repair`/`closeout` call back into `command_checkpoint`, which mutates state again. If implemented as written, the guardrail will miss real state changes and can still let contradictions slip through. Evidence: [run_factory.py](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py#L102-L118), [factory_cmd_discover.py](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_discover.py#L27-L228), [factory_cmd_implement.py](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_implement.py#L314-L364), [factory_cmd_status.py](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_status.py#L238-L295), [factory_cmd_deliver.py](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py#L473-L589).
+
+- **MEDIUM [CODE-CONFIRMED]** The concern-lifecycle slice is missing the read-path ID backfill needed for legacy runs. The plan extends `unresolved_concerns` with `id`, `addressed_at`, `deferred_reason`, and `dismissed_reason`, but it does not require backfilling `id` for existing concerns. The code shows that older state needs this migration on read, and the required `run-033` fixture already has open concerns with no `id` field. Without that backfill, `checkpoint --address/--defer/--dismiss` only works on newly created concerns, not on the regression input the plan says to use. Evidence: [factory_state.py](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py#L376-L440), [run-033-state-pre-fix.json](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/fixtures/run-033-state-pre-fix.json#L1136-L1152).
+
+## Residual Risks
+
+- I did not re-audit the full PR-body rendering path for resolved concerns against the plan’s concern lifecycle, so there may still be mismatches between how concerns are stored and how they are surfaced to operators.
+- I also did not verify every out-of-band state mutation path outside the runner entrypoints; if anything else writes `state.json` directly, the invariant hook coverage will still be incomplete unless it is wired there too.
+
+## Runner Stats
+- total_input=0
+- total_output=0
+- total_tokens=0
+
+## Resolution
+- status: open
+- note: 

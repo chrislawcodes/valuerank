@@ -471,12 +471,252 @@
       "agent_id": null,
       "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
       "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:24:27.270638Z",
+      "started_at": "2026-04-24T05:23:51.766325Z",
+      "ended_at": "2026-04-24T05:24:27.270638Z",
+      "duration_seconds": 35.504093,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:24:29.385410Z",
+      "started_at": "2026-04-24T05:23:51.763858Z",
+      "ended_at": "2026-04-24T05:24:29.385410Z",
+      "duration_seconds": 37.621327,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:24:47.069760Z",
+      "started_at": "2026-04-24T05:24:29.386848Z",
+      "ended_at": "2026-04-24T05:24:47.069760Z",
+      "duration_seconds": 17.682832,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:24:53.727521Z",
+      "started_at": "2026-04-24T05:24:27.273070Z",
+      "ended_at": "2026-04-24T05:24:53.727521Z",
+      "duration_seconds": 26.454276,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:25:51.796199Z",
+      "started_at": "2026-04-24T05:23:51.763667Z",
+      "ended_at": "2026-04-24T05:25:51.796199Z",
+      "duration_seconds": 120.03156,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:27:05.978210Z",
+      "started_at": "2026-04-24T05:25:51.797620Z",
+      "ended_at": "2026-04-24T05:27:05.978210Z",
+      "duration_seconds": 74.180105,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:29:38.874991Z",
+      "started_at": "2026-04-24T05:27:24.686505Z",
+      "ended_at": "2026-04-24T05:29:38.874991Z",
+      "duration_seconds": 134.186344,
+      "agent_id": null,
+      "artifact_sha_at_time": "a260b8ebd806f71193a11b024ab25896b974da30fb8a754b3a8529e3b695a142",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:31:04.963706Z",
+      "started_at": "2026-04-24T05:29:39.043566Z",
+      "ended_at": "2026-04-24T05:31:04.963706Z",
+      "duration_seconds": 85.919392,
+      "agent_id": null,
+      "artifact_sha_at_time": "a260b8ebd806f71193a11b024ab25896b974da30fb8a754b3a8529e3b695a142",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:31:50.525031Z",
+      "started_at": "2026-04-24T05:31:05.143428Z",
+      "ended_at": "2026-04-24T05:31:50.525031Z",
+      "duration_seconds": 45.381187,
+      "agent_id": null,
+      "artifact_sha_at_time": "a260b8ebd806f71193a11b024ab25896b974da30fb8a754b3a8529e3b695a142",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:49:33.002477Z",
+      "started_at": "2026-04-24T05:48:59.029795Z",
+      "ended_at": "2026-04-24T05:49:33.002477Z",
+      "duration_seconds": 33.972509,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:49:34.770009Z",
+      "started_at": "2026-04-24T05:48:59.029600Z",
+      "ended_at": "2026-04-24T05:49:34.770009Z",
+      "duration_seconds": 35.740023,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:49:54.254292Z",
+      "started_at": "2026-04-24T05:49:34.771789Z",
+      "ended_at": "2026-04-24T05:49:54.254292Z",
+      "duration_seconds": 19.482386,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:50:17.391159Z",
+      "started_at": "2026-04-24T05:49:33.005521Z",
+      "ended_at": "2026-04-24T05:50:17.391159Z",
+      "duration_seconds": 44.385314,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:51:12.991939Z",
+      "started_at": "2026-04-24T05:48:59.029829Z",
+      "ended_at": "2026-04-24T05:51:12.991939Z",
+      "duration_seconds": 133.961121,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:52:17.370190Z",
+      "started_at": "2026-04-24T05:51:12.993356Z",
+      "ended_at": "2026-04-24T05:52:17.370190Z",
+      "duration_seconds": 64.37638,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Claude token counts found in stdout or stderr"
     }
   ],
   "stages": {
     "spec": {
       "adversarial_rounds": 3,
-      "judge_rounds": 2,
+      "judge_rounds": 3,
       "judge_verdicts": [
         [
           {
@@ -736,6 +976,118 @@
             ],
             "timestamp": "2026-04-23T00:00:00Z"
           }
+        ],
+        [
+          {
+            "judge": "completeness",
+            "model": "gpt-5.4",
+            "verdict": "proceed-with-annotation",
+            "confidence": 4,
+            "reasoning": "spec.codex.edge-cases-adversarial.review#high-1: acknowledged as a documented limitation in the plan reconciliation note, which explicitly pins the fenced-code-block regex match with a test; that is specific enough to count as an accepted limitation, not a missing mitigation. spec.codex.feasibility-adversarial.review#high-1: addressed in FR-011a and task T3.5, which require read-time backfill of missing `unresolved_concerns.id` for existing snapshots, including run-033; this is specific enough to implement. spec.gemini.requirements-adversarial.review#high-3: acknowledged in Risk R7 as a format-bound regex limitation, with structured-output reviewer prompts named as the durable fix and explicitly out of scope; this is specific enough as an accepted limitation.",
+            "evidence": [
+              {
+                "artifact": "/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/plans/feature-factory-runner-fixes.md",
+                "section": "Review Reconciliation",
+                "quote": "fenced-code-block regex match \u2014 pinned as documented limitation with explicit test."
+              },
+              {
+                "artifact": "/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/spec.md",
+                "section": "FR-011a",
+                "quote": "the loader MUST backfill the stable `id` field for any existing `unresolved_concerns` entry that lacks one."
+              },
+              {
+                "artifact": "/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/spec.md",
+                "section": "Residual risks (with verification) / R7",
+                "quote": "A durable fix would require reviewer prompts to emit structured output (JSON findings)."
+              }
+            ],
+            "timestamp": "2026-04-23T00:00:00Z"
+          },
+          {
+            "judge": "restatement",
+            "model": "gpt-5",
+            "verdict": "block",
+            "confidence": 5,
+            "reasoning": "All findings in the latest adversarial round are NEW, not restatements. The decisive reason is that the record explicitly says there were no earlier findings: \"No prior findings yet.\" Because there was no prior concern and no orchestrator mitigation to compare against, none of the latest items can qualify as a RESTATEMENT under the stated rule. The latest round surfaces multiple distinct failure modes that were not previously covered, including: a code-fence bypass in auto-reconcile parsing, missing invariant coverage for state-mutating commands like discover/parallel/init, lack of backfill IDs for existing unresolved concerns, an internal spec contradiction between US1 scenario 3 and FR-004, brittle concern-ID generation for paraphrases, regex-maintenance risk in severity detection, weak audit-trail assumptions under artifact drift, silent-ignore risk for contradiction warnings, and misuse paths in the concern lifecycle. Since substantial new concerns are still surfacing, the review loop is still producing signal and should be blocked from proceeding.",
+            "evidence": [
+              {
+                "artifact": "earlier-rounds",
+                "section": "prior-findings",
+                "quote": "No prior findings yet."
+              },
+              {
+                "artifact": "spec.codex.edge-cases-adversarial.review.md",
+                "section": "high-1",
+                "quote": "The auto-reconcile regex still has a code-fence bypass."
+              },
+              {
+                "artifact": "spec.codex.edge-cases-adversarial.review.md",
+                "section": "medium-2",
+                "quote": "FR-009 under-specifies the state-mutating commands that must get the post-run invariant check."
+              },
+              {
+                "artifact": "spec.codex.feasibility-adversarial.review.md",
+                "section": "high-1",
+                "quote": "FR-003 and FR-011a do not backfill id for existing unresolved_concerns."
+              },
+              {
+                "artifact": "spec.codex.feasibility-adversarial.review.md",
+                "section": "medium-3",
+                "quote": "US1 scenario 3 says the next checkpoint can treat concerns as closed when they are \"referenced as addressed in plan annotations,\" but FR-004 says annotations are display-only."
+              },
+              {
+                "artifact": "spec.gemini.requirements-adversarial.review.md",
+                "section": "medium-1",
+                "quote": "Concern ID generation is brittle and may fail to track paraphrased findings [UNVERIFIED]"
+              },
+              {
+                "artifact": "spec.gemini.requirements-adversarial.review.md",
+                "section": "high-3",
+                "quote": "The root problem\u2014a lack of a structured format for review findings\u2014is not addressed, leading to a tactical patch rather than a robust, long-term solution."
+              },
+              {
+                "artifact": "spec.gemini.requirements-adversarial.review.md",
+                "section": "low-5",
+                "quote": "State contradiction warnings may be silently ignored by automated agents [UNVERIFIED]"
+              }
+            ],
+            "timestamp": "2026-04-23T00:00:00-07:00"
+          },
+          {
+            "judge": "implementation-risk",
+            "model": "claude-opus-4-5",
+            "verdict": "block",
+            "confidence": 4,
+            "reasoning": "Four places where a competent implementer would guess or ship a bug: (1) `run_invariant_checks` has three incompatible signatures across three artifacts \u2014 spec FR-009 gives two params, plan adds a third `emit_to`, tasks drop `emit_to` and add `recommended, invariants=None`. The caller in run_factory.py must match one; no artifact resolves which. (2) The owning module contradicts itself: spec FR-009 and plan say put the helper in `factory_state.py`; tasks T2.2 says create a NEW module `factory_invariants.py`. Both cannot be right, and the choice determines which imports change across the codebase. (3) T3.3 calls two helper functions \u2014 `factory_state.checkpoint_manifest_path(slug, stage)` and `workflow_utils.normalized_artifact_hash` \u2014 with no confirmation either exists today. If `normalized_artifact_hash` must be written, the artifact scope (which files are hashed, encoding, algorithm details beyond 'sha256') is entirely unspecified. (4) FR-006 requires matching `**Severity**: (HIGH|CRITICAL|MEDIUM)` nested under a `### N. <title>` heading \u2014 a span that inherently crosses lines. The spec's anchoring strategy is `^\\s*` (start-of-line), which works for single-line patterns; whether the regex must be applied with `re.MULTILINE | re.DOTALL` or via a two-pass scan is never stated, and the choice determines whether the pattern fires at all.",
+            "evidence": [
+              {
+                "artifact": "spec",
+                "section": "FR-009",
+                "quote": "A new helper `factory_state.run_invariant_checks(state, command)` MUST run after every state-mutating command"
+              },
+              {
+                "artifact": "plan",
+                "section": "Slice 2 \u2014 Fix 8 invariant self-check",
+                "quote": "Add `run_invariant_checks(state, command)` helper in `factory_state.py`. ... Emit to stderr when `--json` is in effect; stdout otherwise. Detect via a context var or explicit parameter threaded from the caller."
+              },
+              {
+                "artifact": "tasks",
+                "section": "T2.2",
+                "quote": "Create NEW module `factory_invariants.py` (sibling of `factory_state.py`). Define `run_invariant_checks(state, command, recommended, invariants=None) -> list[dict]`"
+              },
+              {
+                "artifact": "tasks",
+                "section": "T3.3",
+                "quote": "reads the current artifact sha via `workflow_utils.normalized_artifact_hash` and, when it differs from the manifest sha ... (resolve via `factory_state.checkpoint_manifest_path(slug, stage)`). The helper reads the current artifact sha via `workflow_utils.normalized_artifact_hash`"
+              },
+              {
+                "artifact": "spec",
+                "section": "FR-006",
+                "quote": "new: nested under `### N. <title>` \u2014 paragraph that begins with `**Severity**: (HIGH|CRITICAL|MEDIUM)` (the Gemini review style)"
+              }
+            ],
+            "timestamp": "2026-04-23T00:00:00Z"
+          }
         ]
       ],
       "annotations": [
@@ -746,9 +1098,51 @@
           "confidence": 4,
           "reasoning": "spec.codex.edge-cases-adversarial.review#high-1 is explicitly acknowledged as a documented limitation for fenced code-block matches in the plan reconciliation notes, so it is not left unaddressed. spec.codex.feasibility-adversarial.review#high-1 is directly mitigated by FR-011a and T3.5, which backfill unresolved_concerns ids on read so older runs remain usable. spec.gemini.requirements-adversarial.review#high-3 is explicitly accepted as a format-bound limitation in Residual Risk R7 and is deferred because prompt/structured-output changes are out of scope. Every HIGH finding has either a named mitigation or an explicit limitation note, so the chain is complete, with annotations for the accepted limitations.",
           "artifact_sha_at_time": "8d699036faefbe0a7ddef56824dae633ec6d49fb020dc5e24e7a756b21889553"
+        },
+        {
+          "type": "judge-reset",
+          "reason": "reset judge_rounds 3->2 to re-run round 3 with updated artifacts (spec-plan-tasks aligned per round-2 findings)",
+          "at": 1777009735.359256
+        },
+        {
+          "stage": "spec",
+          "round": 3,
+          "judge": "completeness",
+          "confidence": 4,
+          "reasoning": "spec.codex.edge-cases-adversarial.review#high-1: acknowledged as a documented limitation in the plan reconciliation note, which explicitly pins the fenced-code-block regex match with a test; that is specific enough to count as an accepted limitation, not a missing mitigation. spec.codex.feasibility-adversarial.review#high-1: addressed in FR-011a and task T3.5, which require read-time backfill of missing `unresolved_concerns.id` for existing snapshots, including run-033; this is specific enough to implement. spec.gemini.requirements-adversarial.review#high-3: acknowledged in Risk R7 as a format-bound regex limitation, with structured-output reviewer prompts named as the durable fix and explicitly out of scope; this is specific enough as an accepted limitation.",
+          "artifact_sha_at_time": "a0a6eb61aa484ae52c7ef756d98963fdd609dcf59fd80704cd23c2d5f6cd169d"
         }
       ],
-      "unresolved_concerns": [],
+      "unresolved_concerns": [
+        {
+          "id": "188ae9b92e77",
+          "stage": "spec",
+          "judge": "restatement",
+          "model": "gpt-5",
+          "confidence": 5,
+          "reasoning": "All findings in the latest adversarial round are NEW, not restatements. The decisive reason is that the record explicitly says there were no earlier findings: \"No prior findings yet.\" Because there was no prior concern and no orchestrator mitigation to compare against, none of the latest items can qualify as a RESTATEMENT under the stated rule. The latest round surfaces multiple distinct failure modes that were not previously covered, including: a code-fence bypass in auto-reconcile parsing, missing invariant coverage for state-mutating commands like discover/parallel/init, lack of backfill IDs for existing unresolved concerns, an internal spec contradiction between US1 scenario 3 and FR-004, brittle concern-ID generation for paraphrases, regex-maintenance risk in severity detection, weak audit-trail assumptions under artifact drift, silent-ignore risk for contradiction warnings, and misuse paths in the concern lifecycle. Since substantial new concerns are still surfacing, the review loop is still producing signal and should be blocked from proceeding.",
+          "round_raised": 3,
+          "also_raised_in_round": [],
+          "addressed_at": null,
+          "addressed_by": null,
+          "deferred_reason": null,
+          "dismissed_reason": null
+        },
+        {
+          "id": "72308bafaac4",
+          "stage": "spec",
+          "judge": "implementation-risk",
+          "model": "claude-opus-4-5",
+          "confidence": 4,
+          "reasoning": "Four places where a competent implementer would guess or ship a bug: (1) `run_invariant_checks` has three incompatible signatures across three artifacts \u2014 spec FR-009 gives two params, plan adds a third `emit_to`, tasks drop `emit_to` and add `recommended, invariants=None`. The caller in run_factory.py must match one; no artifact resolves which. (2) The owning module contradicts itself: spec FR-009 and plan say put the helper in `factory_state.py`; tasks T2.2 says create a NEW module `factory_invariants.py`. Both cannot be right, and the choice determines which imports change across the codebase. (3) T3.3 calls two helper functions \u2014 `factory_state.checkpoint_manifest_path(slug, stage)` and `workflow_utils.normalized_artifact_hash` \u2014 with no confirmation either exists today. If `normalized_artifact_hash` must be written, the artifact scope (which files are hashed, encoding, algorithm details beyond 'sha256') is entirely unspecified. (4) FR-006 requires matching `**Severity**: (HIGH|CRITICAL|MEDIUM)` nested under a `### N. <title>` heading \u2014 a span that inherently crosses lines. The spec's anchoring strategy is `^\\s*` (start-of-line), which works for single-line patterns; whether the regex must be applied with `re.MULTILINE | re.DOTALL` or via a two-pass scan is never stated, and the choice determines whether the pattern fires at all.",
+          "round_raised": 3,
+          "also_raised_in_round": [],
+          "addressed_at": null,
+          "addressed_by": null,
+          "deferred_reason": null,
+          "dismissed_reason": null
+        }
+      ],
       "adversarial_sha_history": [
         "4ab997afabde09d73e0680a192ec0043e351c24cf51bb3a5166a324de5aba32a",
         "a82f14b19712743bcdce071c4b6ca8eab51000fe4a7304d2fc203dfb82676f6f",
@@ -758,7 +1152,18 @@
         "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba"
       ],
       "initial_sha": "4ab997afabde09d73e0680a192ec0043e351c24cf51bb3a5166a324de5aba32a",
-      "judge_next_action": "edit_and_rerun_judge"
+      "judge_next_action": "advance"
+    },
+    "plan": {
+      "adversarial_rounds": 1,
+      "judge_rounds": 0,
+      "judge_verdicts": [],
+      "annotations": [],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [
+        "a260b8ebd806f71193a11b024ab25896b974da30fb8a754b3a8529e3b695a142"
+      ],
+      "initial_sha": "a260b8ebd806f71193a11b024ab25896b974da30fb8a754b3a8529e3b695a142"
     }
   },
   "schema_version": 2,
@@ -770,17 +1175,18 @@
   "spec_adversarial_rounds": 3,
   "invariant_warnings": [],
   "last_action_result": {
-    "next": "edit_and_rerun_judge",
-    "reason": "block majority; 2 of 3 judges blocked",
+    "next": "record_parallel_analysis",
+    "reason": "judge panel exhausted; advancing with unresolved concerns",
     "blockers": [
-      "All latest-round findings are NEW because there were no earlier rounds to restate: the record explicitly says \"No prior findings yet.\" Under the stated rule, a finding can only be a RESTATEMENT if an earlier round raised the same concern and the orchestrator made a substantive change in response. That prerequisite is absent for every item here. Several findings also describe concrete failure modes not previously covered anywhere in the review history: a fenced-code auto-reconcile bypass, missing invariant coverage for mutating commands like discover/parallel/init, missing backfill IDs for existing unresolved concerns, an internal spec contradiction between US1 scenario 3 and FR-004, brittle concern-ID generation, regex-maintenance risk, audit-trail assumptions, ignored contradiction warnings, and lifecycle misuse risk. Some latest findings overlap with each other thematically, but overlap within the same latest batch does not make them restatements of earlier rounds. Because 0% of the latest round can be classified as restatements against prior rounds, the loop is still producing signal and should be blocked from proceeding.",
-      "Four load-bearing ambiguities would force an implementer to guess on real decisions. First, the plan introduces `factory_invariants.py` with a `JSON_MODE` flag and `set_json_mode()` API for back-compat, but the tasks place the same helper in `factory_state.py` with no `emit_to` parameter and no mention of `factory_invariants.py`. These cannot both be right, and the implementer must pick a file and decide whether to create or extend it. Second, `reseal_manifest_for_drift` must 'update the manifest checkpoint.json' but no artifact gives the path pattern for that file; the implementer cannot write the function without guessing the path. Third, the invariant check (FR-010/FR-011b) must call `recommended_next_action(...)` using `reconciliation_state()` as input, but neither the signature of `recommended_next_action` nor how to obtain `reconciliation_state()` is specified in any artifact. Fourth, the reconcile notes explicitly added `init` to `_STATE_MUTATING_COMMANDS`, but T2.4's authoritative command list omits it, leaving the implementer to decide which source wins."
+      "All findings in the latest adversarial round are NEW, not restatements. The decisive reason is that the record explicitly says there were no earlier findings: \"No prior findings yet.\" Because there was no prior concern and no orchestrator mitigation to compare against, none of the latest items can qualify as a RESTATEMENT under the stated rule. The latest round surfaces multiple distinct failure modes that were not previously covered, including: a code-fence bypass in auto-reconcile parsing, missing invariant coverage for state-mutating commands like discover/parallel/init, lack of backfill IDs for existing unresolved concerns, an internal spec contradiction between US1 scenario 3 and FR-004, brittle concern-ID generation for paraphrases, regex-maintenance risk in severity detection, weak audit-trail assumptions under artifact drift, silent-ignore risk for contradiction warnings, and misuse paths in the concern lifecycle. Since substantial new concerns are still surfacing, the review loop is still producing signal and should be blocked from proceeding.",
+      "Four places where a competent implementer would guess or ship a bug: (1) `run_invariant_checks` has three incompatible signatures across three artifacts \u2014 spec FR-009 gives two params, plan adds a third `emit_to`, tasks drop `emit_to` and add `recommended, invariants=None`. The caller in run_factory.py must match one; no artifact resolves which. (2) The owning module contradicts itself: spec FR-009 and plan say put the helper in `factory_state.py`; tasks T2.2 says create a NEW module `factory_invariants.py`. Both cannot be right, and the choice determines which imports change across the codebase. (3) T3.3 calls two helper functions \u2014 `factory_state.checkpoint_manifest_path(slug, stage)` and `workflow_utils.normalized_artifact_hash` \u2014 with no confirmation either exists today. If `normalized_artifact_hash` must be written, the artifact scope (which files are hashed, encoding, algorithm details beyond 'sha256') is entirely unspecified. (4) FR-006 requires matching `**Severity**: (HIGH|CRITICAL|MEDIUM)` nested under a `### N. <title>` heading \u2014 a span that inherently crosses lines. The spec's anchoring strategy is `^\\s*` (start-of-line), which works for single-line patterns; whether the regex must be applied with `re.MULTILINE | re.DOTALL` or via a two-pass scan is never stated, and the choice determines whether the pattern fires at all."
     ],
-    "outcome": "rejudge",
+    "outcome": "advance",
     "proceed_count": 1,
     "block_count": 2,
-    "timestamp": "2026-04-24T05:22:42.455135Z",
-    "judge_round": 2
+    "timestamp": "2026-04-24T05:52:17.463414Z",
+    "judge_round": 3
   },
-  "spec_judge_rounds": 2
+  "spec_judge_rounds": 3,
+  "plan_adversarial_rounds": 1
 }
