@@ -229,7 +229,9 @@ export async function detectPairAsymmetry(run: RunSnapshot): Promise<AnomalyDraf
   }
 
   const deltaPct = Math.abs(currentSuccess.successRate - siblingSuccess.successRate) * 100;
-  if (deltaPct < PAIR_ASYMMETRY_THRESHOLD_PCT) {
+  // <= so identical rates (deltaPct === 0) don't fire when threshold is 0.
+  // At threshold=0 the detector fires on any measurable asymmetry.
+  if (deltaPct <= PAIR_ASYMMETRY_THRESHOLD_PCT) {
     return null;
   }
 
