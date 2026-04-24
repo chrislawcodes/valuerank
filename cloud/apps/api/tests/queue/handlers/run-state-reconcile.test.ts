@@ -197,7 +197,7 @@ describe('createRunStateReconcileHandler', () => {
             malformedTranscriptIds: ['t-1'],
           },
         }),
-      ]
+      ],
       'default'
     );
   });
