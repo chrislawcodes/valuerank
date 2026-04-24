@@ -191,7 +191,7 @@ export async function deductSingleTranscriptBalance(
     const debitedAt = new Date();
 
     if (cost > 0) {
-      const model = await transaction.llmModel.findUnique({
+      const model = await transaction.llmModel.findFirst({
         where: { modelId: transcript.modelId },
         select: { provider: { select: { name: true, balance: true } } },
       });

@@ -148,6 +148,7 @@ export async function persistCachedSummary(
         rawDecisionEvidence,
         persistedSummaryCache ?? undefined,
       ),
+      summarizeFailedAt: null,
       summarizedAt: new Date(),
     },
   });
@@ -186,6 +187,7 @@ export async function persistSuccessfulSummary(
         rawDecisionEvidence,
         freshSummaryCache ?? undefined,
       ),
+      summarizeFailedAt: null,
       summarizedAt: new Date(),
     },
   });

@@ -114,6 +114,7 @@ how many exist even if only 'limit' are returned.`,
         const where = includeFailed
           ? {
             runId: args.run_id,
+            deletedAt: null,
             OR: [
               { summarizedAt: null, summarizeFailedAt: null },
               { summarizeFailedAt: { not: null } },
@@ -121,6 +122,7 @@ how many exist even if only 'limit' are returned.`,
           }
           : {
             runId: args.run_id,
+            deletedAt: null,
             summarizedAt: null,
             summarizeFailedAt: null,
           };

@@ -44,6 +44,8 @@ export type {
   LevelPreset,
   LevelPresetVersion,
   ProviderBalanceSyncLog,
+  RunAnomaly,
+  RunAnomalyType,
   ValueStatementVersion,
   DomainConfigSnapshot,
 } from '@prisma/client';

@@ -11,6 +11,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { db } from '@valuerank/db';
 import { createLogger, NotFoundError } from '@valuerank/shared';
 import { recoverOrphanedRun } from '../../services/run/recovery.js';
+import { computeRunProgress } from '../../services/run/index.js';
 import { logAuditEvent } from '../../services/mcp/index.js';
 import { formatError, formatSuccess, createOperationsAudit, requireMcpAdmin } from './helpers.js';
 import { addToolRegistrar } from './registry.js';
@@ -74,7 +75,6 @@ function registerRecoverRunTool(server: McpServer): void {
           select: {
             id: true,
             status: true,
-            progress: true,
             deletedAt: true,
           },
         });
@@ -105,11 +105,10 @@ function registerRecoverRunTool(server: McpServer): void {
           select: {
             id: true,
             status: true,
-            progress: true,
           },
         });
 
-        const progress = updatedRun?.progress as { total: number; completed: number; failed: number } | null;
+        const progress = await computeRunProgress(args.run_id);
 
         log.info({
           requestId,
@@ -141,14 +140,14 @@ function registerRecoverRunTool(server: McpServer): void {
           status: updatedRun?.status ?? run.status,
           action: result.action,
           requeued_count: result.requeuedCount ?? 0,
-          run_progress: progress ? {
+          run_progress: {
             total: progress.total,
             completed: progress.completed,
             failed: progress.failed,
             percent_complete: progress.total > 0
-              ? Math.round((progress.completed / progress.total) * 100)
+              ? Math.round(((progress.completed + progress.failed) / progress.total) * 100)
               : 0,
-          } : null,
+          },
         });
       } catch (err) {
         log.error({ err, requestId, runId: args.run_id }, 'recover_run failed');

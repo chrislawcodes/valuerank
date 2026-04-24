@@ -15,13 +15,6 @@ import { getAllMetrics, getTotals } from '../../services/rate-limiter/index.js';
 // Re-export for backward compatibility
 export { RunRef, TranscriptRef, ExperimentRef };
 
-// Type for progress data stored in JSONB
-type ProgressData = {
-  total: number;
-  completed: number;
-  failed: number;
-};
-
 // Type for run config stored in JSONB
 type RunConfig = {
   models?: string[];
@@ -296,22 +289,12 @@ builder.objectType(RunRef, {
     summarizeProgress: t.field({
       type: RunProgress,
       nullable: true,
-      description: 'Progress information for transcript summarization (only populated in SUMMARIZING state)',
+      description: 'Derived progress information for transcript summarization',
       resolve: async (run) => {
-        const progress = run.summarizeProgress as ProgressData | null;
-        if (progress === null) return null;
+        const derived = await computeRunProgress(run.id);
 
         // Query per-model counts from Transcript.
-        // Failure signal: persistSummarizeFailure writes decisionMetadata = null
-        // AND decisionText LIKE 'Summary failed%' AND summarizedAt = now().
-        // The decision_code column was dropped in the remove-decisionCode follow-up.
-        // Completed counts only successful summaries (failed transcripts also
-        // have summarizedAt set, so we explicitly exclude them).
-        // SQL three-valued logic note: decision_text LIKE 'pattern' is NULL
-        // (not false) when decision_text is NULL, so we coalesce to false
-        // before AND-ing. Otherwise the FILTER predicate evaluates to NULL
-        // for non-failed transcripts (where decision_text IS NULL) and they
-        // are excluded from the completed count.
+        // Derived counts exclude summarize failures via summarizeFailedAt.
         const byModelResults = await db.$queryRaw<
           Array<{ model_id: string; completed: bigint; failed: bigint }>
         >`
@@ -319,18 +302,14 @@ builder.objectType(RunRef, {
             model_id,
             COUNT(*) FILTER (
               WHERE summarized_at IS NOT NULL
-                AND NOT (
-                  decision_metadata IS NULL
-                  AND COALESCE(decision_text LIKE 'Summary failed%', false)
-                )
+                AND summarize_failed_at IS NULL
             ) as completed,
             COUNT(*) FILTER (
-              WHERE summarized_at IS NOT NULL
-                AND decision_metadata IS NULL
-                AND COALESCE(decision_text LIKE 'Summary failed%', false)
+              WHERE summarize_failed_at IS NOT NULL
             ) as failed
           FROM transcripts
           WHERE run_id = ${run.id}
+            AND deleted_at IS NULL
           GROUP BY model_id
         `;
 
@@ -346,12 +325,27 @@ builder.objectType(RunRef, {
         const dynamicFailed = byModel.reduce((sum, m) => sum + m.failed, 0);
 
         return {
-          total: progress.total,
+          total: derived.summarizeTotal,
           completed: dynamicCompleted,
           failed: dynamicFailed,
-          percentComplete: Math.min(100, Math.round(((dynamicCompleted + dynamicFailed) / progress.total) * 100)),
+          percentComplete: calculatePercentComplete({
+            total: derived.summarizeTotal,
+            completed: dynamicCompleted,
+            failed: dynamicFailed,
+          }),
           byModel: byModel.length > 0 ? byModel : undefined,
         };
+      },
+    }),
+
+    anomalies: t.field({
+      type: [RunAnomalyRef],
+      description: 'Structured anomaly records for this run',
+      resolve: async (run) => {
+        return db.runAnomaly.findMany({
+          where: { runId: run.id },
+          orderBy: { firstSeenAt: 'desc' },
+        });
       },
     }),
 
@@ -557,19 +551,17 @@ builder.objectType(RunRef, {
           recentCompletions: provider.recentCompletions.filter((completion) => completion.runId === run.id),
         }));
         const { totalActive, totalQueued } = getTotals();
+        const derivedProgress = await computeRunProgress(run.id);
 
         // Calculate estimated time remaining based on progress and throughput
-        const progress = run.progress as ProgressData | null;
         let estimatedSecondsRemaining: number | null = null;
 
-        if (progress !== null && progress !== undefined) {
-          const remaining = progress.total - progress.completed - progress.failed;
-          if (remaining > 0 && totalActive > 0) {
-            // Rough estimate: assume average of 5 seconds per job
-            // In production, calculate from recent completion times
-            const avgJobTime = 5;
-            estimatedSecondsRemaining = Math.ceil((remaining * avgJobTime) / Math.max(1, totalActive));
-          }
+        const remaining = derivedProgress.total - derivedProgress.completed - derivedProgress.failed;
+        if (remaining > 0 && totalActive > 0) {
+          // Rough estimate: assume average of 5 seconds per job
+          // In production, calculate from recent completion times
+          const avgJobTime = 5;
+          estimatedSecondsRemaining = Math.ceil((remaining * avgJobTime) / Math.max(1, totalActive));
         }
 
         const retriesAggregate = await db.probeResult.aggregate({

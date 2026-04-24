@@ -89,6 +89,7 @@ export async function queueSummarizeJobsForRecovery(runId: string): Promise<numb
   const transcripts = await db.transcript.findMany({
     where: {
       runId,
+      deletedAt: null,
       summarizedAt: null,
       summarizeFailedAt: null,
     },
@@ -105,7 +106,10 @@ export async function queueSummarizeJobsForRecovery(runId: string): Promise<numb
     await boss.send('summarize_transcript', {
       runId,
       transcriptId: transcript.id,
-    }, jobOptions);
+    }, {
+      ...jobOptions,
+      singletonKey: transcript.id,
+    });
   }
 
   log.info({ runId, jobCount: transcripts.length }, 'Queued summarize jobs for recovery');

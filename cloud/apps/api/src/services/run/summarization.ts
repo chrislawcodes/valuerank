@@ -194,9 +194,10 @@ export async function restartSummarization(
 
   // Get transcripts to re-summarize
   const whereClause = force
-    ? { runId }
+    ? { runId, deletedAt: null }
     : {
       runId,
+      deletedAt: null,
       summarizedAt: null,
       summarizeFailedAt: null,
     };
@@ -223,9 +224,10 @@ export async function restartSummarization(
   // This ensures the job handler doesn't skip them
   const transcriptIds = transcriptsToQueue.map((t) => t.id);
   await db.transcript.updateMany({
-    where: { id: { in: transcriptIds } },
+    where: { id: { in: transcriptIds }, deletedAt: null },
     data: {
       summarizedAt: null,
+      summarizeFailedAt: null,
       decisionText: null,
       // The legacy transcripts.decision_code column drop is deferred to a
       // follow-up PR (spec out-of-scope). We stop writing to it here so the
@@ -271,7 +273,10 @@ export async function restartSummarization(
         transcriptId: transcript.id,
         ...(force ? { forceSummarize: true } : {}),
       },
-      jobOptions
+      {
+        ...jobOptions,
+        singletonKey: transcript.id,
+      }
     );
   }
 

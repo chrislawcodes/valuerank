@@ -13,6 +13,7 @@
 import { db } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 import { findMissingProbes } from './coverage-completeness.js';
+import { computeRunProgress } from './derived-progress.js';
 import { maybeAdvanceRunStatus } from './progress.js';
 import { ACTIVE_PROBE_QUEUE_SQL } from '../queue/probe-queues.js';
 import {
@@ -147,7 +148,7 @@ export async function recoverOrphanedRun(
     });
 
     if (currentRun?.status === 'RUNNING') {
-      const progress = currentRun.progress as { total: number; completed: number; failed: number };
+      const progress = await computeRunProgress(runId);
       if (progress.completed + progress.failed >= progress.total) {
         // Progress complete, trigger summarization
         log.info({ runId }, 'Triggering summarization for completed run');
@@ -173,7 +174,7 @@ export async function recoverOrphanedRun(
       if (pendingCount === 0) {
         // Check if there are unsummarized transcripts
         const unsummarizedCount = await db.transcript.count({
-          where: { runId, summarizedAt: null },
+          where: { runId, deletedAt: null, summarizedAt: null, summarizeFailedAt: null },
         });
 
         if (unsummarizedCount > 0) {
