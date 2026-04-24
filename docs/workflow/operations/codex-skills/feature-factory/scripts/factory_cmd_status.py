@@ -56,8 +56,10 @@ from factory_review import (  # noqa: E402
 from factory_next_action import recommended_next_action  # noqa: E402
 
 from factory_deliver import refresh_delivery_snapshot  # noqa: E402
+from factory_mutating import mutates_state, readonly_command  # noqa: E402
 
 
+@readonly_command("status")
 def command_status(args: argparse.Namespace) -> int:
     ensure_sync()
     state = load_workflow_state(args.slug)
@@ -235,6 +237,7 @@ def command_status(args: argparse.Namespace) -> int:
     return 0
 
 
+@mutates_state("repair")
 def command_repair(args: argparse.Namespace) -> int:
     from factory_cmd_checkpoint import command_checkpoint  # noqa: E402
     ensure_sync()
@@ -320,6 +323,7 @@ def command_repair(args: argparse.Namespace) -> int:
     return 0
 
 
+@readonly_command("doctor")
 def command_doctor(args: argparse.Namespace) -> int:
     from factory_git import git_output  # noqa: E402
     checks: list[tuple[str, str, str]] = []

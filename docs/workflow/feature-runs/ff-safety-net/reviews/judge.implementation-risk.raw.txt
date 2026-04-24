@@ -1,0 +1,32 @@
+```json
+{
+  "judge": "implementation-risk",
+  "model": "claude-sonnet-4-6",
+  "verdict": "block",
+  "confidence": 4,
+  "reasoning": "Four load-bearing gaps would force guessing during implementation. First, FR-012 names a Python stdlib function that does not exist — inspect.islambda — so the lambda-detection test would raise AttributeError at runtime; the implementer must invent a substitute check. Second, the tasks artifact is empty (just a header), leaving the implementer with no phased breakdown and no sequencing constraints between the three fixes. Third, FR-004 sets outcome_value to the string 'rejudge', but the judge schema enumerates only 'proceed', 'proceed-with-annotation', and 'block' — it is unspecified whether 'rejudge' is valid anywhere this local variable feeds downstream (logging, state replay, PR body rendering). Fourth, Implementer Reference point 4 gives glob pseudo-code that calls .iterdir() on a Path containing wildcard characters, which is not valid Python and cannot be used as written; the implementer must guess the intended glob API (likely Path.glob) with no authoritative confirmation.",
+  "evidence": [
+    {
+      "artifact": "spec",
+      "section": "FR-012",
+      "quote": "checked via `inspect.isfunction(handler) is False and inspect.islambda(handler)` or `handler.__name__ == \"<lambda>\"`"
+    },
+    {
+      "artifact": "tasks",
+      "section": "entire artifact",
+      "quote": "# Tasks"
+    },
+    {
+      "artifact": "spec",
+      "section": "FR-004",
+      "quote": "The override sets: `outcome_value = \"rejudge\"` (local), `next_action = \"edit_and_rerun_judge\"` (local)"
+    },
+    {
+      "artifact": "spec",
+      "section": "Implementer reference, point 4",
+      "quote": "The glob is `(reviews_dir / f\"{stage}.*{suffix}\").iterdir()`-style per-suffix; NOT a recursive walk."
+    }
+  ],
+  "timestamp": "2026-04-24T00:00:00Z"
+}
+```

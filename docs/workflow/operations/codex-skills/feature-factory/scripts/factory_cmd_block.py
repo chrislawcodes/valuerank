@@ -15,8 +15,10 @@ from factory_state import (  # noqa: E402
 )
 
 from factory_git import ensure_sync  # noqa: E402
+from factory_mutating import mutates_state  # noqa: E402
 
 
+@mutates_state("block")
 def command_block(args: argparse.Namespace) -> int:
     ensure_sync()
     if not args.clear and not args.reason:

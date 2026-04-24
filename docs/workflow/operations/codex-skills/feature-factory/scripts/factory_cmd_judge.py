@@ -19,6 +19,7 @@ if str(_SCRIPT_DIR) not in sys.path:
 
 from factory_state import (  # noqa: E402
     REPO_ROOT,
+    INVARIANT_WARNINGS_KEY,
     atomic_json_write,
     default_artifact_path,
     load_workflow_state,
@@ -104,6 +105,44 @@ def _stage_int(stage_state: dict, key: str) -> int:
         return int(stage_state.get(key, 0) or 0)
     except (TypeError, ValueError):
         return 0
+
+
+def _concern_is_open(concern: dict) -> bool:
+    return (
+        concern.get("addressed_at") is None
+        and not concern.get("deferred_reason")
+        and not concern.get("dismissed_reason")
+    )
+
+
+def _structured_high_ids(verdict: dict | None) -> list[str]:
+    if not isinstance(verdict, dict):
+        return []
+    raw_ids = verdict.get("unaddressed_high_finding_ids", [])
+    if not isinstance(raw_ids, list):
+        return []
+    ids: list[str] = []
+    for item in raw_ids:
+        if not isinstance(item, str):
+            continue
+        stripped = item.strip()
+        if stripped:
+            ids.append(stripped)
+    return ids
+
+
+def _open_concern_ids(stage_state: dict) -> set[str]:
+    unresolved = stage_state.get("unresolved_concerns", [])
+    if not isinstance(unresolved, list):
+        return set()
+    ids: set[str] = set()
+    for concern in unresolved:
+        if not isinstance(concern, dict):
+            continue
+        concern_id = str(concern.get("id", "") or "").strip()
+        if concern_id and _concern_is_open(concern):
+            ids.add(concern_id)
+    return ids
 
 
 def _record_migration_bypass_use(slug: str, stage: str) -> None:
@@ -436,6 +475,12 @@ def _validate_verdict(verdict: dict) -> str | None:
         return "confidence must be an integer in the range 0..5"
     if not isinstance(verdict["reasoning"], str) or len(verdict["reasoning"].strip()) < 10:
         return "reasoning must be a string of at least 10 characters"
+    if "unaddressed_high_finding_ids" in verdict:
+        if not isinstance(verdict["unaddressed_high_finding_ids"], list):
+            return "unaddressed_high_finding_ids must be a list"
+        for item in verdict["unaddressed_high_finding_ids"]:
+            if not isinstance(item, str) or not item.strip():
+                return "unaddressed_high_finding_ids items must be non-empty strings"
     if not isinstance(verdict["evidence"], list):
         return "evidence must be a list"
     for item in verdict["evidence"]:
@@ -454,7 +499,7 @@ def _validate_verdict(verdict: dict) -> str | None:
     IGNORABLE_METADATA_FIELDS = {"$schema", "$id", "$comment", "title", "description"}
     for meta_field in IGNORABLE_METADATA_FIELDS & set(verdict):
         verdict.pop(meta_field, None)
-    extra = set(verdict) - set(required)
+    extra = set(verdict) - set(required) - {"unaddressed_high_finding_ids"}
     if extra:
         return f"unexpected fields in verdict: {sorted(extra)}"
     return None
@@ -891,6 +936,28 @@ def _persist_state(
         stage_state["annotations"] = annotations
         block_verdicts = _block_verdicts(verdicts)
         blockers = _block_reasonings(block_verdicts)
+        completeness_verdict = next(
+            (verdict for verdict in verdicts if isinstance(verdict, dict) and verdict.get("judge") == "completeness"),
+            None,
+        )
+        structured_high_ids = _structured_high_ids(completeness_verdict)
+        open_concern_ids = _open_concern_ids(stage_state)
+        open_structured_high_ids = [concern_id for concern_id in structured_high_ids if concern_id in open_concern_ids]
+
+        if (
+            isinstance(completeness_verdict, dict)
+            and completeness_verdict.get("verdict") == "block"
+            and not structured_high_ids
+            and open_concern_ids
+        ):
+            state.setdefault(INVARIANT_WARNINGS_KEY, []).append(
+                {
+                    "at": int(datetime.now(timezone.utc).timestamp()),
+                    "command": "judge",
+                    "stage": stage,
+                    "detail": "completeness judge blocked without structured HIGH ids while concerns remain — prompt may be malformed",
+                }
+            )
 
         # FR-001a — write judge_next_action into stage_state BEFORE computing
         # recommended_next_action so the decision tree (which reads
@@ -898,7 +965,22 @@ def _persist_state(
         # the same run. Without this reorder, factory_cmd_judge itself emits
         # a stale repair_<stage>_checkpoint banner immediately after voting
         # advance — the exact symptom observed in feature run 033.
-        if block_count >= 2 and judge_round < 3:
+        if (
+            isinstance(completeness_verdict, dict)
+            and completeness_verdict.get("verdict") == "block"
+            and open_structured_high_ids
+            and proceed_count >= 2
+        ):
+            stage_state["judge_next_action"] = "edit_and_rerun_judge"
+            next_action = "edit_and_rerun_judge"
+            reason = (
+                "completeness judge veto: unaddressed HIGH concerns "
+                + "{"
+                + ",".join(open_structured_high_ids)
+                + "} — majority override"
+            )
+            outcome_value = "rejudge"
+        elif block_count >= 2 and judge_round < 3:
             stage_state["judge_next_action"] = "edit_and_rerun_judge"
             next_action = "edit_and_rerun_judge"
             reason = f"block majority; {block_count} of {len(verdicts)} judges blocked"

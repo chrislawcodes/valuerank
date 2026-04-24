@@ -1,0 +1,6 @@
+## Findings
+- **MEDIUM [UNVERIFIED]** In `factory_cmd_judge.py`, the new completeness veto can fail open when `unaddressed_high_finding_ids` is present but wrong. The veto only activates for IDs that intersect `_open_concern_ids(stage_state)`, and the new warning only fires when the array is empty. If the judge returns stale, mistyped, or truncated IDs, the code treats the block as irrelevant and can still advance on the remaining majority. That weakens the new prompt/schema contract and lets a malformed completeness veto be silently ignored.
+
+## Residual Risks
+- The new mutating-command registry now depends on decorator coverage plus parser introspection. If a future command handler is added without `@mutates_state` or `@readonly_command`, post-invariant checks will quietly stop covering it.
+- The checkpoint GC only removes a fixed set of intermediate suffixes for the selected stage. Any other temporary review artifacts or new file patterns will still accumulate unless they are added to the cleanup list.

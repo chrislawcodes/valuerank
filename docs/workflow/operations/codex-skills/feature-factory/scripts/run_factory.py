@@ -95,28 +95,25 @@ from factory_cmd_judge import run_judge  # noqa: E402
 from factory_cmd_implement import command_implement, command_parallel, _run_serial, _run_parallel  # noqa: E402
 from factory_cmd_status import command_status, command_repair, command_doctor  # noqa: E402
 from factory_invariants import run_invariant_checks, set_json_mode  # noqa: E402
+from factory_mutating import (  # noqa: E402
+    collect_mutating_command_names,
+    enumerate_subparser_handlers,
+    mutates_state,
+)
 from factory_stages import stage_manifest_state  # noqa: E402  (re-imported for invariant check)
 from workflow_utils import resolve_stored_path  # noqa: E402
 
 
-# Commands that mutate workflow state — wrap them with the invariant post-check.
-# `repair` and `closeout` both call into `command_checkpoint` and therefore
-# mutate state; they were flagged missing by the spec round-2 edge-cases review.
-_STATE_MUTATING_COMMANDS: frozenset[str] = frozenset(
-    {
-        "checkpoint",
-        "judge",
-        "reconcile",
-        "auto-reconcile",
-        "implement",
-        "deliver",
-        "block",
-        "repair",
-        "closeout",
-        "discover",
-        "parallel",
-    }
-)
+_MUTATING_CACHE: frozenset[str] | None = None
+
+
+def _get_mutating_commands() -> frozenset[str]:
+    global _MUTATING_CACHE
+    if _MUTATING_CACHE is None:
+        _MUTATING_CACHE = collect_mutating_command_names(
+            handler for _, handler in enumerate_subparser_handlers(build_parser())
+        )
+    return _MUTATING_CACHE
 
 
 def _run_post_invariants(slug: str | None, command_name: str) -> None:
@@ -142,6 +139,7 @@ def _run_post_invariants(slug: str | None, command_name: str) -> None:
         return
 
 
+@mutates_state("init")
 def command_init(args: argparse.Namespace) -> int:
     if not args.path:
         raise SystemExit(
@@ -185,6 +183,7 @@ def command_init(args: argparse.Namespace) -> int:
     return 0
 
 
+@mutates_state("reconcile")
 def command_reconcile(args: argparse.Namespace) -> int:
     ensure_sync()
     plan_path = workflow_dir(args.slug) / "plan.md"
@@ -199,6 +198,7 @@ def command_reconcile(args: argparse.Namespace) -> int:
     return 0
 
 
+@mutates_state("auto-reconcile")
 def command_auto_reconcile(args: argparse.Namespace) -> int:
     """Auto-accept reviews with no HIGH or MEDIUM severity findings.
 
@@ -268,6 +268,18 @@ def command_auto_reconcile(args: argparse.Namespace) -> int:
     return 0
 
 
+@mutates_state("judge")
+def command_judge(args: argparse.Namespace) -> int:
+    return run_judge(
+        args.slug,
+        args.stage,
+        json_output=args.json,
+        prompt_override=args.prompt_override,
+        override_reason=args.override_reason,
+        migration_bypass=args.migration_bypass,
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -318,6 +330,11 @@ def build_parser() -> argparse.ArgumentParser:
     checkpoint_parser.add_argument("--allow-large-diff-rerun", action="store_true")
     checkpoint_parser.add_argument("--fallback", action="store_true")
     checkpoint_parser.add_argument("--json", action="store_true")
+    checkpoint_parser.add_argument(
+        "--keep-intermediates",
+        action="store_true",
+        help="Preserve review intermediate files for debugging instead of deleting them at checkpoint start",
+    )
     checkpoint_parser.add_argument("--fast", action="store_true",
         help="Fast path: skip prerequisites, run 1 Gemini + 1 Codex review. Requires --stage diff.")
     checkpoint_parser.set_defaults(func=command_checkpoint)
@@ -354,14 +371,7 @@ def build_parser() -> argparse.ArgumentParser:
     judge_parser.add_argument("--prompt-override", type=Path)
     judge_parser.add_argument("--override-reason")
     judge_parser.add_argument("--migration-bypass", action="store_true")
-    judge_parser.set_defaults(func=lambda args: run_judge(
-        args.slug,
-        args.stage,
-        json_output=args.json,
-        prompt_override=args.prompt_override,
-        override_reason=args.override_reason,
-        migration_bypass=args.migration_bypass,
-    ))
+    judge_parser.set_defaults(func=command_judge)
 
     discover_parser = subparsers.add_parser("discover")
     discover_parser.add_argument("--slug", required=True)
@@ -455,7 +465,7 @@ def main() -> int:
         exit_code = args.func(args)
         return exit_code
     finally:
-        if command_name in _STATE_MUTATING_COMMANDS:
+        if command_name in _get_mutating_commands():
             _run_post_invariants(getattr(args, "slug", None), command_name)
 
 

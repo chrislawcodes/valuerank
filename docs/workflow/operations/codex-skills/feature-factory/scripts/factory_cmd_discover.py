@@ -22,8 +22,10 @@ from factory_git import ensure_sync  # noqa: E402
 from factory_review import trim_detail  # noqa: E402
 
 from factory_emit import _emit_next_action  # noqa: E402
+from factory_mutating import mutates_state  # noqa: E402
 
 
+@mutates_state("discover")
 def command_discover(args: argparse.Namespace) -> int:
     ensure_sync()
     clear = getattr(args, "clear", False)
