@@ -9,6 +9,7 @@ import {
   detectScheduledCountMismatch,
   detectStrandedTranscript,
   detectSummarizingStall,
+  countOrphanTranscripts,
   findOrphanTranscripts,
   type AnomalyDraft,
   type RunSnapshot,
@@ -18,16 +19,18 @@ import {
   repairScheduledCount,
   resolveAnomaly,
 } from '../../services/run/anomaly-persistence.js';
+import { ORPHAN_RECONSTRUCTION_CAP_PER_TICK } from '../../services/run/anomaly-thresholds.js';
 import { recordProbeSuccess } from '../../services/probe-result/index.js';
 
 const log = createLogger('queue:run-state-reconcile');
 
-function extractTranscriptTokenUsage(
-  content: unknown,
-  fallbackTokenCount: number,
-): { inputTokens: number; outputTokens: number } {
+type TokenUsageResult =
+  | { kind: 'ok'; inputTokens: number; outputTokens: number }
+  | { kind: 'malformed'; reason: string };
+
+function extractTranscriptTokenUsage(content: unknown, fallbackTokenCount: number): TokenUsageResult {
   if (content === null || content === undefined || typeof content !== 'object') {
-    return { inputTokens: 0, outputTokens: fallbackTokenCount };
+    return { kind: 'malformed', reason: 'content-not-object' };
   }
 
   const record = content as Record<string, unknown>;
@@ -35,14 +38,15 @@ function extractTranscriptTokenUsage(
   if (snapshot !== null && snapshot !== undefined && typeof snapshot === 'object') {
     const snap = snapshot as Record<string, unknown>;
     if (typeof snap.inputTokens === 'number' && typeof snap.outputTokens === 'number') {
-      return { inputTokens: snap.inputTokens, outputTokens: snap.outputTokens };
+      return { kind: 'ok', inputTokens: snap.inputTokens, outputTokens: snap.outputTokens };
     }
   }
 
   const turns = Array.isArray(record.turns) ? record.turns : [];
   let inputTokens = 0;
   let outputTokens = 0;
-  let found = false;
+  let foundInputTokens = false;
+  let foundOutputTokens = false;
 
   for (const turn of turns) {
     if (turn === null || typeof turn !== 'object') {
@@ -52,19 +56,23 @@ function extractTranscriptTokenUsage(
     const turnRecord = turn as Record<string, unknown>;
     if (typeof turnRecord.inputTokens === 'number') {
       inputTokens += turnRecord.inputTokens;
-      found = true;
+      foundInputTokens = true;
     }
     if (typeof turnRecord.outputTokens === 'number') {
       outputTokens += turnRecord.outputTokens;
-      found = true;
+      foundOutputTokens = true;
     }
   }
 
-  if (!found) {
-    return { inputTokens: 0, outputTokens: fallbackTokenCount };
+  if (!foundInputTokens && !foundOutputTokens) {
+    return { kind: 'malformed', reason: 'no-cost-data' };
   }
 
-  return { inputTokens, outputTokens };
+  return {
+    kind: 'ok',
+    inputTokens: foundInputTokens ? inputTokens : fallbackTokenCount,
+    outputTokens: foundOutputTokens ? outputTokens : fallbackTokenCount,
+  };
 }
 
 async function enqueueSummarizeTranscriptJob(runId: string, transcriptId: string): Promise<void> {
@@ -101,7 +109,7 @@ async function syncAnomalies(runId: string, type: AnomalyDraft['type'], drafts: 
 }
 
 async function reconstructOrphans(runId: string): Promise<{ orphanIds: string[]; failedIds: string[]; reconstructedCount: number }> {
-  const orphans = await findOrphanTranscripts(runId);
+  const orphans = await findOrphanTranscripts(runId, ORPHAN_RECONSTRUCTION_CAP_PER_TICK);
   const failedIds: string[] = [];
   let reconstructedCount = 0;
 
@@ -113,20 +121,40 @@ async function reconstructOrphans(runId: string): Promise<{ orphanIds: string[];
 
     try {
       const tokenUsage = extractTranscriptTokenUsage(orphan.content, orphan.tokenCount);
-      await recordProbeSuccess({
-        runId,
-        scenarioId: orphan.scenarioId,
-        modelId: orphan.modelId,
-        sampleIndex: orphan.sampleIndex,
-        transcriptId: orphan.id,
-        durationMs: orphan.durationMs,
-        inputTokens: tokenUsage.inputTokens,
-        outputTokens: tokenUsage.outputTokens,
-      });
-      reconstructedCount++;
+      if (tokenUsage.kind === 'ok') {
+        await recordProbeSuccess({
+          runId,
+          scenarioId: orphan.scenarioId,
+          modelId: orphan.modelId,
+          sampleIndex: orphan.sampleIndex,
+          transcriptId: orphan.id,
+          durationMs: orphan.durationMs,
+          inputTokens: tokenUsage.inputTokens,
+          outputTokens: tokenUsage.outputTokens,
+        });
+        reconstructedCount++;
+      } else {
+        failedIds.push(orphan.id);
+        log.warn({ runId, transcriptId: orphan.id, reason: tokenUsage.reason }, 'Malformed orphan transcript content');
+      }
     } catch (error) {
       failedIds.push(orphan.id);
       log.warn({ runId, transcriptId: orphan.id, err: error }, 'Failed to reconstruct orphan transcript');
+    }
+  }
+
+  if (orphans.length === ORPHAN_RECONSTRUCTION_CAP_PER_TICK) {
+    const total = await countOrphanTranscripts(runId);
+    if (total > ORPHAN_RECONSTRUCTION_CAP_PER_TICK) {
+      log.info(
+        {
+          runId,
+          total,
+          processing: ORPHAN_RECONSTRUCTION_CAP_PER_TICK,
+          overflow: total - ORPHAN_RECONSTRUCTION_CAP_PER_TICK,
+        },
+        'Orphan backlog exceeds per-tick cap'
+      );
     }
   }
 
@@ -185,7 +213,8 @@ export function createRunStateReconcileHandler(): PgBoss.WorkHandler<RunStateRec
               type: 'ORPHAN_TRANSCRIPT',
               subject: '',
               details: {
-                transcriptIds: orphanResult.failedIds,
+                transcriptIds: orphanResult.orphanIds,
+                malformedTranscriptIds: orphanResult.failedIds,
               },
             }]);
           } else {
@@ -254,7 +283,7 @@ export function createRunStateReconcileHandler(): PgBoss.WorkHandler<RunStateRec
           }
 
           try {
-            const stall = await detectSummarizingStall(run);
+            const stall = detectSummarizingStall(run);
             await syncAnomalies(runId, 'SUMMARIZING_STALL', stall === null ? [] : [stall]);
           } catch (error) {
             log.warn({ runId, err: error }, 'Summarizing stall detection failed');

@@ -33,6 +33,12 @@ vi.mock('@valuerank/db', () => ({
     },
     $queryRaw: mockQueryRaw,
   },
+  Prisma: {
+    sql: (strings: TemplateStringsArray, ..._values: unknown[]) => ({
+      strings,
+      values: _values,
+    }),
+  },
 }));
 
 vi.mock('@valuerank/shared', () => ({
@@ -92,11 +98,14 @@ describe('run anomaly detection', () => {
   });
 
   it('detects pair asymmetry when sibling success rates diverge enough', async () => {
+    // mockRunFindMany is called by detectPairAsymmetry with `id: { not: run.id }`,
+    // so it should return only siblings (not self).
     mockRunFindMany.mockResolvedValue([
-      { id: 'run-1', config: { jobChoiceBatchGroupId: 'group-1', models: ['m1'], samplesPerScenario: 10 } },
       { id: 'run-2', config: { jobChoiceBatchGroupId: 'group-1', models: ['m1'], samplesPerScenario: 10 } },
     ]);
     mockRunScenarioSelectionCount.mockResolvedValue(1);
+    // Two candidates (self + 1 sibling). Each calls probeResult.count once.
+    // Order in Promise.all: run-1 (self, 3 successes), run-2 (sibling, 9 successes).
     mockProbeResultCount
       .mockResolvedValueOnce(3)
       .mockResolvedValueOnce(9);
@@ -116,7 +125,6 @@ describe('run anomaly detection', () => {
     });
 
     mockRunFindMany.mockResolvedValue([
-      { id: 'run-1', config: { jobChoiceBatchGroupId: 'group-1', models: ['m1'], samplesPerScenario: 10 } },
       { id: 'run-2', config: { jobChoiceBatchGroupId: 'group-1', models: ['m1'], samplesPerScenario: 10 } },
     ]);
     mockProbeResultCount
@@ -135,8 +143,8 @@ describe('run anomaly detection', () => {
     ).resolves.toBeNull();
   });
 
-  it('detects summarizing stalls only after the threshold', async () => {
-    await expect(
+  it('detects summarizing stalls only after the threshold', () => {
+    expect(
       detectSummarizingStall({
         id: 'run-1',
         status: 'SUMMARIZING',
@@ -145,9 +153,9 @@ describe('run anomaly detection', () => {
         progress: { total: 1 },
         deletedAt: null,
       })
-    ).resolves.toMatchObject({ type: 'SUMMARIZING_STALL', subject: '' });
+    ).toMatchObject({ type: 'SUMMARIZING_STALL', subject: '' });
 
-    await expect(
+    expect(
       detectSummarizingStall({
         id: 'run-1',
         status: 'RUNNING',
@@ -156,7 +164,7 @@ describe('run anomaly detection', () => {
         progress: { total: 1 },
         deletedAt: null,
       })
-    ).resolves.toBeNull();
+    ).toBeNull();
   });
 
   it('detects model transcript shortfalls using derived success rates', async () => {

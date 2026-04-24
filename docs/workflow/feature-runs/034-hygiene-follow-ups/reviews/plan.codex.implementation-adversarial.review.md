@@ -1,0 +1,44 @@
+---
+reviewer: "codex"
+lens: "implementation-adversarial"
+stage: "plan"
+artifact_path: "docs/workflow/feature-runs/034-hygiene-follow-ups/plan.md"
+artifact_sha256: "dc3059aa4677c705270bdfa8b17ed1cfa78427dad71dd2d811079a71d1363479"
+repo_root: "."
+git_head_sha: "42b7bb726d5992b7810c0346673e7f795365c4c9"
+git_base_ref: "origin/main"
+git_base_sha: "42b7bb726d5992b7810c0346673e7f795365c4c9"
+generation_method: "codex-runner"
+resolution_status: "accepted"
+resolution_note: "No actionable findings detected — auto-accepted"
+raw_output_path: "docs/workflow/feature-runs/034-hygiene-follow-ups/reviews/plan.codex.implementation-adversarial.review.md.raw.txt"
+narrowed_artifact_path: ""
+narrowed_artifact_sha256: ""
+coverage_status: "full"
+coverage_note: ""
+---
+
+# Review: plan implementation-adversarial
+
+## Findings
+
+- HIGH [CODE-CONFIRMED]: Wave 4’s proposed activity predicate is keyed off the wrong transcript state. The current orphan pipeline defines orphan rows by a missing `probe_results` match and an age gate, not by `summarizedAt` status. `findOrphanTranscripts()` already selects rows with `p.id IS NULL` and `t.created_at` older than the threshold, so a `summarizedAt IS NOT NULL` filter would miss the backlog this wave is trying to keep alive. See [scheduler.ts](/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/services/run/scheduler.ts#L95) and [anomaly-detection.ts](/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/services/run/anomaly-detection.ts#L122).
+
+- HIGH [CODE-CONFIRMED]: Wave 4 only changes `hasRecoveryActivity()`, but `enqueueRunStateReconcileJobs()` still never selects completed runs because of orphan transcripts alone. Right now it queues completed runs only when they have stranded transcripts (`summarized_at IS NULL`), so a completed run with only orphan backlog would keep the scheduler alive and still never get a `run_state_reconcile` job. See [scheduler.ts](/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/services/run/scheduler.ts#L118).
+
+- MEDIUM [CODE-CONFIRMED]: Wave 2 describes capping orphan reads by adding `limit?: number` and applying Prisma `take`, but the current orphan helper is raw SQL via `db.$queryRaw`, not a Prisma `findMany`. There is no `take` to attach to in the existing implementation, so the plan understates the scope of the change and will not work as written without rewriting the query itself. See [anomaly-detection.ts](/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/services/run/anomaly-detection.ts#L122).
+
+## Residual Risks
+
+- The new reconcile-window env var needs explicit rejection of `0` and negative values, not just `NaN`, or the window can collapse to effectively “now” and suppress recovery activity.
+- The capped-orphan path may add an extra count scan per tick; if the backlog gets large, that query needs to stay indexed or it will become the hot path.
+- Wave 3’s pair-asymmetry payload expansion should be checked against any downstream readers of `runAnomaly.details`, since the JSON shape will grow even if the detector stays logically correct.
+
+## Runner Stats
+- total_input=0
+- total_output=0
+- total_tokens=0
+
+## Resolution
+- status: accepted
+- note: No actionable findings detected — auto-accepted

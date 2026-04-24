@@ -4,6 +4,10 @@ const mockRunFindUnique = vi.hoisted(() => vi.fn());
 const mockTranscriptFindMany = vi.hoisted(() => vi.fn());
 const mockRunAnomalyFindMany = vi.hoisted(() => vi.fn());
 const mockBossSend = vi.hoisted(() => vi.fn());
+const mockLogDebug = vi.hoisted(() => vi.fn());
+const mockLogInfo = vi.hoisted(() => vi.fn());
+const mockLogWarn = vi.hoisted(() => vi.fn());
+const mockLogError = vi.hoisted(() => vi.fn());
 const mockMaybeAdvanceRunStatus = vi.hoisted(() => vi.fn());
 const mockDetectStrandedTranscript = vi.hoisted(() => vi.fn());
 const mockDetectPairAsymmetry = vi.hoisted(() => vi.fn());
@@ -11,6 +15,7 @@ const mockDetectModelTranscriptShortfall = vi.hoisted(() => vi.fn());
 const mockDetectScheduledCountMismatch = vi.hoisted(() => vi.fn());
 const mockDetectSummarizingStall = vi.hoisted(() => vi.fn());
 const mockFindOrphanTranscripts = vi.hoisted(() => vi.fn());
+const mockCountOrphanTranscripts = vi.hoisted(() => vi.fn());
 const mockPersistAnomalyDrafts = vi.hoisted(() => vi.fn());
 const mockResolveAnomaly = vi.hoisted(() => vi.fn());
 const mockRepairScheduledCount = vi.hoisted(() => vi.fn());
@@ -32,10 +37,10 @@ vi.mock('@valuerank/db', () => ({
 
 vi.mock('@valuerank/shared', () => ({
   createLogger: () => ({
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
+    debug: mockLogDebug,
+    info: mockLogInfo,
+    warn: mockLogWarn,
+    error: mockLogError,
   }),
 }));
 
@@ -57,6 +62,7 @@ vi.mock('../../../src/services/run/anomaly-detection.js', () => ({
   detectScheduledCountMismatch: mockDetectScheduledCountMismatch,
   detectSummarizingStall: mockDetectSummarizingStall,
   findOrphanTranscripts: mockFindOrphanTranscripts,
+  countOrphanTranscripts: mockCountOrphanTranscripts,
 }));
 
 vi.mock('../../../src/services/run/anomaly-persistence.js', () => ({
@@ -93,6 +99,7 @@ describe('createRunStateReconcileHandler', () => {
     });
     mockDetectSummarizingStall.mockResolvedValue(null);
     mockFindOrphanTranscripts.mockResolvedValue([]);
+    mockCountOrphanTranscripts.mockResolvedValue(0);
     mockMaybeAdvanceRunStatus.mockResolvedValue({ enteredSummarizing: false, completed: false });
     mockRecordProbeSuccess.mockResolvedValue(undefined);
     mockPersistAnomalyDrafts.mockResolvedValue(undefined);
@@ -141,6 +148,206 @@ describe('createRunStateReconcileHandler', () => {
       expect.objectContaining({ singletonKey: 't-2' })
     );
     expect(mockMaybeAdvanceRunStatus).not.toHaveBeenCalled();
+  });
+
+  it('marks malformed orphan transcripts as failed and persists the anomaly details', async () => {
+    mockRunFindUnique.mockResolvedValueOnce({
+      id: 'run-1',
+      status: 'COMPLETED',
+      updatedAt: new Date('2026-04-23T00:00:00.000Z'),
+      config: { models: ['m1'], samplesPerScenario: 1 },
+      progress: { total: 1 },
+      deletedAt: null,
+    });
+    mockFindOrphanTranscripts.mockResolvedValueOnce([
+      {
+        id: 't-1',
+        scenarioId: 'scenario-1',
+        modelId: 'm1',
+        sampleIndex: 0,
+        createdAt: new Date('2026-04-23T00:00:00.000Z'),
+        durationMs: 10,
+        tokenCount: 20,
+        content: null,
+      },
+    ]);
+
+    const handler = createRunStateReconcileHandler();
+    await handler([
+      {
+        id: 'job-1',
+        data: { runId: 'run-1' },
+      } as never,
+    ]);
+
+    expect(mockRecordProbeSuccess).not.toHaveBeenCalled();
+    expect(mockLogWarn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: 'run-1',
+        transcriptId: 't-1',
+        reason: 'content-not-object',
+      }),
+      'Malformed orphan transcript content'
+    );
+    expect(mockPersistAnomalyDrafts).toHaveBeenCalledWith(
+      'run-1',
+      [
+        expect.objectContaining({
+          type: 'ORPHAN_TRANSCRIPT',
+          details: {
+            transcriptIds: ['t-1'],
+            malformedTranscriptIds: ['t-1'],
+          },
+        }),
+      ]
+    );
+  });
+
+  it('reconstructs orphan transcripts with cost snapshots normally', async () => {
+    mockRunFindUnique.mockResolvedValueOnce({
+      id: 'run-1',
+      status: 'COMPLETED',
+      updatedAt: new Date('2026-04-23T00:00:00.000Z'),
+      config: { models: ['m1'], samplesPerScenario: 1 },
+      progress: { total: 1 },
+      deletedAt: null,
+    });
+    mockFindOrphanTranscripts.mockResolvedValueOnce([
+      {
+        id: 't-1',
+        scenarioId: 'scenario-1',
+        modelId: 'm1',
+        sampleIndex: 0,
+        createdAt: new Date('2026-04-23T00:00:00.000Z'),
+        durationMs: 10,
+        tokenCount: 20,
+        content: {
+          costSnapshot: {
+            inputTokens: 11,
+            outputTokens: 12,
+          },
+        },
+      },
+    ]);
+
+    const handler = createRunStateReconcileHandler();
+    await handler([
+      {
+        id: 'job-1',
+        data: { runId: 'run-1' },
+      } as never,
+    ]);
+
+    expect(mockRecordProbeSuccess).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: 'run-1',
+        scenarioId: 'scenario-1',
+        modelId: 'm1',
+        transcriptId: 't-1',
+        inputTokens: 11,
+        outputTokens: 12,
+      })
+    );
+    expect(mockLogWarn).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        transcriptId: 't-1',
+      }),
+      'Malformed orphan transcript content'
+    );
+  });
+
+  it('logs overflow when the orphan backlog exceeds the per-tick cap', async () => {
+    mockRunFindUnique.mockResolvedValueOnce({
+      id: 'run-1',
+      status: 'COMPLETED',
+      updatedAt: new Date('2026-04-23T00:00:00.000Z'),
+      config: { models: ['m1'], samplesPerScenario: 1 },
+      progress: { total: 1 },
+      deletedAt: null,
+    });
+    mockFindOrphanTranscripts.mockResolvedValueOnce(
+      Array.from({ length: 500 }, (_, index) => ({
+        id: `t-${index + 1}`,
+        scenarioId: `scenario-${index + 1}`,
+        modelId: 'm1',
+        sampleIndex: 0,
+        createdAt: new Date('2026-04-23T00:00:00.000Z'),
+        durationMs: 10,
+        tokenCount: 20,
+        content: {
+          costSnapshot: {
+            inputTokens: 1,
+            outputTokens: 2,
+          },
+        },
+      }))
+    );
+    mockCountOrphanTranscripts.mockResolvedValueOnce(600);
+
+    const handler = createRunStateReconcileHandler();
+    await handler([
+      {
+        id: 'job-1',
+        data: { runId: 'run-1' },
+      } as never,
+    ]);
+
+    expect(mockRecordProbeSuccess).toHaveBeenCalledTimes(500);
+    expect(mockCountOrphanTranscripts).toHaveBeenCalledWith('run-1');
+    expect(mockLogInfo).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: 'run-1',
+        total: 600,
+        processing: 500,
+        overflow: 100,
+      }),
+      'Orphan backlog exceeds per-tick cap'
+    );
+  });
+
+  it('does not log overflow when the orphan backlog is exactly at the cap', async () => {
+    mockRunFindUnique.mockResolvedValueOnce({
+      id: 'run-1',
+      status: 'COMPLETED',
+      updatedAt: new Date('2026-04-23T00:00:00.000Z'),
+      config: { models: ['m1'], samplesPerScenario: 1 },
+      progress: { total: 1 },
+      deletedAt: null,
+    });
+    mockFindOrphanTranscripts.mockResolvedValueOnce(
+      Array.from({ length: 500 }, (_, index) => ({
+        id: `t-${index + 1}`,
+        scenarioId: `scenario-${index + 1}`,
+        modelId: 'm1',
+        sampleIndex: 0,
+        createdAt: new Date('2026-04-23T00:00:00.000Z'),
+        durationMs: 10,
+        tokenCount: 20,
+        content: {
+          costSnapshot: {
+            inputTokens: 1,
+            outputTokens: 2,
+          },
+        },
+      }))
+    );
+    mockCountOrphanTranscripts.mockResolvedValueOnce(500);
+
+    const handler = createRunStateReconcileHandler();
+    await handler([
+      {
+        id: 'job-1',
+        data: { runId: 'run-1' },
+      } as never,
+    ]);
+
+    expect(mockLogInfo).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: 'run-1',
+        overflow: expect.any(Number),
+      }),
+      'Orphan backlog exceeds per-tick cap'
+    );
   });
 
   it('advances running runs and repairs scheduled count mismatches', async () => {
