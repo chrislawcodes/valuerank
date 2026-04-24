@@ -1,0 +1,253 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": true,
+    "complete": true,
+    "question_count": 0,
+    "asked_count": 0,
+    "questions": [],
+    "assumptions": [
+      "source column enum: 'default' | 'audit', default='default'",
+      "Unique key extends to (runId, type, subject, source). Existing default-source rows migrated with source='default'.",
+      "Audit sweep runs daily via PgBoss cron or scheduler tick; default sweep unchanged.",
+      "Audit thresholds: MIN_PROBES=10, AGE=60s, STALL=30m KEPT. Severity gates (ABSOLUTE, RELATIVE, PEER, THRESHOLD_PCT) all zeroed for audit path.",
+      "resolveAnomaly + syncAnomalies scoped by source \u2014 audit sweep never touches default rows and vice versa.",
+      "No UI surface; existing run.anomalies GraphQL field exposes both sources with new source field."
+    ],
+    "summary": "Add a second reconciliation sweep ('audit') that runs daily with relaxed thresholds, recording anomalies with a new 'source' column on RunAnomaly. Operators compare default vs audit to tune default thresholds from real data. Carrying assumptions: (a) source='default'|'audit' with default='default'; (b) unique key becomes (runId, type, subject, source); (c) resolveAnomaly/syncAnomalies scoped by source; (d) audit sweep runs daily, separate PgBoss job 'run_state_audit'; (e) audit thresholds: MIN_PROBES and AGE filters KEPT (avoid statistical/in-flight noise), severity gates all zeroed; (f) no UI, just data surface via existing run.anomalies resolver.",
+    "updated_at": 1777043029,
+    "answers": {},
+    "non_goals": [
+      "UI for comparing default vs audit anomalies \u2014 defer to separate PR if needed",
+      "Auto-tuning default thresholds based on audit sweep findings",
+      "Items #2 (janitor) and #7 (load test) from STATUS.md"
+    ],
+    "acceptance_criteria": [
+      "Schema migration adds source column + extends unique key; existing rows backfilled with source='default'",
+      "New run_state_audit job type + handler that reuses detectors with relaxed threshold overrides",
+      "Daily audit sweep scheduled via PgBoss send-every or existing scheduler tick",
+      "resolveAnomaly(runId, type, subject, source) API \u2014 no cross-source resolution",
+      "run.anomalies GraphQL field exposes source field on each anomaly",
+      "STATUS.md follow-up #3 marked resolved after merge"
+    ],
+    "unresolved": []
+  },
+  "delivery": {},
+  "dirty_overrides": {},
+  "checkpoint_fallback": {},
+  "parallel_analysis": {
+    "reviewed": true,
+    "found": false,
+    "note": "Per-wave parallelism in tasks.md summary table; cross-wave parallelism unsafe.",
+    "updated_at": 1777044090
+  },
+  "init_head_sha": "67082dc3d4eeede3775a50ee4769cb22d2cb7e09",
+  "token_usage": [
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T15:07:08.675819Z",
+      "started_at": "2026-04-24T15:05:38.571078Z",
+      "ended_at": "2026-04-24T15:07:08.675819Z",
+      "duration_seconds": 90.104277,
+      "agent_id": null,
+      "artifact_sha_at_time": "b2c5f96927a0c5d50330a7c97712a8e5af48d353b2c2992918ae94c71e4a83ad",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T15:09:00.428537Z",
+      "started_at": "2026-04-24T15:07:08.834741Z",
+      "ended_at": "2026-04-24T15:09:00.428537Z",
+      "duration_seconds": 111.593241,
+      "agent_id": null,
+      "artifact_sha_at_time": "b2c5f96927a0c5d50330a7c97712a8e5af48d353b2c2992918ae94c71e4a83ad",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T15:10:35.691155Z",
+      "started_at": "2026-04-24T15:09:00.609868Z",
+      "ended_at": "2026-04-24T15:10:35.691155Z",
+      "duration_seconds": 95.08084,
+      "agent_id": null,
+      "artifact_sha_at_time": "b2c5f96927a0c5d50330a7c97712a8e5af48d353b2c2992918ae94c71e4a83ad",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T15:15:40.139843Z",
+      "started_at": "2026-04-24T15:14:21.004731Z",
+      "ended_at": "2026-04-24T15:15:40.139843Z",
+      "duration_seconds": 79.134712,
+      "agent_id": null,
+      "artifact_sha_at_time": "03ac1cd7519d95fd7017e39bc532b7986cb8e8082b02d3e7ee2ce9b70aca9c6c",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T15:17:13.119080Z",
+      "started_at": "2026-04-24T15:15:40.340104Z",
+      "ended_at": "2026-04-24T15:17:13.119080Z",
+      "duration_seconds": 92.772024,
+      "agent_id": null,
+      "artifact_sha_at_time": "03ac1cd7519d95fd7017e39bc532b7986cb8e8082b02d3e7ee2ce9b70aca9c6c",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T15:18:16.167384Z",
+      "started_at": "2026-04-24T15:17:13.277224Z",
+      "ended_at": "2026-04-24T15:18:16.167384Z",
+      "duration_seconds": 62.887199,
+      "agent_id": null,
+      "artifact_sha_at_time": "03ac1cd7519d95fd7017e39bc532b7986cb8e8082b02d3e7ee2ce9b70aca9c6c",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "tasks",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T15:21:59.535412Z",
+      "started_at": "2026-04-24T15:21:31.089603Z",
+      "ended_at": "2026-04-24T15:21:59.535412Z",
+      "duration_seconds": 28.445532,
+      "agent_id": null,
+      "artifact_sha_at_time": "e0926ae18cb87801403abc7ab4051452c067c89923050eb5fa49fd1c53f145b0",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T15:23:07.739867Z",
+      "started_at": "2026-04-24T15:21:59.662080Z",
+      "ended_at": "2026-04-24T15:23:07.739867Z",
+      "duration_seconds": 68.077186,
+      "agent_id": null,
+      "artifact_sha_at_time": "e0926ae18cb87801403abc7ab4051452c067c89923050eb5fa49fd1c53f145b0",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T15:24:13.560299Z",
+      "started_at": "2026-04-24T15:23:07.906113Z",
+      "ended_at": "2026-04-24T15:24:13.560299Z",
+      "duration_seconds": 65.65362,
+      "agent_id": null,
+      "artifact_sha_at_time": "e0926ae18cb87801403abc7ab4051452c067c89923050eb5fa49fd1c53f145b0",
+      "parse_error": "no Gemini token stats found in stdout"
+    }
+  ],
+  "stages": {
+    "spec": {
+      "adversarial_rounds": 1,
+      "judge_rounds": 0,
+      "judge_verdicts": [],
+      "annotations": [],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [
+        "b2c5f96927a0c5d50330a7c97712a8e5af48d353b2c2992918ae94c71e4a83ad",
+        "b557df51cab17301aa8f7ad3143eb33bd88598783db0f36c557cceec039a17f6"
+      ],
+      "initial_sha": "b2c5f96927a0c5d50330a7c97712a8e5af48d353b2c2992918ae94c71e4a83ad"
+    },
+    "plan": {
+      "adversarial_rounds": 1,
+      "judge_rounds": 0,
+      "judge_verdicts": [],
+      "annotations": [],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [
+        "03ac1cd7519d95fd7017e39bc532b7986cb8e8082b02d3e7ee2ce9b70aca9c6c",
+        "422279cfe9d693de84c4302d95cc32eb59945b9b9ee4ca057c0bcbe8504978fc"
+      ],
+      "initial_sha": "03ac1cd7519d95fd7017e39bc532b7986cb8e8082b02d3e7ee2ce9b70aca9c6c"
+    },
+    "tasks": {
+      "adversarial_rounds": 1,
+      "judge_rounds": 0,
+      "judge_verdicts": [],
+      "annotations": [],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [
+        "e0926ae18cb87801403abc7ab4051452c067c89923050eb5fa49fd1c53f145b0"
+      ],
+      "initial_sha": "e0926ae18cb87801403abc7ab4051452c067c89923050eb5fa49fd1c53f145b0"
+    }
+  },
+  "schema_version": 2,
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  },
+  "spec_adversarial_rounds": 1,
+  "last_action_result": {
+    "next": "dispatch_next_slice_to_codex",
+    "reason": "tasks checkpoint completed",
+    "blockers": []
+  },
+  "plan_adversarial_rounds": 1,
+  "tasks_adversarial_rounds": 1
+}
