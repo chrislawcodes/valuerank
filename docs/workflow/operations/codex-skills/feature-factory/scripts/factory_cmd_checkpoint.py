@@ -2,8 +2,10 @@
 """command_checkpoint implementation."""
 import argparse
 import json
+import os
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -351,11 +353,156 @@ def _handle_concern_lifecycle(args: argparse.Namespace) -> int | None:
     return 0
 
 
+def _run_validation_only(slug: str, stage: str) -> int:
+    """Feature B Slice 3 — re-seal the manifest against the current artifact
+    SHA without dispatching any reviewer.
+
+    Lets an operator who has edited the artifact past the 3-round adversarial
+    cap re-sync the manifest instead of hand-editing review frontmatter SHAs.
+    Pure manifest-sync tool — does NOT bypass the concern-lifecycle gate or
+    the judge advance verdict.
+
+    Flow (per spec FR-004-007):
+      1. Load manifest; missing → exit 2.
+      2. Pre-check: every review path exists + is writable. Any failure →
+         exit 2 BEFORE any write so partial-state is impossible.
+      3. Compute current artifact SHA.
+      4. Read each review's frontmatter artifact_sha256.
+      5. If all match → print success, exit 0 (no-op).
+      6. Else: atomic-write each mismatching review with new SHA. Any failure
+         mid-loop → exit 2 with clear error (already-written reviews keep new
+         SHA; operator re-runs to catch the rest, per accepted Risk P3).
+      7. On full success: append advance-with-drift-style annotation to
+         stages[stage].annotations[] and print summary.
+    """
+    import re
+
+    manifest_path = checkpoint_manifest_path(slug, stage)
+    if not manifest_path.exists():
+        print(
+            f"no manifest to validate for stage={stage} — run checkpoint first",
+            file=sys.stderr,
+        )
+        return 2
+
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        print(f"invalid manifest at {manifest_path}: {exc}", file=sys.stderr)
+        return 2
+
+    artifact_path = default_artifact_path(slug, stage)
+    if not artifact_path.exists():
+        print(f"no artifact to validate at {artifact_path}", file=sys.stderr)
+        return 2
+    current_sha = normalized_artifact_hash(stage, artifact_path)
+
+    required_reviews = manifest.get("required_reviews") or []
+    review_paths: list[Path] = []
+    from workflow_utils import resolve_stored_path  # local import
+    for entry in required_reviews:
+        raw = entry.get("path")
+        if not raw:
+            continue
+        review_paths.append(resolve_stored_path(raw, REPO_ROOT))
+
+    # Pre-check every target file before any write (Gemini MEDIUM F-03 best-effort).
+    pre_check_errors: list[str] = []
+    for p in review_paths:
+        if not p.exists():
+            pre_check_errors.append(f"pre-check failed: {p} does not exist")
+        elif not os.access(p, os.W_OK):
+            pre_check_errors.append(f"pre-check failed: {p} not writable")
+    if pre_check_errors:
+        for err in pre_check_errors:
+            print(err, file=sys.stderr)
+        return 2
+
+    # Classify each review as "needs update" or "already matches".
+    frontmatter_re = re.compile(r'(artifact_sha256:\s*)"[^"]*"')
+    needs_update: list[tuple[Path, str, str]] = []  # (path, old, new)
+    old_shas: set[str] = set()
+    for p in review_paths:
+        content = p.read_text(encoding="utf-8")
+        m = re.search(r'artifact_sha256:\s*"([a-f0-9]+)"', content)
+        old = m.group(1) if m else ""
+        old_shas.add(old)
+        if old != current_sha:
+            needs_update.append((p, old, current_sha))
+
+    if not needs_update:
+        print(f"manifest already matches artifact (sha={current_sha[:12]})")
+        return 0
+
+    # Atomic write per file: temp file in same dir + os.replace.
+    for p, _old, _new in needs_update:
+        try:
+            content = p.read_text(encoding="utf-8")
+            new_content = frontmatter_re.sub(
+                lambda m: f'{m.group(1)}"{current_sha}"', content, count=1
+            )
+            fd, tmp_name = tempfile.mkstemp(dir=p.parent, prefix=".reseal.", suffix=".md")
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                    fh.write(new_content)
+                os.replace(tmp_name, p)
+            except Exception:
+                Path(tmp_name).unlink(missing_ok=True)
+                raise
+        except Exception as exc:  # noqa: BLE001 — report + bail, partial is accepted risk
+            print(
+                f"reseal partial failure at {p}: {exc} — re-run --validation-only to recover",
+                file=sys.stderr,
+            )
+            return 2
+
+    # Record annotation on full success.
+    old_sha_display = next(iter(old_shas - {current_sha}), "unknown")
+    annotation = {
+        "type": "validation-only-reseal",
+        "old_sha": old_sha_display,
+        "new_sha": current_sha,
+        "at": int(time.time()),
+        "files_updated": len(needs_update),
+    }
+    with with_locked_state(slug) as state:
+        stages_state = state.setdefault("stages", {})
+        stage_blob = stages_state.setdefault(stage, {})
+        if not isinstance(stage_blob, dict):
+            stage_blob = {}
+            stages_state[stage] = stage_blob
+        annotations = stage_blob.setdefault("annotations", [])
+        if not isinstance(annotations, list):
+            annotations = []
+            stage_blob["annotations"] = annotations
+        annotations.append(annotation)
+
+    print(
+        f"manifest re-sealed: {len(needs_update)} review file"
+        f"{'s' if len(needs_update) != 1 else ''} updated to sha={current_sha[:12]}"
+    )
+    return 0
+
+
 @mutates_state("checkpoint")
 def command_checkpoint(args: argparse.Namespace) -> int:
     fast = getattr(args, "fast", False)
     if fast and args.stage != "diff":
         raise SystemExit("--fast requires --stage diff")
+
+    # Feature B Slice 3 — --validation-only is mutually exclusive with all
+    # state-mutating review modes. Argparse can't express this with required
+    # args cleanly; check at runtime.
+    if getattr(args, "validation_only", False):
+        if getattr(args, "fallback", False):
+            raise SystemExit("--validation-only cannot be combined with --fallback")
+        if getattr(args, "address", None):
+            raise SystemExit("--validation-only cannot be combined with --address")
+        if getattr(args, "defer", None):
+            raise SystemExit("--validation-only cannot be combined with --defer")
+        if getattr(args, "dismiss", None):
+            raise SystemExit("--validation-only cannot be combined with --dismiss")
+        return _run_validation_only(args.slug, args.stage)
 
     ensure_sync()
     lifecycle_rc = _handle_concern_lifecycle(args)
