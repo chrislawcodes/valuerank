@@ -1,0 +1,9 @@
+{
+  "paths": [
+    "docs/workflow/operations/codex-skills/feature-factory/scripts"
+  ],
+  "allowed_dirty_paths": [
+    "docs/workflow/feature-runs/ff-housekeeping",
+    "docs/workflow/operations/codex-skills/feature-factory/scripts"
+  ]
+}

@@ -1,0 +1,65 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": true,
+    "complete": true,
+    "question_count": 0,
+    "asked_count": 0,
+    "questions": [],
+    "assumptions": [
+      "Scope: 4 small fixes only. Each is independent and lands in different modules.",
+      "Fix 1 (3-way reconcile): factor existing reconcile logic into a single helper that updates frontmatter, in-body Resolution block, and plan.md line atomically. Existing reconcile command keeps working \u2014 just routes through the helper. Reduces by-hand drift recovery (which hit Features A and B postmortems).",
+      "Fix 2 (Codex quota fallback): when run_codex_review subprocess returns the OpenAI quota-exhausted error string, write the review file with resolution_status=deferred and resolution_note explaining quota exhaustion. The error pattern is 'You've hit your usage limit' or HTTP 402. Existing path treats this as 'failed' which blocks checkpoint progression. Fallback unblocks and is visible in PR body.",
+      "Fix 3 (smoke test): a new pytest test that drives checkpoint --validation-only end-to-end against a canned tmpdir fixture (no real Codex/Gemini calls). Catches argparse-wiring regressions that unit tests on the helper miss.",
+      "Fix 4 (postmortem rule): a new helper in factory_deliver that scans the implementation diff and counts non-test lines added since branch base. If above 200 lines AND state.json has no record of a Codex dispatch (codex_dispatches[] field), append a deliver-time WARN that the postmortem MUST explain why Claude implemented.",
+      "All 209 existing runner tests must pass. Target ~225 after.",
+      "Codex dispatch likely still throttled. Implement directly in Claude \u2014 but document in postmortem per the rule we are building (Fix 4)."
+    ],
+    "summary": "Feature D = FF Housekeeping. Four runner ergonomics fixes from PR #750 postmortem: (1) review-frontmatter/body/plan.md atomic 3-way reconcile helper to prevent drift, (2) Codex quota-exhaustion \u2192 auto-mark reviews as deferred not failed, (3) CI smoke test for checkpoint --validation-only end-to-end, (4) postmortem-rule helper that surfaces Claude-implemented work above N lines.",
+    "updated_at": 1777069477,
+    "answers": {},
+    "non_goals": [
+      "New review formats / structured JSON output (Risk R7, separate project).",
+      "Embedding concern IDs (Feature C).",
+      "Atomic-rollback for --validation-only (out of scope, Risk P3 in PR #750).",
+      "Live-LLM behavioral tests (would test the LLM more than our code)."
+    ],
+    "acceptance_criteria": [
+      "reconcile command (manual + auto-reconcile) routes through a single helper that writes frontmatter, body Resolution block, and plan.md entry in one call. Test asserts no two-of-three drift after reconcile.",
+      "When run_codex_review returns 'usage limit' / quota-exhausted error, the produced review file has resolution_status=deferred and a clear note. Existing behavior on real Codex failures is unchanged.",
+      "tests/test_validation_only_smoke.py drives the full CLI invocation through a tmpdir fixture and asserts exit 0 + reseal + annotation.",
+      "deliver emits a WARN message when implementation diff exceeds 200 non-test lines AND no codex_dispatches[] entries are recorded; --override-implementation-rule flag bypasses with a recorded reason."
+    ],
+    "unresolved": []
+  },
+  "delivery": {},
+  "dirty_overrides": {},
+  "checkpoint_fallback": {},
+  "parallel_analysis": {
+    "reviewed": false,
+    "found": false,
+    "note": "",
+    "updated_at": 0
+  },
+  "init_head_sha": "85a91778b3c3de491fd6b326879d29fa5dc6d0fa",
+  "token_usage": [],
+  "stages": {},
+  "invariant_warnings": [],
+  "schema_version": 1,
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  }
+}
