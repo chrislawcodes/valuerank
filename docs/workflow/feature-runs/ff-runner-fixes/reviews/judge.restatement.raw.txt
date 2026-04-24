@@ -1,49 +1,44 @@
 {
   "judge": "restatement",
-  "model": "gpt-5",
+  "model": "gpt-5.5",
   "verdict": "block",
   "confidence": 5,
-  "reasoning": "All findings in the latest adversarial round are NEW, not restatements. The decisive reason is that the record explicitly says there were no earlier findings: \"No prior findings yet.\" Because there was no prior concern and no orchestrator mitigation to compare against, none of the latest items can qualify as a RESTATEMENT under the stated rule. The latest round surfaces multiple distinct failure modes that were not previously covered, including: a code-fence bypass in auto-reconcile parsing, missing invariant coverage for state-mutating commands like discover/parallel/init, lack of backfill IDs for existing unresolved concerns, an internal spec contradiction between US1 scenario 3 and FR-004, brittle concern-ID generation for paraphrases, regex-maintenance risk in severity detection, weak audit-trail assumptions under artifact drift, silent-ignore risk for contradiction warnings, and misuse paths in the concern lifecycle. Since substantial new concerns are still surfacing, the review loop is still producing signal and should be blocked from proceeding.",
+  "reasoning": "All latest-round findings are NEW because the provided history explicitly says there were no earlier findings, so none can be a restatement under the stated rule. The round surfaces multiple distinct failure modes that were not previously covered: code-fence bypass in auto-reconcile parsing, missing invariant coverage for mutating commands, lack of backfill IDs for existing unresolved concerns, an internal spec contradiction about what closes concerns, brittle/paraphrase-sensitive concern ID generation, regex-maintenance risk for severity parsing, weak audit-trail assumptions under artifact drift, possible silent ignoring of contradiction warnings, and misuse paths in the concern lifecycle. Because substantial new concerns are still surfacing, the loop is still producing signal rather than cosmetic repetition.",
   "evidence": [
     {
       "artifact": "earlier-rounds",
-      "section": "prior-findings",
+      "section": "history",
       "quote": "No prior findings yet."
     },
     {
-      "artifact": "spec.codex.edge-cases-adversarial.review.md",
-      "section": "high-1",
+      "artifact": "latest-round",
+      "section": "spec.codex.edge-cases-adversarial.review#high-1",
       "quote": "The auto-reconcile regex still has a code-fence bypass."
     },
     {
-      "artifact": "spec.codex.edge-cases-adversarial.review.md",
-      "section": "medium-2",
+      "artifact": "latest-round",
+      "section": "spec.codex.edge-cases-adversarial.review#medium-2",
       "quote": "FR-009 under-specifies the state-mutating commands that must get the post-run invariant check."
     },
     {
-      "artifact": "spec.codex.feasibility-adversarial.review.md",
-      "section": "high-1",
-      "quote": "FR-003 and FR-011a do not backfill id for existing unresolved_concerns."
+      "artifact": "latest-round",
+      "section": "spec.codex.feasibility-adversarial.review#high-1",
+      "quote": "do not backfill `id` for existing `unresolved_concerns`."
     },
     {
-      "artifact": "spec.codex.feasibility-adversarial.review.md",
-      "section": "medium-3",
-      "quote": "US1 scenario 3 says the next checkpoint can treat concerns as closed when they are \"referenced as addressed in plan annotations,\" but FR-004 says annotations are display-only."
+      "artifact": "latest-round",
+      "section": "spec.codex.feasibility-adversarial.review#medium-3",
+      "quote": "the spec is internally inconsistent and will force a choice later."
     },
     {
-      "artifact": "spec.gemini.requirements-adversarial.review.md",
-      "section": "medium-1",
-      "quote": "Concern ID generation is brittle and may fail to track paraphrased findings [UNVERIFIED]"
+      "artifact": "latest-round",
+      "section": "spec.gemini.requirements-adversarial.review#medium-1",
+      "quote": "Concern ID generation is brittle and may fail to track paraphrased findings"
     },
     {
-      "artifact": "spec.gemini.requirements-adversarial.review.md",
-      "section": "high-3",
-      "quote": "The root problem—a lack of a structured format for review findings—is not addressed, leading to a tactical patch rather than a robust, long-term solution."
-    },
-    {
-      "artifact": "spec.gemini.requirements-adversarial.review.md",
-      "section": "low-5",
-      "quote": "State contradiction warnings may be silently ignored by automated agents [UNVERIFIED]"
+      "artifact": "latest-round",
+      "section": "spec.gemini.requirements-adversarial.review#high-3",
+      "quote": "The root problem—a lack of a structured format for review findings—is not addressed"
     }
   ],
   "timestamp": "2026-04-23T00:00:00-07:00"

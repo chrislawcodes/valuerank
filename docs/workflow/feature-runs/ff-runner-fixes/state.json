@@ -711,6 +711,102 @@
       "agent_id": null,
       "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
       "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:53:13.533937Z",
+      "started_at": "2026-04-24T05:52:50.676630Z",
+      "ended_at": "2026-04-24T05:53:13.533937Z",
+      "duration_seconds": 22.857178,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:53:15.854215Z",
+      "started_at": "2026-04-24T05:52:50.674877Z",
+      "ended_at": "2026-04-24T05:53:15.854215Z",
+      "duration_seconds": 25.17902,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:53:29.312337Z",
+      "started_at": "2026-04-24T05:53:13.536764Z",
+      "ended_at": "2026-04-24T05:53:29.312337Z",
+      "duration_seconds": 15.775472,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:53:39.239760Z",
+      "started_at": "2026-04-24T05:53:15.856023Z",
+      "ended_at": "2026-04-24T05:53:39.239760Z",
+      "duration_seconds": 23.383568,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:55:10.481893Z",
+      "started_at": "2026-04-24T05:52:50.676419Z",
+      "ended_at": "2026-04-24T05:55:10.481893Z",
+      "duration_seconds": 139.804461,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:56:29.327202Z",
+      "started_at": "2026-04-24T05:55:10.483736Z",
+      "ended_at": "2026-04-24T05:56:29.327202Z",
+      "duration_seconds": 78.842921,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Claude token counts found in stdout or stderr"
     }
   ],
   "stages": {
@@ -983,107 +1079,102 @@
             "model": "gpt-5.4",
             "verdict": "proceed-with-annotation",
             "confidence": 4,
-            "reasoning": "spec.codex.edge-cases-adversarial.review#high-1: acknowledged as a documented limitation in the plan reconciliation note, which explicitly pins the fenced-code-block regex match with a test; that is specific enough to count as an accepted limitation, not a missing mitigation. spec.codex.feasibility-adversarial.review#high-1: addressed in FR-011a and task T3.5, which require read-time backfill of missing `unresolved_concerns.id` for existing snapshots, including run-033; this is specific enough to implement. spec.gemini.requirements-adversarial.review#high-3: acknowledged in Risk R7 as a format-bound regex limitation, with structured-output reviewer prompts named as the durable fix and explicitly out of scope; this is specific enough as an accepted limitation.",
+            "reasoning": "spec.codex.edge-cases-adversarial.review#high-1 is not mitigated in the spec itself, but it is explicitly acknowledged in the plan as an accepted limitation: the fenced-code-block regex case is \u201cpinned as documented limitation with explicit test.\u201d That is specific enough as a limitation, though not an implementation plan. spec.codex.feasibility-adversarial.review#high-1 is addressed by FR-011a and T3.5, which require backfilling the stable `id` field for existing `unresolved_concerns` entries that lack one on read; that is a named mitigation and is specific enough to implement. spec.gemini.requirements-adversarial.review#high-3 is explicitly acknowledged in Risk R7 as a known architectural limitation, with structured-output migration out of scope; that is a clear acceptance, not a mitigation, and it is specific enough as an accepted limitation.",
             "evidence": [
               {
-                "artifact": "/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/plans/feature-factory-runner-fixes.md",
+                "artifact": "docs/workflow/feature-runs/ff-runner-fixes/plan.md",
                 "section": "Review Reconciliation",
-                "quote": "fenced-code-block regex match \u2014 pinned as documented limitation with explicit test."
+                "quote": "LOW fenced-code-block regex match \u2014 pinned as documented limitation with explicit test."
               },
               {
-                "artifact": "/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/spec.md",
+                "artifact": "docs/workflow/feature-runs/ff-runner-fixes/spec.md",
                 "section": "FR-011a",
-                "quote": "the loader MUST backfill the stable `id` field for any existing `unresolved_concerns` entry that lacks one."
+                "quote": "backfill the stable `id` field for any existing `unresolved_concerns` entry that lacks one."
               },
               {
-                "artifact": "/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/spec.md",
-                "section": "Residual risks (with verification) / R7",
-                "quote": "A durable fix would require reviewer prompts to emit structured output (JSON findings)."
+                "artifact": "docs/workflow/feature-runs/ff-runner-fixes/spec.md",
+                "section": "Residual risks (with verification) - Risk R7",
+                "quote": "accepted as a known architectural limitation; out of scope for this feature"
               }
             ],
             "timestamp": "2026-04-23T00:00:00Z"
           },
           {
             "judge": "restatement",
-            "model": "gpt-5",
+            "model": "gpt-5.5",
             "verdict": "block",
             "confidence": 5,
-            "reasoning": "All findings in the latest adversarial round are NEW, not restatements. The decisive reason is that the record explicitly says there were no earlier findings: \"No prior findings yet.\" Because there was no prior concern and no orchestrator mitigation to compare against, none of the latest items can qualify as a RESTATEMENT under the stated rule. The latest round surfaces multiple distinct failure modes that were not previously covered, including: a code-fence bypass in auto-reconcile parsing, missing invariant coverage for state-mutating commands like discover/parallel/init, lack of backfill IDs for existing unresolved concerns, an internal spec contradiction between US1 scenario 3 and FR-004, brittle concern-ID generation for paraphrases, regex-maintenance risk in severity detection, weak audit-trail assumptions under artifact drift, silent-ignore risk for contradiction warnings, and misuse paths in the concern lifecycle. Since substantial new concerns are still surfacing, the review loop is still producing signal and should be blocked from proceeding.",
+            "reasoning": "All latest-round findings are NEW because the provided history explicitly says there were no earlier findings, so none can be a restatement under the stated rule. The round surfaces multiple distinct failure modes that were not previously covered: code-fence bypass in auto-reconcile parsing, missing invariant coverage for mutating commands, lack of backfill IDs for existing unresolved concerns, an internal spec contradiction about what closes concerns, brittle/paraphrase-sensitive concern ID generation, regex-maintenance risk for severity parsing, weak audit-trail assumptions under artifact drift, possible silent ignoring of contradiction warnings, and misuse paths in the concern lifecycle. Because substantial new concerns are still surfacing, the loop is still producing signal rather than cosmetic repetition.",
             "evidence": [
               {
                 "artifact": "earlier-rounds",
-                "section": "prior-findings",
+                "section": "history",
                 "quote": "No prior findings yet."
               },
               {
-                "artifact": "spec.codex.edge-cases-adversarial.review.md",
-                "section": "high-1",
+                "artifact": "latest-round",
+                "section": "spec.codex.edge-cases-adversarial.review#high-1",
                 "quote": "The auto-reconcile regex still has a code-fence bypass."
               },
               {
-                "artifact": "spec.codex.edge-cases-adversarial.review.md",
-                "section": "medium-2",
+                "artifact": "latest-round",
+                "section": "spec.codex.edge-cases-adversarial.review#medium-2",
                 "quote": "FR-009 under-specifies the state-mutating commands that must get the post-run invariant check."
               },
               {
-                "artifact": "spec.codex.feasibility-adversarial.review.md",
-                "section": "high-1",
-                "quote": "FR-003 and FR-011a do not backfill id for existing unresolved_concerns."
+                "artifact": "latest-round",
+                "section": "spec.codex.feasibility-adversarial.review#high-1",
+                "quote": "do not backfill `id` for existing `unresolved_concerns`."
               },
               {
-                "artifact": "spec.codex.feasibility-adversarial.review.md",
-                "section": "medium-3",
-                "quote": "US1 scenario 3 says the next checkpoint can treat concerns as closed when they are \"referenced as addressed in plan annotations,\" but FR-004 says annotations are display-only."
+                "artifact": "latest-round",
+                "section": "spec.codex.feasibility-adversarial.review#medium-3",
+                "quote": "the spec is internally inconsistent and will force a choice later."
               },
               {
-                "artifact": "spec.gemini.requirements-adversarial.review.md",
-                "section": "medium-1",
-                "quote": "Concern ID generation is brittle and may fail to track paraphrased findings [UNVERIFIED]"
+                "artifact": "latest-round",
+                "section": "spec.gemini.requirements-adversarial.review#medium-1",
+                "quote": "Concern ID generation is brittle and may fail to track paraphrased findings"
               },
               {
-                "artifact": "spec.gemini.requirements-adversarial.review.md",
-                "section": "high-3",
-                "quote": "The root problem\u2014a lack of a structured format for review findings\u2014is not addressed, leading to a tactical patch rather than a robust, long-term solution."
-              },
-              {
-                "artifact": "spec.gemini.requirements-adversarial.review.md",
-                "section": "low-5",
-                "quote": "State contradiction warnings may be silently ignored by automated agents [UNVERIFIED]"
+                "artifact": "latest-round",
+                "section": "spec.gemini.requirements-adversarial.review#high-3",
+                "quote": "The root problem\u2014a lack of a structured format for review findings\u2014is not addressed"
               }
             ],
             "timestamp": "2026-04-23T00:00:00-07:00"
           },
           {
             "judge": "implementation-risk",
-            "model": "claude-opus-4-5",
+            "model": "claude-sonnet-4-5",
             "verdict": "block",
             "confidence": 4,
-            "reasoning": "Four places where a competent implementer would guess or ship a bug: (1) `run_invariant_checks` has three incompatible signatures across three artifacts \u2014 spec FR-009 gives two params, plan adds a third `emit_to`, tasks drop `emit_to` and add `recommended, invariants=None`. The caller in run_factory.py must match one; no artifact resolves which. (2) The owning module contradicts itself: spec FR-009 and plan say put the helper in `factory_state.py`; tasks T2.2 says create a NEW module `factory_invariants.py`. Both cannot be right, and the choice determines which imports change across the codebase. (3) T3.3 calls two helper functions \u2014 `factory_state.checkpoint_manifest_path(slug, stage)` and `workflow_utils.normalized_artifact_hash` \u2014 with no confirmation either exists today. If `normalized_artifact_hash` must be written, the artifact scope (which files are hashed, encoding, algorithm details beyond 'sha256') is entirely unspecified. (4) FR-006 requires matching `**Severity**: (HIGH|CRITICAL|MEDIUM)` nested under a `### N. <title>` heading \u2014 a span that inherently crosses lines. The spec's anchoring strategy is `^\\s*` (start-of-line), which works for single-line patterns; whether the regex must be applied with `re.MULTILINE | re.DOTALL` or via a two-pass scan is never stated, and the choice determines whether the pattern fires at all.",
+            "reasoning": "Five load-bearing ambiguities that would cause wrong code or a stuck implementer. Two are direct contradictions between the plan's architecture table and the spec/tasks (module location, stderr routing). One is an underspecified encoding that produces silently wrong IDs. Two leave the implementer with no way to satisfy the stated call-site contract without guessing at existing API surface.",
             "evidence": [
               {
-                "artifact": "spec",
-                "section": "FR-009",
-                "quote": "A new helper `factory_state.run_invariant_checks(state, command)` MUST run after every state-mutating command"
+                "artifact": "PLAN",
+                "section": "Architecture table / Slice 2 description vs. SPEC FR-009 and TASKS T2.2",
+                "quote": "Plan architecture table: '| 8 | new helper in `factory_state.py` | `run_invariant_checks(state, command)`'. But FR-009: 'A new helper `factory_invariants.run_invariant_checks(...)` (in a NEW module `factory_invariants.py`, sibling of `factory_state.py`)'. And T2.2: 'Create NEW module `factory_invariants.py`\u2026 Do NOT put this helper in `factory_state.py`.' Direct contradiction on which file to create the helper in."
               },
               {
-                "artifact": "plan",
-                "section": "Slice 2 \u2014 Fix 8 invariant self-check",
-                "quote": "Add `run_invariant_checks(state, command)` helper in `factory_state.py`. ... Emit to stderr when `--json` is in effect; stdout otherwise. Detect via a context var or explicit parameter threaded from the caller."
+                "artifact": "PLAN",
+                "section": "Slice 2 narrative vs. SPEC FR-009, TASKS T2.3, PLAN Risk P3",
+                "quote": "Slice 2: 'Emit to stderr when `--json` is in effect; stdout otherwise. Detect via a context var or explicit parameter threaded from the caller.' But FR-009: 'always stderr, so machine-readable stdout is never contaminated'. T2.3: 'Emit invariant warnings to stderr ALWAYS (no conditional routing).' Risk P3: 'Warnings go to stderr *always* \u2014 no conditional routing.' Conditional routing is specified and simultaneously forbidden."
               },
               {
-                "artifact": "tasks",
-                "section": "T2.2",
-                "quote": "Create NEW module `factory_invariants.py` (sibling of `factory_state.py`). Define `run_invariant_checks(state, command, recommended, invariants=None) -> list[dict]`"
+                "artifact": "SPEC / TASKS",
+                "section": "FR-003 and T3.5 \u2014 concern ID encoding",
+                "quote": "FR-003: 'id = sha256(stage|judge|round_raised|<first-48-chars-of-reasoning-stripped-of-whitespace>)[:12]'. T3.5: 'sha256(f\"{stage}|{judge}|{round_raised}|\" + \"\".join(reasoning.split())[:48])[:12]'. Neither specifies `.hexdigest()` vs `.digest()`. IDs are stored in state.json and passed as CLI arguments (`checkpoint --address <id>`), so bytes vs hex string is load-bearing \u2014 a bytes slice produces a binary string that breaks JSON serialization and CLI round-trips."
               },
               {
-                "artifact": "tasks",
-                "section": "T3.3",
-                "quote": "reads the current artifact sha via `workflow_utils.normalized_artifact_hash` and, when it differs from the manifest sha ... (resolve via `factory_state.checkpoint_manifest_path(slug, stage)`). The helper reads the current artifact sha via `workflow_utils.normalized_artifact_hash`"
+                "artifact": "TASKS",
+                "section": "T3.3 \u2014 checkpoint_manifest_path assumed to exist",
+                "quote": "T3.3: 'The manifest lives at `docs/workflow/feature-runs/<slug>/reviews/<stage>.checkpoint.json` (resolve via `factory_state.checkpoint_manifest_path(slug, stage)`).' No other artifact confirms this function exists in `factory_state.py`. If it does not exist, the implementer must invent the path-resolution logic rather than call a known API \u2014 and the path shown in the parenthetical may not match how the existing codebase actually constructs it."
               },
               {
-                "artifact": "spec",
-                "section": "FR-006",
-                "quote": "new: nested under `### N. <title>` \u2014 paragraph that begins with `**Severity**: (HIGH|CRITICAL|MEDIUM)` (the Gemini review style)"
+                "artifact": "TASKS",
+                "section": "T3.3 / T3.4 \u2014 manifest_state parameter provenance at call site",
+                "quote": "T3.3 defines: 'record_advance_with_drift_if_needed(slug, stage, stage_state, manifest_state)'. T3.4 says: 'Call the reseal helper from `factory_stages.prerequisite_failure` when a prereq stage is unhealthy BUT has `judge_next_action == \"advance\"`. No artifact explains where `prerequisite_failure` gets `manifest_state` from \u2014 the caller would have to read the manifest file itself, but then it is unclear whether the helper still reads it too (double read) or takes the pre-read dict as a caller responsibility."
               }
             ],
             "timestamp": "2026-04-23T00:00:00Z"
@@ -1111,16 +1202,29 @@
           "confidence": 4,
           "reasoning": "spec.codex.edge-cases-adversarial.review#high-1: acknowledged as a documented limitation in the plan reconciliation note, which explicitly pins the fenced-code-block regex match with a test; that is specific enough to count as an accepted limitation, not a missing mitigation. spec.codex.feasibility-adversarial.review#high-1: addressed in FR-011a and task T3.5, which require read-time backfill of missing `unresolved_concerns.id` for existing snapshots, including run-033; this is specific enough to implement. spec.gemini.requirements-adversarial.review#high-3: acknowledged in Risk R7 as a format-bound regex limitation, with structured-output reviewer prompts named as the durable fix and explicitly out of scope; this is specific enough as an accepted limitation.",
           "artifact_sha_at_time": "a0a6eb61aa484ae52c7ef756d98963fdd609dcf59fd80704cd23c2d5f6cd169d"
+        },
+        {
+          "type": "judge-reset",
+          "reason": "second reset after aligning FR-009 signature across spec/plan/tasks",
+          "at": 1777009967.246698
+        },
+        {
+          "stage": "spec",
+          "round": 3,
+          "judge": "completeness",
+          "confidence": 4,
+          "reasoning": "spec.codex.edge-cases-adversarial.review#high-1 is not mitigated in the spec itself, but it is explicitly acknowledged in the plan as an accepted limitation: the fenced-code-block regex case is \u201cpinned as documented limitation with explicit test.\u201d That is specific enough as a limitation, though not an implementation plan. spec.codex.feasibility-adversarial.review#high-1 is addressed by FR-011a and T3.5, which require backfilling the stable `id` field for existing `unresolved_concerns` entries that lack one on read; that is a named mitigation and is specific enough to implement. spec.gemini.requirements-adversarial.review#high-3 is explicitly acknowledged in Risk R7 as a known architectural limitation, with structured-output migration out of scope; that is a clear acceptance, not a mitigation, and it is specific enough as an accepted limitation.",
+          "artifact_sha_at_time": "102b8ce6a77244e43e05a3efddf9007ef8b1a547fb68030d98fe5288c928d5b6"
         }
       ],
       "unresolved_concerns": [
         {
-          "id": "188ae9b92e77",
+          "id": "72abbcb01f61",
           "stage": "spec",
           "judge": "restatement",
-          "model": "gpt-5",
+          "model": "gpt-5.5",
           "confidence": 5,
-          "reasoning": "All findings in the latest adversarial round are NEW, not restatements. The decisive reason is that the record explicitly says there were no earlier findings: \"No prior findings yet.\" Because there was no prior concern and no orchestrator mitigation to compare against, none of the latest items can qualify as a RESTATEMENT under the stated rule. The latest round surfaces multiple distinct failure modes that were not previously covered, including: a code-fence bypass in auto-reconcile parsing, missing invariant coverage for state-mutating commands like discover/parallel/init, lack of backfill IDs for existing unresolved concerns, an internal spec contradiction between US1 scenario 3 and FR-004, brittle concern-ID generation for paraphrases, regex-maintenance risk in severity detection, weak audit-trail assumptions under artifact drift, silent-ignore risk for contradiction warnings, and misuse paths in the concern lifecycle. Since substantial new concerns are still surfacing, the review loop is still producing signal and should be blocked from proceeding.",
+          "reasoning": "All latest-round findings are NEW because the provided history explicitly says there were no earlier findings, so none can be a restatement under the stated rule. The round surfaces multiple distinct failure modes that were not previously covered: code-fence bypass in auto-reconcile parsing, missing invariant coverage for mutating commands, lack of backfill IDs for existing unresolved concerns, an internal spec contradiction about what closes concerns, brittle/paraphrase-sensitive concern ID generation, regex-maintenance risk for severity parsing, weak audit-trail assumptions under artifact drift, possible silent ignoring of contradiction warnings, and misuse paths in the concern lifecycle. Because substantial new concerns are still surfacing, the loop is still producing signal rather than cosmetic repetition.",
           "round_raised": 3,
           "also_raised_in_round": [],
           "addressed_at": null,
@@ -1129,12 +1233,12 @@
           "dismissed_reason": null
         },
         {
-          "id": "72308bafaac4",
+          "id": "394aa8cd151b",
           "stage": "spec",
           "judge": "implementation-risk",
-          "model": "claude-opus-4-5",
+          "model": "claude-sonnet-4-5",
           "confidence": 4,
-          "reasoning": "Four places where a competent implementer would guess or ship a bug: (1) `run_invariant_checks` has three incompatible signatures across three artifacts \u2014 spec FR-009 gives two params, plan adds a third `emit_to`, tasks drop `emit_to` and add `recommended, invariants=None`. The caller in run_factory.py must match one; no artifact resolves which. (2) The owning module contradicts itself: spec FR-009 and plan say put the helper in `factory_state.py`; tasks T2.2 says create a NEW module `factory_invariants.py`. Both cannot be right, and the choice determines which imports change across the codebase. (3) T3.3 calls two helper functions \u2014 `factory_state.checkpoint_manifest_path(slug, stage)` and `workflow_utils.normalized_artifact_hash` \u2014 with no confirmation either exists today. If `normalized_artifact_hash` must be written, the artifact scope (which files are hashed, encoding, algorithm details beyond 'sha256') is entirely unspecified. (4) FR-006 requires matching `**Severity**: (HIGH|CRITICAL|MEDIUM)` nested under a `### N. <title>` heading \u2014 a span that inherently crosses lines. The spec's anchoring strategy is `^\\s*` (start-of-line), which works for single-line patterns; whether the regex must be applied with `re.MULTILINE | re.DOTALL` or via a two-pass scan is never stated, and the choice determines whether the pattern fires at all.",
+          "reasoning": "Five load-bearing ambiguities that would cause wrong code or a stuck implementer. Two are direct contradictions between the plan's architecture table and the spec/tasks (module location, stderr routing). One is an underspecified encoding that produces silently wrong IDs. Two leave the implementer with no way to satisfy the stated call-site contract without guessing at existing API surface.",
           "round_raised": 3,
           "also_raised_in_round": [],
           "addressed_at": null,
@@ -1178,13 +1282,13 @@
     "next": "record_parallel_analysis",
     "reason": "judge panel exhausted; advancing with unresolved concerns",
     "blockers": [
-      "All findings in the latest adversarial round are NEW, not restatements. The decisive reason is that the record explicitly says there were no earlier findings: \"No prior findings yet.\" Because there was no prior concern and no orchestrator mitigation to compare against, none of the latest items can qualify as a RESTATEMENT under the stated rule. The latest round surfaces multiple distinct failure modes that were not previously covered, including: a code-fence bypass in auto-reconcile parsing, missing invariant coverage for state-mutating commands like discover/parallel/init, lack of backfill IDs for existing unresolved concerns, an internal spec contradiction between US1 scenario 3 and FR-004, brittle concern-ID generation for paraphrases, regex-maintenance risk in severity detection, weak audit-trail assumptions under artifact drift, silent-ignore risk for contradiction warnings, and misuse paths in the concern lifecycle. Since substantial new concerns are still surfacing, the review loop is still producing signal and should be blocked from proceeding.",
-      "Four places where a competent implementer would guess or ship a bug: (1) `run_invariant_checks` has three incompatible signatures across three artifacts \u2014 spec FR-009 gives two params, plan adds a third `emit_to`, tasks drop `emit_to` and add `recommended, invariants=None`. The caller in run_factory.py must match one; no artifact resolves which. (2) The owning module contradicts itself: spec FR-009 and plan say put the helper in `factory_state.py`; tasks T2.2 says create a NEW module `factory_invariants.py`. Both cannot be right, and the choice determines which imports change across the codebase. (3) T3.3 calls two helper functions \u2014 `factory_state.checkpoint_manifest_path(slug, stage)` and `workflow_utils.normalized_artifact_hash` \u2014 with no confirmation either exists today. If `normalized_artifact_hash` must be written, the artifact scope (which files are hashed, encoding, algorithm details beyond 'sha256') is entirely unspecified. (4) FR-006 requires matching `**Severity**: (HIGH|CRITICAL|MEDIUM)` nested under a `### N. <title>` heading \u2014 a span that inherently crosses lines. The spec's anchoring strategy is `^\\s*` (start-of-line), which works for single-line patterns; whether the regex must be applied with `re.MULTILINE | re.DOTALL` or via a two-pass scan is never stated, and the choice determines whether the pattern fires at all."
+      "All latest-round findings are NEW because the provided history explicitly says there were no earlier findings, so none can be a restatement under the stated rule. The round surfaces multiple distinct failure modes that were not previously covered: code-fence bypass in auto-reconcile parsing, missing invariant coverage for mutating commands, lack of backfill IDs for existing unresolved concerns, an internal spec contradiction about what closes concerns, brittle/paraphrase-sensitive concern ID generation, regex-maintenance risk for severity parsing, weak audit-trail assumptions under artifact drift, possible silent ignoring of contradiction warnings, and misuse paths in the concern lifecycle. Because substantial new concerns are still surfacing, the loop is still producing signal rather than cosmetic repetition.",
+      "Five load-bearing ambiguities that would cause wrong code or a stuck implementer. Two are direct contradictions between the plan's architecture table and the spec/tasks (module location, stderr routing). One is an underspecified encoding that produces silently wrong IDs. Two leave the implementer with no way to satisfy the stated call-site contract without guessing at existing API surface."
     ],
     "outcome": "advance",
     "proceed_count": 1,
     "block_count": 2,
-    "timestamp": "2026-04-24T05:52:17.463414Z",
+    "timestamp": "2026-04-24T05:56:29.422180Z",
     "judge_round": 3
   },
   "spec_judge_rounds": 3,

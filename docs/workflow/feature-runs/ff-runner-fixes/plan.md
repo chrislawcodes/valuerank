@@ -12,9 +12,9 @@ The three fixes land in three already-separate modules:
 
 | Fix | Module | Entry point |
 |---|---|---|
-| 1 | `factory_next_action.py` + `factory_cmd_judge.py` + `factory_cmd_checkpoint.py` | `recommended_next_action()`, judge `handle_*_advance_path()`, checkpoint concern verification |
-| 2 | `factory_review_specs.py` | `_ACTIONABLE_FINDING_RE` |
-| 8 | new helper in `factory_state.py` | `run_invariant_checks(state, command, emit_to)` called from `run_factory.py` dispatch tail |
+| 1 | `factory_next_action.py` + `factory_cmd_judge.py` + `factory_stages.py` | `recommended_next_action()` (inline advance-gate), `_unresolved_concern_from_verdict()` + call-order reorder, `prerequisite_failure()` + `record_advance_with_drift_if_needed()` |
+| 2 | `factory_review_specs.py` | `_ACTIONABLE_FINDING_RE` + `ACTIONABLE_FINDING_SHAPES` manifest |
+| 8 | NEW module `factory_invariants.py` (sibling of `factory_state.py`) | `run_invariant_checks(state, command, recommended, invariants=None) -> list[dict]` called from `run_factory.main()` tail; emits to stderr only |
 
 Each fix is independently mergeable. They share one new state.json field (`invariant_warnings`) and extend one existing field (`stages.<stage>.unresolved_concerns`).
 
