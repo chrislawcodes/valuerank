@@ -152,6 +152,54 @@
       "agent_id": null,
       "artifact_sha_at_time": "ef0fe4e58d4772e6f4d2656fd004979cddd4585ca188ef3c267af42e6d40b1f1",
       "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T21:28:17.092069Z",
+      "started_at": "2026-04-24T21:28:14.237656Z",
+      "ended_at": "2026-04-24T21:28:17.092069Z",
+      "duration_seconds": 2.854238,
+      "agent_id": null,
+      "artifact_sha_at_time": "04bbf261608c51ed0a516ee3ac440155fbd54ead89d078cf3e394e5dd4dc350d",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T21:28:20.084438Z",
+      "started_at": "2026-04-24T21:28:17.302383Z",
+      "ended_at": "2026-04-24T21:28:20.084438Z",
+      "duration_seconds": 2.781871,
+      "agent_id": null,
+      "artifact_sha_at_time": "04bbf261608c51ed0a516ee3ac440155fbd54ead89d078cf3e394e5dd4dc350d",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T21:29:04.787252Z",
+      "started_at": "2026-04-24T21:28:20.271736Z",
+      "ended_at": "2026-04-24T21:29:04.787252Z",
+      "duration_seconds": 44.515026,
+      "agent_id": null,
+      "artifact_sha_at_time": "04bbf261608c51ed0a516ee3ac440155fbd54ead89d078cf3e394e5dd4dc350d",
+      "parse_error": "no Gemini token stats found in stdout"
     }
   ],
   "stages": {
@@ -166,6 +214,17 @@
         "ef0fe4e58d4772e6f4d2656fd004979cddd4585ca188ef3c267af42e6d40b1f1"
       ],
       "initial_sha": "70c7715a932eaa6c8e8ac5f56422eaf2b5dd7ea3bdbd67841e9a4d584f670261"
+    },
+    "plan": {
+      "adversarial_rounds": 0,
+      "judge_rounds": 0,
+      "judge_verdicts": [],
+      "annotations": [],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [
+        "04bbf261608c51ed0a516ee3ac440155fbd54ead89d078cf3e394e5dd4dc350d"
+      ],
+      "initial_sha": "04bbf261608c51ed0a516ee3ac440155fbd54ead89d078cf3e394e5dd4dc350d"
     }
   },
   "invariant_warnings": [],
@@ -180,5 +239,6 @@
     "next": "author_plan",
     "reason": "spec checkpoint completed",
     "blockers": []
-  }
+  },
+  "plan_adversarial_rounds": 0
 }
