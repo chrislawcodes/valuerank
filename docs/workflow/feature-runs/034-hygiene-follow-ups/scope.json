@@ -1,0 +1,13 @@
+{
+  "paths": [
+    "cloud/apps/api/src/queue/handlers/run-state-reconcile.ts",
+    "cloud/apps/api/src/services/run",
+    "cloud/apps/api/src/services/run/scheduler.ts"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/api/src/queue/handlers/run-state-reconcile.ts",
+    "cloud/apps/api/src/services/run",
+    "cloud/apps/api/src/services/run/scheduler.ts",
+    "docs/workflow/feature-runs/034-hygiene-follow-ups"
+  ]
+}

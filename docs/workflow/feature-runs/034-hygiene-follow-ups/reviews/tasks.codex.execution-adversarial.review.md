@@ -1,0 +1,44 @@
+---
+reviewer: "codex"
+lens: "execution-adversarial"
+stage: "tasks"
+artifact_path: "docs/workflow/feature-runs/034-hygiene-follow-ups/tasks.md"
+artifact_sha256: "8e4669304a6ed6d6504ad2247bb3602be7294c849998f6dda556b8d7d8db3ff8"
+repo_root: "."
+git_head_sha: "42b7bb726d5992b7810c0346673e7f795365c4c9"
+git_base_ref: "origin/main"
+git_base_sha: "42b7bb726d5992b7810c0346673e7f795365c4c9"
+generation_method: "codex-runner"
+resolution_status: "open"
+resolution_note: ""
+raw_output_path: "docs/workflow/feature-runs/034-hygiene-follow-ups/reviews/tasks.codex.execution-adversarial.review.md.raw.txt"
+narrowed_artifact_path: ""
+narrowed_artifact_sha256: ""
+coverage_status: "full"
+coverage_note: ""
+---
+
+# Review: tasks execution-adversarial
+
+## Findings
+
+- **Medium** - **[UNVERIFIED]** `T1-1` and `T1-2` are internally at odds unless the tests explicitly reload the module between cases. The helper is memoized at module load, so changing `process.env.RUN_RECONCILE_WINDOW_DAYS` inside one test will not affect later assertions in the same process. As written, the test matrix is likely to be order-dependent or flaky.
+- **Medium** - **[UNVERIFIED]** `T4-1` says to use a parameterized Prisma raw query, but the predicate still embeds dynamic values inside `INTERVAL '<...> days'` and `INTERVAL '<...> seconds'`. That is not truly parameterized unless the implementation adds explicit casts or arithmetic. The task does not define that safely, so it risks either falling back to string interpolation or relying on driver-specific SQL tricks.
+- **Medium** - **[UNVERIFIED]** `T3-1` adds `siblingRunIds`, `siblingSuccessRates`, and `skippedUnderSampledRunIds`, but it never defines how those arrays line up when some siblings are skipped. The spec says skipped siblings are tracked, yet it also says to keep sibling summaries “as before.” That leaves the payload contract ambiguous and easy to misread downstream.
+- **Low** - **[UNVERIFIED]** `T2-2` only marks malformed content as `content-not-object` or `no-cost-data`, but it does not cover partially malformed numeric token data. The “otherwise ok” branch can still admit bad values like missing, string, or `NaN` token counts, which is a hidden failure mode for downstream accounting.
+- **Low** - `T3-2`’s `JSON.stringify(details).length < 4096` check is brittle. It ties correctness to incidental string length, so longer IDs or harmless payload growth can fail the test even when the detector logic is correct.
+
+## Residual Risks
+
+- The new scheduler and orphan-query predicates still depend on exact SQL parity across multiple files. If one predicate changes later, drift is likely unless a shared helper is introduced.
+- The anomaly payload changes in Wave 3 may break any consumer that assumes a fixed field set or fixed array shape, especially if skipped siblings are represented inconsistently.
+- The verification plan covers lint, build, and tests, but it does not explicitly require a targeted query-plan check for the new `LIMIT` and `COUNT(*)` paths beyond the single `EXPLAIN ANALYZE` note.
+
+## Runner Stats
+- total_input=0
+- total_output=0
+- total_tokens=0
+
+## Resolution
+- status: open
+- note: 
