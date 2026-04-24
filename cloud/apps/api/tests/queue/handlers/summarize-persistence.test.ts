@@ -29,6 +29,14 @@ describe('checkAllSummarized', () => {
     const result = await checkAllSummarized('run-1');
     expect(result).toBe(false);
     expect(mockFindMissingProbes).not.toHaveBeenCalled();
+    expect(mockCount.mock.calls[0]?.[0]).toEqual({
+      where: {
+        runId: 'run-1',
+        deletedAt: null,
+        summarizedAt: null,
+        summarizeFailedAt: null,
+      },
+    });
   });
 
   it('returns false when all transcripts are summarized but some probes are missing', async () => {

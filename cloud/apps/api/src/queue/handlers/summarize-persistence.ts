@@ -1,6 +1,7 @@
 import { db, Prisma, type SummaryCache } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 import { DEFAULT_JOB_OPTIONS } from '../types.js';
+import { findMissingProbes } from '../../services/run/coverage-completeness.js';
 import { triggerBasicAnalysis } from '../../services/analysis/index.js';
 import { maybeAdvanceRunStatus } from '../../services/run/index.js';
 import { deductSingleTranscriptBalance } from '../../services/budget/deduct.js';
@@ -54,6 +55,29 @@ export function isCacheRecordMatch(
     cache.parserVersion === parserVersion &&
     cache.modelId === modelId
   );
+}
+
+/**
+ * Returns true when a run has no live transcripts left and no missing probes.
+ *
+ * Failed summaries are terminal and must be excluded from the unsummarized count.
+ */
+export async function checkAllSummarized(runId: string): Promise<boolean> {
+  const unsummarizedCount = await db.transcript.count({
+    where: {
+      runId,
+      deletedAt: null,
+      summarizedAt: null,
+      summarizeFailedAt: null,
+    },
+  });
+
+  if (unsummarizedCount > 0) {
+    return false;
+  }
+
+  const missingProbes = await findMissingProbes(runId);
+  return missingProbes.length === 0;
 }
 
 /**
