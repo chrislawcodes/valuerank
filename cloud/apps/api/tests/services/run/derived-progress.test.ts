@@ -33,21 +33,10 @@ describe('computeRunProgress', () => {
       { status: 'SUCCESS', _count: { _all: 6 } },
       { status: 'FAILED', _count: { _all: 2 } },
     ]);
-    mockTranscriptCount.mockImplementation(async (args: unknown) => {
-      const { where } = args as {
-        where: { summarizeFailedAt?: unknown; summarizedAt?: unknown };
-      };
-
-      if (where.summarizeFailedAt != null) {
-        return 1;
-      }
-
-      if (where.summarizedAt != null) {
-        return 3;
-      }
-
-      return 5;
-    });
+    mockTranscriptCount
+      .mockResolvedValueOnce(5)
+      .mockResolvedValueOnce(3)
+      .mockResolvedValueOnce(1);
 
     const result = await computeRunProgress('run_123');
 

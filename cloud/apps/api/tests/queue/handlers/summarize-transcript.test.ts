@@ -128,6 +128,7 @@ type TranscriptShape = {
   decisionMetadata: unknown;
   definitionSnapshot: unknown;
   summarizedAt: Date | null;
+  summarizeFailedAt: Date | null;
 };
 
 function makeTranscript(overrides: Partial<TranscriptShape> = {}): TranscriptShape {
@@ -146,6 +147,7 @@ function makeTranscript(overrides: Partial<TranscriptShape> = {}): TranscriptSha
     decisionMetadata: null,
     definitionSnapshot: null,
     summarizedAt: null,
+    summarizeFailedAt: null,
     ...overrides,
   };
 }
