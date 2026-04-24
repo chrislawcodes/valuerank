@@ -242,6 +242,26 @@ def command_deliver(args: argparse.Namespace) -> int:
         print("deliver --override-judges requires --reason", file=sys.stderr)
         raise SystemExit(2)
 
+    # PR #751 / FF Housekeeping Slice 3: implementation-rule WARN.
+    # Surface Claude-implementation cases at deliver time so the postmortem
+    # author sees them before pressing merge. Advisory, not blocking.
+    if getattr(args, "override_implementation_rule", False):
+        reason = (getattr(args, "override_implementation_reason", None) or "").strip()
+        if len(reason) < 10:
+            print(
+                "deliver --override-implementation-rule requires "
+                "--override-implementation-reason of at least 10 characters",
+                file=sys.stderr,
+            )
+            raise SystemExit(2)
+        from factory_deliver import record_implementation_rule_override
+        record_implementation_rule_override(args.slug, reason)
+    else:
+        from factory_deliver import check_implementation_rule
+        triggered, message = check_implementation_rule(args.slug)
+        if triggered:
+            print(message, file=sys.stderr)
+
     auth = subprocess.run(["gh", "auth", "status", "--active"], text=True, capture_output=True)
     if auth.returncode != 0:
         raise SystemExit(trim_detail(auth.stderr or auth.stdout or "GitHub authentication is not ready"))

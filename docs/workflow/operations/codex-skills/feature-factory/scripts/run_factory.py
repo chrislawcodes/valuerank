@@ -187,12 +187,27 @@ def command_init(args: argparse.Namespace) -> int:
 def command_reconcile(args: argparse.Namespace) -> int:
     ensure_sync()
     plan_path = workflow_dir(args.slug) / "plan.md"
-    review_args = []
+
+    # PR #751 / FF Housekeeping Slice 2: route through factory_reconcile so
+    # frontmatter + body block + plan.md are pre-checked together. Three prior
+    # features (PR #744/#749/#750) hit verify_review_checkpoint drift errors;
+    # the helper raises pre-check failures BEFORE any partial write happens.
+    from factory_reconcile import reconcile_review_full  # noqa: E402
+    for review in args.review:
+        review_path = Path(review).resolve()
+        rc = reconcile_review_full(
+            review_path=review_path,
+            plan_path=plan_path,
+            status=args.status,
+            note=args.note,
+            update_review_script=UPDATE_REVIEW,
+            append_reconciliation_script=APPEND_RECONCILIATION,
+        )
+        if rc != 0:
+            return rc
+    review_args: list[str] = []
     for review in args.review:
         review_args.extend(["--review", str(Path(review).resolve())])
-
-    run([sys.executable, str(UPDATE_REVIEW), *review_args, "--status", args.status, "--note", args.note])
-    run([sys.executable, str(APPEND_RECONCILIATION), "--plan", str(plan_path), *review_args, "--status", args.status, "--note", args.note])
     run([sys.executable, str(VERIFY_RECONCILIATION), "--plan", str(plan_path), *review_args])
     _emit_next_action(args.slug, f"reconcile ({args.status})")
     return 0
@@ -453,6 +468,11 @@ def build_parser() -> argparse.ArgumentParser:
     deliver_parser.add_argument("--merge-when-green", action="store_true")
     deliver_parser.add_argument("--auto-merge", action="store_true")
     deliver_parser.add_argument("--dry-run", action="store_true")
+    deliver_parser.add_argument("--override-implementation-rule", action="store_true",
+        help="Suppress the implementation-rule WARN if Claude implemented "
+             "more than 200 lines without a Codex dispatch. Requires --override-implementation-reason.")
+    deliver_parser.add_argument("--override-implementation-reason",
+        help="Reason for overriding the implementation-rule WARN. Must be at least 10 characters.")
     deliver_parser.set_defaults(func=command_deliver)
 
     closeout_parser = subparsers.add_parser("closeout")

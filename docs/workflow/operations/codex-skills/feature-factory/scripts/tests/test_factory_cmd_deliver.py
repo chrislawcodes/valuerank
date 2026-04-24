@@ -126,6 +126,9 @@ class FactoryDeliverTests(unittest.TestCase):
                 FACTORY_STATE.atomic_json_write(manifest_path, {"healthy": True})
 
     def _base_patches(self):
+        # Import factory_deliver lazily so its globals can be patched here.
+        import importlib
+        factory_deliver = importlib.import_module("factory_deliver")
         return [
             patch.object(DELIVER, "ensure_sync", return_value=None),
             patch.object(DELIVER, "command_path", return_value=True),
@@ -135,6 +138,11 @@ class FactoryDeliverTests(unittest.TestCase):
             patch.object(DELIVER, "upstream_branch_name", return_value="origin/main"),
             patch.object(DELIVER, "git_output", return_value="head-sha"),
             patch.object(DELIVER, "commits_behind_upstream", return_value=0),
+            # PR #751: implementation-rule check makes its own git subprocess
+            # calls. Mock to a no-op for existing deliver tests so they don't
+            # trip on the new shell-out. Tests covering the rule live in
+            # test_implementation_rule.py.
+            patch.object(factory_deliver, "check_implementation_rule", return_value=(False, "")),
         ]
 
     def _run_deliver(

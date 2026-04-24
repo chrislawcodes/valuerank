@@ -1,0 +1,45 @@
+---
+reviewer: "codex"
+lens: "execution-adversarial"
+stage: "tasks"
+artifact_path: "docs/workflow/feature-runs/ff-housekeeping/tasks.md"
+artifact_sha256: "6a1cb7a4e3e5795f82b58a5507b831982ecd5a2562bdc79b74955193941f3bda"
+repo_root: "."
+git_head_sha: "0c36f43209746964038a3ba98b1d7a8f3817c5d8"
+git_base_ref: "origin/main"
+git_base_sha: "85a91778b3c3de491fd6b326879d29fa5dc6d0fa"
+generation_method: "codex-runner"
+resolution_status: "open"
+resolution_note: ""
+raw_output_path: "docs/workflow/feature-runs/ff-housekeeping/reviews/tasks.codex.execution-adversarial.review.md.raw.txt"
+narrowed_artifact_path: ""
+narrowed_artifact_sha256: ""
+coverage_status: "full"
+coverage_note: ""
+---
+
+# Review: tasks execution-adversarial
+
+## Findings
+
+- **High:** Slice 3’s trigger rule is logically ambiguous and likely wrong as written. `added > 200 AND codex_dispatches is empty AND no override entry exists OR the override's head_sha doesn't match current HEAD` needs parentheses. Without them, a stale override can make the WARN fire even when the change is under threshold or dispatches already exist. That is a spec bug, not an implementation detail.
+- **Medium:** Slice 4’s `--validation-only` path is internally contradictory. The test expects it to update review-file SHAs and append annotations, which are writes. A flag named `validation-only` should not mutate state, or the flag name is misleading enough to cause operator mistakes.
+- **Medium:** The artifact omits the repo rule to update `STATUS.md` when a meaningful task is complete. That is a concrete delivery gap: the feature can be “done” by tests and commits while project status stays stale.
+- **Medium [UNVERIFIED]:** Slice 1’s quota classifier is too loose. Treating `usage` as a context marker and scanning for 402/429 in an undefined “stderr block” risks classifying ordinary failures as quota exhaustion. The exact log shape is unknown, so this depends on the current codebase.
+- **Medium [UNVERIFIED]:** Slice 2’s pre-check only uses `os.access(..., W_OK)` on the files. That does not prove the later sequential writes can succeed, especially if the rewrite path needs directory write permission or temp-file replacement. The promised “return 2 before any write” behavior is therefore weaker than the task claims.
+- **Medium [UNVERIFIED]:** Slice 3’s `HEAD~50` fallback is a poor substitute for a real merge base. On short, rebased, or merge-heavy branches it can compare against the wrong ancestor and produce false WARNs or misses. The impact depends on repository history, so this is unverified.
+
+## Residual Risks
+
+- The artifact assumes existing helpers, state layout, and CLI wiring that were not provided. Several tasks may need adjustment once the actual code paths are inspected.
+- The git-based heuristics in Slice 3 are brittle by nature. Branch history, shallow clones, and merge commits can all change the result.
+- The filesystem checks and multi-file reconciliation flow are only partially guarded. Even with the planned pre-checks, mid-write drift can still happen and will rely on a later rerun to repair.
+
+## Runner Stats
+- total_input=0
+- total_output=0
+- total_tokens=0
+
+## Resolution
+- status: open
+- note: 

@@ -342,6 +342,7 @@ class CompletenessVetoTests(unittest.TestCase):
             }), \
             patch.object(DELIVER, "required_check_summary", return_value=("pass", [], "")), \
             patch.object(DELIVER.subprocess, "run", side_effect=gh_side_effect), \
+            patch.object(__import__("factory_deliver"), "check_implementation_rule", return_value=(False, "")), \
             patch.dict(DELIVER.os.environ, {"USER": "test-operator"}, clear=False):
             with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
                 rc = DELIVER.command_deliver(args)

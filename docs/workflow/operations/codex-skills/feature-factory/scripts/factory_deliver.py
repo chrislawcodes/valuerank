@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """GitHub CLI interaction, delivery records, and closeout text generation."""
 import json
+import os
 import subprocess
 import time
 from datetime import datetime, timezone
@@ -14,6 +15,8 @@ if str(_SCRIPT_DIR) not in sys.path:
 from factory_state import (  # noqa: E402
     REPO_ROOT,
     load_checkpoint_manifest,
+    load_workflow_state,
+    update_workflow_state,
 )
 
 REVIEW_SCRIPTS = REPO_ROOT / "docs" / "workflow" / "operations" / "codex-skills" / "review-lens" / "scripts"
@@ -24,6 +27,122 @@ from workflow_utils import resolve_stored_path  # noqa: E402
 
 from factory_git import current_branch_name, command_path  # noqa: E402
 from factory_stages import VERIFY_ON_CLOSEOUT_STAGES  # noqa: E402
+
+
+# ---------------------------------------------------------------------------
+# Implementation rule check (PR #751 / FF Housekeeping Slice 3)
+# ---------------------------------------------------------------------------
+
+_IMPLEMENTATION_RULE_THRESHOLD = 200
+_IMPLEMENTATION_RULE_CODE_GLOBS = ("*.py", "*.ts", "*.tsx", "*.js", "*.jsx")
+_IMPLEMENTATION_RULE_TEST_EXCLUDES = (
+    ":!**/test_*",
+    ":!**/*_test.py",
+    ":!**/tests/**",
+)
+
+
+def _resolve_branch_base() -> str | None:
+    """Find a sane branch base via origin/main → main → HEAD~50 fallback."""
+    for ref in ("origin/main", "main"):
+        result = subprocess.run(
+            ["git", "merge-base", ref, "HEAD"],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    result = subprocess.run(
+        ["git", "rev-parse", "HEAD~50"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0 and result.stdout.strip():
+        return result.stdout.strip()
+    return None
+
+
+def _added_code_lines(branch_base: str) -> int | None:
+    """Count added lines in code files (not tests, not docs) since branch_base."""
+    cmd = [
+        "git",
+        "diff",
+        "--numstat",
+        f"{branch_base}..HEAD",
+        "--",
+        *_IMPLEMENTATION_RULE_CODE_GLOBS,
+        *_IMPLEMENTATION_RULE_TEST_EXCLUDES,
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        return None
+    total_added = 0
+    for line in result.stdout.splitlines():
+        parts = line.split("\t")
+        if len(parts) < 2:
+            continue
+        added_str = parts[0]
+        if added_str == "-":
+            continue
+        try:
+            total_added += int(added_str)
+        except ValueError:
+            continue
+    return total_added
+
+
+def check_implementation_rule(slug: str) -> tuple[bool, str]:
+    """Return (triggered, message). See spec FR-012-016."""
+    branch_base = _resolve_branch_base()
+    if branch_base is None:
+        return (
+            False,
+            "implementation-rule check skipped: could not determine branch base.",
+        )
+    added = _added_code_lines(branch_base)
+    if added is None:
+        return (False, "implementation-rule check skipped: git diff failed.")
+    if added <= _IMPLEMENTATION_RULE_THRESHOLD:
+        return (False, "")
+
+    state = load_workflow_state(slug)
+    if state.get("codex_dispatches"):
+        return (False, "")
+
+    head_result = subprocess.run(
+        ["git", "rev-parse", "HEAD"], capture_output=True, text=True
+    )
+    head_sha = head_result.stdout.strip() if head_result.returncode == 0 else ""
+    override = state.get("implementation_rule_override") or {}
+    if isinstance(override, dict) and override.get("head_sha") == head_sha and head_sha:
+        return (False, "")
+
+    msg = (
+        f"⚠ implementation-rule: {added} non-test code lines added with no recorded "
+        f"Codex dispatch. The postmortem must explain why Claude implemented this PR. "
+        f"Suppress with --override-implementation-rule "
+        f"--override-implementation-reason \"<text>\" (>= 10 chars)."
+    )
+    return (True, msg)
+
+
+def record_implementation_rule_override(slug: str, reason: str) -> None:
+    head_result = subprocess.run(
+        ["git", "rev-parse", "HEAD"], capture_output=True, text=True
+    )
+    head_sha = head_result.stdout.strip() if head_result.returncode == 0 else ""
+    operator = os.environ.get("USER") or "unknown"
+    override = {
+        "at": int(time.time()),
+        "reason": reason.strip(),
+        "operator": operator,
+        "head_sha": head_sha,
+    }
+
+    def _mutate(state: dict) -> None:
+        state["implementation_rule_override"] = override
+
+    update_workflow_state(slug, _mutate)
 
 
 # ---------------------------------------------------------------------------
