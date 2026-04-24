@@ -1,0 +1,68 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": true,
+    "complete": true,
+    "question_count": 0,
+    "asked_count": 0,
+    "questions": [],
+    "assumptions": [
+      "Scope: 4 fixes only. Do NOT include auto-register veto changes (already in Feature A), embedding concern IDs (Feature C), or rename of repair_X_checkpoint (skipped).",
+      "Char budgets: default --max-artifact-chars 40000, --max-context-chars 50000, --max-total-chars 200000. Current defaults are lower and cause partial-coverage retries on normal-sized specs.",
+      "--validation-only: on checkpoint command. When set, skips adversarial review dispatch entirely and only re-verifies the manifest against the current artifact SHA. Lets post-cap edits re-seal the manifest without burning agent calls.",
+      "Restatement judge hardening: tighten the 'diminishing returns' rule so a bad-faith operator can't game it by filing HIGH findings early and downgrading later. Prompt update: require the judge to quote specific reasoning text from each prior round when citing severity drop, not just count severity transitions.",
+      "Discover CLI: change --non-goal and --acceptance-criteria to APPEND semantics when provided multiple times in one invocation. Current behavior silently keeps only the last value. Add a --clear-non-goals / --clear-acceptance-criteria flag for destructive cases.",
+      "All 183 existing runner tests must pass. Target ~200 after this feature.",
+      "Codex implements slices after spec/plan/tasks checkpoints healthy. Claude is orchestrator only."
+    ],
+    "summary": "Feature B = FF Quality of Life. Four runner polish items that don't fit Feature A (safety net) or Feature C (concern IDs): (1) raise default char budgets to reduce retry churn, (2) add --validation-only flag to let operators re-checkpoint past the 3-round cap without triggering adversarial reviews, (3) harden restatement judge prompt against severity-noise gaming, (4) fix discover CLI flag-overwrite footgun (multiple --non-goal flags in one invocation silently drop all but the last).",
+    "updated_at": 1777065008,
+    "answers": {},
+    "non_goals": [
+      "Structured JSON reviewer output (Risk R7 \u2014 larger project).",
+      "Completeness judge veto (Feature A \u2014 shipped in PR #749).",
+      "Review intermediate GC (Feature A \u2014 shipped in PR #749).",
+      "Embedding-based concern IDs (Feature C \u2014 deferred).",
+      "Rename repair_X_checkpoint (skipped \u2014 cosmetic, wide blast radius).",
+      "--force-advance CLI (subsumed by --override-judges + concern-lifecycle CLI from PR #744)."
+    ],
+    "acceptance_criteria": [
+      "discover --clear-non-goals replaces the list with empty; same for --clear-acceptance-criteria.",
+      "checkpoint --validation-only --stage X re-seals the manifest against current artifact SHA without dispatching any Codex or Gemini calls; exits 0 when SHA matches, exits 2 with a clear error when it doesn't.",
+      "Restatement judge prompt includes concrete quote-a-prior-round-finding requirement when citing severity drop; existing first-round-proceed-with-annotation rule preserved.",
+      "discover --non-goal X --non-goal Y --non-goal Z in one invocation stores all 3 values in state.non_goals[] (append semantics).",
+      "discover --acceptance-criteria X --acceptance-criteria Y in one invocation stores both values in state.acceptance_criteria[]."
+    ],
+    "unresolved": []
+  },
+  "delivery": {},
+  "dirty_overrides": {},
+  "checkpoint_fallback": {},
+  "parallel_analysis": {
+    "reviewed": false,
+    "found": false,
+    "note": "",
+    "updated_at": 0
+  },
+  "init_head_sha": "29476d513f705290496288c4e580ba6890bc87ad",
+  "token_usage": [],
+  "stages": {},
+  "invariant_warnings": [],
+  "schema_version": 1,
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  }
+}
