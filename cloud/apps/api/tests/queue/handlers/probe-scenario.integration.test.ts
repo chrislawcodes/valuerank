@@ -212,14 +212,18 @@ describe('probe-scenario integration', () => {
       const handler = createProbeScenarioHandler();
       await handler([createMockJob()]);
 
-      // Verify progress was updated
-      const run = await db.run.findUnique({
-        where: { id: TEST_IDS.run },
-      });
-
-      const progress = run?.progress as { completed: number; failed: number; total: number };
-      expect(progress.completed).toBe(1);
-      expect(progress.failed).toBe(0);
+      // Progress is now derived from ProbeResult rows (PR #745). The JSONB
+      // counter on Run no longer advances — query ProbeResult directly.
+      const [successes, failures] = await Promise.all([
+        db.probeResult.count({
+          where: { runId: TEST_IDS.run, status: 'SUCCESS', deletedAt: null },
+        }),
+        db.probeResult.count({
+          where: { runId: TEST_IDS.run, status: 'FAILED', deletedAt: null },
+        }),
+      ]);
+      expect(successes).toBe(1);
+      expect(failures).toBe(0);
     });
 
     it('stores definition snapshot in transcript', async () => {

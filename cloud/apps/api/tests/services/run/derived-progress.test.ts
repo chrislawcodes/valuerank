@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mockFindUnique = vi.fn();
-const mockGroupBy = vi.fn();
-const mockTranscriptCount = vi.fn();
+const { mockFindUnique, mockGroupBy, mockTranscriptCount } = vi.hoisted(() => ({
+  mockFindUnique: vi.fn(),
+  mockGroupBy: vi.fn(),
+  mockTranscriptCount: vi.fn(),
+}));
 
 vi.mock('@valuerank/db', () => ({
   db: {

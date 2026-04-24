@@ -184,11 +184,11 @@ describe('stall detection service', () => {
       data: { stalledModels: ['model-a'] },
     });
     expect(logger.warn).toHaveBeenCalledWith(
-      {
+      expect.objectContaining({
         runId: 'run-1',
         stalledModels: ['model-a'],
-        progress: { total: 6, completed: 3, failed: 1 },
-      },
+        progress: expect.objectContaining({ total: 6, completed: 3, failed: 1 }),
+      }),
       'Progress stall detected: incomplete progress with no pending jobs'
     );
   });

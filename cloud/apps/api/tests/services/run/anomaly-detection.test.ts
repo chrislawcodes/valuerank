@@ -1,11 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mockRunFindMany = vi.fn();
-const mockRunScenarioSelectionCount = vi.fn();
-const mockProbeResultCount = vi.fn();
-const mockProbeResultGroupBy = vi.fn();
-const mockTranscriptFindMany = vi.fn();
-const mockQueryRaw = vi.fn();
+const {
+  mockRunFindMany,
+  mockRunScenarioSelectionCount,
+  mockProbeResultCount,
+  mockProbeResultGroupBy,
+  mockTranscriptFindMany,
+  mockQueryRaw,
+} = vi.hoisted(() => ({
+  mockRunFindMany: vi.fn(),
+  mockRunScenarioSelectionCount: vi.fn(),
+  mockProbeResultCount: vi.fn(),
+  mockProbeResultGroupBy: vi.fn(),
+  mockTranscriptFindMany: vi.fn(),
+  mockQueryRaw: vi.fn(),
+}));
 
 vi.mock('@valuerank/db', () => ({
   db: {

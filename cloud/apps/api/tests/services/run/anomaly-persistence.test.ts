@@ -1,9 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mockRunFindUnique = vi.fn();
-const mockRunUpdate = vi.fn();
-const mockAnomalyUpsert = vi.fn();
-const mockAnomalyUpdateMany = vi.fn();
+const {
+  mockRunFindUnique,
+  mockRunUpdate,
+  mockAnomalyUpsert,
+  mockAnomalyUpdateMany,
+} = vi.hoisted(() => ({
+  mockRunFindUnique: vi.fn(),
+  mockRunUpdate: vi.fn(),
+  mockAnomalyUpsert: vi.fn(),
+  mockAnomalyUpdateMany: vi.fn(),
+}));
 
 vi.mock('@valuerank/db', () => ({
   db: {
