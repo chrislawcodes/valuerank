@@ -3,14 +3,14 @@ reviewer: "codex"
 lens: "edge-cases-adversarial"
 stage: "spec"
 artifact_path: "docs/workflow/feature-runs/ff-housekeeping/spec.md"
-artifact_sha256: "1fe8c29e6d371698154c77e2dcf33fe8254b6459aef37da8fe13ed20920ee8e1"
+artifact_sha256: "57c1da3e83611194b16f837e9c02efbdaf3b884439b2f0e0e6ee49c0a878c78f"
 repo_root: "."
-git_head_sha: "1a289b5df079426cc7cec40fe87a8b72eefa06de"
+git_head_sha: "abe37af6980410617bc8583fba79f3603ad9b221"
 git_base_ref: "origin/main"
 git_base_sha: "85a91778b3c3de491fd6b326879d29fa5dc6d0fa"
 generation_method: "codex-runner"
-resolution_status: "accepted"
-resolution_note: "HIGH (atomicity): FIXED. HIGH (sticky override): FIXED — head_sha scope. MEDIUM (line count summing): FIXED — explicit added-only. MEDIUM (smoke test): FIXED — explicit harness contract. MEDIUM (quota too broad): FIXED — combined patterns + canonical helper."
+resolution_status: "open"
+resolution_note: ""
 raw_output_path: "docs/workflow/feature-runs/ff-housekeeping/reviews/spec.codex.edge-cases-adversarial.review.md.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,17 +22,16 @@ coverage_note: ""
 
 ## Findings
 
-- **High**: Fix 1 is not actually atomic or fully idempotent as written. The spec says the helper should update frontmatter, the in-body Resolution block, and `plan.md`, but only the body rewrite is explicitly protected from duplication. There is no defined rollback path if the review write succeeds and the plan write fails, and no dedupe rule for the plan entry. That means the feature can still leave the exact drift it is supposed to eliminate.
-- **High**: Fix 4 makes the override sticky at slug scope. FR-012/FR-014 say the warning is suppressed whenever `implementation_rule_override` exists, and that override is stored in `state.json` with no expiry or per-deliver scope. One legitimate override can silently disable the safeguard for every later deliver on that slug.
-- **Medium**: The implementation-rule line-count heuristic is underspecified and likely wrong for refactors. FR-016 says to use `git diff --numstat` and “summed” counts, while the trigger condition is “non-test lines added > 200.” If “summed” includes deletions or churn from renames/moves, the warning will fire on large refactors that did not add 200 lines and miss large additions offset by deletions.
-- **Medium**: **[UNVERIFIED]** The `--validation-only` smoke test command is brittle because the spec does not define the working directory or how `run_factory.py` is located when the fixture is tmpdir-rooted. As written, `subprocess.run([sys.executable, "run_factory.py", ...])` only works if the repo root is the current directory or the test harness injects a matching path.
-- **Medium**: The quota-to-deferred mapping is too broad for a status-changing heuristic. FR-005/FR-006 rely on substring matches in stderr/stdout plus HTTP 402, so any unrelated failure that echoes “usage limit” or 402 can be downgraded to `deferred` even when the run was not quota-exhausted.
+- **Medium**: The quota classifier in **FR-005** is too broad and internally inconsistent. It treats `rate limit` plus `429/402` as quota exhaustion, which can turn a transient throttling failure into `deferred` and let the checkpoint advance when it should still fail. The rule also mixes substring matching with HTTP-status checks without defining precedence or where the status comes from, so the deferred-vs-failed boundary is unstable.
+- **Medium**: The reconcile story overstates its guarantee. The summary, **US1**, and **SC-001** imply the three artifacts will never drift after a reconcile call, but **FR-002** explicitly says the helper is not transactional and mid-write failures can still leave drift. That contradiction is not just wording; it can lead to impossible acceptance tests and false confidence about recovery.
+- **Medium**: The implementation-rule suppression path is under-specified and contradictory. **FR-012** says the warning depends on `codex_dispatches` for the current HEAD, but **FR-015** stores dispatches as a plain list with no `head_sha`, and **US4/SC-004** only talk about “a `codex_dispatches` entry.” A stale dispatch from an older commit could either suppress warnings forever or fail to suppress them when intended.
+- **[UNVERIFIED] Medium**: **FR-012** assumes `git merge-base origin/main HEAD` is always available and meaningful. The spec never defines a fallback for detached worktrees, shallow clones, or repos without an `origin/main` ref, so deliver may fail before it can emit the warning or may compare against the wrong base. This depends on runtime/repo setup, so it is not verified from the artifact alone.
 
 ## Residual Risks
 
-- The quota detector will still need maintenance if the upstream provider changes wording or status codes.
-- The implementation-rule warning is advisory, so a human can still ignore it even when it is correct.
-- The reconcile helper still depends on the review-file and plan-file formats staying stable; a later schema change will require updating this entry point in lockstep.
+- Mid-write reconcile drift can still happen by design. The spec accepts that and relies on rerun recovery, so operators still need a clear manual recovery path.
+- The quota rule still depends on current error wording. If OpenAI changes the stderr/stdout text, the classifier may stop deferring quota failures until the spec and tests are updated.
+- The implementation-rule check is advisory only. A user can still ignore the warning or override it, so the audit trail matters more than enforcement.
 
 ## Runner Stats
 - total_input=0
@@ -40,5 +39,5 @@ coverage_note: ""
 - total_tokens=0
 
 ## Resolution
-- status: accepted
-- note: HIGH (atomicity): FIXED. HIGH (sticky override): FIXED — head_sha scope. MEDIUM (line count summing): FIXED — explicit added-only. MEDIUM (smoke test): FIXED — explicit harness contract. MEDIUM (quota too broad): FIXED — combined patterns + canonical helper.
+- status: open
+- note: 

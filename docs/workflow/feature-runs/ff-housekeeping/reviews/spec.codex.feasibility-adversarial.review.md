@@ -3,14 +3,14 @@ reviewer: "codex"
 lens: "feasibility-adversarial"
 stage: "spec"
 artifact_path: "docs/workflow/feature-runs/ff-housekeeping/spec.md"
-artifact_sha256: "1fe8c29e6d371698154c77e2dcf33fe8254b6459aef37da8fe13ed20920ee8e1"
+artifact_sha256: "57c1da3e83611194b16f837e9c02efbdaf3b884439b2f0e0e6ee49c0a878c78f"
 repo_root: "."
-git_head_sha: "1a289b5df079426cc7cec40fe87a8b72eefa06de"
+git_head_sha: "abe37af6980410617bc8583fba79f3603ad9b221"
 git_base_ref: "origin/main"
 git_base_sha: "85a91778b3c3de491fd6b326879d29fa5dc6d0fa"
 generation_method: "codex-runner"
-resolution_status: "accepted"
-resolution_note: "HIGH (atomicity overpromise): FIXED — FR-002 now scopes honestly: pre-check + sequential write, NOT transactional. Idempotent re-run is the recovery path. MEDIUM (quota classifier): FIXED — single canonical _is_codex_quota_exhaustion helper, expanded patterns. MEDIUM (smoke test ambient state): FIXED — FR-009 now specifies cwd=REPO_ROOT + FACTORY_RUNS_ROOT env redirect. MEDIUM (override sticky): FIXED — override scoped to head_sha."
+resolution_status: "open"
+resolution_note: ""
 raw_output_path: "docs/workflow/feature-runs/ff-housekeeping/reviews/spec.codex.feasibility-adversarial.review.md.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,20 +22,15 @@ coverage_note: ""
 
 ## Findings
 
-1. **High**: The reconcile helper is described as atomic, and the acceptance criteria even require “all rolled back (or none committed)” on a write failure. But the spec only asks for a pre-check that write access exists before any write. That is not enough to guarantee atomicity across three separate files. If the first write succeeds and the second fails, or the process crashes mid-run, the three sources can still diverge. As written, the spec overpromises a consistency guarantee it does not actually design for.
-
-2. **Medium**: The Codex quota classifier is brittle and ambiguous. It relies on substring matches over stderr/stdout and also treats any `HTTP 402` as quota exhaustion. That can miss real quota failures if the wording changes, and it can misclassify unrelated output that happens to mention 402. The same logic is also duplicated across two paths, which makes drift likely. The spec needs one canonical classifier and a tighter failure contract.
-
-3. **Medium [UNVERIFIED]**: The `--validation-only` smoke test assumes a tmpdir-only subprocess can drive the full CLI path end-to-end. That may fail if the command expects repo-root-relative paths, a real `.git` checkout, or other ambient state outside the fixture. Because no code context was provided, this is unverified, but the spec should state the exact harness assumptions or the test may end up flaky or impossible to run reliably.
-
-4. **Medium**: The implementation-rule warning can be silenced too easily. The trigger is disabled if `state["codex_dispatches"]` is non-empty, even if that entry is unrelated to the current large Claude-authored change. That creates a bypass: one historical Codex dispatch can suppress warnings on later deliveries. If the goal is to surface provenance for the current deliverable, the signal needs to be scoped to the current feature run or current diff, not a persistent branch flag.
+- High: Fix 1 still presents the reconcile helper as if it makes the frontmatter, body block, and plan.md entry "atomic" and guarantees they "never drift", but FR-002 explicitly says the implementation is only pre-check plus sequential writes and can still drift on mid-write failure. That is not a minor wording issue. It means the spec asks for a stronger invariant than it actually defines, so a green test suite could still ship the exact two-of-three drift problem this feature is meant to remove.
+- High: FR-005 makes quota detection depend on both free-text substrings and HTTP status 402/429, but the spec only promises stderr/stdout from `run_codex_review`. It never says the subprocess will expose structured HTTP status, so the deferred path may never trigger for the real error string the feature is supposed to catch. The same rule also uses `rate limit`, which is broad enough to misclassify unrelated throttling as quota exhaustion.
+- Medium [UNVERIFIED]: Fix 4 assumes `git merge-base origin/main HEAD` is always available and that redirecting `FACTORY_RUNS_ROOT` is enough to isolate the smoke test. If the runner ever operates in a shallow clone, detached checkout, or reads any repo-relative path outside that env var, deliver can fail early or the smoke test can touch live files. The spec needs an explicit fallback and a stricter isolation contract.
 
 ## Residual Risks
 
-- Quota detection will still need maintenance if the provider changes its error text, even with tighter matching.
-- The implementation-rule remains advisory, so operators can still ignore it unless the workflow treats the warning as a hard review gate elsewhere.
-- Any cross-file reconciliation scheme still depends on crash behavior and filesystem semantics, so partial failure handling needs explicit design and test coverage.
-- The smoke test will likely be the first place environment assumptions show up, so it should be backed by a very explicit fixture contract.
+- The reconcile helper is still not transactional. A crash, signal, or disk-full error between the three writes can still leave drift until someone reruns it.
+- The quota classifier still depends on exact upstream wording. If the OpenAI error text changes, the deferred path will regress until the pattern is updated.
+- The implementation-rule warning is advisory by design. If an operator ignores it or uses the override path casually, the spec does not prevent that behavior.
 
 ## Runner Stats
 - total_input=0
@@ -43,5 +38,5 @@ coverage_note: ""
 - total_tokens=0
 
 ## Resolution
-- status: accepted
-- note: HIGH (atomicity overpromise): FIXED — FR-002 now scopes honestly: pre-check + sequential write, NOT transactional. Idempotent re-run is the recovery path. MEDIUM (quota classifier): FIXED — single canonical _is_codex_quota_exhaustion helper, expanded patterns. MEDIUM (smoke test ambient state): FIXED — FR-009 now specifies cwd=REPO_ROOT + FACTORY_RUNS_ROOT env redirect. MEDIUM (override sticky): FIXED — override scoped to head_sha.
+- status: open
+- note: 

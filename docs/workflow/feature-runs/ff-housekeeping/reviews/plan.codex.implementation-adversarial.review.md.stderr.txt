@@ -1,13 +1,28 @@
+Reading additional input from stdin...
+OpenAI Codex v0.125.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019dc1a0-6a24-7431-9546-d6c66488485a
+--------
+user
+Review this plan artifact using a implementation-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: plan.md
 # Plan — FF Housekeeping
-
-## Review Reconciliation
-
-- review: reviews/spec.codex.feasibility-adversarial.review.md | status: accepted | note: HIGH atomicity FIXED (honest scoping); MEDIUM classifier FIXED (canonical helper); MEDIUM smoke test FIXED (cwd + env contract); MEDIUM sticky override FIXED (head_sha scope).
-- review: reviews/spec.codex.edge-cases-adversarial.review.md | status: accepted | note: HIGH atomicity + HIGH override scope FIXED. MEDIUM line-count + smoke test + quota classifier FIXED.
-- review: reviews/spec.gemini.requirements-adversarial.review.md | status: accepted | note: CRITICAL F-01 (atomicity) FIXED. HIGH F-02 (noisy line count) FIXED. MEDIUM F-03 (branch_base) FIXED. MEDIUM F-04 (HTTP 429) FIXED. LOW F-05 + LOW F-06 FIXED.
-- review: reviews/plan.codex.architecture-adversarial.review.md | status: accepted | note: No actionable findings detected — auto-accepted
-- review: reviews/plan.gemini.testability-adversarial.review.md | status: accepted | note: No actionable findings detected — auto-accepted
-- review: reviews/plan.codex.implementation-adversarial.review.md | status: accepted | note: MEDIUM (smoke test patch won't see subprocess): FIXED — FR-009a requires factory_state to honor FF_FACTORY_RUNS_ROOT env var, subprocess test sets it, no module-local patches. MEDIUM (merge-base fallback): FIXED — try origin/main → main → HEAD~50, info note if all fail. MEDIUM (quota too broad): FIXED — explicit phrase patterns OR (HTTP 429/402 + Codex/OpenAI context marker), plain 'rate limit' doesn't qualify alone.
 
 ## Architecture
 
@@ -86,3 +101,22 @@ Total target: 209 + ~16 = ~225 tests.
 ## Out of scope
 
 Same as spec.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+## Findings
+- Medium: The `--validation-only` smoke test is not reliable as written if `FACTORY_RUNS_ROOT` is not already honored by the CLI. The fallback says to “patch at module level instead,” but that will not affect the subprocess the test launches, so the test would still hit real state or fail nondeterministically. This is a `[UNVERIFIED]` dependency on existing code behavior, but the plan needs a subprocess-visible override, not a process-local patch.
+- Medium: The implementation-rule check assumes `git merge-base origin/main HEAD` is always available and correct. In shallow clones, detached CI checkouts, or repos where `origin/main` is stale or absent, this can produce false warnings or miss real ones. This is `[UNVERIFIED]` because it depends on repo and CI setup, but the plan should define a fallback or fetch step.
+- Medium: The quota classifier is too broad. Treating any `rate limit` text or HTTP `429` as Codex quota exhaustion will misclassify transient throttling and unrelated API limits as `deferred`, which weakens triage and can hide real failures. The classifier needs a stricter match or explicit precedence rules.
+
+## Residual Risks
+- The 3-way reconcile flow is still non-transactional. A failure after one or two writes can leave the review, body, and plan temporarily out of sync until a rerun repairs it.
+- The plan still relies on heuristic text matching for external error output. If provider wording changes, the deferred mapping will drift.
+- The plan does not define how to handle concurrent reconcile or deliver invocations, so races can still reintroduce drift even if each individual step is idempotent.
+2026-04-24T22:33:56.851250Z ERROR codex_core::session: failed to record rollout items: thread 019dc1a0-6a24-7431-9546-d6c66488485a not found
+tokens used
+9,100

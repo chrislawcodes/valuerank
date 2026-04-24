@@ -8,7 +8,7 @@ approval: never
 sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
 reasoning effort: high
 reasoning summaries: none
-session id: 019dc19a-18f4-78a2-a64d-3a3e5f9d141a
+session id: 019dc19e-5ebd-72e1-98a9-b2152569f140
 --------
 user
 Review this spec artifact using a feasibility-adversarial lens.
@@ -83,7 +83,7 @@ PR #750 implemented in Claude after Codex quota exhausted. PR #744 had Claude im
 
 **Why P1**: this hit every prior feature run. Drift recovery is tedious and error-prone.
 
-**Independent test**: invoke `reconcile` with mocked I/O. Assert all three writes happen and the resulting state passes `verify_review_checkpoint` cleanly. Then mock one of the three writes to fail; assert all three rolled back (or none committed) — pre-check before write.
+**Independent test**: invoke `reconcile` with mocked I/O. Assert all three writes happen and the resulting state passes `verify_review_checkpoint` cleanly. Then mock the pre-check to fail (e.g. plan.md read-only); assert no writes happen and exit code is 2 — pre-check protects against the most common failure mode (read-only file, missing file). Mid-write atomicity is NOT promised (see FR-002 scoping note); idempotent re-run recovers.
 
 **Acceptance scenarios**:
 
@@ -141,30 +141,30 @@ PR #750 implemented in Claude after Codex quota exhausted. PR #744 had Claude im
 ### Fix 1 — Three-way reconcile helper
 
 - **FR-001**: New helper `factory_review.reconcile_review_full(review_path: Path, plan_path: Path, status: str, note: str) -> int` writes frontmatter, body Resolution block, AND plan.md reconciliation entry. Returns 0 on success, 2 on any pre-check or write failure.
-- **FR-002**: Pre-check pattern from PR #750: validate write access to all 3 target files before any write. Any failure → return 2 BEFORE any write.
+- **FR-002**: Pre-check pattern from PR #750: validate write access to all 3 target files before any write. Any failure → return 2 BEFORE any write. **Honest scoping (corrected per Codex HIGH + Gemini CRITICAL F-01):** this is pre-check + sequential write, NOT a transaction. Mid-write failures (disk full, crash, signal) can leave drift. The helper is a sharp tool to reduce manual drift recovery, not a guaranteed atomic primitive. Idempotent re-run is the recovery path for mid-write failures.
 - **FR-003**: `command_reconcile` and `command_auto_reconcile` route through `reconcile_review_full` instead of calling the lower-level scripts directly.
-- **FR-004**: Idempotent — calling the helper twice with the same inputs produces no second mutation. The body Resolution block is rewritten (not appended) so duplicates can't accumulate.
+- **FR-004**: Idempotent — calling the helper twice with the same inputs produces no second mutation. The body Resolution block is rewritten (not appended) so duplicates can't accumulate. The plan.md entry is dedup'd by `review:` line key — re-running with the same review path replaces the existing line in place.
 
 ### Fix 2 — Codex quota → deferred
 
-- **FR-005**: In `factory_review.run_codex_review` (or the equivalent failure-mapping path), detect quota patterns: case-insensitive match on the substrings `you've hit your usage limit` OR `usage_limit_exhausted` OR HTTP 402 status code in stderr/stdout.
-- **FR-006**: When matched, the review file MUST be written with `resolution_status: "deferred"` and `resolution_note: "Codex quota exhausted — re-run after quota refresh. See <link to provider quota page>."` (template — exact link can be left blank).
+- **FR-005**: In `factory_review.run_codex_review` (or the equivalent failure-mapping path), detect quota patterns from the subprocess stderr/stdout (NOT artifact content): case-insensitive match on `you've hit your usage limit` OR `usage_limit_exhausted` OR `rate limit` AND HTTP status 402 OR HTTP status 429. Combine into a single helper `_is_codex_quota_exhaustion(stderr: str, stdout: str) -> bool` so the classifier is canonical (per Codex feasibility MEDIUM #2 — one source of truth, not duplicated logic).
+- **FR-006**: When matched, the review file MUST be written with `resolution_status: "deferred"` and `resolution_note: "Codex quota exhausted — re-run after quota refresh. See https://chatgpt.com/codex/settings/usage"` (concrete link per Gemini LOW F-06 — no operator detective work required).
 - **FR-007**: When NOT matched (any other failure), behavior is unchanged: `resolution_status: "failed"`.
 - **FR-008**: Same detection logic in `update_review_resolution.py` if it independently sets failure status.
 
 ### Fix 3 — `--validation-only` smoke test
 
-- **FR-009**: New `tests/test_validation_only_smoke.py` test class drives the CLI via `subprocess.run([sys.executable, "run_factory.py", "checkpoint", "--slug", "...", "--stage", "spec", "--validation-only"])` against a tmpdir-rooted fixture.
+- **FR-009**: New `tests/test_validation_only_smoke.py` test class drives the CLI via `subprocess.run([sys.executable, str(SCRIPTS_DIR / "run_factory.py"), "checkpoint", "--slug", "...", "--stage", "spec", "--validation-only"], cwd=str(REPO_ROOT), env=...)` where the env sets `FACTORY_RUNS_ROOT` to the tmpdir's `feature-runs` subdir. The subprocess test runs from the real repo root so all imports resolve, but `feature-runs` is redirected via env so no real workflow data is touched. Per Codex MEDIUM and Gemini MEDIUM F-03 — explicit harness contract.
 - **FR-010**: Test fixture: minimal workflow with 3 review files at one drifted SHA, manifest pointing to all 3, current artifact at a new SHA. Assert exit 0 + all 3 reviews now at the new SHA + annotation appended in state.
 - **FR-011**: Negative test: `--validation-only --fast` → non-zero exit (mutex check fires from CLI argparse).
 
 ### Fix 4 — Claude-implementation rule
 
-- **FR-012**: New helper `factory_deliver.check_implementation_rule(slug: str, branch_base: str) -> tuple[bool, str]` returns `(triggered, message)`. Triggered when (a) `git diff --numstat <base>..HEAD` non-test lines added > 200 AND (b) `state["codex_dispatches"]` is empty/missing AND (c) no `state["implementation_rule_override"]` entry exists.
+- **FR-012**: New helper `factory_deliver.check_implementation_rule(slug: str) -> tuple[bool, str]` returns `(triggered, message)`. The `branch_base` is computed internally as `git merge-base origin/main HEAD` (per Gemini MEDIUM F-03 — explicit base, not parameter). Triggered when (a) > 200 added lines in **code** files (`*.py`, `*.ts`, `*.tsx`, `*.js`, `*.jsx` only — NOT `*.md`/`*.json`/`*.yaml` per Gemini HIGH F-02), AND (b) `state["codex_dispatches"]` for the current HEAD is empty/missing, AND (c) no `state["implementation_rule_override"]` entry whose `head_sha` matches current HEAD (per Codex edge-cases HIGH — override is scoped to current diff, not slug-sticky).
 - **FR-013**: `command_deliver` calls the helper. If triggered AND no override flag, prints a clear WARN to stderr but DOES NOT block delivery. Format: `⚠ implementation-rule: {N} non-test lines added with no recorded Codex dispatch. Postmortem must explain why Claude implemented. Suppress with --override-implementation-rule --override-implementation-reason "<text>"`.
-- **FR-014**: New flags `--override-implementation-rule` (store_true) and `--override-implementation-reason TEXT` on the `deliver` subcommand. When both passed, override is recorded in `state["implementation_rule_override"] = {at: epoch, reason: text, operator: env.USER or "unknown"}`. Reason MUST be non-blank (reuse the `_nonblank` helper from PR #744).
+- **FR-014**: New flags `--override-implementation-rule` (store_true) and `--override-implementation-reason TEXT` on the `deliver` subcommand. When both passed, override is recorded in `state["implementation_rule_override"] = {at: epoch, reason: text, operator: env.USER or "unknown", head_sha: git_head_sha()}`. Reason MUST be at least 10 characters AFTER strip (per Gemini LOW F-05 — defeats placeholder text). Override is scoped to `head_sha`; advancing the branch invalidates the override and the warning re-fires (per Codex edge-cases HIGH).
 - **FR-015**: Optional companion: a new `factory_state.record_codex_dispatch(slug, command_summary)` helper that prepends to `state["codex_dispatches"]`. NOT yet called from anywhere in this feature — the rule fires until something opts in. Documented as a follow-up integration point.
-- **FR-016**: Non-test line count uses git: `git diff --numstat {base}..HEAD -- ':!**/test_*' ':!**/*_test.py' ':!**/tests/**'` summed. Excludes test files via pathspec.
+- **FR-016**: Code-line count uses `git diff --numstat {base}..HEAD -- '*.py' '*.ts' '*.tsx' '*.js' '*.jsx' ':!**/test_*' ':!**/*_test.py' ':!**/tests/**'`. Sum the **added** column ONLY (first column of numstat output) — not deletions, not net change. Excludes test files via pathspec. Per Codex edge-cases MEDIUM — explicit "added only" addresses refactor-with-net-zero-change confusion.
 
 ### Shared
 
@@ -215,22 +215,15 @@ Return only markdown with exactly these sections:
 ## Residual Risks
 Do not include any other sections.
 codex
-I’m reviewing this as a spec-only feasibility check and will stay adversarial: I’m looking for places where the artifact overpromises behavior, leaves key cases undefined, or assumes implementation details it does not prove.
-codex
 ## Findings
-1. **High**: The reconcile helper is described as atomic, and the acceptance criteria even require “all rolled back (or none committed)” on a write failure. But the spec only asks for a pre-check that write access exists before any write. That is not enough to guarantee atomicity across three separate files. If the first write succeeds and the second fails, or the process crashes mid-run, the three sources can still diverge. As written, the spec overpromises a consistency guarantee it does not actually design for.
-
-2. **Medium**: The Codex quota classifier is brittle and ambiguous. It relies on substring matches over stderr/stdout and also treats any `HTTP 402` as quota exhaustion. That can miss real quota failures if the wording changes, and it can misclassify unrelated output that happens to mention 402. The same logic is also duplicated across two paths, which makes drift likely. The spec needs one canonical classifier and a tighter failure contract.
-
-3. **Medium [UNVERIFIED]**: The `--validation-only` smoke test assumes a tmpdir-only subprocess can drive the full CLI path end-to-end. That may fail if the command expects repo-root-relative paths, a real `.git` checkout, or other ambient state outside the fixture. Because no code context was provided, this is unverified, but the spec should state the exact harness assumptions or the test may end up flaky or impossible to run reliably.
-
-4. **Medium**: The implementation-rule warning can be silenced too easily. The trigger is disabled if `state["codex_dispatches"]` is non-empty, even if that entry is unrelated to the current large Claude-authored change. That creates a bypass: one historical Codex dispatch can suppress warnings on later deliveries. If the goal is to surface provenance for the current deliverable, the signal needs to be scoped to the current feature run or current diff, not a persistent branch flag.
+- High: Fix 1 still presents the reconcile helper as if it makes the frontmatter, body block, and plan.md entry "atomic" and guarantees they "never drift", but FR-002 explicitly says the implementation is only pre-check plus sequential writes and can still drift on mid-write failure. That is not a minor wording issue. It means the spec asks for a stronger invariant than it actually defines, so a green test suite could still ship the exact two-of-three drift problem this feature is meant to remove.
+- High: FR-005 makes quota detection depend on both free-text substrings and HTTP status 402/429, but the spec only promises stderr/stdout from `run_codex_review`. It never says the subprocess will expose structured HTTP status, so the deferred path may never trigger for the real error string the feature is supposed to catch. The same rule also uses `rate limit`, which is broad enough to misclassify unrelated throttling as quota exhaustion.
+- Medium [UNVERIFIED]: Fix 4 assumes `git merge-base origin/main HEAD` is always available and that redirecting `FACTORY_RUNS_ROOT` is enough to isolate the smoke test. If the runner ever operates in a shallow clone, detached checkout, or reads any repo-relative path outside that env var, deliver can fail early or the smoke test can touch live files. The spec needs an explicit fallback and a stricter isolation contract.
 
 ## Residual Risks
-- Quota detection will still need maintenance if the provider changes its error text, even with tighter matching.
-- The implementation-rule remains advisory, so operators can still ignore it unless the workflow treats the warning as a hard review gate elsewhere.
-- Any cross-file reconciliation scheme still depends on crash behavior and filesystem semantics, so partial failure handling needs explicit design and test coverage.
-- The smoke test will likely be the first place environment assumptions show up, so it should be backed by a very explicit fixture contract.
-2026-04-24T22:26:57.956087Z ERROR codex_core::session: failed to record rollout items: thread 019dc19a-18f4-78a2-a64d-3a3e5f9d141a not found
+- The reconcile helper is still not transactional. A crash, signal, or disk-full error between the three writes can still leave drift until someone reruns it.
+- The quota classifier still depends on exact upstream wording. If the OpenAI error text changes, the deferred path will regress until the pattern is updated.
+- The implementation-rule warning is advisory by design. If an operator ignores it or uses the override path casually, the spec does not prevent that behavior.
+2026-04-24T22:31:50.048171Z ERROR codex_core::session: failed to record rollout items: thread 019dc19e-5ebd-72e1-98a9-b2152569f140 not found
 tokens used
-11,252
+14,022
