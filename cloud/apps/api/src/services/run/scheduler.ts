@@ -175,7 +175,7 @@ async function hasRecoveryActivity(): Promise<boolean> {
   return orphanBacklog.length > 0;
 }
 
-async function enqueueRunStateReconcileJobs(): Promise<number> {
+export async function enqueueRunStateReconcileJobs(): Promise<number> {
   const boss = getBoss();
   const jobOptions = DEFAULT_JOB_OPTIONS['run_state_reconcile'];
   const windowDays = getReconcileWindowDays();
@@ -204,6 +204,19 @@ async function enqueueRunStateReconcileJobs(): Promise<number> {
           LIMIT 1
         )
         OR ${buildOrphanBacklogExistsClause()}
+        -- Also pick up runs that have lingering open anomalies, even if the
+        -- underlying transcript state is clean. Without this, an anomaly that
+        -- was created (source='default') but later self-cleared has no path
+        -- to auto-resolution -- the reconciler skips clean runs, so
+        -- syncAnomalies(..., [], 'default') never fires to mark it resolved.
+        OR EXISTS (
+          SELECT 1
+          FROM run_anomalies ra
+          WHERE ra.run_id = r.id
+            AND ra.resolved_at IS NULL
+            AND ra.source = 'default'
+          LIMIT 1
+        )
       )
   `;
 
