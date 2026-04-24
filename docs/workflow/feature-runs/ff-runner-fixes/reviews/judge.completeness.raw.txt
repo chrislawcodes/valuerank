@@ -1,1 +1,31 @@
-{"judge":"completeness","model":"gpt-5.4","verdict":"proceed","confidence":3,"reasoning":"spec.codex.edge-cases-adversarial.review#high-1 is addressed as an accepted limitation in the plan's Review Reconciliation note; it names the fenced-code-block case and says it is pinned with an explicit test, which is specific enough for this audit. spec.codex.feasibility-adversarial.review#high-1 is addressed in FR-011a (and reinforced in T3.5): existing unresolved_concerns entries without id are backfilled on read, including the run-033 fixture path, which is specific enough to implement. spec.gemini.requirements-adversarial.review#high-3 is addressed as an accepted limitation in Risk R7: the regex is format-bound, the durable fix is structured JSON findings, and the change is explicitly out of scope. All HIGH findings are either named mitigations or explicit limitation acknowledgements, so the gate can proceed.","evidence":[{"artifact":"docs/workflow/plans/feature-factory-runner-fixes.md","section":"Review Reconciliation","quote":"LOW fenced-code-block regex match — pinned as documented limitation with explicit test."},{"artifact":"docs/workflow/feature-runs/ff-runner-fixes/spec.md","section":"FR-011a","quote":"The loader MUST backfill the stable `id` field for any existing `unresolved_concerns` entry that lacks one ... so in-flight runs (including the run-033 fixture) transparently gain the new fields."},{"artifact":"docs/workflow/feature-runs/ff-runner-fixes/spec.md","section":"Residual risks (Risk R7)","quote":"accepted as a known architectural limitation; out of scope for this feature since it would require changes to reviewer prompts (explicitly out-of-scope per FR-013)."}],"timestamp":"2026-04-23T00:00:00Z"}
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "judge": "completeness",
+  "model": "gpt-5.4",
+  "verdict": "proceed",
+  "confidence": 4,
+  "reasoning": "spec.codex.edge-cases-adversarial.review#high-1 is explicitly acknowledged as a limitation in the review-spec test that says fenced-code lines are not excluded; that is specific enough as an accepted limitation, even though it is not a mitigation. spec.codex.feasibility-adversarial.review#high-1 is addressed by FR-011a in spec.md and the matching Slice 3 task: legacy unresolved_concerns get id backfill on read, so the new lifecycle works on run-033 without a migration. spec.gemini.requirements-adversarial.review#high-3 is addressed by Risk R7 in spec.md: it names the format-arms-race limitation, accepts it as known, and points to ACTIONABLE_FINDING_SHAPES plus tests as the near-term mitigation; that is specific enough to implement.",
+  "evidence": [
+    {
+      "artifact": "/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_review_specs.py",
+      "section": "test_fenced_code_block_with_literal_severity_line_is_documented_limitation",
+      "quote": "Known limitation: lines inside fenced code blocks are NOT excluded."
+    },
+    {
+      "artifact": "/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/spec.md",
+      "section": "FR-011a",
+      "quote": "backfill the stable `id` field for any existing `unresolved_concerns` entry"
+    },
+    {
+      "artifact": "/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/tasks.md",
+      "section": "T3.5",
+      "quote": "on read, backfill `id` for any existing `unresolved_concerns` entry that lacks one"
+    },
+    {
+      "artifact": "/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/spec.md",
+      "section": "Risk R7",
+      "quote": "The broadened regex is format-bound — we're in a review-format arms race."
+    }
+  ],
+  "timestamp": "2026-04-24T00:00:00-07:00"
+}

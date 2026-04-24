@@ -131,9 +131,11 @@ def recommended_next_action(
         return "repair_tasks_checkpoint"
     if not stages["diff"]["artifact_exists"]:
         return "dispatch_next_slice_to_codex"
-    if not stages["diff"]["manifest_exists"] or not stages["diff"]["healthy"]:
+    if not _judge_advanced("diff") and (
+        not stages["diff"]["manifest_exists"] or not stages["diff"]["healthy"]
+    ):
         return "repair_diff_checkpoint"
-    if diff_review_budget_state(slug).get("head_mismatch"):
+    if not _judge_advanced("diff") and diff_review_budget_state(slug).get("head_mismatch"):
         return "repair_diff_checkpoint"
     if not reconciliation_ok:
         return "reconcile_reviews"
@@ -152,7 +154,7 @@ def recommended_next_action(
         return "deliver"
     if not stages["closeout"]["manifest_exists"]:
         return "closeout"
-    if not stages["closeout"]["healthy"]:
+    if not _judge_advanced("closeout") and not stages["closeout"]["healthy"]:
         return "repair_closeout_checkpoint"
     postmortem_path = workflow_dir(slug) / "postmortem.md"
     if not postmortem_path.exists() or not postmortem_path.read_text(encoding="utf-8").strip():

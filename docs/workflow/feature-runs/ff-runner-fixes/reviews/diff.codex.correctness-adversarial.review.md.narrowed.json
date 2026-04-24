@@ -1,0 +1,23 @@
+{
+  "source_artifact_path": "docs/workflow/feature-runs/ff-runner-fixes/reviews/implementation.diff.patch",
+  "source_artifact_sha256": "132c64c0ca7f787053b67da38dfc7c89e02d81e31adfdfeb94a9106408e57a06",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/ff-runner-fixes/reviews/diff.codex.correctness-adversarial.review.md.narrowed.txt",
+  "narrowed_artifact_sha256": "e21e8bbfcd2c93f1e63b7616bb7d832f3b04994c86db94f6229854ddebcb90a9",
+  "strategy": "diff-head-tail-chunks",
+  "head_chunks": [
+    "diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py",
+    "diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py",
+    "diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_status.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_status.py",
+    "diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_invariants.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_invariants.py",
+    "diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_next_action.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_next_action.py",
+    "diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_pr_body.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_pr_body.py",
+    "diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_review_specs.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_review_specs.py"
+  ],
+  "tail_chunks": [
+    "diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_deliver.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_deliver.py",
+    "diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_invariants.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_invariants.py",
+    "diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_next_action.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_next_action.py",
+    "diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_review_specs.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_review_specs.py",
+    "diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_state.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_state.py"
+  ]
+}

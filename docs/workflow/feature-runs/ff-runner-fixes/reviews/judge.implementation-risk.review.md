@@ -5,12 +5,12 @@ stage: "spec"
 artifact_path: "docs/workflow/feature-runs/ff-runner-fixes/spec.md"
 artifact_sha256: "102b8ce6a77244e43e05a3efddf9007ef8b1a547fb68030d98fe5288c928d5b6"
 repo_root: "."
-git_head_sha: "846e5ba953723957aaffc5727ed3834dfe44a1a5"
+git_head_sha: "b4a15a9fb0cba0243fc33620c50b106b0b8970e9"
 git_base_ref: "origin/main"
 git_base_sha: "424c0605a8158acfe0b3912840a6c5b2da057c84"
 generation_method: "judge-panel"
-resolution_status: "accepted"
-resolution_note: "Judge panel exhausted after 3 rounds; advance taken per workflow policy. 2 unresolved concerns recorded and surfaced in PR body."
+resolution_status: "open"
+resolution_note: "Four load-bearing ambiguities would cause a competent implementer to guess or stop. (1) The plan explicitly defers the checkpoint CLI flags to a follow-up feature, but the spec's FR-004 requires them and T3.6 marks them done — the implem..."
 raw_output_path: "docs/workflow/feature-runs/ff-runner-fixes/reviews/judge.implementation-risk.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,17 +22,17 @@ coverage_note: ""
 
 ## Findings
 
-Four concrete snags would stop or mis-direct a cold implementer. Two are load-bearing blockers: (1) `workflow_utils.normalized_artifact_hash` is called in T3.3 with no documented signature or confirmation it exists — the implementer cannot write the reseal helper without knowing what arguments to pass. (2) The reconcile review note in the plan says 'init/discover/parallel added to _STATE_MUTATING_COMMANDS' but the authoritative frozenset in T2.4 omits `init` entirely and the spec FR-009 list also omits it — the implementer must guess whether to include it. Two additional risks are lower severity but still cause a wrong implementation on first read: (3) The plan architecture section says 'Emit to stderr when --json is in effect; stdout otherwise' which directly contradicts T2.3's 'Emit invariant warnings to stderr ALWAYS' — a cold reader of the plan hits the architecture section before the task detail. (4) T3.4 says to call the reseal helper from `factory_stages.prerequisite_failure` but FR-002 says the reseal happens 'lazily the next time the advance is taken' and the advance-gate lives in `factory_next_action.recommended_next_action` — the call-graph relationship between `prerequisite_failure` and 'taking an advance' is not documented, so the implementer cannot confirm the reseal fires at the right moment without reading existing source.
+Four load-bearing ambiguities would cause a competent implementer to guess or stop. (1) The plan explicitly defers the checkpoint CLI flags to a follow-up feature, but the spec's FR-004 requires them and T3.6 marks them done — the implementer has no signal which wins, and SC-005 requires the flags to pass. (2) T3.3 calls `workflow_utils.normalized_artifact_hash` but that function is never defined, described, or typed anywhere in the artifact chain — the implementer doesn't know its signature or what it hashes. (3) T3.3 resolves the manifest path via `factory_state.checkpoint_manifest_path(slug, stage)` — same problem: not defined anywhere. (4) FR-011b requires `_run_post_invariants` in `run_factory.main()` to call `recommended_next_action` with the same `reconciliation_state()` signal used by `status`, but the plan never shows how `main()` obtains `slug`, `stages`, and `reconciliation_ok` at that tail-hook point — the function signature requires all four arguments and the call-site assembly is unspecified.
 
 ## Residual Risks
 
-- TASKS :: Slice 3 — T3.3 - reads the current artifact sha via `workflow_utils.normalized_artifact_hash`
-- PLAN :: Review Reconciliation — edge-cases-adversarial note - M#1 init/discover/parallel added to _STATE_MUTATING_COMMANDS
-- TASKS :: Slice 2 — T2.4 - Contents (exact, in alphabetic order for easy diff): `auto-reconcile, block, checkpoint, closeout, deliver, discover, implement, judge, parallel, reconcile, repair`
-- PLAN :: Architecture — Fix 8 row - Emit to stderr when `--json` is in effect; stdout otherwise. Detect via a context var or explicit parameter threaded from the caller.
-- TASKS :: Slice 2 — T2.3 - Emit invariant warnings to stderr ALWAYS (no conditional routing). Preserve the module-level `JSON_MODE` flag + `set_json_mode()` API for back-compat but do not use them to switch emit targets — `_emit_target()` always returns `sys.stderr`.
-- TASKS :: Slice 3 — T3.4 - Call the reseal helper from `factory_stages.prerequisite_failure` when a prereq stage is unhealthy BUT has `judge_next_action == "advance"` — at that point the drift is about to be tolerated so we record it once.
-- SPEC :: FR-002 - This reseal happens lazily the next time the advance is taken (not eagerly at judge-write time).
+- plan :: Slice 3 — Fix 1 judge-advance honoring - `checkpoint --address/--defer/--dismiss <id>` CLI flags — **deferred to follow-up feature** (the data shape supports the lifecycle but the CLI is not wired in this PR).
+- tasks :: T3.6 - [x] T3.6 Add `checkpoint --address <id> --evidence <text>`, `--defer <id> --reason <text>`, `--dismiss <id> --reason <text>` flags and their handlers
+- spec :: SC-005 - a plan checkpoint against a spec whose judges left 1 concern MUST block until either `checkpoint --address <id> --evidence "<text>"` or `checkpoint --defer <id> --reason "<text>"` is invoked.
+- tasks :: T3.3 - reads the current artifact sha via `workflow_utils.normalized_artifact_hash`
+- tasks :: T3.3 - The manifest lives at `docs/workflow/feature-runs/<slug>/reviews/<stage>.checkpoint.json` (resolve via `factory_state.checkpoint_manifest_path(slug, stage)`)
+- spec :: FR-011b - `_run_post_invariants` in `run_factory.py` MUST compute `recommended_next_action` using the same `reconciliation_state()` signal as `status` and `command_checkpoint`, so the contradiction detector evaluates the user-visible next-action string.
+- spec :: FR-001 - `factory_next_action.recommended_next_action(slug, state, stages, reconciliation_ok) -> str`
 
 ## Verdict (structured)
 
@@ -41,49 +41,49 @@ Four concrete snags would stop or mis-direct a cold implementer. Two are load-be
   "confidence": 4,
   "evidence": [
     {
-      "artifact": "TASKS",
+      "artifact": "plan",
+      "quote": "`checkpoint --address/--defer/--dismiss <id>` CLI flags \u2014 **deferred to follow-up feature** (the data shape supports the lifecycle but the CLI is not wired in this PR).",
+      "section": "Slice 3 \u2014 Fix 1 judge-advance honoring"
+    },
+    {
+      "artifact": "tasks",
+      "quote": "[x] T3.6 Add `checkpoint --address <id> --evidence <text>`, `--defer <id> --reason <text>`, `--dismiss <id> --reason <text>` flags and their handlers",
+      "section": "T3.6"
+    },
+    {
+      "artifact": "spec",
+      "quote": "a plan checkpoint against a spec whose judges left 1 concern MUST block until either `checkpoint --address <id> --evidence \"<text>\"` or `checkpoint --defer <id> --reason \"<text>\"` is invoked.",
+      "section": "SC-005"
+    },
+    {
+      "artifact": "tasks",
       "quote": "reads the current artifact sha via `workflow_utils.normalized_artifact_hash`",
-      "section": "Slice 3 \u2014 T3.3"
+      "section": "T3.3"
     },
     {
-      "artifact": "PLAN",
-      "quote": "M#1 init/discover/parallel added to _STATE_MUTATING_COMMANDS",
-      "section": "Review Reconciliation \u2014 edge-cases-adversarial note"
+      "artifact": "tasks",
+      "quote": "The manifest lives at `docs/workflow/feature-runs/<slug>/reviews/<stage>.checkpoint.json` (resolve via `factory_state.checkpoint_manifest_path(slug, stage)`)",
+      "section": "T3.3"
     },
     {
-      "artifact": "TASKS",
-      "quote": "Contents (exact, in alphabetic order for easy diff): `auto-reconcile, block, checkpoint, closeout, deliver, discover, implement, judge, parallel, reconcile, repair`",
-      "section": "Slice 2 \u2014 T2.4"
+      "artifact": "spec",
+      "quote": "`_run_post_invariants` in `run_factory.py` MUST compute `recommended_next_action` using the same `reconciliation_state()` signal as `status` and `command_checkpoint`, so the contradiction detector evaluates the user-visible next-action string.",
+      "section": "FR-011b"
     },
     {
-      "artifact": "PLAN",
-      "quote": "Emit to stderr when `--json` is in effect; stdout otherwise. Detect via a context var or explicit parameter threaded from the caller.",
-      "section": "Architecture \u2014 Fix 8 row"
-    },
-    {
-      "artifact": "TASKS",
-      "quote": "Emit invariant warnings to stderr ALWAYS (no conditional routing). Preserve the module-level `JSON_MODE` flag + `set_json_mode()` API for back-compat but do not use them to switch emit targets \u2014 `_emit_target()` always returns `sys.stderr`.",
-      "section": "Slice 2 \u2014 T2.3"
-    },
-    {
-      "artifact": "TASKS",
-      "quote": "Call the reseal helper from `factory_stages.prerequisite_failure` when a prereq stage is unhealthy BUT has `judge_next_action == \"advance\"` \u2014 at that point the drift is about to be tolerated so we record it once.",
-      "section": "Slice 3 \u2014 T3.4"
-    },
-    {
-      "artifact": "SPEC",
-      "quote": "This reseal happens lazily the next time the advance is taken (not eagerly at judge-write time).",
-      "section": "FR-002"
+      "artifact": "spec",
+      "quote": "`factory_next_action.recommended_next_action(slug, state, stages, reconciliation_ok) -> str`",
+      "section": "FR-001"
     }
   ],
   "judge": "implementation-risk",
   "model": "claude-sonnet-4-5",
-  "reasoning": "Four concrete snags would stop or mis-direct a cold implementer. Two are load-bearing blockers: (1) `workflow_utils.normalized_artifact_hash` is called in T3.3 with no documented signature or confirmation it exists \u2014 the implementer cannot write the reseal helper without knowing what arguments to pass. (2) The reconcile review note in the plan says 'init/discover/parallel added to _STATE_MUTATING_COMMANDS' but the authoritative frozenset in T2.4 omits `init` entirely and the spec FR-009 list also omits it \u2014 the implementer must guess whether to include it. Two additional risks are lower severity but still cause a wrong implementation on first read: (3) The plan architecture section says 'Emit to stderr when --json is in effect; stdout otherwise' which directly contradicts T2.3's 'Emit invariant warnings to stderr ALWAYS' \u2014 a cold reader of the plan hits the architecture section before the task detail. (4) T3.4 says to call the reseal helper from `factory_stages.prerequisite_failure` but FR-002 says the reseal happens 'lazily the next time the advance is taken' and the advance-gate lives in `factory_next_action.recommended_next_action` \u2014 the call-graph relationship between `prerequisite_failure` and 'taking an advance' is not documented, so the implementer cannot confirm the reseal fires at the right moment without reading existing source.",
-  "timestamp": "2026-04-23T00:00:00Z",
+  "reasoning": "Four load-bearing ambiguities would cause a competent implementer to guess or stop. (1) The plan explicitly defers the checkpoint CLI flags to a follow-up feature, but the spec's FR-004 requires them and T3.6 marks them done \u2014 the implementer has no signal which wins, and SC-005 requires the flags to pass. (2) T3.3 calls `workflow_utils.normalized_artifact_hash` but that function is never defined, described, or typed anywhere in the artifact chain \u2014 the implementer doesn't know its signature or what it hashes. (3) T3.3 resolves the manifest path via `factory_state.checkpoint_manifest_path(slug, stage)` \u2014 same problem: not defined anywhere. (4) FR-011b requires `_run_post_invariants` in `run_factory.main()` to call `recommended_next_action` with the same `reconciliation_state()` signal used by `status`, but the plan never shows how `main()` obtains `slug`, `stages`, and `reconciliation_ok` at that tail-hook point \u2014 the function signature requires all four arguments and the call-site assembly is unspecified.",
+  "timestamp": "2026-04-24T00:00:00Z",
   "verdict": "block"
 }
 ```
 
 ## Resolution
-- status: accepted
-- note: Judge panel exhausted after 3 rounds; advance taken per workflow policy. 2 unresolved concerns recorded and surfaced in PR body.
+- status: open
+- note: Four load-bearing ambiguities would cause a competent implementer to guess or stop. (1) The plan explicitly defers the checkpoint CLI flags to a follow-up feature, but the spec's FR-004 requires them and T3.6 marks them done — the implem...

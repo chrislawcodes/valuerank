@@ -83,5 +83,7 @@
     "blockers": [
       "spec.adversarial_rounds >= 3"
     ]
-  }
+  },
+  "token_usage": [],
+  "invariant_warnings": []
 }
