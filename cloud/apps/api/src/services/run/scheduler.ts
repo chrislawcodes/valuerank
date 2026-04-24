@@ -20,8 +20,11 @@ import {
   runStartupRecovery
 } from './recovery.js';
 import { detectAndUpdateStalledRuns } from './stall-detection.js';
+import { RECENT_COMPLETED_RUN_WINDOW_DAYS } from './anomaly-thresholds.js';
 import { PROBE_QUEUE_DEPTH_PER_PROVIDER } from './start-queue.js';
 import { enqueueTopUpProbesSingleton } from '../../queue/handlers/top-up-probes.js';
+import { DEFAULT_JOB_OPTIONS } from '../../queue/types.js';
+import { getBoss } from '../../queue/boss.js';
 import { getQueueNameForModel } from '../parallelism/index.js';
 
 const log = createLogger('services:run:scheduler');
@@ -76,6 +79,81 @@ async function sweepRunForTopUp(run: { id: string; config: unknown }): Promise<b
   return false;
 }
 
+async function hasRecoveryActivity(): Promise<boolean> {
+  const activeRuns = await db.run.findFirst({
+    where: {
+      deletedAt: null,
+      status: { in: ['RUNNING', 'SUMMARIZING', 'PAUSED'] },
+    },
+    select: { id: true },
+  });
+
+  if (activeRuns !== null) {
+    return true;
+  }
+
+  const strandedTranscript = await db.transcript.findFirst({
+    where: {
+      deletedAt: null,
+      summarizedAt: null,
+      summarizeFailedAt: null,
+      run: {
+        deletedAt: null,
+        status: 'COMPLETED',
+        updatedAt: {
+          gt: new Date(Date.now() - RECENT_COMPLETED_RUN_WINDOW_DAYS * 24 * 60 * 60 * 1000),
+        },
+      },
+    },
+    select: { id: true },
+  });
+
+  return strandedTranscript !== null;
+}
+
+async function enqueueRunStateReconcileJobs(): Promise<number> {
+  const boss = getBoss();
+  const jobOptions = DEFAULT_JOB_OPTIONS['run_state_reconcile'];
+
+  const runs = await db.$queryRaw<Array<{ run_id: string }>>`
+    SELECT id AS run_id
+    FROM runs
+    WHERE deleted_at IS NULL
+      AND status IN ('RUNNING', 'SUMMARIZING', 'PAUSED')
+
+    UNION
+
+    SELECT DISTINCT r.id AS run_id
+    FROM runs r
+    JOIN transcripts t ON t.run_id = r.id
+    WHERE r.deleted_at IS NULL
+      AND r.status = 'COMPLETED'
+      AND r.updated_at > NOW() - (${RECENT_COMPLETED_RUN_WINDOW_DAYS} || ' days')::interval
+      AND t.deleted_at IS NULL
+      AND t.summarized_at IS NULL
+      AND t.summarize_failed_at IS NULL
+  `;
+
+  let queued = 0;
+  for (const run of runs) {
+    await boss.send(
+      'run_state_reconcile',
+      { runId: run.run_id },
+      {
+        ...jobOptions,
+        singletonKey: run.run_id,
+      }
+    );
+    queued++;
+  }
+
+  if (queued > 0) {
+    log.info({ queued }, 'Queued run_state_reconcile jobs');
+  }
+
+  return queued;
+}
+
 /**
  * Runs the recovery job, preventing concurrent executions.
  */
@@ -102,11 +180,14 @@ async function runRecoveryJob(): Promise<void> {
       }
     }
 
+    const reconcileQueued = await enqueueRunStateReconcileJobs();
+
     if (
       result.detected.length > 0 ||
       result.errors.length > 0 ||
       zombieResult.recovered > 0 ||
-      topUpQueued > 0
+      topUpQueued > 0 ||
+      reconcileQueued > 0
     ) {
       log.info(
         {
@@ -115,9 +196,14 @@ async function runRecoveryJob(): Promise<void> {
           zombiesKilled: zombieResult.recovered,
           errors: result.errors.length + zombieResult.errors,
           recoveryTopUps: topUpQueued,
+          reconcileQueued,
         },
         'Recovery job completed'
       );
+    }
+
+    if (await hasRecoveryActivity()) {
+      signalRunActivity();
     }
 
     if (stallResult.totalStalled > 0) {
@@ -224,6 +310,9 @@ export async function startRecoveryScheduler(): Promise<void> {
       );
       // If we found orphaned runs, keep recovery running
       hasActiveRuns = true;
+    }
+    if (!hasActiveRuns) {
+      hasActiveRuns = await hasRecoveryActivity();
     }
   } catch (error) {
     log.error({ error }, 'Startup recovery failed');

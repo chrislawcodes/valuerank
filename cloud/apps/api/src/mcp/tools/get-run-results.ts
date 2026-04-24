@@ -10,6 +10,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { db } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 import { buildMcpResponse, truncateArray } from '../../services/mcp/index.js';
+import { computeRunProgress } from '../../services/run/index.js';
 import { resolveTranscriptDecisionModel } from '../../graphql/queries/domain/decision-model.js';
 import { addToolRegistrar } from './registry.js';
 
@@ -37,12 +38,6 @@ const GetRunResultsInputSchema = {
     .min(0)
     .default(0)
     .describe('Number of results to skip for pagination (default: 0)'),
-};
-
-type ProgressShape = {
-  total: number;
-  completed: number;
-  failed: number;
 };
 
 type RunResultItem = {
@@ -82,33 +77,6 @@ type RunResultsOutput = {
   results: RunResultItem[];
 };
 
-function parseProgress(value: unknown): ProgressShape | null {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-    return null;
-  }
-  const record = value as Record<string, unknown>;
-  if (
-    typeof record.total !== 'number'
-    || typeof record.completed !== 'number'
-    || typeof record.failed !== 'number'
-  ) {
-    return null;
-  }
-  return {
-    total: record.total,
-    completed: record.completed,
-    failed: record.failed,
-  };
-}
-
-function calculatePercentComplete(progress: ProgressShape): number {
-  if (progress.total <= 0) return 0;
-  return Math.min(
-    100,
-    Math.round(((progress.completed + progress.failed) / progress.total) * 100)
-  );
-}
-
 function getStatusFilter(status: 'all' | 'success' | 'failed'): 'SUCCESS' | 'FAILED' | undefined {
   if (status === 'success') return 'SUCCESS';
   if (status === 'failed') return 'FAILED';
@@ -142,12 +110,11 @@ Limited to 8KB token budget.`,
       const statusFilter = getStatusFilter(args.status);
 
       try {
-        const run = await db.run.findUnique({
+        const run = await db.run.findFirst({
           where: { id: args.run_id, deletedAt: null },
           select: {
             id: true,
             status: true,
-            progress: true,
           },
         });
 
@@ -168,6 +135,7 @@ Limited to 8KB token budget.`,
 
         const where = {
           runId: args.run_id,
+          deletedAt: null,
           ...(args.model !== undefined && args.model !== '' ? { modelId: args.model } : {}),
           ...(statusFilter !== undefined ? { status: statusFilter } : {}),
         };
@@ -260,19 +228,22 @@ Limited to 8KB token budget.`,
           };
         });
 
-        const progress = parseProgress(run.progress);
+        const progress = await computeRunProgress(run.id);
         const data: RunResultsOutput = {
           runId: run.id,
           runStatus: run.status,
-          progress: progress === null
-            ? null
-            : {
-              total: progress.total,
-              completed: progress.completed,
-              failed: progress.failed,
-              pending: Math.max(0, progress.total - progress.completed - progress.failed),
-              percentComplete: calculatePercentComplete(progress),
-            },
+          progress: {
+            total: progress.total,
+            completed: progress.completed,
+            failed: progress.failed,
+            pending: Math.max(0, progress.total - progress.completed - progress.failed),
+            percentComplete: progress.total <= 0
+              ? 0
+              : Math.min(
+                100,
+                Math.round(((progress.completed + progress.failed) / progress.total) * 100)
+              ),
+          },
           pagination: {
             limit,
             offset,

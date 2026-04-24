@@ -1,0 +1,2549 @@
+diff --git a/cloud/apps/api/src/queue/handlers/handler-config.ts b/cloud/apps/api/src/queue/handlers/handler-config.ts
+index 0c2b8280..8d658e0e 100644
+--- a/cloud/apps/api/src/queue/handlers/handler-config.ts
++++ b/cloud/apps/api/src/queue/handlers/handler-config.ts
+@@ -11,6 +11,7 @@ import type {
+   AnalyzeBasicJobData,
+   ExpandScenariosJobData,
+   ComputeTokenStatsJobData,
++  RunStateReconcileJobData,
+   ProbeDeadLetterJobData,
+   AggregateAnalysisJobData,
+   RefreshDomainAnalysisSnapshotJobData,
+@@ -21,6 +22,7 @@ import { createAnalyzeBasicHandler } from './analyze-basic.js';
+ import { createExpandScenariosHandler } from './expand-scenarios.js';
+ import { createComputeTokenStatsHandler } from './compute-token-stats.js';
+ import { createProbeDeadLetterHandler } from './probe-dead-letter.js';
++import { createRunStateReconcileHandler } from './run-state-reconcile.js';
+ import { createAggregateAnalysisHandler } from './aggregate-analysis.js';
+ import { createRefreshDomainAnalysisSnapshotHandler } from './refresh-domain-analysis-snapshot.js';
+ 
+@@ -31,6 +33,7 @@ export type {
+   AnalyzeBasicJobData,
+   ExpandScenariosJobData,
+   ComputeTokenStatsJobData,
++  RunStateReconcileJobData,
+   ProbeDeadLetterJobData,
+   AggregateAnalysisJobData,
+   RefreshDomainAnalysisSnapshotJobData,
+@@ -97,6 +100,16 @@ export const handlerRegistrations: HandlerRegistration[] = [
+       );
+     },
+   },
++  {
++    name: 'run_state_reconcile',
++    register: async (boss, batchSize) => {
++      await boss.work<RunStateReconcileJobData>(
++        'run_state_reconcile',
++        { batchSize },
++        createRunStateReconcileHandler()
++      );
++    },
++  },
+   {
+     name: 'probe_dead_letter',
+     register: async (boss, batchSize) => {
+diff --git a/cloud/apps/api/src/queue/handlers/probe-dead-letter.ts b/cloud/apps/api/src/queue/handlers/probe-dead-letter.ts
+index d52db15c..02ace3e2 100644
+--- a/cloud/apps/api/src/queue/handlers/probe-dead-letter.ts
++++ b/cloud/apps/api/src/queue/handlers/probe-dead-letter.ts
+@@ -8,7 +8,7 @@
+ import type * as PgBoss from 'pg-boss';
+ import { createLogger } from '@valuerank/shared';
+ import type { ProbeDeadLetterJobData } from '../types.js';
+-import { incrementFailed } from '../../services/run/index.js';
++import { maybeAdvanceRunStatus } from '../../services/run/index.js';
+ import { recordProbeFailure } from '../../services/probe-result/index.js';
+ 
+ const log = createLogger('queue:probe-dead-letter');
+@@ -46,11 +46,11 @@ export function createProbeDeadLetterHandler(): PgBoss.WorkHandler<ProbeDeadLett
+           retryCount: 0,
+         });
+ 
+-        // Increment failed count for the run
+-        const { progress, status } = await incrementFailed(runId);
++        // Advance run state using derived counts
++        const result = await maybeAdvanceRunStatus(runId);
+ 
+         log.info(
+-          { jobId, runId, scenarioId, modelId, sampleIndex, progress, status },
++          { jobId, runId, scenarioId, modelId, sampleIndex, result },
+           'Dead letter job processed - run progress updated'
+         );
+       } catch (error) {
+diff --git a/cloud/apps/api/src/queue/handlers/probe-scenario/handler.ts b/cloud/apps/api/src/queue/handlers/probe-scenario/handler.ts
+index ea6c1725..301a56cf 100644
+--- a/cloud/apps/api/src/queue/handlers/probe-scenario/handler.ts
++++ b/cloud/apps/api/src/queue/handlers/probe-scenario/handler.ts
+@@ -16,7 +16,7 @@ import { createLogger } from '@valuerank/shared';
+ import type { ProbeScenarioJobData } from '../../types.js';
+ import { DEFAULT_JOB_OPTIONS } from '../../types.js';
+ import { spawnPython } from '../../spawn.js';
+-import { isRunPaused, isRunTerminal } from '../../../services/run/index.js';
++import { isRunPaused, isRunTerminal, maybeAdvanceRunStatus } from '../../../services/run/index.js';
+ import { createTranscript, validateTranscript } from '../../../services/transcript/index.js';
+ import type { CostSnapshot } from '../../../services/transcript/index.js';
+ import { recordProbeSuccess, recordProbeFailure } from '../../../services/probe-result/index.js';
+@@ -24,7 +24,7 @@ import { schedule as rateLimitSchedule } from '../../../services/rate-limiter/in
+ import { getProviderForModel } from '../../../services/parallelism/index.js';
+ import { ensureHealthCheck } from './health-check.js';
+ import { enqueueTopUpProbesSingleton } from '../top-up-probes.js';
+-import { formatWorkerErrorMessage, extractStoredTranscriptTokenUsage, applyProgressDelta, handleJobError } from './retry.js';
++import { formatWorkerErrorMessage, extractStoredTranscriptTokenUsage, handleJobError } from './retry.js';
+ import { PROBE_WORKER_PATH, fetchScenario, buildWorkerInput } from './worker-input.js';
+ import type { ProbeWorkerInput, ProbeWorkerOutput } from './worker-input.js';
+ 
+@@ -33,6 +33,26 @@ const log = createLogger('queue:probe-scenario');
+ // Retry limit from job options (default 3)
+ const RETRY_LIMIT = DEFAULT_JOB_OPTIONS['probe_scenario'].retryLimit ?? 3;
+ 
++async function enqueueSummarizeTranscriptSingleton(runId: string, transcriptId: string): Promise<void> {
++  const { getBoss } = await import('../../boss.js');
++  const { DEFAULT_JOB_OPTIONS: jobOptions } = await import('../../types.js');
++  const boss = getBoss();
++
++  await boss.send(
++    'summarize_transcript',
++    {
++      runId,
++      transcriptId,
++    },
++    {
++      ...jobOptions['summarize_transcript'],
++      singletonKey: transcriptId,
++    }
++  );
++
++  log.info({ runId, transcriptId }, 'Queued summarize job for late-arriving transcript');
++}
++
+ /**
+  * Process a single probe job.
+  * Extracted to allow parallel execution within batches.
+@@ -75,7 +95,6 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
+         transcriptId: true,
+       },
+     });
+-    const previousProbeStatus = existingProbeResult?.status ?? null;
+     const currentRetryCount = (job as unknown as { retrycount?: number }).retrycount ?? 0;
+ 
+     if (
+@@ -89,6 +108,7 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
+         'Skipping probe job - result already succeeded'
+       );
+       await enqueueTopUpProbesSingleton(runId);
++      await maybeAdvanceRunStatus(runId);
+       return;
+     }
+ 
+@@ -104,6 +124,7 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
+         'Skipping probe job - already terminal failed'
+       );
+       await enqueueTopUpProbesSingleton(runId);
++      await maybeAdvanceRunStatus(runId);
+       return;
+     }
+ 
+@@ -142,9 +163,16 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
+         outputTokens: tokenUsage.outputTokens,
+       });
+ 
+-      const { progress, status } = await applyProgressDelta(runId, previousProbeStatus, 'SUCCESS');
++      const advanceResult = await maybeAdvanceRunStatus(runId);
++      const currentRun = await db.run.findUnique({
++        where: { id: runId },
++        select: { status: true },
++      });
++      if (!advanceResult.enteredSummarizing && currentRun?.status === 'SUMMARIZING') {
++        await enqueueSummarizeTranscriptSingleton(runId, existingTranscript.id);
++      }
+       log.info(
+-        { jobId, runId, scenarioId, modelId, sampleIndex, transcriptId: existingTranscript.id, progress, status },
++        { jobId, runId, scenarioId, modelId, sampleIndex, transcriptId: existingTranscript.id, advanceResult },
+         'Recovered probe result from existing transcript'
+       );
+       return;
+@@ -201,8 +229,8 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
+           errorMessage,
+           retryCount: 0,
+         });
+-        const { progress, status } = await applyProgressDelta(runId, previousProbeStatus, 'FAILED');
+-        log.error({ jobId, runId, progress, status, error: err }, 'Probe job permanently failed');
++        const advanceResult = await maybeAdvanceRunStatus(runId);
++        log.error({ jobId, runId, advanceResult, error: err }, 'Probe job permanently failed');
+         return; // Complete job without retrying
+       }
+ 
+@@ -286,27 +314,21 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
+       outputTokens: output.transcript.totalOutputTokens,
+     });
+ 
+-    // Update progress based on status transition for this probe key
+-    const { progress, status } = await applyProgressDelta(runId, previousProbeStatus, 'SUCCESS');
++    const advanceResult = await maybeAdvanceRunStatus(runId);
++    const currentRun = await db.run.findUnique({
++      where: { id: runId },
++      select: { status: true },
++    });
+     await enqueueTopUpProbesSingleton(runId);
+ 
+-    // If run is already in SUMMARIZING state (late-arriving probe job),
+-    // queue a summarize job for this transcript immediately
+-    if (status === 'SUMMARIZING') {
+-      const { getBoss } = await import('../../boss.js');
+-      const { DEFAULT_JOB_OPTIONS: jobOptions } = await import('../../types.js');
+-      const boss = getBoss();
+-      if (boss !== null) {
+-        await boss.send('summarize_transcript', {
+-          runId,
+-          transcriptId: transcriptRecord.id,
+-        }, jobOptions['summarize_transcript']);
+-        log.info({ runId, transcriptId: transcriptRecord.id }, 'Queued summarize job for late-arriving transcript');
+-      }
++    // If the run is already summarizing, queue the just-created transcript.
++    // When we just entered SUMMARIZING in this call, queueSummarizeJobs already handled it.
++    if (!advanceResult.enteredSummarizing && currentRun?.status === 'SUMMARIZING') {
++      await enqueueSummarizeTranscriptSingleton(runId, transcriptRecord.id);
+     }
+ 
+     log.info(
+-      { jobId, runId, scenarioId, modelId, progress, status, turns: output.transcript.turns.length },
++      { jobId, runId, scenarioId, modelId, sampleIndex, transcriptId: transcriptRecord.id, advanceResult, turns: output.transcript.turns.length },
+       'Probe job completed'
+     );
+   } catch (error) {
+diff --git a/cloud/apps/api/src/queue/handlers/probe-scenario/retry.ts b/cloud/apps/api/src/queue/handlers/probe-scenario/retry.ts
+index 635b2bb7..2c8f4726 100644
+--- a/cloud/apps/api/src/queue/handlers/probe-scenario/retry.ts
++++ b/cloud/apps/api/src/queue/handlers/probe-scenario/retry.ts
+@@ -3,8 +3,7 @@
+  */
+ 
+ import { createLogger } from '@valuerank/shared';
+-import { db } from '@valuerank/db';
+-import { updateProgress } from '../../../services/run/index.js';
++import { maybeAdvanceRunStatus } from '../../../services/run/index.js';
+ import { recordProbeFailure } from '../../../services/probe-result/index.js';
+ import { enqueueTopUpProbesSingleton } from '../top-up-probes.js';
+ 
+@@ -82,26 +81,6 @@ export function formatWorkerErrorMessage(error: { message: string; details?: str
+   return `${baseMessage} | ${details}`;
+ }
+ 
+-export function getProgressDelta(
+-  previousStatus: ProbeStatus,
+-  nextStatus: 'SUCCESS' | 'FAILED'
+-): { incrementCompleted: number; incrementFailed: number } {
+-  if (previousStatus === nextStatus) {
+-    return { incrementCompleted: 0, incrementFailed: 0 };
+-  }
+-
+-  if (previousStatus === null) {
+-    return nextStatus === 'SUCCESS'
+-      ? { incrementCompleted: 1, incrementFailed: 0 }
+-      : { incrementCompleted: 0, incrementFailed: 1 };
+-  }
+-
+-  // Transition between terminal states (rare but possible if recovered/overridden)
+-  return nextStatus === 'SUCCESS'
+-    ? { incrementCompleted: 1, incrementFailed: -1 }
+-    : { incrementCompleted: -1, incrementFailed: 1 };
+-}
+-
+ export function extractStoredTranscriptTokenUsage(
+   content: unknown,
+   fallbackTokenCount: number
+@@ -144,20 +123,6 @@ export function extractStoredTranscriptTokenUsage(
+   return { inputTokens: 0, outputTokens: fallbackTokenCount };
+ }
+ 
+-export async function applyProgressDelta(
+-  runId: string,
+-  previousStatus: ProbeStatus,
+-  nextStatus: 'SUCCESS' | 'FAILED'
+-): Promise<{ progress: { total: number; completed: number; failed: number } | null; status: string | null }> {
+-  const delta = getProgressDelta(previousStatus, nextStatus);
+-  if (delta.incrementCompleted === 0 && delta.incrementFailed === 0) {
+-    return { progress: null, status: null };
+-  }
+-
+-  const updated = await updateProgress(runId, delta);
+-  return { progress: updated.progress, status: updated.status };
+-}
+-
+ type ProbeResultKey = {
+   runId_scenarioId_modelId_sampleIndex: {
+     runId: string;
+@@ -184,7 +149,7 @@ export async function handleJobError(
+   sampleIndex: number,
+   retryCount: number,
+   retryLimit: number,
+-  probeResultKey: ProbeResultKey
++  _probeResultKey: ProbeResultKey
+ ): Promise<boolean> {
+   const retryable = isRetryableError(error);
+   const maxRetriesReached = retryCount >= retryLimit;
+@@ -198,10 +163,6 @@ export async function handleJobError(
+     try {
+       const errorMessage = error instanceof Error ? error.message : String(error);
+       const errorCode = !retryable ? 'NON_RETRYABLE' : 'MAX_RETRIES_EXCEEDED';
+-      const existingProbeResult = await db.probeResult.findUnique({
+-        where: probeResultKey,
+-        select: { status: true },
+-      });
+       await recordProbeFailure({
+         runId,
+         scenarioId,
+@@ -211,14 +172,10 @@ export async function handleJobError(
+         errorMessage,
+         retryCount,
+       });
+-      const { progress, status } = await applyProgressDelta(
+-        runId,
+-        existingProbeResult?.status ?? null,
+-        'FAILED'
+-      );
++      const result = await maybeAdvanceRunStatus(runId);
+       await enqueueTopUpProbesSingleton(runId);
+       log.error(
+-        { jobId, runId, scenarioId, modelId, progress, status, retryCount, err: error },
++        { jobId, runId, scenarioId, modelId, result, retryCount, err: error },
+         'Probe job permanently failed'
+       );
+     } catch (progressError) {
+diff --git a/cloud/apps/api/src/queue/handlers/run-state-reconcile.ts b/cloud/apps/api/src/queue/handlers/run-state-reconcile.ts
+new file mode 100644
+index 00000000..cc45e00e
+--- /dev/null
++++ b/cloud/apps/api/src/queue/handlers/run-state-reconcile.ts
+@@ -0,0 +1,281 @@
++import type * as PgBoss from 'pg-boss';
++import { db } from '@valuerank/db';
++import { createLogger } from '@valuerank/shared';
++import { DEFAULT_JOB_OPTIONS, type RunStateReconcileJobData } from '../types.js';
++import { maybeAdvanceRunStatus } from '../../services/run/index.js';
++import {
++  detectModelTranscriptShortfall,
++  detectPairAsymmetry,
++  detectScheduledCountMismatch,
++  detectStrandedTranscript,
++  detectSummarizingStall,
++  findOrphanTranscripts,
++  type AnomalyDraft,
++  type RunSnapshot,
++} from '../../services/run/anomaly-detection.js';
++import {
++  persistAnomalyDrafts,
++  repairScheduledCount,
++  resolveAnomaly,
++} from '../../services/run/anomaly-persistence.js';
++import { recordProbeSuccess } from '../../services/probe-result/index.js';
++
++const log = createLogger('queue:run-state-reconcile');
++
++function extractTranscriptTokenUsage(
++  content: unknown,
++  fallbackTokenCount: number,
++): { inputTokens: number; outputTokens: number } {
++  if (content === null || content === undefined || typeof content !== 'object') {
++    return { inputTokens: 0, outputTokens: fallbackTokenCount };
++  }
++
++  const record = content as Record<string, unknown>;
++  const snapshot = record.costSnapshot;
++  if (snapshot !== null && snapshot !== undefined && typeof snapshot === 'object') {
++    const snap = snapshot as Record<string, unknown>;
++    if (typeof snap.inputTokens === 'number' && typeof snap.outputTokens === 'number') {
++      return { inputTokens: snap.inputTokens, outputTokens: snap.outputTokens };
++    }
++  }
++
++  const turns = Array.isArray(record.turns) ? record.turns : [];
++  let inputTokens = 0;
++  let outputTokens = 0;
++  let found = false;
++
++  for (const turn of turns) {
++    if (turn === null || typeof turn !== 'object') {
++      continue;
++    }
++
++    const turnRecord = turn as Record<string, unknown>;
++    if (typeof turnRecord.inputTokens === 'number') {
++      inputTokens += turnRecord.inputTokens;
++      found = true;
++    }
++    if (typeof turnRecord.outputTokens === 'number') {
++      outputTokens += turnRecord.outputTokens;
++      found = true;
++    }
++  }
++
++  if (!found) {
++    return { inputTokens: 0, outputTokens: fallbackTokenCount };
++  }
++
++  return { inputTokens, outputTokens };
++}
++
++async function enqueueSummarizeTranscriptJob(runId: string, transcriptId: string): Promise<void> {
++  const boss = (await import('../boss.js')).getBoss();
++  await boss.send(
++    'summarize_transcript',
++    { runId, transcriptId },
++    {
++      ...DEFAULT_JOB_OPTIONS['summarize_transcript'],
++      singletonKey: transcriptId,
++    }
++  );
++}
++
++async function syncAnomalies(runId: string, type: AnomalyDraft['type'], drafts: AnomalyDraft[]): Promise<void> {
++  await persistAnomalyDrafts(runId, drafts);
++
++  const currentSubjects = new Set(drafts.map((draft) => draft.subject));
++  const existing = await db.runAnomaly.findMany({
++    where: { runId, type },
++    select: { subject: true },
++  });
++
++  for (const anomaly of existing) {
++    if (!currentSubjects.has(anomaly.subject)) {
++      await resolveAnomaly({ runId, type, subject: anomaly.subject });
++    }
++  }
++}
++
++async function reconstructOrphans(runId: string): Promise<{ orphanIds: string[]; failedIds: string[]; reconstructedCount: number }> {
++  const orphans = await findOrphanTranscripts(runId);
++  const failedIds: string[] = [];
++  let reconstructedCount = 0;
++
++  for (const orphan of orphans) {
++    if (orphan.scenarioId === null) {
++      failedIds.push(orphan.id);
++      continue;
++    }
++
++    try {
++      const tokenUsage = extractTranscriptTokenUsage(orphan.content, orphan.tokenCount);
++      await recordProbeSuccess({
++        runId,
++        scenarioId: orphan.scenarioId,
++        modelId: orphan.modelId,
++        sampleIndex: orphan.sampleIndex,
++        transcriptId: orphan.id,
++        durationMs: orphan.durationMs,
++        inputTokens: tokenUsage.inputTokens,
++        outputTokens: tokenUsage.outputTokens,
++      });
++      reconstructedCount++;
++    } catch (error) {
++      failedIds.push(orphan.id);
++      log.warn({ runId, transcriptId: orphan.id, err: error }, 'Failed to reconstruct orphan transcript');
++    }
++  }
++
++  return {
++    orphanIds: orphans.map((orphan) => orphan.id),
++    failedIds,
++    reconstructedCount,
++  };
++}
++
++async function getRunSnapshot(runId: string): Promise<RunSnapshot | null> {
++  return db.run.findUnique({
++    where: { id: runId },
++    select: {
++      id: true,
++      status: true,
++      updatedAt: true,
++      config: true,
++      progress: true,
++      deletedAt: true,
++    },
++  });
++}
++
++export function createRunStateReconcileHandler(): PgBoss.WorkHandler<RunStateReconcileJobData> {
++  return async (jobs: PgBoss.Job<RunStateReconcileJobData>[]) => {
++    if (jobs.length === 0) {
++      return;
++    }
++
++    await Promise.all(
++      jobs.map(async (job) => {
++        const runId = job.data.runId;
++        log.debug({ jobId: job.id, runId }, 'Reconciling run state');
++
++        let run = await getRunSnapshot(runId);
++        if (run === null || run.deletedAt !== null) {
++          log.debug({ runId }, 'Skipping reconcile for missing or deleted run');
++          return;
++        }
++
++        if (run.status === 'FAILED' || run.status === 'CANCELLED') {
++          log.debug({ runId, status: run.status }, 'Skipping reconcile for terminal run');
++          return;
++        }
++
++        try {
++          const stranded = await detectStrandedTranscript(runId);
++          if (stranded !== null) {
++            const transcripts = await db.transcript.findMany({
++              where: {
++                runId,
++                deletedAt: null,
++                summarizedAt: null,
++                summarizeFailedAt: null,
++              },
++              select: { id: true },
++              orderBy: { createdAt: 'asc' },
++            });
++
++            for (const transcript of transcripts) {
++              await enqueueSummarizeTranscriptJob(runId, transcript.id);
++            }
++
++            await syncAnomalies(runId, stranded.type, [stranded]);
++          } else {
++            await syncAnomalies(runId, 'STRANDED_TRANSCRIPT', []);
++          }
++        } catch (error) {
++          log.warn({ runId, err: error }, 'Late transcript rescue failed');
++        }
++
++        if (run.status === 'RUNNING' || run.status === 'SUMMARIZING' || run.status === 'PAUSED') {
++          try {
++            const advanceResult = await maybeAdvanceRunStatus(runId);
++            log.debug({ runId, advanceResult }, 'Reconciled run state');
++            run = (await getRunSnapshot(runId)) ?? run;
++          } catch (error) {
++            log.warn({ runId, err: error }, 'Failed to advance run state during reconciliation');
++          }
++        }
++
++        try {
++          const orphanResult = await reconstructOrphans(runId);
++          if (orphanResult.failedIds.length > 0) {
++            await syncAnomalies(runId, 'ORPHAN_TRANSCRIPT', [{
++              type: 'ORPHAN_TRANSCRIPT',
++              subject: '',
++              details: {
++                transcriptIds: orphanResult.failedIds,
++              },
++            }]);
++          } else {
++            await syncAnomalies(runId, 'ORPHAN_TRANSCRIPT', []);
++          }
++
++          if (orphanResult.reconstructedCount > 0 && run.status !== 'COMPLETED') {
++            const postRepairAdvance = await maybeAdvanceRunStatus(runId);
++            log.debug({ runId, postRepairAdvance }, 'Advanced run after orphan repair');
++            run = (await getRunSnapshot(runId)) ?? run;
++          }
++        } catch (error) {
++          log.warn({ runId, err: error }, 'Orphan transcript reconciliation failed');
++        }
++
++        if (run.status === 'COMPLETED') {
++          try {
++            const pair = await detectPairAsymmetry(run);
++            await syncAnomalies(runId, 'PAIR_ASYMMETRY', pair === null ? [] : [pair]);
++          } catch (error) {
++            log.warn({ runId, err: error }, 'Pair asymmetry detection failed');
++          }
++
++          try {
++            const shortfalls = await detectModelTranscriptShortfall(run);
++            await syncAnomalies(runId, 'MODEL_TRANSCRIPT_SHORTFALL', shortfalls);
++          } catch (error) {
++            log.warn({ runId, err: error }, 'Model shortfall detection failed');
++          }
++        } else {
++          try {
++            const pair = await detectPairAsymmetry(run);
++            await syncAnomalies(runId, 'PAIR_ASYMMETRY', pair === null ? [] : [pair]);
++          } catch (error) {
++            log.warn({ runId, err: error }, 'Pair asymmetry detection failed');
++          }
++
++          try {
++            const stall = await detectSummarizingStall(run);
++            await syncAnomalies(runId, 'SUMMARIZING_STALL', stall === null ? [] : [stall]);
++          } catch (error) {
++            log.warn({ runId, err: error }, 'Summarizing stall detection failed');
++          }
++
++          try {
++            const scheduled = await detectScheduledCountMismatch(run);
++            await syncAnomalies(runId, 'SCHEDULED_COUNT_MISMATCH', scheduled.draft === null ? [] : [scheduled.draft]);
++            if (scheduled.draft !== null) {
++              await repairScheduledCount(runId, scheduled.canonicalTotal);
++            }
++          } catch (error) {
++            log.warn({ runId, err: error }, 'Scheduled count mismatch detection failed');
++          }
++
++          try {
++            const shortfalls = await detectModelTranscriptShortfall(run);
++            await syncAnomalies(runId, 'MODEL_TRANSCRIPT_SHORTFALL', shortfalls);
++          } catch (error) {
++            log.warn({ runId, err: error }, 'Model shortfall detection failed');
++          }
++        }
++
++        log.info({ runId }, 'Run reconciliation completed');
++      })
++    );
++  };
++}
+diff --git a/cloud/apps/api/src/queue/handlers/summarize-persistence.ts b/cloud/apps/api/src/queue/handlers/summarize-persistence.ts
+index 4fa2c388..6dee7dcb 100644
+--- a/cloud/apps/api/src/queue/handlers/summarize-persistence.ts
++++ b/cloud/apps/api/src/queue/handlers/summarize-persistence.ts
+@@ -1,10 +1,10 @@
+ import { db, Prisma, type SummaryCache } from '@valuerank/db';
+-import { findMissingProbes } from '../../services/run/coverage-completeness.js';
+ import { createLogger } from '@valuerank/shared';
+ import { DEFAULT_JOB_OPTIONS } from '../types.js';
++import { findMissingProbes } from '../../services/run/coverage-completeness.js';
+ import { triggerBasicAnalysis } from '../../services/analysis/index.js';
+-import { incrementSummarizeCompleted, incrementSummarizeFailed } from '../../services/run/progress.js';
+-import { deductActualProviderBalancesForRun } from '../../services/budget/deduct.js';
++import { maybeAdvanceRunStatus } from '../../services/run/index.js';
++import { deductSingleTranscriptBalance } from '../../services/budget/deduct.js';
+ import {
+   buildDecisionMetadataForPersist,
+   isPlainJsonObject,
+@@ -57,6 +57,29 @@ export function isCacheRecordMatch(
+   );
+ }
+ 
++/**
++ * Returns true when a run has no live transcripts left and no missing probes.
++ *
++ * Failed summaries are terminal and must be excluded from the unsummarized count.
++ */
++export async function checkAllSummarized(runId: string): Promise<boolean> {
++  const unsummarizedCount = await db.transcript.count({
++    where: {
++      runId,
++      deletedAt: null,
++      summarizedAt: null,
++      summarizeFailedAt: null,
++    },
++  });
++
++  if (unsummarizedCount > 0) {
++    return false;
++  }
++
++  const missingProbes = await findMissingProbes(runId);
++  return missingProbes.length === 0;
++}
++
+ /**
+  * Queues a compute_token_stats job for cost prediction data.
+  */
+@@ -79,85 +102,42 @@ export async function queueComputeTokenStats(runId: string): Promise<void> {
+   log.info({ runId }, 'Queued compute_token_stats job');
+ }
+ 
+-/**
+- * Check if all transcripts for a run have been summarized AND all expected probes
+- * have produced transcripts (or been accounted for).
+- *
+- * Returns false if:
+- * - Any transcript is still unsummarized (existing behavior), OR
+- * - Any expected (scenarioId × modelId × sampleIndex) tuple lacks a transcript
+- *   (new guard: prevents premature completion when AUTH_ERROR probes are re-queued)
+- *
+- * Returns true only when both conditions are satisfied.
+- */
+-export async function checkAllSummarized(runId: string): Promise<boolean> {
+-  const unsummarized = await db.transcript.count({
+-    where: {
+-      runId,
+-      summarizedAt: null,
+-    },
+-  });
+-  if (unsummarized > 0) {
+-    return false;
++async function refreshPostSummarySideEffects(runId: string, transcriptId: string): Promise<void> {
++  const advanceResult = await maybeAdvanceRunStatus(runId);
++  if (advanceResult.completed) {
++    return;
+   }
+-  const missing = await findMissingProbes(runId);
+-  return missing.length === 0;
+-}
+ 
+-/**
+- * Update run status to COMPLETED if all transcripts are summarized.
+- * Also triggers basic analysis, token statistics computation, and budget deduction.
+- *
+- * Uses an atomic status transition (SUMMARIZING → COMPLETED) to prevent
+- * duplicate side effects when multiple summarization jobs finish concurrently.
+- * Only the first caller that successfully transitions the status will run
+- * the completion side effects (analysis, token stats, budget deduction).
+- */
+-export async function maybeCompleteRun(runId: string): Promise<void> {
+-  const allDone = await checkAllSummarized(runId);
+-
+-  if (allDone) {
+-    // Atomic transition: only update if status is still SUMMARIZING.
+-    // If another caller already moved it to COMPLETED, this returns 0 rows
+-    // and we skip all side effects to avoid duplicates (e.g., double deductions).
+-    const transitioned = await db.$executeRaw`
+-      UPDATE "runs"
+-      SET "status" = 'COMPLETED',
+-          "completed_at" = NOW(),
+-          "stalled_models" = '{}'::text[]
+-      WHERE "id" = ${runId}
+-        AND "status" = 'SUMMARIZING'
+-    `;
+-
+-    if (transitioned === 0) {
+-      log.debug({ runId }, 'Run already completed by another worker — skipping side effects');
+-      return;
+-    }
++  const run = await db.run.findUnique({
++    where: { id: runId },
++    select: { status: true },
++  });
+ 
+-    log.info({ runId }, 'Run completed - all transcripts summarized');
++  if (run?.status !== 'COMPLETED') {
++    return;
++  }
+ 
+-    try {
+-      const prompted = await triggerBasicAnalysis(runId);
+-      if (prompted) {
+-        log.info({ runId }, 'Analysis triggered successfully');
+-      } else {
+-        log.warn({ runId }, 'Analysis not triggered - no qualify transcripts?');
+-      }
+-    } catch (error) {
+-      log.error({ runId, err: error }, 'Failed to trigger basic analysis');
++  try {
++    const prompted = await triggerBasicAnalysis(runId);
++    if (prompted) {
++      log.info({ runId }, 'Analysis triggered successfully');
++    } else {
++      log.debug({ runId }, 'Analysis not triggered');
+     }
++  } catch (error) {
++    log.error({ runId, err: error }, 'Failed to trigger basic analysis');
++  }
+ 
+-    try {
+-      await queueComputeTokenStats(runId);
+-    } catch (error) {
+-      log.error({ runId, err: error }, 'Failed to trigger token stats computation');
+-    }
++  try {
++    await queueComputeTokenStats(runId);
++  } catch (error) {
++    log.error({ runId, err: error }, 'Failed to trigger token stats computation');
++  }
+ 
+-    try {
+-      await deductActualProviderBalancesForRun(runId);
+-    } catch (error) {
+-      log.error({ runId, err: error }, 'Failed to deduct provider balances');
+-    }
++  try {
++    await deductSingleTranscriptBalance(transcriptId);
++  } catch (error) {
++    log.error({ runId, transcriptId, err: error }, 'Failed to deduct transcript provider balance');
+   }
+ }
+ 
+@@ -192,12 +172,12 @@ export async function persistCachedSummary(
+         rawDecisionEvidence,
+         persistedSummaryCache ?? undefined,
+       ),
++      summarizeFailedAt: null,
+       summarizedAt: new Date(),
+     },
+   });
+ 
+-  await incrementSummarizeCompleted(job.data.runId);
+-  await maybeCompleteRun(job.data.runId);
++  await refreshPostSummarySideEffects(job.data.runId, transcript.id);
+ }
+ 
+ export async function persistSuccessfulSummary(
+@@ -231,14 +211,14 @@ export async function persistSuccessfulSummary(
+         rawDecisionEvidence,
+         freshSummaryCache ?? undefined,
+       ),
++      summarizeFailedAt: null,
+       summarizedAt: new Date(),
+     },
+   });
+ 
+   log.info({ jobId: job.id, transcriptId: transcript.id }, 'Transcript summarized');
+ 
+-  await incrementSummarizeCompleted(job.data.runId);
+-  await maybeCompleteRun(job.data.runId);
++  await refreshPostSummarySideEffects(job.data.runId, transcript.id);
+ }
+ 
+ export async function persistSummarizeFailure(
+@@ -267,11 +247,10 @@ export async function persistSummarizeFailure(
+     data: {
+       decisionText: failureText,
+       decisionMetadata: Prisma.DbNull,
+-      summarizedAt: new Date(),
++      summarizeFailedAt: new Date(),
+     },
+   });
+ 
+-  await incrementSummarizeFailed(job.data.runId);
+-  await maybeCompleteRun(job.data.runId);
++  await maybeAdvanceRunStatus(job.data.runId);
+   return false;
+ }
+diff --git a/cloud/apps/api/src/queue/handlers/summarize-transcript.ts b/cloud/apps/api/src/queue/handlers/summarize-transcript.ts
+index efb74af3..6312163f 100644
+--- a/cloud/apps/api/src/queue/handlers/summarize-transcript.ts
++++ b/cloud/apps/api/src/queue/handlers/summarize-transcript.ts
+@@ -17,6 +17,7 @@ import { spawnPython, type SpawnPythonResult } from '../spawn.js';
+ import { getSummarizerModel, type InfraModelConfig } from '../../services/infra-models.js';
+ import { getMaxParallelSummarizations } from '../../services/summarization-parallelism/index.js';
+ import { schedule as rateLimitSchedule, getLimiterStats, type ScheduleOptions } from '../../services/rate-limiter/index.js';
++import { maybeAdvanceRunStatus } from '../../services/run/index.js';
+ import { resolveTranscriptDecisionModel } from '../../graphql/queries/domain/shared.js';
+ import type { SummarizeTranscriptJobData } from '../types.js';
+ import {
+@@ -193,7 +194,7 @@ async function resolveSummarizeJob(
+     return { kind: 'missing' };
+   }
+ 
+-  const wasAlreadySummarized = transcript.summarizedAt !== null;
++  const isTerminal = transcript.summarizedAt !== null || transcript.summarizeFailedAt !== null;
+   const responseSha256 = computeTranscriptResponseSha256(transcript.content);
+   const transcriptDecisionMetadata = isPlainJsonObject(transcript.decisionMetadata)
+     ? transcript.decisionMetadata
+@@ -208,14 +209,14 @@ async function resolveSummarizeJob(
+   if (!forceSummarize && summaryCache && isCacheRecordMatch(summaryCache, responseSha256, parserVersion, modelId)) {
+     log.info({ jobId: job.id, transcriptId, modelId }, 'Transcript summary cache hit');
+ 
+-    if (!wasAlreadySummarized) {
++    if (!isTerminal) {
+       await persistCachedSummary(job, transcript, summaryCache, responseSha256, parserVersion, modelId);
+     }
+ 
+     return { kind: 'cache-hit' };
+   }
+ 
+-  if (!forceSummarize && !hasSummaryCacheField && wasAlreadySummarized) {
++  if (!forceSummarize && !hasSummaryCacheField && isTerminal) {
+     log.info({ jobId: job.id, transcriptId }, 'Transcript already summarized, skipping');
+     return { kind: 'skipped' };
+   }
+@@ -462,8 +463,10 @@ export function createSummarizeTranscriptHandler(): PgBoss.WorkHandler<Summarize
+ 
+       if (resolved.kind === 'cache-hit') {
+         cacheHitCount++;
++        await maybeAdvanceRunStatus(job.data.runId);
+       } else if (resolved.kind === 'skipped') {
+         skippedCount++;
++        await maybeAdvanceRunStatus(job.data.runId);
+       }
+     }
+ 
+diff --git a/cloud/apps/api/src/services/run/anomaly-detection.ts b/cloud/apps/api/src/services/run/anomaly-detection.ts
+new file mode 100644
+index 00000000..ad37a4b6
+--- /dev/null
++++ b/cloud/apps/api/src/services/run/anomaly-detection.ts
+@@ -0,0 +1,385 @@
++import { db, type Prisma } from '@valuerank/db';
++import { createLogger } from '@valuerank/shared';
++import {
++  MODEL_SHORTFALL_ABSOLUTE_RATE,
++  MODEL_SHORTFALL_MIN_PROBES,
++  MODEL_SHORTFALL_PEER_RATE,
++  MODEL_SHORTFALL_RELATIVE_RATE,
++  ORPHAN_TRANSCRIPT_MIN_AGE_SECONDS,
++  PAIR_ASYMMETRY_MIN_PROBES,
++  PAIR_ASYMMETRY_THRESHOLD_PCT,
++  SUMMARIZING_STALL_MINUTES,
++} from './anomaly-thresholds.js';
++
++const log = createLogger('services:run:anomaly-detection');
++
++export type RunAnomalyType =
++  | 'STRANDED_TRANSCRIPT'
++  | 'ORPHAN_TRANSCRIPT'
++  | 'PAIR_ASYMMETRY'
++  | 'SUMMARIZING_STALL'
++  | 'MODEL_TRANSCRIPT_SHORTFALL'
++  | 'SCHEDULED_COUNT_MISMATCH';
++
++export type AnomalyDraft = {
++  type: RunAnomalyType;
++  subject: string;
++  details: Prisma.InputJsonValue;
++};
++
++type RunSnapshot = {
++  id: string;
++  status: string;
++  updatedAt: Date;
++  config: unknown;
++  progress: unknown;
++  deletedAt: Date | null;
++};
++
++type RunConfig = {
++  models?: string[];
++  samplesPerScenario?: number;
++  jobChoiceBatchGroupId?: string | null;
++};
++
++type SuccessCountRow = {
++  modelId: string;
++  _count: { _all: number };
++};
++
++type OrphanTranscriptRow = {
++  id: string;
++  scenarioId: string | null;
++  modelId: string;
++  sampleIndex: number;
++  createdAt: Date;
++  durationMs: number;
++  tokenCount: number;
++  content: unknown;
++};
++
++function parseRunConfig(config: unknown): RunConfig {
++  if (config === null || typeof config !== 'object') {
++    return {};
++  }
++
++  return config as RunConfig;
++}
++
++function getModelIds(config: unknown): string[] {
++  const models = parseRunConfig(config).models ?? [];
++  return models.filter((modelId) => typeof modelId === 'string' && modelId.length > 0);
++}
++
++function getSamplesPerScenario(config: unknown): number {
++  const samples = parseRunConfig(config).samplesPerScenario;
++  return typeof samples === 'number' && Number.isFinite(samples) && samples > 0 ? samples : 1;
++}
++
++function getGroupId(config: unknown): string | null {
++  const groupId = parseRunConfig(config).jobChoiceBatchGroupId;
++  return typeof groupId === 'string' && groupId.trim() !== '' ? groupId : null;
++}
++
++function getProgressTotal(progress: unknown): number {
++  if (progress === null || progress === undefined || typeof progress !== 'object') {
++    return 0;
++  }
++
++  const total = (progress as Record<string, unknown>).total;
++  return typeof total === 'number' && Number.isFinite(total) ? total : 0;
++}
++
++function toJsonValue(value: unknown): Prisma.InputJsonValue {
++  return value as Prisma.InputJsonValue;
++}
++
++export async function detectStrandedTranscript(runId: string): Promise<AnomalyDraft | null> {
++  const transcripts = await db.transcript.findMany({
++    where: {
++      runId,
++      deletedAt: null,
++      summarizedAt: null,
++      summarizeFailedAt: null,
++    },
++    select: { id: true },
++    orderBy: { createdAt: 'asc' },
++  });
++
++  if (transcripts.length === 0) {
++    return null;
++  }
++
++  return {
++    type: 'STRANDED_TRANSCRIPT',
++    subject: '',
++    details: toJsonValue({
++      transcriptIds: transcripts.map((transcript) => transcript.id),
++    }),
++  };
++}
++
++export async function findOrphanTranscripts(runId: string): Promise<OrphanTranscriptRow[]> {
++  const minAge = new Date(Date.now() - ORPHAN_TRANSCRIPT_MIN_AGE_SECONDS * 1000);
++  return db.$queryRaw<OrphanTranscriptRow[]>`
++    SELECT
++      t.id,
++      t.scenario_id AS "scenarioId",
++      t.model_id AS "modelId",
++      t.sample_index AS "sampleIndex",
++      t.created_at AS "createdAt",
++      t.duration_ms AS "durationMs",
++      t.token_count AS "tokenCount",
++      t.content AS "content"
++    FROM transcripts t
++    LEFT JOIN probe_results p
++      ON p.run_id = t.run_id
++     AND p.scenario_id = t.scenario_id
++     AND p.model_id = t.model_id
++     AND p.sample_index = t.sample_index
++     AND p.deleted_at IS NULL
++    WHERE t.run_id = ${runId}
++      AND t.deleted_at IS NULL
++      AND t.created_at < ${minAge}
++      AND p.id IS NULL
++    ORDER BY t.created_at ASC
++  `;
++}
++
++export async function detectOrphanTranscript(runId: string): Promise<AnomalyDraft | null> {
++  const orphans = await findOrphanTranscripts(runId);
++  if (orphans.length === 0) {
++    return null;
++  }
++
++  return {
++    type: 'ORPHAN_TRANSCRIPT',
++    subject: '',
++    details: toJsonValue({
++      transcriptIds: orphans.map((transcript) => transcript.id),
++    }),
++  };
++}
++
++export async function detectPairAsymmetry(run: RunSnapshot): Promise<AnomalyDraft | null> {
++  const groupId = getGroupId(run.config);
++  if (groupId === null) {
++    return null;
++  }
++
++  const siblings = await db.run.findMany({
++    where: {
++      deletedAt: null,
++      config: {
++        path: ['jobChoiceBatchGroupId'],
++        equals: groupId,
++      },
++    },
++    select: {
++      id: true,
++      config: true,
++    },
++    orderBy: { updatedAt: 'asc' },
++  });
++
++  if (siblings.length < 2) {
++    return null;
++  }
++
++  const sibling = siblings.find((candidate) => candidate.id !== run.id) ?? null;
++  if (sibling === null) {
++    return null;
++  }
++
++  const scheduledCounts = await Promise.all(
++    [run, sibling].map(async (candidate) => {
++      const modelCount = getModelIds(candidate.config).length;
++      const scenarioCount = await db.runScenarioSelection.count({ where: { runId: candidate.id } });
++      const samplesPerScenario = getSamplesPerScenario(candidate.config);
++      return {
++        runId: candidate.id,
++        scheduled: scenarioCount * modelCount * samplesPerScenario,
++      };
++    })
++  );
++
++  const currentScheduled = scheduledCounts.find((item) => item.runId === run.id)?.scheduled ?? 0;
++  const siblingScheduled = scheduledCounts.find((item) => item.runId === sibling.id)?.scheduled ?? 0;
++
++  if (currentScheduled < PAIR_ASYMMETRY_MIN_PROBES || siblingScheduled < PAIR_ASYMMETRY_MIN_PROBES) {
++    return null;
++  }
++
++  const successResults = await Promise.all(
++    [run.id, sibling.id].map(async (runId) => {
++      const successCount = await db.probeResult.count({
++        where: { runId, deletedAt: null, status: 'SUCCESS' },
++      });
++      const total = scheduledCounts.find((item) => item.runId === runId)?.scheduled ?? 0;
++      return {
++        runId,
++        successRate: total === 0 ? 0 : successCount / total,
++      };
++    })
++  );
++  const currentSuccess = successResults[0];
++  const siblingSuccess = successResults[1];
++  if (!currentSuccess || !siblingSuccess) {
++    return null;
++  }
++
++  const deltaPct = Math.abs(currentSuccess.successRate - siblingSuccess.successRate) * 100;
++  if (deltaPct < PAIR_ASYMMETRY_THRESHOLD_PCT) {
++    return null;
++  }
++
++  return {
++    type: 'PAIR_ASYMMETRY',
++    subject: groupId,
++    details: toJsonValue({
++      runId: run.id,
++      siblingRunId: sibling.id,
++      currentSuccessRate: currentSuccess.successRate,
++      siblingSuccessRate: siblingSuccess.successRate,
++      scheduled: currentScheduled,
++      siblingScheduled,
++    }),
++  };
++}
++
++export async function detectSummarizingStall(run: RunSnapshot): Promise<AnomalyDraft | null> {
++  if (run.status !== 'SUMMARIZING') {
++    return null;
++  }
++
++  const ageMinutes = Math.floor((Date.now() - run.updatedAt.getTime()) / 60000);
++  if (ageMinutes < SUMMARIZING_STALL_MINUTES) {
++    return null;
++  }
++
++  return {
++    type: 'SUMMARIZING_STALL',
++    subject: '',
++    details: toJsonValue({
++      updatedAt: run.updatedAt.toISOString(),
++      ageMinutes,
++    }),
++  };
++}
++
++export async function detectModelTranscriptShortfall(run: RunSnapshot): Promise<AnomalyDraft[]> {
++  const modelIds = getModelIds(run.config);
++  if (modelIds.length === 0) {
++    return [];
++  }
++
++  const scenarioCount = await db.runScenarioSelection.count({ where: { runId: run.id } });
++  const samplesPerScenario = getSamplesPerScenario(run.config);
++  const scheduledPerModel = scenarioCount * samplesPerScenario;
++
++  if (scheduledPerModel < MODEL_SHORTFALL_MIN_PROBES) {
++    return [];
++  }
++
++  const successRows = await db.probeResult.groupBy({
++    by: ['modelId'],
++    where: {
++      runId: run.id,
++      deletedAt: null,
++      status: 'SUCCESS',
++    },
++    _count: { _all: true },
++  });
++
++  const successesByModel = new Map<string, number>();
++  for (const row of successRows as SuccessCountRow[]) {
++    successesByModel.set(row.modelId, row._count._all);
++  }
++
++  const rates = modelIds.map((modelId) => {
++    const successes = successesByModel.get(modelId) ?? 0;
++    return {
++      modelId,
++      successes,
++      scheduled: scheduledPerModel,
++      rate: scheduledPerModel === 0 ? 0 : successes / scheduledPerModel,
++    };
++  });
++
++  const peerMedianRate = [...rates]
++    .map((rate) => rate.rate)
++    .sort((left, right) => left - right)[Math.floor(rates.length / 2)] ?? 0;
++
++  return rates
++    .filter((rate) => rate.rate < MODEL_SHORTFALL_ABSOLUTE_RATE || (
++      rate.rate < MODEL_SHORTFALL_RELATIVE_RATE && peerMedianRate > MODEL_SHORTFALL_PEER_RATE
++    ))
++    .map((rate) => ({
++      type: 'MODEL_TRANSCRIPT_SHORTFALL' as const,
++      subject: rate.modelId,
++      details: toJsonValue({
++        runId: run.id,
++        modelId: rate.modelId,
++        successes: rate.successes,
++        scheduled: rate.scheduled,
++        rate: rate.rate,
++        peerMedianRate,
++      }),
++    }));
++}
++
++export async function detectScheduledCountMismatch(
++  run: RunSnapshot,
++): Promise<{ draft: AnomalyDraft | null; canonicalTotal: number }> {
++  const modelCount = getModelIds(run.config).length;
++  const scenarioCount = await db.runScenarioSelection.count({ where: { runId: run.id } });
++  const samplesPerScenario = getSamplesPerScenario(run.config);
++  const canonicalTotal = modelCount * scenarioCount * samplesPerScenario;
++  const currentTotal = getProgressTotal(run.progress);
++
++  if (currentTotal === canonicalTotal) {
++    return { draft: null, canonicalTotal };
++  }
++
++  return {
++    draft: {
++      type: 'SCHEDULED_COUNT_MISMATCH',
++      subject: '',
++      details: toJsonValue({
++        runId: run.id,
++        canonicalTotal,
++        currentTotal,
++        modelCount,
++        scenarioCount,
++        samplesPerScenario,
++      }),
++    },
++    canonicalTotal,
++  };
++}
++
++export async function detectRunAnomalies(run: RunSnapshot): Promise<AnomalyDraft[]> {
++  const drafts: AnomalyDraft[] = [];
++
++  const stranded = await detectStrandedTranscript(run.id);
++  if (stranded !== null) drafts.push(stranded);
++
++  const orphan = await detectOrphanTranscript(run.id);
++  if (orphan !== null) drafts.push(orphan);
++
++  const pair = await detectPairAsymmetry(run);
++  if (pair !== null) drafts.push(pair);
++
++  const stall = await detectSummarizingStall(run);
++  if (stall !== null) drafts.push(stall);
++
++  drafts.push(...await detectModelTranscriptShortfall(run));
++
++  const scheduled = await detectScheduledCountMismatch(run);
++  if (scheduled.draft !== null) drafts.push(scheduled.draft);
++
++  log.debug({ runId: run.id, anomalyCount: drafts.length }, 'Detected run anomalies');
++  return drafts;
++}
++
++export type { RunSnapshot };
+diff --git a/cloud/apps/api/src/services/run/anomaly-persistence.ts b/cloud/apps/api/src/services/run/anomaly-persistence.ts
+new file mode 100644
+index 00000000..01124eb4
+--- /dev/null
++++ b/cloud/apps/api/src/services/run/anomaly-persistence.ts
+@@ -0,0 +1,106 @@
++import { db } from '@valuerank/db';
++import { createLogger } from '@valuerank/shared';
++import type { AnomalyDraft, RunAnomalyType } from './anomaly-detection.js';
++
++const log = createLogger('services:run:anomaly-persistence');
++
++type RunProgress = {
++  total: number;
++  completed: number;
++  failed: number;
++};
++
++type RunAnomalyKey = {
++  runId: string;
++  type: RunAnomalyType;
++  subject: string;
++};
++
++function parseProgress(progress: unknown): RunProgress {
++  if (progress === null || progress === undefined || typeof progress !== 'object') {
++    return { total: 0, completed: 0, failed: 0 };
++  }
++
++  const record = progress as Record<string, unknown>;
++  const total = typeof record.total === 'number' && Number.isFinite(record.total) ? record.total : 0;
++  const completed = typeof record.completed === 'number' && Number.isFinite(record.completed) ? record.completed : 0;
++  const failed = typeof record.failed === 'number' && Number.isFinite(record.failed) ? record.failed : 0;
++  return { total, completed, failed };
++}
++
++export async function upsertAnomaly(runId: string, draft: AnomalyDraft): Promise<void> {
++  const now = new Date();
++  await db.runAnomaly.upsert({
++    where: {
++      runId_type_subject: {
++        runId,
++        type: draft.type,
++        subject: draft.subject,
++      },
++    },
++    create: {
++      runId,
++      type: draft.type,
++      subject: draft.subject,
++      details: draft.details,
++      firstSeenAt: now,
++      lastSeenAt: now,
++    },
++    update: {
++      details: draft.details,
++      lastSeenAt: now,
++      resolvedAt: null,
++    },
++  });
++}
++
++export async function persistAnomalyDrafts(runId: string, drafts: AnomalyDraft[]): Promise<void> {
++  for (const draft of drafts) {
++    await upsertAnomaly(runId, draft);
++  }
++}
++
++export async function resolveAnomaly(key: RunAnomalyKey): Promise<void> {
++  const now = new Date();
++  await db.runAnomaly.updateMany({
++    where: {
++      runId: key.runId,
++      type: key.type,
++      subject: key.subject,
++      resolvedAt: null,
++    },
++    data: {
++      resolvedAt: now,
++      lastSeenAt: now,
++    },
++  });
++}
++
++export async function repairScheduledCount(runId: string, canonicalTotal: number): Promise<boolean> {
++  const run = await db.run.findUnique({
++    where: { id: runId },
++    select: { progress: true },
++  });
++
++  if (run === null) {
++    return false;
++  }
++
++  const current = parseProgress(run.progress);
++  if (current.total === canonicalTotal) {
++    return false;
++  }
++
++  const updated: RunProgress = {
++    ...current,
++    total: canonicalTotal,
++  };
++
++  await db.run.update({
++    where: { id: runId },
++    data: { progress: updated },
++  });
++
++  log.info({ runId, currentTotal: current.total, canonicalTotal }, 'Repaired scheduled count');
++  return true;
++}
+diff --git a/cloud/apps/api/src/services/run/anomaly-thresholds.ts b/cloud/apps/api/src/services/run/anomaly-thresholds.ts
+new file mode 100644
+index 00000000..18a6c1ad
+--- /dev/null
++++ b/cloud/apps/api/src/services/run/anomaly-thresholds.ts
+@@ -0,0 +1,9 @@
++export const PAIR_ASYMMETRY_THRESHOLD_PCT = 20;
++export const PAIR_ASYMMETRY_MIN_PROBES = 10;
++export const SUMMARIZING_STALL_MINUTES = 30;
++export const MODEL_SHORTFALL_MIN_PROBES = 10;
++export const MODEL_SHORTFALL_ABSOLUTE_RATE = 0.30;
++export const MODEL_SHORTFALL_RELATIVE_RATE = 0.50;
++export const MODEL_SHORTFALL_PEER_RATE = 0.80;
++export const ORPHAN_TRANSCRIPT_MIN_AGE_SECONDS = 60;
++export const RECENT_COMPLETED_RUN_WINDOW_DAYS = 30;
+diff --git a/cloud/apps/api/src/services/run/derived-progress.ts b/cloud/apps/api/src/services/run/derived-progress.ts
+new file mode 100644
+index 00000000..b516a242
+--- /dev/null
++++ b/cloud/apps/api/src/services/run/derived-progress.ts
+@@ -0,0 +1,87 @@
++/**
++ * Derived run progress reads.
++ */
++
++import { db } from '@valuerank/db';
++import { createLogger } from '@valuerank/shared';
++
++const log = createLogger('services:run:derived-progress');
++
++export type RunProgress = {
++  total: number;
++  completed: number;
++  failed: number;
++  summarizeTotal: number;
++  summarizeCompleted: number;
++  summarizeFailed: number;
++};
++
++function extractTotal(progress: unknown): number {
++  if (progress === null || progress === undefined || typeof progress !== 'object') {
++    return 0;
++  }
++
++  const record = progress as Record<string, unknown>;
++  const total = record.total;
++  return typeof total === 'number' && Number.isFinite(total) ? total : 0;
++}
++
++export async function computeRunProgress(runId: string): Promise<RunProgress> {
++  log.debug({ runId }, 'Computing derived run progress');
++
++  const [run, probeResults, summarizeTotal, summarizeCompleted, summarizeFailed] =
++    await Promise.all([
++      db.run.findUnique({
++        where: { id: runId },
++        select: { progress: true },
++      }),
++      db.probeResult.groupBy({
++        by: ['status'],
++        where: { runId, deletedAt: null },
++        _count: { _all: true },
++      }),
++      db.transcript.count({
++        where: { runId, deletedAt: null },
++      }),
++      db.transcript.count({
++        where: {
++          runId,
++          deletedAt: null,
++          summarizedAt: { not: null },
++          summarizeFailedAt: null,
++        },
++      }),
++      db.transcript.count({
++        where: {
++          runId,
++          deletedAt: null,
++          summarizeFailedAt: { not: null },
++        },
++      }),
++    ]);
++
++  const progress = run?.progress;
++  const total = extractTotal(progress);
++
++  let completed = 0;
++  let failed = 0;
++  for (const row of probeResults) {
++    if (row.status === 'SUCCESS') {
++      completed = row._count._all;
++    } else if (row.status === 'FAILED') {
++      failed = row._count._all;
++    }
++  }
++
++  const result: RunProgress = {
++    total,
++    completed,
++    failed,
++    summarizeTotal,
++    summarizeCompleted,
++    summarizeFailed,
++  };
++
++  log.debug({ runId, result }, 'Derived run progress computed');
++  return result;
++}
+diff --git a/cloud/apps/api/src/services/run/index.ts b/cloud/apps/api/src/services/run/index.ts
+index e607af7e..1905ea25 100644
+--- a/cloud/apps/api/src/services/run/index.ts
++++ b/cloud/apps/api/src/services/run/index.ts
+@@ -8,16 +8,13 @@ export { startRun } from './start.js';
+ export type { StartRunInput, StartRunResult } from './start.js';
+ 
+ export {
+-  updateProgress,
+-  incrementCompleted,
+-  incrementFailed,
++  maybeAdvanceRunStatus,
+   getProgress,
+   calculatePercentComplete,
+-  updateSummarizeProgress,
+-  incrementSummarizeCompleted,
+-  incrementSummarizeFailed,
+ } from './progress.js';
+-export type { ProgressUpdate, ProgressData } from './progress.js';
++export type { ProgressData } from './progress.js';
++export { computeRunProgress } from './derived-progress.js';
++export type { RunProgress } from './derived-progress.js';
+ 
+ export {
+   pauseRun,
+diff --git a/cloud/apps/api/src/services/run/progress.ts b/cloud/apps/api/src/services/run/progress.ts
+index e0561a9e..26aa0e3e 100644
+--- a/cloud/apps/api/src/services/run/progress.ts
++++ b/cloud/apps/api/src/services/run/progress.ts
+@@ -1,339 +1,217 @@
+ /**
+  * Run Progress Service
+  *
+- * Handles atomic progress updates and status transitions for runs.
+- * Uses PostgreSQL JSONB operators for concurrent-safe increments.
++ * Handles derived progress reads and atomic run status transitions.
+  */
+ 
+ import { db } from '@valuerank/db';
+ import { createLogger, NotFoundError } from '@valuerank/shared';
+-import type { Prisma } from '@prisma/client';
++import type { RunProgress } from './derived-progress.js';
+ 
+ const log = createLogger('services:run:progress');
+ 
+-export type ProgressUpdate = {
+-  incrementCompleted?: number;
+-  incrementFailed?: number;
+-};
+-
+ export type ProgressData = {
+   total: number;
+   completed: number;
+   failed: number;
+ };
+ 
+-/**
+- * Updates run progress atomically using PostgreSQL JSONB operators.
+- *
+- * This function:
+- * 1. Atomically increments completed/failed counts
+- * 2. Transitions run status based on progress:
+- *    - PENDING -> RUNNING when first job completes
+- *    - RUNNING -> SUMMARIZING when all jobs done
+- * 3. Sets startedAt/completedAt timestamps as appropriate
+- *
+- * Note: Progress is only updated for runs in PENDING or RUNNING state.
+- * Once a run transitions to SUMMARIZING or terminal states, progress
+- * updates are ignored to prevent overcounting.
+- */
+-export async function updateProgress(
+-  runId: string,
+-  update: ProgressUpdate
+-): Promise<{ progress: ProgressData; status: string }> {
+-  const { incrementCompleted = 0, incrementFailed = 0 } = update;
+-
+-  // First check current state
+-  const currentRun = await db.run.findUnique({
+-    where: { id: runId },
+-    select: { progress: true, status: true },
+-  });
+-
+-  if (!currentRun) {
+-    throw new NotFoundError('Run', runId);
+-  }
+-
+-  // Allow correction swaps regardless of run status.
+-  // A correction swap is exactly { +1, -1 } or { -1, +1 } - the counters offset each other.
+-  // This handles FAILED -> SUCCESS or SUCCESS -> FAILED probe transitions during recovery
+-  // even after the run has moved to SUMMARIZING or a terminal state.
+-  const isCorrectionSwap =
+-    (incrementCompleted === 1 && incrementFailed === -1) ||
+-    (incrementCompleted === -1 && incrementFailed === 1);
+-  if (!['PENDING', 'RUNNING'].includes(currentRun.status) && !isCorrectionSwap) {
+-    log.debug(
+-      { runId, status: currentRun.status, incrementCompleted, incrementFailed },
+-      'Skipping progress update - run not in PENDING/RUNNING state'
+-    );
+-    return {
+-      progress: currentRun.progress as ProgressData,
+-      status: currentRun.status,
+-    };
+-  }
++export type AdvanceRunStatusResult = {
++  enteredSummarizing: boolean;
++  completed: boolean;
++};
+ 
+-  if (incrementCompleted === 0 && incrementFailed === 0) {
+-    // No-op, just return current state
+-    return {
+-      progress: currentRun.progress as ProgressData,
+-      status: currentRun.status,
+-    };
+-  }
++async function queueSummarizeJobs(runId: string): Promise<void> {
++  const { getBoss } = await import('../../queue/boss.js');
++  const { DEFAULT_JOB_OPTIONS } = await import('../../queue/types.js');
+ 
+-  log.debug(
+-    { runId, incrementCompleted, incrementFailed },
+-    'Updating run progress'
+-  );
+-
+-  // Use raw SQL for atomic JSONB increment
+-  // This prevents race conditions when multiple jobs complete simultaneously
+-  const result = await db.$queryRaw<Array<{
+-    id: string;
+-    progress: ProgressData;
+-    status: string;
+-    started_at: Date | null;
+-    completed_at: Date | null;
+-  }>>`
+-    UPDATE runs
+-    SET
+-      progress = jsonb_set(
+-        jsonb_set(
+-          progress,
+-          '{completed}',
+-          to_jsonb(GREATEST(0, (progress->>'completed')::int + ${incrementCompleted}))
+-        ),
+-        '{failed}',
+-        to_jsonb(GREATEST(0, (progress->>'failed')::int + ${incrementFailed}))
+-      ),
+-      updated_at = NOW()
+-    WHERE id = ${runId}
+-    RETURNING id, progress, status, started_at, completed_at
+-  `;
++  const transcripts = await db.transcript.findMany({
++    where: {
++      runId,
++      deletedAt: null,
++      summarizedAt: null,
++      summarizeFailedAt: null,
++    },
++    select: { id: true },
++    orderBy: { createdAt: 'asc' },
++  });
+ 
+-  const updatedRun = result[0];
+-  if (!updatedRun) {
+-    throw new NotFoundError('Run', runId);
++  if (transcripts.length === 0) {
++    return;
+   }
+ 
+-  const progress = updatedRun.progress;
+-
+-  // Determine if status transition is needed
+-  const newStatus = determineStatus(progress, updatedRun.status);
++  const boss = getBoss();
++  const jobOptions = DEFAULT_JOB_OPTIONS['summarize_transcript'];
+ 
+-  if (newStatus !== updatedRun.status) {
+-    await transitionStatus(runId, updatedRun.status, newStatus);
+-    log.info(
+-      { runId, oldStatus: updatedRun.status, newStatus, progress },
+-      'Run status transitioned'
++  for (const transcript of transcripts) {
++    await boss.send(
++      'summarize_transcript',
++      {
++        runId,
++        transcriptId: transcript.id,
++      },
++      {
++        ...jobOptions,
++        singletonKey: transcript.id,
++      }
+     );
+-    return { progress, status: newStatus };
+   }
+ 
+-  log.debug({ runId, progress }, 'Progress updated');
+-  return { progress, status: updatedRun.status };
++  log.info({ runId, jobCount: transcripts.length }, 'Queued summarize jobs');
+ }
+ 
+-// Valid run statuses (from Prisma enum)
+-type RunStatus = 'PENDING' | 'RUNNING' | 'PAUSED' | 'SUMMARIZING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+-
+-/**
+- * Determines the appropriate run status based on progress.
+- */
+-function determineStatus(progress: ProgressData, currentStatus: string): RunStatus {
+-  const { total, completed, failed } = progress;
+-  const done = completed + failed;
+-
+-  // If run is already in a terminal state, don't change
+-  if (['COMPLETED', 'FAILED', 'CANCELLED'].includes(currentStatus)) {
+-    return currentStatus as RunStatus;
+-  }
+-
+-  // If already summarizing, don't change (summarize completion handled separately)
+-  if (currentStatus === 'SUMMARIZING') {
+-    return 'SUMMARIZING';
+-  }
+-
+-  // If run is PAUSED, keep it paused - only resumeRun can change this
+-  if (currentStatus === 'PAUSED') {
+-    // But if all jobs are done, transition to SUMMARIZING
+-    if (done >= total) {
+-      return 'SUMMARIZING';
++async function triggerCompletionSideEffects(runId: string): Promise<void> {
++  const { triggerBasicAnalysis } = await import('../analysis/index.js');
++  const { queueComputeTokenStats } = await import('../../queue/handlers/summarize-persistence.js');
++  const { deductActualProviderBalancesForRun } = await import('../budget/deduct.js');
++
++  try {
++    const prompted = await triggerBasicAnalysis(runId);
++    if (prompted) {
++      log.info({ runId }, 'Analysis triggered successfully');
++    } else {
++      log.debug({ runId }, 'Analysis not triggered');
+     }
+-    return 'PAUSED';
++  } catch (error) {
++    log.error({ runId, err: error }, 'Failed to trigger basic analysis');
+   }
+ 
+-  // If all jobs are done, transition to SUMMARIZING (not directly to COMPLETED)
+-  if (done >= total) {
+-    return 'SUMMARIZING';
++  try {
++    await queueComputeTokenStats(runId);
++  } catch (error) {
++    log.error({ runId, err: error }, 'Failed to queue token stats computation');
+   }
+ 
+-  // If at least one job has completed/failed, run is RUNNING
+-  if (done > 0 && currentStatus === 'PENDING') {
+-    return 'RUNNING';
++  try {
++    await deductActualProviderBalancesForRun(runId);
++  } catch (error) {
++    log.error({ runId, err: error }, 'Failed to deduct provider balances');
+   }
+-
+-  return currentStatus as RunStatus;
+ }
+ 
+-/**
+- * Transitions run to a new status with appropriate timestamp updates.
+- */
+-async function transitionStatus(
+-  runId: string,
+-  fromStatus: string,
+-  toStatus: RunStatus
+-): Promise<void> {
+-  const updates: Prisma.RunUpdateInput = {
+-    status: toStatus,
+-  };
+-
+-  // Set startedAt when transitioning to RUNNING
+-  if (toStatus === 'RUNNING' && fromStatus === 'PENDING') {
+-    updates.startedAt = new Date();
+-  }
+-
+-  // Set completedAt when transitioning to a terminal state
+-  if (['COMPLETED', 'FAILED', 'CANCELLED'].includes(toStatus)) {
+-    updates.completedAt = new Date();
+-  }
++async function maybeTransitionToSummarizing(runId: string): Promise<boolean> {
++  const rows = await db.$queryRaw<Array<{ id: string }>>`
++    UPDATE "runs"
++    SET "status" = 'SUMMARIZING',
++        "stalled_models" = ARRAY[]::text[],
++        "updated_at" = NOW()
++    WHERE "id" = ${runId}
++      AND "deleted_at" IS NULL
++      AND "status" IN ('RUNNING', 'PAUSED')
++      AND (
++        SELECT COUNT(*)
++        FROM "probe_results"
++        WHERE "run_id" = ${runId}
++          AND "status" IN ('SUCCESS', 'FAILED')
++          AND "deleted_at" IS NULL
++      ) >= COALESCE((progress->>'total')::int, 0)
++    RETURNING "id"
++  `;
+ 
+-  if (toStatus !== 'RUNNING') {
+-    updates.stalledModels = [];
+-  }
++  return rows.length === 1;
++}
+ 
+-  await db.run.update({
+-    where: { id: runId },
+-    data: updates,
+-  });
++async function maybeTransitionToCompleted(runId: string): Promise<boolean> {
++  const rows = await db.$queryRaw<Array<{ id: string }>>`
++    UPDATE "runs"
++    SET "status" = 'COMPLETED',
++        "completed_at" = NOW(),
++        "stalled_models" = ARRAY[]::text[],
++        "updated_at" = NOW()
++    WHERE "id" = ${runId}
++      AND "deleted_at" IS NULL
++      AND "status" = 'SUMMARIZING'
++      AND NOT EXISTS (
++        SELECT 1
++        FROM "transcripts"
++        WHERE "run_id" = ${runId}
++          AND "deleted_at" IS NULL
++          AND "summarized_at" IS NULL
++          AND "summarize_failed_at" IS NULL
++      )
++    RETURNING "id"
++  `;
+ 
+-  // When transitioning to SUMMARIZING, queue summarize jobs for all transcripts
+-  if (toStatus === 'SUMMARIZING') {
+-    await queueSummarizeJobs(runId);
+-  }
++  return rows.length === 1;
+ }
+ 
+-/**
+- * Wait for transcript rows to settle before counting.
+- *
+- * When the last probe job triggers SUMMARIZING, other probe jobs may still
+- * be committing their transcript rows. This polls briefly (up to 5 seconds)
+- * until the DB transcript count matches the expected total from probe progress,
+- * so the summarization denominator is accurate.
+- */
+-const SETTLE_POLL_INTERVAL_MS = 500;
+-const SETTLE_MAX_WAIT_MS = 5_000;
+-
+-async function waitForTranscriptSettle(
+-  runId: string,
+-  expectedCompleted: number,
+-): Promise<number> {
+-  const deadline = Date.now() + SETTLE_MAX_WAIT_MS;
+-
+-  while (Date.now() < deadline) {
+-    const count = await db.transcript.count({ where: { runId } });
+-    if (count >= expectedCompleted) {
+-      return count;
+-    }
+-    log.debug(
+-      { runId, dbCount: count, expected: expectedCompleted },
+-      'Waiting for in-flight transcript commits to settle'
+-    );
+-    await new Promise((resolve) => setTimeout(resolve, SETTLE_POLL_INTERVAL_MS));
+-  }
++async function maybeCompleteEmptyRun(runId: string): Promise<boolean> {
++  const rows = await db.$queryRaw<Array<{ id: string }>>`
++    UPDATE "runs"
++    SET "status" = 'COMPLETED',
++        "started_at" = COALESCE("started_at", NOW()),
++        "completed_at" = NOW(),
++        "stalled_models" = ARRAY[]::text[],
++        "updated_at" = NOW()
++    WHERE "id" = ${runId}
++      AND "deleted_at" IS NULL
++      AND "status" = 'PENDING'
++      AND COALESCE((progress->>'total')::int, 0) = 0
++    RETURNING "id"
++  `;
+ 
+-  // Timed out — return whatever we have
+-  const finalCount = await db.transcript.count({ where: { runId } });
+-  log.warn(
+-    { runId, dbCount: finalCount, expected: expectedCompleted },
+-    'Transcript settle timed out — proceeding with current count'
+-  );
+-  return finalCount;
++  return rows.length === 1;
+ }
+ 
+ /**
+- * Queues summarize jobs for all transcripts in a run.
++ * Advances the run status using atomic compare-and-swap updates.
++ *
++ * Two-gate chain:
++ * 1. RUNNING / PAUSED -> SUMMARIZING when probe completion reaches the stored total.
++ * 2. SUMMARIZING -> COMPLETED when there are no live transcripts left to summarize.
++ *
++ * These gates replace the old read-then-write completion logic.
+  */
+-async function queueSummarizeJobs(runId: string): Promise<void> {
+-  // Dynamic import to avoid circular dependency
+-  const { getBoss } = await import('../../queue/boss.js');
+-  const { DEFAULT_JOB_OPTIONS } = await import('../../queue/types.js');
+-
+-  const boss = getBoss();
+-
+-  // Read the probe progress to know how many successful transcripts to expect
++export async function maybeAdvanceRunStatus(runId: string): Promise<AdvanceRunStatusResult> {
+   const run = await db.run.findUnique({
+     where: { id: runId },
+-    select: { progress: true },
++    select: {
++      status: true,
++      progress: true,
++      deletedAt: true,
++    },
+   });
+-  const probeProgress = run?.progress as ProgressData | null;
+-  const expectedCompleted = probeProgress?.completed ?? 0;
+ 
+-  // Wait for in-flight transcript commits before counting
+-  if (expectedCompleted > 0) {
+-    await waitForTranscriptSettle(runId, expectedCompleted);
++  if (run === null) {
++    throw new NotFoundError('Run', runId);
+   }
+ 
+-  // Get all transcripts for this run
+-  const transcripts = await db.transcript.findMany({
+-    where: { runId },
+-    select: { id: true },
+-  });
+-
+-  if (transcripts.length === 0) {
+-    log.warn({ runId }, 'No transcripts to summarize, completing run');
+-    await db.run.update({
+-      where: { id: runId },
+-      data: { status: 'COMPLETED', completedAt: new Date(), stalledModels: [] },
+-    });
+-    return;
++  if (run.deletedAt !== null) {
++    log.debug({ runId }, 'Skipping status advance for deleted run');
++    return { enteredSummarizing: false, completed: false };
+   }
+ 
+-  // Initialize summarizeProgress
+-  await db.run.update({
+-    where: { id: runId },
+-    data: {
+-      summarizeProgress: {
+-        total: transcripts.length,
+-        completed: 0,
+-        failed: 0,
+-      },
+-    },
+-  });
+-
+-  log.info({ runId, transcriptCount: transcripts.length }, 'Queueing summarize jobs');
+-
+-  const jobOptions = DEFAULT_JOB_OPTIONS['summarize_transcript'];
++  const total = (() => {
++    const progress = run.progress as ProgressData | null;
++    return progress?.total ?? 0;
++  })();
+ 
+-  for (const transcript of transcripts) {
+-    await boss.send('summarize_transcript', {
+-      runId,
+-      transcriptId: transcript.id,
+-    }, jobOptions);
++  if (run.status === 'PENDING' && total === 0) {
++    const completed = await maybeCompleteEmptyRun(runId);
++    if (completed) {
++      log.info({ runId }, 'Completed zero-probe run at launch');
++      await triggerCompletionSideEffects(runId);
++    }
++    return { enteredSummarizing: false, completed };
+   }
+ 
+-  log.info({ runId, jobCount: transcripts.length }, 'Summarize jobs queued');
+-}
++  const enteredSummarizing = await maybeTransitionToSummarizing(runId);
++  if (enteredSummarizing) {
++    log.info({ runId }, 'Run entered SUMMARIZING');
++    await queueSummarizeJobs(runId);
++  }
+ 
+-/**
+- * Increments completed count by 1.
+- * Convenience wrapper for updateProgress.
+- */
+-export async function incrementCompleted(
+-  runId: string
+-): Promise<{ progress: ProgressData; status: string }> {
+-  return updateProgress(runId, { incrementCompleted: 1 });
+-}
++  const completed = await maybeTransitionToCompleted(runId);
++  if (completed) {
++    log.info({ runId }, 'Run completed');
++    await triggerCompletionSideEffects(runId);
++  }
+ 
+-/**
+- * Increments failed count by 1.
+- * Convenience wrapper for updateProgress.
+- */
+-export async function incrementFailed(
+-  runId: string
+-): Promise<{ progress: ProgressData; status: string }> {
+-  return updateProgress(runId, { incrementFailed: 1 });
++  return { enteredSummarizing, completed };
+ }
+ 
+ /**
+- * Gets current progress for a run.
++ * Gets current progress JSON for a run.
+  */
+ export async function getProgress(runId: string): Promise<ProgressData | null> {
+   const run = await db.run.findUnique({
+@@ -349,15 +227,13 @@ export async function getProgress(runId: string): Promise<ProgressData | null> {
+ }
+ 
+ /**
+- * Calculates percent complete from progress data.
++ * Calculates percent complete from derived progress data.
+  */
+-export function calculatePercentComplete(progress: ProgressData): number {
++export function calculatePercentComplete(progress: Pick<RunProgress, 'total' | 'completed' | 'failed'>): number {
+   if (progress.total === 0) {
+-    return 100; // Edge case: no jobs means complete
++    return 100;
+   }
++
+   const done = progress.completed + progress.failed;
+-  return Math.round((done / progress.total) * 100);
++  return Math.min(100, Math.round((done / progress.total) * 100));
+ }
+-
+-// Summarize progress functions live in ./summarize-progress.ts
+-export { updateSummarizeProgress, incrementSummarizeCompleted, incrementSummarizeFailed } from './summarize-progress.js';
+diff --git a/cloud/apps/api/src/services/run/recovery-jobs.ts b/cloud/apps/api/src/services/run/recovery-jobs.ts
+index 2c6ff8c6..86431a19 100644
+--- a/cloud/apps/api/src/services/run/recovery-jobs.ts
++++ b/cloud/apps/api/src/services/run/recovery-jobs.ts
+@@ -87,7 +87,12 @@ export async function queueSummarizeJobsForRecovery(runId: string): Promise<numb
+   const boss = getBoss();
+ 
+   const transcripts = await db.transcript.findMany({
+-    where: { runId, summarizedAt: null },
++    where: {
++      runId,
++      deletedAt: null,
++      summarizedAt: null,
++      summarizeFailedAt: null,
++    },
+     select: { id: true },
+   });
+ 
+@@ -101,7 +106,10 @@ export async function queueSummarizeJobsForRecovery(runId: string): Promise<numb
+     await boss.send('summarize_transcript', {
+       runId,
+       transcriptId: transcript.id,
+-    }, jobOptions);
++    }, {
++      ...jobOptions,
++      singletonKey: transcript.id,
++    });
+   }
+ 
+   log.info({ runId, jobCount: transcripts.length }, 'Queued summarize jobs for recovery');
+diff --git a/cloud/apps/api/src/services/run/recovery.ts b/cloud/apps/api/src/services/run/recovery.ts
+index f4040bbf..56524695 100644
+--- a/cloud/apps/api/src/services/run/recovery.ts
++++ b/cloud/apps/api/src/services/run/recovery.ts
+@@ -13,6 +13,8 @@
+ import { db } from '@valuerank/db';
+ import { createLogger } from '@valuerank/shared';
+ import { findMissingProbes } from './coverage-completeness.js';
++import { computeRunProgress } from './derived-progress.js';
++import { maybeAdvanceRunStatus } from './progress.js';
+ import { ACTIVE_PROBE_QUEUE_SQL } from '../queue/probe-queues.js';
+ import {
+   countJobsForRun,
+@@ -146,18 +148,14 @@ export async function recoverOrphanedRun(
+     });
+ 
+     if (currentRun?.status === 'RUNNING') {
+-      const progress = currentRun.progress as { total: number; completed: number; failed: number };
++      const progress = await computeRunProgress(runId);
+       if (progress.completed + progress.failed >= progress.total) {
+         // Progress complete, trigger summarization
+         log.info({ runId }, 'Triggering summarization for completed run');
+-        await db.run.update({
+-          where: { id: runId },
+-          data: { status: 'SUMMARIZING', stalledModels: [] },
+-        });
+-
+-        // Queue summarize jobs for unsummarized transcripts
+-        const queuedCount = await queueSummarizeJobsForRecovery(runId);
+-        return { action: 'triggered_summarization', requeuedCount: queuedCount };
++        const advanceResult = await maybeAdvanceRunStatus(runId);
++        if (advanceResult.enteredSummarizing) {
++          return { action: 'triggered_summarization' };
++        }
+       }
+     }
+ 
+@@ -176,7 +174,7 @@ export async function recoverOrphanedRun(
+       if (pendingCount === 0) {
+         // Check if there are unsummarized transcripts
+         const unsummarizedCount = await db.transcript.count({
+-          where: { runId, summarizedAt: null },
++          where: { runId, deletedAt: null, summarizedAt: null, summarizeFailedAt: null },
+         });
+ 
+         if (unsummarizedCount > 0) {
+@@ -187,11 +185,10 @@ export async function recoverOrphanedRun(
+         } else {
+           // All transcripts summarized, mark as complete
+           log.info({ runId }, 'All transcripts summarized, completing run');
+-          await db.run.update({
+-            where: { id: runId },
+-            data: { status: 'COMPLETED', completedAt: new Date(), stalledModels: [] },
+-          });
+-          return { action: 'completed_run' };
++          const advanceResult = await maybeAdvanceRunStatus(runId);
++          if (advanceResult.completed) {
++            return { action: 'completed_run' };
++          }
+         }
+       }
+     }
+diff --git a/cloud/apps/api/src/services/run/scheduler.ts b/cloud/apps/api/src/services/run/scheduler.ts
+index 8ee68ff2..21008b6f 100644
+--- a/cloud/apps/api/src/services/run/scheduler.ts
++++ b/cloud/apps/api/src/services/run/scheduler.ts
+@@ -20,8 +20,11 @@ import {
+   runStartupRecovery
+ } from './recovery.js';
+ import { detectAndUpdateStalledRuns } from './stall-detection.js';
++import { RECENT_COMPLETED_RUN_WINDOW_DAYS } from './anomaly-thresholds.js';
+ import { PROBE_QUEUE_DEPTH_PER_PROVIDER } from './start-queue.js';
+ import { enqueueTopUpProbesSingleton } from '../../queue/handlers/top-up-probes.js';
++import { DEFAULT_JOB_OPTIONS } from '../../queue/types.js';
++import { getBoss } from '../../queue/boss.js';
+ import { getQueueNameForModel } from '../parallelism/index.js';
+ 
+ const log = createLogger('services:run:scheduler');
+@@ -76,6 +79,81 @@ async function sweepRunForTopUp(run: { id: string; config: unknown }): Promise<b
+   return false;
+ }
+ 
++async function hasRecoveryActivity(): Promise<boolean> {
++  const activeRuns = await db.run.findFirst({
++    where: {
++      deletedAt: null,
++      status: { in: ['RUNNING', 'SUMMARIZING', 'PAUSED'] },
++    },
++    select: { id: true },
++  });
++
++  if (activeRuns !== null) {
++    return true;
++  }
++
++  const strandedTranscript = await db.transcript.findFirst({
++    where: {
++      deletedAt: null,
++      summarizedAt: null,
++      summarizeFailedAt: null,
++      run: {
++        deletedAt: null,
++        status: 'COMPLETED',
++        updatedAt: {
++          gt: new Date(Date.now() - RECENT_COMPLETED_RUN_WINDOW_DAYS * 24 * 60 * 60 * 1000),
++        },
++      },
++    },
++    select: { id: true },
++  });
++
++  return strandedTranscript !== null;
++}
++
++async function enqueueRunStateReconcileJobs(): Promise<number> {
++  const boss = getBoss();
++  const jobOptions = DEFAULT_JOB_OPTIONS['run_state_reconcile'];
++
++  const runs = await db.$queryRaw<Array<{ run_id: string }>>`
++    SELECT id AS run_id
++    FROM runs
++    WHERE deleted_at IS NULL
++      AND status IN ('RUNNING', 'SUMMARIZING', 'PAUSED')
++
++    UNION
++
++    SELECT DISTINCT r.id AS run_id
++    FROM runs r
++    JOIN transcripts t ON t.run_id = r.id
++    WHERE r.deleted_at IS NULL
++      AND r.status = 'COMPLETED'
++      AND r.updated_at > NOW() - (${RECENT_COMPLETED_RUN_WINDOW_DAYS} || ' days')::interval
++      AND t.deleted_at IS NULL
++      AND t.summarized_at IS NULL
++      AND t.summarize_failed_at IS NULL
++  `;
++
++  let queued = 0;
++  for (const run of runs) {
++    await boss.send(
++      'run_state_reconcile',
++      { runId: run.run_id },
++      {
++        ...jobOptions,
++        singletonKey: run.run_id,
++      }
++    );
++    queued++;
++  }
++
++  if (queued > 0) {
++    log.info({ queued }, 'Queued run_state_reconcile jobs');
++  }
++
++  return queued;
++}
++
+ /**
+  * Runs the recovery job, preventing concurrent executions.
+  */
+@@ -102,11 +180,14 @@ async function runRecoveryJob(): Promise<void> {
+       }
+     }
+ 
++    const reconcileQueued = await enqueueRunStateReconcileJobs();
++
+     if (
+       result.detected.length > 0 ||
+       result.errors.length > 0 ||
+       zombieResult.recovered > 0 ||
+-      topUpQueued > 0
++      topUpQueued > 0 ||
++      reconcileQueued > 0
+     ) {
+       log.info(
+         {
+@@ -115,11 +196,16 @@ async function runRecoveryJob(): Promise<void> {
+           zombiesKilled: zombieResult.recovered,
+           errors: result.errors.length + zombieResult.errors,
+           recoveryTopUps: topUpQueued,
++          reconcileQueued,
+         },
+         'Recovery job completed'
+       );
+     }
+ 
++    if (await hasRecoveryActivity()) {
++      signalRunActivity();
++    }
++
+     if (stallResult.totalStalled > 0) {
+       // Keep scheduler alive while stalls persist (not just when new stalls appear)
+       signalRunActivity();
+@@ -225,6 +311,9 @@ export async function startRecoveryScheduler(): Promise<void> {
+       // If we found orphaned runs, keep recovery running
+       hasActiveRuns = true;
+     }
++    if (!hasActiveRuns) {
++      hasActiveRuns = await hasRecoveryActivity();
++    }
+   } catch (error) {
+     log.error({ error }, 'Startup recovery failed');
+     // Don't throw - we still want to proceed
+diff --git a/cloud/apps/api/src/services/run/stall-detection.ts b/cloud/apps/api/src/services/run/stall-detection.ts
+index f7906914..7e7d0112 100644
+--- a/cloud/apps/api/src/services/run/stall-detection.ts
++++ b/cloud/apps/api/src/services/run/stall-detection.ts
+@@ -1,6 +1,7 @@
+ import { db } from '@valuerank/db';
+ import { createLogger } from '@valuerank/shared';
+ import { ACTIVE_PROBE_QUEUE_SQL } from '../queue/probe-queues.js';
++import { computeRunProgress } from './derived-progress.js';
+ 
+ const log = createLogger('services:run:stall-detection');
+ 
+@@ -22,6 +23,7 @@ export async function getLastSuccessfulCompletionByModel(runId: string): Promise
+     SELECT model_id, MAX(completed_at) as last_completion
+     FROM probe_results
+     WHERE run_id = ${runId}
++      AND deleted_at IS NULL
+       AND status = 'SUCCESS'
+       AND completed_at IS NOT NULL
+     GROUP BY model_id
+@@ -72,6 +74,7 @@ export async function detectProgressStalls(
+     SELECT model_id, COUNT(*) as cnt
+     FROM transcripts
+     WHERE run_id = ${runId}
++      AND deleted_at IS NULL
+     GROUP BY model_id
+   `;
+ 
+@@ -111,7 +114,7 @@ export async function detectAndUpdateStalledRuns(): Promise<{
+ }> {
+   const runningRuns = await db.run.findMany({
+     where: { status: 'RUNNING' },
+-    select: { id: true, stalledModels: true, startedAt: true, progress: true, config: true },
++    select: { id: true, stalledModels: true, startedAt: true, config: true },
+   });
+ 
+   let newStalls = 0;
+@@ -126,8 +129,8 @@ export async function detectAndUpdateStalledRuns(): Promise<{
+     let stalled = await detectStalledModels(run.id, run.startedAt);
+ 
+     // If no queue-level stalls, check for progress stalls (jobs vanished from queue)
+-    if (stalled.length === 0 && run.progress != null) {
+-      const progress = run.progress as { total: number; completed: number; failed: number };
++    if (stalled.length === 0) {
++      const progress = await computeRunProgress(run.id);
+       const done = progress.completed + progress.failed;
+       if (done < progress.total) {
+         // Check that there are truly zero pending/active jobs
+diff --git a/cloud/apps/api/src/services/run/start-queue.ts b/cloud/apps/api/src/services/run/start-queue.ts
+index 422470a6..16a1b757 100644
+--- a/cloud/apps/api/src/services/run/start-queue.ts
++++ b/cloud/apps/api/src/services/run/start-queue.ts
+@@ -9,6 +9,7 @@ import {
+   type JobEntry,
+   RETRY_ENQUEUE_CHUNK_SIZE,
+ } from './start-helpers.js';
++import { maybeAdvanceRunStatus } from './progress.js';
+ import type { RunJobPlanItem } from './start-plan.js';
+ 
+ const log = createLogger('services:run:start');
+@@ -31,6 +32,8 @@ export async function enqueueRunJobs(input: EnqueueRunJobsInput): Promise<string
+     priority: priorityValue,
+   };
+ 
++  await maybeAdvanceRunStatus(runId);
++
+   const jobs: JobEntry[] = [];
+   const queueNameCache = new Map<string, string>();
+   const getQueue = async (modelId: string) => {
+diff --git a/cloud/apps/api/src/services/run/summarization.ts b/cloud/apps/api/src/services/run/summarization.ts
+index 5efe44c7..6a3ec7b6 100644
+--- a/cloud/apps/api/src/services/run/summarization.ts
++++ b/cloud/apps/api/src/services/run/summarization.ts
+@@ -4,7 +4,7 @@
+  * Handles cancel and restart operations for the summarization phase.
+  */
+ 
+-import { db, Prisma } from '@valuerank/db';
++import { db } from '@valuerank/db';
+ import { createLogger, NotFoundError, RunStateError } from '@valuerank/shared';
+ import { getBoss } from '../../queue/boss.js';
+ import { invalidateCache } from '../analysis/cache.js';
+@@ -194,16 +194,12 @@ export async function restartSummarization(
+ 
+   // Get transcripts to re-summarize
+   const whereClause = force
+-    ? { runId }
++    ? { runId, deletedAt: null }
+     : {
+       runId,
+-      OR: [
+-        { summarizedAt: null },
+-        {
+-          summarizedAt: { not: null },
+-          decisionMetadata: { equals: Prisma.DbNull },
+-        },
+-      ],
++      deletedAt: null,
++      summarizedAt: null,
++      summarizeFailedAt: null,
+     };
+ 
+   const transcriptsToQueue = await db.transcript.findMany({
+@@ -228,9 +224,10 @@ export async function restartSummarization(
+   // This ensures the job handler doesn't skip them
+   const transcriptIds = transcriptsToQueue.map((t) => t.id);
+   await db.transcript.updateMany({
+-    where: { id: { in: transcriptIds } },
++    where: { id: { in: transcriptIds }, deletedAt: null },
+     data: {
+       summarizedAt: null,
++      summarizeFailedAt: null,
+       decisionText: null,
+       // The legacy transcripts.decision_code column drop is deferred to a
+       // follow-up PR (spec out-of-scope). We stop writing to it here so the
+@@ -276,7 +273,10 @@ export async function restartSummarization(
+         transcriptId: transcript.id,
+         ...(force ? { forceSummarize: true } : {}),
+       },
+-      jobOptions
++      {
++        ...jobOptions,
++        singletonKey: transcript.id,
++      }
+     );
+   }
+ 
+diff --git a/cloud/apps/api/src/services/run/summarize-progress.ts b/cloud/apps/api/src/services/run/summarize-progress.ts
+index fa9c0ad5..a525e2d8 100644
+--- a/cloud/apps/api/src/services/run/summarize-progress.ts
++++ b/cloud/apps/api/src/services/run/summarize-progress.ts
+@@ -1,79 +1,35 @@
+ /**
+  * Summarize Progress Service
+  *
+- * Handles atomic progress updates for transcript summarization.
+- * Extracted from progress.ts to keep file sizes within limits.
++ * Legacy read helpers for summarize progress.
++ * Counter writes were removed in favor of derived reads.
+  */
+ 
+ import { db } from '@valuerank/db';
+ import { createLogger } from '@valuerank/shared';
+ import type { ProgressData } from './progress.js';
+ 
+-const log = createLogger('services:run:progress');
++const log = createLogger('services:run:summarize-progress');
+ 
+-/**
+- * Updates summarize progress atomically using PostgreSQL JSONB operators.
+- * Increments the completed or failed count for transcript summarization.
+- */
+-export async function updateSummarizeProgress(
+-  runId: string,
+-  update: { incrementCompleted?: number; incrementFailed?: number }
+-): Promise<ProgressData | null> {
+-  const { incrementCompleted = 0, incrementFailed = 0 } = update;
+-
+-  if (incrementCompleted === 0 && incrementFailed === 0) {
+-    const run = await db.run.findUnique({
+-      where: { id: runId },
+-      select: { summarizeProgress: true },
+-    });
+-    return run?.summarizeProgress as ProgressData | null;
+-  }
+-
+-  log.debug(
+-    { runId, incrementCompleted, incrementFailed },
+-    'Updating summarize progress'
+-  );
++export async function updateSummarizeProgress(runId: string): Promise<ProgressData | null> {
++  const run = await db.run.findUnique({
++    where: { id: runId },
++    select: { summarizeProgress: true },
++  });
+ 
+-  // Use raw SQL for atomic JSONB increment
+-  const result = await db.$queryRaw<Array<{
+-    id: string;
+-    summarize_progress: ProgressData;
+-  }>>`
+-    UPDATE runs
+-    SET
+-      summarize_progress = jsonb_set(
+-        jsonb_set(
+-          summarize_progress,
+-          '{completed}',
+-          to_jsonb((summarize_progress->>'completed')::int + ${incrementCompleted})
+-        ),
+-        '{failed}',
+-        to_jsonb((summarize_progress->>'failed')::int + ${incrementFailed})
+-      ),
+-      updated_at = NOW()
+-    WHERE id = ${runId}
+-    RETURNING id, summarize_progress
+-  `;
+-
+-  const updatedRun = result[0];
+-  if (!updatedRun) {
++  if (run === null) {
+     return null;
+   }
+ 
+-  log.debug({ runId, summarizeProgress: updatedRun.summarize_progress }, 'Summarize progress updated');
+-  return updatedRun.summarize_progress;
++  return run.summarizeProgress as ProgressData | null;
+ }
+ 
+-/**
+- * Increments summarize completed count by 1.
+- */
+ export async function incrementSummarizeCompleted(runId: string): Promise<ProgressData | null> {
+-  return updateSummarizeProgress(runId, { incrementCompleted: 1 });
++  log.debug({ runId }, 'incrementSummarizeCompleted is read-only in derived mode');
++  return updateSummarizeProgress(runId);
+ }
+ 
+-/**
+- * Increments summarize failed count by 1.
+- */
+ export async function incrementSummarizeFailed(runId: string): Promise<ProgressData | null> {
+-  return updateSummarizeProgress(runId, { incrementFailed: 1 });
++  log.debug({ runId }, 'incrementSummarizeFailed is read-only in derived mode');
++  return updateSummarizeProgress(runId);
+ }
+diff --git a/cloud/packages/db/prisma/schema.prisma b/cloud/packages/db/prisma/schema.prisma
+index c1b1a193..5cea8036 100644
+--- a/cloud/packages/db/prisma/schema.prisma
++++ b/cloud/packages/db/prisma/schema.prisma
+@@ -403,6 +403,7 @@ model Run {
+   comparisonFor   RunComparison[]  @relation("ComparisonRun")
+   scenarioSelections RunScenarioSelection[]
+   probeResults    ProbeResult[]
++  anomalies       RunAnomaly[]
+ 
+   // Audit relations
+   createdBy User? @relation("RunCreator", fields: [createdByUserId], references: [id])
+@@ -492,6 +493,15 @@ enum RunCategory {
+   UNKNOWN_LEGACY
+ }
+ 
++enum RunAnomalyType {
++  STRANDED_TRANSCRIPT
++  ORPHAN_TRANSCRIPT
++  PAIR_ASYMMETRY
++  SUMMARIZING_STALL
++  MODEL_TRANSCRIPT_SHORTFALL
++  SCHEDULED_COUNT_MISMATCH
++}
++
+ model Transcript {
+   id                 String    @id @default(cuid())
+   runId              String    @map("run_id")
+@@ -521,6 +531,8 @@ model Transcript {
+   decisionText       String?   @map("decision_text")     // LLM-generated summary
+   decisionMetadata   Json?     @map("decision_metadata") @db.JsonB
+   summarizedAt       DateTime? @map("summarized_at")     // When summary was generated
++  summarizeFailedAt  DateTime?  @map("summarize_failed_at")
++  costDebitedAt      DateTime?  @map("cost_debited_at")
+   // Soft delete
+   deletedAt          DateTime? @map("deleted_at")
+ 
+@@ -532,6 +544,7 @@ model Transcript {
+   @@index([modelId])
+   @@index([deletedAt])
+   @@index([sampleIndex])
++  @@index([runId, summarizedAt])
+   @@map("transcripts")
+ }
+ 
+@@ -638,6 +651,7 @@ model ProbeResult {
+   // Updated unique constraint to include sampleIndex for multi-sample runs
+   @@unique([runId, scenarioId, modelId, sampleIndex])
+   @@index([runId])
++  @@index([runId, status])
+   @@index([scenarioId])
+   @@index([modelId])
+   @@index([status])
+@@ -645,6 +659,25 @@ model ProbeResult {
+   @@map("probe_results")
+ }
+ 
++model RunAnomaly {
++  id                   String         @id @default(cuid())
++  runId                String         @map("run_id")
++  type                 RunAnomalyType
++  subject              String         @default("")
++  details              Json           @db.JsonB
++  firstSeenAt          DateTime       @default(now()) @map("first_seen_at")
++  lastSeenAt           DateTime       @default(now()) @map("last_seen_at")
++  resolvedAt           DateTime?      @map("resolved_at")
++  acknowledgedByUserId String?        @map("acknowledged_by_user_id")
++
++  run Run @relation(fields: [runId], references: [id], onDelete: Cascade)
++
++  @@unique([runId, type, subject])
++  @@index([runId])
++  @@index([type, resolvedAt])
++  @@map("run_anomalies")
++}
++
+ enum ProbeResultStatus {
+   SUCCESS
+   FAILED

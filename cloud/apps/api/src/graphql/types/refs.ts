@@ -2,6 +2,7 @@ import { builder } from '../builder.js';
 import type {
   Definition,
   Run,
+  RunAnomaly,
   Transcript,
   Scenario,
   Experiment,
@@ -28,6 +29,7 @@ export type DefinitionShape = Omit<Definition, 'deletedAt'> & {
 
 export const DefinitionRef = builder.objectRef<DefinitionShape>('Definition');
 export const RunRef = builder.objectRef<Run>('Run');
+export const RunAnomalyRef = builder.objectRef<RunAnomaly>('RunAnomaly');
 export const TranscriptRef = builder.objectRef<Transcript>('Transcript');
 export const ScenarioRef = builder.objectRef<Scenario>('Scenario');
 export const ExperimentRef = builder.objectRef<Experiment>('Experiment');

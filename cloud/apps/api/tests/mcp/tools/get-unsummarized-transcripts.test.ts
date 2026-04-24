@@ -101,6 +101,7 @@ describe('get_unsummarized_transcripts MCP Tool [T021]', () => {
         tokenCount: 100,
         durationMs: 1000,
         summarizedAt: options?.summarized ? new Date() : null,
+        summarizeFailedAt: options?.failed ? new Date() : null,
       },
     });
     createdTranscriptIds.push(transcript.id);
@@ -182,7 +183,11 @@ describe('get_unsummarized_transcripts MCP Tool [T021]', () => {
       const transcripts = await db.transcript.findMany({
         where: {
           runId: run.id,
-          summarizedAt: null,
+          deletedAt: null,
+          OR: [
+            { summarizedAt: null, summarizeFailedAt: null },
+            { summarizeFailedAt: { not: null } },
+          ],
         },
       });
 

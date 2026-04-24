@@ -16,7 +16,7 @@ import { createLogger } from '@valuerank/shared';
 import type { ProbeScenarioJobData } from '../../types.js';
 import { DEFAULT_JOB_OPTIONS } from '../../types.js';
 import { spawnPython } from '../../spawn.js';
-import { isRunPaused, isRunTerminal } from '../../../services/run/index.js';
+import { isRunPaused, isRunTerminal, maybeAdvanceRunStatus } from '../../../services/run/index.js';
 import { createTranscript, validateTranscript } from '../../../services/transcript/index.js';
 import type { CostSnapshot } from '../../../services/transcript/index.js';
 import { recordProbeSuccess, recordProbeFailure } from '../../../services/probe-result/index.js';
@@ -24,7 +24,7 @@ import { schedule as rateLimitSchedule } from '../../../services/rate-limiter/in
 import { getProviderForModel } from '../../../services/parallelism/index.js';
 import { ensureHealthCheck } from './health-check.js';
 import { enqueueTopUpProbesSingleton } from '../top-up-probes.js';
-import { formatWorkerErrorMessage, extractStoredTranscriptTokenUsage, applyProgressDelta, handleJobError } from './retry.js';
+import { formatWorkerErrorMessage, extractStoredTranscriptTokenUsage, handleJobError } from './retry.js';
 import { PROBE_WORKER_PATH, fetchScenario, buildWorkerInput } from './worker-input.js';
 import type { ProbeWorkerInput, ProbeWorkerOutput } from './worker-input.js';
 
@@ -32,6 +32,26 @@ const log = createLogger('queue:probe-scenario');
 
 // Retry limit from job options (default 3)
 const RETRY_LIMIT = DEFAULT_JOB_OPTIONS['probe_scenario'].retryLimit ?? 3;
+
+async function enqueueSummarizeTranscriptSingleton(runId: string, transcriptId: string): Promise<void> {
+  const { getBoss } = await import('../../boss.js');
+  const { DEFAULT_JOB_OPTIONS: jobOptions } = await import('../../types.js');
+  const boss = getBoss();
+
+  await boss.send(
+    'summarize_transcript',
+    {
+      runId,
+      transcriptId,
+    },
+    {
+      ...jobOptions['summarize_transcript'],
+      singletonKey: transcriptId,
+    }
+  );
+
+  log.info({ runId, transcriptId }, 'Queued summarize job for late-arriving transcript');
+}
 
 /**
  * Process a single probe job.
@@ -75,7 +95,6 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
         transcriptId: true,
       },
     });
-    const previousProbeStatus = existingProbeResult?.status ?? null;
     const currentRetryCount = (job as unknown as { retrycount?: number }).retrycount ?? 0;
 
     if (
@@ -89,6 +108,7 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
         'Skipping probe job - result already succeeded'
       );
       await enqueueTopUpProbesSingleton(runId);
+      await maybeAdvanceRunStatus(runId);
       return;
     }
 
@@ -104,6 +124,7 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
         'Skipping probe job - already terminal failed'
       );
       await enqueueTopUpProbesSingleton(runId);
+      await maybeAdvanceRunStatus(runId);
       return;
     }
 
@@ -142,9 +163,16 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
         outputTokens: tokenUsage.outputTokens,
       });
 
-      const { progress, status } = await applyProgressDelta(runId, previousProbeStatus, 'SUCCESS');
+      const advanceResult = await maybeAdvanceRunStatus(runId);
+      const currentRun = await db.run.findUnique({
+        where: { id: runId },
+        select: { status: true },
+      });
+      if (!advanceResult.enteredSummarizing && currentRun?.status === 'SUMMARIZING') {
+        await enqueueSummarizeTranscriptSingleton(runId, existingTranscript.id);
+      }
       log.info(
-        { jobId, runId, scenarioId, modelId, sampleIndex, transcriptId: existingTranscript.id, progress, status },
+        { jobId, runId, scenarioId, modelId, sampleIndex, transcriptId: existingTranscript.id, advanceResult },
         'Recovered probe result from existing transcript'
       );
       return;
@@ -201,8 +229,8 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
           errorMessage,
           retryCount: 0,
         });
-        const { progress, status } = await applyProgressDelta(runId, previousProbeStatus, 'FAILED');
-        log.error({ jobId, runId, progress, status, error: err }, 'Probe job permanently failed');
+        const advanceResult = await maybeAdvanceRunStatus(runId);
+        log.error({ jobId, runId, advanceResult, error: err }, 'Probe job permanently failed');
         return; // Complete job without retrying
       }
 
@@ -286,27 +314,21 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
       outputTokens: output.transcript.totalOutputTokens,
     });
 
-    // Update progress based on status transition for this probe key
-    const { progress, status } = await applyProgressDelta(runId, previousProbeStatus, 'SUCCESS');
+    const advanceResult = await maybeAdvanceRunStatus(runId);
+    const currentRun = await db.run.findUnique({
+      where: { id: runId },
+      select: { status: true },
+    });
     await enqueueTopUpProbesSingleton(runId);
 
-    // If run is already in SUMMARIZING state (late-arriving probe job),
-    // queue a summarize job for this transcript immediately
-    if (status === 'SUMMARIZING') {
-      const { getBoss } = await import('../../boss.js');
-      const { DEFAULT_JOB_OPTIONS: jobOptions } = await import('../../types.js');
-      const boss = getBoss();
-      if (boss !== null) {
-        await boss.send('summarize_transcript', {
-          runId,
-          transcriptId: transcriptRecord.id,
-        }, jobOptions['summarize_transcript']);
-        log.info({ runId, transcriptId: transcriptRecord.id }, 'Queued summarize job for late-arriving transcript');
-      }
+    // If the run is already summarizing, queue the just-created transcript.
+    // When we just entered SUMMARIZING in this call, queueSummarizeJobs already handled it.
+    if (!advanceResult.enteredSummarizing && currentRun?.status === 'SUMMARIZING') {
+      await enqueueSummarizeTranscriptSingleton(runId, transcriptRecord.id);
     }
 
     log.info(
-      { jobId, runId, scenarioId, modelId, progress, status, turns: output.transcript.turns.length },
+      { jobId, runId, scenarioId, modelId, sampleIndex, transcriptId: transcriptRecord.id, advanceResult, turns: output.transcript.turns.length },
       'Probe job completed'
     );
   } catch (error) {

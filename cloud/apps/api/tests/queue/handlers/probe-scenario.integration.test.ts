@@ -55,6 +55,16 @@ const TEST_IDS = {
 };
 
 // Sample probe transcript response from Python worker
+// Progress is derived from ProbeResult rows (PR #745). Helper for tests that
+// used to read `run.progress` JSONB counters.
+async function getDerivedProgress(runId: string): Promise<{ completed: number; failed: number }> {
+  const [completed, failed] = await Promise.all([
+    db.probeResult.count({ where: { runId, status: 'SUCCESS', deletedAt: null } }),
+    db.probeResult.count({ where: { runId, status: 'FAILED', deletedAt: null } }),
+  ]);
+  return { completed, failed };
+}
+
 const MOCK_TRANSCRIPT = {
   turns: [
     {
@@ -212,14 +222,18 @@ describe('probe-scenario integration', () => {
       const handler = createProbeScenarioHandler();
       await handler([createMockJob()]);
 
-      // Verify progress was updated
-      const run = await db.run.findUnique({
-        where: { id: TEST_IDS.run },
-      });
-
-      const progress = run?.progress as { completed: number; failed: number; total: number };
-      expect(progress.completed).toBe(1);
-      expect(progress.failed).toBe(0);
+      // Progress is now derived from ProbeResult rows (PR #745). The JSONB
+      // counter on Run no longer advances — query ProbeResult directly.
+      const [successes, failures] = await Promise.all([
+        db.probeResult.count({
+          where: { runId: TEST_IDS.run, status: 'SUCCESS', deletedAt: null },
+        }),
+        db.probeResult.count({
+          where: { runId: TEST_IDS.run, status: 'FAILED', deletedAt: null },
+        }),
+      ]);
+      expect(successes).toBe(1);
+      expect(failures).toBe(0);
     });
 
     it('stores definition snapshot in transcript', async () => {
@@ -305,11 +319,8 @@ describe('probe-scenario integration', () => {
       });
       expect(transcripts.length).toBe(3);
 
-      // Verify final progress
-      const run = await db.run.findUnique({
-        where: { id: TEST_IDS.run },
-      });
-      const progress = run?.progress as { completed: number; failed: number; total: number };
+      // Verify final progress (derived from ProbeResult since PR #745)
+      const progress = await getDerivedProgress(TEST_IDS.run);
       expect(progress.completed).toBe(3);
       expect(progress.failed).toBe(0);
 
@@ -386,8 +397,7 @@ describe('probe-scenario integration', () => {
       });
       expect(transcripts.length).toBe(1);
 
-      let run = await db.run.findUnique({ where: { id: TEST_IDS.run } });
-      let progress = run?.progress as { completed: number; failed: number; total: number };
+      let progress = await getDerivedProgress(TEST_IDS.run);
       expect(progress.completed).toBe(1);
       expect(progress.failed).toBe(0);
 
@@ -399,8 +409,7 @@ describe('probe-scenario integration', () => {
       });
       expect(transcripts.length).toBe(2);
 
-      run = await db.run.findUnique({ where: { id: TEST_IDS.run } });
-      progress = run?.progress as { completed: number; failed: number; total: number };
+      progress = await getDerivedProgress(TEST_IDS.run);
       expect(progress.completed).toBe(2);
       expect(progress.failed).toBe(0);
 
@@ -435,8 +444,7 @@ describe('probe-scenario integration', () => {
       await expect(handler([createMockJob()])).rejects.toThrow('RATE_LIMIT');
 
       // Progress should NOT be incremented (will retry)
-      const run = await db.run.findUnique({ where: { id: TEST_IDS.run } });
-      const progress = run?.progress as { completed: number; failed: number };
+      const progress = await getDerivedProgress(TEST_IDS.run);
       expect(progress.completed).toBe(0);
       expect(progress.failed).toBe(0);
     });
@@ -462,8 +470,7 @@ describe('probe-scenario integration', () => {
       await handler([createMockJob()]);
 
       // Progress.failed should be incremented
-      const run = await db.run.findUnique({ where: { id: TEST_IDS.run } });
-      const progress = run?.progress as { completed: number; failed: number };
+      const progress = await getDerivedProgress(TEST_IDS.run);
       expect(progress.completed).toBe(0);
       expect(progress.failed).toBe(1);
     });

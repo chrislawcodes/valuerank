@@ -7,7 +7,7 @@
 
 import { db, Prisma } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
-import { getBoss } from '../../queue/boss.js';
+import { getBoss, isBossRunning } from '../../queue/boss.js';
 import { DEFAULT_JOB_OPTIONS } from '../../queue/types.js';
 
 const log = createLogger('services:analysis:trigger');
@@ -55,11 +55,11 @@ export async function triggerBasicAnalysis(
   );
 
   // Queue the analyze_basic job
-  const boss = getBoss();
-  if (boss === null) {
-    log.error({ runId }, 'Cannot queue analysis - boss not initialized');
+  if (!isBossRunning()) {
+    log.error({ runId }, 'Cannot queue analysis - boss not running');
     return false;
   }
+  const boss = getBoss();
 
   const jobOptions = DEFAULT_JOB_OPTIONS['analyze_basic'];
 
