@@ -375,12 +375,108 @@
       "agent_id": null,
       "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
       "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:18:42.400643Z",
+      "started_at": "2026-04-24T05:18:20.466521Z",
+      "ended_at": "2026-04-24T05:18:42.400643Z",
+      "duration_seconds": 21.933998,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:18:57.048403Z",
+      "started_at": "2026-04-24T05:18:20.463091Z",
+      "ended_at": "2026-04-24T05:18:57.048403Z",
+      "duration_seconds": 36.58494,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:19:01.064191Z",
+      "started_at": "2026-04-24T05:18:42.403536Z",
+      "ended_at": "2026-04-24T05:19:01.064191Z",
+      "duration_seconds": 18.660552,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:19:30.452839Z",
+      "started_at": "2026-04-24T05:18:57.049981Z",
+      "ended_at": "2026-04-24T05:19:30.452839Z",
+      "duration_seconds": 33.402633,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:21:15.344463Z",
+      "started_at": "2026-04-24T05:18:20.463345Z",
+      "ended_at": "2026-04-24T05:21:15.344463Z",
+      "duration_seconds": 174.879931,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:22:42.450290Z",
+      "started_at": "2026-04-24T05:21:15.346976Z",
+      "ended_at": "2026-04-24T05:22:42.450290Z",
+      "duration_seconds": 87.10275,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Claude token counts found in stdout or stderr"
     }
   ],
   "stages": {
     "spec": {
       "adversarial_rounds": 3,
-      "judge_rounds": 1,
+      "judge_rounds": 2,
       "judge_verdicts": [
         [
           {
@@ -523,9 +619,135 @@
             ],
             "timestamp": "2026-04-23T00:00:00Z"
           }
+        ],
+        [
+          {
+            "judge": "completeness",
+            "model": "gpt-5.4",
+            "verdict": "proceed-with-annotation",
+            "confidence": 4,
+            "reasoning": "spec.codex.edge-cases-adversarial.review#high-1 is explicitly acknowledged as a documented limitation for fenced code-block matches in the plan reconciliation notes, so it is not left unaddressed. spec.codex.feasibility-adversarial.review#high-1 is directly mitigated by FR-011a and T3.5, which backfill unresolved_concerns ids on read so older runs remain usable. spec.gemini.requirements-adversarial.review#high-3 is explicitly accepted as a format-bound limitation in Residual Risk R7 and is deferred because prompt/structured-output changes are out of scope. Every HIGH finding has either a named mitigation or an explicit limitation note, so the chain is complete, with annotations for the accepted limitations.",
+            "evidence": [
+              {
+                "artifact": "docs/workflow/feature-runs/ff-runner-fixes/plan.md",
+                "section": "Review Reconciliation",
+                "quote": "LOW fenced-code-block regex match \u2014 pinned as documented limitation with explicit test."
+              },
+              {
+                "artifact": "docs/workflow/feature-runs/ff-runner-fixes/spec.md",
+                "section": "FR-011a / FR-003",
+                "quote": "The loader MUST backfill the stable `id` field for any existing `unresolved_concerns` entry that lacks one."
+              },
+              {
+                "artifact": "docs/workflow/feature-runs/ff-runner-fixes/spec.md",
+                "section": "Residual risks R7",
+                "quote": "accepted as a known architectural limitation; out of scope ... `factory_review_specs.ACTIONABLE_FINDING_SHAPES` manifest + test coverage mitigates near-term impact."
+              }
+            ],
+            "timestamp": "2026-04-23T00:00:00-07:00"
+          },
+          {
+            "judge": "restatement",
+            "model": "GPT-5.5",
+            "verdict": "block",
+            "confidence": 5,
+            "reasoning": "All latest-round findings are NEW because there were no earlier rounds to restate: the record explicitly says \"No prior findings yet.\" Under the stated rule, a finding can only be a RESTATEMENT if an earlier round raised the same concern and the orchestrator made a substantive change in response. That prerequisite is absent for every item here. Several findings also describe concrete failure modes not previously covered anywhere in the review history: a fenced-code auto-reconcile bypass, missing invariant coverage for mutating commands like discover/parallel/init, missing backfill IDs for existing unresolved concerns, an internal spec contradiction between US1 scenario 3 and FR-004, brittle concern-ID generation, regex-maintenance risk, audit-trail assumptions, ignored contradiction warnings, and lifecycle misuse risk. Some latest findings overlap with each other thematically, but overlap within the same latest batch does not make them restatements of earlier rounds. Because 0% of the latest round can be classified as restatements against prior rounds, the loop is still producing signal and should be blocked from proceeding.",
+            "evidence": [
+              {
+                "artifact": "review-history",
+                "section": "earlier-rounds",
+                "quote": "No prior findings yet."
+              },
+              {
+                "artifact": "spec.codex.edge-cases-adversarial.review.md",
+                "section": "high-1",
+                "quote": "The auto-reconcile regex still has a code-fence bypass... a literal `- HIGH:` line inside a fenced code block still matches and is treated as actionable."
+              },
+              {
+                "artifact": "spec.codex.edge-cases-adversarial.review.md",
+                "section": "medium-2",
+                "quote": "FR-009 under-specifies the state-mutating commands that must get the post-run invariant check... the current runner already treats `discover` and `parallel` as mutating commands... and `init` also writes workflow state during bootstrap."
+              },
+              {
+                "artifact": "spec.codex.feasibility-adversarial.review.md",
+                "section": "high-1",
+                "quote": "FR-003 and FR-011a do not backfill `id` for existing `unresolved_concerns`... the new lifecycle is unusable on existing runs."
+              },
+              {
+                "artifact": "spec.codex.feasibility-adversarial.review.md",
+                "section": "medium-3",
+                "quote": "US1 scenario 3 says the next checkpoint can treat concerns as closed when they are \"referenced as `addressed` in plan annotations,\" but FR-004 says annotations are display-only... the spec is internally inconsistent."
+              },
+              {
+                "artifact": "spec.gemini.requirements-adversarial.review.md",
+                "section": "medium-1",
+                "quote": "Concern ID generation is brittle and may fail to track paraphrased findings [UNVERIFIED]"
+              },
+              {
+                "artifact": "spec.gemini.requirements-adversarial.review.md",
+                "section": "high-3",
+                "quote": "This method is inherently brittle and adds maintenance complexity... The root problem\u2014a lack of a structured format for review findings\u2014is not addressed."
+              }
+            ],
+            "timestamp": "2026-04-23T00:00:00-07:00"
+          },
+          {
+            "judge": "implementation-risk",
+            "model": "claude-sonnet-4-5",
+            "verdict": "block",
+            "confidence": 4,
+            "reasoning": "Four load-bearing ambiguities would force an implementer to guess on real decisions. First, the plan introduces `factory_invariants.py` with a `JSON_MODE` flag and `set_json_mode()` API for back-compat, but the tasks place the same helper in `factory_state.py` with no `emit_to` parameter and no mention of `factory_invariants.py`. These cannot both be right, and the implementer must pick a file and decide whether to create or extend it. Second, `reseal_manifest_for_drift` must 'update the manifest checkpoint.json' but no artifact gives the path pattern for that file; the implementer cannot write the function without guessing the path. Third, the invariant check (FR-010/FR-011b) must call `recommended_next_action(...)` using `reconciliation_state()` as input, but neither the signature of `recommended_next_action` nor how to obtain `reconciliation_state()` is specified in any artifact. Fourth, the reconcile notes explicitly added `init` to `_STATE_MUTATING_COMMANDS`, but T2.4's authoritative command list omits it, leaving the implementer to decide which source wins.",
+            "evidence": [
+              {
+                "artifact": "PLAN",
+                "section": "Slice 2 / Risk P3",
+                "quote": "Emit to stderr when --json is in effect; stdout otherwise. Detect via a context var or explicit parameter threaded from the caller. \u2026 The module-level JSON_MODE flag in factory_invariants.py is preserved for back-compat of set_json_mode() callers but has no behavioral effect on the emit target."
+              },
+              {
+                "artifact": "TASKS",
+                "section": "T2.2 / T2.3",
+                "quote": "Add run_invariant_checks(state, command) helper \u2026 Emit invariant warnings to stderr ALWAYS (no conditional routing). Preserve the JSON_MODE flag + set_json_mode() API for back-compat but do not use it to switch emit targets."
+              },
+              {
+                "artifact": "TASKS",
+                "section": "T3.3",
+                "quote": "Add reseal_manifest_for_drift(slug, stage) helper that updates the manifest checkpoint.json and appends a drift annotation to stages[stage].annotations[]"
+              },
+              {
+                "artifact": "SPEC",
+                "section": "FR-002",
+                "quote": "the runner MUST reseal the manifest to the current SHA and append a drift record to stages.<stage>.annotations[] \u2026 This reseal happens lazily the next time the advance is taken"
+              },
+              {
+                "artifact": "SPEC",
+                "section": "FR-011b",
+                "quote": "_run_post_invariants in run_factory.py MUST compute recommended_next_action using the same reconciliation_state() signal as status and command_checkpoint, so the contradiction detector evaluates the user-visible next-action string."
+              },
+              {
+                "artifact": "PLAN",
+                "section": "Review Reconciliation note for edge-cases-adversarial",
+                "quote": "M#1 init/discover/parallel added to _STATE_MUTATING_COMMANDS."
+              },
+              {
+                "artifact": "TASKS",
+                "section": "T2.4",
+                "quote": "Call run_invariant_checks at the tail of every state-mutating command in run_factory.py: checkpoint, judge, reconcile, auto-reconcile, implement, deliver, block, repair, closeout, discover, parallel."
+              }
+            ],
+            "timestamp": "2026-04-23T00:00:00Z"
+          }
         ]
       ],
-      "annotations": [],
+      "annotations": [
+        {
+          "stage": "spec",
+          "round": 2,
+          "judge": "completeness",
+          "confidence": 4,
+          "reasoning": "spec.codex.edge-cases-adversarial.review#high-1 is explicitly acknowledged as a documented limitation for fenced code-block matches in the plan reconciliation notes, so it is not left unaddressed. spec.codex.feasibility-adversarial.review#high-1 is directly mitigated by FR-011a and T3.5, which backfill unresolved_concerns ids on read so older runs remain usable. spec.gemini.requirements-adversarial.review#high-3 is explicitly accepted as a format-bound limitation in Residual Risk R7 and is deferred because prompt/structured-output changes are out of scope. Every HIGH finding has either a named mitigation or an explicit limitation note, so the chain is complete, with annotations for the accepted limitations.",
+          "artifact_sha_at_time": "8d699036faefbe0a7ddef56824dae633ec6d49fb020dc5e24e7a756b21889553"
+        }
+      ],
       "unresolved_concerns": [],
       "adversarial_sha_history": [
         "4ab997afabde09d73e0680a192ec0043e351c24cf51bb3a5166a324de5aba32a",
@@ -549,17 +771,16 @@
   "invariant_warnings": [],
   "last_action_result": {
     "next": "edit_and_rerun_judge",
-    "reason": "block majority; 3 of 3 judges blocked",
+    "reason": "block majority; 2 of 3 judges blocked",
     "blockers": [
-      "spec.codex.edge-cases-adversarial.review#high-1 is explicitly acknowledged as a limitation in the artifact chain: the plan says the fenced-code-block case is \"pinned as documented limitation with explicit test,\" and the review test note says lines inside fenced code blocks are not excluded; specific enough to implement: yes. spec.codex.feasibility-adversarial.review#high-1 is not addressed: FR-011a only default-fills missing concern fields on read, but there is no named backfill or migration for `id` on existing `unresolved_concerns`, so the run-033 fixture path is still uncovered; specific enough to implement: no. spec.gemini.requirements-adversarial.review#high-3 is not addressed: the chain only expands `_ACTIONABLE_FINDING_RE` and records regex false-positive risk, but it does not name any mitigation for the maintainability/structured-format critique; specific enough to implement: no. Because at least one HIGH remains unaddressed, the verdict is block.",
-      "All latest findings are NEW, not RESTATEMENTS, because the record explicitly says there were no earlier findings: \"No prior findings yet.\" That means there is no earlier round that raised the same concern, and no orchestrator response that could have substantively addressed it. Finding-by-finding: 1) edge-cases high-1 is NEW because it identifies a specific code-fence bypass in the auto-reconcile regex, where a literal severity line inside fenced code is still treated as actionable. 2) edge-cases medium-2 is NEW because it identifies an uncovered mutation-path failure mode: FR-009 does not require invariant checks after `discover`, `parallel`, and `init`, even though those commands mutate state. 3) feasibility high-1 is NEW because it identifies a backfill gap for existing `unresolved_concerns` without `id`, making the new checkpoint lifecycle unusable on preexisting runs. 4) feasibility medium-2 is NEW because it again identifies omitted invariant coverage for `discover` and `parallel`; this is duplicative within the latest round, but still not a restatement of any earlier round because there were none. 5) feasibility medium-3 is NEW because it identifies an internal spec contradiction between US1 scenario 3 and FR-004 about whether plan annotations can close concerns. 6) feasibility medium-4 is NEW because it again identifies the code-fence false-positive/false-actionable regex bypass; duplicative within the latest round, but still new relative to prior rounds. 7) gemini medium-1 is NEW because it raises a distinct failure mode: brittle concern-ID generation may fail to track paraphrased findings. 8) gemini medium-2 is NEW because it raises a broader maintainability and brittleness risk in the regex-based severity detection strategy. 9) gemini high-3 is NEW because it raises the architectural failure mode that the system is entering an open-ended formatting arms race instead of solving the lack of structured review input. 10) gemini medium-4 is NEW because it raises a distinct audit-trail assumption risk around advancing with artifact drift. 11) gemini low-5 is NEW because it raises a human/agent-operability failure mode: contradiction warnings may be silently ignored by automated agents. 12) gemini low-6 is NEW because it raises a governance/control gap in the new concern lifecycle. Since 100% of the latest round's findings are new relative to earlier rounds, the loop is still producing signal and should be blocked from saturation-based proceed.",
-      "Four concrete snags would stop a competent implementer: (1) The emit-routing for Fix 8 warnings is specified three different ways across the three artifacts \u2014 always-stderr in the spec FR, conditional in the plan Risk P3, and a JSON_MODE context-var switch in T2.3. An implementer must pick one; tests written for the wrong choice will be wrong. (2) The Fix 1 decision-tree change is expressed as pseudocode calling an undefined function `continue_past_stage()` \u2014 the artifacts never show the source of `factory_next_action.py`, so the implementer has no artifact-grounded answer for what code to write. (3) The plan's reconcile-accepted list of state-mutating commands (init/discover/parallel) contradicts T2.4's enumeration, which omits those three call sites. An implementer following tasks.md will miss them. (4) The concern-ID hash formula is specified two different ways \u2014 FR-003 says 'stripped-of-whitespace then first 48 chars' and T3.5 says `reasoning[:48]` \u2014 producing different bytes and therefore different IDs."
+      "All latest-round findings are NEW because there were no earlier rounds to restate: the record explicitly says \"No prior findings yet.\" Under the stated rule, a finding can only be a RESTATEMENT if an earlier round raised the same concern and the orchestrator made a substantive change in response. That prerequisite is absent for every item here. Several findings also describe concrete failure modes not previously covered anywhere in the review history: a fenced-code auto-reconcile bypass, missing invariant coverage for mutating commands like discover/parallel/init, missing backfill IDs for existing unresolved concerns, an internal spec contradiction between US1 scenario 3 and FR-004, brittle concern-ID generation, regex-maintenance risk, audit-trail assumptions, ignored contradiction warnings, and lifecycle misuse risk. Some latest findings overlap with each other thematically, but overlap within the same latest batch does not make them restatements of earlier rounds. Because 0% of the latest round can be classified as restatements against prior rounds, the loop is still producing signal and should be blocked from proceeding.",
+      "Four load-bearing ambiguities would force an implementer to guess on real decisions. First, the plan introduces `factory_invariants.py` with a `JSON_MODE` flag and `set_json_mode()` API for back-compat, but the tasks place the same helper in `factory_state.py` with no `emit_to` parameter and no mention of `factory_invariants.py`. These cannot both be right, and the implementer must pick a file and decide whether to create or extend it. Second, `reseal_manifest_for_drift` must 'update the manifest checkpoint.json' but no artifact gives the path pattern for that file; the implementer cannot write the function without guessing the path. Third, the invariant check (FR-010/FR-011b) must call `recommended_next_action(...)` using `reconciliation_state()` as input, but neither the signature of `recommended_next_action` nor how to obtain `reconciliation_state()` is specified in any artifact. Fourth, the reconcile notes explicitly added `init` to `_STATE_MUTATING_COMMANDS`, but T2.4's authoritative command list omits it, leaving the implementer to decide which source wins."
     ],
     "outcome": "rejudge",
-    "proceed_count": 0,
-    "block_count": 3,
-    "timestamp": "2026-04-24T05:14:00.060754Z",
-    "judge_round": 1
+    "proceed_count": 1,
+    "block_count": 2,
+    "timestamp": "2026-04-24T05:22:42.455135Z",
+    "judge_round": 2
   },
-  "spec_judge_rounds": 1
+  "spec_judge_rounds": 2
 }

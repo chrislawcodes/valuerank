@@ -15,21 +15,21 @@
 
 ## Slice 2 — Fix 8 invariant self-check `[CHECKPOINT]`
 
-- [ ] T2.1 Add `invariant_warnings: list[dict]` to the default state shape in `factory_state.py` with default-on-read behavior
-- [ ] T2.2 Add `run_invariant_checks(state, command)` helper with the FR-010 rule
-- [ ] T2.3 Emit invariant warnings to stderr ALWAYS (no conditional routing). Preserve the `JSON_MODE` flag + `set_json_mode()` API for back-compat but do not use it to switch emit targets.
-- [ ] T2.4 Call `run_invariant_checks` at the tail of every state-mutating command in `run_factory.py`: `checkpoint`, `judge`, `reconcile`, `auto-reconcile`, `implement`, `deliver`, `block`, `repair`, `closeout`, `discover`, `parallel`. The `_STATE_MUTATING_COMMANDS` frozenset is the single source of truth.
-- [ ] T2.5 Surface last-5 `invariant_warnings` in `status --slug` output
-- [ ] T2.6 Add `tests/test_invariant_checks.py` covering: contradiction triggers WARN, clean state emits nothing, --json sends to stderr, exception in check does not abort command
-- [ ] T2.7 `pytest tests/test_invariant_checks.py` green
+- [ ] T2.1 Add `invariant_warnings: list[dict]` + `INVARIANT_WARNINGS_KEY` constant + `_INVARIANT_WARNINGS_CAP = 100` to `factory_state.py`. The default workflow state and `load_workflow_state` both default-fill `invariant_warnings = []`.
+- [ ] T2.2 Create NEW module `factory_invariants.py` (sibling of `factory_state.py`). Define `run_invariant_checks(state, command, recommended, invariants=None) -> list[dict]` and a catalog of invariant functions (`check_judge_advance_vs_recommended`). Do NOT put this helper in `factory_state.py` — it needs to import from `factory_state` and live as a separate concern.
+- [ ] T2.3 Emit invariant warnings to stderr ALWAYS (no conditional routing). Preserve the module-level `JSON_MODE` flag + `set_json_mode()` API for back-compat but do not use them to switch emit targets — `_emit_target()` always returns `sys.stderr`.
+- [ ] T2.4 Call `run_invariant_checks` at the tail of `main()` in `run_factory.py` for every state-mutating command. The authoritative enumeration is the `_STATE_MUTATING_COMMANDS` frozenset literal. Contents (exact, in alphabetic order for easy diff): `auto-reconcile, block, checkpoint, closeout, deliver, discover, implement, judge, parallel, reconcile, repair`. Tasks.md and reconcile notes must match this enumeration.
+- [ ] T2.5 Surface last-5 `invariant_warnings` in `status --slug` output (under new `invariant-warnings:` section). Implementation lives in `factory_cmd_status.command_status`.
+- [ ] T2.6 Add `tests/test_factory_invariants.py` covering: contradiction triggers WARN, clean state emits nothing, `JSON_MODE=True` still routes to stderr, exception in check does not abort caller, cap bounds the list at 100 entries.
+- [ ] T2.7 `pytest tests/test_factory_invariants.py` green
 - [ ] T2.8 Commit
 
 ## Slice 3 — Fix 1 judge-advance honoring `[CHECKPOINT]`
 
 - [ ] T3.1 In `factory_next_action.recommended_next_action`, add `if stages[stage].get("judge_next_action") == "advance":` check before each `not healthy` branch, for spec/plan/tasks (loop or inline)
 - [ ] T3.2 In `factory_cmd_judge.py`, reorder both advance branches so `stage_state["judge_next_action"] = "advance"` is written BEFORE `recommended_next_action` is called
-- [ ] T3.3 Add `reseal_manifest_for_drift(slug, stage)` helper that updates the manifest checkpoint.json and appends a drift annotation to `stages[stage].annotations[]`
-- [ ] T3.4 Call the reseal helper lazily — at the top of `cmd_checkpoint` / on advance — when `judge_next_action == "advance"` AND artifact SHA drifted
+- [ ] T3.3 Add `record_advance_with_drift_if_needed(slug, stage, stage_state, manifest_state)` helper to `factory_stages.py`. The manifest lives at `docs/workflow/feature-runs/<slug>/reviews/<stage>.checkpoint.json` (resolve via `factory_state.checkpoint_manifest_path(slug, stage)`). The helper reads the current artifact sha via `workflow_utils.normalized_artifact_hash` and, when it differs from the manifest sha, appends `{type: "advance-with-drift", old_sha, new_sha, at: epoch, reason: "post-judge-edits-only"}` to `stages[stage].annotations[]`. Idempotent — skip if the same old_sha/new_sha pair is already recorded.
+- [ ] T3.4 Call the reseal helper from `factory_stages.prerequisite_failure` when a prereq stage is unhealthy BUT has `judge_next_action == "advance"` — at that point the drift is about to be tolerated so we record it once.
 - [ ] T3.5 Extend `unresolved_concerns` dict shape: add `id`, `addressed_at`, `addressed_by`, `deferred_reason`, `dismissed_reason`. Compute `id` as `sha256(f"{stage}|{judge}|{round_raised}|" + "".join(reasoning.split())[:48])[:12]` — that is, normalize reasoning by stripping ALL whitespace first, then take the first 48 chars, matching FR-003 exactly. Also: on read, backfill `id` for any existing `unresolved_concerns` entry that lacks one, so run-033 fixture path is covered.
 - [ ] T3.6 Add `checkpoint --address <id> --evidence <text>`, `--defer <id> --reason <text>`, `--dismiss <id> --reason <text>` flags and their handlers
 - [ ] T3.7 In `factory_cmd_checkpoint.py`, before running next-stage adversarial reviews, verify every prior-stage unresolved_concern is addressed/deferred/dismissed; if any open, return `blocked: unresolved-concerns-from-<prior-stage>`

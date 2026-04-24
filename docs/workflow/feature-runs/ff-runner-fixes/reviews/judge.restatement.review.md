@@ -1,16 +1,16 @@
 ---
-reviewer: "gpt-5.5"
+reviewer: "GPT-5.5"
 lens: "restatement-judge"
 stage: "spec"
 artifact_path: "docs/workflow/feature-runs/ff-runner-fixes/spec.md"
-artifact_sha256: "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba"
+artifact_sha256: "8d699036faefbe0a7ddef56824dae633ec6d49fb020dc5e24e7a756b21889553"
 repo_root: "."
-git_head_sha: "7b414cadc42e915c128f35f296d36dca61c9d85b"
+git_head_sha: "10bcb0bba915d6a6b917a78091afbca232a3e34f"
 git_base_ref: "origin/main"
 git_base_sha: "424c0605a8158acfe0b3912840a6c5b2da057c84"
 generation_method: "judge-panel"
 resolution_status: "open"
-resolution_note: "All latest findings are NEW, not RESTATEMENTS, because the record explicitly says there were no earlier findings: \"No prior findings yet.\" That means there is no earlier round that raised the same concern, and no orchestrator response th..."
+resolution_note: "All latest-round findings are NEW because there were no earlier rounds to restate: the record explicitly says \"No prior findings yet.\" Under the stated rule, a finding can only be a RESTATEMENT if an earlier round raised the same concern..."
 raw_output_path: "docs/workflow/feature-runs/ff-runner-fixes/reviews/judge.restatement.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,18 +22,17 @@ coverage_note: ""
 
 ## Findings
 
-All latest findings are NEW, not RESTATEMENTS, because the record explicitly says there were no earlier findings: "No prior findings yet." That means there is no earlier round that raised the same concern, and no orchestrator response that could have substantively addressed it. Finding-by-finding: 1) edge-cases high-1 is NEW because it identifies a specific code-fence bypass in the auto-reconcile regex, where a literal severity line inside fenced code is still treated as actionable. 2) edge-cases medium-2 is NEW because it identifies an uncovered mutation-path failure mode: FR-009 does not require invariant checks after `discover`, `parallel`, and `init`, even though those commands mutate state. 3) feasibility high-1 is NEW because it identifies a backfill gap for existing `unresolved_concerns` without `id`, making the new checkpoint lifecycle unusable on preexisting runs. 4) feasibility medium-2 is NEW because it again identifies omitted invariant coverage for `discover` and `parallel`; this is duplicative within the latest round, but still not a restatement of any earlier round because there were none. 5) feasibility medium-3 is NEW because it identifies an internal spec contradiction between US1 scenario 3 and FR-004 about whether plan annotations can close concerns. 6) feasibility medium-4 is NEW because it again identifies the code-fence false-positive/false-actionable regex bypass; duplicative within the latest round, but still new relative to prior rounds. 7) gemini medium-1 is NEW because it raises a distinct failure mode: brittle concern-ID generation may fail to track paraphrased findings. 8) gemini medium-2 is NEW because it raises a broader maintainability and brittleness risk in the regex-based severity detection strategy. 9) gemini high-3 is NEW because it raises the architectural failure mode that the system is entering an open-ended formatting arms race instead of solving the lack of structured review input. 10) gemini medium-4 is NEW because it raises a distinct audit-trail assumption risk around advancing with artifact drift. 11) gemini low-5 is NEW because it raises a human/agent-operability failure mode: contradiction warnings may be silently ignored by automated agents. 12) gemini low-6 is NEW because it raises a governance/control gap in the new concern lifecycle. Since 100% of the latest round's findings are new relative to earlier rounds, the loop is still producing signal and should be blocked from saturation-based proceed.
+All latest-round findings are NEW because there were no earlier rounds to restate: the record explicitly says "No prior findings yet." Under the stated rule, a finding can only be a RESTATEMENT if an earlier round raised the same concern and the orchestrator made a substantive change in response. That prerequisite is absent for every item here. Several findings also describe concrete failure modes not previously covered anywhere in the review history: a fenced-code auto-reconcile bypass, missing invariant coverage for mutating commands like discover/parallel/init, missing backfill IDs for existing unresolved concerns, an internal spec contradiction between US1 scenario 3 and FR-004, brittle concern-ID generation, regex-maintenance risk, audit-trail assumptions, ignored contradiction warnings, and lifecycle misuse risk. Some latest findings overlap with each other thematically, but overlap within the same latest batch does not make them restatements of earlier rounds. Because 0% of the latest round can be classified as restatements against prior rounds, the loop is still producing signal and should be blocked from proceeding.
 
 ## Residual Risks
 
-- earlier-rounds :: summary - No prior findings yet.
-- spec.codex.edge-cases-adversarial.review.md :: high-1 - The auto-reconcile regex still has a code-fence bypass.
-- spec.codex.edge-cases-adversarial.review.md :: medium-2 - FR-009 under-specifies the state-mutating commands that must get the post-run invariant check.
-- spec.codex.feasibility-adversarial.review.md :: high-1 - FR-003 and FR-011a do not backfill `id` for existing `unresolved_concerns`.
-- spec.codex.feasibility-adversarial.review.md :: medium-3 - US1 scenario 3 says the next checkpoint can treat concerns as closed when they are "referenced as `addressed` in plan annotations," but FR-004 says annotations are display-only.
+- review-history :: earlier-rounds - No prior findings yet.
+- spec.codex.edge-cases-adversarial.review.md :: high-1 - The auto-reconcile regex still has a code-fence bypass... a literal `- HIGH:` line inside a fenced code block still matches and is treated as actionable.
+- spec.codex.edge-cases-adversarial.review.md :: medium-2 - FR-009 under-specifies the state-mutating commands that must get the post-run invariant check... the current runner already treats `discover` and `parallel` as mutating commands... and `init` also writes workflow state during bootstrap.
+- spec.codex.feasibility-adversarial.review.md :: high-1 - FR-003 and FR-011a do not backfill `id` for existing `unresolved_concerns`... the new lifecycle is unusable on existing runs.
+- spec.codex.feasibility-adversarial.review.md :: medium-3 - US1 scenario 3 says the next checkpoint can treat concerns as closed when they are "referenced as `addressed` in plan annotations," but FR-004 says annotations are display-only... the spec is internally inconsistent.
 - spec.gemini.requirements-adversarial.review.md :: medium-1 - Concern ID generation is brittle and may fail to track paraphrased findings [UNVERIFIED]
-- spec.gemini.requirements-adversarial.review.md :: high-3 - This creates an "arms race" where the tool is always trying to catch up to new, arbitrary markdown formatting choices.
-- spec.gemini.requirements-adversarial.review.md :: medium-4 - Audit trail for advancing with artifact drift is based on a weak assumption [UNVERIFIED]
+- spec.gemini.requirements-adversarial.review.md :: high-3 - This method is inherently brittle and adds maintenance complexity... The root problem—a lack of a structured format for review findings—is not addressed.
 
 ## Verdict (structured)
 
@@ -42,28 +41,28 @@ All latest findings are NEW, not RESTATEMENTS, because the record explicitly say
   "confidence": 5,
   "evidence": [
     {
-      "artifact": "earlier-rounds",
+      "artifact": "review-history",
       "quote": "No prior findings yet.",
-      "section": "summary"
+      "section": "earlier-rounds"
     },
     {
       "artifact": "spec.codex.edge-cases-adversarial.review.md",
-      "quote": "The auto-reconcile regex still has a code-fence bypass.",
+      "quote": "The auto-reconcile regex still has a code-fence bypass... a literal `- HIGH:` line inside a fenced code block still matches and is treated as actionable.",
       "section": "high-1"
     },
     {
       "artifact": "spec.codex.edge-cases-adversarial.review.md",
-      "quote": "FR-009 under-specifies the state-mutating commands that must get the post-run invariant check.",
+      "quote": "FR-009 under-specifies the state-mutating commands that must get the post-run invariant check... the current runner already treats `discover` and `parallel` as mutating commands... and `init` also writes workflow state during bootstrap.",
       "section": "medium-2"
     },
     {
       "artifact": "spec.codex.feasibility-adversarial.review.md",
-      "quote": "FR-003 and FR-011a do not backfill `id` for existing `unresolved_concerns`.",
+      "quote": "FR-003 and FR-011a do not backfill `id` for existing `unresolved_concerns`... the new lifecycle is unusable on existing runs.",
       "section": "high-1"
     },
     {
       "artifact": "spec.codex.feasibility-adversarial.review.md",
-      "quote": "US1 scenario 3 says the next checkpoint can treat concerns as closed when they are \"referenced as `addressed` in plan annotations,\" but FR-004 says annotations are display-only.",
+      "quote": "US1 scenario 3 says the next checkpoint can treat concerns as closed when they are \"referenced as `addressed` in plan annotations,\" but FR-004 says annotations are display-only... the spec is internally inconsistent.",
       "section": "medium-3"
     },
     {
@@ -73,18 +72,13 @@ All latest findings are NEW, not RESTATEMENTS, because the record explicitly say
     },
     {
       "artifact": "spec.gemini.requirements-adversarial.review.md",
-      "quote": "This creates an \"arms race\" where the tool is always trying to catch up to new, arbitrary markdown formatting choices.",
+      "quote": "This method is inherently brittle and adds maintenance complexity... The root problem\u2014a lack of a structured format for review findings\u2014is not addressed.",
       "section": "high-3"
-    },
-    {
-      "artifact": "spec.gemini.requirements-adversarial.review.md",
-      "quote": "Audit trail for advancing with artifact drift is based on a weak assumption [UNVERIFIED]",
-      "section": "medium-4"
     }
   ],
   "judge": "restatement",
-  "model": "gpt-5.5",
-  "reasoning": "All latest findings are NEW, not RESTATEMENTS, because the record explicitly says there were no earlier findings: \"No prior findings yet.\" That means there is no earlier round that raised the same concern, and no orchestrator response that could have substantively addressed it. Finding-by-finding: 1) edge-cases high-1 is NEW because it identifies a specific code-fence bypass in the auto-reconcile regex, where a literal severity line inside fenced code is still treated as actionable. 2) edge-cases medium-2 is NEW because it identifies an uncovered mutation-path failure mode: FR-009 does not require invariant checks after `discover`, `parallel`, and `init`, even though those commands mutate state. 3) feasibility high-1 is NEW because it identifies a backfill gap for existing `unresolved_concerns` without `id`, making the new checkpoint lifecycle unusable on preexisting runs. 4) feasibility medium-2 is NEW because it again identifies omitted invariant coverage for `discover` and `parallel`; this is duplicative within the latest round, but still not a restatement of any earlier round because there were none. 5) feasibility medium-3 is NEW because it identifies an internal spec contradiction between US1 scenario 3 and FR-004 about whether plan annotations can close concerns. 6) feasibility medium-4 is NEW because it again identifies the code-fence false-positive/false-actionable regex bypass; duplicative within the latest round, but still new relative to prior rounds. 7) gemini medium-1 is NEW because it raises a distinct failure mode: brittle concern-ID generation may fail to track paraphrased findings. 8) gemini medium-2 is NEW because it raises a broader maintainability and brittleness risk in the regex-based severity detection strategy. 9) gemini high-3 is NEW because it raises the architectural failure mode that the system is entering an open-ended formatting arms race instead of solving the lack of structured review input. 10) gemini medium-4 is NEW because it raises a distinct audit-trail assumption risk around advancing with artifact drift. 11) gemini low-5 is NEW because it raises a human/agent-operability failure mode: contradiction warnings may be silently ignored by automated agents. 12) gemini low-6 is NEW because it raises a governance/control gap in the new concern lifecycle. Since 100% of the latest round's findings are new relative to earlier rounds, the loop is still producing signal and should be blocked from saturation-based proceed.",
+  "model": "GPT-5.5",
+  "reasoning": "All latest-round findings are NEW because there were no earlier rounds to restate: the record explicitly says \"No prior findings yet.\" Under the stated rule, a finding can only be a RESTATEMENT if an earlier round raised the same concern and the orchestrator made a substantive change in response. That prerequisite is absent for every item here. Several findings also describe concrete failure modes not previously covered anywhere in the review history: a fenced-code auto-reconcile bypass, missing invariant coverage for mutating commands like discover/parallel/init, missing backfill IDs for existing unresolved concerns, an internal spec contradiction between US1 scenario 3 and FR-004, brittle concern-ID generation, regex-maintenance risk, audit-trail assumptions, ignored contradiction warnings, and lifecycle misuse risk. Some latest findings overlap with each other thematically, but overlap within the same latest batch does not make them restatements of earlier rounds. Because 0% of the latest round can be classified as restatements against prior rounds, the loop is still producing signal and should be blocked from proceeding.",
   "timestamp": "2026-04-23T00:00:00-07:00",
   "verdict": "block"
 }
@@ -92,4 +86,4 @@ All latest findings are NEW, not RESTATEMENTS, because the record explicitly say
 
 ## Resolution
 - status: open
-- note: All latest findings are NEW, not RESTATEMENTS, because the record explicitly says there were no earlier findings: "No prior findings yet." That means there is no earlier round that raised the same concern, and no orchestrator response th...
+- note: All latest-round findings are NEW because there were no earlier rounds to restate: the record explicitly says "No prior findings yet." Under the stated rule, a finding can only be a RESTATEMENT if an earlier round raised the same concern...
