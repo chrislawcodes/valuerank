@@ -48,7 +48,15 @@
     ],
     "unresolved": []
   },
-  "delivery": {},
+  "delivery": {
+    "pr_url": "https://github.com/chrislawcodes/valuerank/pull/749",
+    "pr_number": 749,
+    "pr_state": "open",
+    "pr_is_draft": true,
+    "checks_summary": "pass",
+    "head_sha": "671bdc14",
+    "recorded_at": 1777064813
+  },
   "checkpoint_fallback": {},
   "parallel_analysis": {
     "reviewed": true,
