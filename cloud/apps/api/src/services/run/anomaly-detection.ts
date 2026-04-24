@@ -1,4 +1,4 @@
-import { db, type Prisma } from '@valuerank/db';
+import { db, Prisma } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 import {
   MODEL_SHORTFALL_ABSOLUTE_RATE,
@@ -58,6 +58,18 @@ type OrphanTranscriptRow = {
   content: unknown;
 };
 
+type PairAsymmetryCandidate = {
+  id: string;
+  config: unknown;
+};
+
+type PairAsymmetryMetrics = {
+  runId: string;
+  scheduled: number;
+  successCount: number;
+  successRate: number;
+};
+
 function parseRunConfig(config: unknown): RunConfig {
   if (config === null || typeof config !== 'object') {
     return {};
@@ -94,6 +106,23 @@ function toJsonValue(value: unknown): Prisma.InputJsonValue {
   return value as Prisma.InputJsonValue;
 }
 
+function buildOrphanTranscriptFromClause(runId: string): Prisma.Sql {
+  const minAge = new Date(Date.now() - ORPHAN_TRANSCRIPT_MIN_AGE_SECONDS * 1000);
+  return Prisma.sql`
+    FROM transcripts t
+    LEFT JOIN probe_results p
+      ON p.run_id = t.run_id
+     AND p.scenario_id = t.scenario_id
+     AND p.model_id = t.model_id
+     AND p.sample_index = t.sample_index
+     AND p.deleted_at IS NULL
+    WHERE t.run_id = ${runId}
+      AND t.deleted_at IS NULL
+      AND t.created_at < ${minAge}
+      AND p.id IS NULL
+  `;
+}
+
 export async function detectStrandedTranscript(runId: string): Promise<AnomalyDraft | null> {
   const transcripts = await db.transcript.findMany({
     where: {
@@ -119,8 +148,26 @@ export async function detectStrandedTranscript(runId: string): Promise<AnomalyDr
   };
 }
 
-export async function findOrphanTranscripts(runId: string): Promise<OrphanTranscriptRow[]> {
-  const minAge = new Date(Date.now() - ORPHAN_TRANSCRIPT_MIN_AGE_SECONDS * 1000);
+export async function findOrphanTranscripts(runId: string, limit?: number): Promise<OrphanTranscriptRow[]> {
+  const fromClause = buildOrphanTranscriptFromClause(runId);
+
+  if (limit !== undefined) {
+    return db.$queryRaw<OrphanTranscriptRow[]>`
+    SELECT
+      t.id,
+      t.scenario_id AS "scenarioId",
+      t.model_id AS "modelId",
+      t.sample_index AS "sampleIndex",
+      t.created_at AS "createdAt",
+      t.duration_ms AS "durationMs",
+      t.token_count AS "tokenCount",
+      t.content AS "content"
+    ${fromClause}
+    ORDER BY t.created_at ASC
+    LIMIT ${limit}
+  `;
+  }
+
   return db.$queryRaw<OrphanTranscriptRow[]>`
     SELECT
       t.id,
@@ -131,19 +178,19 @@ export async function findOrphanTranscripts(runId: string): Promise<OrphanTransc
       t.duration_ms AS "durationMs",
       t.token_count AS "tokenCount",
       t.content AS "content"
-    FROM transcripts t
-    LEFT JOIN probe_results p
-      ON p.run_id = t.run_id
-     AND p.scenario_id = t.scenario_id
-     AND p.model_id = t.model_id
-     AND p.sample_index = t.sample_index
-     AND p.deleted_at IS NULL
-    WHERE t.run_id = ${runId}
-      AND t.deleted_at IS NULL
-      AND t.created_at < ${minAge}
-      AND p.id IS NULL
+    ${fromClause}
     ORDER BY t.created_at ASC
   `;
+}
+
+export async function countOrphanTranscripts(runId: string): Promise<number> {
+  const fromClause = buildOrphanTranscriptFromClause(runId);
+  const rows = await db.$queryRaw<Array<{ count: bigint }>>`
+    SELECT COUNT(*) AS count
+    ${fromClause}
+  `;
+
+  return Number(rows[0]?.count ?? 0);
 }
 
 export async function detectOrphanTranscript(runId: string): Promise<AnomalyDraft | null> {
@@ -170,6 +217,7 @@ export async function detectPairAsymmetry(run: RunSnapshot): Promise<AnomalyDraf
   const siblings = await db.run.findMany({
     where: {
       deletedAt: null,
+      id: { not: run.id },
       config: {
         path: ['jobChoiceBatchGroupId'],
         equals: groupId,
@@ -182,56 +230,62 @@ export async function detectPairAsymmetry(run: RunSnapshot): Promise<AnomalyDraf
     orderBy: { updatedAt: 'asc' },
   });
 
-  if (siblings.length < 2) {
+  if (siblings.length === 0) {
     return null;
   }
 
-  const sibling = siblings.find((candidate) => candidate.id !== run.id) ?? null;
-  if (sibling === null) {
-    return null;
-  }
-
-  const scheduledCounts = await Promise.all(
-    [run, sibling].map(async (candidate) => {
+  const comparisonRuns: PairAsymmetryCandidate[] = [run, ...siblings];
+  const metrics = await Promise.all(
+    comparisonRuns.map(async (candidate): Promise<PairAsymmetryMetrics> => {
       const modelCount = getModelIds(candidate.config).length;
       const scenarioCount = await db.runScenarioSelection.count({ where: { runId: candidate.id } });
       const samplesPerScenario = getSamplesPerScenario(candidate.config);
+      const scheduled = scenarioCount * modelCount * samplesPerScenario;
+      const successCount = await db.probeResult.count({
+        where: { runId: candidate.id, deletedAt: null, status: 'SUCCESS' },
+      });
       return {
         runId: candidate.id,
-        scheduled: scenarioCount * modelCount * samplesPerScenario,
+        scheduled,
+        successCount,
+        successRate: scheduled === 0 ? 0 : successCount / scheduled,
       };
     })
   );
 
-  const currentScheduled = scheduledCounts.find((item) => item.runId === run.id)?.scheduled ?? 0;
-  const siblingScheduled = scheduledCounts.find((item) => item.runId === sibling.id)?.scheduled ?? 0;
-
-  if (currentScheduled < PAIR_ASYMMETRY_MIN_PROBES || siblingScheduled < PAIR_ASYMMETRY_MIN_PROBES) {
+  const currentMetrics = metrics.find((candidate) => candidate.runId === run.id) ?? null;
+  if (currentMetrics === null) {
     return null;
   }
 
-  const successResults = await Promise.all(
-    [run.id, sibling.id].map(async (runId) => {
-      const successCount = await db.probeResult.count({
-        where: { runId, deletedAt: null, status: 'SUCCESS' },
-      });
-      const total = scheduledCounts.find((item) => item.runId === runId)?.scheduled ?? 0;
-      return {
-        runId,
-        successRate: total === 0 ? 0 : successCount / total,
-      };
-    })
-  );
-  const currentSuccess = successResults[0];
-  const siblingSuccess = successResults[1];
-  if (!currentSuccess || !siblingSuccess) {
+  const skippedUnderSampledRunIds: string[] = [];
+  let maxDeltaPct = -1;
+  let maxDeltaSibling: PairAsymmetryMetrics | null = null;
+
+  for (const siblingMetrics of metrics) {
+    if (siblingMetrics.runId === run.id) {
+      continue;
+    }
+
+    if (currentMetrics.scheduled < PAIR_ASYMMETRY_MIN_PROBES || siblingMetrics.scheduled < PAIR_ASYMMETRY_MIN_PROBES) {
+      skippedUnderSampledRunIds.push(siblingMetrics.runId);
+      continue;
+    }
+
+    const deltaPct = Math.abs(currentMetrics.successRate - siblingMetrics.successRate) * 100;
+    if (deltaPct > maxDeltaPct) {
+      maxDeltaPct = deltaPct;
+      maxDeltaSibling = siblingMetrics;
+    }
+  }
+
+  if (maxDeltaSibling === null) {
     return null;
   }
 
-  const deltaPct = Math.abs(currentSuccess.successRate - siblingSuccess.successRate) * 100;
   // <= so identical rates (deltaPct === 0) don't fire when threshold is 0.
   // At threshold=0 the detector fires on any measurable asymmetry.
-  if (deltaPct <= PAIR_ASYMMETRY_THRESHOLD_PCT) {
+  if (maxDeltaPct <= PAIR_ASYMMETRY_THRESHOLD_PCT) {
     return null;
   }
 
@@ -240,16 +294,20 @@ export async function detectPairAsymmetry(run: RunSnapshot): Promise<AnomalyDraf
     subject: groupId,
     details: toJsonValue({
       runId: run.id,
-      siblingRunId: sibling.id,
-      currentSuccessRate: currentSuccess.successRate,
-      siblingSuccessRate: siblingSuccess.successRate,
-      scheduled: currentScheduled,
-      siblingScheduled,
+      siblingRunId: maxDeltaSibling.runId,
+      currentSuccessRate: currentMetrics.successRate,
+      siblingSuccessRate: maxDeltaSibling.successRate,
+      scheduled: currentMetrics.scheduled,
+      siblingScheduled: maxDeltaSibling.scheduled,
+      siblingRunIds: metrics.map((candidate) => candidate.runId),
+      siblingSuccessRates: metrics.map((candidate) => candidate.successRate),
+      maxDeltaPct,
+      skippedUnderSampledRunIds,
     }),
   };
 }
 
-export async function detectSummarizingStall(run: RunSnapshot): Promise<AnomalyDraft | null> {
+export function detectSummarizingStall(run: RunSnapshot): AnomalyDraft | null {
   if (run.status !== 'SUMMARIZING') {
     return null;
   }
@@ -375,7 +433,7 @@ export async function detectRunAnomalies(run: RunSnapshot): Promise<AnomalyDraft
   const pair = await detectPairAsymmetry(run);
   if (pair !== null) drafts.push(pair);
 
-  const stall = await detectSummarizingStall(run);
+  const stall = detectSummarizingStall(run);
   if (stall !== null) drafts.push(stall);
 
   drafts.push(...await detectModelTranscriptShortfall(run));
