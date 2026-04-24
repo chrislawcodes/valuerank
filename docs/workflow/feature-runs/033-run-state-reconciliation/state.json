@@ -850,6 +850,54 @@
       "agent_id": null,
       "artifact_sha_at_time": "3a3c121d6d69ece72a9707a49e2b9c4276f610c225fb38b5599ca2016ac33cc9",
       "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T04:47:30.317601Z",
+      "started_at": "2026-04-24T04:46:17.144578Z",
+      "ended_at": "2026-04-24T04:47:30.317601Z",
+      "duration_seconds": 73.172436,
+      "agent_id": null,
+      "artifact_sha_at_time": "ca11349d52249e5df76e293593a66aa165dff8db4bb5ecceac8e1ad8e739746d",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T04:48:10.042593Z",
+      "started_at": "2026-04-24T04:47:30.453838Z",
+      "ended_at": "2026-04-24T04:48:10.042593Z",
+      "duration_seconds": 39.588403,
+      "agent_id": null,
+      "artifact_sha_at_time": "ca11349d52249e5df76e293593a66aa165dff8db4bb5ecceac8e1ad8e739746d",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T04:49:17.381560Z",
+      "started_at": "2026-04-24T04:48:10.238808Z",
+      "ended_at": "2026-04-24T04:49:17.381560Z",
+      "duration_seconds": 67.142186,
+      "agent_id": null,
+      "artifact_sha_at_time": "ca11349d52249e5df76e293593a66aa165dff8db4bb5ecceac8e1ad8e739746d",
+      "parse_error": "no Gemini token stats found in stdout"
     }
   ],
   "stages": {
@@ -1308,7 +1356,8 @@
       "annotations": [],
       "unresolved_concerns": [],
       "adversarial_sha_history": [
-        "3a3c121d6d69ece72a9707a49e2b9c4276f610c225fb38b5599ca2016ac33cc9"
+        "3a3c121d6d69ece72a9707a49e2b9c4276f610c225fb38b5599ca2016ac33cc9",
+        "ca11349d52249e5df76e293593a66aa165dff8db4bb5ecceac8e1ad8e739746d"
       ],
       "initial_sha": "3a3c121d6d69ece72a9707a49e2b9c4276f610c225fb38b5599ca2016ac33cc9"
     }
