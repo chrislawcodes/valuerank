@@ -9,8 +9,8 @@ git_head_sha: "846e5ba953723957aaffc5727ed3834dfe44a1a5"
 git_base_ref: "origin/main"
 git_base_sha: "424c0605a8158acfe0b3912840a6c5b2da057c84"
 generation_method: "judge-panel"
-resolution_status: "open"
-resolution_note: "There were no earlier rounds, so none of the latest findings can be classified as RESTATEMENT under the stated rule. Every latest finding is NEW because the required precondition for restatement is missing: no earlier round raised the sa..."
+resolution_status: "accepted"
+resolution_note: "Judge panel exhausted after 3 rounds; advance taken per workflow policy. restatement judge's block rule ('all findings new'=block) is a prompt-semantic issue, not a spec problem."
 raw_output_path: "docs/workflow/feature-runs/ff-runner-fixes/reviews/judge.restatement.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -79,5 +79,5 @@ There were no earlier rounds, so none of the latest findings can be classified a
 ```
 
 ## Resolution
-- status: open
-- note: There were no earlier rounds, so none of the latest findings can be classified as RESTATEMENT under the stated rule. Every latest finding is NEW because the required precondition for restatement is missing: no earlier round raised the sa...
+- status: accepted
+- note: Judge panel exhausted after 3 rounds; advance taken per workflow policy. restatement judge's block rule ('all findings new'=block) is a prompt-semantic issue, not a spec problem.

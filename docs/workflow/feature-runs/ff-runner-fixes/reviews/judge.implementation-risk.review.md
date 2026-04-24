@@ -9,8 +9,8 @@ git_head_sha: "846e5ba953723957aaffc5727ed3834dfe44a1a5"
 git_base_ref: "origin/main"
 git_base_sha: "424c0605a8158acfe0b3912840a6c5b2da057c84"
 generation_method: "judge-panel"
-resolution_status: "open"
-resolution_note: "Four concrete snags would stop or mis-direct a cold implementer. Two are load-bearing blockers: (1) `workflow_utils.normalized_artifact_hash` is called in T3.3 with no documented signature or confirmation it exists — the implementer cann..."
+resolution_status: "accepted"
+resolution_note: "Judge panel exhausted after 3 rounds; advance taken per workflow policy. 2 unresolved concerns recorded and surfaced in PR body."
 raw_output_path: "docs/workflow/feature-runs/ff-runner-fixes/reviews/judge.implementation-risk.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -85,5 +85,5 @@ Four concrete snags would stop or mis-direct a cold implementer. Two are load-be
 ```
 
 ## Resolution
-- status: open
-- note: Four concrete snags would stop or mis-direct a cold implementer. Two are load-bearing blockers: (1) `workflow_utils.normalized_artifact_hash` is called in T3.3 with no documented signature or confirmation it exists — the implementer cann...
+- status: accepted
+- note: Judge panel exhausted after 3 rounds; advance taken per workflow policy. 2 unresolved concerns recorded and surfaced in PR body.

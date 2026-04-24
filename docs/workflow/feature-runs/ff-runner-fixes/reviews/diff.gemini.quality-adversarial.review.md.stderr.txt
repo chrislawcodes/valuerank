@@ -1,0 +1,13 @@
+YOLO mode is enabled. All tool calls will be automatically approved.
+YOLO mode is enabled. All tool calls will be automatically approved.
+AbortError: The user aborted a request.
+    at abort3 (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/bundle/chunk-IWSCP2GY.js:7469:25)
+    at AbortSignal.abortAndFinalize2 (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/bundle/chunk-IWSCP2GY.js:7482:11)
+    at [nodejs.internal.kHybridDispatch] (node:internal/event_target:845:20)
+    at AbortSignal.dispatchEvent (node:internal/event_target:778:26)
+    at runAbort (node:internal/abort_controller:488:10)
+    at abortSignal (node:internal/abort_controller:465:5)
+    at AbortController.abort (node:internal/abort_controller:507:5)
+    at GeminiClient._recoverFromLoop (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/bundle/chunk-IWSCP2GY.js:315701:24)
+    at GeminiClient.processTurn (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/bundle/chunk-IWSCP2GY.js:315434:26)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)

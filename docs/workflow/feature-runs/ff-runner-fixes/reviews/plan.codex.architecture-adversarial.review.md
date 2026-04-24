@@ -9,8 +9,8 @@ git_head_sha: "b8d5934f8215b9d6e4bffd546f5abca8e9799c79"
 git_base_ref: "origin/claude/friendly-aryabhata-9efbf7"
 git_base_sha: "6f5ed232c83bbd0f51ac8419ac6fb9688b8b8fad"
 generation_method: "codex-runner"
-resolution_status: "open"
-resolution_note: ""
+resolution_status: "accepted"
+resolution_note: "Addressed: HIGH invariant hook surface — plan Slice 2 now enumerates full _STATE_MUTATING_COMMANDS. MEDIUM id backfill — plan Slice 3 specifies _backfill_unresolved_concern_ids in load_workflow_state."
 raw_output_path: "docs/workflow/feature-runs/ff-runner-fixes/reviews/plan.codex.architecture-adversarial.review.md.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -36,5 +36,5 @@ coverage_note: ""
 - total_tokens=0
 
 ## Resolution
-- status: open
-- note: 
+- status: accepted
+- note: Addressed: HIGH invariant hook surface — plan Slice 2 now enumerates full _STATE_MUTATING_COMMANDS. MEDIUM id backfill — plan Slice 3 specifies _backfill_unresolved_concern_ids in load_workflow_state.

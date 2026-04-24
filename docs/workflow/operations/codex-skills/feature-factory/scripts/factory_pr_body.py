@@ -93,7 +93,11 @@ def render_judge_panel_block(state: dict) -> str:
     if not concerns and not annotations and not override and not resolved_concerns:
         return ""
 
-    lines: list[str] = [SENTINEL_BEGIN, "## ⚠ Unresolved Judge Concerns"]
+    lines: list[str] = [SENTINEL_BEGIN]
+    # Diff round-1 LOW finding: skip the unresolved heading when every concern
+    # is resolved — otherwise operators see an empty section and mis-read it.
+    if concerns:
+        lines.append("## ⚠ Unresolved Judge Concerns")
 
     for concern in concerns:
         stage = str(concern.get("stage", "") or "")

@@ -3,9 +3,9 @@ reviewer: "codex"
 lens: "dependency-order-adversarial"
 stage: "tasks"
 artifact_path: "docs/workflow/feature-runs/ff-runner-fixes/tasks.md"
-artifact_sha256: "2bcb85d7575f8c1c9a11aa344f662c30280feeba496b385cda84783f9c14d2c9"
+artifact_sha256: "4a74e08b65179da926013be34c58b47652b5eafb36c7b02fcc0867dcf9982805"
 repo_root: "."
-git_head_sha: "b8d5934f8215b9d6e4bffd546f5abca8e9799c79"
+git_head_sha: "55f130cde79344c09ac3c9f873a77abae390e6f9"
 git_base_ref: "origin/claude/friendly-aryabhata-9efbf7"
 git_base_sha: "6f5ed232c83bbd0f51ac8419ac6fb9688b8b8fad"
 generation_method: "codex-runner"
@@ -22,14 +22,16 @@ coverage_note: ""
 
 ## Findings
 
-- [UNVERIFIED][MEDIUM] T3.1 and T3.4 are ordered in a way that can strand the drift-reseal hook. T3.1 moves `judge_next_action == "advance"` ahead of the unhealthy branches, but T3.4 relies on `prerequisite_failure` being reached when the prereq is unhealthy. If that function is only entered from the branch T3.1 bypasses, the new `advance-with-drift` annotation never gets written.
-- [UNVERIFIED][MEDIUM] T3.5 only backfills `id`, not the new resolution fields. Existing `unresolved_concerns` entries that were already addressed, deferred, or dismissed will still look open unless there is a migration rule for those states. That can block checkpointing in T3.7 and misrender the PR body in T3.8.
-- [UNVERIFIED][MEDIUM] T2.1 and T2.5 add persisted `invariant_warnings`, but the tasks do not cover compatibility at the load/save boundary beyond default-filling. If the workflow state schema is strict, older fixtures or serializers may reject the new field or drop it, which would make the new status section empty even after warnings are emitted.
+1. **MEDIUM [UNVERIFIED]** Slice 3 introduces a hard checkpoint block on any prior-stage `unresolved_concern` that is still open, but the artifact only specifies a backfill for missing `id` values. It does not define a migration or compatibility step for the rest of the new concern lifecycle fields before the block lands. That creates a dependency-order trap: older runs can become blocked by a gate that depends on state the plan has not fully normalized yet.
+
+2. **MEDIUM [UNVERIFIED]** The `unresolved_concerns.id` contract is not pinned to one canonical path. The plan defines the hash recipe, but only says to backfill missing IDs on read, while also adding new write-time actions (`address`, `defer`, `dismiss`) and PR rendering changes. If any of those paths derive or preserve the ID differently, the same concern can become impossible to match across checkpoint, status, and PR-body flows.
+
+3. **LOW [UNVERIFIED]** The judge-advance fix is only described for the explicit `recommended_next_action` branches and the judge command’s write-before-read ordering. The artifact does not cover other entry points, stale in-memory state, or any later recomputation path. That leaves a hole where the old `repair_spec_checkpoint` behavior can still reappear outside the exact flow the tasks enumerate.
 
 ## Residual Risks
 
-- The regex work in T1.1 and T1.2 is still sensitive to false positives in prose that mention severity terms. The regression suite needs examples from more than this feature’s own reviews to prove the structural anchors are really working.
-- The run-033 regression in T3.10 only protects one known failure mode. If the underlying bug also appears on plan or tasks stages, this artifact does not explicitly add a fixture or test for those variants.
+- The plan assumes existing state and review artifacts can absorb the new fields and gates without a broader migration. If that assumption is wrong, the first failures will likely show up as blocked checkpoints or mismatched concern IDs.
+- The tests named in the artifact appear to cover the happy path and the captured regression, but not mixed old/new records, repeated checkpoint retries, or alternate call paths. Those are the most likely places for dependency-order bugs to survive.
 
 ## Runner Stats
 - total_input=0

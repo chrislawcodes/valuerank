@@ -438,15 +438,19 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
-    # FR-009: route invariant-warning output to stderr when --json is active so
-    # machine-readable JSON on stdout is never contaminated.
+    # FR-009: route invariant-warning output to stderr (always).
     set_json_mode(bool(getattr(args, "json", False)))
-    exit_code = args.func(args)
-    # FR-009 / FR-010: post-run invariant check on state-mutating commands.
     command_name = getattr(args, "_factory_command", None) or _infer_command_name(args)
-    if command_name in _STATE_MUTATING_COMMANDS:
-        _run_post_invariants(getattr(args, "slug", None), command_name)
-    return exit_code
+    # Diff round-1 finding: run invariants in a `finally` so contradictions
+    # introduced by a partial-state write before an exception still get
+    # caught — the exact class of bug the guardrail exists to detect.
+    exit_code = 0
+    try:
+        exit_code = args.func(args)
+        return exit_code
+    finally:
+        if command_name in _STATE_MUTATING_COMMANDS:
+            _run_post_invariants(getattr(args, "slug", None), command_name)
 
 
 def _infer_command_name(args: argparse.Namespace) -> str | None:

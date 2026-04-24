@@ -430,10 +430,17 @@ def _backfill_unresolved_concern_ids(state: dict) -> None:
             if not isinstance(concern, dict):
                 continue
             if not concern.get("id"):
+                # Defensive coercion — diff round-1 finding: older/corrupt
+                # state.json may store round_raised as a non-numeric string.
+                # Never let load_workflow_state raise.
+                try:
+                    round_raised = int(concern.get("round_raised") or 0)
+                except (TypeError, ValueError):
+                    round_raised = 0
                 concern["id"] = _concern_id_stable(
                     str(concern.get("stage") or stage_name),
                     str(concern.get("judge") or ""),
-                    int(concern.get("round_raised") or 0),
+                    round_raised,
                     str(concern.get("reasoning") or ""),
                 )
             for field in ("addressed_at", "addressed_by", "deferred_reason", "dismissed_reason"):

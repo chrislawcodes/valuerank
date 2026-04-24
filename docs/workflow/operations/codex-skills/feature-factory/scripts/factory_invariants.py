@@ -12,7 +12,6 @@ to add more. Failures inside the check itself never abort the caller.
 """
 from __future__ import annotations
 
-import os
 import sys
 import time
 from typing import Callable, Iterable
@@ -146,16 +145,12 @@ def _print_warning(entry: dict) -> None:
 
 
 def set_json_mode(enabled: bool) -> None:
-    """Toggle JSON_MODE so warnings route to stderr instead of stdout.
+    """Toggle JSON_MODE for back-compat callers.
 
-    Called from run_factory.py when --json appears in argv. Also respects
-    FF_INVARIANT_EMIT=stderr|stdout for tests.
+    The flag has no behavioral effect on emit target — warnings always go
+    to stderr — but existing callers that set it would otherwise error. The
+    FF_INVARIANT_EMIT env var is not consulted; kept here only so a stale
+    reference never silently re-enables conditional routing.
     """
     global JSON_MODE
-    override = os.environ.get("FF_INVARIANT_EMIT")
-    if override == "stderr":
-        JSON_MODE = True
-    elif override == "stdout":
-        JSON_MODE = False
-    else:
-        JSON_MODE = bool(enabled)
+    JSON_MODE = bool(enabled)

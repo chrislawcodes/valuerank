@@ -9,8 +9,8 @@ git_head_sha: "b8d5934f8215b9d6e4bffd546f5abca8e9799c79"
 git_base_ref: "origin/claude/friendly-aryabhata-9efbf7"
 git_base_sha: "6f5ed232c83bbd0f51ac8419ac6fb9688b8b8fad"
 generation_method: "gemini-cli"
-resolution_status: "open"
-resolution_note: ""
+resolution_status: "accepted"
+resolution_note: "No actionable findings"
 raw_output_path: "docs/workflow/feature-runs/ff-runner-fixes/reviews/plan.gemini.testability-adversarial.review.md.json"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -55,5 +55,5 @@ Slice 3 of the plan defines a concern `id` based on a hash of its stage, judge, 
 - `gemini-2.5-pro`: input=16303, output=1026, total=19799
 
 ## Resolution
-- status: open
-- note:
+- status: accepted
+- note: No actionable findings

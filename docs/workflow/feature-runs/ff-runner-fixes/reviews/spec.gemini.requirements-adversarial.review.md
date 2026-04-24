@@ -9,8 +9,8 @@ git_head_sha: "7b414cadc42e915c128f35f296d36dca61c9d85b"
 git_base_ref: "origin/claude/friendly-aryabhata-9efbf7"
 git_base_sha: "6f5ed232c83bbd0f51ac8419ac6fb9688b8b8fad"
 generation_method: "gemini-cli"
-resolution_status: "open"
-resolution_note: ""
+resolution_status: "accepted"
+resolution_note: "All findings addressed (see spec round-2 notes in plan.md reconciliation section)"
 raw_output_path: "docs/workflow/feature-runs/ff-runner-fixes/reviews/spec.gemini.requirements-adversarial.review.md.json"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -60,5 +60,5 @@ The spec includes a good list of residual risks. The following are additional ri
 - `gemini-2.5-pro`: input=21199, output=1101, total=25479
 
 ## Resolution
-- status: open
-- note:
+- status: accepted
+- note: All findings addressed (see spec round-2 notes in plan.md reconciliation section)

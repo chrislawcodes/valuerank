@@ -3,14 +3,14 @@ reviewer: "codex"
 lens: "execution-adversarial"
 stage: "tasks"
 artifact_path: "docs/workflow/feature-runs/ff-runner-fixes/tasks.md"
-artifact_sha256: "2bcb85d7575f8c1c9a11aa344f662c30280feeba496b385cda84783f9c14d2c9"
+artifact_sha256: "4a74e08b65179da926013be34c58b47652b5eafb36c7b02fcc0867dcf9982805"
 repo_root: "."
-git_head_sha: "b8d5934f8215b9d6e4bffd546f5abca8e9799c79"
+git_head_sha: "55f130cde79344c09ac3c9f873a77abae390e6f9"
 git_base_ref: "origin/claude/friendly-aryabhata-9efbf7"
 git_base_sha: "6f5ed232c83bbd0f51ac8419ac6fb9688b8b8fad"
 generation_method: "codex-runner"
 resolution_status: "accepted"
-resolution_note: "MEDIUM #1 (concern-id collision): documented as Risk R5 in spec; embedding-based ID is follow-up. MEDIUM #2 (regex overfitting): added CRLF + leading-whitespace tests. MEDIUM #3 (audit alternate state paths): _STATE_MUTATING_COMMANDS enumerates all 11 state-mutating subcommands of run_factory.py."
+resolution_note: "MEDIUM #1 (Fix 1 scope to spec/plan/tasks): accepted — these are the 3 stages that carry judge_next_action; diff/closeout use different paths. MEDIUM (regex overfitting): CRLF+tab tests added. MEDIUM (audit alternate paths): 11-command enumeration in _STATE_MUTATING_COMMANDS."
 raw_output_path: "docs/workflow/feature-runs/ff-runner-fixes/reviews/tasks.codex.execution-adversarial.review.md.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,17 +22,15 @@ coverage_note: ""
 
 ## Findings
 
-1. Medium: The unresolved-concern ID scheme is collision-prone. It hashes only `stage|judge|round_raised|` plus the first 48 non-whitespace chars of the reasoning. In a real review stream, two concerns can share the same stage, judge, round, and opening language, which would make them indistinguishable in the new `--address/--defer/--dismiss` flow. That creates a bad failure mode where one concern can be “resolved” while the other stays open with the same ID.
-
-2. Medium: The regex test plan is too easy to overfit to the artifact’s own examples. T1.2 asks for positive cases from this feature’s own spec reviews, but it does not require broad adversarial markdown coverage beyond a few prose negatives. A regex change that matches the listed samples can still misclassify headings, quoted text, or documentation snippets in unrelated reviews. This is exactly the kind of change that looks correct in targeted tests and still breaks production review parsing.
-
-3. Medium [UNVERIFIED]: The plan assumes the only affected state-mutating paths and judge-next-action call sites are the ones explicitly named. It does not require a search for alternate command entry points, older scripts, or other callers that might also mutate workflow state or call `recommended_next_action`. If the codebase has any of those, this rollout can leave the bug partially unfixed or make the new invariant checks inconsistent across commands.
+- Medium [UNVERIFIED]: Slice 3 only broadens `recommended_next_action` for `spec`, `plan`, and `tasks`, and the regression coverage is limited to run-033. That leaves a gap if any other unhealthy stage, branch, or caller uses the same `judge_next_action == "advance"` decision path. The fix can look complete while the broader class of mis-recommendations still exists.
+- Medium [UNVERIFIED]: Slice 2 forces invariant warnings to `stderr` in every mode, but the tasks never say how JSON or scripted callers should keep structured output clean. If the current CLI contract expects machine-readable stdout in JSON mode, this can contaminate consumer output or break parsing.
+- Low [UNVERIFIED]: Slice 3.5 backfills only `id` on existing `unresolved_concerns` entries. The new fields `addressed_at`, `addressed_by`, `deferred_reason`, and `dismissed_reason` are not normalized for old records, so mixed-shape data can still trip downstream readers that assume the new schema is fully populated.
 
 ## Residual Risks
 
-- I could not verify whether the repo already has additional state-mutating command paths or schema migration hooks, so the implementation still needs a code audit for completeness.
-- The artifact still does not explicitly call out the repo’s `STATUS.md` update requirement, so status tracking may drift unless that is handled elsewhere.
-- The `invariant_warnings` and unresolved-concern lifecycle changes will likely need cleanup for old state files and repeated replays, even if the main fixes land cleanly.
+- The fixture strategy proves the run-033 case, but it does not prove the fix against other stage combinations or future variants of the unhealthy-branch logic.
+- The checklist is heavy on unit tests, but it does not call for a separate end-to-end verification of the full runner flow after the last commit.
+- Several tasks assume the existing CLI and state formats already match the new helpers and warnings. If those assumptions are off, some adapter work may still be needed.
 
 ## Runner Stats
 - total_input=0
@@ -41,4 +39,4 @@ coverage_note: ""
 
 ## Resolution
 - status: accepted
-- note: MEDIUM #1 (concern-id collision): documented as Risk R5 in spec; embedding-based ID is follow-up. MEDIUM #2 (regex overfitting): added CRLF + leading-whitespace tests. MEDIUM #3 (audit alternate state paths): _STATE_MUTATING_COMMANDS enumerates all 11 state-mutating subcommands of run_factory.py.
+- note: MEDIUM #1 (Fix 1 scope to spec/plan/tasks): accepted — these are the 3 stages that carry judge_next_action; diff/closeout use different paths. MEDIUM (regex overfitting): CRLF+tab tests added. MEDIUM (audit alternate paths): 11-command enumeration in _STATE_MUTATING_COMMANDS.
