@@ -280,8 +280,11 @@ class FactoryDeliverTests(unittest.TestCase):
                 return subprocess.CompletedProcess(cmd, 0, stdout="https://example.test/pr/17\n", stderr="")
             raise AssertionError(f"unexpected command: {cmd}")
 
+        # Deliver now blocks on open concerns (P1-2 fix) unless --override-judges
+        # is used. This test verifies the PR body sentinel rendering, not the
+        # block-on-open-concerns gate (which has its own tests below).
         rc, _, _ = self._run_deliver(
-            _deliver_args(create_pr=True, draft=True, dry_run=True),
+            _deliver_args(create_pr=True, draft=True, dry_run=True, override_judges=True, reason="testing sentinel render"),
             current_pr_payload=None,
             gh_side_effect=gh_side_effect,
         )

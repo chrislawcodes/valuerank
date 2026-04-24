@@ -200,10 +200,16 @@ def _concern_reasoning_snippet(concern: dict, limit: int = 60) -> str:
     return reasoning[:limit]
 
 
-def _find_concern_by_id(state: dict, concern_id: str) -> tuple[str, dict] | None:
+def _find_concerns_by_id(state: dict, concern_id: str) -> list[tuple[str, dict]]:
+    """Return ALL matches so callers can detect ambiguity (P2-3 adversarial finding).
+
+    Previously the helper returned the first hit, which silently resolved the
+    wrong concern when two shared an ID (hash collision, copied state, etc.).
+    """
+    matches: list[tuple[str, dict]] = []
     stages = state.get("stages", {})
     if not isinstance(stages, dict):
-        return None
+        return matches
     for stage_name, stage_state in stages.items():
         if not isinstance(stage_state, dict):
             continue
@@ -214,8 +220,15 @@ def _find_concern_by_id(state: dict, concern_id: str) -> tuple[str, dict] | None
             if not isinstance(concern, dict):
                 continue
             if str(concern.get("id", "") or "") == concern_id:
-                return stage_name, concern
-    return None
+                matches.append((stage_name, concern))
+    return matches
+
+
+def _find_concern_by_id(state: dict, concern_id: str) -> tuple[str, dict] | None:
+    """Back-compat shim — returns first match. New callers should use
+    _find_concerns_by_id to detect ambiguity."""
+    matches = _find_concerns_by_id(state, concern_id)
+    return matches[0] if matches else None
 
 
 def _render_open_concern_block(prior_stage: str, concerns: list[dict]) -> None:
@@ -238,26 +251,43 @@ def _render_open_concern_block(prior_stage: str, concerns: list[dict]) -> None:
         )
 
 
+def _nonblank(value: object) -> str | None:
+    """Return value.strip() if it is non-empty after stripping, else None.
+
+    P2-4 (adversarial review): whitespace-only --reason / --evidence strings
+    pass truthiness checks but are meaningless. Treat them as missing.
+    """
+    if value is None:
+        return None
+    stripped = str(value).strip()
+    return stripped if stripped else None
+
+
 def _handle_concern_lifecycle(args: argparse.Namespace) -> int | None:
     action: str | None = None
     concern_id: str | None = None
+    evidence: str | None = None
+    reason: str | None = None
     if getattr(args, "address", None):
         action = "addressed"
         concern_id = args.address
-        if not getattr(args, "evidence", None):
-            print("--address requires --evidence TEXT", file=sys.stderr)
+        evidence = _nonblank(getattr(args, "evidence", None))
+        if evidence is None:
+            print("--address requires --evidence TEXT (non-whitespace)", file=sys.stderr)
             return 2
     elif getattr(args, "defer", None):
         action = "deferred"
         concern_id = args.defer
-        if not getattr(args, "reason", None):
-            print("--defer requires --reason TEXT", file=sys.stderr)
+        reason = _nonblank(getattr(args, "reason", None))
+        if reason is None:
+            print("--defer requires --reason TEXT (non-whitespace)", file=sys.stderr)
             return 2
     elif getattr(args, "dismiss", None):
         action = "dismissed"
         concern_id = args.dismiss
-        if not getattr(args, "reason", None):
-            print("--dismiss requires --reason TEXT", file=sys.stderr)
+        reason = _nonblank(getattr(args, "reason", None))
+        if reason is None:
+            print("--dismiss requires --reason TEXT (non-whitespace)", file=sys.stderr)
             return 2
     else:
         return None
@@ -267,18 +297,36 @@ def _handle_concern_lifecycle(args: argparse.Namespace) -> int | None:
         return 2
 
     with with_locked_state(args.slug) as state:
-        found = _find_concern_by_id(state, concern_id)
-        if found is None:
+        matches = _find_concerns_by_id(state, concern_id)
+        if not matches:
             print(f"concern id {concern_id} not found in any stage", file=sys.stderr)
             return 2
-        _, concern = found
+        # P2-3 (adversarial review): ambiguous IDs must NOT silently resolve the
+        # first match. Require disambiguation via --stage.
+        if len(matches) > 1:
+            stage_list = ", ".join(sorted({m[0] for m in matches}))
+            matched_stages = [m[0] for m in matches]
+            if matched_stages.count(args.stage) == 1:
+                # --stage disambiguates uniquely.
+                concern = next(c for s, c in matches if s == args.stage)
+            else:
+                print(
+                    f"concern id {concern_id} matches multiple concerns across stages: "
+                    f"{stage_list}. Disambiguate by running with --stage set to the "
+                    f"stage containing exactly one matching concern, or use a longer "
+                    f"concern id.",
+                    file=sys.stderr,
+                )
+                return 2
+        else:
+            concern = matches[0][1]
         if action == "addressed":
             concern["addressed_at"] = int(time.time())
-            concern["addressed_by"] = args.evidence
+            concern["addressed_by"] = evidence
         elif action == "deferred":
-            concern["deferred_reason"] = args.reason
+            concern["deferred_reason"] = reason
         elif action == "dismissed":
-            concern["dismissed_reason"] = args.reason
+            concern["dismissed_reason"] = reason
 
     print(f"✓ concern {concern_id} marked {action}")
     return 0

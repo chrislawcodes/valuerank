@@ -116,6 +116,26 @@ class ActionableFindingRegexPositiveTests(unittest.TestCase):
     def test_inline_severity_field_plain(self) -> None:
         self.assertTrue(FRS.detect_actionable_findings(_review("Severity: HIGH\n")))
 
+    def test_heading_with_emoji_prefix(self) -> None:
+        """Adversarial-review finding: '### 🚨 HIGH:' shape used by some LLM reviewers."""
+        self.assertTrue(FRS.detect_actionable_findings(_review("### 🚨 HIGH: missing index\n")))
+        self.assertTrue(FRS.detect_actionable_findings(_review("### 🚨 1. HIGH: missing index\n")))
+
+    def test_bold_prefix_with_dash_delimiter(self) -> None:
+        """Adversarial-review finding: '**HIGH** - rest-of-line' (dash instead of colon)."""
+        self.assertTrue(
+            FRS.detect_actionable_findings(_review("**HIGH** - missing rollback path\n"))
+        )
+
+    def test_bold_bracket_severity_prefix(self) -> None:
+        """Adversarial-review finding: '**[HIGH SEVERITY]**: ...' shape."""
+        self.assertTrue(
+            FRS.detect_actionable_findings(_review("**[HIGH SEVERITY]**: the thing is broken\n"))
+        )
+        self.assertTrue(
+            FRS.detect_actionable_findings(_review("**[MEDIUM IMPACT]**: mitigation needed\n"))
+        )
+
     def test_gemini_style_nested_finding(self) -> None:
         """Real shape produced by the Gemini requirements-adversarial reviewer."""
         body = (

@@ -78,10 +78,17 @@ _ACTIONABLE_FINDING_RE = re.compile(
     # Must be `### HIGH:` or `### HIGH` on its own line — NOT `### HIGH availability
     # target` (false-positive from section titles). Colon is the only delimiter
     # allowed since `-` or `--` can appear in compound words like `MEDIUM-term`.
-    r"^#+\s+(?:\d+\.\s+)?" + _SEV + r"\s*(?::|$)"
+    # Adversarial-review finding: allow non-word chars (emoji, bullet, etc.)
+    # between `#+ ` and the rank prefix / severity — `### 🚨 HIGH:` is common.
+    r"^#+\s+(?:\W+\s*)*(?:\d+\.\s+)?(?:\W+\s*)*" + _SEV + r"\s*(?::|$)"
     r"|"
-    # 9-10. Paragraph start with bold prefix: "**high**:" or "**high [code-confirmed]**:"
-    r"^\s*\*\*" + _SEV + r"(?:\s*\[[^\]]+\])?\*\*\s*:"
+    # 9-10. Paragraph start with bold prefix: "**high**:", "**high [code-confirmed]**:",
+    # or "**high** - something" (adversarial review: dash delimiter after closing **).
+    r"^\s*\*\*" + _SEV + r"(?:\s*\[[^\]]+\])?\*\*\s*(?::|-\s)"
+    r"|"
+    # 10b. Bracket-tag-first bold prefix: "**[HIGH SEVERITY]**:" — the severity
+    # word lives inside the brackets, not before them (adversarial-review find).
+    r"^\s*\*\*\[\s*" + _SEV + r"[^\]]*\]\*\*\s*:"
     r"|"
     # 11. Inline Severity field bold: "**severity**: high" or "**severity:** high"
     r"^\s*\*\*severity(?:\*\*)?:\*?\*?\s*" + _SEV + r"\b"

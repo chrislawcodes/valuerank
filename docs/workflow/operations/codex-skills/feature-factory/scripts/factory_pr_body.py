@@ -46,15 +46,73 @@ def _findings_pushed_aside(resolved_concerns: list[dict]) -> list[dict]:
     return pushed
 
 
-def render_findings_pushed_aside_block(resolved_concerns: list[dict]) -> list[str]:
+def _deferred_reviews(slug: str | None) -> list[dict]:
+    """P3-7 (adversarial-review finding): surface deferred/failed reviews.
+
+    A review can be `resolution_status: deferred` when the reviewer subprocess
+    failed (timeout, abort, fallback). Those deferrals never make it into
+    state.stages[X].unresolved_concerns — they live only in the review file
+    frontmatter. Without including them in the summary, a human reviewer
+    reading the PR body would see "no concerns pushed aside" even when an
+    entire review path was skipped.
+    """
+    if not slug:
+        return []
+    try:
+        from pathlib import Path as _Path
+        import re as _re
+        repo_root = _Path(__file__).resolve().parents[5]
+        reviews_dir = repo_root / "docs" / "workflow" / "feature-runs" / slug / "reviews"
+        if not reviews_dir.exists():
+            return []
+    except Exception:
+        return []
+
+    deferred: list[dict] = []
+    frontmatter_re = _re.compile(r"^---\n(.*?)\n---", _re.DOTALL)
+    for review_path in sorted(reviews_dir.glob("*.review.md")):
+        try:
+            content = review_path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        match = frontmatter_re.match(content)
+        if not match:
+            continue
+        frontmatter = match.group(1)
+        status_match = _re.search(r'resolution_status:\s*"([^"]+)"', frontmatter)
+        if not status_match or status_match.group(1) != "deferred":
+            continue
+        note_match = _re.search(r'resolution_note:\s*"([^"]*)"', frontmatter)
+        reviewer_match = _re.search(r'reviewer:\s*"([^"]+)"', frontmatter)
+        lens_match = _re.search(r'lens:\s*"([^"]+)"', frontmatter)
+        stage_match = _re.search(r'stage:\s*"([^"]+)"', frontmatter)
+        deferred.append(
+            {
+                "path": str(review_path.relative_to(repo_root)),
+                "stage": stage_match.group(1) if stage_match else "?",
+                "reviewer": reviewer_match.group(1) if reviewer_match else "?",
+                "lens": lens_match.group(1) if lens_match else "?",
+                "note": note_match.group(1) if note_match else "",
+            }
+        )
+    return deferred
+
+
+def render_findings_pushed_aside_block(
+    resolved_concerns: list[dict], slug: str | None = None
+) -> list[str]:
     """Render the plain-language 'Findings Pushed Aside' PR-body section.
 
     Produces the same human-readable summary for every feature the Factory
     ships. Reviewers reading a PR should never have to dig through state.json
     or review files to see which adversarial findings got waved off.
+
+    ``slug`` is optional for back-compat — when provided, the section also
+    surfaces review-level deferrals (runner failures, fallbacks) per P3-7.
     """
     pushed = _findings_pushed_aside(resolved_concerns)
-    if not pushed:
+    deferred_reviews = _deferred_reviews(slug) if slug else []
+    if not pushed and not deferred_reviews:
         return []
 
     lines: list[str] = [
@@ -91,6 +149,25 @@ def render_findings_pushed_aside_block(resolved_concerns: list[dict]) -> list[st
                 "",
             ]
         )
+    if deferred_reviews:
+        lines.extend(
+            [
+                "### Skipped reviews (runner / tool failures)",
+                "",
+                "These are adversarial review passes that never produced usable findings — the "
+                "reviewer subprocess timed out, aborted, or otherwise failed. A pushed-aside "
+                "review is a gap in review coverage for this feature that a human merger should "
+                "weigh explicitly.",
+                "",
+            ]
+        )
+        for review in deferred_reviews:
+            note = review.get("note", "") or "(no resolution note)"
+            lines.append(
+                f"- **{review['stage']} / {review['reviewer']} / {review['lens']}** "
+                f"([`{review['path']}`]({review['path']})): {note}"
+            )
+        lines.append("")
     return lines
 
 
@@ -153,7 +230,7 @@ def collect_judge_panel_entries(
     return concerns, annotations, override, resolved_concerns
 
 
-def render_judge_panel_block(state: dict) -> str:
+def render_judge_panel_block(state: dict, slug: str | None = None) -> str:
     concerns, annotations, override, resolved_concerns = collect_judge_panel_entries(state)
     if not concerns and not annotations and not override and not resolved_concerns:
         return ""
@@ -197,7 +274,7 @@ def render_judge_panel_block(state: dict) -> str:
 
     # Plain-language summary of deferred/dismissed findings — rendered BEFORE
     # the full resolved-concerns dump so a human reviewer sees it first.
-    lines.extend(render_findings_pushed_aside_block(resolved_concerns))
+    lines.extend(render_findings_pushed_aside_block(resolved_concerns, slug=slug))
 
     if resolved_concerns:
         lines.append("## Resolved Concerns")

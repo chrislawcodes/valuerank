@@ -82,6 +82,8 @@ A test that greps `run_factory.py` for `command_` functions and asserts each mut
 | Are they documented in a place a future engineer will find? | Yes — spec Risk R5/R7, test pins, PR body. |
 | Are they worth their own follow-up features? | Yes, each one. Rough estimates: R7 is ~1 week (reviewer prompt changes + JSON parsing), fenced-code is ~1 day (Markdown AST), auto-register is ~2 days (decorator + test). |
 
-**Recommendation: safe to merge.** The three HIGH findings pushed aside are all "the durable version of this fix needs a bigger change we're not making today" — not "there's a live bug in this code." The fix for the immediate bug (run-033 loop) is complete and well-tested.
+**Recommendation: safe to merge the 3 doc-level deferrals above.** They're "the durable version of this fix needs a bigger change we're not making today" — not "there's a live bug in this code."
+
+**Important correction (added after adversarial-review pass):** An earlier version of this doc also labelled manifest-reseal drift and diff-concern delivery gates as "known limitations." Those were actually live correctness bugs, not drift, and they were fixed in this PR after a separate adversarial-review pass surfaced them (P1-1 and P1-2 in the PR description). If you see a doc revision that calls them "accepted," that doc was wrong — check commit history to confirm the fix landed.
 
 If you want belt-and-suspenders before merging: open follow-up GitHub issues for the three items above and link them in the PR description. Each one is small and well-scoped.
