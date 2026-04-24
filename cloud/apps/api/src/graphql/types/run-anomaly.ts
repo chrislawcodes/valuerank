@@ -1,7 +1,7 @@
 import { builder } from '../builder.js';
 import { RunAnomalyRef } from './refs.js';
 
-export const RunAnomalyTypeEnum = builder.enumType('RunAnomalyType', {
+export const RunAnomalyTypeEnum: ReturnType<typeof builder.enumType<'RunAnomalyType', readonly ['STRANDED_TRANSCRIPT', 'ORPHAN_TRANSCRIPT', 'PAIR_ASYMMETRY', 'SUMMARIZING_STALL', 'MODEL_TRANSCRIPT_SHORTFALL', 'SCHEDULED_COUNT_MISMATCH']>> = builder.enumType('RunAnomalyType', {
   values: [
     'STRANDED_TRANSCRIPT',
     'ORPHAN_TRANSCRIPT',

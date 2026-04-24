@@ -9,7 +9,8 @@ import { calculatePercentComplete, computeRunProgress } from '../../services/run
 import { ACTIVE_PROBE_QUEUE_SQL } from '../../services/queue/probe-queues.js';
 import { AnalysisResultRef } from './analysis.js';
 import { CostEstimateRef, type CostEstimateShape } from './cost-estimate.js';
-import { RunAnomalyRef } from './run-anomaly.js';
+import './run-anomaly.js';
+import { RunAnomalyRef } from './refs.js';
 import { getAllMetrics, getTotals } from '../../services/rate-limiter/index.js';
 
 // Re-export for backward compatibility

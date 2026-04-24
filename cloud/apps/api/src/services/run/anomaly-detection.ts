@@ -4,6 +4,7 @@ import {
   MODEL_SHORTFALL_ABSOLUTE_RATE,
   MODEL_SHORTFALL_MIN_PROBES,
   MODEL_SHORTFALL_PEER_RATE,
+  MODEL_SHORTFALL_RELATIVE_RATE,
   ORPHAN_TRANSCRIPT_MIN_AGE_SECONDS,
   PAIR_ASYMMETRY_MIN_PROBES,
   PAIR_ASYMMETRY_THRESHOLD_PCT,
@@ -209,7 +210,7 @@ export async function detectPairAsymmetry(run: RunSnapshot): Promise<AnomalyDraf
     return null;
   }
 
-  const [currentSuccess, siblingSuccess] = await Promise.all(
+  const successResults = await Promise.all(
     [run.id, sibling.id].map(async (runId) => {
       const successCount = await db.probeResult.count({
         where: { runId, deletedAt: null, status: 'SUCCESS' },
@@ -221,6 +222,11 @@ export async function detectPairAsymmetry(run: RunSnapshot): Promise<AnomalyDraf
       };
     })
   );
+  const currentSuccess = successResults[0];
+  const siblingSuccess = successResults[1];
+  if (!currentSuccess || !siblingSuccess) {
+    return null;
+  }
 
   const deltaPct = Math.abs(currentSuccess.successRate - siblingSuccess.successRate) * 100;
   if (deltaPct < PAIR_ASYMMETRY_THRESHOLD_PCT) {

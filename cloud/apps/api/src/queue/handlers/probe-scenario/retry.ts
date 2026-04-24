@@ -3,7 +3,6 @@
  */
 
 import { createLogger } from '@valuerank/shared';
-import { db } from '@valuerank/db';
 import { maybeAdvanceRunStatus } from '../../../services/run/index.js';
 import { recordProbeFailure } from '../../../services/probe-result/index.js';
 import { enqueueTopUpProbesSingleton } from '../top-up-probes.js';
@@ -150,7 +149,7 @@ export async function handleJobError(
   sampleIndex: number,
   retryCount: number,
   retryLimit: number,
-  probeResultKey: ProbeResultKey
+  _probeResultKey: ProbeResultKey
 ): Promise<boolean> {
   const retryable = isRetryableError(error);
   const maxRetriesReached = retryCount >= retryLimit;
@@ -164,10 +163,6 @@ export async function handleJobError(
     try {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorCode = !retryable ? 'NON_RETRYABLE' : 'MAX_RETRIES_EXCEEDED';
-      const existingProbeResult = await db.probeResult.findUnique({
-        where: probeResultKey,
-        select: { status: true },
-      });
       await recordProbeFailure({
         runId,
         scenarioId,
