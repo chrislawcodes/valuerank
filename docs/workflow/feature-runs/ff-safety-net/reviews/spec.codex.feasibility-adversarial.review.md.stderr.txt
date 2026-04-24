@@ -8,7 +8,7 @@ approval: never
 sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
 reasoning effort: high
 reasoning summaries: none
-session id: 019dc121-e805-76e2-88c8-133de219fd1e
+session id: 019dc125-41b0-7131-ba22-6bbf01821eba
 --------
 user
 Review this spec artifact using a feasibility-adversarial lens.
@@ -131,7 +131,7 @@ Three known gaps from the post-PR-#744 adversarial review and leftover backlog:
 
 - **FR-001**: `judge-prompts/completeness.md` MUST be updated to emit a JSON verdict that includes a `unaddressed_high_finding_ids: [string]` array alongside the existing `verdict`/`reasoning` fields. When the judge votes `block` specifically because HIGH reviewer findings remain unaddressed, it populates this array with the concern `id`s (or reviewer-finding references) that are still open. An empty array means "I blocked for a different reason." The array is the veto's single source of truth; reasoning text is audit detail only.
 - **FR-002**: `factory_cmd_judge._validate_json_output` (or the schema validator) MUST accept the new `unaddressed_high_finding_ids` field and ignore unknown fields from older judge prompts (back-compat). `judge_schema.json` is updated to include the new field.
-- **FR-003**: The tally code MUST detect the veto condition by checking: `verdict.verdict == "block"` AND `verdict.judge == "completeness"` AND `len(verdict.get("unaddressed_high_finding_ids", [])) > 0` AND the referenced ids have no `addressed_at OR deferred_reason OR dismissed_reason` in the current `stage_state.unresolved_concerns` (ground-truth cross-check — Gemini LOW #4). If any listed id is already resolved in state, the veto DOES NOT fire (judge was looking at stale context).
+- **FR-003**: The tally code MUST detect the veto condition by checking: `verdict.verdict == "block"` AND `verdict.judge == "completeness"` AND `len(verdict.get("unaddressed_high_finding_ids", [])) > 0` AND **at least one** of the referenced ids is still unresolved in the current `stage_state.unresolved_concerns` (i.e., has no `addressed_at OR deferred_reason OR dismissed_reason`). Corrected in spec round-2 reconcile — an earlier draft inverted the logic and would have let one stale/resolved id suppress the veto even when other cited HIGHs remained open. Ground-truth-cross-check rule (per Gemini LOW #4): **the veto fires if ANY cited id is still unresolved; the veto does NOT fire only if ALL cited ids are resolved.**
 - **FR-004**: When FR-003's condition matches AND `proceed_count >= 2`, the tally MUST override majority: `outcome_value = "rejudge"`, `next_action = "edit_and_rerun_judge"`, `stage_state["judge_next_action"] = "edit_and_rerun_judge"`. Reason text includes the specific id(s) cited: `"completeness judge veto: unaddressed HIGH concerns {id1,id2} — majority override"`.
 - **FR-005**: When all `unresolved_concerns` for the stage are resolved, the veto MUST NOT fire. Verified via the cross-check in FR-003.
 - **FR-006**: `deliver --override-judges --reason "<text>"` MUST continue to bypass the veto (existing escape hatch).
@@ -183,7 +183,7 @@ Three known gaps from the post-PR-#744 adversarial review and leftover backlog:
 
 ## Edge cases
 
-- **Completeness veto, reasoning is ambiguous:** if the reasoning says "some HIGHs remain unaddressed" without naming ids, the regex fallback MUST still match. Test includes this shape.
+- **Completeness veto, reasoning is ambiguous (no ids populated):** if the judge's `unaddressed_high_finding_ids` array is empty OR missing, the veto does NOT fire — even if the prose says "some HIGHs remain unaddressed." This is intentional per FR-001: the structured signal is the single source of truth. No regex fallback. If the judge prompt produces vague prose without populating the array, that's a prompt-quality issue to fix upstream, not a reason to re-introduce regex matching.
 - **Completeness votes block but NO HIGH is unaddressed** (e.g., it's flagging a MEDIUM as critical in its judgment): majority rules as before. Veto is scoped to HIGH specifically.
 - **Auto-register: a module-internal helper named `command_something_helper`:** the registry scan MUST only match functions that match a specific naming + signature pattern (e.g., accepts `args: argparse.Namespace` and is a module-level function with `__ff_*` attribute). Internal helpers without decorators are invisible to the scan.
 - **GC fires on a stage with no intermediates:** no-op, no error.
@@ -220,6 +220,7 @@ Three known gaps from the post-PR-#744 adversarial review and leftover backlog:
 - **Risk R3** — GC deletes a file during a concurrent run (two workflows running simultaneously on the same slug).
   **verification:** checkpoint execution already acquires the state lock via `with_locked_state`. Concurrent runs on the same slug are already guarded. Test covers the single-run case; document the concurrency guarantee.
 
+- **Risk R5** — GC preserves `*.review.md` intentionally but does NOT guarantee atomic writes. If a checkpoint dispatches a reviewer that writes `.review.md` and is killed mid-write, the partial file survives GC and is the file the next run sees (Codex round-2 edge-cases MEDIUM). This is out of scope for this feature — the proper fix is atomic write (temp file + rename) in the reviewer dispatch code, not the GC. Tracked as a follow-up.
 - **Risk R4** — GC rules out a future file shape we haven't named (e.g., `.partial.txt`).
   **verification:** the GC glob list is a named tuple — adding a shape is one-line. Test explicitly documents the list; any new shape needs an explicit addition + test entry.
 
@@ -229,17 +230,19 @@ Return only markdown with exactly these sections:
 ## Residual Risks
 Do not include any other sections.
 codex
-I’m reading the spec as an adversarial design review, not as an implementation check. I’m looking for places where the proposal can still fail, drift, or become impossible to verify cleanly.
-codex
 ## Findings
-1. **High**: `FR-003` makes the veto too easy to bypass. It says the completeness veto does **not** fire if any listed id is already resolved in state. That means a completeness verdict can include one stale/resolved id plus one live unresolved HIGH, and the gate will fall back to majority anyway. That is a direct safety bypass of the feature’s stated goal.
-2. **Medium**: The spec contradicts itself on legacy and ambiguous completeness outputs. `FR-001` says the structured `unaddressed_high_finding_ids` array is the single source of truth and regex is **not** a fallback, but the US1 edge case still requires regex matching when reasoning is vague, and `FR-007` says older verdicts without the field default to majority. Those rules do not agree, so the same historical state can be treated two different ways.
-3. **Medium [UNVERIFIED]**: US2 assumes `build_parser()` is the authoritative list of exposed commands and that every handler can be forced into exactly one of two decorator buckets. If the existing codebase has dynamic handlers, aliases, or non-function dispatch paths, this registry test can miss a real mutating command or reject a legitimate command wiring. Without code context, that assumption is unverified.
+1. **High:** The completeness veto is still too easy to fail open. FR-001/FR-003 make the veto depend entirely on the completeness judge emitting a structured `unaddressed_high_finding_ids` array, and the edge-case rule says an empty or missing array means “no veto.” That means a prompt regression, schema drift, or parser hiccup silently reopens the exact unsafe path this feature is meant to close. For a safety gate, “best effort” is not strong enough; the spec needs a deterministic fail-closed behavior when the judge blocks on a HIGH but does not emit usable ids.
+
+2. **Medium:** The artifact contradicts itself about the completeness fallback path. FR-001 says the structured array is the single source of truth and regex is not a fallback, but Residual Risk R1 still describes a regex fallback and even mentions testing both structured and regex paths. That leaves implementers with two incompatible behaviors to choose from, which is a spec bug, not just an editorial issue.
+
+3. **Medium [UNVERIFIED]:** The mutating-command registry has multiple sources of truth and an underspecified discovery scope. FR-009 treats the argparse registry as authoritative, FR-010 derives the mutating set from handler callables, and FR-012 still talks about scanning `command_*` functions. Without one canonical discovery rule and explicit alias/wrapper normalization, the test can miss real exposed commands or falsely reject internal helpers.
+
+4. **Medium [UNVERIFIED]:** The review-GC requirement is underspecified and the test ask is likely brittle. The summary, US3, and FR-015 do not agree cleanly on the exact stale-file set, especially around `.narrowed.*` versus `.narrowed.json`. FR-018 also requires proving that GC blocks behind the state lock, which is a concurrency assertion that is often flaky and expensive to stabilize in a unit test.
 
 ## Residual Risks
-- The completeness veto still depends on concern IDs being stable and comparable between the judge payload and `stage_state.unresolved_concerns`.
-- The GC change is only safe if every stale scratch-file shape is explicitly named in the glob list; new temporary artifact names can still accumulate.
-- The mutating-command guardrail will remain fragile if future command wiring bypasses the decorator convention or the parser test is not kept in sync.
-2026-04-24T20:16:21.637197Z ERROR codex_core::session: failed to record rollout items: thread 019dc121-e805-76e2-88c8-133de219fd1e not found
+- The completeness veto still depends on stable concern-id continuity across the review lifecycle. If ids are regenerated, normalized differently, or dropped between judge runs and `unresolved_concerns`, the gate can miss open HIGHs.
+- The GC logic is tied to filename conventions. Any future artifact shape that is not added to the glob list will start accumulating stale files again.
+- `deliver --override-judges` remains a deliberate bypass. That is fine as an escape hatch, but it means operational discipline still matters when the system is being forced through an unsafe review state.
+2026-04-24T20:19:48.799744Z ERROR codex_core::session: failed to record rollout items: thread 019dc125-41b0-7131-ba22-6bbf01821eba not found
 tokens used
-16,261
+16,656

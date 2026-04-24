@@ -170,20 +170,312 @@
       "agent_id": null,
       "artifact_sha_at_time": "da09382e8c33b1717f23595ce88209107a3400a0ee13bff880353439515552d6",
       "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T20:19:48.940431Z",
+      "started_at": "2026-04-24T20:18:57.010745Z",
+      "ended_at": "2026-04-24T20:19:48.940431Z",
+      "duration_seconds": 51.929141,
+      "agent_id": null,
+      "artifact_sha_at_time": "a03753d0a4ce026eaa4cd7527592ee1a83632df1fd5e4c1750e3cbb2f475c841",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T20:20:51.320943Z",
+      "started_at": "2026-04-24T20:19:49.096327Z",
+      "ended_at": "2026-04-24T20:20:51.320943Z",
+      "duration_seconds": 62.223994,
+      "agent_id": null,
+      "artifact_sha_at_time": "a03753d0a4ce026eaa4cd7527592ee1a83632df1fd5e4c1750e3cbb2f475c841",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T20:21:37.982137Z",
+      "started_at": "2026-04-24T20:20:51.517335Z",
+      "ended_at": "2026-04-24T20:21:37.982137Z",
+      "duration_seconds": 46.464287,
+      "agent_id": null,
+      "artifact_sha_at_time": "a03753d0a4ce026eaa4cd7527592ee1a83632df1fd5e4c1750e3cbb2f475c841",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T20:22:16.926650Z",
+      "started_at": "2026-04-24T20:21:44.896083Z",
+      "ended_at": "2026-04-24T20:22:16.926650Z",
+      "duration_seconds": 32.030365,
+      "agent_id": null,
+      "artifact_sha_at_time": "a03753d0a4ce026eaa4cd7527592ee1a83632df1fd5e4c1750e3cbb2f475c841",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T20:23:00.778097Z",
+      "started_at": "2026-04-24T20:21:44.896056Z",
+      "ended_at": "2026-04-24T20:23:00.778097Z",
+      "duration_seconds": 75.881502,
+      "agent_id": null,
+      "artifact_sha_at_time": "a03753d0a4ce026eaa4cd7527592ee1a83632df1fd5e4c1750e3cbb2f475c841",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T20:23:04.861242Z",
+      "started_at": "2026-04-24T20:22:16.928319Z",
+      "ended_at": "2026-04-24T20:23:04.861242Z",
+      "duration_seconds": 47.932594,
+      "agent_id": null,
+      "artifact_sha_at_time": "a03753d0a4ce026eaa4cd7527592ee1a83632df1fd5e4c1750e3cbb2f475c841",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T20:23:42.447946Z",
+      "started_at": "2026-04-24T20:21:44.895779Z",
+      "ended_at": "2026-04-24T20:23:42.447946Z",
+      "duration_seconds": 117.551095,
+      "agent_id": null,
+      "artifact_sha_at_time": "a03753d0a4ce026eaa4cd7527592ee1a83632df1fd5e4c1750e3cbb2f475c841",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T20:24:02.752786Z",
+      "started_at": "2026-04-24T20:23:00.779596Z",
+      "ended_at": "2026-04-24T20:24:02.752786Z",
+      "duration_seconds": 61.972734,
+      "agent_id": null,
+      "artifact_sha_at_time": "a03753d0a4ce026eaa4cd7527592ee1a83632df1fd5e4c1750e3cbb2f475c841",
+      "parse_error": "no Claude token counts found in stdout or stderr"
     }
   ],
   "stages": {
     "spec": {
-      "adversarial_rounds": 2,
-      "judge_rounds": 0,
-      "judge_verdicts": [],
-      "annotations": [],
+      "adversarial_rounds": 3,
+      "judge_rounds": 1,
+      "judge_verdicts": [
+        [
+          {
+            "judge": "completeness",
+            "model": "gpt-5.5",
+            "verdict": "block",
+            "confidence": 4,
+            "reasoning": "plan.md only auto-accepts the reviews and adds no finding-specific mitigation. spec.codex.edge-cases-adversarial.review#high-1 is acknowledged only for the no-ids case at spec.md:162, but that line intentionally keeps empty or missing `unaddressed_high_finding_ids` non-vetoing; it does not give a deterministic fail-closed mitigation for malformed or under-specified verdicts, so specific enough to implement: no. spec.codex.feasibility-adversarial.review#high-1 has the same gap at spec.md:162: the no-ids case is intentional, but prompt regression, schema drift, or parser hiccups still reopen the unsafe path with no fail-closed rule, so specific enough to implement: no. spec.gemini.requirements-adversarial.review#high-1 is not addressed: spec.md:108-114 and 149-162 rely on the structured prompt output and majority fallback, but there is no mechanism validating the prompt's own logic, so specific enough to implement: no. spec.gemini.requirements-adversarial.review#high-2 is not addressed: spec.md:113 and 174 keep `deliver --override-judges --reason` as an escape hatch, but no audited log requirement exists for the reason text, so specific enough to implement: no.",
+            "evidence": [
+              {
+                "artifact": "/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-safety-net/plan.md",
+                "section": "Review Reconciliation",
+                "quote": "No actionable findings detected \u2014 auto-accepted"
+              },
+              {
+                "artifact": "/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-safety-net/spec.md",
+                "section": "spec.codex.edge-cases-adversarial.review#high-1 / FR-001, FR-003, edge case",
+                "quote": "if the judge's `unaddressed_high_finding_ids` array is empty OR missing, the veto does NOT fire"
+              },
+              {
+                "artifact": "/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-safety-net/spec.md",
+                "section": "spec.codex.feasibility-adversarial.review#high-1 / FR-001, FR-003, edge case",
+                "quote": "This is intentional per FR-001: the structured signal is the single source of truth"
+              },
+              {
+                "artifact": "/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-safety-net/spec.md",
+                "section": "spec.gemini.requirements-adversarial.review#high-1 / FR-001, FR-007, FR-019",
+                "quote": "The array is the veto's single source of truth; reasoning text is audit detail only"
+              },
+              {
+                "artifact": "/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-safety-net/spec.md",
+                "section": "spec.gemini.requirements-adversarial.review#high-2 / FR-006, Assumption 5",
+                "quote": "`deliver --override-judges --reason \"<text>\"` MUST continue to bypass the veto"
+              }
+            ],
+            "timestamp": "2026-04-24T00:00:00-07:00"
+          },
+          {
+            "judge": "restatement",
+            "model": "gpt-5",
+            "verdict": "proceed-with-annotation",
+            "confidence": 5,
+            "reasoning": "First-round case applies. The prior-round record explicitly says there were no earlier findings, so restatement analysis cannot establish duplication yet. Per the stated rule, the correct verdict is proceed-with-annotation, while recording this round as the baseline for future comparison.\n\nClassification of each latest finding:\n1. spec.codex.edge-cases-adversarial.review#high-1: NEW. Failure mode not previously covered: the completeness veto fails open when a judge blocks in prose but omits or malforms `unaddressed_high_finding_ids`.\n2. spec.codex.edge-cases-adversarial.review#medium-2: NEW. Failure mode not previously covered: identifier mismatch or instability causes exact-match veto lookup to miss unresolved HIGH concerns.\n3. spec.codex.edge-cases-adversarial.review#medium-3: NEW. Failure mode not previously covered: review GC may wrongly delete or wrongly retain `.narrowed.json` because the spec is inconsistent about whether that file is durable state or disposable intermediate output.\n4. spec.codex.feasibility-adversarial.review#high-1: NEW. Failure mode not previously covered: prompt regression, schema drift, or parser failure silently disables a safety gate because the veto does not fail closed.\n5. spec.codex.feasibility-adversarial.review#medium-2: NEW. Failure mode not previously covered: implementers are given two incompatible fallback behaviors, structured-only versus regex fallback, creating inconsistent safety behavior.\n6. spec.codex.feasibility-adversarial.review#medium-3: NEW. Failure mode not previously covered: multiple command-discovery mechanisms can miss real mutating commands or falsely flag internal helpers.\n7. spec.codex.feasibility-adversarial.review#medium-4: NEW. Failure mode not previously covered: GC stale-file scope is unclear and the required lock-behavior test may be brittle or flaky.\n8. spec.gemini.requirements-adversarial.review#high-1: NEW. Failure mode not previously covered: a critical concern-merging safety invariant is delegated to a probabilistic prompt path without a specified validation mechanism.\n9. spec.gemini.requirements-adversarial.review#high-2: NEW. Failure mode not previously covered: `deliver --override-judges` can bypass the guardrail without an auditable persisted justification.\n10. spec.gemini.requirements-adversarial.review#medium-3: NEW. Failure mode not previously covered: banning lambdas by convention is unenforced, so future handlers can silently evade the mutating-command safety check.\n11. spec.gemini.requirements-adversarial.review#medium-4: NEW. Failure mode not previously covered: inconsistent intermediate-file counts signal a spec-contract mismatch for GC behavior.\n12. spec.gemini.requirements-adversarial.review#medium-5: NEW. Failure mode not previously covered: treating `init` as mutating may break the self-check when no pre-state exists.\n13. spec.gemini.requirements-adversarial.review#low-6: NEW. Failure mode not previously covered: decorator-based mutability discovery may fail for non-function callables such as class-based handlers.\n\nBecause there is no earlier round, none of these can be classified as RESTATEMENT today; they form the baseline set for the next comparison.",
+            "evidence": [
+              {
+                "artifact": "prior-rounds",
+                "section": "baseline",
+                "quote": "No prior findings yet."
+              },
+              {
+                "artifact": "spec.codex.edge-cases-adversarial.review.md",
+                "section": "high-1",
+                "quote": "The completeness veto can be bypassed by a malformed or under-specified structured verdict."
+              },
+              {
+                "artifact": "spec.codex.edge-cases-adversarial.review.md",
+                "section": "medium-2",
+                "quote": "The spec does not define a canonical identifier contract for `unaddressed_high_finding_ids`."
+              },
+              {
+                "artifact": "spec.codex.edge-cases-adversarial.review.md",
+                "section": "medium-3",
+                "quote": "The review-GC scope is internally inconsistent about `.narrowed.json`."
+              },
+              {
+                "artifact": "spec.codex.feasibility-adversarial.review.md",
+                "section": "high-1",
+                "quote": "The completeness veto is still too easy to fail open."
+              },
+              {
+                "artifact": "spec.codex.feasibility-adversarial.review.md",
+                "section": "medium-2",
+                "quote": "FR-001 says the structured array is the single source of truth and regex is not a fallback, but Residual Risk R1 still describes a regex fallback"
+              },
+              {
+                "artifact": "spec.codex.feasibility-adversarial.review.md",
+                "section": "medium-3",
+                "quote": "The mutating-command registry has multiple sources of truth and an underspecified discovery scope."
+              },
+              {
+                "artifact": "spec.codex.feasibility-adversarial.review.md",
+                "section": "medium-4",
+                "quote": "The review-GC requirement is underspecified and the test ask is likely brittle."
+              },
+              {
+                "artifact": "spec.gemini.requirements-adversarial.review.md",
+                "section": "high-1",
+                "quote": "This outsources a critical safety invariant to a probabilistic system with no specified mechanism for validating the prompt's own logic."
+              },
+              {
+                "artifact": "spec.gemini.requirements-adversarial.review.md",
+                "section": "high-2",
+                "quote": "The `deliver --override-judges --reason \"<text>\"` command (FR-006) provides an escape hatch from the completeness veto, but the spec does not define any requirements for what happens to the mandatory `--reason` text."
+              },
+              {
+                "artifact": "spec.gemini.requirements-adversarial.review.md",
+                "section": "medium-3",
+                "quote": "The proposed solution to the manually-curated command list (US2) relies on a new rule: \"No more lambdas in `set_defaults(func=...)`\" (FR-011)."
+              },
+              {
+                "artifact": "spec.gemini.requirements-adversarial.review.md",
+                "section": "medium-4",
+                "quote": "The spec is inconsistent on the number of intermediate files to be deleted by the garbage collection feature (US3)."
+              },
+              {
+                "artifact": "spec.gemini.requirements-adversarial.review.md",
+                "section": "medium-5",
+                "quote": "The reclassification of the `init` command as mutating (FR-011) assumes the invariant self-check will execute harmlessly."
+              },
+              {
+                "artifact": "spec.gemini.requirements-adversarial.review.md",
+                "section": "low-6",
+                "quote": "The mechanism for decorator discovery in FR-010 (`__ff_mutates_state__` attribute) might not be robust enough for all Python callables."
+              }
+            ],
+            "timestamp": "2026-04-24T12:00:00-07:00"
+          },
+          {
+            "judge": "implementation-risk",
+            "model": "claude-sonnet-4-6",
+            "verdict": "block",
+            "confidence": 4,
+            "reasoning": "Five load-bearing gaps would force an implementer to guess on correctness-critical details. (1) The shape of stage_state.unresolved_concerns is never defined \u2014 the FR-003 resolution check requires comparing concern ids against fields named addressed_at, deferred_reason, dismissed_reason, but whether unresolved_concerns is a list of objects, a dict keyed by id, or something else is unspecified; implementer must reverse-engineer existing code not supplied in the artifact chain. (2) The existing completeness judge verdict JSON schema is not shown; FR-001 says to add unaddressed_high_finding_ids alongside existing fields, but without knowing the current schema shape the extension is ambiguous \u2014 especially since FR-001 also says the array holds 'concern ids (or reviewer-finding references)' which are two different identifier namespaces. (3) FR-009 mandates enumerating subcommands from the argparse subparser registry but gives zero guidance on the non-obvious argparse internals (_subparsers, _group_actions, choices dict) required to do so; implementer will either get it wrong or fall back to the function-name scan the spec explicitly forbids. (4) FR-014 calls with_locked_state(slug) but slug is never shown to be available in command_checkpoint's argument namespace \u2014 if checkpoint args don't already carry a slug field, this silently fails at runtime. (5) The Tasks artifact is entirely empty \u2014 there is no executable work breakdown, so any Codex dispatch has no slice boundaries to implement against.",
+            "evidence": [
+              {
+                "artifact": "spec",
+                "section": "FR-003",
+                "quote": "at least one of the referenced ids is still unresolved in the current `stage_state.unresolved_concerns` (i.e., has no `addressed_at OR deferred_reason OR dismissed_reason`)"
+              },
+              {
+                "artifact": "spec",
+                "section": "FR-001",
+                "quote": "populates this array with the concern `id`s (or reviewer-finding references) that are still open"
+              },
+              {
+                "artifact": "spec",
+                "section": "FR-009",
+                "quote": "The authoritative source for 'every subcommand the runner exposes' is the argparse subparser registry in `build_parser()`. The test in FR-012 enumerates subcommands from argparse (not from a function-name scan)"
+              },
+              {
+                "artifact": "spec",
+                "section": "FR-014",
+                "quote": "`command_checkpoint` MUST acquire the state lock via `with_locked_state(slug)` BEFORE running GC. Sequence is: parse args \u2192 acquire lock \u2192 GC \u2192 dispatch reviews \u2192 release lock."
+              },
+              {
+                "artifact": "tasks",
+                "section": "entire artifact",
+                "quote": "# Tasks"
+              }
+            ],
+            "timestamp": "2026-04-24T00:00:00Z"
+          }
+        ]
+      ],
+      "annotations": [
+        {
+          "stage": "spec",
+          "round": 1,
+          "judge": "restatement",
+          "confidence": 5,
+          "reasoning": "First-round case applies. The prior-round record explicitly says there were no earlier findings, so restatement analysis cannot establish duplication yet. Per the stated rule, the correct verdict is proceed-with-annotation, while recording this round as the baseline for future comparison.\n\nClassification of each latest finding:\n1. spec.codex.edge-cases-adversarial.review#high-1: NEW. Failure mode not previously covered: the completeness veto fails open when a judge blocks in prose but omits or malforms `unaddressed_high_finding_ids`.\n2. spec.codex.edge-cases-adversarial.review#medium-2: NEW. Failure mode not previously covered: identifier mismatch or instability causes exact-match veto lookup to miss unresolved HIGH concerns.\n3. spec.codex.edge-cases-adversarial.review#medium-3: NEW. Failure mode not previously covered: review GC may wrongly delete or wrongly retain `.narrowed.json` because the spec is inconsistent about whether that file is durable state or disposable intermediate output.\n4. spec.codex.feasibility-adversarial.review#high-1: NEW. Failure mode not previously covered: prompt regression, schema drift, or parser failure silently disables a safety gate because the veto does not fail closed.\n5. spec.codex.feasibility-adversarial.review#medium-2: NEW. Failure mode not previously covered: implementers are given two incompatible fallback behaviors, structured-only versus regex fallback, creating inconsistent safety behavior.\n6. spec.codex.feasibility-adversarial.review#medium-3: NEW. Failure mode not previously covered: multiple command-discovery mechanisms can miss real mutating commands or falsely flag internal helpers.\n7. spec.codex.feasibility-adversarial.review#medium-4: NEW. Failure mode not previously covered: GC stale-file scope is unclear and the required lock-behavior test may be brittle or flaky.\n8. spec.gemini.requirements-adversarial.review#high-1: NEW. Failure mode not previously covered: a critical concern-merging safety invariant is delegated to a probabilistic prompt path without a specified validation mechanism.\n9. spec.gemini.requirements-adversarial.review#high-2: NEW. Failure mode not previously covered: `deliver --override-judges` can bypass the guardrail without an auditable persisted justification.\n10. spec.gemini.requirements-adversarial.review#medium-3: NEW. Failure mode not previously covered: banning lambdas by convention is unenforced, so future handlers can silently evade the mutating-command safety check.\n11. spec.gemini.requirements-adversarial.review#medium-4: NEW. Failure mode not previously covered: inconsistent intermediate-file counts signal a spec-contract mismatch for GC behavior.\n12. spec.gemini.requirements-adversarial.review#medium-5: NEW. Failure mode not previously covered: treating `init` as mutating may break the self-check when no pre-state exists.\n13. spec.gemini.requirements-adversarial.review#low-6: NEW. Failure mode not previously covered: decorator-based mutability discovery may fail for non-function callables such as class-based handlers.\n\nBecause there is no earlier round, none of these can be classified as RESTATEMENT today; they form the baseline set for the next comparison.",
+          "artifact_sha_at_time": "a03753d0a4ce026eaa4cd7527592ee1a83632df1fd5e4c1750e3cbb2f475c841"
+        }
+      ],
       "unresolved_concerns": [],
       "adversarial_sha_history": [
         "4519e751b65d7f72d73c1f2323a8d751ae2c48dc293e83854252d503c60bcb18",
-        "da09382e8c33b1717f23595ce88209107a3400a0ee13bff880353439515552d6"
+        "da09382e8c33b1717f23595ce88209107a3400a0ee13bff880353439515552d6",
+        "a03753d0a4ce026eaa4cd7527592ee1a83632df1fd5e4c1750e3cbb2f475c841"
       ],
-      "initial_sha": "4519e751b65d7f72d73c1f2323a8d751ae2c48dc293e83854252d503c60bcb18"
+      "initial_sha": "4519e751b65d7f72d73c1f2323a8d751ae2c48dc293e83854252d503c60bcb18",
+      "judge_next_action": "edit_and_rerun_judge"
     }
   },
   "invariant_warnings": [],
@@ -193,10 +485,19 @@
     "markers_sha": "",
     "last_diff_head_sha": ""
   },
-  "spec_adversarial_rounds": 2,
+  "spec_adversarial_rounds": 3,
   "last_action_result": {
-    "next": "repair_plan_checkpoint",
-    "reason": "spec checkpoint completed",
-    "blockers": []
-  }
+    "next": "edit_and_rerun_judge",
+    "reason": "block majority; 2 of 3 judges blocked",
+    "blockers": [
+      "plan.md only auto-accepts the reviews and adds no finding-specific mitigation. spec.codex.edge-cases-adversarial.review#high-1 is acknowledged only for the no-ids case at spec.md:162, but that line intentionally keeps empty or missing `unaddressed_high_finding_ids` non-vetoing; it does not give a deterministic fail-closed mitigation for malformed or under-specified verdicts, so specific enough to implement: no. spec.codex.feasibility-adversarial.review#high-1 has the same gap at spec.md:162: the no-ids case is intentional, but prompt regression, schema drift, or parser hiccups still reopen the unsafe path with no fail-closed rule, so specific enough to implement: no. spec.gemini.requirements-adversarial.review#high-1 is not addressed: spec.md:108-114 and 149-162 rely on the structured prompt output and majority fallback, but there is no mechanism validating the prompt's own logic, so specific enough to implement: no. spec.gemini.requirements-adversarial.review#high-2 is not addressed: spec.md:113 and 174 keep `deliver --override-judges --reason` as an escape hatch, but no audited log requirement exists for the reason text, so specific enough to implement: no.",
+      "Five load-bearing gaps would force an implementer to guess on correctness-critical details. (1) The shape of stage_state.unresolved_concerns is never defined \u2014 the FR-003 resolution check requires comparing concern ids against fields named addressed_at, deferred_reason, dismissed_reason, but whether unresolved_concerns is a list of objects, a dict keyed by id, or something else is unspecified; implementer must reverse-engineer existing code not supplied in the artifact chain. (2) The existing completeness judge verdict JSON schema is not shown; FR-001 says to add unaddressed_high_finding_ids alongside existing fields, but without knowing the current schema shape the extension is ambiguous \u2014 especially since FR-001 also says the array holds 'concern ids (or reviewer-finding references)' which are two different identifier namespaces. (3) FR-009 mandates enumerating subcommands from the argparse subparser registry but gives zero guidance on the non-obvious argparse internals (_subparsers, _group_actions, choices dict) required to do so; implementer will either get it wrong or fall back to the function-name scan the spec explicitly forbids. (4) FR-014 calls with_locked_state(slug) but slug is never shown to be available in command_checkpoint's argument namespace \u2014 if checkpoint args don't already carry a slug field, this silently fails at runtime. (5) The Tasks artifact is entirely empty \u2014 there is no executable work breakdown, so any Codex dispatch has no slice boundaries to implement against."
+    ],
+    "outcome": "rejudge",
+    "proceed_count": 1,
+    "block_count": 2,
+    "timestamp": "2026-04-24T20:24:02.755709Z",
+    "judge_round": 1
+  },
+  "spec_judge_rounds": 1
 }
