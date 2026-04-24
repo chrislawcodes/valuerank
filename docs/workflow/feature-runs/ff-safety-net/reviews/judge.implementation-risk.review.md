@@ -3,14 +3,14 @@ reviewer: "claude-sonnet-4-6"
 lens: "implementation-risk-judge"
 stage: "spec"
 artifact_path: "docs/workflow/feature-runs/ff-safety-net/spec.md"
-artifact_sha256: "a03753d0a4ce026eaa4cd7527592ee1a83632df1fd5e4c1750e3cbb2f475c841"
+artifact_sha256: "454d1e9f2c35505682c9fc947ff8753fd9d652c62a41fe3b4af2aeb86cac7f3f"
 repo_root: "."
-git_head_sha: "baf9c78f2c8130f3de17c7904a0e85edf62b9074"
+git_head_sha: "fef1e560eb41e6d90070ec8b970a62baa711cc93"
 git_base_ref: "origin/main"
 git_base_sha: "c07a4283ecdebffa57e8a2cccfa08c23e0f76a36"
 generation_method: "judge-panel"
 resolution_status: "open"
-resolution_note: "Five load-bearing gaps would force an implementer to guess on correctness-critical details. (1) The shape of stage_state.unresolved_concerns is never defined — the FR-003 resolution check requires comparing concern ids against fields nam..."
+resolution_note: "Three load-bearing gaps would force guessing. (1) FR-003a introduces a new `invariant_warnings[]` state field but never defines where it lives in state.json, whether it is top-level or stage-scoped, or how `status --slug` reads and surfa..."
 raw_output_path: "docs/workflow/feature-runs/ff-safety-net/reviews/judge.implementation-risk.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,15 +22,13 @@ coverage_note: ""
 
 ## Findings
 
-Five load-bearing gaps would force an implementer to guess on correctness-critical details. (1) The shape of stage_state.unresolved_concerns is never defined — the FR-003 resolution check requires comparing concern ids against fields named addressed_at, deferred_reason, dismissed_reason, but whether unresolved_concerns is a list of objects, a dict keyed by id, or something else is unspecified; implementer must reverse-engineer existing code not supplied in the artifact chain. (2) The existing completeness judge verdict JSON schema is not shown; FR-001 says to add unaddressed_high_finding_ids alongside existing fields, but without knowing the current schema shape the extension is ambiguous — especially since FR-001 also says the array holds 'concern ids (or reviewer-finding references)' which are two different identifier namespaces. (3) FR-009 mandates enumerating subcommands from the argparse subparser registry but gives zero guidance on the non-obvious argparse internals (_subparsers, _group_actions, choices dict) required to do so; implementer will either get it wrong or fall back to the function-name scan the spec explicitly forbids. (4) FR-014 calls with_locked_state(slug) but slug is never shown to be available in command_checkpoint's argument namespace — if checkpoint args don't already carry a slug field, this silently fails at runtime. (5) The Tasks artifact is entirely empty — there is no executable work breakdown, so any Codex dispatch has no slice boundaries to implement against.
+Three load-bearing gaps would force guessing. (1) FR-003a introduces a new `invariant_warnings[]` state field but never defines where it lives in state.json, whether it is top-level or stage-scoped, or how `status --slug` reads and surfaces it. An implementer cannot write this path without inventing the schema. (2) FR-001 requires updating `judge-prompts/completeness.md` to reliably produce a `unaddressed_high_finding_ids` JSON array, but provides zero prompt wording, format constraint, or instruction pattern. The entire veto mechanism depends on the LLM emitting this field; if the prompt is wrong, the feature silently fails (the veto never fires). The spec gives no basis for writing a correct prompt. (3) FR-004 introduces two unexplained identifiers alongside the one state key that is already known: `outcome_value = 'rejudge'` and `next_action = 'edit_and_rerun_judge'` appear alongside `stage_state['judge_next_action'] = 'edit_and_rerun_judge'`, but the spec never says whether `outcome_value` and `next_action` are local variables, new state fields, or aliases of something existing. The current tally logic is described only as being 'around line 875-900' — an implementer writing the override block cannot know whether setting `outcome_value` has any downstream effect or is dead code.
 
 ## Residual Risks
 
-- spec :: FR-003 - at least one of the referenced ids is still unresolved in the current `stage_state.unresolved_concerns` (i.e., has no `addressed_at OR deferred_reason OR dismissed_reason`)
-- spec :: FR-001 - populates this array with the concern `id`s (or reviewer-finding references) that are still open
-- spec :: FR-009 - The authoritative source for 'every subcommand the runner exposes' is the argparse subparser registry in `build_parser()`. The test in FR-012 enumerates subcommands from argparse (not from a function-name scan)
-- spec :: FR-014 - `command_checkpoint` MUST acquire the state lock via `with_locked_state(slug)` BEFORE running GC. Sequence is: parse args → acquire lock → GC → dispatch reviews → release lock.
-- tasks :: entire artifact - # Tasks
+- spec :: FR-003a - it MUST write an `invariant_warnings[]` entry `{command: "judge", stage: <stage>, detail: "completeness judge blocked without structured HIGH ids while concerns remain — prompt may be malformed"}` and fall back to majority. The operator sees the warning in `status --slug` output.
+- spec :: FR-001 - `judge-prompts/completeness.md` MUST be updated to emit a JSON verdict that includes a `unaddressed_high_finding_ids: [string]` array alongside the existing `verdict`/`reasoning` fields. When the judge votes `block` specifically because HIGH reviewer findings remain unaddressed, it populates this array with the concern `id`s (or reviewer-finding references) that are still open.
+- spec :: FR-004 - the tally MUST override majority: `outcome_value = "rejudge"`, `next_action = "edit_and_rerun_judge"`, `stage_state["judge_next_action"] = "edit_and_rerun_judge"`. Reason text includes the specific id(s) cited: `"completeness judge veto: unaddressed HIGH concerns {id1,id2} — majority override"`.
 
 ## Verdict (structured)
 
@@ -40,38 +38,28 @@ Five load-bearing gaps would force an implementer to guess on correctness-critic
   "evidence": [
     {
       "artifact": "spec",
-      "quote": "at least one of the referenced ids is still unresolved in the current `stage_state.unresolved_concerns` (i.e., has no `addressed_at OR deferred_reason OR dismissed_reason`)",
-      "section": "FR-003"
+      "quote": "it MUST write an `invariant_warnings[]` entry `{command: \"judge\", stage: <stage>, detail: \"completeness judge blocked without structured HIGH ids while concerns remain \u2014 prompt may be malformed\"}` and fall back to majority. The operator sees the warning in `status --slug` output.",
+      "section": "FR-003a"
     },
     {
       "artifact": "spec",
-      "quote": "populates this array with the concern `id`s (or reviewer-finding references) that are still open",
+      "quote": "`judge-prompts/completeness.md` MUST be updated to emit a JSON verdict that includes a `unaddressed_high_finding_ids: [string]` array alongside the existing `verdict`/`reasoning` fields. When the judge votes `block` specifically because HIGH reviewer findings remain unaddressed, it populates this array with the concern `id`s (or reviewer-finding references) that are still open.",
       "section": "FR-001"
     },
     {
       "artifact": "spec",
-      "quote": "The authoritative source for 'every subcommand the runner exposes' is the argparse subparser registry in `build_parser()`. The test in FR-012 enumerates subcommands from argparse (not from a function-name scan)",
-      "section": "FR-009"
-    },
-    {
-      "artifact": "spec",
-      "quote": "`command_checkpoint` MUST acquire the state lock via `with_locked_state(slug)` BEFORE running GC. Sequence is: parse args \u2192 acquire lock \u2192 GC \u2192 dispatch reviews \u2192 release lock.",
-      "section": "FR-014"
-    },
-    {
-      "artifact": "tasks",
-      "quote": "# Tasks",
-      "section": "entire artifact"
+      "quote": "the tally MUST override majority: `outcome_value = \"rejudge\"`, `next_action = \"edit_and_rerun_judge\"`, `stage_state[\"judge_next_action\"] = \"edit_and_rerun_judge\"`. Reason text includes the specific id(s) cited: `\"completeness judge veto: unaddressed HIGH concerns {id1,id2} \u2014 majority override\"`.",
+      "section": "FR-004"
     }
   ],
   "judge": "implementation-risk",
   "model": "claude-sonnet-4-6",
-  "reasoning": "Five load-bearing gaps would force an implementer to guess on correctness-critical details. (1) The shape of stage_state.unresolved_concerns is never defined \u2014 the FR-003 resolution check requires comparing concern ids against fields named addressed_at, deferred_reason, dismissed_reason, but whether unresolved_concerns is a list of objects, a dict keyed by id, or something else is unspecified; implementer must reverse-engineer existing code not supplied in the artifact chain. (2) The existing completeness judge verdict JSON schema is not shown; FR-001 says to add unaddressed_high_finding_ids alongside existing fields, but without knowing the current schema shape the extension is ambiguous \u2014 especially since FR-001 also says the array holds 'concern ids (or reviewer-finding references)' which are two different identifier namespaces. (3) FR-009 mandates enumerating subcommands from the argparse subparser registry but gives zero guidance on the non-obvious argparse internals (_subparsers, _group_actions, choices dict) required to do so; implementer will either get it wrong or fall back to the function-name scan the spec explicitly forbids. (4) FR-014 calls with_locked_state(slug) but slug is never shown to be available in command_checkpoint's argument namespace \u2014 if checkpoint args don't already carry a slug field, this silently fails at runtime. (5) The Tasks artifact is entirely empty \u2014 there is no executable work breakdown, so any Codex dispatch has no slice boundaries to implement against.",
-  "timestamp": "2026-04-24T00:00:00Z",
+  "reasoning": "Three load-bearing gaps would force guessing. (1) FR-003a introduces a new `invariant_warnings[]` state field but never defines where it lives in state.json, whether it is top-level or stage-scoped, or how `status --slug` reads and surfaces it. An implementer cannot write this path without inventing the schema. (2) FR-001 requires updating `judge-prompts/completeness.md` to reliably produce a `unaddressed_high_finding_ids` JSON array, but provides zero prompt wording, format constraint, or instruction pattern. The entire veto mechanism depends on the LLM emitting this field; if the prompt is wrong, the feature silently fails (the veto never fires). The spec gives no basis for writing a correct prompt. (3) FR-004 introduces two unexplained identifiers alongside the one state key that is already known: `outcome_value = 'rejudge'` and `next_action = 'edit_and_rerun_judge'` appear alongside `stage_state['judge_next_action'] = 'edit_and_rerun_judge'`, but the spec never says whether `outcome_value` and `next_action` are local variables, new state fields, or aliases of something existing. The current tally logic is described only as being 'around line 875-900' \u2014 an implementer writing the override block cannot know whether setting `outcome_value` has any downstream effect or is dead code.",
+  "timestamp": "2026-04-24T12:00:00Z",
   "verdict": "block"
 }
 ```
 
 ## Resolution
 - status: open
-- note: Five load-bearing gaps would force an implementer to guess on correctness-critical details. (1) The shape of stage_state.unresolved_concerns is never defined — the FR-003 resolution check requires comparing concern ids against fields nam...
+- note: Three load-bearing gaps would force guessing. (1) FR-003a introduces a new `invariant_warnings[]` state field but never defines where it lives in state.json, whether it is top-level or stage-scoped, or how `status --slug` reads and surfa...
