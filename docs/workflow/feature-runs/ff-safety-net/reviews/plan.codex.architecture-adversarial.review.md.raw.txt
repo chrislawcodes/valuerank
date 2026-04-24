@@ -1,0 +1,9 @@
+## Findings
+- Medium: The Slice 1 inventory is internally inconsistent. It says “13 existing `command_*` handlers” but then describes “12 mutating incl `init`, 2 readonly,” which totals 14. That is not a minor typo in a safety-net plan; it means the coverage list is already off by one, and this kind of mismatch is exactly how a command gets left undecorated or misclassified.
+- Medium [UNVERIFIED]: The completeness veto can be bypassed by malformed or missing judge metadata. The schema makes `unaddressed_high_finding_ids` optional, and the veto only fires when at least one cited ID is still open. If the model omits the field, emits an empty array, or cites stale IDs, the plan provides no hard fail-open warning for the “complete” verdict itself, so the main safety check can silently degrade.
+- Medium [UNVERIFIED]: GC is scoped only to `command_checkpoint`, which is a late and narrow choke point. If any other path can read or depend on review intermediates before checkpoint runs, stale files can still affect behavior even though the plan claims the cleanup is part of keeping the workflow trustworthy.
+
+## Residual Risks
+- The plan still depends on LLM compliance for the completeness metadata. The prompt and self-validation help, but they do not guarantee correct IDs in every run.
+- The registry approach is still coupled to parser construction behavior. If the CLI wiring changes, the protection can fail in a way that is easy to miss unless the tests are very strict.
+- The plan assumes `state["invariant_warnings"]` is already accepted everywhere that reads or validates state. If any downstream consumer is stricter than expected, the warning path may need extra compatibility work.

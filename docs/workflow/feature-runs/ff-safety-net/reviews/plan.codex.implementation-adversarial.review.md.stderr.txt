@@ -1,13 +1,28 @@
+Reading additional input from stdin...
+OpenAI Codex v0.125.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019dc133-c387-7a20-9f90-e64f710570e3
+--------
+user
+Review this plan artifact using a implementation-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: plan.md
 # Plan — FF Safety Net
-
-## Review Reconciliation
-
-- review: reviews/spec.codex.feasibility-adversarial.review.md | status: accepted | note: Round 1-2 HIGH findings addressed; round 3 auto-accepted.
-- review: reviews/spec.codex.edge-cases-adversarial.review.md | status: accepted | note: Round 1-2 HIGH findings addressed; round 3 auto-accepted.
-- review: reviews/spec.gemini.requirements-adversarial.review.md | status: accepted | note: Round 1-2 HIGH findings addressed; round 3 auto-accepted.
-- review: reviews/plan.gemini.testability-adversarial.review.md | status: accepted | note: No actionable findings detected — auto-accepted
-- review: reviews/plan.codex.implementation-adversarial.review.md | status: accepted | note: MEDIUM (13 vs 14 count): FIXED — plan Slice 1 now says '14 subparser handlers (12 mutating + 2 readonly = 14)' with full enumeration. MEDIUM (ID comparability UNVERIFIED): spec FR-003 requires ANY cited id unresolved; stale/duplicate/malformed IDs are handled by the id-in-state cross-check (no match = treat id as resolved = veto does not fire on that id alone; but other cited ids may still fire it). FR-003a catches the missing-field case. MEDIUM (GC scope UNVERIFIED): spec FR-015 already specifies 5 globs with {stage}. prefix and FR-016 names preserved files explicitly.
-- review: reviews/plan.codex.architecture-adversarial.review.md | status: accepted | note: MEDIUM (count): same as implementation — FIXED in plan. MEDIUM (fail-open degradation): FR-003a fail-open guard writes to invariant_warnings[] when ids empty but concerns remain open; covered. MEDIUM (GC only in command_checkpoint): accepted as narrow scope — no other path currently reads raw/narrowed/stdout/stderr files; if a future command needs them, it adds its own GC.
 
 ## Architecture
 
@@ -33,7 +48,7 @@ Implementation dispatched to Codex per `~/.claude/rules/agent-invocation.md` tok
 
 - Create `factory_mutating.py` with `@mutates_state(name)` and `@readonly_command(name)` decorators + `collect_mutating_command_names(handlers)` helper.
 - Wrap `run_judge` in a named function `command_judge` in `run_factory.py`; apply `@mutates_state("judge")`.
-- Apply decorators to all 14 subparser handlers per FR-011: 12 mutating (`init`, `checkpoint`, `judge` via the new `command_judge` wrapper, `reconcile`, `auto-reconcile`, `block`, `repair`, `closeout`, `discover`, `parallel`, `implement`, `deliver`) + 2 readonly (`status`, `doctor`). The arithmetic — 12 mutating + 2 readonly = 14 — matches the 14 subparsers registered in `build_parser()`. Any mismatch at test time fails loudly per FR-012.
+- Apply decorators to all 13 existing `command_*` handlers per FR-011 (12 mutating incl `init`, 2 readonly).
 - Replace literal `_STATE_MUTATING_COMMANDS` in `run_factory.py` with `collect_mutating_command_names([...])` seeded from `build_parser()` dispatch map.
 - Add `tests/test_mutating_registry.py` per FR-012 — enumerates subparsers, rejects bare lambdas, asserts every handler is decorated.
 
@@ -94,3 +109,24 @@ Total target: ~190 tests (167 existing + ~23 new).
 ## Out of scope
 
 Same as spec — Fixes 3, 4, 5, 7 from plan doc + Risks R5, R7 + P2-6 restatement-judge hardening all remain deferred.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m reviewing the plan itself as a hostile artifact, not the codebase. I’ll focus on contradictions, missing cases, and assumptions the plan quietly relies on, and I’ll mark any codebase-dependent point as `[UNVERIFIED]`.
+codex
+## Findings
+- Medium: Slice 1 is internally inconsistent about scope. It says there are "13 existing `command_*` handlers" but then classifies them as "12 mutating incl `init`, 2 readonly", which totals 14. That means the decorator rollout is underspecified and at least one handler is likely to be missed or misclassified unless the count is corrected first.
+- Medium [UNVERIFIED]: The completeness veto never defines how `unaddressed_high_finding_ids` is resolved against the current open-finding set. The plan assumes the IDs are stable and directly comparable, but it does not say how to handle stale IDs, duplicate IDs, malformed values, or a missing field if validation is bypassed. That leaves room for false vetoes or silent fail-open behavior.
+- Medium [UNVERIFIED]: The GC change is underspecified about deletion scope. It says to delete "the 5 globs per FR-015" inside the checkpoint lock, but it does not restate which paths are protected, whether the patterns are narrowly stage-qualified, or how collisions between review artifacts are avoided. If the real layout is broader than assumed, the cleanup can delete unrelated files.
+
+## Residual Risks
+- The plan still depends on assumptions about the existing command registry, open-finding model, and FR-015 path layout that were not verified here.
+- The completeness fix still relies on the model actually emitting the new field correctly; prompt changes reduce risk, but they do not remove it.
+- The GC change is only safe if the glob set is tightly scoped to intermediate artifacts and not shared outputs.
+2026-04-24T20:35:27.019655Z ERROR codex_core::session: failed to record rollout items: thread 019dc133-c387-7a20-9f90-e64f710570e3 not found
+tokens used
+8,547

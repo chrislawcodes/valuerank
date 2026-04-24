@@ -490,6 +490,54 @@
       "agent_id": null,
       "artifact_sha_at_time": "a03753d0a4ce026eaa4cd7527592ee1a83632df1fd5e4c1750e3cbb2f475c841",
       "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T20:35:27.164387Z",
+      "started_at": "2026-04-24T20:34:47.795192Z",
+      "ended_at": "2026-04-24T20:35:27.164387Z",
+      "duration_seconds": 39.368754,
+      "agent_id": null,
+      "artifact_sha_at_time": "140b40ba22e7ed7f96aab45ede5563fa9cc63877610aadd497fa30ed0ae5e84c",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T20:35:51.736836Z",
+      "started_at": "2026-04-24T20:35:27.316203Z",
+      "ended_at": "2026-04-24T20:35:51.736836Z",
+      "duration_seconds": 24.42029,
+      "agent_id": null,
+      "artifact_sha_at_time": "140b40ba22e7ed7f96aab45ede5563fa9cc63877610aadd497fa30ed0ae5e84c",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T20:36:36.089188Z",
+      "started_at": "2026-04-24T20:35:51.931401Z",
+      "ended_at": "2026-04-24T20:36:36.089188Z",
+      "duration_seconds": 44.157289,
+      "agent_id": null,
+      "artifact_sha_at_time": "140b40ba22e7ed7f96aab45ede5563fa9cc63877610aadd497fa30ed0ae5e84c",
+      "parse_error": "no Gemini token stats found in stdout"
     }
   ],
   "stages": {
@@ -679,6 +727,17 @@
       ],
       "initial_sha": "4519e751b65d7f72d73c1f2323a8d751ae2c48dc293e83854252d503c60bcb18",
       "judge_next_action": "advance"
+    },
+    "plan": {
+      "adversarial_rounds": 1,
+      "judge_rounds": 0,
+      "judge_verdicts": [],
+      "annotations": [],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [
+        "140b40ba22e7ed7f96aab45ede5563fa9cc63877610aadd497fa30ed0ae5e84c"
+      ],
+      "initial_sha": "140b40ba22e7ed7f96aab45ede5563fa9cc63877610aadd497fa30ed0ae5e84c"
     }
   },
   "invariant_warnings": [],
@@ -690,16 +749,10 @@
   },
   "spec_adversarial_rounds": 3,
   "last_action_result": {
-    "next": "repair_plan_checkpoint",
-    "reason": "spec judge panel completed: advance",
-    "blockers": [
-      "Four load-bearing gaps would force guessing during implementation. First, FR-012 names a Python stdlib function that does not exist \u2014 inspect.islambda \u2014 so the lambda-detection test would raise AttributeError at runtime; the implementer must invent a substitute check. Second, the tasks artifact is empty (just a header), leaving the implementer with no phased breakdown and no sequencing constraints between the three fixes. Third, FR-004 sets outcome_value to the string 'rejudge', but the judge schema enumerates only 'proceed', 'proceed-with-annotation', and 'block' \u2014 it is unspecified whether 'rejudge' is valid anywhere this local variable feeds downstream (logging, state replay, PR body rendering). Fourth, Implementer Reference point 4 gives glob pseudo-code that calls .iterdir() on a Path containing wildcard characters, which is not valid Python and cannot be used as written; the implementer must guess the intended glob API (likely Path.glob) with no authoritative confirmation."
-    ],
-    "outcome": "advance",
-    "proceed_count": 2,
-    "block_count": 1,
-    "timestamp": "2026-04-24T20:33:02.067254Z",
-    "judge_round": 1
+    "next": "author_tasks",
+    "reason": "plan checkpoint completed",
+    "blockers": []
   },
-  "spec_judge_rounds": 1
+  "spec_judge_rounds": 1,
+  "plan_adversarial_rounds": 1
 }

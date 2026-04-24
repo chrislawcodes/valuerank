@@ -1,0 +1,9 @@
+## Findings
+- Medium: Slice 1 is internally inconsistent about scope. It says there are "13 existing `command_*` handlers" but then classifies them as "12 mutating incl `init`, 2 readonly", which totals 14. That means the decorator rollout is underspecified and at least one handler is likely to be missed or misclassified unless the count is corrected first.
+- Medium [UNVERIFIED]: The completeness veto never defines how `unaddressed_high_finding_ids` is resolved against the current open-finding set. The plan assumes the IDs are stable and directly comparable, but it does not say how to handle stale IDs, duplicate IDs, malformed values, or a missing field if validation is bypassed. That leaves room for false vetoes or silent fail-open behavior.
+- Medium [UNVERIFIED]: The GC change is underspecified about deletion scope. It says to delete "the 5 globs per FR-015" inside the checkpoint lock, but it does not restate which paths are protected, whether the patterns are narrowly stage-qualified, or how collisions between review artifacts are avoided. If the real layout is broader than assumed, the cleanup can delete unrelated files.
+
+## Residual Risks
+- The plan still depends on assumptions about the existing command registry, open-finding model, and FR-015 path layout that were not verified here.
+- The completeness fix still relies on the model actually emitting the new field correctly; prompt changes reduce risk, but they do not remove it.
+- The GC change is only safe if the glob set is tightly scoped to intermediate artifacts and not shared outputs.
