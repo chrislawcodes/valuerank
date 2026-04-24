@@ -9,8 +9,8 @@ git_head_sha: "221e9cffa80ea251479986bcb2240237ef841a57"
 git_base_ref: "origin/claude/friendly-aryabhata-9efbf7"
 git_base_sha: "6f5ed232c83bbd0f51ac8419ac6fb9688b8b8fad"
 generation_method: "gemini-cli"
-resolution_status: "open"
-resolution_note: ""
+resolution_status: "accepted"
+resolution_note: "No actionable findings detected — auto-accepted"
 raw_output_path: "docs/workflow/feature-runs/ff-runner-fixes/reviews/plan.gemini.testability-adversarial.review.md.json"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -43,5 +43,5 @@ coverage_note: ""
 - `gemini-2.5-pro`: input=16012, output=619, total=19640
 
 ## Resolution
-- status: open
-- note:
+- status: accepted
+- note: No actionable findings detected — auto-accepted

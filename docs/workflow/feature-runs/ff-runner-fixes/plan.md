@@ -5,6 +5,9 @@
 - review: reviews/spec.codex.feasibility-adversarial.review.md | status: accepted | note: Round-2 findings addressed: MEDIUM US3-vs-FR-009 contradiction — US3 updated to say stderr matching FR-009. MEDIUM pr-body addressed_by — rendering now requires addressed_at (state-bearing field), matching _concern_is_resolved and the FR-004 gate. LOW fenced-code-block regex match — pinned as documented limitation with explicit test.
 - review: reviews/spec.gemini.requirements-adversarial.review.md | status: accepted | note: Round-2 MEDIUM findings: #1 (dismiss backdoor) — accepted as known limitation; CLI is deferred anyway. #2 (post-judge drift) — accepted; manifest reseal annotation preserves audit trail; strict-mode require-re-review-on-drift is follow-up. #3 (warnings non-blocking) — intentional design; breaking workflow on warning defeats Fix 8's purpose; operator decides via status. LOW #4 (assumption 7 interaction) — addressed: assumption 7 rewritten to acknowledge runtime interaction. LOW #5 (id brittleness) — tracked as Risk R5.
 - review: reviews/spec.codex.edge-cases-adversarial.review.md | status: accepted | note: Round-2 findings (runner auto-accepted but content had MEDIUM/LOW findings — my Fix 2 regex gap): M#1 discover/parallel added to _STATE_MUTATING_COMMANDS (init excluded — runs before any stages exist, invariant check has nothing to evaluate). M#2 FR-004 clarified — only self-fields count for closure, annotations are display-only. LOW#3 heading regex tightened to require colon or EOL after severity word, with test fixture for ### HIGH availability and ## MEDIUM-term.
+- review: reviews/plan.codex.implementation-adversarial.review.md | status: accepted | note: No actionable findings detected — auto-accepted
+- review: reviews/plan.gemini.testability-adversarial.review.md | status: accepted | note: No actionable findings detected — auto-accepted
+- review: reviews/plan.codex.architecture-adversarial.review.md | status: accepted | note: Addressed: HIGH invariant hook surface — plan Slice 2 now enumerates full _STATE_MUTATING_COMMANDS (11 commands incl discover/parallel/repair/closeout). MEDIUM id backfill — plan Slice 3 now specifies _backfill_unresolved_concern_ids in load_workflow_state.
 
 ## Architecture
 
@@ -45,26 +48,26 @@ Estimated diff: ~100 lines (1 regex edit, 1 test file).
 
 ### Slice 2 — Fix 8 invariant self-check `[CHECKPOINT]`
 
-- Add `run_invariant_checks(state, command)` helper in `factory_state.py`.
-- Initial invariant: `judge_next_action == advance` AND `recommended_next_action` starts with `repair_` and ends with the same stage name.
-- Emit to stderr when `--json` is in effect; stdout otherwise. Detect via a context var or explicit parameter threaded from the caller.
-- Call the helper from the tail of `cmd_checkpoint`, `cmd_judge`, `cmd_reconcile`, `cmd_auto_reconcile`, `cmd_implement`, `cmd_deliver`, `cmd_block` in `run_factory.py`.
-- Add `invariant_warnings: list[dict]` to state.json with default `[]` on read; store last 100 entries.
-- Surface in `status` output.
-- Add `tests/test_invariant_checks.py`.
+- Create NEW module `factory_invariants.py` (sibling of `factory_state.py`) with `run_invariant_checks(state, command, recommended, invariants=None) -> list[dict]`.
+- Initial invariant `check_judge_advance_vs_recommended`: for each checkpoint stage, if `stages[stage].judge_next_action == "advance"` AND `recommended` equals `repair_<same stage>_checkpoint`, flag.
+- Emit to **stderr always** (no conditional routing). `JSON_MODE` flag + `set_json_mode()` API preserved for back-compat but have no behavioral effect.
+- Call the helper from `run_factory.main()` tail for every state-mutating command. Full enumeration in `_STATE_MUTATING_COMMANDS`: `auto-reconcile, block, checkpoint, closeout, deliver, discover, implement, judge, parallel, reconcile, repair`. (`init` is excluded — it runs before any stages exist.)
+- Add `invariant_warnings: list[dict]` to state.json with default `[]` on read; cap at 100 entries.
+- Surface last 5 + total count in `status --slug` output under `invariant-warnings:`.
+- Add `tests/test_factory_invariants.py`.
 
 Estimated diff: ~250 lines.
 
 ### Slice 3 — Fix 1 judge-advance honoring `[CHECKPOINT]`
 
-- `factory_next_action.recommended_next_action`: add `if stages[stage].get("judge_next_action") == "advance": continue_past_stage()` check before each `not healthy` branch, for spec, plan, tasks (and ideally by loop).
+- `factory_next_action.recommended_next_action`: for each stage (spec, plan, tasks), add `if stages[stage].get("judge_next_action") == "advance": fall through` inline before the existing `not healthy` branch. No new helper function.
 - `factory_cmd_judge.py`: reorder both advance branches so `stage_state["judge_next_action"] = "advance"` is written BEFORE `recommended_next_action` is called; update `state` in place first.
-- `factory_cmd_checkpoint.py`: when `judge_next_action == "advance"` and artifact SHA drifted from manifest, reseal manifest to current SHA and append `{type, old_sha, new_sha, at, reason}` to `stages[stage].annotations`.
-- Extend `unresolved_concerns` entry shape with `id`, `addressed_at`, `addressed_by`, `deferred_reason`, `dismissed_reason`. Derive `id = sha256(stage|judge|round_raised|first-48-chars-reasoning-stripped)[:12]`.
-- Add `checkpoint --address <id> --evidence <text>`, `checkpoint --defer <id> --reason <text>`, `checkpoint --dismiss <id> --reason <text>` flags. These MUTATE the unresolved_concerns entry in state.json.
-- Next-stage checkpoint: before accepting a stage, verify every prior-stage concern is addressed/deferred/dismissed; else return `blocked: unresolved-concerns-from-<prior-stage>`.
-- Update `factory_pr_body.py` to filter addressed/deferred/dismissed concerns out of the "unresolved judge concerns" block; render them in a new "resolved concerns" block.
-- Regression test using Slice 0's fixture — pre-fix returns `repair_spec_checkpoint`, post-fix returns `author_plan`.
+- `factory_stages.py`: `prerequisite_failure` treats an unhealthy prereq as acceptable when it has `judge_next_action == "advance"`, and calls `record_advance_with_drift_if_needed` once to append `{type: "advance-with-drift", old_sha, new_sha, at, reason}` to `stages[stage].annotations[]`.
+- Extend `unresolved_concerns` entry shape with `id`, `addressed_at`, `addressed_by`, `deferred_reason`, `dismissed_reason`. Derive `id` via `sha256(f"{stage}|{judge}|{round_raised}|" + "".join(reasoning.split())[:48])[:12]`.
+- **State-load backfill (FR-011a)**: `factory_state.load_workflow_state` calls `_backfill_unresolved_concern_ids(state)` which synthesizes `id` for any legacy concern missing it AND default-fills the lifecycle fields to `None`. This is what makes run-033's pre-existing concerns usable with the new lifecycle without a migration script.
+- `checkpoint --address/--defer/--dismiss <id>` CLI flags — **deferred to follow-up feature** (the data shape supports the lifecycle but the CLI is not wired in this PR).
+- Update `factory_pr_body.py`: `_concern_is_resolved` returns True only when `addressed_at`, `deferred_reason`, or `dismissed_reason` is non-null (state-bearing fields, not `addressed_by` which is evidence only). Resolved concerns render in a new "Resolved Concerns" block. Open concerns block now shows `id`.
+- Regression test `test_run_033_regression_from_fixture` loads `run-033-state-pre-fix.json` and asserts `recommended_next_action` returns `author_plan` (post-fix), not `repair_spec_checkpoint` (pre-fix).
 
 Estimated diff: ~400 lines (this is the largest slice).
 
