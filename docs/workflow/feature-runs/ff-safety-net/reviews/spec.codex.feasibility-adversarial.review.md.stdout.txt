@@ -1,0 +1,12 @@
+## Findings
+1. **High**: The completeness veto is built on parsing free-form judge prose, not a required machine-readable signal. `FR-001`/`FR-002` allow the safety gate to trigger from regex matches on words like `unaddressed` and `high`, with `FR-016` only optional. That is too brittle for a control that is supposed to stop unsafe merges. A phrasing change, a different capitalization pattern, or an innocent mention of “high” can either miss a real veto or create a false one. This should be mandatory structured data, not a text heuristic.
+
+2. **Medium**: The mutating-command registry spec is internally inconsistent about what is actually being registered. `FR-007` says the registry scans module-exported functions with decorators, but `FR-008` also includes `run_judge` “invoked via a lambda,” which cannot be decorated in the form described. That leaves a real gap in the claimed “every current command” coverage and makes the test plan easy to satisfy while still missing an executable path. The spec needs a named wrapper or a clearer registration model.
+
+3. **Medium [UNVERIFIED]**: The review-intermediate GC is specified as a destructive cleanup at the top of `command_checkpoint`, but the spec does not define any atomicity or recovery guarantee around that delete step. If the checkpoint run is interrupted or another invocation is already writing files, the cleanup can erase the only forensic evidence of the failure. This depends on how the current checkpoint lock and write path behave, so it is unverified, but the spec currently assumes those protections exist without stating them.
+
+## Residual Risks
+- If `FR-016` is deferred, the completeness veto still depends on regex matching and will remain sensitive to prompt wording drift.
+- The mutating-command registry will still rely on the project keeping the `command_*` naming convention consistent across future additions.
+- The GC rule is scoped to known file shapes only; any new intermediate artifact type will need an explicit update or it will accumulate again.
+- The `--keep-intermediates` escape hatch preserves debugging state only for that one run, so operators still need to know when to enable it before a failure happens.

@@ -1,0 +1,10 @@
+## Findings
+- High: FR-002 makes the completeness veto depend on free-form judge prose plus an optional regex fallback. That is too brittle for a safety gate. A wording change, prompt tweak, or copy edit can either fire the veto on the wrong case or miss a real unaddressed HIGH. Because FR-016 is optional, the spec still allows the feature to ship with regex as the only enforcement path.
+- Medium [UNVERIFIED]: The mutating-command registry only covers `command_*` functions, but the spec already exempts `run_judge` as a lambda-invoked path. If the current codebase has any state-mutating entrypoint outside that naming pattern, this fix will not register it and the invariant self-check can still be bypassed. This depends on existing code shape.
+- Medium [UNVERIFIED]: FR-008 marks `init` as read-only without stating that it has zero persistent side effects. If `init` creates or seeds state, excluding it from `mutates_state` reintroduces the same drift hole this feature is trying to close. The spec needs to pin down that `init` is truly side-effect free, or classify it as mutating.
+- Medium: US3 is internally inconsistent about the cleanup target set. The summary, FR-011, and the US3 test/scenario text disagree on whether there are four or five intermediates and which suffixes are authoritative. That ambiguity makes it easy to ship a GC that misses `.narrowed.json` or deletes the wrong file class without the spec clearly failing it.
+
+## Residual Risks
+- If FR-016 stays out of scope, completeness veto behavior will still be sensitive to prompt wording and reasoning format drift.
+- The GC still only covers the explicitly named suffixes in FR-011, so any future intermediate file shape will need an explicit spec update.
+- The registry approach still assumes the project keeps using the `command_*` naming convention; any new mutation path outside that pattern will need a manual convention update.
