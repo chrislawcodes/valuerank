@@ -1,0 +1,15 @@
+{
+  "repo_root": ".",
+  "git_head_sha": "5b618f11fbed63e44bb89f9b1763d71ca7e6754d",
+  "git_base_ref": "b734f00a",
+  "git_base_sha": "b734f00ae4b779dc2297c26496285e09ea719e2a",
+  "paths": [
+    "cloud/apps/api/src/queue/handlers",
+    "cloud/apps/api/src/services/run",
+    "cloud/packages/db/prisma/schema.prisma"
+  ],
+  "allowed_dirty_paths": [],
+  "untracked_files_included": [],
+  "artifact_path": "docs/workflow/feature-runs/033-run-state-reconciliation/reviews/implementation.diff.patch",
+  "allow_empty_diff": false
+}

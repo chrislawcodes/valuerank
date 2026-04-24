@@ -1,0 +1,57 @@
+{
+  "session_id": "28f6e40c-7f7a-49f9-b896-1f11803533e1",
+  "response": "## Findings\n\n1.  **HIGH - Data Corruption via False Reconstruction**: The new `run-state-reconcile` job introduces a powerful but dangerous repair mechanism: `reconstructOrphans`. This function automatically creates a `ProbeResult` with `status: 'SUCCESS'` for any `Transcript` found without a corresponding `ProbeResult`. This carries a significant risk of data corruption. The assumption that an orphaned transcript implies a successful probe is flawed. A probe worker could fail *after* successfully creating a transcript but *before* persisting the probe result (e.g., due to a crash while parsing a malformed LLM response). In such a scenario, a failed probe would be resurrected and incorrectly recorded as a `SUCCESS`, silently skewing run data and any subsequent analysis. This repair mechanism launders an unknown state into a \"successful\" one without sufficient evidence.\n\n2.  **MEDIUM - Opaque Summarization Failures**: The refactoring removes write capabilities from `summarize-progress.ts`, relying on derived counts from the `Transcript` table. While a `summarizeFailedAt` column has been added to `Transcript`, the logic in `restartSummarization` and `queueSummarizeJobsForRecovery` only re-queues jobs where `summarizeFailedAt` is `null`. This creates a dead-end for summarization jobs that fail permanently. Once a transcript is marked with a `summarizeFailedAt` timestamp, it appears to be excluded from all future recovery and restart attempts, effectively becoming a permanent failure with no clear path to resolution or even re-evaluation. This could lead to runs that never complete because a subset of their transcripts are in this unrecoverable failed state.\n\n3.  **[UNVERIFIED] MEDIUM - Stale Progress Counter Repair Is Incomplete**: The new `run_state_reconcile` job includes logic (`detectScheduledCountMismatch`) to detect and repair mismatches between the `run.progress.total` counter and the canonical number of probes that should have been scheduled. The function `repairScheduledCount` is called to fix this. However, this appears to be the *only* progress field that is repaired. The `completed` and `failed` counters within the `run.progress` JSONB object are now obsolete and read-only, but they are not cleared or corrected. They remain as potentially misleading stale data. An external user or a different part of the system not aware of this refactor could mistakenly read these stale counters and operate on incorrect information. A full repair should involve nullifying or removing these legacy fields to prevent misuse.\n\n## Residual Risks\n\n1.  **Increased Complexity & Obscured Logic**: The shift from simple, explicit counter increments (`incrementFailed`, `applyProgressDelta`) to a centralized, declarative `maybeAdvanceRunStatus` function and a background `run_state_reconcile` job significantly increases the system's complexity. While this improves robustness by centralizing state logic, it also obscures it. Debugging a state transition issue is no longer a matter of tracing a single function call but requires understanding the intricate queries and rules within these new, critical \"god functions.\" A bug in this centralized logic is now catastrophic, affecting all run state transitions system-wide.\n\n2.  **Performance Scalability Concerns**: The core design has shifted from write-time counter updates to read-time progress derivation (e.g., `computeRunProgress`). This is a valid strategy to ensure data consistency. The author has correctly added database indexes to support these new query patterns. However, this introduces a scalability risk. For runs with extremely high probe counts (e.g., millions), the `COUNT` operations across large tables to calculate progress on the fly could become performance bottlenecks, potentially slowing down state transitions and API responses. The system's performance is now more tightly coupled to the size of historical run data in key tables.\n\n3.  **Singleton Job Key Dependency**: The correctness of several recovery and restart operations (e.g., `restartSummarization`, `queueSummarizeJobsForRecovery`) now critically relies on the `singletonKey` feature of the job queue (`pg-boss`) to prevent duplicate job enqueues. While effective, this creates a tight coupling to a specific feature of the queueing infrastructure. Any change in the queueing system or a misconfiguration of the `singletonKey` could re-introduce race conditions and redundant processing that the old, more explicit logic might have avoided (albeit with its own flaws). The system's idempotency is now partially outsourced to the job queue's configuration.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 57767
+        },
+        "tokens": {
+          "input": 30973,
+          "prompt": 30973,
+          "candidates": 943,
+          "total": 36392,
+          "cached": 0,
+          "thoughts": 4476,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 57767,
+            "tokens": {
+              "input": 30973,
+              "prompt": 30973,
+              "candidates": 943,
+              "total": 36392,
+              "cached": 0,
+              "thoughts": 4476,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}
