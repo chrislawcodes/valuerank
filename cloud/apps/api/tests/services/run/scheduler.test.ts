@@ -22,6 +22,16 @@ vi.mock('@valuerank/db', () => ({
     },
     $queryRaw: mockDbQueryRaw,
   },
+  Prisma: {
+    // Minimal stand-in for Prisma.sql tagged-template helper. Concatenates
+    // the literal segments and pipes interpolated values through; that's
+    // enough for our string-assertion tests below.
+    sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({
+      strings,
+      values,
+      sql: strings.reduce((acc, str, i) => acc + str + (i < values.length ? String(values[i]) : ''), ''),
+    }),
+  },
 }));
 
 vi.mock('@valuerank/shared', () => ({
@@ -163,5 +173,32 @@ describe('getReconcileWindowDays', () => {
       }),
       'Invalid RUN_RECONCILE_WINDOW_DAYS, falling back to default'
     );
+  });
+});
+
+describe('enqueueRunStateReconcileJobs', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    delete process.env.RUN_RECONCILE_WINDOW_DAYS;
+    mockDbQueryRaw.mockResolvedValue([]);
+  });
+
+  it('also picks up runs with open default-source anomalies, even when transcripts are clean', async () => {
+    const { enqueueRunStateReconcileJobs } = await loadScheduler();
+
+    await enqueueRunStateReconcileJobs();
+
+    // The function builds a single tagged-template query; check the assembled SQL.
+    expect(mockDbQueryRaw).toHaveBeenCalledTimes(1);
+    const callArgs = mockDbQueryRaw.mock.calls[0]!;
+    const stringsArg = callArgs[0] as TemplateStringsArray;
+    const sql = stringsArg.join('?');
+
+    // The new clause must reference run_anomalies, filter to unresolved rows,
+    // and restrict to source='default'. Without all three, stale anomalies on
+    // clean COMPLETED runs would never get a chance to auto-resolve.
+    expect(sql).toContain('run_anomalies');
+    expect(sql).toContain('resolved_at IS NULL');
+    expect(sql).toContain("source = 'default'");
   });
 });
