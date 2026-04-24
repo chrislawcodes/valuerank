@@ -47,6 +47,8 @@
 ### Follow-up Cleanup
 
 - ✅ First/second wording removed from all analysis surfaces, backend contracts, and export/worker paths (PRs #432, #434, #440, #445, #448).
+- 🟡 **Run-state reconciliation sweep is scoped to runs updated in the past 30 days.** Stranded transcripts on runs older than that need manual `recover_run` (via MCP). If operators investigate older runs often, widen the window in `cloud/apps/api/src/services/run/scheduler.ts` (search for `30 days`). Added 2026-04-23 with [PR #745](https://github.com/chrislawcodes/valuerank/pull/745).
+- 🟡 **Run-state reconciliation accumulates SUPERSEDED `AnalysisResult` rows** on runs that receive late-rescue re-analyses. Not a correctness issue — queries filter `status='CURRENT'` — but the table grows. Add a janitor if growth becomes visible. Added 2026-04-23 with [PR #745](https://github.com/chrislawcodes/valuerank/pull/745).
 
 ### Validation Gate
 
