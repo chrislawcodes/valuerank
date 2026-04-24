@@ -1,0 +1,3640 @@
+Reading additional input from stdin...
+OpenAI Codex v0.124.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: medium
+reasoning summaries: none
+session id: 019dbce0-4ebd-7613-b2cb-5e421e604373
+--------
+user
+Review this spec artifact using a edge-cases-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+Code context files are provided above. Before asserting any finding, check whether it is confirmed or refuted by the provided code. Each finding must include an evidence tag:
+  [CODE-CONFIRMED] — the code directly supports this finding
+  [CODE-REFUTED] — the code contradicts this finding (do not include as a finding)
+  [UNVERIFIED] — relevant code was not provided; treat as lower confidence
+Only assign HIGH severity to CODE-CONFIRMED findings.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Context: CLAUDE.md
+# Cloud ValueRank - Project Constitution
+
+This document defines the cloud-specific coding standards and push checks for ValueRank.
+
+Repo-wide agent behavior, delivery paths, terminology policy, and memory policy live in the repo-root `AGENTS.md`.
+
+## Push And PR Checks
+
+- Use Pull Requests for changes that will land on `main`.
+- Ask the human before running `git push`.
+- Run the Preflight Gate before any `git push` or PR creation.
+
+## Workflow State
+
+- For Feature Factory, use the repo-owned workflow docs and `docs/workflow/feature-runs/<slug>/state.json` as the source of truth.
+- Repo-root `MEMORY.md` is a persistent reference index. Keep it lean — no shipped feature history or long-term archives.
+
+### Pre-push Hook (Preferred)
+
+The pre-push hook automatically detects which workspaces changed and runs lint, test, and build only for those. Install once:
+
+```bash
+./scripts/hooks/install-hooks.sh
+```
+
+The hook compares your branch to `origin/main` and respects the dependency graph:
+- `shared` changes → checks shared, db, api, web
+- `db` changes → checks db, api
+- `api` changes → checks api only
+- `web` changes → checks web only
+- Root config changes (`turbo.json`, `package.json`, etc.) → checks everything
+
+### Manual Preflight (If Hook Not Installed)
+
+Run from `cloud/` for the workspaces you changed:
+
+```bash
+# Always run for the workspaces you touched:
+npx turbo lint --filter=@valuerank/<workspace>
+npx turbo test --filter=@valuerank/<workspace>
+npx turbo build --filter=@valuerank/<workspace>
+
+# If you touched db or api, also set up the test database first:
+npm run db:test:setup
+```
+
+**Hard rules:**
+- Do not push if any preflight command fails.
+- Do not use `git push --no-verify` except emergency hotfix with explicit human approval.
+- If unrelated local files break checks, validate in a clean worktree from `origin/main` before push.
+- Every PR must include a `Validation` section listing exact commands run and pass/fail results.
+
+---
+
+## Core Principles
+
+1. **Small, focused files** - Easy to read, test, and maintain
+2. **Type safety** - Catch errors at compile time, not runtime
+3. **Test coverage** - Confidence to refactor and deploy
+4. **Observable** - Debug issues in production without guessing
+
+---
+
+## File Structure
+
+Enforced mechanically — do not treat these as soft guidance.
+
+| Check | Enforced by | Thresholds |
+|-------|-------------|------------|
+| File size | `cloud/scripts/check-file-sizes.sh` (CI + pre-push), ESLint `max-lines` (editor) | prod: warn 400 / error 700 — tests: warn 800 / error 1200 |
+| Placeholder filenames | `cloud/scripts/check-filenames.sh` | bans `-helper(s).ts`, `-util(s).ts`, `-misc.ts`, `-types-detail.ts` |
+| Trivial re-export barrels | `cloud/scripts/check-barrels.sh` | rejects new `index.ts` < 15 lines that is export-only |
+| Known fragmented clusters | `cloud/scripts/check-tech-debt.sh` | informational reminders; see `docs/tech-debt/file-structure.md` |
+
+Grandfathered files live in the allowlists next to each script. See
+[`docs/tech-debt/file-structure.md`](../docs/tech-debt/file-structure.md)
+for what to collapse when touching the area.
+
+Guidance when the size warning fires: do not split just to silence it. Ask
+whether the file has one responsibility. If yes, keep it. If no, split by
+responsibility and give the new module a domain-meaningful name.
+
+---
+
+## TypeScript Standards
+
+### No `any` Types
+
+Never use `any`. Use the actual type, or `unknown` if the type is truly dynamic:
+
+```typescript
+function parseJson(input: string): unknown { ... }
+function handleError(err: unknown): void { ... }
+```
+
+### Strict Mode Required
+
+`tsconfig.json` must have `strict: true`, `noImplicitAny: true`, `strictNullChecks: true`, `noUncheckedIndexedAccess: true`.
+
+### Strict Boolean Checks
+
+Use explicit checks for `null` and `undefined` — do not rely on truthiness for numbers or strings (linting error):
+
+```typescript
+// Bad - fails strict-boolean-expressions
+if (!value) { ... }
+
+// Good
+if (value != null) { ... }
+if (value === 0) { ... }
+```
+
+### Types vs Interfaces
+
+Use `type` for data shapes; use `interface` for service contracts.
+
+---
+
+## Testing Requirements
+
+### Coverage Targets
+
+| Metric | Minimum | Target |
+|--------|---------|--------|
+| Line coverage | 80% | 90% |
+| Branch coverage | 75% | 85% |
+| Function coverage | 80% | 90% |
+
+### What to Test
+
+- **Always test**: Business logic, data transformations, edge cases
+- **Mock**: Database, external APIs, LLM providers
+- **Integration tests**: API routes with test database
+- **Skip**: Simple getters, direct ORM pass-through
+
+### Required Environment Variables for Tests
+
+```bash
+JWT_SECRET="test-secret-that-is-at-least-32-characters-long"
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank_test"
+```
+
+Setup test DB: `npm run db:test:setup` (from `cloud/`). Reset on data pollution: `npm run db:test:reset`.
+
+---
+
+## Logging Standards
+
+All logging goes through the centralized logger — never use `console.log` directly.
+
+```typescript
+import { createLogger } from '@valuerank/shared';
+const log = createLogger('runs');
+
+log.info({ runId: run.id }, 'Run created');
+log.error({ err, config }, 'Failed to create run');
+```
+
+Always use structured data (object + message), never string interpolation.
+
+### Log Levels
+
+| Level | Use For |
+|-------|---------|
+| `error` | Exceptions, failed operations that need attention |
+| `warn` | Recoverable issues, deprecations, retry attempts |
+| `info` | Key business events (run started, completed, user action) |
+| `debug` | Detailed flow info, useful for local debugging |
+
+---
+
+## Code Organization
+
+### Import Order
+
+1. Node built-ins (`fs`, `path`)
+2. External packages (`express`, `zod`)
+3. Internal packages (`@valuerank/shared`, `@valuerank/db`)
+4. Relative imports (`./validation`, `./types`)
+
+### Folder Structure
+
+```
+apps/api/src/
+├── auth/         # Authentication middleware and JWT handling
+├── cli/          # Admin scripts (create-user, normalize, shadow)
+├── config/       # Server configuration
+├── graphql/      # GraphQL schema, queries, mutations, types
+├── mcp/          # MCP server tools and OAuth
+├── middleware/    # Express middleware
+├── queue/        # PgBoss job handlers and queue orchestration
+├── routes/       # Express route handlers (REST, CSV, OData)
+├── services/     # Business logic
+└── utils/        # Pure utility functions
+
+apps/web/src/
+├── api/          # GraphQL operations and client setup
+├── components/   # React components
+├── hooks/        # Custom hooks
+├── lib/          # Shared libraries (statistics, formatting)
+├── pages/        # Route pages
+└── utils/        # Pure utility functions
+```
+
+---
+
+## Error Handling
+
+Use custom error classes (`AppError`, `NotFoundError`, `ValidationError`) from `packages/shared`. Always catch and forward to error middleware in routes — never swallow errors silently.
+
+---
+
+## Database Access
+
+### Use Prisma with Type Safety
+
+Use typed queries and `$transaction` for multi-step operations.
+
+### Soft Delete Pattern
+
+Entities use soft delete via `deletedAt` timestamp. **Never physically delete** — set `deletedAt` instead.
+
+**Tables with soft delete:** `definitions`, `definition_tags`, `scenarios`
+
+```typescript
+// ALWAYS filter out soft-deleted records
+const definitions = await prisma.definition.findMany({
+  where: { deletedAt: null },  // Required!
+});
+
+// When "deleting", set deletedAt
+await prisma.definition.update({
+  where: { id: definitionId },
+  data: { deletedAt: new Date() },
+});
+```
+
+`deletedAt` is **never exposed** in GraphQL schema. All resolvers must filter `deletedAt: null` automatically.
+
+---
+
+## Database Connections
+
+The project uses PostgreSQL with PgBouncer for connection pooling.
+
+**Application** (via PgBouncer): `DATABASE_URL` — include `?pgbouncer=true` to disable prepared statements.
+
+**Migrations** (direct): `DIRECT_URL` — Prisma Migrate requires a direct connection, not a pooler.
+
+```bash
+# .env
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:6432/valuerank?pgbouncer=true"
+DIRECT_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank"
+```
+
+Start local DB: `docker-compose up -d` from `cloud/`.
+
+---
+
+## Schema Changes (Migrations)
+
+**Always use Prisma Migrate — never `db push`.**
+
+```bash
+# Create and apply a migration
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank" \
+  npx prisma migrate dev --name add_feature_tables --schema packages/db/prisma/schema.prisma
+```
+
+Production deployments run `prisma migrate deploy` automatically on startup.
+
+---
+
+## Quick Reference
+
+```
+File size:      enforced by scripts (prod warn 400/err 700, tests warn 800/err 1200)
+any types:      NEVER (use unknown if truly unknown)
+Test coverage:  80% minimum
+Console.log:    NEVER (use logger)
+Error handling: Custom AppError classes
+Imports:        Node → External → Internal → Relative
+```
+
+---
+
+## Terminology
+
+Canonical source: `docs/canonical-glossary.md`
+
+- Follow the terminology policy in repo-root `AGENTS.md`.
+- In cloud code, older names like `definition`, `dimension`, and `scenario` may still appear in code, schema, or APIs. Map them to glossary terms instead of renaming them casually.
+
+
+Artifact: spec.md
+# Feature Factory Runner Fixes — Spec
+
+**Feature branch**: `claude/friendly-aryabhata-9efbf7`
+**Slug**: `ff-runner-fixes`
+**Created**: 2026-04-23
+**Status**: Draft spec (discovery complete)
+**Supporting plan**: [docs/workflow/plans/feature-factory-runner-fixes.md](../../plans/feature-factory-runner-fixes.md)
+
+## Summary
+
+Fix three concrete defects in the Feature Factory runner that surfaced during feature run 033:
+
+1. **Fix 1** — Judge panel verdicts are silently ignored by the next-action decision tree.
+2. **Fix 2** — Auto-reconcile's severity regex misses common finding shapes, letting HIGH findings slip through as "no findings."
+3. **Fix 8** — No invariant guardrail to catch future state contradictions like Fix 1 produced.
+
+Fixes 3, 4, 5, 6, 7 from the plan are **out of scope** for this feature and will be tracked as follow-up features.
+
+This is workflow-tool maintenance, not product work. The "user" is the orchestrator (Claude or Codex) and the secondary user is the human operator watching the workflow.
+
+## Problem statement
+
+During feature run 033 the runner appeared to loop: after the judge panel voted `advance`, the next-action banner still recommended `repair_spec_checkpoint`. The orchestrator had to hand-edit `state.json` to proceed. Three causes:
+
+1. [factory_next_action.py:76-143](../../operations/codex-skills/feature-factory/scripts/factory_next_action.py) never reads `stages.<stage>.judge_next_action`, even though [factory_cmd_judge.py:879, 884, 899](../../operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py) writes it.
+2. [factory_review_specs.py:20-27](../../operations/codex-skills/feature-factory/scripts/factory_review_specs.py) matches only bullet-list (`- high:`) and table-cell (`| **HIGH** |`) severity shapes. Numbered-list (`1. **HIGH**:`), heading (`### HIGH:`), bold-prefix (`**HIGH [CODE-CONFIRMED]**:`), and inline (`Severity: HIGH`) are silently ignored.
+3. No automated check flags the state contradiction (`judge_next_action == advance` AND `recommended_next_action == repair_<same stage>_checkpoint`) when it occurs. The orchestrator only noticed by reading review bodies manually.
+
+## Scope
+
+### In scope
+
+- **Fix 1** — `factory_next_action.recommended_next_action` honors `judge_next_action == "advance"` before checking `stages.<stage>.healthy`.
+- **Fix 1 schema** — extend the already-partly-defined `unresolved_concerns` schema in `state.json` so the next stage can verify concerns were addressed.
+- **Fix 1 manifest reseal** — when `judge_next_action == "advance"` but artifact SHA has drifted from the manifest, reseal the manifest at advance time and record drift in `annotations[]`.
+- **Fix 2** — broaden `_ACTIONABLE_FINDING_RE` in `factory_review_specs.py` to catch the four additional severity shapes, with structural anchoring to avoid prose false-positives.
+- **Fix 8** — post-run invariant self-check that runs after `checkpoint`, `judge`, `reconcile`, `auto-reconcile` and surfaces state contradictions.
+- **Regression fixture** — capture run-033's `state.json` into `scripts/tests/fixtures/run-033-snapshot.json` as task 0 and use it as an integration-test input for Fix 1.
+- **Unit tests** — table-driven tests for the regex (positive + negative cases), decision-tree tests for Fix 1, self-check tests for Fix 8.
+
+### Out of scope (deferred to separate features)
+
+- Fix 3 — `--force-advance` / `advance` CLI subcommand.
+- Fix 4 — rename `repair_X_checkpoint` → `run_X_checkpoint`.
+- Fix 5 — `--validation-only` flag past 3-round adversarial cap.
+- Fix 6 — garbage-collect stale review intermediates.
+- Fix 7 — raise default character budgets.
+- Changes to `sync-codex-skills.py`, `review-lens/` scripts, or any reviewer prompts.
+- Product-surface changes (cloud/ app, GraphQL, UI).
+- Scheduler, PgBoss, or transport-level changes.
+
+## User stories
+
+This work lands inside the runner, not product surface. "Users" are orchestrating agents and the human operator.
+
+### US1 — Runner honors judge verdicts (Priority: P1)
+
+**As** the orchestrator (Claude or Codex)
+**I need** the runner's next-action recommendation to reflect the judge panel's formal verdict
+**So that** I do not have to hand-edit `state.json` when a judge votes `advance` but the artifact has been edited since the last checkpoint.
+
+**Why P1**: this is the root cause of the run-033 loop and the most painful friction in the workflow. Without it, every feature run risks manual recovery.
+
+**Independent test**: Replay the run-033 `state.json` fixture. Pre-fix: `recommended_next_action` returns `repair_spec_checkpoint`. Post-fix: returns `author_plan` (the correct next action).
+
+**Acceptance scenarios**:
+
+1. **Given** `stages.spec.judge_next_action == "advance"` and `stages.spec.healthy == false` (manifest SHA drift), **when** `recommended_next_action` is called, **then** it returns the next stage's action (`author_plan`) — not `repair_spec_checkpoint`.
+2. **Given** `stages.spec.judge_next_action == "advance"` and artifact SHA has drifted, **when** the advance is taken, **then** the manifest is resealed to the current SHA and an `annotations[]` entry records `{reason: "advance-with-drift", old_sha, new_sha, at: <timestamp>}`.
+3. **Given** `stages.spec.unresolved_concerns` is non-empty and the runner advances to plan, **when** plan checkpoint runs, **then** plan checkpoint verifies every concern id is either referenced as `addressed` in plan annotations or explicitly `deferred` via the `--defer` flag; otherwise checkpoint returns `needs-unresolved-concerns-review`.
+4. **Given** `stages.spec.judge_next_action == "edit_and_rerun_judge"`, **when** `recommended_next_action` is called, **then** it returns `judge_panel` (unchanged from today) — Fix 1 does not interfere with the rejudge path.
+
+### US2 — Auto-reconcile catches common finding shapes (Priority: P1)
+
+**As** the orchestrator
+**I need** `auto-reconcile` to detect HIGH/MEDIUM findings regardless of whether the reviewer used bullets, numbered lists, headings, or inline Severity fields
+**So that** I do not silently accept reviews with unaddressed blocking findings (as happened in run 033).
+
+**Why P1**: this fix closes the blindspot that let 3 reviews in run 033 auto-accept despite each containing multiple HIGH findings. Without it, Fix 1 could still be undermined by reviews that secretly pass auto-accept.
+
+**Independent test**: Feed the `_ACTIONABLE_FINDING_RE` function a set of real reviewer outputs from run 033 and assert it returns `True` for each. Separately feed prose that merely mentions "HIGH" in passing and assert `False`.
+
+**Acceptance scenarios**:
+
+1. **Given** a review body containing `1. **HIGH**: missing index on the foo table`, **when** `detect_actionable_findings` runs, **then** it returns `True`.
+2. **Given** a review body containing `### HIGH: missing index`, **when** `detect_actionable_findings` runs, **then** it returns `True`.
+3. **Given** a review body containing `**HIGH [CODE-CONFIRMED]**: duplicate key handling broken`, **when** `detect_actionable_findings` runs, **then** it returns `True`.
+4. **Given** a review body containing `Severity: HIGH` on its own line, **when** `detect_actionable_findings` runs, **then** it returns `True`.
+5. **Given** a review body that discusses "this would be a HIGH severity issue in production systems" in prose, **when** `detect_actionable_findings` runs, **then** it returns `False` (no false-positive on narrative mentions).
+6. **Given** all four existing positive patterns (`- high:`, `- [tag] high:`, `| **HIGH** |`, `| **CRITICAL** |`), **when** `detect_actionable_findings` runs, **then** it still returns `True` (no regression).
+
+### US3 — Invariant self-check surfaces state contradictions (Priority: P2)
+
+**As** the orchestrator
+**I need** the runner to flag state contradictions after every state-mutating command
+**So that** I notice future variants of the run-033 trap immediately instead of after hours of debugging.
+
+**Why P2**: Fix 1 closes the specific contradiction that occurred. Fix 8 is the guardrail that catches *unknown* future contradictions. Lower priority than Fixes 1/2 because it only matters for regressions; higher than a "nice to have" because it costs little and earns trust in the workflow.
+
+**Independent test**: Artificially set `stages.spec.judge_next_action = "advance"` AND leave `stages.spec.healthy = false` (without applying Fix 1). Run `auto-reconcile`. Assert the self-check logs a WARN to `state.invariant_warnings[]` AND prints the contradiction message to stdout.
+
+**Acceptance scenarios**:
+
+1. **Given** `judge_next_action == "advance"` and `recommended_next_action == "repair_<same stage>_checkpoint"`, **when** any state-mutating command completes, **then** `state.invariant_warnings` receives a new entry `{at, command, stage, detail}` AND a `⚠ state contradiction detected: ...` message is printed to stdout.
+2. **Given** the state is internally consistent, **when** a state-mutating command completes, **then** no WARN is logged and no contradiction message prints.
+3. **Given** a self-check WARN was logged, **when** `status --slug <slug>` runs, **then** the warning appears in the human-readable status output.
+
+## Functional requirements
+
+### Fix 1 — Judge verdict is honored
+
+- **FR-001**: `factory_next_action.recommended_next_action` MUST check `stages.<stage>.judge_next_action == "advance"` before the `stages.<stage>.healthy` check. If the advance bit is set, the function MUST return the next stage's action (same logic as today's "stage is healthy" branch), not `repair_<stage>_checkpoint`.
+- **FR-002**: When `judge_next_action == "advance"` and the current artifact SHA differs from the manifest SHA, the runner MUST reseal the manifest to the current SHA and append a drift record to `stages.<stage>.annotations[]` with shape `{type: "advance-with-drift", old_sha, new_sha, at: <epoch>}`. This reseal happens lazily the next time the advance is taken (not eagerly at judge-write time).
+- **FR-003**: The `unresolved_concerns` schema MUST be extended so each entry carries a stable `id` (SHA256 of `stage|judge|reasoning` truncated to 12 chars), `addressed_at` (nullable epoch), `addressed_by` (nullable string — commit SHA or annotation id), and `deferred_reason` (nullable string). Existing fields (`stage`, `judge`, `model`, `confidence`, `reasoning`, `round_raised`, `also_raised_in_round`) are preserved.
+- **FR-004**: The next stage's `checkpoint` command MUST verify every unresolved concern from the prior stage is either `addressed` (has a non-null `addressed_at`) or `deferred` (has a non-null `deferred_reason`). If any concern is open, checkpoint MUST return `blocked: unresolved-concerns-from-<prior-stage>` and name the open concern ids. New flags: `checkpoint --address <concern-id> --evidence <text>` and `checkpoint --defer <concern-id> --reason <text>`.
+- **FR-005**: Discovery + adversarial reviewer prompts are NOT changed. Reviewers and judges continue to produce concerns as they do today. Only the downstream carry-forward and verification behavior changes.
+
+### Fix 2 — Broaden severity detection
+
+- **FR-006**: `_ACTIONABLE_FINDING_RE` in `factory_review_specs.py` MUST match all of the following shapes, anchored to start-of-line (after optional whitespace):
+  - existing: `- high:`, `- [tag] high:`, `| **HIGH** |`, `| **CRITICAL** |`
+  - new: `<digits>. **(HIGH|CRITICAL|MEDIUM)** :?` (numbered list, bold severity)
+  - new: `#+ \s*(HIGH|CRITICAL|MEDIUM)\b` (heading with severity word)
+  - new: `**(HIGH|CRITICAL|MEDIUM)[\s:\[]` (bold severity prefix, possibly followed by `[CODE-CONFIRMED]`)
+  - new: `Severity: \s*(HIGH|CRITICAL|MEDIUM)\b` (inline severity field)
+- **FR-007**: The regex MUST NOT match prose mentions of severity words embedded in sentences (e.g., `"this would be HIGH severity"`). Structural anchoring (start-of-line, punctuation/whitespace immediately after) is the mechanism.
+- **FR-008**: A property-style unit test MUST cover: (a) each positive shape above, (b) negative prose cases, (c) every existing pattern that already matches — regression coverage.
+
+### Fix 8 — Invariant self-check
+
+- **FR-009**: A new helper `factory_state.run_invariant_checks(state, command)` MUST run after every state-mutating command (`checkpoint`, `judge`, `reconcile`, `auto-reconcile`). On contradiction it MUST append to `state.invariant_warnings[]` with shape `{at: <epoch>, command: <str>, stage: <str>, detail: <str>}` AND print a single-line `⚠ state contradiction detected: <detail> — see docs/workflow/plans/feature-factory-runner-fixes.md` message to stdout. The command itself MUST NOT abort.
+- **FR-010**: The initial invariant is: IF `stages.<stage>.judge_next_action == "advance"` AND `recommended_next_action(...) == "repair_<same stage>_checkpoint"` THEN flag. Additional invariants can be added later.
+- **FR-011**: `status --slug <slug>` output MUST include an `invariant-warnings:` section listing any entries in `state.invariant_warnings[]` (showing at most the last 5, with a count if more).
+
+### Shared
+
+- **FR-012**: No change to CLAUDE.md, AGENTS.md, cloud/CLAUDE.md, cloud/AGENTS.md, MEMORY.md, .gitignore, `sync-codex-skills.py`, or any file under `docs/workflow/operations/codex-skills/review-lens/`.
+- **FR-013**: No change to reviewer or judge prompts.
+- **FR-014**: All preflight checks (lint, test, build for the runner's Python module) MUST pass before PR creation. The runner has its own test suite under `docs/workflow/operations/codex-skills/feature-factory/scripts/tests/`.
+
+## Success criteria
+
+- **SC-001**: Replaying the run-033 `state.json` fixture with the new decision tree returns `author_plan` instead of `repair_spec_checkpoint`. (Binary pass/fail regression.)
+- **SC-002**: The regex test matrix passes — every documented positive shape returns `True`, every negative prose case returns `False`, zero regressions on the existing four shapes.
+- **SC-003**: An induced contradiction (manually set `judge_next_action == "advance"` + unhealthy stage) triggers a WARN in `state.invariant_warnings[]` and prints the contradiction message exactly once per command.
+- **SC-004**: Running the full runner test suite after the changes shows no regression in any test that passed before.
+- **SC-005**: The follow-up (Fix 1) verification for `unresolved_concerns`: a plan checkpoint against a spec whose judges left 1 concern MUST block until either `checkpoint --address <id> --evidence "<text>"` or `checkpoint --defer <id> --reason "<text>"` is invoked.
+- **SC-006**: PR diff is under ~500 lines added (excluding test fixtures and tests). If the diff exceeds this, tasks.md MUST split implementation across `[CHECKPOINT]` boundaries.
+
+## Edge cases
+
+- **What if `unresolved_concerns` is empty?** → Next-stage checkpoint proceeds normally; no verification to perform.
+- **What if two adjacent stages both produce concerns?** → Each stage's concerns are stored on that stage; the next stage verifies only the immediately-prior stage's list. Tasks → diff handoff applies the same rule.
+- **What if the same concern is raised in rounds 2 and 3?** → Existing `also_raised_in_round` field already handles dedup. No new behavior.
+- **What if the orchestrator addresses a concern with `--address` but never commits the supporting edit?** → `addressed_by` stores whatever evidence string was provided (commit SHA, annotation id, free text). Truth verification is out of scope for this feature.
+- **What if Fix 1 is applied but `judge_next_action == "advance"` was never set (stub state)?** → The new check falls through to existing `stages.<stage>.healthy` logic; behavior is unchanged for pre-judge states.
+- **What if a reviewer's finding format changes again in the future?** → Fix 2 adds a `factory_review_specs.ACTIONABLE_FINDING_SHAPES` manifest comment documenting each supported shape and a test that flags additions, so changes are visible in code review.
+- **What if `state.invariant_warnings[]` grows large over a long feature run?** → `status` shows last 5 with count. No automatic pruning; that is follow-up scope.
+- **What if `run_invariant_checks` itself throws?** → Caught, logged, and the command proceeds. Invariant failure must not itself break the runner.
+
+## Assumptions carried in
+
+1. Scope is Fixes 1, 2, 8 only. Fixes 3, 4, 5, 6, 7 are explicitly deferred.
+2. `unresolved_concerns` field already exists in state schema (confirmed via `factory_state.py:200`, `factory_cmd_judge.py:78`, `factory_cmd_checkpoint.py:94`). We extend it, not create it.
+3. Fix 1 reseals the manifest at advance time rather than at judge-vote time to avoid racing with orchestrator edits between judge completion and advance acceptance.
+4. Fix 2 uses structural anchoring (`^\s*` + punctuation/whitespace boundary) rather than a permissive "contains HIGH" match. Prose false-positives are the main risk.
+5. Fix 8 is a soft warning, not a hard stop — the runner continues after logging. The operator decides whether to halt.
+6. Run 033's `state.json` snapshot will be committed to `docs/workflow/operations/codex-skills/feature-factory/scripts/tests/fixtures/run-033-snapshot.json` as task 0 of `tasks.md`.
+7. The three fixes do not interact at runtime (Fix 1 is in the decision function, Fix 2 is in reconcile's regex, Fix 8 is a post-command hook). They can be implemented and merged independently if useful.
+8. Preflight (`pytest` on the runner module) is the required gate; no broader `cloud/` preflight applies because this feature touches only `docs/workflow/operations/codex-skills/feature-factory/scripts/`.
+
+## Non-goals
+
+1. Rename `repair_X_checkpoint` → `run_X_checkpoint` (plan Fix 4) — deferred.
+2. Add `--force-advance` / `advance` CLI subcommand (plan Fix 3) — deferred.
+3. `--validation-only` flag past 3-round adversarial cap (plan Fix 5) — deferred.
+4. Garbage-collect stale review intermediates (plan Fix 6) — deferred.
+5. Raise default character budgets (plan Fix 7) — deferred.
+6. Any change to product code under `cloud/`, to the GraphQL schema, to worker code, or to the scheduler.
+7. Any change to reviewer or judge prompts.
+
+## Residual risks (with verification)
+
+- **Risk R1**: Fix 2's broadened regex false-positives on a future review that quotes another finding's bold-prefix header in prose.
+  **verification:** test matrix includes a "quoted finding" negative case; if a real-world review regresses, the `_ACTIONABLE_FINDING_RE` change isolates the fix to one function.
+- **Risk R2**: Fix 1's manifest reseal loses the link between the original adversarial review SHAs and the final advance SHA.
+  **verification:** the `annotations[]` drift record preserves `old_sha` and `new_sha`; a reviewer can diff them post-facto. If drift is large, the `judge panel exhausted; advancing with unresolved concerns` log already captures intent.
+- **Risk R3**: `unresolved_concerns` verification at next-stage checkpoint blocks feature runs that have no natural mechanism to address spec-level concerns during plan authoring.
+  **verification:** explicit `checkpoint --defer <id> --reason` escape hatch. Run 033 replay test ensures the deferral path completes without forcing address-every-concern.
+- **Risk R4**: Fix 8 prints to stdout during CI-like noninteractive usage and looks like an error.
+  **verification:** output prefixed with `⚠` (not `ERROR`); the command's exit code remains whatever the underlying command returned. Tests assert exit code is unchanged by the invariant check.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m checking the runner code paths the spec depends on so I can separate confirmed problems from assumptions. I’ll look at the decision tree, review regex, and state-check flow, then assess the spec for edge-case gaps only.
+exec
+/bin/zsh -lc 'rg -n "_ACTIONABLE_FINDING_RE|detect_actionable_findings|Severity:|HIGH|CRITICAL|MEDIUM|CODE-CONFIRMED" docs/workflow/operations/codex-skills/feature-factory/scripts/factory_review_specs.py docs/workflow/operations/codex-skills/feature-factory/scripts/tests' in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+exec
+/bin/zsh -lc 'rg -n "judge_next_action|recommended_next_action|healthy|repair_.*_checkpoint|author_plan" docs/workflow/operations/codex-skills/feature-factory/scripts/factory_next_action.py docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py' in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 0ms:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_next_action.py:76:def recommended_next_action(
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_next_action.py:96:    if not stages["spec"]["manifest_exists"] or not stages["spec"]["healthy"]:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_next_action.py:97:        return "repair_spec_checkpoint"
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_next_action.py:101:        return "author_plan"
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_next_action.py:102:    if not stages["plan"]["manifest_exists"] or not stages["plan"]["healthy"]:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_next_action.py:103:        return "repair_plan_checkpoint"
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_next_action.py:111:    if not stages["tasks"]["manifest_exists"] or not stages["tasks"]["healthy"]:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_next_action.py:112:        return "repair_tasks_checkpoint"
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_next_action.py:115:    if not stages["diff"]["manifest_exists"] or not stages["diff"]["healthy"]:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_next_action.py:116:        return "repair_diff_checkpoint"
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_next_action.py:118:        return "repair_diff_checkpoint"
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_next_action.py:136:    if not stages["closeout"]["healthy"]:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_next_action.py:137:        return "repair_closeout_checkpoint"
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py:81:from factory_next_action import recommended_next_action  # noqa: E402
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py:149:    next_action = recommended_next_action(slug, state, stages, recon_ok)
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py:41:from factory_next_action import recommended_next_action  # noqa: E402
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py:806:    next_action = recommended_next_action(slug, state, stages, True)
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py:879:            stage_state["judge_next_action"] = next_action
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py:881:            next_action = recommended_next_action(slug, state, {name: stage_manifest_state(slug, name) for name in CHECKPOINT_STAGES}, True)
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py:884:            stage_state["judge_next_action"] = "advance"
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py:896:            next_action = recommended_next_action(slug, state, {name: stage_manifest_state(slug, name) for name in CHECKPOINT_STAGES}, True)
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py:899:            stage_state["judge_next_action"] = "advance"
+
+ succeeded in 0ms:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_review_specs.py:20:_ACTIONABLE_FINDING_RE = re.compile(
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_review_specs.py:24:    r"^\|\s*\*\*(critical|high|medium)\*\*"  # table row: "| **HIGH** |" or "| **CRITICAL** |"
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_review_specs.py:35:def detect_actionable_findings(review_path: Path) -> bool:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_review_specs.py:36:    """Return True if the review contains any HIGH or MEDIUM severity findings.
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_review_specs.py:38:    Lowercases the full text once so mixed-case headings (High, HIGH, high) all match.
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_review_specs.py:45:    return bool(_ACTIONABLE_FINDING_RE.search(text))
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_judge.py:276:            ("plan.codex.feasibility-adversarial.review.md", "sha-round-2", ["- HIGH: High finding from round 2."]),
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_judge.py:277:            ("plan.gemini.testability-adversarial.review.md", "sha-round-3", ["- MEDIUM: Latest finding from round 3."]),
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_judge.py:338:        review_specs = [("plan.codex.feasibility-adversarial.review.md", "sha-round-3", ["- HIGH: High finding."])]
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_judge.py:357:        review_specs = [("plan.codex.feasibility-adversarial.review.md", "sha-round-3", ["- HIGH: High finding."])]
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_judge.py:376:        review_specs = [("plan.codex.feasibility-adversarial.review.md", "sha-round-3", ["- HIGH: High finding."])]
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_judge.py:422:        review_specs = [("plan.codex.feasibility-adversarial.review.md", "sha-round-3", ["- HIGH: High finding."])]
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_judge.py:444:        review_specs = [("plan.codex.feasibility-adversarial.review.md", "sha-round-3", ["- HIGH: High finding."])]
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_judge.py:489:        review_specs = [("plan.codex.feasibility-adversarial.review.md", "sha-round-3", ["- HIGH: High finding."])]
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_judge.py:546:        review_specs = [("plan.codex.feasibility-adversarial.review.md", "sha-round-3", ["- HIGH: High finding."])]
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_judge.py:596:        review_specs = [("plan.codex.feasibility-adversarial.review.md", "sha-round-3", ["- HIGH: High finding."])]
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_judge_prompts.py:53:        self.assertIn("HIGH findings", user_prompt)
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/smoke_test_judge_panel.py:99:        _write_review(slug, reviews_root / "plan.codex.feasibility-adversarial.review.md", artifact_sha, ["- HIGH: completeness gap."])
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/smoke_test_judge_panel.py:100:        _write_review(slug, reviews_root / "plan.codex.edge-cases-adversarial.review.md", artifact_sha, ["- HIGH: edge case gap."])
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/smoke_test_judge_panel.py:101:        _write_review(slug, reviews_root / "plan.gemini.testability-adversarial.review.md", artifact_sha, ["- HIGH: implementation risk gap."])
+
+exec
+/bin/zsh -lc 'rg -n "invariant_warnings|run_invariant_checks|state contradiction|status --slug|auto-reconcile|reconcile" docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_*.py docs/workflow/operations/codex-skills/feature-factory/scripts/tests' in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ exited 1 in 0ms:
+codex
+I’ve confirmed the current code still has the exact blind spots the spec describes. Next I’m checking whether the spec’s new cases are actually exhaustive or if it leaves holes, especially around state transitions and regex anchoring.
+exec
+/bin/zsh -lc "sed -n '1,220p' docs/workflow/operations/codex-skills/feature-factory/scripts/factory_next_action.py" in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 0ms:
+#!/usr/bin/env python3
+"""Next-action decision tree for the feature factory workflow."""
+import sys
+from pathlib import Path
+
+_SCRIPT_DIR = Path(__file__).resolve().parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
+
+from factory_state import (  # noqa: E402
+    BLOCKED_KEY,
+    DISCOVERY_KEY,
+    DELIVERY_KEY,
+    PARALLEL_ANALYSIS_KEY,
+    blocking_unresolved_items,
+    load_workflow_state,
+    workflow_dir,
+)
+
+from factory_stages import (  # noqa: E402
+    CHECKPOINT_STAGES,
+    diff_review_budget_state,
+    later_progress_exists,
+    status_md_changed_since_init,
+)
+
+
+def _stage_state(state: dict, stage: str) -> dict:
+    stages = state.get("stages", {})
+    stage_state = stages.get(stage, {}) if isinstance(stages, dict) else {}
+    if not isinstance(stage_state, dict):
+        stage_state = {}
+    stage_state = dict(stage_state)
+    if "adversarial_rounds" not in stage_state:
+        try:
+            stage_state["adversarial_rounds"] = int(state.get(f"{stage}_adversarial_rounds", 0) or 0)
+        except (TypeError, ValueError):
+            stage_state["adversarial_rounds"] = 0
+    if "judge_rounds" not in stage_state:
+        try:
+            stage_state["judge_rounds"] = int(state.get(f"{stage}_judge_rounds", 0) or 0)
+        except (TypeError, ValueError):
+            stage_state["judge_rounds"] = 0
+    if "judge_verdicts" not in stage_state or not isinstance(stage_state.get("judge_verdicts"), list):
+        stage_state["judge_verdicts"] = []
+    return stage_state
+
+
+def _judge_panel_needed(state: dict) -> bool:
+    for stage in CHECKPOINT_STAGES:
+        stage_state = _stage_state(state, stage)
+        adversarial_rounds = stage_state.get("adversarial_rounds", 0)
+        judge_rounds = stage_state.get("judge_rounds", 0)
+        judge_verdicts = stage_state.get("judge_verdicts", [])
+        try:
+            adversarial_rounds_int = int(adversarial_rounds)
+        except (TypeError, ValueError):
+            adversarial_rounds_int = 0
+        try:
+            judge_rounds_int = int(judge_rounds)
+        except (TypeError, ValueError):
+            judge_rounds_int = 0
+        latest_round = judge_verdicts[-1] if judge_verdicts else []
+        block_count = 0
+        if isinstance(latest_round, list):
+            for verdict in latest_round:
+                if isinstance(verdict, dict) and verdict.get("verdict") == "block":
+                    block_count += 1
+        if adversarial_rounds_int >= 3 and judge_rounds_int == 0:
+            return True
+        if judge_rounds_int < 3 and block_count >= 2:
+            return True
+    return False
+
+
+def recommended_next_action(
+    slug: str,
+    state: dict | None,
+    stages: dict[str, dict[str, object]],
+    reconciliation_ok: bool,
+) -> str:
+    if state is None:
+        state = load_workflow_state(slug)
+    blocked = state.get(BLOCKED_KEY, {})
+    if blocked.get("active"):
+        return "mark_blocked"
+    discovery = state.get(DISCOVERY_KEY, {})
+    if blocking_unresolved_items(discovery) or (discovery.get("required") and not discovery.get("complete")):
+        return "discover"
+    if _judge_panel_needed(state):
+        return "judge_panel"
+    if not stages["spec"]["artifact_exists"] or not stages["spec"]["artifact_meaningful"]:
+        if later_progress_exists(stages, "spec")[0]:
+            return "mark_blocked"
+        return "author_spec"
+    if not stages["spec"]["manifest_exists"] or not stages["spec"]["healthy"]:
+        return "repair_spec_checkpoint"
+    if not stages["plan"]["artifact_exists"] or not stages["plan"]["artifact_meaningful"]:
+        if later_progress_exists(stages, "plan")[0]:
+            return "mark_blocked"
+        return "author_plan"
+    if not stages["plan"]["manifest_exists"] or not stages["plan"]["healthy"]:
+        return "repair_plan_checkpoint"
+    if not stages["tasks"]["artifact_exists"] or not stages["tasks"]["artifact_meaningful"]:
+        if later_progress_exists(stages, "tasks")[0]:
+            return "mark_blocked"
+        return "author_tasks"
+    parallel = state.get(PARALLEL_ANALYSIS_KEY, {})
+    if not parallel.get("reviewed"):
+        return "record_parallel_analysis"
+    if not stages["tasks"]["manifest_exists"] or not stages["tasks"]["healthy"]:
+        return "repair_tasks_checkpoint"
+    if not stages["diff"]["artifact_exists"]:
+        return "dispatch_next_slice_to_codex"
+    if not stages["diff"]["manifest_exists"] or not stages["diff"]["healthy"]:
+        return "repair_diff_checkpoint"
+    if diff_review_budget_state(slug).get("head_mismatch"):
+        return "repair_diff_checkpoint"
+    if not reconciliation_ok:
+        return "reconcile_reviews"
+    # If any tasks remain unchecked there are more slices to implement before delivering.
+    tasks_path = workflow_dir(slug) / "tasks.md"
+    if tasks_path.exists() and "- [ ]" in tasks_path.read_text(encoding="utf-8"):
+        return "dispatch_next_slice_to_codex"
+    # Import here to avoid circular — refresh_delivery_snapshot is in factory_deliver
+    from factory_deliver import refresh_delivery_snapshot  # noqa: E402
+    delivery = refresh_delivery_snapshot(state.get(DELIVERY_KEY, {}))
+    if not delivery.get("pr_url"):
+        return "deliver"
+    if delivery.get("head_mismatch"):
+        return "deliver"
+    if delivery.get("checks_summary") in {"pending", "fail", "unknown"}:
+        return "deliver"
+    if not stages["closeout"]["manifest_exists"]:
+        return "closeout"
+    if not stages["closeout"]["healthy"]:
+        return "repair_closeout_checkpoint"
+    postmortem_path = workflow_dir(slug) / "postmortem.md"
+    if not postmortem_path.exists() or not postmortem_path.read_text(encoding="utf-8").strip():
+        return "write_postmortem"
+    if not status_md_changed_since_init(slug):
+        return "update_status_md"
+    return "done"
+
+exec
+/bin/zsh -lc "sed -n '1,220p' docs/workflow/operations/codex-skills/feature-factory/scripts/factory_review_specs.py" in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 0ms:
+#!/usr/bin/env python3
+"""Review spec definitions, actionable-finding detection, and lens selection.
+
+Pure helpers with no filesystem or workflow-state side effects. Extracted from
+factory_review.py to keep each module under the 400-line source limit.
+"""
+import re
+from pathlib import Path
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+DEFAULT_GEMINI_MODEL = "gemini-2.5-pro"
+DEFAULT_CODEX_MODEL = "gpt-5.4-mini"
+
+SMALL_TASK_SET_THRESHOLD = 15
+_AUTO_ACCEPT_NOTE = "No actionable findings detected — auto-accepted"
+
+_ACTIONABLE_FINDING_RE = re.compile(
+    r"(?:"
+    r"^\s*-\s+(?:\[[^\]]+\]\s+)?(high|medium):"  # bullet-list: "- high:" or "- [tag] high:"
+    r"|"
+    r"^\|\s*\*\*(critical|high|medium)\*\*"  # table row: "| **HIGH** |" or "| **CRITICAL** |"
+    r")",
+    re.MULTILINE,
+)
+
+
+# ---------------------------------------------------------------------------
+# Review helpers
+# ---------------------------------------------------------------------------
+
+
+def detect_actionable_findings(review_path: Path) -> bool:
+    """Return True if the review contains any HIGH or MEDIUM severity findings.
+
+    Lowercases the full text once so mixed-case headings (High, HIGH, high) all match.
+    Returns False if the file cannot be read, treating unreadable files as non-blocking.
+    """
+    try:
+        text = review_path.read_text(encoding="utf-8").lower()
+    except OSError:
+        return False
+    return bool(_ACTIONABLE_FINDING_RE.search(text))
+
+
+def trim_detail(text: str, limit: int = 240) -> str:
+    stripped = " ".join(text.split())
+    if len(stripped) <= limit:
+        return stripped
+    return stripped[: limit - 3] + "..."
+
+
+def pick_secondary_lens(primary: str, default: str, candidates: list[str]) -> str:
+    ordered = [*candidates, default]
+    seen: set[str] = set()
+    for lens in ordered:
+        if not lens or lens in seen:
+            continue
+        seen.add(lens)
+        if lens != primary:
+            return lens
+    return default if default != primary else f"{primary}-secondary"
+
+
+def required_reviews(
+    stage: str,
+    sensitive: bool,
+    large_structural: bool,
+    performance_sensitive: bool,
+    extra_gemini: list[str],
+    fast: bool = False,
+    small_task_set: bool = False,
+) -> list[dict[str, str]]:
+    if fast:
+        return [
+            {"reviewer": "codex", "lens": "correctness-adversarial", "model": DEFAULT_CODEX_MODEL},
+            {"reviewer": "gemini", "lens": "regression-adversarial", "model": DEFAULT_GEMINI_MODEL},
+        ]
+
+    # Codex runs two reviews (primary + secondary) — it has codebase context and finds hard issues.
+    # Gemini runs one review using the broadest-perspective lens for the stage.
+    gemini_lens = ""
+    codex_primary = ""
+    codex_secondary = ""
+
+    if stage == "spec":
+        gemini_lens = "requirements-adversarial"
+        codex_primary = "feasibility-adversarial"
+        codex_secondary = "risk-adversarial" if sensitive else "edge-cases-adversarial"
+    elif stage == "plan":
+        gemini_lens = "testability-adversarial"
+        codex_primary = "implementation-adversarial"
+        codex_secondary = "risk-adversarial" if sensitive else "architecture-adversarial"
+    elif stage == "tasks":
+        gemini_lens = "coverage-adversarial"
+        codex_primary = "execution-adversarial"
+        codex_secondary = "risk-adversarial" if sensitive else "dependency-order-adversarial"
+    elif stage == "diff":
+        gemini_lens = "quality-adversarial"
+        codex_primary = "correctness-adversarial"
+        if sensitive:
+            codex_secondary = "security-adversarial"
+        elif performance_sensitive:
+            codex_secondary = "performance-adversarial"
+        else:
+            codex_secondary = "regression-adversarial"
+    elif stage == "closeout":
+        gemini_lens = "residual-risk-adversarial"
+        codex_primary = "fidelity-adversarial"
+        codex_secondary = "rollout-risk-adversarial" if sensitive else "completeness-adversarial"
+    else:
+        raise ValueError(f"Unsupported stage: {stage}")
+
+    if small_task_set and stage in ("tasks", "closeout"):
+        return [
+            {
+                "reviewer": "codex",
+                "lens": codex_primary,
+                "model": DEFAULT_CODEX_MODEL,
+            },
+        ]
+
+    return [
+        {
+            "reviewer": "codex",
+            "lens": codex_primary,
+            "model": DEFAULT_CODEX_MODEL,
+        },
+        {
+            "reviewer": "codex",
+            "lens": codex_secondary,
+            "model": DEFAULT_CODEX_MODEL,
+        },
+        {
+            "reviewer": "gemini",
+            "lens": gemini_lens,
+            "model": DEFAULT_GEMINI_MODEL,
+        },
+    ]
+
+exec
+/bin/zsh -lc "sed -n '1,260p' docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py" in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 0ms:
+#!/usr/bin/env python3
+"""Path helpers, atomic I/O primitives, state constants, and workflow state
+management for the feature factory.
+
+No subprocess calls.  All I/O is file-based JSON read/write.
+Every public symbol is safe to import in tests without side effects.
+"""
+import json
+from contextlib import contextmanager
+import fcntl
+import errno
+import os
+import tempfile
+import time
+from pathlib import Path
+
+
+# ---------------------------------------------------------------------------
+# Repository root + canonical subdirectory roots
+# ---------------------------------------------------------------------------
+
+REPO_ROOT: Path = Path(__file__).resolve().parents[6]
+FACTORY_RUNS_ROOT: Path = REPO_ROOT / "docs" / "workflow" / "feature-runs"
+
+# ---------------------------------------------------------------------------
+# String constants used as workflow-state dictionary keys
+# ---------------------------------------------------------------------------
+
+FACTORY_STATE = "state.json"
+
+BLOCKED_KEY = "blocked"
+DISCOVERY_KEY = "discovery"
+DELIVERY_KEY = "delivery"
+DIRTY_OVERRIDE_KEY = "dirty_overrides"
+CHECKPOINT_FALLBACK_KEY = "checkpoint_fallback"
+CHECKPOINT_PROGRESS_KEY = "checkpoint_progress"
+PARALLEL_ANALYSIS_KEY = "parallel_analysis"
+INIT_HEAD_SHA_KEY = "init_head_sha"
+
+# ---------------------------------------------------------------------------
+# Atomic JSON I/O
+# ---------------------------------------------------------------------------
+
+
+def atomic_json_write(path: Path, data: dict) -> None:
+    """Write *data* to *path* as JSON atomically via a temp file + os.replace()."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = json.dumps(data, indent=2)
+    fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=".tmp.", suffix=".json")
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        tmp_path.replace(path)
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise
+
+
+def read_json_file(path: Path) -> tuple[dict | None, str]:
+    """Return (parsed_dict, "") on success, or (None, error_string) on failure."""
+    if not path.exists():
+        return None, ""
+    try:
+        return json.loads(path.read_text(encoding="utf-8")), ""
+    except Exception as exc:
+        return None, str(exc)
+
+
+# ---------------------------------------------------------------------------
+# Pure path helpers
+# ---------------------------------------------------------------------------
+
+
+def validated_slug(slug: str) -> str:
+    """Return a validated single-component workflow slug, or raise SystemExit."""
+    candidate = Path(slug)
+    if not slug or candidate.is_absolute() or len(candidate.parts) != 1:
+        raise SystemExit(f"Invalid workflow slug: {slug!r}")
+    part = candidate.parts[0]
+    if part in {".", ".."}:
+        raise SystemExit(f"Invalid workflow slug: {slug!r}")
+    resolved = (FACTORY_RUNS_ROOT / part).resolve()
+    try:
+        resolved.relative_to(FACTORY_RUNS_ROOT.resolve())
+    except ValueError as exc:
+        raise SystemExit(f"Invalid workflow slug: {slug!r}") from exc
+    return part
+
+
+def normalized_repo_path(raw: str, field_name: str) -> str:
+    """Resolve *raw* to a repo-relative path string, or raise SystemExit."""
+    stripped = raw.strip()
+    if not stripped or stripped.strip("/") == "":
+        raise SystemExit(f"Invalid {field_name}: {raw!r}")
+    candidate = Path(stripped)
+    resolved = (
+        candidate.resolve()
+        if candidate.is_absolute()
+        else (REPO_ROOT / candidate).resolve()
+    )
+    try:
+        relative = resolved.relative_to(REPO_ROOT.resolve())
+    except ValueError as exc:
+        raise SystemExit(f"Invalid {field_name}: {raw!r}") from exc
+    return str(relative)
+
+
+def workflow_dir(slug: str) -> Path:
+    return FACTORY_RUNS_ROOT / validated_slug(slug)
+
+
+def reviews_dir(slug: str) -> Path:
+    return workflow_dir(slug) / "reviews"
+
+
+def scope_manifest_path(slug: str) -> Path:
+    return workflow_dir(slug) / "scope.json"
+
+
+def factory_state_path(slug: str) -> Path:
+    return workflow_dir(slug) / FACTORY_STATE
+
+
+def checkpoint_manifest_path(slug: str, stage: str) -> Path:
+    return reviews_dir(slug) / f"{stage}.checkpoint.json"
+
+
+def default_artifact_path(slug: str, stage: str) -> Path:
+    if stage == "diff":
+        return reviews_dir(slug) / "implementation.diff.patch"
+    return workflow_dir(slug) / f"{stage}.md"
+
+
+# ---------------------------------------------------------------------------
+# Default state shapes
+# ---------------------------------------------------------------------------
+
+
+def default_discovery_state() -> dict:
+    return {
+        "version": 2,
+        "required": False,
+        "complete": True,
+        "question_count": 0,
+        "asked_count": 0,
+        "questions": [],
+        "assumptions": [],
+        "summary": "",
+        "updated_at": 0,
+        "answers": {},
+        "non_goals": [],
+        "acceptance_criteria": [],
+        "unresolved": [],
+    }
+
+
+def default_parallel_analysis_state() -> dict:
+    return {
+        "reviewed": False,
+        "found": False,
+        "note": "",
+        "updated_at": 0,
+    }
+
+
+def _default_workflow_state() -> dict:
+    """Return the baseline workflow state for a new or migrated run."""
+    return {
+        "review_policy": {
+            "sensitive": False,
+            "large_structural": False,
+            "performance_sensitive": False,
+            "extra_gemini_lenses": [],
+        },
+        BLOCKED_KEY: {
+            "active": False,
+            "reason": "",
+            "updated_at": 0,
+        },
+        DISCOVERY_KEY: default_discovery_state(),
+        DELIVERY_KEY: {},
+        DIRTY_OVERRIDE_KEY: {},
+        CHECKPOINT_FALLBACK_KEY: {},
+        PARALLEL_ANALYSIS_KEY: default_parallel_analysis_state(),
+        INIT_HEAD_SHA_KEY: "",
+        "token_usage": [],
+        "stages": {},
+        "schema_version": 1,
+    }
+
+
+def _default_stage_state(state: dict | None = None, stage: str | None = None) -> dict:
+    """Return the canonical nested state blob for a single workflow stage."""
+    stage_state = {
+        "adversarial_rounds": 0,
+        "judge_rounds": 0,
+        "judge_verdicts": [],
+        "annotations": [],
+        "unresolved_concerns": [],
+        "adversarial_sha_history": [],
+        "initial_sha": "",
+    }
+    if state is None or stage is None:
+        return stage_state
+    for key in ("adversarial_rounds", "judge_rounds"):
+        legacy_key = f"{stage}_{key}"
+        if legacy_key in state:
+            stage_state[key] = state[legacy_key]
+    return stage_state
+
+
+@contextmanager
+def with_locked_state(slug: str):
+    """Lock state.json, yield the loaded state, and persist mutations on exit."""
+    path = factory_state_path(slug)
+    if not path.exists():
+        atomic_json_write(path, _default_workflow_state())
+
+    last_error: Exception | None = None
+    backoff_seconds = 0.1
+    for attempt in range(11):
+        with path.open("r+", encoding="utf-8") as lock_fh:
+            try:
+                fcntl.flock(lock_fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except Exception as exc:
+                busy_errno = getattr(exc, "errno", None)
+                if not isinstance(exc, BlockingIOError) and busy_errno not in {errno.EACCES, errno.EAGAIN}:
+                    raise
+                last_error = exc
+                if attempt == 10:
+                    break
+                time.sleep(backoff_seconds)
+                backoff_seconds *= 2
+                continue
+
+            try:
+                state = load_workflow_state(slug)
+                yield state
+                atomic_json_write(path, state)
+            finally:
+                fcntl.flock(lock_fh.fileno(), fcntl.LOCK_UN)
+            return
+
+    raise TimeoutError(f"Timed out acquiring exclusive lock for {path} after 10 retries") from last_error
+
+
+def migrate_discovery_state(d: dict) -> dict:
+    """Upgrade a V1 discovery blob to V2. Returns a new dict (does not mutate input.
+
+    Idempotent on V2+ blobs. Safe for malformed inputs.
+    """
+    try:
+        version = d.get("version", 1)
+        if not isinstance(version, (int, float)) or version >= 2:
+            return d
+    except Exception:
+        return d
+    d = dict(d)  # shallow copy — do not mutate caller's dict
+    d["version"] = 2
+
+exec
+/bin/zsh -lc "sed -n '1,260p' docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py" in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 0ms:
+#!/usr/bin/env python3
+"""command_checkpoint implementation."""
+import argparse
+import json
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+_SCRIPT_DIR = Path(__file__).resolve().parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
+
+from factory_state import (  # noqa: E402
+    REPO_ROOT,
+    CHECKPOINT_PROGRESS_KEY,
+    DIRTY_OVERRIDE_KEY,
+    PARALLEL_ANALYSIS_KEY,
+    atomic_json_write,
+    normalized_repo_path,
+    update_stage_state,
+    with_locked_state,
+    workflow_dir,
+    reviews_dir,
+    scope_manifest_path,
+    checkpoint_manifest_path,
+    default_artifact_path,
+    load_workflow_state,
+    update_workflow_state,
+    discovery_state,
+    blocking_unresolved_items,
+    discovery_blockers_are_malformed,
+    save_scope_manifest,
+)
+
+from factory_git import (  # noqa: E402
+    run,
+    _sha_is_valid_ancestor,
+    _git_head_sha,
+    ensure_sync,
+    revert_protected_files,
+)
+
+from factory_stages import (  # noqa: E402
+    HARD_DIFF_ARTIFACT_MAX_CHARS,
+    LARGE_DIFF_RERUN_WARN_CHARS,
+    CHECKPOINT_STAGES,
+    STAGE_ARTIFACT_HEADINGS,
+    _CHECKPOINT_MARKER_RE,
+    parse_checkpoint_markers,
+    checkpoint_progress_state,
+    _default_checkpoint_progress,
+    artifact_has_meaningful_content,
+    diff_review_budget_state,
+    preferred_diff_base_ref,
+    prerequisite_failure,
+    reconciliation_state,
+    stage_manifest_state,
+)
+
+from factory_review import (  # noqa: E402
+    WRITE_DIFF,
+    REPAIR,
+    SMALL_TASK_SET_THRESHOLD,
+    trim_detail,
+    required_reviews,
+    resolved_review_policy,
+    checkpoint_manifest,
+    repair_checkpoint_args,
+    run_checkpoint_fallback,
+    record_checkpoint_fallback,
+    _advance_checkpoint_progress,
+    _AUTO_CONTEXT_MAX_FILES,
+    _AUTO_CONTEXT_EXTENSIONS,
+    _AUTO_CONTEXT_PATH_RE,
+    _extract_file_paths_from_artifact,
+)
+
+from factory_emit import _emit_next_action  # noqa: E402
+from factory_heartbeat import HeartbeatEmitter, set_activity as heartbeat_set_activity  # noqa: E402
+from factory_next_action import recommended_next_action  # noqa: E402
+from workflow_utils import normalized_artifact_hash  # noqa: E402
+
+
+def _ensure_stage_state_blob(state: dict, stage: str) -> dict:
+    stages = state.setdefault("stages", {})
+    stage_state = stages.get(stage)
+    if not isinstance(stage_state, dict):
+        stage_state = {}
+    stage_state.setdefault("adversarial_rounds", 0)
+    stage_state.setdefault("judge_rounds", 0)
+    stage_state.setdefault("judge_verdicts", [])
+    stage_state.setdefault("annotations", [])
+    stage_state.setdefault("unresolved_concerns", [])
+    stage_state.setdefault("adversarial_sha_history", [])
+    stage_state.setdefault("initial_sha", "")
+    stages[stage] = stage_state
+    try:
+        schema_version = int(state.get("schema_version", 1))
+    except (TypeError, ValueError):
+        schema_version = 1
+    if schema_version < 2:
+        state["schema_version"] = 2
+    return stage_state
+
+
+def _stage_int(stage_state: dict, key: str) -> int:
+    try:
+        return int(stage_state.get(key, 0) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _judge_panel_payload_from_state(slug: str, state: dict) -> dict[str, object] | None:
+    stages = state.get("stages", {})
+    if not isinstance(stages, dict):
+        stages = {}
+    for stage in ("spec", "plan", "tasks", "diff", "closeout"):
+        stage_state = stages.get(stage, {})
+        if not isinstance(stage_state, dict):
+            stage_state = {}
+        adversarial_rounds = _stage_int(stage_state, "adversarial_rounds")
+        judge_rounds = _stage_int(stage_state, "judge_rounds")
+        judge_verdicts = stage_state.get("judge_verdicts", [])
+        latest_round = judge_verdicts[-1] if isinstance(judge_verdicts, list) and judge_verdicts else []
+        block_count = 0
+        if isinstance(latest_round, list):
+            for verdict in latest_round:
+                if isinstance(verdict, dict) and verdict.get("verdict") == "block":
+                    block_count += 1
+        if adversarial_rounds >= 3 and judge_rounds == 0:
+            return {
+                "next": "judge_panel",
+                "reason": f"{stage} reached adversarial round cap",
+                "blockers": [f"{stage}.adversarial_rounds >= 3"],
+            }
+        if judge_rounds < 3 and block_count >= 2:
+            return {
+                "next": "judge_panel",
+                "reason": f"{stage} judge panel voted block",
+                "blockers": [f"{stage}.judge_verdicts[-1] block-majority"],
+            }
+    return None
+
+
+def _checkpoint_next_action_payload(slug: str, state: dict, completed_stage: str) -> dict[str, object]:
+    stages = {stage: stage_manifest_state(slug, stage) for stage in CHECKPOINT_STAGES}
+    recon_ok, _ = reconciliation_state(slug)
+    next_action = recommended_next_action(slug, state, stages, recon_ok)
+    judge_panel_payload = _judge_panel_payload_from_state(slug, state)
+    if next_action == "judge_panel" and judge_panel_payload is not None:
+        return judge_panel_payload
+    return {
+        "next": next_action,
+        "reason": f"{completed_stage} checkpoint completed",
+        "blockers": [],
+    }
+
+
+def _persist_last_action_result(slug: str, payload: dict[str, object]) -> None:
+    update_workflow_state(
+        slug,
+        lambda state: state.__setitem__("last_action_result", payload),
+    )
+
+
+def _rollback_adversarial_round(slug: str, stage: str) -> None:
+    state = load_workflow_state(slug)
+    stage_state = state.get("stages", {}).get(stage, {})
+    if not isinstance(stage_state, dict):
+        stage_state = {}
+    current_rounds = _stage_int(stage_state, "adversarial_rounds")
+    update_stage_state(
+        slug,
+        stage,
+        {"adversarial_rounds": max(current_rounds - 1, 0)},
+    )
+
+
+def command_checkpoint(args: argparse.Namespace) -> int:
+    fast = getattr(args, "fast", False)
+    if fast and args.stage != "diff":
+        raise SystemExit("--fast requires --stage diff")
+
+    ensure_sync()
+    root = workflow_dir(args.slug)
+    reviews = reviews_dir(args.slug)
+    root.mkdir(parents=True, exist_ok=True)
+    reviews.mkdir(parents=True, exist_ok=True)
+
+    if not fast:
+        prereq_error = prerequisite_failure(args.slug, args.stage)
+        if prereq_error:
+            raise SystemExit(prereq_error)
+    if not fast and args.stage == "tasks":
+        parallel = load_workflow_state(args.slug).get(PARALLEL_ANALYSIS_KEY, {})
+        if not parallel.get("reviewed"):
+            raise SystemExit(
+                "tasks checkpoint requires parallel analysis first; "
+                "run 'parallel --slug <slug> --note \"...\"' to record whether "
+                "parallel implementation opportunities exist in tasks.md"
+            )
+    if not fast and args.stage == "spec":
+        discovery = discovery_state(args.slug)
+        blocking = blocking_unresolved_items(discovery)
+        if blocking:
+            if discovery_blockers_are_malformed(discovery):
+                raise SystemExit(
+                    "spec checkpoint requires discovery state to be repaired first; "
+                    "use discover --clear to reset malformed discovery state"
+                )
+            raise SystemExit(
+                "spec checkpoint requires discovery unresolved items to be resolved or deferred first; "
+                "use discover --resolve or discover --defer before checkpointing spec"
+            )
+        if discovery.get("required") and not discovery.get("complete"):
+            raise SystemExit(
+                "spec checkpoint requires discovery to be complete first; "
+                "record the remaining questions and assumptions with the discover command"
+            )
+    policy = resolved_review_policy(args.slug, args)
+    context_paths = [normalized_repo_path(path, "context path") for path in args.context]
+    allow_dirty_paths = [normalized_repo_path(path, "allow-dirty path") for path in args.allow_dirty_path]
+    prior_diff_budget = diff_review_budget_state(args.slug) if args.stage == "diff" else None
+
+    # Capture HEAD SHA now — before any reviews launch — so it reflects the
+    # state of the repo at diff generation time, not after verify completes.
+    pending_head_sha: str = _git_head_sha(REPO_ROOT) or "" if args.stage == "diff" else ""
+
+    if args.stage == "diff":
+        # Determine whether a checkpoint-scoped base_ref should override the default.
+        marker_count, current_markers_sha = parse_checkpoint_markers(args.slug)
+        if marker_count == 0:
+            print(
+                "warning: tasks.md has no [CHECKPOINT] markers — diff review will cover "
+                "the full branch. Add [CHECKPOINT] markers to tasks.md to scope each "
+                "diff review to a single implementation slice.",
+                file=sys.stderr,
+            )
+        progress = checkpoint_progress_state(args.slug)
+        use_checkpoint_base = False
+        if marker_count > 0 and not args.base_ref:
+            idx = progress["index"]
+            stored_sha = progress["markers_sha"]
+            last_head = progress["last_diff_head_sha"]
+            if idx == 0:
+                pass  # first slice — use branch base as normal
+            elif idx >= marker_count:
+                print(
+                    f"warning: checkpoint_progress.index ({idx}) >= marker count ({marker_count}); "
+                    "tasks.md may have had markers removed — resetting checkpoint progress and using branch base.",
+                    file=sys.stderr,
+                )
+                update_workflow_state(
+                    args.slug,
+                    lambda s: s.__setitem__(CHECKPOINT_PROGRESS_KEY, _default_checkpoint_progress()),
+                )
+                args.base_ref = None
+            elif stored_sha != current_markers_sha:
+                print(
+
+exec
+/bin/zsh -lc "sed -n '760,940p' docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py" in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 0ms:
+        for future in concurrent.futures.as_completed(futures):
+            lens, verdict, raw_output = future.result()
+            verdicts[lens] = verdict
+            raw_outputs[lens] = raw_output
+
+    ordered_verdicts = [verdicts[lens] for lens in JUDGE_LENS_ORDER]
+    combined_raw = "\n\n".join(raw_outputs.get(lens, "") for lens in JUDGE_LENS_ORDER)
+    return ordered_verdicts, current_sha, combined_raw, git_head_sha
+
+
+def _payload_for_state(
+    stage: str,
+    outcome: str,
+    proceed_count: int,
+    block_count: int,
+    *,
+    next_action: str,
+    reason: str,
+    blockers: list[str],
+    judge_round: int,
+) -> dict[str, object]:
+    return {
+        "next": next_action,
+        "reason": reason,
+        "blockers": blockers,
+        "outcome": outcome,
+        "proceed_count": proceed_count,
+        "block_count": block_count,
+        "timestamp": _now_iso8601_utc(),
+        "judge_round": judge_round,
+    }
+
+
+def _build_exhausted_payload(slug: str, stage: str, state: dict, stage_state: dict) -> dict[str, object]:
+    judge_round = _stage_int(stage_state, "judge_rounds")
+    judge_history = stage_state.get("judge_verdicts", [])
+    latest_round = judge_history[-1] if isinstance(judge_history, list) and judge_history else []
+    latest_round_verdicts = latest_round if isinstance(latest_round, list) else []
+    block_verdicts = _block_verdicts(latest_round_verdicts)
+    proceed_count = sum(
+        1
+        for verdict in latest_round_verdicts
+        if isinstance(verdict, dict) and verdict.get("verdict") in {"proceed", "proceed-with-annotation"}
+    )
+    block_count = len(block_verdicts)
+    stages = {name: stage_manifest_state(slug, name) for name in CHECKPOINT_STAGES}
+    next_action = recommended_next_action(slug, state, stages, True)
+    reason = "judge panel exhausted; advancing with unresolved concerns" if block_count >= 2 else f"{stage} judge panel completed: advance"
+    return _payload_for_state(
+        stage,
+        "advance",
+        proceed_count,
+        block_count,
+        next_action=next_action,
+        reason=reason,
+        blockers=_block_reasonings(block_verdicts),
+        judge_round=judge_round,
+    )
+
+
+def _fallback_block_verdict(lens: str) -> dict:
+    return {
+        "judge": lens,
+        "model": JUDGE_MODEL_BY_LENS[lens],
+        "verdict": "block",
+        "confidence": 0,
+        "reasoning": "schema_violation: artifact_mutated",
+        "evidence": [],
+        "timestamp": _now_iso8601_utc(),
+    }
+
+
+def _persist_state(
+    slug: str,
+    stage: str,
+    verdicts: list[dict],
+    current_sha: str,
+    outcome: str,
+    proceed_count: int,
+    block_count: int,
+) -> dict[str, object]:
+    with with_locked_state(slug) as state:
+        stage_state = _ensure_stage_state(state, stage)
+        judge_round = _stage_int(stage_state, "judge_rounds") + 1
+        stage_state["judge_rounds"] = judge_round
+        state[f"{stage}_judge_rounds"] = judge_round
+
+        judge_history = stage_state.get("judge_verdicts", [])
+        if not isinstance(judge_history, list):
+            judge_history = []
+        prior_rounds = list(judge_history)
+        judge_history = list(judge_history)
+        judge_history.append(verdicts)
+        stage_state["judge_verdicts"] = judge_history
+
+        annotations = stage_state.get("annotations", [])
+        if not isinstance(annotations, list):
+            annotations = []
+        annotations = list(annotations)
+        for verdict in verdicts:
+            if verdict.get("verdict") == "proceed-with-annotation":
+                annotations.append(
+                    {
+                        "stage": stage,
+                        "round": judge_round,
+                        "judge": verdict["judge"],
+                        "confidence": verdict["confidence"],
+                        "reasoning": verdict["reasoning"],
+                        "artifact_sha_at_time": current_sha,
+                    }
+                )
+        stage_state["annotations"] = annotations
+        block_verdicts = _block_verdicts(verdicts)
+        blockers = _block_reasonings(block_verdicts)
+
+        if block_count >= 2 and judge_round < 3:
+            next_action = "edit_and_rerun_judge"
+            reason = f"block majority; {block_count} of {len(verdicts)} judges blocked"
+            outcome_value = "rejudge"
+            stage_state["judge_next_action"] = next_action
+        elif block_count >= 2 and judge_round >= 3:
+            next_action = recommended_next_action(slug, state, {name: stage_manifest_state(slug, name) for name in CHECKPOINT_STAGES}, True)
+            reason = "judge panel exhausted; advancing with unresolved concerns"
+            outcome_value = "advance"
+            stage_state["judge_next_action"] = "advance"
+            unresolved = stage_state.get("unresolved_concerns", [])
+            if not isinstance(unresolved, list):
+                unresolved = []
+            unresolved = list(unresolved)
+            unresolved.extend(
+                _unresolved_concern_from_verdict(stage, verdict, 3, prior_rounds)
+                for verdict in block_verdicts
+            )
+            stage_state["unresolved_concerns"] = unresolved
+            _LOGGER.warning("judge panel exhausted; advancing with unresolved concerns")
+        else:
+            next_action = recommended_next_action(slug, state, {name: stage_manifest_state(slug, name) for name in CHECKPOINT_STAGES}, True)
+            reason = f"{stage} judge panel completed: advance"
+            outcome_value = "advance"
+            stage_state["judge_next_action"] = "advance"
+
+        state["last_action_result"] = {
+            **_payload_for_state(
+                stage,
+                outcome_value,
+                proceed_count,
+                block_count,
+                next_action=next_action,
+                reason=reason,
+                blockers=blockers,
+                judge_round=judge_round,
+            ),
+        }
+    return load_workflow_state(slug).get("last_action_result", {})
+
+
+def _validate_json_output(slug: str, stage: str, prompt_override: Path | None, override_reason: str | None) -> tuple[list[dict], str, str]:
+    prompt_override_text = prompt_override.read_text(encoding="utf-8") if prompt_override else None
+    verdicts: list[dict] = []
+    current_sha = ""
+    git_head_sha = ""
+    for _attempt in range(3):
+        verdicts, current_sha, raw_output, git_head_sha = _dispatch_panel(
+            slug,
+            stage,
+            prompt_override_text,
+            override_reason,
+        )
+        if _current_artifact_sha(stage, _stage_artifact_path(slug, stage)) == current_sha:
+            return verdicts, current_sha, git_head_sha
+
+    verdicts = [_fallback_block_verdict(lens) for lens in JUDGE_LENS_ORDER]
+    git_head_sha = _git_head_sha(REPO_ROOT) or git_head_sha
+    git_base_sha = _git_merge_base_sha()
+    current_sha = _current_artifact_sha(stage, _stage_artifact_path(slug, stage))
+    for lens, verdict in zip(JUDGE_LENS_ORDER, verdicts):
+        _write_review_outputs(
+            slug,
+            stage,
+            lens,
+            verdict,
+
+exec
+/bin/zsh -lc "rg -n \"update_stage_state\\(|update_workflow_state\\(|atomic_json_write\\(|invariant|status --slug|command_status|status_md\" docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_*.py docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py" in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 0ms:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py:45:def atomic_json_write(path: Path, data: dict) -> None:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py:218:        atomic_json_write(path, _default_workflow_state())
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py:240:                atomic_json_write(path, state)
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py:369:    atomic_json_write(path, manifest)
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py:396:    atomic_json_write(path, state)
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py:400:def update_workflow_state(slug: str, mutate) -> dict:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py:407:def update_stage_state(slug: str, stage: str, updates: dict) -> dict:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py:455:    return update_workflow_state(slug, _migrated_mutate)
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_status.py:2:"""command_status, command_repair, and command_doctor implementations."""
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_status.py:61:def command_status(args: argparse.Namespace) -> int:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_implement.py:359:    update_workflow_state(args.slug, mutate)
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py:637:    atomic_json_write(verdict_path, verdict)
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py:161:    update_workflow_state(
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py:173:    update_stage_state(
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py:254:                update_workflow_state(
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py:265:                update_workflow_state(
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py:280:                update_workflow_state(
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py:453:    atomic_json_write(manifest_path, manifest)
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py:456:            update_workflow_state(
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py:469:            update_workflow_state(
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py:156:    update_workflow_state(
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py:379:            update_workflow_state(
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py:401:            update_workflow_state(
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py:414:            update_workflow_state(
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py:420:            update_workflow_state(
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py:440:        update_workflow_state(
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_block.py:39:    state = update_workflow_state(args.slug, mutate)
+
+exec
+/bin/zsh -lc 'rg -n "def command_status|invariant_warnings|status_md" docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_*.py' in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 0ms:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_status.py:61:def command_status(args: argparse.Namespace) -> int:
+
+exec
+/bin/zsh -lc "sed -n '1,220p' docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_status.py" in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 0ms:
+#!/usr/bin/env python3
+"""command_status, command_repair, and command_doctor implementations."""
+import argparse
+import subprocess
+import sys
+from pathlib import Path
+
+_SCRIPT_DIR = Path(__file__).resolve().parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
+
+from factory_state import (  # noqa: E402
+    REPO_ROOT,
+    BLOCKED_KEY,
+    DELIVERY_KEY,
+    DIRTY_OVERRIDE_KEY,
+    CHECKPOINT_FALLBACK_KEY,
+    blocking_unresolved_items,
+    discovery_blockers_are_malformed,
+    load_workflow_state,
+    discovery_state,
+)
+
+from factory_git import (  # noqa: E402
+    SYNC_SCRIPT,
+    current_branch_name,
+    upstream_branch_name,
+    commits_behind_upstream,
+    command_path,
+    ensure_sync,
+)
+
+from factory_stages import (  # noqa: E402
+    VERIFY_CHECKPOINT,
+    VERIFY_RECONCILIATION,
+    LARGE_DIFF_RERUN_WARN_CHARS,
+    CHECKPOINT_STAGES,
+    stage_manifest_state,
+    stage_review_inventory,
+    stage_drift_class,
+    stage_repairable,
+    stage_status_label,
+    later_progress_exists,
+    reconciliation_state,
+    diff_review_budget_state,
+    checkpoint_progress_state,
+)
+
+from factory_review import (  # noqa: E402
+    WRITE_DIFF,
+    REPAIR,
+    trim_detail,
+    repair_checkpoint_args,
+)
+
+from factory_next_action import recommended_next_action  # noqa: E402
+
+from factory_deliver import refresh_delivery_snapshot  # noqa: E402
+
+
+def command_status(args: argparse.Namespace) -> int:
+    ensure_sync()
+    state = load_workflow_state(args.slug)
+    stages = {stage: stage_manifest_state(args.slug, stage) for stage in CHECKPOINT_STAGES}
+    recon_ok, recon_detail = reconciliation_state(args.slug)
+    next_action = recommended_next_action(args.slug, state, stages, recon_ok)
+    last_action_result = state.get("last_action_result", None)
+    branch = current_branch_name() or "(detached HEAD)"
+    upstream = upstream_branch_name() or "(none)"
+    blocked = state.get(BLOCKED_KEY, {})
+    delivery = refresh_delivery_snapshot(state.get(DELIVERY_KEY, {}))
+    discovery = discovery_state(args.slug)
+    dirty_override = state.get(DIRTY_OVERRIDE_KEY, {})
+    checkpoint_fallback = state.get(CHECKPOINT_FALLBACK_KEY, {})
+    diff_budget = diff_review_budget_state(args.slug)
+
+    behind = commits_behind_upstream()
+
+    if next_action == "judge_panel":
+        print("⚠ next: judge_panel")
+    print(f"workflow: {args.slug}")
+    print(f"branch: {branch}")
+    print(f"upstream: {upstream}")
+    if behind is not None and behind > 0:
+        print(f"warning: branch is {behind} commit{'s' if behind != 1 else ''} behind upstream — rebase before creating PR")
+    if isinstance(last_action_result, dict) and last_action_result.get("next"):
+        reason = str(last_action_result.get("reason", "")).strip()
+        next_label = str(last_action_result.get("next", "")).strip()
+        if reason:
+            print(f"Last recommended action: {next_label} — {reason}")
+        else:
+            print(f"Last recommended action: {next_label}")
+        blockers = last_action_result.get("blockers", [])
+        if isinstance(blockers, list) and blockers:
+            print(f"Last action blockers: {', '.join(str(item) for item in blockers)}")
+    print("")
+    print("stages:")
+    for stage in CHECKPOINT_STAGES:
+        stage_state = stages[stage]
+        status = stage_status_label(args.slug, stage, stage_state)
+        detail = trim_detail(str(stage_state.get("detail", "")))
+        _, orphaned = stage_review_inventory(args.slug, stage)
+        if orphaned:
+            orphaned_note = f"orphaned historical reviews: {len(orphaned)}"
+            detail = f"{detail}; {orphaned_note}" if detail else orphaned_note
+        print(f"- {stage}: {status}" + (f" ({detail})" if detail else ""))
+
+    print("")
+    print("reconciliation:")
+    if recon_ok:
+        print("- terminal")
+    else:
+        print(f"- blocked ({trim_detail(recon_detail)})")
+
+    print("")
+    print("blocked-state:")
+    if blocked.get("active"):
+        print(f"- active: {blocked.get('reason', '')}")
+    else:
+        print("- inactive")
+
+    blocking = blocking_unresolved_items(discovery)
+    unresolved = discovery.get("unresolved", [])
+    if discovery.get("required") or not discovery.get("complete") or discovery.get("asked_count") or discovery.get("assumptions") or discovery.get("summary") or blocking or (isinstance(unresolved, list) and unresolved):
+        print("")
+        print("discovery:")
+        print(f"- required: {'yes' if discovery.get('required') else 'no'}")
+        print(f"- complete: {'yes' if discovery.get('complete') else 'no'}")
+        print(f"- question-count: {discovery.get('question_count', 0)}")
+        print(f"- asked-count: {discovery.get('asked_count', 0)}")
+        remaining = max(int(discovery.get("question_count", 0)) - int(discovery.get("asked_count", 0)), 0)
+        print(f"- remaining: {remaining}")
+        if discovery.get("assumptions"):
+            print(f"- assumptions: {len(discovery.get('assumptions', []))}")
+        if discovery.get("summary"):
+            print(f"- summary: {trim_detail(str(discovery.get('summary', '')))}")
+        if isinstance(unresolved, list) and unresolved:
+            print(f"- unresolved-open: {len(blocking)}")
+            print(f"- unresolved-deferred: {len(unresolved) - len(blocking)}")
+            if blocking:
+                if discovery_blockers_are_malformed(discovery):
+                    print("- action: use discover --clear to repair malformed discovery state")
+                else:
+                    print("- action: resolve or defer unresolved items before spec")
+        elif blocking:
+            print(f"- unresolved-open: {len(blocking)}")
+            if discovery_blockers_are_malformed(discovery):
+                print("- action: use discover --clear to repair malformed discovery state")
+            else:
+                print("- action: resolve or defer unresolved items before spec")
+
+    cp = checkpoint_progress_state(args.slug)
+    if cp["index"] > 0:
+        print("")
+        print("checkpoint-progress:")
+        print(f"- index: {cp['index']}")
+        last = cp["last_diff_head_sha"]
+        print(f"- last-diff-head: {last[:12] if last else '(none)'}")
+
+    print("")
+    print("delivery:")
+    if delivery.get("pr_url"):
+        line = f"- pr: {delivery.get('pr_url')} [{delivery.get('pr_state', '')}]"
+        if delivery.get("pr_is_draft"):
+            line += " draft"
+        print(line)
+        print(f"- checks: {delivery.get('checks_summary', 'unknown')}")
+        if delivery.get("merge_state_status"):
+            print(f"- merge-state: {delivery.get('merge_state_status')}")
+        if delivery.get("head_mismatch"):
+            print("- head-mismatch: local HEAD differs from PR head")
+            print("- action: refresh the PR head before delivering")
+    else:
+        print("- not-started")
+
+    if dirty_override.get("used"):
+        print("")
+        print("dirty-override:")
+        print("- used: yes")
+        for path in dirty_override.get("allowed_dirty_paths", []):
+            print(f"- allow-dirty-path: {path}")
+
+    if checkpoint_fallback.get("used"):
+        print("")
+        print("checkpoint-fallback:")
+        print(f"- stage: {checkpoint_fallback.get('stage', '')}")
+        print(f"- reason: {checkpoint_fallback.get('reason', '')}")
+
+    if diff_budget.get("artifact_exists"):
+        print("")
+        print("diff-review-budget:")
+        print(f"- artifact-bytes: {diff_budget.get('artifact_bytes', 0)}")
+        if diff_budget.get("recorded_base_ref"):
+            base_ref = str(diff_budget.get("recorded_base_ref", ""))
+            base_sha = str(diff_budget.get("recorded_base_sha", ""))[:12]
+            print(f"- recorded-base: {base_ref} [{base_sha}]")
+        if diff_budget.get("large_artifact"):
+            print(f"- large-artifact: yes (>= {LARGE_DIFF_RERUN_WARN_CHARS} bytes)")
+        else:
+            print("- large-artifact: no")
+        if diff_budget.get("head_mismatch"):
+            recorded_head = str(diff_budget.get("recorded_head_sha", ""))[:12]
+            current_head = str(diff_budget.get("current_head_sha", ""))[:12]
+            print(f"- rerun-likely: yes (diff artifact HEAD {recorded_head} != current HEAD {current_head})")
+            print(
+                f"- scope-basis: last-reviewed-head [{recorded_head}]"
+            )
+        elif diff_budget.get("artifact_changed_since_codex"):
+            print("- rerun-likely: yes (artifact changed since the last Codex review)")
+        elif diff_budget.get("suggested_base_ref"):
+            suggested = str(diff_budget.get("suggested_base_ref", ""))[:12]
+            print(f"- scope-basis: {diff_budget.get('scope_basis', 'branch-merge-base')} [{suggested}]")
+        else:
+            print("- rerun-likely: no")
+        if diff_budget.get("large_artifact") and (
+            diff_budget.get("head_mismatch") or diff_budget.get("artifact_changed_since_codex")
+        ):
+            print("- advice: batch more implementation fixes before rerunning the diff checkpoint")
+
+    print("")
+
+exec
+/bin/zsh -lc "sed -n '260,520p' docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py" in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 0ms:
+    d["version"] = 2
+    # Add missing V2 fields
+    if "answers" not in d:
+        d["answers"] = {}
+    if "non_goals" not in d:
+        d["non_goals"] = []
+    if "acceptance_criteria" not in d:
+        d["acceptance_criteria"] = []
+    # Sanitize unresolved: keep only valid dicts with a hashable "item" key
+    existing_unresolved = d.get("unresolved", [])
+    if not isinstance(existing_unresolved, list):
+        existing_unresolved = []
+    valid_unresolved = []
+    for item in existing_unresolved:
+        if not isinstance(item, dict) or "item" not in item:
+            continue
+        try:
+            hash(item["item"])
+        except TypeError:
+            continue
+        valid_unresolved.append(item)
+    d["unresolved"] = valid_unresolved
+    # Populate unresolved from V1 questions when discovery is required and incomplete
+    if d.get("required") and not bool(d.get("complete")):
+        questions = d.get("questions", [])
+        if not isinstance(questions, list):
+            questions = []
+        existing_items = {u["item"] for u in d["unresolved"]}
+        for q in questions:
+            if not isinstance(q, dict):
+                continue
+            raw = q.get("question")
+            if not isinstance(raw, str):
+                continue
+            text = raw.strip()
+            if text and text not in existing_items:
+                d["unresolved"].append({"item": text, "deferred": False})
+                existing_items.add(text)
+    return d
+
+
+def blocking_unresolved_items(discovery: dict) -> list[dict]:
+    """Return unresolved discovery entries that still block spec progress."""
+    unresolved = discovery.get("unresolved", [])
+    if not isinstance(unresolved, list):
+        return [{"item": "<malformed discovery state>", "deferred": False, "malformed": True}]
+    blocking: list[dict] = []
+    for item in unresolved:
+        if not isinstance(item, dict):
+            blocking.append({"item": "<malformed unresolved item>", "deferred": False, "malformed": True})
+            continue
+        value = item.get("item")
+        if not isinstance(value, str) or not value.strip():
+            blocking.append({"item": "<malformed unresolved item>", "deferred": False, "malformed": True})
+            continue
+        if item.get("deferred") is True:
+            continue
+        blocking.append(item)
+    return blocking
+
+
+def discovery_blockers_are_malformed(discovery: dict) -> bool:
+    """Return True when blocking discovery items include malformed state."""
+    unresolved = discovery.get("unresolved", [])
+    if not isinstance(unresolved, list):
+        return True
+    return any(isinstance(item, dict) and item.get("malformed") is True for item in blocking_unresolved_items(discovery))
+
+
+# ---------------------------------------------------------------------------
+# Workflow state I/O — load / save / update patterns
+# ---------------------------------------------------------------------------
+
+
+def parse_review_frontmatter(path: Path) -> tuple[dict[str, str], str]:
+    text = path.read_text(encoding="utf-8")
+    if not text.startswith("---\n"):
+        raise ValueError(f"{path} is missing frontmatter")
+    _, rest = text.split("---\n", 1)
+    fm_text, body = rest.split("\n---\n", 1)
+    data: dict[str, str] = {}
+    for line in fm_text.splitlines():
+        if not line.strip():
+            continue
+        key, value = line.split(":", 1)
+        data[key.strip()] = value.strip().strip('"')
+    return data, body
+
+
+def load_scope_manifest(slug: str) -> dict:
+    path = scope_manifest_path(slug)
+    if not path.exists():
+        return {"paths": [], "allowed_dirty_paths": []}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def save_scope_manifest(slug: str, paths: list[str]) -> Path:
+    safe_slug = validated_slug(slug)
+    normalized_paths = {normalized_repo_path(path, "scope path").rstrip("/") for path in paths if path.strip()}
+    manifest = {
+        "paths": sorted(normalized_paths),
+        "allowed_dirty_paths": sorted(
+            {
+                *normalized_paths,
+                f"docs/workflow/feature-runs/{safe_slug}",
+            }
+        ),
+    }
+    path = scope_manifest_path(slug)
+    atomic_json_write(path, manifest)
+    return path
+
+
+def load_workflow_state(slug: str) -> dict:
+    """Load workflow state and add missing schema defaults without writing."""
+    path = factory_state_path(slug)
+    if not path.exists():
+        return _default_workflow_state()
+    state = json.loads(path.read_text(encoding="utf-8"))
+    defaults = _default_workflow_state()
+    state.setdefault("review_policy", defaults["review_policy"])
+    state.setdefault(BLOCKED_KEY, defaults[BLOCKED_KEY])
+    state.setdefault(DISCOVERY_KEY, default_discovery_state())
+    state.setdefault(DELIVERY_KEY, {})
+    state.setdefault(DIRTY_OVERRIDE_KEY, {})
+    state.setdefault(CHECKPOINT_FALLBACK_KEY, {})
+    state.setdefault(PARALLEL_ANALYSIS_KEY, default_parallel_analysis_state())
+    state.setdefault(INIT_HEAD_SHA_KEY, "")
+    state.setdefault("token_usage", [])
+    state.setdefault("stages", {})
+    state.setdefault("schema_version", 1)
+    return state
+
+
+def save_workflow_state(slug: str, state: dict) -> Path:
+    path = factory_state_path(slug)
+    atomic_json_write(path, state)
+    return path
+
+
+def update_workflow_state(slug: str, mutate) -> dict:
+    """Mutate workflow state under the exclusive file lock."""
+    with with_locked_state(slug) as state:
+        mutate(state)
+    return state
+
+
+def update_stage_state(slug: str, stage: str, updates: dict) -> dict:
+    """Update nested stage state and mirror legacy top-level counters."""
+    with with_locked_state(slug) as state:
+        stages = state.get("stages")
+        if not isinstance(stages, dict):
+            stages = {}
+            state["stages"] = stages
+        stage_state = stages.get(stage)
+        if not isinstance(stage_state, dict):
+            stage_state = {}
+        defaults = _default_stage_state(state, stage)
+        for key, value in defaults.items():
+            stage_state.setdefault(key, value)
+        for key, value in updates.items():
+            stage_state[key] = value
+            if key in {"adversarial_rounds", "judge_rounds"}:
+                state[f"{stage}_{key}"] = value
+        stages[stage] = stage_state
+        try:
+            schema_version = int(state.get("schema_version", 1))
+        except (TypeError, ValueError):
+            schema_version = 1
+        if schema_version < 2:
+            state["schema_version"] = 2
+    return state
+
+
+def discovery_state(slug: str) -> dict:
+    state = load_workflow_state(slug).get(DISCOVERY_KEY, {})
+    merged = default_discovery_state()
+    merged.update(state if isinstance(state, dict) else {})
+    def _safe_list(val) -> list:
+        return list(val) if isinstance(val, list) else []
+    merged["questions"] = _safe_list(merged.get("questions"))
+    merged["assumptions"] = _safe_list(merged.get("assumptions"))
+    merged["unresolved"] = _safe_list(merged.get("unresolved"))
+    merged["non_goals"] = _safe_list(merged.get("non_goals"))
+    merged["acceptance_criteria"] = _safe_list(merged.get("acceptance_criteria"))
+    merged = migrate_discovery_state(merged)
+    return merged
+
+
+def update_discovery_state(slug: str, mutate) -> dict:
+    def _migrated_mutate(state: dict):
+        discovery = state.setdefault(DISCOVERY_KEY, default_discovery_state())
+        migrated = migrate_discovery_state(discovery)
+        state[DISCOVERY_KEY] = migrated
+        return mutate(migrated)
+    return update_workflow_state(slug, _migrated_mutate)
+
+
+def load_checkpoint_manifest(slug: str, stage: str) -> dict | None:
+    path = checkpoint_manifest_path(slug, stage)
+    manifest, _ = read_json_file(path)
+    return manifest
+
+exec
+/bin/zsh -lc "sed -n '520,760p' docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py" in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 0ms:
+                post_state = load_workflow_state(args.slug)
+                payload = _checkpoint_next_action_payload(args.slug, post_state, args.stage)
+                _persist_last_action_result(args.slug, payload)
+                heartbeat_set_activity("all reviews complete")
+                if args.json:
+                    print(json.dumps(payload))
+                else:
+                    _emit_next_action(args.slug, f"{args.stage} checkpoint")
+                return 0
+            if not args.fallback:
+                _rollback_adversarial_round(args.slug, args.stage)
+                return result.returncode
+            fallback_reason = f"repair exited {result.returncode}"
+
+        heartbeat_set_activity("reviewer gemini.requirements running")
+        fallback_ok, fallback_detail = run_checkpoint_fallback(
+            manifest_path,
+            REPO_ROOT,
+            args.gemini_timeout_seconds,
+            args.gemini_retries,
+        )
+        if not fallback_ok:
+            _rollback_adversarial_round(args.slug, args.stage)
+            print(f"checkpoint blocked: fallback review path failed for {args.stage} on {args.slug}: {trim_detail(fallback_detail)}", file=sys.stderr)
+            return 1
+        reverted = revert_protected_files()
+        if reverted:
+            print(f"reverted protected files: {', '.join(reverted)}", file=sys.stderr)
+        record_checkpoint_fallback(args.slug, args.stage, fallback_reason)
+        _advance_checkpoint_progress(args.slug, args.stage, pending_head_sha)
+        heartbeat_set_activity("aggregating results")
+        print(f"warning: fallback checkpoint path used for {args.stage} on {args.slug}: {fallback_reason}", file=sys.stderr)
+        post_state = load_workflow_state(args.slug)
+        payload = _checkpoint_next_action_payload(args.slug, post_state, args.stage)
+        _persist_last_action_result(args.slug, payload)
+        heartbeat_set_activity("all reviews complete")
+        if args.json:
+            print(json.dumps(payload))
+        else:
+            _emit_next_action(args.slug, f"{args.stage} checkpoint")
+        return 0
+
+codex
+I’ve confirmed the current state model already has `stages.*.unresolved_concerns`, so the spec’s extension is a change to entry shape, not a new field. I’m checking whether the proposed verification rule is underspecified or conflicts with the existing checkpoint/judge flow.
+exec
+/bin/zsh -lc "sed -n '400,520p' docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py" in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+exec
+/bin/zsh -lc 'rg -n "unresolved_concerns|judge_next_action|advance-with-drift|artifact_sha_at_time|annotations" docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py docs/workflow/operations/codex-skills/feature-factory/scripts/factory_review.py docs/workflow/operations/codex-skills/feature-factory/scripts/factory_stages.py' in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 0ms:
+    if cap_hit_payload is not None:
+        if args.json:
+            print(json.dumps(cap_hit_payload))
+        else:
+            print("→ next: judge_panel")
+        return 2
+
+    reviews_arg = getattr(args, "required_reviews", None)
+    if reviews_arg is None:
+        small_task_set = False
+        if args.stage in ("tasks", "closeout"):
+            # For "tasks": count from the artifact (tasks.md is the artifact).
+            # For "closeout": count from tasks.md in the workflow dir (artifact is closeout.md).
+            tasks_file = artifact_path if args.stage == "tasks" else workflow_dir(args.slug) / "tasks.md"
+            if tasks_file.exists():
+                try:
+                    task_text = tasks_file.read_text(encoding="utf-8")
+                    task_count = sum(
+                        1 for line in task_text.splitlines()
+                        if line.strip().startswith("- [ ]") or line.strip().startswith("- [x]") or line.strip().startswith("- [X]")
+                    )
+                    if task_count < SMALL_TASK_SET_THRESHOLD:
+                        small_task_set = True
+                        print(
+                            f"info: small task set ({task_count} tasks < {SMALL_TASK_SET_THRESHOLD} threshold) — "
+                            f"skipping Gemini reviews for {args.stage} stage, running Codex review only.",
+                            file=sys.stderr,
+                        )
+                except Exception:
+                    pass  # count failed — fall back to full reviews
+        reviews_arg = required_reviews(
+            args.stage,
+            policy["sensitive"],
+            policy["large_structural"],
+            policy["performance_sensitive"],
+            policy["extra_gemini_lenses"],
+            fast=fast,
+            small_task_set=small_task_set,
+        )
+
+    manifest = checkpoint_manifest(
+        args.slug,
+        args.stage,
+        artifact_path,
+        args.base_ref,
+        context_paths,
+        reviews_arg,
+        args.max_artifact_chars,
+        args.max_context_chars,
+        args.max_total_chars,
+        allow_dirty_paths,
+    )
+    manifest_path = checkpoint_manifest_path(args.slug, args.stage)
+    atomic_json_write(manifest_path, manifest)
+    if args.stage == "diff":
+        if allow_dirty_paths:
+            update_workflow_state(
+                args.slug,
+                lambda state: state.__setitem__(
+                    DIRTY_OVERRIDE_KEY,
+                    {
+                        "allowed_dirty_paths": allow_dirty_paths,
+                        "used": True,
+                        "updated_at": int(time.time()),
+                    },
+                ),
+            )
+        else:
+            # No --allow-dirty-path on this run — clear any stale override from a prior run.
+            update_workflow_state(
+                args.slug,
+                lambda state: state.pop(DIRTY_OVERRIDE_KEY, None),
+            )
+
+    with HeartbeatEmitter(args.slug, args.stage):
+        heartbeat_set_activity("awaiting reviewers")
+        for review_spec in reviews_arg or []:
+            reviewer = str(review_spec.get("reviewer", "")).strip()
+            lens = str(review_spec.get("lens", "")).strip()
+            if reviewer and lens:
+                heartbeat_set_activity(f"dispatching {reviewer}.{lens}")
+                heartbeat_set_activity(f"reviewer {reviewer}.{lens} running")
+        cmd = [
+            sys.executable,
+            str(REPAIR),
+            "--checkpoint-manifest",
+            str(manifest_path),
+            "--workspace-dir",
+            str(REPO_ROOT),
+            "--gemini-timeout-seconds",
+            str(args.gemini_timeout_seconds),
+            "--gemini-retries",
+            str(args.gemini_retries),
+        ]
+        try:
+            result = subprocess.run(
+                cmd,
+                text=True,
+                timeout=args.repair_timeout_seconds,
+            )
+        except subprocess.TimeoutExpired:
+            if not args.fallback:
+                _rollback_adversarial_round(args.slug, args.stage)
+                print(
+                    f"checkpoint blocked: repair exceeded {args.repair_timeout_seconds}s for "
+                    f"{args.stage} on {args.slug}",
+                    file=sys.stderr,
+                )
+                return 1
+            fallback_reason = f"repair exceeded {args.repair_timeout_seconds}s"
+        except Exception:
+            _rollback_adversarial_round(args.slug, args.stage)
+            raise
+        else:
+            heartbeat_set_activity("aggregating results")
+            if result.returncode == 0:
+                reverted = revert_protected_files()
+                if reverted:
+                    print(f"reverted protected files: {', '.join(reverted)}", file=sys.stderr)
+                _advance_checkpoint_progress(args.slug, args.stage, pending_head_sha)
+                post_state = load_workflow_state(args.slug)
+
+ succeeded in 0ms:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py:199:        "annotations": [],
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py:200:        "unresolved_concerns": [],
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py:3:from __future__ import annotations
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py:77:        "annotations": [],
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py:78:        "unresolved_concerns": [],
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py:855:        annotations = stage_state.get("annotations", [])
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py:856:        if not isinstance(annotations, list):
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py:857:            annotations = []
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py:858:        annotations = list(annotations)
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py:861:                annotations.append(
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py:868:                        "artifact_sha_at_time": current_sha,
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py:871:        stage_state["annotations"] = annotations
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py:879:            stage_state["judge_next_action"] = next_action
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py:884:            stage_state["judge_next_action"] = "advance"
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py:885:            unresolved = stage_state.get("unresolved_concerns", [])
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py:893:            stage_state["unresolved_concerns"] = unresolved
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py:899:            stage_state["judge_next_action"] = "advance"
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py:93:    stage_state.setdefault("annotations", [])
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py:94:    stage_state.setdefault("unresolved_concerns", [])
+
+exec
+/bin/zsh -lc "sed -n '1,220p' docs/workflow/operations/codex-skills/feature-factory/scripts/factory_stages.py" in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 0ms:
+#!/usr/bin/env python3
+"""Stage health analysis, checkpoint marker parsing, and prerequisite checks.
+
+Reads state and classifies stage health. No review execution — just analysis.
+"""
+import hashlib
+import json
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+_SCRIPT_DIR = Path(__file__).resolve().parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
+
+from factory_state import (  # noqa: E402
+    REPO_ROOT,
+    CHECKPOINT_PROGRESS_KEY,
+    INIT_HEAD_SHA_KEY,
+    read_json_file,
+    workflow_dir,
+    reviews_dir,
+    checkpoint_manifest_path,
+    default_artifact_path,
+    load_workflow_state,
+    load_checkpoint_manifest,
+    parse_review_frontmatter,
+)
+
+REVIEW_SCRIPTS = REPO_ROOT / "docs" / "workflow" / "operations" / "codex-skills" / "review-lens" / "scripts"
+if str(REVIEW_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(REVIEW_SCRIPTS))
+
+from workflow_utils import normalized_artifact_hash, resolve_stored_path  # noqa: E402
+from factory_git import _git_head_sha  # noqa: E402
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+VERIFY_CHECKPOINT = REVIEW_SCRIPTS / "verify_review_checkpoint.py"
+VERIFY_RECONCILIATION = REVIEW_SCRIPTS / "verify_reconciliation.py"
+
+HARD_DIFF_ARTIFACT_MAX_CHARS = 150000
+LARGE_DIFF_RERUN_WARN_CHARS = 80000
+
+NEXT_ACTION_LABELS: dict[str, str] = {
+    "mark_blocked": "workflow is blocked — human intervention required",
+    "discover": "complete discovery before writing spec",
+    "author_spec": "write spec.md",
+    "repair_spec_checkpoint": "run spec checkpoint",
+    "author_plan": "write plan.md",
+    "repair_plan_checkpoint": "run plan checkpoint",
+    "author_tasks": "write tasks.md with [CHECKPOINT] markers",
+    "record_parallel_analysis": "record parallel task analysis before checkpointing tasks",
+    "repair_tasks_checkpoint": "run tasks checkpoint",
+    "dispatch_next_slice_to_codex": "implement next slice",
+    "repair_diff_checkpoint": "run diff checkpoint",
+    "reconcile_reviews": "reconcile open review findings",
+    "deliver": "create PR and watch CI",
+    "closeout": "write closeout summary and run closeout checkpoint",
+    "repair_closeout_checkpoint": "re-run closeout checkpoint",
+    "write_postmortem": "write postmortem.md",
+    "update_status_md": "update STATUS.md",
+    "done": "workflow complete",
+}
+
+CHECKPOINT_STAGES = ["spec", "plan", "tasks", "diff", "closeout"]
+VERIFY_ON_CLOSEOUT_STAGES = ["spec", "plan", "tasks", "diff"]
+REQUIRED_PREDELIVERY_STAGES = ["spec", "plan", "tasks", "diff"]
+STAGE_PREREQUISITES = {
+    "plan": ["spec"],
+    "tasks": ["plan"],
+    "diff": ["tasks"],
+}
+STAGE_ARTIFACT_HEADINGS = {
+    "spec": "# Spec",
+    "plan": "# Plan",
+    "tasks": "# Tasks",
+}
+
+# Matches [CHECKPOINT] as a marker on any list-item line (unordered, ordered, checkbox).
+# Anchored to end-of-line to avoid matching [CHECKPOINT] mid-sentence.
+_CHECKPOINT_MARKER_RE = re.compile(
+    r"^\s*(?:[-*]|\d+\.|-\s+\[[ xX]\])\s+.*\[CHECKPOINT\]\s*$",
+    re.MULTILINE,
+)
+
+
+# ---------------------------------------------------------------------------
+# Checkpoint marker parsing
+# ---------------------------------------------------------------------------
+
+
+def parse_checkpoint_markers(slug: str) -> tuple[int, str]:
+    """Return (count, markers_sha) for [CHECKPOINT] markers in tasks.md.
+
+    markers_sha is sha256 of only the matched marker lines (normalised to LF,
+    stripped of leading/trailing whitespace) — routine edits to non-marker
+    lines do not change the hash.  Returns (0, '') if tasks.md is missing or
+    has no markers.
+    """
+    tasks_path = workflow_dir(slug) / "tasks.md"
+    if not tasks_path.exists():
+        return 0, ""
+    text = tasks_path.read_text(encoding="utf-8")
+    matches = _CHECKPOINT_MARKER_RE.findall(text)
+    if not matches:
+        return 0, ""
+    # Normalise: strip individual lines and join with LF to avoid CRLF drift.
+    normalised = "\n".join(line.strip() for line in matches)
+    sha = hashlib.sha256(normalised.encode("utf-8")).hexdigest()
+    return len(matches), sha
+
+
+def checkpoint_progress_state(slug: str) -> dict:
+    """Return checkpoint_progress from workflow state, filling missing keys with defaults."""
+    state = load_workflow_state(slug)
+    raw = state.get(CHECKPOINT_PROGRESS_KEY, {})
+    return {
+        "index": int(raw.get("index", 0)),
+        "markers_sha": str(raw.get("markers_sha", "")),
+        "last_diff_head_sha": str(raw.get("last_diff_head_sha", "")),
+    }
+
+
+def _default_checkpoint_progress() -> dict:
+    return {"index": 0, "markers_sha": "", "last_diff_head_sha": ""}
+
+
+# ---------------------------------------------------------------------------
+# Artifact & manifest health
+# ---------------------------------------------------------------------------
+
+
+def artifact_has_meaningful_content(stage: str, path: Path) -> bool:
+    if not path.exists():
+        return False
+    text = path.read_text(encoding="utf-8").strip()
+    heading = STAGE_ARTIFACT_HEADINGS.get(stage)
+    if not text:
+        return False
+    if heading and text == heading:
+        return False
+    return True
+
+
+def verify_checkpoint_manifest(manifest_path: Path) -> tuple[bool, str]:
+    result = subprocess.run(
+        [sys.executable, str(VERIFY_CHECKPOINT), "--checkpoint-manifest", str(manifest_path)],
+        text=True,
+        capture_output=True,
+    )
+    detail = (result.stdout or result.stderr or "").strip()
+    return result.returncode == 0, detail
+
+
+# ---------------------------------------------------------------------------
+# Diff review budget
+# ---------------------------------------------------------------------------
+
+
+def diff_review_budget_state(slug: str) -> dict[str, object]:
+    artifact_path = default_artifact_path(slug, "diff")
+    state: dict[str, object] = {
+        "artifact_path": artifact_path,
+        "artifact_exists": artifact_path.exists(),
+        "artifact_bytes": artifact_path.stat().st_size if artifact_path.exists() else 0,
+        "large_artifact": artifact_path.exists() and artifact_path.stat().st_size >= LARGE_DIFF_RERUN_WARN_CHARS,
+        "recorded_base_ref": "",
+        "recorded_base_sha": "",
+        "recorded_head_sha": "",
+        "current_head_sha": _git_head_sha(REPO_ROOT) or "",
+        "head_mismatch": False,
+        "scope_basis": "branch-merge-base",
+        "suggested_base_ref": "",
+        "codex_review_path": None,
+        "codex_review_present": False,
+        "artifact_changed_since_codex": False,
+    }
+    meta_path = artifact_path.with_suffix(artifact_path.suffix + ".json")
+    if meta_path.exists():
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            state["recorded_base_ref"] = meta.get("git_base_ref", "")
+            state["recorded_base_sha"] = meta.get("git_base_sha", "")
+            state["recorded_head_sha"] = meta.get("git_head_sha", "")
+        except Exception:
+            state["recorded_base_ref"] = ""
+            state["recorded_base_sha"] = ""
+            state["recorded_head_sha"] = ""
+    recorded_head = str(state["recorded_head_sha"])
+    current_head = str(state["current_head_sha"])
+    state["head_mismatch"] = bool(recorded_head and current_head and recorded_head != current_head)
+    if state["head_mismatch"] and recorded_head:
+        state["scope_basis"] = "last-reviewed-head"
+        state["suggested_base_ref"] = recorded_head
+    elif state["recorded_base_ref"]:
+        state["scope_basis"] = "recorded-base"
+        state["suggested_base_ref"] = str(state["recorded_base_ref"])
+
+    manifest = load_checkpoint_manifest(slug, "diff")
+    if not manifest:
+        return state
+    for review in manifest.get("required_reviews", []):
+        if review.get("reviewer") != "codex":
+            continue
+        review_path = resolve_stored_path(review["path"], REPO_ROOT)
+        state["codex_review_path"] = review_path
+        state["codex_review_present"] = review_path.exists()
+        if not review_path.exists() or not artifact_path.exists():
+            return state
+        try:
+            data, _ = parse_review_frontmatter(review_path)
+        except Exception:
+            return state
+        state["artifact_changed_since_codex"] = (
+            data.get("artifact_sha256", "") != normalized_artifact_hash("diff", artifact_path)
+        )
+
+codex
+The current code confirms one important gap in the spec: the concern-carry-forward path has no existing storage for “addressed” evidence besides generic annotations, so the spec has to define that bridge very precisely or it will be hard to implement safely. I’m looking for any other places where the spec leaves state transitions open to bypass.
+exec
+/bin/zsh -lc "sed -n '1,140p' docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_implement.py" in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 0ms:
+#!/usr/bin/env python3
+"""command_implement and command_parallel implementations."""
+import argparse
+import concurrent.futures
+import os
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+_SCRIPT_DIR = Path(__file__).resolve().parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
+
+from factory_state import (  # noqa: E402
+    REPO_ROOT,
+    PARALLEL_ANALYSIS_KEY,
+    load_workflow_state,
+    workflow_dir,
+    update_workflow_state,
+)
+from factory_heartbeat import HeartbeatEmitter, set_activity as heartbeat_set_activity  # noqa: E402
+from factory_telemetry import record_ai_call  # noqa: E402
+
+from factory_git import (  # noqa: E402
+    ensure_sync,
+    revert_protected_files,
+    create_worktree,
+    remove_all_worktrees,
+    get_new_commits,
+    stage_and_commit_if_dirty,
+    cherry_pick_commits,
+)
+
+from factory_stages import parse_parallel_task_groups  # noqa: E402
+
+from factory_emit import _emit_next_action  # noqa: E402
+
+
+def _codex_prompt_path(slug: str, i: int) -> Path:
+    safe_slug = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in slug)
+    return Path(f"/tmp/codex-impl-{safe_slug}-{os.getpid()}-{i}.txt")
+
+
+def _implementation_round(slug: str) -> int:
+    state = load_workflow_state(slug)
+    stages = state.get("stages", {})
+    if not isinstance(stages, dict):
+        return 0
+    stage_state = stages.get("tasks", {})
+    if not isinstance(stage_state, dict):
+        return 0
+    try:
+        return int(stage_state.get("adversarial_rounds", 0) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _run_codex_command(command: list[str], cwd: Path) -> subprocess.CompletedProcess:
+    try:
+        return subprocess.run(
+            command,
+            cwd=str(cwd),
+            timeout=3600,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.TimeoutExpired as exc:
+        return subprocess.CompletedProcess(
+            command,
+            124,
+            stdout=exc.stdout or "",
+            stderr=exc.stderr or "",
+        )
+
+
+def _build_codex_prompt(slug: str, i: int, tasks: list[str], file_scope: list[str]) -> str:
+    root = workflow_dir(slug)
+    # Prefer compact summaries — they contain everything Codex needs for implementation
+    # without the full narrative. Fall back to full files when summaries don't exist yet.
+    spec_path = root / "spec-acceptance.md" if (root / "spec-acceptance.md").exists() else root / "spec.md"
+    plan_path = root / "plan-summary.md" if (root / "plan-summary.md").exists() else root / "plan.md"
+
+    spec_content = spec_path.read_text(encoding="utf-8") if spec_path.exists() else ""
+    plan_content = plan_path.read_text(encoding="utf-8") if plan_path.exists() else ""
+
+    prompt_path = _codex_prompt_path(slug, i)
+    prompt_text = (
+        "# Implementation Task\n\n"
+        "## Context\n"
+        f"{spec_content}\n\n"
+        "## Plan\n"
+        f"{plan_content}\n\n"
+        "## Tasks to implement (your scope)\n"
+        f"{chr(10).join(map(str, tasks))}\n\n"
+        "## File scope\n"
+        f"{chr(10).join(map(str, file_scope)) if file_scope else '(no specific scope — implement all tasks)'}\n\n"
+        "Implement the tasks above. Commit your changes when done.\n"
+        "DO NOT MODIFY: CLAUDE.md, AGENTS.md, MEMORY.md, or any file not in your file scope.\n"
+    )
+    prompt_path.write_text(prompt_text, encoding="utf-8")
+    return prompt_text
+
+
+def _run_serial(slug: str, tasks: list[str]) -> int:
+    prompt_path = _codex_prompt_path(slug, 0)
+    prompt_text = _build_codex_prompt(slug, 0, tasks, [])
+    round_number = _implementation_round(slug)
+    rc = 1
+    try:
+        heartbeat_set_activity("codex exec running")
+        result = record_ai_call(
+            slug,
+            "tasks",
+            round_number,
+            "implementation",
+            "gpt-5.4-mini",
+            lambda: _run_codex_command(
+                ["codex", "exec", "-m", "gpt-5.4-mini", "-s", "workspace-write", prompt_text],
+                REPO_ROOT,
+            ),
+        )
+        rc = result.returncode
+        if rc == 124:
+            print("[error] codex execution timed out after 3600 seconds", file=sys.stderr)
+            rc = 1
+    except subprocess.TimeoutExpired:
+        print("[error] codex execution timed out after 3600 seconds", file=sys.stderr)
+        rc = 1
+    finally:
+        revert_protected_files()
+        prompt_path.unlink(missing_ok=True)
+    return rc
+
+
+def _run_parallel(slug: str, group: dict, max_workers: int = 4) -> int:
+    status = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "status", "--porcelain"],
+        capture_output=True,
+        text=True,
+
+exec
+/bin/zsh -lc 'rg -n "command_(checkpoint|judge|implement|deliver|block|discover|repair|doctor|status)" docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_*.py' in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+exec
+/bin/zsh -lc "rg -n \"update_workflow_state\\(|update_stage_state\\(\" docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_*.py" in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 0ms:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_block.py:2:"""command_block implementation."""
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_block.py:20:def command_block(args: argparse.Namespace) -> int:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_implement.py:2:"""command_implement and command_parallel implementations."""
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_implement.py:278:def command_implement(args: argparse.Namespace) -> int:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_discover.py:2:"""command_discover implementation."""
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_discover.py:27:def command_discover(args: argparse.Namespace) -> int:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py:2:"""command_judge implementation."""
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_status.py:2:"""command_status, command_repair, and command_doctor implementations."""
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_status.py:61:def command_status(args: argparse.Namespace) -> int:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_status.py:225:def command_repair(args: argparse.Namespace) -> int:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_status.py:226:    from factory_cmd_checkpoint import command_checkpoint  # noqa: E402
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_status.py:243:            result = command_checkpoint(repair_checkpoint_args(args.slug, stage, stage_state))
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_status.py:272:            result = command_checkpoint(repair_checkpoint_args(args.slug, "closeout", closeout_state))
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_status.py:310:def command_doctor(args: argparse.Namespace) -> int:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py:2:"""command_checkpoint implementation."""
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py:180:def command_checkpoint(args: argparse.Namespace) -> int:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py:2:"""command_deliver and command_closeout implementations."""
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py:234:def command_deliver(args: argparse.Namespace) -> int:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py:474:    from factory_cmd_checkpoint import command_checkpoint  # noqa: E402
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py:549:    checkpoint_result = command_checkpoint(closeout_args)
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py:575:        checkpoint_result = command_checkpoint(closeout_args)
+
+ succeeded in 0ms:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_implement.py:359:    update_workflow_state(args.slug, mutate)
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_block.py:39:    state = update_workflow_state(args.slug, mutate)
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py:161:    update_workflow_state(
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py:173:    update_stage_state(
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py:254:                update_workflow_state(
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py:265:                update_workflow_state(
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py:280:                update_workflow_state(
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py:456:            update_workflow_state(
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py:469:            update_workflow_state(
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py:156:    update_workflow_state(
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py:379:            update_workflow_state(
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py:401:            update_workflow_state(
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py:414:            update_workflow_state(
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py:420:            update_workflow_state(
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py:440:        update_workflow_state(
+
+codex
+I’ve found a more subtle risk in the spec’s concern-tracking design: the proposed concern ID is derived from raw reasoning text, which is not stable enough to serve as a durable key if the model rephrases the same issue. I’m checking that against the current judge output shape so I can judge whether it’s a real spec flaw or just a theoretical one.
+exec
+/bin/zsh -lc 'rg -n "def _unresolved_concern_from_verdict|reasoning" docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py' in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 0ms:
+129:def _block_reasonings(verdicts: list[dict]) -> list[str]:
+130:    reasonings: list[str] = []
+132:        reasoning = str(verdict.get("reasoning", "")).strip()
+133:        if reasoning:
+134:            reasonings.append(reasoning)
+135:    return reasonings
+138:def _also_raised_in_round(current_reasoning: str, prior_rounds: list[list[dict]]) -> list[int]:
+140:    current_reasoning = current_reasoning.strip()
+141:    if not current_reasoning:
+149:            prior_reasoning = str(prior_verdict.get("reasoning", "")).strip()
+150:            if not prior_reasoning:
+152:            similarity = factory_embeddings.cosine_similarity(current_reasoning, prior_reasoning)
+159:def _unresolved_concern_from_verdict(
+165:    reasoning = str(verdict.get("reasoning", "")).strip()
+171:        "reasoning": reasoning,
+173:        "also_raised_in_round": _also_raised_in_round(reasoning, prior_rounds),
+405:    required = ["judge", "model", "verdict", "confidence", "reasoning", "evidence", "timestamp"]
+417:    if not isinstance(verdict["reasoning"], str) or len(verdict["reasoning"].strip()) < 10:
+418:        return "reasoning must be a string of at least 10 characters"
+597:        "reasoning": f"schema_violation: {retry_error or error}",
+617:    note = " ".join(str(verdict.get("reasoning", "")).split())
+651:            str(verdict.get("reasoning", "")).strip(),
+815:        blockers=_block_reasonings(block_verdicts),
+826:        "reasoning": "schema_violation: artifact_mutated",
+867:                        "reasoning": verdict["reasoning"],
+873:        blockers = _block_reasonings(block_verdicts)
+
+exec
+/bin/zsh -lc "sed -n '1,160p' docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py" in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 0ms:
+#!/usr/bin/env python3
+"""command_judge implementation."""
+from __future__ import annotations
+
+import argparse
+import concurrent.futures
+import json
+import logging
+import os
+import re
+import subprocess
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+_SCRIPT_DIR = Path(__file__).resolve().parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
+
+from factory_state import (  # noqa: E402
+    REPO_ROOT,
+    atomic_json_write,
+    default_artifact_path,
+    load_workflow_state,
+    parse_review_frontmatter,
+    reviews_dir,
+    with_locked_state,
+    workflow_dir,
+)
+from factory_heartbeat import HeartbeatEmitter, set_activity as heartbeat_set_activity  # noqa: E402
+import factory_embeddings  # noqa: E402
+from factory_telemetry import record_ai_call  # noqa: E402
+
+REVIEW_SCRIPTS = REPO_ROOT / "docs" / "workflow" / "operations" / "codex-skills" / "review-lens" / "scripts"
+if str(REVIEW_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(REVIEW_SCRIPTS))
+
+from workflow_utils import normalized_artifact_hash, repo_relative_path  # noqa: E402
+
+from factory_git import _git_head_sha  # noqa: E402
+from factory_next_action import recommended_next_action  # noqa: E402
+from factory_stages import CHECKPOINT_STAGES, stage_manifest_state  # noqa: E402
+from judge_prompts import VALID_LENSES, load_prompt, substitute  # noqa: E402
+
+
+JUDGE_MODEL_BY_LENS: dict[str, str] = {
+    "completeness": "gpt-5.4-mini",
+    "restatement": "gpt-5.4",
+    "implementation-risk": "claude-sonnet-4-6",
+}
+
+JUDGE_COMMAND_BY_LENS: dict[str, list[str]] = {
+    "completeness": ["codex", "exec", "-m", "gpt-5.4-mini"],
+    "restatement": ["codex", "exec", "-m", "gpt-5.4"],
+    "implementation-risk": ["claude", "-p", "--model", "claude-sonnet-4-6", "--output-format", "text"],
+}
+
+JUDGE_LENS_ORDER = ["completeness", "restatement", "implementation-risk"]
+JUDGE_BASE_REF = "origin/main"
+JUDGE_TIMEOUT_SECONDS = 180
+_LOGGER = logging.getLogger(__name__)
+
+
+def _now_iso8601_utc() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _escape_frontmatter(value: object) -> str:
+    return str(value).replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _default_stage_state() -> dict[str, object]:
+    return {
+        "adversarial_rounds": 0,
+        "judge_rounds": 0,
+        "judge_verdicts": [],
+        "annotations": [],
+        "unresolved_concerns": [],
+        "adversarial_sha_history": [],
+        "initial_sha": "",
+    }
+
+
+def _ensure_stage_state(state: dict, stage: str) -> dict:
+    stages = state.setdefault("stages", {})
+    stage_state = stages.get(stage)
+    if not isinstance(stage_state, dict):
+        stage_state = {}
+    for key, default in _default_stage_state().items():
+        if key not in stage_state:
+            stage_state[key] = list(default) if isinstance(default, list) else default
+    stages[stage] = stage_state
+    try:
+        schema_version = int(state.get("schema_version", 1))
+    except (TypeError, ValueError):
+        schema_version = 1
+    if schema_version < 2:
+        state["schema_version"] = 2
+    return stage_state
+
+
+def _stage_int(stage_state: dict, key: str) -> int:
+    try:
+        return int(stage_state.get(key, 0) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _record_migration_bypass_use(slug: str, stage: str) -> None:
+    with with_locked_state(slug) as state:
+        uses = state.get("migration_bypass_uses", [])
+        if not isinstance(uses, list):
+            uses = []
+        uses = list(uses)
+        uses.append(
+            {
+                "timestamp": _now_iso8601_utc(),
+                "stage": stage,
+                "operator_id": os.environ.get("USER", "unknown") or "unknown",
+            }
+        )
+        state["migration_bypass_uses"] = uses
+
+
+def _block_verdicts(verdicts: list[dict]) -> list[dict]:
+    return [verdict for verdict in verdicts if isinstance(verdict, dict) and verdict.get("verdict") == "block"]
+
+
+def _block_reasonings(verdicts: list[dict]) -> list[str]:
+    reasonings: list[str] = []
+    for verdict in _block_verdicts(verdicts):
+        reasoning = str(verdict.get("reasoning", "")).strip()
+        if reasoning:
+            reasonings.append(reasoning)
+    return reasonings
+
+
+def _also_raised_in_round(current_reasoning: str, prior_rounds: list[list[dict]]) -> list[int]:
+    also_raised: set[int] = set()
+    current_reasoning = current_reasoning.strip()
+    if not current_reasoning:
+        return []
+    for round_index, round_verdicts in enumerate(prior_rounds, start=1):
+        if not isinstance(round_verdicts, list):
+            continue
+        for prior_verdict in round_verdicts:
+            if not isinstance(prior_verdict, dict) or prior_verdict.get("verdict") != "block":
+                continue
+            prior_reasoning = str(prior_verdict.get("reasoning", "")).strip()
+            if not prior_reasoning:
+                continue
+            similarity = factory_embeddings.cosine_similarity(current_reasoning, prior_reasoning)
+            if similarity >= 0.85:
+                also_raised.add(round_index)
+                break
+    return sorted(also_raised)
+
+
+def _unresolved_concern_from_verdict(
+    stage: str,
+
+exec
+/bin/zsh -lc "sed -n '160,260p' docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py" in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 0ms:
+    stage: str,
+    verdict: dict,
+    round_raised: int,
+    prior_rounds: list[list[dict]],
+) -> dict[str, object]:
+    reasoning = str(verdict.get("reasoning", "")).strip()
+    return {
+        "stage": stage,
+        "judge": verdict.get("judge", ""),
+        "model": verdict.get("model", ""),
+        "confidence": verdict.get("confidence"),
+        "reasoning": reasoning,
+        "round_raised": round_raised,
+        "also_raised_in_round": _also_raised_in_round(reasoning, prior_rounds),
+    }
+
+
+def _stage_artifact_path(slug: str, stage: str) -> Path:
+    return default_artifact_path(slug, stage)
+
+
+def _artifact_paths(slug: str) -> dict[str, Path]:
+    root = workflow_dir(slug)
+    return {
+        "spec": root / "spec.md",
+        "plan": root / "plan.md",
+        "tasks": root / "tasks.md",
+    }
+
+
+def _artifact_chain_text(slug: str) -> str:
+    parts: list[str] = []
+    for label, path in _artifact_paths(slug).items():
+        parts.extend([f"--- {label.upper()} ---", path.read_text(encoding="utf-8") if path.exists() else ""])
+    return "\n".join(parts)
+
+
+def _review_files_for_stage(slug: str, stage: str) -> list[Path]:
+    return sorted(reviews_dir(slug).glob(f"{stage}.*.review.md"))
+
+
+def _safe_frontmatter(review_path: Path) -> dict[str, str]:
+    try:
+        data, _ = parse_review_frontmatter(review_path)
+    except Exception:
+        return {}
+    return data
+
+
+def _findings_block(review_body: str) -> str:
+    if "## Findings" not in review_body:
+        return ""
+    tail = review_body.split("## Findings", 1)[1]
+    if "\n## " in tail:
+        tail = tail.split("\n## ", 1)[0]
+    return tail.strip()
+
+
+def _finding_id(review_path: Path, index: int, severity: str) -> str:
+    return f"{review_path.stem}#{severity.lower()}-{index}"
+
+
+def _finding_text_from_line(line: str) -> str:
+    text = line.strip()
+    text = re.sub(r"^[\-*\d.]+\s*", "", text)
+    text = re.sub(r"^\|", "", text)
+    text = re.sub(r"\|$", "", text)
+    parts = [part.strip() for part in text.split("|") if part.strip()]
+    if len(parts) >= 2 and parts[0].upper() in {"HIGH", "MEDIUM", "LOW"}:
+        return parts[-1]
+    match = re.search(r"\b(HIGH|MEDIUM|LOW)\b[:\-]?\s*(.*)$", text, re.I)
+    if match:
+        return match.group(2).strip() or text
+    return text
+
+
+def _findings_from_review(review_path: Path) -> list[dict[str, str]]:
+    try:
+        meta, body = parse_review_frontmatter(review_path)
+    except Exception:
+        return []
+    block = _findings_block(body)
+    if not block:
+        return []
+    findings: list[dict[str, str]] = []
+    index = 0
+    for raw in block.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        severity_match = re.search(r"\b(HIGH|MEDIUM|LOW)\b", line, re.I)
+        if not severity_match:
+            continue
+        severity = severity_match.group(1).upper()
+        index += 1
+        findings.append(
+            {
+                "severity": severity,
+                "id": _finding_id(review_path, index, severity),
+                "finding": _finding_text_from_line(line),
+                "source": review_path.name,
+
+exec
+/bin/zsh -lc "sed -n '220,360p' docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_status.py" in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 0ms:
+    print("")
+    print(f"next-action: {next_action}")
+    return 0
+
+
+def command_repair(args: argparse.Namespace) -> int:
+    from factory_cmd_checkpoint import command_checkpoint  # noqa: E402
+    ensure_sync()
+    state = load_workflow_state(args.slug)
+    stages = {stage: stage_manifest_state(args.slug, stage) for stage in CHECKPOINT_STAGES}
+    repaired: list[str] = []
+    notes: list[str] = []
+    blocked_reason = ""
+
+    print(f"workflow: {args.slug}")
+    print("repair:")
+
+    for stage in ["spec", "plan", "tasks", "diff"]:
+        stage_state = stages[stage]
+        drift = stage_drift_class(stage, stage_state)
+        _, orphaned = stage_review_inventory(args.slug, stage)
+        if stage_repairable(args.slug, stage, stage_state):
+            print(f"- {stage}: repairing {drift}")
+            result = command_checkpoint(repair_checkpoint_args(args.slug, stage, stage_state))
+            if result != 0:
+                blocked_reason = f"{stage} repair failed"
+                break
+            refreshed = stage_manifest_state(args.slug, stage)
+            stages[stage] = refreshed
+            if not refreshed["healthy"]:
+                blocked_reason = f"{stage} remains unhealthy: {trim_detail(str(refreshed.get('detail', '')))}"
+                break
+            repaired.append(stage)
+            if orphaned:
+                notes.append(f"{stage}: preserved {len(orphaned)} orphaned historical review file(s)")
+            continue
+
+        print(f"- {stage}: {stage_status_label(args.slug, stage, stage_state)}")
+
+        if drift in {"missing-artifact", "stub-artifact"} and later_progress_exists(stages, stage)[0]:
+            blocked_reason = f"{stage} has {drift.replace('-', ' ')} while later workflow material exists"
+            break
+        if drift == "unhealthy-manifest" and not stage_repairable(args.slug, stage, stage_state):
+            blocked_reason = f"{stage} checkpoint is not safely repairable: {trim_detail(str(stage_state.get('detail', '')))}"
+            break
+
+    if not blocked_reason:
+        # Repair closeout if manifest is stale (only when it exists and is unhealthy)
+        closeout_state = stages["closeout"]
+        closeout_drift = stage_drift_class("closeout", closeout_state)
+        if closeout_drift == "unhealthy-manifest" and stage_repairable(args.slug, "closeout", closeout_state):
+            print("- closeout: repairing unhealthy-manifest")
+            result = command_checkpoint(repair_checkpoint_args(args.slug, "closeout", closeout_state))
+            if result != 0:
+                blocked_reason = "closeout repair failed"
+            else:
+                refreshed = stage_manifest_state(args.slug, "closeout")
+                stages["closeout"] = refreshed
+                if not refreshed["healthy"]:
+                    blocked_reason = f"closeout remains unhealthy: {trim_detail(str(refreshed.get('detail', '')))}"
+                else:
+                    repaired.append("closeout")
+        elif closeout_drift == "unhealthy-manifest":
+            # unhealthy-manifest but not repairable — block so repair doesn't silently succeed
+            blocked_reason = "closeout is unhealthy but not repairable"
+        elif closeout_drift not in {"not-checkpointed", "missing-artifact", "stub-artifact"}:
+            print(f"- closeout: {stage_status_label(args.slug, 'closeout', closeout_state)}")
+
+    if blocked_reason:
+        print(f"- blocked: {blocked_reason}")
+        for note in notes:
+            print(f"- note: {note}")
+        return 1
+
+    recon_ok, recon_detail = reconciliation_state(args.slug)
+    next_action = recommended_next_action(args.slug, state, stages, recon_ok)
+    print("")
+    if repaired:
+        print(f"- repaired: {', '.join(repaired)}")
+    else:
+        print("- repaired: none")
+    if notes:
+        for note in notes:
+            print(f"- note: {note}")
+    if not recon_ok:
+        print(f"- follow-up: reconciliation still blocked ({trim_detail(recon_detail)})")
+    print(f"next-action: {next_action}")
+    return 0
+
+
+def command_doctor(args: argparse.Namespace) -> int:
+    from factory_git import git_output  # noqa: E402
+    checks: list[tuple[str, str, str]] = []
+
+    def add(name: str, level: str, detail: str) -> None:
+        checks.append((name, level, detail))
+
+    repo_root = git_output("rev-parse", "--show-toplevel")
+    add("repo-root", "ok" if repo_root == str(REPO_ROOT) else "fail", repo_root or "not inside a git repo")
+    add(
+        "python",
+        "ok" if sys.version_info >= (3, 10) else "fail",
+        f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+    )
+
+    for label, path in {
+        "sync-script": SYNC_SCRIPT,
+        "feature-runner": Path(__file__).resolve(),
+        "write-diff": WRITE_DIFF,
+        "repair": REPAIR,
+        "verify-checkpoint": VERIFY_CHECKPOINT,
+        "verify-reconciliation": VERIFY_RECONCILIATION,
+    }.items():
+        add(label, "ok" if path.exists() else "fail", str(path))
+
+    for tool_name in ["git", "codex", "gemini", "gh"]:
+        found = command_path(tool_name)
+        level = "ok" if found else ("warn" if tool_name == "gh" else "fail")
+        add(f"tool:{tool_name}", level, found or "not installed")
+
+    sync_check = subprocess.run([sys.executable, str(SYNC_SCRIPT), "--check"], text=True, capture_output=True)
+    add("skill-sync", "ok" if sync_check.returncode == 0 else "warn", "in sync" if sync_check.returncode == 0 else "needs sync")
+
+    branch = current_branch_name()
+    add("git-branch", "ok" if branch else "warn", branch or "detached HEAD")
+    upstream = upstream_branch_name()
+    add("git-upstream", "ok" if upstream else "warn", upstream or "no upstream configured")
+
+    if command_path("gh"):
+        auth = subprocess.run(["gh", "auth", "status", "--active"], text=True, capture_output=True)
+        auth_detail = (auth.stderr or auth.stdout or "").strip().splitlines()
+        add("gh-auth", "ok" if auth.returncode == 0 else "warn", auth_detail[0] if auth_detail else "unknown")
+
+    failed = False
+    for name, level, detail in checks:
+        print(f"[{level.upper()}] {name}: {detail}")
+        if level == "fail":
+            failed = True
+    return 1 if failed else 0
+
+exec
+/bin/zsh -lc 'rg -n "auto-reconcile|reconcile" docs/workflow/operations/codex-skills/feature-factory/scripts' in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 0ms:
+docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py:143:def command_reconcile(args: argparse.Namespace) -> int:
+docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py:153:    _emit_next_action(args.slug, f"reconcile ({args.status})")
+docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py:157:def command_auto_reconcile(args: argparse.Namespace) -> int:
+docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py:190:            # Already reconciled — skip.
+docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py:221:        print(f"all reviews for {args.stage} already reconciled")
+docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py:222:    _emit_next_action(args.slug, f"auto-reconcile {args.stage}")
+docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py:274:    reconcile_parser = subparsers.add_parser("reconcile")
+docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py:275:    reconcile_parser.add_argument("--slug", required=True)
+docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py:276:    reconcile_parser.add_argument("--review", action="append", required=True)
+docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py:277:    reconcile_parser.add_argument("--status", required=True)
+docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py:278:    reconcile_parser.add_argument("--note", required=True)
+docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py:279:    reconcile_parser.set_defaults(func=command_reconcile)
+docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py:281:    auto_reconcile_parser = subparsers.add_parser(
+docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py:282:        "auto-reconcile",
+docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py:285:    auto_reconcile_parser.add_argument("--slug", required=True)
+docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py:286:    auto_reconcile_parser.add_argument(
+docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py:291:    auto_reconcile_parser.set_defaults(func=command_auto_reconcile)
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_next_action.py:120:        return "reconcile_reviews"
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_stages.py:60:    "reconcile_reviews": "reconcile open review findings",
+
+codex
+I found a likely implementation trap in the spec itself: it requires invariant warnings to print to stdout, but the runner already has JSON output modes on state-mutating commands. That can corrupt machine-readable output unless the spec carves out a separate channel. I’m verifying that against the command interfaces now.
+exec
+/bin/zsh -lc "rg -n \"--json|args.json|print\\(json\\.dumps\" docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py" in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ exited 2 in 0ms:
+rg: unrecognized flag --json|args.json|print\(json\.dumps
+
+exec
+/bin/zsh -lc "sed -n '1,140p' docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py" in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 0ms:
+#!/usr/bin/env python3
+import argparse
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+
+_SCRIPT_DIR = Path(__file__).resolve().parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
+
+from factory_state import (  # noqa: E402
+    REPO_ROOT,
+    BLOCKED_KEY,
+    DISCOVERY_KEY,
+    CHECKPOINT_PROGRESS_KEY,
+    INIT_HEAD_SHA_KEY,
+    checkpoint_manifest_path,
+    default_artifact_path,
+    default_discovery_state,
+    reviews_dir,
+    scope_manifest_path,
+    workflow_dir,
+    save_scope_manifest,
+    load_workflow_state,
+    save_workflow_state,
+    update_workflow_state,
+    load_checkpoint_manifest,
+    parse_review_frontmatter,
+    blocking_unresolved_items,
+    discovery_state,
+)
+
+from factory_git import (  # noqa: E402
+    _git_head_sha,
+    _sha_is_valid_ancestor,
+    command_path,
+    current_branch_name,
+    ensure_sync,
+    ensure_file,
+    run,
+    upstream_branch_name,
+)
+
+from factory_stages import (  # noqa: E402
+    CHECKPOINT_STAGES,
+    VERIFY_RECONCILIATION,
+    _default_checkpoint_progress,
+    checkpoint_progress_state,
+    diff_review_budget_state,
+    later_progress_exists,
+    parse_checkpoint_markers,
+    parse_parallel_task_groups,
+    preferred_diff_base_ref,
+    prerequisite_failure,
+    reconciliation_state,
+    stage_drift_class,
+    stage_manifest_state,
+    stage_repairable,
+    stage_review_inventory,
+    stage_status_label,
+)
+
+from factory_review import (  # noqa: E402
+    UPDATE_REVIEW,
+    APPEND_RECONCILIATION,
+    DEFAULT_CODEX_MODEL,
+    _AUTO_ACCEPT_NOTE,
+    checkpoint_manifest,
+    trim_detail,
+    detect_actionable_findings,
+    _advance_checkpoint_progress,
+    record_checkpoint_fallback,
+    repair_checkpoint_args,
+    required_reviews,
+    resolved_review_policy,
+    run_checkpoint_fallback,
+)
+
+from factory_emit import _emit_next_action  # noqa: E402
+from factory_next_action import recommended_next_action  # noqa: E402
+from factory_cmd_checkpoint import command_checkpoint  # noqa: E402
+from factory_cmd_discover import command_discover  # noqa: E402
+from factory_deliver import (  # noqa: E402
+    compose_closeout_text,
+    current_pr_payload,
+    gather_all_review_paths,
+    refresh_delivery_snapshot,
+    required_check_summary,
+)
+from factory_cmd_deliver import command_deliver, command_closeout  # noqa: E402
+from factory_cmd_block import command_block  # noqa: E402
+from factory_cmd_judge import run_judge  # noqa: E402
+from factory_cmd_implement import command_implement, command_parallel, _run_serial, _run_parallel  # noqa: E402
+from factory_cmd_status import command_status, command_repair, command_doctor  # noqa: E402
+from workflow_utils import resolve_stored_path  # noqa: E402
+
+
+def command_init(args: argparse.Namespace) -> int:
+    if not args.path:
+        raise SystemExit(
+            "init requires at least one --path argument to define the feature scope. "
+            "Example: --path cloud/apps/web/src/components/my-feature"
+        )
+    ensure_sync()
+    root = workflow_dir(args.slug)
+    reviews = reviews_dir(args.slug)
+    reviews.mkdir(parents=True, exist_ok=True)
+    ensure_file(root / "spec.md", "Spec")
+    ensure_file(root / "plan.md", "Plan")
+    ensure_file(root / "tasks.md", "Tasks")
+    save_scope_manifest(args.slug, args.path)
+    existing_state = load_workflow_state(args.slug)
+    existing_state.setdefault(
+        "review_policy",
+        {
+            "sensitive": False,
+            "large_structural": False,
+            "performance_sensitive": False,
+            "extra_gemini_lenses": [],
+        },
+    )
+    existing_state.setdefault(DISCOVERY_KEY, default_discovery_state())
+    # For first-time init: require discovery before spec authoring.
+    # Re-inits of an in-progress workflow preserve the existing discovery state.
+    if not existing_state.get(INIT_HEAD_SHA_KEY):
+        discovery = existing_state[DISCOVERY_KEY]
+        discovery["required"] = True
+        discovery["complete"] = False
+    # Always reset checkpoint_progress on init so stale slice state from a
+    # previous run does not corrupt the new one.
+    existing_state[CHECKPOINT_PROGRESS_KEY] = _default_checkpoint_progress()
+    # Record the HEAD SHA at init time so we can verify STATUS.md was updated.
+    head_sha = _git_head_sha(REPO_ROOT)
+    if head_sha:
+        existing_state[INIT_HEAD_SHA_KEY] = head_sha
+    save_workflow_state(args.slug, existing_state)
+    print(str(root))
+    return 0
+
+exec
+/bin/zsh -lc "sed -n '1,120p' docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py | tail -n +1" in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 0ms:
+#!/usr/bin/env python3
+"""command_judge implementation."""
+from __future__ import annotations
+
+import argparse
+import concurrent.futures
+import json
+import logging
+import os
+import re
+import subprocess
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+_SCRIPT_DIR = Path(__file__).resolve().parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
+
+from factory_state import (  # noqa: E402
+    REPO_ROOT,
+    atomic_json_write,
+    default_artifact_path,
+    load_workflow_state,
+    parse_review_frontmatter,
+    reviews_dir,
+    with_locked_state,
+    workflow_dir,
+)
+from factory_heartbeat import HeartbeatEmitter, set_activity as heartbeat_set_activity  # noqa: E402
+import factory_embeddings  # noqa: E402
+from factory_telemetry import record_ai_call  # noqa: E402
+
+REVIEW_SCRIPTS = REPO_ROOT / "docs" / "workflow" / "operations" / "codex-skills" / "review-lens" / "scripts"
+if str(REVIEW_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(REVIEW_SCRIPTS))
+
+from workflow_utils import normalized_artifact_hash, repo_relative_path  # noqa: E402
+
+from factory_git import _git_head_sha  # noqa: E402
+from factory_next_action import recommended_next_action  # noqa: E402
+from factory_stages import CHECKPOINT_STAGES, stage_manifest_state  # noqa: E402
+from judge_prompts import VALID_LENSES, load_prompt, substitute  # noqa: E402
+
+
+JUDGE_MODEL_BY_LENS: dict[str, str] = {
+    "completeness": "gpt-5.4-mini",
+    "restatement": "gpt-5.4",
+    "implementation-risk": "claude-sonnet-4-6",
+}
+
+JUDGE_COMMAND_BY_LENS: dict[str, list[str]] = {
+    "completeness": ["codex", "exec", "-m", "gpt-5.4-mini"],
+    "restatement": ["codex", "exec", "-m", "gpt-5.4"],
+    "implementation-risk": ["claude", "-p", "--model", "claude-sonnet-4-6", "--output-format", "text"],
+}
+
+JUDGE_LENS_ORDER = ["completeness", "restatement", "implementation-risk"]
+JUDGE_BASE_REF = "origin/main"
+JUDGE_TIMEOUT_SECONDS = 180
+_LOGGER = logging.getLogger(__name__)
+
+
+def _now_iso8601_utc() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _escape_frontmatter(value: object) -> str:
+    return str(value).replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _default_stage_state() -> dict[str, object]:
+    return {
+        "adversarial_rounds": 0,
+        "judge_rounds": 0,
+        "judge_verdicts": [],
+        "annotations": [],
+        "unresolved_concerns": [],
+        "adversarial_sha_history": [],
+        "initial_sha": "",
+    }
+
+
+def _ensure_stage_state(state: dict, stage: str) -> dict:
+    stages = state.setdefault("stages", {})
+    stage_state = stages.get(stage)
+    if not isinstance(stage_state, dict):
+        stage_state = {}
+    for key, default in _default_stage_state().items():
+        if key not in stage_state:
+            stage_state[key] = list(default) if isinstance(default, list) else default
+    stages[stage] = stage_state
+    try:
+        schema_version = int(state.get("schema_version", 1))
+    except (TypeError, ValueError):
+        schema_version = 1
+    if schema_version < 2:
+        state["schema_version"] = 2
+    return stage_state
+
+
+def _stage_int(stage_state: dict, key: str) -> int:
+    try:
+        return int(stage_state.get(key, 0) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _record_migration_bypass_use(slug: str, stage: str) -> None:
+    with with_locked_state(slug) as state:
+        uses = state.get("migration_bypass_uses", [])
+        if not isinstance(uses, list):
+            uses = []
+        uses = list(uses)
+        uses.append(
+            {
+                "timestamp": _now_iso8601_utc(),
+                "stage": stage,
+                "operator_id": os.environ.get("USER", "unknown") or "unknown",
+            }
+
+exec
+/bin/zsh -lc "rg -n -- \"--json|args\\.json|json\\.dumps\" docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py" in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 0ms:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py:660:            json.dumps(verdict, indent=2, sort_keys=True),
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py:941:            json.dumps(verdict, indent=2, sort_keys=True),
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py:977:            print(json.dumps(payload, indent=2))
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py:994:            print(json.dumps(payload, indent=2))
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py:1010:            print(json.dumps(payload, indent=2))
+docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py:269:    checkpoint_parser.add_argument("--json", action="store_true")
+docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py:302:    judge_parser.add_argument("--json", action="store_true")
+docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py:309:        json_output=args.json,
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py:401:        if args.json:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py:402:            print(json.dumps(cap_hit_payload))
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py:524:                if args.json:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py:525:                    print(json.dumps(payload))
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py:556:        if args.json:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py:557:            print(json.dumps(payload))
+
+exec
+/bin/zsh -lc "sed -n '140,240p' docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py" in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 0ms:
+    return 0
+
+
+def command_reconcile(args: argparse.Namespace) -> int:
+    ensure_sync()
+    plan_path = workflow_dir(args.slug) / "plan.md"
+    review_args = []
+    for review in args.review:
+        review_args.extend(["--review", str(Path(review).resolve())])
+
+    run([sys.executable, str(UPDATE_REVIEW), *review_args, "--status", args.status, "--note", args.note])
+    run([sys.executable, str(APPEND_RECONCILIATION), "--plan", str(plan_path), *review_args, "--status", args.status, "--note", args.note])
+    run([sys.executable, str(VERIFY_RECONCILIATION), "--plan", str(plan_path), *review_args])
+    _emit_next_action(args.slug, f"reconcile ({args.status})")
+    return 0
+
+
+def command_auto_reconcile(args: argparse.Namespace) -> int:
+    """Auto-accept reviews with no HIGH or MEDIUM severity findings.
+
+    Scans all open (resolution_status == "open") reviews for the given stage.
+    Reviews with only LOW or no findings are accepted automatically.
+    Reviews with actionable findings are left open and listed for human review.
+
+    Prints a summary so the orchestrator knows exactly which reviews still need attention.
+    """
+    ensure_sync()
+    manifest = load_checkpoint_manifest(args.slug, args.stage)
+    if not manifest:
+        raise SystemExit(f"no checkpoint manifest found for {args.slug}/{args.stage} — run checkpoint first")
+
+    plan_path = workflow_dir(args.slug) / "plan.md"
+    required = manifest.get("required_reviews", [])
+
+    auto_accepted: list[str] = []
+    needs_review: list[str] = []
+
+    for spec in required:
+        review_path = Path(resolve_stored_path(spec["path"], REPO_ROOT))
+        if not review_path.exists():
+            needs_review.append(f"{spec['path']} (missing)")
+            continue
+        try:
+            data, _ = parse_review_frontmatter(review_path)
+        except Exception:
+            needs_review.append(f"{spec['path']} (unreadable)")
+            continue
+
+        status = data.get("resolution_status", "open")
+        if status != "open":
+            # Already reconciled — skip.
+            continue
+
+        if detect_actionable_findings(review_path):
+            needs_review.append(spec["path"])
+        else:
+            # Auto-accept: write resolution into file and append to plan reconciliation table.
+            run([
+                sys.executable, str(UPDATE_REVIEW),
+                "--review", str(review_path),
+                "--status", "accepted",
+                "--note", _AUTO_ACCEPT_NOTE,
+            ])
+            run([
+                sys.executable, str(APPEND_RECONCILIATION),
+                "--plan", str(plan_path),
+                "--review", str(review_path),
+                "--status", "accepted",
+                "--note", _AUTO_ACCEPT_NOTE,
+            ])
+            auto_accepted.append(spec["path"])
+
+    if auto_accepted:
+        print(f"auto-accepted ({len(auto_accepted)}):")
+        for path in auto_accepted:
+            print(f"  {path}")
+    if needs_review:
+        print(f"needs-review ({len(needs_review)}):")
+        for path in needs_review:
+            print(f"  {path}")
+    if not auto_accepted and not needs_review:
+        print(f"all reviews for {args.stage} already reconciled")
+    _emit_next_action(args.slug, f"auto-reconcile {args.stage}")
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    init_parser = subparsers.add_parser("init")
+    init_parser.add_argument("--slug", required=True)
+    init_parser.add_argument("--path", action="append", default=[])
+    init_parser.set_defaults(func=command_init)
+
+    doctor_parser = subparsers.add_parser("doctor")
+    doctor_parser.set_defaults(func=command_doctor)
+
+    status_parser = subparsers.add_parser("status")
+    status_parser.add_argument("--slug", required=True)
+    status_parser.set_defaults(func=command_status)
+
+exec
+/bin/zsh -lc "sed -n '240,340p' docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py" in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 0ms:
+    status_parser.set_defaults(func=command_status)
+
+    repair_parser = subparsers.add_parser("repair")
+    repair_parser.add_argument("--slug", required=True)
+    repair_parser.set_defaults(func=command_repair)
+
+    checkpoint_parser = subparsers.add_parser("checkpoint")
+    checkpoint_parser.add_argument("--slug", required=True)
+    checkpoint_parser.add_argument("--stage", required=True, choices=CHECKPOINT_STAGES)
+    checkpoint_parser.add_argument("--artifact")
+    checkpoint_parser.add_argument("--base-ref")
+    checkpoint_parser.add_argument("--context", action="append", default=[])
+    checkpoint_parser.add_argument("--path", action="append", default=[])
+    checkpoint_parser.add_argument("--extra-gemini-lens", action="append", default=[])
+    checkpoint_parser.add_argument("--sensitive", action="store_true")
+    checkpoint_parser.add_argument("--large-structural", action="store_true")
+    checkpoint_parser.add_argument("--performance-sensitive", action="store_true")
+    checkpoint_parser.add_argument("--use-existing-artifact", action="store_true")
+    checkpoint_parser.add_argument("--no-auto-context", action="store_true",
+                                   help="Disable automatic context file extraction from the artifact")
+    checkpoint_parser.add_argument("--allow-dirty-path", action="append", default=[])
+    checkpoint_parser.add_argument("--max-artifact-chars", type=int)
+    checkpoint_parser.add_argument("--max-context-chars", type=int)
+    checkpoint_parser.add_argument("--max-total-chars", type=int)
+    checkpoint_parser.add_argument("--gemini-timeout-seconds", type=int, default=120)
+    checkpoint_parser.add_argument("--gemini-retries", type=int, default=1)
+    checkpoint_parser.add_argument("--repair-timeout-seconds", type=int, default=300)
+    checkpoint_parser.add_argument("--allow-large-diff-rerun", action="store_true")
+    checkpoint_parser.add_argument("--fallback", action="store_true")
+    checkpoint_parser.add_argument("--json", action="store_true")
+    checkpoint_parser.add_argument("--fast", action="store_true",
+        help="Fast path: skip prerequisites, run 1 Gemini + 1 Codex review. Requires --stage diff.")
+    checkpoint_parser.set_defaults(func=command_checkpoint)
+
+    reconcile_parser = subparsers.add_parser("reconcile")
+    reconcile_parser.add_argument("--slug", required=True)
+    reconcile_parser.add_argument("--review", action="append", required=True)
+    reconcile_parser.add_argument("--status", required=True)
+    reconcile_parser.add_argument("--note", required=True)
+    reconcile_parser.set_defaults(func=command_reconcile)
+
+    auto_reconcile_parser = subparsers.add_parser(
+        "auto-reconcile",
+        help="Auto-accept reviews with no HIGH or MEDIUM findings; list remaining ones for human review",
+    )
+    auto_reconcile_parser.add_argument("--slug", required=True)
+    auto_reconcile_parser.add_argument(
+        "--stage",
+        required=True,
+        choices=["spec", "plan", "tasks", "diff", "closeout"],
+    )
+    auto_reconcile_parser.set_defaults(func=command_auto_reconcile)
+
+    block_parser = subparsers.add_parser("block")
+    block_parser.add_argument("--slug", required=True)
+    block_parser.add_argument("--reason")
+    block_parser.add_argument("--clear", action="store_true")
+    block_parser.set_defaults(func=command_block)
+
+    judge_parser = subparsers.add_parser("judge")
+    judge_parser.add_argument("--slug", required=True)
+    judge_parser.add_argument("--stage", required=True, choices=CHECKPOINT_STAGES)
+    judge_parser.add_argument("--json", action="store_true")
+    judge_parser.add_argument("--prompt-override", type=Path)
+    judge_parser.add_argument("--override-reason")
+    judge_parser.add_argument("--migration-bypass", action="store_true")
+    judge_parser.set_defaults(func=lambda args: run_judge(
+        args.slug,
+        args.stage,
+        json_output=args.json,
+        prompt_override=args.prompt_override,
+        override_reason=args.override_reason,
+        migration_bypass=args.migration_bypass,
+    ))
+
+    discover_parser = subparsers.add_parser("discover")
+    discover_parser.add_argument("--slug", required=True)
+    discover_parser.add_argument("--required", action="store_true")
+    discover_parser.add_argument("--count", type=int)
+    discover_parser.add_argument("--question")
+    discover_parser.add_argument("--recommendation")
+    discover_parser.add_argument("--rationale")
+    discover_parser.add_argument("--assumption", action="append", default=[])
+    discover_parser.add_argument("--summary")
+    discover_parser.add_argument("--complete", action="store_true")
+    discover_parser.add_argument("--unresolved", type=str,
+        help="Add an item to unresolved[]")
+    discover_parser.add_argument("--resolve", type=str,
+        help="Remove an item from unresolved[] by exact text match")
+    discover_parser.add_argument("--defer", type=str,
+        help="Mark an unresolved item as deferred by exact text match")
+    discover_parser.add_argument("--non-goal", type=str, dest="non_goal",
+        help="Add a string to non_goals[]")
+    discover_parser.add_argument("--acceptance-criteria", type=str, dest="acceptance_criteria",
+        help="Add a string to acceptance_criteria[]")
+    discover_parser.add_argument("--answer", nargs=2, metavar=("QUESTION", "ANSWER"),
+        help="Record answers[QUESTION] = ANSWER")
+    discover_parser.add_argument("--force-complete", action="store_true")
+    discover_parser.add_argument("--clear", action="store_true")
+    discover_parser.set_defaults(func=command_discover)
+
+
+codex
+## Findings
+- High: The spec asks the invariant self-check to print `⚠ state contradiction detected: ...` to stdout, but the runner already has JSON output modes for state-mutating commands. `checkpoint` supports `--json`, and `judge` also supports `--json`; `factory_cmd_checkpoint.py` prints JSON directly when that flag is set. If the new warning is emitted on stdout in those paths, it will corrupt machine-readable output and break callers. [CODE-CONFIRMED]
+- Medium: The proposed `unresolved_concerns.id` is not actually stable enough for durable tracking. The spec derives it from `stage|judge|reasoning`, but the current judge code stores raw model reasoning and already treats “same concern, different wording” as a similarity problem via embeddings. Minor paraphrases or formatting changes will split one real concern into multiple IDs, which defeats the addressed/deferred lifecycle. [CODE-CONFIRMED]
+- Medium: The invariant guardrail scope is incomplete. The spec only names `checkpoint`, `judge`, `reconcile`, and `auto-reconcile`, but the current runner has other state-mutating commands too, including `implement`, `deliver`, and `block`, which all update workflow state. Those paths can still create the same contradiction without the new self-check ever running. [CODE-CONFIRMED]
+- Medium: The broadened severity regex still misses a common markdown shape: `**HIGH**:` at the start of a line. The spec’s new bold-prefix pattern only matches when a space, colon, or `[` follows immediately after the severity word, not when the closing `**` does. That leaves an ordinary review style unrecognized and can still auto-accept a blocking review. [CODE-CONFIRMED]
+
+## Residual Risks
+- The spec still leaves the exact migration/defaulting behavior for the new `state.invariant_warnings` array and expanded concern fields implicit. Older `state.json` snapshots may need explicit upgrade logic to avoid inconsistent shapes.
+- The run-033 fixture will validate the specific judge-advance loop, but it may not cover mixed cases where multiple stages are dirty at once or where several unresolved concerns are carried forward together.
+- The spec does not say how the new warning output should behave in non-interactive runs beyond “print to stdout,” so even after the JSON issue is fixed, the exact human-vs-machine output split still needs a precise contract.
+tokens used
+59,406
