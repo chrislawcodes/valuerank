@@ -20,9 +20,12 @@ from typing import Callable, Iterable
 from factory_state import INVARIANT_WARNINGS_KEY, _INVARIANT_WARNINGS_CAP
 
 
-# Context flag toggled by run_factory.py when --json is in effect. When True,
-# invariant warnings go to stderr so they do not contaminate machine-readable
-# stdout. Default is False — stdout, so an operator sees the warning inline.
+# Warnings always emit to stderr. Gemini requirements-adversarial round 2
+# flagged conditional stdout/stderr routing as a risk — automated tools
+# parsing stdout would miss contradiction warnings. Unix convention is
+# warnings → stderr; terminals show both streams so interactive operators
+# still see it. JSON_MODE is preserved for back-compat and tests but has
+# no behavioral effect on the emit target.
 JSON_MODE: bool = False
 
 
@@ -31,7 +34,7 @@ _CHECKPOINT_STAGES: tuple[str, ...] = ("spec", "plan", "tasks", "diff", "closeou
 
 
 def _emit_target():
-    return sys.stderr if JSON_MODE else sys.stdout
+    return sys.stderr
 
 
 def _append_warning(state: dict, entry: dict) -> None:

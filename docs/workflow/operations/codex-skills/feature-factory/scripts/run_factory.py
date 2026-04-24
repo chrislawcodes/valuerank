@@ -100,22 +100,39 @@ from workflow_utils import resolve_stored_path  # noqa: E402
 
 
 # Commands that mutate workflow state — wrap them with the invariant post-check.
+# `repair` and `closeout` both call into `command_checkpoint` and therefore
+# mutate state; they were flagged missing by the spec round-2 edge-cases review.
 _STATE_MUTATING_COMMANDS: frozenset[str] = frozenset(
-    {"checkpoint", "judge", "reconcile", "auto-reconcile", "implement", "deliver", "block"}
+    {
+        "checkpoint",
+        "judge",
+        "reconcile",
+        "auto-reconcile",
+        "implement",
+        "deliver",
+        "block",
+        "repair",
+        "closeout",
+    }
 )
 
 
 def _run_post_invariants(slug: str | None, command_name: str) -> None:
     """Run invariant checks after a state-mutating command.
 
+    Uses the same ``recon_ok`` signal as ``factory_cmd_status`` / the real
+    checkpoint decision path, so the contradiction detector evaluates the
+    user-visible next-action string — not a hypothetical happy-path one.
     Errors are swallowed — the invariant helper must never abort the caller.
     """
     if not slug:
         return
     try:
+        from factory_stages import reconciliation_state  # local import — avoid cycles
         state = load_workflow_state(slug)
         stages = {name: stage_manifest_state(slug, name) for name in CHECKPOINT_STAGES}
-        recommended = recommended_next_action(slug, state, stages, True)
+        recon_ok, _ = reconciliation_state(slug)
+        recommended = recommended_next_action(slug, state, stages, recon_ok)
         appended = run_invariant_checks(state, command_name, recommended)
         if appended:
             save_workflow_state(slug, state)

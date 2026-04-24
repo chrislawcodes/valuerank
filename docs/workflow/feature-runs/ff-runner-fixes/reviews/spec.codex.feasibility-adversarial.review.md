@@ -3,15 +3,15 @@ reviewer: "codex"
 lens: "feasibility-adversarial"
 stage: "spec"
 artifact_path: "docs/workflow/feature-runs/ff-runner-fixes/spec.md"
-artifact_sha256: "a82f14b19712743bcdce071c4b6ca8eab51000fe4a7304d2fc203dfb82676f6f"
+artifact_sha256: "ff794bfed6a87cc28adc461c386aabe6163b4aaaf74d4b4dd84a740555925377"
 repo_root: "."
-git_head_sha: "3938cb4ad255ede0fc735455a7d089ed8e075bed"
-git_base_ref: "origin/main"
-git_base_sha: "424c0605a8158acfe0b3912840a6c5b2da057c84"
+git_head_sha: "6f5ed232c83bbd0f51ac8419ac6fb9688b8b8fad"
+git_base_ref: "origin/claude/friendly-aryabhata-9efbf7"
+git_base_sha: "6f5ed232c83bbd0f51ac8419ac6fb9688b8b8fad"
 generation_method: "codex-runner"
 resolution_status: "accepted"
-resolution_note: "Addressed in spec: FR-001a (judge.py reorder) and FR-005a (PR body filter). All findings incorporated into updated spec.md."
-raw_output_path: ""
+resolution_note: "Round-2 (fresh run) findings ALL ADDRESSED: (HIGH) factory_pr_body._concern_is_resolved no longer treats addressed_by as resolution — uses state-bearing fields (addressed_at/deferred_reason/dismissed_reason) to match FR-004 gate. (MEDIUM) Added repair and closeout to _STATE_MUTATING_COMMANDS in run_factory.py. (MEDIUM) Open-concerns block in factory_pr_body now prints the id field so operators can reference it for --address/--defer/--dismiss."
+raw_output_path: "docs/workflow/feature-runs/ff-runner-fixes/reviews/spec.codex.feasibility-adversarial.review.md.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
 coverage_status: "full"
@@ -22,15 +22,22 @@ coverage_note: ""
 
 ## Findings
 
-- HIGH [CODE-CONFIRMED]: The spec fixes the decision tree, but it does not fix the call site that actually persists and emits the next action. In `factory_cmd_judge.py:880`, `next_action = recommended_next_action(...)` is computed before `stage_state["judge_next_action"] = "advance"` is written in both advance branches. That means the judge command can still save a stale `last_action_result.next` and print the wrong banner on the same run, even if `factory_next_action.py:76` is updated.
+- HIGH [CODE-CONFIRMED]: FR-004 and FR-005a split the meaning of “resolved” in a way that will let the UI and the checkpoint gate disagree. The spec makes `addressed_at` the checkpoint gate, but the existing rendering logic already treats `addressed_by` as enough to move a concern into the resolved block, and it prints `addressed_by` as the resolution detail. That means a concern can look resolved in the PR body while still blocking the next checkpoint if only the evidence string is set. See [factory_pr_body.py](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_pr_body.py#L32-L42) and [factory_pr_body.py](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_pr_body.py#L117-L137), plus the concern schema in [factory_cmd_judge.py](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py#L181-L194).
 
-- MEDIUM [CODE-CONFIRMED]: The new concern lifecycle is only defined in state, not in the human-facing rendering path. `factory_pr_body.py:32` renders every object in `unresolved_concerns` as an unresolved judge concern, and the spec never says to filter out entries once `addressed_at` or `deferred_reason` is set. As written, addressed or deferred concerns will still appear in the judge panel block as if they were open.
+- MEDIUM [CODE-CONFIRMED]: FR-009’s invariant hook list is incomplete. The spec names `checkpoint`, `judge`, `reconcile`, `auto-reconcile`, `implement`, `deliver`, and `block`, but the runner also exposes `repair` and `closeout`, and both mutate state through checkpoint calls. Because the invariant pass in `run_factory` only runs for command names in `_STATE_MUTATING_COMMANDS`, those flows will bypass the new contradiction warning entirely. See [run_factory.py](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py#L102-L105), [run_factory.py](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py#L268-L323), [factory_cmd_status.py](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_status.py#L238-L300), and [factory_cmd_deliver.py](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py#L473-L589).
+
+- MEDIUM [CODE-CONFIRMED]: The new concern-ID workflow is not operable from the human-facing output the spec updates. The unresolved concerns block in the PR body shows stage, judge, confidence, reasoning, and round history, but it does not print the `id` that the new `--address`, `--defer`, and `--dismiss` flags need. Only the resolved-concerns block includes the ID. That forces operators to open `state.json` just to recover the identifier. See [factory_pr_body.py](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_pr_body.py#L64-L73) and [factory_pr_body.py](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_pr_body.py#L93-L137).
 
 ## Residual Risks
 
-- The regex expansion is still bounded to the four new shapes listed in the spec. If reviewers start using a different structured format later, `auto-reconcile` can regress again unless the test matrix is updated.
-- The concern-resolution flow will still depend on a clear convention for how operators see closed concerns versus open ones. If the PR-body block is left unchanged, the workflow will work but remain hard to audit by eye.
+- Older workflow snapshots still need read-time normalization for missing concern fields and invariant warnings. If any reader bypasses the shared state loader, it can still mis-handle legacy `state.json` shapes.
+- The severity regex fix remains format-sensitive. Any new reviewer style that does not match the anchored patterns will need an explicit test and regex update, or auto-accept can regress again.
+
+## Runner Stats
+- total_input=0
+- total_output=0
+- total_tokens=0
 
 ## Resolution
 - status: accepted
-- note: Addressed in spec: FR-001a (judge.py reorder) and FR-005a (PR body filter). All findings incorporated into updated spec.md.
+- note: Round-2 (fresh run) findings ALL ADDRESSED: (HIGH) factory_pr_body._concern_is_resolved no longer treats addressed_by as resolution — uses state-bearing fields (addressed_at/deferred_reason/dismissed_reason) to match FR-004 gate. (MEDIUM) Added repair and closeout to _STATE_MUTATING_COMMANDS in run_factory.py. (MEDIUM) Open-concerns block in factory_pr_body now prints the id field so operators can reference it for --address/--defer/--dismiss.

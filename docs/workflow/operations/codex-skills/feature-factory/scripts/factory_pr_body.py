@@ -32,13 +32,18 @@ def _excerpt(text: object, limit: int = 120) -> str:
 def _concern_is_resolved(concern: dict) -> bool:
     """FR-005a — a concern is resolved once addressed, deferred, or dismissed.
 
+    Resolution requires the STATE-BEARING field to be set (``addressed_at``,
+    ``deferred_reason``, or ``dismissed_reason``). ``addressed_by`` alone is
+    evidence, not resolution — a concern with only evidence would still
+    block checkpoint per FR-004, so it must render as open in the PR body.
+
     Missing fields are treated as None (unresolved). Older concerns written
     before FR-003 simply never populate these fields and keep rendering as
     open, which matches prior behavior.
     """
     return any(
         concern.get(field) is not None
-        for field in ("addressed_at", "addressed_by", "deferred_reason", "dismissed_reason")
+        for field in ("addressed_at", "deferred_reason", "dismissed_reason")
     )
 
 
@@ -96,14 +101,20 @@ def render_judge_panel_block(state: dict) -> str:
         confidence = concern.get("confidence", "")
         reasoning = str(concern.get("reasoning", "") or "").strip()
         round_raised = concern.get("round_raised", concern.get("round", ""))
+        concern_id = str(concern.get("id", "") or "")
         also_raised = concern.get("also_raised_in_round", concern.get("persisted_across_rounds", []))
         if not isinstance(also_raised, list):
             also_raised = [also_raised] if also_raised not in ("", None) else []
         heading_parts = [part for part in (stage, judge) if part]
         heading = " / ".join(heading_parts) if heading_parts else "Concern"
-        lines.extend(
+        concern_lines = [f"### {heading}"]
+        if concern_id:
+            # FR-005a — print id in the open block so operators can use it
+            # with `checkpoint --address/--defer/--dismiss <id>` without
+            # having to read state.json to recover it.
+            concern_lines.append(f"- id: `{concern_id}`")
+        concern_lines.extend(
             [
-                f"### {heading}",
                 f"- stage: `{stage}`",
                 f"- judge: `{judge}`",
                 f"- confidence: `{confidence}`",
@@ -113,6 +124,7 @@ def render_judge_panel_block(state: dict) -> str:
                 "",
             ]
         )
+        lines.extend(concern_lines)
 
     if resolved_concerns:
         lines.append("## Resolved Concerns")

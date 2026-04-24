@@ -3,14 +3,14 @@ reviewer: "gemini"
 lens: "requirements-adversarial"
 stage: "spec"
 artifact_path: "docs/workflow/feature-runs/ff-runner-fixes/spec.md"
-artifact_sha256: "4ab997afabde09d73e0680a192ec0043e351c24cf51bb3a5166a324de5aba32a"
+artifact_sha256: "a82f14b19712743bcdce071c4b6ca8eab51000fe4a7304d2fc203dfb82676f6f"
 repo_root: "."
-git_head_sha: "3938cb4ad255ede0fc735455a7d089ed8e075bed"
-git_base_ref: "origin/main"
-git_base_sha: "424c0605a8158acfe0b3912840a6c5b2da057c84"
+git_head_sha: "6f5ed232c83bbd0f51ac8419ac6fb9688b8b8fad"
+git_base_ref: "origin/claude/friendly-aryabhata-9efbf7"
+git_base_sha: "6f5ed232c83bbd0f51ac8419ac6fb9688b8b8fad"
 generation_method: "gemini-cli"
 resolution_status: "accepted"
-resolution_note: "Addressed: dismiss action (FR-003/004); regex broadened (FR-006); reseal reason field (FR-002); invariant broadened (FR-010)."
+resolution_note: "Round-2 MEDIUM findings: #1 (self-attestation trust) — accepted as known limitation since concern-lifecycle CLI is deferred; truth verification stays out of scope. #2 (post-judge code injection) — accepted; manifest reseal annotation preserves old/new SHA for audit; a strict-mode 'require re-review on drift' is follow-up. #3 (inconsistent stderr/stdout) — ADDRESSED: FR-009 revised to always-stderr. #4 (concern ID brittleness) — accepted limitation, tracked as Risk R5."
 raw_output_path: "docs/workflow/feature-runs/ff-runner-fixes/reviews/spec.gemini.requirements-adversarial.review.md.json"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,47 +22,43 @@ coverage_note: ""
 
 ## Findings
 
-### 1. Mandatory Concern-Tracking Introduces Significant Scope Creep and Workflow Friction
+### 1. Trusting AI Self-Attestation for Addressed Concerns
+
+**Severity**: HIGH
+**Description**: The proposed workflow for managing `unresolved_concerns` relies on the orchestrating AI to be truthful without verification. Functional Requirement FR-004 introduces `checkpoint --address <concern-id> --evidence <text>`, but the corresponding edge case analysis states, "Truth verification is out of scope for this feature." This allows an orchestrator to mark a critical finding as addressed with a false or meaningless evidence string (e.g., "fixed" or "done"), which would be accepted by the system. This completely bypasses the new verification mechanism and undermines the integrity of the judge-and-repair loop.
+**Evidence**: `[UNVERIFIED]` — This is a logical flaw in the specification itself. The required code for verification does not exist yet, and the plan is to omit it. Without code to check, this finding is based on the spec's explicit non-goal.
+
+### 2. Post-Judge Code Injection without Review
 
 **Severity**: MEDIUM
-**Finding**: Functional Requirement `FR-004` transforms a bug fix into a new, complex feature by introducing a mandatory "unresolved concerns" verification step at every subsequent `checkpoint`. This is a significant expansion of scope beyond the stated problem of the decision tree ignoring a judge's verdict. The new workflow forces an orchestrator to explicitly address or defer every single concern from a prior stage, creating a new blocking point. Crucially, the proposed API (`checkpoint --address` and `checkpoint --defer`) omits a vital `dismiss` or `invalidate` action. This forces semantically incorrect states where an invalid finding must be "deferred" rather than removed, polluting the `unresolved_concerns` list and complicating future audits.
+**Description**: The process for handling artifact drift after a judge's `advance` vote (FR-002) creates an un-audited loophole. When the manifest is resealed, the `reason` for the change defaults to `"post-judge-edits-only"`. This allows arbitrary, un-reviewed code changes to be committed alongside the judge-approved version. The spec's mitigation (Risk R2) is that a human *can* manually diff the SHAs later, but this is a weak procedural control. An orchestrator could introduce defects or unwanted changes that are not subject to the same review as the original artifact.
+**Evidence**: `[UNVERIFIED]` — This is a procedural weakness defined in the spec. The relevant code does not exist.
 
-**Evidence**: `[UNVERIFIED]` — This finding is based on the logical requirements laid out in `spec.md` (`FR-003`, `FR-004`, and US1 Acceptance Scenario 3). The described behavior represents a fundamental change to the workflow logic, regardless of the current implementation which was not provided.
-
-### 2. Proposed Severity-Detection Regex Is Still Brittle and Incomplete
+### 3. Inconsistent Warning Stream for Automated Tooling
 
 **Severity**: MEDIUM
-**Finding**: The proposed regular expression in `FR-006` for detecting actionable findings, while an improvement, remains brittle and fails to cover common Markdown variations. For example, the pattern `**(HIGH|CRITICAL|MEDIUM)[\s:\[]` is intended to match a bolded severity prefix. However, it will fail to match the extremely common pattern `**HIGH**: A finding.` because the character class `[\s:\[]` does not account for the closing `*` of the bold tag. The reliance on increasingly complex regex for what is fundamentally semantic extraction is a fragile strategy.
+**Description**: Functional Requirement FR-009 specifies that the new invariant self-check will emit warnings to `stderr` when `--json` is active but to `stdout` otherwise. This inconsistency is a risk for both automated and human operators. A system parsing JSON from `stdout` might completely miss a critical state contradiction warning sent to `stderr`. This complicates parsing and makes it more likely that important signals will be missed. A consistent policy (e.g., warnings are always sent to `stderr`) is more robust.
+**Evidence**: `[UNVERIFIED]` — This finding is based on the behavior described in the spec.
 
-**Evidence**: `[UNVERIFIED]` — This finding is based on analyzing the regular expression described in `spec.md` (`FR-006`) against standard Markdown syntax. The implementation file `factory_review_specs.py` was not provided for confirmation.
-
-### 3. Manifest Resealing Obscures Traceability of Unreviewed Changes
-
-**Severity**: LOW
-**Finding**: The proposed solution for handling manifest drift (`FR-002`) is to lazily reseal the manifest when `advance` is triggered. While this correctly moves the process forward and records that drift occurred, it implicitly blesses changes made *after* the judge panel's review was completed. The `annotations[]` entry records the `old_sha` and `new_sha`, but the semantic link to *why* the changes were made is lost. This weakens the audit trail, as code that was not subject to the formal judge verdict is advanced.
-
-**Evidence**: `[UNVERIFIED]` — This finding is based on the logic described in `spec.md` (`FR-002` and US1 Acceptance Scenario 2). It's a critique of the specified workflow logic, for which the code is not required to validate the weakness.
-
-### 4. Invariant Check Is Too Specific and Reactive
+### 4. Brittle Concern ID Generation Risks Dropping Findings
 
 **Severity**: LOW
-**Finding**: The invariant self-check proposed in `FR-010` is narrowly defined to catch the specific symptom of the bug in run-033 (`judge_next_action == "advance"` AND `recommended_next_action == "repair_<same stage>_checkpoint"`). This is a reactive fix. A more robust, proactive invariant would be based on the underlying principle: `IF judge_next_action == "advance" THEN recommended_next_action MUST NOT be a repair action for the current stage`. By coding to the specific symptom, there is a risk that other future states could lead to a similar, but not identical, contradiction that would not be caught.
-
-**Evidence**: `[UNVERIFIED]` — This is a logical assessment of the requirement defined in `spec.md` (`FR-010`). It critiques the specified logic, not its implementation.
+**Description**: The mechanism for generating a stable `id` for unresolved concerns (FR-003) is based on a hash of the first 48 characters of the reasoning. As noted in Risk R5, this is not stable if a judge significantly rephrases a concern for clarity between review rounds. This could cause a single, persistent issue to be tracked with two different IDs, allowing the original to be dropped without being addressed. While the spec accepts this limitation, it represents a known fragility in a core part of the new workflow.
+**Evidence**: `[UNVERIFIED]` — This is a design weakness described in the spec.
 
 ## Residual Risks
 
--   **Risk R1 (from spec, amplified)**: The broadened regex in Fix 2 is more complex, not just broader. This increases the risk of both false positives and false negatives from subtle formatting changes in reviewer output, making the `auto-reconcile` step appear unreliable. The test matrix described in `FR-008` must be exceptionally thorough to mitigate this.
--   **Risk R3 (from spec, amplified)**: The concern-verification system in `FR-004` is a major new source of friction. The lack of a `dismiss` capability for invalid concerns (as noted in Findings) means the `unresolved_concerns` list will become polluted with items that are perpetually deferred. This could lead to orchestrators habitually deferring all concerns just to move forward, defeating the purpose of the check.
--   **New Risk**: The three fixes are specified as independent, but they create a new complex interaction. An orchestrator could get blocked by the new concern-tracking (`FR-004`), manually edit the artifact to address it (causing SHA drift), and rely on the manifest-reseal (`FR-002`) to advance. This sequence of operations, while technically functional per the spec, completely bypasses the intended review loop and hides un-judged changes within a "drift" annotation, undermining the integrity of the workflow.
+- **Procedural Over-reliance**: Multiple mitigations for identified risks rely on procedural adherence by the orchestrator or a human operator (e.g., manually diffing SHAs for drift, expecting PR reviewers to notice misuse of the `dismiss` command). The system's safety increasingly depends on agents following rules rather than on technical enforcement, which is inherently less reliable.
+
+- **Unverified Code Context**: The specification refers to numerous scripts and file paths (e.g., `factory_next_action.py`, `factory_review_specs.py`) that are not present in the provided file listing. This review is therefore based solely on the internal logic and consistency of the spec document itself. All findings are tagged `[UNVERIFIED]` because their relationship to the actual codebase cannot be confirmed or denied.
 
 ## Token Stats
 
-- total_input=20982
-- total_output=1152
-- total_tokens=24927
-- `gemini-2.5-pro`: input=20982, output=1152, total=24927
+- total_input=20834
+- total_output=861
+- total_tokens=24629
+- `gemini-2.5-pro`: input=20834, output=861, total=24629
 
 ## Resolution
 - status: accepted
-- note: Addressed: dismiss action (FR-003/004); regex broadened (FR-006); reseal reason field (FR-002); invariant broadened (FR-010).
+- note: Round-2 MEDIUM findings: #1 (self-attestation trust) — accepted as known limitation since concern-lifecycle CLI is deferred; truth verification stays out of scope. #2 (post-judge code injection) — accepted; manifest reseal annotation preserves old/new SHA for audit; a strict-mode 'require re-review on drift' is follow-up. #3 (inconsistent stderr/stdout) — ADDRESSED: FR-009 revised to always-stderr. #4 (concern ID brittleness) — accepted limitation, tracked as Risk R5.

@@ -2,9 +2,9 @@
 
 ## Review Reconciliation
 
-- review: reviews/spec.codex.feasibility-adversarial.review.md | status: accepted | note: Addressed in spec: FR-001a (judge.py reorder) and FR-005a (PR body filter). All findings incorporated into updated spec.md.
-- review: reviews/spec.gemini.requirements-adversarial.review.md | status: accepted | note: Addressed: dismiss action (FR-003/004); regex broadened (FR-006); reseal reason field (FR-002); invariant broadened (FR-010).
-- review: reviews/spec.codex.edge-cases-adversarial.review.md | status: accepted | note: Addressed: stdout/stderr split for --json (FR-009); concern-id stability acknowledged as Risk R5; invariant coverage to implement/deliver/block (FR-009); state defaulting (FR-011a); regex broadened (FR-006).
+- review: reviews/spec.codex.feasibility-adversarial.review.md | status: accepted | note: Round-2 (fresh run) findings ALL ADDRESSED: (HIGH) factory_pr_body._concern_is_resolved no longer treats addressed_by as resolution — uses state-bearing fields (addressed_at/deferred_reason/dismissed_reason) to match FR-004 gate. (MEDIUM) Added repair and closeout to _STATE_MUTATING_COMMANDS in run_factory.py. (MEDIUM) Open-concerns block in factory_pr_body now prints the id field so operators can reference it for --address/--defer/--dismiss.
+- review: reviews/spec.gemini.requirements-adversarial.review.md | status: accepted | note: Round-2 MEDIUM findings: #1 (self-attestation trust) — accepted as known limitation since concern-lifecycle CLI is deferred; truth verification stays out of scope. #2 (post-judge code injection) — accepted; manifest reseal annotation preserves old/new SHA for audit; a strict-mode 'require re-review on drift' is follow-up. #3 (inconsistent stderr/stdout) — ADDRESSED: FR-009 revised to always-stderr. #4 (concern ID brittleness) — accepted limitation, tracked as Risk R5.
+- review: reviews/spec.codex.edge-cases-adversarial.review.md | status: accepted | note: Round-2 (fresh) findings ALL ADDRESSED: (M#1) repair/closeout added to _STATE_MUTATING_COMMANDS. (M#2) _run_post_invariants now uses reconciliation_state() for recon_ok — FR-011b. (M#3) _concern_is_resolved aligned with FR-004 gate (state-bearing fields only). (M#4) PR body open-concerns block prints id.
 
 ## Architecture
 

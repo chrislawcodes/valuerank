@@ -3,14 +3,14 @@ reviewer: "codex"
 lens: "edge-cases-adversarial"
 stage: "spec"
 artifact_path: "docs/workflow/feature-runs/ff-runner-fixes/spec.md"
-artifact_sha256: "4ab997afabde09d73e0680a192ec0043e351c24cf51bb3a5166a324de5aba32a"
+artifact_sha256: "ff794bfed6a87cc28adc461c386aabe6163b4aaaf74d4b4dd84a740555925377"
 repo_root: "."
-git_head_sha: "3938cb4ad255ede0fc735455a7d089ed8e075bed"
-git_base_ref: "origin/main"
-git_base_sha: "424c0605a8158acfe0b3912840a6c5b2da057c84"
+git_head_sha: "6f5ed232c83bbd0f51ac8419ac6fb9688b8b8fad"
+git_base_ref: "origin/claude/friendly-aryabhata-9efbf7"
+git_base_sha: "6f5ed232c83bbd0f51ac8419ac6fb9688b8b8fad"
 generation_method: "codex-runner"
 resolution_status: "accepted"
-resolution_note: "Addressed: stdout/stderr split for --json (FR-009); concern-id stability acknowledged as Risk R5; invariant coverage to implement/deliver/block (FR-009); state defaulting (FR-011a); regex broadened (FR-006)."
+resolution_note: "Round-2 (fresh) findings ALL ADDRESSED: (M#1) repair/closeout added to _STATE_MUTATING_COMMANDS. (M#2) _run_post_invariants now uses reconciliation_state() for recon_ok — FR-011b. (M#3) _concern_is_resolved aligned with FR-004 gate (state-bearing fields only). (M#4) PR body open-concerns block prints id."
 raw_output_path: "docs/workflow/feature-runs/ff-runner-fixes/reviews/spec.codex.edge-cases-adversarial.review.md.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,16 +22,18 @@ coverage_note: ""
 
 ## Findings
 
-- High: The spec asks the invariant self-check to print `⚠ state contradiction detected: ...` to stdout, but the runner already has JSON output modes for state-mutating commands. `checkpoint` supports `--json`, and `judge` also supports `--json`; `factory_cmd_checkpoint.py` prints JSON directly when that flag is set. If the new warning is emitted on stdout in those paths, it will corrupt machine-readable output and break callers. [CODE-CONFIRMED]
-- Medium: The proposed `unresolved_concerns.id` is not actually stable enough for durable tracking. The spec derives it from `stage|judge|reasoning`, but the current judge code stores raw model reasoning and already treats “same concern, different wording” as a similarity problem via embeddings. Minor paraphrases or formatting changes will split one real concern into multiple IDs, which defeats the addressed/deferred lifecycle. [CODE-CONFIRMED]
-- Medium: The invariant guardrail scope is incomplete. The spec only names `checkpoint`, `judge`, `reconcile`, and `auto-reconcile`, but the current runner has other state-mutating commands too, including `implement`, `deliver`, and `block`, which all update workflow state. Those paths can still create the same contradiction without the new self-check ever running. [CODE-CONFIRMED]
-- Medium: The broadened severity regex still misses a common markdown shape: `**HIGH**:` at the start of a line. The spec’s new bold-prefix pattern only matches when a space, colon, or `[` follows immediately after the severity word, not when the closing `**` does. That leaves an ordinary review style unrecognized and can still auto-accept a blocking review. [CODE-CONFIRMED]
+- **Medium [CODE-CONFIRMED]**: FR-009 does not cover all state-mutating entry points. `run_factory.py` only post-checks `{"checkpoint", "judge", "reconcile", "auto-reconcile", "implement", "deliver", "block"}`, but `repair` and `closeout` are also user-facing commands and both mutate workflow state by calling `command_checkpoint()`. That leaves the new contradiction guard able to miss the same bad state on two important paths. [run_factory.py](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py#L102) [factory_cmd_status.py](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_status.py#L238) [factory_cmd_deliver.py](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py#L473)
+
+- **Medium [CODE-CONFIRMED]**: The invariant check is being evaluated against the wrong decision context. `_run_post_invariants()` hardcodes `recommended_next_action(..., True)`, while the real checkpoint path computes the next action from the actual reconciliation state. If reconciliation is blocked, the warning can be computed against a branch the user would never see, which makes the contradiction detector unreliable in edge states. [run_factory.py](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py#L116) [factory_cmd_checkpoint.py](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py#L146)
+
+- **Medium [CODE-CONFIRMED]**: FR-005a splits the meaning of “resolved” from the code that already exists. The spec’s unresolved filter only excludes concerns with `addressed_at`, `deferred_reason`, or `dismissed_reason`, but `factory_pr_body.py` already treats `addressed_by` as enough to move a concern into the resolved block and prints that field as the resolution detail. A concern with only evidence attached will therefore be classified one way by the UI and another way by the spec’s filter. [factory_pr_body.py](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_pr_body.py#L32) [factory_pr_body.py](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_pr_body.py#L123)
+
+- **Medium [CODE-CONFIRMED]**: The new concern lifecycle is not actually operable from the open-concerns view the spec preserves. `render_judge_panel_block()` prints stage, judge, confidence, reasoning, and round history for unresolved concerns, but it does not print the `id` that the proposed `--address`, `--defer`, and `--dismiss` flows need. Only the resolved-concerns block includes the ID, so operators still have to inspect `state.json` to recover it. [factory_pr_body.py](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_pr_body.py#L93) [factory_pr_body.py](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_pr_body.py#L117)
 
 ## Residual Risks
 
-- The spec still leaves the exact migration/defaulting behavior for the new `state.invariant_warnings` array and expanded concern fields implicit. Older `state.json` snapshots may need explicit upgrade logic to avoid inconsistent shapes.
-- The run-033 fixture will validate the specific judge-advance loop, but it may not cover mixed cases where multiple stages are dirty at once or where several unresolved concerns are carried forward together.
-- The spec does not say how the new warning output should behave in non-interactive runs beyond “print to stdout,” so even after the JSON issue is fixed, the exact human-vs-machine output split still needs a precise contract.
+- Legacy `state.json` readers that bypass the shared loader can still miss the new defaulting behavior for `invariant_warnings` and concern fields. The spec assumes read-time normalization, but that only helps if every path actually uses the shared accessors.
+- The regex fix is still format-bound. Any reviewer style that falls outside the anchored markdown shapes in FR-006 will remain invisible to `auto-reconcile` until someone adds a new pattern and a regression test.
 
 ## Runner Stats
 - total_input=0
@@ -40,4 +42,4 @@ coverage_note: ""
 
 ## Resolution
 - status: accepted
-- note: Addressed: stdout/stderr split for --json (FR-009); concern-id stability acknowledged as Risk R5; invariant coverage to implement/deliver/block (FR-009); state defaulting (FR-011a); regex broadened (FR-006).
+- note: Round-2 (fresh) findings ALL ADDRESSED: (M#1) repair/closeout added to _STATE_MUTATING_COMMANDS. (M#2) _run_post_invariants now uses reconciliation_state() for recon_ok — FR-011b. (M#3) _concern_is_resolved aligned with FR-004 gate (state-bearing fields only). (M#4) PR body open-concerns block prints id.

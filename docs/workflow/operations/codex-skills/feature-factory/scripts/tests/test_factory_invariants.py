@@ -40,7 +40,7 @@ class RunInvariantChecksTests(unittest.TestCase):
         sys.stdout = self._stdout
         sys.stderr = self._stderr
 
-    def test_contradiction_appends_warning_and_prints_stdout(self) -> None:
+    def test_contradiction_appends_warning_and_prints_to_stderr(self) -> None:
         state = _state_with_advance("spec")
         appended = FI.run_invariant_checks(state, "auto-reconcile", "repair_spec_checkpoint")
 
@@ -49,10 +49,12 @@ class RunInvariantChecksTests(unittest.TestCase):
         self.assertEqual(appended[0]["command"], "auto-reconcile")
         self.assertIn("judge_next_action=advance", appended[0]["detail"])
         self.assertEqual(len(state["invariant_warnings"]), 1)
-        self.assertIn("state contradiction detected", sys.stdout.getvalue())
-        self.assertEqual(sys.stderr.getvalue(), "")
+        # Warnings always go to stderr (Gemini round-2 finding: avoid conditional
+        # stdout/stderr routing that can hide warnings from automated parsers).
+        self.assertEqual(sys.stdout.getvalue(), "")
+        self.assertIn("state contradiction detected", sys.stderr.getvalue())
 
-    def test_json_mode_routes_warning_to_stderr(self) -> None:
+    def test_json_mode_still_routes_to_stderr(self) -> None:
         state = _state_with_advance("spec")
         FI.set_json_mode(True)
         try:
