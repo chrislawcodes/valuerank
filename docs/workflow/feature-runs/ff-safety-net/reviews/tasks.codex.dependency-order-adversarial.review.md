@@ -3,14 +3,14 @@ reviewer: "codex"
 lens: "dependency-order-adversarial"
 stage: "tasks"
 artifact_path: "docs/workflow/feature-runs/ff-safety-net/tasks.md"
-artifact_sha256: "d2a0b32ba24a43fed1299cdc5ee764e79186d87c51270085ebeb2863df90ca6b"
+artifact_sha256: "93dc04aa6c09ac0cac5368a425881a56529d2cbe07eea6e033b526749bb38629"
 repo_root: "."
 git_head_sha: "2b6558ee1c419e962fa35df03d175ab68715997a"
 git_base_ref: "origin/main"
 git_base_sha: "c07a4283ecdebffa57e8a2cccfa08c23e0f76a36"
 generation_method: "codex-runner"
-resolution_status: "open"
-resolution_note: ""
+resolution_status: "accepted"
+resolution_note: "Addressed in tasks round-1 reconcile (see plan.md for rollup)."
 raw_output_path: "docs/workflow/feature-runs/ff-safety-net/reviews/tasks.codex.dependency-order-adversarial.review.md.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -39,5 +39,5 @@ coverage_note: ""
 - total_tokens=0
 
 ## Resolution
-- status: open
-- note: 
+- status: accepted
+- note: Addressed in tasks round-1 reconcile (see plan.md for rollup).

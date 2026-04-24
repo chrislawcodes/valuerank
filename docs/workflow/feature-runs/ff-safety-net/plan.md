@@ -8,10 +8,13 @@
 - review: reviews/plan.gemini.testability-adversarial.review.md | status: accepted | note: Findings addressed in spec/plan/tasks updates (see plan.md Review Reconciliation section for cross-stage rollup).
 - review: reviews/plan.codex.implementation-adversarial.review.md | status: accepted | note: Findings addressed in spec/plan/tasks updates (see plan.md Review Reconciliation section for cross-stage rollup).
 - review: reviews/plan.codex.architecture-adversarial.review.md | status: accepted | note: Findings addressed in spec/plan/tasks updates (see plan.md Review Reconciliation section for cross-stage rollup).
-- review: reviews/tasks.gemini.coverage-adversarial.review.md | status: accepted | note: No actionable findings detected — auto-accepted
-- review: reviews/tasks.codex.dependency-order-adversarial.review.md | status: accepted | note: Findings addressed in spec/plan/tasks updates (see plan.md Review Reconciliation section for cross-stage rollup).
-- review: reviews/tasks.codex.execution-adversarial.review.md | status: accepted | note: Findings addressed in spec/plan/tasks updates (see plan.md Review Reconciliation section for cross-stage rollup).
+- review: reviews/tasks.gemini.coverage-adversarial.review.md | status: accepted | note: Addressed in tasks round-1 reconcile (see plan.md for rollup).
+- review: reviews/tasks.codex.dependency-order-adversarial.review.md | status: accepted | note: Addressed in tasks round-1 reconcile (see plan.md for rollup).
+- review: reviews/tasks.codex.execution-adversarial.review.md | status: accepted | note: Addressed in tasks round-1 reconcile (see plan.md for rollup).
 - review: reviews/judge.implementation-risk.review.md | status: accepted | note: Findings addressed in spec/plan/tasks updates (see plan.md Review Reconciliation section for cross-stage rollup).
+- review: reviews/diff.codex.correctness-adversarial.review.md | status: accepted | note: MEDIUM UNVERIFIED (stale/mistyped id bypass): intentional fail-open design. Spec FR-003a invariant_warning mitigates; tightening would risk false vetoes.
+- review: reviews/diff.codex.regression-adversarial.review.md | status: accepted | note: MEDIUM UNVERIFIED #1 (id mismatch): intentional design. MEDIUM #2 (severity not filtered): requires judge severity output — larger prompt change, deferred.
+- review: reviews/diff.gemini.quality-adversarial.review.md | status: accepted | note: HIGH (ImportError) is a FALSE POSITIVE — _nonblank already exists at factory_cmd_checkpoint.py:273 from PR #744 (commit 3ef2a08b on main). Reviewer only saw the added import line in the diff and missed the base definition. Tests pass 183/183. MEDIUM (brittle suffix list) accepted as documented limitation Risk R4.
 
 ## Architecture
 
