@@ -438,9 +438,19 @@ def _run_validation_only(slug: str, stage: str) -> int:
     for p, _old, _new in needs_update:
         try:
             content = p.read_text(encoding="utf-8")
-            new_content = frontmatter_re.sub(
+            new_content, n_replaced = frontmatter_re.subn(
                 lambda m: f'{m.group(1)}"{current_sha}"', content, count=1
             )
+            # Adversarial-review Codex MEDIUM #1 fix: if the regex didn't
+            # actually replace anything, the frontmatter shape is unexpected
+            # and a silent success would leave stale data. Fail loudly.
+            if n_replaced != 1:
+                print(
+                    f"reseal failure at {p}: expected exactly 1 artifact_sha256 "
+                    f"replacement, got {n_replaced}. Frontmatter format may be unexpected.",
+                    file=sys.stderr,
+                )
+                return 2
             fd, tmp_name = tempfile.mkstemp(dir=p.parent, prefix=".reseal.", suffix=".md")
             try:
                 with os.fdopen(fd, "w", encoding="utf-8") as fh:
@@ -468,13 +478,20 @@ def _run_validation_only(slug: str, stage: str) -> int:
     with with_locked_state(slug) as state:
         stages_state = state.setdefault("stages", {})
         stage_blob = stages_state.setdefault(stage, {})
+        # Adversarial-review Gemini HIGH fix: refuse to silently overwrite
+        # malformed state. If the stage blob or annotations list is the wrong
+        # type, raise rather than clobber — operator should repair state.json.
         if not isinstance(stage_blob, dict):
-            stage_blob = {}
-            stages_state[stage] = stage_blob
+            raise SystemExit(
+                f"state.stages[{stage}] is not a dict (got {type(stage_blob).__name__}); "
+                f"refusing to overwrite. Repair state.json before retrying."
+            )
         annotations = stage_blob.setdefault("annotations", [])
         if not isinstance(annotations, list):
-            annotations = []
-            stage_blob["annotations"] = annotations
+            raise SystemExit(
+                f"state.stages[{stage}].annotations is not a list (got {type(annotations).__name__}); "
+                f"refusing to overwrite. Repair state.json before retrying."
+            )
         annotations.append(annotation)
 
     print(
@@ -494,6 +511,8 @@ def command_checkpoint(args: argparse.Namespace) -> int:
     # state-mutating review modes. Argparse can't express this with required
     # args cleanly; check at runtime.
     if getattr(args, "validation_only", False):
+        if getattr(args, "fast", False):
+            raise SystemExit("--validation-only cannot be combined with --fast")
         if getattr(args, "fallback", False):
             raise SystemExit("--validation-only cannot be combined with --fallback")
         if getattr(args, "address", None):

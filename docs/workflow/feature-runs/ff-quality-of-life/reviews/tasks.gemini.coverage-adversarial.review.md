@@ -3,14 +3,14 @@ reviewer: "gemini"
 lens: "coverage-adversarial"
 stage: "tasks"
 artifact_path: "docs/workflow/feature-runs/ff-quality-of-life/tasks.md"
-artifact_sha256: "6aa84fcee4b38cb1832136f48e6bf182f11aa6304fae62f4ac5722975f26ff07"
+artifact_sha256: "850c9e0f598806b8131f67e8e463d8cc4f70d588f91052bf53ac3bd8357a6954"
 repo_root: "."
 git_head_sha: "46ccb94c5f51fcd6f8259ff2d94e41f86d47065c"
 git_base_ref: "origin/main"
 git_base_sha: "29476d513f705290496288c4e580ba6890bc87ad"
 generation_method: "gemini-cli"
-resolution_status: "open"
-resolution_note: ""
+resolution_status: "accepted"
+resolution_note: "Addressed during spec/plan/tasks rounds (see plan.md reconciliation for rollup)."
 raw_output_path: "docs/workflow/feature-runs/ff-quality-of-life/reviews/tasks.gemini.coverage-adversarial.review.md.json"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -45,5 +45,5 @@ coverage_note: ""
 - `gemini-2.5-pro`: input=14070, output=819, total=16662
 
 ## Resolution
-- status: open
-- note:
+- status: accepted
+- note: Addressed during spec/plan/tasks rounds (see plan.md reconciliation for rollup).

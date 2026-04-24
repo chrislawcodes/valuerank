@@ -1,0 +1,7 @@
+## Findings
+- `docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py`: `--validation-only` returns before the normal `artifact_path = Path(args.artifact)...` branch, so it always reseals `default_artifact_path(args.slug, args.stage)` and silently ignores caller-supplied checkpoint inputs such as `--artifact`, `--base-ref`, `--path`, and `--context`. That can update review SHAs for the wrong artifact while looking like a successful reseal. MEDIUM.
+- `[UNVERIFIED] `docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py`: `_run_validation_only()` uses a raw regex substitution and never verifies that `artifact_sha256` actually changed. If a review file’s frontmatter is malformed or the hash line is formatted differently than `artifact_sha256: "..."`, the command can print success, append a `validation-only-reseal` annotation, and leave the stale hash untouched. MEDIUM.
+
+## Residual Risks
+- I did not verify every downstream consumer of the new parser defaults for `--max-artifact-chars`, `--max-context-chars`, and `--max-total-chars`; if any path treats `None` differently from an explicit cap, this change may have wider behavior impact than the tests cover.
+- The new `discover` append semantics trim whitespace and dedupe exact strings. If any existing caller relied on preserving surrounding spaces or repeated entries, that behavior has changed.

@@ -9,8 +9,8 @@ git_head_sha: "3b06bc99aa6b877dd16a078c1e70c811418e60ea"
 git_base_ref: "origin/main"
 git_base_sha: "29476d513f705290496288c4e580ba6890bc87ad"
 generation_method: "gemini-cli"
-resolution_status: "open"
-resolution_note: ""
+resolution_status: "accepted"
+resolution_note: "Addressed during spec/plan/tasks rounds (see plan.md reconciliation for rollup)."
 raw_output_path: "docs/workflow/feature-runs/ff-quality-of-life/reviews/plan.gemini.testability-adversarial.review.md.json"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -50,5 +50,5 @@ coverage_note: ""
 - `gemini-2.5-pro`: input=2245, output=922, total=17087
 
 ## Resolution
-- status: open
-- note:
+- status: accepted
+- note: Addressed during spec/plan/tasks rounds (see plan.md reconciliation for rollup).

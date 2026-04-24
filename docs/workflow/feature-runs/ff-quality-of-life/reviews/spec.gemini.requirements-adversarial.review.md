@@ -9,8 +9,8 @@ git_head_sha: "3165f5ec0a8db61ff954e72ec15aa075c80a1daa"
 git_base_ref: "origin/main"
 git_base_sha: "29476d513f705290496288c4e580ba6890bc87ad"
 generation_method: "gemini-cli"
-resolution_status: "open"
-resolution_note: ""
+resolution_status: "accepted"
+resolution_note: "Addressed during spec/plan/tasks rounds (see plan.md reconciliation for rollup)."
 raw_output_path: "docs/workflow/feature-runs/ff-quality-of-life/reviews/spec.gemini.requirements-adversarial.review.md.json"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -84,5 +84,5 @@ This design decision prioritizes implementation simplicity at the cost of user e
 - `gemini-2.5-pro`: input=19746, output=1383, total=23846
 
 ## Resolution
-- status: open
-- note:
+- status: accepted
+- note: Addressed during spec/plan/tasks rounds (see plan.md reconciliation for rollup).
