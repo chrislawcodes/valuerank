@@ -2,12 +2,13 @@
 
 ## Review Reconciliation
 
-- review: reviews/spec.codex.edge-cases-adversarial.review.md | status: deferred | note: Codex subprocess timeout — content never generated. Feasibility + requirements reviews completed and flagged real HIGH/MEDIUM findings that are all addressed.
+- review: reviews/spec.codex.edge-cases-adversarial.review.md | status: deferred | note: Codex subprocess failure — no content generated. Gemini review completed and findings addressed.
 - review: reviews/spec.codex.feasibility-adversarial.review.md | status: accepted | note: HIGH manifest-has-no-sha FIXED (read from review frontmatter); MEDIUM budget-lowering FIXED (50k/60k/250k); MEDIUM prompt-only enforcement accepted.
 - review: reviews/spec.gemini.requirements-adversarial.review.md | status: accepted | note: HIGH contradictory test FIXED (textual); MEDIUM atomic reseal FIXED (pre-check); LOW ordering docs + mutex — both fixed.
 - review: reviews/plan.gemini.testability-adversarial.review.md | status: accepted | note: CRITICAL F-01 (partial reseal): FIXED — added mid-run-failure test mocking os.replace. HIGH F-02 (prompt behavioral): accepted as documented limitation — textual test only, real LLM behavior is out of scope. MEDIUM F-03 (full mutex): FIXED — parametrized test for all 4 flag pairs. MEDIUM F-04 (test level): FIXED — all tests are integration-level via argparse CLI. MEDIUM F-05 (CLI edge cases): FIXED — empty/whitespace/interleaved tests added. LOW F-06 (exit codes): FIXED — assertions added. LOW F-07 (count): FIXED — math corrected in test-count section.
-- review: reviews/plan.codex.architecture-adversarial.review.md | status: deferred | note: Codex subprocess failure — no content generated.
-- review: reviews/plan.codex.implementation-adversarial.review.md | status: deferred | note: Codex subprocess failure — no content generated.
+- review: reviews/plan.codex.architecture-adversarial.review.md | status: deferred | note: Codex subprocess failure — no content generated. Gemini review completed and findings addressed.
+- review: reviews/plan.codex.implementation-adversarial.review.md | status: deferred | note: Codex subprocess failure — no content generated. Gemini review completed and findings addressed.
+- review: reviews/tasks.gemini.coverage-adversarial.review.md | status: accepted | note: CRITICAL F-01 (rollback): accepted as Risk P3 — atomic per-file, no multi-file transaction. HIGH F-02 (60-char edge): FIXED — task now says '60 chars OR full text if shorter'. MEDIUM F-03 (TOCTOU): accepted as best-effort pre-check. MEDIUM F-04 (dedup whitespace/case): FIXED — FR-013 strips + exact match. MEDIUM F-05 (corrupt state): accepted as out of scope. LOW F-06 (state assertion): FIXED — test asserts file-level state after mid-run failure.
 
 ## Architecture
 

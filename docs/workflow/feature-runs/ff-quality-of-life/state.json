@@ -50,10 +50,10 @@
   "dirty_overrides": {},
   "checkpoint_fallback": {},
   "parallel_analysis": {
-    "reviewed": false,
+    "reviewed": true,
     "found": false,
-    "note": "",
-    "updated_at": 0
+    "note": "3 slices land in separate modules. Slice 1 touches run_factory.py + judge-prompts/restatement.md. Slice 2 touches run_factory.py + factory_cmd_discover.py. Slice 3 touches run_factory.py + factory_cmd_checkpoint.py. All share run_factory.py argparse wiring but in different subparsers. Serial implementation is simplest.",
+    "updated_at": 1777066298
   },
   "init_head_sha": "29476d513f705290496288c4e580ba6890bc87ad",
   "token_usage": [
@@ -200,6 +200,102 @@
       "agent_id": null,
       "artifact_sha_at_time": "04bbf261608c51ed0a516ee3ac440155fbd54ead89d078cf3e394e5dd4dc350d",
       "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T21:31:47.258500Z",
+      "started_at": "2026-04-24T21:31:44.169067Z",
+      "ended_at": "2026-04-24T21:31:47.258500Z",
+      "duration_seconds": 3.089186,
+      "agent_id": null,
+      "artifact_sha_at_time": "ca93ee59c09306c70321feb23ce0baf82c50239fbd4f9f7c00729fd2b09dbf73",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T21:31:50.102378Z",
+      "started_at": "2026-04-24T21:31:47.419672Z",
+      "ended_at": "2026-04-24T21:31:50.102378Z",
+      "duration_seconds": 2.682521,
+      "agent_id": null,
+      "artifact_sha_at_time": "ca93ee59c09306c70321feb23ce0baf82c50239fbd4f9f7c00729fd2b09dbf73",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T21:32:32.202031Z",
+      "started_at": "2026-04-24T21:31:50.287313Z",
+      "ended_at": "2026-04-24T21:32:32.202031Z",
+      "duration_seconds": 41.914258,
+      "agent_id": null,
+      "artifact_sha_at_time": "ca93ee59c09306c70321feb23ce0baf82c50239fbd4f9f7c00729fd2b09dbf73",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "tasks",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T21:33:52.760893Z",
+      "started_at": "2026-04-24T21:33:50.374147Z",
+      "ended_at": "2026-04-24T21:33:52.760893Z",
+      "duration_seconds": 2.386545,
+      "agent_id": null,
+      "artifact_sha_at_time": "9c0f106053e974c709093015d0ea3e79b80bb024e6f083fbd7f7694c3336303c",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T21:33:58.207320Z",
+      "started_at": "2026-04-24T21:33:52.948626Z",
+      "ended_at": "2026-04-24T21:33:58.207320Z",
+      "duration_seconds": 5.258481,
+      "agent_id": null,
+      "artifact_sha_at_time": "9c0f106053e974c709093015d0ea3e79b80bb024e6f083fbd7f7694c3336303c",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T21:34:45.668659Z",
+      "started_at": "2026-04-24T21:33:58.385415Z",
+      "ended_at": "2026-04-24T21:34:45.668659Z",
+      "duration_seconds": 47.282708,
+      "agent_id": null,
+      "artifact_sha_at_time": "9c0f106053e974c709093015d0ea3e79b80bb024e6f083fbd7f7694c3336303c",
+      "parse_error": "no Gemini token stats found in stdout"
     }
   ],
   "stages": {
@@ -222,9 +318,21 @@
       "annotations": [],
       "unresolved_concerns": [],
       "adversarial_sha_history": [
-        "04bbf261608c51ed0a516ee3ac440155fbd54ead89d078cf3e394e5dd4dc350d"
+        "04bbf261608c51ed0a516ee3ac440155fbd54ead89d078cf3e394e5dd4dc350d",
+        "ca93ee59c09306c70321feb23ce0baf82c50239fbd4f9f7c00729fd2b09dbf73"
       ],
       "initial_sha": "04bbf261608c51ed0a516ee3ac440155fbd54ead89d078cf3e394e5dd4dc350d"
+    },
+    "tasks": {
+      "adversarial_rounds": 0,
+      "judge_rounds": 0,
+      "judge_verdicts": [],
+      "annotations": [],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [
+        "9c0f106053e974c709093015d0ea3e79b80bb024e6f083fbd7f7694c3336303c"
+      ],
+      "initial_sha": "9c0f106053e974c709093015d0ea3e79b80bb024e6f083fbd7f7694c3336303c"
     }
   },
   "invariant_warnings": [],
@@ -240,5 +348,6 @@
     "reason": "spec checkpoint completed",
     "blockers": []
   },
-  "plan_adversarial_rounds": 0
+  "plan_adversarial_rounds": 0,
+  "tasks_adversarial_rounds": 0
 }

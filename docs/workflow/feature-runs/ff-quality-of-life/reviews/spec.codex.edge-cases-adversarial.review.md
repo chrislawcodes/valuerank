@@ -10,7 +10,7 @@ git_base_ref: "origin/main"
 git_base_sha: "29476d513f705290496288c4e580ba6890bc87ad"
 generation_method: "codex-runner"
 resolution_status: "deferred"
-resolution_note: "Codex subprocess timeout — content never generated. Feasibility + requirements reviews completed and flagged real HIGH/MEDIUM findings that are all addressed. Deferring this review because re-dispatch likely hits the same subprocess issue."
+resolution_note: "Codex subprocess failure — no content generated. Gemini review completed and findings addressed."
 raw_output_path: ""
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -34,4 +34,4 @@ Codex review timed out.
 
 ## Resolution
 - status: deferred
-- note: Codex subprocess timeout — content never generated. Feasibility + requirements reviews completed and flagged real HIGH/MEDIUM findings that are all addressed. Deferring this review because re-dispatch likely hits the same subprocess issue.
+- note: Codex subprocess failure — no content generated. Gemini review completed and findings addressed.

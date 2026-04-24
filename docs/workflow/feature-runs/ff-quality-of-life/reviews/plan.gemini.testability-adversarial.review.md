@@ -3,14 +3,14 @@ reviewer: "gemini"
 lens: "testability-adversarial"
 stage: "plan"
 artifact_path: "docs/workflow/feature-runs/ff-quality-of-life/plan.md"
-artifact_sha256: "04bbf261608c51ed0a516ee3ac440155fbd54ead89d078cf3e394e5dd4dc350d"
+artifact_sha256: "ca93ee59c09306c70321feb23ce0baf82c50239fbd4f9f7c00729fd2b09dbf73"
 repo_root: "."
-git_head_sha: "bd1f7ea39928c35f065bdb47a1130ca0ef491d16"
+git_head_sha: "3b06bc99aa6b877dd16a078c1e70c811418e60ea"
 git_base_ref: "origin/main"
 git_base_sha: "29476d513f705290496288c4e580ba6890bc87ad"
 generation_method: "gemini-cli"
-resolution_status: "accepted"
-resolution_note: "CRITICAL F-01 (partial reseal): FIXED — added mid-run-failure test mocking os.replace. HIGH F-02 (prompt behavioral): accepted as documented limitation — textual test only, real LLM behavior is out of scope. MEDIUM F-03 (full mutex): FIXED — parametrized test for all 4 flag pairs. MEDIUM F-04 (test level): FIXED — all tests are integration-level via argparse CLI. MEDIUM F-05 (CLI edge cases): FIXED — empty/whitespace/interleaved tests added. LOW F-06 (exit codes): FIXED — assertions added. LOW F-07 (count): FIXED — math corrected in test-count section."
+resolution_status: "open"
+resolution_note: ""
 raw_output_path: "docs/workflow/feature-runs/ff-quality-of-life/reviews/plan.gemini.testability-adversarial.review.md.json"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,33 +22,33 @@ coverage_note: ""
 
 ## Findings
 
-| Severity | ID | Finding |
-|---|---|---|
-| **CRITICAL** | F-01 | **Incomplete Atomicity Testing:** The test plan for Slice 3 (`--validation-only`) validates a pre-check for read-only files but fails to test for a failure *during* the multi-file write loop. The plan states it will use `atomic_write` for *each* file, implying per-file atomicity, not per-operation. If an error (e.g., disk full, permissions change mid-run) occurs after some files have been updated but before all have, the system will be left in a partially-updated, inconsistent state. The test plan includes no scenario to detect this or verify a graceful recovery, representing a significant gap in validating data integrity. |
-| **HIGH** | F-02 | **Untested Behavioral Change in LLM Prompt:** The test for the Slice 1 restatement prompt is a "textual test" that asserts the presence of a phrase. This test is brittle and provides a false sense of security. It verifies that a string exists in a file, but it cannot and does not verify the critical downstream behavioral change in the LLM. The associated risk (P4) is therefore not actually mitigated or verified by the proposed test plan. |
-| **MEDIUM** | F-03 | **[UNVERIFIED] Mutex Logic Is Not Fully Tested:** The test plan for Slice 3 mentions a "fallback mutex" test but `--validation-only` is declared mutually exclusive with four flags (`--fallback`, `--address`, `--defer`, `--dismiss`). The test plan is insufficient as it only covers one of the four required mutex checks. A comprehensive test suite would verify that `argparse` or the script's runtime fails correctly when `--validation-only` is combined with each of the other four flags individually. |
-| **MEDIUM** | F-04 | **Ambiguous Test Level and Scope:** The plan lists new test files but does not specify if the tests are unit-level, integration-level (CLI), or a mix. This ambiguity is a weakness. For example, unit tests on `factory_cmd_discover.py` (Slice 2) would not validate the `argparse` `action="append"` configuration in `run_factory.py`. Conversely, pure CLI tests might fail to isolate the specific logic (deduplication, clear-then-append order) for robust testing. This lack of clarity suggests the testing strategy is not fully developed and may miss entire classes of bugs. |
-| **MEDIUM** | F-05 | **Missing Edge Case Scenarios for CLI Flags:** The Slice 2 test plan for the `discover` command covers 5 primary acceptance scenarios but omits common edge cases. There are no tests for inputs like empty strings (`--non-goal ""`), strings with leading/trailing whitespace, or handling the `--clear-non-goals` flag appearing between two `--non-goal` flags in the same invocation. This leaves the robustness of the string-based deduplication and clear-then-append logic unverified. |
-| **LOW** | F-06 | **Error Code and Output Verification Omitted:** The plan for Slice 3 specifies `exit 2` on certain failures, but the test plan does not mention any assertions to verify that the application returns the correct exit codes. For a CLI tool, correct exit codes are critical for scripting and integration with CI/CD systems. Likewise, the specific error messages to be printed are not validated. |
-| **LOW** | F-07 | **Inconsistent Test Count:** The "Testing approach" section header claims "Three new test files" but then lists four. It also estimates "~17 new tests", but the described scenarios only sum to 12 (1 for budgets, 1 for prompt, 5 for discover, 5 for validation-only). This minor inconsistency suggests a lack of careful review in the test planning stage. |
+### HIGH
+
+*   **Transactional Integrity of Validation Reseal Is Under-specified.** The plan for `--validation-only` correctly specifies testing the atomicity of the SHA updates across multiple files. However, it states the process will "Append `{type: "validation-only-reseal", ...}`" to the stage annotations. It does not specify *when* this occurs relative to the file writes, nor what happens if the file writes succeed but the annotation write fails (or vice versa). **A test case is missing** to confirm that the annotation is *only* written if and only if the full set of artifact reseals succeeds. A mid-run failure should roll back *both* the file changes and any attempt to write the annotation.
+
+### MEDIUM
+
+*   **[UNVERIFIED] Graceful Handling of Corrupt State Is Not Tested.** The `--validation-only` implementation plan assumes that all review files it needs to read have well-formed YAML frontmatter and contain the `artifact_sha256` key. It does not specify behavior if a file is corrupt, has malformed YAML, or is missing the key. Tests should be added for these failure modes to ensure the command exits gracefully with a clear error message (e.g., "Error parsing frontmatter in file X") rather than crashing.
+*   **[UNVERIFIED] Definition of String De-duplication Is Ambiguous.** The `discover` command plans to de-duplicate appended non-goals and acceptance criteria by "exact string match". This is not fully specified. The tests should clarify and verify the desired behavior for strings that differ only by leading/trailing whitespace or case (e.g., is `" my criteria "` the same as `"my criteria"`? Is `"Example"` the same as `"example"`?). Without explicit tests, the behavior is ambiguous and may lead to unexpected duplicates or incorrect filtering.
+*   **Pre-check for Atomic Write Is Incomplete.** The pre-check for `--validation-only` tests if the target review files are writable. However, the `os.replace` pattern for atomic writes requires creating a temporary file in the same directory. The pre-check does not verify that the *directory* containing the review files is writable, which could cause the `atomic_write` helper to fail after the pre-check has already passed. A test case where the file is writable but the parent directory is not should be added.
+
+### LOW
+
+*   **[UNVERIFIED] Argparse Default Test Is Too Simplistic.** The plan to "verify argparse defaults resolve" for char budgets is insufficient. A robust test would verify not just that the default value is present, but that it is correctly overridden by a command-line argument, and that the command fails appropriately if a non-numeric or invalid value is provided via the command line.
+*   **[UNVERIFIED] Mutex Enforcement Mechanism Is Unspecified.** The plan states `--validation-only` is mutually exclusive with four other flags and that this will be tested. However, it's unclear if this is enforced by `argparse` itself (which is robust) or by manual post-parsing logic. If manual, it's more fragile. The test should specifically assert that the command fails with the expected `argparse` conflict error message, which confirms the more robust implementation and better user experience.
 
 ## Residual Risks
 
-The plan's "Residual Risks" section is overly optimistic because its mitigations are not sufficiently validated by the proposed testing approach.
-
-1.  **Risk P3 (`--validation-only` race condition):** This risk is significantly understated. The plan accepts the risk of a race condition by stating a "second run catches inconsistency." However, the test plan **does not include a test for the recovery path** from the inconsistent state that the first failed run would create (see Finding F-01). Without a test for recovery, accepting this risk is premature. The system might not simply "be caught" by a second run; it might be left in a state that causes subsequent runs to fail in non-obvious ways.
-
-2.  **Risk P4 (LLM non-compliance):** The mitigation for this risk is based on an assumption about the prompt's structure ("quote-rule only applies when..."). As noted in Finding F-02, the proposed test **does not and cannot verify the LLM's behavioral response**. Therefore, this risk is not actually mitigated by the plan as written. It remains a completely unverified assumption, and the confidence in the mitigation should be considered zero based on the test plan.
-
-3.  **Risk P2 (`--validation-only` misuse):** The plan's mitigation is "mutex with concern-lifecycle flags". As noted in Finding F-03, the test plan is incomplete and only verifies one of the four required mutex pairs. The risk of misuse with the other three flags (`--address`, `--defer`, `--dismiss`) is not mitigated by the proposed tests.
+*   **Risk of Inconsistent State:** The plan has a strong focus on atomicity for the `--validation-only` feature, but the logic is complex. A residual risk remains that an un-tested error condition (e.g., disk full during write, unexpected OS-level error) could interrupt the process, leaving the system in an inconsistent state where some files are updated and others are not, and the manifest annotation does not reflect reality. The "mid-run failure" test is a good mitigation, but it cannot cover all possible hardware or OS-level failure modes.
+*   **Risk of User Misunderstanding Complex CLI Behavior:** The "clear-then-append" semantics for the `discover` command, where flag order within a single command matters (e.g., `--non-goal A --clear-non-goals --non-goal B`), is powerful but non-standard for CLI tools. Even with documentation and testing, there is a residual risk that users will find this behavior surprising and misuse the feature, leading to unintentionally cleared or omitted data in their specifications.
 
 ## Token Stats
 
-- total_input=13373
-- total_output=1181
-- total_tokens=16994
-- `gemini-2.5-pro`: input=13373, output=1181, total=16994
+- total_input=2245
+- total_output=922
+- total_tokens=17087
+- `gemini-2.5-pro`: input=2245, output=922, total=17087
 
 ## Resolution
-- status: accepted
-- note: CRITICAL F-01 (partial reseal): FIXED — added mid-run-failure test mocking os.replace. HIGH F-02 (prompt behavioral): accepted as documented limitation — textual test only, real LLM behavior is out of scope. MEDIUM F-03 (full mutex): FIXED — parametrized test for all 4 flag pairs. MEDIUM F-04 (test level): FIXED — all tests are integration-level via argparse CLI. MEDIUM F-05 (CLI edge cases): FIXED — empty/whitespace/interleaved tests added. LOW F-06 (exit codes): FIXED — assertions added. LOW F-07 (count): FIXED — math corrected in test-count section.
+- status: open
+- note:
