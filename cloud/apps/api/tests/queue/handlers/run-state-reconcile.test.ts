@@ -43,6 +43,7 @@ vi.mock('../../../src/queue/boss.js', () => ({
   getBoss: () => ({
     send: mockBossSend,
   }),
+  isBossRunning: vi.fn(() => true),
 }));
 
 vi.mock('../../../src/services/run/index.js', () => ({

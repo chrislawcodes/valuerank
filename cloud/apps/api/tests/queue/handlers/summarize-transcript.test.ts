@@ -69,6 +69,13 @@ vi.mock('../../../src/services/rate-limiter/index.js', () => ({
   })),
 }));
 
+vi.mock('../../../src/services/run/index.js', () => ({
+  maybeAdvanceRunStatus: vi.fn(async () => ({
+    enteredSummarizing: false,
+    completed: false,
+  })),
+}));
+
 vi.mock('../../../src/graphql/queries/domain/shared.js', () => ({
   resolveTranscriptDecisionModel: vi.fn(() => ({
     canonical: {

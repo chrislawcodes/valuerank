@@ -1,4 +1,4 @@
-import { AppError, createLogger } from '@valuerank/shared';
+import { AppError, NotFoundError, createLogger } from '@valuerank/shared';
 import type { PriorityLevel } from '../../queue/types.js';
 import { DEFAULT_JOB_OPTIONS, PRIORITY_VALUES } from '../../queue/types.js';
 import { getBoss } from '../../queue/boss.js';
@@ -32,7 +32,15 @@ export async function enqueueRunJobs(input: EnqueueRunJobsInput): Promise<string
     priority: priorityValue,
   };
 
-  await maybeAdvanceRunStatus(runId);
+  try {
+    await maybeAdvanceRunStatus(runId);
+  } catch (error) {
+    if (error instanceof NotFoundError) {
+      log.warn({ runId, err: error }, 'Run missing during immediate status advance, skipping');
+    } else {
+      throw error;
+    }
+  }
 
   const jobs: JobEntry[] = [];
   const queueNameCache = new Map<string, string>();

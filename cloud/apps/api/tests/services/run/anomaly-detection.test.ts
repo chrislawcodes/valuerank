@@ -112,7 +112,7 @@ describe('run anomaly detection', () => {
     ]);
     mockProbeResultCount
       .mockResolvedValueOnce(8)
-      .mockResolvedValueOnce(9);
+      .mockResolvedValueOnce(8);
 
     await expect(
       detectPairAsymmetry({
