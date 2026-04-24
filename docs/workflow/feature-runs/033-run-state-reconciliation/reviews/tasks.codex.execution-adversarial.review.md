@@ -1,0 +1,43 @@
+---
+reviewer: "codex"
+lens: "execution-adversarial"
+stage: "tasks"
+artifact_path: "docs/workflow/feature-runs/033-run-state-reconciliation/tasks.md"
+artifact_sha256: "32129082d2a1ada79e77b2873e32c01e1b229fd8122f65ca42efe4c0472a8231"
+repo_root: "."
+git_head_sha: "424c0605a8158acfe0b3912840a6c5b2da057c84"
+git_base_ref: "origin/main"
+git_base_sha: "424c0605a8158acfe0b3912840a6c5b2da057c84"
+generation_method: "codex-runner"
+resolution_status: "open"
+resolution_note: ""
+raw_output_path: "docs/workflow/feature-runs/033-run-state-reconciliation/reviews/tasks.codex.execution-adversarial.review.md.raw.txt"
+narrowed_artifact_path: ""
+narrowed_artifact_sha256: ""
+coverage_status: "full"
+coverage_note: ""
+---
+
+# Review: tasks execution-adversarial
+
+## Findings
+
+- **MEDIUM**: The anomaly lifecycle is incomplete. T6-3 defines `resolveAnomaly(runId, type, subject)`, but no wave ever calls it. T5-2 scans anomalies, yet the only explicit repair step is for `SCHEDULED_COUNT_MISMATCH`. As written, anomalies that stop being true will stay unresolved forever, so `run.anomalies` will keep showing stale active issues.
+- **MEDIUM**: The scheduler window can permanently skip repairs. T5-4 only keeps `COMPLETED` runs alive if they are “recent” (`updated_at > NOW() - INTERVAL '30 days'`) and still have unsummarized transcripts. A completed run older than 30 days with a stranded transcript will never be swept again, which defeats the late-transcript rescue goal for historical data.
+- **MEDIUM**: `RunAnomaly` is underspecified for multiplicity. The model uses `subject` with a default empty string and a unique key on `(runId, type, subject)`, but the artifact never says which detectors must set a per-entity subject. If any detector emits more than one anomaly of the same type for a run without distinct subjects, those rows will collapse into one and hide the real count.
+- **MEDIUM [UNVERIFIED]**: The new `costDebitedAt` idempotency marker has no backfill plan for existing transcript rows. On a live database, any future reconciliation of older runs can treat previously billed rows as unpaid because their marker is still `NULL`, which can lead to double charging. This depends on existing billing history in the current codebase.
+
+## Residual Risks
+
+- I could not verify the current queue singleton semantics, CAS SQL shape, or Prisma transaction boundaries, so duplicate job dispatch or missed completion is still a risk if those assumptions are wrong.
+- The threshold-based detectors are entirely policy-driven. `PAIR_ASYMMETRY_THRESHOLD_PCT`, `MODEL_SHORTFALL_*`, and the 30-minute stall window may produce false positives or miss real defects until they are tuned against production data.
+- The artifact does not show how anomaly acknowledgment is used in the UI or whether `acknowledgedByUserId` is ever populated, so operator workflow may still be incomplete even if persistence works.
+
+## Runner Stats
+- total_input=0
+- total_output=0
+- total_tokens=0
+
+## Resolution
+- status: open
+- note: 

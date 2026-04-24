@@ -1,0 +1,4457 @@
+Reading additional input from stdin...
+OpenAI Codex v0.124.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: medium
+reasoning summaries: none
+session id: 019dbca6-1a9d-7ba3-85a1-f5dbbced7e1f
+--------
+user
+Review this spec artifact using a feasibility-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+Code context files are provided above. Before asserting any finding, check whether it is confirmed or refuted by the provided code. Each finding must include an evidence tag:
+  [CODE-CONFIRMED] — the code directly supports this finding
+  [CODE-REFUTED] — the code contradicts this finding (do not include as a finding)
+  [UNVERIFIED] — relevant code was not provided; treat as lower confidence
+Only assign HIGH severity to CODE-CONFIRMED findings.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Context: paired-batch-run-flow.md
+# Paired Batch Run Flow — End to End
+
+Trace of how a paired batch run for a domain goes from user click to summarized data, with every place it can partially fail silently.
+
+Written 2026-04-23 during investigation into "why do so many batches have partial failures?"
+
+All paths are relative to the repo root. Active product lives in `cloud/`.
+
+---
+
+## 1. Start: GraphQL mutation
+
+**UI** calls `startDomainEvaluation`.
+
+- Mutation: [cloud/apps/api/src/graphql/mutations/domain/evaluation.ts:48](cloud/apps/api/src/graphql/mutations/domain/evaluation.ts:48)
+- Inputs: `domainId`, `scopeCategory` (PILOT / PRODUCTION / REPLICATION / VALIDATION), `temperature`, `maxBudgetUsd`, `definitionIds`, `modelIds`, `samplePercentage`, `samplesPerScenario`, `targetBatchCount`.
+
+Resolver flow:
+1. `launchDomainEvaluation()` at line 78.
+2. Creates a `DomainEvaluation` row (status `PENDING`) at line 126.
+3. Captures a config snapshot (line 132) — models, temperature, projected cost.
+4. `executeLaunchRuns()` at line 155.
+5. `recordLaunchResults()` at line 168.
+6. Returns `{ successCount, failureCount }`.
+
+Schema: [cloud/packages/db/prisma/schema.prisma:419](cloud/packages/db/prisma/schema.prisma:419) (`DomainEvaluation`) + `DomainEvaluationRun` join table linking each `Run` to the parent evaluation.
+
+---
+
+## 2. Pair grouping
+
+Where "paired batch" actually gets set up.
+
+- Orchestrator: [cloud/apps/api/src/graphql/mutations/domain/launch/launch-orchestrator.ts:97](cloud/apps/api/src/graphql/mutations/domain/launch/launch-orchestrator.ts:97)
+- Calls `groupDefinitionsByPairKey()`. Pairs are identified by `pairKey` (asset token, e.g. `value_first` / `value_second`).
+- **Incomplete pairs** (a definition has no companion): logged as a warning (line 98–103) but launched as a singleton run. The user is not told pairing failed.
+
+Slot planning: [cloud/apps/api/src/graphql/mutations/domain/launch/plan-slots.ts:120](cloud/apps/api/src/graphql/mutations/domain/launch/plan-slots.ts:120)
+
+When `group.pairKey !== null`:
+- Generates a shared `jobChoiceBatchGroupId` (UUID) that both runs share.
+- `jobChoiceLaunchMode: 'PAIRED_BATCH'` (line 127).
+- Stores `jobChoiceValueFirst` token for later matching (line 129).
+- `methodologySafe: true` (line 130).
+
+All of this lives inside `Run.config` (JSON). There is no dedicated "pair" table. Pair status is reconstructed at analysis time.
+
+---
+
+## 3. Schema shape for the rest of the pipeline
+
+- `Run`: [cloud/packages/db/prisma/schema.prisma:366](cloud/packages/db/prisma/schema.prisma:366)
+  - `status`: `PENDING → RUNNING → SUMMARIZING → COMPLETED` (or `FAILED` / `CANCELLED` / `PAUSED`).
+  - `progress`: `{ total, completed, failed }` for probes.
+  - `summarizeProgress`: `{ total, completed, failed }` for transcript summaries.
+- `Scenario`: schema.prisma:538 — child of Definition, holds the prompt.
+- `ProbeResult`: schema.prisma:613 — unique on `(runId, scenarioId, modelId, sampleIndex)`. Tracks status (`SUCCESS | FAILED`), error code, error message, retry count.
+
+---
+
+## 4. Enqueue
+
+- Entry: [cloud/apps/api/src/services/run/start-queue.ts:25](cloud/apps/api/src/services/run/start-queue.ts:25)
+- `enqueueRunJobs()` routes jobs to provider-specific queues (openai, anthropic, etc.).
+- Capped per provider: `PROBE_QUEUE_DEPTH_PER_PROVIDER = 15`.
+
+**Failure point 1 — enqueue drops.**  If jobs fail to enqueue after the retry loop (line 122–144), the whole run is marked `FAILED` (start.ts:319). Only the first 10 failures are logged; the rest are silently dropped. No auto-recovery.
+
+---
+
+## 5. Probe execution
+
+Handler: [cloud/apps/api/src/queue/handlers/probe-scenario/handler.ts:40](cloud/apps/api/src/queue/handlers/probe-scenario/handler.ts:40)
+
+Idempotency & recovery (lines 70–151):
+- If probe already has a `SUCCESS` `ProbeResult` → skip.
+- If probe has a `FAILED` `ProbeResult` with retryCount > 0 → skip, to avoid re-running terminal failures.
+- If a transcript exists but no `ProbeResult` row → rebuild the `ProbeResult` from the transcript (line 111).
+- Advisory lock around transcript insert (line 244) prevents dup transcripts.
+
+Worker call (lines 153–291):
+1. Shells out to Python `workers/probe.py` (line 173).
+2. Python returns either `{ success: true, transcript: {...} }` or `{ success: false, error: { message, code, retryable, details } }`. See [cloud/workers/probe.py:35](cloud/workers/probe.py:35).
+
+**Failure point 2 — non-retryable worker error.**  If `retryable: false` (bad prompt, validation error, auth error), handler calls `recordProbeFailure()` with `retryCount=0` and returns (line 206). No retry. Single probe stays `FAILED`. Batch continues.
+
+**Failure point 3 — batch-level crash.**  The probe queue handler processes jobs in batches. If the Python process crashes (OOM, timeout), PgBoss requeues the entire batch (handler.ts:374). Successful probes from the first attempt are idempotently skipped. But **a probe that was marked `FAILED` on attempt 1 is also skipped on attempt 2** — its status is never reconsidered. Fail-once-and-you're-done.
+
+**Failure point 4 — dead-letter.**  [cloud/apps/api/src/queue/handlers/probe-dead-letter.ts:26](cloud/apps/api/src/queue/handlers/probe-dead-letter.ts:26) — probe jobs that stay queued > 30 min go to dead-letter, which calls `recordProbeFailure()` with code `JOB_EXPIRED`. Progress silently increments `failed` by 1. No user notification.
+
+After each probe, `applyProgressDelta()` bumps `completed` or `failed`. When `completed + failed >= total`, the run transitions to `SUMMARIZING`. Note: **there is no distinction between "all done clean" and "all done with failures."**
+
+---
+
+## 6. Run → SUMMARIZING transition
+
+- Progress logic: [cloud/apps/api/src/services/run/progress.ts:140](cloud/apps/api/src/services/run/progress.ts:140)
+- On entering `SUMMARIZING`, `queueSummarizeJobs()` runs (progress.ts:207).
+- Expected transcript count = `run.progress.completed` (line 267).
+- Settles up to 5 s waiting for in-flight transcripts to commit (line 270).
+
+**Failure point 5 — settle timeout.**  At line 224–248 the handler gives up after 5 s and proceeds with whatever transcripts are visible. Logged as a WARN only. If a transcript commit is slow, it is simply skipped for summarization — the probe shows `SUCCESS` but never gets summarized.
+
+Jobs are created per-transcript-found (line 305). If fewer transcripts are visible than expected, fewer summarize jobs get queued.
+
+---
+
+## 7. Summarization
+
+Handler: [cloud/apps/api/src/queue/handlers/summarize-transcript.ts:418](cloud/apps/api/src/queue/handlers/summarize-transcript.ts:418)
+
+For each transcript:
+- If `summarizedAt !== null` and no force flag → skip. Logged as INFO, **not counted in `summarizeProgress.completed` or `.failed`** (line 218).
+- Otherwise calls Python summarize worker.
+- Success → `persistSuccessfulSummary()` (line 392).
+- Failure → `persistSummarizeFailure()` (line 404).
+
+**Failure point 6 — silent skip of already-summarized.**  When re-summarization is triggered against transcripts that are already done, progress counters don't move, so `summarizeProgress` can stay stuck below `total`.
+
+**Failure point 7 — summarize job expiration.**  Same dead-letter pattern as probes. Summarize job sits in queue, times out, transcript never gets a summary.
+
+---
+
+## 8. SUMMARIZING → COMPLETED
+
+- Completion logic: [cloud/apps/api/src/queue/handlers/summarize-persistence.ts:93](cloud/apps/api/src/queue/handlers/summarize-persistence.ts:93)
+
+`checkAllSummarized()` returns true iff:
+1. No transcripts with `summarizedAt: null`.
+2. No missing probes (`findMissingProbes()` returns empty).
+
+If both hold, atomically flips status to `COMPLETED` (summarize-persistence.ts:116) and triggers:
+- `triggerBasicAnalysis()` (line 140)
+- `queueComputeTokenStats()` (line 151)
+- `deductActualProviderBalancesForRun()` (line 157)
+
+**Failure point 8 — side-effect errors swallowed.**  Each of the three post-completion steps is wrapped in its own try/catch (line 146–160). Errors are logged but the run stays `COMPLETED`. Analysis or token stats can silently be missing.
+
+---
+
+## 9. How partial failure actually manifests
+
+A run can end with status `COMPLETED` and still look like this:
+
+```
+Run.status            = COMPLETED
+Run.progress          = { total: 100, completed: 95, failed: 5 }
+Run.summarizeProgress = { total: 95,  completed: 95, failed: 0 }
+```
+
+- 5 scenarios never produced a transcript.
+- 95 transcripts got summarized.
+- Analysis runs against 95, treated as the truth.
+- User sees "completed" with no warning banner.
+
+For **paired batches** this is worse: one side of the pair can have 100% success and the other 80%, and there's no "pair completeness" signal in the run record. Downstream analysis has to notice the mismatch itself, and often won't.
+
+---
+
+## 10. Failure-point summary table
+
+| # | Location | What breaks | Recovery | Silent? |
+|---|---|---|---|---|
+| 1 | [start-queue.ts:122](cloud/apps/api/src/services/run/start-queue.ts:122) | Enqueue drops jobs after retries | None; run marked FAILED | Only first 10 failures logged |
+| 2 | [probe handler:192](cloud/apps/api/src/queue/handlers/probe-scenario/handler.ts:192) | Non-retryable worker error | None; probe stays FAILED | Only visible in DB |
+| 3 | [probe handler:374](cloud/apps/api/src/queue/handlers/probe-scenario/handler.ts:374) | Batch crash → whole batch requeued | Successes idempotent; FAILED probes NOT retried | Opaque |
+| 4 | [probe-dead-letter.ts:26](cloud/apps/api/src/queue/handlers/probe-dead-letter.ts:26) | Probe job expires (>30 min) | Marked FAILED with JOB_EXPIRED | No UI signal |
+| 5 | [progress.ts:224](cloud/apps/api/src/services/run/progress.ts:224) | Transcript settle timeout | Proceeds with partial count | WARN log only |
+| 6 | [summarize-transcript.ts:218](cloud/apps/api/src/queue/handlers/summarize-transcript.ts:218) | Re-summarize skipped for already-done | `summarizeProgress` not incremented | INFO log |
+| 7 | Summarize dead-letter | Summarize job expires | Transcript never summarized | No UI signal |
+| 8 | [summarize-persistence.ts:146](cloud/apps/api/src/queue/handlers/summarize-persistence.ts:146) | Analysis / token-stats / balance deduct fails | Swallowed; run still COMPLETED | Logged only |
+| 9 | [launch-orchestrator.ts:97](cloud/apps/api/src/graphql/mutations/domain/launch/launch-orchestrator.ts:97) | Incomplete pair launched as singleton | None | WARN only |
+
+---
+
+## 11. Things worth checking first when investigating a partial batch
+
+1. `Run.progress.failed` > 0 on a `COMPLETED` run — true partial-failure signal.
+2. `Run.progress.completed` vs `Run.summarizeProgress.total` — mismatch means transcripts never made it to summarize queue (failure point 5).
+3. Count `ProbeResult` rows where `status = FAILED` and `errorCode = JOB_EXPIRED` — dead-letter problem.
+4. For paired-batch runs, compare `ProbeResult` success counts across runs sharing the same `jobChoiceBatchGroupId` in `Run.config` — asymmetry means one side of the pair dropped probes.
+5. Transcripts with `summarizedAt IS NULL` on a `COMPLETED` run — means `checkAllSummarized` logic let something through, or summarize job was lost.
+
+---
+
+## 12. Failure-mode deep dive
+
+Follow-up evaluation: for common real-world failure modes, does the code handle it, handle it badly, or not at all? All line numbers verified against the current tree.
+
+### 12.1 Rate limiting (HTTP 429)
+
+- **Detected:** [cloud/workers/common/llm_adapters/base.py:221](cloud/workers/common/llm_adapters/base.py:221) — status-code check plus pattern match ("rate limit", "too many requests").
+- **Classified:** `ErrorCode.RATE_LIMIT`, in `RETRYABLE_CODES` at [errors.py:34](cloud/workers/common/llm_adapters/errors.py:34).
+- **Backoff:** Fixed exponential list `RATE_LIMIT_BACKOFF_SECONDS = [30, 60, 90, 120]` at [constants.py:14](cloud/workers/common/llm_adapters/constants.py:14). Max 4 retries inside the Python worker.
+- **PgBoss layer:** On top of the in-worker retries, PgBoss retries up to 3× with `retryDelay: 5s`, `retryBackoff: true` ([queue/types.ts:102](cloud/apps/api/src/queue/types.ts:102)). Combined upper bound ≈ 12 attempts per probe.
+- **Retry-After header:** **Not honored.** Python backoff ignores provider headers entirely.
+- **Circuit breaker:** **None.** `maxParallelRequests` is per provider but there's no global "one provider is throttling, slow everyone down" logic.
+- **Verdict:** Mostly OK. Gaps: no Retry-After support, no circuit breaker. On sustained provider throttling, the run will burn through all retry budgets and dump a pile of probes into `FAILED` with `errorCode=RATE_LIMIT`.
+
+### 12.2 Quota exhausted / billing errors
+
+- **Detected:** [base.py:230](cloud/workers/common/llm_adapters/base.py:230) — explicit match on `insufficient_quota`, `out of credits`, etc. Ambiguous text like "quota exceeded" defers to 429 classification if both signals are present (line 251).
+- **Classified:** `ErrorCode.AUTH_ERROR`, **not** in `RETRYABLE_CODES`. Correct — quota exhaustion should not retry.
+- **Run behaviour:** Probe is recorded `FAILED` with `retryCount=0` and the handler returns ([probe-scenario/handler.ts:192](cloud/apps/api/src/queue/handlers/probe-scenario/handler.ts:192)). The run keeps going, submitting more probes to the same provider, which will all fail the same way.
+- **Budget enforcement:** `maxBudgetUsd` is captured at launch but never checked during execution. Noted but not a priority — the field isn't widely used in practice.
+- **Verdict:** Classification is correct. Real gap: when one provider's key is out of quota, the system doesn't short-circuit the remaining probes for that provider on that run — it keeps firing them and burning retry time.
+
+### 12.3 Timeouts, DNS, 5xx
+
+- **Classified:** `TIMEOUT`, `NETWORK_ERROR`, `SERVER_ERROR`, all in `RETRYABLE_CODES`.
+- **HTTP timeout:** `DEFAULT_TIMEOUT = 300s` ([constants.py:8](cloud/workers/common/llm_adapters/constants.py:8)).
+- **Python spawn timeout:** 5 min in the TS handler. So ≈10 min worst-case before a probe is declared timed out.
+- **Backoff:** Linear — `2.0 × attempts` seconds, max 3 network retries.
+- **Verdict:** Reasonable. Nothing surprising here.
+
+### 12.4 Malformed model output / bad parse
+
+- **JSON parse failure:** `ErrorCode.INVALID_RESPONSE`, **non-retryable** ([base.py:363](cloud/workers/common/llm_adapters/base.py:363)). Correct — the model is the problem; retrying won't help.
+- **Transcript-shape validation:** [probe-scenario/handler.ts:214](cloud/apps/api/src/queue/handlers/probe-scenario/handler.ts:214) throws a plain `Error('Invalid transcript structure')` — no `retryable` flag. Falls through to `handleJobError`, which **retries** it. This is wrong-direction: if our structural check rejects a response, it's either our bug or the model's, neither of which is transient. Fix: wrap in an `LLMError` with `retryable: false`.
+
+### 12.5 Race conditions
+
+**Progress counter race.** [progress.ts:88](cloud/apps/api/src/services/run/progress.ts:88) does the counter bump via `jsonb_set` in a single SQL statement — atomic. But the **status transition** happens in a separate query right after (line 121). Two probe handlers can both come through the atomic increment, both read back "total == completed + failed", and both call `transitionStatus`. In practice the downstream work is idempotent:
+- Status update is a conditional `UPDATE ... WHERE status = 'RUNNING'` so only one wins.
+- `queueSummarizeJobs` is keyed per-transcript, so duplicates get dropped by the queue.
+
+So duplicate work, no duplicate state. OK, but not by explicit design — it survives because of downstream idempotency.
+
+**Summarize-completion.** [summarize-persistence.ts:123](cloud/apps/api/src/queue/handlers/summarize-persistence.ts:123) uses `UPDATE ... WHERE status = 'SUMMARIZING'` — genuine compare-and-swap. Only the first caller flips the run to `COMPLETED` and runs the side effects. 
+
+**ProbeResult races with dead-letter.**  `ProbeResult` has a unique constraint on `(runId, scenarioId, modelId, sampleIndex)`. `recordProbeSuccess` is an upsert, so:
+- Dead-letter writes `FAILED` (retryCount=0) first, then the late-arriving success upserts → row flips to `SUCCESS`. Net result is correct but the progress counter got both increments — `completed` +1 and `failed` +1, so the run's `completed + failed > total`. Worth verifying: does `applyProgressDelta` cap at total, or can the "done" predicate go stale?
+- Reverse order is also possible. No explicit guard.
+
+**Concurrent summarize on the same transcript.** Handler's first line is "skip if `summarizedAt` is already set" (line 218). But two concurrent jobs could both pass that check, both call the Python worker, both upsert. The upsert will dedupe the row but both API calls were billed. Same cost-dupe issue as §12.7.
+
+**Settle timeout.** [progress.ts:224](cloud/apps/api/src/services/run/progress.ts:224) waits 5 seconds for in-flight transcripts to commit. Transcripts that arrive at t=5.01s are **not** included in the initial summarize-queue batch. They'll get picked up by later recovery passes (`top-up-probes` / manual `recover_run`) but **only if someone runs those**. Left on its own a late-settling transcript sits unsummarized forever.
+
+### 12.6 Worker process crash mid-call
+
+- **Idempotency keys passed to providers:** **No.** No adapter sets an `Idempotency-Key` header. Grep of `cloud/workers/common/llm_adapters/` confirms.
+- **What happens:** Provider completes and bills the request. Python process dies before the TS handler receives output. PgBoss re-runs the job after `expireInSeconds: 420`. The re-run finds no `ProbeResult` and no `Transcript`, calls the provider again, gets charged again. No dedup.
+- **Verdict:** Real gap. Every worker crash = potential double-billing. Fix: set `Idempotency-Key: <runId>:<scenarioId>:<modelId>:<sampleIndex>` on all adapter requests. (OpenAI and Anthropic both support this header.)
+
+### 12.7 PgBoss timing
+
+- **Probe queue:** `expireInSeconds: 420` (7 min), `retryLimit: 3`, `retryDelay: 5s`, `retryBackoff: true` ([queue/types.ts:102](cloud/apps/api/src/queue/types.ts:102)).
+- **Dedup:** None at the PgBoss layer. Handler-level idempotency (the check at handler.ts:71) is what prevents double-writes. But the Python worker has already run by the time that check fires on a retry — so we avoid DB duplication, not API duplication.
+- **Dead-letter:** Handled once, no retry ([probe-dead-letter.ts:26](cloud/apps/api/src/queue/handlers/probe-dead-letter.ts:26)).
+
+### 12.8 Concurrent launches competing for slots
+
+- Queue is keyed by **provider**, not by run. `maxParallelRequests` caps concurrent in-flight requests per provider.
+- Two runs starting at the same time interleave their jobs FIFO inside the provider queue. A big run can't *starve* a small one — jobs come off in order — but a big run does extend the head-of-line latency for everyone behind it.
+- `PROBE_QUEUE_DEPTH_PER_PROVIDER` (the name used in my earlier write-up) turned out to be a misreading — the actual cap is `maxParallelRequests` per provider, not per run.
+- No per-run isolation, no priority queue, no preemption. OK for current scale, will bite at higher concurrency.
+
+### 12.9 Summary — how the common real-world failures actually behave
+
+| Failure | Classified? | Retried sensibly? | Idempotent? | Biggest real risk |
+|---|---|---|---|---|
+| 429 rate limit | ✅ | ✅ exp backoff | ⚠ API double-call on PgBoss retry | No Retry-After, no global circuit breaker |
+| Quota exhausted | ✅ | ✅ non-retryable | ✅ | Keeps firing further probes to same provider |
+| Timeout / 5xx | ✅ | ✅ | ⚠ API double-call | Fine |
+| Malformed JSON | ✅ | ✅ non-retryable | ✅ | Fine |
+| Bad transcript shape | ❌ | ❌ retried | ✅ | Wastes retries on a non-transient bug |
+| Worker crash mid-call | ❌ | Re-run creates second call | ❌ | **Double-billing** — no idempotency keys |
+| Progress race → completion | ⚠ read-then-write | ✅ via downstream idempotency | ✅ | Works by accident; fragile |
+| Transcript settle > 5 s | ⚠ timeout | ⚠ delayed or never | ✅ | Late transcripts can be stranded unsummarized |
+| Dead-letter vs late success | ⚠ | ⚠ progress double-count | ✅ data | Counters can exceed `total`, confusing UI |
+| Concurrent runs | N/A | N/A | N/A | Big runs inflate head-of-line latency; no per-run fairness |
+
+### 12.10 Highest-leverage fixes
+
+1. **Provider idempotency keys** — stop double-billing on worker crash / PgBoss retry. One-line change per adapter.
+2. **Fast-fail a provider inside a run when quota is exhausted** — one `AUTH_ERROR` from `insufficient_quota` should short-circuit the rest of that run's probes to that provider.
+3. **Mark bad-transcript-shape as non-retryable** — [handler.ts:214](cloud/apps/api/src/queue/handlers/probe-scenario/handler.ts:214) should throw an `LLMError` with `retryable: false`.
+4. **Late-transcript safety net** — periodic reconciliation job that finds `Transcript` rows on `SUMMARIZING`/`COMPLETED` runs with `summarizedAt IS NULL` and queues them. Currently relies on humans running `recover_run`.
+5. **Honor Retry-After** — cheap improvement to rate-limit handling.
+6. **Circuit breaker per provider** — when one run starts getting walls of 429s, don't let concurrent runs pile on.
+
+---
+
+## 13. Key files referenced
+
+- Entry: [cloud/apps/api/src/graphql/mutations/domain/evaluation.ts](cloud/apps/api/src/graphql/mutations/domain/evaluation.ts)
+- Launch orchestration: [cloud/apps/api/src/graphql/mutations/domain/launch/launch-orchestrator.ts](cloud/apps/api/src/graphql/mutations/domain/launch/launch-orchestrator.ts)
+- Slot planning: [cloud/apps/api/src/graphql/mutations/domain/launch/plan-slots.ts](cloud/apps/api/src/graphql/mutations/domain/launch/plan-slots.ts)
+- Queue start: [cloud/apps/api/src/services/run/start-queue.ts](cloud/apps/api/src/services/run/start-queue.ts)
+- Probe handler: [cloud/apps/api/src/queue/handlers/probe-scenario/handler.ts](cloud/apps/api/src/queue/handlers/probe-scenario/handler.ts)
+- Probe dead letter: [cloud/apps/api/src/queue/handlers/probe-dead-letter.ts](cloud/apps/api/src/queue/handlers/probe-dead-letter.ts)
+- Progress/transition: [cloud/apps/api/src/services/run/progress.ts](cloud/apps/api/src/services/run/progress.ts)
+- Summarize handler: [cloud/apps/api/src/queue/handlers/summarize-transcript.ts](cloud/apps/api/src/queue/handlers/summarize-transcript.ts)
+- Completion: [cloud/apps/api/src/queue/handlers/summarize-persistence.ts](cloud/apps/api/src/queue/handlers/summarize-persistence.ts)
+- Python probe worker: [cloud/workers/probe.py](cloud/workers/probe.py)
+- Schema: [cloud/packages/db/prisma/schema.prisma](cloud/packages/db/prisma/schema.prisma)
+
+
+Context: CLAUDE.md
+# Cloud ValueRank - Project Constitution
+
+This document defines the cloud-specific coding standards and push checks for ValueRank.
+
+Repo-wide agent behavior, delivery paths, terminology policy, and memory policy live in the repo-root `AGENTS.md`.
+
+## Push And PR Checks
+
+- Use Pull Requests for changes that will land on `main`.
+- Ask the human before running `git push`.
+- Run the Preflight Gate before any `git push` or PR creation.
+
+## Workflow State
+
+- For Feature Factory, use the repo-owned workflow docs and `docs/workflow/feature-runs/<slug>/state.json` as the source of truth.
+- Repo-root `MEMORY.md` is a persistent reference index. Keep it lean — no shipped feature history or long-term archives.
+
+### Pre-push Hook (Preferred)
+
+The pre-push hook automatically detects which workspaces changed and runs lint, test, and build only for those. Install once:
+
+```bash
+./scripts/hooks/install-hooks.sh
+```
+
+The hook compares your branch to `origin/main` and respects the dependency graph:
+- `shared` changes → checks shared, db, api, web
+- `db` changes → checks db, api
+- `api` changes → checks api only
+- `web` changes → checks web only
+- Root config changes (`turbo.json`, `package.json`, etc.) → checks everything
+
+### Manual Preflight (If Hook Not Installed)
+
+Run from `cloud/` for the workspaces you changed:
+
+```bash
+# Always run for the workspaces you touched:
+npx turbo lint --filter=@valuerank/<workspace>
+npx turbo test --filter=@valuerank/<workspace>
+npx turbo build --filter=@valuerank/<workspace>
+
+# If you touched db or api, also set up the test database first:
+npm run db:test:setup
+```
+
+**Hard rules:**
+- Do not push if any preflight command fails.
+- Do not use `git push --no-verify` except emergency hotfix with explicit human approval.
+- If unrelated local files break checks, validate in a clean worktree from `origin/main` before push.
+- Every PR must include a `Validation` section listing exact commands run and pass/fail results.
+
+---
+
+## Core Principles
+
+1. **Small, focused files** - Easy to read, test, and maintain
+2. **Type safety** - Catch errors at compile time, not runtime
+3. **Test coverage** - Confidence to refactor and deploy
+4. **Observable** - Debug issues in production without guessing
+
+---
+
+## File Structure
+
+Enforced mechanically — do not treat these as soft guidance.
+
+| Check | Enforced by | Thresholds |
+|-------|-------------|------------|
+| File size | `cloud/scripts/check-file-sizes.sh` (CI + pre-push), ESLint `max-lines` (editor) | prod: warn 400 / error 700 — tests: warn 800 / error 1200 |
+| Placeholder filenames | `cloud/scripts/check-filenames.sh` | bans `-helper(s).ts`, `-util(s).ts`, `-misc.ts`, `-types-detail.ts` |
+| Trivial re-export barrels | `cloud/scripts/check-barrels.sh` | rejects new `index.ts` < 15 lines that is export-only |
+| Known fragmented clusters | `cloud/scripts/check-tech-debt.sh` | informational reminders; see `docs/tech-debt/file-structure.md` |
+
+Grandfathered files live in the allowlists next to each script. See
+[`docs/tech-debt/file-structure.md`](../docs/tech-debt/file-structure.md)
+for what to collapse when touching the area.
+
+Guidance when the size warning fires: do not split just to silence it. Ask
+whether the file has one responsibility. If yes, keep it. If no, split by
+responsibility and give the new module a domain-meaningful name.
+
+---
+
+## TypeScript Standards
+
+### No `any` Types
+
+Never use `any`. Use the actual type, or `unknown` if the type is truly dynamic:
+
+```typescript
+function parseJson(input: string): unknown { ... }
+function handleError(err: unknown): void { ... }
+```
+
+### Strict Mode Required
+
+`tsconfig.json` must have `strict: true`, `noImplicitAny: true`, `strictNullChecks: true`, `noUncheckedIndexedAccess: true`.
+
+### Strict Boolean Checks
+
+Use explicit checks for `null` and `undefined` — do not rely on truthiness for numbers or strings (linting error):
+
+```typescript
+// Bad - fails strict-boolean-expressions
+if (!value) { ... }
+
+// Good
+if (value != null) { ... }
+if (value === 0) { ... }
+```
+
+### Types vs Interfaces
+
+Use `type` for data shapes; use `interface` for service contracts.
+
+---
+
+## Testing Requirements
+
+### Coverage Targets
+
+| Metric | Minimum | Target |
+|--------|---------|--------|
+| Line coverage | 80% | 90% |
+| Branch coverage | 75% | 85% |
+| Function coverage | 80% | 90% |
+
+### What to Test
+
+- **Always test**: Business logic, data transformations, edge cases
+- **Mock**: Database, external APIs, LLM providers
+- **Integration tests**: API routes with test database
+- **Skip**: Simple getters, direct ORM pass-through
+
+### Required Environment Variables for Tests
+
+```bash
+JWT_SECRET="test-secret-that-is-at-least-32-characters-long"
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank_test"
+```
+
+Setup test DB: `npm run db:test:setup` (from `cloud/`). Reset on data pollution: `npm run db:test:reset`.
+
+---
+
+## Logging Standards
+
+All logging goes through the centralized logger — never use `console.log` directly.
+
+```typescript
+import { createLogger } from '@valuerank/shared';
+const log = createLogger('runs');
+
+log.info({ runId: run.id }, 'Run created');
+log.error({ err, config }, 'Failed to create run');
+```
+
+Always use structured data (object + message), never string interpolation.
+
+### Log Levels
+
+| Level | Use For |
+|-------|---------|
+| `error` | Exceptions, failed operations that need attention |
+| `warn` | Recoverable issues, deprecations, retry attempts |
+| `info` | Key business events (run started, completed, user action) |
+| `debug` | Detailed flow info, useful for local debugging |
+
+---
+
+## Code Organization
+
+### Import Order
+
+1. Node built-ins (`fs`, `path`)
+2. External packages (`express`, `zod`)
+3. Internal packages (`@valuerank/shared`, `@valuerank/db`)
+4. Relative imports (`./validation`, `./types`)
+
+### Folder Structure
+
+```
+apps/api/src/
+├── auth/         # Authentication middleware and JWT handling
+├── cli/          # Admin scripts (create-user, normalize, shadow)
+├── config/       # Server configuration
+├── graphql/      # GraphQL schema, queries, mutations, types
+├── mcp/          # MCP server tools and OAuth
+├── middleware/    # Express middleware
+├── queue/        # PgBoss job handlers and queue orchestration
+├── routes/       # Express route handlers (REST, CSV, OData)
+├── services/     # Business logic
+└── utils/        # Pure utility functions
+
+apps/web/src/
+├── api/          # GraphQL operations and client setup
+├── components/   # React components
+├── hooks/        # Custom hooks
+├── lib/          # Shared libraries (statistics, formatting)
+├── pages/        # Route pages
+└── utils/        # Pure utility functions
+```
+
+---
+
+## Error Handling
+
+Use custom error classes (`AppError`, `NotFoundError`, `ValidationError`) from `packages/shared`. Always catch and forward to error middleware in routes — never swallow errors silently.
+
+---
+
+## Database Access
+
+### Use Prisma with Type Safety
+
+Use typed queries and `$transaction` for multi-step operations.
+
+### Soft Delete Pattern
+
+Entities use soft delete via `deletedAt` timestamp. **Never physically delete** — set `deletedAt` instead.
+
+**Tables with soft delete:** `definitions`, `definition_tags`, `scenarios`
+
+```typescript
+// ALWAYS filter out soft-deleted records
+const definitions = await prisma.definition.findMany({
+  where: { deletedAt: null },  // Required!
+});
+
+// When "deleting", set deletedAt
+await prisma.definition.update({
+  where: { id: definitionId },
+  data: { deletedAt: new Date() },
+});
+```
+
+`deletedAt` is **never exposed** in GraphQL schema. All resolvers must filter `deletedAt: null` automatically.
+
+---
+
+## Database Connections
+
+The project uses PostgreSQL with PgBouncer for connection pooling.
+
+**Application** (via PgBouncer): `DATABASE_URL` — include `?pgbouncer=true` to disable prepared statements.
+
+**Migrations** (direct): `DIRECT_URL` — Prisma Migrate requires a direct connection, not a pooler.
+
+```bash
+# .env
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:6432/valuerank?pgbouncer=true"
+DIRECT_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank"
+```
+
+Start local DB: `docker-compose up -d` from `cloud/`.
+
+---
+
+## Schema Changes (Migrations)
+
+**Always use Prisma Migrate — never `db push`.**
+
+```bash
+# Create and apply a migration
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank" \
+  npx prisma migrate dev --name add_feature_tables --schema packages/db/prisma/schema.prisma
+```
+
+Production deployments run `prisma migrate deploy` automatically on startup.
+
+---
+
+## Quick Reference
+
+```
+File size:      enforced by scripts (prod warn 400/err 700, tests warn 800/err 1200)
+any types:      NEVER (use unknown if truly unknown)
+Test coverage:  80% minimum
+Console.log:    NEVER (use logger)
+Error handling: Custom AppError classes
+Imports:        Node → External → Internal → Relative
+```
+
+---
+
+## Terminology
+
+Canonical source: `docs/canonical-glossary.md`
+
+- Follow the terminology policy in repo-root `AGENTS.md`.
+- In cloud code, older names like `definition`, `dimension`, and `scenario` may still appear in code, schema, or APIs. Map them to glossary terms instead of renaming them casually.
+
+
+Context: schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  // Direct connection for migrations (bypasses PgBouncer)
+  // Required because Prisma Migrate doesn't support connection pooling
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================================================
+// AUTHENTICATION
+// ============================================================================
+
+enum UserRole {
+  ADMIN
+  VISITOR
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  name         String?
+  role         UserRole  @default(ADMIN)
+  mustChangePassword Boolean @default(false) @map("must_change_password")
+  lastLoginAt  DateTime? @map("last_login_at")
+  passwordChangedAt DateTime? @map("password_changed_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  apiKeys ApiKey[]
+
+  // Audit relations
+  auditLogs          AuditLog[]
+  createdDefinitions Definition[] @relation("DefinitionCreator")
+  deletedDefinitions Definition[] @relation("DefinitionDeleter")
+  createdRuns        Run[]        @relation("RunCreator")
+  createdDomainEvaluations DomainEvaluation[] @relation("DomainEvaluationCreator")
+  deletedRuns        Run[]        @relation("RunDeleter")
+  createdTags        Tag[]        @relation("TagCreator")
+  createdLlmModels         LlmModel[]               @relation("LlmModelCreator")
+  createdBalanceSyncLogs   ProviderBalanceSyncLog[] @relation("ProviderBalanceSyncLogCreator")
+
+  @@map("users")
+}
+
+model ApiKey {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  name      String
+  keyHash   String    @unique @map("key_hash")
+  keyPrefix String    @map("key_prefix") @db.VarChar(12)
+  lastUsed  DateTime? @map("last_used")
+  expiresAt DateTime? @map("expires_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([keyPrefix])
+  @@index([userId])
+  @@map("api_keys")
+}
+
+// ============================================================================
+// OAUTH 2.1 (MCP Authentication)
+// ============================================================================
+
+model OAuthClient {
+  id                      String   @id @default(cuid())
+  clientId                String   @unique @map("client_id")
+  clientSecretHash        String   @map("client_secret_hash")
+  clientName              String?  @map("client_name")
+  redirectUris            String[] @map("redirect_uris")
+  tokenEndpointAuthMethod String   @default("client_secret_post") @map("token_endpoint_auth_method")
+  grantTypes              String[] @default(["authorization_code", "refresh_token"]) @map("grant_types")
+  responseTypes           String[] @default(["code"]) @map("response_types")
+  scope                   String   @default("mcp:read mcp:write")
+  createdAt               DateTime @default(now()) @map("created_at")
+
+  refreshTokens OAuthRefreshToken[]
+
+  @@map("oauth_clients")
+}
+
+model OAuthRefreshToken {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique @map("token_hash")
+  clientId  String   @map("client_id")
+  userId    String   @map("user_id")
+  scope     String
+  resource  String
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  client OAuthClient @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("oauth_refresh_tokens")
+}
+
+// ============================================================================
+// CORE DOMAIN
+// ============================================================================
+
+model Definition {
+  id                String    @id @default(cuid())
+  parentId          String?   @map("parent_id")
+  domainId          String?   @map("domain_id")
+  domainContextId   String?   @map("domain_context_id")
+  name              String
+  content           Json      @db.JsonB
+  expansionProgress Json?     @map("expansion_progress") @db.JsonB
+  expansionDebug    Json?     @map("expansion_debug") @db.JsonB
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  lastAccessedAt    DateTime? @map("last_accessed_at")
+  deletedAt         DateTime? @map("deleted_at")
+
+  // Audit fields
+  createdByUserId String? @map("created_by_user_id")
+  deletedByUserId String? @map("deleted_by_user_id")
+
+  parent   Definition?  @relation("DefinitionVersions", fields: [parentId], references: [id])
+  children Definition[] @relation("DefinitionVersions")
+  domain   Domain?      @relation(fields: [domainId], references: [id], onDelete: SetNull)
+  domainContext DomainContext? @relation(fields: [domainContextId], references: [id], onDelete: SetNull)
+
+  runs      Run[]
+  scenarios Scenario[]
+  tags      DefinitionTag[]
+  assumptionVignetteSelections AssumptionVignetteSelection[]
+
+  // Audit relations
+  createdBy User? @relation("DefinitionCreator", fields: [createdByUserId], references: [id])
+  deletedBy User? @relation("DefinitionDeleter", fields: [deletedByUserId], references: [id])
+
+  // Preamble integration
+  preambleVersionId String?          @map("preamble_version_id")
+  preambleVersion   PreambleVersion? @relation(fields: [preambleVersionId], references: [id])
+  version           Int              @default(1)
+
+  // Level preset integration
+  levelPresetVersionId String?             @map("level_preset_version_id")
+  levelPresetVersion   LevelPresetVersion? @relation(fields: [levelPresetVersionId], references: [id])
+
+  // Cost visibility - per-definition token statistics (P3)
+  tokenStatistics ModelTokenStatistics[]
+
+  @@index([parentId])
+  @@index([domainId])
+  @@index([domainContextId])
+  @@index([preambleVersionId])
+  @@index([levelPresetVersionId])
+  @@map("definitions")
+}
+
+model Domain {
+  id             String   @id @default(cuid())
+  name           String
+  normalizedName String   @unique @map("normalized_name")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  defaultLevelPresetVersionId String?             @map("default_level_preset_version_id")
+  defaultLevelPresetVersion   LevelPresetVersion? @relation(fields: [defaultLevelPresetVersionId], references: [id])
+
+  defaultPreambleVersionId String?          @map("default_preamble_version_id")
+  defaultPreambleVersion   PreambleVersion? @relation(fields: [defaultPreambleVersionId], references: [id])
+
+  defaultContextId String?        @map("default_context_id")
+  defaultContext   DomainContext? @relation("DomainDefaultContext", fields: [defaultContextId], references: [id])
+
+  defaultModelIds String[] @default([]) @map("default_model_ids")
+
+  sentencePrefix String? @map("sentence_prefix")
+  labelPrefix    String? @map("label_prefix")
+
+  definitions     Definition[]
+  contexts        DomainContext[] @relation("DomainContexts")
+  valueStatements ValueStatement[]
+  evaluations     DomainEvaluation[]
+  configSnapshots DomainConfigSnapshot[]
+
+  @@index([defaultLevelPresetVersionId])
+  @@index([defaultPreambleVersionId])
+  @@index([defaultContextId])
+  @@map("domains")
+}
+
+model DomainContext {
+  id        String   @id @default(cuid())
+  domainId  String   @map("domain_id")
+  text      String
+  version   Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  domain          Domain       @relation("DomainContexts", fields: [domainId], references: [id])
+  domainsAsDefault Domain[]    @relation("DomainDefaultContext")
+  definitions     Definition[]
+  domainConfigSnapshots DomainConfigSnapshot[]
+
+  @@map("domain_contexts")
+}
+
+model ValueStatement {
+  id        String   @id @default(cuid())
+  domainId  String   @map("domain_id")
+  token     String
+  body      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  domain   Domain                 @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  versions ValueStatementVersion[]
+
+  @@unique([domainId, token])
+  @@index([domainId])
+  @@map("value_statements")
+}
+
+model ValueStatementVersion {
+  id          String   @id @default(cuid())
+  statementId String   @map("statement_id")
+  content     String   @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  statement ValueStatement @relation(fields: [statementId], references: [id], onDelete: Cascade)
+
+  @@index([statementId, createdAt(sort: Desc)])
+  @@map("value_statement_versions")
+}
+
+model DomainConfigSnapshot {
+  id                       String   @id @default(cuid())
+  domainId                 String   @map("domain_id")
+  preambleVersionId        String?  @map("preamble_version_id")
+  levelPresetVersionId     String?  @map("level_preset_version_id")
+  contextId                String?  @map("context_id")
+  valueStatementVersionIds String[] @map("value_statement_version_ids")
+  fingerprint              String
+  createdAt                DateTime @default(now()) @map("created_at")
+
+  domain               Domain              @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  preambleVersion      PreambleVersion?    @relation(fields: [preambleVersionId], references: [id])
+  levelPresetVersion   LevelPresetVersion? @relation(fields: [levelPresetVersionId], references: [id])
+  context              DomainContext?      @relation(fields: [contextId], references: [id])
+  runs                 Run[]
+
+  @@unique([domainId, fingerprint])
+  @@index([domainId, createdAt(sort: Desc)])
+  @@map("domain_config_snapshots")
+}
+
+model Preamble {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  versions PreambleVersion[]
+
+  @@map("preambles")
+}
+
+model LevelPreset {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  versions LevelPresetVersion[]
+
+  @@map("level_presets")
+}
+
+model LevelPresetVersion {
+  id            String   @id @default(cuid())
+  levelPresetId String   @map("level_preset_id")
+  version       String
+  l1            String
+  l2            String
+  l3            String
+  l4            String
+  l5            String
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  levelPreset LevelPreset  @relation(fields: [levelPresetId], references: [id], onDelete: Cascade)
+  domains     Domain[]
+  definitions Definition[]
+  domainConfigSnapshots DomainConfigSnapshot[]
+
+  @@index([levelPresetId])
+  @@map("level_preset_versions")
+}
+
+model PreambleVersion {
+  id         String   @id @default(cuid())
+  preambleId String   @map("preamble_id")
+  version    String   // User-facing version label (e.g. "2024-02-01 12:00 PST")
+  content    String   @db.Text
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  preamble    Preamble     @relation(fields: [preambleId], references: [id], onDelete: Cascade)
+  definitions Definition[]
+  domains     Domain[]
+  domainConfigSnapshots DomainConfigSnapshot[]
+
+  @@index([preambleId])
+  @@map("preamble_versions")
+}
+
+model Tag {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Audit fields
+  createdByUserId String? @map("created_by_user_id")
+
+  definitions DefinitionTag[]
+  runs        RunTag[]
+
+  // Audit relations
+  createdBy User? @relation("TagCreator", fields: [createdByUserId], references: [id])
+
+  @@map("tags")
+}
+
+model DefinitionTag {
+  id           String    @id @default(cuid())
+  definitionId String    @map("definition_id")
+  tagId        String    @map("tag_id")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  definition Definition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  tag        Tag        @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([definitionId, tagId])
+  @@index([definitionId])
+  @@index([tagId])
+  @@map("definition_tags")
+}
+
+model RunTag {
+  id        String   @id @default(cuid())
+  runId     String   @map("run_id")
+  tagId     String   @map("tag_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  run Run @relation(fields: [runId], references: [id], onDelete: Cascade)
+  tag Tag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, tagId])
+  @@index([runId])
+  @@index([tagId])
+  @@map("run_tags")
+}
+
+model Run {
+  id                 String    @id @default(cuid())
+  name               String?   @map("name")
+  definitionId       String    @map("definition_id")
+  experimentId       String?   @map("experiment_id")
+  status             RunStatus @default(PENDING)
+  runCategory        RunCategory @default(UNKNOWN_LEGACY) @map("run_category")
+  config             Json      @db.JsonB
+  progress           Json?     @db.JsonB
+  summarizeProgress  Json?     @map("summarize_progress") @db.JsonB
+  stalledModels      String[]  @default([]) @map("stalled_models")
+  startedAt          DateTime? @map("started_at")
+  completedAt        DateTime? @map("completed_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  lastAccessedAt     DateTime? @map("last_accessed_at")
+  deletedAt          DateTime? @map("deleted_at")
+  // Retention settings (for future pruning)
+  retentionDays      Int?      @map("retention_days")
+  archivePermanently Boolean   @default(true) @map("archive_permanently")
+
+  // Audit fields
+  createdByUserId String? @map("created_by_user_id")
+  deletedByUserId String? @map("deleted_by_user_id")
+
+  definition Definition  @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  experiment Experiment? @relation(fields: [experimentId], references: [id])
+  tags       RunTag[]
+
+  // Domain config snapshot at run creation time
+  domainConfigSnapshotId String?              @map("domain_config_snapshot_id")
+  domainConfigSnapshot   DomainConfigSnapshot? @relation(fields: [domainConfigSnapshotId], references: [id])
+
+  transcripts     Transcript[]
+  analysisResults AnalysisResult[]
+  domainEvaluationMembership DomainEvaluationRun?
+  baselineFor     RunComparison[]  @relation("BaselineRun")
+  comparisonFor   RunComparison[]  @relation("ComparisonRun")
+  scenarioSelections RunScenarioSelection[]
+  probeResults    ProbeResult[]
+
+  // Audit relations
+  createdBy User? @relation("RunCreator", fields: [createdByUserId], references: [id])
+  deletedBy User? @relation("RunDeleter", fields: [deletedByUserId], references: [id])
+
+  @@index([definitionId])
+  @@index([experimentId])
+  @@index([status])
+  @@index([runCategory])
+  @@index([domainConfigSnapshotId])
+  @@map("runs")
+}
+
+model DomainEvaluation {
+  id               String                        @id @default(cuid())
+  domainId         String                        @map("domain_id")
+  domainNameAtLaunch String                      @map("domain_name_at_launch")
+  scopeCategory    DomainEvaluationScopeCategory @map("scope_category")
+  status           DomainEvaluationStatus        @default(PENDING)
+  configSnapshot   Json                          @map("config_snapshot") @db.JsonB
+  createdAt        DateTime                      @default(now()) @map("created_at")
+  startedAt        DateTime?                     @map("started_at")
+  completedAt      DateTime?                     @map("completed_at")
+  createdByUserId  String?                       @map("created_by_user_id")
+  deletedAt        DateTime?                     @map("deleted_at")
+
+  domain    Domain               @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  createdBy User?                @relation("DomainEvaluationCreator", fields: [createdByUserId], references: [id])
+  members   DomainEvaluationRun[]
+
+  @@index([domainId])
+  @@index([scopeCategory])
+  @@index([status])
+  @@index([createdByUserId])
+  @@map("domain_evaluations")
+}
+
+model DomainEvaluationRun {
+  id                    String   @id @default(cuid())
+  domainEvaluationId    String   @map("domain_evaluation_id")
+  runId                 String   @unique @map("run_id")
+  definitionIdAtLaunch  String   @map("definition_id_at_launch")
+  definitionNameAtLaunch String  @map("definition_name_at_launch")
+  domainIdAtLaunch      String   @map("domain_id_at_launch")
+  createdAt             DateTime @default(now()) @map("created_at")
+  deletedAt             DateTime? @map("deleted_at")
+
+  domainEvaluation DomainEvaluation @relation(fields: [domainEvaluationId], references: [id], onDelete: Cascade)
+  run              Run              @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([domainEvaluationId])
+  @@index([definitionIdAtLaunch])
+  @@index([domainIdAtLaunch])
+  @@map("domain_evaluation_runs")
+}
+
+enum RunStatus {
+  PENDING
+  RUNNING
+  PAUSED
+  SUMMARIZING   // Probing complete, generating summaries
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum DomainEvaluationScopeCategory {
+  PILOT
+  PRODUCTION
+  REPLICATION
+  VALIDATION
+}
+
+enum DomainEvaluationStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum RunCategory {
+  PILOT
+  PRODUCTION
+  REPLICATION
+  VALIDATION
+  UNKNOWN_LEGACY
+}
+
+model Transcript {
+  id                 String    @id @default(cuid())
+  runId              String    @map("run_id")
+  scenarioId         String?   @map("scenario_id")
+  // Model versioning (renamed from target_model for consistency)
+  modelId            String    @map("model_id")
+  modelVersion       String?   @map("model_version")
+  // Multi-sample support: index within sample set (0 to N-1)
+  sampleIndex        Int       @default(0) @map("sample_index")
+  // Definition snapshot (captures exact definition at run time)
+  definitionSnapshot Json?     @map("definition_snapshot") @db.JsonB
+  // Transcript content
+  content            Json      @db.JsonB
+  turnCount          Int       @map("turn_count")
+  tokenCount         Int       @map("token_count")
+  durationMs         Int       @map("duration_ms")
+  // Cost tracking (USD, computed from token counts and model pricing)
+  estimatedCost      Float?    @map("estimated_cost")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  lastAccessedAt     DateTime? @map("last_accessed_at")
+  // Retention (NULL = permanent, default)
+  contentExpiresAt   DateTime? @map("content_expires_at")
+  // Summary fields (populated after run completes).
+  // decision_code and decision_code_source columns were dropped after the
+  // remove-decisionCode PR migrated all transcripts to canonicalDecision as
+  // the single source of truth (PR #713, commit f86c2579).
+  decisionText       String?   @map("decision_text")     // LLM-generated summary
+  decisionMetadata   Json?     @map("decision_metadata") @db.JsonB
+  summarizedAt       DateTime? @map("summarized_at")     // When summary was generated
+  // Soft delete
+  deletedAt          DateTime? @map("deleted_at")
+
+  run      Run       @relation(fields: [runId], references: [id], onDelete: Cascade)
+  scenario Scenario? @relation(fields: [scenarioId], references: [id])
+
+  @@index([runId])
+  @@index([scenarioId])
+  @@index([modelId])
+  @@index([deletedAt])
+  @@index([sampleIndex])
+  @@map("transcripts")
+}
+
+model Scenario {
+  id           String    @id @default(cuid())
+  definitionId String    @map("definition_id")
+  name         String
+  content      Json      @db.JsonB
+  orientationFlipped Boolean @default(false) @map("orientation_flipped")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  definition Definition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  transcripts Transcript[]
+  runSelections RunScenarioSelection[]
+  probeResults ProbeResult[]
+  sourceAssumptionPairs AssumptionScenarioPair[] @relation("SourceAssumptionScenario")
+  variantAssumptionPairs AssumptionScenarioPair[] @relation("VariantAssumptionScenario")
+
+  @@index([definitionId])
+  @@map("scenarios")
+}
+
+model AssumptionVignetteSelection {
+  id           String   @id @default(cuid())
+  assumptionKey String  @map("assumption_key")
+  definitionId String   @map("definition_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  definition Definition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+
+  @@unique([assumptionKey, definitionId])
+  @@index([definitionId])
+  @@map("assumption_vignette_selections")
+}
+
+model AssumptionScenarioPair {
+  id                    String    @id @default(cuid())
+  assumptionKey         String    @map("assumption_key")
+  sourceScenarioId      String    @map("source_scenario_id")
+  variantScenarioId     String    @map("variant_scenario_id")
+  variantType           String    @map("variant_type")
+  equivalenceReviewStatus String? @map("equivalence_review_status")
+  equivalenceReviewedBy String?   @map("equivalence_reviewed_by")
+  equivalenceReviewedAt DateTime? @map("equivalence_reviewed_at")
+  equivalenceReviewNotes String?  @map("equivalence_review_notes") @db.Text
+  createdAt             DateTime  @default(now()) @map("created_at")
+
+  sourceScenario  Scenario @relation("SourceAssumptionScenario", fields: [sourceScenarioId], references: [id], onDelete: Cascade)
+  variantScenario Scenario @relation("VariantAssumptionScenario", fields: [variantScenarioId], references: [id], onDelete: Cascade)
+
+  @@unique([assumptionKey, sourceScenarioId, variantScenarioId])
+  @@index([assumptionKey])
+  @@index([sourceScenarioId])
+  @@index([variantScenarioId])
+  @@map("assumption_scenario_pairs")
+}
+
+// Join table to track which scenarios were sampled for a run
+model RunScenarioSelection {
+  id         String   @id @default(cuid())
+  runId      String   @map("run_id")
+  scenarioId String   @map("scenario_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  run      Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
+  scenario Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, scenarioId])
+  @@index([runId])
+  @@index([scenarioId])
+  @@map("run_scenario_selections")
+}
+
+// ============================================================================
+// JOB RESULTS (Probe outcome tracking)
+// ============================================================================
+
+model ProbeResult {
+  id          String            @id @default(cuid())
+  runId       String            @map("run_id")
+  scenarioId  String            @map("scenario_id")
+  modelId     String            @map("model_id")
+  // Multi-sample support: index within sample set (0 to N-1)
+  sampleIndex Int               @default(0) @map("sample_index")
+  status      ProbeResultStatus
+  // Success fields
+  transcriptId   String?        @map("transcript_id")
+  durationMs     Int?           @map("duration_ms")
+  inputTokens    Int?           @map("input_tokens")
+  outputTokens   Int?           @map("output_tokens")
+  // Failure fields
+  errorCode    String?          @map("error_code")
+  errorMessage String?          @map("error_message")
+  retryCount   Int              @default(0) @map("retry_count")
+  // Timestamps
+  createdAt    DateTime         @default(now()) @map("created_at")
+  completedAt  DateTime?        @map("completed_at")
+  deletedAt    DateTime?        @map("deleted_at")
+
+  run      Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
+  scenario Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+
+  // Updated unique constraint to include sampleIndex for multi-sample runs
+  @@unique([runId, scenarioId, modelId, sampleIndex])
+  @@index([runId])
+  @@index([scenarioId])
+  @@index([modelId])
+  @@index([status])
+  @@index([sampleIndex])
+  @@map("probe_results")
+}
+
+enum ProbeResultStatus {
+  SUCCESS
+  FAILED
+}
+
+// ============================================================================
+// ANALYSIS & EXPERIMENTS
+// ============================================================================
+
+model Experiment {
+  id           String   @id @default(cuid())
+  name         String
+  hypothesis   String?
+  analysisPlan Json?    @map("analysis_plan") @db.JsonB
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  runs        Run[]
+  comparisons RunComparison[]
+
+  @@map("experiments")
+}
+
+model RunComparison {
+  id              String   @id @default(cuid())
+  experimentId    String?  @map("experiment_id")
+  baselineRunId   String   @map("baseline_run_id")
+  comparisonRunId String   @map("comparison_run_id")
+  deltaData       Json?    @map("delta_data") @db.JsonB
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  experiment    Experiment? @relation(fields: [experimentId], references: [id])
+  baselineRun   Run         @relation("BaselineRun", fields: [baselineRunId], references: [id])
+  comparisonRun Run         @relation("ComparisonRun", fields: [comparisonRunId], references: [id])
+
+  @@index([experimentId])
+  @@index([baselineRunId])
+  @@index([comparisonRunId])
+  @@map("run_comparisons")
+}
+
+model AnalysisResult {
+  id           String         @id @default(cuid())
+  runId        String         @map("run_id")
+  analysisType String         @map("analysis_type")
+  inputHash    String         @map("input_hash")
+  codeVersion  String         @map("code_version")
+  output       Json           @db.JsonB
+  status       AnalysisStatus @default(CURRENT)
+  createdAt    DateTime       @default(now()) @map("created_at")
+  // Soft delete
+  deletedAt    DateTime?      @map("deleted_at")
+
+  run Run @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+  @@index([analysisType])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("analysis_results")
+}
+
+enum AnalysisStatus {
+  CURRENT
+  SUPERSEDED
+}
+
+enum AssumptionAnalysisStatus {
+  CURRENT
+  SUPERSEDED
+}
+
+model AssumptionAnalysisSnapshot {
+  id            String                   @id @default(cuid())
+  assumptionKey String                   @map("assumption_key")
+  analysisType  String                   @map("analysis_type")
+  inputHash     String                   @map("input_hash")
+  codeVersion   String                   @map("code_version")
+  configSignature String                 @map("config_signature")
+  config        Json                     @db.JsonB
+  output        Json                     @db.JsonB
+  status        AssumptionAnalysisStatus @default(CURRENT)
+  createdAt     DateTime                 @default(now()) @map("created_at")
+  deletedAt     DateTime?                @map("deleted_at")
+
+  @@index([assumptionKey])
+  @@index([analysisType])
+  @@index([inputHash])
+  @@index([configSignature])
+  @@index([status])
+  @@index([deletedAt])
+  @@index([assumptionKey, analysisType, inputHash, status])
+  @@map("assumption_analysis_snapshots")
+}
+
+model Rubric {
+  id        String   @id @default(cuid())
+  version   Int      @unique
+  content   Json     @db.JsonB
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("rubrics")
+}
+
+// ============================================================================
+// COHORTS (for segment analysis)
+// ============================================================================
+
+model Cohort {
+  id        String   @id @default(cuid())
+  name      String
+  criteria  Json     @db.JsonB
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("cohorts")
+}
+
+// ============================================================================
+// LLM PROVIDERS & MODELS
+// ============================================================================
+
+model LlmProvider {
+  id                  String   @id @default(cuid())
+  name                String   @unique
+  displayName         String   @map("display_name")
+  maxParallelRequests Int      @default(1) @map("max_parallel_requests")
+  requestsPerMinute   Int      @default(60) @map("requests_per_minute")
+  isEnabled           Boolean  @default(true) @map("is_enabled")
+  balance             Decimal? @db.Decimal(10, 4)
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  models          LlmModel[]
+  balanceSyncLogs ProviderBalanceSyncLog[]
+
+  @@map("llm_providers")
+}
+
+model ProviderBalanceSyncLog {
+  id                  String   @id @default(cuid())
+  providerId          String   @map("provider_id")
+  systemBalanceAtSync Decimal  @map("system_balance_at_sync") @db.Decimal(10, 4)
+  enteredBalance      Decimal  @map("entered_balance") @db.Decimal(10, 4)
+  delta               Decimal  @db.Decimal(10, 4)
+  syncedAt            DateTime @default(now()) @map("synced_at")
+  createdByUserId     String?  @map("created_by_user_id")
+
+  provider  LlmProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  createdBy User?       @relation("ProviderBalanceSyncLogCreator", fields: [createdByUserId], references: [id])
+
+  @@index([providerId])
+  @@map("provider_balance_sync_logs")
+}
+
+model LlmModel {
+  id                   String         @id @default(cuid())
+  providerId           String         @map("provider_id")
+  modelId              String         @map("model_id")
+  displayName          String         @map("display_name")
+  costInputPerMillion  Decimal        @map("cost_input_per_million") @db.Decimal(10, 4)
+  costOutputPerMillion Decimal        @map("cost_output_per_million") @db.Decimal(10, 4)
+  status               LlmModelStatus @default(ACTIVE)
+  isDefault            Boolean        @default(false) @map("is_default")
+  apiConfig            Json?          @map("api_config") @db.JsonB
+  createdAt            DateTime       @default(now()) @map("created_at")
+  updatedAt            DateTime       @updatedAt @map("updated_at")
+
+  // Audit fields
+  createdByUserId String? @map("created_by_user_id")
+
+  provider LlmProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  // Audit relations
+  createdBy User? @relation("LlmModelCreator", fields: [createdByUserId], references: [id])
+
+  // Cost visibility - token statistics for cost prediction
+  tokenStatistics ModelTokenStatistics[]
+
+  @@unique([providerId, modelId])
+  @@index([providerId])
+  @@index([status])
+  @@map("llm_models")
+}
+
+enum LlmModelStatus {
+  ACTIVE
+  DEPRECATED
+}
+
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json     @db.JsonB
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("system_settings")
+}
+
+// ============================================================================
+// COST VISIBILITY - Token Statistics
+// ============================================================================
+
+model ModelTokenStatistics {
+  id              String     @id @default(cuid())
+  modelId         String     @map("model_id")
+  definitionId    String?    @map("definition_id")
+  avgInputTokens  Decimal    @default(100) @map("avg_input_tokens") @db.Decimal(10, 2)
+  avgOutputTokens Decimal    @default(900) @map("avg_output_tokens") @db.Decimal(10, 2)
+  sampleCount     Int        @default(0) @map("sample_count")
+  lastUpdatedAt   DateTime   @updatedAt @map("last_updated_at")
+  createdAt       DateTime   @default(now()) @map("created_at")
+
+  model      LlmModel    @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  definition Definition? @relation(fields: [definitionId], references: [id], onDelete: SetNull)
+
+  @@unique([modelId, definitionId])
+  @@index([modelId])
+  @@index([definitionId])
+  @@map("model_token_statistics")
+}
+
+// ============================================================================
+// AUDIT LOGGING
+// ============================================================================
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  action     String   // CREATE, UPDATE, DELETE, ACTION
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  userId     String?  @map("user_id")
+  metadata   Json?    @db.JsonB
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([createdAt])
+  @@index([action])
+  @@map("audit_logs")
+}
+
+
+Context: progress.ts
+/**
+ * Run Progress Service
+ *
+ * Handles atomic progress updates and status transitions for runs.
+ * Uses PostgreSQL JSONB operators for concurrent-safe increments.
+ */
+
+import { db } from '@valuerank/db';
+import { createLogger, NotFoundError } from '@valuerank/shared';
+import type { Prisma } from '@prisma/client';
+
+const log = createLogger('services:run:progress');
+
+export type ProgressUpdate = {
+  incrementCompleted?: number;
+  incrementFailed?: number;
+};
+
+export type ProgressData = {
+  total: number;
+  completed: number;
+  failed: number;
+};
+
+/**
+ * Updates run progress atomically using PostgreSQL JSONB operators.
+ *
+ * This function:
+ * 1. Atomically increments completed/failed counts
+ * 2. Transitions run status based on progress:
+ *    - PENDING -> RUNNING when first job completes
+ *    - RUNNING -> SUMMARIZING when all jobs done
+ * 3. Sets startedAt/completedAt timestamps as appropriate
+ *
+ * Note: Progress is only updated for runs in PENDING or RUNNING state.
+ * Once a run transitions to SUMMARIZING or terminal states, progress
+ * updates are ignored to prevent overcounting.
+ */
+export async function updateProgress(
+  runId: string,
+  update: ProgressUpdate
+): Promise<{ progress: ProgressData; status: string }> {
+  const { incrementCompleted = 0, incrementFailed = 0 } = update;
+
+  // First check current state
+  const currentRun = await db.run.findUnique({
+    where: { id: runId },
+    select: { progress: true, status: true },
+  });
+
+  if (!currentRun) {
+    throw new NotFoundError('Run', runId);
+  }
+
+  // Allow correction swaps regardless of run status.
+  // A correction swap is exactly { +1, -1 } or { -1, +1 } - the counters offset each other.
+  // This handles FAILED -> SUCCESS or SUCCESS -> FAILED probe transitions during recovery
+  // even after the run has moved to SUMMARIZING or a terminal state.
+  const isCorrectionSwap =
+    (incrementCompleted === 1 && incrementFailed === -1) ||
+    (incrementCompleted === -1 && incrementFailed === 1);
+  if (!['PENDING', 'RUNNING'].includes(currentRun.status) && !isCorrectionSwap) {
+    log.debug(
+      { runId, status: currentRun.status, incrementCompleted, incrementFailed },
+      'Skipping progress update - run not in PENDING/RUNNING state'
+    );
+    return {
+      progress: currentRun.progress as ProgressData,
+      status: currentRun.status,
+    };
+  }
+
+  if (incrementCompleted === 0 && incrementFailed === 0) {
+    // No-op, just return current state
+    return {
+      progress: currentRun.progress as ProgressData,
+      status: currentRun.status,
+    };
+  }
+
+  log.debug(
+    { runId, incrementCompleted, incrementFailed },
+    'Updating run progress'
+  );
+
+  // Use raw SQL for atomic JSONB increment
+  // This prevents race conditions when multiple jobs complete simultaneously
+  const result = await db.$queryRaw<Array<{
+    id: string;
+    progress: ProgressData;
+    status: string;
+    started_at: Date | null;
+    completed_at: Date | null;
+  }>>`
+    UPDATE runs
+    SET
+      progress = jsonb_set(
+        jsonb_set(
+          progress,
+          '{completed}',
+          to_jsonb(GREATEST(0, (progress->>'completed')::int + ${incrementCompleted}))
+        ),
+        '{failed}',
+        to_jsonb(GREATEST(0, (progress->>'failed')::int + ${incrementFailed}))
+      ),
+      updated_at = NOW()
+    WHERE id = ${runId}
+    RETURNING id, progress, status, started_at, completed_at
+  `;
+
+  const updatedRun = result[0];
+  if (!updatedRun) {
+    throw new NotFoundError('Run', runId);
+  }
+
+  const progress = updatedRun.progress;
+
+  // Determine if status transition is needed
+  const newStatus = determineStatus(progress, updatedRun.status);
+
+  if (newStatus !== updatedRun.status) {
+    await transitionStatus(runId, updatedRun.status, newStatus);
+    log.info(
+      { runId, oldStatus: updatedRun.status, newStatus, progress },
+      'Run status transitioned'
+    );
+    return { progress, status: newStatus };
+  }
+
+  log.debug({ runId, progress }, 'Progress updated');
+  return { progress, status: updatedRun.status };
+}
+
+// Valid run statuses (from Prisma enum)
+type RunStatus = 'PENDING' | 'RUNNING' | 'PAUSED' | 'SUMMARIZING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+
+/**
+ * Determines the appropriate run status based on progress.
+ */
+function determineStatus(progress: ProgressData, currentStatus: string): RunStatus {
+  const { total, completed, failed } = progress;
+  const done = completed + failed;
+
+  // If run is already in a terminal state, don't change
+  if (['COMPLETED', 'FAILED', 'CANCELLED'].includes(currentStatus)) {
+    return currentStatus as RunStatus;
+  }
+
+  // If already summarizing, don't change (summarize completion handled separately)
+  if (currentStatus === 'SUMMARIZING') {
+    return 'SUMMARIZING';
+  }
+
+  // If run is PAUSED, keep it paused - only resumeRun can change this
+  if (currentStatus === 'PAUSED') {
+    // But if all jobs are done, transition to SUMMARIZING
+    if (done >= total) {
+      return 'SUMMARIZING';
+    }
+    return 'PAUSED';
+  }
+
+  // If all jobs are done, transition to SUMMARIZING (not directly to COMPLETED)
+  if (done >= total) {
+    return 'SUMMARIZING';
+  }
+
+  // If at least one job has completed/failed, run is RUNNING
+  if (done > 0 && currentStatus === 'PENDING') {
+    return 'RUNNING';
+  }
+
+  return currentStatus as RunStatus;
+}
+
+/**
+ * Transitions run to a new status with appropriate timestamp updates.
+ */
+async function transitionStatus(
+  runId: string,
+  fromStatus: string,
+  toStatus: RunStatus
+): Promise<void> {
+  const updates: Prisma.RunUpdateInput = {
+    status: toStatus,
+  };
+
+  // Set startedAt when transitioning to RUNNING
+  if (toStatus === 'RUNNING' && fromStatus === 'PENDING') {
+    updates.startedAt = new Date();
+  }
+
+  // Set completedAt when transitioning to a terminal state
+  if (['COMPLETED', 'FAILED', 'CANCELLED'].includes(toStatus)) {
+    updates.completedAt = new Date();
+  }
+
+  if (toStatus !== 'RUNNING') {
+    updates.stalledModels = [];
+  }
+
+  await db.run.update({
+    where: { id: runId },
+    data: updates,
+  });
+
+  // When transitioning to SUMMARIZING, queue summarize jobs for all transcripts
+  if (toStatus === 'SUMMARIZING') {
+    await queueSummarizeJobs(runId);
+  }
+}
+
+/**
+ * Wait for transcript rows to settle before counting.
+ *
+ * When the last probe job triggers SUMMARIZING, other probe jobs may still
+ * be committing their transcript rows. This polls briefly (up to 5 seconds)
+ * until the DB transcript count matches the expected total from probe progress,
+ * so the summarization denominator is accurate.
+ */
+const SETTLE_POLL_INTERVAL_MS = 500;
+const SETTLE_MAX_WAIT_MS = 5_000;
+
+async function waitForTranscriptSettle(
+  runId: string,
+  expectedCompleted: number,
+): Promise<number> {
+  const deadline = Date.now() + SETTLE_MAX_WAIT_MS;
+
+  while (Date.now() < deadline) {
+    const count = await db.transcript.count({ where: { runId } });
+    if (count >= expectedCompleted) {
+      return count;
+    }
+    log.debug(
+      { runId, dbCount: count, expected: expectedCompleted },
+      'Waiting for in-flight transcript commits to settle'
+    );
+    await new Promise((resolve) => setTimeout(resolve, SETTLE_POLL_INTERVAL_MS));
+  }
+
+  // Timed out — return whatever we have
+  const finalCount = await db.transcript.count({ where: { runId } });
+  log.warn(
+    { runId, dbCount: finalCount, expected: expectedCompleted },
+    'Transcript settle timed out — proceeding with current count'
+  );
+  return finalCount;
+}
+
+/**
+ * Queues summarize jobs for all transcripts in a run.
+ */
+async function queueSummarizeJobs(runId: string): Promise<void> {
+  // Dynamic import to avoid circular dependency
+  const { getBoss } = await import('../../queue/boss.js');
+  const { DEFAULT_JOB_OPTIONS } = await import('../../queue/types.js');
+
+  const boss = getBoss();
+
+  // Read the probe progress to know how many successful transcripts to expect
+  const run = await db.run.findUnique({
+    where: { id: runId },
+    select: { progress: true },
+  });
+  const probeProgress = run?.progress as ProgressData | null;
+  const expectedCompleted = probeProgress?.completed ?? 0;
+
+  // Wait for in-flight transcript commits before counting
+  if (expectedCompleted > 0) {
+    await waitForTranscriptSettle(runId, expectedCompleted);
+  }
+
+  // Get all transcripts for this run
+  const transcripts = await db.transcript.findMany({
+    where: { runId },
+    select: { id: true },
+  });
+
+  if (transcripts.length === 0) {
+    log.warn({ runId }, 'No transcripts to summarize, completing run');
+    await db.run.update({
+      where: { id: runId },
+      data: { status: 'COMPLETED', completedAt: new Date(), stalledModels: [] },
+    });
+    return;
+  }
+
+  // Initialize summarizeProgress
+  await db.run.update({
+    where: { id: runId },
+    data: {
+      summarizeProgress: {
+        total: transcripts.length,
+        completed: 0,
+        failed: 0,
+      },
+    },
+  });
+
+  log.info({ runId, transcriptCount: transcripts.length }, 'Queueing summarize jobs');
+
+  const jobOptions = DEFAULT_JOB_OPTIONS['summarize_transcript'];
+
+  for (const transcript of transcripts) {
+    await boss.send('summarize_transcript', {
+      runId,
+      transcriptId: transcript.id,
+    }, jobOptions);
+  }
+
+  log.info({ runId, jobCount: transcripts.length }, 'Summarize jobs queued');
+}
+
+/**
+ * Increments completed count by 1.
+ * Convenience wrapper for updateProgress.
+ */
+export async function incrementCompleted(
+  runId: string
+): Promise<{ progress: ProgressData; status: string }> {
+  return updateProgress(runId, { incrementCompleted: 1 });
+}
+
+/**
+ * Increments failed count by 1.
+ * Convenience wrapper for updateProgress.
+ */
+export async function incrementFailed(
+  runId: string
+): Promise<{ progress: ProgressData; status: string }> {
+  return updateProgress(runId, { incrementFailed: 1 });
+}
+
+/**
+ * Gets current progress for a run.
+ */
+export async function getProgress(runId: string): Promise<ProgressData | null> {
+  const run = await db.run.findUnique({
+    where: { id: runId },
+    select: { progress: true },
+  });
+
+  if (!run) {
+    return null;
+  }
+
+  return run.progress as ProgressData | null;
+}
+
+/**
+ * Calculates percent complete from progress data.
+ */
+export function calculatePercentComplete(progress: ProgressData): number {
+  if (progress.total === 0) {
+    return 100; // Edge case: no jobs means complete
+  }
+  const done = progress.completed + progress.failed;
+  return Math.round((done / progress.total) * 100);
+}
+
+// Summarize progress functions live in ./summarize-progress.ts
+export { updateSummarizeProgress, incrementSummarizeCompleted, incrementSummarizeFailed } from './summarize-progress.js';
+
+
+Context: handler.ts
+/**
+ * Probe Scenario Handler
+ *
+ * Handles probe_scenario jobs by executing Python probe worker
+ * and saving transcripts to database.
+ *
+ * Jobs are processed in parallel within each batch, with rate limiting
+ * enforced per-provider using Bottleneck.
+ */
+
+import path from 'path';
+import type * as PgBoss from 'pg-boss';
+import type { Prisma } from '@valuerank/db';
+import { db } from '@valuerank/db';
+import { createLogger } from '@valuerank/shared';
+import type { ProbeScenarioJobData } from '../../types.js';
+import { DEFAULT_JOB_OPTIONS } from '../../types.js';
+import { spawnPython } from '../../spawn.js';
+import { isRunPaused, isRunTerminal } from '../../../services/run/index.js';
+import { createTranscript, validateTranscript } from '../../../services/transcript/index.js';
+import type { CostSnapshot } from '../../../services/transcript/index.js';
+import { recordProbeSuccess, recordProbeFailure } from '../../../services/probe-result/index.js';
+import { schedule as rateLimitSchedule } from '../../../services/rate-limiter/index.js';
+import { getProviderForModel } from '../../../services/parallelism/index.js';
+import { ensureHealthCheck } from './health-check.js';
+import { enqueueTopUpProbesSingleton } from '../top-up-probes.js';
+import { formatWorkerErrorMessage, extractStoredTranscriptTokenUsage, applyProgressDelta, handleJobError } from './retry.js';
+import { PROBE_WORKER_PATH, fetchScenario, buildWorkerInput } from './worker-input.js';
+import type { ProbeWorkerInput, ProbeWorkerOutput } from './worker-input.js';
+
+const log = createLogger('queue:probe-scenario');
+
+// Retry limit from job options (default 3)
+const RETRY_LIMIT = DEFAULT_JOB_OPTIONS['probe_scenario'].retryLimit ?? 3;
+
+/**
+ * Process a single probe job.
+ * Extracted to allow parallel execution within batches.
+ */
+async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<void> {
+  const { runId, scenarioId, modelId, sampleIndex = 0, config } = job.data;
+  const jobId = job.id;
+  const probeResultKey = {
+    runId_scenarioId_modelId_sampleIndex: {
+      runId,
+      scenarioId,
+      modelId,
+      sampleIndex,
+    },
+  };
+
+  log.info(
+    { jobId, runId, scenarioId, modelId, sampleIndex, config },
+    'Processing probe_scenario job'
+  );
+
+  try {
+    // Check if run is in a terminal state (completed/cancelled) - skip processing
+    if (await isRunTerminal(runId)) {
+      log.info({ jobId, runId }, 'Skipping job - run is in terminal state');
+      return;
+    }
+
+    // Check if run is paused - defer job for later
+    if (await isRunPaused(runId)) {
+      log.info({ jobId, runId }, 'Deferring job - run is paused');
+      throw new Error('RUN_PAUSED: Job deferred because run is paused');
+    }
+
+    // Idempotency: if this probe combination already succeeded, skip it.
+    const existingProbeResult = await db.probeResult.findUnique({
+      where: probeResultKey,
+      select: {
+        status: true,
+        transcriptId: true,
+      },
+    });
+    const previousProbeStatus = existingProbeResult?.status ?? null;
+    const currentRetryCount = (job as unknown as { retrycount?: number }).retrycount ?? 0;
+
+    if (
+      existingProbeResult !== null &&
+      existingProbeResult.status === 'SUCCESS' &&
+      typeof existingProbeResult.transcriptId === 'string' &&
+      existingProbeResult.transcriptId !== ''
+    ) {
+      log.info(
+        { jobId, runId, scenarioId, modelId, sampleIndex, transcriptId: existingProbeResult.transcriptId },
+        'Skipping probe job - result already succeeded'
+      );
+      await enqueueTopUpProbesSingleton(runId);
+      return;
+    }
+
+    // If this specific key is already terminal-failed and this is only a PgBoss retry,
+    // skip repeating a call that has already been recorded as failed.
+    if (
+      existingProbeResult !== null &&
+      existingProbeResult.status === 'FAILED' &&
+      currentRetryCount > 0
+    ) {
+      log.info(
+        { jobId, runId, scenarioId, modelId, sampleIndex, currentRetryCount },
+        'Skipping probe job - already terminal failed'
+      );
+      await enqueueTopUpProbesSingleton(runId);
+      return;
+    }
+
+    // Recovery path: transcript exists but probe_result success row is missing
+    const existingTranscript = await db.transcript.findFirst({
+      where: {
+        runId,
+        scenarioId,
+        modelId,
+        sampleIndex,
+        deletedAt: null,
+      },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        durationMs: true,
+        tokenCount: true,
+        content: true,
+      },
+    });
+
+    if (existingTranscript !== null) {
+      const tokenUsage = extractStoredTranscriptTokenUsage(
+        existingTranscript.content,
+        existingTranscript.tokenCount
+      );
+
+      await recordProbeSuccess({
+        runId,
+        scenarioId,
+        modelId,
+        sampleIndex,
+        transcriptId: existingTranscript.id,
+        durationMs: existingTranscript.durationMs,
+        inputTokens: tokenUsage.inputTokens,
+        outputTokens: tokenUsage.outputTokens,
+      });
+
+      const { progress, status } = await applyProgressDelta(runId, previousProbeStatus, 'SUCCESS');
+      log.info(
+        { jobId, runId, scenarioId, modelId, sampleIndex, transcriptId: existingTranscript.id, progress, status },
+        'Recovered probe result from existing transcript'
+      );
+      return;
+    }
+
+    // Run health check on first job (lazy initialization)
+    await ensureHealthCheck();
+
+    // Fetch scenario and definition from database
+    const scenario = await fetchScenario(scenarioId);
+
+    // Build input for Python worker
+    const workerInput = await buildWorkerInput(
+      runId,
+      scenarioId,
+      modelId,
+      scenario.content,
+      scenario.definition.content,
+      scenario.definition.preambleVersion?.content ?? undefined,
+      config
+    );
+
+    log.debug({ jobId, workerInput }, 'Calling Python probe worker');
+
+    // Execute Python probe worker
+    const result = await spawnPython<ProbeWorkerInput, ProbeWorkerOutput>(
+      PROBE_WORKER_PATH,
+      workerInput,
+      { cwd: path.resolve(process.cwd(), '../..') } // cloud/ directory
+    );
+
+    // Handle spawn failure
+    if (!result.success) {
+      log.error({ jobId, runId, error: result.error, stderr: result.stderr }, 'Python spawn failed');
+      throw new Error(`Python worker failed: ${result.error}`);
+    }
+
+    // Handle worker failure
+    const output = result.data;
+    if (!output.success) {
+      const err = output.error;
+      log.warn({ jobId, runId, error: err }, 'Probe worker returned error');
+
+      // Use Python's retryable flag if available
+      if (!err.retryable) {
+        const errorMessage = formatWorkerErrorMessage(err);
+        // Non-retryable error - record failure and increment failed count
+        await recordProbeFailure({
+          runId,
+          scenarioId,
+          modelId,
+          sampleIndex,
+          errorCode: err.code,
+          errorMessage,
+          retryCount: 0,
+        });
+        const { progress, status } = await applyProgressDelta(runId, previousProbeStatus, 'FAILED');
+        log.error({ jobId, runId, progress, status, error: err }, 'Probe job permanently failed');
+        return; // Complete job without retrying
+      }
+
+      // Retryable error - throw to trigger retry
+      throw new Error(`${err.code}: ${formatWorkerErrorMessage(err)}`);
+    }
+
+    // Validate transcript structure
+    if (!validateTranscript(output.transcript)) {
+      log.error({ jobId, runId }, 'Invalid transcript structure from Python worker');
+      throw new Error('Invalid transcript structure');
+    }
+
+    // Create transcript record with cost snapshot if model cost info available
+    let costSnapshot: CostSnapshot | undefined;
+    if (workerInput.modelCost !== undefined) {
+      const { costInputPerMillion, costOutputPerMillion } = workerInput.modelCost;
+      const inputTokens = output.transcript.totalInputTokens;
+      const outputTokens = output.transcript.totalOutputTokens;
+      const estimatedCost =
+        (inputTokens * costInputPerMillion) / 1_000_000 +
+        (outputTokens * costOutputPerMillion) / 1_000_000;
+      const reasoningTokens = output.transcript.totalReasoningTokens;
+      costSnapshot = {
+        inputTokens,
+        outputTokens,
+        estimatedCost,
+        costInputPerMillion,
+        costOutputPerMillion,
+        ...(reasoningTokens != null && reasoningTokens > 0 && { reasoningTokens }),
+      };
+    }
+
+    // Use an advisory lock to prevent concurrent probe jobs from creating
+    // duplicate transcripts for the same (runId, scenarioId, modelId, sampleIndex).
+    // Without this, two retries can both pass the "existing transcript?" check
+    // before either finishes inserting, producing duplicate rows.
+    const probeKey = `${runId}:${scenarioId}:${modelId}:${sampleIndex}`;
+    const transcriptRecord = await db.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${probeKey}))`;
+
+      // Re-check inside the lock — another job may have inserted while we waited
+      const alreadyCreated = await tx.transcript.findFirst({
+        where: { runId, scenarioId, modelId, sampleIndex, deletedAt: null },
+        select: { id: true, durationMs: true, tokenCount: true, content: true },
+      });
+
+      if (alreadyCreated !== null) {
+        log.info(
+          { runId, scenarioId, modelId, sampleIndex, existingId: alreadyCreated.id },
+          'Transcript already created by concurrent job — skipping duplicate insert'
+        );
+        return alreadyCreated;
+      }
+
+      return createTranscript({
+        runId,
+        scenarioId,
+        modelId,
+        sampleIndex,
+        transcript: output.transcript,
+        definitionSnapshot: scenario.definition.content as Prisma.InputJsonValue,
+        costSnapshot,
+      }, tx);
+    });
+
+    // Record probe success in results table
+    // Calculate duration from timestamps
+    const startedAt = new Date(output.transcript.startedAt);
+    const completedAt = new Date(output.transcript.completedAt);
+    const durationMs = completedAt.getTime() - startedAt.getTime();
+
+    await recordProbeSuccess({
+      runId,
+      scenarioId,
+      modelId,
+      sampleIndex,
+      transcriptId: transcriptRecord.id,
+      durationMs,
+      inputTokens: output.transcript.totalInputTokens,
+      outputTokens: output.transcript.totalOutputTokens,
+    });
+
+    // Update progress based on status transition for this probe key
+    const { progress, status } = await applyProgressDelta(runId, previousProbeStatus, 'SUCCESS');
+    await enqueueTopUpProbesSingleton(runId);
+
+    // If run is already in SUMMARIZING state (late-arriving probe job),
+    // queue a summarize job for this transcript immediately
+    if (status === 'SUMMARIZING') {
+      const { getBoss } = await import('../../boss.js');
+      const { DEFAULT_JOB_OPTIONS: jobOptions } = await import('../../types.js');
+      const boss = getBoss();
+      if (boss !== null) {
+        await boss.send('summarize_transcript', {
+          runId,
+          transcriptId: transcriptRecord.id,
+        }, jobOptions['summarize_transcript']);
+        log.info({ runId, transcriptId: transcriptRecord.id }, 'Queued summarize job for late-arriving transcript');
+      }
+    }
+
+    log.info(
+      { jobId, runId, scenarioId, modelId, progress, status, turns: output.transcript.turns.length },
+      'Probe job completed'
+    );
+  } catch (error) {
+    // Pause deferral is not a real failure — propagate immediately
+    if (error instanceof Error && error.message.startsWith('RUN_PAUSED:')) {
+      throw error;
+    }
+
+    const retryCount = (job as unknown as { retrycount?: number }).retrycount ?? 0;
+    const terminal = await handleJobError(
+      error, jobId, runId, scenarioId, modelId, sampleIndex, retryCount, RETRY_LIMIT, probeResultKey
+    );
+    if (terminal) {
+      return;
+    }
+
+    // Re-throw to let PgBoss handle retry logic
+    throw error;
+  }
+}
+
+/**
+ * Creates a handler for probe_scenario jobs.
+ *
+ * Jobs in each batch are processed in PARALLEL using the rate limiter
+ * to enforce per-provider concurrency and rate limits.
+ */
+export function createProbeScenarioHandler(): PgBoss.WorkHandler<ProbeScenarioJobData> {
+  return async (jobs: PgBoss.Job<ProbeScenarioJobData>[]) => {
+    if (jobs.length === 0) {
+      return;
+    }
+
+    log.info({ jobCount: jobs.length }, 'Processing probe_scenario batch in parallel');
+
+    // Process all jobs in parallel with rate limiting
+    const results = await Promise.allSettled(
+      jobs.map(async (job) => {
+        const { modelId, scenarioId } = job.data;
+        const jobId = job.id;
+
+        // Get provider for this model to route to correct rate limiter
+        const provider = await getProviderForModel(modelId);
+
+        if (provider === null) {
+          // Unknown provider - process without rate limiting (fallback)
+          log.warn({ jobId, modelId }, 'Unknown provider for model, processing without rate limit');
+          return processProbeJob(job);
+        }
+
+        // Schedule through rate limiter for this provider
+        return rateLimitSchedule(
+          provider,
+          jobId,
+          job.data.runId,
+          modelId,
+          scenarioId,
+          () => processProbeJob(job)
+        );
+      })
+    );
+
+    // Check for failures - PgBoss needs us to throw to trigger retries
+    const failures = results.filter(
+      (r): r is PromiseRejectedResult => r.status === 'rejected'
+    );
+
+    if (failures.length > 0) {
+      log.warn(
+        { failureCount: failures.length, totalJobs: jobs.length },
+        'Some jobs in batch failed'
+      );
+
+      // Throw when any retryable failures occurred so PgBoss requeues them.
+      // Succeeded jobs are idempotent (checked by probe_result/transcript), so retries are safe.
+      if (failures[0] !== undefined) {
+        throw failures[0].reason;
+      }
+    }
+
+    log.info(
+      { completed: results.length - failures.length, failed: failures.length },
+      'Probe batch processing complete'
+    );
+  };
+}
+
+
+Context: retry.ts
+/**
+ * Retry logic, error classification, and progress delta helpers.
+ */
+
+import { createLogger } from '@valuerank/shared';
+import { db } from '@valuerank/db';
+import { updateProgress } from '../../../services/run/index.js';
+import { recordProbeFailure } from '../../../services/probe-result/index.js';
+import { enqueueTopUpProbesSingleton } from '../top-up-probes.js';
+
+const log = createLogger('queue:probe-scenario');
+
+export type ProbeStatus = 'SUCCESS' | 'FAILED' | null;
+
+/**
+ * Checks if an error is retryable.
+ */
+export function isRetryableError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return true; // Unknown errors are retryable by default
+  }
+
+  const message = error.message.toLowerCase();
+
+  // Network errors - retryable
+  const networkErrorPatterns = [
+    'econnrefused',
+    'enotfound',
+    'etimedout',
+    'econnreset',
+    'socket hang up',
+    'network error',
+    'fetch failed',
+  ];
+
+  if (networkErrorPatterns.some((pattern) => message.includes(pattern))) {
+    return true;
+  }
+
+  // HTTP status code errors
+  if (message.includes('429') || message.includes('rate limit')) {
+    return true; // Rate limit - retryable
+  }
+
+  if (/5\d{2}/.test(message)) {
+    return true; // Server errors (5xx) - retryable
+  }
+
+  // Non-retryable errors
+  const nonRetryablePatterns = [
+    'validation',
+    'invalid',
+    '401',
+    '403',
+    '404',
+    '400',
+    'unauthorized',
+    'forbidden',
+    'not found',
+    'bad request',
+  ];
+
+  if (nonRetryablePatterns.some((pattern) => message.includes(pattern))) {
+    return false;
+  }
+
+  // Default: retryable
+  return true;
+}
+
+export function formatWorkerErrorMessage(error: { message: string; details?: string }): string {
+  const baseMessage = error.message;
+  const details = typeof error.details === 'string' ? error.details.trim() : '';
+  if (details === '') {
+    return baseMessage;
+  }
+
+  if (baseMessage.toLowerCase().includes(details.toLowerCase())) {
+    return baseMessage;
+  }
+
+  return `${baseMessage} | ${details}`;
+}
+
+export function getProgressDelta(
+  previousStatus: ProbeStatus,
+  nextStatus: 'SUCCESS' | 'FAILED'
+): { incrementCompleted: number; incrementFailed: number } {
+  if (previousStatus === nextStatus) {
+    return { incrementCompleted: 0, incrementFailed: 0 };
+  }
+
+  if (previousStatus === null) {
+    return nextStatus === 'SUCCESS'
+      ? { incrementCompleted: 1, incrementFailed: 0 }
+      : { incrementCompleted: 0, incrementFailed: 1 };
+  }
+
+  // Transition between terminal states (rare but possible if recovered/overridden)
+  return nextStatus === 'SUCCESS'
+    ? { incrementCompleted: 1, incrementFailed: -1 }
+    : { incrementCompleted: -1, incrementFailed: 1 };
+}
+
+export function extractStoredTranscriptTokenUsage(
+  content: unknown,
+  fallbackTokenCount: number
+): { inputTokens: number; outputTokens: number } {
+  const value = content as Record<string, unknown>;
+  const snapshot = value.costSnapshot as Record<string, unknown> | undefined;
+  const snapshotInput = snapshot?.inputTokens;
+  const snapshotOutput = snapshot?.outputTokens;
+
+  if (typeof snapshotInput === 'number' && typeof snapshotOutput === 'number') {
+    return { inputTokens: snapshotInput, outputTokens: snapshotOutput };
+  }
+
+  const turns = Array.isArray(value.turns) ? value.turns : [];
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let foundAny = false;
+
+  for (const turn of turns) {
+    if (turn === null || typeof turn !== 'object') {
+      continue;
+    }
+
+    const turnObj = turn as Record<string, unknown>;
+    if (typeof turnObj.inputTokens === 'number') {
+      inputTokens += turnObj.inputTokens;
+      foundAny = true;
+    }
+    if (typeof turnObj.outputTokens === 'number') {
+      outputTokens += turnObj.outputTokens;
+      foundAny = true;
+    }
+  }
+
+  if (foundAny) {
+    return { inputTokens, outputTokens };
+  }
+
+  // Last-resort fallback when detailed counts are unavailable in legacy transcript payloads
+  return { inputTokens: 0, outputTokens: fallbackTokenCount };
+}
+
+export async function applyProgressDelta(
+  runId: string,
+  previousStatus: ProbeStatus,
+  nextStatus: 'SUCCESS' | 'FAILED'
+): Promise<{ progress: { total: number; completed: number; failed: number } | null; status: string | null }> {
+  const delta = getProgressDelta(previousStatus, nextStatus);
+  if (delta.incrementCompleted === 0 && delta.incrementFailed === 0) {
+    return { progress: null, status: null };
+  }
+
+  const updated = await updateProgress(runId, delta);
+  return { progress: updated.progress, status: updated.status };
+}
+
+type ProbeResultKey = {
+  runId_scenarioId_modelId_sampleIndex: {
+    runId: string;
+    scenarioId: string;
+    modelId: string;
+    sampleIndex: number;
+  };
+};
+
+/**
+ * Handle a caught error in processProbeJob.
+ *
+ * Returns true if the job should return (terminal failure recorded),
+ * or rethrows if the error should propagate to PgBoss for retry.
+ *
+ * Pause deferral errors are always rethrown before calling this function.
+ */
+export async function handleJobError(
+  error: unknown,
+  jobId: string,
+  runId: string,
+  scenarioId: string,
+  modelId: string,
+  sampleIndex: number,
+  retryCount: number,
+  retryLimit: number,
+  probeResultKey: ProbeResultKey
+): Promise<boolean> {
+  const retryable = isRetryableError(error);
+  const maxRetriesReached = retryCount >= retryLimit;
+
+  log.warn(
+    { jobId, runId, scenarioId, modelId, retryable, retryCount, maxRetriesReached, err: error },
+    'Probe job error'
+  );
+
+  if (!retryable || maxRetriesReached) {
+    try {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorCode = !retryable ? 'NON_RETRYABLE' : 'MAX_RETRIES_EXCEEDED';
+      const existingProbeResult = await db.probeResult.findUnique({
+        where: probeResultKey,
+        select: { status: true },
+      });
+      await recordProbeFailure({
+        runId,
+        scenarioId,
+        modelId,
+        sampleIndex,
+        errorCode,
+        errorMessage,
+        retryCount,
+      });
+      const { progress, status } = await applyProgressDelta(
+        runId,
+        existingProbeResult?.status ?? null,
+        'FAILED'
+      );
+      await enqueueTopUpProbesSingleton(runId);
+      log.error(
+        { jobId, runId, scenarioId, modelId, progress, status, retryCount, err: error },
+        'Probe job permanently failed'
+      );
+    } catch (progressError) {
+      log.error(
+        { jobId, runId, err: progressError },
+        'Failed to update progress after job failure'
+      );
+    }
+    return true; // caller should return
+  }
+
+  log.info(
+    { jobId, runId, retryCount, retriesRemaining: retryLimit - retryCount },
+    'Job will be retried'
+  );
+  return false; // caller should rethrow
+}
+
+
+Context: recovery.ts
+/**
+ * Run Recovery Service
+ *
+ * Detects and recovers orphaned runs - runs stuck in RUNNING/SUMMARIZING state
+ * with no active/pending jobs in the queue.
+ *
+ * This handles scenarios like:
+ * - API restart during job processing (jobs orphaned)
+ * - Power outage / pod eviction
+ * - Jobs that expired and exhausted retries without updating run progress
+ */
+
+import { db } from '@valuerank/db';
+import { createLogger } from '@valuerank/shared';
+import { findMissingProbes } from './coverage-completeness.js';
+import { ACTIVE_PROBE_QUEUE_SQL } from '../queue/probe-queues.js';
+import {
+  countJobsForRun,
+  requeueMissingProbes,
+  queueSummarizeJobsForRecovery,
+} from './recovery-jobs.js';
+
+const log = createLogger('services:run:recovery');
+
+// How long a run must be stuck before we consider it orphaned (5 minutes)
+const STUCK_THRESHOLD_MINUTES = 5;
+
+// How often to run recovery (set by scheduled job)
+export const RECOVERY_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
+export type OrphanedRunInfo = {
+  runId: string;
+  status: string;
+  progress: { total: number; completed: number; failed: number };
+  pendingJobs: number;
+  activeJobs: number;
+  missingProbes: number;
+  stuckMinutes: number;
+};
+
+export type RecoveryResult = {
+  detected: OrphanedRunInfo[];
+  recovered: Array<{ runId: string; action: string; requeuedCount?: number }>;
+  errors: Array<{ runId: string; error: string }>;
+};
+
+/**
+ * Detects orphaned runs by comparing run progress with actual queue state.
+ *
+ * A run is considered orphaned if:
+ * 1. Status is RUNNING or SUMMARIZING
+ * 2. No pending or active jobs exist for this run
+ * 3. Progress shows incomplete (completed + failed < total)
+ * 4. Last update was > STUCK_THRESHOLD_MINUTES ago
+ */
+export async function detectOrphanedRuns(): Promise<OrphanedRunInfo[]> {
+  const orphaned: OrphanedRunInfo[] = [];
+
+  // Find runs that might be stuck
+  const stuckRuns = await db.run.findMany({
+    where: {
+      status: { in: ['RUNNING', 'SUMMARIZING'] },
+      updatedAt: {
+        lt: new Date(Date.now() - STUCK_THRESHOLD_MINUTES * 60 * 1000),
+      },
+      deletedAt: null,
+    },
+    select: {
+      id: true,
+      status: true,
+      progress: true,
+      updatedAt: true,
+      config: true,
+    },
+  });
+
+  if (stuckRuns.length === 0) {
+    return [];
+  }
+
+  log.debug({ stuckRunCount: stuckRuns.length }, 'Checking potentially stuck runs');
+
+  for (const run of stuckRuns) {
+    const progress = run.progress as { total: number; completed: number; failed: number };
+
+    // Count pending/active jobs for this run in PgBoss
+    const jobCounts = await countJobsForRun(run.id);
+
+    if (jobCounts.pending === 0 && jobCounts.active === 0) {
+      // Coverage check is based on expected scenario/model/sample keys, not progress counters.
+      // This catches runs where progress counters are inaccurate due retries/duplicates.
+      const missingProbes = await findMissingProbes(run.id);
+      const stuckMinutes = Math.floor(
+        (Date.now() - run.updatedAt.getTime()) / (60 * 1000)
+      );
+
+      orphaned.push({
+        runId: run.id,
+        status: run.status,
+        progress,
+        pendingJobs: jobCounts.pending,
+        activeJobs: jobCounts.active,
+        missingProbes: missingProbes.length,
+        stuckMinutes,
+      });
+
+      log.info(
+        {
+          runId: run.id,
+          status: run.status,
+          progress,
+          missingProbes: missingProbes.length,
+          stuckMinutes,
+        },
+        'Detected orphaned run'
+      );
+    }
+  }
+
+  return orphaned;
+}
+
+/**
+ * Recovers a single orphaned run by re-queuing missing probes.
+ */
+export async function recoverOrphanedRun(
+  runId: string
+): Promise<{ action: string; requeuedCount?: number }> {
+  const run = await db.run.findUnique({
+    where: { id: runId },
+    select: { status: true, startedAt: true },
+  });
+
+  if (run?.status === 'CANCELLED') {
+    log.info({ runId }, 'Skipping recovery for cancelled run');
+    return { action: 'run_cancelled' };
+  }
+
+  const missingProbes = await findMissingProbes(runId);
+
+  if (missingProbes.length === 0) {
+    // No missing probes - check if we need to trigger summarization
+    const currentRun = await db.run.findUnique({
+      where: { id: runId },
+      select: { status: true, progress: true },
+    });
+
+    if (currentRun?.status === 'RUNNING') {
+      const progress = currentRun.progress as { total: number; completed: number; failed: number };
+      if (progress.completed + progress.failed >= progress.total) {
+        // Progress complete, trigger summarization
+        log.info({ runId }, 'Triggering summarization for completed run');
+        await db.run.update({
+          where: { id: runId },
+          data: { status: 'SUMMARIZING', stalledModels: [] },
+        });
+
+        // Queue summarize jobs for unsummarized transcripts
+        const queuedCount = await queueSummarizeJobsForRecovery(runId);
+        return { action: 'triggered_summarization', requeuedCount: queuedCount };
+      }
+    }
+
+    // Check if run is in SUMMARIZING but has no pending summarize jobs
+    if (currentRun?.status === 'SUMMARIZING') {
+      const pendingSummarizeJobs = await db.$queryRaw<Array<{ count: bigint }>>`
+        SELECT COUNT(*) as count
+        FROM pgboss.job
+        WHERE name = 'summarize_transcript'
+          AND state IN ('created', 'retry', 'active')
+          AND data->>'runId' = ${runId}
+      `;
+
+      const pendingCount = Number(pendingSummarizeJobs[0]?.count ?? 0);
+
+      if (pendingCount === 0) {
+        // Check if there are unsummarized transcripts
+        const unsummarizedCount = await db.transcript.count({
+          where: { runId, summarizedAt: null },
+        });
+
+        if (unsummarizedCount > 0) {
+          // Re-queue summarize jobs
+          const queuedCount = await queueSummarizeJobsForRecovery(runId);
+          log.info({ runId, queuedCount }, 'Re-queued orphaned summarize jobs');
+          return { action: 'requeued_summarize_jobs', requeuedCount: queuedCount };
+        } else {
+          // All transcripts summarized, mark as complete
+          log.info({ runId }, 'All transcripts summarized, completing run');
+          await db.run.update({
+            where: { id: runId },
+            data: { status: 'COMPLETED', completedAt: new Date(), stalledModels: [] },
+          });
+          return { action: 'completed_run' };
+        }
+      }
+    }
+
+    return { action: 'no_missing_probes' };
+  }
+
+  // Ensure run is set to RUNNING so re-queued probe jobs are not skipped as terminal.
+  // (COMPLETED/FAILED runs can be manually recovered if missing probes are detected.)
+  const shouldResume = run !== null && run.status !== 'RUNNING';
+  await db.run.update({
+    where: { id: runId },
+    data: {
+      status: shouldResume ? 'RUNNING' : undefined,
+      completedAt: shouldResume ? null : undefined,
+      startedAt: shouldResume && run.startedAt === null ? new Date() : undefined,
+      updatedAt: new Date(),
+    },
+  });
+
+  // Re-queue missing probes after status update.
+  // This avoids workers skipping jobs when a run was previously terminal.
+  const requeuedCount = await requeueMissingProbes(runId, missingProbes);
+
+  // Log details about missing probes (include full details if small number)
+  const logDetails = missingProbes.length <= 10
+    ? { runId, requeuedCount, missingProbes }
+    : { runId, requeuedCount, missingCount: missingProbes.length, sample: missingProbes.slice(0, 5) };
+  log.info(logDetails, 'Recovered orphaned run');
+
+  return { action: 'requeued_probes', requeuedCount };
+}
+
+/**
+ * Detects and recovers all orphaned runs.
+ * This is the main entry point for scheduled recovery.
+ */
+export async function recoverOrphanedRuns(): Promise<RecoveryResult> {
+  const result: RecoveryResult = {
+    detected: [],
+    recovered: [],
+    errors: [],
+  };
+
+  try {
+    // Detect orphaned runs
+    result.detected = await detectOrphanedRuns();
+
+    if (result.detected.length === 0) {
+      log.debug('No orphaned runs detected');
+      return result;
+    }
+
+    log.info(
+      { orphanedCount: result.detected.length },
+      'Recovering orphaned runs'
+    );
+
+    // Recover each orphaned run
+    for (const orphaned of result.detected) {
+      try {
+        const recovery = await recoverOrphanedRun(orphaned.runId);
+        result.recovered.push({
+          runId: orphaned.runId,
+          ...recovery,
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        log.error({ runId: orphaned.runId, error: errorMessage }, 'Failed to recover run');
+        result.errors.push({
+          runId: orphaned.runId,
+          error: errorMessage,
+        });
+      }
+    }
+
+    log.info(
+      {
+        detected: result.detected.length,
+        recovered: result.recovered.length,
+        errors: result.errors.length,
+      },
+      'Orphaned run recovery complete'
+    );
+  } catch (error) {
+    log.error({ error }, 'Failed to run orphaned run recovery');
+    throw error;
+  }
+
+  return result;
+}
+
+/**
+ * Runs recovery immediately on startup.
+ * Called once when the API server starts to recover any runs
+ * that were orphaned during the previous shutdown.
+ */
+export async function runStartupRecovery(): Promise<RecoveryResult> {
+  log.info('Running startup recovery for orphaned runs');
+  // Run both standard recovery and zombie detection
+  const result = await recoverOrphanedRuns();
+  const zombieResult = await detectAndRecoverStuckJobs();
+
+  if (zombieResult.recovered > 0) {
+    log.info({ count: zombieResult.recovered }, 'Startup recovery killed zombie jobs');
+  }
+
+  return result;
+}
+
+/**
+ * Detects and recovers stuck jobs (zombies) that have been active for too long.
+ * This is a failsafe for when PgBoss expiration mechanisms fail or job handlers crash silently.
+ */
+export async function detectAndRecoverStuckJobs(): Promise<{ recovered: number; errors: number }> {
+  // Find jobs active for > 5 minutes (user requested tight watchdog)
+  const ZOMBIE_THRESHOLD_MINUTES = 5;
+
+  const stuckJobs = await db.$queryRaw<Array<{ id: string; name: string; run_id: string }>>`
+    SELECT id, name, data->>'runId' as run_id
+    FROM pgboss.job
+    WHERE state = 'active'
+      AND started_on < NOW() - (${ZOMBIE_THRESHOLD_MINUTES} || ' minutes')::interval
+      AND ${ACTIVE_PROBE_QUEUE_SQL}
+  `;
+
+  if (stuckJobs.length === 0) {
+    return { recovered: 0, errors: 0 };
+  }
+
+  log.warn({ count: stuckJobs.length }, 'Detected zombie jobs (active > 5m)');
+
+  let recovered = 0;
+  let errors = 0;
+
+  for (const job of stuckJobs) {
+    try {
+      // Force fail the job
+      await db.$executeRaw`
+        UPDATE pgboss.job 
+        SET state = 'failed', 
+            output = '{"error": "Zombie job detected and killed by watchdog (active > 15m)"}',
+            completed_on = NOW()
+        WHERE id = ${job.id}::uuid
+      `;
+
+      log.info({ jobId: job.id, runId: job.run_id }, 'Killed zombie job');
+      recovered++;
+    } catch (err) {
+      log.error({ jobId: job.id, err }, 'Failed to kill zombie job');
+      errors++;
+    }
+  }
+
+  return { recovered, errors };
+}
+
+
+Context: summarize-transcript.ts
+/**
+ * Summarize Transcript Handler
+ *
+ * Handles summarize_transcript jobs by executing Python summarize worker
+ * and updating transcripts with decision code and text.
+ *
+ * Jobs are processed in PARALLEL within each batch, with rate limiting
+ * enforced per-provider using Bottleneck.
+ */
+
+import path from 'path';
+import type * as PgBoss from 'pg-boss';
+import { db, type DecisionMetadata } from '@valuerank/db';
+import { createLogger } from '@valuerank/shared';
+import { config } from '../../config.js';
+import { spawnPython, type SpawnPythonResult } from '../spawn.js';
+import { getSummarizerModel, type InfraModelConfig } from '../../services/infra-models.js';
+import { getMaxParallelSummarizations } from '../../services/summarization-parallelism/index.js';
+import { schedule as rateLimitSchedule, getLimiterStats, type ScheduleOptions } from '../../services/rate-limiter/index.js';
+import { resolveTranscriptDecisionModel } from '../../graphql/queries/domain/shared.js';
+import type { SummarizeTranscriptJobData } from '../types.js';
+import {
+  computeTranscriptResponseSha256,
+  isPlainJsonObject,
+  isSummaryCache,
+  type WinnerFirstSummaryCache,
+} from './summarize-types.js';
+import {
+  isCacheRecordMatch,
+  persistCachedSummary,
+  persistSummarizeFailure,
+  persistSuccessfulSummary,
+} from './summarize-persistence.js';
+
+const log = createLogger('queue:summarize-transcript');
+let batchCounter = 0;
+const _RETRY_LIMIT = 3;
+const PYTHON_WORKER_PATH = 'workers/summarize.py';
+
+type SummarizeWorkerInput = {
+  transcriptId: string;
+  modelId: string;
+  transcriptContent: unknown;
+};
+
+type SummarizeWorkerOutput =
+  | {
+      success: true;
+      summary: {
+        decisionText: string | null;
+        decisionMetadata?: DecisionMetadata | null;
+      };
+    }
+  | { success: false; error: { message: string; code: string; retryable: boolean; details?: string } };
+
+type SuccessfulSummarizeWorkerSummary = Extract<SummarizeWorkerOutput, { success: true }>['summary'];
+type TranscriptRecord = NonNullable<Awaited<ReturnType<typeof db.transcript.findUnique>>>;
+
+type SummarizeWorkerBatchInput = {
+  transcripts: SummarizeWorkerInput[];
+};
+
+type SummarizeWorkerBatchItemOutput = {
+  transcriptId: string | null;
+  batchIndex: number;
+} & (
+  | {
+      success: true;
+      summary: SuccessfulSummarizeWorkerSummary;
+    }
+  | {
+      success: false;
+      error: { message: string; code: string; retryable: boolean; details?: unknown };
+    }
+);
+
+type SummarizeWorkerBatchOutput =
+  | {
+      success: true;
+      summaries: SummarizeWorkerBatchItemOutput[];
+    }
+  | {
+      success: false;
+      error: { message: string; code: string; retryable: boolean; details?: unknown };
+      summaries?: SummarizeWorkerBatchItemOutput[];
+    };
+
+type SummarizeWorkerResponse = SummarizeWorkerOutput | SummarizeWorkerBatchOutput;
+
+type PreparedSummarizeJob = {
+  job: PgBoss.Job<SummarizeTranscriptJobData>;
+  transcript: TranscriptRecord;
+  transcriptId: string;
+  modelId: string;
+  providerName: string;
+  responseSha256: string | null;
+  parserVersion: string;
+};
+
+type ResolveSummarizeJobResult =
+  | { kind: 'missing' }
+  | { kind: 'cache-hit' }
+  | { kind: 'skipped' }
+  | { kind: 'pending'; job: PreparedSummarizeJob };
+
+function getProviderNameFromModelId(modelId: string, fallbackProvider: string): string {
+  if (!modelId.includes(':')) {
+    return fallbackProvider;
+  }
+
+  return modelId.split(':', 1)[0] ?? fallbackProvider;
+}
+
+async function buildWinnerFirstSummaryCache(
+  transcript: TranscriptRecord,
+  summary: SuccessfulSummarizeWorkerSummary,
+): Promise<WinnerFirstSummaryCache | null> {
+  const scenarioId = transcript.scenarioId;
+  const scenario = scenarioId == null
+    ? null
+    : await db.scenario.findUnique({
+        where: { id: scenarioId },
+        select: { orientationFlipped: true },
+      });
+
+  const result = resolveTranscriptDecisionModel({
+    decisionMetadata: summary.decisionMetadata,
+    definitionSnapshot: transcript.definitionSnapshot,
+    orientationFlipped: scenario?.orientationFlipped ?? null,
+  });
+
+  const canonical = result.canonical;
+
+  if (canonical.direction === 'refusal') {
+    return {
+      cacheVersion: 2,
+      decisionState: 'refusal',
+      favoredValueKey: null,
+      strength: 'unknown',
+    };
+  }
+
+  if (canonical.direction === 'unknown' || canonical.strength === 'unknown') {
+    return {
+      cacheVersion: 2,
+      decisionState: 'unknown',
+      favoredValueKey: null,
+      strength: 'unknown',
+    };
+  }
+
+  if (canonical.direction === 'neutral' && canonical.strength === 'neutral') {
+    return {
+      cacheVersion: 2,
+      decisionState: 'neutral',
+      favoredValueKey: null,
+      strength: 'neutral',
+    };
+  }
+
+  if (canonical.favoredValueKey == null) {
+    return null;
+  }
+
+  return {
+    cacheVersion: 2,
+    decisionState: 'resolved',
+    favoredValueKey: canonical.favoredValueKey,
+    strength: canonical.strength,
+  };
+}
+
+async function resolveSummarizeJob(
+  job: PgBoss.Job<SummarizeTranscriptJobData>,
+  infraModel: InfraModelConfig,
+): Promise<ResolveSummarizeJobResult> {
+  const { db } = await import('@valuerank/db');
+  const { transcriptId, summaryModelId } = job.data;
+  const modelId = summaryModelId ?? `${infraModel.providerName}:${infraModel.modelId}`;
+  const providerName = getProviderNameFromModelId(modelId, infraModel.providerName);
+
+  log.info(
+    { jobId: job.id, runId: job.data.runId, transcriptId, modelId },
+    'Processing summarize_transcript job'
+  );
+
+  const transcript = await db.transcript.findUnique({
+    where: { id: transcriptId },
+  });
+
+  if (!transcript) {
+    log.error({ jobId: job.id, transcriptId }, 'Transcript not found');
+    return { kind: 'missing' };
+  }
+
+  const wasAlreadySummarized = transcript.summarizedAt !== null;
+  const responseSha256 = computeTranscriptResponseSha256(transcript.content);
+  const transcriptDecisionMetadata = isPlainJsonObject(transcript.decisionMetadata)
+    ? transcript.decisionMetadata
+    : null;
+  const hasSummaryCacheField = transcriptDecisionMetadata !== null && 'summaryCache' in transcriptDecisionMetadata;
+  const summaryCache = hasSummaryCacheField && isSummaryCache(transcriptDecisionMetadata.summaryCache)
+    ? transcriptDecisionMetadata.summaryCache
+    : null;
+  const parserVersion = config.SUMMARIZE_PARSER_VERSION;
+  const forceSummarize = job.data.forceSummarize === true;
+
+  if (!forceSummarize && summaryCache && isCacheRecordMatch(summaryCache, responseSha256, parserVersion, modelId)) {
+    log.info({ jobId: job.id, transcriptId, modelId }, 'Transcript summary cache hit');
+
+    if (!wasAlreadySummarized) {
+      await persistCachedSummary(job, transcript, summaryCache, responseSha256, parserVersion, modelId);
+    }
+
+    return { kind: 'cache-hit' };
+  }
+
+  if (!forceSummarize && !hasSummaryCacheField && wasAlreadySummarized) {
+    log.info({ jobId: job.id, transcriptId }, 'Transcript already summarized, skipping');
+    return { kind: 'skipped' };
+  }
+
+  if (!forceSummarize && hasSummaryCacheField) {
+    log.info({ jobId: job.id, transcriptId, modelId }, 'Transcript summary cache miss, re-summarizing');
+  }
+
+  return {
+    kind: 'pending',
+    job: {
+      job,
+      transcript,
+      transcriptId,
+      modelId,
+      providerName,
+      responseSha256,
+      parserVersion,
+    },
+  };
+}
+
+async function processSummarizeBatchGroup(
+  batchId: number,
+  groupIndex: number,
+  pendingJobs: PreparedSummarizeJob[],
+  scheduleOptions: ScheduleOptions,
+): Promise<Error | null> {
+  if (pendingJobs.length === 0) {
+    return null;
+  }
+
+  const firstJob = pendingJobs[0];
+  if (!firstJob) {
+    return new Error('Python worker batch received no pending jobs');
+  }
+
+  const modelId = firstJob.modelId;
+  const providerName = firstJob.providerName;
+  const workerInput: SummarizeWorkerBatchInput = {
+    transcripts: pendingJobs.map((pendingJob) => ({
+      transcriptId: pendingJob.transcriptId,
+      modelId: pendingJob.modelId,
+      transcriptContent: pendingJob.transcript.content,
+    })),
+  };
+
+  log.debug(
+    {
+      batchId,
+      groupIndex,
+      modelId,
+      providerName,
+      transcriptIds: pendingJobs.map((pendingJob) => pendingJob.transcriptId),
+    },
+    'Calling Python summarize worker for batch'
+  );
+
+  const handleBatchFailure = async (error: Error): Promise<Error | null> => {
+    let retryableError: Error | null = null;
+    const transientFailure = {
+      message: error.message,
+      code: 'PYTHON_WORKER_FAILED',
+      retryable: true,
+      details: error.name,
+    };
+
+    for (const pendingJob of pendingJobs) {
+      const shouldRetry = await persistSummarizeFailure(
+        pendingJob.job,
+        pendingJob.transcript,
+        transientFailure,
+      );
+
+      if (shouldRetry && retryableError === null) {
+        retryableError = error;
+      }
+    }
+
+    return retryableError;
+  };
+
+  let result: SpawnPythonResult<SummarizeWorkerResponse> | null = null;
+  try {
+    result = await rateLimitSchedule(
+      providerName,
+      `summarize_transcript:${batchId}:${groupIndex}`,
+      firstJob.job.data.runId,
+      modelId,
+      firstJob.transcriptId,
+      () => spawnPython<SummarizeWorkerBatchInput, SummarizeWorkerResponse>(
+        PYTHON_WORKER_PATH,
+        workerInput,
+        { cwd: path.resolve(process.cwd(), '../..') }
+      ),
+      scheduleOptions,
+    );
+  } catch (error) {
+    log.error(
+      { batchId, groupIndex, modelId, providerName, err: error },
+      'Python spawn failed'
+    );
+    return handleBatchFailure(error instanceof Error ? error : new Error(String(error)));
+  }
+
+  if (result === null) {
+    return handleBatchFailure(new Error('Python worker failed before returning a result'));
+  }
+
+  if (!result.success) {
+    log.error({ batchId, groupIndex, modelId, providerName, error: result.error, stderr: result.stderr }, 'Python spawn failed');
+    return handleBatchFailure(new Error(`Python worker failed: ${result.error}`));
+  }
+
+  const output = result.data;
+  let summaries: SummarizeWorkerBatchItemOutput[] | null = null;
+
+  if ('summaries' in output && Array.isArray(output.summaries)) {
+    summaries = output.summaries;
+  } else if (pendingJobs.length === 1 && 'summary' in output && output.success) {
+    summaries = [
+      {
+        transcriptId: firstJob.transcriptId,
+        batchIndex: 0,
+        success: true,
+        summary: output.summary,
+      },
+    ];
+  } else if (pendingJobs.length === 1 && !output.success && 'error' in output) {
+    summaries = [
+      {
+        transcriptId: firstJob.transcriptId,
+        batchIndex: 0,
+        success: false,
+        error: output.error,
+      },
+    ];
+  } else if (!output.success) {
+    const err = output.error;
+    return handleBatchFailure(new Error(`Python worker failed: ${err.code}: ${err.message}`));
+  }
+
+  if (!summaries) {
+    return handleBatchFailure(new Error('Python worker batch returned no summaries'));
+  }
+
+  if (summaries.length !== pendingJobs.length) {
+    return handleBatchFailure(
+      new Error(`Python worker batch returned ${summaries.length} summaries for ${pendingJobs.length} transcripts`)
+    );
+  }
+
+  let retryableError: Error | null = null;
+
+  for (const summaryResult of summaries) {
+    const pendingJob = pendingJobs[summaryResult.batchIndex];
+    if (!pendingJob) {
+      return handleBatchFailure(new Error(`Python worker batch returned invalid batchIndex ${summaryResult.batchIndex}`));
+    }
+
+    if (summaryResult.transcriptId !== null && summaryResult.transcriptId !== pendingJob.transcriptId) {
+      return handleBatchFailure(
+        new Error(
+          `Python worker batch returned transcriptId ${summaryResult.transcriptId} for ${pendingJob.transcriptId}`
+        )
+      );
+    }
+
+    if (summaryResult.success) {
+      const canonicalDecision = await buildWinnerFirstSummaryCache(
+        pendingJob.transcript,
+        summaryResult.summary,
+      );
+      await persistSuccessfulSummary(
+        pendingJob.job,
+        pendingJob.transcript,
+        pendingJob.responseSha256,
+        pendingJob.parserVersion,
+        pendingJob.modelId,
+        canonicalDecision,
+        summaryResult.summary,
+      );
+      continue;
+    }
+
+    const shouldRetry = await persistSummarizeFailure(
+      pendingJob.job,
+      pendingJob.transcript,
+      summaryResult.error,
+    );
+
+    if (shouldRetry && retryableError === null) {
+      retryableError = new Error(`${summaryResult.error.code}: ${summaryResult.error.message}`);
+    }
+  }
+
+  return retryableError;
+}
+
+export function createSummarizeTranscriptHandler(): PgBoss.WorkHandler<SummarizeTranscriptJobData> {
+  return async (jobs: PgBoss.Job<SummarizeTranscriptJobData>[]) => {
+    if (jobs.length === 0) {
+      return;
+    }
+
+    const batchId = ++batchCounter;
+    const batchStartTime = Date.now();
+
+    const infraModel = await getSummarizerModel();
+    const providerName = infraModel.providerName;
+    const summarizationParallelism = await getMaxParallelSummarizations();
+    const scheduleOptions: ScheduleOptions = {
+      concurrencyOverride: summarizationParallelism,
+    };
+
+    const limiterStatsBefore = getLimiterStats(providerName);
+    const runIds = [...new Set(jobs.map((j) => j.data.runId))];
+
+    log.info(
+      {
+        batchId,
+        jobCount: jobs.length,
+        provider: providerName,
+        modelId: infraModel.modelId,
+        summarizationParallelism,
+        runIds,
+        rateLimiter: limiterStatsBefore,
+      },
+      'Summarize batch received from PgBoss'
+    );
+
+    const pendingByModelId = new Map<string, PreparedSummarizeJob[]>();
+    let cacheHitCount = 0;
+    let skippedCount = 0;
+
+    for (const job of jobs) {
+      const resolved = await resolveSummarizeJob(job, infraModel);
+      if (resolved.kind === 'pending') {
+        const modelJobs = pendingByModelId.get(resolved.job.modelId) ?? [];
+        modelJobs.push(resolved.job);
+        pendingByModelId.set(resolved.job.modelId, modelJobs);
+        continue;
+      }
+
+      if (resolved.kind === 'cache-hit') {
+        cacheHitCount++;
+      } else if (resolved.kind === 'skipped') {
+        skippedCount++;
+      }
+    }
+
+    const limiterStatsAfterCache = getLimiterStats(providerName);
+    const pendingGroups = [...pendingByModelId.values()];
+    let retryableError: Error | null = null;
+
+    for (let groupIndex = 0; groupIndex < pendingGroups.length; groupIndex += 1) {
+      const group = pendingGroups[groupIndex];
+      if (!group) {
+        continue;
+      }
+      const groupRetryableError = await processSummarizeBatchGroup(
+        batchId,
+        groupIndex,
+        group,
+        scheduleOptions,
+      );
+
+      if (groupRetryableError !== null && retryableError === null) {
+        retryableError = groupRetryableError;
+      }
+    }
+
+    const batchDurationMs = Date.now() - batchStartTime;
+    const limiterStatsAfter = getLimiterStats(providerName);
+
+    log.info(
+      {
+        batchId,
+        totalJobs: jobs.length,
+        cacheHitCount,
+        skippedCount,
+        batchGroups: pendingGroups.length,
+        batchDurationMs,
+        rateLimiterBefore: limiterStatsBefore,
+        rateLimiterAfterCache: limiterStatsAfterCache,
+        rateLimiterAfter: limiterStatsAfter,
+      },
+      'Summarize batch processing complete'
+    );
+
+    if (retryableError !== null) {
+      throw retryableError;
+    }
+  };
+}
+
+
+Context: summarize-persistence.ts
+import { db, Prisma, type SummaryCache } from '@valuerank/db';
+import { findMissingProbes } from '../../services/run/coverage-completeness.js';
+import { createLogger } from '@valuerank/shared';
+import { DEFAULT_JOB_OPTIONS } from '../types.js';
+import { triggerBasicAnalysis } from '../../services/analysis/index.js';
+import { incrementSummarizeCompleted, incrementSummarizeFailed } from '../../services/run/progress.js';
+import { deductActualProviderBalancesForRun } from '../../services/budget/deduct.js';
+import {
+  buildDecisionMetadataForPersist,
+  isPlainJsonObject,
+  type SummarizeTranscriptJobData,
+  type WinnerFirstSummaryCache,
+} from './summarize-types.js';
+import { buildRawDecisionEvidence } from '../../graphql/queries/domain/shared.js';
+
+const log = createLogger('queue:summarize-transcript');
+
+export function buildSummaryCacheRecord(
+  summary: {
+    decisionText: string | null;
+    decisionMetadata?: unknown;
+    canonicalDecision?: WinnerFirstSummaryCache | null;
+  },
+  responseSha256: string,
+  parserVersion: string,
+  modelId: string,
+): SummaryCache | null {
+  if (!isPlainJsonObject(summary.decisionMetadata)) {
+    return null;
+  }
+
+  const { summaryCache: _ignoredSummaryCache, ...workerDecisionMetadata } = summary.decisionMetadata;
+
+  return {
+    responseSha256,
+    parserVersion,
+    modelId,
+    summary: {
+      decisionText: summary.decisionText,
+      decisionMetadata: workerDecisionMetadata,
+      ...(summary.canonicalDecision ? { canonicalDecision: summary.canonicalDecision } : {}),
+    },
+  };
+}
+
+export function isCacheRecordMatch(
+  cache: SummaryCache,
+  responseSha256: string | null,
+  parserVersion: string,
+  modelId: string,
+): boolean {
+  return (
+    responseSha256 !== null &&
+    cache.responseSha256 === responseSha256 &&
+    cache.parserVersion === parserVersion &&
+    cache.modelId === modelId
+  );
+}
+
+/**
+ * Queues a compute_token_stats job for cost prediction data.
+ */
+export async function queueComputeTokenStats(runId: string): Promise<void> {
+  // Dynamic import to avoid circular dependency
+  const { getBoss } = await import('../boss.js');
+
+  const boss = getBoss();
+  const jobOptions = DEFAULT_JOB_OPTIONS['compute_token_stats'];
+
+  await boss.send(
+    'compute_token_stats',
+    { runId },
+    {
+      ...jobOptions,
+      singletonKey: runId,
+    }
+  );
+
+  log.info({ runId }, 'Queued compute_token_stats job');
+}
+
+/**
+ * Check if all transcripts for a run have been summarized AND all expected probes
+ * have produced transcripts (or been accounted for).
+ *
+ * Returns false if:
+ * - Any transcript is still unsummarized (existing behavior), OR
+ * - Any expected (scenarioId × modelId × sampleIndex) tuple lacks a transcript
+ *   (new guard: prevents premature completion when AUTH_ERROR probes are re-queued)
+ *
+ * Returns true only when both conditions are satisfied.
+ */
+export async function checkAllSummarized(runId: string): Promise<boolean> {
+  const unsummarized = await db.transcript.count({
+    where: {
+      runId,
+      summarizedAt: null,
+    },
+  });
+  if (unsummarized > 0) {
+    return false;
+  }
+  const missing = await findMissingProbes(runId);
+  return missing.length === 0;
+}
+
+/**
+ * Update run status to COMPLETED if all transcripts are summarized.
+ * Also triggers basic analysis, token statistics computation, and budget deduction.
+ *
+ * Uses an atomic status transition (SUMMARIZING → COMPLETED) to prevent
+ * duplicate side effects when multiple summarization jobs finish concurrently.
+ * Only the first caller that successfully transitions the status will run
+ * the completion side effects (analysis, token stats, budget deduction).
+ */
+export async function maybeCompleteRun(runId: string): Promise<void> {
+  const allDone = await checkAllSummarized(runId);
+
+  if (allDone) {
+    // Atomic transition: only update if status is still SUMMARIZING.
+    // If another caller already moved it to COMPLETED, this returns 0 rows
+    // and we skip all side effects to avoid duplicates (e.g., double deductions).
+    const transitioned = await db.$executeRaw`
+      UPDATE "runs"
+      SET "status" = 'COMPLETED',
+          "completed_at" = NOW(),
+          "stalled_models" = '{}'::text[]
+      WHERE "id" = ${runId}
+        AND "status" = 'SUMMARIZING'
+    `;
+
+    if (transitioned === 0) {
+      log.debug({ runId }, 'Run already completed by another worker — skipping side effects');
+      return;
+    }
+
+    log.info({ runId }, 'Run completed - all transcripts summarized');
+
+    try {
+      const prompted = await triggerBasicAnalysis(runId);
+      if (prompted) {
+        log.info({ runId }, 'Analysis triggered successfully');
+      } else {
+        log.warn({ runId }, 'Analysis not triggered - no qualify transcripts?');
+      }
+    } catch (error) {
+      log.error({ runId, err: error }, 'Failed to trigger basic analysis');
+    }
+
+    try {
+      await queueComputeTokenStats(runId);
+    } catch (error) {
+      log.error({ runId, err: error }, 'Failed to trigger token stats computation');
+    }
+
+    try {
+      await deductActualProviderBalancesForRun(runId);
+    } catch (error) {
+      log.error({ runId, err: error }, 'Failed to deduct provider balances');
+    }
+  }
+}
+
+export async function persistCachedSummary(
+  job: { id: string; data: SummarizeTranscriptJobData },
+  transcript: { id: string },
+  summaryCache: SummaryCache,
+  responseSha256: string | null,
+  parserVersion: string,
+  modelId: string,
+): Promise<void> {
+  const rawDecisionEvidence = buildRawDecisionEvidence(summaryCache.summary.decisionMetadata);
+  const persistedSummaryCache = responseSha256
+    ? buildSummaryCacheRecord(
+        {
+          decisionText: summaryCache.summary.decisionText,
+          decisionMetadata: summaryCache.summary.decisionMetadata,
+          canonicalDecision: summaryCache.summary.canonicalDecision ?? null,
+        },
+        responseSha256,
+        parserVersion,
+        modelId,
+      )
+    : null;
+
+  await db.transcript.update({
+    where: { id: transcript.id },
+    data: {
+      decisionText: summaryCache.summary.decisionText,
+      decisionMetadata: buildDecisionMetadataForPersist(
+        summaryCache.summary.decisionMetadata,
+        rawDecisionEvidence,
+        persistedSummaryCache ?? undefined,
+      ),
+      summarizedAt: new Date(),
+    },
+  });
+
+  await incrementSummarizeCompleted(job.data.runId);
+  await maybeCompleteRun(job.data.runId);
+}
+
+export async function persistSuccessfulSummary(
+  job: { id: string; data: SummarizeTranscriptJobData },
+  transcript: { id: string; scenarioId: string | null; definitionSnapshot: unknown },
+  responseSha256: string | null,
+  parserVersion: string,
+  modelId: string,
+  canonicalDecision: WinnerFirstSummaryCache | null,
+  summary: { decisionText: string | null; decisionMetadata?: unknown },
+): Promise<void> {
+  const rawDecisionEvidence = buildRawDecisionEvidence(summary.decisionMetadata);
+  const freshSummaryCache = responseSha256
+    ? buildSummaryCacheRecord(
+        {
+          ...summary,
+          canonicalDecision,
+        },
+        responseSha256,
+        parserVersion,
+        modelId,
+      )
+    : null;
+
+  await db.transcript.update({
+    where: { id: transcript.id },
+    data: {
+      decisionText: summary.decisionText,
+      decisionMetadata: buildDecisionMetadataForPersist(
+        summary.decisionMetadata,
+        rawDecisionEvidence,
+        freshSummaryCache ?? undefined,
+      ),
+      summarizedAt: new Date(),
+    },
+  });
+
+  log.info({ jobId: job.id, transcriptId: transcript.id }, 'Transcript summarized');
+
+  await incrementSummarizeCompleted(job.data.runId);
+  await maybeCompleteRun(job.data.runId);
+}
+
+export async function persistSummarizeFailure(
+  job: { id: string; data: SummarizeTranscriptJobData; retrycount?: number },
+  transcript: { id: string },
+  error: { message: string; code: string; retryable: boolean; details?: unknown },
+): Promise<boolean> {
+  const retryCount = job.retrycount ?? 0;
+  const maxRetriesReached = retryCount >= (DEFAULT_JOB_OPTIONS['summarize_transcript'].retryLimit ?? 3);
+
+  log.warn(
+    { jobId: job.id, transcriptId: transcript.id, retryCount, maxRetriesReached, error },
+    'Summarize worker returned error'
+  );
+
+  if (error.retryable && !maxRetriesReached) {
+    return true;
+  }
+
+  const failureText = error.retryable
+    ? `Summary failed after ${retryCount} retries: ${error.message}`
+    : `Summary failed: ${error.message}`;
+
+  await db.transcript.update({
+    where: { id: transcript.id },
+    data: {
+      decisionText: failureText,
+      decisionMetadata: Prisma.DbNull,
+      summarizedAt: new Date(),
+    },
+  });
+
+  await incrementSummarizeFailed(job.data.runId);
+  await maybeCompleteRun(job.data.runId);
+  return false;
+}
+
+
+Context: index.ts
+/**
+ * Queue Handler Registration
+ *
+ * Exports handler registration function for all job types.
+ * Includes provider-specific queues for parallelism enforcement.
+ */
+
+import type { PgBoss } from 'pg-boss';
+import { createLogger } from '@valuerank/shared';
+import { queueConfig } from '../../config.js';
+import { createProbeScenarioHandler } from './probe-scenario/index.js';
+import { createTopUpProbesHandler } from './top-up-probes.js';
+import { createSummarizeTranscriptHandler } from './summarize-transcript.js';
+import {
+  PROBE_DEAD_LETTER_QUEUE,
+  handlerRegistrations,
+} from './handler-config.js';
+import type { ProbeScenarioJobData, SummarizeTranscriptJobData } from './handler-config.js';
+import type { TopUpProbesJobData } from '../types.js';
+import {
+  createProviderQueues,
+  getAllProviderQueues,
+} from '../../services/parallelism/index.js';
+
+export type {
+  ProbeScenarioJobData,
+  SummarizeTranscriptJobData,
+} from './handler-config.js';
+export type { TopUpProbesJobData } from '../types.js';
+
+const log = createLogger('queue:handlers');
+const TOP_UP_PROBES_QUEUE = 'top_up_probes';
+/**
+ * Registers provider-specific probe queue handlers.
+ * Each provider queue gets N workers where N = maxParallelRequests.
+ * Each worker fetches one job at a time to preserve per-job retry semantics.
+ */
+async function registerProviderProbeHandlers(boss: PgBoss): Promise<number> {
+  const providerQueues = await getAllProviderQueues();
+  const probeHandler = createProbeScenarioHandler();
+
+  let registeredCount = 0;
+
+  for (const [providerName, limits] of providerQueues) {
+    const queueName = limits.queueName;
+    const workerCount = limits.maxParallelRequests;
+
+    log.info(
+      { provider: providerName, queueName, workerCount, workerBatchSize: 1 },
+      'Registering provider probe handler'
+    );
+
+    // Register one worker per parallel slot.
+    // Using batchSize > 1 causes pg-boss to mark the whole batch failed when one job throws.
+    // That can retry already-successful jobs and create duplicate transcripts.
+    for (let i = 0; i < workerCount; i++) {
+      await boss.work<ProbeScenarioJobData>(queueName, { batchSize: 1 }, probeHandler);
+      registeredCount++;
+    }
+  }
+
+  return registeredCount;
+}
+
+/**
+ * Registers all job handlers with PgBoss.
+ * Creates queues first (required by PgBoss v10+), then registers workers.
+ * Includes provider-specific probe queues for parallelism enforcement.
+ */
+export async function registerHandlers(boss: PgBoss): Promise<void> {
+  // Import summarization parallelism service
+  const { getMaxParallelSummarizations } = await import(
+    '../../services/summarization-parallelism/index.js'
+  );
+
+  const defaultBatchSize = queueConfig.workerBatchSize;
+
+  log.info(
+    { defaultBatchSize, jobTypes: getJobTypes() },
+    'Starting handler registration'
+  );
+
+  // Create dead letter queue FIRST (required before queues that reference it)
+  log.info({ jobType: PROBE_DEAD_LETTER_QUEUE }, 'Creating dead letter queue');
+  await boss.createQueue(PROBE_DEAD_LETTER_QUEUE);
+
+  // Create standard queues (required by PgBoss v10+)
+  for (const registration of handlerRegistrations) {
+    // Skip dead letter queue - already created above
+    if (registration.name === 'probe_dead_letter') continue;
+
+    log.info({ jobType: registration.name }, 'Creating queue');
+    // Add dead letter queue for probe_scenario
+    if (registration.name === 'probe_scenario') {
+      await boss.createQueue(registration.name, { deadLetter: PROBE_DEAD_LETTER_QUEUE });
+    } else {
+      await boss.createQueue(registration.name);
+    }
+  }
+
+  // Create provider-specific probe queues with dead letter support
+  await createProviderQueues(boss, PROBE_DEAD_LETTER_QUEUE);
+
+  // Collect handler registration details for summary log
+  const handlerDetails: Array<{ jobType: string; batchSize: number }> = [];
+
+  // Register standard handlers with appropriate batchSize
+  for (const registration of handlerRegistrations) {
+    // Use dynamic batchSize for summarize_transcript
+    const batchSize = registration.name === 'summarize_transcript'
+      ? await getMaxParallelSummarizations()
+      : defaultBatchSize;
+
+    log.info(
+      {
+        jobType: registration.name,
+        batchSize,
+        isDynamic: registration.name === 'summarize_transcript',
+      },
+      'Registering handler with batchSize'
+    );
+
+    await registration.register(boss, batchSize);
+    handlerDetails.push({ jobType: registration.name, batchSize });
+  }
+
+  // Register provider-specific probe handlers with parallelism limits
+  const providerHandlerCount = await registerProviderProbeHandlers(boss);
+
+  log.info({ jobType: TOP_UP_PROBES_QUEUE }, 'Creating top-up queue');
+  await boss.createQueue(TOP_UP_PROBES_QUEUE);
+  log.info({ jobType: TOP_UP_PROBES_QUEUE, batchSize: 1 }, 'Registering top-up handler');
+  await boss.work<TopUpProbesJobData>(TOP_UP_PROBES_QUEUE, { batchSize: 1 }, createTopUpProbesHandler());
+
+  // Get current queue states for logging
+  let queueStates: Array<{ name: string; activeCount: number; queuedCount: number }> = [];
+  try {
+    const queues = await boss.getQueues();
+    queueStates = queues.map(q => ({
+      name: q.name,
+      activeCount: q.activeCount,
+      queuedCount: q.queuedCount,
+    }));
+  } catch {
+    // Ignore errors getting queue states
+  }
+
+  log.info(
+    {
+      standardHandlers: handlerRegistrations.length,
+      providerHandlers: providerHandlerCount,
+      topUpHandlers: 1,
+      handlerDetails,
+      queueStates,
+    },
+    'All handlers registered - PgBoss ready'
+  );
+}
+
+/**
+ * Gets list of registered job types.
+ */
+export function getJobTypes() {
+  return [...handlerRegistrations.map((h) => h.name), TOP_UP_PROBES_QUEUE];
+}
+
+/**
+ * Re-registers a single provider's probe queue handler with updated settings.
+ * Called when provider parallelism settings are changed via API.
+ *
+ * This function:
+ * 1. Unregisters the existing handler for the provider queue (allows in-flight jobs to complete)
+ * 2. Clears the parallelism cache to reload settings from DB
+ * 3. Registers N new handlers with batchSize=1 where N=maxParallelRequests
+ *
+ * Note: Jobs in the queue are NOT affected - they remain queued and will be processed
+ * by the new handler. In-flight jobs complete normally before the handler is replaced.
+ * PgBoss's offWork() is graceful and does not abort running jobs.
+ *
+ * @param providerName - The provider name (e.g., 'google', 'openai')
+ */
+export async function reregisterProviderHandler(
+  boss: PgBoss,
+  providerName: string
+): Promise<void> {
+  // Import here to avoid circular dependency
+  const { clearCache, getProviderQueueName, loadProviderLimits } = await import(
+    '../../services/parallelism/index.js'
+  );
+  const { reloadLimiters } = await import('../../services/rate-limiter/index.js');
+
+  const queueName = getProviderQueueName(providerName);
+
+  log.info({ provider: providerName, queueName }, 'Re-registering provider queue handler');
+
+  // 1. Get queue stats before unregistering (for logging)
+  let activeCount = 0;
+  let queuedCount = 0;
+  try {
+    const queues = await boss.getQueues();
+    const queueInfo = queues.find((q) => q.name === queueName);
+    if (queueInfo) {
+      activeCount = queueInfo.activeCount;
+      queuedCount = queueInfo.queuedCount;
+    }
+  } catch {
+    // Ignore errors getting stats
+  }
+
+  // 2. Unregister existing handler - this is GRACEFUL:
+  //    - Stops fetching NEW jobs from the queue
+  //    - In-flight jobs continue to completion
+  //    - Jobs in queue remain untouched
+  await boss.offWork(queueName);
+  log.info(
+    { provider: providerName, queueName, activeJobs: activeCount, queuedJobs: queuedCount },
+    'Unregistered existing handler (in-flight jobs will complete)'
+  );
+
+  // 3. Clear caches to force reload from database
+  clearCache();
+
+  // 4. Load fresh limits
+  const limits = await loadProviderLimits();
+  const providerLimits = limits.get(providerName);
+
+  if (!providerLimits) {
+    log.warn({ provider: providerName }, 'Provider not found after cache reload');
+    return;
+  }
+
+  // 5. Register new handlers with batchSize=1.
+  //    This preserves per-job retry semantics while keeping provider concurrency.
+  const workerCount = providerLimits.maxParallelRequests;
+  const probeHandler = createProbeScenarioHandler();
+
+  for (let i = 0; i < workerCount; i++) {
+    await boss.work<ProbeScenarioJobData>(queueName, { batchSize: 1 }, probeHandler);
+  }
+
+  log.info(
+    { provider: providerName, queueName, workerCount, workerBatchSize: 1 },
+    'Provider queue handler re-registered with new settings'
+  );
+
+  // 6. Reload rate limiters to pick up new settings
+  await reloadLimiters();
+  log.debug({ provider: providerName }, 'Rate limiters reloaded');
+}
+
+/**
+ * Re-registers the summarize_transcript queue handler with updated batchSize.
+ * Called when summarization parallelism settings are changed via MCP.
+ *
+ * This function:
+ * 1. Unregisters the existing handler (allows in-flight jobs to complete)
+ * 2. Clears the summarization parallelism cache to reload settings from DB
+ * 3. Registers a new handler with the updated batchSize
+ *
+ * Note: Jobs in the queue are NOT affected - they remain queued and will be processed
+ * by the new handler. In-flight jobs complete normally before the handler is replaced.
+ * PgBoss's offWork() is graceful and does not abort running jobs.
+ */
+export async function reregisterSummarizeHandler(boss: PgBoss): Promise<void> {
+  // Import here to avoid circular dependency
+  const { clearSummarizationCache, getMaxParallelSummarizations } = await import(
+    '../../services/summarization-parallelism/index.js'
+  );
+
+  const queueName = 'summarize_transcript';
+  const reregisterStartTime = Date.now();
+
+  log.info({ queueName }, 'Starting summarize handler re-registration');
+
+  // 1. Get queue stats before unregistering (for logging)
+  let activeCount = 0;
+  let queuedCount = 0;
+  try {
+    const queues = await boss.getQueues();
+    const queueInfo = queues.find((q) => q.name === queueName);
+    if (queueInfo) {
+      activeCount = queueInfo.activeCount;
+      queuedCount = queueInfo.queuedCount;
+    }
+  } catch {
+    // Ignore errors getting stats
+  }
+
+  // Get old batch size for comparison
+  const oldBatchSize = await getMaxParallelSummarizations();
+
+  // 2. Unregister existing handler - this is GRACEFUL:
+  //    - Stops fetching NEW jobs from the queue
+  //    - In-flight jobs continue to completion
+  //    - Jobs in queue remain untouched
+  await boss.offWork(queueName);
+  log.info(
+    { queueName, activeJobs: activeCount, queuedJobs: queuedCount, oldBatchSize },
+    'Unregistered existing handler (in-flight jobs will complete)'
+  );
+
+  // 3. Clear cache to force reload from database
+  clearSummarizationCache();
+
+  // 4. Clear summarize rate limiters so they're recreated with new settings
+  const { clearSummarizeLimiters } = await import('../../services/rate-limiter/index.js');
+  clearSummarizeLimiters();
+  log.debug('Summarize rate limiters cleared');
+
+  // 5. Load fresh parallelism setting
+  const newBatchSize = await getMaxParallelSummarizations();
+
+  // 6. Register new handler with updated batchSize
+  //    This immediately starts processing queued jobs with the new concurrency
+  const summarizeHandler = createSummarizeTranscriptHandler();
+
+  await boss.work<SummarizeTranscriptJobData>(queueName, { batchSize: newBatchSize }, summarizeHandler);
+
+  const durationMs = Date.now() - reregisterStartTime;
+
+  log.info(
+    {
+      queueName,
+      oldBatchSize,
+      newBatchSize,
+      batchSizeChanged: oldBatchSize !== newBatchSize,
+      queuedJobsWaiting: queuedCount,
+      durationMs,
+    },
+    'Summarize handler re-registered with new settings'
+  );
+}
+
+
+Artifact: spec.md
+# Feature 033 — Run State Reconciliation
+
+**Branch**: feat/033-run-state-reconciliation
+**Created**: 2026-04-23
+**Status**: Draft
+
+---
+
+## Background
+
+Many paired batch runs end as `COMPLETED` with silent partial failures: some probes never produced a transcript, some transcripts were never summarized, and the run's `progress` JSONB counters disagree with the authoritative `ProbeResult` and `Transcript` rows. Root cause analysis lives in `docs/backend/paired-batch-run-flow.md` (sections 11 and 12).
+
+The mechanism: today, workers write to two JSONB counters on `Run` — `progress` (probe outcomes) and `summarizeProgress` (summarization outcomes). Completion decisions read those counters. The counters drift vs. the authoritative tables in several ways:
+
+1. **Stranded transcripts.** Transcripts that commit after the 5-second settle window in `progress.ts:224` are never queued for summarization; their `summarizedAt` stays `NULL` forever. The run still flips to `COMPLETED`.
+2. **Read-then-write race.** `progress.ts` increments the counter in one SQL statement, then reads and conditionally flips status in a separate statement. Two handlers finishing simultaneously can both attempt the transition.
+3. **Dead-letter / late-success double-count.** When a probe is dead-lettered (`JOB_EXPIRED`) and a late worker finally succeeds, the `ProbeResult` upsert flips `FAILED → SUCCESS` but both counter increments already fired — so `completed + failed > total`.
+4. **No partial-success signal.** Runs with `progress.failed > 0` still transition to `COMPLETED` silently. Downstream analysis treats them as clean.
+5. **Pair asymmetry invisible.** Paired batch runs share a `jobChoiceBatchGroupId` in `Run.config`. Today there is no signal when one side of the pair succeeds at 98% and the other at 40% — the partial failure is only visible by running analysis and noticing nothing lines up.
+6. **Model-specific shortfall invisible.** When a single model (e.g., Mistral) systemically fails to produce transcripts, no alert surfaces — the run just has more failures than expected.
+
+This feature replaces the drift-prone JSONB counters with reads off the authoritative tables, moves completion to an atomic compare-and-swap, and adds a periodic reconciliation sweep that auto-completes stuck runs and records anomalies.
+
+Discovery: all six design choices are recorded in `state.json` discovery. Delivery path is Feature Factory. Counter approach is hard replacement (no cache). Migration is hard cutover (no dual-write). Completion stays event-driven with the sweep as a safety net. Anomalies auto-surface to a new `RunAnomaly` table.
+
+---
+
+## User Stories
+
+### US-1 (P0): Progress counts match reality
+
+**As an** operator investigating a run,
+**I want** the `progress` and `summarizeProgress` numbers I see in GraphQL and the UI to equal the real count of `ProbeResult` and `Transcript` rows for that run,
+**so that** I can trust the run's state without cross-checking the database by hand.
+
+**Acceptance criteria:**
+- For every existing run, a GraphQL read returns `progress.completed` equal to `COUNT(ProbeResult WHERE runId=run.id AND status='SUCCESS')` and `progress.failed` equal to `COUNT(ProbeResult WHERE runId=run.id AND status='FAILED')`.
+- For every existing run, `summarizeProgress.completed` equals `COUNT(Transcript WHERE runId=run.id AND deletedAt IS NULL AND summarizedAt IS NOT NULL)` and `summarizeProgress.failed` equals the count of transcripts that hit terminal summarize failure (see Design).
+- The JSONB counter values stored on the row may lag or mismatch; resolvers ignore them for `completed`/`failed`.
+
+### US-2 (P0): No more counter-increment writes from handlers
+
+**As the** probe and summarize handlers,
+**I want** to stop writing `progress.completed`, `progress.failed`, `summarizeProgress.completed`, and `summarizeProgress.failed` on every job,
+**so that** the counters cannot drift out of sync with authoritative tables.
+
+**Acceptance criteria:**
+- `applyProgressDelta()` (or the code that mutates those JSONB counters) is removed from `probe-scenario/handler.ts`, `summarize-transcript.ts`, and `summarize-persistence.ts`.
+- `Run.progress.total` and `Run.summarizeProgress.total` are still written **once at launch** by the job-planner (those values never change and are not drift-prone).
+- No production code path calls `jsonb_set` on `progress.completed`, `progress.failed`, `summarizeProgress.completed`, or `summarizeProgress.failed`.
+
+### US-3 (P0): Atomic SUMMARIZING → COMPLETED transition
+
+**As the** completion path,
+**I want** the status flip from `SUMMARIZING` to `COMPLETED` (and from `RUNNING` to `SUMMARIZING`) to be a single conditional UPDATE that is driven by authoritative row counts,
+**so that** two concurrent handlers cannot both believe they are the last completer.
+
+**Acceptance criteria:**
+- `maybeCompleteRun()` executes a single SQL statement of the form: `UPDATE Run SET status='COMPLETED', completedAt=NOW() WHERE id=$1 AND status='SUMMARIZING' AND <derived-count predicate>`.
+- If the UPDATE returns 0 rows affected, the caller treats it as "someone else won" and does not run post-completion side effects.
+- If the UPDATE returns 1 row, the caller runs the existing post-completion side effects (analysis, token stats, balance deduction) exactly once.
+- The same atomic pattern is used for `RUNNING → SUMMARIZING` in event-driven completion.
+
+### US-4 (P1): Event-driven completion still flips happy-path runs in seconds
+
+**As the** probe and summarize handlers,
+**I want** each terminal outcome (probe success/fail, summarize success/fail) to trigger `maybeCompleteRun()` immediately,
+**so that** a healthy run's state transitions happen in seconds, not minutes.
+
+**Acceptance criteria:**
+- After every terminal outcome, the handler calls `maybeCompleteRun(runId)` using the derived-count query.
+- For a run where every probe succeeds and every summarize succeeds, the run reaches `COMPLETED` status within seconds of the last handler finishing (no reliance on the sweep).
+
+### US-5 (P0): Reconciliation sweep auto-heals stuck runs
+
+**As the** system,
+**I want** a periodic job that scans non-terminal runs and (a) queues summarize jobs for stranded transcripts, (b) retries the atomic completion flip when the event-driven path missed it,
+**so that** runs no longer require human `recover_run` intervention to reach a clean terminal state.
+
+**Acceptance criteria:**
+- A new `run_state_reconcile` job runs on a singleton, periodic cadence (every recovery-scheduler tick, currently 5 minutes — see Design).
+- For each non-terminal run (`RUNNING`, `SUMMARIZING`), the handler: queues summarize jobs for any `Transcript` rows where `summarizedAt IS NULL AND deletedAt IS NULL`; attempts the `maybeCompleteRun()` flip; records anomalies (US-6).
+- The handler is idempotent: running it twice in a row on the same run produces the same state.
+- A run that was stranded in `SUMMARIZING` with one unsummarized transcript will reach `COMPLETED` within one sweep interval once that transcript summarizes.
+
+### US-6 (P0): Anomalies surface to a queryable `RunAnomaly` table
+
+**As an** operator,
+**I want** the reconciliation sweep to record structured anomaly rows for the six classes of silent partial failure,
+**so that** I can query "which runs had partial failures and why" without reading logs.
+
+**Acceptance criteria:**
+- A new `RunAnomaly` table is created with columns: `id`, `runId`, `type` (enum), `subject` (NOT NULL string, default `""` — `modelId` for per-model shortfalls, pair group id for asymmetry, `""` for run-level anomalies), `details` (JSONB), `firstSeenAt`, `lastSeenAt`, `resolvedAt` (nullable), `acknowledgedByUserId` (nullable).
+- Unique constraint on `(runId, type, subject)` so re-running the sweep updates `lastSeenAt` instead of creating duplicates. Empty-string default on `subject` ensures the PostgreSQL unique constraint dedupes run-level anomalies (NULL would not).
+- The sweep detects and records all six anomaly types at launch (see "Anomaly Catalog" below). `PROBE_COUNT_OVERFLOW` was replaced with `SCHEDULED_COUNT_MISMATCH` during spec review.
+- Anomalies are readable via a new GraphQL query on `Run` (e.g., `run.anomalies: [RunAnomaly!]!`).
+- No UI polish in this feature — just the data surface.
+
+### US-7 (P1): In-flight runs at deploy time reach a correct terminal state
+
+**As the** system,
+**I want** runs that are `RUNNING` or `SUMMARIZING` at the moment of deploy to continue to a correct terminal state under the new rules,
+**so that** the cutover does not cause double-completion, lost data, or permanently stuck runs.
+
+**Acceptance criteria:**
+- Any in-flight probe/summarize job whose handler runs after deploy succeeds under the new no-counter-write code path.
+- Any run that was `SUMMARIZING` before deploy reaches `COMPLETED` within one sweep interval after deploy if its derived counts satisfy the completion predicate.
+- No run flips to `COMPLETED` twice (the atomic CAS prevents it).
+- No run that previously flipped to `COMPLETED` regresses.
+
+---
+
+## What is NOT in scope
+
+- Provider idempotency keys (meta-fix #2 prerequisite — separate PR).
+- Provider health tracker / circuit breaker (meta-fix #2).
+- Retry-After header handling.
+- Non-retryable transcript-shape fix at `probe-scenario/handler.ts:214`.
+- UI polish beyond exposing `RunAnomaly` via GraphQL.
+- Changes to pair grouping at launch time.
+- `JOB_EXPIRED` rate alerting and cost-deviation anomalies (deferred; belong with meta-fix #2).
+- `maxBudgetUsd` enforcement (not actively used in practice).
+- Dropping the `Run.progress` / `Run.summarizeProgress` JSONB columns from the schema (keep them; just stop writing to `.completed` / `.failed`). Column removal is a follow-up.
+- Backfilling `RunAnomaly` rows for historical runs — the sweep only records anomalies for non-terminal runs going forward. A one-shot backfill is a follow-up.
+- CLAUDE.md, AGENTS.md, cloud/CLAUDE.md, cloud/AGENTS.md, MEMORY.md, .gitignore, or any file not listed in the Files in Scope section.
+
+---
+
+## Design
+
+### Derived progress query
+
+A single service-layer helper `computeRunProgress(runId)` returns:
+
+```
+{
+  total: number,              // from Run.progress.total (written once at launch)
+  completed: number,          // COUNT(ProbeResult WHERE runId = $1 AND status = 'SUCCESS' AND deletedAt IS NULL)
+  failed: number,             // COUNT(ProbeResult WHERE runId = $1 AND status = 'FAILED' AND deletedAt IS NULL)
+  summarizeTotal: number,     // derived on demand — see "Summarize total accounting" below
+  summarizeCompleted: number, // COUNT(Transcript WHERE runId = $1 AND deletedAt IS NULL AND summarizedAt IS NOT NULL)
+  summarizeFailed: number,    // see "Summarize failure accounting" below
+}
+```
+
+**Soft-delete filter.** All `ProbeResult` and `Transcript` counts in the derived query include `deletedAt IS NULL`. The schema exposes `deletedAt` on both tables and soft-deleted rows must not influence run progress.
+
+**Summarize total accounting.** Instead of pre-computing `summarizeProgress.total` at the `RUNNING → SUMMARIZING` transition (which re-introduces the original race — a slow-committing transcript would be left out of the denominator), the derived helper computes `summarizeTotal` on demand as `COUNT(Transcript WHERE runId=$1 AND deletedAt IS NULL)` each time it is called. This means the denominator grows if late transcripts arrive, and the `SUMMARIZING → COMPLETED` CAS (below) is the only authority on "are we done summarizing."
+
+**Summarize failure accounting (MANDATORY — no option).** The existing handler calls `persistSummarizeFailure()` on terminal summarize failure and sets `summarizedAt = now()` plus `decisionText = "Summary failed..."`. Under the new rules a transcript with `summarizedAt IS NOT NULL` is counted as summarized; keeping the old behavior would cause the new derived query to mis-count failures as successes **and** cause the SUMMARIZING → COMPLETED CAS (below) to fire prematurely.
+
+The change:
+- Add `summarizeFailedAt: DateTime?` to `Transcript`.
+- `persistSummarizeFailure()` now writes `summarizeFailedAt = now()` and does **not** set `summarizedAt`.
+- Derived `summarizeCompleted` counts `summarizedAt IS NOT NULL AND summarizeFailedAt IS NULL`.
+- Derived `summarizeFailed` counts `summarizeFailedAt IS NOT NULL`.
+- **Data backfill in the same migration:** `UPDATE transcripts SET summarize_failed_at = summarized_at, summarized_at = NULL WHERE decision_text LIKE 'Summary failed%' AND summarize_failed_at IS NULL`. This is the only data mutation in the migration; it rewrites existing terminal failures into the new shape.
+
+### Completion CAS (compare-and-swap)
+
+Replaces the read-then-write in `progress.ts:140` and the conditional `UPDATE` in `summarize-persistence.ts:123`. Two flavors:
+
+```sql
+-- RUNNING / PAUSED → SUMMARIZING (no pre-computed transcript denominator)
+UPDATE runs
+SET status = 'SUMMARIZING'
+WHERE id = $runId
+  AND status IN ('RUNNING', 'PAUSED')
+  AND (SELECT COUNT(*) FROM probe_results
+        WHERE run_id = $runId AND status IN ('SUCCESS', 'FAILED') AND deleted_at IS NULL) >= (progress->>'total')::int;
+```
+
+`PAUSED` is included in the predicate because the existing `determineStatus()` already flips a `PAUSED` run with all probes finished into `SUMMARIZING`; the new CAS must preserve that behavior.
+
+**Not in scope: `PENDING → RUNNING` transition.** The current probe handler sets `startedAt` and clears `stalledModels` when the first probe completes on a `PENDING` run. That code path stays as-is; this feature does not rewrite it because the transition is not drift-prone (a single first-probe event decides it, not a cumulative counter).
+
+```sql
+-- SUMMARIZING → COMPLETED
+UPDATE runs
+SET status = 'COMPLETED', completed_at = NOW()
+WHERE id = $runId
+  AND status = 'SUMMARIZING'
+  AND NOT EXISTS (
+    SELECT 1 FROM transcripts
+    WHERE run_id = $runId AND deleted_at IS NULL AND summarized_at IS NULL AND summarize_failed_at IS NULL
+  );
+```
+
+Both UPDATEs return a rowCount. Caller uses `rowCount === 1` as "I won the race". Post-completion side effects (`triggerBasicAnalysis`, `queueComputeTokenStats`, `deductActualProviderBalancesForRun`) run only in the winner path.
+
+**No pre-computed transcript denominator at the RUNNING → SUMMARIZING transition.** The original 5-second settle timeout existed because the code needed to pre-compute "how many transcripts are there" before transitioning. The new design removes that need: `SUMMARIZING → COMPLETED` succeeds only when there are zero unsummarized transcripts, regardless of how the transcript count changed during SUMMARIZING. Late transcripts that commit after the status flip simply delay the next successful CAS by one cycle.
+
+**`Run.progress.total`.** Written once at launch. This is the probe denominator and never changes.
+
+**`Run.summarizeProgress.total`.** No longer a persistent column value. `computeRunProgress` computes `summarizeTotal` by counting live `Transcript` rows on demand. The JSONB column's `total` field stays in the schema for backward compatibility but is ignored by resolvers.
+
+### Event-driven trigger — unchanged call sites, new implementation
+
+In `probe-scenario/handler.ts` and `summarize-transcript.ts`, every terminal outcome replaces `applyProgressDelta(...)` with a call to `maybeAdvanceRunStatus(runId)`. The new function runs both CAS UPDATEs in order (RUNNING → SUMMARIZING first; if that succeeds, SUMMARIZING → COMPLETED; if either changed a row, runs the appropriate side effects).
+
+### Fast path for late transcripts
+
+The existing probe handler has a branch that queues a summarize job immediately when a probe finishes and the run is already in `SUMMARIZING`. **This branch is preserved** to keep the happy path for late transcripts — the reconciliation sweep is a safety net, not the primary trigger for a single late transcript. Concretely, after `maybeAdvanceRunStatus` runs in the probe handler, if the run is `SUMMARIZING` and the just-produced transcript has `summarizedAt IS NULL`, the handler enqueues a `summarize_transcript` singleton for that transcript before returning.
+
+### Preserve existing ProbeResult reconstruction from Transcript
+
+The probe handler today reconstructs a missing `ProbeResult` row from an existing `Transcript` (same `(runId, scenarioId, modelId, sampleIndex)` key). This path is kept: the new completion gate depends on `ProbeResult` counts, so a missing row would block completion forever. The reconciliation sweep additionally performs the same reconstruction for orphan transcripts it finds — before recording `ORPHAN_TRANSCRIPT` as an anomaly, the sweep attempts to create the missing `ProbeResult` row and only records the anomaly if reconstruction fails.
+
+### Reconciliation sweep scheduling (must run independent of activity window)
+
+The existing `runRecoveryJob()` in `scheduler.ts` stops when the system has been idle for ~1 hour. Piggybacking the reconciliation sweep naively would inherit that shutdown — stuck `SUMMARIZING` runs would be stranded if the system is quiet. Instead:
+
+- The reconciliation sweep runs on the same tick as `runRecoveryJob` **while** any run exists with status ∈ `{RUNNING, SUMMARIZING}` (regardless of whether new runs have been launched recently).
+- Activation condition: `SELECT 1 FROM runs WHERE status IN ('RUNNING','SUMMARIZING') AND deleted_at IS NULL LIMIT 1`. If this returns a row, the reconciliation tick keeps running even when the recovery-activity window has expired.
+- Plan phase decides whether this is a change to `scheduler.ts`'s existing activity logic, or a separate ticker dedicated to reconciliation.
+
+### Reconciliation sweep
+
+New PgBoss job type: `run_state_reconcile`. Piggybacks on the existing `runRecoveryJob()` tick in `scheduler.ts` — same cadence (5 min) and same scheduling hook. Enqueues singleton `run_state_reconcile` per non-terminal run per tick.
+
+Handler:
+1. Load the run. Always run steps 2 (late-transcript rescue) and 4 (anomaly scan) for runs in `{RUNNING, SUMMARIZING, PAUSED, COMPLETED}`. Skip entirely only for `{FAILED, CANCELLED}` or soft-deleted runs. Step 3 (status advancement) runs for `{RUNNING, SUMMARIZING, PAUSED}` only.
+2. **Late-transcript rescue (runs in all scanned statuses including `COMPLETED`):** find all `Transcript` rows where `runId = $runId AND deletedAt IS NULL AND summarizedAt IS NULL AND summarizeFailedAt IS NULL`, enqueue a `summarize_transcript` job per transcript (singleton on `transcriptId`). This is the safety net for a transcript that committed after the run already flipped to `COMPLETED`.
+3. Call `maybeAdvanceRunStatus(runId)` — same CAS path as event-driven. Skipped for `COMPLETED` runs.
+4. Evaluate anomalies (see catalog) and upsert into `RunAnomaly`. For `COMPLETED` runs, only `STRANDED_TRANSCRIPT`, `ORPHAN_TRANSCRIPT`, `PAIR_ASYMMETRY`, and `MODEL_TRANSCRIPT_SHORTFALL` are evaluated. `SUMMARIZING_STALL` and `SCHEDULED_COUNT_MISMATCH` only apply to non-terminal runs.
+
+**Why the sweep scans `COMPLETED` runs.** A transcript can commit after the SUMMARIZING → COMPLETED CAS succeeds — the run is already terminal but the row lands a moment later. Without a rescue pass on `COMPLETED` runs, that transcript is stranded permanently.
+
+**Re-triggering analysis when a late transcript is summarized on a `COMPLETED` run.** If the sweep's late-transcript rescue summarizes a transcript belonging to a `COMPLETED` run, analysis results for that run become stale (the original `triggerBasicAnalysis` fired before this transcript was summarized, so the transcript is missing from aggregates). To prevent silent "completed-but-stale" runs:
+- After each successful late summarization on a `COMPLETED` run, the `summarize-transcript` handler calls `triggerBasicAnalysis(runId)` to refresh analysis. This is idempotent on the analysis side.
+- The sweep does not revert the run's status from `COMPLETED` back to `SUMMARIZING`. Run status is a coarse signal of "work is done enough to publish"; analysis regeneration is the fine-grained correctness path.
+
+### Reconciliation scheduler activation
+
+The reconciliation tick runs whenever **either** condition holds:
+- `SELECT 1 FROM runs WHERE status IN ('RUNNING','SUMMARIZING','PAUSED') AND deleted_at IS NULL LIMIT 1` returns a row, **OR**
+- `SELECT 1 FROM transcripts WHERE deleted_at IS NULL AND summarized_at IS NULL AND summarize_failed_at IS NULL LIMIT 1` returns a row (catches the "COMPLETED run with stranded transcript" case where the run is terminal but a transcript still needs rescue).
+
+This keeps the sweep alive precisely when it can do useful work and lets it idle otherwise. Plan phase decides whether to extend the existing `runRecoveryJob` activity check or build a parallel ticker.
+
+**Summarize dead-letter equivalence.** There is no dedicated PgBoss dead-letter handler for `summarize_transcript` jobs today, and this feature does not add one. Expired or dropped summarize jobs are surfaced by the reconciliation sweep's late-transcript rescue (step 2 above) — the sweep re-enqueues any unsummarized transcript on every tick, which is the canonical recovery path for this feature.
+
+**Resolution behavior.** Once an anomaly's condition no longer holds (e.g., a stranded transcript gets summarized), the next sweep sets `resolvedAt = NOW()` for that `RunAnomaly` row. Operators can also manually acknowledge via MCP tooling in a follow-up.
+
+### Anomaly catalog
+
+| # | Type | Subject | Detection |
+|---|---|---|---|
+| 1 | `STRANDED_TRANSCRIPT` | empty string (run-level) | Run is `COMPLETED`, `SUMMARIZING` > threshold, or otherwise has ≥ 1 `Transcript` with `summarizedAt IS NULL AND summarizeFailedAt IS NULL AND deletedAt IS NULL`. The sweep queues summarize for these transcripts (late-transcript rescue) and records the anomaly so operators see the gap after the run's original completion. One anomaly row per run; `details` lists transcript ids. |
+| 2 | `ORPHAN_TRANSCRIPT` | empty string (run-level) | A `Transcript` row older than the orphan-age threshold (default: 60 s after `createdAt`) exists with no matching `ProbeResult` row on `(runId, scenarioId, modelId, sampleIndex)`. **The sweep first attempts to reconstruct the missing `ProbeResult` from the transcript — this anomaly only fires when reconstruction fails.** One row per run; `details` lists orphan transcript ids. The age filter prevents false positives from in-flight probe writes (transcript is written before `ProbeResult` in the same transaction). |
+| 3 | `PAIR_ASYMMETRY` | `jobChoiceBatchGroupId` | Two runs share `Run.config.jobChoiceBatchGroupId` and their success rates differ by more than a configured threshold (default: 20 percentage points, with a minimum 10 scheduled probes per side to avoid noise). One anomaly recorded on each run in the pair. **Note:** launch-time downgrades (incomplete pair → singleton run without `jobChoiceBatchGroupId`) are **not** detected by this anomaly and are a separate follow-up (a launch-time anomaly type would live closer to `launch-orchestrator.ts`). |
+| 4 | `SUMMARIZING_STALL` | empty string (run-level) | Run status = `SUMMARIZING` and `updatedAt` older than a configured threshold (default: 30 min) with no progress since. One row per run. |
+| 5 | `MODEL_TRANSCRIPT_SHORTFALL` | `modelId` | Within a single run: a model has ≥ N scheduled probes (default: 10) and success rate is either (a) below an absolute threshold (default: < 30%, catches systemic failures where every model fails equally) **or** (b) materially lower than peer models (success rate < X% where X = 50% default AND peer-median success rate > Y% where Y = 80% default). **The scheduled count per model comes from `RunScenarioSelection` rows for the run, not `Run.config.scenarioIds`.** `RunScenarioSelection` is the canonical source and already used by recovery/coverage logic. One row per (run, model). |
+| 6 | `SCHEDULED_COUNT_MISMATCH` | empty string (run-level) | `Run.progress.total` disagrees with the deterministic expected scheduled count derived from `RunScenarioSelection × modelIds × samplesPerScenario`. Replaces the dropped `PROBE_COUNT_OVERFLOW`. Detects the "undercounted launch" edge case where `progress.total` got stored with a wrong value and the new CAS would either complete too early or stall forever. One row per run. |
+
+**Subject convention.** PostgreSQL unique constraints do not dedupe `NULL`, so a nullable `subject` would let run-level anomalies duplicate. Schema uses `subject String @default("") NOT NULL` — run-level anomalies carry the empty string, making `(runId, type, subject)` a real upsert key.
+
+**Catalog change during review.** The original catalog had `PROBE_COUNT_OVERFLOW`; it was dropped during spec review because the `ProbeResult` unique constraint makes count > total impossible under the new data model. It is replaced by `SCHEDULED_COUNT_MISMATCH`, which detects the actual real-world problem — a wrong-valued `progress.total` — that the dropped anomaly was ostensibly meant to catch. Final launch set: **six anomaly types**, as originally agreed.
+
+Thresholds live as constants in the sweep handler; plan phase may move them to runtime config.
+
+### Schema additions
+
+```prisma
+enum RunAnomalyType {
+  STRANDED_TRANSCRIPT
+  ORPHAN_TRANSCRIPT
+  PAIR_ASYMMETRY
+  SUMMARIZING_STALL
+  MODEL_TRANSCRIPT_SHORTFALL
+  SCHEDULED_COUNT_MISMATCH
+}
+
+model RunAnomaly {
+  id                    String         @id @default(cuid())
+  runId                 String         @map("run_id")
+  type                  RunAnomalyType
+  subject               String         @default("")    // modelId, pair group id, or "" for run-level
+  details               Json           @db.JsonB
+  firstSeenAt           DateTime       @default(now()) @map("first_seen_at")
+  lastSeenAt            DateTime       @default(now()) @map("last_seen_at")
+  resolvedAt            DateTime?      @map("resolved_at")
+  acknowledgedByUserId  String?        @map("acknowledged_by_user_id")
+
+  run Run @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, type, subject])
+  @@index([runId])
+  @@index([type, resolvedAt])
+  @@map("run_anomalies")
+}
+```
+
+Subject is `NOT NULL` with a default of the empty string so the unique constraint actually dedupes run-level anomalies (see "Subject convention" in the anomaly catalog).
+
+Plus (pending plan approval of Option A for summarize-failure accounting):
+
+```prisma
+// On Transcript:
+summarizeFailedAt DateTime? @map("summarize_failed_at")
+```
+
+Run relation to anomalies: `anomalies RunAnomaly[]`.
+
+### Migration and cutover
+
+Single PR. Hard cutover. Migration steps:
+1. Add `RunAnomaly` table + enum.
+2. Add `Transcript.summarizeFailedAt` (if Option A confirmed in plan).
+3. No data migration needed for existing `Run.progress` JSONB — resolvers simply stop trusting `completed`/`failed` on those columns and compute from tables. Existing `total` values stay.
+4. No data backfill required for `RunAnomaly` — sweep populates going forward.
+
+In-flight safety: handlers that were mid-job at deploy read the new code path when they commit. The CAS pattern tolerates concurrent attempts. The reconciliation sweep runs within 5 minutes of deploy and heals any run that the event-driven path missed during the cutover window.
+
+---
+
+## Files in Scope
+
+| File | Change |
+|---|---|
+| `cloud/packages/db/prisma/schema.prisma` | Add `RunAnomaly` model + `RunAnomalyType` enum (6 values); add `Transcript.summarizeFailedAt`; add `Run.anomalies` relation; add index `Transcript(run_id, summarized_at)` to keep the derived summarize-progress query fast |
+| `cloud/packages/db/prisma/migrations/<timestamp>_run_state_reconciliation/migration.sql` | New migration matching schema additions **plus** the failure-row backfill: `UPDATE transcripts SET summarize_failed_at = summarized_at, summarized_at = NULL WHERE decision_text LIKE 'Summary failed%' AND summarize_failed_at IS NULL` |
+| `cloud/apps/api/src/services/run/progress.ts` | Remove `applyProgressDelta`; rewrite `maybeAdvanceRunStatus` using the CAS UPDATEs; remove the 5s settle-timeout branch in favor of `maybeAdvanceRunStatus` running at the right moment |
+| `cloud/apps/api/src/services/run/derived-progress.ts` | **New** — `computeRunProgress(runId)` service helper |
+| `cloud/apps/api/src/queue/handlers/probe-scenario/handler.ts` | Replace `applyProgressDelta` calls with `maybeAdvanceRunStatus`; remove JSONB counter writes; keep the existing `ProbeResult` reconstruction branch that rebuilds a missing `ProbeResult` from an existing `Transcript` (new completion gate depends on it) |
+| `cloud/apps/api/src/queue/handlers/probe-scenario/retry.ts` | **Was missing from initial scope.** Has its own `applyProgressDelta()` calls on retry paths — must be updated to the new `maybeAdvanceRunStatus` flow so retry handling does not bypass the new state machine |
+| `cloud/apps/api/src/services/run/recovery.ts` | **Was missing from initial scope.** Has a direct `UPDATE status = 'COMPLETED'` path for stuck runs — must route through `maybeAdvanceRunStatus` or be removed in favor of the sweep, so there is no path that skips the derived-count predicate |
+| `cloud/apps/api/src/queue/handlers/summarize-transcript.ts` | Same — replace counter writes; call `maybeAdvanceRunStatus` on terminal outcomes; write `summarizeFailedAt` on terminal summarize failure; **update `resolveSummarizeJob()` "already done" check to treat a transcript as terminal when EITHER `summarizedAt !== null` OR `summarizeFailedAt !== null`** (otherwise failure rows look pending forever and the sweep will re-queue them indefinitely — livelock) |
+| `cloud/apps/api/src/queue/handlers/summarize-persistence.ts` | Replace `checkAllSummarized` + read-then-write transition with the `SUMMARIZING → COMPLETED` CAS UPDATE; side effects only on winner |
+| `cloud/apps/api/src/queue/handlers/run-state-reconcile.ts` | **New** — reconciliation sweep handler |
+| `cloud/apps/api/src/queue/handlers/index.ts` | Register `run_state_reconcile` handler |
+| `cloud/apps/api/src/queue/types.ts` | Add `run_state_reconcile` job type and `RunStateReconcileJobData` |
+| `cloud/apps/api/src/services/run/scheduler.ts` | Enqueue singleton `run_state_reconcile` per non-terminal run each recovery tick |
+| `cloud/apps/api/src/services/run/anomaly-detection.ts` | **New** — pure detection functions for the six anomaly types, called by the sweep handler |
+| `cloud/apps/api/src/services/run/anomaly-persistence.ts` | **New** — upsert helpers on `RunAnomaly` (including `resolvedAt` flip when a condition clears) |
+| `cloud/apps/api/src/graphql/types/run.ts` (or equivalent) | Expose `run.progress`, `run.summarizeProgress` via the derived helper; expose `run.anomalies` |
+| `cloud/apps/api/src/graphql/types/run-anomaly.ts` | **New** — GraphQL type + enum for `RunAnomaly` |
+| `cloud/apps/api/src/graphql/resolvers/run-progress.ts` (or wherever `run.progress` resolves today) | Resolve `progress` / `summarizeProgress` via `computeRunProgress`, not from the JSONB column's `completed`/`failed` fields |
+| `cloud/apps/api/tests/...` | Unit tests for CAS UPDATE semantics, sweep handler, each anomaly detector, derived progress helper |
+
+Exact file list is subject to small adjustments during planning — the plan phase validates these paths.
+
+---
+
+## Acceptance Criteria
+
+| ID | Criterion |
+|---|---|
+| AC-1 | `computeRunProgress(runId)` returns numbers that match direct SQL `COUNT(...)` on `ProbeResult` / `Transcript` for 100% of runs in a test fixture containing ≥ 50 historical runs across multiple statuses |
+| AC-2 | `applyProgressDelta()` (or its successor) is removed from all probe and summarize handlers — verified by grep |
+| AC-3 | `RUNNING → SUMMARIZING` and `SUMMARIZING → COMPLETED` each execute as a single `UPDATE` statement with the predicate in the `WHERE` clause; no read-then-write anywhere |
+| AC-4 | Two concurrent handlers calling `maybeAdvanceRunStatus(runId)` for the same run result in exactly one CAS winner per transition (test with in-process concurrency) |
+| AC-5 | A run with one stranded transcript (summarize job never fired) is auto-completed by the sweep within one tick after the transcript is summarized |
+| AC-6 | `RunAnomaly` rows are created for all six anomaly types in fixture-driven unit tests |
+| AC-7 | `RunAnomaly` rows are upserted (not duplicated) when the sweep sees the same anomaly condition twice |
+| AC-8 | `RunAnomaly` rows gain `resolvedAt` when the condition clears |
+| AC-9 | `run.anomalies` returns the expected shape via GraphQL; schema includes all six enum values |
+| AC-10 | TypeScript build passes with zero errors and no `@ts-ignore` |
+| AC-11 | Full test suite passes; coverage for new files ≥ 80% lines |
+| AC-12 | A run in `SUMMARIZING` pre-deploy completes correctly post-deploy — verified by a migration smoke test against a seeded database |
+| AC-13 | No production code path calls `jsonb_set` on `progress.completed`, `progress.failed`, `summarizeProgress.completed`, or `summarizeProgress.failed` — verified by grep |
+
+---
+
+## Edge Cases
+
+| Case | Behavior |
+|---|---|
+| Two probe handlers finish simultaneously and both try `maybeAdvanceRunStatus` | CAS predicate ensures only one rowCount-1 result; loser exits cleanly |
+| A probe dead-letters as `JOB_EXPIRED` then a late worker succeeds | Upsert flips `ProbeResult.status` to `SUCCESS`; derived counts are consistent on next read; sweep records no anomaly (because the counts still satisfy `completed + failed = total`) |
+| A transcript commits 6 seconds after the last probe finishes (past the old 5s settle window) | Event-driven path may miss it, so status stays `SUMMARIZING`; sweep finds it within one tick, queues summarize, then flips to `COMPLETED` on the following tick |
+| A run has `progress.total` mismatch — e.g., user started 200 probes but `progress.total` says 180 | Anomaly `PROBE_COUNT_OVERFLOW` fires if actuals exceed declared; the derived `progress.total` continues to show the declared value. Operator follow-up is manual. |
+| Pair of runs, one side has 0 scheduled probes (all probes skipped at launch) | `PAIR_ASYMMETRY` threshold requires ≥ 10 probes per side, so the anomaly does not fire; a separate anomaly class for "pair side was never launched" is out of scope |
+| `SUMMARIZING` stall threshold trips on a slow-but-valid run | Anomaly is recorded but run state is unchanged; operator reviews |
+| A run is manually `CANCELLED` while the sweep is mid-evaluation | Sweep re-checks status at the start of its loop; the CAS UPDATE on a `CANCELLED` run affects 0 rows and exits cleanly |
+| `RunAnomaly` already exists with same `(runId, type, subject)` | Upsert updates `lastSeenAt` and optionally `details`; does not re-fire notifications (there are no notifications yet) |
+| Deploy happens mid-run | In-flight handlers read new code after their next dispatch; no state corruption |
+| Historical runs completed before this feature | Resolvers immediately read from tables for those runs; cached JSONB `completed`/`failed` values become decorative |
+
+---
+
+## Open Questions for Plan Phase
+
+1. **Reconciliation cadence** — confirm 5-minute tick (piggyback on existing `runRecoveryJob`) vs. dedicated shorter cadence.
+2. **Anomaly thresholds** — confirm hardcoded vs. runtime-configurable (defaults are in the catalog table above).
+3. **Reconciliation scheduler activation** — confirm the approach to decouple from `runRecoveryJob`'s 1-hour idle shutdown (extend the activity check vs. separate ticker).
+4. **Should a `COMPLETED` run revert to `SUMMARIZING` when a late transcript arrives?** Currently the sweep queues summarize for the transcript but leaves the run `COMPLETED`. Alternative: revert status, finish summarizing, re-flip to `COMPLETED`. Plan phase decides.
+5. **GraphQL resolver strategy** — confirm we compute `progress` once per request (field-level resolver) vs. cache within a single request for nested queries.
+
+---
+
+## Constitution Validation
+
+| Requirement | Status |
+|---|---|
+| Type safety — no `any`, strict mode | PASS — all new types explicit; derived helper has a structured return type |
+| File size ≤ 400 lines production / ≤ 800 tests | PASS — new files planned as small focused modules |
+| Test coverage ≥ 80% | PASS — unit tests planned for CAS semantics, each anomaly detector, sweep handler, derived progress helper |
+| No `console.log` — use centralized logger | PASS — sweep handler logs via `createLogger('run-reconcile')` |
+| Observable | PASS — sweep emits structured logs per run per tick; anomaly creation logs at `warn`; completion flips log at `info` |
+| Migrations use `prisma migrate dev` (never `db push`) | PASS — one new migration for schema additions |
+| Respects soft-delete pattern (`deletedAt` filter) | PASS — all transcript queries filter `deletedAt: null` |
+| PRs via branch, never direct to main | PASS — feature branch `feat/033-run-state-reconciliation` |
+| Do not touch protected files (CLAUDE.md, AGENTS.md, MEMORY.md, etc.) | PASS — see "What is NOT in scope" |
+
+---
+
+## Residual Risks (must include `verification:` per workflow rule)
+
+- **Risk: derived-count query is slow on large runs (e.g., 10k probes × 1 run).**
+  verification: before merge, run `EXPLAIN ANALYZE` on the derived progress query against a local copy of the largest production run; confirm indexed plan on `probe_results(run_id, status)` and `transcripts(run_id, summarized_at)`; add/confirm indexes if plan is sequential.
+
+- **Risk: atomic CAS under PostgreSQL's default READ COMMITTED isolation allows the subquery count to advance between two concurrent UPDATEs, resulting in double side-effects.**
+  verification: write an integration test that launches two concurrent `maybeAdvanceRunStatus` calls against a staged row and asserts exactly one rowCount-1 result; run against the test database before merge.
+
+- **Risk: reconciliation sweep fires `run_state_reconcile` for every non-terminal run every tick, producing O(runs) PgBoss inserts per tick in a loaded system.**
+  verification: before merge, measure sweep tick cost against a fixture of 200 non-terminal runs; confirm inserts are batched or deduplicated via singleton keys; if tick > 5s, adjust scheduling to run-status-filtered batch.
+
+- **Risk: `PAIR_ASYMMETRY` detection joins two runs by `Run.config.jobChoiceBatchGroupId` (a JSON path lookup), which may be slow without a functional index.**
+  verification: before merge, run `EXPLAIN` on the pair-asymmetry query in the sweep against a production-sized fixture; if the plan is sequential, add a functional index on `(config ->> 'jobChoiceBatchGroupId')` in the migration.
+
+- **Risk: replacing `applyProgressDelta` in every handler is a wide touch; a missed call site continues writing counters and creates silent state confusion.**
+  verification: before merge, run `grep -RIn "progress.*jsonb_set\|applyProgressDelta\|summarizeProgress.*jsonb_set" cloud/apps/api/src` and assert the only matches are in the authoritative `computeRunProgress` helper and the launch-time `total` writes.
+
+- **Risk: removing the 5-second settle-timeout branch loses the "wait for in-flight transcripts" behavior the event-driven path used to rely on; happy-path runs could fall through to sweep-driven completion instead of completing in seconds.**
+  verification: before merge, run the run-lifecycle integration test with a realistic probe timing fixture and assert that a clean 25-probe run reaches `COMPLETED` within 10 seconds of the last probe finishing (not 5 minutes); confirm the preserved "fast path for late transcripts" branch fires in the test.
+
+- **Risk: the reconciliation sweep re-queues probe or summarize jobs whose original worker crashed mid-API-call, producing double-billing at the provider.**
+  verification: meta-fix #2 (provider idempotency keys) is the structural fix; until that ships, before merge quantify the exposure by measuring the probe dead-letter rate and summarize-failure rate against the last week of production; if the rates are low (< 0.5% of probes) ship as-is, otherwise block on idempotency keys landing first.
+
+- **Risk: the reconciliation sweep runs for every non-terminal run every tick, and can stall if the existing `runRecoveryJob` activity window shuts off.**
+  verification: before merge, extend the scheduler activation check so the reconciliation tick also fires when `SELECT 1 FROM runs WHERE status IN ('RUNNING','SUMMARIZING')` returns a row; write a test that idles the system for > 1 hour and confirms the sweep still runs while a non-terminal run exists.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m checking the spec against the current run/probe/summarize code paths first, then I’ll call out only the failure modes that are actually supported by the tree.
+codex
+## Findings
+| Severity | Finding | Evidence |
+|---|---|---|
+| HIGH | The spec does not fully remove the old summarize-queue setup path. `cloud/apps/api/src/services/run/progress.ts` still has `queueSummarizeJobs()` waiting for transcript settle and then writing `summarizeProgress.total` from a snapshot of visible transcripts. If the new flow reuses that helper, the feature keeps the legacy counter write and the 5-second settle race, which conflicts with the spec’s “derive from authoritative tables” design and US-2. | [CODE-CONFIRMED] [/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/services/run/progress.ts](/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/services/run/progress.ts) |
+| HIGH | The spec still leaves a direct completion bypass in `cloud/apps/api/src/services/run/recovery.ts`. That file has a branch that updates a `SUMMARIZING` run straight to `COMPLETED` once queue state looks finished, which bypasses the new CAS-based completion gate unless it is explicitly removed. That is a second completion path outside the new derived-count rule. | [CODE-CONFIRMED] [/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/services/run/recovery.ts](/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/services/run/recovery.ts) |
+| MEDIUM | The migration backfill keys off `decision_text LIKE 'Summary failed%'`, but `decisionText` is just a free-form display string in the current code, not a machine status field. Any historical failure row whose text was edited, localized, or formatted differently will miss the backfill and stay misclassified after cutover. | [CODE-CONFIRMED] [/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/queue/handlers/summarize-persistence.ts](/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/queue/handlers/summarize-persistence.ts) |
+
+## Residual Risks
+- The reconciliation sweep still depends on scheduler activation logic that is not shown in the provided code. If `runRecoveryJob` still idles out on quiet systems, `run_state_reconcile` will not fire and stranded transcripts will stay stranded. [UNVERIFIED]
+- The pair/model anomaly queries will likely need careful indexing or query shaping, especially where the spec depends on JSON-path lookups from `Run.config`. The provided code does not show the final query shape, so performance risk remains. [UNVERIFIED]
+tokens used
+71,206
