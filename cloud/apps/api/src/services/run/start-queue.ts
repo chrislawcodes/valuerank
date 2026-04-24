@@ -9,6 +9,7 @@ import {
   type JobEntry,
   RETRY_ENQUEUE_CHUNK_SIZE,
 } from './start-helpers.js';
+import { maybeAdvanceRunStatus } from './progress.js';
 import type { RunJobPlanItem } from './start-plan.js';
 
 const log = createLogger('services:run:start');
@@ -30,6 +31,8 @@ export async function enqueueRunJobs(input: EnqueueRunJobsInput): Promise<string
     ...DEFAULT_JOB_OPTIONS['probe_scenario'],
     priority: priorityValue,
   };
+
+  await maybeAdvanceRunStatus(runId);
 
   const jobs: JobEntry[] = [];
   const queueNameCache = new Map<string, string>();

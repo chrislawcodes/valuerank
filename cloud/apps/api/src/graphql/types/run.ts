@@ -5,10 +5,11 @@ import { UserRef } from './user.js';
 import { RunProgress, TaskResult } from './run-progress.js';
 import { ExecutionMetrics } from './execution-metrics.js';
 import { ProbeResultRef, ProbeResultModelSummary } from './probe-result.js';
-import { calculatePercentComplete } from '../../services/run/index.js';
+import { calculatePercentComplete, computeRunProgress } from '../../services/run/index.js';
 import { ACTIVE_PROBE_QUEUE_SQL } from '../../services/queue/probe-queues.js';
 import { AnalysisResultRef } from './analysis.js';
 import { CostEstimateRef, type CostEstimateShape } from './cost-estimate.js';
+import { RunAnomalyRef } from './run-anomaly.js';
 import { getAllMetrics, getTotals } from '../../services/rate-limiter/index.js';
 
 // Re-export for backward compatibility
@@ -254,13 +255,12 @@ builder.objectType(RunRef, {
       nullable: true,
       description: 'Structured progress information with percentComplete',
       resolve: async (run) => {
-        const progress = run.progress as ProgressData | null;
-        if (progress === null) return null;
+        const progress = await computeRunProgress(run.id);
 
         // Query per-model counts from ProbeResult
         const byModelResults = await db.probeResult.groupBy({
           by: ['modelId', 'status'],
-          where: { runId: run.id },
+          where: { runId: run.id, deletedAt: null },
           _count: { _all: true },
         });
 

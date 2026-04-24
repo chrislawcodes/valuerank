@@ -30,8 +30,12 @@ export function groupCostByProvider(perModel: ModelCostEstimate[]): Map<string, 
  * No-ops if the provider's balance is NULL (budget tracking not enabled).
  * No-ops if the provider does not exist.
  */
-export async function atomicDeduct(providerName: string, cost: number): Promise<void> {
-  await db.$executeRaw`
+export async function atomicDeduct(
+  providerName: string,
+  cost: number,
+  client: Pick<typeof db, '$executeRaw'> = db,
+): Promise<void> {
+  await client.$executeRaw`
     UPDATE "llm_providers"
     SET "balance" = "balance" - ${new Prisma.Decimal(cost)}
     WHERE "name" = ${providerName}
@@ -68,8 +72,14 @@ function extractTranscriptCost(content: unknown): number {
 export async function deductActualProviderBalancesForRun(runId: string): Promise<void> {
   try {
     const transcripts = await db.transcript.findMany({
-      where: { runId },
-      select: { modelId: true, content: true },
+      where: {
+        runId,
+        deletedAt: null,
+        summarizedAt: { not: null },
+        summarizeFailedAt: null,
+        costDebitedAt: null,
+      },
+      select: { id: true, modelId: true, content: true },
     });
 
     if (transcripts.length === 0) {
@@ -101,34 +111,116 @@ export async function deductActualProviderBalancesForRun(runId: string): Promise
 
     // Aggregate cost by provider, tracking balance availability
     const providerBalanceKnown = new Map<string, boolean>();
-    const costByProvider = new Map<string, number>();
+    const costByProvider = new Map<string, { cost: number; transcriptIds: string[] }>();
     for (const [modelId, cost] of costByModel) {
       const provider = modelToProvider.get(modelId);
       if (provider == null) {
         log.warn({ runId, modelId }, 'Model not found in DB — skipping deduction for this model');
         continue;
       }
-      costByProvider.set(provider.name, (costByProvider.get(provider.name) ?? 0) + cost);
+      const existing = costByProvider.get(provider.name) ?? { cost: 0, transcriptIds: [] };
+      existing.cost += cost;
+      existing.transcriptIds.push(
+        ...transcripts.filter((transcript) => transcript.modelId === modelId).map((transcript) => transcript.id)
+      );
+      costByProvider.set(provider.name, existing);
       providerBalanceKnown.set(provider.name, provider.balance != null);
     }
 
-    // Deduct per provider
-    for (const [providerName, cost] of costByProvider) {
-      try {
-        if (!providerBalanceKnown.get(providerName)) {
-          log.debug({ runId, providerName }, 'Provider balance is null — skipping deduction');
-          continue;
-        }
+    const debitedAt = new Date();
+    await db.$transaction(async (tx) => {
+      for (const [providerName, bucket] of costByProvider) {
+        try {
+          if (!providerBalanceKnown.get(providerName)) {
+            log.debug({ runId, providerName }, 'Provider balance is null — skipping deduction');
+          } else if (bucket.cost > 0) {
+            await atomicDeduct(providerName, bucket.cost, tx);
+            log.info({ runId, providerName, cost: bucket.cost }, 'Deducted provider balance (actual cost)');
+          }
 
-        await atomicDeduct(providerName, cost);
-        log.info({ runId, providerName, cost }, 'Deducted provider balance (actual cost)');
-      } catch (err) {
-        log.error({ runId, providerName, err }, 'Failed to deduct provider balance');
+          if (bucket.transcriptIds.length > 0) {
+            await tx.transcript.updateMany({
+              where: {
+                id: { in: bucket.transcriptIds },
+                costDebitedAt: null,
+              },
+              data: { costDebitedAt: debitedAt },
+            });
+          }
+        } catch (err) {
+          log.error({ runId, providerName, err }, 'Failed to deduct provider balance');
+        }
       }
-    }
+    });
   } catch (err) {
     log.error({ runId, err }, 'Failed to deduct actual provider balances for run');
   }
+}
+
+/**
+ * Deduct provider balance for a single transcript if it has not already been charged.
+ */
+export async function deductSingleTranscriptBalance(
+  transcriptId: string,
+  tx?: Prisma.TransactionClient,
+): Promise<void> {
+  const runDeduction = async (transaction: Prisma.TransactionClient): Promise<void> => {
+    const transcript = await transaction.transcript.findUnique({
+      where: { id: transcriptId },
+      select: {
+        id: true,
+        modelId: true,
+        content: true,
+        summarizedAt: true,
+        summarizeFailedAt: true,
+        costDebitedAt: true,
+      },
+    });
+
+    if (transcript === null) {
+      log.warn({ transcriptId }, 'Transcript not found for single balance deduction');
+      return;
+    }
+
+    if (transcript.costDebitedAt !== null) {
+      log.debug({ transcriptId }, 'Transcript cost already debited');
+      return;
+    }
+
+    const cost = extractTranscriptCost(transcript.content);
+    const debitedAt = new Date();
+
+    if (cost > 0) {
+      const model = await transaction.llmModel.findUnique({
+        where: { modelId: transcript.modelId },
+        select: { provider: { select: { name: true, balance: true } } },
+      });
+
+      const provider = model?.provider ?? null;
+      if (provider !== null && provider.balance !== null) {
+        await atomicDeduct(provider.name, cost, transaction);
+        log.info({ transcriptId, providerName: provider.name, cost }, 'Deducted provider balance for transcript');
+      } else if (provider === null) {
+        log.warn({ transcriptId, modelId: transcript.modelId }, 'Model not found for transcript balance deduction');
+      } else {
+        log.debug({ transcriptId, providerName: provider.name }, 'Provider balance is null — skipping deduction');
+      }
+    }
+
+    await transaction.transcript.update({
+      where: { id: transcriptId },
+      data: { costDebitedAt: debitedAt },
+    });
+  };
+
+  if (tx !== undefined) {
+    await runDeduction(tx);
+    return;
+  }
+
+  await db.$transaction(async (transaction) => {
+    await runDeduction(transaction);
+  });
 }
 
 /**
@@ -187,6 +279,11 @@ export async function reverseDeductionForRun(
     }
     log.info({ runId, providerName, cost }, 'Reversed provider balance (backfill)');
   }
+
+  await client.transcript.updateMany({
+    where: { runId },
+    data: { costDebitedAt: null },
+  });
 }
 
 /**

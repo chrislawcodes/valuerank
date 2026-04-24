@@ -4,7 +4,7 @@
  * Handles cancel and restart operations for the summarization phase.
  */
 
-import { db, Prisma } from '@valuerank/db';
+import { db } from '@valuerank/db';
 import { createLogger, NotFoundError, RunStateError } from '@valuerank/shared';
 import { getBoss } from '../../queue/boss.js';
 import { invalidateCache } from '../analysis/cache.js';
@@ -197,13 +197,8 @@ export async function restartSummarization(
     ? { runId }
     : {
       runId,
-      OR: [
-        { summarizedAt: null },
-        {
-          summarizedAt: { not: null },
-          decisionMetadata: { equals: Prisma.DbNull },
-        },
-      ],
+      summarizedAt: null,
+      summarizeFailedAt: null,
     };
 
   const transcriptsToQueue = await db.transcript.findMany({
