@@ -3,14 +3,14 @@ reviewer: "gemini"
 lens: "testability-adversarial"
 stage: "plan"
 artifact_path: "docs/workflow/feature-runs/ff-safety-net/plan.md"
-artifact_sha256: "140b40ba22e7ed7f96aab45ede5563fa9cc63877610aadd497fa30ed0ae5e84c"
+artifact_sha256: "5deff9bcdb318585117de24610b19e86c12bae171e3851edbd1c9124770a7484"
 repo_root: "."
-git_head_sha: "c5f51491f6cd5eaa19dfc5b1605cd47e39238679"
+git_head_sha: "c6ec7b7929903a6a9a4c8fea6819b6aa2f1cba03"
 git_base_ref: "origin/main"
 git_base_sha: "c07a4283ecdebffa57e8a2cccfa08c23e0f76a36"
 generation_method: "gemini-cli"
 resolution_status: "accepted"
-resolution_note: "No actionable findings detected — auto-accepted"
+resolution_note: "Findings addressed in spec/plan/tasks updates (see plan.md Review Reconciliation section for cross-stage rollup)."
 raw_output_path: "docs/workflow/feature-runs/ff-safety-net/reviews/plan.gemini.testability-adversarial.review.md.json"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,28 +22,30 @@ coverage_note: ""
 
 ## Findings
 
-| Severity | Finding |
-| --- | --- |
-| HIGH | **Untested Integration Complexity.** The plan bundles three distinct features into a single PR, justified as "mutually reinforcing." However, it lacks a testing strategy to validate each slice's functionality in isolation before the final, complex integration. A failure in the combined build will be significantly harder to debug than a failure in a standalone slice, as the source of the error could be in any of the three new features or their interactions. |
-| MEDIUM | **Asserted, Not Tested, Idempotency.** The plan dismisses the risk of a mid-operation crash during the garbage collection (GC) step by stating it is "idempotent by construction" with "no concern." From an adversarial perspective, this assertion is a testing gap. A robust test plan would include a test case that simulates this failure scenario: partially delete the intermediate files, then re-run the `checkpoint` command, and assert that the final state is correct. This would prove idempotency rather than just claiming it. |
-| MEDIUM | **Fragile Test-by-Introspection.** [UNVERIFIED] The test for the command mutation registry (`test_mutating_registry.py`) relies on introspecting the `build_parser()` result. This creates a brittle test that is coupled to the implementation details of Python's `argparse` library and the project's specific parser construction. If the parser's internal structure changes (e.g., in a future Python version or a refactor), the test could break or, worse, silently pass without actually testing all commands. |
-| LOW | **Ambiguous Veto Edge Case Coverage.** The test plan for the completeness veto (`test_completeness_veto.py`) covers the primary acceptance scenarios. However, it does not explicitly mention testing for failure modes or edge cases in the judge's response. For example: What happens if `unaddressed_high_finding_ids` contains malformed, non-existent, or duplicate finding IDs? What if it's an empty array? These cases could reveal unexpected behavior in the tally logic. |
+| Severity | ID | Finding |
+|---|---|---|
+| **HIGH** | F-01 | **Untested Conditional State Mutation Creates Corruption Loophole:** The proposed decorator-based system (`@mutates_state`, `@readonly_command`) is binary and cannot account for commands that mutate state only under specific conditions (e.g., when a flag like `--write-to-state` is used). A command could be decorated as `@readonly_command` but contain a mutating code path. This would bypass the invariant checks designed to protect state integrity, creating a silent and untestable vector for state corruption. The test plan only validates that a decorator is present, not that its classification is correct across all execution paths. |
+| **MEDIUM** | F-02 | **[UNVERIFIED] Veto Outcome Is Ambiguous and Untestable:** The plan states the completeness veto will "override majority". This is too vague to be testable. It is unclear if this means flipping a `status` field, preventing a `PASS` state, or simply adding a warning. Without a precise definition of the final state representation after a veto, it is impossible to write a definitive test assertion. The test plan can only validate that *something* happens, not that the *correct* state transition occurred. |
+| **MEDIUM** | F-03 | **Omitted Failure Case for Garbage Collection:** The test plan for garbage collection (`test_review_gc.py`) focuses on success paths (deletion and preservation). It completely omits testing for failure modes, specifically what happens if the process encounters a file system error (e.g., permissions denied) during deletion. An unhandled exception could crash the process mid-GC, leaving the workflow in an inconsistent state with a random subset of intermediate files present. This failure mode is not covered. |
+| **LOW** | F-04 | **[UNVERIFIED] Garbage Collection Specification Is Brittle:** The plan states GC will delete "5 globs per FR-015". The effectiveness of the entire GC feature hinges on the assumption that this list of globs is, and will remain, complete and accurate. The test plan only verifies that files matching these globs are deleted; it cannot verify that the globs themselves cover all necessary intermediate artifacts. Stale files from a new or changed tool could easily be missed, leading to data pollution. |
+| **LOW** | F-05 | **Inflexible GC Control Logic May Obscure Bugs:** The `--keep-intermediates` flag is an all-or-nothing switch. This coarse-grained control prevents a developer from inspecting the output of a single problematic stage while cleaning up others. This can make debugging more difficult and encourages leaving all intermediates, increasing the risk of a developer being confused by stale data—the very problem the GC feature aims to solve. The test plan does not explore the robustness of this binary choice. |
 
 ## Residual Risks
 
-| Severity | Risk |
-| --- | --- |
-| HIGH | **Manual, Non-Repeatable LLM Verification.** The plan correctly identifies that the "Completeness judge prompt reliability" is a major risk, but the mitigation is a "live judge run," which is a manual verification step, not an automated test. This creates a significant testability gap. A regression in the LLM's ability to follow the prompt's structured output rules could be missed by the unit tests (which mock this data) and only caught by a human running a specific manual check. The lack of an automated integration test with a suite of canned LLM responses (covering valid, invalid, and empty `unaddressed_high_finding_ids` cases) makes this feature's core logic brittle and subject to unverified LLM drift. |
-| MEDIUM | **Incomplete Side-Effect Verification for Bad Override.** [UNVERIFIED] The plan astutely identifies an order-of-operations risk (P3) where an override could be recorded before its reason is validated. The proposed verification is to assert that `state["override"]` is not written. However, this may not be sufficient. An adversarial test would also need to verify that no *other* side effects occurred. It's possible that `_record_override_if_needed` or a function it calls performs other state mutations (e.g., logging, metric emission, writing to other parts of `state.json`) before it is determined the override is invalid. The test should assert that the system state is entirely unchanged after a rejected override attempt. |
-| LOW | **Unverified GC Failure Modes.** The test plan for garbage collection (`test_review_gc.py`) focuses on correct deletion and preservation. It omits adversarial scenarios that test the system's resilience to filesystem errors. For example, the plan does not mention testing the behavior when one of the target intermediate files cannot be deleted due to restrictive file permissions. This leaves the system's error handling for filesystem exceptions untested. |
+| Severity | ID | Risk |
+|---|---|---|
+| **HIGH** | R-01 | **Silent State Corruption:** A command mis-decorated as `@readonly_command` could mutate state without triggering the framework's invariant checks. This breaks the primary safety assumption of the new architecture and could lead to data integrity issues that are difficult to trace. |
+| **MEDIUM** | R-02 | **Inconsistent State on File System Error:** If the garbage collection process fails mid-operation due to a file system error (e.g., permissions), it may leave the workflow in a partially cleaned, inconsistent state. The plan confirms idempotency on re-run but does not account for the process crashing or the untestability of this failure mode. |
+| **MEDIUM** | R-03 | **LLM Non-Compliance in Veto Prompt:** As noted in the artifact (Risk P1), the completeness veto depends on the LLM correctly identifying and populating the `unaddressed_high_finding_ids` array. If the LLM fails to follow the new prompt instructions, the veto mechanism may fail silently (i.e., not block) even if the fail-open guard catches the empty array, as the human reviewer may not notice the missing veto. |
+| **LOW** | R-04 | **Brittle Dependency on `argparse` Internals:** As noted in the artifact (Risk P2), the logic for auto-registering commands relies on introspecting `argparse` internal structures. A future update to the `argparse` library could break the command registry, causing runtime failures. While the plan suggests a mitigating test, this remains a dependency risk. |
 
 ## Token Stats
 
-- total_input=13867
-- total_output=872
-- total_tokens=17139
-- `gemini-2.5-pro`: input=13867, output=872, total=17139
+- total_input=13965
+- total_output=965
+- total_tokens=16819
+- `gemini-2.5-pro`: input=13965, output=965, total=16819
 
 ## Resolution
 - status: accepted
-- note: No actionable findings detected — auto-accepted
+- note: Findings addressed in spec/plan/tasks updates (see plan.md Review Reconciliation section for cross-stage rollup).

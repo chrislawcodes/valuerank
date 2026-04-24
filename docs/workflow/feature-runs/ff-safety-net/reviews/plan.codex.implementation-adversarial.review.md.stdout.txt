@@ -1,9 +1,9 @@
 ## Findings
-- Medium: Slice 1 is internally inconsistent about scope. It says there are "13 existing `command_*` handlers" but then classifies them as "12 mutating incl `init`, 2 readonly", which totals 14. That means the decorator rollout is underspecified and at least one handler is likely to be missed or misclassified unless the count is corrected first.
-- Medium [UNVERIFIED]: The completeness veto never defines how `unaddressed_high_finding_ids` is resolved against the current open-finding set. The plan assumes the IDs are stable and directly comparable, but it does not say how to handle stale IDs, duplicate IDs, malformed values, or a missing field if validation is bypassed. That leaves room for false vetoes or silent fail-open behavior.
-- Medium [UNVERIFIED]: The GC change is underspecified about deletion scope. It says to delete "the 5 globs per FR-015" inside the checkpoint lock, but it does not restate which paths are protected, whether the patterns are narrowly stage-qualified, or how collisions between review artifacts are avoided. If the real layout is broader than assumed, the cleanup can delete unrelated files.
+1. High: The completeness veto can be bypassed by omission. The plan makes `unaddressed_high_finding_ids` optional and only vetoes when at least one cited ID is still open. That means a judge that returns no IDs, or a parse path that drops the field, can still let an incomplete review pass on majority vote. The main safety net needs a hard failure when completeness is selected but no actionable IDs are supplied.
+2. Medium: The plan does not define how to handle stale, duplicate, or unknown cited IDs. Without explicit normalization, a typo or a citation to an already-closed finding can either cause a false block or silently skip the veto depending on how the lookup is implemented. That is an avoidable edge-case hole in the new control flow.
+3. Medium: GC is defined only as a top-of-`command_checkpoint` cleanup. If `command_checkpoint` creates review intermediates later in the same command, those files will survive until the next run. If the goal is workspace cleanliness after each checkpoint, the plan currently cleans only old debris, not same-run output.
 
 ## Residual Risks
-- The plan still depends on assumptions about the existing command registry, open-finding model, and FR-015 path layout that were not verified here.
-- The completeness fix still relies on the model actually emitting the new field correctly; prompt changes reduce risk, but they do not remove it.
-- The GC change is only safe if the glob set is tightly scoped to intermediate artifacts and not shared outputs.
+- The new safety net still depends on the judge model complying with the prompt; prompt and schema changes reduce drift but do not make the model deterministic.
+- The registry auto-discovery approach is coupled to the current parser shape, so future CLI refactors may require test and helper updates.
+- The checkpoint cleanup is best-effort rather than transactional, so a crash during deletion can leave partial leftovers until the next checkpoint.

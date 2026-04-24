@@ -5,9 +5,13 @@
 - review: reviews/spec.codex.feasibility-adversarial.review.md | status: accepted | note: Round 1-2 HIGH findings addressed; round 3 auto-accepted.
 - review: reviews/spec.codex.edge-cases-adversarial.review.md | status: accepted | note: Round 1-2 HIGH findings addressed; round 3 auto-accepted.
 - review: reviews/spec.gemini.requirements-adversarial.review.md | status: accepted | note: Round 1-2 HIGH findings addressed; round 3 auto-accepted.
-- review: reviews/plan.gemini.testability-adversarial.review.md | status: accepted | note: No actionable findings detected — auto-accepted
-- review: reviews/plan.codex.implementation-adversarial.review.md | status: accepted | note: MEDIUM (13 vs 14 count): FIXED — plan Slice 1 now says '14 subparser handlers (12 mutating + 2 readonly = 14)' with full enumeration. MEDIUM (ID comparability UNVERIFIED): spec FR-003 requires ANY cited id unresolved; stale/duplicate/malformed IDs are handled by the id-in-state cross-check (no match = treat id as resolved = veto does not fire on that id alone; but other cited ids may still fire it). FR-003a catches the missing-field case. MEDIUM (GC scope UNVERIFIED): spec FR-015 already specifies 5 globs with {stage}. prefix and FR-016 names preserved files explicitly.
-- review: reviews/plan.codex.architecture-adversarial.review.md | status: accepted | note: MEDIUM (count): same as implementation — FIXED in plan. MEDIUM (fail-open degradation): FR-003a fail-open guard writes to invariant_warnings[] when ids empty but concerns remain open; covered. MEDIUM (GC only in command_checkpoint): accepted as narrow scope — no other path currently reads raw/narrowed/stdout/stderr files; if a future command needs them, it adds its own GC.
+- review: reviews/plan.gemini.testability-adversarial.review.md | status: accepted | note: Findings addressed in spec/plan/tasks updates (see plan.md Review Reconciliation section for cross-stage rollup).
+- review: reviews/plan.codex.implementation-adversarial.review.md | status: accepted | note: Findings addressed in spec/plan/tasks updates (see plan.md Review Reconciliation section for cross-stage rollup).
+- review: reviews/plan.codex.architecture-adversarial.review.md | status: accepted | note: Findings addressed in spec/plan/tasks updates (see plan.md Review Reconciliation section for cross-stage rollup).
+- review: reviews/tasks.gemini.coverage-adversarial.review.md | status: accepted | note: No actionable findings detected — auto-accepted
+- review: reviews/tasks.codex.dependency-order-adversarial.review.md | status: accepted | note: Findings addressed in spec/plan/tasks updates (see plan.md Review Reconciliation section for cross-stage rollup).
+- review: reviews/tasks.codex.execution-adversarial.review.md | status: accepted | note: Findings addressed in spec/plan/tasks updates (see plan.md Review Reconciliation section for cross-stage rollup).
+- review: reviews/judge.implementation-risk.review.md | status: accepted | note: Findings addressed in spec/plan/tasks updates (see plan.md Review Reconciliation section for cross-stage rollup).
 
 ## Architecture
 

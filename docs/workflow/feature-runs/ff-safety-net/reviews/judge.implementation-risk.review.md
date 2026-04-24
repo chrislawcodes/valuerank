@@ -9,8 +9,8 @@ git_head_sha: "262e50f7d081cff9d6ba1487502528a84ee61728"
 git_base_ref: "origin/main"
 git_base_sha: "c07a4283ecdebffa57e8a2cccfa08c23e0f76a36"
 generation_method: "judge-panel"
-resolution_status: "open"
-resolution_note: "Four load-bearing gaps would force guessing during implementation. First, FR-012 names a Python stdlib function that does not exist — inspect.islambda — so the lambda-detection test would raise AttributeError at runtime; the implementer ..."
+resolution_status: "accepted"
+resolution_note: "Findings addressed in spec/plan/tasks updates (see plan.md Review Reconciliation section for cross-stage rollup)."
 raw_output_path: "docs/workflow/feature-runs/ff-safety-net/reviews/judge.implementation-risk.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -67,5 +67,5 @@ Four load-bearing gaps would force guessing during implementation. First, FR-012
 ```
 
 ## Resolution
-- status: open
-- note: Four load-bearing gaps would force guessing during implementation. First, FR-012 names a Python stdlib function that does not exist — inspect.islambda — so the lambda-detection test would raise AttributeError at runtime; the implementer ...
+- status: accepted
+- note: Findings addressed in spec/plan/tasks updates (see plan.md Review Reconciliation section for cross-stage rollup).

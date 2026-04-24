@@ -8,7 +8,7 @@ approval: never
 sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
 reasoning effort: high
 reasoning summaries: none
-session id: 019dc133-c387-7a20-9f90-e64f710570e3
+session id: 019dc137-1942-7050-9336-59cb5a4fed75
 --------
 user
 Review this plan artifact using a implementation-adversarial lens.
@@ -48,7 +48,7 @@ Implementation dispatched to Codex per `~/.claude/rules/agent-invocation.md` tok
 
 - Create `factory_mutating.py` with `@mutates_state(name)` and `@readonly_command(name)` decorators + `collect_mutating_command_names(handlers)` helper.
 - Wrap `run_judge` in a named function `command_judge` in `run_factory.py`; apply `@mutates_state("judge")`.
-- Apply decorators to all 13 existing `command_*` handlers per FR-011 (12 mutating incl `init`, 2 readonly).
+- Apply decorators to all 14 subparser handlers per FR-011: 12 mutating (`init`, `checkpoint`, `judge` via the new `command_judge` wrapper, `reconcile`, `auto-reconcile`, `block`, `repair`, `closeout`, `discover`, `parallel`, `implement`, `deliver`) + 2 readonly (`status`, `doctor`). The arithmetic — 12 mutating + 2 readonly = 14 — matches the 14 subparsers registered in `build_parser()`. Any mismatch at test time fails loudly per FR-012.
 - Replace literal `_STATE_MUTATING_COMMANDS` in `run_factory.py` with `collect_mutating_command_names([...])` seeded from `build_parser()` dispatch map.
 - Add `tests/test_mutating_registry.py` per FR-012 — enumerates subparsers, rejects bare lambdas, asserts every handler is decorated.
 
@@ -116,17 +116,17 @@ Return only markdown with exactly these sections:
 ## Residual Risks
 Do not include any other sections.
 codex
-I’m reviewing the plan itself as a hostile artifact, not the codebase. I’ll focus on contradictions, missing cases, and assumptions the plan quietly relies on, and I’ll mark any codebase-dependent point as `[UNVERIFIED]`.
+I’m reviewing the plan as an attacker would: looking for places it can fail quietly, be bypassed, or depend on unstated behavior. I’ll stay scoped to the artifact itself and flag any codebase-dependent concerns as `[UNVERIFIED]`.
 codex
 ## Findings
-- Medium: Slice 1 is internally inconsistent about scope. It says there are "13 existing `command_*` handlers" but then classifies them as "12 mutating incl `init`, 2 readonly", which totals 14. That means the decorator rollout is underspecified and at least one handler is likely to be missed or misclassified unless the count is corrected first.
-- Medium [UNVERIFIED]: The completeness veto never defines how `unaddressed_high_finding_ids` is resolved against the current open-finding set. The plan assumes the IDs are stable and directly comparable, but it does not say how to handle stale IDs, duplicate IDs, malformed values, or a missing field if validation is bypassed. That leaves room for false vetoes or silent fail-open behavior.
-- Medium [UNVERIFIED]: The GC change is underspecified about deletion scope. It says to delete "the 5 globs per FR-015" inside the checkpoint lock, but it does not restate which paths are protected, whether the patterns are narrowly stage-qualified, or how collisions between review artifacts are avoided. If the real layout is broader than assumed, the cleanup can delete unrelated files.
+1. High: The completeness veto can be bypassed by omission. The plan makes `unaddressed_high_finding_ids` optional and only vetoes when at least one cited ID is still open. That means a judge that returns no IDs, or a parse path that drops the field, can still let an incomplete review pass on majority vote. The main safety net needs a hard failure when completeness is selected but no actionable IDs are supplied.
+2. Medium: The plan does not define how to handle stale, duplicate, or unknown cited IDs. Without explicit normalization, a typo or a citation to an already-closed finding can either cause a false block or silently skip the veto depending on how the lookup is implemented. That is an avoidable edge-case hole in the new control flow.
+3. Medium: GC is defined only as a top-of-`command_checkpoint` cleanup. If `command_checkpoint` creates review intermediates later in the same command, those files will survive until the next run. If the goal is workspace cleanliness after each checkpoint, the plan currently cleans only old debris, not same-run output.
 
 ## Residual Risks
-- The plan still depends on assumptions about the existing command registry, open-finding model, and FR-015 path layout that were not verified here.
-- The completeness fix still relies on the model actually emitting the new field correctly; prompt changes reduce risk, but they do not remove it.
-- The GC change is only safe if the glob set is tightly scoped to intermediate artifacts and not shared outputs.
-2026-04-24T20:35:27.019655Z ERROR codex_core::session: failed to record rollout items: thread 019dc133-c387-7a20-9f90-e64f710570e3 not found
+- The new safety net still depends on the judge model complying with the prompt; prompt and schema changes reduce drift but do not make the model deterministic.
+- The registry auto-discovery approach is coupled to the current parser shape, so future CLI refactors may require test and helper updates.
+- The checkpoint cleanup is best-effort rather than transactional, so a crash during deletion can leave partial leftovers until the next checkpoint.
+2026-04-24T20:39:10.002325Z ERROR codex_core::session: failed to record rollout items: thread 019dc137-1942-7050-9336-59cb5a4fed75 not found
 tokens used
-8,547
+9,653
