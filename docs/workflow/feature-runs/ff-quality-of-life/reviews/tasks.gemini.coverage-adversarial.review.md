@@ -3,14 +3,14 @@ reviewer: "gemini"
 lens: "coverage-adversarial"
 stage: "tasks"
 artifact_path: "docs/workflow/feature-runs/ff-quality-of-life/tasks.md"
-artifact_sha256: "9c0f106053e974c709093015d0ea3e79b80bb024e6f083fbd7f7694c3336303c"
+artifact_sha256: "6aa84fcee4b38cb1832136f48e6bf182f11aa6304fae62f4ac5722975f26ff07"
 repo_root: "."
-git_head_sha: "3b06bc99aa6b877dd16a078c1e70c811418e60ea"
+git_head_sha: "46ccb94c5f51fcd6f8259ff2d94e41f86d47065c"
 git_base_ref: "origin/main"
 git_base_sha: "29476d513f705290496288c4e580ba6890bc87ad"
 generation_method: "gemini-cli"
-resolution_status: "accepted"
-resolution_note: "CRITICAL F-01 (rollback): accepted as Risk P3 — atomic per-file, no multi-file transaction. HIGH F-02 (60-char edge): FIXED — task now says '60 chars OR full text if shorter'. MEDIUM F-03 (TOCTOU): accepted as best-effort pre-check. MEDIUM F-04 (dedup whitespace/case): FIXED — FR-013 strips + exact match. MEDIUM F-05 (corrupt state): accepted as out of scope. LOW F-06 (state assertion): FIXED — test asserts file-level state after mid-run failure."
+resolution_status: "open"
+resolution_note: ""
 raw_output_path: "docs/workflow/feature-runs/ff-quality-of-life/reviews/tasks.gemini.coverage-adversarial.review.md.json"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -24,27 +24,26 @@ coverage_note: ""
 
 | Severity | ID | Finding |
 | --- | --- | --- |
-| CRITICAL | F-01 | **Slice 3 creates an inconsistent state on partial failure with no rollback.** The failure handling for updating review files in `T3.3` involves writing changes file-by-file. If an `os.replace` call fails midway through the list of files, the system is left in a state where some review files have the new `artifact_sha256` and others have the old one. The plan correctly avoids appending a success annotation, but it provides no mechanism to roll back the already-completed changes, forcing an operator to re-run the command on this inconsistent state. This could cause incorrect behavior in other tools that read these files before the fix is complete. |
-| HIGH | F-02 | **Slice 1 prompt change omits a key edge case.** The new rule added in `T1.2` requires a judge to "quote at least 60 characters of the original prior-round reasoning text". This rule does not define the expected behavior if the source reasoning text is *less than* 60 characters long. This ambiguity could lead to LLM failure, hallucination, or human confusion. |
-| MEDIUM | F-03 | **Slice 3 suffers from a potential TOCTOU race condition.** The pre-check for file writability in `T3.3` using `os.access` before attempting the atomic `os.replace` is not guaranteed to be safe. Permissions could change between the check and the write operation, leading to a failure that the pre-check was intended to prevent. While the subsequent `os.replace` has error handling, the pre-check itself can provide a false sense of security. |
-| MEDIUM | F-04 | **Slice 2 test plan for deduplication is insufficient.** The test case for deduplication in `T2.4` only considers an exact string match (`--non-goal "A" --non-goal "A"`). It fails to cover other important cases, such as case-sensitivity (e.g., `"A"` vs `"a"`) or strings that become identical after stripping whitespace (e.g., `"B"` vs `" B "`). This leaves ambiguity about the precise deduplication logic. |
-| MEDIUM | F-05 | **[UNVERIFIED] Slice 2 does not account for corrupt state files.** The logic in `T2.3` to modify `state.discovery.non_goals` and `state.discovery.acceptance_criteria` implicitly assumes that the `state` object loads correctly and these attributes are lists. The plan does not specify any error handling for cases where the underlying state file is missing, corrupt, or has an unexpected schema, which could lead to a runtime crash. |
-| LOW | F-06 | **Slice 3 failure test lacks a state assertion.** The test for a mid-run failure in `T3.4` confirms that the exit code is correct and the success annotation is not appended. However, it fails to explicitly assert the resulting inconsistent state of the files (i.e., that one file *was* updated while another *was not*). This is a missed opportunity to fully validate the documented failure behavior. |
+| HIGH | H-01 | **`--validation-only` success is not atomic:** The success path in T3.3 updates review files and *then* appends an annotation. If the `os.replace` calls succeed but the final `update_stage_state` call fails, the files will be modified with a new SHA, but no audit record of the reseal will be saved. This leaves the system in an inconsistent state that may complicate future debugging. The test plan in T3.4 confirms the annotation is added on success, but does not test the failure mode where annotation itself fails. |
+| MEDIUM | M-01 | **Restatement prompt test is weak:** The test in T1.4 asserts that certain phrases exist in the `restatement.md` prompt file. This is a brittle test that only checks for the presence of text, not the correctness of the logic. An LLM could pass this test with a prompt that is grammatically correct but logically flawed, leading to incorrect "severity-drop" justifications being accepted. A more robust test would involve checking scenarios against the prompt's logic. |
+| MEDIUM | M-02 | **[UNVERIFIED] Relies on untested hash function:** The entire drift-detection logic for `--validation-only` (Slice 3) depends on the correctness of `normalized_artifact_hash`. The tasks do not include any tests to verify that this function is robust and correctly detects all relevant changes while ignoring irrelevant ones (e.g., line ending differences). A subtle bug in the hashing function could cause it to fail to detect artifact drift, silently undermining the purpose of the validation feature. |
+| LOW | L-01 | **Incomplete test coverage for CLI argument stripping:** The handler logic in T2.3 specifies that values for `--non-goal` and `--acceptance-criteria` should be stripped of whitespace before being appended. The test plan in T2.4 covers cases where the input is empty or only whitespace, but it omits a test to verify that surrounding whitespace is correctly stripped from a non-empty string (e.g., asserting that `"--non-goal '  A  '"` results in the state `['A']`). |
+| LOW | L-02 | **[UNVERIFIED] Restatement prompt contains ambiguous fallback:** The new rule added in T1.2 instructs the LLM to "fall back to other rules" if the conditions for a severity-drop justification aren't met. This is ambiguous. If the "other rules" are not explicitly defined and ranked within the prompt, it creates a risk of unpredictable or inconsistent behavior from the LLM when it encounters this edge case. |
 
 ## Residual Risks
 
 | ID | Risk |
 | --- | --- |
-| R-01 | **Effectiveness of Prompt Change is Unverified:** The core assumption of `T1.2` is that modifying the `restatement.md` prompt will successfully compel a human or LLM judge to follow the new, more complex rule about quoting evidence. The planned tests (`T1.4`) can only verify that the text of the prompt has changed; they cannot and do not verify that this change will produce the desired behavioral outcome in practice. The efficacy of the prompt remains an unmitigated risk that can only be assessed through operational monitoring. |
-| R-02 | **Inconsistent State is an Accepted Risk:** As noted in `F-01`, the `validation-only` workflow can result in a partially-updated set of review files on failure. The task artifact explicitly acknowledges this possibility as an "accepted Risk P3". While this indicates awareness, the risk itself remains: between the partial failure and the successful re-run, the repository is in a known inconsistent state, which may impact other processes or user actions. |
+| RR-01 | **Partial write state is accepted:** The plan in T3.3 and test in T3.4 explicitly accept the risk of a partial write if `os.replace` fails mid-operation. This means in a failure scenario, some review files will have a new artifact SHA while others have the old one. While this state is tested, it remains a system complexity that could complicate manual recovery or subsequent automated operations, as the reviews for a single artifact would be out of sync. |
+| RR-02 | **No validation for `run_factory.py` default arguments:** The tasks in T1.1 add default values to argparse arguments. The test in T1.3 verifies these defaults are present when no flags are passed. However, there's no check to prevent a user from providing invalid or nonsensical values (e.g., `--max-artifact-chars=0` or a negative number), which might cause downstream failures. The risk is that the CLI tool may not be robust to invalid user input for these new arguments. |
 
 ## Token Stats
 
-- total_input=13993
-- total_output=927
-- total_tokens=18076
-- `gemini-2.5-pro`: input=13993, output=927, total=18076
+- total_input=14070
+- total_output=819
+- total_tokens=16662
+- `gemini-2.5-pro`: input=14070, output=819, total=16662
 
 ## Resolution
-- status: accepted
-- note: CRITICAL F-01 (rollback): accepted as Risk P3 — atomic per-file, no multi-file transaction. HIGH F-02 (60-char edge): FIXED — task now says '60 chars OR full text if shorter'. MEDIUM F-03 (TOCTOU): accepted as best-effort pre-check. MEDIUM F-04 (dedup whitespace/case): FIXED — FR-013 strips + exact match. MEDIUM F-05 (corrupt state): accepted as out of scope. LOW F-06 (state assertion): FIXED — test asserts file-level state after mid-run failure.
+- status: open
+- note:

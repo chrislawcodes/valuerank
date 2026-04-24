@@ -8,7 +8,7 @@ approval: never
 sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
 reasoning effort: high
 reasoning summaries: none
-session id: 019dc169-dbe8-7621-afeb-0014f2a8b702
+session id: 019dc16b-8189-7cb3-9782-c77a181d58ba
 --------
 user
 Review this tasks artifact using a dependency-order-adversarial lens.
@@ -27,7 +27,7 @@ Artifact: tasks.md
 ## Slice 1 — Char budgets + restatement prompt `[CHECKPOINT]`
 
 - [ ] T1.1 In `run_factory.py` checkpoint subparser, add `default=50000` to `--max-artifact-chars`, `default=60000` to `--max-context-chars`, `default=250000` to `--max-total-chars`.
-- [ ] T1.2 In `judge-prompts/restatement.md`, under the "diminishing-returns case" rule, add: "When citing severity drop as a proceed justification, the verdict reasoning MUST quote at least 60 characters of the original prior-round reasoning text verbatim and name the specific finding whose severity allegedly dropped. If you cannot quote a prior round's text for the finding in question, severity-drop is not a valid proceed basis — fall back to other rules."
+- [ ] T1.2 In `judge-prompts/restatement.md`, under the "diminishing-returns case" rule, add: "When citing severity drop as a proceed justification, the verdict reasoning MUST quote the prior-round reasoning text verbatim — at least 60 characters, OR the full reasoning text if it is shorter than 60 characters — and name the specific finding whose severity allegedly dropped (per Gemini tasks HIGH F-02). If you cannot quote a prior round's text for the finding in question, severity-drop is not a valid proceed basis — fall back to other rules."
 - [ ] T1.3 Add `tests/test_char_budget_defaults.py` — parse args with no budget flags, assert defaults resolve to 50000/60000/250000.
 - [ ] T1.4 Add `tests/test_restatement_prompt.py` — read judge-prompts/restatement.md, assert it contains both the new quote-evidence phrase AND the unchanged first-round-proceed-with-annotation + true-saturation rules.
 - [ ] T1.5 Run `pytest docs/workflow/operations/codex-skills/feature-factory/scripts/tests/` — 183 existing + 2 new pass.
@@ -73,7 +73,7 @@ Artifact: tasks.md
   - US2.3: no drift → no-op, exit 0, zero writes.
   - US2.4: no manifest → exit 2.
   - Pre-check failure: one review file read-only → exit 2, no writes to other files.
-  - Mid-run failure (per Gemini CRITICAL F-01): mock `os.replace` to raise on the 2nd of 3 files. Assert exit 2, clear error message, annotation NOT appended (so operator knows to re-run).
+  - Mid-run failure (per Gemini CRITICAL F-01): mock `os.replace` to raise on the 2nd of 3 files. Assert exit 2, clear error message, annotation NOT appended. Also assert the resulting file state: file[0] has new SHA, file[1] has old SHA (raise happened mid-write), file[2] has old SHA (never reached). This explicitly documents + tests the accepted-partial-state behavior per Gemini tasks LOW F-06.
   - Parametrized mutex (per Gemini MEDIUM F-03): `--validation-only --fallback`, `--validation-only --address X --evidence Y`, `--validation-only --defer X --reason Y`, `--validation-only --dismiss X --reason Y` → argparse error exit 2 for each.
   - Exit code + error message assertions on each failure path.
 - [ ] T3.5 Run pytest — all pass.
@@ -92,4 +92,4 @@ Return only markdown with exactly these sections:
 Do not include any other sections.
 ERROR: You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Apr 28th, 2026 11:35 AM.
 ERROR: You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Apr 28th, 2026 11:35 AM.
-2026-04-24T21:33:58.189282Z ERROR codex_core::session: failed to record rollout items: thread 019dc169-dbe8-7621-afeb-0014f2a8b702 not found
+2026-04-24T21:35:44.220047Z ERROR codex_core::session: failed to record rollout items: thread 019dc16b-8189-7cb3-9782-c77a181d58ba not found
