@@ -3,7 +3,7 @@
   "model": "gpt-5",
   "verdict": "proceed-with-annotation",
   "confidence": 5,
-  "reasoning": "No prior findings exist, so there is no baseline for restatement analysis. Per the first-round rule, the correct verdict is proceed-with-annotation, not block. All latest findings are classified NEW for baseline-setting purposes. Classification by finding: spec.codex.edge-cases-adversarial.review#high-1 NEW: fail-open path where a completeness judge can block in prose but omit usable `unaddressed_high_finding_ids`, causing majority fallback. spec.codex.edge-cases-adversarial.review#medium-2 NEW: missing canonical identifier contract can make exact-match veto checks miss unresolved HIGH concerns. spec.codex.edge-cases-adversarial.review#medium-3 NEW: inconsistent `.narrowed.json` retention/deletion rule creates risk of deleting durable state or leaving stale artifacts. spec.codex.feasibility-adversarial.review#high-1 NEW: deterministic fail-closed behavior is missing when the completeness judge blocks on HIGH but emits no usable ids. spec.codex.feasibility-adversarial.review#medium-2 NEW: internal contradiction between structured-only behavior and regex fallback leaves two incompatible implementations. spec.codex.feasibility-adversarial.review#medium-3 NEW: mutating-command discovery has multiple sources of truth, so exposed commands may be missed or internal helpers falsely flagged. spec.codex.feasibility-adversarial.review#medium-4 NEW: GC file-scope inconsistency plus brittle lock-blocking test requirement creates cleanup and test-stability risk. spec.gemini.requirements-adversarial.review#high-1 NEW: critical safety invariant depends on an LLM-based concern-merge step without a specified validation mechanism. spec.gemini.requirements-adversarial.review#high-2 NEW: override reason can bypass the gate without an auditable persistence requirement. spec.gemini.requirements-adversarial.review#medium-3 NEW: banning lambdas is only a process convention, so the original silent-guardrail-regression bug class can return. spec.gemini.requirements-adversarial.review#medium-4 NEW: the spec disagrees on the intermediate-file deletion set, signaling unresolved GC scope. spec.gemini.requirements-adversarial.review#medium-5 NEW: reclassifying `init` as mutating may break invariant self-checks when no prior state exists. spec.gemini.requirements-adversarial.review#low-6 NEW: decorator-attribute discovery may fail for non-function callables such as `__call__` objects. Because this is the first round, these should be treated as baseline issues for later restatement comparisons rather than as saturation evidence.",
+  "reasoning": "No prior findings or orchestrator responses were provided, so restatement analysis is not possible. Per the first-round rule, the correct verdict is proceed-with-annotation. I therefore treat every latest finding as NEW for baseline purposes. The new failure modes recorded in this baseline are: fail-open completeness veto when a blocking HIGH verdict omits usable ids; missing canonical identifier contract for `unaddressed_high_finding_ids`; inconsistent deletion scope for `.narrowed.json`; contradiction between single-source-of-truth structured ids and regex fallback text; multiple incompatible mutating-command discovery sources; underspecified and potentially brittle GC locking test expectations; outsourcing critical merge safety to a probabilistic system without validation; unaudited override reasons; unenforced no-lambda convention that can reintroduce silent coverage gaps; inconsistent stale-file counts across sections; possible `init` breakage when no prior state exists; and decorator discovery gaps for non-function callables. This round should establish the comparison baseline for later restatement checks.",
   "evidence": [
     {
       "artifact": "spec.codex.edge-cases-adversarial.review.md",
@@ -18,12 +18,12 @@
     {
       "artifact": "spec.codex.edge-cases-adversarial.review.md",
       "section": "medium-3",
-      "quote": "Earlier sections describe cleanup of `*.narrowed.*` / text intermediates, while FR-015 explicitly adds `*.narrowed.json` to deletion."
+      "quote": "FR-015 explicitly adds `*.narrowed.json` to deletion."
     },
     {
       "artifact": "spec.codex.feasibility-adversarial.review.md",
       "section": "high-1",
-      "quote": "The completeness veto is still too easy to fail open... the spec needs a deterministic fail-closed behavior when the judge blocks on a HIGH but does not emit usable ids."
+      "quote": "The completeness veto is still too easy to fail open... a prompt regression, schema drift, or parser hiccup silently reopens the exact unsafe path this feature is meant to close."
     },
     {
       "artifact": "spec.codex.feasibility-adversarial.review.md",
@@ -33,7 +33,7 @@
     {
       "artifact": "spec.codex.feasibility-adversarial.review.md",
       "section": "medium-3",
-      "quote": "The mutating-command registry has multiple sources of truth and an underspecified discovery scope."
+      "quote": "FR-009 treats the argparse registry as authoritative, FR-010 derives the mutating set from handler callables, and FR-012 still talks about scanning `command_*` functions."
     },
     {
       "artifact": "spec.codex.feasibility-adversarial.review.md",
@@ -53,7 +53,7 @@
     {
       "artifact": "spec.gemini.requirements-adversarial.review.md",
       "section": "medium-3",
-      "quote": "The proposed solution to the manually-curated command list (US2) relies on a new rule: \"No more lambdas in `set_defaults(func=...)`\" (FR-011)."
+      "quote": "The proposed solution... relies on a new rule: \"No more lambdas in `set_defaults(func=...)`\" (FR-011). This is a fragile, process-based convention with no technical enforcement proposed."
     },
     {
       "artifact": "spec.gemini.requirements-adversarial.review.md",
@@ -63,7 +63,7 @@
     {
       "artifact": "spec.gemini.requirements-adversarial.review.md",
       "section": "medium-5",
-      "quote": "The reclassification of the `init` command as mutating (FR-011) assumes the invariant self-check will execute harmlessly."
+      "quote": "The reclassification of the `init` command as mutating (FR-011) assumes the invariant self-check will execute harmlessly... For `init`, the \"before\" state does not exist."
     },
     {
       "artifact": "spec.gemini.requirements-adversarial.review.md",

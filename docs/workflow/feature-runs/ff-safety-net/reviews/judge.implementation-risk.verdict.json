@@ -3,23 +3,28 @@
   "model": "claude-sonnet-4-6",
   "verdict": "block",
   "confidence": 4,
-  "reasoning": "Three load-bearing gaps would force guessing. (1) FR-003a introduces a new `invariant_warnings[]` state field but never defines where it lives in state.json, whether it is top-level or stage-scoped, or how `status --slug` reads and surfaces it. An implementer cannot write this path without inventing the schema. (2) FR-001 requires updating `judge-prompts/completeness.md` to reliably produce a `unaddressed_high_finding_ids` JSON array, but provides zero prompt wording, format constraint, or instruction pattern. The entire veto mechanism depends on the LLM emitting this field; if the prompt is wrong, the feature silently fails (the veto never fires). The spec gives no basis for writing a correct prompt. (3) FR-004 introduces two unexplained identifiers alongside the one state key that is already known: `outcome_value = 'rejudge'` and `next_action = 'edit_and_rerun_judge'` appear alongside `stage_state['judge_next_action'] = 'edit_and_rerun_judge'`, but the spec never says whether `outcome_value` and `next_action` are local variables, new state fields, or aliases of something existing. The current tally logic is described only as being 'around line 875-900' \u2014 an implementer writing the override block cannot know whether setting `outcome_value` has any downstream effect or is dead code.",
+  "reasoning": "Four load-bearing gaps would force guessing during implementation. First, FR-012 names a Python stdlib function that does not exist \u2014 inspect.islambda \u2014 so the lambda-detection test would raise AttributeError at runtime; the implementer must invent a substitute check. Second, the tasks artifact is empty (just a header), leaving the implementer with no phased breakdown and no sequencing constraints between the three fixes. Third, FR-004 sets outcome_value to the string 'rejudge', but the judge schema enumerates only 'proceed', 'proceed-with-annotation', and 'block' \u2014 it is unspecified whether 'rejudge' is valid anywhere this local variable feeds downstream (logging, state replay, PR body rendering). Fourth, Implementer Reference point 4 gives glob pseudo-code that calls .iterdir() on a Path containing wildcard characters, which is not valid Python and cannot be used as written; the implementer must guess the intended glob API (likely Path.glob) with no authoritative confirmation.",
   "evidence": [
     {
       "artifact": "spec",
-      "section": "FR-003a",
-      "quote": "it MUST write an `invariant_warnings[]` entry `{command: \"judge\", stage: <stage>, detail: \"completeness judge blocked without structured HIGH ids while concerns remain \u2014 prompt may be malformed\"}` and fall back to majority. The operator sees the warning in `status --slug` output."
+      "section": "FR-012",
+      "quote": "checked via `inspect.isfunction(handler) is False and inspect.islambda(handler)` or `handler.__name__ == \"<lambda>\"`"
     },
     {
-      "artifact": "spec",
-      "section": "FR-001",
-      "quote": "`judge-prompts/completeness.md` MUST be updated to emit a JSON verdict that includes a `unaddressed_high_finding_ids: [string]` array alongside the existing `verdict`/`reasoning` fields. When the judge votes `block` specifically because HIGH reviewer findings remain unaddressed, it populates this array with the concern `id`s (or reviewer-finding references) that are still open."
+      "artifact": "tasks",
+      "section": "entire artifact",
+      "quote": "# Tasks"
     },
     {
       "artifact": "spec",
       "section": "FR-004",
-      "quote": "the tally MUST override majority: `outcome_value = \"rejudge\"`, `next_action = \"edit_and_rerun_judge\"`, `stage_state[\"judge_next_action\"] = \"edit_and_rerun_judge\"`. Reason text includes the specific id(s) cited: `\"completeness judge veto: unaddressed HIGH concerns {id1,id2} \u2014 majority override\"`."
+      "quote": "The override sets: `outcome_value = \"rejudge\"` (local), `next_action = \"edit_and_rerun_judge\"` (local)"
+    },
+    {
+      "artifact": "spec",
+      "section": "Implementer reference, point 4",
+      "quote": "The glob is `(reviews_dir / f\"{stage}.*{suffix}\").iterdir()`-style per-suffix; NOT a recursive walk."
     }
   ],
-  "timestamp": "2026-04-24T12:00:00Z"
+  "timestamp": "2026-04-24T00:00:00Z"
 }

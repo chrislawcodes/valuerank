@@ -3,14 +3,14 @@ reviewer: "gpt-5.5"
 lens: "completeness-judge"
 stage: "spec"
 artifact_path: "docs/workflow/feature-runs/ff-safety-net/spec.md"
-artifact_sha256: "454d1e9f2c35505682c9fc947ff8753fd9d652c62a41fe3b4af2aeb86cac7f3f"
+artifact_sha256: "7bd832423495f43bc7238bef88e8c370b34a60f585d507b9cddc224f39e4a123"
 repo_root: "."
-git_head_sha: "fef1e560eb41e6d90070ec8b970a62baa711cc93"
+git_head_sha: "262e50f7d081cff9d6ba1487502528a84ee61728"
 git_base_ref: "origin/main"
 git_base_sha: "c07a4283ecdebffa57e8a2cccfa08c23e0f76a36"
 generation_method: "judge-panel"
-resolution_status: "open"
-resolution_note: "spec.codex.edge-cases-adversarial.review#high-1: addressed in SPEC FR-003a, which adds a named completeness-judge fail-open guard that writes invariant_warnings[] when ids are missing/empty and concerns remain; specific enough to impleme..."
+resolution_status: "accepted"
+resolution_note: "spec.codex.edge-cases-adversarial.review#high-1 is addressed in SPEC Edge cases and FR-003a: the artifact explicitly says empty or missing `unaddressed_high_finding_ids` does not veto and that this behavior is intentional, and it adds a ..."
 raw_output_path: "docs/workflow/feature-runs/ff-safety-net/reviews/judge.completeness.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,50 +22,50 @@ coverage_note: ""
 
 ## Findings
 
-spec.codex.edge-cases-adversarial.review#high-1: addressed in SPEC FR-003a, which adds a named completeness-judge fail-open guard that writes invariant_warnings[] when ids are missing/empty and concerns remain; specific enough to implement. spec.codex.feasibility-adversarial.review#high-1: same FR-003a guard, same status, so this finding is named and acknowledged in the artifact chain. spec.gemini.requirements-adversarial.review#high-1: addressed in SPEC FR-001/FR-003/FR-004, which make structured unaddressed_high_finding_ids the source of truth and require a deterministic cross-check against unresolved concerns; specific enough to implement. spec.gemini.requirements-adversarial.review#high-2: not addressed anywhere; FR-006 preserves the override escape hatch but adds no requirement to log or otherwise audit the mandatory reason text, so this HIGH remains open.
+spec.codex.edge-cases-adversarial.review#high-1 is addressed in SPEC Edge cases and FR-003a: the artifact explicitly says empty or missing `unaddressed_high_finding_ids` does not veto and that this behavior is intentional, and it adds a warning when a completeness block lacks structured HIGH ids while concerns remain. Specific enough to implement: yes. spec.codex.feasibility-adversarial.review#high-1 is addressed in SPEC FR-003a with the same named warning path for block-without-ids cases, which prevents the failure from being silent even though it still falls back to majority. Specific enough to implement: yes. spec.gemini.requirements-adversarial.review#high-1 is addressed in SPEC FR-001a, especially the self-validation requirement that a blocking completeness judge must populate the ids array when HIGH findings remain, plus explicit prompt instructions and an example. Specific enough to implement: yes. spec.gemini.requirements-adversarial.review#high-2 is addressed in SPEC FR-006, which requires a non-whitespace override reason and records that reason to `state["override"]` and the PR body. Specific enough to implement: yes.
 
 ## Residual Risks
 
-- SPEC :: Functional requirements / FR-003a - write an invariant_warnings[] entry ... and fall back to majority
-- SPEC :: Functional requirements / FR-001 - The array is the veto's single source of truth
-- SPEC :: Functional requirements / FR-003 - The tally code MUST detect the veto condition by checking
-- SPEC :: Functional requirements / FR-006 - deliver --override-judges --reason "<text>" MUST continue to bypass the veto
+- SPEC :: Edge cases / FR-003a - if the judge's `unaddressed_high_finding_ids` array is empty OR missing, the veto does NOT fire ... This is intentional per FR-001
+- SPEC :: FR-003a - When `completeness` votes block AND `unaddressed_high_finding_ids` is empty/missing AND `stage_state.unresolved_concerns` is non-empty, the tally MUST NOT silently fall back to majority — it MUST write an `invariant_warnings[]` entry ... and fall back to majority
+- SPEC :: FR-001a - The prompt update MUST include explicit instructions to the judge to ... Self-validate before emitting: if `verdict == "block"` and the reason mentions HIGH findings, the array MUST be non-empty
+- SPEC :: FR-006 - `deliver --override-judges --reason "<text>"` MUST continue to bypass the veto AND record the reason to `state["override"]` ... the `--reason` text MUST be non-whitespace
 
 ## Verdict (structured)
 
 ```json
 {
-  "confidence": 5,
+  "confidence": 4,
   "evidence": [
     {
       "artifact": "SPEC",
-      "quote": "write an invariant_warnings[] entry ... and fall back to majority",
-      "section": "Functional requirements / FR-003a"
+      "quote": "if the judge's `unaddressed_high_finding_ids` array is empty OR missing, the veto does NOT fire ... This is intentional per FR-001",
+      "section": "Edge cases / FR-003a"
     },
     {
       "artifact": "SPEC",
-      "quote": "The array is the veto's single source of truth",
-      "section": "Functional requirements / FR-001"
+      "quote": "When `completeness` votes block AND `unaddressed_high_finding_ids` is empty/missing AND `stage_state.unresolved_concerns` is non-empty, the tally MUST NOT silently fall back to majority \u2014 it MUST write an `invariant_warnings[]` entry ... and fall back to majority",
+      "section": "FR-003a"
     },
     {
       "artifact": "SPEC",
-      "quote": "The tally code MUST detect the veto condition by checking",
-      "section": "Functional requirements / FR-003"
+      "quote": "The prompt update MUST include explicit instructions to the judge to ... Self-validate before emitting: if `verdict == \"block\"` and the reason mentions HIGH findings, the array MUST be non-empty",
+      "section": "FR-001a"
     },
     {
       "artifact": "SPEC",
-      "quote": "deliver --override-judges --reason \"<text>\" MUST continue to bypass the veto",
-      "section": "Functional requirements / FR-006"
+      "quote": "`deliver --override-judges --reason \"<text>\"` MUST continue to bypass the veto AND record the reason to `state[\"override\"]` ... the `--reason` text MUST be non-whitespace",
+      "section": "FR-006"
     }
   ],
   "judge": "completeness",
   "model": "gpt-5.5",
-  "reasoning": "spec.codex.edge-cases-adversarial.review#high-1: addressed in SPEC FR-003a, which adds a named completeness-judge fail-open guard that writes invariant_warnings[] when ids are missing/empty and concerns remain; specific enough to implement. spec.codex.feasibility-adversarial.review#high-1: same FR-003a guard, same status, so this finding is named and acknowledged in the artifact chain. spec.gemini.requirements-adversarial.review#high-1: addressed in SPEC FR-001/FR-003/FR-004, which make structured unaddressed_high_finding_ids the source of truth and require a deterministic cross-check against unresolved concerns; specific enough to implement. spec.gemini.requirements-adversarial.review#high-2: not addressed anywhere; FR-006 preserves the override escape hatch but adds no requirement to log or otherwise audit the mandatory reason text, so this HIGH remains open.",
+  "reasoning": "spec.codex.edge-cases-adversarial.review#high-1 is addressed in SPEC Edge cases and FR-003a: the artifact explicitly says empty or missing `unaddressed_high_finding_ids` does not veto and that this behavior is intentional, and it adds a warning when a completeness block lacks structured HIGH ids while concerns remain. Specific enough to implement: yes. spec.codex.feasibility-adversarial.review#high-1 is addressed in SPEC FR-003a with the same named warning path for block-without-ids cases, which prevents the failure from being silent even though it still falls back to majority. Specific enough to implement: yes. spec.gemini.requirements-adversarial.review#high-1 is addressed in SPEC FR-001a, especially the self-validation requirement that a blocking completeness judge must populate the ids array when HIGH findings remain, plus explicit prompt instructions and an example. Specific enough to implement: yes. spec.gemini.requirements-adversarial.review#high-2 is addressed in SPEC FR-006, which requires a non-whitespace override reason and records that reason to `state[\"override\"]` and the PR body. Specific enough to implement: yes.",
   "timestamp": "2026-04-24T00:00:00Z",
-  "verdict": "block"
+  "verdict": "proceed"
 }
 ```
 
 ## Resolution
-- status: open
-- note: spec.codex.edge-cases-adversarial.review#high-1: addressed in SPEC FR-003a, which adds a named completeness-judge fail-open guard that writes invariant_warnings[] when ids are missing/empty and concerns remain; specific enough to impleme...
+- status: accepted
+- note: spec.codex.edge-cases-adversarial.review#high-1 is addressed in SPEC Edge cases and FR-003a: the artifact explicitly says empty or missing `unaddressed_high_finding_ids` does not veto and that this behavior is intentional, and it adds a ...
