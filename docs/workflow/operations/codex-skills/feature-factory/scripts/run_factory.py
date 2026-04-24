@@ -94,7 +94,52 @@ from factory_cmd_block import command_block  # noqa: E402
 from factory_cmd_judge import run_judge  # noqa: E402
 from factory_cmd_implement import command_implement, command_parallel, _run_serial, _run_parallel  # noqa: E402
 from factory_cmd_status import command_status, command_repair, command_doctor  # noqa: E402
+from factory_invariants import run_invariant_checks, set_json_mode  # noqa: E402
+from factory_stages import stage_manifest_state  # noqa: E402  (re-imported for invariant check)
 from workflow_utils import resolve_stored_path  # noqa: E402
+
+
+# Commands that mutate workflow state — wrap them with the invariant post-check.
+# `repair` and `closeout` both call into `command_checkpoint` and therefore
+# mutate state; they were flagged missing by the spec round-2 edge-cases review.
+_STATE_MUTATING_COMMANDS: frozenset[str] = frozenset(
+    {
+        "checkpoint",
+        "judge",
+        "reconcile",
+        "auto-reconcile",
+        "implement",
+        "deliver",
+        "block",
+        "repair",
+        "closeout",
+        "discover",
+        "parallel",
+    }
+)
+
+
+def _run_post_invariants(slug: str | None, command_name: str) -> None:
+    """Run invariant checks after a state-mutating command.
+
+    Uses the same ``recon_ok`` signal as ``factory_cmd_status`` / the real
+    checkpoint decision path, so the contradiction detector evaluates the
+    user-visible next-action string — not a hypothetical happy-path one.
+    Errors are swallowed — the invariant helper must never abort the caller.
+    """
+    if not slug:
+        return
+    try:
+        from factory_stages import reconciliation_state  # local import — avoid cycles
+        state = load_workflow_state(slug)
+        stages = {name: stage_manifest_state(slug, name) for name in CHECKPOINT_STAGES}
+        recon_ok, _ = reconciliation_state(slug)
+        recommended = recommended_next_action(slug, state, stages, recon_ok)
+        appended = run_invariant_checks(state, command_name, recommended)
+        if appended:
+            save_workflow_state(slug, state)
+    except Exception:  # noqa: BLE001 — invariant failure must not abort the caller
+        return
 
 
 def command_init(args: argparse.Namespace) -> int:
@@ -246,6 +291,12 @@ def build_parser() -> argparse.ArgumentParser:
     checkpoint_parser = subparsers.add_parser("checkpoint")
     checkpoint_parser.add_argument("--slug", required=True)
     checkpoint_parser.add_argument("--stage", required=True, choices=CHECKPOINT_STAGES)
+    lifecycle_group = checkpoint_parser.add_mutually_exclusive_group()
+    lifecycle_group.add_argument("--address", metavar="CONCERN_ID")
+    lifecycle_group.add_argument("--defer", metavar="CONCERN_ID")
+    lifecycle_group.add_argument("--dismiss", metavar="CONCERN_ID")
+    checkpoint_parser.add_argument("--evidence", metavar="TEXT")
+    checkpoint_parser.add_argument("--reason", metavar="TEXT")
     checkpoint_parser.add_argument("--artifact")
     checkpoint_parser.add_argument("--base-ref")
     checkpoint_parser.add_argument("--context", action="append", default=[])
@@ -393,7 +444,37 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
-    return args.func(args)
+    # FR-009: route invariant-warning output to stderr (always).
+    set_json_mode(bool(getattr(args, "json", False)))
+    command_name = getattr(args, "_factory_command", None) or _infer_command_name(args)
+    # Diff round-1 finding: run invariants in a `finally` so contradictions
+    # introduced by a partial-state write before an exception still get
+    # caught — the exact class of bug the guardrail exists to detect.
+    exit_code = 0
+    try:
+        exit_code = args.func(args)
+        return exit_code
+    finally:
+        if command_name in _STATE_MUTATING_COMMANDS:
+            _run_post_invariants(getattr(args, "slug", None), command_name)
+
+
+def _infer_command_name(args: argparse.Namespace) -> str | None:
+    """Best-effort extraction of the subcommand name from parsed argparse args."""
+    # argparse doesn't expose the selected subcommand name cleanly; inspect the
+    # configured func and map it back to a known subcommand.
+    func = getattr(args, "func", None)
+    if func is None:
+        return None
+    qualname = getattr(func, "__qualname__", "") or ""
+    name = getattr(func, "__name__", "") or ""
+    # Common mapping — command_X -> X
+    if name.startswith("command_"):
+        return name[len("command_"):].replace("_", "-")
+    # run_judge is wrapped in a lambda for the judge subcommand.
+    if "run_judge" in qualname or name == "<lambda>":
+        return "judge"
+    return None
 
 
 if __name__ == "__main__":

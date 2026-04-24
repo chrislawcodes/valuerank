@@ -1,0 +1,1887 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": true,
+    "complete": true,
+    "question_count": 0,
+    "asked_count": 0,
+    "questions": [],
+    "assumptions": [
+      "Scope = Fixes 1, 2, 8 from the plan; Fixes 3, 4, 5-7 deferred to separate features.",
+      "Fix 1 includes a new state.json schema for unresolved_concerns carry-forward: stored under stages.<stage>.unresolved_concerns as a list of {id, severity, summary, source_review, raised_at, addressed_at, addressed_by}; written when judges vote advance with open concerns; verified-cleared by the next stage's checkpoint runner reading and requiring each id be either marked addressed or explicitly deferred in annotations[].",
+      "Fix 1 reseals the manifest at advance time when artifact SHA has drifted, and records the drift (old_sha, new_sha, reason) in stages.<stage>.annotations[].",
+      "Fix 2 regex uses structural anchoring \u2014 start-of-line + specific finding-block prefixes \u2014 to avoid false-positives from prose that mentions HIGH in passing. Negative-case tests required.",
+      "Fix 8 self-check runs as a post-command hook after checkpoint/judge/reconcile/auto-reconcile; writes a WARN to state.json under invariant_warnings[] and prints the contradiction message to stdout; does not abort the command.",
+      "Regression test uses a captured state.json snapshot from feature run 033; task 0 of tasks.md is 'capture and commit the snapshot to scripts/tests/fixtures/'.",
+      "Out of scope: changes to sync-codex-skills.py, review-lens scripts, reviewer prompts, product-surface changes, any PgBoss/scheduler changes."
+    ],
+    "summary": "Discovery carried in from skeptical-TL review of docs/workflow/plans/feature-factory-runner-fixes.md. Scope is Fixes 1, 2, 8 only; Fixes 3, 4, 5-7 explicitly deferred. No new questions needed \u2014 assumptions captured via --assumption flags. If implementation surfaces ambiguity in the unresolved_concerns schema, block for human decision.",
+    "updated_at": 1776989839,
+    "answers": {},
+    "non_goals": [
+      "Raise default character budgets (Fix 7) \u2014 deferred.",
+      "Rename repair_X_checkpoint \u2192 run_X_checkpoint (Fix 4) \u2014 deferred.",
+      "Add --force-advance / advance CLI subcommand (Fix 3) \u2014 deferred.",
+      "--validation-only flag past 3-round cap (Fix 5) \u2014 deferred.",
+      "Garbage-collect reviews/ intermediates (Fix 6) \u2014 deferred."
+    ],
+    "acceptance_criteria": [
+      "Run-033 state.json snapshot committed as a test fixture; regression test replays it and asserts advance is honored.",
+      "factory_next_action honors judge_next_action='advance' and routes to next stage action instead of repair_<stage>_checkpoint, including when artifact SHA has drifted.",
+      "unresolved_concerns carried from stage N to stage N+1 in state.json under a documented schema; next stage's checkpoint verifies they are addressed or deferred.",
+      "detect_actionable_findings catches numbered-list, heading, bold-prefix, and inline Severity: shapes; does not false-positive on prose mentioning HIGH.",
+      "Post-run self-check emits a WARN and console message when judge_next_action==advance contradicts recommended_next_action==repair_<same stage>_checkpoint."
+    ],
+    "unresolved": []
+  },
+  "delivery": {
+    "pr_url": "https://github.com/chrislawcodes/valuerank/pull/744",
+    "pr_state": "open",
+    "pr_is_draft": true,
+    "checks_summary": "pass",
+    "head_sha": "72454c9d",
+    "merge_state_status": "CONFLICTING",
+    "recorded_at": 1777043383
+  },
+  "checkpoint_fallback": {},
+  "parallel_analysis": {
+    "reviewed": true,
+    "found": false,
+    "note": "Three fixes land in three separate modules (factory_next_action/factory_cmd_judge/factory_stages for Fix 1; factory_review_specs for Fix 2; factory_invariants for Fix 8). They share one state field (invariant_warnings) but are mergeable independently. Implementation is already complete in a single commit history \u2014 no need to re-parallelize the already-shipped implementation.",
+    "updated_at": 1777010970
+  },
+  "init_head_sha": "424c0605a8158acfe0b3912840a6c5b2da057c84",
+  "token_usage": [
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": 41,
+      "output_tokens": 17,
+      "cost_usd_estimate": 7.5e-05,
+      "timestamp": "2026-04-24T00:25:09.204688Z",
+      "started_at": "2026-04-24T00:22:34.251971Z",
+      "ended_at": "2026-04-24T00:25:09.204688Z",
+      "duration_seconds": 154.95152,
+      "agent_id": null,
+      "artifact_sha_at_time": "4ab997afabde09d73e0680a192ec0043e351c24cf51bb3a5166a324de5aba32a",
+      "activity_subtype": "micro"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T00:26:45.051464Z",
+      "started_at": "2026-04-24T00:25:09.392026Z",
+      "ended_at": "2026-04-24T00:26:45.051464Z",
+      "duration_seconds": 95.658686,
+      "agent_id": null,
+      "artifact_sha_at_time": "4ab997afabde09d73e0680a192ec0043e351c24cf51bb3a5166a324de5aba32a",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T00:27:35.611457Z",
+      "started_at": "2026-04-24T00:26:45.256103Z",
+      "ended_at": "2026-04-24T00:27:35.611457Z",
+      "duration_seconds": 50.3549,
+      "agent_id": null,
+      "artifact_sha_at_time": "4ab997afabde09d73e0680a192ec0043e351c24cf51bb3a5166a324de5aba32a",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T00:33:13.457906Z",
+      "started_at": "2026-04-24T00:30:49.578214Z",
+      "ended_at": "2026-04-24T00:33:13.457906Z",
+      "duration_seconds": 143.87856,
+      "agent_id": null,
+      "artifact_sha_at_time": "a82f14b19712743bcdce071c4b6ca8eab51000fe4a7304d2fc203dfb82676f6f",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T04:44:07.172650Z",
+      "started_at": "2026-04-24T04:41:07.164332Z",
+      "ended_at": "2026-04-24T04:44:07.172650Z",
+      "duration_seconds": 180.00702,
+      "agent_id": null,
+      "artifact_sha_at_time": "a82f14b19712743bcdce071c4b6ca8eab51000fe4a7304d2fc203dfb82676f6f",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T04:44:54.196338Z",
+      "started_at": "2026-04-24T04:44:07.353822Z",
+      "ended_at": "2026-04-24T04:44:54.196338Z",
+      "duration_seconds": 46.842093,
+      "agent_id": null,
+      "artifact_sha_at_time": "a82f14b19712743bcdce071c4b6ca8eab51000fe4a7304d2fc203dfb82676f6f",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T04:50:36.020199Z",
+      "started_at": "2026-04-24T04:48:00.049739Z",
+      "ended_at": "2026-04-24T04:50:36.020199Z",
+      "duration_seconds": 155.969324,
+      "agent_id": null,
+      "artifact_sha_at_time": "ff794bfed6a87cc28adc461c386aabe6163b4aaaf74d4b4dd84a740555925377",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T04:53:34.649511Z",
+      "started_at": "2026-04-24T04:50:36.167502Z",
+      "ended_at": "2026-04-24T04:53:34.649511Z",
+      "duration_seconds": 178.479921,
+      "agent_id": null,
+      "artifact_sha_at_time": "ff794bfed6a87cc28adc461c386aabe6163b4aaaf74d4b4dd84a740555925377",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T04:57:41.653156Z",
+      "started_at": "2026-04-24T04:55:20.711743Z",
+      "ended_at": "2026-04-24T04:57:41.653156Z",
+      "duration_seconds": 140.94034,
+      "agent_id": null,
+      "artifact_sha_at_time": "026757984d1f921d93c5a73e8885d9882a5c0c36b55f767bdabe655968cbeae0",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:00:24.933694Z",
+      "started_at": "2026-04-24T04:57:41.793330Z",
+      "ended_at": "2026-04-24T05:00:24.933694Z",
+      "duration_seconds": 163.139122,
+      "agent_id": null,
+      "artifact_sha_at_time": "026757984d1f921d93c5a73e8885d9882a5c0c36b55f767bdabe655968cbeae0",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:01:20.747221Z",
+      "started_at": "2026-04-24T05:00:25.123096Z",
+      "ended_at": "2026-04-24T05:01:20.747221Z",
+      "duration_seconds": 55.62362,
+      "agent_id": null,
+      "artifact_sha_at_time": "026757984d1f921d93c5a73e8885d9882a5c0c36b55f767bdabe655968cbeae0",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:07:25.997002Z",
+      "started_at": "2026-04-24T05:04:48.063682Z",
+      "ended_at": "2026-04-24T05:07:25.997002Z",
+      "duration_seconds": 157.932159,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:09:28.503114Z",
+      "started_at": "2026-04-24T05:07:26.181026Z",
+      "ended_at": "2026-04-24T05:09:28.503114Z",
+      "duration_seconds": 122.321162,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:10:20.452657Z",
+      "started_at": "2026-04-24T05:09:28.686892Z",
+      "ended_at": "2026-04-24T05:10:20.452657Z",
+      "duration_seconds": 51.765277,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:10:54.041401Z",
+      "started_at": "2026-04-24T05:10:28.913522Z",
+      "ended_at": "2026-04-24T05:10:54.041401Z",
+      "duration_seconds": 25.127759,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:10:56.146371Z",
+      "started_at": "2026-04-24T05:10:28.913581Z",
+      "ended_at": "2026-04-24T05:10:56.146371Z",
+      "duration_seconds": 27.232631,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:11:23.613516Z",
+      "started_at": "2026-04-24T05:10:54.043046Z",
+      "ended_at": "2026-04-24T05:11:23.613516Z",
+      "duration_seconds": 29.570301,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:11:34.856400Z",
+      "started_at": "2026-04-24T05:10:56.147778Z",
+      "ended_at": "2026-04-24T05:11:34.856400Z",
+      "duration_seconds": 38.708365,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:13:01.673860Z",
+      "started_at": "2026-04-24T05:10:28.913351Z",
+      "ended_at": "2026-04-24T05:13:01.673860Z",
+      "duration_seconds": 152.759318,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:14:00.057573Z",
+      "started_at": "2026-04-24T05:13:01.674828Z",
+      "ended_at": "2026-04-24T05:14:00.057573Z",
+      "duration_seconds": 58.382374,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:18:42.400643Z",
+      "started_at": "2026-04-24T05:18:20.466521Z",
+      "ended_at": "2026-04-24T05:18:42.400643Z",
+      "duration_seconds": 21.933998,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:18:57.048403Z",
+      "started_at": "2026-04-24T05:18:20.463091Z",
+      "ended_at": "2026-04-24T05:18:57.048403Z",
+      "duration_seconds": 36.58494,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:19:01.064191Z",
+      "started_at": "2026-04-24T05:18:42.403536Z",
+      "ended_at": "2026-04-24T05:19:01.064191Z",
+      "duration_seconds": 18.660552,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:19:30.452839Z",
+      "started_at": "2026-04-24T05:18:57.049981Z",
+      "ended_at": "2026-04-24T05:19:30.452839Z",
+      "duration_seconds": 33.402633,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:21:15.344463Z",
+      "started_at": "2026-04-24T05:18:20.463345Z",
+      "ended_at": "2026-04-24T05:21:15.344463Z",
+      "duration_seconds": 174.879931,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:22:42.450290Z",
+      "started_at": "2026-04-24T05:21:15.346976Z",
+      "ended_at": "2026-04-24T05:22:42.450290Z",
+      "duration_seconds": 87.10275,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:24:27.270638Z",
+      "started_at": "2026-04-24T05:23:51.766325Z",
+      "ended_at": "2026-04-24T05:24:27.270638Z",
+      "duration_seconds": 35.504093,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:24:29.385410Z",
+      "started_at": "2026-04-24T05:23:51.763858Z",
+      "ended_at": "2026-04-24T05:24:29.385410Z",
+      "duration_seconds": 37.621327,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:24:47.069760Z",
+      "started_at": "2026-04-24T05:24:29.386848Z",
+      "ended_at": "2026-04-24T05:24:47.069760Z",
+      "duration_seconds": 17.682832,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:24:53.727521Z",
+      "started_at": "2026-04-24T05:24:27.273070Z",
+      "ended_at": "2026-04-24T05:24:53.727521Z",
+      "duration_seconds": 26.454276,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:25:51.796199Z",
+      "started_at": "2026-04-24T05:23:51.763667Z",
+      "ended_at": "2026-04-24T05:25:51.796199Z",
+      "duration_seconds": 120.03156,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:27:05.978210Z",
+      "started_at": "2026-04-24T05:25:51.797620Z",
+      "ended_at": "2026-04-24T05:27:05.978210Z",
+      "duration_seconds": 74.180105,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:29:38.874991Z",
+      "started_at": "2026-04-24T05:27:24.686505Z",
+      "ended_at": "2026-04-24T05:29:38.874991Z",
+      "duration_seconds": 134.186344,
+      "agent_id": null,
+      "artifact_sha_at_time": "a260b8ebd806f71193a11b024ab25896b974da30fb8a754b3a8529e3b695a142",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:31:04.963706Z",
+      "started_at": "2026-04-24T05:29:39.043566Z",
+      "ended_at": "2026-04-24T05:31:04.963706Z",
+      "duration_seconds": 85.919392,
+      "agent_id": null,
+      "artifact_sha_at_time": "a260b8ebd806f71193a11b024ab25896b974da30fb8a754b3a8529e3b695a142",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:31:50.525031Z",
+      "started_at": "2026-04-24T05:31:05.143428Z",
+      "ended_at": "2026-04-24T05:31:50.525031Z",
+      "duration_seconds": 45.381187,
+      "agent_id": null,
+      "artifact_sha_at_time": "a260b8ebd806f71193a11b024ab25896b974da30fb8a754b3a8529e3b695a142",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:49:33.002477Z",
+      "started_at": "2026-04-24T05:48:59.029795Z",
+      "ended_at": "2026-04-24T05:49:33.002477Z",
+      "duration_seconds": 33.972509,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:49:34.770009Z",
+      "started_at": "2026-04-24T05:48:59.029600Z",
+      "ended_at": "2026-04-24T05:49:34.770009Z",
+      "duration_seconds": 35.740023,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:49:54.254292Z",
+      "started_at": "2026-04-24T05:49:34.771789Z",
+      "ended_at": "2026-04-24T05:49:54.254292Z",
+      "duration_seconds": 19.482386,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:50:17.391159Z",
+      "started_at": "2026-04-24T05:49:33.005521Z",
+      "ended_at": "2026-04-24T05:50:17.391159Z",
+      "duration_seconds": 44.385314,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:51:12.991939Z",
+      "started_at": "2026-04-24T05:48:59.029829Z",
+      "ended_at": "2026-04-24T05:51:12.991939Z",
+      "duration_seconds": 133.961121,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:52:17.370190Z",
+      "started_at": "2026-04-24T05:51:12.993356Z",
+      "ended_at": "2026-04-24T05:52:17.370190Z",
+      "duration_seconds": 64.37638,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:53:13.533937Z",
+      "started_at": "2026-04-24T05:52:50.676630Z",
+      "ended_at": "2026-04-24T05:53:13.533937Z",
+      "duration_seconds": 22.857178,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:53:15.854215Z",
+      "started_at": "2026-04-24T05:52:50.674877Z",
+      "ended_at": "2026-04-24T05:53:15.854215Z",
+      "duration_seconds": 25.17902,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:53:29.312337Z",
+      "started_at": "2026-04-24T05:53:13.536764Z",
+      "ended_at": "2026-04-24T05:53:29.312337Z",
+      "duration_seconds": 15.775472,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:53:39.239760Z",
+      "started_at": "2026-04-24T05:53:15.856023Z",
+      "ended_at": "2026-04-24T05:53:39.239760Z",
+      "duration_seconds": 23.383568,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:55:10.481893Z",
+      "started_at": "2026-04-24T05:52:50.676419Z",
+      "ended_at": "2026-04-24T05:55:10.481893Z",
+      "duration_seconds": 139.804461,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:56:29.327202Z",
+      "started_at": "2026-04-24T05:55:10.483736Z",
+      "ended_at": "2026-04-24T05:56:29.327202Z",
+      "duration_seconds": 78.842921,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:57:21.878908Z",
+      "started_at": "2026-04-24T05:56:58.471095Z",
+      "ended_at": "2026-04-24T05:57:21.878908Z",
+      "duration_seconds": 23.407532,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:57:24.185491Z",
+      "started_at": "2026-04-24T05:56:58.471292Z",
+      "ended_at": "2026-04-24T05:57:24.185491Z",
+      "duration_seconds": 25.714039,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:57:43.450280Z",
+      "started_at": "2026-04-24T05:57:21.881408Z",
+      "ended_at": "2026-04-24T05:57:43.450280Z",
+      "duration_seconds": 21.568745,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:58:09.136083Z",
+      "started_at": "2026-04-24T05:57:24.187169Z",
+      "ended_at": "2026-04-24T05:58:09.136083Z",
+      "duration_seconds": 44.948594,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:58:20.374772Z",
+      "started_at": "2026-04-24T05:56:58.471357Z",
+      "ended_at": "2026-04-24T05:58:20.374772Z",
+      "duration_seconds": 81.902813,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T05:59:48.411840Z",
+      "started_at": "2026-04-24T05:58:20.375977Z",
+      "ended_at": "2026-04-24T05:59:48.411840Z",
+      "duration_seconds": 88.035236,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T06:05:44.131527Z",
+      "started_at": "2026-04-24T06:02:44.122175Z",
+      "ended_at": "2026-04-24T06:05:44.131527Z",
+      "duration_seconds": 180.007937,
+      "agent_id": null,
+      "artifact_sha_at_time": "dc061ea73545a86c8e1a615660bbab41b7247ccd464641c6a2d4090f1490c2e6",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": 1500,
+      "output_tokens": 700,
+      "cost_usd_estimate": 0.0029,
+      "timestamp": "2026-04-24T06:08:00.429223Z",
+      "started_at": "2026-04-24T06:05:44.298434Z",
+      "ended_at": "2026-04-24T06:08:00.429223Z",
+      "duration_seconds": 136.129664,
+      "agent_id": null,
+      "artifact_sha_at_time": "dc061ea73545a86c8e1a615660bbab41b7247ccd464641c6a2d4090f1490c2e6"
+    },
+    {
+      "stage": "plan",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T06:08:47.465650Z",
+      "started_at": "2026-04-24T06:08:00.600151Z",
+      "ended_at": "2026-04-24T06:08:47.465650Z",
+      "duration_seconds": 46.865119,
+      "agent_id": null,
+      "artifact_sha_at_time": "dc061ea73545a86c8e1a615660bbab41b7247ccd464641c6a2d4090f1490c2e6",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "tasks",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T06:10:19.882462Z",
+      "started_at": "2026-04-24T06:09:39.175195Z",
+      "ended_at": "2026-04-24T06:10:19.882462Z",
+      "duration_seconds": 40.706881,
+      "agent_id": null,
+      "artifact_sha_at_time": "2bcb85d7575f8c1c9a11aa344f662c30280feeba496b385cda84783f9c14d2c9",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T06:10:57.603840Z",
+      "started_at": "2026-04-24T06:10:20.086027Z",
+      "ended_at": "2026-04-24T06:10:57.603840Z",
+      "duration_seconds": 37.517411,
+      "agent_id": null,
+      "artifact_sha_at_time": "2bcb85d7575f8c1c9a11aa344f662c30280feeba496b385cda84783f9c14d2c9",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T06:11:38.185092Z",
+      "started_at": "2026-04-24T06:10:57.807948Z",
+      "ended_at": "2026-04-24T06:11:38.185092Z",
+      "duration_seconds": 40.376743,
+      "agent_id": null,
+      "artifact_sha_at_time": "2bcb85d7575f8c1c9a11aa344f662c30280feeba496b385cda84783f9c14d2c9",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "tasks",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T06:14:00.663069Z",
+      "started_at": "2026-04-24T06:13:27.387677Z",
+      "ended_at": "2026-04-24T06:14:00.663069Z",
+      "duration_seconds": 33.275057,
+      "agent_id": null,
+      "artifact_sha_at_time": "4a74e08b65179da926013be34c58b47652b5eafb36c7b02fcc0867dcf9982805",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T06:14:41.772793Z",
+      "started_at": "2026-04-24T06:14:00.869469Z",
+      "ended_at": "2026-04-24T06:14:41.772793Z",
+      "duration_seconds": 40.902935,
+      "agent_id": null,
+      "artifact_sha_at_time": "4a74e08b65179da926013be34c58b47652b5eafb36c7b02fcc0867dcf9982805",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T06:15:17.224521Z",
+      "started_at": "2026-04-24T06:14:41.945197Z",
+      "ended_at": "2026-04-24T06:15:17.224521Z",
+      "duration_seconds": 35.278973,
+      "agent_id": null,
+      "artifact_sha_at_time": "4a74e08b65179da926013be34c58b47652b5eafb36c7b02fcc0867dcf9982805",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T06:19:48.221599Z",
+      "started_at": "2026-04-24T06:16:48.209411Z",
+      "ended_at": "2026-04-24T06:19:48.221599Z",
+      "duration_seconds": 180.010846,
+      "agent_id": null,
+      "artifact_sha_at_time": "132c64c0ca7f787053b67da38dfc7c89e02d81e31adfdfeb94a9106408e57a06",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T06:21:58.124016Z",
+      "started_at": "2026-04-24T06:19:48.350799Z",
+      "ended_at": "2026-04-24T06:21:58.124016Z",
+      "duration_seconds": 129.772162,
+      "agent_id": null,
+      "artifact_sha_at_time": "132c64c0ca7f787053b67da38dfc7c89e02d81e31adfdfeb94a9106408e57a06",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T06:22:45.786176Z",
+      "started_at": "2026-04-24T06:21:58.255332Z",
+      "ended_at": "2026-04-24T06:22:45.786176Z",
+      "duration_seconds": 47.530386,
+      "agent_id": null,
+      "artifact_sha_at_time": "132c64c0ca7f787053b67da38dfc7c89e02d81e31adfdfeb94a9106408e57a06",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T06:23:45.195100Z",
+      "started_at": "2026-04-24T06:22:45.789307Z",
+      "ended_at": "2026-04-24T06:23:45.195100Z",
+      "duration_seconds": 59.405371,
+      "agent_id": null,
+      "artifact_sha_at_time": "132c64c0ca7f787053b67da38dfc7c89e02d81e31adfdfeb94a9106408e57a06",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "closeout",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T15:10:03.716937Z",
+      "started_at": "2026-04-24T15:09:48.073437Z",
+      "ended_at": "2026-04-24T15:10:03.716937Z",
+      "duration_seconds": 15.643337,
+      "agent_id": null,
+      "artifact_sha_at_time": "b74c7e980831fbe8ad11b5222a67879d6532e0503f4012a436c8a5fa68ff6962",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "closeout",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T15:10:27.355703Z",
+      "started_at": "2026-04-24T15:10:03.868378Z",
+      "ended_at": "2026-04-24T15:10:27.355703Z",
+      "duration_seconds": 23.48712,
+      "agent_id": null,
+      "artifact_sha_at_time": "b74c7e980831fbe8ad11b5222a67879d6532e0503f4012a436c8a5fa68ff6962",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "closeout",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T15:12:27.566755Z",
+      "started_at": "2026-04-24T15:10:27.556397Z",
+      "ended_at": "2026-04-24T15:12:27.566755Z",
+      "duration_seconds": 120.00972,
+      "agent_id": null,
+      "artifact_sha_at_time": "b74c7e980831fbe8ad11b5222a67879d6532e0503f4012a436c8a5fa68ff6962",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "closeout",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T15:13:24.667338Z",
+      "started_at": "2026-04-24T15:12:57.970578Z",
+      "ended_at": "2026-04-24T15:13:24.667338Z",
+      "duration_seconds": 26.696457,
+      "agent_id": null,
+      "artifact_sha_at_time": "b74c7e980831fbe8ad11b5222a67879d6532e0503f4012a436c8a5fa68ff6962",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T15:19:37.210546Z",
+      "started_at": "2026-04-24T15:16:56.011483Z",
+      "ended_at": "2026-04-24T15:19:37.210546Z",
+      "duration_seconds": 161.190205,
+      "agent_id": null,
+      "artifact_sha_at_time": "132c64c0ca7f787053b67da38dfc7c89e02d81e31adfdfeb94a9106408e57a06",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T15:20:29.373300Z",
+      "started_at": "2026-04-24T15:19:37.414361Z",
+      "ended_at": "2026-04-24T15:20:29.373300Z",
+      "duration_seconds": 51.958517,
+      "agent_id": null,
+      "artifact_sha_at_time": "132c64c0ca7f787053b67da38dfc7c89e02d81e31adfdfeb94a9106408e57a06",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T15:23:42.135705Z",
+      "started_at": "2026-04-24T15:20:42.128574Z",
+      "ended_at": "2026-04-24T15:23:42.135705Z",
+      "duration_seconds": 180.005774,
+      "agent_id": null,
+      "artifact_sha_at_time": "132c64c0ca7f787053b67da38dfc7c89e02d81e31adfdfeb94a9106408e57a06",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T15:24:56.283469Z",
+      "started_at": "2026-04-24T15:23:42.300976Z",
+      "ended_at": "2026-04-24T15:24:56.283469Z",
+      "duration_seconds": 73.981901,
+      "agent_id": null,
+      "artifact_sha_at_time": "132c64c0ca7f787053b67da38dfc7c89e02d81e31adfdfeb94a9106408e57a06",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T15:27:06.579874Z",
+      "started_at": "2026-04-24T15:26:57.758056Z",
+      "ended_at": "2026-04-24T15:27:06.579874Z",
+      "duration_seconds": 8.821788,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T15:27:18.300572Z",
+      "started_at": "2026-04-24T15:27:06.581644Z",
+      "ended_at": "2026-04-24T15:27:18.300572Z",
+      "duration_seconds": 11.718888,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T15:27:48.678355Z",
+      "started_at": "2026-04-24T15:26:57.757834Z",
+      "ended_at": "2026-04-24T15:27:48.678355Z",
+      "duration_seconds": 50.920031,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T15:28:28.170234Z",
+      "started_at": "2026-04-24T15:27:48.679890Z",
+      "ended_at": "2026-04-24T15:28:28.170234Z",
+      "duration_seconds": 39.490094,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T15:29:13.552888Z",
+      "started_at": "2026-04-24T15:26:57.760556Z",
+      "ended_at": "2026-04-24T15:29:13.552888Z",
+      "duration_seconds": 135.791381,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T15:30:18.884309Z",
+      "started_at": "2026-04-24T15:29:13.555808Z",
+      "ended_at": "2026-04-24T15:30:18.884309Z",
+      "duration_seconds": 65.328069,
+      "agent_id": null,
+      "artifact_sha_at_time": "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    }
+  ],
+  "stages": {
+    "spec": {
+      "adversarial_rounds": 3,
+      "judge_rounds": 3,
+      "judge_verdicts": [
+        [
+          {
+            "judge": "completeness",
+            "model": "gpt-5.4",
+            "verdict": "block",
+            "confidence": 5,
+            "reasoning": "spec.codex.edge-cases-adversarial.review#high-1 is explicitly acknowledged as a limitation in the artifact chain: the plan says the fenced-code-block case is \"pinned as documented limitation with explicit test,\" and the review test note says lines inside fenced code blocks are not excluded; specific enough to implement: yes. spec.codex.feasibility-adversarial.review#high-1 is not addressed: FR-011a only default-fills missing concern fields on read, but there is no named backfill or migration for `id` on existing `unresolved_concerns`, so the run-033 fixture path is still uncovered; specific enough to implement: no. spec.gemini.requirements-adversarial.review#high-3 is not addressed: the chain only expands `_ACTIONABLE_FINDING_RE` and records regex false-positive risk, but it does not name any mitigation for the maintainability/structured-format critique; specific enough to implement: no. Because at least one HIGH remains unaddressed, the verdict is block.",
+            "evidence": [
+              {
+                "artifact": "/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/plan.md",
+                "section": "Review Reconciliation",
+                "quote": "LOW fenced-code-block regex match \u2014 pinned as documented limitation with explicit test."
+              },
+              {
+                "artifact": "/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/reviews/spec.codex.feasibility-adversarial.review.md.stderr.txt",
+                "section": "test_fenced_code_block_with_literal_severity_line_is_documented_limitation",
+                "quote": "Known limitation: lines inside fenced code blocks are NOT excluded."
+              },
+              {
+                "artifact": "/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/spec.md",
+                "section": "FR-011a",
+                "quote": "When older state.json snapshots lack `invariant_warnings` or lack the extended concern fields, the state loader MUST default-fill `invariant_warnings = []` and treat missing concern fields as `None`."
+              },
+              {
+                "artifact": "/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/reviews/spec.codex.feasibility-adversarial.review.md",
+                "section": "HIGH finding",
+                "quote": "do not backfill `id` for existing `unresolved_concerns`."
+              },
+              {
+                "artifact": "/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/spec.md",
+                "section": "FR-006",
+                "quote": "`_ACTIONABLE_FINDING_RE` in `factory_review_specs.py` MUST match all of the following shapes, anchored to start-of-line (after optional whitespace):"
+              },
+              {
+                "artifact": "/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/reviews/spec.gemini.requirements-adversarial.review.md",
+                "section": "MEDIUM finding",
+                "quote": "This creates an \"arms race\" where the tool is always trying to catch up to new, arbitrary markdown formatting choices."
+              }
+            ],
+            "timestamp": "2026-04-24T05:11:21Z"
+          },
+          {
+            "judge": "restatement",
+            "model": "gpt-5.5",
+            "verdict": "block",
+            "confidence": 5,
+            "reasoning": "All latest findings are NEW, not RESTATEMENTS, because the record explicitly says there were no earlier findings: \"No prior findings yet.\" That means there is no earlier round that raised the same concern, and no orchestrator response that could have substantively addressed it. Finding-by-finding: 1) edge-cases high-1 is NEW because it identifies a specific code-fence bypass in the auto-reconcile regex, where a literal severity line inside fenced code is still treated as actionable. 2) edge-cases medium-2 is NEW because it identifies an uncovered mutation-path failure mode: FR-009 does not require invariant checks after `discover`, `parallel`, and `init`, even though those commands mutate state. 3) feasibility high-1 is NEW because it identifies a backfill gap for existing `unresolved_concerns` without `id`, making the new checkpoint lifecycle unusable on preexisting runs. 4) feasibility medium-2 is NEW because it again identifies omitted invariant coverage for `discover` and `parallel`; this is duplicative within the latest round, but still not a restatement of any earlier round because there were none. 5) feasibility medium-3 is NEW because it identifies an internal spec contradiction between US1 scenario 3 and FR-004 about whether plan annotations can close concerns. 6) feasibility medium-4 is NEW because it again identifies the code-fence false-positive/false-actionable regex bypass; duplicative within the latest round, but still new relative to prior rounds. 7) gemini medium-1 is NEW because it raises a distinct failure mode: brittle concern-ID generation may fail to track paraphrased findings. 8) gemini medium-2 is NEW because it raises a broader maintainability and brittleness risk in the regex-based severity detection strategy. 9) gemini high-3 is NEW because it raises the architectural failure mode that the system is entering an open-ended formatting arms race instead of solving the lack of structured review input. 10) gemini medium-4 is NEW because it raises a distinct audit-trail assumption risk around advancing with artifact drift. 11) gemini low-5 is NEW because it raises a human/agent-operability failure mode: contradiction warnings may be silently ignored by automated agents. 12) gemini low-6 is NEW because it raises a governance/control gap in the new concern lifecycle. Since 100% of the latest round's findings are new relative to earlier rounds, the loop is still producing signal and should be blocked from saturation-based proceed.",
+            "evidence": [
+              {
+                "artifact": "earlier-rounds",
+                "section": "summary",
+                "quote": "No prior findings yet."
+              },
+              {
+                "artifact": "spec.codex.edge-cases-adversarial.review.md",
+                "section": "high-1",
+                "quote": "The auto-reconcile regex still has a code-fence bypass."
+              },
+              {
+                "artifact": "spec.codex.edge-cases-adversarial.review.md",
+                "section": "medium-2",
+                "quote": "FR-009 under-specifies the state-mutating commands that must get the post-run invariant check."
+              },
+              {
+                "artifact": "spec.codex.feasibility-adversarial.review.md",
+                "section": "high-1",
+                "quote": "FR-003 and FR-011a do not backfill `id` for existing `unresolved_concerns`."
+              },
+              {
+                "artifact": "spec.codex.feasibility-adversarial.review.md",
+                "section": "medium-3",
+                "quote": "US1 scenario 3 says the next checkpoint can treat concerns as closed when they are \"referenced as `addressed` in plan annotations,\" but FR-004 says annotations are display-only."
+              },
+              {
+                "artifact": "spec.gemini.requirements-adversarial.review.md",
+                "section": "medium-1",
+                "quote": "Concern ID generation is brittle and may fail to track paraphrased findings [UNVERIFIED]"
+              },
+              {
+                "artifact": "spec.gemini.requirements-adversarial.review.md",
+                "section": "high-3",
+                "quote": "This creates an \"arms race\" where the tool is always trying to catch up to new, arbitrary markdown formatting choices."
+              },
+              {
+                "artifact": "spec.gemini.requirements-adversarial.review.md",
+                "section": "medium-4",
+                "quote": "Audit trail for advancing with artifact drift is based on a weak assumption [UNVERIFIED]"
+              }
+            ],
+            "timestamp": "2026-04-23T00:00:00-07:00"
+          },
+          {
+            "judge": "implementation-risk",
+            "model": "claude-sonnet-4-5",
+            "verdict": "block",
+            "confidence": 4,
+            "reasoning": "Four concrete snags would stop a competent implementer: (1) The emit-routing for Fix 8 warnings is specified three different ways across the three artifacts \u2014 always-stderr in the spec FR, conditional in the plan Risk P3, and a JSON_MODE context-var switch in T2.3. An implementer must pick one; tests written for the wrong choice will be wrong. (2) The Fix 1 decision-tree change is expressed as pseudocode calling an undefined function `continue_past_stage()` \u2014 the artifacts never show the source of `factory_next_action.py`, so the implementer has no artifact-grounded answer for what code to write. (3) The plan's reconcile-accepted list of state-mutating commands (init/discover/parallel) contradicts T2.4's enumeration, which omits those three call sites. An implementer following tasks.md will miss them. (4) The concern-ID hash formula is specified two different ways \u2014 FR-003 says 'stripped-of-whitespace then first 48 chars' and T3.5 says `reasoning[:48]` \u2014 producing different bytes and therefore different IDs.",
+            "evidence": [
+              {
+                "artifact": "spec",
+                "section": "FR-009",
+                "quote": "Emission rule (revised in spec review round 2 per Gemini requirements-adversarial MEDIUM #3): always stderr"
+              },
+              {
+                "artifact": "plan",
+                "section": "Slice 2 bullet",
+                "quote": "Emit to stderr when --json is in effect; stdout otherwise. Detect via a context var or explicit parameter threaded from the caller."
+              },
+              {
+                "artifact": "tasks",
+                "section": "T2.3",
+                "quote": "Add stdout-vs-stderr emit logic gated on a `factory_state.JSON_MODE` context variable set by `run_factory.py` when `--json` is present"
+              },
+              {
+                "artifact": "tasks",
+                "section": "T3.1",
+                "quote": "add `if stages[stage].get(\"judge_next_action\") == \"advance\": continue_past_stage()` check before each `not healthy` branch"
+              },
+              {
+                "artifact": "plan",
+                "section": "Review Reconciliation \u2014 edge-cases-adversarial",
+                "quote": "M#1 init/discover/parallel added to _STATE_MUTATING_COMMANDS"
+              },
+              {
+                "artifact": "tasks",
+                "section": "T2.4",
+                "quote": "Call `run_invariant_checks` at the tail of `cmd_checkpoint`, `cmd_judge`, `cmd_reconcile`, `cmd_auto_reconcile`, `cmd_implement`, `cmd_deliver`, `cmd_block` in `run_factory.py`"
+              },
+              {
+                "artifact": "spec",
+                "section": "FR-003",
+                "quote": "id = sha256(stage|judge|round_raised|<first-48-chars-of-reasoning-stripped-of-whitespace>)[:12]"
+              },
+              {
+                "artifact": "tasks",
+                "section": "T3.5",
+                "quote": "Compute `id` from `sha256(stage|judge|round_raised|reasoning[:48])[:12]` when writing"
+              }
+            ],
+            "timestamp": "2026-04-23T00:00:00Z"
+          }
+        ],
+        [
+          {
+            "judge": "completeness",
+            "model": "gpt-5.4",
+            "verdict": "proceed-with-annotation",
+            "confidence": 4,
+            "reasoning": "spec.codex.edge-cases-adversarial.review#high-1 is explicitly acknowledged as a documented limitation for fenced code-block matches in the plan reconciliation notes, so it is not left unaddressed. spec.codex.feasibility-adversarial.review#high-1 is directly mitigated by FR-011a and T3.5, which backfill unresolved_concerns ids on read so older runs remain usable. spec.gemini.requirements-adversarial.review#high-3 is explicitly accepted as a format-bound limitation in Residual Risk R7 and is deferred because prompt/structured-output changes are out of scope. Every HIGH finding has either a named mitigation or an explicit limitation note, so the chain is complete, with annotations for the accepted limitations.",
+            "evidence": [
+              {
+                "artifact": "docs/workflow/feature-runs/ff-runner-fixes/plan.md",
+                "section": "Review Reconciliation",
+                "quote": "LOW fenced-code-block regex match \u2014 pinned as documented limitation with explicit test."
+              },
+              {
+                "artifact": "docs/workflow/feature-runs/ff-runner-fixes/spec.md",
+                "section": "FR-011a / FR-003",
+                "quote": "The loader MUST backfill the stable `id` field for any existing `unresolved_concerns` entry that lacks one."
+              },
+              {
+                "artifact": "docs/workflow/feature-runs/ff-runner-fixes/spec.md",
+                "section": "Residual risks R7",
+                "quote": "accepted as a known architectural limitation; out of scope ... `factory_review_specs.ACTIONABLE_FINDING_SHAPES` manifest + test coverage mitigates near-term impact."
+              }
+            ],
+            "timestamp": "2026-04-23T00:00:00-07:00"
+          },
+          {
+            "judge": "restatement",
+            "model": "GPT-5.5",
+            "verdict": "block",
+            "confidence": 5,
+            "reasoning": "All latest-round findings are NEW because there were no earlier rounds to restate: the record explicitly says \"No prior findings yet.\" Under the stated rule, a finding can only be a RESTATEMENT if an earlier round raised the same concern and the orchestrator made a substantive change in response. That prerequisite is absent for every item here. Several findings also describe concrete failure modes not previously covered anywhere in the review history: a fenced-code auto-reconcile bypass, missing invariant coverage for mutating commands like discover/parallel/init, missing backfill IDs for existing unresolved concerns, an internal spec contradiction between US1 scenario 3 and FR-004, brittle concern-ID generation, regex-maintenance risk, audit-trail assumptions, ignored contradiction warnings, and lifecycle misuse risk. Some latest findings overlap with each other thematically, but overlap within the same latest batch does not make them restatements of earlier rounds. Because 0% of the latest round can be classified as restatements against prior rounds, the loop is still producing signal and should be blocked from proceeding.",
+            "evidence": [
+              {
+                "artifact": "review-history",
+                "section": "earlier-rounds",
+                "quote": "No prior findings yet."
+              },
+              {
+                "artifact": "spec.codex.edge-cases-adversarial.review.md",
+                "section": "high-1",
+                "quote": "The auto-reconcile regex still has a code-fence bypass... a literal `- HIGH:` line inside a fenced code block still matches and is treated as actionable."
+              },
+              {
+                "artifact": "spec.codex.edge-cases-adversarial.review.md",
+                "section": "medium-2",
+                "quote": "FR-009 under-specifies the state-mutating commands that must get the post-run invariant check... the current runner already treats `discover` and `parallel` as mutating commands... and `init` also writes workflow state during bootstrap."
+              },
+              {
+                "artifact": "spec.codex.feasibility-adversarial.review.md",
+                "section": "high-1",
+                "quote": "FR-003 and FR-011a do not backfill `id` for existing `unresolved_concerns`... the new lifecycle is unusable on existing runs."
+              },
+              {
+                "artifact": "spec.codex.feasibility-adversarial.review.md",
+                "section": "medium-3",
+                "quote": "US1 scenario 3 says the next checkpoint can treat concerns as closed when they are \"referenced as `addressed` in plan annotations,\" but FR-004 says annotations are display-only... the spec is internally inconsistent."
+              },
+              {
+                "artifact": "spec.gemini.requirements-adversarial.review.md",
+                "section": "medium-1",
+                "quote": "Concern ID generation is brittle and may fail to track paraphrased findings [UNVERIFIED]"
+              },
+              {
+                "artifact": "spec.gemini.requirements-adversarial.review.md",
+                "section": "high-3",
+                "quote": "This method is inherently brittle and adds maintenance complexity... The root problem\u2014a lack of a structured format for review findings\u2014is not addressed."
+              }
+            ],
+            "timestamp": "2026-04-23T00:00:00-07:00"
+          },
+          {
+            "judge": "implementation-risk",
+            "model": "claude-sonnet-4-5",
+            "verdict": "block",
+            "confidence": 4,
+            "reasoning": "Four load-bearing ambiguities would force an implementer to guess on real decisions. First, the plan introduces `factory_invariants.py` with a `JSON_MODE` flag and `set_json_mode()` API for back-compat, but the tasks place the same helper in `factory_state.py` with no `emit_to` parameter and no mention of `factory_invariants.py`. These cannot both be right, and the implementer must pick a file and decide whether to create or extend it. Second, `reseal_manifest_for_drift` must 'update the manifest checkpoint.json' but no artifact gives the path pattern for that file; the implementer cannot write the function without guessing the path. Third, the invariant check (FR-010/FR-011b) must call `recommended_next_action(...)` using `reconciliation_state()` as input, but neither the signature of `recommended_next_action` nor how to obtain `reconciliation_state()` is specified in any artifact. Fourth, the reconcile notes explicitly added `init` to `_STATE_MUTATING_COMMANDS`, but T2.4's authoritative command list omits it, leaving the implementer to decide which source wins.",
+            "evidence": [
+              {
+                "artifact": "PLAN",
+                "section": "Slice 2 / Risk P3",
+                "quote": "Emit to stderr when --json is in effect; stdout otherwise. Detect via a context var or explicit parameter threaded from the caller. \u2026 The module-level JSON_MODE flag in factory_invariants.py is preserved for back-compat of set_json_mode() callers but has no behavioral effect on the emit target."
+              },
+              {
+                "artifact": "TASKS",
+                "section": "T2.2 / T2.3",
+                "quote": "Add run_invariant_checks(state, command) helper \u2026 Emit invariant warnings to stderr ALWAYS (no conditional routing). Preserve the JSON_MODE flag + set_json_mode() API for back-compat but do not use it to switch emit targets."
+              },
+              {
+                "artifact": "TASKS",
+                "section": "T3.3",
+                "quote": "Add reseal_manifest_for_drift(slug, stage) helper that updates the manifest checkpoint.json and appends a drift annotation to stages[stage].annotations[]"
+              },
+              {
+                "artifact": "SPEC",
+                "section": "FR-002",
+                "quote": "the runner MUST reseal the manifest to the current SHA and append a drift record to stages.<stage>.annotations[] \u2026 This reseal happens lazily the next time the advance is taken"
+              },
+              {
+                "artifact": "SPEC",
+                "section": "FR-011b",
+                "quote": "_run_post_invariants in run_factory.py MUST compute recommended_next_action using the same reconciliation_state() signal as status and command_checkpoint, so the contradiction detector evaluates the user-visible next-action string."
+              },
+              {
+                "artifact": "PLAN",
+                "section": "Review Reconciliation note for edge-cases-adversarial",
+                "quote": "M#1 init/discover/parallel added to _STATE_MUTATING_COMMANDS."
+              },
+              {
+                "artifact": "TASKS",
+                "section": "T2.4",
+                "quote": "Call run_invariant_checks at the tail of every state-mutating command in run_factory.py: checkpoint, judge, reconcile, auto-reconcile, implement, deliver, block, repair, closeout, discover, parallel."
+              }
+            ],
+            "timestamp": "2026-04-23T00:00:00Z"
+          }
+        ],
+        [
+          {
+            "judge": "completeness",
+            "model": "gpt-5.4",
+            "verdict": "proceed",
+            "confidence": 4,
+            "reasoning": "spec.codex.edge-cases-adversarial.review#high-1 is explicitly acknowledged as a limitation in the review-spec test that says fenced-code lines are not excluded; that is specific enough as an accepted limitation, even though it is not a mitigation. spec.codex.feasibility-adversarial.review#high-1 is addressed by FR-011a in spec.md and the matching Slice 3 task: legacy unresolved_concerns get id backfill on read, so the new lifecycle works on run-033 without a migration. spec.gemini.requirements-adversarial.review#high-3 is addressed by Risk R7 in spec.md: it names the format-arms-race limitation, accepts it as known, and points to ACTIONABLE_FINDING_SHAPES plus tests as the near-term mitigation; that is specific enough to implement.",
+            "evidence": [
+              {
+                "artifact": "/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_review_specs.py",
+                "section": "test_fenced_code_block_with_literal_severity_line_is_documented_limitation",
+                "quote": "Known limitation: lines inside fenced code blocks are NOT excluded."
+              },
+              {
+                "artifact": "/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/spec.md",
+                "section": "FR-011a",
+                "quote": "backfill the stable `id` field for any existing `unresolved_concerns` entry"
+              },
+              {
+                "artifact": "/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/tasks.md",
+                "section": "T3.5",
+                "quote": "on read, backfill `id` for any existing `unresolved_concerns` entry that lacks one"
+              },
+              {
+                "artifact": "/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/spec.md",
+                "section": "Risk R7",
+                "quote": "The broadened regex is format-bound \u2014 we're in a review-format arms race."
+              }
+            ],
+            "timestamp": "2026-04-24T00:00:00-07:00"
+          },
+          {
+            "judge": "restatement",
+            "model": "gpt-5",
+            "verdict": "proceed",
+            "confidence": 5,
+            "reasoning": "There are no latest-round findings to classify as NEW or RESTATEMENT. Prior rounds exist and are marked addressed, and the latest round surfaced no additional failure modes. That means the review loop is no longer producing new signal from a restatement-auditor perspective, so the correct verdict is proceed.",
+            "evidence": [
+              {
+                "artifact": "latest-round",
+                "section": "findings",
+                "quote": "Latest round's findings:\n- No latest findings found."
+              },
+              {
+                "artifact": "spec.codex.edge-cases-adversarial.review.md",
+                "section": "resolution",
+                "quote": "resolution: All findings addressed (see spec round-2 notes in plan.md reconciliation section)"
+              },
+              {
+                "artifact": "spec.codex.feasibility-adversarial.review.md",
+                "section": "resolution",
+                "quote": "resolution: All findings addressed (see spec round-2 notes in plan.md reconciliation section)"
+              },
+              {
+                "artifact": "spec.gemini.requirements-adversarial.review.md",
+                "section": "resolution",
+                "quote": "resolution: All findings addressed (see spec round-2 notes in plan.md reconciliation section)"
+              }
+            ],
+            "timestamp": "2026-04-24T00:00:00-07:00"
+          },
+          {
+            "judge": "implementation-risk",
+            "model": "claude-sonnet-4-5",
+            "verdict": "block",
+            "confidence": 4,
+            "reasoning": "Four load-bearing ambiguities would cause a competent implementer to guess or stop. (1) The plan explicitly defers the checkpoint CLI flags to a follow-up feature, but the spec's FR-004 requires them and T3.6 marks them done \u2014 the implementer has no signal which wins, and SC-005 requires the flags to pass. (2) T3.3 calls `workflow_utils.normalized_artifact_hash` but that function is never defined, described, or typed anywhere in the artifact chain \u2014 the implementer doesn't know its signature or what it hashes. (3) T3.3 resolves the manifest path via `factory_state.checkpoint_manifest_path(slug, stage)` \u2014 same problem: not defined anywhere. (4) FR-011b requires `_run_post_invariants` in `run_factory.main()` to call `recommended_next_action` with the same `reconciliation_state()` signal used by `status`, but the plan never shows how `main()` obtains `slug`, `stages`, and `reconciliation_ok` at that tail-hook point \u2014 the function signature requires all four arguments and the call-site assembly is unspecified.",
+            "evidence": [
+              {
+                "artifact": "plan",
+                "section": "Slice 3 \u2014 Fix 1 judge-advance honoring",
+                "quote": "`checkpoint --address/--defer/--dismiss <id>` CLI flags \u2014 **deferred to follow-up feature** (the data shape supports the lifecycle but the CLI is not wired in this PR)."
+              },
+              {
+                "artifact": "tasks",
+                "section": "T3.6",
+                "quote": "[x] T3.6 Add `checkpoint --address <id> --evidence <text>`, `--defer <id> --reason <text>`, `--dismiss <id> --reason <text>` flags and their handlers"
+              },
+              {
+                "artifact": "spec",
+                "section": "SC-005",
+                "quote": "a plan checkpoint against a spec whose judges left 1 concern MUST block until either `checkpoint --address <id> --evidence \"<text>\"` or `checkpoint --defer <id> --reason \"<text>\"` is invoked."
+              },
+              {
+                "artifact": "tasks",
+                "section": "T3.3",
+                "quote": "reads the current artifact sha via `workflow_utils.normalized_artifact_hash`"
+              },
+              {
+                "artifact": "tasks",
+                "section": "T3.3",
+                "quote": "The manifest lives at `docs/workflow/feature-runs/<slug>/reviews/<stage>.checkpoint.json` (resolve via `factory_state.checkpoint_manifest_path(slug, stage)`)"
+              },
+              {
+                "artifact": "spec",
+                "section": "FR-011b",
+                "quote": "`_run_post_invariants` in `run_factory.py` MUST compute `recommended_next_action` using the same `reconciliation_state()` signal as `status` and `command_checkpoint`, so the contradiction detector evaluates the user-visible next-action string."
+              },
+              {
+                "artifact": "spec",
+                "section": "FR-001",
+                "quote": "`factory_next_action.recommended_next_action(slug, state, stages, reconciliation_ok) -> str`"
+              }
+            ],
+            "timestamp": "2026-04-24T00:00:00Z"
+          }
+        ]
+      ],
+      "annotations": [
+        {
+          "stage": "spec",
+          "round": 2,
+          "judge": "completeness",
+          "confidence": 4,
+          "reasoning": "spec.codex.edge-cases-adversarial.review#high-1 is explicitly acknowledged as a documented limitation for fenced code-block matches in the plan reconciliation notes, so it is not left unaddressed. spec.codex.feasibility-adversarial.review#high-1 is directly mitigated by FR-011a and T3.5, which backfill unresolved_concerns ids on read so older runs remain usable. spec.gemini.requirements-adversarial.review#high-3 is explicitly accepted as a format-bound limitation in Residual Risk R7 and is deferred because prompt/structured-output changes are out of scope. Every HIGH finding has either a named mitigation or an explicit limitation note, so the chain is complete, with annotations for the accepted limitations.",
+          "artifact_sha_at_time": "8d699036faefbe0a7ddef56824dae633ec6d49fb020dc5e24e7a756b21889553"
+        },
+        {
+          "type": "judge-reset",
+          "reason": "reset judge_rounds 3->2 to re-run round 3 with updated artifacts (spec-plan-tasks aligned per round-2 findings)",
+          "at": 1777009735.359256
+        },
+        {
+          "stage": "spec",
+          "round": 3,
+          "judge": "completeness",
+          "confidence": 4,
+          "reasoning": "spec.codex.edge-cases-adversarial.review#high-1: acknowledged as a documented limitation in the plan reconciliation note, which explicitly pins the fenced-code-block regex match with a test; that is specific enough to count as an accepted limitation, not a missing mitigation. spec.codex.feasibility-adversarial.review#high-1: addressed in FR-011a and task T3.5, which require read-time backfill of missing `unresolved_concerns.id` for existing snapshots, including run-033; this is specific enough to implement. spec.gemini.requirements-adversarial.review#high-3: acknowledged in Risk R7 as a format-bound regex limitation, with structured-output reviewer prompts named as the durable fix and explicitly out of scope; this is specific enough as an accepted limitation.",
+          "artifact_sha_at_time": "a0a6eb61aa484ae52c7ef756d98963fdd609dcf59fd80704cd23c2d5f6cd169d"
+        },
+        {
+          "type": "judge-reset",
+          "reason": "second reset after aligning FR-009 signature across spec/plan/tasks",
+          "at": 1777009967.246698
+        },
+        {
+          "stage": "spec",
+          "round": 3,
+          "judge": "completeness",
+          "confidence": 4,
+          "reasoning": "spec.codex.edge-cases-adversarial.review#high-1 is not mitigated in the spec itself, but it is explicitly acknowledged in the plan as an accepted limitation: the fenced-code-block regex case is \u201cpinned as documented limitation with explicit test.\u201d That is specific enough as a limitation, though not an implementation plan. spec.codex.feasibility-adversarial.review#high-1 is addressed by FR-011a and T3.5, which require backfilling the stable `id` field for existing `unresolved_concerns` entries that lack one on read; that is a named mitigation and is specific enough to implement. spec.gemini.requirements-adversarial.review#high-3 is explicitly acknowledged in Risk R7 as a known architectural limitation, with structured-output migration out of scope; that is a clear acceptance, not a mitigation, and it is specific enough as an accepted limitation.",
+          "artifact_sha_at_time": "102b8ce6a77244e43e05a3efddf9007ef8b1a547fb68030d98fe5288c928d5b6"
+        },
+        {
+          "type": "judge-reset",
+          "reason": "third reset after plan architecture table aligned",
+          "at": 1777010218.345984
+        },
+        {
+          "type": "judge-reset",
+          "reason": "reset after restatement judge prompt fix + diff stage fix 1 extension",
+          "at": 1777044417
+        }
+      ],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [
+        "4ab997afabde09d73e0680a192ec0043e351c24cf51bb3a5166a324de5aba32a",
+        "a82f14b19712743bcdce071c4b6ca8eab51000fe4a7304d2fc203dfb82676f6f",
+        "a82f14b19712743bcdce071c4b6ca8eab51000fe4a7304d2fc203dfb82676f6f",
+        "ff794bfed6a87cc28adc461c386aabe6163b4aaaf74d4b4dd84a740555925377",
+        "026757984d1f921d93c5a73e8885d9882a5c0c36b55f767bdabe655968cbeae0",
+        "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba"
+      ],
+      "initial_sha": "4ab997afabde09d73e0680a192ec0043e351c24cf51bb3a5166a324de5aba32a",
+      "judge_next_action": "advance"
+    },
+    "plan": {
+      "adversarial_rounds": 1,
+      "judge_rounds": 0,
+      "judge_verdicts": [],
+      "annotations": [],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [
+        "a260b8ebd806f71193a11b024ab25896b974da30fb8a754b3a8529e3b695a142",
+        "dc061ea73545a86c8e1a615660bbab41b7247ccd464641c6a2d4090f1490c2e6"
+      ],
+      "initial_sha": "a260b8ebd806f71193a11b024ab25896b974da30fb8a754b3a8529e3b695a142"
+    },
+    "tasks": {
+      "adversarial_rounds": 2,
+      "judge_rounds": 0,
+      "judge_verdicts": [],
+      "annotations": [],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [
+        "2bcb85d7575f8c1c9a11aa344f662c30280feeba496b385cda84783f9c14d2c9",
+        "4a74e08b65179da926013be34c58b47652b5eafb36c7b02fcc0867dcf9982805"
+      ],
+      "initial_sha": "2bcb85d7575f8c1c9a11aa344f662c30280feeba496b385cda84783f9c14d2c9"
+    },
+    "diff": {
+      "adversarial_rounds": 0,
+      "judge_rounds": 0,
+      "judge_verdicts": [],
+      "annotations": [],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [
+        "132c64c0ca7f787053b67da38dfc7c89e02d81e31adfdfeb94a9106408e57a06",
+        "132c64c0ca7f787053b67da38dfc7c89e02d81e31adfdfeb94a9106408e57a06",
+        "132c64c0ca7f787053b67da38dfc7c89e02d81e31adfdfeb94a9106408e57a06"
+      ],
+      "initial_sha": "132c64c0ca7f787053b67da38dfc7c89e02d81e31adfdfeb94a9106408e57a06"
+    },
+    "closeout": {
+      "adversarial_rounds": 0,
+      "judge_rounds": 0,
+      "judge_verdicts": [],
+      "annotations": [],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [
+        "b74c7e980831fbe8ad11b5222a67879d6532e0503f4012a436c8a5fa68ff6962",
+        "b74c7e980831fbe8ad11b5222a67879d6532e0503f4012a436c8a5fa68ff6962"
+      ],
+      "initial_sha": "b74c7e980831fbe8ad11b5222a67879d6532e0503f4012a436c8a5fa68ff6962"
+    }
+  },
+  "schema_version": 2,
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  },
+  "spec_adversarial_rounds": 3,
+  "invariant_warnings": [],
+  "last_action_result": {
+    "next": "repair_diff_checkpoint",
+    "reason": "spec judge panel completed: advance",
+    "blockers": [
+      "Four load-bearing ambiguities would cause a competent implementer to guess or stop. (1) The plan explicitly defers the checkpoint CLI flags to a follow-up feature, but the spec's FR-004 requires them and T3.6 marks them done \u2014 the implementer has no signal which wins, and SC-005 requires the flags to pass. (2) T3.3 calls `workflow_utils.normalized_artifact_hash` but that function is never defined, described, or typed anywhere in the artifact chain \u2014 the implementer doesn't know its signature or what it hashes. (3) T3.3 resolves the manifest path via `factory_state.checkpoint_manifest_path(slug, stage)` \u2014 same problem: not defined anywhere. (4) FR-011b requires `_run_post_invariants` in `run_factory.main()` to call `recommended_next_action` with the same `reconciliation_state()` signal used by `status`, but the plan never shows how `main()` obtains `slug`, `stages`, and `reconciliation_ok` at that tail-hook point \u2014 the function signature requires all four arguments and the call-site assembly is unspecified."
+    ],
+    "outcome": "advance",
+    "proceed_count": 2,
+    "block_count": 1,
+    "timestamp": "2026-04-24T15:30:19.052457Z",
+    "judge_round": 3
+  },
+  "spec_judge_rounds": 3,
+  "plan_adversarial_rounds": 1,
+  "tasks_adversarial_rounds": 2,
+  "diff_adversarial_rounds": 0,
+  "override": {
+    "reason": "Judge panel exhausted on spec stage after 3 rounds; advance recorded with 2 unresolved concerns. Delivering draft PR for human review.",
+    "timestamp_iso8601_utc": "2026-04-24T15:09:16.926137Z",
+    "operator_id": "chrislaw",
+    "affected_concerns": [
+      {
+        "id": "5d0b8ff8ac73",
+        "stage": "spec",
+        "judge": "restatement",
+        "model": "GPT-5.5",
+        "confidence": 5,
+        "reasoning": "There were no earlier rounds, so none of the latest findings can be classified as RESTATEMENT under the stated rule. Every latest finding is NEW because the required precondition for restatement is missing: no earlier round raised the same concern, and there was no orchestrator response that addressed it. Per-finding classification: spec.codex.edge-cases-adversarial.review#high-1 = NEW; uncovered failure mode: fenced code blocks containing literal '- HIGH:' lines are still parsed as actionable findings. spec.codex.edge-cases-adversarial.review#medium-2 = NEW; uncovered failure mode: FR-009 omits mutating commands such as discover, parallel, and init from invariant enforcement. spec.codex.feasibility-adversarial.review#high-1 = NEW; uncovered failure mode: existing unresolved concerns without ids are not backfilled, so lifecycle commands cannot operate on preexisting runs. spec.codex.feasibility-adversarial.review#medium-2 = NEW; uncovered failure mode: discover and parallel remain outside the required invariant coverage despite mutating state. spec.codex.feasibility-adversarial.review#medium-3 = NEW; uncovered failure mode: the spec internally disagrees on whether plan annotations alone close concerns. spec.codex.feasibility-adversarial.review#medium-4 = NEW; uncovered failure mode: FR-006/FR-007 overclaim false-positive protection because fenced code blocks still match severity lines. spec.gemini.requirements-adversarial.review#medium-1 = NEW; uncovered failure mode: concern-id generation may not survive paraphrased findings. spec.gemini.requirements-adversarial.review#medium-2 = NEW; uncovered failure mode: severity detection depends on a fragile regex strategy. spec.gemini.requirements-adversarial.review#high-3 = NEW; uncovered failure mode: the overall regex-based parsing approach creates an arms race and does not solve the lack of structured findings. spec.gemini.requirements-adversarial.review#medium-4 = NEW; uncovered failure mode: artifact-drift advancement relies on an unverified audit-trail assumption. spec.gemini.requirements-adversarial.review#low-5 = NEW; uncovered failure mode: automated agents may ignore contradiction warnings. spec.gemini.requirements-adversarial.review#low-6 = NEW; uncovered failure mode: the concern lifecycle adds a misuse path without enough controls. Since 0% of the latest round's findings are restatements, the loop is still producing new signal and should be blocked.",
+        "round_raised": 3,
+        "also_raised_in_round": [],
+        "addressed_at": null,
+        "addressed_by": null,
+        "deferred_reason": null,
+        "dismissed_reason": null
+      },
+      {
+        "id": "152680565b2f",
+        "stage": "spec",
+        "judge": "implementation-risk",
+        "model": "claude-sonnet-4-5",
+        "confidence": 4,
+        "reasoning": "Four concrete snags would stop or mis-direct a cold implementer. Two are load-bearing blockers: (1) `workflow_utils.normalized_artifact_hash` is called in T3.3 with no documented signature or confirmation it exists \u2014 the implementer cannot write the reseal helper without knowing what arguments to pass. (2) The reconcile review note in the plan says 'init/discover/parallel added to _STATE_MUTATING_COMMANDS' but the authoritative frozenset in T2.4 omits `init` entirely and the spec FR-009 list also omits it \u2014 the implementer must guess whether to include it. Two additional risks are lower severity but still cause a wrong implementation on first read: (3) The plan architecture section says 'Emit to stderr when --json is in effect; stdout otherwise' which directly contradicts T2.3's 'Emit invariant warnings to stderr ALWAYS' \u2014 a cold reader of the plan hits the architecture section before the task detail. (4) T3.4 says to call the reseal helper from `factory_stages.prerequisite_failure` but FR-002 says the reseal happens 'lazily the next time the advance is taken' and the advance-gate lives in `factory_next_action.recommended_next_action` \u2014 the call-graph relationship between `prerequisite_failure` and 'taking an advance' is not documented, so the implementer cannot confirm the reseal fires at the right moment without reading existing source.",
+        "round_raised": 3,
+        "also_raised_in_round": [],
+        "addressed_at": null,
+        "addressed_by": null,
+        "deferred_reason": null,
+        "dismissed_reason": null
+      }
+    ]
+  },
+  "closeout_adversarial_rounds": 0,
+  "dirty_overrides": {}
+}

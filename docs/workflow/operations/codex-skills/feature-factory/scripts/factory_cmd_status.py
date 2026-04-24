@@ -217,6 +217,19 @@ def command_status(args: argparse.Namespace) -> int:
         ):
             print("- advice: batch more implementation fixes before rerunning the diff checkpoint")
 
+    invariant_warnings = state.get("invariant_warnings") or []
+    if invariant_warnings:
+        print("")
+        print("invariant-warnings:")
+        total = len(invariant_warnings)
+        print(f"- total: {total}")
+        for entry in invariant_warnings[-5:]:
+            at = entry.get("at", 0)
+            command = entry.get("command", "")
+            stage = entry.get("stage", "")
+            detail = trim_detail(str(entry.get("detail", "")))
+            print(f"- [{at}] {command} stage={stage}: {detail}")
+
     print("")
     print(f"next-action: {next_action}")
     return 0

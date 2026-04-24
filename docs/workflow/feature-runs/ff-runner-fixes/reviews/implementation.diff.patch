@@ -1,0 +1,2649 @@
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py
+index 838f8bbb..b983275a 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py
+@@ -116,7 +116,7 @@ def _edit_pr_body(body: str) -> None:
+ def _record_override_if_needed(slug: str, reason: str) -> dict | None:
+     recorded: dict | None = None
+     with with_locked_state(slug) as state:
+-        concerns, _, _ = collect_judge_panel_entries(state)
++        concerns, _, _, _ = collect_judge_panel_entries(state)
+         if not concerns:
+             return None
+         recorded = {
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py
+index a82b8f32..6609e0f4 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py
+@@ -156,6 +156,20 @@ def _also_raised_in_round(current_reasoning: str, prior_rounds: list[list[dict]]
+     return sorted(also_raised)
+ 
+ 
++def _concern_id(stage: str, judge: str, round_raised: int, reasoning: str) -> str:
++    """Derive a stable ID from the stage/judge/round and the reasoning prefix.
++
++    FR-003 — the ID must be stable under minor paraphrasing at the end of the
++    reasoning. We hash the first 48 non-whitespace characters of the reasoning
++    along with the fixed fields; this accepts drift at the tail but splits
++    heavily-reworded concerns into distinct IDs (see Risk R5 in the spec).
++    """
++    import hashlib
++    normalized = "".join(reasoning.split())[:48]
++    key = f"{stage}|{judge}|{round_raised}|{normalized}"
++    return hashlib.sha256(key.encode("utf-8")).hexdigest()[:12]
++
++
+ def _unresolved_concern_from_verdict(
+     stage: str,
+     verdict: dict,
+@@ -163,14 +177,20 @@ def _unresolved_concern_from_verdict(
+     prior_rounds: list[list[dict]],
+ ) -> dict[str, object]:
+     reasoning = str(verdict.get("reasoning", "")).strip()
++    judge = str(verdict.get("judge", ""))
+     return {
++        "id": _concern_id(stage, judge, round_raised, reasoning),
+         "stage": stage,
+-        "judge": verdict.get("judge", ""),
++        "judge": judge,
+         "model": verdict.get("model", ""),
+         "confidence": verdict.get("confidence"),
+         "reasoning": reasoning,
+         "round_raised": round_raised,
+         "also_raised_in_round": _also_raised_in_round(reasoning, prior_rounds),
++        "addressed_at": None,
++        "addressed_by": None,
++        "deferred_reason": None,
++        "dismissed_reason": None,
+     }
+ 
+ 
+@@ -872,15 +892,18 @@ def _persist_state(
+         block_verdicts = _block_verdicts(verdicts)
+         blockers = _block_reasonings(block_verdicts)
+ 
++        # FR-001a — write judge_next_action into stage_state BEFORE computing
++        # recommended_next_action so the decision tree (which reads
++        # stages[stage].judge_next_action) sees the freshly-voted advance on
++        # the same run. Without this reorder, factory_cmd_judge itself emits
++        # a stale repair_<stage>_checkpoint banner immediately after voting
++        # advance — the exact symptom observed in feature run 033.
+         if block_count >= 2 and judge_round < 3:
++            stage_state["judge_next_action"] = "edit_and_rerun_judge"
+             next_action = "edit_and_rerun_judge"
+             reason = f"block majority; {block_count} of {len(verdicts)} judges blocked"
+             outcome_value = "rejudge"
+-            stage_state["judge_next_action"] = next_action
+         elif block_count >= 2 and judge_round >= 3:
+-            next_action = recommended_next_action(slug, state, {name: stage_manifest_state(slug, name) for name in CHECKPOINT_STAGES}, True)
+-            reason = "judge panel exhausted; advancing with unresolved concerns"
+-            outcome_value = "advance"
+             stage_state["judge_next_action"] = "advance"
+             unresolved = stage_state.get("unresolved_concerns", [])
+             if not isinstance(unresolved, list):
+@@ -891,12 +914,15 @@ def _persist_state(
+                 for verdict in block_verdicts
+             )
+             stage_state["unresolved_concerns"] = unresolved
++            next_action = recommended_next_action(slug, state, {name: stage_manifest_state(slug, name) for name in CHECKPOINT_STAGES}, True)
++            reason = "judge panel exhausted; advancing with unresolved concerns"
++            outcome_value = "advance"
+             _LOGGER.warning("judge panel exhausted; advancing with unresolved concerns")
+         else:
++            stage_state["judge_next_action"] = "advance"
+             next_action = recommended_next_action(slug, state, {name: stage_manifest_state(slug, name) for name in CHECKPOINT_STAGES}, True)
+             reason = f"{stage} judge panel completed: advance"
+             outcome_value = "advance"
+-            stage_state["judge_next_action"] = "advance"
+ 
+         state["last_action_result"] = {
+             **_payload_for_state(
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_status.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_status.py
+index 524b3039..efba6e6d 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_status.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_status.py
+@@ -217,6 +217,19 @@ def command_status(args: argparse.Namespace) -> int:
+         ):
+             print("- advice: batch more implementation fixes before rerunning the diff checkpoint")
+ 
++    invariant_warnings = state.get("invariant_warnings") or []
++    if invariant_warnings:
++        print("")
++        print("invariant-warnings:")
++        total = len(invariant_warnings)
++        print(f"- total: {total}")
++        for entry in invariant_warnings[-5:]:
++            at = entry.get("at", 0)
++            command = entry.get("command", "")
++            stage = entry.get("stage", "")
++            detail = trim_detail(str(entry.get("detail", "")))
++            print(f"- [{at}] {command} stage={stage}: {detail}")
++
+     print("")
+     print(f"next-action: {next_action}")
+     return 0
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_invariants.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_invariants.py
+new file mode 100644
+index 00000000..6527226d
+--- /dev/null
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_invariants.py
+@@ -0,0 +1,161 @@
++#!/usr/bin/env python3
++"""Post-run invariant checks for the feature factory runner.
++
++Run after every state-mutating command to catch contradictions between the
++judge panel's verdict and the next-action decision tree — the class of bug
++that produced the run-033 loop. The check writes any contradiction to
++``state.invariant_warnings`` and emits a single-line warning to stdout or
++stderr (see :func:`_emit_target`).
++
++This module is intentionally narrow: one invariant today (FR-010), with room
++to add more. Failures inside the check itself never abort the caller.
++"""
++from __future__ import annotations
++
++import os
++import sys
++import time
++from typing import Callable, Iterable
++
++from factory_state import INVARIANT_WARNINGS_KEY, _INVARIANT_WARNINGS_CAP
++
++
++# Warnings always emit to stderr. Gemini requirements-adversarial round 2
++# flagged conditional stdout/stderr routing as a risk — automated tools
++# parsing stdout would miss contradiction warnings. Unix convention is
++# warnings → stderr; terminals show both streams so interactive operators
++# still see it. JSON_MODE is preserved for back-compat and tests but has
++# no behavioral effect on the emit target.
++JSON_MODE: bool = False
++
++
++# Stages whose judge_next_action field we inspect for the contradiction check.
++_CHECKPOINT_STAGES: tuple[str, ...] = ("spec", "plan", "tasks", "diff", "closeout")
++
++
++def _emit_target():
++    return sys.stderr
++
++
++def _append_warning(state: dict, entry: dict) -> None:
++    warnings = state.setdefault(INVARIANT_WARNINGS_KEY, [])
++    warnings.append(entry)
++    # Keep the most recent _INVARIANT_WARNINGS_CAP entries to bound state.json size.
++    if len(warnings) > _INVARIANT_WARNINGS_CAP:
++        del warnings[: len(warnings) - _INVARIANT_WARNINGS_CAP]
++
++
++def _is_repair_action_for_stage(action: str, stage: str) -> bool:
++    """Return True if *action* is a repair action targeting *stage*."""
++    if not isinstance(action, str) or not action:
++        return False
++    return action == f"repair_{stage}_checkpoint"
++
++
++def check_judge_advance_vs_recommended(
++    state: dict,
++    recommended: str,
++) -> list[dict]:
++    """FR-010 — the core invariant.
++
++    Return a list of per-stage contradiction dicts. Each dict has keys
++    ``stage`` and ``detail``. Callers wrap these into state-level warnings
++    with timestamp + command via :func:`run_invariant_checks`.
++    """
++    contradictions: list[dict] = []
++    stages = state.get("stages") or {}
++    for stage in _CHECKPOINT_STAGES:
++        stage_state = stages.get(stage) or {}
++        if stage_state.get("judge_next_action") != "advance":
++            continue
++        if _is_repair_action_for_stage(recommended, stage):
++            contradictions.append(
++                {
++                    "stage": stage,
++                    "detail": (
++                        f"judge_next_action=advance for stage={stage} "
++                        f"but recommended_next_action={recommended}"
++                    ),
++                }
++            )
++    return contradictions
++
++
++# Public alias so tests can point at the list of invariants if we grow more.
++_INVARIANTS: tuple[Callable[[dict, str], list[dict]], ...] = (
++    check_judge_advance_vs_recommended,
++)
++
++
++def run_invariant_checks(
++    state: dict,
++    command: str,
++    recommended: str,
++    invariants: Iterable[Callable[[dict, str], list[dict]]] | None = None,
++) -> list[dict]:
++    """Run all invariants against *state*; append warnings; emit messages.
++
++    The function never raises — any invariant that itself errors is swallowed
++    and reported as a self-failure warning. Returns the list of newly appended
++    warning dicts (may be empty).
++
++    ``recommended`` is the current output of
++    :func:`factory_next_action.recommended_next_action` for this slug.
++    Callers compute it once after applying their state mutation.
++    """
++    if not isinstance(state, dict):
++        return []
++    appended: list[dict] = []
++    invariant_fns = list(invariants) if invariants is not None else list(_INVARIANTS)
++    now = int(time.time())
++    for fn in invariant_fns:
++        try:
++            findings = fn(state, recommended)
++        except Exception as exc:  # noqa: BLE001 — invariant failure must not abort the caller
++            findings = [
++                {
++                    "stage": "",
++                    "detail": f"invariant {fn.__name__} raised {type(exc).__name__}: {exc}",
++                }
++            ]
++        for finding in findings or []:
++            entry = {
++                "at": now,
++                "command": command,
++                "stage": finding.get("stage", ""),
++                "detail": finding.get("detail", ""),
++            }
++            _append_warning(state, entry)
++            appended.append(entry)
++            _print_warning(entry)
++    return appended
++
++
++def _print_warning(entry: dict) -> None:
++    """Emit a single-line warning to stdout or stderr per JSON_MODE."""
++    detail = entry.get("detail", "")
++    target = _emit_target()
++    try:
++        target.write(
++            "⚠ state contradiction detected: "
++            f"{detail} — see docs/workflow/plans/feature-factory-runner-fixes.md\n"
++        )
++        target.flush()
++    except Exception:  # noqa: BLE001 — output failure must not abort the caller
++        pass
++
++
++def set_json_mode(enabled: bool) -> None:
++    """Toggle JSON_MODE so warnings route to stderr instead of stdout.
++
++    Called from run_factory.py when --json appears in argv. Also respects
++    FF_INVARIANT_EMIT=stderr|stdout for tests.
++    """
++    global JSON_MODE
++    override = os.environ.get("FF_INVARIANT_EMIT")
++    if override == "stderr":
++        JSON_MODE = True
++    elif override == "stdout":
++        JSON_MODE = False
++    else:
++        JSON_MODE = bool(enabled)
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_next_action.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_next_action.py
+index cc08b8cd..28f98b9f 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_next_action.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_next_action.py
+@@ -89,17 +89,34 @@ def recommended_next_action(
+         return "discover"
+     if _judge_panel_needed(state):
+         return "judge_panel"
++    stages_state = state.get("stages") or {}
++
++    def _judge_advanced(stage_name: str) -> bool:
++        """FR-001 — honor the judge panel's formal advance verdict.
++
++        When judges voted advance, downstream behavior treats the stage as
++        ready to hand off even if the artifact SHA has drifted since the
++        last checkpoint. factory_cmd_checkpoint reseals the manifest lazily
++        (FR-002) so the next checkpoint starts from a clean manifest.
++        """
++        stage_blob = stages_state.get(stage_name) or {}
++        return stage_blob.get("judge_next_action") == "advance"
++
+     if not stages["spec"]["artifact_exists"] or not stages["spec"]["artifact_meaningful"]:
+         if later_progress_exists(stages, "spec")[0]:
+             return "mark_blocked"
+         return "author_spec"
+-    if not stages["spec"]["manifest_exists"] or not stages["spec"]["healthy"]:
++    if not _judge_advanced("spec") and (
++        not stages["spec"]["manifest_exists"] or not stages["spec"]["healthy"]
++    ):
+         return "repair_spec_checkpoint"
+     if not stages["plan"]["artifact_exists"] or not stages["plan"]["artifact_meaningful"]:
+         if later_progress_exists(stages, "plan")[0]:
+             return "mark_blocked"
+         return "author_plan"
+-    if not stages["plan"]["manifest_exists"] or not stages["plan"]["healthy"]:
++    if not _judge_advanced("plan") and (
++        not stages["plan"]["manifest_exists"] or not stages["plan"]["healthy"]
++    ):
+         return "repair_plan_checkpoint"
+     if not stages["tasks"]["artifact_exists"] or not stages["tasks"]["artifact_meaningful"]:
+         if later_progress_exists(stages, "tasks")[0]:
+@@ -108,7 +125,9 @@ def recommended_next_action(
+     parallel = state.get(PARALLEL_ANALYSIS_KEY, {})
+     if not parallel.get("reviewed"):
+         return "record_parallel_analysis"
+-    if not stages["tasks"]["manifest_exists"] or not stages["tasks"]["healthy"]:
++    if not _judge_advanced("tasks") and (
++        not stages["tasks"]["manifest_exists"] or not stages["tasks"]["healthy"]
++    ):
+         return "repair_tasks_checkpoint"
+     if not stages["diff"]["artifact_exists"]:
+         return "dispatch_next_slice_to_codex"
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_pr_body.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_pr_body.py
+index a0c6afaa..939daf5e 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_pr_body.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_pr_body.py
+@@ -29,8 +29,36 @@ def _excerpt(text: object, limit: int = 120) -> str:
+     return textwrap.shorten(normalized, width=limit, placeholder="...")
+ 
+ 
+-def collect_judge_panel_entries(state: dict) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any] | None]:
++def _concern_is_resolved(concern: dict) -> bool:
++    """FR-005a — a concern is resolved once addressed, deferred, or dismissed.
++
++    Resolution requires the STATE-BEARING field to be set (``addressed_at``,
++    ``deferred_reason``, or ``dismissed_reason``). ``addressed_by`` alone is
++    evidence, not resolution — a concern with only evidence would still
++    block checkpoint per FR-004, so it must render as open in the PR body.
++
++    Missing fields are treated as None (unresolved). Older concerns written
++    before FR-003 simply never populate these fields and keep rendering as
++    open, which matches prior behavior.
++    """
++    return any(
++        concern.get(field) is not None
++        for field in ("addressed_at", "deferred_reason", "dismissed_reason")
++    )
++
++
++def collect_judge_panel_entries(
++    state: dict,
++) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any] | None, list[dict[str, Any]]]:
++    """Return (open_concerns, annotations, override, resolved_concerns).
++
++    Open concerns render in the ``## ⚠ Unresolved Judge Concerns`` block.
++    Resolved concerns render in a separate ``## Resolved Concerns`` block so
++    the audit trail is preserved without confusing the operator about open
++    items (FR-005a).
++    """
+     concerns: list[dict[str, Any]] = []
++    resolved_concerns: list[dict[str, Any]] = []
+     annotations: list[dict[str, Any]] = []
+     stages = state.get("stages", {})
+     if isinstance(stages, dict):
+@@ -44,7 +72,10 @@ def collect_judge_panel_entries(state: dict) -> tuple[list[dict[str, Any]], list
+                     continue
+                 merged = dict(concern_blob)
+                 merged.setdefault("stage", stage_name)
+-                concerns.append(merged)
++                if _concern_is_resolved(merged):
++                    resolved_concerns.append(merged)
++                else:
++                    concerns.append(merged)
+             for annotation in _coerce_list(stage_blob.get("annotations")):
+                 annotation_blob = _coerce_mapping(annotation)
+                 if not annotation_blob:
+@@ -54,12 +85,12 @@ def collect_judge_panel_entries(state: dict) -> tuple[list[dict[str, Any]], list
+                 annotations.append(merged)
+ 
+     override = _coerce_mapping(state.get("override"))
+-    return concerns, annotations, override
++    return concerns, annotations, override, resolved_concerns
+ 
+ 
+ def render_judge_panel_block(state: dict) -> str:
+-    concerns, annotations, override = collect_judge_panel_entries(state)
+-    if not concerns and not annotations and not override:
++    concerns, annotations, override, resolved_concerns = collect_judge_panel_entries(state)
++    if not concerns and not annotations and not override and not resolved_concerns:
+         return ""
+ 
+     lines: list[str] = [SENTINEL_BEGIN, "## ⚠ Unresolved Judge Concerns"]
+@@ -70,14 +101,20 @@ def render_judge_panel_block(state: dict) -> str:
+         confidence = concern.get("confidence", "")
+         reasoning = str(concern.get("reasoning", "") or "").strip()
+         round_raised = concern.get("round_raised", concern.get("round", ""))
++        concern_id = str(concern.get("id", "") or "")
+         also_raised = concern.get("also_raised_in_round", concern.get("persisted_across_rounds", []))
+         if not isinstance(also_raised, list):
+             also_raised = [also_raised] if also_raised not in ("", None) else []
+         heading_parts = [part for part in (stage, judge) if part]
+         heading = " / ".join(heading_parts) if heading_parts else "Concern"
+-        lines.extend(
++        concern_lines = [f"### {heading}"]
++        if concern_id:
++            # FR-005a — print id in the open block so operators can use it
++            # with `checkpoint --address/--defer/--dismiss <id>` without
++            # having to read state.json to recover it.
++            concern_lines.append(f"- id: `{concern_id}`")
++        concern_lines.extend(
+             [
+-                f"### {heading}",
+                 f"- stage: `{stage}`",
+                 f"- judge: `{judge}`",
+                 f"- confidence: `{confidence}`",
+@@ -87,6 +124,34 @@ def render_judge_panel_block(state: dict) -> str:
+                 "",
+             ]
+         )
++        lines.extend(concern_lines)
++
++    if resolved_concerns:
++        lines.append("## Resolved Concerns")
++        for concern in resolved_concerns:
++            stage = str(concern.get("stage", "") or "")
++            judge = str(concern.get("judge", "") or "")
++            concern_id = str(concern.get("id", "") or "")
++            if concern.get("addressed_at") is not None:
++                # addressed_at is the state-bearing field; addressed_by is evidence.
++                # Keep the two aligned with _concern_is_resolved so the PR body
++                # and the checkpoint gate (FR-004) never disagree.
++                status = "addressed"
++                detail = str(concern.get("addressed_by", "") or "").strip() or "(no evidence)"
++            elif concern.get("deferred_reason"):
++                status = "deferred"
++                detail = str(concern.get("deferred_reason", "") or "").strip()
++            elif concern.get("dismissed_reason"):
++                status = "dismissed"
++                detail = str(concern.get("dismissed_reason", "") or "").strip()
++            else:
++                status = "resolved"
++                detail = ""
++            id_label = f"`{concern_id}`" if concern_id else ""
++            lines.append(
++                f"- {stage} / {judge} {id_label} — **{status}**: {detail}".rstrip()
++            )
++        lines.append("")
+ 
+     if annotations:
+         lines.append("## Annotations")
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_review_specs.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_review_specs.py
+index 059d42db..1665c09e 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_review_specs.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_review_specs.py
+@@ -17,11 +17,77 @@ DEFAULT_CODEX_MODEL = "gpt-5.4-mini"
+ SMALL_TASK_SET_THRESHOLD = 15
+ _AUTO_ACCEPT_NOTE = "No actionable findings detected — auto-accepted"
+ 
++# Every pattern below is matched against text that has already been lowercased
++# by detect_actionable_findings(). All patterns anchor to start-of-line (after
++# optional whitespace) to avoid matching prose mentions of severity words inside
++# sentences. ACTIONABLE_FINDING_SHAPES documents the supported forms; when a
++# reviewer starts using a new shape, update this regex and add a test.
++#
++# Supported shapes (each example drawn from a real review):
++#   1. "- high: ..."                           bullet + severity + colon
++#   2. "- [tag] high: ..."                     bullet + bracket tag + severity
++#   3. "- HIGH [CODE-CONFIRMED]: ..."          bullet + bare severity + bracket tag
++#   4. "- **HIGH**: ..."                       bullet + bold severity + colon
++#   5. "| **HIGH** | ..."                      table cell with bold severity
++#   6. "1. **HIGH**: ..."                      numbered list + bold severity
++#   7. "### HIGH: ..."                         heading with severity word
++#   8. "### 1. Finding title"                  heading with rank prefix (matched via next line)
++#   9. "**HIGH**: ..."                         bold-prefix at paragraph start
++#  10. "**HIGH [CODE-CONFIRMED]**: ..."        bold-prefix with tag
++#  11. "**Severity**: HIGH"                    inline-field form (Gemini style)
++#  12. "Severity: HIGH"                        inline-field without bold
++ACTIONABLE_FINDING_SHAPES = (
++    "bullet-colon",
++    "bullet-bracket-tag-colon",
++    "bullet-bare-plus-bracket-tag",
++    "bullet-bold-severity",
++    "table-bold-severity",
++    "numbered-bold-severity",
++    "heading-severity",
++    "paragraph-bold-prefix",
++    "paragraph-bold-prefix-bracket",
++    "inline-severity-field-bold",
++    "inline-severity-field-plain",
++)
++
++_SEV = r"(?:critical|high|medium)"
++
+ _ACTIONABLE_FINDING_RE = re.compile(
+     r"(?:"
+-    r"^\s*-\s+(?:\[[^\]]+\]\s+)?(high|medium):"  # bullet-list: "- high:" or "- [tag] high:"
++    # 1-2. Bullet + severity + colon: "- high:" or "- [tag] high:"
++    r"^\s*-\s+(?:\[[^\]]+\]\s+)?" + _SEV + r":"
++    r"|"
++    # 3. Bullet + bare severity + bracket tag: "- high [code-confirmed]:"
++    r"^\s*-\s+" + _SEV + r"\s+\[[^\]]+\]\s*:"
++    r"|"
++    # 4. Bullet + bold severity (with optional inner bracket tag):
++    # "- **high**:" or "- **high [code-confirmed]**:" or
++    # "- **HIGH [CODE-CONFIRMED]** rest-of-line" (no colon, as some lenses emit)
++    r"^\s*-\s+\*\*" + _SEV + r"(?:\s*\[[^\]]+\])?\*\*(?:\s*:|\s+)"
++    r"|"
++    # 5. Table cell with bold severity: "| **high** |"
++    r"^\|\s*\*\*" + _SEV + r"\*\*"
++    r"|"
++    # 6a. Numbered list + bold severity: "1. **high**:"
++    r"^\s*\d+\.\s+\*\*" + _SEV + r"\*\*\s*:"
++    r"|"
++    # 6b. Numbered list + plain severity + colon (no bold): "1. high:" or "1. HIGH [tag]:"
++    r"^\s*\d+\.\s+" + _SEV + r"(?:\s+\[[^\]]+\])?\s*:"
++    r"|"
++    # 7. Heading with severity word followed by colon or end-of-line.
++    # Must be `### HIGH:` or `### HIGH` on its own line — NOT `### HIGH availability
++    # target` (false-positive from section titles). Colon is the only delimiter
++    # allowed since `-` or `--` can appear in compound words like `MEDIUM-term`.
++    r"^#+\s+(?:\d+\.\s+)?" + _SEV + r"\s*(?::|$)"
++    r"|"
++    # 9-10. Paragraph start with bold prefix: "**high**:" or "**high [code-confirmed]**:"
++    r"^\s*\*\*" + _SEV + r"(?:\s*\[[^\]]+\])?\*\*\s*:"
++    r"|"
++    # 11. Inline Severity field bold: "**severity**: high" or "**severity:** high"
++    r"^\s*\*\*severity(?:\*\*)?:\*?\*?\s*" + _SEV + r"\b"
+     r"|"
+-    r"^\|\s*\*\*(critical|high|medium)\*\*"  # table row: "| **HIGH** |" or "| **CRITICAL** |"
++    # 12. Inline Severity field plain: "severity: high"
++    r"^\s*severity:\s*" + _SEV + r"\b"
+     r")",
+     re.MULTILINE,
+ )
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_stages.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_stages.py
+index c5276085..78cbeffb 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_stages.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_stages.py
+@@ -359,15 +359,82 @@ def reconciliation_state(slug: str) -> tuple[bool, str]:
+ 
+ 
+ def prerequisite_failure(slug: str, stage: str) -> str | None:
++    """Return a human-readable reason if *stage*'s prerequisites aren't ready.
++
++    FR-001 / FR-002 — an "unhealthy" prerequisite manifest is still acceptable
++    when the judge panel has voted ``judge_next_action == "advance"`` for that
++    prerequisite. The drift is recorded as an annotation the first time this
++    branch is taken (see :func:`record_advance_with_drift_if_needed`).
++    """
++    from factory_state import load_workflow_state  # local import — avoid cycle
++    state = load_workflow_state(slug)
++    stages_state = state.get("stages") or {}
+     for prereq in STAGE_PREREQUISITES.get(stage, []):
+         prereq_state = stage_manifest_state(slug, prereq)
+         if not prereq_state["manifest_exists"]:
+             return f"{stage} checkpoint requires completed {prereq} checkpoint first"
+         if not prereq_state["healthy"]:
++            prereq_stage_state = stages_state.get(prereq, {}) if isinstance(stages_state, dict) else {}
++            if isinstance(prereq_stage_state, dict) and prereq_stage_state.get("judge_next_action") == "advance":
++                record_advance_with_drift_if_needed(slug, prereq, prereq_stage_state, prereq_state)
++                continue  # judge advance overrides the manifest-drift-equals-unhealthy rule
+             return f"{stage} checkpoint requires a healthy {prereq} checkpoint first"
+     return None
+ 
+ 
++def record_advance_with_drift_if_needed(
++    slug: str,
++    stage: str,
++    stage_state: dict,
++    manifest_state: dict,
++) -> None:
++    """FR-002 — record drift once per advance-with-drift pair.
++
++    Appends a single ``{type: advance-with-drift, old_sha, new_sha, at, reason}``
++    entry to ``stages.<stage>.annotations[]``. Idempotent — if the same
++    old-sha/new-sha pair is already recorded, no new entry is written.
++    """
++    import time
++    from factory_state import workflow_dir, load_workflow_state, save_workflow_state
++    from workflow_utils import normalized_artifact_hash
++
++    artifact_path = manifest_state.get("artifact_path")
++    if artifact_path is None:
++        return
++    try:
++        current_sha = normalized_artifact_hash(artifact_path)
++    except Exception:  # noqa: BLE001
++        return
++    history = stage_state.get("adversarial_sha_history") or []
++    manifest_sha = history[-1] if isinstance(history, list) and history else stage_state.get("initial_sha", "")
++    if not manifest_sha or manifest_sha == current_sha:
++        return
++
++    fresh_state = load_workflow_state(slug)
++    stage_blob = (fresh_state.get("stages") or {}).get(stage) or {}
++    annotations = stage_blob.get("annotations") or []
++    for entry in annotations:
++        if (
++            isinstance(entry, dict)
++            and entry.get("type") == "advance-with-drift"
++            and entry.get("old_sha") == manifest_sha
++            and entry.get("new_sha") == current_sha
++        ):
++            return  # already recorded
++    annotations.append(
++        {
++            "type": "advance-with-drift",
++            "old_sha": manifest_sha,
++            "new_sha": current_sha,
++            "at": int(time.time()),
++            "reason": "post-judge-edits-only",
++        }
++    )
++    stage_blob["annotations"] = annotations
++    fresh_state.setdefault("stages", {})[stage] = stage_blob
++    save_workflow_state(slug, fresh_state)
++
++
+ def status_md_changed_since_init(slug: str) -> bool:
+     """Return True if STATUS.md was modified after workflow init.
+ 
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py
+index 0c0c0bcd..0a5e0aeb 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py
+@@ -36,6 +36,8 @@ CHECKPOINT_FALLBACK_KEY = "checkpoint_fallback"
+ CHECKPOINT_PROGRESS_KEY = "checkpoint_progress"
+ PARALLEL_ANALYSIS_KEY = "parallel_analysis"
+ INIT_HEAD_SHA_KEY = "init_head_sha"
++INVARIANT_WARNINGS_KEY = "invariant_warnings"
++_INVARIANT_WARNINGS_CAP = 100
+ 
+ # ---------------------------------------------------------------------------
+ # Atomic JSON I/O
+@@ -186,6 +188,7 @@ def _default_workflow_state() -> dict:
+         INIT_HEAD_SHA_KEY: "",
+         "token_usage": [],
+         "stages": {},
++        INVARIANT_WARNINGS_KEY: [],
+         "schema_version": 1,
+     }
+ 
+@@ -387,10 +390,56 @@ def load_workflow_state(slug: str) -> dict:
+     state.setdefault(INIT_HEAD_SHA_KEY, "")
+     state.setdefault("token_usage", [])
+     state.setdefault("stages", {})
++    state.setdefault(INVARIANT_WARNINGS_KEY, [])
+     state.setdefault("schema_version", 1)
++    _backfill_unresolved_concern_ids(state)
+     return state
+ 
+ 
++def _concern_id_stable(stage: str, judge: str, round_raised: int, reasoning: str) -> str:
++    """Stable concern ID per FR-003. Mirrored in factory_cmd_judge._concern_id.
++
++    Defined here so state-load backfill (FR-011a) does not need to import the
++    judge module at load time.
++    """
++    import hashlib
++    normalized = "".join(reasoning.split())[:48]
++    key = f"{stage}|{judge}|{round_raised}|{normalized}"
++    return hashlib.sha256(key.encode("utf-8")).hexdigest()[:12]
++
++
++def _backfill_unresolved_concern_ids(state: dict) -> None:
++    """FR-011a — backfill `id` on any legacy unresolved_concern without one.
++
++    Older runs (including the run-033 fixture) wrote concerns before FR-003
++    added the stable-id field. On read, synthesize the id so the new
++    checkpoint lifecycle works on in-flight runs without a migration script.
++    Also default-fills addressed_at / addressed_by / deferred_reason /
++    dismissed_reason to ``None``.
++    """
++    stages = state.get("stages")
++    if not isinstance(stages, dict):
++        return
++    for stage_name, stage_state in stages.items():
++        if not isinstance(stage_state, dict):
++            continue
++        concerns = stage_state.get("unresolved_concerns")
++        if not isinstance(concerns, list):
++            continue
++        for concern in concerns:
++            if not isinstance(concern, dict):
++                continue
++            if not concern.get("id"):
++                concern["id"] = _concern_id_stable(
++                    str(concern.get("stage") or stage_name),
++                    str(concern.get("judge") or ""),
++                    int(concern.get("round_raised") or 0),
++                    str(concern.get("reasoning") or ""),
++                )
++            for field in ("addressed_at", "addressed_by", "deferred_reason", "dismissed_reason"):
++                concern.setdefault(field, None)
++
++
+ def save_workflow_state(slug: str, state: dict) -> Path:
+     path = factory_state_path(slug)
+     atomic_json_write(path, state)
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py
+index cb221780..088a89d3 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py
+@@ -94,9 +94,54 @@ from factory_cmd_block import command_block  # noqa: E402
+ from factory_cmd_judge import run_judge  # noqa: E402
+ from factory_cmd_implement import command_implement, command_parallel, _run_serial, _run_parallel  # noqa: E402
+ from factory_cmd_status import command_status, command_repair, command_doctor  # noqa: E402
++from factory_invariants import run_invariant_checks, set_json_mode  # noqa: E402
++from factory_stages import stage_manifest_state  # noqa: E402  (re-imported for invariant check)
+ from workflow_utils import resolve_stored_path  # noqa: E402
+ 
+ 
++# Commands that mutate workflow state — wrap them with the invariant post-check.
++# `repair` and `closeout` both call into `command_checkpoint` and therefore
++# mutate state; they were flagged missing by the spec round-2 edge-cases review.
++_STATE_MUTATING_COMMANDS: frozenset[str] = frozenset(
++    {
++        "checkpoint",
++        "judge",
++        "reconcile",
++        "auto-reconcile",
++        "implement",
++        "deliver",
++        "block",
++        "repair",
++        "closeout",
++        "discover",
++        "parallel",
++    }
++)
++
++
++def _run_post_invariants(slug: str | None, command_name: str) -> None:
++    """Run invariant checks after a state-mutating command.
++
++    Uses the same ``recon_ok`` signal as ``factory_cmd_status`` / the real
++    checkpoint decision path, so the contradiction detector evaluates the
++    user-visible next-action string — not a hypothetical happy-path one.
++    Errors are swallowed — the invariant helper must never abort the caller.
++    """
++    if not slug:
++        return
++    try:
++        from factory_stages import reconciliation_state  # local import — avoid cycles
++        state = load_workflow_state(slug)
++        stages = {name: stage_manifest_state(slug, name) for name in CHECKPOINT_STAGES}
++        recon_ok, _ = reconciliation_state(slug)
++        recommended = recommended_next_action(slug, state, stages, recon_ok)
++        appended = run_invariant_checks(state, command_name, recommended)
++        if appended:
++            save_workflow_state(slug, state)
++    except Exception:  # noqa: BLE001 — invariant failure must not abort the caller
++        return
++
++
+ def command_init(args: argparse.Namespace) -> int:
+     if not args.path:
+         raise SystemExit(
+@@ -393,7 +438,33 @@ def build_parser() -> argparse.ArgumentParser:
+ def main() -> int:
+     parser = build_parser()
+     args = parser.parse_args()
+-    return args.func(args)
++    # FR-009: route invariant-warning output to stderr when --json is active so
++    # machine-readable JSON on stdout is never contaminated.
++    set_json_mode(bool(getattr(args, "json", False)))
++    exit_code = args.func(args)
++    # FR-009 / FR-010: post-run invariant check on state-mutating commands.
++    command_name = getattr(args, "_factory_command", None) or _infer_command_name(args)
++    if command_name in _STATE_MUTATING_COMMANDS:
++        _run_post_invariants(getattr(args, "slug", None), command_name)
++    return exit_code
++
++
++def _infer_command_name(args: argparse.Namespace) -> str | None:
++    """Best-effort extraction of the subcommand name from parsed argparse args."""
++    # argparse doesn't expose the selected subcommand name cleanly; inspect the
++    # configured func and map it back to a known subcommand.
++    func = getattr(args, "func", None)
++    if func is None:
++        return None
++    qualname = getattr(func, "__qualname__", "") or ""
++    name = getattr(func, "__name__", "") or ""
++    # Common mapping — command_X -> X
++    if name.startswith("command_"):
++        return name[len("command_"):].replace("_", "-")
++    # run_judge is wrapped in a lambda for the judge subcommand.
++    if "run_judge" in qualname or name == "<lambda>":
++        return "judge"
++    return None
+ 
+ 
+ if __name__ == "__main__":
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/fixtures/run-033-state-pre-fix.json b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/fixtures/run-033-state-pre-fix.json
+new file mode 100644
+index 00000000..17ef34de
+--- /dev/null
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/fixtures/run-033-state-pre-fix.json
+@@ -0,0 +1,1209 @@
++{
++  "review_policy": {
++    "sensitive": false,
++    "large_structural": false,
++    "performance_sensitive": false,
++    "extra_gemini_lenses": []
++  },
++  "blocked": {
++    "active": false,
++    "reason": "",
++    "updated_at": 0
++  },
++  "discovery": {
++    "version": 2,
++    "required": true,
++    "complete": true,
++    "question_count": 6,
++    "asked_count": 6,
++    "questions": [
++      {
++        "question": "Delivery path for this feature",
++        "recommendation": "Feature Factory",
++        "rationale": "Touches production-facing run state and completion state machine; benefits from adversarial-review gates.",
++        "updated_at": 1776984040
++      },
++      {
++        "question": "Counter replacement vs cache-and-correct",
++        "recommendation": "Cache the counters, sweep corrects drift",
++        "rationale": "Small blast radius; existing reads keep working; bug fix not refactor.",
++        "updated_at": 1776984051
++      },
++      {
++        "question": "Sweep autonomy level",
++        "recommendation": "Auto-complete happy path, flag anomalies for review",
++        "rationale": "Self-healing is the goal; don't hide weird data shapes.",
++        "updated_at": 1776984051
++      },
++      {
++        "question": "Migration posture",
++        "recommendation": "Dual-write + shadow-read for 24-48h then cut over",
++        "rationale": "Lowers risk of a bad derived query breaking every run's UI at deploy.",
++        "updated_at": 1776984051
++      },
++      {
++        "question": "Completion trigger model",
++        "recommendation": "Event-driven primary, sweep as safety net",
++        "rationale": "Keeps happy-path latency in seconds; sweep catches stragglers.",
++        "updated_at": 1776984051
++      },
++      {
++        "question": "Anomaly types to ship at launch",
++        "recommendation": "Ship five common anomalies; defer JOB_EXPIRED rate alerts and cost deviation",
++        "rationale": "Covers silent-partial-failure modes without expanding into provider-health territory.",
++        "updated_at": 1776984051
++      }
++    ],
++    "assumptions": [],
++    "summary": "Shift run state (progress counters, completion) from JSONB cached counters to derived reads off ProbeResult + Transcript tables, plus a periodic reconciliation sweep that auto-completes stuck runs and records anomalies. Root cause + motivation documented in docs/backend/paired-batch-run-flow.md.",
++    "updated_at": 1776984107,
++    "answers": {
++      "Anomaly set at launch": "Ship six types: (1) transcript with summarizedAt IS NULL on COMPLETED run; (2) ProbeResult count > scheduled total; (3) transcript without matching ProbeResult; (4) paired-batch asymmetry by jobChoiceBatchGroupId; (5) run stuck in SUMMARIZING beyond threshold; (6) per-model transcript shortfall within a run (Mistral-style model-specific failures).",
++      "Delivery path": "Feature Factory",
++      "Counter approach": "Option B: replace \u2014 drop Run.progress and Run.summarizeProgress counter writes entirely; derive from live counts on ProbeResult and Transcript at read time.",
++      "Sweep autonomy": "Option B: sweep auto-completes happy-path runs (flips SUMMARIZING -> COMPLETED atomically and triggers post-completion side effects); anomalies land in a new RunAnomaly table for human review.",
++      "Migration posture": "Option A: hard cutover \u2014 stop writing counters and start reading derived in the same PR; no dual-write/shadow-read phase.",
++      "Completion trigger": "Option B: event-driven primary (last handler to finish triggers maybeCompleteRun using derived counts), sweep acts as the safety net."
++    },
++    "non_goals": [
++      "maxBudgetUsd enforcement (not actively used in practice)",
++      "Provider idempotency keys (meta-fix #2 prerequisite \u2014 separate PR)",
++      "Provider health tracker / circuit breaker (meta-fix #2)",
++      "Retry-After header handling",
++      "Non-retryable transcript-shape fix at probe-scenario/handler.ts:214",
++      "UI polish beyond exposing RunAnomaly via GraphQL",
++      "Changes to pair grouping at launch time",
++      "JOB_EXPIRED rate alerting and cost-deviation anomalies (deferred)"
++    ],
++    "acceptance_criteria": [
++      "In-flight runs at deploy time continue to a correct terminal state (no double-completion, no lost data)",
++      "Run.progress and Run.summarizeProgress values shown in GraphQL match derived counts from ProbeResult + Transcript for all existing historical runs",
++      "No probe or summarize handler writes to Run.progress/Run.summarizeProgress JSONB counters after this change",
++      "Event-driven completion still flips happy-path runs SUMMARIZING -> COMPLETED within seconds of the last handler finishing",
++      "Reconciliation sweep runs on a periodic cadence and auto-completes a SUMMARIZING run that meets completion criteria but was missed by the event-driven path",
++      "Reconciliation sweep queues summarize jobs for Transcript rows with summarizedAt IS NULL on non-terminal runs (fixes stranded-transcript bug)",
++      "SUMMARIZING -> COMPLETED transition is a single-statement conditional UPDATE (no read-then-write race window)",
++      "RunAnomaly rows readable via GraphQL for all six anomaly types",
++      "Per-model transcript shortfall anomaly fires when a model in a run has >= N scheduled probes and materially lower success rate than peer models in the same run",
++      "Paired-batch asymmetry anomaly fires when sibling runs sharing jobChoiceBatchGroupId have materially different ProbeResult success counts"
++    ],
++    "unresolved": []
++  },
++  "delivery": {},
++  "dirty_overrides": {},
++  "checkpoint_fallback": {},
++  "parallel_analysis": {
++    "reviewed": true,
++    "found": false,
++    "note": "Per-wave parallelism annotated within tasks.md; cross-wave parallelism unsafe due to checkpoint gates.",
++    "updated_at": 1776990079
++  },
++  "init_head_sha": "424c0605a8158acfe0b3912840a6c5b2da057c84",
++  "token_usage": [
++    {
++      "stage": "spec",
++      "round": 1,
++      "activity_type": "adversarial_review",
++      "model": "gpt-5.4-mini",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-23T22:57:40.114993Z",
++      "started_at": "2026-04-23T22:55:55.351904Z",
++      "ended_at": "2026-04-23T22:57:40.114993Z",
++      "duration_seconds": 104.762181,
++      "agent_id": null,
++      "artifact_sha_at_time": "9cb38e24b630cbf08eee89873f0ce8c6cc1a002be61e9b67171e3bfd7f41a581",
++      "parse_error": "no Codex token block found in stderr"
++    },
++    {
++      "stage": "spec",
++      "round": 1,
++      "activity_type": "adversarial_review",
++      "model": "gpt-5.4-mini",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-23T22:59:22.581148Z",
++      "started_at": "2026-04-23T22:57:40.267100Z",
++      "ended_at": "2026-04-23T22:59:22.581148Z",
++      "duration_seconds": 102.313171,
++      "agent_id": null,
++      "artifact_sha_at_time": "9cb38e24b630cbf08eee89873f0ce8c6cc1a002be61e9b67171e3bfd7f41a581",
++      "parse_error": "no Codex token block found in stderr"
++    },
++    {
++      "stage": "spec",
++      "round": 1,
++      "activity_type": "adversarial_review",
++      "model": "gemini-2.5-pro",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-23T23:00:45.853211Z",
++      "started_at": "2026-04-23T22:59:22.748327Z",
++      "ended_at": "2026-04-23T23:00:45.853211Z",
++      "duration_seconds": 83.104173,
++      "agent_id": null,
++      "artifact_sha_at_time": "9cb38e24b630cbf08eee89873f0ce8c6cc1a002be61e9b67171e3bfd7f41a581",
++      "parse_error": "no Gemini token stats found in stdout"
++    },
++    {
++      "stage": "spec",
++      "round": 2,
++      "activity_type": "adversarial_review",
++      "model": "gpt-5.4-mini",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-23T23:06:56.565467Z",
++      "started_at": "2026-04-23T23:04:41.912101Z",
++      "ended_at": "2026-04-23T23:06:56.565467Z",
++      "duration_seconds": 134.652277,
++      "agent_id": null,
++      "artifact_sha_at_time": "8cb2d0927637376291a03e3fb9cd99652f9d51322cdb482a76cfac284353abf9",
++      "parse_error": "no Codex token block found in stderr"
++    },
++    {
++      "stage": "spec",
++      "round": 2,
++      "activity_type": "adversarial_review",
++      "model": "gpt-5.4-mini",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-23T23:09:31.776136Z",
++      "started_at": "2026-04-23T23:06:56.742338Z",
++      "ended_at": "2026-04-23T23:09:31.776136Z",
++      "duration_seconds": 155.03252,
++      "agent_id": null,
++      "artifact_sha_at_time": "8cb2d0927637376291a03e3fb9cd99652f9d51322cdb482a76cfac284353abf9",
++      "parse_error": "no Codex token block found in stderr"
++    },
++    {
++      "stage": "spec",
++      "round": 2,
++      "activity_type": "adversarial_review",
++      "model": "gemini-2.5-pro",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-23T23:11:09.170920Z",
++      "started_at": "2026-04-23T23:09:31.962309Z",
++      "ended_at": "2026-04-23T23:11:09.170920Z",
++      "duration_seconds": 97.207861,
++      "agent_id": null,
++      "artifact_sha_at_time": "8cb2d0927637376291a03e3fb9cd99652f9d51322cdb482a76cfac284353abf9",
++      "parse_error": "no Gemini token stats found in stdout"
++    },
++    {
++      "stage": "spec",
++      "round": 2,
++      "activity_type": "adversarial_review",
++      "model": "gpt-5.4-mini",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-23T23:16:46.664172Z",
++      "started_at": "2026-04-23T23:15:05.003843Z",
++      "ended_at": "2026-04-23T23:16:46.664172Z",
++      "duration_seconds": 101.65998,
++      "agent_id": null,
++      "artifact_sha_at_time": "eaf894aba401ed706d0791df291fb7cc283da0ed7a5d1c7b7b67b57e977d729d",
++      "parse_error": "no Codex token block found in stderr"
++    },
++    {
++      "stage": "spec",
++      "round": 2,
++      "activity_type": "adversarial_review",
++      "model": "gpt-5.4-mini",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-23T23:18:42.096978Z",
++      "started_at": "2026-04-23T23:16:46.806783Z",
++      "ended_at": "2026-04-23T23:18:42.096978Z",
++      "duration_seconds": 115.289265,
++      "agent_id": null,
++      "artifact_sha_at_time": "eaf894aba401ed706d0791df291fb7cc283da0ed7a5d1c7b7b67b57e977d729d",
++      "parse_error": "no Codex token block found in stderr"
++    },
++    {
++      "stage": "spec",
++      "round": 2,
++      "activity_type": "adversarial_review",
++      "model": "gemini-2.5-pro",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-23T23:19:53.630898Z",
++      "started_at": "2026-04-23T23:18:42.294455Z",
++      "ended_at": "2026-04-23T23:19:53.630898Z",
++      "duration_seconds": 71.335838,
++      "agent_id": null,
++      "artifact_sha_at_time": "eaf894aba401ed706d0791df291fb7cc283da0ed7a5d1c7b7b67b57e977d729d",
++      "parse_error": "no Gemini token stats found in stdout"
++    },
++    {
++      "stage": "spec",
++      "round": 3,
++      "activity_type": "adversarial_review",
++      "model": "gpt-5.4-mini",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-23T23:23:57.546188Z",
++      "started_at": "2026-04-23T23:21:34.408863Z",
++      "ended_at": "2026-04-23T23:23:57.546188Z",
++      "duration_seconds": 143.136175,
++      "agent_id": null,
++      "artifact_sha_at_time": "23041c8d1b08e880ba8abb1fbf701cc6a51e9d309d6e71d419a7a43be3c17b2f",
++      "parse_error": "no Codex token block found in stderr"
++    },
++    {
++      "stage": "spec",
++      "round": 3,
++      "activity_type": "adversarial_review",
++      "model": "gpt-5.4-mini",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-23T23:25:29.402553Z",
++      "started_at": "2026-04-23T23:23:57.711092Z",
++      "ended_at": "2026-04-23T23:25:29.402553Z",
++      "duration_seconds": 91.690675,
++      "agent_id": null,
++      "artifact_sha_at_time": "23041c8d1b08e880ba8abb1fbf701cc6a51e9d309d6e71d419a7a43be3c17b2f",
++      "parse_error": "no Codex token block found in stderr"
++    },
++    {
++      "stage": "spec",
++      "round": 3,
++      "activity_type": "adversarial_review",
++      "model": "gemini-2.5-pro",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-23T23:27:00.556737Z",
++      "started_at": "2026-04-23T23:25:29.539101Z",
++      "ended_at": "2026-04-23T23:27:00.556737Z",
++      "duration_seconds": 91.016913,
++      "agent_id": null,
++      "artifact_sha_at_time": "23041c8d1b08e880ba8abb1fbf701cc6a51e9d309d6e71d419a7a43be3c17b2f",
++      "parse_error": "no Gemini token stats found in stdout"
++    },
++    {
++      "stage": "spec",
++      "round": 1,
++      "activity_type": "judge_panel",
++      "model": "gpt-5.4",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-23T23:27:42.705930Z",
++      "started_at": "2026-04-23T23:27:13.148016Z",
++      "ended_at": "2026-04-23T23:27:42.705930Z",
++      "duration_seconds": 29.557735,
++      "agent_id": null,
++      "artifact_sha_at_time": "23041c8d1b08e880ba8abb1fbf701cc6a51e9d309d6e71d419a7a43be3c17b2f",
++      "parse_error": "no Codex token block found in stderr"
++    },
++    {
++      "stage": "spec",
++      "round": 1,
++      "activity_type": "judge_panel",
++      "model": "gpt-5.4",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-23T23:28:06.993540Z",
++      "started_at": "2026-04-23T23:27:42.707385Z",
++      "ended_at": "2026-04-23T23:28:06.993540Z",
++      "duration_seconds": 24.286,
++      "agent_id": null,
++      "artifact_sha_at_time": "23041c8d1b08e880ba8abb1fbf701cc6a51e9d309d6e71d419a7a43be3c17b2f",
++      "parse_error": "no Codex token block found in stderr"
++    },
++    {
++      "stage": "spec",
++      "round": 1,
++      "activity_type": "judge_panel",
++      "model": "gpt-5.4-mini",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-23T23:28:09.353175Z",
++      "started_at": "2026-04-23T23:27:13.147833Z",
++      "ended_at": "2026-04-23T23:28:09.353175Z",
++      "duration_seconds": 56.204801,
++      "agent_id": null,
++      "artifact_sha_at_time": "23041c8d1b08e880ba8abb1fbf701cc6a51e9d309d6e71d419a7a43be3c17b2f",
++      "parse_error": "no Codex token block found in stderr"
++    },
++    {
++      "stage": "spec",
++      "round": 1,
++      "activity_type": "judge_panel",
++      "model": "gpt-5.4-mini",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-23T23:28:29.933649Z",
++      "started_at": "2026-04-23T23:28:09.354100Z",
++      "ended_at": "2026-04-23T23:28:29.933649Z",
++      "duration_seconds": 20.579442,
++      "agent_id": null,
++      "artifact_sha_at_time": "23041c8d1b08e880ba8abb1fbf701cc6a51e9d309d6e71d419a7a43be3c17b2f",
++      "parse_error": "no Codex token block found in stderr"
++    },
++    {
++      "stage": "spec",
++      "round": 1,
++      "activity_type": "judge_panel",
++      "model": "claude-sonnet-4-6",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-23T23:29:23.406434Z",
++      "started_at": "2026-04-23T23:27:13.148103Z",
++      "ended_at": "2026-04-23T23:29:23.406434Z",
++      "duration_seconds": 130.257394,
++      "agent_id": null,
++      "artifact_sha_at_time": "23041c8d1b08e880ba8abb1fbf701cc6a51e9d309d6e71d419a7a43be3c17b2f",
++      "parse_error": "no Claude token counts found in stdout or stderr"
++    },
++    {
++      "stage": "spec",
++      "round": 1,
++      "activity_type": "judge_panel",
++      "model": "claude-sonnet-4-6",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-23T23:31:02.665066Z",
++      "started_at": "2026-04-23T23:29:23.408033Z",
++      "ended_at": "2026-04-23T23:31:02.665066Z",
++      "duration_seconds": 99.256341,
++      "agent_id": null,
++      "artifact_sha_at_time": "23041c8d1b08e880ba8abb1fbf701cc6a51e9d309d6e71d419a7a43be3c17b2f",
++      "parse_error": "no Claude token counts found in stdout or stderr"
++    },
++    {
++      "stage": "spec",
++      "round": 2,
++      "activity_type": "judge_panel",
++      "model": "gpt-5.4",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-23T23:34:20.640476Z",
++      "started_at": "2026-04-23T23:33:54.215074Z",
++      "ended_at": "2026-04-23T23:34:20.640476Z",
++      "duration_seconds": 26.425252,
++      "agent_id": null,
++      "artifact_sha_at_time": "23041c8d1b08e880ba8abb1fbf701cc6a51e9d309d6e71d419a7a43be3c17b2f",
++      "parse_error": "no Codex token block found in stderr"
++    },
++    {
++      "stage": "spec",
++      "round": 2,
++      "activity_type": "judge_panel",
++      "model": "gpt-5.4-mini",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-23T23:34:26.109918Z",
++      "started_at": "2026-04-23T23:33:54.214772Z",
++      "ended_at": "2026-04-23T23:34:26.109918Z",
++      "duration_seconds": 31.894737,
++      "agent_id": null,
++      "artifact_sha_at_time": "23041c8d1b08e880ba8abb1fbf701cc6a51e9d309d6e71d419a7a43be3c17b2f",
++      "parse_error": "no Codex token block found in stderr"
++    },
++    {
++      "stage": "spec",
++      "round": 2,
++      "activity_type": "judge_panel",
++      "model": "gpt-5.4",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-23T23:34:38.223019Z",
++      "started_at": "2026-04-23T23:34:20.641969Z",
++      "ended_at": "2026-04-23T23:34:38.223019Z",
++      "duration_seconds": 17.580947,
++      "agent_id": null,
++      "artifact_sha_at_time": "23041c8d1b08e880ba8abb1fbf701cc6a51e9d309d6e71d419a7a43be3c17b2f",
++      "parse_error": "no Codex token block found in stderr"
++    },
++    {
++      "stage": "spec",
++      "round": 2,
++      "activity_type": "judge_panel",
++      "model": "gpt-5.4-mini",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-23T23:34:54.829602Z",
++      "started_at": "2026-04-23T23:34:26.111273Z",
++      "ended_at": "2026-04-23T23:34:54.829602Z",
++      "duration_seconds": 28.718126,
++      "agent_id": null,
++      "artifact_sha_at_time": "23041c8d1b08e880ba8abb1fbf701cc6a51e9d309d6e71d419a7a43be3c17b2f",
++      "parse_error": "no Codex token block found in stderr"
++    },
++    {
++      "stage": "spec",
++      "round": 2,
++      "activity_type": "judge_panel",
++      "model": "claude-sonnet-4-6",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-23T23:36:54.231085Z",
++      "started_at": "2026-04-23T23:33:54.215028Z",
++      "ended_at": "2026-04-23T23:36:54.231085Z",
++      "duration_seconds": 180.014761,
++      "agent_id": null,
++      "artifact_sha_at_time": "23041c8d1b08e880ba8abb1fbf701cc6a51e9d309d6e71d419a7a43be3c17b2f",
++      "parse_error": "no Claude token counts found in stdout or stderr"
++    },
++    {
++      "stage": "spec",
++      "round": 2,
++      "activity_type": "judge_panel",
++      "model": "claude-sonnet-4-6",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-23T23:37:14.115725Z",
++      "started_at": "2026-04-23T23:36:54.232324Z",
++      "ended_at": "2026-04-23T23:37:14.115725Z",
++      "duration_seconds": 19.883285,
++      "agent_id": null,
++      "artifact_sha_at_time": "23041c8d1b08e880ba8abb1fbf701cc6a51e9d309d6e71d419a7a43be3c17b2f",
++      "parse_error": "no Claude token counts found in stdout or stderr"
++    },
++    {
++      "stage": "spec",
++      "round": 3,
++      "activity_type": "judge_panel",
++      "model": "gpt-5.4-mini",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-23T23:38:28.828603Z",
++      "started_at": "2026-04-23T23:38:07.695269Z",
++      "ended_at": "2026-04-23T23:38:28.828603Z",
++      "duration_seconds": 21.133018,
++      "agent_id": null,
++      "artifact_sha_at_time": "23041c8d1b08e880ba8abb1fbf701cc6a51e9d309d6e71d419a7a43be3c17b2f",
++      "parse_error": "no Codex token block found in stderr"
++    },
++    {
++      "stage": "spec",
++      "round": 3,
++      "activity_type": "judge_panel",
++      "model": "gpt-5.4",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-23T23:38:36.608135Z",
++      "started_at": "2026-04-23T23:38:07.697163Z",
++      "ended_at": "2026-04-23T23:38:36.608135Z",
++      "duration_seconds": 28.910772,
++      "agent_id": null,
++      "artifact_sha_at_time": "23041c8d1b08e880ba8abb1fbf701cc6a51e9d309d6e71d419a7a43be3c17b2f",
++      "parse_error": "no Codex token block found in stderr"
++    },
++    {
++      "stage": "spec",
++      "round": 3,
++      "activity_type": "judge_panel",
++      "model": "gpt-5.4",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-23T23:38:56.624306Z",
++      "started_at": "2026-04-23T23:38:36.609543Z",
++      "ended_at": "2026-04-23T23:38:56.624306Z",
++      "duration_seconds": 20.014637,
++      "agent_id": null,
++      "artifact_sha_at_time": "23041c8d1b08e880ba8abb1fbf701cc6a51e9d309d6e71d419a7a43be3c17b2f",
++      "parse_error": "no Codex token block found in stderr"
++    },
++    {
++      "stage": "spec",
++      "round": 3,
++      "activity_type": "judge_panel",
++      "model": "gpt-5.4-mini",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-23T23:39:14.565531Z",
++      "started_at": "2026-04-23T23:38:28.830181Z",
++      "ended_at": "2026-04-23T23:39:14.565531Z",
++      "duration_seconds": 45.735025,
++      "agent_id": null,
++      "artifact_sha_at_time": "23041c8d1b08e880ba8abb1fbf701cc6a51e9d309d6e71d419a7a43be3c17b2f",
++      "parse_error": "no Codex token block found in stderr"
++    },
++    {
++      "stage": "spec",
++      "round": 3,
++      "activity_type": "judge_panel",
++      "model": "claude-sonnet-4-6",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-23T23:40:05.797508Z",
++      "started_at": "2026-04-23T23:38:07.698548Z",
++      "ended_at": "2026-04-23T23:40:05.797508Z",
++      "duration_seconds": 118.098113,
++      "agent_id": null,
++      "artifact_sha_at_time": "23041c8d1b08e880ba8abb1fbf701cc6a51e9d309d6e71d419a7a43be3c17b2f",
++      "parse_error": "no Claude token counts found in stdout or stderr"
++    },
++    {
++      "stage": "spec",
++      "round": 3,
++      "activity_type": "judge_panel",
++      "model": "claude-sonnet-4-6",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-23T23:41:39.575818Z",
++      "started_at": "2026-04-23T23:40:05.799000Z",
++      "ended_at": "2026-04-23T23:41:39.575818Z",
++      "duration_seconds": 93.776172,
++      "agent_id": null,
++      "artifact_sha_at_time": "23041c8d1b08e880ba8abb1fbf701cc6a51e9d309d6e71d419a7a43be3c17b2f",
++      "parse_error": "no Claude token counts found in stdout or stderr"
++    },
++    {
++      "stage": "plan",
++      "round": 1,
++      "activity_type": "adversarial_review",
++      "model": "gpt-5.4-mini",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-23T23:58:20.192321Z",
++      "started_at": "2026-04-23T23:57:20.800853Z",
++      "ended_at": "2026-04-23T23:58:20.192321Z",
++      "duration_seconds": 59.390729,
++      "agent_id": null,
++      "artifact_sha_at_time": "70a3334afd7e8bc9903950f604eacd4648edb2b4809a6340c34e28619a79f9ef",
++      "parse_error": "no Codex token block found in stderr"
++    },
++    {
++      "stage": "plan",
++      "round": 1,
++      "activity_type": "adversarial_review",
++      "model": "gpt-5.4-mini",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-23T23:59:15.412069Z",
++      "started_at": "2026-04-23T23:58:20.338721Z",
++      "ended_at": "2026-04-23T23:59:15.412069Z",
++      "duration_seconds": 55.072867,
++      "agent_id": null,
++      "artifact_sha_at_time": "70a3334afd7e8bc9903950f604eacd4648edb2b4809a6340c34e28619a79f9ef",
++      "parse_error": "no Codex token block found in stderr"
++    },
++    {
++      "stage": "plan",
++      "round": 1,
++      "activity_type": "adversarial_review",
++      "model": "gemini-2.5-pro",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-24T00:01:06.899481Z",
++      "started_at": "2026-04-23T23:59:15.575813Z",
++      "ended_at": "2026-04-24T00:01:06.899481Z",
++      "duration_seconds": 111.322777,
++      "agent_id": null,
++      "artifact_sha_at_time": "70a3334afd7e8bc9903950f604eacd4648edb2b4809a6340c34e28619a79f9ef",
++      "parse_error": "no Gemini token stats found in stdout"
++    },
++    {
++      "stage": "plan",
++      "round": 2,
++      "activity_type": "adversarial_review",
++      "model": "gpt-5.4-mini",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-24T00:10:55.078458Z",
++      "started_at": "2026-04-24T00:09:18.792372Z",
++      "ended_at": "2026-04-24T00:10:55.078458Z",
++      "duration_seconds": 96.285286,
++      "agent_id": null,
++      "artifact_sha_at_time": "3aff1bdb8a9ee5d3d9ebcdd14a4122637e5ebf14293ceda7debe9492a3d69714",
++      "parse_error": "no Codex token block found in stderr"
++    },
++    {
++      "stage": "plan",
++      "round": 2,
++      "activity_type": "adversarial_review",
++      "model": "gpt-5.4-mini",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-24T00:13:01.682637Z",
++      "started_at": "2026-04-24T00:10:55.259118Z",
++      "ended_at": "2026-04-24T00:13:01.682637Z",
++      "duration_seconds": 126.422539,
++      "agent_id": null,
++      "artifact_sha_at_time": "3aff1bdb8a9ee5d3d9ebcdd14a4122637e5ebf14293ceda7debe9492a3d69714",
++      "parse_error": "no Codex token block found in stderr"
++    },
++    {
++      "stage": "plan",
++      "round": 2,
++      "activity_type": "adversarial_review",
++      "model": "gemini-2.5-pro",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-24T00:14:24.838598Z",
++      "started_at": "2026-04-24T00:13:01.842555Z",
++      "ended_at": "2026-04-24T00:14:24.838598Z",
++      "duration_seconds": 82.995361,
++      "agent_id": null,
++      "artifact_sha_at_time": "3aff1bdb8a9ee5d3d9ebcdd14a4122637e5ebf14293ceda7debe9492a3d69714",
++      "parse_error": "no Gemini token stats found in stdout"
++    },
++    {
++      "stage": "tasks",
++      "round": 1,
++      "activity_type": "adversarial_review",
++      "model": "gpt-5.4-mini",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-24T00:22:07.979181Z",
++      "started_at": "2026-04-24T00:21:24.926999Z",
++      "ended_at": "2026-04-24T00:22:07.979181Z",
++      "duration_seconds": 43.051757,
++      "agent_id": null,
++      "artifact_sha_at_time": "32129082d2a1ada79e77b2873e32c01e1b229fd8122f65ca42efe4c0472a8231",
++      "parse_error": "no Codex token block found in stderr"
++    },
++    {
++      "stage": "tasks",
++      "round": 1,
++      "activity_type": "adversarial_review",
++      "model": "gpt-5.4-mini",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-24T00:22:47.569204Z",
++      "started_at": "2026-04-24T00:22:08.173060Z",
++      "ended_at": "2026-04-24T00:22:47.569204Z",
++      "duration_seconds": 39.395761,
++      "agent_id": null,
++      "artifact_sha_at_time": "32129082d2a1ada79e77b2873e32c01e1b229fd8122f65ca42efe4c0472a8231",
++      "parse_error": "no Codex token block found in stderr"
++    },
++    {
++      "stage": "tasks",
++      "round": 1,
++      "activity_type": "adversarial_review",
++      "model": "gemini-2.5-pro",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-24T00:23:59.222290Z",
++      "started_at": "2026-04-24T00:22:47.746510Z",
++      "ended_at": "2026-04-24T00:23:59.222290Z",
++      "duration_seconds": 71.475164,
++      "agent_id": null,
++      "artifact_sha_at_time": "32129082d2a1ada79e77b2873e32c01e1b229fd8122f65ca42efe4c0472a8231",
++      "parse_error": "no Gemini token stats found in stdout"
++    },
++    {
++      "stage": "tasks",
++      "round": 1,
++      "activity_type": "implementation",
++      "model": "gpt-5.4-mini",
++      "input_tokens": null,
++      "output_tokens": null,
++      "cost_usd_estimate": null,
++      "timestamp": "2026-04-24T00:33:13.463840Z",
++      "started_at": "2026-04-24T00:24:44.902605Z",
++      "ended_at": "2026-04-24T00:33:13.463840Z",
++      "duration_seconds": 508.557051,
++      "agent_id": null,
++      "artifact_sha_at_time": "32129082d2a1ada79e77b2873e32c01e1b229fd8122f65ca42efe4c0472a8231",
++      "parse_error": "no Codex token block found in stderr"
++    }
++  ],
++  "stages": {
++    "spec": {
++      "adversarial_rounds": 3,
++      "judge_rounds": 3,
++      "judge_verdicts": [
++        [
++          {
++            "judge": "completeness",
++            "model": "gpt-5.4",
++            "verdict": "block",
++            "confidence": 4,
++            "reasoning": "spec.codex.edge-cases-adversarial.review#high-1 is not addressed: the late-transcript repair text only reruns triggerBasicAnalysis and does not name queueComputeTokenStats or deductActualProviderBalancesForRun. spec.codex.feasibility-adversarial.review#high-1 is addressed in Design -> Completion CAS, which explicitly says it replaces the read-then-write in progress.ts:140. spec.codex.feasibility-adversarial.review#high-2 is addressed in Reconciliation sweep scheduling and the recovery.ts scope note, which says recovery must route through maybeAdvanceRunStatus or be removed. spec.gemini.requirements-adversarial.review#high-1 is not addressed: the migration still uses decision_text LIKE 'Summary failed%' and there is no explicit acceptance of that brittleness. spec.gemini.requirements-adversarial.review#high-2 is addressed in Residual Risks, which names the probe_results(run_id, status) plan and says to add or confirm indexes if the plan is sequential. Because two HIGH findings lack a clear named mitigation or accepted limitation, the correct verdict is block.",
++            "evidence": [
++              {
++                "artifact": "SPEC",
++                "section": "Design -> Re-triggering analysis when a late transcript is summarized on a COMPLETED run",
++                "quote": "calls triggerBasicAnalysis(runId) to refresh analysis"
++              },
++              {
++                "artifact": "SPEC",
++                "section": "Design -> Completion CAS",
++                "quote": "Replaces the read-then-write in progress.ts:140"
++              },
++              {
++                "artifact": "SPEC",
++                "section": "Files in Scope -> cloud/apps/api/src/services/run/recovery.ts",
++                "quote": "must route through maybeAdvanceRunStatus or be removed"
++              },
++              {
++                "artifact": "SPEC",
++                "section": "Design -> Summarize failure accounting (MANDATORY \u2014 no option) / Migration and cutover",
++                "quote": "UPDATE transcripts SET summarize_failed_at = summarized_at, summarized_at = NULL WHERE decision_text LIKE 'Summary failed%'"
++              },
++              {
++                "artifact": "SPEC",
++                "section": "Residual Risks",
++                "quote": "confirm indexed plan on probe_results(run_id, status) and transcripts(run_id, summarized_at); add/confirm indexes if plan is sequential"
++              }
++            ],
++            "timestamp": "2026-04-23T12:00:00Z"
++          },
++          {
++            "judge": "restatement",
++            "model": "GPT-5",
++            "verdict": "block",
++            "confidence": 5,
++            "reasoning": "All latest-round findings are NEW, not restatements, because the record explicitly says there were no earlier findings and therefore no earlier orchestrator responses that could have substantively addressed any shared concern. The latest round surfaces multiple distinct failure modes that were not previously covered: missing reruns of completion side effects after late transcript repair; stale stalled-model metadata after CAS completion updates; possible progress-percentage divergence from deprecated counters; fragile migration logic keyed to error-message text; missing composite indexing for a critical query path; inconsistent handling of PAUSED runs in reconciliation; direct status writes in recovery that bypass the new completion guardrails; a summarize-failure livelock loop; and reliance on launch-time total counts as a single point of failure. Because 0% of the latest findings are restatements, the loop is still producing signal and should be blocked from proceeding.",
++            "evidence": [
++              {
++                "artifact": "earlier-rounds",
++                "section": "prior-findings",
++                "quote": "No prior findings yet."
++              },
++              {
++                "artifact": "spec.codex.edge-cases-adversarial.review.md",
++                "section": "high-1",
++                "quote": "The late-transcript repair path only reruns `triggerBasicAnalysis(runId)` for a `COMPLETED` run... the spec does not rerun those two side effects after a late transcript is summarized, a run can be published with stale token stats and stale balance accounting forever."
++              },
++              {
++                "artifact": "spec.codex.edge-cases-adversarial.review.md",
++                "section": "medium-2",
++                "quote": "The proposed CAS SQL drops the existing `stalled_models` reset... completed runs will retain stale stalled-model metadata and any downstream UI or alerting that reads it will be wrong."
++              },
++              {
++                "artifact": "spec.codex.edge-cases-adversarial.review.md",
++                "section": "low-3",
++                "quote": "`progress.ts` still exposes `calculatePercentComplete(progress)` from the deprecated JSONB counters. If any resolver or UI path keeps calling that helper after cutover, the new derived progress numbers and the displayed percentage will diverge."
++              },
++              {
++                "artifact": "spec.gemini.requirements-adversarial.review.md",
++                "section": "high-1",
++                "quote": "The proposed data backfill to populate the new `summarizeFailedAt` column relies on a `LIKE 'Summary failed%'` string match against `decisionText`. This is brittle."
++              },
++              {
++                "artifact": "spec.gemini.requirements-adversarial.review.md",
++                "section": "high-2",
++                "quote": "The provided `schema.prisma` shows separate indexes on `runId` and `status`, but lacks a composite index on `(runId, status)`."
++              },
++              {
++                "artifact": "spec.gemini.requirements-adversarial.review.md",
++                "section": "medium-3",
++                "quote": "several other parts of the design described in the spec omit `PAUSED`... a run that becomes stuck while `PAUSED` would not be picked up by the reconciliation sweep"
++              },
++              {
++                "artifact": "spec.gemini.requirements-adversarial.review.md",
++                "section": "medium-4",
++                "quote": "`cloud/apps/api/src/services/run/recovery.ts` was missed in the initial scope... logic to directly update a run's status to `COMPLETED` ... bypasses the entire new system of derived-count checks and atomic CAS updates."
++              },
++              {
++                "artifact": "spec.gemini.requirements-adversarial.review.md",
++                "section": "medium-5",
++                "quote": "A transcript with `summarizeFailedAt` set would appear \"pending\" to the handler... creating a persistent, useless job-queueing loop and wasting resources."
++              },
++              {
++                "artifact": "spec.gemini.requirements-adversarial.review.md",
++                "section": "low-6",
++                "quote": "the completion logic remains vulnerable to this single point of failure."
++              }
++            ],
++            "timestamp": "2026-04-23T00:00:00-07:00"
++          },
++          {
++            "judge": "implementation-risk",
++            "model": "claude-sonnet-4-6",
++            "verdict": "block",
++            "confidence": 4,
++            "reasoning": "Three load-bearing ambiguities would cause an implementer to guess wrong or ship a silent bug. (1) The control flow of maybeAdvanceRunStatus is underspecified: 'if that succeeds, SUMMARIZING \u2192 COMPLETED' strongly implies the second CAS only runs when the first CAS flipped a row. An implementer following this literally writes the conditional form, meaning summarize handlers\u2014which are called when a run is already in SUMMARIZING\u2014would never trigger SUMMARIZING\u2192COMPLETED via this function, breaking event-driven completion for the entire summarize path. The 'if either changed a row' clause in the same sentence is contradictory and does not resolve the ambiguity. (2) The Edge Cases table instructs the implementer that 'PROBE_COUNT_OVERFLOW fires' for a progress.total mismatch, but the Anomaly Catalog section explicitly drops that type and replaces it with SCHEDULED_COUNT_MISMATCH. An implementer reading both sections would implement a dropped anomaly type for that case. (3) MODEL_TRANSCRIPT_SHORTFALL detection requires querying RunScenarioSelection for per-model scheduled counts, but no schema, field names, or file path is provided\u2014only the clue that it is 'already used by recovery/coverage logic,' leaving the implementer to discover the shape of this table from the existing codebase.",
++            "evidence": [
++              {
++                "artifact": "spec",
++                "section": "Event-driven trigger \u2014 unchanged call sites, new implementation",
++                "quote": "The new function runs both CAS UPDATEs in order (RUNNING \u2192 SUMMARIZING first; if that succeeds, SUMMARIZING \u2192 COMPLETED; if either changed a row, runs the appropriate side effects)."
++              },
++              {
++                "artifact": "spec",
++                "section": "Edge Cases",
++                "quote": "A run has `progress.total` mismatch \u2014 e.g., user started 200 probes but `progress.total` says 180 | Anomaly `PROBE_COUNT_OVERFLOW` fires if actuals exceed declared; the derived `progress.total` continues to show the declared value. Operator follow-up is manual."
++              },
++              {
++                "artifact": "spec",
++                "section": "Anomaly catalog \u2014 Catalog change during review",
++                "quote": "PROBE_COUNT_OVERFLOW was replaced with SCHEDULED_COUNT_MISMATCH during spec review because the ProbeResult unique constraint makes count > total impossible under the new data model. It is replaced by SCHEDULED_COUNT_MISMATCH, which detects the actual real-world problem \u2014 a wrong-valued `progress.total`."
++              },
++              {
++                "artifact": "spec",
++                "section": "Anomaly catalog \u2014 MODEL_TRANSCRIPT_SHORTFALL",
++                "quote": "The scheduled count per model comes from `RunScenarioSelection` rows for the run, not `Run.config.scenarioIds`. `RunScenarioSelection` is the canonical source and already used by recovery/coverage logic."
++              }
++            ],
++            "timestamp": "2026-04-23T00:00:00Z"
++          }
++        ],
++        [
++          {
++            "judge": "completeness",
++            "model": "gpt-5.4",
++            "verdict": "proceed",
++            "confidence": 4,
++            "reasoning": "spec.codex.edge-cases-adversarial.review#high-1 is addressed in SPEC under \"Re-triggering post-completion side effects when a late transcript is summarized on a COMPLETED run,\" which explicitly reruns triggerBasicAnalysis, queueComputeTokenStats, and deductActualProviderBalancesForRun after late summarization; this is specific enough to implement. spec.codex.feasibility-adversarial.review#high-1 is addressed in SPEC under the `cloud/apps/api/src/services/run/progress.ts` entry and the \"Completion CAS\" section, which remove the 5-second settle-timeout branch and replace the old flow with the named `maybeAdvanceRunStatus` CAS path; this is specific enough to implement. spec.codex.feasibility-adversarial.review#high-2 is addressed in SPEC under the `cloud/apps/api/src/services/run/recovery.ts` entry, which says the stuck-run path \"must route through maybeAdvanceRunStatus\" or be removed; this is specific enough to implement. spec.gemini.requirements-adversarial.review#high-1 is acknowledged as a limitation in \"Migration brittleness acceptance,\" where the LIKE-based backfill is explicitly accepted; this is specific enough because the exact backfill clause is named. spec.gemini.requirements-adversarial.review#high-2 is addressed in \"Composite indexes added to existing tables,\" which adds the ProbeResult(runId,status) composite index; this is specific enough to implement.",
++            "evidence": [
++              {
++                "artifact": "SPEC",
++                "section": "Re-triggering post-completion side effects when a late transcript is summarized on a COMPLETED run",
++                "quote": "calls all three side effects"
++              },
++              {
++                "artifact": "SPEC",
++                "section": "Files in Scope: `cloud/apps/api/src/services/run/progress.ts`",
++                "quote": "remove the 5s settle-timeout branch"
++              },
++              {
++                "artifact": "SPEC",
++                "section": "Files in Scope: `cloud/apps/api/src/services/run/recovery.ts`",
++                "quote": "must route through maybeAdvanceRunStatus"
++              },
++              {
++                "artifact": "SPEC",
++                "section": "Migration brittleness acceptance",
++                "quote": "We accept it"
++              },
++              {
++                "artifact": "SPEC",
++                "section": "Composite indexes added to existing tables",
++                "quote": "composite index is required"
++              }
++            ],
++            "timestamp": "2026-04-23T00:00:00-07:00"
++          },
++          {
++            "judge": "restatement",
++            "model": "gpt-5",
++            "verdict": "block",
++            "confidence": 5,
++            "reasoning": "All 11 latest findings are NEW because the record explicitly says \"No prior findings yet,\" so there are no earlier rounds that could make any latest finding a restatement. The latest round is still surfacing substantial new concerns, not cosmetic variations. New failure modes identified include: late-transcript repair missing token-stats and balance side effects; stale `stalled_models` metadata surviving terminal transitions; possible divergence between derived progress and displayed percentage; additional high-risk issues in `progress.ts`, `recovery.ts`, and `summarize-persistence.ts` that were not previously raised in any round; brittle backfill logic based on `decisionText LIKE 'Summary failed%'`; missing composite index on `(runId, status)` for critical-path queries; inconsistent `PAUSED` handling in reconciliation; unsafe direct `COMPLETED` writes in recovery logic; summarize-failure livelock due to re-queueing failed transcripts; and continued trust in launch-time `Run.progress.total` as a fragile denominator. Because 100% of the latest findings are new relative to the provided history, the loop is not saturated and should be blocked.",
++            "evidence": [
++              {
++                "artifact": "earlier-rounds",
++                "section": "prior findings",
++                "quote": "No prior findings yet."
++              },
++              {
++                "artifact": "spec.codex.edge-cases-adversarial.review.md",
++                "section": "high-1",
++                "quote": "The late-transcript repair path only reruns `triggerBasicAnalysis(runId)` for a `COMPLETED` run, but current completion logic also performs `queueComputeTokenStats(runId)` and `deductActualProviderBalancesForRun(runId)` on the winner path."
++              },
++              {
++                "artifact": "spec.codex.edge-cases-adversarial.review.md",
++                "section": "medium-2",
++                "quote": "The proposed CAS SQL drops the existing `stalled_models` reset."
++              },
++              {
++                "artifact": "spec.gemini.requirements-adversarial.review.md",
++                "section": "high-1",
++                "quote": "The proposed data backfill to populate the new `summarizeFailedAt` column relies on a `LIKE 'Summary failed%'` string match against `decisionText`."
++              },
++              {
++                "artifact": "spec.gemini.requirements-adversarial.review.md",
++                "section": "high-2",
++                "quote": "The provided `schema.prisma` shows separate indexes on `runId` and `status`, but lacks a composite index on `(runId, status)`."
++              },
++              {
++                "artifact": "spec.gemini.requirements-adversarial.review.md",
++                "section": "medium-4",
++                "quote": "This file contains logic to directly update a run's status to `COMPLETED` (`data: { status: 'COMPLETED' }`)."
++              },
++              {
++                "artifact": "spec.gemini.requirements-adversarial.review.md",
++                "section": "medium-5",
++                "quote": "A transcript with `summarizeFailedAt` set would appear \"pending\" to the handler... creating a persistent, useless job-queueing loop and wasting resources."
++              }
++            ],
++            "timestamp": "2026-04-23T00:00:00-07:00"
++          },
++          {
++            "judge": "implementation-risk",
++            "model": "claude-sonnet-4-5",
++            "verdict": "proceed-with-annotation",
++            "confidence": 3,
++            "reasoning": "The spec is unusually thorough and closes most ambiguities explicitly. Four real implementation snags remain: (1) The idempotency contract for deductActualProviderBalancesForRun is deferred to plan phase with no answer in the spec \u2014 an implementer writing the late-summarization re-trigger path cannot safely call this function without knowing whether it re-debits. (2) The reconciliation sweep's step-1 scope says scan {RUNNING, SUMMARIZING, PAUSED, COMPLETED} but step-3 says skip COMPLETED for status advancement \u2014 yet the sweep is described as being enqueued only for 'non-terminal runs' in the scheduling section, creating a contradiction about whether COMPLETED runs are scanned at all. (3) The RUNNING\u2192SUMMARIZING CAS compares against (progress->>'total')::int but the spec also says SCHEDULED_COUNT_MISMATCH auto-repairs progress.total during anomaly detection \u2014 the sequencing of 'repair total' vs 'run CAS' within a single sweep tick is unspecified. (4) resolveSummarizeJob() 'already done' check update is described but its current signature/location is not given, leaving the implementer to search for it.",
++            "evidence": [
++              {
++                "artifact": "spec",
++                "section": "Design \u2014 Re-triggering post-completion side effects when a late transcript is summarized on a COMPLETED run",
++                "quote": "Each must be idempotent on its own side \u2014 plan phase verifies this, with special attention to deductActualProviderBalancesForRun which debits a balance and must either check 'already deducted for this transcript' or operate on a delta basis rather than re-deducting the full run."
++              },
++              {
++                "artifact": "spec",
++                "section": "Design \u2014 Reconciliation sweep (handler steps 1-4)",
++                "quote": "Always run steps 2 (late-transcript rescue) and 4 (anomaly scan) for runs in {RUNNING, SUMMARIZING, PAUSED, COMPLETED}. Skip entirely only for {FAILED, CANCELLED} or soft-deleted runs. Step 3 (status advancement) runs for {RUNNING, SUMMARIZING, PAUSED} only."
++              },
++              {
++                "artifact": "spec",
++                "section": "Design \u2014 Reconciliation sweep scheduling",
++                "quote": "Enqueues singleton run_state_reconcile per non-terminal run per tick."
++              },
++              {
++                "artifact": "spec",
++                "section": "Anomaly catalog \u2014 SCHEDULED_COUNT_MISMATCH",
++                "quote": "Auto-repair: when this anomaly fires, the sweep also updates Run.progress.total to the canonical derived value so the CAS predicate is unblocked"
++              },
++              {
++                "artifact": "spec",
++                "section": "Files in Scope \u2014 summarize-transcript.ts",
++                "quote": "update resolveSummarizeJob() 'already done' check to treat a transcript as terminal when EITHER summarizedAt !== null OR summarizeFailedAt !== null (otherwise failure rows look pending forever and the sweep will re-queue them indefinitely \u2014 livelock)"
++              }
++            ],
++            "timestamp": "2026-04-23T00:00:00Z"
++          }
++        ],
++        [
++          {
++            "judge": "completeness",
++            "model": "gpt-5.4",
++            "verdict": "proceed",
++            "confidence": 4,
++            "reasoning": "spec.codex.edge-cases-adversarial.review#high-1 is addressed in SPEC Design under \"Re-triggering post-completion side effects when a late transcript is summarized on a COMPLETED run\"; it explicitly reruns triggerBasicAnalysis, queueComputeTokenStats, and deductActualProviderBalancesForRun after late summarization, which is specific enough to implement. spec.codex.feasibility-adversarial.review#high-1 is addressed by the SPEC \"Completion CAS\" / US-3 atomic compare-and-swap, which replaces read-then-write with a single conditional UPDATE and rowCount winner/loser semantics; specific enough to implement. spec.codex.feasibility-adversarial.review#high-2 is addressed in SPEC Files in Scope for cloud/apps/api/src/services/run/recovery.ts and the reconciliation-sweep design; it says recovery must route through maybeAdvanceRunStatus or be removed, so the direct status-update path is named and covered. spec.gemini.requirements-adversarial.review#high-1 is explicitly acknowledged as a limitation in SPEC \"Migration brittleness acceptance\" and the migration note; the LIKE-based backfill is accepted in writing, so this counts as addressed by name. spec.gemini.requirements-adversarial.review#high-2 is addressed in the SPEC schema additions with the ProbeResult composite index @@index([runId, status]); that is a named mitigation for the performance concern and is specific enough to implement.",
++            "evidence": [
++              {
++                "artifact": "SPEC",
++                "section": "Design / Re-triggering post-completion side effects",
++                "quote": "rerun **all three side effects**: `triggerBasicAnalysis(runId)`, `queueComputeTokenStats(runId)`, and `deductActualProviderBalancesForRun(runId)`"
++              },
++              {
++                "artifact": "SPEC",
++                "section": "US-3 / Completion CAS (compare-and-swap)",
++                "quote": "Caller uses `rowCount === 1` as \"I won the race\"."
++              },
++              {
++                "artifact": "SPEC",
++                "section": "Files in Scope / cloud/apps/api/src/services/run/recovery.ts",
++                "quote": "must route through `maybeAdvanceRunStatus` or be removed"
++              },
++              {
++                "artifact": "SPEC",
++                "section": "Design / Migration brittleness acceptance",
++                "quote": "This is a text-pattern match and is inherently brittle. We accept it"
++              },
++              {
++                "artifact": "SPEC",
++                "section": "Design / Composite indexes added to existing tables",
++                "quote": "`@@index([runId, status])`"
++              }
++            ],
++            "timestamp": "2026-04-23T00:00:00Z"
++          },
++          {
++            "judge": "restatement",
++            "model": "gpt-5",
++            "verdict": "block",
++            "confidence": 5,
++            "reasoning": "All latest-round findings are NEW because the record explicitly says there were no earlier rounds to restate: \"No prior findings yet.\" That means none of the latest findings can satisfy the restatement test, which requires an earlier finding plus an orchestrator response that substantively addressed it. The latest round surfaces multiple distinct failure modes not previously covered, including stale side effects after late transcript repair, stale stalled-model metadata after CAS completion, deprecated percent-complete drift risk, brittle backfill logic for summarize failures, missing composite indexing on a critical query path, inconsistent PAUSED-state reconciliation coverage, unsafe direct completion writes in recovery logic, a summarize-failure livelock loop, and reliance on launch-time totals as a single point of failure. Because 0% of the latest findings are restatements, the loop is still producing signal rather than noise, so the correct decision is to block.",
++            "evidence": [
++              {
++                "artifact": "earlier-rounds",
++                "section": "prior-findings",
++                "quote": "No prior findings yet."
++              },
++              {
++                "artifact": "spec.codex.edge-cases-adversarial.review.md",
++                "section": "high-1",
++                "quote": "The late-transcript repair path only reruns `triggerBasicAnalysis(runId)` for a `COMPLETED` run... the spec does not rerun those two side effects after a late transcript is summarized, a run can be published with stale token stats and stale balance accounting forever."
++              },
++              {
++                "artifact": "spec.codex.edge-cases-adversarial.review.md",
++                "section": "medium-2",
++                "quote": "The proposed CAS SQL drops the existing `stalled_models` reset... completed runs will retain stale stalled-model metadata and any downstream UI or alerting that reads it will be wrong."
++              },
++              {
++                "artifact": "spec.codex.edge-cases-adversarial.review.md",
++                "section": "low-3",
++                "quote": "`progress.ts` still exposes `calculatePercentComplete(progress)` from the deprecated JSONB counters. If any resolver or UI path keeps calling that helper after cutover, the new derived progress numbers and the displayed percentage will diverge."
++              },
++              {
++                "artifact": "spec.gemini.requirements-adversarial.review.md",
++                "section": "high-1",
++                "quote": "The proposed data backfill to populate the new `summarizeFailedAt` column relies on a `LIKE 'Summary failed%'` string match against `decisionText`. This is brittle."
++              },
++              {
++                "artifact": "spec.gemini.requirements-adversarial.review.md",
++                "section": "high-2",
++                "quote": "The provided `schema.prisma` shows separate indexes on `runId` and `status`, but lacks a composite index on `(runId, status)`."
++              },
++              {
++                "artifact": "spec.gemini.requirements-adversarial.review.md",
++                "section": "medium-3",
++                "quote": "Several other parts of the design described in the spec omit `PAUSED`... a run that becomes stuck while `PAUSED` would not be picked up by the reconciliation sweep."
++              },
++              {
++                "artifact": "spec.gemini.requirements-adversarial.review.md",
++                "section": "medium-4",
++                "quote": "This file contains logic to directly update a run's status to `COMPLETED` (`data: { status: 'COMPLETED' }`). This is a significant issue because it represents a backdoor that bypasses the entire new system of derived-count checks and atomic CAS updates."
++              },
++              {
++                "artifact": "spec.gemini.requirements-adversarial.review.md",
++                "section": "medium-5",
++                "quote": "A transcript with `summarizeFailedAt` set would appear \"pending\" to the handler... creating a persistent, useless job-queueing loop and wasting resources."
++              },
++              {
++                "artifact": "spec.gemini.requirements-adversarial.review.md",
++                "section": "low-6",
++                "quote": "The `RUNNING -> SUMMARIZING` completion logic correctly uses a derived count for `completed` and `failed` probes but continues to trust `Run.progress.total` as the authoritative denominator."
++              }
++            ],
++            "timestamp": "2026-04-23T00:00:00-07:00"
++          },
++          {
++            "judge": "implementation-risk",
++            "model": "claude-sonnet-4-5",
++            "verdict": "block",
++            "confidence": 4,
++            "reasoning": "Two load-bearing decisions are explicitly deferred to 'plan phase' but the plan's Tasks section is empty, leaving them unresolved. First: whether `deductActualProviderBalancesForRun` is safe to re-invoke on a COMPLETED run. The spec names this as a financial correctness risk and says 'plan phase verifies this', but no verification or resolution appears anywhere in the artifact chain. An implementer who calls this function again for a late transcript risks double-debiting user balances with no guidance on the correct fix (full-run re-deduction vs. delta vs. idempotency guard). Second: how the reconciliation sweep integrates with the scheduler. The spec gives two structurally different options \u2014 extend the existing `runRecoveryJob` activity logic or build a separate ticker \u2014 and explicitly says 'plan phase decides', but the plan Tasks section is empty. These two options produce materially different code in `scheduler.ts` and the worker registration layer; an implementer would have to guess. Two additional risks are real but lower severity: `maybeAdvanceRunStatus` is a service-layer helper that the spec says must enqueue PgBoss jobs, but the spec does not address how the queue client reaches the service layer (the existing `progress.ts` may not have a queue dependency, and adding one may conflict with project patterns). And the migration backfill relies on the assertion that 'all success paths write a non-null `decisionMetadata`' \u2014 this is stated but not evidenced in the artifacts; a single historical transcript that is a success but has NULL `decisionMetadata` would be silently corrupted by the UPDATE.",
++            "evidence": [
++              {
++                "artifact": "spec",
++                "section": "Design \u2014 Re-triggering post-completion side effects when a late transcript is summarized on a COMPLETED run",
++                "quote": "Each must be idempotent on its own side \u2014 plan phase verifies this, with special attention to `deductActualProviderBalancesForRun` which debits a balance and must either check 'already deducted for this transcript' or operate on a delta basis rather than re-deducting the full run."
++              },
++              {
++                "artifact": "plan",
++                "section": "Tasks",
++                "quote": "--- TASKS ---\n# Tasks"
++              },
++              {
++                "artifact": "spec",
++                "section": "Design \u2014 Reconciliation sweep scheduling",
++                "quote": "Plan phase decides whether this is a change to `scheduler.ts`'s existing activity logic, or a separate ticker dedicated to reconciliation."
++              },
++              {
++                "artifact": "spec",
++                "section": "Design \u2014 Summarize job fan-out at the RUNNING \u2192 SUMMARIZING transition",
++                "quote": "When the first CAS wins, the caller enqueues a `summarize_transcript` job (singleton on `transcriptId`) for every `Transcript` row belonging to the run with `summarizedAt IS NULL AND summarizeFailedAt IS NULL AND deletedAt IS NULL`. This replaces the old 5-second settle + `queueSummarizeJobs()` path"
++              },
++              {
++                "artifact": "spec",
++                "section": "Files in Scope \u2014 migration.sql",
++                "quote": "the failure-row backfill: `UPDATE transcripts SET summarize_failed_at = summarized_at, summarized_at = NULL WHERE decision_text LIKE 'Summary failed%' AND decision_metadata IS NULL AND summarize_failed_at IS NULL` \u2014 the combined `decision_text LIKE` + `decision_metadata IS NULL` guard distinguishes failure rows from unusual-but-valid summaries"
++              }
++            ],
++            "timestamp": "2026-04-23T12:00:00Z"
++          }
++        ]
++      ],
++      "annotations": [
++        {
++          "stage": "spec",
++          "round": 2,
++          "judge": "implementation-risk",
++          "confidence": 3,
++          "reasoning": "The spec is unusually thorough and closes most ambiguities explicitly. Four real implementation snags remain: (1) The idempotency contract for deductActualProviderBalancesForRun is deferred to plan phase with no answer in the spec \u2014 an implementer writing the late-summarization re-trigger path cannot safely call this function without knowing whether it re-debits. (2) The reconciliation sweep's step-1 scope says scan {RUNNING, SUMMARIZING, PAUSED, COMPLETED} but step-3 says skip COMPLETED for status advancement \u2014 yet the sweep is described as being enqueued only for 'non-terminal runs' in the scheduling section, creating a contradiction about whether COMPLETED runs are scanned at all. (3) The RUNNING\u2192SUMMARIZING CAS compares against (progress->>'total')::int but the spec also says SCHEDULED_COUNT_MISMATCH auto-repairs progress.total during anomaly detection \u2014 the sequencing of 'repair total' vs 'run CAS' within a single sweep tick is unspecified. (4) resolveSummarizeJob() 'already done' check update is described but its current signature/location is not given, leaving the implementer to search for it.",
++          "artifact_sha_at_time": "32613ca457104617746d439d696403206c0d704d3d3391d4cf3414a4c4dcd282"
++        }
++      ],
++      "unresolved_concerns": [
++        {
++          "stage": "spec",
++          "judge": "restatement",
++          "model": "gpt-5",
++          "confidence": 5,
++          "reasoning": "All latest-round findings are NEW because the record explicitly says there were no earlier rounds to restate: \"No prior findings yet.\" That means none of the latest findings can satisfy the restatement test, which requires an earlier finding plus an orchestrator response that substantively addressed it. The latest round surfaces multiple distinct failure modes not previously covered, including stale side effects after late transcript repair, stale stalled-model metadata after CAS completion, deprecated percent-complete drift risk, brittle backfill logic for summarize failures, missing composite indexing on a critical query path, inconsistent PAUSED-state reconciliation coverage, unsafe direct completion writes in recovery logic, a summarize-failure livelock loop, and reliance on launch-time totals as a single point of failure. Because 0% of the latest findings are restatements, the loop is still producing signal rather than noise, so the correct decision is to block.",
++          "round_raised": 3,
++          "also_raised_in_round": []
++        },
++        {
++          "stage": "spec",
++          "judge": "implementation-risk",
++          "model": "claude-sonnet-4-5",
++          "confidence": 4,
++          "reasoning": "Two load-bearing decisions are explicitly deferred to 'plan phase' but the plan's Tasks section is empty, leaving them unresolved. First: whether `deductActualProviderBalancesForRun` is safe to re-invoke on a COMPLETED run. The spec names this as a financial correctness risk and says 'plan phase verifies this', but no verification or resolution appears anywhere in the artifact chain. An implementer who calls this function again for a late transcript risks double-debiting user balances with no guidance on the correct fix (full-run re-deduction vs. delta vs. idempotency guard). Second: how the reconciliation sweep integrates with the scheduler. The spec gives two structurally different options \u2014 extend the existing `runRecoveryJob` activity logic or build a separate ticker \u2014 and explicitly says 'plan phase decides', but the plan Tasks section is empty. These two options produce materially different code in `scheduler.ts` and the worker registration layer; an implementer would have to guess. Two additional risks are real but lower severity: `maybeAdvanceRunStatus` is a service-layer helper that the spec says must enqueue PgBoss jobs, but the spec does not address how the queue client reaches the service layer (the existing `progress.ts` may not have a queue dependency, and adding one may conflict with project patterns). And the migration backfill relies on the assertion that 'all success paths write a non-null `decisionMetadata`' \u2014 this is stated but not evidenced in the artifacts; a single historical transcript that is a success but has NULL `decisionMetadata` would be silently corrupted by the UPDATE.",
++          "round_raised": 3,
++          "also_raised_in_round": []
++        }
++      ],
++      "adversarial_sha_history": [
++        "9cb38e24b630cbf08eee89873f0ce8c6cc1a002be61e9b67171e3bfd7f41a581",
++        "9cb38e24b630cbf08eee89873f0ce8c6cc1a002be61e9b67171e3bfd7f41a581",
++        "9cb38e24b630cbf08eee89873f0ce8c6cc1a002be61e9b67171e3bfd7f41a581",
++        "8cb2d0927637376291a03e3fb9cd99652f9d51322cdb482a76cfac284353abf9",
++        "eaf894aba401ed706d0791df291fb7cc283da0ed7a5d1c7b7b67b57e977d729d",
++        "23041c8d1b08e880ba8abb1fbf701cc6a51e9d309d6e71d419a7a43be3c17b2f",
++        "32613ca457104617746d439d696403206c0d704d3d3391d4cf3414a4c4dcd282"
++      ],
++      "initial_sha": "9cb38e24b630cbf08eee89873f0ce8c6cc1a002be61e9b67171e3bfd7f41a581",
++      "judge_next_action": "advance"
++    },
++    "plan": {
++      "adversarial_rounds": 2,
++      "judge_rounds": 0,
++      "judge_verdicts": [],
++      "annotations": [],
++      "unresolved_concerns": [],
++      "adversarial_sha_history": [
++        "70a3334afd7e8bc9903950f604eacd4648edb2b4809a6340c34e28619a79f9ef",
++        "3aff1bdb8a9ee5d3d9ebcdd14a4122637e5ebf14293ceda7debe9492a3d69714",
++        "98bde3c334b476f668b7d13b0db672c873fe3cbba1214ca3108e6a43c7eeb25a",
++        "6da747265f6061859ed54e5cd6a18050cfb411d95a83c6e84ebf1d2b021579ed"
++      ],
++      "initial_sha": "70a3334afd7e8bc9903950f604eacd4648edb2b4809a6340c34e28619a79f9ef"
++    },
++    "tasks": {
++      "adversarial_rounds": 1,
++      "judge_rounds": 0,
++      "judge_verdicts": [],
++      "annotations": [],
++      "unresolved_concerns": [],
++      "adversarial_sha_history": [
++        "32129082d2a1ada79e77b2873e32c01e1b229fd8122f65ca42efe4c0472a8231"
++      ],
++      "initial_sha": "32129082d2a1ada79e77b2873e32c01e1b229fd8122f65ca42efe4c0472a8231"
++    }
++  },
++  "schema_version": 2,
++  "checkpoint_progress": {
++    "index": 0,
++    "markers_sha": "",
++    "last_diff_head_sha": ""
++  },
++  "spec_adversarial_rounds": 3,
++  "last_action_result": {
++    "next": "dispatch_next_slice_to_codex",
++    "reason": "tasks checkpoint completed",
++    "blockers": []
++  },
++  "spec_judge_rounds": 3,
++  "plan_adversarial_rounds": 2,
++  "tasks_adversarial_rounds": 1
++}
+\ No newline at end of file
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_deliver.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_deliver.py
+index 45fe8a17..e313f0c8 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_deliver.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_deliver.py
+@@ -236,24 +236,17 @@ class FactoryDeliverTests(unittest.TestCase):
+         override = state["override"]
+         self.assertEqual(override["reason"], "judge calibration")
+         self.assertEqual(override["operator_id"], "test-operator")
+-        self.assertEqual(override["affected_concerns"], [
+-            {
+-                "stage": "plan",
+-                "round": 2,
+-                "judge": "completeness",
+-                "confidence": 4,
+-                "reasoning": "Missing rollback path.",
+-                "also_raised_in_round": [1, 2],
+-            },
+-            {
+-                "stage": "tasks",
+-                "round": 3,
+-                "judge": "implementation-risk",
+-                "confidence": 3,
+-                "reasoning": "Merge wait may stall forever.",
+-                "also_raised_in_round": [2, 3],
+-            },
+-        ])
++        # Concerns now carry backfilled id + lifecycle fields (FR-011a). Check the
++        # stable subset rather than exact equality.
++        affected = override["affected_concerns"]
++        self.assertEqual(len(affected), 2)
++        self.assertEqual(affected[0]["stage"], "plan")
++        self.assertEqual(affected[0]["judge"], "completeness")
++        self.assertEqual(affected[0]["reasoning"], "Missing rollback path.")
++        self.assertTrue(affected[0].get("id"))
++        self.assertEqual(affected[1]["stage"], "tasks")
++        self.assertEqual(affected[1]["judge"], "implementation-risk")
++        self.assertTrue(affected[1].get("id"))
+         self.assertTrue(captured_bodies)
+         self.assertIn(FACTORY_PR_BODY.SENTINEL_BEGIN, captured_bodies[0])
+         self.assertIn("## ⚠ Shipped over judge objection", captured_bodies[0])
+@@ -376,7 +369,9 @@ class FactoryDeliverTests(unittest.TestCase):
+                 "- keep this exactly as written",
+             ]
+         )
+-        expected_block = FACTORY_PR_BODY.render_judge_panel_block(state)
++        # Reload state so expected reflects the backfilled concern fields (FR-011a).
++        loaded_state = FACTORY_STATE.load_workflow_state(SLUG)
++        expected_block = FACTORY_PR_BODY.render_judge_panel_block(loaded_state)
+         expected_body, _ = FACTORY_PR_BODY.upsert_judge_panel_block(existing_body, expected_block)
+ 
+         captured_bodies: list[str] = []
+@@ -422,7 +417,8 @@ class FactoryDeliverTests(unittest.TestCase):
+                 "No judge block has ever been inserted here.",
+             ]
+         )
+-        expected_block = FACTORY_PR_BODY.render_judge_panel_block(state)
++        loaded_state = FACTORY_STATE.load_workflow_state(SLUG)
++        expected_block = FACTORY_PR_BODY.render_judge_panel_block(loaded_state)
+         expected_body = f"{expected_block}\n\n{existing_body}"
+ 
+         captured_bodies: list[str] = []
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_invariants.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_invariants.py
+new file mode 100644
+index 00000000..712a992c
+--- /dev/null
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_invariants.py
+@@ -0,0 +1,149 @@
++import importlib.util
++import io
++import sys
++import unittest
++from pathlib import Path
++
++
++SCRIPTS_DIR = Path(__file__).resolve().parents[1]
++if str(SCRIPTS_DIR) not in sys.path:
++    sys.path.insert(0, str(SCRIPTS_DIR))
++
++# factory_invariants imports factory_state — load factory_state first so its
++# module cache entry is warm for the invariants module.
++import factory_state  # noqa: E402, F401
++import factory_invariants as FI  # noqa: E402
++
++
++def _state_with_advance(stage: str, judge_next_action: str = "advance") -> dict:
++    return {
++        "stages": {
++            stage: {
++                "adversarial_rounds": 3,
++                "judge_rounds": 3,
++                "judge_next_action": judge_next_action,
++            }
++        },
++        "invariant_warnings": [],
++    }
++
++
++class RunInvariantChecksTests(unittest.TestCase):
++    def setUp(self) -> None:
++        FI.JSON_MODE = False
++        self._stdout = sys.stdout
++        self._stderr = sys.stderr
++        sys.stdout = io.StringIO()
++        sys.stderr = io.StringIO()
++
++    def tearDown(self) -> None:
++        sys.stdout = self._stdout
++        sys.stderr = self._stderr
++
++    def test_contradiction_appends_warning_and_prints_to_stderr(self) -> None:
++        state = _state_with_advance("spec")
++        appended = FI.run_invariant_checks(state, "auto-reconcile", "repair_spec_checkpoint")
++
++        self.assertEqual(len(appended), 1)
++        self.assertEqual(appended[0]["stage"], "spec")
++        self.assertEqual(appended[0]["command"], "auto-reconcile")
++        self.assertIn("judge_next_action=advance", appended[0]["detail"])
++        self.assertEqual(len(state["invariant_warnings"]), 1)
++        # Warnings always go to stderr (Gemini round-2 finding: avoid conditional
++        # stdout/stderr routing that can hide warnings from automated parsers).
++        self.assertEqual(sys.stdout.getvalue(), "")
++        self.assertIn("state contradiction detected", sys.stderr.getvalue())
++
++    def test_json_mode_still_routes_to_stderr(self) -> None:
++        state = _state_with_advance("spec")
++        FI.set_json_mode(True)
++        try:
++            FI.run_invariant_checks(state, "checkpoint", "repair_spec_checkpoint")
++        finally:
++            FI.set_json_mode(False)
++
++        self.assertEqual(sys.stdout.getvalue(), "")
++        self.assertIn("state contradiction detected", sys.stderr.getvalue())
++
++    def test_clean_state_emits_nothing(self) -> None:
++        state = _state_with_advance("spec")
++        appended = FI.run_invariant_checks(state, "auto-reconcile", "author_plan")
++        self.assertEqual(appended, [])
++        self.assertEqual(state["invariant_warnings"], [])
++        self.assertEqual(sys.stdout.getvalue(), "")
++        self.assertEqual(sys.stderr.getvalue(), "")
++
++    def test_judge_next_action_not_set_does_not_trigger(self) -> None:
++        state = _state_with_advance("spec", judge_next_action="edit_and_rerun_judge")
++        appended = FI.run_invariant_checks(state, "judge", "judge_panel")
++        self.assertEqual(appended, [])
++
++    def test_multiple_stages_each_contradict(self) -> None:
++        state = {
++            "stages": {
++                "spec": {"judge_next_action": "advance"},
++                "plan": {"judge_next_action": "advance"},
++            },
++            "invariant_warnings": [],
++        }
++        appended = FI.run_invariant_checks(state, "auto-reconcile", "repair_spec_checkpoint")
++        # Only the spec stage's advance contradicts repair_spec_checkpoint.
++        self.assertEqual(len(appended), 1)
++        self.assertEqual(appended[0]["stage"], "spec")
++
++    def test_invariant_exception_does_not_abort(self) -> None:
++        def raising_check(_state: dict, _recommended: str) -> list[dict]:
++            raise RuntimeError("boom")
++
++        state = _state_with_advance("spec")
++        appended = FI.run_invariant_checks(
++            state,
++            "auto-reconcile",
++            "repair_spec_checkpoint",
++            invariants=(raising_check,),
++        )
++        self.assertEqual(len(appended), 1)
++        self.assertIn("boom", appended[0]["detail"])
++
++    def test_cap_bounds_warnings_list(self) -> None:
++        state = {
++            "stages": {"spec": {"judge_next_action": "advance"}},
++            "invariant_warnings": [],
++        }
++        for _ in range(FI._INVARIANT_WARNINGS_CAP + 10):
++            FI.run_invariant_checks(state, "auto-reconcile", "repair_spec_checkpoint")
++        self.assertEqual(len(state["invariant_warnings"]), FI._INVARIANT_WARNINGS_CAP)
++
++    def test_non_dict_state_is_no_op(self) -> None:
++        FI.run_invariant_checks(None, "auto-reconcile", "author_plan")  # type: ignore[arg-type]
++        # Should not raise, nothing to assert beyond "does not crash."
++
++
++class CheckJudgeAdvanceFunctionTests(unittest.TestCase):
++    def test_contradiction_detected_across_stages(self) -> None:
++        state = {
++            "stages": {
++                "spec": {"judge_next_action": "advance"},
++                "plan": {"judge_next_action": "advance"},
++                "tasks": {"judge_next_action": ""},
++            }
++        }
++        findings = FI.check_judge_advance_vs_recommended(state, "repair_plan_checkpoint")
++        self.assertEqual(len(findings), 1)
++        self.assertEqual(findings[0]["stage"], "plan")
++
++    def test_non_repair_action_is_fine(self) -> None:
++        state = {"stages": {"spec": {"judge_next_action": "advance"}}}
++        findings = FI.check_judge_advance_vs_recommended(state, "author_plan")
++        self.assertEqual(findings, [])
++
++    def test_repair_for_different_stage_is_not_a_contradiction_for_this_stage(
++        self,
++    ) -> None:
++        state = {"stages": {"spec": {"judge_next_action": "advance"}}}
++        findings = FI.check_judge_advance_vs_recommended(state, "repair_plan_checkpoint")
++        self.assertEqual(findings, [])
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_next_action.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_next_action.py
+index c95cc7c2..2df3cf97 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_next_action.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_next_action.py
+@@ -104,5 +104,67 @@ class FactoryNextActionTests(unittest.TestCase):
+         self.assertEqual(action, "author_plan")
+ 
+ 
++class FactoryNextActionJudgeAdvanceTests(unittest.TestCase):
++    """FR-001 — judge_next_action=advance overrides the manifest-drift unhealthy signal."""
++
++    def test_judge_advance_overrides_unhealthy_spec(self) -> None:
++        """Core run-033 regression: spec unhealthy + judge advanced → author_plan."""
++        state = _base_state(adversarial_rounds=3, judge_rounds=3)
++        state["stages"]["spec"]["judge_next_action"] = "advance"
++        stages = _stages(plan_exists=False)
++        stages["spec"] = _base_stage_state(True, True, healthy=False)
++        action = NEXT_ACTION.recommended_next_action(
++            "ff-judge-advance", state, stages, True
++        )
++        self.assertEqual(action, "author_plan")
++
++    def test_judge_advance_does_not_skip_missing_spec(self) -> None:
++        """Advance only bypasses health, not artifact existence."""
++        state = _base_state(adversarial_rounds=3, judge_rounds=3)
++        state["stages"]["spec"]["judge_next_action"] = "advance"
++        stages = _stages(plan_exists=False)
++        stages["spec"] = _base_stage_state(artifact_exists=False, manifest_exists=False, healthy=False)
++        action = NEXT_ACTION.recommended_next_action(
++            "ff-judge-advance", state, stages, True
++        )
++        self.assertEqual(action, "author_spec")
++
++    def test_edit_and_rerun_judge_does_not_advance(self) -> None:
++        """Rejudge path must NOT be mistaken for advance."""
++        state = _base_state(adversarial_rounds=3, judge_rounds=2)
++        state["stages"]["spec"]["judge_next_action"] = "edit_and_rerun_judge"
++        stages = _stages(plan_exists=False)
++        stages["spec"] = _base_stage_state(True, True, healthy=False)
++        action = NEXT_ACTION.recommended_next_action(
++            "ff-judge-rejudge", state, stages, True
++        )
++        # The decision tree should still say judge_panel when block majority
++        # holds; here we test it at least does not auto-advance.
++        self.assertNotEqual(action, "author_plan")
++
++    def test_run_033_regression_from_fixture(self) -> None:
++        """Replay the run-033 state.json snapshot — the canonical regression test.
++
++        Pre-fix: ``recommended_next_action`` returned ``repair_spec_checkpoint``
++        even though judges had voted advance on spec. Post-fix: it returns
++        ``author_plan`` (spec advances, plan needs authoring).
++        """
++        import json
++        fixture = (
++            SCRIPT_DIR / "tests" / "fixtures" / "run-033-state-pre-fix.json"
++        )
++        if not fixture.exists():
++            self.skipTest(f"fixture missing: {fixture}")
++        state = json.loads(fixture.read_text(encoding="utf-8"))
++        # Build a stages dict mirroring what stage_manifest_state would return:
++        # spec advanced-but-unhealthy, plan artifact does not exist yet.
++        stages = _stages(plan_exists=False)
++        stages["spec"] = _base_stage_state(True, True, healthy=False)
++        action = NEXT_ACTION.recommended_next_action(
++            "033-regression", state, stages, True
++        )
++        self.assertEqual(action, "author_plan")
++
++
+ if __name__ == "__main__":
+     unittest.main()
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_review_specs.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_review_specs.py
+new file mode 100644
+index 00000000..14c03b7a
+--- /dev/null
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_review_specs.py
+@@ -0,0 +1,248 @@
++import importlib.util
++import sys
++import tempfile
++import unittest
++from pathlib import Path
++
++SCRIPT_PATH = Path(__file__).resolve().parents[1] / "factory_review_specs.py"
++SPEC = importlib.util.spec_from_file_location("factory_review_specs", SCRIPT_PATH)
++assert SPEC and SPEC.loader
++FRS = importlib.util.module_from_spec(SPEC)
++sys.modules[SPEC.name] = FRS
++SPEC.loader.exec_module(FRS)
++
++
++def _review(body: str) -> Path:
++    """Write a tiny review-shaped file and return the path."""
++    tmp = tempfile.NamedTemporaryFile(
++        mode="w",
++        encoding="utf-8",
++        delete=False,
++        suffix=".review.md",
++    )
++    tmp.write(body)
++    tmp.flush()
++    tmp.close()
++    return Path(tmp.name)
++
++
++class ActionableFindingRegexPositiveTests(unittest.TestCase):
++    """Every supported finding shape must be detected."""
++
++    def test_bullet_colon_high(self) -> None:
++        self.assertTrue(FRS.detect_actionable_findings(_review("- high: missing index\n")))
++
++    def test_bullet_colon_medium(self) -> None:
++        self.assertTrue(FRS.detect_actionable_findings(_review("- medium: stale cache\n")))
++
++    def test_bullet_bracket_tag_colon(self) -> None:
++        self.assertTrue(
++            FRS.detect_actionable_findings(_review("- [code-confirmed] high: stale cache\n"))
++        )
++
++    def test_bullet_bare_plus_bracket_tag_upper(self) -> None:
++        self.assertTrue(
++            FRS.detect_actionable_findings(
++                _review("- HIGH [CODE-CONFIRMED]: bug in path handling\n")
++            )
++        )
++
++    def test_bullet_bold_severity(self) -> None:
++        self.assertTrue(
++            FRS.detect_actionable_findings(_review("- **HIGH**: path handler missing\n"))
++        )
++
++    def test_bullet_bold_severity_with_tag(self) -> None:
++        self.assertTrue(
++            FRS.detect_actionable_findings(
++                _review("- **HIGH [CODE-CONFIRMED]**: path handler missing\n")
++            )
++        )
++
++    def test_table_cell_high(self) -> None:
++        self.assertTrue(FRS.detect_actionable_findings(_review("| **HIGH** | some text |\n")))
++
++    def test_table_cell_critical(self) -> None:
++        self.assertTrue(
++            FRS.detect_actionable_findings(_review("| **CRITICAL** | some text |\n"))
++        )
++
++    def test_numbered_list_bold_severity(self) -> None:
++        self.assertTrue(
++            FRS.detect_actionable_findings(_review("1. **HIGH**: missing index on foo\n"))
++        )
++
++    def test_numbered_list_plain_severity(self) -> None:
++        """Plain numbered list: '1. MEDIUM: text' without bold — produced by Codex edge-cases lens."""
++        self.assertTrue(
++            FRS.detect_actionable_findings(_review("1. MEDIUM: something is wrong\n"))
++        )
++        self.assertTrue(
++            FRS.detect_actionable_findings(_review("2. HIGH: another issue\n"))
++        )
++
++    def test_numbered_list_plain_with_bracket_tag(self) -> None:
++        self.assertTrue(
++            FRS.detect_actionable_findings(_review("1. HIGH [CODE-CONFIRMED]: bug\n"))
++        )
++
++    def test_heading_severity(self) -> None:
++        self.assertTrue(FRS.detect_actionable_findings(_review("### HIGH: missing index\n")))
++
++    def test_heading_with_rank_prefix_and_colon(self) -> None:
++        """Rank-prefixed heading with colon is actionable — but bare trailing
++        word (``### 1. HIGH concern``) is NOT, to avoid title false positives
++        like ``### HIGH availability target`` (round-2 Codex edge-cases LOW)."""
++        self.assertTrue(FRS.detect_actionable_findings(_review("### 1. HIGH: concern\n")))
++
++    def test_paragraph_bold_prefix(self) -> None:
++        self.assertTrue(FRS.detect_actionable_findings(_review("**HIGH**: broken join\n")))
++
++    def test_paragraph_bold_prefix_with_tag(self) -> None:
++        self.assertTrue(
++            FRS.detect_actionable_findings(
++                _review("**HIGH [CODE-CONFIRMED]**: duplicate handler\n")
++            )
++        )
++
++    def test_inline_severity_field_bold(self) -> None:
++        self.assertTrue(
++            FRS.detect_actionable_findings(_review("**Severity**: HIGH\nmore text\n"))
++        )
++
++    def test_inline_severity_field_bold_alternate(self) -> None:
++        self.assertTrue(FRS.detect_actionable_findings(_review("**Severity:** HIGH\n")))
++
++    def test_inline_severity_field_plain(self) -> None:
++        self.assertTrue(FRS.detect_actionable_findings(_review("Severity: HIGH\n")))
++
++    def test_gemini_style_nested_finding(self) -> None:
++        """Real shape produced by the Gemini requirements-adversarial reviewer."""
++        body = (
++            "### 1. Mandatory tracking introduces scope creep\n"
++            "\n"
++            "**Severity**: MEDIUM\n"
++            "**Finding**: The new step...\n"
++        )
++        self.assertTrue(FRS.detect_actionable_findings(_review(body)))
++
++
++class ActionableFindingRegexNegativeTests(unittest.TestCase):
++    """Prose mentions of severity words must NOT match."""
++
++    def test_prose_mid_sentence(self) -> None:
++        self.assertFalse(
++            FRS.detect_actionable_findings(
++                _review("This would be a HIGH severity issue in production.\n")
++            )
++        )
++
++    def test_prose_with_severity_word_only(self) -> None:
++        self.assertFalse(
++            FRS.detect_actionable_findings(
++                _review("We consider severity carefully in this review.\n")
++            )
++        )
++
++    def test_empty_review(self) -> None:
++        self.assertFalse(FRS.detect_actionable_findings(_review("")))
++
++    def test_low_severity_not_actionable(self) -> None:
++        """LOW findings are not actionable — auto-accept is fine."""
++        self.assertFalse(FRS.detect_actionable_findings(_review("- low: minor typo\n")))
++        self.assertFalse(FRS.detect_actionable_findings(_review("### LOW: minor typo\n")))
++        self.assertFalse(FRS.detect_actionable_findings(_review("**LOW**: typo\n")))
++
++    def test_word_higher_not_match(self) -> None:
++        self.assertFalse(
++            FRS.detect_actionable_findings(_review("higher-priority item is this\n"))
++        )
++
++    def test_severity_word_in_code_block_prose(self) -> None:
++        self.assertFalse(
++            FRS.detect_actionable_findings(
++                _review("For example, the pattern **HIGH severity findings** in docs...\n")
++            )
++        )
++
++    def test_crlf_line_endings_do_not_break_detection(self) -> None:
++        """Windows-style line endings should still detect findings (Gemini coverage F-5)."""
++        self.assertTrue(
++            FRS.detect_actionable_findings(_review("- HIGH: some finding\r\n"))
++        )
++
++    def test_leading_tab_whitespace(self) -> None:
++        """Lines with unusual leading whitespace (tabs, mixed) still match."""
++        self.assertTrue(FRS.detect_actionable_findings(_review("\t- HIGH: finding\n")))
++        self.assertTrue(FRS.detect_actionable_findings(_review("  - HIGH: finding\n")))
++
++    def test_heading_high_availability_is_not_actionable(self) -> None:
++        """Spec round-2 Codex edge-cases LOW: '### HIGH availability' is a section title."""
++        self.assertFalse(
++            FRS.detect_actionable_findings(_review("### HIGH availability target\n"))
++        )
++        self.assertFalse(
++            FRS.detect_actionable_findings(_review("## MEDIUM-term plan\n"))
++        )
++
++    def test_fenced_code_block_with_literal_severity_line_is_documented_limitation(self) -> None:
++        """Known limitation: lines inside fenced code blocks are NOT excluded.
++
++        A review that quotes a literal ``- HIGH:`` example inside a code fence
++        will match. This is called out in spec residual risks; the test pins
++        the current behavior so a future fix can intentionally flip it.
++        """
++        body = (
++            "Here is an example of the pattern:\n"
++            "```\n"
++            "- HIGH: example finding line for docs\n"
++            "```\n"
++            "This review itself has no real findings.\n"
++        )
++        # Current behavior: matches. If this test starts failing, someone has
++        # tightened the regex to exclude code fences — delete this test and
++        # add a negative one asserting False.
++        self.assertTrue(FRS.detect_actionable_findings(_review(body)))
++
++
++class ActionableFindingRegexRealReviewTests(unittest.TestCase):
++    """The regex must detect findings in THIS feature's own spec reviews."""
++
++    FEATURE_REVIEWS = (
++        Path(__file__).resolve().parents[3].parents[1]
++        / "feature-runs"
++        / "ff-runner-fixes"
++        / "reviews"
++    )
++
++    def _review_path(self, name: str) -> Path:
++        return self.FEATURE_REVIEWS / name
++
++    def test_codex_feasibility_review_is_actionable(self) -> None:
++        path = self._review_path("spec.codex.feasibility-adversarial.review.md")
++        if not path.exists():
++            self.skipTest(f"fixture review missing: {path}")
++        self.assertTrue(FRS.detect_actionable_findings(path))
++
++    def test_codex_edge_cases_review_is_actionable(self) -> None:
++        path = self._review_path("spec.codex.edge-cases-adversarial.review.md")
++        if not path.exists():
++            self.skipTest(f"fixture review missing: {path}")
++        self.assertTrue(FRS.detect_actionable_findings(path))
++
++    def test_gemini_requirements_review_is_actionable(self) -> None:
++        path = self._review_path("spec.gemini.requirements-adversarial.review.md")
++        if not path.exists():
++            self.skipTest(f"fixture review missing: {path}")
++        self.assertTrue(FRS.detect_actionable_findings(path))
++
++
++class ActionableFindingShapesManifestTests(unittest.TestCase):
++    def test_shapes_manifest_present(self) -> None:
++        """ACTIONABLE_FINDING_SHAPES documents every pattern the regex covers."""
++        self.assertIsInstance(FRS.ACTIONABLE_FINDING_SHAPES, tuple)
++        self.assertGreaterEqual(len(FRS.ACTIONABLE_FINDING_SHAPES), 10)
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_state.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_state.py
+index eedac41f..973f1b9d 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_state.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_state.py
+@@ -16,6 +16,72 @@ sys.modules[SPEC.name] = FACTORY_STATE
+ SPEC.loader.exec_module(FACTORY_STATE)
+ 
+ 
++class UnresolvedConcernBackfillTests(unittest.TestCase):
++    """FR-011a — legacy unresolved_concerns without id/lifecycle fields get backfilled on read."""
++
++    def test_backfill_adds_id_and_lifecycle_fields(self) -> None:
++        with tempfile.TemporaryDirectory() as tmpdir:
++            with patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", Path(tmpdir)):
++                slug = "backfill-test"
++                state_path = FACTORY_STATE.factory_state_path(slug)
++                legacy = FACTORY_STATE._default_workflow_state()
++                legacy["stages"] = {
++                    "spec": {
++                        "adversarial_rounds": 3,
++                        "judge_rounds": 3,
++                        "judge_next_action": "advance",
++                        "unresolved_concerns": [
++                            {
++                                "stage": "spec",
++                                "judge": "restatement",
++                                "model": "codex",
++                                "round_raised": 3,
++                                "reasoning": "legacy concern without id or lifecycle fields",
++                            }
++                        ],
++                    }
++                }
++                FACTORY_STATE.atomic_json_write(state_path, legacy)
++
++                loaded = FACTORY_STATE.load_workflow_state(slug)
++                concern = loaded["stages"]["spec"]["unresolved_concerns"][0]
++                self.assertTrue(concern.get("id"))
++                self.assertEqual(len(concern["id"]), 12)
++                for field in ("addressed_at", "addressed_by", "deferred_reason", "dismissed_reason"):
++                    self.assertIsNone(concern[field])
++
++    def test_backfill_preserves_existing_id(self) -> None:
++        with tempfile.TemporaryDirectory() as tmpdir:
++            with patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", Path(tmpdir)):
++                slug = "backfill-preserve"
++                state_path = FACTORY_STATE.factory_state_path(slug)
++                legacy = FACTORY_STATE._default_workflow_state()
++                legacy["stages"] = {
++                    "spec": {
++                        "unresolved_concerns": [
++                            {
++                                "id": "deadbeef0000",
++                                "stage": "spec",
++                                "judge": "judge1",
++                                "round_raised": 3,
++                                "reasoning": "existing id must not be overwritten",
++                                "addressed_at": 12345,
++                                "addressed_by": "commit:abc",
++                                "deferred_reason": None,
++                                "dismissed_reason": None,
++                            }
++                        ],
++                    }
++                }
++                FACTORY_STATE.atomic_json_write(state_path, legacy)
++
++                loaded = FACTORY_STATE.load_workflow_state(slug)
++                concern = loaded["stages"]["spec"]["unresolved_concerns"][0]
++                self.assertEqual(concern["id"], "deadbeef0000")
++                self.assertEqual(concern["addressed_at"], 12345)
++                self.assertEqual(concern["addressed_by"], "commit:abc")
++
++
+ class FactoryStateTests(unittest.TestCase):
+     def test_with_locked_state_single_writer_acquires_and_releases(self) -> None:
+         """A single writer can enter, mutate, exit, and reopen the same state."""

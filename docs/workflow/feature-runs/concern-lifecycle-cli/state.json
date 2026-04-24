@@ -1,0 +1,42 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": false,
+    "complete": true,
+    "question_count": 0,
+    "asked_count": 0,
+    "questions": [],
+    "assumptions": [],
+    "summary": "",
+    "updated_at": 0,
+    "answers": {},
+    "non_goals": [],
+    "acceptance_criteria": [],
+    "unresolved": []
+  },
+  "delivery": {},
+  "dirty_overrides": {},
+  "checkpoint_fallback": {},
+  "parallel_analysis": {
+    "reviewed": false,
+    "found": false,
+    "note": "",
+    "updated_at": 0
+  },
+  "init_head_sha": "",
+  "token_usage": [],
+  "stages": {},
+  "invariant_warnings": [],
+  "schema_version": 1
+}

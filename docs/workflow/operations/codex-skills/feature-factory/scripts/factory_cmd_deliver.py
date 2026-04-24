@@ -84,7 +84,7 @@ def _base_pr_body(slug: str) -> str:
 
 
 def _issue_pr_body(pr: dict | None, state: dict, slug: str) -> tuple[str, bool]:
-    rendered_block = render_judge_panel_block(state)
+    rendered_block = render_judge_panel_block(state, slug=slug)
     existing_body = str(pr.get("body", "")) if isinstance(pr, dict) else ""
     if not existing_body:
         body = _base_pr_body(slug)
@@ -116,7 +116,7 @@ def _edit_pr_body(body: str) -> None:
 def _record_override_if_needed(slug: str, reason: str) -> dict | None:
     recorded: dict | None = None
     with with_locked_state(slug) as state:
-        concerns, _, _ = collect_judge_panel_entries(state)
+        concerns, _, _, _ = collect_judge_panel_entries(state)
         if not concerns:
             return None
         recorded = {
@@ -264,13 +264,57 @@ def command_deliver(args: argparse.Namespace) -> int:
         if recorded_override:
             state = load_workflow_state(args.slug)
 
+    # P1-1 (adversarial review finding): honor judge-advance verdicts at delivery
+    # the same way prerequisite_failure does, so an unhealthy manifest with an
+    # advance vote does not wall off delivery. Without this, every feature that
+    # hit the judge-panel cap has to hand-patch review SHAs to reach the PR.
+    stages_state = state.get("stages") or {}
     for stage in REQUIRED_PREDELIVERY_STAGES:
         manifest_path = checkpoint_manifest_path(args.slug, stage)
         if not manifest_path.exists():
             raise SystemExit(f"deliver requires completed {stage} checkpoint first")
         healthy, detail = verify_checkpoint_manifest(manifest_path)
         if not healthy:
+            stage_blob = stages_state.get(stage) or {}
+            if isinstance(stage_blob, dict) and stage_blob.get("judge_next_action") == "advance":
+                continue  # judge advance overrides manifest-drift-equals-unhealthy
             raise SystemExit(f"deliver requires a healthy {stage} checkpoint first: {trim_detail(detail)}")
+
+    # P1-2 (adversarial review finding): block delivery when any stage carries
+    # open judge concerns. Without this, 2-of-3 judge proceed votes can ship a
+    # feature with unresolved HIGH concerns that only surface in the PR body.
+    # Operators must explicitly resolve them (--address/--defer/--dismiss) or
+    # use deliver --override-judges --reason to accept the risk.
+    if not args.override_judges:
+        open_concerns_by_stage: dict[str, list[dict]] = {}
+        for stage_name in ("spec", "plan", "tasks", "diff", "closeout"):
+            stage_blob = stages_state.get(stage_name) or {}
+            if not isinstance(stage_blob, dict):
+                continue
+            for concern in stage_blob.get("unresolved_concerns") or []:
+                if not isinstance(concern, dict):
+                    continue
+                if (
+                    concern.get("addressed_at") is None
+                    and not concern.get("deferred_reason")
+                    and not concern.get("dismissed_reason")
+                ):
+                    open_concerns_by_stage.setdefault(stage_name, []).append(concern)
+        if open_concerns_by_stage:
+            lines = [
+                "deliver blocked: open judge concerns on these stages — resolve before PR or pass --override-judges --reason:",
+            ]
+            for stage_name, concerns in open_concerns_by_stage.items():
+                for concern in concerns:
+                    cid = concern.get("id", "?")
+                    snippet = trim_detail(str(concern.get("reasoning", "") or ""), limit=80)
+                    lines.append(f"  - [{stage_name}] {cid}: {snippet}")
+            lines.append("")
+            lines.append("options per concern:")
+            lines.append("  python3 run_factory.py checkpoint --slug <slug> --stage <stage> --address <id> --evidence '<text>'")
+            lines.append("  python3 run_factory.py checkpoint --slug <slug> --stage <stage> --defer   <id> --reason   '<text>'")
+            lines.append("  python3 run_factory.py checkpoint --slug <slug> --stage <stage> --dismiss <id> --reason   '<text>'")
+            raise SystemExit("\n".join(lines))
 
     recon_ok, recon_detail = reconciliation_state(args.slug)
     if not recon_ok:

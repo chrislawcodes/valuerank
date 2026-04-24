@@ -1,0 +1,57 @@
+{
+  "session_id": "8cdb54b6-7934-40a4-8141-6bc4cc40297e",
+  "response": "## Findings\n\n### MEDIUM: Concern ID generation is brittle and may fail to track paraphrased findings [UNVERIFIED]\n\nThe proposed ID derivation for unresolved concerns (FR-003) uses a hash of the first 48 characters of the reasoning. This is a fragile identifier. A judge who rephrases the beginning of a finding, or even just adds a clarifying clause, will cause a new, distinct ID to be generated for what is semantically the same concern. This undermines the entire lifecycle (`addressed`, `deferred`, `dismissed`) by creating duplicate entries for a single issue, potentially allowing unresolved concerns to slip through verification at the next stage's checkpoint (FR-004). The spec acknowledges this (Risk R5) but accepts the limitation, which remains a significant flaw in the core logic of Fix 1.\n\n### MEDIUM: Severity detection relies on a complex, high-maintenance regex strategy [UNVERIFIED]\n\nFix 2's approach (FR-006) is to add more regex patterns to catch various ways reviewers might write \"HIGH severity\". This creates an \"arms race\" where the tool is always trying to catch up to new, arbitrary markdown formatting choices. This method is inherently brittle and adds maintenance complexity. Each new pattern increases the risk of both false positives on prose (Risk R1) and false negatives on future unforeseen formats. The root problem\u2014a lack of a structured format for review findings\u2014is not addressed, leading to a tactical patch rather than a robust, long-term solution.\n\n### MEDIUM: Audit trail for advancing with artifact drift is based on a weak assumption [UNVERIFIED]\n\nWhen a judge-approved artifact is modified before advancement, the runner reseals the manifest and adds an annotation with `reason: \"post-judge-edits-only\"` (FR-002). This reason is a hardcoded assumption. The runner has no way to know *why* the artifact's SHA has drifted. The change could be a substantive modification that invalidates the judge's original approval. By logging a benign, speculative reason, the audit trail becomes misleading and unreliable, undermining trust in the workflow's history.\n\n### LOW: State contradiction warnings may be silently ignored by automated agents [UNVERIFIED]\n\nThe invariant self-check (Fix 8) is designed to only log a warning and print to stderr, but explicitly *not* abort the command (FR-009). This design correctly prevents the checker from fragility, but it creates a new risk: an automated orchestrator may not be designed to parse stderr for warnings or check the `state.invariant_warnings` array. If the agent only monitors the command's exit code and stdout, it could silently proceed even when the state is known to be contradictory, leading to the same class of wasted work and debugging cycles that Fix 8 is intended to prevent.\n\n### LOW: The concern lifecycle introduces a new path for misuse without adequate controls [UNVERIFIED]\n\nThe `unresolved_concerns` lifecycle introduces a `checkpoint --dismiss` flag (FR-004) that allows an orchestrator to bypass addressing a concern. While the spec notes this action will be visible in the final PR body (FR-005a), it provides no active guardrail against misuse. An automated agent could potentially be configured (or learn) to habitually dismiss valid findings to force a feature through the workflow, subverting the entire purpose of the adversarial review and judging stages. Visibility in a PR is a passive check that may not be sufficient for a highly automated workflow.\n\n## Residual Risks\n\nThe spec includes a good list of residual risks. The following are additional risks or elaborations on existing ones that warrant specific attention.\n\n1.  **Systemic Fragility from Unstructured Inputs**: The core of Fix 2 is reactive. By continuing to accept free-form markdown for severity ratings, the system remains vulnerable to any deviation from the currently supported regexes. This commits the project to ongoing maintenance, with each new \"missed finding\" requiring another patch. The true risk is not that one regex might fail (Risk R1), but that the entire approach is fundamentally fragile.\n\n2.  **Orchestrator Logic Drift**: The spec introduces several new state fields (`judge_next_action`, `unresolved_concerns` lifecycle fields, `invariant_warnings`) and CLI flags (`--address`, `--defer`, `--dismiss`). The runner's behavior is now more complex. There is a risk that the orchestrator agents (Claude, Codex) will not correctly or fully implement logic to handle these new states and tools, leading to the new safety mechanisms being ignored. For example, an agent might never use the `--defer` flag and instead get stuck when it cannot address a concern.\n\n3.  **Loss of Granular Audit Trail**: The manifest resealing process (FR-002) when an artifact has drifted effectively collapses all post-judge edits into a single `advance-with-drift` event. As noted in the finding, the default reason is weak. Furthermore, this loses the specific SHA of the originally judged artifact in the primary manifest. While the `old_sha` is in an annotation, it breaks the primary \"chain of custody,\" making it harder to audit exactly what was approved versus what was advanced.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 48009
+        },
+        "tokens": {
+          "input": 21199,
+          "prompt": 21199,
+          "candidates": 1101,
+          "total": 25479,
+          "cached": 0,
+          "thoughts": 3179,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 48009,
+            "tokens": {
+              "input": 21199,
+              "prompt": 21199,
+              "candidates": 1101,
+              "total": 25479,
+              "cached": 0,
+              "thoughts": 3179,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

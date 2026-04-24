@@ -1,0 +1,47 @@
+```json
+{
+  "judge": "implementation-risk",
+  "model": "claude-sonnet-4-5",
+  "verdict": "block",
+  "confidence": 4,
+  "reasoning": "Four load-bearing ambiguities would cause a competent implementer to guess or stop. (1) The plan explicitly defers the checkpoint CLI flags to a follow-up feature, but the spec's FR-004 requires them and T3.6 marks them done — the implementer has no signal which wins, and SC-005 requires the flags to pass. (2) T3.3 calls `workflow_utils.normalized_artifact_hash` but that function is never defined, described, or typed anywhere in the artifact chain — the implementer doesn't know its signature or what it hashes. (3) T3.3 resolves the manifest path via `factory_state.checkpoint_manifest_path(slug, stage)` — same problem: not defined anywhere. (4) FR-011b requires `_run_post_invariants` in `run_factory.main()` to call `recommended_next_action` with the same `reconciliation_state()` signal used by `status`, but the plan never shows how `main()` obtains `slug`, `stages`, and `reconciliation_ok` at that tail-hook point — the function signature requires all four arguments and the call-site assembly is unspecified.",
+  "evidence": [
+    {
+      "artifact": "plan",
+      "section": "Slice 3 — Fix 1 judge-advance honoring",
+      "quote": "`checkpoint --address/--defer/--dismiss <id>` CLI flags — **deferred to follow-up feature** (the data shape supports the lifecycle but the CLI is not wired in this PR)."
+    },
+    {
+      "artifact": "tasks",
+      "section": "T3.6",
+      "quote": "[x] T3.6 Add `checkpoint --address <id> --evidence <text>`, `--defer <id> --reason <text>`, `--dismiss <id> --reason <text>` flags and their handlers"
+    },
+    {
+      "artifact": "spec",
+      "section": "SC-005",
+      "quote": "a plan checkpoint against a spec whose judges left 1 concern MUST block until either `checkpoint --address <id> --evidence \"<text>\"` or `checkpoint --defer <id> --reason \"<text>\"` is invoked."
+    },
+    {
+      "artifact": "tasks",
+      "section": "T3.3",
+      "quote": "reads the current artifact sha via `workflow_utils.normalized_artifact_hash`"
+    },
+    {
+      "artifact": "tasks",
+      "section": "T3.3",
+      "quote": "The manifest lives at `docs/workflow/feature-runs/<slug>/reviews/<stage>.checkpoint.json` (resolve via `factory_state.checkpoint_manifest_path(slug, stage)`)"
+    },
+    {
+      "artifact": "spec",
+      "section": "FR-011b",
+      "quote": "`_run_post_invariants` in `run_factory.py` MUST compute `recommended_next_action` using the same `reconciliation_state()` signal as `status` and `command_checkpoint`, so the contradiction detector evaluates the user-visible next-action string."
+    },
+    {
+      "artifact": "spec",
+      "section": "FR-001",
+      "quote": "`factory_next_action.recommended_next_action(slug, state, stages, reconciliation_ok) -> str`"
+    }
+  ],
+  "timestamp": "2026-04-24T00:00:00Z"
+}
+```

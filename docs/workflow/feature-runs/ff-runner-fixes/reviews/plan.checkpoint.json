@@ -1,0 +1,42 @@
+{
+  "feature_slug": "ff-runner-fixes",
+  "stage": "plan",
+  "artifact_path": "docs/workflow/feature-runs/ff-runner-fixes/plan.md",
+  "git_base_ref": "",
+  "allowed_dirty_paths": [],
+  "required_reviews": [
+    {
+      "reviewer": "codex",
+      "lens": "implementation-adversarial",
+      "stage": "plan",
+      "path": "docs/workflow/feature-runs/ff-runner-fixes/reviews/plan.codex.implementation-adversarial.review.md",
+      "context_paths": [
+        "docs/workflow/feature-runs/ff-runner-fixes/closeout.md"
+      ],
+      "model": "gpt-5.4-mini"
+    },
+    {
+      "reviewer": "codex",
+      "lens": "architecture-adversarial",
+      "stage": "plan",
+      "path": "docs/workflow/feature-runs/ff-runner-fixes/reviews/plan.codex.architecture-adversarial.review.md",
+      "context_paths": [
+        "docs/workflow/feature-runs/ff-runner-fixes/closeout.md"
+      ],
+      "model": "gpt-5.4-mini"
+    },
+    {
+      "reviewer": "gemini",
+      "lens": "testability-adversarial",
+      "stage": "plan",
+      "path": "docs/workflow/feature-runs/ff-runner-fixes/reviews/plan.gemini.testability-adversarial.review.md",
+      "context_paths": [
+        "docs/workflow/feature-runs/ff-runner-fixes/closeout.md"
+      ],
+      "model": "gemini-2.5-pro"
+    }
+  ],
+  "max_artifact_chars": 50000,
+  "max_context_chars": 60000,
+  "max_total_chars": 250000
+}

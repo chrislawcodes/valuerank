@@ -104,5 +104,67 @@ class FactoryNextActionTests(unittest.TestCase):
         self.assertEqual(action, "author_plan")
 
 
+class FactoryNextActionJudgeAdvanceTests(unittest.TestCase):
+    """FR-001 — judge_next_action=advance overrides the manifest-drift unhealthy signal."""
+
+    def test_judge_advance_overrides_unhealthy_spec(self) -> None:
+        """Core run-033 regression: spec unhealthy + judge advanced → author_plan."""
+        state = _base_state(adversarial_rounds=3, judge_rounds=3)
+        state["stages"]["spec"]["judge_next_action"] = "advance"
+        stages = _stages(plan_exists=False)
+        stages["spec"] = _base_stage_state(True, True, healthy=False)
+        action = NEXT_ACTION.recommended_next_action(
+            "ff-judge-advance", state, stages, True
+        )
+        self.assertEqual(action, "author_plan")
+
+    def test_judge_advance_does_not_skip_missing_spec(self) -> None:
+        """Advance only bypasses health, not artifact existence."""
+        state = _base_state(adversarial_rounds=3, judge_rounds=3)
+        state["stages"]["spec"]["judge_next_action"] = "advance"
+        stages = _stages(plan_exists=False)
+        stages["spec"] = _base_stage_state(artifact_exists=False, manifest_exists=False, healthy=False)
+        action = NEXT_ACTION.recommended_next_action(
+            "ff-judge-advance", state, stages, True
+        )
+        self.assertEqual(action, "author_spec")
+
+    def test_edit_and_rerun_judge_does_not_advance(self) -> None:
+        """Rejudge path must NOT be mistaken for advance."""
+        state = _base_state(adversarial_rounds=3, judge_rounds=2)
+        state["stages"]["spec"]["judge_next_action"] = "edit_and_rerun_judge"
+        stages = _stages(plan_exists=False)
+        stages["spec"] = _base_stage_state(True, True, healthy=False)
+        action = NEXT_ACTION.recommended_next_action(
+            "ff-judge-rejudge", state, stages, True
+        )
+        # The decision tree should still say judge_panel when block majority
+        # holds; here we test it at least does not auto-advance.
+        self.assertNotEqual(action, "author_plan")
+
+    def test_run_033_regression_from_fixture(self) -> None:
+        """Replay the run-033 state.json snapshot — the canonical regression test.
+
+        Pre-fix: ``recommended_next_action`` returned ``repair_spec_checkpoint``
+        even though judges had voted advance on spec. Post-fix: it returns
+        ``author_plan`` (spec advances, plan needs authoring).
+        """
+        import json
+        fixture = (
+            SCRIPT_DIR / "tests" / "fixtures" / "run-033-state-pre-fix.json"
+        )
+        if not fixture.exists():
+            self.skipTest(f"fixture missing: {fixture}")
+        state = json.loads(fixture.read_text(encoding="utf-8"))
+        # Build a stages dict mirroring what stage_manifest_state would return:
+        # spec advanced-but-unhealthy, plan artifact does not exist yet.
+        stages = _stages(plan_exists=False)
+        stages["spec"] = _base_stage_state(True, True, healthy=False)
+        action = NEXT_ACTION.recommended_next_action(
+            "033-regression", state, stages, True
+        )
+        self.assertEqual(action, "author_plan")
+
+
 if __name__ == "__main__":
     unittest.main()

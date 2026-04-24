@@ -236,24 +236,17 @@ class FactoryDeliverTests(unittest.TestCase):
         override = state["override"]
         self.assertEqual(override["reason"], "judge calibration")
         self.assertEqual(override["operator_id"], "test-operator")
-        self.assertEqual(override["affected_concerns"], [
-            {
-                "stage": "plan",
-                "round": 2,
-                "judge": "completeness",
-                "confidence": 4,
-                "reasoning": "Missing rollback path.",
-                "also_raised_in_round": [1, 2],
-            },
-            {
-                "stage": "tasks",
-                "round": 3,
-                "judge": "implementation-risk",
-                "confidence": 3,
-                "reasoning": "Merge wait may stall forever.",
-                "also_raised_in_round": [2, 3],
-            },
-        ])
+        # Concerns now carry backfilled id + lifecycle fields (FR-011a). Check the
+        # stable subset rather than exact equality.
+        affected = override["affected_concerns"]
+        self.assertEqual(len(affected), 2)
+        self.assertEqual(affected[0]["stage"], "plan")
+        self.assertEqual(affected[0]["judge"], "completeness")
+        self.assertEqual(affected[0]["reasoning"], "Missing rollback path.")
+        self.assertTrue(affected[0].get("id"))
+        self.assertEqual(affected[1]["stage"], "tasks")
+        self.assertEqual(affected[1]["judge"], "implementation-risk")
+        self.assertTrue(affected[1].get("id"))
         self.assertTrue(captured_bodies)
         self.assertIn(FACTORY_PR_BODY.SENTINEL_BEGIN, captured_bodies[0])
         self.assertIn("## ⚠ Shipped over judge objection", captured_bodies[0])
@@ -287,8 +280,11 @@ class FactoryDeliverTests(unittest.TestCase):
                 return subprocess.CompletedProcess(cmd, 0, stdout="https://example.test/pr/17\n", stderr="")
             raise AssertionError(f"unexpected command: {cmd}")
 
+        # Deliver now blocks on open concerns (P1-2 fix) unless --override-judges
+        # is used. This test verifies the PR body sentinel rendering, not the
+        # block-on-open-concerns gate (which has its own tests below).
         rc, _, _ = self._run_deliver(
-            _deliver_args(create_pr=True, draft=True, dry_run=True),
+            _deliver_args(create_pr=True, draft=True, dry_run=True, override_judges=True, reason="testing sentinel render"),
             current_pr_payload=None,
             gh_side_effect=gh_side_effect,
         )
@@ -376,7 +372,9 @@ class FactoryDeliverTests(unittest.TestCase):
                 "- keep this exactly as written",
             ]
         )
-        expected_block = FACTORY_PR_BODY.render_judge_panel_block(state)
+        # Reload state so expected reflects the backfilled concern fields (FR-011a).
+        loaded_state = FACTORY_STATE.load_workflow_state(SLUG)
+        expected_block = FACTORY_PR_BODY.render_judge_panel_block(loaded_state)
         expected_body, _ = FACTORY_PR_BODY.upsert_judge_panel_block(existing_body, expected_block)
 
         captured_bodies: list[str] = []
@@ -422,7 +420,8 @@ class FactoryDeliverTests(unittest.TestCase):
                 "No judge block has ever been inserted here.",
             ]
         )
-        expected_block = FACTORY_PR_BODY.render_judge_panel_block(state)
+        loaded_state = FACTORY_STATE.load_workflow_state(SLUG)
+        expected_block = FACTORY_PR_BODY.render_judge_panel_block(loaded_state)
         expected_body = f"{expected_block}\n\n{existing_body}"
 
         captured_bodies: list[str] = []

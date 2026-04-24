@@ -20,9 +20,31 @@ A finding is NEW if:
 - Earlier rounds raised it but the mitigation is now itself flawed
   in a way the new finding surfaces
 
-Proceed when 70%+ of the latest round's findings are restatements.
-Block when substantial new concerns are surfacing — the loop is
-still earning its keep.
+## Verdict rules
+
+**First-round case (no prior findings exist):** You cannot assess
+restatement because there is nothing to compare against. Default
+to PROCEED-WITH-ANNOTATION in this case — the orchestrator needs
+signal from other judges (`completeness`, `implementation-risk`)
+to decide blocking, not from you. Note the findings you observed
+so later rounds have baseline to compare against.
+
+**Diminishing-returns case (prior rounds exist, latest findings
+are materially less severe than prior rounds):** PROCEED. Severity
+is ranked HIGH > MEDIUM > LOW. If prior rounds had HIGH findings
+and the latest round has only MEDIUM/LOW, the loop is converging.
+
+**True-saturation case (70%+ of latest findings are literal
+restatements of prior-round findings):** PROCEED.
+
+**Real-progress case (latest round surfaces genuinely new and
+material failure modes that were not covered before):** BLOCK.
+
+**Important non-blocking pattern:** a round that introduces new
+findings while prior findings remain addressed is NOT automatic
+block. Block only when the new findings point at load-bearing
+correctness or safety issues, not at cosmetic or belt-and-suspenders
+concerns.
 
 Be concrete. Quote specific text from both the old and new rounds
 when calling something a restatement.

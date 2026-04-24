@@ -156,6 +156,20 @@ def _also_raised_in_round(current_reasoning: str, prior_rounds: list[list[dict]]
     return sorted(also_raised)
 
 
+def _concern_id(stage: str, judge: str, round_raised: int, reasoning: str) -> str:
+    """Derive a stable ID from the stage/judge/round and the reasoning prefix.
+
+    FR-003 — the ID must be stable under minor paraphrasing at the end of the
+    reasoning. We hash the first 48 non-whitespace characters of the reasoning
+    along with the fixed fields; this accepts drift at the tail but splits
+    heavily-reworded concerns into distinct IDs (see Risk R5 in the spec).
+    """
+    import hashlib
+    normalized = "".join(reasoning.split())[:48]
+    key = f"{stage}|{judge}|{round_raised}|{normalized}"
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()[:12]
+
+
 def _unresolved_concern_from_verdict(
     stage: str,
     verdict: dict,
@@ -163,14 +177,20 @@ def _unresolved_concern_from_verdict(
     prior_rounds: list[list[dict]],
 ) -> dict[str, object]:
     reasoning = str(verdict.get("reasoning", "")).strip()
+    judge = str(verdict.get("judge", ""))
     return {
+        "id": _concern_id(stage, judge, round_raised, reasoning),
         "stage": stage,
-        "judge": verdict.get("judge", ""),
+        "judge": judge,
         "model": verdict.get("model", ""),
         "confidence": verdict.get("confidence"),
         "reasoning": reasoning,
         "round_raised": round_raised,
         "also_raised_in_round": _also_raised_in_round(reasoning, prior_rounds),
+        "addressed_at": None,
+        "addressed_by": None,
+        "deferred_reason": None,
+        "dismissed_reason": None,
     }
 
 
@@ -872,15 +892,18 @@ def _persist_state(
         block_verdicts = _block_verdicts(verdicts)
         blockers = _block_reasonings(block_verdicts)
 
+        # FR-001a — write judge_next_action into stage_state BEFORE computing
+        # recommended_next_action so the decision tree (which reads
+        # stages[stage].judge_next_action) sees the freshly-voted advance on
+        # the same run. Without this reorder, factory_cmd_judge itself emits
+        # a stale repair_<stage>_checkpoint banner immediately after voting
+        # advance — the exact symptom observed in feature run 033.
         if block_count >= 2 and judge_round < 3:
+            stage_state["judge_next_action"] = "edit_and_rerun_judge"
             next_action = "edit_and_rerun_judge"
             reason = f"block majority; {block_count} of {len(verdicts)} judges blocked"
             outcome_value = "rejudge"
-            stage_state["judge_next_action"] = next_action
         elif block_count >= 2 and judge_round >= 3:
-            next_action = recommended_next_action(slug, state, {name: stage_manifest_state(slug, name) for name in CHECKPOINT_STAGES}, True)
-            reason = "judge panel exhausted; advancing with unresolved concerns"
-            outcome_value = "advance"
             stage_state["judge_next_action"] = "advance"
             unresolved = stage_state.get("unresolved_concerns", [])
             if not isinstance(unresolved, list):
@@ -891,12 +914,15 @@ def _persist_state(
                 for verdict in block_verdicts
             )
             stage_state["unresolved_concerns"] = unresolved
+            next_action = recommended_next_action(slug, state, {name: stage_manifest_state(slug, name) for name in CHECKPOINT_STAGES}, True)
+            reason = "judge panel exhausted; advancing with unresolved concerns"
+            outcome_value = "advance"
             _LOGGER.warning("judge panel exhausted; advancing with unresolved concerns")
         else:
+            stage_state["judge_next_action"] = "advance"
             next_action = recommended_next_action(slug, state, {name: stage_manifest_state(slug, name) for name in CHECKPOINT_STAGES}, True)
             reason = f"{stage} judge panel completed: advance"
             outcome_value = "advance"
-            stage_state["judge_next_action"] = "advance"
 
         state["last_action_result"] = {
             **_payload_for_state(

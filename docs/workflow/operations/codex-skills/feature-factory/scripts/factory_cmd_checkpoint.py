@@ -177,12 +177,170 @@ def _rollback_adversarial_round(slug: str, stage: str) -> None:
     )
 
 
+def _prior_stage_for_checkpoint(stage: str) -> str | None:
+    prior_stage_by_stage = {
+        "plan": "spec",
+        "tasks": "plan",
+        "diff": "tasks",
+    }
+    return prior_stage_by_stage.get(stage)
+
+
+def _concern_is_open(concern: dict) -> bool:
+    return all(
+        concern.get(field) is None
+        for field in ("addressed_at", "deferred_reason", "dismissed_reason")
+    )
+
+
+def _concern_reasoning_snippet(concern: dict, limit: int = 60) -> str:
+    reasoning = str(concern.get("reasoning", "") or "").strip()
+    if not reasoning:
+        return "(no reasoning)"
+    return reasoning[:limit]
+
+
+def _find_concerns_by_id(state: dict, concern_id: str) -> list[tuple[str, dict]]:
+    """Return ALL matches so callers can detect ambiguity (P2-3 adversarial finding).
+
+    Previously the helper returned the first hit, which silently resolved the
+    wrong concern when two shared an ID (hash collision, copied state, etc.).
+    """
+    matches: list[tuple[str, dict]] = []
+    stages = state.get("stages", {})
+    if not isinstance(stages, dict):
+        return matches
+    for stage_name, stage_state in stages.items():
+        if not isinstance(stage_state, dict):
+            continue
+        concerns = stage_state.get("unresolved_concerns", [])
+        if not isinstance(concerns, list):
+            continue
+        for concern in concerns:
+            if not isinstance(concern, dict):
+                continue
+            if str(concern.get("id", "") or "") == concern_id:
+                matches.append((stage_name, concern))
+    return matches
+
+
+def _find_concern_by_id(state: dict, concern_id: str) -> tuple[str, dict] | None:
+    """Back-compat shim — returns first match. New callers should use
+    _find_concerns_by_id to detect ambiguity."""
+    matches = _find_concerns_by_id(state, concern_id)
+    return matches[0] if matches else None
+
+
+def _render_open_concern_block(prior_stage: str, concerns: list[dict]) -> None:
+    print(f"blocked: unresolved-concerns-from-{prior_stage}", file=sys.stderr)
+    for concern in concerns:
+        concern_id = str(concern.get("id", "") or "")
+        snippet = _concern_reasoning_snippet(concern)
+        print(f"- {concern_id}: {snippet}", file=sys.stderr)
+        print(
+            f"  checkpoint --address {concern_id} --evidence \"fixed in commit abc\"",
+            file=sys.stderr,
+        )
+        print(
+            f"  checkpoint --defer {concern_id} --reason \"follow-up\"",
+            file=sys.stderr,
+        )
+        print(
+            f"  checkpoint --dismiss {concern_id} --reason \"reviewer error\"",
+            file=sys.stderr,
+        )
+
+
+def _nonblank(value: object) -> str | None:
+    """Return value.strip() if it is non-empty after stripping, else None.
+
+    P2-4 (adversarial review): whitespace-only --reason / --evidence strings
+    pass truthiness checks but are meaningless. Treat them as missing.
+    """
+    if value is None:
+        return None
+    stripped = str(value).strip()
+    return stripped if stripped else None
+
+
+def _handle_concern_lifecycle(args: argparse.Namespace) -> int | None:
+    action: str | None = None
+    concern_id: str | None = None
+    evidence: str | None = None
+    reason: str | None = None
+    if getattr(args, "address", None):
+        action = "addressed"
+        concern_id = args.address
+        evidence = _nonblank(getattr(args, "evidence", None))
+        if evidence is None:
+            print("--address requires --evidence TEXT (non-whitespace)", file=sys.stderr)
+            return 2
+    elif getattr(args, "defer", None):
+        action = "deferred"
+        concern_id = args.defer
+        reason = _nonblank(getattr(args, "reason", None))
+        if reason is None:
+            print("--defer requires --reason TEXT (non-whitespace)", file=sys.stderr)
+            return 2
+    elif getattr(args, "dismiss", None):
+        action = "dismissed"
+        concern_id = args.dismiss
+        reason = _nonblank(getattr(args, "reason", None))
+        if reason is None:
+            print("--dismiss requires --reason TEXT (non-whitespace)", file=sys.stderr)
+            return 2
+    else:
+        return None
+
+    if args.stage not in {"spec", "plan", "tasks"}:
+        print("concern lifecycle flags only usable with --stage spec|plan|tasks", file=sys.stderr)
+        return 2
+
+    with with_locked_state(args.slug) as state:
+        matches = _find_concerns_by_id(state, concern_id)
+        if not matches:
+            print(f"concern id {concern_id} not found in any stage", file=sys.stderr)
+            return 2
+        # P2-3 (adversarial review): ambiguous IDs must NOT silently resolve the
+        # first match. Require disambiguation via --stage.
+        if len(matches) > 1:
+            stage_list = ", ".join(sorted({m[0] for m in matches}))
+            matched_stages = [m[0] for m in matches]
+            if matched_stages.count(args.stage) == 1:
+                # --stage disambiguates uniquely.
+                concern = next(c for s, c in matches if s == args.stage)
+            else:
+                print(
+                    f"concern id {concern_id} matches multiple concerns across stages: "
+                    f"{stage_list}. Disambiguate by running with --stage set to the "
+                    f"stage containing exactly one matching concern, or use a longer "
+                    f"concern id.",
+                    file=sys.stderr,
+                )
+                return 2
+        else:
+            concern = matches[0][1]
+        if action == "addressed":
+            concern["addressed_at"] = int(time.time())
+            concern["addressed_by"] = evidence
+        elif action == "deferred":
+            concern["deferred_reason"] = reason
+        elif action == "dismissed":
+            concern["dismissed_reason"] = reason
+
+    print(f"✓ concern {concern_id} marked {action}")
+    return 0
+
+
 def command_checkpoint(args: argparse.Namespace) -> int:
     fast = getattr(args, "fast", False)
     if fast and args.stage != "diff":
         raise SystemExit("--fast requires --stage diff")
 
     ensure_sync()
+    lifecycle_rc = _handle_concern_lifecycle(args)
+    if lifecycle_rc is not None:
+        return lifecycle_rc
     root = workflow_dir(args.slug)
     reviews = reviews_dir(args.slug)
     root.mkdir(parents=True, exist_ok=True)
@@ -218,6 +376,23 @@ def command_checkpoint(args: argparse.Namespace) -> int:
                 "spec checkpoint requires discovery to be complete first; "
                 "record the remaining questions and assumptions with the discover command"
             )
+    prior_stage = _prior_stage_for_checkpoint(args.stage)
+    if prior_stage is not None:
+        prior_state = load_workflow_state(args.slug)
+        stages = prior_state.get("stages", {})
+        prior_stage_state = stages.get(prior_stage, {}) if isinstance(stages, dict) else {}
+        open_concerns: list[dict] = []
+        if isinstance(prior_stage_state, dict):
+            concerns = prior_stage_state.get("unresolved_concerns", [])
+            if isinstance(concerns, list):
+                open_concerns = [
+                    concern
+                    for concern in concerns
+                    if isinstance(concern, dict) and _concern_is_open(concern)
+                ]
+        if open_concerns:
+            _render_open_concern_block(prior_stage, open_concerns)
+            return 2
     policy = resolved_review_policy(args.slug, args)
     context_paths = [normalized_repo_path(path, "context path") for path in args.context]
     allow_dirty_paths = [normalized_repo_path(path, "allow-dirty path") for path in args.allow_dirty_path]

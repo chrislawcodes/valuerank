@@ -36,6 +36,8 @@ CHECKPOINT_FALLBACK_KEY = "checkpoint_fallback"
 CHECKPOINT_PROGRESS_KEY = "checkpoint_progress"
 PARALLEL_ANALYSIS_KEY = "parallel_analysis"
 INIT_HEAD_SHA_KEY = "init_head_sha"
+INVARIANT_WARNINGS_KEY = "invariant_warnings"
+_INVARIANT_WARNINGS_CAP = 100
 
 # ---------------------------------------------------------------------------
 # Atomic JSON I/O
@@ -186,6 +188,7 @@ def _default_workflow_state() -> dict:
         INIT_HEAD_SHA_KEY: "",
         "token_usage": [],
         "stages": {},
+        INVARIANT_WARNINGS_KEY: [],
         "schema_version": 1,
     }
 
@@ -387,8 +390,61 @@ def load_workflow_state(slug: str) -> dict:
     state.setdefault(INIT_HEAD_SHA_KEY, "")
     state.setdefault("token_usage", [])
     state.setdefault("stages", {})
+    state.setdefault(INVARIANT_WARNINGS_KEY, [])
     state.setdefault("schema_version", 1)
+    _backfill_unresolved_concern_ids(state)
     return state
+
+
+def _concern_id_stable(stage: str, judge: str, round_raised: int, reasoning: str) -> str:
+    """Stable concern ID per FR-003. Mirrored in factory_cmd_judge._concern_id.
+
+    Defined here so state-load backfill (FR-011a) does not need to import the
+    judge module at load time.
+    """
+    import hashlib
+    normalized = "".join(reasoning.split())[:48]
+    key = f"{stage}|{judge}|{round_raised}|{normalized}"
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()[:12]
+
+
+def _backfill_unresolved_concern_ids(state: dict) -> None:
+    """FR-011a — backfill `id` on any legacy unresolved_concern without one.
+
+    Older runs (including the run-033 fixture) wrote concerns before FR-003
+    added the stable-id field. On read, synthesize the id so the new
+    checkpoint lifecycle works on in-flight runs without a migration script.
+    Also default-fills addressed_at / addressed_by / deferred_reason /
+    dismissed_reason to ``None``.
+    """
+    stages = state.get("stages")
+    if not isinstance(stages, dict):
+        return
+    for stage_name, stage_state in stages.items():
+        if not isinstance(stage_state, dict):
+            continue
+        concerns = stage_state.get("unresolved_concerns")
+        if not isinstance(concerns, list):
+            continue
+        for concern in concerns:
+            if not isinstance(concern, dict):
+                continue
+            if not concern.get("id"):
+                # Defensive coercion — diff round-1 finding: older/corrupt
+                # state.json may store round_raised as a non-numeric string.
+                # Never let load_workflow_state raise.
+                try:
+                    round_raised = int(concern.get("round_raised") or 0)
+                except (TypeError, ValueError):
+                    round_raised = 0
+                concern["id"] = _concern_id_stable(
+                    str(concern.get("stage") or stage_name),
+                    str(concern.get("judge") or ""),
+                    round_raised,
+                    str(concern.get("reasoning") or ""),
+                )
+            for field in ("addressed_at", "addressed_by", "deferred_reason", "dismissed_reason"):
+                concern.setdefault(field, None)
 
 
 def save_workflow_state(slug: str, state: dict) -> Path:
