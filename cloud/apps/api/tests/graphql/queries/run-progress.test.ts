@@ -193,15 +193,31 @@ describe('Run progress GraphQL queries', () => {
       createdTranscriptIds.push(transcript.id);
     }
 
-    const anomaly = await db.runAnomaly.create({
+    const defaultAnomaly = await db.runAnomaly.create({
       data: {
         runId: run.id,
         type: 'STRANDED_TRANSCRIPT',
         subject: '',
         details: { transcriptIds: [createdTranscriptIds[4]] },
+        source: 'default',
+        firstSeenAt: new Date('2026-04-23T00:00:00.000Z'),
+        lastSeenAt: new Date('2026-04-23T00:00:00.000Z'),
       },
     });
-    createdAnomalyIds.push(anomaly.id);
+    createdAnomalyIds.push(defaultAnomaly.id);
+
+    const auditAnomaly = await db.runAnomaly.create({
+      data: {
+        runId: run.id,
+        type: 'STRANDED_TRANSCRIPT',
+        subject: '',
+        details: { transcriptIds: [createdTranscriptIds[4]] },
+        source: 'audit',
+        firstSeenAt: new Date('2026-04-23T00:00:01.000Z'),
+        lastSeenAt: new Date('2026-04-23T00:00:01.000Z'),
+      },
+    });
+    createdAnomalyIds.push(auditAnomaly.id);
 
     const response = await request(app)
       .post('/graphql')
@@ -220,6 +236,7 @@ describe('Run progress GraphQL queries', () => {
                 id
                 type
                 subject
+                source
               }
             }
           }
@@ -237,9 +254,16 @@ describe('Run progress GraphQL queries', () => {
     });
     expect(response.body.data.run.anomalies).toEqual([
       {
-        id: anomaly.id,
+        id: auditAnomaly.id,
         type: 'STRANDED_TRANSCRIPT',
         subject: '',
+        source: 'AUDIT',
+      },
+      {
+        id: defaultAnomaly.id,
+        type: 'STRANDED_TRANSCRIPT',
+        subject: '',
+        source: 'DEFAULT',
       },
     ]);
   });

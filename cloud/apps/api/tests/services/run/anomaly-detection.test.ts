@@ -143,6 +143,45 @@ describe('run anomaly detection', () => {
     ).resolves.toBeNull();
   });
 
+  it('detects any measurable pair asymmetry in audit mode', async () => {
+    mockRunFindMany.mockResolvedValue([
+      { id: 'run-2', config: { jobChoiceBatchGroupId: 'group-1', models: ['m1'], samplesPerScenario: 10 } },
+    ]);
+    mockRunScenarioSelectionCount.mockResolvedValue(1);
+    mockProbeResultCount
+      .mockResolvedValueOnce(5)
+      .mockResolvedValueOnce(6);
+
+    await expect(
+      detectPairAsymmetry({
+        id: 'run-1',
+        status: 'COMPLETED',
+        updatedAt: new Date('2026-04-23T00:00:00.000Z'),
+        config: { jobChoiceBatchGroupId: 'group-1', models: ['m1'], samplesPerScenario: 10 },
+        progress: { total: 10 },
+        deletedAt: null,
+      }, 'audit')
+    ).resolves.toMatchObject({
+      type: 'PAIR_ASYMMETRY',
+      subject: 'group-1',
+    });
+
+    mockProbeResultCount
+      .mockResolvedValueOnce(5)
+      .mockResolvedValueOnce(5);
+
+    await expect(
+      detectPairAsymmetry({
+        id: 'run-1',
+        status: 'COMPLETED',
+        updatedAt: new Date('2026-04-23T00:00:00.000Z'),
+        config: { jobChoiceBatchGroupId: 'group-1', models: ['m1'], samplesPerScenario: 10 },
+        progress: { total: 10 },
+        deletedAt: null,
+      }, 'audit')
+    ).resolves.toBeNull();
+  });
+
   it('detects summarizing stalls only after the threshold', () => {
     expect(
       detectSummarizingStall({
@@ -205,6 +244,47 @@ describe('run anomaly detection', () => {
         progress: { total: 20 },
         deletedAt: null,
       })
+    ).resolves.toEqual([]);
+  });
+
+  it('detects below-median models in audit mode without changing the probe floor', async () => {
+    mockRunScenarioSelectionCount.mockResolvedValue(5);
+    mockProbeResultGroupBy.mockResolvedValue([
+      { modelId: 'm1', _count: { _all: 4 } },
+      { modelId: 'm2', _count: { _all: 5 } },
+    ]);
+
+    await expect(
+      detectModelTranscriptShortfall({
+        id: 'run-1',
+        status: 'COMPLETED',
+        updatedAt: new Date('2026-04-23T00:00:00.000Z'),
+        config: { models: ['m1', 'm2'], samplesPerScenario: 2 },
+        progress: { total: 20 },
+        deletedAt: null,
+      }, 'audit')
+    ).resolves.toEqual([
+      expect.objectContaining({
+        type: 'MODEL_TRANSCRIPT_SHORTFALL',
+        subject: 'm1',
+      }),
+    ]);
+
+    mockRunScenarioSelectionCount.mockResolvedValue(2);
+    mockProbeResultGroupBy.mockResolvedValue([
+      { modelId: 'm1', _count: { _all: 1 } },
+      { modelId: 'm2', _count: { _all: 1 } },
+    ]);
+
+    await expect(
+      detectModelTranscriptShortfall({
+        id: 'run-1',
+        status: 'COMPLETED',
+        updatedAt: new Date('2026-04-23T00:00:00.000Z'),
+        config: { models: ['m1', 'm2'], samplesPerScenario: 1 },
+        progress: { total: 4 },
+        deletedAt: null,
+      }, 'audit')
     ).resolves.toEqual([]);
   });
 

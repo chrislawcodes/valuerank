@@ -1,0 +1,15 @@
+{
+  "paths": [
+    "cloud/apps/api/src/queue/handlers",
+    "cloud/apps/api/src/queue/handlers/run-state-reconcile.ts",
+    "cloud/apps/api/src/services/run",
+    "cloud/packages/db/prisma/schema.prisma"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/api/src/queue/handlers",
+    "cloud/apps/api/src/queue/handlers/run-state-reconcile.ts",
+    "cloud/apps/api/src/services/run",
+    "cloud/packages/db/prisma/schema.prisma",
+    "docs/workflow/feature-runs/035-audit-sweep"
+  ]
+}

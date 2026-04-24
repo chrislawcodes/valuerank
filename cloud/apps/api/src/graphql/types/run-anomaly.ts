@@ -13,6 +13,14 @@ export const RunAnomalyTypeEnum: ReturnType<typeof builder.enumType<'RunAnomalyT
   description: 'Structured anomaly type for run state reconciliation',
 });
 
+const RunAnomalySourceEnum = builder.enumType('RunAnomalySource', {
+  values: {
+    DEFAULT: { value: 'default', description: 'Anomaly detected by the default reconciliation sweep' },
+    AUDIT: { value: 'audit', description: 'Anomaly detected by the audit sweep' },
+  },
+  description: 'Source of a run anomaly record',
+});
+
 builder.objectType(RunAnomalyRef, {
   description: 'Structured anomaly record for a run',
   fields: (t) => ({
@@ -23,6 +31,10 @@ builder.objectType(RunAnomalyRef, {
       resolve: (anomaly) => anomaly.type,
     }),
     subject: t.exposeString('subject'),
+    source: t.field({
+      type: RunAnomalySourceEnum,
+      resolve: (anomaly) => anomaly.source,
+    }),
     details: t.field({
       type: 'JSON',
       resolve: (anomaly) => anomaly.details,

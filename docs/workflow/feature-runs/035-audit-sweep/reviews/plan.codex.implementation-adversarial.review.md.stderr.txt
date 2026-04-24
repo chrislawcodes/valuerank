@@ -1,0 +1,3698 @@
+Reading additional input from stdin...
+OpenAI Codex v0.124.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: medium
+reasoning summaries: none
+session id: 019dc00e-64c1-7112-8439-fcea5ab831a2
+--------
+user
+Review this plan artifact using a implementation-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+Code context files are provided above. Before asserting any finding, check whether it is confirmed or refuted by the provided code. Each finding must include an evidence tag:
+  [CODE-CONFIRMED] — the code directly supports this finding
+  [CODE-REFUTED] — the code contradicts this finding (do not include as a finding)
+  [UNVERIFIED] — relevant code was not provided; treat as lower confidence
+Only assign HIGH severity to CODE-CONFIRMED findings.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Context: schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  // Direct connection for migrations (bypasses PgBouncer)
+  // Required because Prisma Migrate doesn't support connection pooling
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================================================
+// AUTHENTICATION
+// ============================================================================
+
+enum UserRole {
+  ADMIN
+  VISITOR
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  name         String?
+  role         UserRole  @default(ADMIN)
+  mustChangePassword Boolean @default(false) @map("must_change_password")
+  lastLoginAt  DateTime? @map("last_login_at")
+  passwordChangedAt DateTime? @map("password_changed_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  apiKeys ApiKey[]
+
+  // Audit relations
+  auditLogs          AuditLog[]
+  createdDefinitions Definition[] @relation("DefinitionCreator")
+  deletedDefinitions Definition[] @relation("DefinitionDeleter")
+  createdRuns        Run[]        @relation("RunCreator")
+  createdDomainEvaluations DomainEvaluation[] @relation("DomainEvaluationCreator")
+  deletedRuns        Run[]        @relation("RunDeleter")
+  createdTags        Tag[]        @relation("TagCreator")
+  createdLlmModels         LlmModel[]               @relation("LlmModelCreator")
+  createdBalanceSyncLogs   ProviderBalanceSyncLog[] @relation("ProviderBalanceSyncLogCreator")
+
+  @@map("users")
+}
+
+model ApiKey {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  name      String
+  keyHash   String    @unique @map("key_hash")
+  keyPrefix String    @map("key_prefix") @db.VarChar(12)
+  lastUsed  DateTime? @map("last_used")
+  expiresAt DateTime? @map("expires_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([keyPrefix])
+  @@index([userId])
+  @@map("api_keys")
+}
+
+// ============================================================================
+// OAUTH 2.1 (MCP Authentication)
+// ============================================================================
+
+model OAuthClient {
+  id                      String   @id @default(cuid())
+  clientId                String   @unique @map("client_id")
+  clientSecretHash        String   @map("client_secret_hash")
+  clientName              String?  @map("client_name")
+  redirectUris            String[] @map("redirect_uris")
+  tokenEndpointAuthMethod String   @default("client_secret_post") @map("token_endpoint_auth_method")
+  grantTypes              String[] @default(["authorization_code", "refresh_token"]) @map("grant_types")
+  responseTypes           String[] @default(["code"]) @map("response_types")
+  scope                   String   @default("mcp:read mcp:write")
+  createdAt               DateTime @default(now()) @map("created_at")
+
+  refreshTokens OAuthRefreshToken[]
+
+  @@map("oauth_clients")
+}
+
+model OAuthRefreshToken {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique @map("token_hash")
+  clientId  String   @map("client_id")
+  userId    String   @map("user_id")
+  scope     String
+  resource  String
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  client OAuthClient @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("oauth_refresh_tokens")
+}
+
+// ============================================================================
+// CORE DOMAIN
+// ============================================================================
+
+model Definition {
+  id                String    @id @default(cuid())
+  parentId          String?   @map("parent_id")
+  domainId          String?   @map("domain_id")
+  domainContextId   String?   @map("domain_context_id")
+  name              String
+  content           Json      @db.JsonB
+  expansionProgress Json?     @map("expansion_progress") @db.JsonB
+  expansionDebug    Json?     @map("expansion_debug") @db.JsonB
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  lastAccessedAt    DateTime? @map("last_accessed_at")
+  deletedAt         DateTime? @map("deleted_at")
+
+  // Audit fields
+  createdByUserId String? @map("created_by_user_id")
+  deletedByUserId String? @map("deleted_by_user_id")
+
+  parent   Definition?  @relation("DefinitionVersions", fields: [parentId], references: [id])
+  children Definition[] @relation("DefinitionVersions")
+  domain   Domain?      @relation(fields: [domainId], references: [id], onDelete: SetNull)
+  domainContext DomainContext? @relation(fields: [domainContextId], references: [id], onDelete: SetNull)
+
+  runs      Run[]
+  scenarios Scenario[]
+  tags      DefinitionTag[]
+  assumptionVignetteSelections AssumptionVignetteSelection[]
+
+  // Audit relations
+  createdBy User? @relation("DefinitionCreator", fields: [createdByUserId], references: [id])
+  deletedBy User? @relation("DefinitionDeleter", fields: [deletedByUserId], references: [id])
+
+  // Preamble integration
+  preambleVersionId String?          @map("preamble_version_id")
+  preambleVersion   PreambleVersion? @relation(fields: [preambleVersionId], references: [id])
+  version           Int              @default(1)
+
+  // Level preset integration
+  levelPresetVersionId String?             @map("level_preset_version_id")
+  levelPresetVersion   LevelPresetVersion? @relation(fields: [levelPresetVersionId], references: [id])
+
+  // Cost visibility - per-definition token statistics (P3)
+  tokenStatistics ModelTokenStatistics[]
+
+  @@index([parentId])
+  @@index([domainId])
+  @@index([domainContextId])
+  @@index([preambleVersionId])
+  @@index([levelPresetVersionId])
+  @@map("definitions")
+}
+
+model Domain {
+  id             String   @id @default(cuid())
+  name           String
+  normalizedName String   @unique @map("normalized_name")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  defaultLevelPresetVersionId String?             @map("default_level_preset_version_id")
+  defaultLevelPresetVersion   LevelPresetVersion? @relation(fields: [defaultLevelPresetVersionId], references: [id])
+
+  defaultPreambleVersionId String?          @map("default_preamble_version_id")
+  defaultPreambleVersion   PreambleVersion? @relation(fields: [defaultPreambleVersionId], references: [id])
+
+  defaultContextId String?        @map("default_context_id")
+  defaultContext   DomainContext? @relation("DomainDefaultContext", fields: [defaultContextId], references: [id])
+
+  defaultModelIds String[] @default([]) @map("default_model_ids")
+
+  sentencePrefix String? @map("sentence_prefix")
+  labelPrefix    String? @map("label_prefix")
+
+  definitions     Definition[]
+  contexts        DomainContext[] @relation("DomainContexts")
+  valueStatements ValueStatement[]
+  evaluations     DomainEvaluation[]
+  configSnapshots DomainConfigSnapshot[]
+
+  @@index([defaultLevelPresetVersionId])
+  @@index([defaultPreambleVersionId])
+  @@index([defaultContextId])
+  @@map("domains")
+}
+
+model DomainContext {
+  id        String   @id @default(cuid())
+  domainId  String   @map("domain_id")
+  text      String
+  version   Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  domain          Domain       @relation("DomainContexts", fields: [domainId], references: [id])
+  domainsAsDefault Domain[]    @relation("DomainDefaultContext")
+  definitions     Definition[]
+  domainConfigSnapshots DomainConfigSnapshot[]
+
+  @@map("domain_contexts")
+}
+
+model ValueStatement {
+  id        String   @id @default(cuid())
+  domainId  String   @map("domain_id")
+  token     String
+  body      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  domain   Domain                 @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  versions ValueStatementVersion[]
+
+  @@unique([domainId, token])
+  @@index([domainId])
+  @@map("value_statements")
+}
+
+model ValueStatementVersion {
+  id          String   @id @default(cuid())
+  statementId String   @map("statement_id")
+  content     String   @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  statement ValueStatement @relation(fields: [statementId], references: [id], onDelete: Cascade)
+
+  @@index([statementId, createdAt(sort: Desc)])
+  @@map("value_statement_versions")
+}
+
+model DomainConfigSnapshot {
+  id                       String   @id @default(cuid())
+  domainId                 String   @map("domain_id")
+  preambleVersionId        String?  @map("preamble_version_id")
+  levelPresetVersionId     String?  @map("level_preset_version_id")
+  contextId                String?  @map("context_id")
+  valueStatementVersionIds String[] @map("value_statement_version_ids")
+  fingerprint              String
+  createdAt                DateTime @default(now()) @map("created_at")
+
+  domain               Domain              @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  preambleVersion      PreambleVersion?    @relation(fields: [preambleVersionId], references: [id])
+  levelPresetVersion   LevelPresetVersion? @relation(fields: [levelPresetVersionId], references: [id])
+  context              DomainContext?      @relation(fields: [contextId], references: [id])
+  runs                 Run[]
+
+  @@unique([domainId, fingerprint])
+  @@index([domainId, createdAt(sort: Desc)])
+  @@map("domain_config_snapshots")
+}
+
+model Preamble {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  versions PreambleVersion[]
+
+  @@map("preambles")
+}
+
+model LevelPreset {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  versions LevelPresetVersion[]
+
+  @@map("level_presets")
+}
+
+model LevelPresetVersion {
+  id            String   @id @default(cuid())
+  levelPresetId String   @map("level_preset_id")
+  version       String
+  l1            String
+  l2            String
+  l3            String
+  l4            String
+  l5            String
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  levelPreset LevelPreset  @relation(fields: [levelPresetId], references: [id], onDelete: Cascade)
+  domains     Domain[]
+  definitions Definition[]
+  domainConfigSnapshots DomainConfigSnapshot[]
+
+  @@index([levelPresetId])
+  @@map("level_preset_versions")
+}
+
+model PreambleVersion {
+  id         String   @id @default(cuid())
+  preambleId String   @map("preamble_id")
+  version    String   // User-facing version label (e.g. "2024-02-01 12:00 PST")
+  content    String   @db.Text
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  preamble    Preamble     @relation(fields: [preambleId], references: [id], onDelete: Cascade)
+  definitions Definition[]
+  domains     Domain[]
+  domainConfigSnapshots DomainConfigSnapshot[]
+
+  @@index([preambleId])
+  @@map("preamble_versions")
+}
+
+model Tag {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Audit fields
+  createdByUserId String? @map("created_by_user_id")
+
+  definitions DefinitionTag[]
+  runs        RunTag[]
+
+  // Audit relations
+  createdBy User? @relation("TagCreator", fields: [createdByUserId], references: [id])
+
+  @@map("tags")
+}
+
+model DefinitionTag {
+  id           String    @id @default(cuid())
+  definitionId String    @map("definition_id")
+  tagId        String    @map("tag_id")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  definition Definition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  tag        Tag        @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([definitionId, tagId])
+  @@index([definitionId])
+  @@index([tagId])
+  @@map("definition_tags")
+}
+
+model RunTag {
+  id        String   @id @default(cuid())
+  runId     String   @map("run_id")
+  tagId     String   @map("tag_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  run Run @relation(fields: [runId], references: [id], onDelete: Cascade)
+  tag Tag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, tagId])
+  @@index([runId])
+  @@index([tagId])
+  @@map("run_tags")
+}
+
+model Run {
+  id                 String    @id @default(cuid())
+  name               String?   @map("name")
+  definitionId       String    @map("definition_id")
+  experimentId       String?   @map("experiment_id")
+  status             RunStatus @default(PENDING)
+  runCategory        RunCategory @default(UNKNOWN_LEGACY) @map("run_category")
+  config             Json      @db.JsonB
+  progress           Json?     @db.JsonB
+  summarizeProgress  Json?     @map("summarize_progress") @db.JsonB
+  stalledModels      String[]  @default([]) @map("stalled_models")
+  startedAt          DateTime? @map("started_at")
+  completedAt        DateTime? @map("completed_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  lastAccessedAt     DateTime? @map("last_accessed_at")
+  deletedAt          DateTime? @map("deleted_at")
+  // Retention settings (for future pruning)
+  retentionDays      Int?      @map("retention_days")
+  archivePermanently Boolean   @default(true) @map("archive_permanently")
+
+  // Audit fields
+  createdByUserId String? @map("created_by_user_id")
+  deletedByUserId String? @map("deleted_by_user_id")
+
+  definition Definition  @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  experiment Experiment? @relation(fields: [experimentId], references: [id])
+  tags       RunTag[]
+
+  // Domain config snapshot at run creation time
+  domainConfigSnapshotId String?              @map("domain_config_snapshot_id")
+  domainConfigSnapshot   DomainConfigSnapshot? @relation(fields: [domainConfigSnapshotId], references: [id])
+
+  transcripts     Transcript[]
+  analysisResults AnalysisResult[]
+  domainEvaluationMembership DomainEvaluationRun?
+  baselineFor     RunComparison[]  @relation("BaselineRun")
+  comparisonFor   RunComparison[]  @relation("ComparisonRun")
+  scenarioSelections RunScenarioSelection[]
+  probeResults    ProbeResult[]
+  anomalies       RunAnomaly[]
+
+  // Audit relations
+  createdBy User? @relation("RunCreator", fields: [createdByUserId], references: [id])
+  deletedBy User? @relation("RunDeleter", fields: [deletedByUserId], references: [id])
+
+  @@index([definitionId])
+  @@index([experimentId])
+  @@index([status])
+  @@index([runCategory])
+  @@index([domainConfigSnapshotId])
+  @@map("runs")
+}
+
+model DomainEvaluation {
+  id               String                        @id @default(cuid())
+  domainId         String                        @map("domain_id")
+  domainNameAtLaunch String                      @map("domain_name_at_launch")
+  scopeCategory    DomainEvaluationScopeCategory @map("scope_category")
+  status           DomainEvaluationStatus        @default(PENDING)
+  configSnapshot   Json                          @map("config_snapshot") @db.JsonB
+  createdAt        DateTime                      @default(now()) @map("created_at")
+  startedAt        DateTime?                     @map("started_at")
+  completedAt      DateTime?                     @map("completed_at")
+  createdByUserId  String?                       @map("created_by_user_id")
+  deletedAt        DateTime?                     @map("deleted_at")
+
+  domain    Domain               @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  createdBy User?                @relation("DomainEvaluationCreator", fields: [createdByUserId], references: [id])
+  members   DomainEvaluationRun[]
+
+  @@index([domainId])
+  @@index([scopeCategory])
+  @@index([status])
+  @@index([createdByUserId])
+  @@map("domain_evaluations")
+}
+
+model DomainEvaluationRun {
+  id                    String   @id @default(cuid())
+  domainEvaluationId    String   @map("domain_evaluation_id")
+  runId                 String   @unique @map("run_id")
+  definitionIdAtLaunch  String   @map("definition_id_at_launch")
+  definitionNameAtLaunch String  @map("definition_name_at_launch")
+  domainIdAtLaunch      String   @map("domain_id_at_launch")
+  createdAt             DateTime @default(now()) @map("created_at")
+  deletedAt             DateTime? @map("deleted_at")
+
+  domainEvaluation DomainEvaluation @relation(fields: [domainEvaluationId], references: [id], onDelete: Cascade)
+  run              Run              @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([domainEvaluationId])
+  @@index([definitionIdAtLaunch])
+  @@index([domainIdAtLaunch])
+  @@map("domain_evaluation_runs")
+}
+
+enum RunStatus {
+  PENDING
+  RUNNING
+  PAUSED
+  SUMMARIZING   // Probing complete, generating summaries
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum DomainEvaluationScopeCategory {
+  PILOT
+  PRODUCTION
+  REPLICATION
+  VALIDATION
+}
+
+enum DomainEvaluationStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum RunCategory {
+  PILOT
+  PRODUCTION
+  REPLICATION
+  VALIDATION
+  UNKNOWN_LEGACY
+}
+
+enum RunAnomalyType {
+  STRANDED_TRANSCRIPT
+  ORPHAN_TRANSCRIPT
+  PAIR_ASYMMETRY
+  SUMMARIZING_STALL
+  MODEL_TRANSCRIPT_SHORTFALL
+  SCHEDULED_COUNT_MISMATCH
+}
+
+model Transcript {
+  id                 String    @id @default(cuid())
+  runId              String    @map("run_id")
+  scenarioId         String?   @map("scenario_id")
+  // Model versioning (renamed from target_model for consistency)
+  modelId            String    @map("model_id")
+  modelVersion       String?   @map("model_version")
+  // Multi-sample support: index within sample set (0 to N-1)
+  sampleIndex        Int       @default(0) @map("sample_index")
+  // Definition snapshot (captures exact definition at run time)
+  definitionSnapshot Json?     @map("definition_snapshot") @db.JsonB
+  // Transcript content
+  content            Json      @db.JsonB
+  turnCount          Int       @map("turn_count")
+  tokenCount         Int       @map("token_count")
+  durationMs         Int       @map("duration_ms")
+  // Cost tracking (USD, computed from token counts and model pricing)
+  estimatedCost      Float?    @map("estimated_cost")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  lastAccessedAt     DateTime? @map("last_accessed_at")
+  // Retention (NULL = permanent, default)
+  contentExpiresAt   DateTime? @map("content_expires_at")
+  // Summary fields (populated after run completes).
+  // decision_code and decision_code_source columns were dropped after the
+  // remove-decisionCode PR migrated all transcripts to canonicalDecision as
+  // the single source of truth (PR #713, commit f86c2579).
+  decisionText       String?   @map("decision_text")     // LLM-generated summary
+  decisionMetadata   Json?     @map("decision_metadata") @db.JsonB
+  summarizedAt       DateTime? @map("summarized_at")     // When summary was generated
+  summarizeFailedAt  DateTime?  @map("summarize_failed_at")
+  costDebitedAt      DateTime?  @map("cost_debited_at")
+  // Soft delete
+  deletedAt          DateTime? @map("deleted_at")
+
+  run      Run       @relation(fields: [runId], references: [id], onDelete: Cascade)
+  scenario Scenario? @relation(fields: [scenarioId], references: [id])
+
+  @@index([runId])
+  @@index([scenarioId])
+  @@index([modelId])
+  @@index([deletedAt])
+  @@index([sampleIndex])
+  @@index([runId, summarizedAt])
+  @@map("transcripts")
+}
+
+model Scenario {
+  id           String    @id @default(cuid())
+  definitionId String    @map("definition_id")
+  name         String
+  content      Json      @db.JsonB
+  orientationFlipped Boolean @default(false) @map("orientation_flipped")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  definition Definition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  transcripts Transcript[]
+  runSelections RunScenarioSelection[]
+  probeResults ProbeResult[]
+  sourceAssumptionPairs AssumptionScenarioPair[] @relation("SourceAssumptionScenario")
+  variantAssumptionPairs AssumptionScenarioPair[] @relation("VariantAssumptionScenario")
+
+  @@index([definitionId])
+  @@map("scenarios")
+}
+
+model AssumptionVignetteSelection {
+  id           String   @id @default(cuid())
+  assumptionKey String  @map("assumption_key")
+  definitionId String   @map("definition_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  definition Definition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+
+  @@unique([assumptionKey, definitionId])
+  @@index([definitionId])
+  @@map("assumption_vignette_selections")
+}
+
+model AssumptionScenarioPair {
+  id                    String    @id @default(cuid())
+  assumptionKey         String    @map("assumption_key")
+  sourceScenarioId      String    @map("source_scenario_id")
+  variantScenarioId     String    @map("variant_scenario_id")
+  variantType           String    @map("variant_type")
+  equivalenceReviewStatus String? @map("equivalence_review_status")
+  equivalenceReviewedBy String?   @map("equivalence_reviewed_by")
+  equivalenceReviewedAt DateTime? @map("equivalence_reviewed_at")
+  equivalenceReviewNotes String?  @map("equivalence_review_notes") @db.Text
+  createdAt             DateTime  @default(now()) @map("created_at")
+
+  sourceScenario  Scenario @relation("SourceAssumptionScenario", fields: [sourceScenarioId], references: [id], onDelete: Cascade)
+  variantScenario Scenario @relation("VariantAssumptionScenario", fields: [variantScenarioId], references: [id], onDelete: Cascade)
+
+  @@unique([assumptionKey, sourceScenarioId, variantScenarioId])
+  @@index([assumptionKey])
+  @@index([sourceScenarioId])
+  @@index([variantScenarioId])
+  @@map("assumption_scenario_pairs")
+}
+
+// Join table to track which scenarios were sampled for a run
+model RunScenarioSelection {
+  id         String   @id @default(cuid())
+  runId      String   @map("run_id")
+  scenarioId String   @map("scenario_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  run      Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
+  scenario Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, scenarioId])
+  @@index([runId])
+  @@index([scenarioId])
+  @@map("run_scenario_selections")
+}
+
+// ============================================================================
+// JOB RESULTS (Probe outcome tracking)
+// ============================================================================
+
+model ProbeResult {
+  id          String            @id @default(cuid())
+  runId       String            @map("run_id")
+  scenarioId  String            @map("scenario_id")
+  modelId     String            @map("model_id")
+  // Multi-sample support: index within sample set (0 to N-1)
+  sampleIndex Int               @default(0) @map("sample_index")
+  status      ProbeResultStatus
+  // Success fields
+  transcriptId   String?        @map("transcript_id")
+  durationMs     Int?           @map("duration_ms")
+  inputTokens    Int?           @map("input_tokens")
+  outputTokens   Int?           @map("output_tokens")
+  // Failure fields
+  errorCode    String?          @map("error_code")
+  errorMessage String?          @map("error_message")
+  retryCount   Int              @default(0) @map("retry_count")
+  // Timestamps
+  createdAt    DateTime         @default(now()) @map("created_at")
+  completedAt  DateTime?        @map("completed_at")
+  deletedAt    DateTime?        @map("deleted_at")
+
+  run      Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
+  scenario Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+
+  // Updated unique constraint to include sampleIndex for multi-sample runs
+  @@unique([runId, scenarioId, modelId, sampleIndex])
+  @@index([runId])
+  @@index([runId, status])
+  @@index([scenarioId])
+  @@index([modelId])
+  @@index([status])
+  @@index([sampleIndex])
+  @@map("probe_results")
+}
+
+model RunAnomaly {
+  id                   String         @id @default(cuid())
+  runId                String         @map("run_id")
+  type                 RunAnomalyType
+  subject              String         @default("")
+  details              Json           @db.JsonB
+  firstSeenAt          DateTime       @default(now()) @map("first_seen_at")
+  lastSeenAt           DateTime       @default(now()) @map("last_seen_at")
+  resolvedAt           DateTime?      @map("resolved_at")
+  acknowledgedByUserId String?        @map("acknowledged_by_user_id")
+
+  run Run @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, type, subject])
+  @@index([runId])
+  @@index([type, resolvedAt])
+  @@map("run_anomalies")
+}
+
+enum ProbeResultStatus {
+  SUCCESS
+  FAILED
+}
+
+// ============================================================================
+// ANALYSIS & EXPERIMENTS
+// ============================================================================
+
+model Experiment {
+  id           String   @id @default(cuid())
+  name         String
+  hypothesis   String?
+  analysisPlan Json?    @map("analysis_plan") @db.JsonB
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  runs        Run[]
+  comparisons RunComparison[]
+
+  @@map("experiments")
+}
+
+model RunComparison {
+  id              String   @id @default(cuid())
+  experimentId    String?  @map("experiment_id")
+  baselineRunId   String   @map("baseline_run_id")
+  comparisonRunId String   @map("comparison_run_id")
+  deltaData       Json?    @map("delta_data") @db.JsonB
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  experiment    Experiment? @relation(fields: [experimentId], references: [id])
+  baselineRun   Run         @relation("BaselineRun", fields: [baselineRunId], references: [id])
+  comparisonRun Run         @relation("ComparisonRun", fields: [comparisonRunId], references: [id])
+
+  @@index([experimentId])
+  @@index([baselineRunId])
+  @@index([comparisonRunId])
+  @@map("run_comparisons")
+}
+
+model AnalysisResult {
+  id           String         @id @default(cuid())
+  runId        String         @map("run_id")
+  analysisType String         @map("analysis_type")
+  inputHash    String         @map("input_hash")
+  codeVersion  String         @map("code_version")
+  output       Json           @db.JsonB
+  status       AnalysisStatus @default(CURRENT)
+  createdAt    DateTime       @default(now()) @map("created_at")
+  // Soft delete
+  deletedAt    DateTime?      @map("deleted_at")
+
+  run Run @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+  @@index([analysisType])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("analysis_results")
+}
+
+enum AnalysisStatus {
+  CURRENT
+  SUPERSEDED
+}
+
+enum AssumptionAnalysisStatus {
+  CURRENT
+  SUPERSEDED
+}
+
+model AssumptionAnalysisSnapshot {
+  id            String                   @id @default(cuid())
+  assumptionKey String                   @map("assumption_key")
+  analysisType  String                   @map("analysis_type")
+  inputHash     String                   @map("input_hash")
+  codeVersion   String                   @map("code_version")
+  configSignature String                 @map("config_signature")
+  config        Json                     @db.JsonB
+  output        Json                     @db.JsonB
+  status        AssumptionAnalysisStatus @default(CURRENT)
+  createdAt     DateTime                 @default(now()) @map("created_at")
+  deletedAt     DateTime?                @map("deleted_at")
+
+  @@index([assumptionKey])
+  @@index([analysisType])
+  @@index([inputHash])
+  @@index([configSignature])
+  @@index([status])
+  @@index([deletedAt])
+  @@index([assumptionKey, analysisType, inputHash, status])
+  @@map("assumption_analysis_snapshots")
+}
+
+model Rubric {
+  id        String   @id @default(cuid())
+  version   Int      @unique
+  content   Json     @db.JsonB
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("rubrics")
+}
+
+// ============================================================================
+// COHORTS (for segment analysis)
+// ============================================================================
+
+model Cohort {
+  id        String   @id @default(cuid())
+  name      String
+  criteria  Json     @db.JsonB
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("cohorts")
+}
+
+// ============================================================================
+// LLM PROVIDERS & MODELS
+// ============================================================================
+
+model LlmProvider {
+  id                  String   @id @default(cuid())
+  name                String   @unique
+  displayName         String   @map("display_name")
+  maxParallelRequests Int      @default(1) @map("max_parallel_requests")
+  requestsPerMinute   Int      @default(60) @map("requests_per_minute")
+  isEnabled           Boolean  @default(true) @map("is_enabled")
+  balance             Decimal? @db.Decimal(10, 4)
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  models          LlmModel[]
+  balanceSyncLogs ProviderBalanceSyncLog[]
+
+  @@map("llm_providers")
+}
+
+model ProviderBalanceSyncLog {
+  id                  String   @id @default(cuid())
+  providerId          String   @map("provider_id")
+  systemBalanceAtSync Decimal  @map("system_balance_at_sync") @db.Decimal(10, 4)
+  enteredBalance      Decimal  @map("entered_balance") @db.Decimal(10, 4)
+  delta               Decimal  @db.Decimal(10, 4)
+  syncedAt            DateTime @default(now()) @map("synced_at")
+  createdByUserId     String?  @map("created_by_user_id")
+
+  provider  LlmProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  createdBy User?       @relation("ProviderBalanceSyncLogCreator", fields: [createdByUserId], references: [id])
+
+  @@index([providerId])
+  @@map("provider_balance_sync_logs")
+}
+
+model LlmModel {
+  id                   String         @id @default(cuid())
+  providerId           String         @map("provider_id")
+  modelId              String         @map("model_id")
+  displayName          String         @map("display_name")
+  costInputPerMillion  Decimal        @map("cost_input_per_million") @db.Decimal(10, 4)
+  costOutputPerMillion Decimal        @map("cost_output_per_million") @db.Decimal(10, 4)
+  status               LlmModelStatus @default(ACTIVE)
+  isDefault            Boolean        @default(false) @map("is_default")
+  apiConfig            Json?          @map("api_config") @db.JsonB
+  createdAt            DateTime       @default(now()) @map("created_at")
+  updatedAt            DateTime       @updatedAt @map("updated_at")
+
+  // Audit fields
+  createdByUserId String? @map("created_by_user_id")
+
+  provider LlmProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  // Audit relations
+  createdBy User? @relation("LlmModelCreator", fields: [createdByUserId], references: [id])
+
+  // Cost visibility - token statistics for cost prediction
+  tokenStatistics ModelTokenStatistics[]
+
+  @@unique([providerId, modelId])
+  @@index([providerId])
+  @@index([status])
+  @@map("llm_models")
+}
+
+enum LlmModelStatus {
+  ACTIVE
+  DEPRECATED
+}
+
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json     @db.JsonB
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("system_settings")
+}
+
+// ============================================================================
+// COST VISIBILITY - Token Statistics
+// ============================================================================
+
+model ModelTokenStatistics {
+  id              String     @id @default(cuid())
+  modelId         String     @map("model_id")
+  definitionId    String?    @map("definition_id")
+  avgInputTokens  Decimal    @default(100) @map("avg_input_tokens") @db.Decimal(10, 2)
+  avgOutputTokens Decimal    @default(900) @map("avg_output_tokens") @db.Decimal(10, 2)
+  sampleCount     Int        @default(0) @map("sample_count")
+  lastUpdatedAt   DateTime   @updatedAt @map("last_updated_at")
+  createdAt       DateTime   @default(now()) @map("created_at")
+
+  model      LlmModel    @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  definition Definition? @relation(fields: [definitionId], references: [id], onDelete: SetNull)
+
+  @@unique([modelId, definitionId])
+  @@index([modelId])
+  @@index([definitionId])
+  @@map("model_token_statistics")
+}
+
+// ============================================================================
+// AUDIT LOGGING
+// ============================================================================
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  action     String   // CREATE, UPDATE, DELETE, ACTION
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  userId     String?  @map("user_id")
+  metadata   Json?    @db.JsonB
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([createdAt])
+  @@index([action])
+  @@map("audit_logs")
+}
+
+
+Context: anomaly-persistence.ts
+import { db } from '@valuerank/db';
+import { createLogger } from '@valuerank/shared';
+import type { AnomalyDraft, RunAnomalyType } from './anomaly-detection.js';
+
+const log = createLogger('services:run:anomaly-persistence');
+
+type RunProgress = {
+  total: number;
+  completed: number;
+  failed: number;
+};
+
+type RunAnomalyKey = {
+  runId: string;
+  type: RunAnomalyType;
+  subject: string;
+};
+
+function parseProgress(progress: unknown): RunProgress {
+  if (progress === null || progress === undefined || typeof progress !== 'object') {
+    return { total: 0, completed: 0, failed: 0 };
+  }
+
+  const record = progress as Record<string, unknown>;
+  const total = typeof record.total === 'number' && Number.isFinite(record.total) ? record.total : 0;
+  const completed = typeof record.completed === 'number' && Number.isFinite(record.completed) ? record.completed : 0;
+  const failed = typeof record.failed === 'number' && Number.isFinite(record.failed) ? record.failed : 0;
+  return { total, completed, failed };
+}
+
+export async function upsertAnomaly(runId: string, draft: AnomalyDraft): Promise<void> {
+  const now = new Date();
+  await db.runAnomaly.upsert({
+    where: {
+      runId_type_subject: {
+        runId,
+        type: draft.type,
+        subject: draft.subject,
+      },
+    },
+    create: {
+      runId,
+      type: draft.type,
+      subject: draft.subject,
+      details: draft.details,
+      firstSeenAt: now,
+      lastSeenAt: now,
+    },
+    update: {
+      details: draft.details,
+      lastSeenAt: now,
+      resolvedAt: null,
+    },
+  });
+}
+
+export async function persistAnomalyDrafts(runId: string, drafts: AnomalyDraft[]): Promise<void> {
+  for (const draft of drafts) {
+    await upsertAnomaly(runId, draft);
+  }
+}
+
+export async function resolveAnomaly(key: RunAnomalyKey): Promise<void> {
+  const now = new Date();
+  await db.runAnomaly.updateMany({
+    where: {
+      runId: key.runId,
+      type: key.type,
+      subject: key.subject,
+      resolvedAt: null,
+    },
+    data: {
+      resolvedAt: now,
+      lastSeenAt: now,
+    },
+  });
+}
+
+export async function repairScheduledCount(runId: string, canonicalTotal: number): Promise<boolean> {
+  const run = await db.run.findUnique({
+    where: { id: runId },
+    select: { progress: true },
+  });
+
+  if (run === null) {
+    return false;
+  }
+
+  const current = parseProgress(run.progress);
+  if (current.total === canonicalTotal) {
+    return false;
+  }
+
+  const updated: RunProgress = {
+    ...current,
+    total: canonicalTotal,
+  };
+
+  await db.run.update({
+    where: { id: runId },
+    data: { progress: updated },
+  });
+
+  log.info({ runId, currentTotal: current.total, canonicalTotal }, 'Repaired scheduled count');
+  return true;
+}
+
+
+Context: anomaly-persistence.test.ts
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const {
+  mockRunFindUnique,
+  mockRunUpdate,
+  mockAnomalyUpsert,
+  mockAnomalyUpdateMany,
+} = vi.hoisted(() => ({
+  mockRunFindUnique: vi.fn(),
+  mockRunUpdate: vi.fn(),
+  mockAnomalyUpsert: vi.fn(),
+  mockAnomalyUpdateMany: vi.fn(),
+}));
+
+vi.mock('@valuerank/db', () => ({
+  db: {
+    run: {
+      findUnique: mockRunFindUnique,
+      update: mockRunUpdate,
+    },
+    runAnomaly: {
+      upsert: mockAnomalyUpsert,
+      updateMany: mockAnomalyUpdateMany,
+    },
+  },
+  Prisma: {},
+}));
+
+import {
+  repairScheduledCount,
+  resolveAnomaly,
+  upsertAnomaly,
+} from '../../../src/services/run/anomaly-persistence.js';
+
+describe('run anomaly persistence helpers', () => {
+  beforeEach(() => {
+    mockRunFindUnique.mockReset();
+    mockRunUpdate.mockReset();
+    mockAnomalyUpsert.mockReset();
+    mockAnomalyUpdateMany.mockReset();
+  });
+
+  it('upserts anomaly rows with the current timestamps', async () => {
+    mockAnomalyUpsert.mockResolvedValue(undefined);
+
+    await upsertAnomaly('run_1', {
+      type: 'STRANDED_TRANSCRIPT',
+      subject: '',
+      details: { transcriptIds: ['t1'] },
+    });
+
+    expect(mockAnomalyUpsert).toHaveBeenCalledTimes(1);
+    const args = mockAnomalyUpsert.mock.calls[0]?.[0];
+    expect(args.where.runId_type_subject).toEqual({
+      runId: 'run_1',
+      type: 'STRANDED_TRANSCRIPT',
+      subject: '',
+    });
+    expect(args.create.runId).toBe('run_1');
+    expect(args.update.resolvedAt).toBeNull();
+  });
+
+  it('marks anomalies resolved when the condition clears', async () => {
+    mockAnomalyUpdateMany.mockResolvedValue({ count: 1 });
+
+    await resolveAnomaly({
+      runId: 'run_1',
+      type: 'PAIR_ASYMMETRY',
+      subject: 'group-1',
+    });
+
+    expect(mockAnomalyUpdateMany).toHaveBeenCalledTimes(1);
+    const args = mockAnomalyUpdateMany.mock.calls[0]?.[0];
+    expect(args.where).toEqual({
+      runId: 'run_1',
+      type: 'PAIR_ASYMMETRY',
+      subject: 'group-1',
+      resolvedAt: null,
+    });
+    expect(args.data.resolvedAt).toBeInstanceOf(Date);
+  });
+
+  it('repairs scheduled total only when it changes', async () => {
+    mockRunFindUnique.mockResolvedValue({
+      progress: { total: 4, completed: 2, failed: 1 },
+    });
+    mockRunUpdate.mockResolvedValue(undefined);
+
+    await expect(repairScheduledCount('run_1', 4)).resolves.toBe(false);
+    await expect(repairScheduledCount('run_1', 6)).resolves.toBe(true);
+
+    expect(mockRunUpdate).toHaveBeenCalledTimes(1);
+    expect(mockRunUpdate.mock.calls[0]?.[0].data.progress).toEqual({
+      total: 6,
+      completed: 2,
+      failed: 1,
+    });
+  });
+});
+
+
+Context: anomaly-detection.ts
+import { db, Prisma } from '@valuerank/db';
+import { createLogger } from '@valuerank/shared';
+import {
+  MODEL_SHORTFALL_ABSOLUTE_RATE,
+  MODEL_SHORTFALL_MIN_PROBES,
+  MODEL_SHORTFALL_PEER_RATE,
+  MODEL_SHORTFALL_RELATIVE_RATE,
+  ORPHAN_TRANSCRIPT_MIN_AGE_SECONDS,
+  PAIR_ASYMMETRY_MIN_PROBES,
+  PAIR_ASYMMETRY_THRESHOLD_PCT,
+  SUMMARIZING_STALL_MINUTES,
+} from './anomaly-thresholds.js';
+
+const log = createLogger('services:run:anomaly-detection');
+
+export type RunAnomalyType =
+  | 'STRANDED_TRANSCRIPT'
+  | 'ORPHAN_TRANSCRIPT'
+  | 'PAIR_ASYMMETRY'
+  | 'SUMMARIZING_STALL'
+  | 'MODEL_TRANSCRIPT_SHORTFALL'
+  | 'SCHEDULED_COUNT_MISMATCH';
+
+export type AnomalyDraft = {
+  type: RunAnomalyType;
+  subject: string;
+  details: Prisma.InputJsonValue;
+};
+
+type RunSnapshot = {
+  id: string;
+  status: string;
+  updatedAt: Date;
+  config: unknown;
+  progress: unknown;
+  deletedAt: Date | null;
+};
+
+type RunConfig = {
+  models?: string[];
+  samplesPerScenario?: number;
+  jobChoiceBatchGroupId?: string | null;
+};
+
+type SuccessCountRow = {
+  modelId: string;
+  _count: { _all: number };
+};
+
+type OrphanTranscriptRow = {
+  id: string;
+  scenarioId: string | null;
+  modelId: string;
+  sampleIndex: number;
+  createdAt: Date;
+  durationMs: number;
+  tokenCount: number;
+  content: unknown;
+};
+
+type PairAsymmetryCandidate = {
+  id: string;
+  config: unknown;
+};
+
+type PairAsymmetryMetrics = {
+  runId: string;
+  scheduled: number;
+  successCount: number;
+  successRate: number;
+};
+
+function parseRunConfig(config: unknown): RunConfig {
+  if (config === null || typeof config !== 'object') {
+    return {};
+  }
+
+  return config as RunConfig;
+}
+
+function getModelIds(config: unknown): string[] {
+  const models = parseRunConfig(config).models ?? [];
+  return models.filter((modelId) => typeof modelId === 'string' && modelId.length > 0);
+}
+
+function getSamplesPerScenario(config: unknown): number {
+  const samples = parseRunConfig(config).samplesPerScenario;
+  return typeof samples === 'number' && Number.isFinite(samples) && samples > 0 ? samples : 1;
+}
+
+function getGroupId(config: unknown): string | null {
+  const groupId = parseRunConfig(config).jobChoiceBatchGroupId;
+  return typeof groupId === 'string' && groupId.trim() !== '' ? groupId : null;
+}
+
+function getProgressTotal(progress: unknown): number {
+  if (progress === null || progress === undefined || typeof progress !== 'object') {
+    return 0;
+  }
+
+  const total = (progress as Record<string, unknown>).total;
+  return typeof total === 'number' && Number.isFinite(total) ? total : 0;
+}
+
+function toJsonValue(value: unknown): Prisma.InputJsonValue {
+  return value as Prisma.InputJsonValue;
+}
+
+function buildOrphanTranscriptFromClause(runId: string): Prisma.Sql {
+  const minAge = new Date(Date.now() - ORPHAN_TRANSCRIPT_MIN_AGE_SECONDS * 1000);
+  return Prisma.sql`
+    FROM transcripts t
+    LEFT JOIN probe_results p
+      ON p.run_id = t.run_id
+     AND p.scenario_id = t.scenario_id
+     AND p.model_id = t.model_id
+     AND p.sample_index = t.sample_index
+     AND p.deleted_at IS NULL
+    WHERE t.run_id = ${runId}
+      AND t.deleted_at IS NULL
+      AND t.created_at < ${minAge}
+      AND p.id IS NULL
+  `;
+}
+
+export async function detectStrandedTranscript(runId: string): Promise<AnomalyDraft | null> {
+  const transcripts = await db.transcript.findMany({
+    where: {
+      runId,
+      deletedAt: null,
+      summarizedAt: null,
+      summarizeFailedAt: null,
+    },
+    select: { id: true },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  if (transcripts.length === 0) {
+    return null;
+  }
+
+  return {
+    type: 'STRANDED_TRANSCRIPT',
+    subject: '',
+    details: toJsonValue({
+      transcriptIds: transcripts.map((transcript) => transcript.id),
+    }),
+  };
+}
+
+export async function findOrphanTranscripts(runId: string, limit?: number): Promise<OrphanTranscriptRow[]> {
+  const fromClause = buildOrphanTranscriptFromClause(runId);
+
+  if (limit !== undefined) {
+    return db.$queryRaw<OrphanTranscriptRow[]>`
+    SELECT
+      t.id,
+      t.scenario_id AS "scenarioId",
+      t.model_id AS "modelId",
+      t.sample_index AS "sampleIndex",
+      t.created_at AS "createdAt",
+      t.duration_ms AS "durationMs",
+      t.token_count AS "tokenCount",
+      t.content AS "content"
+    ${fromClause}
+    ORDER BY t.created_at ASC
+    LIMIT ${limit}
+  `;
+  }
+
+  return db.$queryRaw<OrphanTranscriptRow[]>`
+    SELECT
+      t.id,
+      t.scenario_id AS "scenarioId",
+      t.model_id AS "modelId",
+      t.sample_index AS "sampleIndex",
+      t.created_at AS "createdAt",
+      t.duration_ms AS "durationMs",
+      t.token_count AS "tokenCount",
+      t.content AS "content"
+    ${fromClause}
+    ORDER BY t.created_at ASC
+  `;
+}
+
+export async function countOrphanTranscripts(runId: string): Promise<number> {
+  const fromClause = buildOrphanTranscriptFromClause(runId);
+  const rows = await db.$queryRaw<Array<{ count: bigint }>>`
+    SELECT COUNT(*) AS count
+    ${fromClause}
+  `;
+
+  return Number(rows[0]?.count ?? 0);
+}
+
+export async function detectOrphanTranscript(runId: string): Promise<AnomalyDraft | null> {
+  const orphans = await findOrphanTranscripts(runId);
+  if (orphans.length === 0) {
+    return null;
+  }
+
+  return {
+    type: 'ORPHAN_TRANSCRIPT',
+    subject: '',
+    details: toJsonValue({
+      transcriptIds: orphans.map((transcript) => transcript.id),
+    }),
+  };
+}
+
+export async function detectPairAsymmetry(run: RunSnapshot): Promise<AnomalyDraft | null> {
+  const groupId = getGroupId(run.config);
+  if (groupId === null) {
+    return null;
+  }
+
+  const siblings = await db.run.findMany({
+    where: {
+      deletedAt: null,
+      id: { not: run.id },
+      config: {
+        path: ['jobChoiceBatchGroupId'],
+        equals: groupId,
+      },
+    },
+    select: {
+      id: true,
+      config: true,
+    },
+    orderBy: { updatedAt: 'asc' },
+  });
+
+  if (siblings.length === 0) {
+    return null;
+  }
+
+  const comparisonRuns: PairAsymmetryCandidate[] = [run, ...siblings];
+  const metrics = await Promise.all(
+    comparisonRuns.map(async (candidate): Promise<PairAsymmetryMetrics> => {
+      const modelCount = getModelIds(candidate.config).length;
+      const scenarioCount = await db.runScenarioSelection.count({ where: { runId: candidate.id } });
+      const samplesPerScenario = getSamplesPerScenario(candidate.config);
+      const scheduled = scenarioCount * modelCount * samplesPerScenario;
+      const successCount = await db.probeResult.count({
+        where: { runId: candidate.id, deletedAt: null, status: 'SUCCESS' },
+      });
+      return {
+        runId: candidate.id,
+        scheduled,
+        successCount,
+        successRate: scheduled === 0 ? 0 : successCount / scheduled,
+      };
+    })
+  );
+
+  const currentMetrics = metrics.find((candidate) => candidate.runId === run.id) ?? null;
+  if (currentMetrics === null) {
+    return null;
+  }
+
+  const skippedUnderSampledRunIds: string[] = [];
+  let maxDeltaPct = -1;
+  let maxDeltaSibling: PairAsymmetryMetrics | null = null;
+
+  for (const siblingMetrics of metrics) {
+    if (siblingMetrics.runId === run.id) {
+      continue;
+    }
+
+    if (currentMetrics.scheduled < PAIR_ASYMMETRY_MIN_PROBES || siblingMetrics.scheduled < PAIR_ASYMMETRY_MIN_PROBES) {
+      skippedUnderSampledRunIds.push(siblingMetrics.runId);
+      continue;
+    }
+
+    const deltaPct = Math.abs(currentMetrics.successRate - siblingMetrics.successRate) * 100;
+    if (deltaPct > maxDeltaPct) {
+      maxDeltaPct = deltaPct;
+      maxDeltaSibling = siblingMetrics;
+    }
+  }
+
+  if (maxDeltaSibling === null) {
+    return null;
+  }
+
+  // <= so identical rates (deltaPct === 0) don't fire when threshold is 0.
+  // At threshold=0 the detector fires on any measurable asymmetry.
+  if (maxDeltaPct <= PAIR_ASYMMETRY_THRESHOLD_PCT) {
+    return null;
+  }
+
+  return {
+    type: 'PAIR_ASYMMETRY',
+    subject: groupId,
+    details: toJsonValue({
+      runId: run.id,
+      siblingRunId: maxDeltaSibling.runId,
+      currentSuccessRate: currentMetrics.successRate,
+      siblingSuccessRate: maxDeltaSibling.successRate,
+      scheduled: currentMetrics.scheduled,
+      siblingScheduled: maxDeltaSibling.scheduled,
+      siblingRunIds: metrics.map((candidate) => candidate.runId),
+      siblingSuccessRates: metrics.map((candidate) => candidate.successRate),
+      maxDeltaPct,
+      skippedUnderSampledRunIds,
+    }),
+  };
+}
+
+export function detectSummarizingStall(run: RunSnapshot): AnomalyDraft | null {
+  if (run.status !== 'SUMMARIZING') {
+    return null;
+  }
+
+  const ageMinutes = Math.floor((Date.now() - run.updatedAt.getTime()) / 60000);
+  if (ageMinutes < SUMMARIZING_STALL_MINUTES) {
+    return null;
+  }
+
+  return {
+    type: 'SUMMARIZING_STALL',
+    subject: '',
+    details: toJsonValue({
+      updatedAt: run.updatedAt.toISOString(),
+      ageMinutes,
+    }),
+  };
+}
+
+export async function detectModelTranscriptShortfall(run: RunSnapshot): Promise<AnomalyDraft[]> {
+  const modelIds = getModelIds(run.config);
+  if (modelIds.length === 0) {
+    return [];
+  }
+
+  const scenarioCount = await db.runScenarioSelection.count({ where: { runId: run.id } });
+  const samplesPerScenario = getSamplesPerScenario(run.config);
+  const scheduledPerModel = scenarioCount * samplesPerScenario;
+
+  if (scheduledPerModel < MODEL_SHORTFALL_MIN_PROBES) {
+    return [];
+  }
+
+  const successRows = await db.probeResult.groupBy({
+    by: ['modelId'],
+    where: {
+      runId: run.id,
+      deletedAt: null,
+      status: 'SUCCESS',
+    },
+    _count: { _all: true },
+  });
+
+  const successesByModel = new Map<string, number>();
+  for (const row of successRows as SuccessCountRow[]) {
+    successesByModel.set(row.modelId, row._count._all);
+  }
+
+  const rates = modelIds.map((modelId) => {
+    const successes = successesByModel.get(modelId) ?? 0;
+    return {
+      modelId,
+      successes,
+      scheduled: scheduledPerModel,
+      rate: scheduledPerModel === 0 ? 0 : successes / scheduledPerModel,
+    };
+  });
+
+  const sorted = [...rates].map((rate) => rate.rate).sort((left, right) => left - right);
+  const peerMedianRate = sorted.length === 0
+    ? 0
+    : sorted.length % 2 === 0
+      ? ((sorted[sorted.length / 2 - 1] ?? 0) + (sorted[sorted.length / 2] ?? 0)) / 2
+      : sorted[Math.floor(sorted.length / 2)] ?? 0;
+
+  return rates
+    .filter((rate) => rate.rate < MODEL_SHORTFALL_ABSOLUTE_RATE || (
+      rate.rate < MODEL_SHORTFALL_RELATIVE_RATE && peerMedianRate > MODEL_SHORTFALL_PEER_RATE
+    ))
+    .map((rate) => ({
+      type: 'MODEL_TRANSCRIPT_SHORTFALL' as const,
+      subject: rate.modelId,
+      details: toJsonValue({
+        runId: run.id,
+        modelId: rate.modelId,
+        successes: rate.successes,
+        scheduled: rate.scheduled,
+        rate: rate.rate,
+        peerMedianRate,
+      }),
+    }));
+}
+
+export async function detectScheduledCountMismatch(
+  run: RunSnapshot,
+): Promise<{ draft: AnomalyDraft | null; canonicalTotal: number }> {
+  const modelCount = getModelIds(run.config).length;
+  const scenarioCount = await db.runScenarioSelection.count({ where: { runId: run.id } });
+  const samplesPerScenario = getSamplesPerScenario(run.config);
+  const canonicalTotal = modelCount * scenarioCount * samplesPerScenario;
+  const currentTotal = getProgressTotal(run.progress);
+
+  if (currentTotal === canonicalTotal) {
+    return { draft: null, canonicalTotal };
+  }
+
+  return {
+    draft: {
+      type: 'SCHEDULED_COUNT_MISMATCH',
+      subject: '',
+      details: toJsonValue({
+        runId: run.id,
+        canonicalTotal,
+        currentTotal,
+        modelCount,
+        scenarioCount,
+        samplesPerScenario,
+      }),
+    },
+    canonicalTotal,
+  };
+}
+
+export async function detectRunAnomalies(run: RunSnapshot): Promise<AnomalyDraft[]> {
+  const drafts: AnomalyDraft[] = [];
+
+  const stranded = await detectStrandedTranscript(run.id);
+  if (stranded !== null) drafts.push(stranded);
+
+  const orphan = await detectOrphanTranscript(run.id);
+  if (orphan !== null) drafts.push(orphan);
+
+  const pair = await detectPairAsymmetry(run);
+  if (pair !== null) drafts.push(pair);
+
+  const stall = detectSummarizingStall(run);
+  if (stall !== null) drafts.push(stall);
+
+  drafts.push(...await detectModelTranscriptShortfall(run));
+
+  const scheduled = await detectScheduledCountMismatch(run);
+  if (scheduled.draft !== null) drafts.push(scheduled.draft);
+
+  log.debug({ runId: run.id, anomalyCount: drafts.length }, 'Detected run anomalies');
+  return drafts;
+}
+
+export type { RunSnapshot };
+
+
+Context: anomaly-detection.test.ts
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const {
+  mockRunFindMany,
+  mockRunScenarioSelectionCount,
+  mockProbeResultCount,
+  mockProbeResultGroupBy,
+  mockTranscriptFindMany,
+  mockQueryRaw,
+} = vi.hoisted(() => ({
+  mockRunFindMany: vi.fn(),
+  mockRunScenarioSelectionCount: vi.fn(),
+  mockProbeResultCount: vi.fn(),
+  mockProbeResultGroupBy: vi.fn(),
+  mockTranscriptFindMany: vi.fn(),
+  mockQueryRaw: vi.fn(),
+}));
+
+vi.mock('@valuerank/db', () => ({
+  db: {
+    run: {
+      findMany: mockRunFindMany,
+    },
+    runScenarioSelection: {
+      count: mockRunScenarioSelectionCount,
+    },
+    probeResult: {
+      count: mockProbeResultCount,
+      groupBy: mockProbeResultGroupBy,
+    },
+    transcript: {
+      findMany: mockTranscriptFindMany,
+    },
+    $queryRaw: mockQueryRaw,
+  },
+  Prisma: {
+    sql: (strings: TemplateStringsArray, ..._values: unknown[]) => ({
+      strings,
+      values: _values,
+    }),
+  },
+}));
+
+vi.mock('@valuerank/shared', () => ({
+  createLogger: () => ({
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }),
+}));
+
+import {
+  detectModelTranscriptShortfall,
+  detectOrphanTranscript,
+  detectPairAsymmetry,
+  detectScheduledCountMismatch,
+  detectStrandedTranscript,
+  detectSummarizingStall,
+} from '../../../src/services/run/anomaly-detection.js';
+
+describe('run anomaly detection', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('detects stranded transcripts and ignores runs with none', async () => {
+    mockTranscriptFindMany.mockResolvedValueOnce([{ id: 't-1' }]).mockResolvedValueOnce([]);
+
+    await expect(detectStrandedTranscript('run-1')).resolves.toEqual({
+      type: 'STRANDED_TRANSCRIPT',
+      subject: '',
+      details: { transcriptIds: ['t-1'] },
+    });
+    await expect(detectStrandedTranscript('run-2')).resolves.toBeNull();
+  });
+
+  it('detects orphan transcripts only when rows exist', async () => {
+    mockQueryRaw.mockResolvedValueOnce([
+      {
+        id: 't-1',
+        scenarioId: 'scenario-1',
+        modelId: 'model-1',
+        sampleIndex: 0,
+        createdAt: new Date('2026-04-23T00:00:00.000Z'),
+        durationMs: 10,
+        tokenCount: 20,
+        content: {},
+      },
+    ]).mockResolvedValueOnce([]);
+
+    await expect(detectOrphanTranscript('run-1')).resolves.toEqual({
+      type: 'ORPHAN_TRANSCRIPT',
+      subject: '',
+      details: { transcriptIds: ['t-1'] },
+    });
+    await expect(detectOrphanTranscript('run-2')).resolves.toBeNull();
+  });
+
+  it('detects pair asymmetry when sibling success rates diverge enough', async () => {
+    // mockRunFindMany is called by detectPairAsymmetry with `id: { not: run.id }`,
+    // so it should return only siblings (not self).
+    mockRunFindMany.mockResolvedValue([
+      { id: 'run-2', config: { jobChoiceBatchGroupId: 'group-1', models: ['m1'], samplesPerScenario: 10 } },
+    ]);
+    mockRunScenarioSelectionCount.mockResolvedValue(1);
+    // Two candidates (self + 1 sibling). Each calls probeResult.count once.
+    // Order in Promise.all: run-1 (self, 3 successes), run-2 (sibling, 9 successes).
+    mockProbeResultCount
+      .mockResolvedValueOnce(3)
+      .mockResolvedValueOnce(9);
+
+    await expect(
+      detectPairAsymmetry({
+        id: 'run-1',
+        status: 'COMPLETED',
+        updatedAt: new Date('2026-04-23T00:00:00.000Z'),
+        config: { jobChoiceBatchGroupId: 'group-1', models: ['m1'], samplesPerScenario: 10 },
+        progress: { total: 10 },
+        deletedAt: null,
+      })
+    ).resolves.toMatchObject({
+      type: 'PAIR_ASYMMETRY',
+      subject: 'group-1',
+    });
+
+    mockRunFindMany.mockResolvedValue([
+      { id: 'run-2', config: { jobChoiceBatchGroupId: 'group-1', models: ['m1'], samplesPerScenario: 10 } },
+    ]);
+    mockProbeResultCount
+      .mockResolvedValueOnce(8)
+      .mockResolvedValueOnce(8);
+
+    await expect(
+      detectPairAsymmetry({
+        id: 'run-1',
+        status: 'COMPLETED',
+        updatedAt: new Date('2026-04-23T00:00:00.000Z'),
+        config: { jobChoiceBatchGroupId: 'group-1', models: ['m1'], samplesPerScenario: 10 },
+        progress: { total: 10 },
+        deletedAt: null,
+      })
+    ).resolves.toBeNull();
+  });
+
+  it('detects summarizing stalls only after the threshold', () => {
+    expect(
+      detectSummarizingStall({
+        id: 'run-1',
+        status: 'SUMMARIZING',
+        updatedAt: new Date(Date.now() - 31 * 60 * 1000),
+        config: {},
+        progress: { total: 1 },
+        deletedAt: null,
+      })
+    ).toMatchObject({ type: 'SUMMARIZING_STALL', subject: '' });
+
+    expect(
+      detectSummarizingStall({
+        id: 'run-1',
+        status: 'RUNNING',
+        updatedAt: new Date(Date.now() - 31 * 60 * 1000),
+        config: {},
+        progress: { total: 1 },
+        deletedAt: null,
+      })
+    ).toBeNull();
+  });
+
+  it('detects model transcript shortfalls using derived success rates', async () => {
+    mockRunScenarioSelectionCount.mockResolvedValue(5);
+    mockProbeResultGroupBy.mockResolvedValue([
+      { modelId: 'm1', _count: { _all: 2 } },
+      { modelId: 'm2', _count: { _all: 9 } },
+    ]);
+
+    await expect(
+      detectModelTranscriptShortfall({
+        id: 'run-1',
+        status: 'COMPLETED',
+        updatedAt: new Date('2026-04-23T00:00:00.000Z'),
+        config: { models: ['m1', 'm2'], samplesPerScenario: 2 },
+        progress: { total: 20 },
+        deletedAt: null,
+      })
+    ).resolves.toEqual([
+      expect.objectContaining({
+        type: 'MODEL_TRANSCRIPT_SHORTFALL',
+        subject: 'm1',
+      }),
+    ]);
+
+    mockRunScenarioSelectionCount.mockResolvedValue(5);
+    mockProbeResultGroupBy.mockResolvedValue([
+      { modelId: 'm1', _count: { _all: 8 } },
+      { modelId: 'm2', _count: { _all: 9 } },
+    ]);
+
+    await expect(
+      detectModelTranscriptShortfall({
+        id: 'run-1',
+        status: 'COMPLETED',
+        updatedAt: new Date('2026-04-23T00:00:00.000Z'),
+        config: { models: ['m1', 'm2'], samplesPerScenario: 2 },
+        progress: { total: 20 },
+        deletedAt: null,
+      })
+    ).resolves.toEqual([]);
+  });
+
+  it('detects scheduled total mismatches and returns null when canonical totals match', async () => {
+    mockRunScenarioSelectionCount.mockResolvedValue(4);
+
+    await expect(
+      detectScheduledCountMismatch({
+        id: 'run-1',
+        status: 'RUNNING',
+        updatedAt: new Date('2026-04-23T00:00:00.000Z'),
+        config: { models: ['m1', 'm2'], samplesPerScenario: 2 },
+        progress: { total: 6 },
+        deletedAt: null,
+      })
+    ).resolves.toMatchObject({
+      canonicalTotal: 16,
+      draft: expect.objectContaining({
+        type: 'SCHEDULED_COUNT_MISMATCH',
+        subject: '',
+      }),
+    });
+
+    await expect(
+      detectScheduledCountMismatch({
+        id: 'run-1',
+        status: 'RUNNING',
+        updatedAt: new Date('2026-04-23T00:00:00.000Z'),
+        config: { models: ['m1', 'm2'], samplesPerScenario: 2 },
+        progress: { total: 16 },
+        deletedAt: null,
+      })
+    ).resolves.toEqual({
+      draft: null,
+      canonicalTotal: 16,
+    });
+  });
+});
+
+
+Context: run-state-reconcile.ts
+import type * as PgBoss from 'pg-boss';
+import { db } from '@valuerank/db';
+import { createLogger } from '@valuerank/shared';
+import { DEFAULT_JOB_OPTIONS, type RunStateReconcileJobData } from '../types.js';
+import { maybeAdvanceRunStatus } from '../../services/run/index.js';
+import {
+  detectModelTranscriptShortfall,
+  detectPairAsymmetry,
+  detectScheduledCountMismatch,
+  detectStrandedTranscript,
+  detectSummarizingStall,
+  countOrphanTranscripts,
+  findOrphanTranscripts,
+  type AnomalyDraft,
+  type RunSnapshot,
+} from '../../services/run/anomaly-detection.js';
+import {
+  persistAnomalyDrafts,
+  repairScheduledCount,
+  resolveAnomaly,
+} from '../../services/run/anomaly-persistence.js';
+import { ORPHAN_RECONSTRUCTION_CAP_PER_TICK } from '../../services/run/anomaly-thresholds.js';
+import { recordProbeSuccess } from '../../services/probe-result/index.js';
+
+const log = createLogger('queue:run-state-reconcile');
+
+type TokenUsageResult =
+  | { kind: 'ok'; inputTokens: number; outputTokens: number }
+  | { kind: 'malformed'; reason: string };
+
+function extractTranscriptTokenUsage(content: unknown, fallbackTokenCount: number): TokenUsageResult {
+  if (content === null || content === undefined || typeof content !== 'object') {
+    return { kind: 'malformed', reason: 'content-not-object' };
+  }
+
+  const record = content as Record<string, unknown>;
+  const snapshot = record.costSnapshot;
+  if (snapshot !== null && snapshot !== undefined && typeof snapshot === 'object') {
+    const snap = snapshot as Record<string, unknown>;
+    if (typeof snap.inputTokens === 'number' && typeof snap.outputTokens === 'number') {
+      return { kind: 'ok', inputTokens: snap.inputTokens, outputTokens: snap.outputTokens };
+    }
+  }
+
+  const turns = Array.isArray(record.turns) ? record.turns : [];
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let foundInputTokens = false;
+  let foundOutputTokens = false;
+
+  for (const turn of turns) {
+    if (turn === null || typeof turn !== 'object') {
+      continue;
+    }
+
+    const turnRecord = turn as Record<string, unknown>;
+    if (typeof turnRecord.inputTokens === 'number') {
+      inputTokens += turnRecord.inputTokens;
+      foundInputTokens = true;
+    }
+    if (typeof turnRecord.outputTokens === 'number') {
+      outputTokens += turnRecord.outputTokens;
+      foundOutputTokens = true;
+    }
+  }
+
+  if (!foundInputTokens && !foundOutputTokens) {
+    return { kind: 'malformed', reason: 'no-cost-data' };
+  }
+
+  return {
+    kind: 'ok',
+    inputTokens: foundInputTokens ? inputTokens : fallbackTokenCount,
+    outputTokens: foundOutputTokens ? outputTokens : fallbackTokenCount,
+  };
+}
+
+async function enqueueSummarizeTranscriptJob(runId: string, transcriptId: string): Promise<void> {
+  const bossModule = await import('../boss.js');
+  if (!bossModule.isBossRunning()) {
+    log.warn({ runId, transcriptId }, 'Boss not running, skipping summarize enqueue');
+    return;
+  }
+  const boss = bossModule.getBoss();
+  await boss.send(
+    'summarize_transcript',
+    { runId, transcriptId },
+    {
+      ...DEFAULT_JOB_OPTIONS['summarize_transcript'],
+      singletonKey: transcriptId,
+    }
+  );
+}
+
+async function syncAnomalies(runId: string, type: AnomalyDraft['type'], drafts: AnomalyDraft[]): Promise<void> {
+  await persistAnomalyDrafts(runId, drafts);
+
+  const currentSubjects = new Set(drafts.map((draft) => draft.subject));
+  const existing = await db.runAnomaly.findMany({
+    where: { runId, type },
+    select: { subject: true },
+  });
+
+  for (const anomaly of existing) {
+    if (!currentSubjects.has(anomaly.subject)) {
+      await resolveAnomaly({ runId, type, subject: anomaly.subject });
+    }
+  }
+}
+
+async function reconstructOrphans(runId: string): Promise<{ orphanIds: string[]; failedIds: string[]; reconstructedCount: number }> {
+  const orphans = await findOrphanTranscripts(runId, ORPHAN_RECONSTRUCTION_CAP_PER_TICK);
+  const failedIds: string[] = [];
+  let reconstructedCount = 0;
+
+  for (const orphan of orphans) {
+    if (orphan.scenarioId === null) {
+      failedIds.push(orphan.id);
+      continue;
+    }
+
+    try {
+      const tokenUsage = extractTranscriptTokenUsage(orphan.content, orphan.tokenCount);
+      if (tokenUsage.kind === 'ok') {
+        await recordProbeSuccess({
+          runId,
+          scenarioId: orphan.scenarioId,
+          modelId: orphan.modelId,
+          sampleIndex: orphan.sampleIndex,
+          transcriptId: orphan.id,
+          durationMs: orphan.durationMs,
+          inputTokens: tokenUsage.inputTokens,
+          outputTokens: tokenUsage.outputTokens,
+        });
+        reconstructedCount++;
+      } else {
+        failedIds.push(orphan.id);
+        log.warn({ runId, transcriptId: orphan.id, reason: tokenUsage.reason }, 'Malformed orphan transcript content');
+      }
+    } catch (error) {
+      failedIds.push(orphan.id);
+      log.warn({ runId, transcriptId: orphan.id, err: error }, 'Failed to reconstruct orphan transcript');
+    }
+  }
+
+  if (orphans.length === ORPHAN_RECONSTRUCTION_CAP_PER_TICK) {
+    const total = await countOrphanTranscripts(runId);
+    if (total > ORPHAN_RECONSTRUCTION_CAP_PER_TICK) {
+      log.info(
+        {
+          runId,
+          total,
+          processing: ORPHAN_RECONSTRUCTION_CAP_PER_TICK,
+          overflow: total - ORPHAN_RECONSTRUCTION_CAP_PER_TICK,
+        },
+        'Orphan backlog exceeds per-tick cap'
+      );
+    }
+  }
+
+  return {
+    orphanIds: orphans.map((orphan) => orphan.id),
+    failedIds,
+    reconstructedCount,
+  };
+}
+
+async function getRunSnapshot(runId: string): Promise<RunSnapshot | null> {
+  return db.run.findUnique({
+    where: { id: runId },
+    select: {
+      id: true,
+      status: true,
+      updatedAt: true,
+      config: true,
+      progress: true,
+      deletedAt: true,
+    },
+  });
+}
+
+export function createRunStateReconcileHandler(): PgBoss.WorkHandler<RunStateReconcileJobData> {
+  return async (jobs: PgBoss.Job<RunStateReconcileJobData>[]) => {
+    if (jobs.length === 0) {
+      return;
+    }
+
+    await Promise.all(
+      jobs.map(async (job) => {
+        const runId = job.data.runId;
+        log.debug({ jobId: job.id, runId }, 'Reconciling run state');
+
+        let run = await getRunSnapshot(runId);
+        if (run === null || run.deletedAt !== null) {
+          log.debug({ runId }, 'Skipping reconcile for missing or deleted run');
+          return;
+        }
+
+        if (run.status === 'FAILED' || run.status === 'CANCELLED') {
+          log.debug({ runId, status: run.status }, 'Skipping reconcile for terminal run');
+          return;
+        }
+
+        // Reconstruct orphan transcripts FIRST so their ProbeResult rows exist
+        // before we compute derived progress (maybeAdvanceRunStatus) and before
+        // the stranded-transcript rescue fans out summarize jobs. Without this
+        // ordering, orphans reconstructed on COMPLETED runs would wait a full
+        // sweep cycle (5-10 min) before getting summarized.
+        try {
+          const orphanResult = await reconstructOrphans(runId);
+          if (orphanResult.failedIds.length > 0) {
+            await syncAnomalies(runId, 'ORPHAN_TRANSCRIPT', [{
+              type: 'ORPHAN_TRANSCRIPT',
+              subject: '',
+              details: {
+                transcriptIds: orphanResult.orphanIds,
+                malformedTranscriptIds: orphanResult.failedIds,
+              },
+            }]);
+          } else {
+            await syncAnomalies(runId, 'ORPHAN_TRANSCRIPT', []);
+          }
+        } catch (error) {
+          log.warn({ runId, err: error }, 'Orphan transcript reconciliation failed');
+        }
+
+        try {
+          const stranded = await detectStrandedTranscript(runId);
+          if (stranded !== null) {
+            const transcripts = await db.transcript.findMany({
+              where: {
+                runId,
+                deletedAt: null,
+                summarizedAt: null,
+                summarizeFailedAt: null,
+              },
+              select: { id: true },
+              orderBy: { createdAt: 'asc' },
+            });
+
+            for (const transcript of transcripts) {
+              await enqueueSummarizeTranscriptJob(runId, transcript.id);
+            }
+
+            await syncAnomalies(runId, stranded.type, [stranded]);
+          } else {
+            await syncAnomalies(runId, 'STRANDED_TRANSCRIPT', []);
+          }
+        } catch (error) {
+          log.warn({ runId, err: error }, 'Late transcript rescue failed');
+        }
+
+        if (run.status === 'RUNNING' || run.status === 'SUMMARIZING' || run.status === 'PAUSED') {
+          try {
+            const advanceResult = await maybeAdvanceRunStatus(runId);
+            log.debug({ runId, advanceResult }, 'Reconciled run state');
+            run = (await getRunSnapshot(runId)) ?? run;
+          } catch (error) {
+            log.warn({ runId, err: error }, 'Failed to advance run state during reconciliation');
+          }
+        }
+
+        if (run.status === 'COMPLETED') {
+          try {
+            const pair = await detectPairAsymmetry(run);
+            await syncAnomalies(runId, 'PAIR_ASYMMETRY', pair === null ? [] : [pair]);
+          } catch (error) {
+            log.warn({ runId, err: error }, 'Pair asymmetry detection failed');
+          }
+
+          try {
+            const shortfalls = await detectModelTranscriptShortfall(run);
+            await syncAnomalies(runId, 'MODEL_TRANSCRIPT_SHORTFALL', shortfalls);
+          } catch (error) {
+            log.warn({ runId, err: error }, 'Model shortfall detection failed');
+          }
+        } else {
+          try {
+            const pair = await detectPairAsymmetry(run);
+            await syncAnomalies(runId, 'PAIR_ASYMMETRY', pair === null ? [] : [pair]);
+          } catch (error) {
+            log.warn({ runId, err: error }, 'Pair asymmetry detection failed');
+          }
+
+          try {
+            const stall = detectSummarizingStall(run);
+            await syncAnomalies(runId, 'SUMMARIZING_STALL', stall === null ? [] : [stall]);
+          } catch (error) {
+            log.warn({ runId, err: error }, 'Summarizing stall detection failed');
+          }
+
+          try {
+            const scheduled = await detectScheduledCountMismatch(run);
+            await syncAnomalies(runId, 'SCHEDULED_COUNT_MISMATCH', scheduled.draft === null ? [] : [scheduled.draft]);
+            if (scheduled.draft !== null) {
+              await repairScheduledCount(runId, scheduled.canonicalTotal);
+            }
+          } catch (error) {
+            log.warn({ runId, err: error }, 'Scheduled count mismatch detection failed');
+          }
+
+          try {
+            const shortfalls = await detectModelTranscriptShortfall(run);
+            await syncAnomalies(runId, 'MODEL_TRANSCRIPT_SHORTFALL', shortfalls);
+          } catch (error) {
+            log.warn({ runId, err: error }, 'Model shortfall detection failed');
+          }
+        }
+
+        log.info({ runId }, 'Run reconciliation completed');
+      })
+    );
+  };
+}
+
+
+Context: run-state-reconcile.test.ts
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mockRunFindUnique = vi.hoisted(() => vi.fn());
+const mockTranscriptFindMany = vi.hoisted(() => vi.fn());
+const mockRunAnomalyFindMany = vi.hoisted(() => vi.fn());
+const mockBossSend = vi.hoisted(() => vi.fn());
+const mockLogDebug = vi.hoisted(() => vi.fn());
+const mockLogInfo = vi.hoisted(() => vi.fn());
+const mockLogWarn = vi.hoisted(() => vi.fn());
+const mockLogError = vi.hoisted(() => vi.fn());
+const mockMaybeAdvanceRunStatus = vi.hoisted(() => vi.fn());
+const mockDetectStrandedTranscript = vi.hoisted(() => vi.fn());
+const mockDetectPairAsymmetry = vi.hoisted(() => vi.fn());
+const mockDetectModelTranscriptShortfall = vi.hoisted(() => vi.fn());
+const mockDetectScheduledCountMismatch = vi.hoisted(() => vi.fn());
+const mockDetectSummarizingStall = vi.hoisted(() => vi.fn());
+const mockFindOrphanTranscripts = vi.hoisted(() => vi.fn());
+const mockCountOrphanTranscripts = vi.hoisted(() => vi.fn());
+const mockPersistAnomalyDrafts = vi.hoisted(() => vi.fn());
+const mockResolveAnomaly = vi.hoisted(() => vi.fn());
+const mockRepairScheduledCount = vi.hoisted(() => vi.fn());
+const mockRecordProbeSuccess = vi.hoisted(() => vi.fn());
+
+vi.mock('@valuerank/db', () => ({
+  db: {
+    run: {
+      findUnique: mockRunFindUnique,
+    },
+    transcript: {
+      findMany: mockTranscriptFindMany,
+    },
+    runAnomaly: {
+      findMany: mockRunAnomalyFindMany,
+    },
+  },
+}));
+
+vi.mock('@valuerank/shared', () => ({
+  createLogger: () => ({
+    debug: mockLogDebug,
+    info: mockLogInfo,
+    warn: mockLogWarn,
+    error: mockLogError,
+  }),
+}));
+
+vi.mock('../../../src/queue/boss.js', () => ({
+  getBoss: () => ({
+    send: mockBossSend,
+  }),
+  isBossRunning: vi.fn(() => true),
+}));
+
+vi.mock('../../../src/services/run/index.js', () => ({
+  maybeAdvanceRunStatus: mockMaybeAdvanceRunStatus,
+}));
+
+vi.mock('../../../src/services/run/anomaly-detection.js', () => ({
+  detectStrandedTranscript: mockDetectStrandedTranscript,
+  detectPairAsymmetry: mockDetectPairAsymmetry,
+  detectModelTranscriptShortfall: mockDetectModelTranscriptShortfall,
+  detectScheduledCountMismatch: mockDetectScheduledCountMismatch,
+  detectSummarizingStall: mockDetectSummarizingStall,
+  findOrphanTranscripts: mockFindOrphanTranscripts,
+  countOrphanTranscripts: mockCountOrphanTranscripts,
+}));
+
+vi.mock('../../../src/services/run/anomaly-persistence.js', () => ({
+  persistAnomalyDrafts: mockPersistAnomalyDrafts,
+  resolveAnomaly: mockResolveAnomaly,
+  repairScheduledCount: mockRepairScheduledCount,
+}));
+
+vi.mock('../../../src/services/probe-result/index.js', () => ({
+  recordProbeSuccess: mockRecordProbeSuccess,
+}));
+
+import { createRunStateReconcileHandler } from '../../../src/queue/handlers/run-state-reconcile.js';
+
+describe('createRunStateReconcileHandler', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockRunFindUnique.mockResolvedValue({
+      id: 'run-1',
+      status: 'RUNNING',
+      updatedAt: new Date('2026-04-23T00:00:00.000Z'),
+      config: {},
+      progress: { total: 1 },
+      deletedAt: null,
+    });
+    mockTranscriptFindMany.mockResolvedValue([]);
+    mockRunAnomalyFindMany.mockResolvedValue([]);
+    mockDetectStrandedTranscript.mockResolvedValue(null);
+    mockDetectPairAsymmetry.mockResolvedValue(null);
+    mockDetectModelTranscriptShortfall.mockResolvedValue([]);
+    mockDetectScheduledCountMismatch.mockResolvedValue({
+      draft: null,
+      canonicalTotal: 1,
+    });
+    mockDetectSummarizingStall.mockResolvedValue(null);
+    mockFindOrphanTranscripts.mockResolvedValue([]);
+    mockCountOrphanTranscripts.mockResolvedValue(0);
+    mockMaybeAdvanceRunStatus.mockResolvedValue({ enteredSummarizing: false, completed: false });
+    mockRecordProbeSuccess.mockResolvedValue(undefined);
+    mockPersistAnomalyDrafts.mockResolvedValue(undefined);
+    mockResolveAnomaly.mockResolvedValue(undefined);
+    mockRepairScheduledCount.mockResolvedValue(false);
+  });
+
+  it('queues summarize jobs for stranded transcripts on a completed run without advancing status', async () => {
+    mockRunFindUnique.mockResolvedValueOnce({
+      id: 'run-1',
+      status: 'COMPLETED',
+      updatedAt: new Date('2026-04-23T00:00:00.000Z'),
+      config: { models: ['m1'], samplesPerScenario: 1 },
+      progress: { total: 1 },
+      deletedAt: null,
+    });
+    mockDetectStrandedTranscript.mockResolvedValueOnce({
+      type: 'STRANDED_TRANSCRIPT',
+      subject: '',
+      details: { transcriptIds: ['t-1', 't-2'] },
+    });
+    mockTranscriptFindMany.mockResolvedValueOnce([
+      { id: 't-1' },
+      { id: 't-2' },
+    ]);
+
+    const handler = createRunStateReconcileHandler();
+    await handler([
+      {
+        id: 'job-1',
+        data: { runId: 'run-1' },
+      } as never,
+    ]);
+
+    expect(mockBossSend).toHaveBeenCalledTimes(2);
+    expect(mockBossSend).toHaveBeenNthCalledWith(
+      1,
+      'summarize_transcript',
+      { runId: 'run-1', transcriptId: 't-1' },
+      expect.objectContaining({ singletonKey: 't-1' })
+    );
+    expect(mockBossSend).toHaveBeenNthCalledWith(
+      2,
+      'summarize_transcript',
+      { runId: 'run-1', transcriptId: 't-2' },
+      expect.objectContaining({ singletonKey: 't-2' })
+    );
+    expect(mockMaybeAdvanceRunStatus).not.toHaveBeenCalled();
+  });
+
+  it('marks malformed orphan transcripts as failed and persists the anomaly details', async () => {
+    mockRunFindUnique.mockResolvedValueOnce({
+      id: 'run-1',
+      status: 'COMPLETED',
+      updatedAt: new Date('2026-04-23T00:00:00.000Z'),
+      config: { models: ['m1'], samplesPerScenario: 1 },
+      progress: { total: 1 },
+      deletedAt: null,
+    });
+    mockFindOrphanTranscripts.mockResolvedValueOnce([
+      {
+        id: 't-1',
+        scenarioId: 'scenario-1',
+        modelId: 'm1',
+        sampleIndex: 0,
+        createdAt: new Date('2026-04-23T00:00:00.000Z'),
+        durationMs: 10,
+        tokenCount: 20,
+        content: null,
+      },
+    ]);
+
+    const handler = createRunStateReconcileHandler();
+    await handler([
+      {
+        id: 'job-1',
+        data: { runId: 'run-1' },
+      } as never,
+    ]);
+
+    expect(mockRecordProbeSuccess).not.toHaveBeenCalled();
+    expect(mockLogWarn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: 'run-1',
+        transcriptId: 't-1',
+        reason: 'content-not-object',
+      }),
+      'Malformed orphan transcript content'
+    );
+    expect(mockPersistAnomalyDrafts).toHaveBeenCalledWith(
+      'run-1',
+      [
+        expect.objectContaining({
+          type: 'ORPHAN_TRANSCRIPT',
+          details: {
+            transcriptIds: ['t-1'],
+            malformedTranscriptIds: ['t-1'],
+          },
+        }),
+      ]
+    );
+  });
+
+  it('reconstructs orphan transcripts with cost snapshots normally', async () => {
+    mockRunFindUnique.mockResolvedValueOnce({
+      id: 'run-1',
+      status: 'COMPLETED',
+      updatedAt: new Date('2026-04-23T00:00:00.000Z'),
+      config: { models: ['m1'], samplesPerScenario: 1 },
+      progress: { total: 1 },
+      deletedAt: null,
+    });
+    mockFindOrphanTranscripts.mockResolvedValueOnce([
+      {
+        id: 't-1',
+        scenarioId: 'scenario-1',
+        modelId: 'm1',
+        sampleIndex: 0,
+        createdAt: new Date('2026-04-23T00:00:00.000Z'),
+        durationMs: 10,
+        tokenCount: 20,
+        content: {
+          costSnapshot: {
+            inputTokens: 11,
+            outputTokens: 12,
+          },
+        },
+      },
+    ]);
+
+    const handler = createRunStateReconcileHandler();
+    await handler([
+      {
+        id: 'job-1',
+        data: { runId: 'run-1' },
+      } as never,
+    ]);
+
+    expect(mockRecordProbeSuccess).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: 'run-1',
+        scenarioId: 'scenario-1',
+        modelId: 'm1',
+        transcriptId: 't-1',
+        inputTokens: 11,
+        outputTokens: 12,
+      })
+    );
+    expect(mockLogWarn).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        transcriptId: 't-1',
+      }),
+      'Malformed orphan transcript content'
+    );
+  });
+
+  it('logs overflow when the orphan backlog exceeds the per-tick cap', async () => {
+    mockRunFindUnique.mockResolvedValueOnce({
+      id: 'run-1',
+      status: 'COMPLETED',
+      updatedAt: new Date('2026-04-23T00:00:00.000Z'),
+      config: { models: ['m1'], samplesPerScenario: 1 },
+      progress: { total: 1 },
+      deletedAt: null,
+    });
+    mockFindOrphanTranscripts.mockResolvedValueOnce(
+      Array.from({ length: 500 }, (_, index) => ({
+        id: `t-${index + 1}`,
+        scenarioId: `scenario-${index + 1}`,
+        modelId: 'm1',
+        sampleIndex: 0,
+        createdAt: new Date('2026-04-23T00:00:00.000Z'),
+        durationMs: 10,
+        tokenCount: 20,
+        content: {
+          costSnapshot: {
+            inputTokens: 1,
+            outputTokens: 2,
+          },
+        },
+      }))
+    );
+    mockCountOrphanTranscripts.mockResolvedValueOnce(600);
+
+    const handler = createRunStateReconcileHandler();
+    await handler([
+      {
+        id: 'job-1',
+        data: { runId: 'run-1' },
+      } as never,
+    ]);
+
+    expect(mockRecordProbeSuccess).toHaveBeenCalledTimes(500);
+    expect(mockCountOrphanTranscripts).toHaveBeenCalledWith('run-1');
+    expect(mockLogInfo).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: 'run-1',
+        total: 600,
+        processing: 500,
+        overflow: 100,
+      }),
+      'Orphan backlog exceeds per-tick cap'
+    );
+  });
+
+  it('does not log overflow when the orphan backlog is exactly at the cap', async () => {
+    mockRunFindUnique.mockResolvedValueOnce({
+      id: 'run-1',
+      status: 'COMPLETED',
+      updatedAt: new Date('2026-04-23T00:00:00.000Z'),
+      config: { models: ['m1'], samplesPerScenario: 1 },
+      progress: { total: 1 },
+      deletedAt: null,
+    });
+    mockFindOrphanTranscripts.mockResolvedValueOnce(
+      Array.from({ length: 500 }, (_, index) => ({
+        id: `t-${index + 1}`,
+        scenarioId: `scenario-${index + 1}`,
+        modelId: 'm1',
+        sampleIndex: 0,
+        createdAt: new Date('2026-04-23T00:00:00.000Z'),
+        durationMs: 10,
+        tokenCount: 20,
+        content: {
+          costSnapshot: {
+            inputTokens: 1,
+            outputTokens: 2,
+          },
+        },
+      }))
+    );
+    mockCountOrphanTranscripts.mockResolvedValueOnce(500);
+
+    const handler = createRunStateReconcileHandler();
+    await handler([
+      {
+        id: 'job-1',
+        data: { runId: 'run-1' },
+      } as never,
+    ]);
+
+    expect(mockLogInfo).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: 'run-1',
+        overflow: expect.any(Number),
+      }),
+      'Orphan backlog exceeds per-tick cap'
+    );
+  });
+
+  it('advances running runs and repairs scheduled count mismatches', async () => {
+    mockDetectScheduledCountMismatch.mockResolvedValueOnce({
+      draft: {
+        type: 'SCHEDULED_COUNT_MISMATCH',
+        subject: '',
+        details: { canonicalTotal: 12, currentTotal: 9 },
+      },
+      canonicalTotal: 12,
+    });
+    mockRepairScheduledCount.mockResolvedValueOnce(true);
+
+    const handler = createRunStateReconcileHandler();
+    await handler([
+      {
+        id: 'job-2',
+        data: { runId: 'run-1' },
+      } as never,
+    ]);
+
+    expect(mockMaybeAdvanceRunStatus).toHaveBeenCalledOnce();
+    expect(mockRepairScheduledCount).toHaveBeenCalledWith('run-1', 12);
+  });
+});
+
+
+Context: types.ts
+/**
+ * Queue System Types
+ *
+ * Defines job types, data interfaces, and options for PgBoss queue.
+ */
+
+// Job type union
+export type JobType =
+  | 'probe_scenario'
+  | 'top_up_probes'
+  | 'summarize_transcript'
+  | 'analyze_basic'
+  | 'expand_scenarios'
+  | 'compute_token_stats'
+  | 'probe_dead_letter'
+  | 'run_state_reconcile'
+  | 'aggregate_analysis'
+  | 'refresh_domain_analysis_snapshot';
+
+// Job data interfaces
+export type ProbeScenarioJobData = {
+  runId: string;
+  scenarioId: string;
+  modelId: string;
+  modelVersion?: string;
+  sampleIndex: number; // Index within sample set (0 to N-1) for multi-sample runs
+  config: {
+    temperature?: number;
+    seed?: number;
+    maxTurns: number;
+  };
+};
+
+export type TopUpProbesJobData = {
+  runId: string;
+};
+
+export type SummarizeTranscriptJobData = {
+  runId: string;
+  transcriptId: string;
+  summaryModelId?: string; // Optional: defaults to configured summary model
+  forceSummarize?: boolean; // Optional: bypasses cache and summarization short-circuits
+};
+
+export type AnalyzeBasicJobData = {
+  runId: string;
+  transcriptIds?: string[]; // Optional: will be fetched from DB if not provided
+  force?: boolean; // Force recomputation even if cached
+};
+
+export type ExpandScenariosJobData = {
+  definitionId: string;
+  triggeredBy: 'create' | 'update' | 'fork';
+};
+
+export type ComputeTokenStatsJobData = {
+  runId: string;
+};
+
+export type RunStateReconcileJobData = {
+  runId: string;
+};
+
+export type AggregateAnalysisJobData = {
+  definitionId: string;
+  preambleVersionId: string | null;
+  // Optional for backward compatibility with already-queued legacy jobs.
+  definitionVersion?: number | null;
+  // Optional for backward compatibility with already-queued legacy jobs.
+  temperature?: number | null;
+};
+
+export type RefreshDomainAnalysisSnapshotJobData = {
+  scope: 'DOMAIN' | 'ALL_DOMAINS';
+  domainId: string;
+  signature: string | null;
+  reason: string;
+};
+
+// Dead letter job data - same as probe scenario but handled separately for failed/expired jobs
+export type ProbeDeadLetterJobData = ProbeScenarioJobData;
+
+// Job data union type (ProbeDeadLetterJobData is same as ProbeScenarioJobData, so not duplicated here)
+export type JobData =
+  | ProbeScenarioJobData
+  | TopUpProbesJobData
+  | SummarizeTranscriptJobData
+  | AnalyzeBasicJobData
+  | ExpandScenariosJobData
+  | ComputeTokenStatsJobData
+  | RunStateReconcileJobData
+  | AggregateAnalysisJobData
+  | RefreshDomainAnalysisSnapshotJobData;
+
+// Job options interface
+export type JobOptions = {
+  priority?: number;
+  retryLimit?: number;
+  retryDelay?: number;
+  retryBackoff?: boolean;
+  expireInSeconds?: number;
+  singletonKey?: string;
+};
+
+// Default job options per type
+export const DEFAULT_JOB_OPTIONS: Record<JobType, JobOptions> = {
+  'probe_scenario': {
+    retryLimit: 3,
+    retryDelay: 5,
+    retryBackoff: true,
+    expireInSeconds: 420, // 7 minutes - covers 5m timeout + buffer
+  },
+  'top_up_probes': {
+    retryLimit: 0,
+    expireInSeconds: 60,
+  },
+  'summarize_transcript': {
+    retryLimit: 3,
+    retryDelay: 10,
+    retryBackoff: true,
+    expireInSeconds: 600, // 10 minutes - covers 5m Python spawn timeout + buffer
+  },
+  'analyze_basic': {
+    retryLimit: 3,
+    retryDelay: 10,
+    retryBackoff: true,
+    expireInSeconds: 600, // 10 minutes
+  },
+  'expand_scenarios': {
+    retryLimit: 2,
+    retryDelay: 10,
+    retryBackoff: true,
+    expireInSeconds: 900, // 15 minutes
+    singletonKey: 'definition', // Only one expansion per definition at a time
+  },
+  'compute_token_stats': {
+    retryLimit: 2,
+    retryDelay: 10,
+    retryBackoff: true,
+    expireInSeconds: 120, // 2 minutes - stats computation is quick
+    singletonKey: 'run', // Only one stats computation per run at a time
+  },
+  'run_state_reconcile': {
+    retryLimit: 0,
+    expireInSeconds: 120,
+  },
+  'aggregate_analysis': {
+    retryLimit: 3,
+    retryDelay: 10,
+    retryBackoff: true,
+    expireInSeconds: 300, // 5 minutes
+    // singletonKey is set dynamically based on definitionId
+  },
+  'refresh_domain_analysis_snapshot': {
+    retryLimit: 2,
+    retryDelay: 10,
+    retryBackoff: true,
+    expireInSeconds: 300, // 5 minutes
+  },
+  'probe_dead_letter': {
+    retryLimit: 0, // Don't retry dead letter jobs - just log and record
+    expireInSeconds: 300,
+  },
+};
+
+// Run progress tracking
+export type RunProgress = {
+  total: number;
+  completed: number;
+  failed: number;
+  byModel?: Record<string, { completed: number; failed: number }>;
+};
+
+// Priority values mapping
+export const PRIORITY_VALUES = {
+  LOW: 0,
+  NORMAL: 5,
+  HIGH: 10,
+} as const;
+
+export type PriorityLevel = keyof typeof PRIORITY_VALUES;
+
+// Task result for GraphQL
+export type TaskResult = {
+  scenarioId: string;
+  modelId: string;
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+  error?: string;
+  completedAt?: Date;
+};
+
+// Job handler interface
+export type JobHandler<T extends JobData> = {
+  name: JobType;
+  handler: (data: T) => Promise<void>;
+  options: JobOptions;
+};
+
+
+Context: index.ts
+/**
+ * Queue Handler Registration
+ *
+ * Exports handler registration function for all job types.
+ * Includes provider-specific queues for parallelism enforcement.
+ */
+
+import type { PgBoss } from 'pg-boss';
+import { createLogger } from '@valuerank/shared';
+import { queueConfig } from '../../config.js';
+import { createProbeScenarioHandler } from './probe-scenario/index.js';
+import { createTopUpProbesHandler } from './top-up-probes.js';
+import { createSummarizeTranscriptHandler } from './summarize-transcript.js';
+import {
+  PROBE_DEAD_LETTER_QUEUE,
+  handlerRegistrations,
+} from './handler-config.js';
+import type { ProbeScenarioJobData, SummarizeTranscriptJobData } from './handler-config.js';
+import type { TopUpProbesJobData } from '../types.js';
+import {
+  createProviderQueues,
+  getAllProviderQueues,
+} from '../../services/parallelism/index.js';
+
+export type {
+  ProbeScenarioJobData,
+  SummarizeTranscriptJobData,
+} from './handler-config.js';
+export type { TopUpProbesJobData } from '../types.js';
+
+const log = createLogger('queue:handlers');
+const TOP_UP_PROBES_QUEUE = 'top_up_probes';
+/**
+ * Registers provider-specific probe queue handlers.
+ * Each provider queue gets N workers where N = maxParallelRequests.
+ * Each worker fetches one job at a time to preserve per-job retry semantics.
+ */
+async function registerProviderProbeHandlers(boss: PgBoss): Promise<number> {
+  const providerQueues = await getAllProviderQueues();
+  const probeHandler = createProbeScenarioHandler();
+
+  let registeredCount = 0;
+
+  for (const [providerName, limits] of providerQueues) {
+    const queueName = limits.queueName;
+    const workerCount = limits.maxParallelRequests;
+
+    log.info(
+      { provider: providerName, queueName, workerCount, workerBatchSize: 1 },
+      'Registering provider probe handler'
+    );
+
+    // Register one worker per parallel slot.
+    // Using batchSize > 1 causes pg-boss to mark the whole batch failed when one job throws.
+    // That can retry already-successful jobs and create duplicate transcripts.
+    for (let i = 0; i < workerCount; i++) {
+      await boss.work<ProbeScenarioJobData>(queueName, { batchSize: 1 }, probeHandler);
+      registeredCount++;
+    }
+  }
+
+  return registeredCount;
+}
+
+/**
+ * Registers all job handlers with PgBoss.
+ * Creates queues first (required by PgBoss v10+), then registers workers.
+ * Includes provider-specific probe queues for parallelism enforcement.
+ */
+export async function registerHandlers(boss: PgBoss): Promise<void> {
+  // Import summarization parallelism service
+  const { getMaxParallelSummarizations } = await import(
+    '../../services/summarization-parallelism/index.js'
+  );
+
+  const defaultBatchSize = queueConfig.workerBatchSize;
+
+  log.info(
+    { defaultBatchSize, jobTypes: getJobTypes() },
+    'Starting handler registration'
+  );
+
+  // Create dead letter queue FIRST (required before queues that reference it)
+  log.info({ jobType: PROBE_DEAD_LETTER_QUEUE }, 'Creating dead letter queue');
+  await boss.createQueue(PROBE_DEAD_LETTER_QUEUE);
+
+  // Create standard queues (required by PgBoss v10+)
+  for (const registration of handlerRegistrations) {
+    // Skip dead letter queue - already created above
+    if (registration.name === 'probe_dead_letter') continue;
+
+    log.info({ jobType: registration.name }, 'Creating queue');
+    // Add dead letter queue for probe_scenario
+    if (registration.name === 'probe_scenario') {
+      await boss.createQueue(registration.name, { deadLetter: PROBE_DEAD_LETTER_QUEUE });
+    } else {
+      await boss.createQueue(registration.name);
+    }
+  }
+
+  // Create provider-specific probe queues with dead letter support
+  await createProviderQueues(boss, PROBE_DEAD_LETTER_QUEUE);
+
+  // Collect handler registration details for summary log
+  const handlerDetails: Array<{ jobType: string; batchSize: number }> = [];
+
+  // Register standard handlers with appropriate batchSize
+  for (const registration of handlerRegistrations) {
+    // Use dynamic batchSize for summarize_transcript
+    const batchSize = registration.name === 'summarize_transcript'
+      ? await getMaxParallelSummarizations()
+      : defaultBatchSize;
+
+    log.info(
+      {
+        jobType: registration.name,
+        batchSize,
+        isDynamic: registration.name === 'summarize_transcript',
+      },
+      'Registering handler with batchSize'
+    );
+
+    await registration.register(boss, batchSize);
+    handlerDetails.push({ jobType: registration.name, batchSize });
+  }
+
+  // Register provider-specific probe handlers with parallelism limits
+  const providerHandlerCount = await registerProviderProbeHandlers(boss);
+
+  log.info({ jobType: TOP_UP_PROBES_QUEUE }, 'Creating top-up queue');
+  await boss.createQueue(TOP_UP_PROBES_QUEUE);
+  log.info({ jobType: TOP_UP_PROBES_QUEUE, batchSize: 1 }, 'Registering top-up handler');
+  await boss.work<TopUpProbesJobData>(TOP_UP_PROBES_QUEUE, { batchSize: 1 }, createTopUpProbesHandler());
+
+  // Get current queue states for logging
+  let queueStates: Array<{ name: string; activeCount: number; queuedCount: number }> = [];
+  try {
+    const queues = await boss.getQueues();
+    queueStates = queues.map(q => ({
+      name: q.name,
+      activeCount: q.activeCount,
+      queuedCount: q.queuedCount,
+    }));
+  } catch {
+    // Ignore errors getting queue states
+  }
+
+  log.info(
+    {
+      standardHandlers: handlerRegistrations.length,
+      providerHandlers: providerHandlerCount,
+      topUpHandlers: 1,
+      handlerDetails,
+      queueStates,
+    },
+    'All handlers registered - PgBoss ready'
+  );
+}
+
+/**
+ * Gets list of registered job types.
+ */
+export function getJobTypes() {
+  return [...handlerRegistrations.map((h) => h.name), TOP_UP_PROBES_QUEUE];
+}
+
+/**
+ * Re-registers a single provider's probe queue handler with updated settings.
+ * Called when provider parallelism settings are changed via API.
+ *
+ * This function:
+ * 1. Unregisters the existing handler for the provider queue (allows in-flight jobs to complete)
+ * 2. Clears the parallelism cache to reload settings from DB
+ * 3. Registers N new handlers with batchSize=1 where N=maxParallelRequests
+ *
+ * Note: Jobs in the queue are NOT affected - they remain queued and will be processed
+ * by the new handler. In-flight jobs complete normally before the handler is replaced.
+ * PgBoss's offWork() is graceful and does not abort running jobs.
+ *
+ * @param providerName - The provider name (e.g., 'google', 'openai')
+ */
+export async function reregisterProviderHandler(
+  boss: PgBoss,
+  providerName: string
+): Promise<void> {
+  // Import here to avoid circular dependency
+  const { clearCache, getProviderQueueName, loadProviderLimits } = await import(
+    '../../services/parallelism/index.js'
+  );
+  const { reloadLimiters } = await import('../../services/rate-limiter/index.js');
+
+  const queueName = getProviderQueueName(providerName);
+
+  log.info({ provider: providerName, queueName }, 'Re-registering provider queue handler');
+
+  // 1. Get queue stats before unregistering (for logging)
+  let activeCount = 0;
+  let queuedCount = 0;
+  try {
+    const queues = await boss.getQueues();
+    const queueInfo = queues.find((q) => q.name === queueName);
+    if (queueInfo) {
+      activeCount = queueInfo.activeCount;
+      queuedCount = queueInfo.queuedCount;
+    }
+  } catch {
+    // Ignore errors getting stats
+  }
+
+  // 2. Unregister existing handler - this is GRACEFUL:
+  //    - Stops fetching NEW jobs from the queue
+  //    - In-flight jobs continue to completion
+  //    - Jobs in queue remain untouched
+  await boss.offWork(queueName);
+  log.info(
+    { provider: providerName, queueName, activeJobs: activeCount, queuedJobs: queuedCount },
+    'Unregistered existing handler (in-flight jobs will complete)'
+  );
+
+  // 3. Clear caches to force reload from database
+  clearCache();
+
+  // 4. Load fresh limits
+  const limits = await loadProviderLimits();
+  const providerLimits = limits.get(providerName);
+
+  if (!providerLimits) {
+    log.warn({ provider: providerName }, 'Provider not found after cache reload');
+    return;
+  }
+
+  // 5. Register new handlers with batchSize=1.
+  //    This preserves per-job retry semantics while keeping provider concurrency.
+  const workerCount = providerLimits.maxParallelRequests;
+  const probeHandler = createProbeScenarioHandler();
+
+  for (let i = 0; i < workerCount; i++) {
+    await boss.work<ProbeScenarioJobData>(queueName, { batchSize: 1 }, probeHandler);
+  }
+
+  log.info(
+    { provider: providerName, queueName, workerCount, workerBatchSize: 1 },
+    'Provider queue handler re-registered with new settings'
+  );
+
+  // 6. Reload rate limiters to pick up new settings
+  await reloadLimiters();
+  log.debug({ provider: providerName }, 'Rate limiters reloaded');
+}
+
+/**
+ * Re-registers the summarize_transcript queue handler with updated batchSize.
+ * Called when summarization parallelism settings are changed via MCP.
+ *
+ * This function:
+ * 1. Unregisters the existing handler (allows in-flight jobs to complete)
+ * 2. Clears the summarization parallelism cache to reload settings from DB
+ * 3. Registers a new handler with the updated batchSize
+ *
+ * Note: Jobs in the queue are NOT affected - they remain queued and will be processed
+ * by the new handler. In-flight jobs complete normally before the handler is replaced.
+ * PgBoss's offWork() is graceful and does not abort running jobs.
+ */
+export async function reregisterSummarizeHandler(boss: PgBoss): Promise<void> {
+  // Import here to avoid circular dependency
+  const { clearSummarizationCache, getMaxParallelSummarizations } = await import(
+    '../../services/summarization-parallelism/index.js'
+  );
+
+  const queueName = 'summarize_transcript';
+  const reregisterStartTime = Date.now();
+
+  log.info({ queueName }, 'Starting summarize handler re-registration');
+
+  // 1. Get queue stats before unregistering (for logging)
+  let activeCount = 0;
+  let queuedCount = 0;
+  try {
+    const queues = await boss.getQueues();
+    const queueInfo = queues.find((q) => q.name === queueName);
+    if (queueInfo) {
+      activeCount = queueInfo.activeCount;
+      queuedCount = queueInfo.queuedCount;
+    }
+  } catch {
+    // Ignore errors getting stats
+  }
+
+  // Get old batch size for comparison
+  const oldBatchSize = await getMaxParallelSummarizations();
+
+  // 2. Unregister existing handler - this is GRACEFUL:
+  //    - Stops fetching NEW jobs from the queue
+  //    - In-flight jobs continue to completion
+  //    - Jobs in queue remain untouched
+  await boss.offWork(queueName);
+  log.info(
+    { queueName, activeJobs: activeCount, queuedJobs: queuedCount, oldBatchSize },
+    'Unregistered existing handler (in-flight jobs will complete)'
+  );
+
+  // 3. Clear cache to force reload from database
+  clearSummarizationCache();
+
+  // 4. Clear summarize rate limiters so they're recreated with new settings
+  const { clearSummarizeLimiters } = await import('../../services/rate-limiter/index.js');
+  clearSummarizeLimiters();
+  log.debug('Summarize rate limiters cleared');
+
+  // 5. Load fresh parallelism setting
+  const newBatchSize = await getMaxParallelSummarizations();
+
+  // 6. Register new handler with updated batchSize
+  //    This immediately starts processing queued jobs with the new concurrency
+  const summarizeHandler = createSummarizeTranscriptHandler();
+
+  await boss.work<SummarizeTranscriptJobData>(queueName, { batchSize: newBatchSize }, summarizeHandler);
+
+  const durationMs = Date.now() - reregisterStartTime;
+
+  log.info(
+    {
+      queueName,
+      oldBatchSize,
+      newBatchSize,
+      batchSizeChanged: oldBatchSize !== newBatchSize,
+      queuedJobsWaiting: queuedCount,
+      durationMs,
+    },
+    'Summarize handler re-registered with new settings'
+  );
+}
+
+
+Context: scheduler.ts
+/**
+ * Run Recovery Scheduler
+ *
+ * Manages the periodic recovery job that detects and recovers orphaned runs.
+ * Uses setInterval for simplicity - PgBoss schedule() is for distributed cron,
+ * but we only need one instance running recovery.
+ *
+ * Activity-based scheduling:
+ * - Recovery only runs for 1 hour after the last run was started
+ * - When a new run starts, the activity timeout is reset
+ * - This prevents wasting resources checking for orphaned runs when no runs are active
+ */
+
+import { db, Prisma } from '@valuerank/db';
+import { createLogger } from '@valuerank/shared';
+import {
+  recoverOrphanedRuns,
+  detectAndRecoverStuckJobs,
+  RECOVERY_INTERVAL_MS,
+  runStartupRecovery
+} from './recovery.js';
+import { detectAndUpdateStalledRuns } from './stall-detection.js';
+import {
+  ORPHAN_TRANSCRIPT_MIN_AGE_SECONDS,
+  RECENT_COMPLETED_RUN_WINDOW_DAYS,
+} from './anomaly-thresholds.js';
+import { PROBE_QUEUE_DEPTH_PER_PROVIDER } from './start-queue.js';
+import { enqueueTopUpProbesSingleton } from '../../queue/handlers/top-up-probes.js';
+import { DEFAULT_JOB_OPTIONS } from '../../queue/types.js';
+import { getBoss } from '../../queue/boss.js';
+import { getQueueNameForModel } from '../parallelism/index.js';
+
+const log = createLogger('services:run:scheduler');
+
+type RunConfig = {
+  models?: string[];
+};
+
+let recoveryInterval: NodeJS.Timeout | null = null;
+let activityTimeout: NodeJS.Timeout | null = null;
+let isRecovering = false;
+let reconcileWindowDaysCache: number | null = null;
+
+// How long to keep recovery running after the last run was started (1 hour)
+export const RECOVERY_ACTIVITY_WINDOW_MS = 60 * 60 * 1000;
+
+function parseRunConfig(config: unknown): RunConfig {
+  return config !== null && typeof config === 'object' ? (config as RunConfig) : {};
+}
+
+function resolveReconcileWindowDays(): number {
+  const rawValue = process.env.RUN_RECONCILE_WINDOW_DAYS;
+  if (rawValue === undefined) {
+    return RECENT_COMPLETED_RUN_WINDOW_DAYS;
+  }
+
+  const parsed = Number.parseInt(rawValue, 10);
+  if (Number.isNaN(parsed) || parsed < 0) {
+    log.warn(
+      { rawValue, fallbackDays: RECENT_COMPLETED_RUN_WINDOW_DAYS },
+      'Invalid RUN_RECONCILE_WINDOW_DAYS, falling back to default'
+    );
+    return RECENT_COMPLETED_RUN_WINDOW_DAYS;
+  }
+
+  return parsed;
+}
+
+// Read once at module load. Changing RUN_RECONCILE_WINDOW_DAYS requires a process restart.
+reconcileWindowDaysCache = resolveReconcileWindowDays();
+
+export function getReconcileWindowDays(): number {
+  return reconcileWindowDaysCache ?? RECENT_COMPLETED_RUN_WINDOW_DAYS;
+}
+
+function buildOrphanBacklogExistsClause(): Prisma.Sql {
+  return Prisma.sql`
+    EXISTS (
+      SELECT 1
+      FROM transcripts t
+      LEFT JOIN probe_results p
+        ON p.run_id = t.run_id
+       AND p.scenario_id = t.scenario_id
+       AND p.model_id = t.model_id
+       AND p.sample_index = t.sample_index
+       AND p.deleted_at IS NULL
+      WHERE t.run_id = r.id
+        AND t.deleted_at IS NULL
+        AND t.created_at < NOW() - (${ORPHAN_TRANSCRIPT_MIN_AGE_SECONDS} || ' seconds')::interval
+        AND p.id IS NULL
+      LIMIT 1
+    )
+  `;
+}
+
+async function getPendingJobsForQueue(runId: string, queueName: string): Promise<number> {
+  const rows = await db.$queryRaw<Array<{ count: bigint }>>`
+    SELECT COUNT(*) AS count
+    FROM pgboss.job
+    WHERE name = ${queueName}
+      AND data->>'runId' = ${runId}
+      AND state IN ('created', 'retry', 'active')
+  `;
+
+  return Number(rows[0]?.count ?? 0);
+}
+
+async function sweepRunForTopUp(run: { id: string; config: unknown }): Promise<boolean> {
+  const models = parseRunConfig(run.config).models ?? [];
+  if (models.length === 0) {
+    return false;
+  }
+
+  const queueNames = new Set<string>();
+  for (const modelId of models) {
+    queueNames.add(await getQueueNameForModel(modelId));
+  }
+
+  for (const queueName of queueNames) {
+    const pendingJobs = await getPendingJobsForQueue(run.id, queueName);
+    if (pendingJobs < PROBE_QUEUE_DEPTH_PER_PROVIDER / 2) {
+      await enqueueTopUpProbesSingleton(run.id);
+      log.debug({ runId: run.id, queueName, pendingJobs }, 'Queued recovery top-up sweep');
+      return true;
+    }
+  }
+
+  return false;
+}
+
+async function hasRecoveryActivity(): Promise<boolean> {
+  const windowDays = getReconcileWindowDays();
+  const activeRuns = await db.run.findFirst({
+    where: {
+      deletedAt: null,
+      status: { in: ['RUNNING', 'SUMMARIZING', 'PAUSED'] },
+    },
+    select: { id: true },
+  });
+
+  if (activeRuns !== null) {
+    return true;
+  }
+
+  const strandedTranscript = await db.transcript.findFirst({
+    where: {
+      deletedAt: null,
+      summarizedAt: null,
+      summarizeFailedAt: null,
+      run: {
+        deletedAt: null,
+        status: 'COMPLETED',
+        updatedAt: {
+          gt: new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000),
+        },
+      },
+    },
+    select: { id: true },
+  });
+
+  if (strandedTranscript !== null) {
+    return true;
+  }
+
+  const orphanBacklog = await db.$queryRaw<Array<{ run_id: string }>>`
+    SELECT r.id AS run_id
+    FROM runs r
+    WHERE r.deleted_at IS NULL
+      AND r.status = 'COMPLETED'
+      AND r.updated_at > NOW() - (${windowDays} || ' days')::interval
+      AND ${buildOrphanBacklogExistsClause()}
+    LIMIT 1
+  `;
+
+  return orphanBacklog.length > 0;
+}
+
+async function enqueueRunStateReconcileJobs(): Promise<number> {
+  const boss = getBoss();
+  const jobOptions = DEFAULT_JOB_OPTIONS['run_state_reconcile'];
+  const windowDays = getReconcileWindowDays();
+
+  const runs = await db.$queryRaw<Array<{ run_id: string }>>`
+    SELECT id AS run_id
+    FROM runs
+    WHERE deleted_at IS NULL
+      AND status IN ('RUNNING', 'SUMMARIZING', 'PAUSED')
+
+    UNION
+
+    SELECT DISTINCT r.id AS run_id
+    FROM runs r
+    WHERE r.deleted_at IS NULL
+      AND r.status = 'COMPLETED'
+      AND r.updated_at > NOW() - (${windowDays} || ' days')::interval
+      AND (
+        EXISTS (
+          SELECT 1
+          FROM transcripts stranded_t
+          WHERE stranded_t.run_id = r.id
+            AND stranded_t.deleted_at IS NULL
+            AND stranded_t.summarized_at IS NULL
+            AND stranded_t.summarize_failed_at IS NULL
+          LIMIT 1
+        )
+        OR ${buildOrphanBacklogExistsClause()}
+      )
+  `;
+
+  let queued = 0;
+  for (const run of runs) {
+    await boss.send(
+      'run_state_reconcile',
+      { runId: run.run_id },
+      {
+        ...jobOptions,
+        singletonKey: run.run_id,
+      }
+    );
+    queued++;
+  }
+
+  if (queued > 0) {
+    log.info({ queued }, 'Queued run_state_reconcile jobs');
+  }
+
+  return queued;
+}
+
+/**
+ * Runs the recovery job, preventing concurrent executions.
+ */
+async function runRecoveryJob(): Promise<void> {
+  if (isRecovering) {
+    log.debug('Recovery already in progress, skipping');
+    return;
+  }
+
+  isRecovering = true;
+  try {
+    const result = await recoverOrphanedRuns();
+    const zombieResult = await detectAndRecoverStuckJobs();
+    const stallResult = await detectAndUpdateStalledRuns();
+    const runningRuns = await db.run.findMany({
+      where: { status: 'RUNNING', deletedAt: null },
+      select: { id: true, config: true },
+    });
+
+    let topUpQueued = 0;
+    for (const run of runningRuns) {
+      if (await sweepRunForTopUp(run)) {
+        topUpQueued++;
+      }
+    }
+
+    const reconcileQueued = await enqueueRunStateReconcileJobs();
+
+    if (
+      result.detected.length > 0 ||
+      result.errors.length > 0 ||
+      zombieResult.recovered > 0 ||
+      topUpQueued > 0 ||
+      reconcileQueued > 0
+    ) {
+      log.info(
+        {
+          detected: result.detected.length,
+          recovered: result.recovered.length,
+          zombiesKilled: zombieResult.recovered,
+          errors: result.errors.length + zombieResult.errors,
+          recoveryTopUps: topUpQueued,
+          reconcileQueued,
+        },
+        'Recovery job completed'
+      );
+    }
+
+    if (await hasRecoveryActivity()) {
+      signalRunActivity();
+    }
+
+    if (stallResult.totalStalled > 0) {
+      // Keep scheduler alive while stalls persist (not just when new stalls appear)
+      signalRunActivity();
+    }
+  } catch (error) {
+    log.error({ error }, 'Recovery job failed');
+  } finally {
+    isRecovering = false;
+  }
+}
+
+/**
+ * Clears the activity timeout if set.
+ */
+function clearActivityTimeout(): void {
+  if (activityTimeout !== null) {
+    clearTimeout(activityTimeout);
+    activityTimeout = null;
+  }
+}
+
+/**
+ * Starts the activity timeout that will stop recovery after RECOVERY_ACTIVITY_WINDOW_MS.
+ */
+function startActivityTimeout(): void {
+  clearActivityTimeout();
+
+  activityTimeout = setTimeout(() => {
+    log.info(
+      { windowMs: RECOVERY_ACTIVITY_WINDOW_MS },
+      'Activity window expired, stopping recovery scheduler'
+    );
+    stopRecoveryInterval();
+  }, RECOVERY_ACTIVITY_WINDOW_MS);
+}
+
+/**
+ * Stops only the recovery interval (not the activity tracking).
+ */
+function stopRecoveryInterval(): void {
+  if (recoveryInterval !== null) {
+    clearInterval(recoveryInterval);
+    recoveryInterval = null;
+    log.info('Recovery interval stopped');
+  }
+}
+
+/**
+ * Starts the recovery interval if not already running.
+ */
+function startRecoveryInterval(): void {
+  if (recoveryInterval !== null) {
+    return; // Already running
+  }
+
+  recoveryInterval = setInterval(() => { void runRecoveryJob(); }, RECOVERY_INTERVAL_MS);
+  log.info({ intervalMs: RECOVERY_INTERVAL_MS }, 'Recovery interval started');
+}
+
+/**
+ * Signals that a run has been started.
+ * This resets the activity window and ensures recovery is running.
+ */
+export function signalRunActivity(): void {
+  log.debug('Run activity signaled, resetting activity window');
+
+  // Ensure recovery is running
+  startRecoveryInterval();
+
+  // Reset the activity timeout
+  startActivityTimeout();
+}
+
+/**
+ * Starts the recovery scheduler.
+ * Runs recovery immediately on startup, then schedules periodic recovery
+ * only if there are active runs (detected during startup recovery).
+ */
+export async function startRecoveryScheduler(): Promise<void> {
+  if (recoveryInterval !== null) {
+    log.warn('Recovery scheduler already running');
+    return;
+  }
+
+  log.info(
+    { intervalMs: RECOVERY_INTERVAL_MS, activityWindowMs: RECOVERY_ACTIVITY_WINDOW_MS },
+    'Starting recovery scheduler'
+  );
+
+  // Run startup recovery first
+  let hasActiveRuns = false;
+  try {
+    const startupResult = await runStartupRecovery();
+    if (startupResult.detected.length > 0) {
+      log.info(
+        {
+          detected: startupResult.detected.length,
+          recovered: startupResult.recovered.length,
+          errors: startupResult.errors.length,
+        },
+        'Startup recovery completed'
+      );
+      // If we found orphaned runs, keep recovery running
+      hasActiveRuns = true;
+    }
+    if (!hasActiveRuns) {
+      hasActiveRuns = await hasRecoveryActivity();
+    }
+  } catch (error) {
+    log.error({ error }, 'Startup recovery failed');
+    // Don't throw - we still want to proceed
+  }
+
+  // Only start the interval if we found active runs during startup
+  if (hasActiveRuns) {
+    startRecoveryInterval();
+    startActivityTimeout();
+    log.info('Recovery scheduler started (active runs detected)');
+  } else {
+    log.info('Recovery scheduler initialized but not running (no active runs)');
+  }
+}
+
+/**
+ * Stops the recovery scheduler completely (interval and activity timeout).
+ */
+export function stopRecoveryScheduler(): void {
+  stopRecoveryInterval();
+  clearActivityTimeout();
+  log.info('Recovery scheduler stopped');
+}
+
+/**
+ * Checks if the recovery scheduler is running.
+ */
+export function isRecoverySchedulerRunning(): boolean {
+  return recoveryInterval !== null;
+}
+
+/**
+ * Manually triggers a recovery run (for debugging/admin).
+ */
+export async function triggerRecovery(): Promise<{
+  detected: number;
+  recovered: number;
+  errors: number;
+}> {
+  const result = await recoverOrphanedRuns();
+  return {
+    detected: result.detected.length,
+    recovered: result.recovered.length,
+    errors: result.errors.length,
+  };
+}
+
+
+Artifact: plan.md
+# Plan — Feature 035: Audit Sweep
+
+**Branch**: feat/035-audit-sweep
+**Source spec**: `spec.md` in this directory
+
+---
+
+## Implementation Waves
+
+### Wave 1 — Schema + migration [CHECKPOINT]
+
+**Files**
+- `cloud/packages/db/prisma/schema.prisma`:
+  - Add `enum RunAnomalySource { default; audit }`.
+  - Add `source RunAnomalySource @default(default)` field on `RunAnomaly`.
+  - Change `@@unique([runId, type, subject])` to `@@unique([runId, type, subject, source])`.
+- `cloud/packages/db/prisma/migrations/<timestamp>_run_anomaly_source/migration.sql`:
+  - `CREATE TYPE "RunAnomalySource" AS ENUM ('default', 'audit');`
+  - `ALTER TABLE run_anomalies ADD COLUMN source "RunAnomalySource" NOT NULL DEFAULT 'default';`
+  - `DROP INDEX "run_anomalies_run_id_type_subject_key";`
+  - `CREATE UNIQUE INDEX "run_anomalies_run_id_type_subject_source_key" ON run_anomalies (run_id, type, subject, source);`
+
+**Estimated size**: ~30 lines.
+
+### Wave 2 — Persistence: source-scoped API [CHECKPOINT]
+
+**Files**
+- `cloud/apps/api/src/services/run/anomaly-persistence.ts`:
+  - Import the Prisma-generated `RunAnomalySource` type.
+  - Update `upsertAnomaly(runId, draft, source)` signature: add `source` parameter; use 4-column upsert key; include `resolvedAt: null` in the `update` object (load-bearing — re-detecting a resolved anomaly must un-resolve it).
+  - Update `resolveAnomaly({runId, type, subject, source})` signature: add `source`; include it in the Prisma where clause.
+  - Update `syncAnomalies(runId, type, drafts, source)` signature: add `source`; the existing-rows `findMany` MUST include `source` in `where`.
+  - `repairScheduledCount` unchanged (it doesn't touch `RunAnomaly`).
+- `cloud/apps/api/tests/services/run/anomaly-persistence.test.ts`:
+  - Test: upsert creates with `source`, re-upsert updates `lastSeenAt` + `resolvedAt: null`.
+  - Test: `syncAnomalies(source='audit')` with empty drafts does NOT resolve rows where `source='default'`.
+  - Test: cross-source rows with same `(runId, type, subject)` coexist.
+
+### Wave 3 — Detector threshold overrides [CHECKPOINT]
+
+**Files**
+- `cloud/apps/api/src/services/run/anomaly-detection.ts`:
+  - Export `type AnomalyThresholdOverrides = { pairAsymmetryThresholdPct?: number; modelShortfallAbsoluteRate?: number; modelShortfallRelativeRate?: number; modelShortfallPeerRate?: number; }`.
+  - `detectPairAsymmetry(run, overrides?)`: when `overrides?.pairAsymmetryThresholdPct` is defined, use it; otherwise use `PAIR_ASYMMETRY_THRESHOLD_PCT` constant.
+  - `detectModelTranscriptShortfall(run, overrides?)`: same pattern for the three shortfall constants.
+  - Detectors with no threshold constants (`detectStrandedTranscript`, `detectOrphanTranscript`, `detectScheduledCountMismatch`, `detectSummarizingStall`) unchanged.
+- `cloud/apps/api/tests/services/run/anomaly-detection.test.ts`:
+  - Test: `detectPairAsymmetry(run)` uses default threshold — existing behavior unchanged.
+  - Test: `detectPairAsymmetry(run, { pairAsymmetryThresholdPct: 0 })` fires on any non-zero delta.
+  - Test: `detectModelTranscriptShortfall(run, { modelShortfallAbsoluteRate: 0, ... })` fires on any below-peer model.
+
+### Wave 4 — Default sweep refactor to pass source [CHECKPOINT]
+
+**Files**
+- `cloud/apps/api/src/queue/handlers/run-state-reconcile.ts`:
+  - Every call to `upsertAnomaly`, `resolveAnomaly`, `syncAnomalies` gets `source: 'default'` as the new argument.
+  - No other behavior change.
+- `cloud/apps/api/tests/queue/handlers/run-state-reconcile.test.ts`:
+  - Update fixtures to pass `source='default'`.
+  - Add test: default sweep emits `source='default'` on all persisted rows.
+
+### Wave 5 — Audit sweep handler + job registration [CHECKPOINT]
+
+**Files**
+- `cloud/apps/api/src/queue/types.ts`: add `run_state_audit` job type and `RunStateAuditJobData = Record<string, never>`.
+- `cloud/apps/api/src/queue/handlers/run-state-audit.ts` (new): ~150 lines.
+  - Export `createRunStateAuditHandler()`.
+  - Handler body: find runs matching reconcile scope. For each run, run the permitted detectors — each wrapped in try/catch so one failure doesn't block the rest. Pass `AUDIT_THRESHOLDS = { pairAsymmetryThresholdPct: 0, modelShortfallAbsoluteRate: 0, modelShortfallRelativeRate: 0, modelShortfallPeerRate: 0 }` to the threshold-driven detectors.
+  - Per-run detector list depends on status:
+    - `RUNNING | PAUSED | SUMMARIZING`: pair asymmetry, model shortfall, orphan transcript.
+    - `COMPLETED`: all of the above PLUS stranded transcript, summarizing stall, scheduled count mismatch.
+  - All persistence calls pass `source='audit'`.
+  - Handler does NOT call `maybeAdvanceRunStatus`, `reconstructOrphans`, or `repairScheduledCount` — read-only except for `RunAnomaly` writes.
+- `cloud/apps/api/src/queue/handlers/index.ts`: extend `handlerRegistrations` with `run_state_audit` entry pointing at `createRunStateAuditHandler()`.
+- `cloud/apps/api/src/services/run/scheduler.ts`: inside server-startup hook, call `boss.schedule('run_state_audit', '0 9 * * *', {})`. Wrap in try/catch with `log.info` on success and `log.error` on failure.
+- `cloud/apps/api/tests/queue/handlers/run-state-audit.test.ts` (new):
+  - Test: COMPLETED run with 25pp pair asymmetry → audit emits `PAIR_ASYMMETRY` with `source='audit'`.
+  - Test: RUNNING run with unsummarized transcripts → audit does NOT emit `STRANDED_TRANSCRIPT` (status-scoped).
+  - Test: audit run does NOT call `reconstructOrphans` or `maybeAdvanceRunStatus`.
+  - Test: audit emits rows with `source='audit'` coexisting with default-sweep `source='default'` rows.
+
+### Wave 6 — GraphQL exposure [CHECKPOINT]
+
+**Files**
+- `cloud/apps/api/src/graphql/types/run-anomaly.ts`:
+  - Define Pothos enum mapping Prisma `default`/`audit` to GraphQL values `DEFAULT`/`AUDIT`.
+  - Add `source` field on the `RunAnomaly` GraphQL type using the new enum.
+- `cloud/apps/api/tests/graphql/run.test.ts`: add assertion that querying `run { anomalies { source } }` returns the correct enum values for mixed default/audit rows.
+
+### Wave 7 — STATUS.md cleanup + verification [CHECKPOINT]
+
+**Files**
+- `STATUS.md`: remove follow-up #3 (audit sweep).
+- Verification:
+  - `npx turbo lint build --filter=@valuerank/api` → 0 errors.
+  - `npx turbo test --filter=@valuerank/api` (with DB) → all tests pass.
+  - `grep -RIn "syncAnomalies\|upsertAnomaly\|resolveAnomaly" cloud/apps/api/src` → every call site passes a `source` argument.
+  - Manual inspection: `boss.getSchedules()` at test server startup includes `run_state_audit`.
+
+---
+
+## Residual Risks (each with `verification:`)
+
+- **Risk: the default sweep and audit sweep run on the same run at nearly the same time; if a race produces both writing the same `(runId, type, subject)` with different sources, the upserts succeed independently (different rows by unique key) — no conflict. Verify no implicit ordering assumption exists.**
+  verification: integration-style test that fires default and audit handlers concurrently against the same fixture run; assert both anomaly rows land and neither overwrites the other.
+
+- **Risk: `boss.schedule()` at server startup may register the schedule multiple times across worker restarts.**
+  verification: Wave 5 wrapping — use `boss.unschedule()` before `schedule()`, or rely on PgBoss idempotency (check docs); add a test-server-startup assertion that only one schedule entry exists for the name.
+
+- **Risk: the Pothos `RunAnomalySource` GraphQL enum name collides with the Prisma import.**
+  verification: import Prisma enum as `RunAnomalySourceDb` (alias) and declare the GraphQL enum with the name `RunAnomalySource`; test that `introspection` returns the expected values.
+
+- **Risk: audit sweep scanning every non-terminal + recent COMPLETED run daily could be slow on a large DB.**
+  verification: measure duration against a dev DB seeded with 5k runs; target < 30s total. If slower, batch runs or shrink scope.
+
+- **Risk: `undefined ?? CONSTANT` vs `0 ?? CONSTANT` — the `0` case correctly overrides because `0` is not nullish, but is easy to confuse with "unset" at a glance.**
+  verification: unit test explicitly passes `overrides: { pairAsymmetryThresholdPct: 0 }` and asserts delta of 1pp fires; then passes `overrides: {}` (empty) and asserts default 0pp threshold still fires. Comment in-code explaining the `??` semantics.
+
+---
+
+## Verification Before Push
+
+Per `cloud/CLAUDE.md` preflight:
+1. `npx turbo lint --filter=@valuerank/db` — 0 errors.
+2. `npx turbo lint --filter=@valuerank/api` — 0 errors.
+3. `npm run db:test:setup`.
+4. `npx turbo test --filter=@valuerank/api`.
+5. `npx turbo build --filter=@valuerank/api`.
+
+---
+
+## Constitution Validation
+
+| Requirement | Status |
+|---|---|
+| Type safety — no `any` | PASS — enums and threshold overrides typed |
+| File size ≤ 400 lines prod | PASS — audit handler ~150 lines; detector edits small |
+| Test coverage ≥ 80% | PASS — each wave has tests |
+| Structured logging | PASS — audit handler uses its own `createLogger` |
+| Prisma `migrate dev` | PASS — one migration for schema additions |
+| Soft-delete filter | PASS — no change |
+| Protected files untouched | PASS — CLAUDE.md/AGENTS.md/MEMORY.md/.gitignore off-limits |
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m checking the plan against the current anomaly code and scheduler paths first. I’m looking for places where the plan assumes behavior the code does not support, or where it leaves a real edge case unhandled.
+codex
+## Findings
+- **High**: The audit sweep as written will only inspect the same narrow set of completed runs that `run_state_reconcile` already queues, so it will miss completed runs that have pair-asymmetry or model-shortfall issues but no stranded/orphan transcript signal. In [`scheduler.ts`](\/Users\/chrislaw\/valuerank\/.claude\/worktrees\/distracted-noyce-64917e\/cloud\/apps\/api\/src\/services\/run\/scheduler.ts), `enqueueRunStateReconcileJobs()` only includes `COMPLETED` runs when they already have stranded transcripts or orphan backlog; a daily audit that “finds runs matching reconcile scope” inherits that blind spot. [CODE-CONFIRMED]
+
+- **High**: The proposed “zero-threshold” audit mode for `detectModelTranscriptShortfall()` does not actually widen detection. In [`anomaly-detection.ts`](\/Users\/chrislaw\/valuerank\/.claude\/worktrees\/distracted-noyce-64917e\/cloud\/apps\/api\/src\/services\/run\/anomaly-detection.ts), the detector only fires when `rate < MODEL_SHORTFALL_ABSOLUTE_RATE` or `rate < MODEL_SHORTFALL_RELATIVE_RATE`; setting both to `0` still makes `0%` success and any positive rate fail the `< 0` test, so the audit sweep would never flag the shortfall cases the plan claims to cover. [CODE-CONFIRMED]
+
+- **Medium**: The registration step points at the wrong file. [`index.ts`](\/Users\/chrislaw\/valuerank\/.claude\/worktrees\/distracted-noyce-64917e\/cloud\/apps\/api\/src\/queue\/handlers\/index.ts) only consumes `handlerRegistrations` from `handler-config.js`; it does not define that registry. If the new `run_state_audit` entry is not added in the actual registry source, the handler will never be wired even if the new code compiles. [CODE-CONFIRMED]
+
+- **Medium**: The plan leaves the existing minimum-probe gates untouched, so “audit everything” is still not true for low-volume runs. In [`anomaly-detection.ts`](\/Users\/chrislaw\/valuerank\/.claude\/worktrees\/distracted-noyce-64917e\/cloud\/apps\/api\/src\/services\/run\/anomaly-detection.ts), `detectPairAsymmetry()` skips runs below `PAIR_ASYMMETRY_MIN_PROBES`, and `detectModelTranscriptShortfall()` returns `[]` below `MODEL_SHORTFALL_MIN_PROBES`. Those hard gates remain even with the proposed audit overrides, so small runs will still be invisible to the new audit sweep. [CODE-CONFIRMED]
+
+## Residual Risks
+- The plan still depends on a new daily scheduler hook and does not show how duplicate schedule entries will be prevented across restarts or multiple workers.
+- The source-splitting change introduces a new row shape for `RunAnomaly`; any other consumers outside the provided code may still assume the old uniqueness and should be checked before shipping.
+
+tokens used
+52,417

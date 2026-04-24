@@ -16,8 +16,7 @@ const mockDetectScheduledCountMismatch = vi.hoisted(() => vi.fn());
 const mockDetectSummarizingStall = vi.hoisted(() => vi.fn());
 const mockFindOrphanTranscripts = vi.hoisted(() => vi.fn());
 const mockCountOrphanTranscripts = vi.hoisted(() => vi.fn());
-const mockPersistAnomalyDrafts = vi.hoisted(() => vi.fn());
-const mockResolveAnomaly = vi.hoisted(() => vi.fn());
+const mockSyncAnomalies = vi.hoisted(() => vi.fn());
 const mockRepairScheduledCount = vi.hoisted(() => vi.fn());
 const mockRecordProbeSuccess = vi.hoisted(() => vi.fn());
 
@@ -66,8 +65,7 @@ vi.mock('../../../src/services/run/anomaly-detection.js', () => ({
 }));
 
 vi.mock('../../../src/services/run/anomaly-persistence.js', () => ({
-  persistAnomalyDrafts: mockPersistAnomalyDrafts,
-  resolveAnomaly: mockResolveAnomaly,
+  syncAnomalies: mockSyncAnomalies,
   repairScheduledCount: mockRepairScheduledCount,
 }));
 
@@ -102,8 +100,7 @@ describe('createRunStateReconcileHandler', () => {
     mockCountOrphanTranscripts.mockResolvedValue(0);
     mockMaybeAdvanceRunStatus.mockResolvedValue({ enteredSummarizing: false, completed: false });
     mockRecordProbeSuccess.mockResolvedValue(undefined);
-    mockPersistAnomalyDrafts.mockResolvedValue(undefined);
-    mockResolveAnomaly.mockResolvedValue(undefined);
+    mockSyncAnomalies.mockResolvedValue(undefined);
     mockRepairScheduledCount.mockResolvedValue(false);
   });
 
@@ -189,8 +186,9 @@ describe('createRunStateReconcileHandler', () => {
       }),
       'Malformed orphan transcript content'
     );
-    expect(mockPersistAnomalyDrafts).toHaveBeenCalledWith(
+    expect(mockSyncAnomalies).toHaveBeenCalledWith(
       'run-1',
+      'ORPHAN_TRANSCRIPT',
       [
         expect.objectContaining({
           type: 'ORPHAN_TRANSCRIPT',
@@ -199,7 +197,8 @@ describe('createRunStateReconcileHandler', () => {
             malformedTranscriptIds: ['t-1'],
           },
         }),
-      ]
+      ],
+      'default'
     );
   });
 

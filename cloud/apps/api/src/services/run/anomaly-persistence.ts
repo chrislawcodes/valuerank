@@ -1,4 +1,5 @@
 import { db } from '@valuerank/db';
+import type { RunAnomalySource } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 import type { AnomalyDraft, RunAnomalyType } from './anomaly-detection.js';
 
@@ -14,6 +15,7 @@ type RunAnomalyKey = {
   runId: string;
   type: RunAnomalyType;
   subject: string;
+  source: RunAnomalySource;
 };
 
 function parseProgress(progress: unknown): RunProgress {
@@ -28,20 +30,26 @@ function parseProgress(progress: unknown): RunProgress {
   return { total, completed, failed };
 }
 
-export async function upsertAnomaly(runId: string, draft: AnomalyDraft): Promise<void> {
+export async function upsertAnomaly(
+  runId: string,
+  draft: AnomalyDraft,
+  source: RunAnomalySource,
+): Promise<void> {
   const now = new Date();
   await db.runAnomaly.upsert({
     where: {
-      runId_type_subject: {
+      runId_type_subject_source: {
         runId,
         type: draft.type,
         subject: draft.subject,
+        source,
       },
     },
     create: {
       runId,
       type: draft.type,
       subject: draft.subject,
+      source,
       details: draft.details,
       firstSeenAt: now,
       lastSeenAt: now,
@@ -54,9 +62,30 @@ export async function upsertAnomaly(runId: string, draft: AnomalyDraft): Promise
   });
 }
 
-export async function persistAnomalyDrafts(runId: string, drafts: AnomalyDraft[]): Promise<void> {
+export async function syncAnomalies(
+  runId: string,
+  type: RunAnomalyType,
+  drafts: AnomalyDraft[],
+  source: RunAnomalySource,
+): Promise<void> {
   for (const draft of drafts) {
-    await upsertAnomaly(runId, draft);
+    await upsertAnomaly(runId, draft, source);
+  }
+  const currentSubjects = new Set(drafts.map((draft) => draft.subject));
+  const existing = await db.runAnomaly.findMany({
+    where: {
+      runId,
+      type,
+      source,
+      resolvedAt: null,
+    },
+    select: { subject: true },
+  });
+
+  for (const anomaly of existing) {
+    if (!currentSubjects.has(anomaly.subject)) {
+      await resolveAnomaly({ runId, type, subject: anomaly.subject, source });
+    }
   }
 }
 
@@ -67,11 +96,11 @@ export async function resolveAnomaly(key: RunAnomalyKey): Promise<void> {
       runId: key.runId,
       type: key.type,
       subject: key.subject,
+      source: key.source,
       resolvedAt: null,
     },
     data: {
       resolvedAt: now,
-      lastSeenAt: now,
     },
   });
 }

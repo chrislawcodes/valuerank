@@ -502,6 +502,11 @@ enum RunAnomalyType {
   SCHEDULED_COUNT_MISMATCH
 }
 
+enum RunAnomalySource {
+  default
+  audit
+}
+
 model Transcript {
   id                 String    @id @default(cuid())
   runId              String    @map("run_id")
@@ -664,6 +669,7 @@ model RunAnomaly {
   runId                String         @map("run_id")
   type                 RunAnomalyType
   subject              String         @default("")
+  source               RunAnomalySource @default(default)
   details              Json           @db.JsonB
   firstSeenAt          DateTime       @default(now()) @map("first_seen_at")
   lastSeenAt           DateTime       @default(now()) @map("last_seen_at")
@@ -672,7 +678,7 @@ model RunAnomaly {
 
   run Run @relation(fields: [runId], references: [id], onDelete: Cascade)
 
-  @@unique([runId, type, subject])
+  @@unique([runId, type, subject, source])
   @@index([runId])
   @@index([type, resolvedAt])
   @@map("run_anomalies")

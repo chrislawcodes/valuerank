@@ -5,11 +5,13 @@ const {
   mockRunUpdate,
   mockAnomalyUpsert,
   mockAnomalyUpdateMany,
+  mockAnomalyFindMany,
 } = vi.hoisted(() => ({
   mockRunFindUnique: vi.fn(),
   mockRunUpdate: vi.fn(),
   mockAnomalyUpsert: vi.fn(),
   mockAnomalyUpdateMany: vi.fn(),
+  mockAnomalyFindMany: vi.fn(),
 }));
 
 vi.mock('@valuerank/db', () => ({
@@ -21,6 +23,7 @@ vi.mock('@valuerank/db', () => ({
     runAnomaly: {
       upsert: mockAnomalyUpsert,
       updateMany: mockAnomalyUpdateMany,
+      findMany: mockAnomalyFindMany,
     },
   },
   Prisma: {},
@@ -29,6 +32,7 @@ vi.mock('@valuerank/db', () => ({
 import {
   repairScheduledCount,
   resolveAnomaly,
+  syncAnomalies,
   upsertAnomaly,
 } from '../../../src/services/run/anomaly-persistence.js';
 
@@ -38,6 +42,7 @@ describe('run anomaly persistence helpers', () => {
     mockRunUpdate.mockReset();
     mockAnomalyUpsert.mockReset();
     mockAnomalyUpdateMany.mockReset();
+    mockAnomalyFindMany.mockReset();
   });
 
   it('upserts anomaly rows with the current timestamps', async () => {
@@ -47,17 +52,42 @@ describe('run anomaly persistence helpers', () => {
       type: 'STRANDED_TRANSCRIPT',
       subject: '',
       details: { transcriptIds: ['t1'] },
-    });
+    }, 'default');
 
     expect(mockAnomalyUpsert).toHaveBeenCalledTimes(1);
     const args = mockAnomalyUpsert.mock.calls[0]?.[0];
-    expect(args.where.runId_type_subject).toEqual({
+    expect(args.where.runId_type_subject_source).toEqual({
       runId: 'run_1',
       type: 'STRANDED_TRANSCRIPT',
       subject: '',
+      source: 'default',
     });
     expect(args.create.runId).toBe('run_1');
     expect(args.update.resolvedAt).toBeNull();
+  });
+
+  it('re-unresolves an anomaly when it is re-detected', async () => {
+    mockAnomalyUpsert.mockResolvedValue(undefined);
+
+    await upsertAnomaly('run_1', {
+      type: 'PAIR_ASYMMETRY',
+      subject: 'group-1',
+      details: { runId: 'run_1' },
+    }, 'audit');
+
+    expect(mockAnomalyUpsert.mock.calls[0]?.[0]).toMatchObject({
+      where: {
+        runId_type_subject_source: {
+          runId: 'run_1',
+          type: 'PAIR_ASYMMETRY',
+          subject: 'group-1',
+          source: 'audit',
+        },
+      },
+      update: {
+        resolvedAt: null,
+      },
+    });
   });
 
   it('marks anomalies resolved when the condition clears', async () => {
@@ -67,6 +97,7 @@ describe('run anomaly persistence helpers', () => {
       runId: 'run_1',
       type: 'PAIR_ASYMMETRY',
       subject: 'group-1',
+      source: 'audit',
     });
 
     expect(mockAnomalyUpdateMany).toHaveBeenCalledTimes(1);
@@ -75,9 +106,39 @@ describe('run anomaly persistence helpers', () => {
       runId: 'run_1',
       type: 'PAIR_ASYMMETRY',
       subject: 'group-1',
+      source: 'audit',
       resolvedAt: null,
     });
     expect(args.data.resolvedAt).toBeInstanceOf(Date);
+    expect(args.data.lastSeenAt).toBeUndefined();
+  });
+
+  it('syncs anomalies without touching other sources', async () => {
+    mockAnomalyUpsert.mockResolvedValue(undefined);
+    mockAnomalyFindMany.mockResolvedValue([{ subject: 'group-1' }]);
+
+    await syncAnomalies('run_1', 'PAIR_ASYMMETRY', [], 'audit');
+
+    expect(mockAnomalyFindMany).toHaveBeenCalledWith({
+      where: {
+        runId: 'run_1',
+        type: 'PAIR_ASYMMETRY',
+        source: 'audit',
+        resolvedAt: null,
+      },
+      select: { subject: true },
+    });
+    expect(mockAnomalyUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          runId: 'run_1',
+          type: 'PAIR_ASYMMETRY',
+          subject: 'group-1',
+          source: 'audit',
+          resolvedAt: null,
+        },
+      })
+    );
   });
 
   it('repairs scheduled total only when it changes', async () => {
@@ -95,5 +156,12 @@ describe('run anomaly persistence helpers', () => {
       completed: 2,
       failed: 1,
     });
+  });
+
+  it('returns false when the run does not exist', async () => {
+    mockRunFindUnique.mockResolvedValue(null);
+
+    await expect(repairScheduledCount('missing-run', 6)).resolves.toBe(false);
+    expect(mockRunUpdate).not.toHaveBeenCalled();
   });
 });

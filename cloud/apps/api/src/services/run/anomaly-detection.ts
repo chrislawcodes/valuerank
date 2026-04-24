@@ -70,6 +70,20 @@ type PairAsymmetryMetrics = {
   successRate: number;
 };
 
+export type AnomalyThresholds = {
+  pairAsymmetryThresholdPct?: number;
+  modelShortfallAbsoluteRate?: number;
+  modelShortfallRelativeRate?: number;
+  modelShortfallPeerRate?: number;
+};
+
+export type AnomalyDetectionMode = 'default' | 'audit';
+
+type DetectionOptions = {
+  mode: AnomalyDetectionMode;
+  thresholds: AnomalyThresholds | null;
+};
+
 function parseRunConfig(config: unknown): RunConfig {
   if (config === null || typeof config !== 'object') {
     return {};
@@ -104,6 +118,35 @@ function getProgressTotal(progress: unknown): number {
 
 function toJsonValue(value: unknown): Prisma.InputJsonValue {
   return value as Prisma.InputJsonValue;
+}
+
+function isThresholdOverrides(value: AnomalyDetectionMode | AnomalyThresholds | undefined): value is AnomalyThresholds {
+  return value !== undefined && value !== 'default' && value !== 'audit';
+}
+
+function hasAuditThresholdOverrides(thresholds: AnomalyThresholds | null): boolean {
+  return thresholds !== null
+    && thresholds.pairAsymmetryThresholdPct === 0
+    && thresholds.modelShortfallAbsoluteRate === 0
+    && thresholds.modelShortfallRelativeRate === 0
+    && thresholds.modelShortfallPeerRate === 0;
+}
+
+function normalizeDetectionOptions(
+  options?: AnomalyDetectionMode | AnomalyThresholds,
+): DetectionOptions {
+  if (options === 'audit') {
+    return { mode: 'audit', thresholds: null };
+  }
+
+  if (isThresholdOverrides(options)) {
+    return {
+      mode: hasAuditThresholdOverrides(options) ? 'audit' : 'default',
+      thresholds: options,
+    };
+  }
+
+  return { mode: 'default', thresholds: null };
 }
 
 function buildOrphanTranscriptFromClause(runId: string): Prisma.Sql {
@@ -208,7 +251,11 @@ export async function detectOrphanTranscript(runId: string): Promise<AnomalyDraf
   };
 }
 
-export async function detectPairAsymmetry(run: RunSnapshot): Promise<AnomalyDraft | null> {
+export async function detectPairAsymmetry(
+  run: RunSnapshot,
+  options?: AnomalyDetectionMode | AnomalyThresholds,
+): Promise<AnomalyDraft | null> {
+  const detection = normalizeDetectionOptions(options);
   const groupId = getGroupId(run.config);
   if (groupId === null) {
     return null;
@@ -283,9 +330,14 @@ export async function detectPairAsymmetry(run: RunSnapshot): Promise<AnomalyDraf
     return null;
   }
 
+  const thresholdPct =
+    detection.mode === 'audit'
+      ? 0
+      : detection.thresholds?.pairAsymmetryThresholdPct ?? PAIR_ASYMMETRY_THRESHOLD_PCT;
+
   // <= so identical rates (deltaPct === 0) don't fire when threshold is 0.
   // At threshold=0 the detector fires on any measurable asymmetry.
-  if (maxDeltaPct <= PAIR_ASYMMETRY_THRESHOLD_PCT) {
+  if (maxDeltaPct <= thresholdPct) {
     return null;
   }
 
@@ -327,7 +379,11 @@ export function detectSummarizingStall(run: RunSnapshot): AnomalyDraft | null {
   };
 }
 
-export async function detectModelTranscriptShortfall(run: RunSnapshot): Promise<AnomalyDraft[]> {
+export async function detectModelTranscriptShortfall(
+  run: RunSnapshot,
+  options?: AnomalyDetectionMode | AnomalyThresholds,
+): Promise<AnomalyDraft[]> {
+  const detection = normalizeDetectionOptions(options);
   const modelIds = getModelIds(run.config);
   if (modelIds.length === 0) {
     return [];
@@ -373,9 +429,33 @@ export async function detectModelTranscriptShortfall(run: RunSnapshot): Promise<
       ? ((sorted[sorted.length / 2 - 1] ?? 0) + (sorted[sorted.length / 2] ?? 0)) / 2
       : sorted[Math.floor(sorted.length / 2)] ?? 0;
 
+  if (detection.mode === 'audit') {
+    return rates
+      .filter((rate) => rate.rate < peerMedianRate - 0.0001)
+      .map((rate) => ({
+        type: 'MODEL_TRANSCRIPT_SHORTFALL' as const,
+        subject: rate.modelId,
+        details: toJsonValue({
+          runId: run.id,
+          modelId: rate.modelId,
+          successes: rate.successes,
+          scheduled: rate.scheduled,
+          rate: rate.rate,
+          peerMedianRate,
+        }),
+      }));
+  }
+
+  const absoluteRateThreshold =
+    detection.thresholds?.modelShortfallAbsoluteRate ?? MODEL_SHORTFALL_ABSOLUTE_RATE;
+  const relativeRateThreshold =
+    detection.thresholds?.modelShortfallRelativeRate ?? MODEL_SHORTFALL_RELATIVE_RATE;
+  const peerRateThreshold =
+    detection.thresholds?.modelShortfallPeerRate ?? MODEL_SHORTFALL_PEER_RATE;
+
   return rates
-    .filter((rate) => rate.rate < MODEL_SHORTFALL_ABSOLUTE_RATE || (
-      rate.rate < MODEL_SHORTFALL_RELATIVE_RATE && peerMedianRate > MODEL_SHORTFALL_PEER_RATE
+    .filter((rate) => rate.rate < absoluteRateThreshold || (
+      rate.rate < relativeRateThreshold && peerMedianRate > peerRateThreshold
     ))
     .map((rate) => ({
       type: 'MODEL_TRANSCRIPT_SHORTFALL' as const,
