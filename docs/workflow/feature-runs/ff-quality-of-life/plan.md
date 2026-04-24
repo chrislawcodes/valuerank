@@ -1,7 +1,79 @@
-# Plan
+# Plan — FF Quality of Life
 
 ## Review Reconciliation
 
-- review: reviews/spec.codex.edge-cases-adversarial.review.md | status: accepted | note: No actionable findings detected — auto-accepted
-- review: reviews/spec.codex.feasibility-adversarial.review.md | status: accepted | note: HIGH (manifest has no artifact_sha256): FIXED — FR-005 now reads SHAs from review-file frontmatter (the authoritative source); manifest only provides the required_reviews list. MEDIUM (budget raise was lowering): FIXED — FR-001 now says 50k/60k/250k which is raises-or-equal across the chain. MEDIUM (prompt-only enforcement): accepted — FR-011 explicitly scopes to prompt-level; independent test made behavioral.
-- review: reviews/spec.gemini.requirements-adversarial.review.md | status: accepted | note: HIGH (contradictory test vs FR-011): FIXED — independent test is now textual, not schema-level. MEDIUM (atomic reseal): FIXED — FR-005 requires pre-check validation of all targets before any write. LOW (clear-before-append order): FIXED — FR-014 requires help text to document explicitly. LOW (lifecycle ordering): FIXED — edge case is now mutually exclusive via argparse, no implicit order.
+- review: reviews/spec.codex.edge-cases-adversarial.review.md | status: deferred | note: Codex subprocess timeout — content never generated. Feasibility + requirements reviews completed and flagged real HIGH/MEDIUM findings that are all addressed.
+- review: reviews/spec.codex.feasibility-adversarial.review.md | status: accepted | note: HIGH manifest-has-no-sha FIXED (read from review frontmatter); MEDIUM budget-lowering FIXED (50k/60k/250k); MEDIUM prompt-only enforcement accepted.
+- review: reviews/spec.gemini.requirements-adversarial.review.md | status: accepted | note: HIGH contradictory test FIXED (textual); MEDIUM atomic reseal FIXED (pre-check); LOW ordering docs + mutex — both fixed.
+
+## Architecture
+
+Four small, independent changes. No shared state.
+
+| Fix | File | Entry point |
+|---|---|---|
+| 1 — Char budget defaults | `run_factory.py` | checkpoint subparser argparse defaults |
+| 2 — `--validation-only` | `factory_cmd_checkpoint.py` + `run_factory.py` | new flag + new code path at top of `command_checkpoint` |
+| 3 — Restatement judge prompt | `judge-prompts/restatement.md` | prompt text edit |
+| 4 — Discover CLI append | `factory_cmd_discover.py` + `run_factory.py` | argparse `action="append"` + clear flags |
+
+## Implementation waves (slices)
+
+### Slice 1 — Trivial fixes (char budgets + restatement prompt) `[CHECKPOINT]`
+
+- Set `default=50000`, `default=60000`, `default=250000` on the 3 char-budget argparse args in `run_factory.py` checkpoint subparser.
+- Edit `judge-prompts/restatement.md`: add the quote-evidence requirement under the diminishing-returns rule. Preserve first-round-proceed-with-annotation and true-saturation rules.
+- Tests: verify argparse defaults resolve to the new values; textual test asserts restatement.md contains the quote-requirement phrase.
+
+Estimated diff: ~50 lines (3 defaults + 1 prompt block + 2 test cases).
+
+### Slice 2 — Discover CLI append semantics `[CHECKPOINT]`
+
+- Change `--non-goal` and `--acceptance-criteria` from `action="store"` to `action="append"` in `run_factory.py` discover subparser.
+- Add `--clear-non-goals` and `--clear-acceptance-criteria` flags.
+- In `factory_cmd_discover.py`, update the handler to: (a) if `clear_*` flag set, empty the corresponding list first; (b) for each value in the appended list, append to state if not already present (dedup by exact string match).
+- Update argparse help text per FR-014 to document clear-then-append order.
+- Tests: 5 US4 acceptance scenarios (append multiple in one call; preserve existing; clear; clear-then-append; same for acceptance-criteria).
+
+Estimated diff: ~100 lines.
+
+### Slice 3 — `--validation-only` flag `[CHECKPOINT]`
+
+- Add `--validation-only` (mutually exclusive with `--fallback`, `--address`, `--defer`, `--dismiss`) to the checkpoint subparser.
+- In `factory_cmd_checkpoint.command_checkpoint`, at the top (after args parse, before prereq checks), if `args.validation_only`:
+  - Load the stage's checkpoint manifest.
+  - Pre-check: every `required_reviews[].path` exists and is writable. Any failure → exit 2 with specific message.
+  - Compute current artifact SHA.
+  - Read each review's frontmatter `artifact_sha256`.
+  - If all match current SHA: print `manifest already matches`, exit 0.
+  - If any differ: use `atomic_write` for each review file — read YAML frontmatter, update `artifact_sha256`, write to temp file, `os.replace`. Append `{type: "validation-only-reseal", old_sha, new_sha, at: <epoch>}` to `stages[stage].annotations[]`. Exit 0.
+  - If manifest doesn't exist: exit 2.
+- Tests: 4 US2 acceptance scenarios (drift + reseal; no drift; no manifest; fallback mutex). Plus pre-check-failure test: make one review file read-only, assert no partial writes happen.
+
+Estimated diff: ~250 lines.
+
+### Slice 4 — Closeout + docs `[CHECKPOINT]`
+
+- Write `closeout.md` + `postmortem.md`.
+
+## Testing approach
+
+Three new test files:
+
+1. `tests/test_char_budget_defaults.py` — argparse default resolution; Slice 1.
+2. `tests/test_restatement_prompt.py` — textual assertion on prompt file; Slice 1.
+3. `tests/test_discover_append.py` — 5 US4 scenarios; Slice 2.
+4. `tests/test_validation_only.py` — 4 US2 + pre-check-failure; Slice 3.
+
+Total target: ~200 tests (183 existing + ~17 new).
+
+## Residual risks (with verification)
+
+- **Risk P1** — raised defaults + rate limits. Operators can override downward. Risk is reversible; verification is monitoring cost after deploy.
+- **Risk P2** — `--validation-only` misused as workflow bypass. Mitigated by mutex with concern-lifecycle flags; annotation trail.
+- **Risk P3** — atomic reseal pre-check misses a race where file becomes unwritable between check and write. Accepted — extremely narrow window; second run catches inconsistency.
+- **Risk P4** — restatement prompt change induces LLM non-compliance on legitimate rounds. Mitigated: quote-rule only applies when citing severity drop; other proceed paths unaffected.
+
+## Out of scope
+
+Same as spec — auto-register, completeness veto, GC intermediates (shipped in Feature A); embedding concern IDs, JSON reviewer output, rename cosmetic, --force-advance (deferred).

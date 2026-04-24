@@ -3,14 +3,14 @@ reviewer: "codex"
 lens: "feasibility-adversarial"
 stage: "spec"
 artifact_path: "docs/workflow/feature-runs/ff-quality-of-life/spec.md"
-artifact_sha256: "70c7715a932eaa6c8e8ac5f56422eaf2b5dd7ea3bdbd67841e9a4d584f670261"
+artifact_sha256: "ef0fe4e58d4772e6f4d2656fd004979cddd4585ca188ef3c267af42e6d40b1f1"
 repo_root: "."
-git_head_sha: "51207c8bf078e076ea613e85c0b9abf3dd36ea7a"
+git_head_sha: "3165f5ec0a8db61ff954e72ec15aa075c80a1daa"
 git_base_ref: "origin/main"
 git_base_sha: "29476d513f705290496288c4e580ba6890bc87ad"
 generation_method: "codex-runner"
-resolution_status: "accepted"
-resolution_note: "HIGH (manifest has no artifact_sha256): FIXED — FR-005 now reads SHAs from review-file frontmatter (the authoritative source); manifest only provides the required_reviews list. MEDIUM (budget raise was lowering): FIXED — FR-001 now says 50k/60k/250k which is raises-or-equal across the chain. MEDIUM (prompt-only enforcement): accepted — FR-011 explicitly scopes to prompt-level; independent test made behavioral."
+resolution_status: "open"
+resolution_note: ""
 raw_output_path: "docs/workflow/feature-runs/ff-quality-of-life/reviews/spec.codex.feasibility-adversarial.review.md.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,19 +22,16 @@ coverage_note: ""
 
 ## Findings
 
-- **High** [CODE-CONFIRMED]: `--validation-only` is underspecified against the current manifest format. The spec says to “re-seal the manifest” and update an `artifact_sha256` field ([spec.md:49](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-quality-of-life/spec.md#L49), [spec.md:148](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-quality-of-life/spec.md#L148)), but `checkpoint_manifest()` does not store any SHA at all ([factory_review.py:144](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_review.py#L144)), and the verifier only checks review-file frontmatter `artifact_sha256` against the artifact hash ([verify_review_checkpoint.py:149](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/review-lens/scripts/verify_review_checkpoint.py#L149), [verify_review_checkpoint.py:173](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/review-lens/scripts/verify_review_checkpoint.py#L173)). As written, the spec needs a manifest schema change it never calls out.
+1. **High** `[CODE-CONFIRMED]` The `--validation-only` design is incomplete because it only rewrites review frontmatter SHAs, but the judge panel does not use the manifest as its source of truth for “latest.” It derives `latest_sha` from `stages[stage].adversarial_sha_history` or `initial_sha`, then compares that to review frontmatter to decide which files are latest vs prior. After a reseal, if stage state is not updated too, the next restatement judge will misclassify the current round as stale or empty. See [factory_cmd_judge.py](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py#L344), [factory_cmd_judge.py](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py#L423), and [spec.md](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-quality-of-life/spec.md#L143).
 
-- **Medium** [CODE-CONFIRMED]: The budget “raise” is not a pure raise. The proposed defaults are `40000 / 50000 / 200000` in the spec ([spec.md:136](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-quality-of-life/spec.md#L136)), but the downstream review runners already default to `50000 / 10000 / 70000` ([run_codex_review.py:51](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/review-lens/scripts/run_codex_review.py#L51), [run_gemini_review.py:484](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/review-lens/scripts/run_gemini_review.py#L484)). Lowering the artifact cap to 40k can make artifact-heavy runs narrow earlier than they do today, so this can reintroduce partial coverage on cases that currently fit.
+2. **Medium** `[CODE-CONFIRMED]` The reseal path has no defined behavior for malformed review frontmatter, but the code path it depends on throws on missing or malformed frontmatter. `parse_review_frontmatter()` raises immediately if the file is missing the `---` envelope or is structurally malformed, so one bad review file can abort the command with no rollback or recovery rule. The spec only requires existence/writability prechecks, not parseability or failure policy. See [factory_state.py](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py#L337) and [spec.md](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-quality-of-life/spec.md#L149).
 
-- **Medium** [CODE-CONFIRMED]: The restatement hardening is still prompt-only and not actually enforced by the runner. The spec asks for a test that fails schema validation when a severity-drop rationale lacks quotes ([spec.md:106](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-quality-of-life/spec.md#L106)), but `run_judge()` only checks JSON shape and field presence in `_validate_verdict()` ([factory_cmd_judge.py:463](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py#L463)). The prompt already tells the model to quote specific text from old and new rounds ([restatement.md:49](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/judge-prompts/restatement.md#L49)), so this spec does not add a machine-checkable guard.
+3. **Medium** `[UNVERIFIED]` The checkpoint budget target is internally inconsistent. The summary says `40k/50k/200k`, FR-001 says `50k/60k/250k`, and SC-001 repeats `40k/50k/200k`, while the problem statement also mentions the observed workaround was `50k/250k`. An implementer cannot tell which budget set is the actual contract. See [spec.md](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-quality-of-life/spec.md#L13), [spec.md](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-quality-of-life/spec.md#L24), [spec.md](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-quality-of-life/spec.md#L136), and [spec.md](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-quality-of-life/spec.md#L175).
 
 ## Residual Risks
 
-- `--validation-only` still needs a precise rule for which review files it rewrites if the manifest lists multiple reviews for a stage. The manifest only names `required_reviews`; it does not carry a separate source of truth for which files are safe to reseal.
-
-- `discover` append semantics will still depend on exact-string deduplication. Near-duplicates that differ only by whitespace or casing can still accumulate unless the spec also defines normalization.
-
-- The restatement fix will still depend on model compliance unless you add a post-parse validator or a structured field. Prompt text alone can reduce risk, but it cannot guarantee behavior.
+- The validation-only reseal still needs a stage-level lock or equivalent transaction boundary if it rewrites multiple review files. Per-file atomic writes prevent torn files, but they do not stop another judge run from reading a mixed old/new SHA set mid-reseal.
+- If the higher budget defaults are kept, the spec still needs a clear operator fallback for constrained environments. The artifact already acknowledges small-hardware OOM and rate-limit risk, so the implementation should document the override path explicitly.
 
 ## Runner Stats
 - total_input=0
@@ -42,5 +39,5 @@ coverage_note: ""
 - total_tokens=0
 
 ## Resolution
-- status: accepted
-- note: HIGH (manifest has no artifact_sha256): FIXED — FR-005 now reads SHAs from review-file frontmatter (the authoritative source); manifest only provides the required_reviews list. MEDIUM (budget raise was lowering): FIXED — FR-001 now says 50k/60k/250k which is raises-or-equal across the chain. MEDIUM (prompt-only enforcement): accepted — FR-011 explicitly scopes to prompt-level; independent test made behavioral.
+- status: open
+- note: 
