@@ -89,17 +89,34 @@ def recommended_next_action(
         return "discover"
     if _judge_panel_needed(state):
         return "judge_panel"
+    stages_state = state.get("stages") or {}
+
+    def _judge_advanced(stage_name: str) -> bool:
+        """FR-001 — honor the judge panel's formal advance verdict.
+
+        When judges voted advance, downstream behavior treats the stage as
+        ready to hand off even if the artifact SHA has drifted since the
+        last checkpoint. factory_cmd_checkpoint reseals the manifest lazily
+        (FR-002) so the next checkpoint starts from a clean manifest.
+        """
+        stage_blob = stages_state.get(stage_name) or {}
+        return stage_blob.get("judge_next_action") == "advance"
+
     if not stages["spec"]["artifact_exists"] or not stages["spec"]["artifact_meaningful"]:
         if later_progress_exists(stages, "spec")[0]:
             return "mark_blocked"
         return "author_spec"
-    if not stages["spec"]["manifest_exists"] or not stages["spec"]["healthy"]:
+    if not _judge_advanced("spec") and (
+        not stages["spec"]["manifest_exists"] or not stages["spec"]["healthy"]
+    ):
         return "repair_spec_checkpoint"
     if not stages["plan"]["artifact_exists"] or not stages["plan"]["artifact_meaningful"]:
         if later_progress_exists(stages, "plan")[0]:
             return "mark_blocked"
         return "author_plan"
-    if not stages["plan"]["manifest_exists"] or not stages["plan"]["healthy"]:
+    if not _judge_advanced("plan") and (
+        not stages["plan"]["manifest_exists"] or not stages["plan"]["healthy"]
+    ):
         return "repair_plan_checkpoint"
     if not stages["tasks"]["artifact_exists"] or not stages["tasks"]["artifact_meaningful"]:
         if later_progress_exists(stages, "tasks")[0]:
@@ -108,7 +125,9 @@ def recommended_next_action(
     parallel = state.get(PARALLEL_ANALYSIS_KEY, {})
     if not parallel.get("reviewed"):
         return "record_parallel_analysis"
-    if not stages["tasks"]["manifest_exists"] or not stages["tasks"]["healthy"]:
+    if not _judge_advanced("tasks") and (
+        not stages["tasks"]["manifest_exists"] or not stages["tasks"]["healthy"]
+    ):
         return "repair_tasks_checkpoint"
     if not stages["diff"]["artifact_exists"]:
         return "dispatch_next_slice_to_codex"

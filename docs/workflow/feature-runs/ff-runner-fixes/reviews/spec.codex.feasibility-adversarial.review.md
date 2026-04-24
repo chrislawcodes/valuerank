@@ -22,15 +22,14 @@ coverage_note: ""
 
 ## Findings
 
-Codex output did not match the required review format: Gemini response did not include both required sections
+- HIGH [CODE-CONFIRMED]: The spec fixes the decision tree, but it does not fix the call site that actually persists and emits the next action. In `factory_cmd_judge.py:880`, `next_action = recommended_next_action(...)` is computed before `stage_state["judge_next_action"] = "advance"` is written in both advance branches. That means the judge command can still save a stale `last_action_result.next` and print the wrong banner on the same run, even if `factory_next_action.py:76` is updated.
+
+- MEDIUM [CODE-CONFIRMED]: The new concern lifecycle is only defined in state, not in the human-facing rendering path. `factory_pr_body.py:32` renders every object in `unresolved_concerns` as an unresolved judge concern, and the spec never says to filter out entries once `addressed_at` or `deferred_reason` is set. As written, addressed or deferred concerns will still appear in the judge panel block as if they were open.
 
 ## Residual Risks
 
-- Review did not complete successfully, so this checkpoint is not satisfied.
-
-## Failure Evidence
-- stdout: `/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/reviews/spec.codex.feasibility-adversarial.review.md.stdout.txt`
-- stderr: `/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/reviews/spec.codex.feasibility-adversarial.review.md.stderr.txt`
+- The regex expansion is still bounded to the four new shapes listed in the spec. If reviewers start using a different structured format later, `auto-reconcile` can regress again unless the test matrix is updated.
+- The concern-resolution flow will still depend on a clear convention for how operators see closed concerns versus open ones. If the PR-body block is left unchanged, the workflow will work but remain hard to audit by eye.
 
 ## Resolution
 - status: accepted

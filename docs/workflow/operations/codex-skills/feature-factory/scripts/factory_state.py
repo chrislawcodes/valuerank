@@ -36,6 +36,8 @@ CHECKPOINT_FALLBACK_KEY = "checkpoint_fallback"
 CHECKPOINT_PROGRESS_KEY = "checkpoint_progress"
 PARALLEL_ANALYSIS_KEY = "parallel_analysis"
 INIT_HEAD_SHA_KEY = "init_head_sha"
+INVARIANT_WARNINGS_KEY = "invariant_warnings"
+_INVARIANT_WARNINGS_CAP = 100
 
 # ---------------------------------------------------------------------------
 # Atomic JSON I/O
@@ -186,6 +188,7 @@ def _default_workflow_state() -> dict:
         INIT_HEAD_SHA_KEY: "",
         "token_usage": [],
         "stages": {},
+        INVARIANT_WARNINGS_KEY: [],
         "schema_version": 1,
     }
 
@@ -387,6 +390,7 @@ def load_workflow_state(slug: str) -> dict:
     state.setdefault(INIT_HEAD_SHA_KEY, "")
     state.setdefault("token_usage", [])
     state.setdefault("stages", {})
+    state.setdefault(INVARIANT_WARNINGS_KEY, [])
     state.setdefault("schema_version", 1)
     return state
 

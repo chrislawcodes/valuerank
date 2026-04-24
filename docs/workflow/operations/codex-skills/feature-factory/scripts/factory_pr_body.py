@@ -29,8 +29,31 @@ def _excerpt(text: object, limit: int = 120) -> str:
     return textwrap.shorten(normalized, width=limit, placeholder="...")
 
 
-def collect_judge_panel_entries(state: dict) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any] | None]:
+def _concern_is_resolved(concern: dict) -> bool:
+    """FR-005a — a concern is resolved once addressed, deferred, or dismissed.
+
+    Missing fields are treated as None (unresolved). Older concerns written
+    before FR-003 simply never populate these fields and keep rendering as
+    open, which matches prior behavior.
+    """
+    return any(
+        concern.get(field) is not None
+        for field in ("addressed_at", "addressed_by", "deferred_reason", "dismissed_reason")
+    )
+
+
+def collect_judge_panel_entries(
+    state: dict,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any] | None, list[dict[str, Any]]]:
+    """Return (open_concerns, annotations, override, resolved_concerns).
+
+    Open concerns render in the ``## ⚠ Unresolved Judge Concerns`` block.
+    Resolved concerns render in a separate ``## Resolved Concerns`` block so
+    the audit trail is preserved without confusing the operator about open
+    items (FR-005a).
+    """
     concerns: list[dict[str, Any]] = []
+    resolved_concerns: list[dict[str, Any]] = []
     annotations: list[dict[str, Any]] = []
     stages = state.get("stages", {})
     if isinstance(stages, dict):
@@ -44,7 +67,10 @@ def collect_judge_panel_entries(state: dict) -> tuple[list[dict[str, Any]], list
                     continue
                 merged = dict(concern_blob)
                 merged.setdefault("stage", stage_name)
-                concerns.append(merged)
+                if _concern_is_resolved(merged):
+                    resolved_concerns.append(merged)
+                else:
+                    concerns.append(merged)
             for annotation in _coerce_list(stage_blob.get("annotations")):
                 annotation_blob = _coerce_mapping(annotation)
                 if not annotation_blob:
@@ -54,12 +80,12 @@ def collect_judge_panel_entries(state: dict) -> tuple[list[dict[str, Any]], list
                 annotations.append(merged)
 
     override = _coerce_mapping(state.get("override"))
-    return concerns, annotations, override
+    return concerns, annotations, override, resolved_concerns
 
 
 def render_judge_panel_block(state: dict) -> str:
-    concerns, annotations, override = collect_judge_panel_entries(state)
-    if not concerns and not annotations and not override:
+    concerns, annotations, override, resolved_concerns = collect_judge_panel_entries(state)
+    if not concerns and not annotations and not override and not resolved_concerns:
         return ""
 
     lines: list[str] = [SENTINEL_BEGIN, "## ⚠ Unresolved Judge Concerns"]
@@ -87,6 +113,30 @@ def render_judge_panel_block(state: dict) -> str:
                 "",
             ]
         )
+
+    if resolved_concerns:
+        lines.append("## Resolved Concerns")
+        for concern in resolved_concerns:
+            stage = str(concern.get("stage", "") or "")
+            judge = str(concern.get("judge", "") or "")
+            concern_id = str(concern.get("id", "") or "")
+            if concern.get("addressed_at") is not None or concern.get("addressed_by"):
+                status = "addressed"
+                detail = str(concern.get("addressed_by", "") or "").strip() or "(no evidence)"
+            elif concern.get("deferred_reason"):
+                status = "deferred"
+                detail = str(concern.get("deferred_reason", "") or "").strip()
+            elif concern.get("dismissed_reason"):
+                status = "dismissed"
+                detail = str(concern.get("dismissed_reason", "") or "").strip()
+            else:
+                status = "resolved"
+                detail = ""
+            id_label = f"`{concern_id}`" if concern_id else ""
+            lines.append(
+                f"- {stage} / {judge} {id_label} — **{status}**: {detail}".rstrip()
+            )
+        lines.append("")
 
     if annotations:
         lines.append("## Annotations")

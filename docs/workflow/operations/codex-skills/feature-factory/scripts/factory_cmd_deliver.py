@@ -116,7 +116,7 @@ def _edit_pr_body(body: str) -> None:
 def _record_override_if_needed(slug: str, reason: str) -> dict | None:
     recorded: dict | None = None
     with with_locked_state(slug) as state:
-        concerns, _, _ = collect_judge_panel_entries(state)
+        concerns, _, _, _ = collect_judge_panel_entries(state)
         if not concerns:
             return None
         recorded = {

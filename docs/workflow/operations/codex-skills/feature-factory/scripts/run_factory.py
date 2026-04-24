@@ -94,7 +94,33 @@ from factory_cmd_block import command_block  # noqa: E402
 from factory_cmd_judge import run_judge  # noqa: E402
 from factory_cmd_implement import command_implement, command_parallel, _run_serial, _run_parallel  # noqa: E402
 from factory_cmd_status import command_status, command_repair, command_doctor  # noqa: E402
+from factory_invariants import run_invariant_checks, set_json_mode  # noqa: E402
+from factory_stages import stage_manifest_state  # noqa: E402  (re-imported for invariant check)
 from workflow_utils import resolve_stored_path  # noqa: E402
+
+
+# Commands that mutate workflow state — wrap them with the invariant post-check.
+_STATE_MUTATING_COMMANDS: frozenset[str] = frozenset(
+    {"checkpoint", "judge", "reconcile", "auto-reconcile", "implement", "deliver", "block"}
+)
+
+
+def _run_post_invariants(slug: str | None, command_name: str) -> None:
+    """Run invariant checks after a state-mutating command.
+
+    Errors are swallowed — the invariant helper must never abort the caller.
+    """
+    if not slug:
+        return
+    try:
+        state = load_workflow_state(slug)
+        stages = {name: stage_manifest_state(slug, name) for name in CHECKPOINT_STAGES}
+        recommended = recommended_next_action(slug, state, stages, True)
+        appended = run_invariant_checks(state, command_name, recommended)
+        if appended:
+            save_workflow_state(slug, state)
+    except Exception:  # noqa: BLE001 — invariant failure must not abort the caller
+        return
 
 
 def command_init(args: argparse.Namespace) -> int:
@@ -393,7 +419,33 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
-    return args.func(args)
+    # FR-009: route invariant-warning output to stderr when --json is active so
+    # machine-readable JSON on stdout is never contaminated.
+    set_json_mode(bool(getattr(args, "json", False)))
+    exit_code = args.func(args)
+    # FR-009 / FR-010: post-run invariant check on state-mutating commands.
+    command_name = getattr(args, "_factory_command", None) or _infer_command_name(args)
+    if command_name in _STATE_MUTATING_COMMANDS:
+        _run_post_invariants(getattr(args, "slug", None), command_name)
+    return exit_code
+
+
+def _infer_command_name(args: argparse.Namespace) -> str | None:
+    """Best-effort extraction of the subcommand name from parsed argparse args."""
+    # argparse doesn't expose the selected subcommand name cleanly; inspect the
+    # configured func and map it back to a known subcommand.
+    func = getattr(args, "func", None)
+    if func is None:
+        return None
+    qualname = getattr(func, "__qualname__", "") or ""
+    name = getattr(func, "__name__", "") or ""
+    # Common mapping — command_X -> X
+    if name.startswith("command_"):
+        return name[len("command_"):].replace("_", "-")
+    # run_judge is wrapped in a lambda for the judge subcommand.
+    if "run_judge" in qualname or name == "<lambda>":
+        return "judge"
+    return None
 
 
 if __name__ == "__main__":
