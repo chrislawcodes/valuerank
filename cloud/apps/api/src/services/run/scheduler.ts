@@ -329,6 +329,20 @@ async function registerRunStateAuditSchedule(): Promise<void> {
   }
 }
 
+async function registerAnalysisResultJanitorSchedule(): Promise<void> {
+  try {
+    const boss = getBoss();
+    await boss.unschedule('analysis_result_janitor').catch(() => undefined);
+    await boss.schedule('analysis_result_janitor', '0 10 * * *', {});
+    log.info(
+      { jobType: 'analysis_result_janitor', cron: '0 10 * * *' },
+      'Registered analysis_result_janitor schedule'
+    );
+  } catch (error) {
+    log.error({ error }, 'Failed to register analysis_result_janitor schedule');
+  }
+}
+
 /**
  * Stops only the recovery interval (not the activity tracking).
  */
@@ -383,6 +397,7 @@ export async function startRecoveryScheduler(): Promise<void> {
   );
 
   await registerRunStateAuditSchedule();
+  await registerAnalysisResultJanitorSchedule();
 
   // Run startup recovery first
   let hasActiveRuns = false;

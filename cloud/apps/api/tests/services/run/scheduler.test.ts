@@ -105,19 +105,30 @@ describe('getReconcileWindowDays', () => {
     expect(mockLogWarn).not.toHaveBeenCalled();
   });
 
-  it('registers the daily audit schedule on startup', async () => {
+  it('registers the daily audit and janitor schedules on startup', async () => {
     const { startRecoveryScheduler } = await loadScheduler();
 
     await startRecoveryScheduler();
 
+    expect(mockBossUnschedule).toHaveBeenCalledTimes(2);
+    expect(mockBossUnschedule).toHaveBeenCalledWith('analysis_result_janitor');
     expect(mockBossUnschedule).toHaveBeenCalledWith('run_state_audit');
+    expect(mockBossSchedule).toHaveBeenCalledTimes(2);
     expect(mockBossSchedule).toHaveBeenCalledWith('run_state_audit', '0 9 * * *', {});
+    expect(mockBossSchedule).toHaveBeenCalledWith('analysis_result_janitor', '0 10 * * *', {});
     expect(mockLogInfo).toHaveBeenCalledWith(
       expect.objectContaining({
         jobType: 'run_state_audit',
         cron: '0 9 * * *',
       }),
       'Registered run_state_audit schedule'
+    );
+    expect(mockLogInfo).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobType: 'analysis_result_janitor',
+        cron: '0 10 * * *',
+      }),
+      'Registered analysis_result_janitor schedule'
     );
   });
 

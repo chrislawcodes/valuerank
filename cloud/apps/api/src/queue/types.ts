@@ -15,6 +15,7 @@ export type JobType =
   | 'probe_dead_letter'
   | 'run_state_reconcile'
   | 'run_state_audit'
+  | 'analysis_result_janitor'
   | 'aggregate_analysis'
   | 'refresh_domain_analysis_snapshot';
 
@@ -64,6 +65,8 @@ export type RunStateReconcileJobData = {
 
 export type RunStateAuditJobData = Record<string, never>;
 
+export type AnalysisResultJanitorJobData = Record<string, never>;
+
 export type AggregateAnalysisJobData = {
   definitionId: string;
   preambleVersionId: string | null;
@@ -93,6 +96,7 @@ export type JobData =
   | ComputeTokenStatsJobData
   | RunStateReconcileJobData
   | RunStateAuditJobData
+  | AnalysisResultJanitorJobData
   | AggregateAnalysisJobData
   | RefreshDomainAnalysisSnapshotJobData;
 
@@ -151,6 +155,10 @@ export const DEFAULT_JOB_OPTIONS: Record<JobType, JobOptions> = {
   'run_state_audit': {
     retryLimit: 0,
     expireInSeconds: 1800,
+  },
+  'analysis_result_janitor': {
+    retryLimit: 0,
+    expireInSeconds: 600,
   },
   'aggregate_analysis': {
     retryLimit: 3,
