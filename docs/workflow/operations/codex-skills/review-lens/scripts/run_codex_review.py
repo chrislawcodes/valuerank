@@ -12,6 +12,7 @@ from run_gemini_review import (
     ensure_allowed_path,
     ensure_sections,
     format_stats,
+    is_codex_quota_exhaustion,
     normalized_artifact_text,
     prompt_for,
     read_text,
@@ -24,6 +25,7 @@ from run_gemini_review import (
     text_or_empty,
     write_failure,
     write_narrowed_artifact,
+    write_quota_deferred,
     write_report,
 )
 
@@ -242,6 +244,19 @@ def main() -> int:
         return 3
     if result.returncode != 0:
         last_message_path.unlink(missing_ok=True)
+        # PR #751 / FF Housekeeping Slice 1: detect Codex quota / usage-limit
+        # exhaustion in stderr/stdout and route to deferred (not failed) so the
+        # checkpoint doesn't lock up on a quota issue. Plain `rate limit` is
+        # not enough — see is_codex_quota_exhaustion for the precise rule.
+        if is_codex_quota_exhaustion(result.stderr, result.stdout):
+            write_quota_deferred(
+                output_path,
+                metadata,
+                stdout_path,
+                stderr_path,
+            )
+            log_attempt("deferred", 0, "Codex quota exhausted")
+            return 0
         write_failure(
             output_path,
             metadata,

@@ -1,0 +1,42 @@
+---
+reviewer: "codex"
+lens: "feasibility-adversarial"
+stage: "spec"
+artifact_path: "docs/workflow/feature-runs/ff-housekeeping/spec.md"
+artifact_sha256: "769546a0c1b7e0faa9f32465e35cc2722aae6884984f9f7254f229224a4b2acb"
+repo_root: "."
+git_head_sha: "abe37af6980410617bc8583fba79f3603ad9b221"
+git_base_ref: "origin/main"
+git_base_sha: "85a91778b3c3de491fd6b326879d29fa5dc6d0fa"
+generation_method: "codex-runner"
+resolution_status: "accepted"
+resolution_note: "Addressed during spec/plan/tasks rounds (see plan.md reconciliation rollup)."
+raw_output_path: "docs/workflow/feature-runs/ff-housekeeping/reviews/spec.codex.feasibility-adversarial.review.md.raw.txt"
+narrowed_artifact_path: ""
+narrowed_artifact_sha256: ""
+coverage_status: "full"
+coverage_note: ""
+---
+
+# Review: spec feasibility-adversarial
+
+## Findings
+
+- High: Fix 1 still presents the reconcile helper as if it makes the frontmatter, body block, and plan.md entry "atomic" and guarantees they "never drift", but FR-002 explicitly says the implementation is only pre-check plus sequential writes and can still drift on mid-write failure. That is not a minor wording issue. It means the spec asks for a stronger invariant than it actually defines, so a green test suite could still ship the exact two-of-three drift problem this feature is meant to remove.
+- High: FR-005 makes quota detection depend on both free-text substrings and HTTP status 402/429, but the spec only promises stderr/stdout from `run_codex_review`. It never says the subprocess will expose structured HTTP status, so the deferred path may never trigger for the real error string the feature is supposed to catch. The same rule also uses `rate limit`, which is broad enough to misclassify unrelated throttling as quota exhaustion.
+- Medium [UNVERIFIED]: Fix 4 assumes `git merge-base origin/main HEAD` is always available and that redirecting `FACTORY_RUNS_ROOT` is enough to isolate the smoke test. If the runner ever operates in a shallow clone, detached checkout, or reads any repo-relative path outside that env var, deliver can fail early or the smoke test can touch live files. The spec needs an explicit fallback and a stricter isolation contract.
+
+## Residual Risks
+
+- The reconcile helper is still not transactional. A crash, signal, or disk-full error between the three writes can still leave drift until someone reruns it.
+- The quota classifier still depends on exact upstream wording. If the OpenAI error text changes, the deferred path will regress until the pattern is updated.
+- The implementation-rule warning is advisory by design. If an operator ignores it or uses the override path casually, the spec does not prevent that behavior.
+
+## Runner Stats
+- total_input=0
+- total_output=0
+- total_tokens=0
+
+## Resolution
+- status: accepted
+- note: Addressed during spec/plan/tasks rounds (see plan.md reconciliation rollup).

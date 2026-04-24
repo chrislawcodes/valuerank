@@ -1,0 +1,10 @@
+## Findings
+- High: T2.2 and T2.6 conflict. The reconcile helper is required to fail unless `review_path` and `plan_path` already exist and are writable, but the “clean reconcile: empty starting state” test says the command should bring three sources to `accepted` from an empty state. If “empty” means missing files, this cannot work. If it means empty files, the artifact needs to say that explicitly.
+- Medium [UNVERIFIED]: T3.1 assumes `git merge-base origin/main HEAD` will work, but nothing in the artifact requires the remote tracking ref to exist. In checkouts without `origin/main`, the helper falls back to `main` or `HEAD~50`, which makes the implementation-rule WARN depend on local history depth and can fire at the wrong time.
+- Medium [UNVERIFIED]: T2.3(c) matches plan entries only by `reviews/<basename>.review.md`. If two review files share the same basename in different folders, reconcile can update the wrong line or append a duplicate. That makes the repair path depend on filename uniqueness that the artifact never guarantees.
+- Medium: T3.4 leaves the override flow incomplete. It only validates the reason when both override flags are present, but it never says what should happen if the boolean flag is passed without a reason, or vice versa. That creates a silent no-op path where the user thinks they overrode the rule, but delivery still warns and proceeds.
+
+## Residual Risks
+- No code context was provided, so I could not verify whether existing helpers already handle missing files, basename collisions, or override parsing.
+- The reconcile and smoke-test slices may still depend on fixture shape details that are not stated here, especially around whether files are pre-created or bootstrapped.
+- The implementation-rule check will remain environment-sensitive as long as it depends on `git merge-base` fallbacks, so CI behavior may vary if remote refs or history depth differ.

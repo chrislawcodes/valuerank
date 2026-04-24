@@ -1,0 +1,158 @@
+"""Slice 3 — implementation-rule WARN at deliver."""
+import importlib.util
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+
+SCRIPTS_DIR = Path(__file__).resolve().parents[1]
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+
+
+def _load(name: str):
+    spec = importlib.util.spec_from_file_location(name, SCRIPTS_DIR / f"{name}.py")
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+FACTORY_STATE = _load("factory_state")
+FACTORY_DELIVER = _load("factory_deliver")
+
+
+def _mock_run_factory(*, base_succeeds: bool = True, head_sha: str = "abcdef0", added_lines: int = 0):
+    """Build a side-effect for subprocess.run that simulates git commands."""
+    def side_effect(cmd, *args, **kwargs):
+        result = MagicMock()
+        result.stdout = ""
+        result.stderr = ""
+        result.returncode = 0
+        if cmd[:2] == ["git", "merge-base"]:
+            if base_succeeds:
+                result.stdout = "basesha\n"
+                result.returncode = 0
+            else:
+                result.returncode = 1
+        elif cmd[:2] == ["git", "rev-parse"] and "HEAD~50" in cmd:
+            if base_succeeds:
+                result.stdout = "basesha\n"
+            else:
+                result.returncode = 1
+        elif cmd[:2] == ["git", "rev-parse"] and cmd[2:] == ["HEAD"]:
+            result.stdout = head_sha + "\n"
+        elif cmd[:2] == ["git", "diff"]:
+            # numstat format: <added>\t<deleted>\t<file>
+            if added_lines > 0:
+                result.stdout = f"{added_lines}\t10\tsome_file.py\n"
+            else:
+                result.stdout = ""
+        return result
+    return side_effect
+
+
+class CheckImplementationRuleTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmpdir = tempfile.mkdtemp()
+        self.tmp_root = Path(self.tmpdir)
+        self.slug = "impl-rule-test"
+        self._patch = patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", self.tmp_root)
+        self._patch.start()
+        FACTORY_STATE.workflow_dir(self.slug).mkdir(parents=True, exist_ok=True)
+        FACTORY_STATE.atomic_json_write(
+            FACTORY_STATE.factory_state_path(self.slug),
+            FACTORY_STATE._default_workflow_state(),
+        )
+
+    def tearDown(self) -> None:
+        self._patch.stop()
+
+    def test_triggered_over_threshold_no_dispatches_no_override(self) -> None:
+        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(added_lines=250)):
+            triggered, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertTrue(triggered)
+        self.assertIn("250", msg)
+        self.assertIn("Codex dispatch", msg)
+
+    def test_under_threshold_not_triggered(self) -> None:
+        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(added_lines=50)):
+            triggered, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertFalse(triggered)
+        self.assertEqual(msg, "")
+
+    def test_codex_dispatch_recorded_suppresses(self) -> None:
+        state = FACTORY_STATE.load_workflow_state(self.slug)
+        state["codex_dispatches"] = [{"at": 12345, "command": "codex exec ..."}]
+        FACTORY_STATE.atomic_json_write(FACTORY_STATE.factory_state_path(self.slug), state)
+        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(added_lines=300)):
+            triggered, _ = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertFalse(triggered)
+
+    def test_override_matching_head_suppresses(self) -> None:
+        state = FACTORY_STATE.load_workflow_state(self.slug)
+        state["implementation_rule_override"] = {
+            "head_sha": "abcdef0",
+            "reason": "explained reason here",
+            "at": 12345,
+            "operator": "tester",
+        }
+        FACTORY_STATE.atomic_json_write(FACTORY_STATE.factory_state_path(self.slug), state)
+        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(added_lines=300, head_sha="abcdef0")):
+            triggered, _ = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertFalse(triggered)
+
+    def test_override_stale_head_does_not_suppress(self) -> None:
+        state = FACTORY_STATE.load_workflow_state(self.slug)
+        state["implementation_rule_override"] = {
+            "head_sha": "oldsha9",
+            "reason": "stale override from earlier HEAD",
+            "at": 12345,
+            "operator": "tester",
+        }
+        FACTORY_STATE.atomic_json_write(FACTORY_STATE.factory_state_path(self.slug), state)
+        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(added_lines=300, head_sha="newsha1")):
+            triggered, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertTrue(triggered)
+        self.assertIn("300", msg)
+
+    def test_skip_when_branch_base_unresolved(self) -> None:
+        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(base_succeeds=False)):
+            triggered, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertFalse(triggered)
+        self.assertIn("could not determine branch base", msg)
+
+
+class RecordOverrideTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmpdir = tempfile.mkdtemp()
+        self.tmp_root = Path(self.tmpdir)
+        self.slug = "override-test"
+        self._patch = patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", self.tmp_root)
+        self._patch.start()
+        FACTORY_STATE.workflow_dir(self.slug).mkdir(parents=True, exist_ok=True)
+        FACTORY_STATE.atomic_json_write(
+            FACTORY_STATE.factory_state_path(self.slug),
+            FACTORY_STATE._default_workflow_state(),
+        )
+
+    def tearDown(self) -> None:
+        self._patch.stop()
+
+    def test_record_writes_override_with_head_and_reason(self) -> None:
+        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(head_sha="ddd")):
+            FACTORY_DELIVER.record_implementation_rule_override(
+                self.slug, "  Codex quota exhausted, see postmortem  "
+            )
+        state = FACTORY_STATE.load_workflow_state(self.slug)
+        override = state["implementation_rule_override"]
+        self.assertEqual(override["head_sha"], "ddd")
+        self.assertEqual(override["reason"], "Codex quota exhausted, see postmortem")
+        self.assertGreater(override["at"], 0)
+
+
+if __name__ == "__main__":
+    unittest.main()

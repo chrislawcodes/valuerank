@@ -20,7 +20,15 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 REPO_ROOT: Path = Path(__file__).resolve().parents[6]
-FACTORY_RUNS_ROOT: Path = REPO_ROOT / "docs" / "workflow" / "feature-runs"
+# PR #751 / FF Housekeeping Slice 4: honor FF_FACTORY_RUNS_ROOT env var so
+# tests can redirect the workflow root via subprocess env without monkey-
+# patching module state. Production paths are unaffected when absent.
+_RUNS_ROOT_OVERRIDE = os.environ.get("FF_FACTORY_RUNS_ROOT")
+FACTORY_RUNS_ROOT: Path = (
+    Path(_RUNS_ROOT_OVERRIDE).resolve()
+    if _RUNS_ROOT_OVERRIDE
+    else REPO_ROOT / "docs" / "workflow" / "feature-runs"
+)
 
 # ---------------------------------------------------------------------------
 # String constants used as workflow-state dictionary keys

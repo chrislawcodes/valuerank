@@ -1,0 +1,2859 @@
+Reading additional input from stdin...
+OpenAI Codex v0.125.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019dc1b1-1ede-7240-ba1d-1504ca722e21
+--------
+user
+Review this diff artifact using a correctness-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: implementation.diff.patch
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py
+index 78ee2f2e..75e986d4 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py
+@@ -242,6 +242,26 @@ def command_deliver(args: argparse.Namespace) -> int:
+         print("deliver --override-judges requires --reason", file=sys.stderr)
+         raise SystemExit(2)
+ 
++    # PR #751 / FF Housekeeping Slice 3: implementation-rule WARN.
++    # Surface Claude-implementation cases at deliver time so the postmortem
++    # author sees them before pressing merge. Advisory, not blocking.
++    if getattr(args, "override_implementation_rule", False):
++        reason = (getattr(args, "override_implementation_reason", None) or "").strip()
++        if len(reason) < 10:
++            print(
++                "deliver --override-implementation-rule requires "
++                "--override-implementation-reason of at least 10 characters",
++                file=sys.stderr,
++            )
++            raise SystemExit(2)
++        from factory_deliver import record_implementation_rule_override
++        record_implementation_rule_override(args.slug, reason)
++    else:
++        from factory_deliver import check_implementation_rule
++        triggered, message = check_implementation_rule(args.slug)
++        if triggered:
++            print(message, file=sys.stderr)
++
+     auth = subprocess.run(["gh", "auth", "status", "--active"], text=True, capture_output=True)
+     if auth.returncode != 0:
+         raise SystemExit(trim_detail(auth.stderr or auth.stdout or "GitHub authentication is not ready"))
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_deliver.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_deliver.py
+index 73126675..bfcf3dcf 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_deliver.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_deliver.py
+@@ -1,6 +1,7 @@
+ #!/usr/bin/env python3
+ """GitHub CLI interaction, delivery records, and closeout text generation."""
+ import json
++import os
+ import subprocess
+ import time
+ from datetime import datetime, timezone
+@@ -14,6 +15,8 @@ if str(_SCRIPT_DIR) not in sys.path:
+ from factory_state import (  # noqa: E402
+     REPO_ROOT,
+     load_checkpoint_manifest,
++    load_workflow_state,
++    update_workflow_state,
+ )
+ 
+ REVIEW_SCRIPTS = REPO_ROOT / "docs" / "workflow" / "operations" / "codex-skills" / "review-lens" / "scripts"
+@@ -26,6 +29,122 @@ from factory_git import current_branch_name, command_path  # noqa: E402
+ from factory_stages import VERIFY_ON_CLOSEOUT_STAGES  # noqa: E402
+ 
+ 
++# ---------------------------------------------------------------------------
++# Implementation rule check (PR #751 / FF Housekeeping Slice 3)
++# ---------------------------------------------------------------------------
++
++_IMPLEMENTATION_RULE_THRESHOLD = 200
++_IMPLEMENTATION_RULE_CODE_GLOBS = ("*.py", "*.ts", "*.tsx", "*.js", "*.jsx")
++_IMPLEMENTATION_RULE_TEST_EXCLUDES = (
++    ":!**/test_*",
++    ":!**/*_test.py",
++    ":!**/tests/**",
++)
++
++
++def _resolve_branch_base() -> str | None:
++    """Find a sane branch base via origin/main → main → HEAD~50 fallback."""
++    for ref in ("origin/main", "main"):
++        result = subprocess.run(
++            ["git", "merge-base", ref, "HEAD"],
++            capture_output=True,
++            text=True,
++        )
++        if result.returncode == 0 and result.stdout.strip():
++            return result.stdout.strip()
++    result = subprocess.run(
++        ["git", "rev-parse", "HEAD~50"],
++        capture_output=True,
++        text=True,
++    )
++    if result.returncode == 0 and result.stdout.strip():
++        return result.stdout.strip()
++    return None
++
++
++def _added_code_lines(branch_base: str) -> int | None:
++    """Count added lines in code files (not tests, not docs) since branch_base."""
++    cmd = [
++        "git",
++        "diff",
++        "--numstat",
++        f"{branch_base}..HEAD",
++        "--",
++        *_IMPLEMENTATION_RULE_CODE_GLOBS,
++        *_IMPLEMENTATION_RULE_TEST_EXCLUDES,
++    ]
++    result = subprocess.run(cmd, capture_output=True, text=True)
++    if result.returncode != 0:
++        return None
++    total_added = 0
++    for line in result.stdout.splitlines():
++        parts = line.split("\t")
++        if len(parts) < 2:
++            continue
++        added_str = parts[0]
++        if added_str == "-":
++            continue
++        try:
++            total_added += int(added_str)
++        except ValueError:
++            continue
++    return total_added
++
++
++def check_implementation_rule(slug: str) -> tuple[bool, str]:
++    """Return (triggered, message). See spec FR-012-016."""
++    branch_base = _resolve_branch_base()
++    if branch_base is None:
++        return (
++            False,
++            "implementation-rule check skipped: could not determine branch base.",
++        )
++    added = _added_code_lines(branch_base)
++    if added is None:
++        return (False, "implementation-rule check skipped: git diff failed.")
++    if added <= _IMPLEMENTATION_RULE_THRESHOLD:
++        return (False, "")
++
++    state = load_workflow_state(slug)
++    if state.get("codex_dispatches"):
++        return (False, "")
++
++    head_result = subprocess.run(
++        ["git", "rev-parse", "HEAD"], capture_output=True, text=True
++    )
++    head_sha = head_result.stdout.strip() if head_result.returncode == 0 else ""
++    override = state.get("implementation_rule_override") or {}
++    if isinstance(override, dict) and override.get("head_sha") == head_sha and head_sha:
++        return (False, "")
++
++    msg = (
++        f"⚠ implementation-rule: {added} non-test code lines added with no recorded "
++        f"Codex dispatch. The postmortem must explain why Claude implemented this PR. "
++        f"Suppress with --override-implementation-rule "
++        f"--override-implementation-reason \"<text>\" (>= 10 chars)."
++    )
++    return (True, msg)
++
++
++def record_implementation_rule_override(slug: str, reason: str) -> None:
++    head_result = subprocess.run(
++        ["git", "rev-parse", "HEAD"], capture_output=True, text=True
++    )
++    head_sha = head_result.stdout.strip() if head_result.returncode == 0 else ""
++    operator = os.environ.get("USER") or "unknown"
++    override = {
++        "at": int(time.time()),
++        "reason": reason.strip(),
++        "operator": operator,
++        "head_sha": head_sha,
++    }
++
++    def _mutate(state: dict) -> None:
++        state["implementation_rule_override"] = override
++
++    update_workflow_state(slug, _mutate)
++
++
+ # ---------------------------------------------------------------------------
+ # GitHub CLI helpers
+ # ---------------------------------------------------------------------------
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_reconcile.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_reconcile.py
+new file mode 100644
+index 00000000..bce4effb
+--- /dev/null
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_reconcile.py
+@@ -0,0 +1,107 @@
++#!/usr/bin/env python3
++"""Three-way reconcile helper — keeps review frontmatter, body Resolution
++block, and plan.md reconciliation entry in sync.
++
++Why this exists:
++  Three prior feature runs (PR #744, #749, #750) hit `verify_review_checkpoint`
++  errors of the form "resolution status does not match frontmatter" or "plan.md
++  is missing reconciliation entry for reviews/foo.review.md". Every recovery
++  was hand-editing one or two of three sources to match. This helper bundles
++  the reconcile into a single entry point with a pre-check.
++
++Scope (per spec FR-002):
++  Pre-check + sequential write. NOT transactional. Mid-write failure can leave
++  drift; idempotent re-run is the recovery path.
++"""
++from __future__ import annotations
++
++import os
++import subprocess
++import sys
++from pathlib import Path
++
++
++def reconcile_review_full(
++    review_path: Path,
++    plan_path: Path,
++    status: str,
++    note: str,
++    *,
++    update_review_script: Path,
++    append_reconciliation_script: Path,
++    python_exe: str | None = None,
++) -> int:
++    """Update review frontmatter + body Resolution block + plan.md entry.
++
++    Returns 0 on success, 2 on pre-check or write failure.
++
++    Args:
++      review_path: absolute path to the .review.md file.
++      plan_path: absolute path to the workflow's plan.md.
++      status: one of "accepted", "rejected", "deferred", "open".
++      note: free-form note. Should be non-empty.
++      update_review_script: path to update_review_resolution.py (review-lens).
++      append_reconciliation_script: path to append_reconciliation_entry.py.
++      python_exe: Python executable. Defaults to sys.executable.
++    """
++    python_exe = python_exe or sys.executable
++
++    # --- Pre-check phase: validate both targets exist + writable ---
++    pre_check_errors: list[str] = []
++    if not review_path.exists():
++        pre_check_errors.append(f"review file does not exist: {review_path}")
++    elif not os.access(review_path, os.W_OK):
++        pre_check_errors.append(f"review file not writable: {review_path}")
++
++    if not plan_path.exists():
++        pre_check_errors.append(f"plan.md does not exist: {plan_path}")
++    elif not os.access(plan_path, os.W_OK):
++        pre_check_errors.append(f"plan.md not writable: {plan_path}")
++
++    if pre_check_errors:
++        for err in pre_check_errors:
++            print(f"reconcile pre-check failed: {err}", file=sys.stderr)
++        return 2
++
++    # --- Write phase 1: review frontmatter + body Resolution block ---
++    review_args = ["--review", str(review_path)]
++    update_cmd = [
++        python_exe,
++        str(update_review_script),
++        *review_args,
++        "--status",
++        status,
++        "--note",
++        note,
++    ]
++    update_result = subprocess.run(update_cmd, capture_output=True, text=True)
++    if update_result.returncode != 0:
++        print(
++            f"reconcile failed at update_review_resolution: {update_result.stderr.strip()}",
++            file=sys.stderr,
++        )
++        return 2
++
++    # --- Write phase 2: plan.md entry (dedup by review path) ---
++    append_cmd = [
++        python_exe,
++        str(append_reconciliation_script),
++        "--plan",
++        str(plan_path),
++        *review_args,
++        "--status",
++        status,
++        "--note",
++        note,
++    ]
++    append_result = subprocess.run(append_cmd, capture_output=True, text=True)
++    if append_result.returncode != 0:
++        print(
++            f"reconcile failed at append_reconciliation_entry: {append_result.stderr.strip()}\n"
++            f"  WARNING: review file at {review_path} was already updated; "
++            f"plan.md is now out of sync. Re-run reconcile to repair.",
++            file=sys.stderr,
++        )
++        return 2
++
++    return 0
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py
+index 6645a9be..c326d7d8 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py
+@@ -20,7 +20,15 @@ from pathlib import Path
+ # ---------------------------------------------------------------------------
+ 
+ REPO_ROOT: Path = Path(__file__).resolve().parents[6]
+-FACTORY_RUNS_ROOT: Path = REPO_ROOT / "docs" / "workflow" / "feature-runs"
++# PR #751 / FF Housekeeping Slice 4: honor FF_FACTORY_RUNS_ROOT env var so
++# tests can redirect the workflow root via subprocess env without monkey-
++# patching module state. Production paths are unaffected when absent.
++_RUNS_ROOT_OVERRIDE = os.environ.get("FF_FACTORY_RUNS_ROOT")
++FACTORY_RUNS_ROOT: Path = (
++    Path(_RUNS_ROOT_OVERRIDE).resolve()
++    if _RUNS_ROOT_OVERRIDE
++    else REPO_ROOT / "docs" / "workflow" / "feature-runs"
++)
+ 
+ # ---------------------------------------------------------------------------
+ # String constants used as workflow-state dictionary keys
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py
+index 7b99a445..1d9ae81a 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py
+@@ -187,12 +187,27 @@ def command_init(args: argparse.Namespace) -> int:
+ def command_reconcile(args: argparse.Namespace) -> int:
+     ensure_sync()
+     plan_path = workflow_dir(args.slug) / "plan.md"
+-    review_args = []
++
++    # PR #751 / FF Housekeeping Slice 2: route through factory_reconcile so
++    # frontmatter + body block + plan.md are pre-checked together. Three prior
++    # features (PR #744/#749/#750) hit verify_review_checkpoint drift errors;
++    # the helper raises pre-check failures BEFORE any partial write happens.
++    from factory_reconcile import reconcile_review_full  # noqa: E402
++    for review in args.review:
++        review_path = Path(review).resolve()
++        rc = reconcile_review_full(
++            review_path=review_path,
++            plan_path=plan_path,
++            status=args.status,
++            note=args.note,
++            update_review_script=UPDATE_REVIEW,
++            append_reconciliation_script=APPEND_RECONCILIATION,
++        )
++        if rc != 0:
++            return rc
++    review_args: list[str] = []
+     for review in args.review:
+         review_args.extend(["--review", str(Path(review).resolve())])
+-
+-    run([sys.executable, str(UPDATE_REVIEW), *review_args, "--status", args.status, "--note", args.note])
+-    run([sys.executable, str(APPEND_RECONCILIATION), "--plan", str(plan_path), *review_args, "--status", args.status, "--note", args.note])
+     run([sys.executable, str(VERIFY_RECONCILIATION), "--plan", str(plan_path), *review_args])
+     _emit_next_action(args.slug, f"reconcile ({args.status})")
+     return 0
+@@ -453,6 +468,11 @@ def build_parser() -> argparse.ArgumentParser:
+     deliver_parser.add_argument("--merge-when-green", action="store_true")
+     deliver_parser.add_argument("--auto-merge", action="store_true")
+     deliver_parser.add_argument("--dry-run", action="store_true")
++    deliver_parser.add_argument("--override-implementation-rule", action="store_true",
++        help="Suppress the implementation-rule WARN if Claude implemented "
++             "more than 200 lines without a Codex dispatch. Requires --override-implementation-reason.")
++    deliver_parser.add_argument("--override-implementation-reason",
++        help="Reason for overriding the implementation-rule WARN. Must be at least 10 characters.")
+     deliver_parser.set_defaults(func=command_deliver)
+ 
+     closeout_parser = subparsers.add_parser("closeout")
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_codex_quota_classifier.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_codex_quota_classifier.py
+new file mode 100644
+index 00000000..5fc9590b
+--- /dev/null
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_codex_quota_classifier.py
+@@ -0,0 +1,134 @@
++"""Slice 1 — `is_codex_quota_exhaustion` classifier + `write_quota_deferred` write path.
++
++Pin the matcher rules so future regressions are visible immediately.
++"""
++import importlib.util
++import sys
++import tempfile
++import unittest
++from pathlib import Path
++
++
++REVIEW_LENS_DIR = (
++    Path(__file__).resolve().parents[3]
++    / "review-lens"
++    / "scripts"
++)
++if str(REVIEW_LENS_DIR) not in sys.path:
++    sys.path.insert(0, str(REVIEW_LENS_DIR))
++
++
++def _load(name: str):
++    spec = importlib.util.spec_from_file_location(name, REVIEW_LENS_DIR / f"{name}.py")
++    assert spec and spec.loader
++    mod = importlib.util.module_from_spec(spec)
++    sys.modules[name] = mod
++    spec.loader.exec_module(mod)
++    return mod
++
++
++GEMINI_REVIEW = _load("run_gemini_review")
++
++
++class CodexQuotaClassifierTests(unittest.TestCase):
++    def _check(self, stderr: str = "", stdout: str = "") -> bool:
++        return GEMINI_REVIEW.is_codex_quota_exhaustion(stderr, stdout)
++
++    # Phrase-pattern positives
++    def test_youve_hit_your_usage_limit(self) -> None:
++        self.assertTrue(
++            self._check(stderr="ERROR: You've hit your usage limit. Upgrade to Pro.")
++        )
++
++    def test_usage_limit_exhausted(self) -> None:
++        self.assertTrue(self._check(stderr="usage_limit_exhausted: try again later"))
++
++    def test_quota_exceeded(self) -> None:
++        self.assertTrue(self._check(stderr="error: monthly quota exceeded"))
++
++    def test_monthly_quota(self) -> None:
++        self.assertTrue(self._check(stderr="Your monthly quota is depleted"))
++
++    def test_case_insensitive(self) -> None:
++        self.assertTrue(self._check(stderr="USAGE_LIMIT_EXHAUSTED"))
++
++    # HTTP status + Codex/OpenAI context positives
++    def test_429_with_openai_context(self) -> None:
++        self.assertTrue(
++            self._check(stderr="HTTP 429 from openai.com /v1/chat/completions")
++        )
++
++    def test_402_with_codex_context(self) -> None:
++        self.assertTrue(self._check(stderr="codex returned 402 Payment Required"))
++
++    def test_429_with_chatgpt_context(self) -> None:
++        self.assertTrue(self._check(stderr="429 from chatgpt.com api"))
++
++    # HTTP status WITHOUT Codex/OpenAI context — should NOT match
++    def test_429_alone_does_not_match(self) -> None:
++        self.assertFalse(self._check(stderr="429 Too Many Requests from upstream"))
++
++    def test_402_alone_does_not_match(self) -> None:
++        self.assertFalse(self._check(stderr="402 from billing system"))
++
++    def test_plain_rate_limit_text_alone(self) -> None:
++        """Per spec: 'rate limit' alone is NOT enough — needs HTTP status + context."""
++        self.assertFalse(self._check(stderr="rate limit triggered for unrelated API"))
++
++    # Genuine non-quota failures should NOT match
++    def test_timeout_does_not_match(self) -> None:
++        self.assertFalse(self._check(stderr="Codex review timed out after 300s"))
++
++    def test_malformed_json_does_not_match(self) -> None:
++        self.assertFalse(
++            self._check(stderr="json.JSONDecodeError: expecting value at line 1 col 1")
++        )
++
++    def test_empty_inputs(self) -> None:
++        self.assertFalse(self._check())
++
++    def test_stdout_alone_can_match(self) -> None:
++        """Either stderr or stdout may carry the pattern."""
++        self.assertTrue(
++            self._check(stdout="429 from openai.com")
++        )
++
++
++class WriteQuotaDeferredTests(unittest.TestCase):
++    def test_writes_deferred_status_and_note(self) -> None:
++        with tempfile.TemporaryDirectory() as tmpdir:
++            output_path = Path(tmpdir) / "spec.codex.feasibility-adversarial.review.md"
++            metadata = {
++                "reviewer": "codex",
++                "lens": "feasibility-adversarial",
++                "stage": "spec",
++                "artifact_path": "docs/workflow/feature-runs/x/spec.md",
++                "artifact_sha256": "abc",
++                "repo_root": ".",
++                "git_head_sha": "deadbeef",
++                "git_base_ref": "origin/main",
++                "git_base_sha": "1234",
++                "generation_method": "codex-runner",
++                "resolution_status": "open",
++                "resolution_note": "",
++                "raw_output_path": "",
++                "narrowed_artifact_path": "",
++                "narrowed_artifact_sha256": "",
++                "coverage_status": "full",
++                "coverage_note": "",
++            }
++            GEMINI_REVIEW.write_quota_deferred(output_path, metadata)
++
++            content = output_path.read_text(encoding="utf-8")
++            self.assertIn('resolution_status: "deferred"', content)
++            self.assertIn("Codex quota exhausted", content)
++            self.assertIn("https://chatgpt.com/codex/settings/usage", content)
++            # Frontmatter and body block must agree (fixes the verify_review_checkpoint
++            # 3-way drift problem from prior features).
++            body_resolution_idx = content.index("## Resolution")
++            body_block = content[body_resolution_idx:]
++            self.assertIn("- status: deferred", body_block)
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_completeness_veto.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_completeness_veto.py
+index 48ab6d4d..6dc87f3f 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_completeness_veto.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_completeness_veto.py
+@@ -342,6 +342,7 @@ class CompletenessVetoTests(unittest.TestCase):
+             }), \
+             patch.object(DELIVER, "required_check_summary", return_value=("pass", [], "")), \
+             patch.object(DELIVER.subprocess, "run", side_effect=gh_side_effect), \
++            patch.object(__import__("factory_deliver"), "check_implementation_rule", return_value=(False, "")), \
+             patch.dict(DELIVER.os.environ, {"USER": "test-operator"}, clear=False):
+             with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                 rc = DELIVER.command_deliver(args)
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_deliver.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_deliver.py
+index 3f5e4212..d52f74cf 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_deliver.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_deliver.py
+@@ -126,6 +126,9 @@ class FactoryDeliverTests(unittest.TestCase):
+                 FACTORY_STATE.atomic_json_write(manifest_path, {"healthy": True})
+ 
+     def _base_patches(self):
++        # Import factory_deliver lazily so its globals can be patched here.
++        import importlib
++        factory_deliver = importlib.import_module("factory_deliver")
+         return [
+             patch.object(DELIVER, "ensure_sync", return_value=None),
+             patch.object(DELIVER, "command_path", return_value=True),
+@@ -135,6 +138,11 @@ class FactoryDeliverTests(unittest.TestCase):
+             patch.object(DELIVER, "upstream_branch_name", return_value="origin/main"),
+             patch.object(DELIVER, "git_output", return_value="head-sha"),
+             patch.object(DELIVER, "commits_behind_upstream", return_value=0),
++            # PR #751: implementation-rule check makes its own git subprocess
++            # calls. Mock to a no-op for existing deliver tests so they don't
++            # trip on the new shell-out. Tests covering the rule live in
++            # test_implementation_rule.py.
++            patch.object(factory_deliver, "check_implementation_rule", return_value=(False, "")),
+         ]
+ 
+     def _run_deliver(
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_implementation_rule.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_implementation_rule.py
+new file mode 100644
+index 00000000..951cbd78
+--- /dev/null
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_implementation_rule.py
+@@ -0,0 +1,158 @@
++"""Slice 3 — implementation-rule WARN at deliver."""
++import importlib.util
++import sys
++import tempfile
++import unittest
++from pathlib import Path
++from unittest.mock import MagicMock, patch
++
++
++SCRIPTS_DIR = Path(__file__).resolve().parents[1]
++if str(SCRIPTS_DIR) not in sys.path:
++    sys.path.insert(0, str(SCRIPTS_DIR))
++
++
++def _load(name: str):
++    spec = importlib.util.spec_from_file_location(name, SCRIPTS_DIR / f"{name}.py")
++    assert spec and spec.loader
++    mod = importlib.util.module_from_spec(spec)
++    sys.modules[name] = mod
++    spec.loader.exec_module(mod)
++    return mod
++
++
++FACTORY_STATE = _load("factory_state")
++FACTORY_DELIVER = _load("factory_deliver")
++
++
++def _mock_run_factory(*, base_succeeds: bool = True, head_sha: str = "abcdef0", added_lines: int = 0):
++    """Build a side-effect for subprocess.run that simulates git commands."""
++    def side_effect(cmd, *args, **kwargs):
++        result = MagicMock()
++        result.stdout = ""
++        result.stderr = ""
++        result.returncode = 0
++        if cmd[:2] == ["git", "merge-base"]:
++            if base_succeeds:
++                result.stdout = "basesha\n"
++                result.returncode = 0
++            else:
++                result.returncode = 1
++        elif cmd[:2] == ["git", "rev-parse"] and "HEAD~50" in cmd:
++            if base_succeeds:
++                result.stdout = "basesha\n"
++            else:
++                result.returncode = 1
++        elif cmd[:2] == ["git", "rev-parse"] and cmd[2:] == ["HEAD"]:
++            result.stdout = head_sha + "\n"
++        elif cmd[:2] == ["git", "diff"]:
++            # numstat format: <added>\t<deleted>\t<file>
++            if added_lines > 0:
++                result.stdout = f"{added_lines}\t10\tsome_file.py\n"
++            else:
++                result.stdout = ""
++        return result
++    return side_effect
++
++
++class CheckImplementationRuleTests(unittest.TestCase):
++    def setUp(self) -> None:
++        self.tmpdir = tempfile.mkdtemp()
++        self.tmp_root = Path(self.tmpdir)
++        self.slug = "impl-rule-test"
++        self._patch = patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", self.tmp_root)
++        self._patch.start()
++        FACTORY_STATE.workflow_dir(self.slug).mkdir(parents=True, exist_ok=True)
++        FACTORY_STATE.atomic_json_write(
++            FACTORY_STATE.factory_state_path(self.slug),
++            FACTORY_STATE._default_workflow_state(),
++        )
++
++    def tearDown(self) -> None:
++        self._patch.stop()
++
++    def test_triggered_over_threshold_no_dispatches_no_override(self) -> None:
++        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(added_lines=250)):
++            triggered, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
++        self.assertTrue(triggered)
++        self.assertIn("250", msg)
++        self.assertIn("Codex dispatch", msg)
++
++    def test_under_threshold_not_triggered(self) -> None:
++        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(added_lines=50)):
++            triggered, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
++        self.assertFalse(triggered)
++        self.assertEqual(msg, "")
++
++    def test_codex_dispatch_recorded_suppresses(self) -> None:
++        state = FACTORY_STATE.load_workflow_state(self.slug)
++        state["codex_dispatches"] = [{"at": 12345, "command": "codex exec ..."}]
++        FACTORY_STATE.atomic_json_write(FACTORY_STATE.factory_state_path(self.slug), state)
++        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(added_lines=300)):
++            triggered, _ = FACTORY_DELIVER.check_implementation_rule(self.slug)
++        self.assertFalse(triggered)
++
++    def test_override_matching_head_suppresses(self) -> None:
++        state = FACTORY_STATE.load_workflow_state(self.slug)
++        state["implementation_rule_override"] = {
++            "head_sha": "abcdef0",
++            "reason": "explained reason here",
++            "at": 12345,
++            "operator": "tester",
++        }
++        FACTORY_STATE.atomic_json_write(FACTORY_STATE.factory_state_path(self.slug), state)
++        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(added_lines=300, head_sha="abcdef0")):
++            triggered, _ = FACTORY_DELIVER.check_implementation_rule(self.slug)
++        self.assertFalse(triggered)
++
++    def test_override_stale_head_does_not_suppress(self) -> None:
++        state = FACTORY_STATE.load_workflow_state(self.slug)
++        state["implementation_rule_override"] = {
++            "head_sha": "oldsha9",
++            "reason": "stale override from earlier HEAD",
++            "at": 12345,
++            "operator": "tester",
++        }
++        FACTORY_STATE.atomic_json_write(FACTORY_STATE.factory_state_path(self.slug), state)
++        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(added_lines=300, head_sha="newsha1")):
++            triggered, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
++        self.assertTrue(triggered)
++        self.assertIn("300", msg)
++
++    def test_skip_when_branch_base_unresolved(self) -> None:
++        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(base_succeeds=False)):
++            triggered, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
++        self.assertFalse(triggered)
++        self.assertIn("could not determine branch base", msg)
++
++
++class RecordOverrideTests(unittest.TestCase):
++    def setUp(self) -> None:
++        self.tmpdir = tempfile.mkdtemp()
++        self.tmp_root = Path(self.tmpdir)
++        self.slug = "override-test"
++        self._patch = patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", self.tmp_root)
++        self._patch.start()
++        FACTORY_STATE.workflow_dir(self.slug).mkdir(parents=True, exist_ok=True)
++        FACTORY_STATE.atomic_json_write(
++            FACTORY_STATE.factory_state_path(self.slug),
++            FACTORY_STATE._default_workflow_state(),
++        )
++
++    def tearDown(self) -> None:
++        self._patch.stop()
++
++    def test_record_writes_override_with_head_and_reason(self) -> None:
++        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(head_sha="ddd")):
++            FACTORY_DELIVER.record_implementation_rule_override(
++                self.slug, "  Codex quota exhausted, see postmortem  "
++            )
++        state = FACTORY_STATE.load_workflow_state(self.slug)
++        override = state["implementation_rule_override"]
++        self.assertEqual(override["head_sha"], "ddd")
++        self.assertEqual(override["reason"], "Codex quota exhausted, see postmortem")
++        self.assertGreater(override["at"], 0)
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_three_way_reconcile.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_three_way_reconcile.py
+new file mode 100644
+index 00000000..23b96a99
+--- /dev/null
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_three_way_reconcile.py
+@@ -0,0 +1,167 @@
++"""Slice 2 — 3-way reconcile helper.
++
++Pre-check + sequential write of review frontmatter, body Resolution block,
++and plan.md reconciliation entry. Covers happy path, pre-check failure,
++idempotent re-run.
++"""
++import importlib.util
++import os
++import stat
++import sys
++import tempfile
++import unittest
++from pathlib import Path
++
++
++SCRIPTS_DIR = Path(__file__).resolve().parents[1]
++if str(SCRIPTS_DIR) not in sys.path:
++    sys.path.insert(0, str(SCRIPTS_DIR))
++
++
++def _load(name: str):
++    spec = importlib.util.spec_from_file_location(name, SCRIPTS_DIR / f"{name}.py")
++    assert spec and spec.loader
++    mod = importlib.util.module_from_spec(spec)
++    sys.modules[name] = mod
++    spec.loader.exec_module(mod)
++    return mod
++
++
++FACTORY_RECONCILE = _load("factory_reconcile")
++FACTORY_REVIEW = _load("factory_review")
++
++
++_FRONTMATTER_TEMPLATE = """---
++reviewer: "codex"
++lens: "feasibility-adversarial"
++stage: "spec"
++artifact_path: "docs/workflow/feature-runs/x/spec.md"
++artifact_sha256: "abc123"
++repo_root: "."
++git_head_sha: "deadbeef"
++git_base_ref: "origin/main"
++git_base_sha: "1234"
++generation_method: "codex-runner"
++resolution_status: "open"
++resolution_note: ""
++raw_output_path: ""
++narrowed_artifact_path: ""
++narrowed_artifact_sha256: ""
++coverage_status: "full"
++coverage_note: ""
++---
++
++# Review: spec feasibility-adversarial
++
++## Findings
++
++- HIGH: example finding.
++
++## Residual Risks
++
++- example risk.
++
++## Resolution
++- status: open
++- note:
++"""
++
++
++class ThreeWayReconcileTests(unittest.TestCase):
++    def setUp(self) -> None:
++        self.tmpdir = tempfile.mkdtemp()
++        self.tmp_root = Path(self.tmpdir)
++        self.review_path = self.tmp_root / "spec.codex.feasibility-adversarial.review.md"
++        self.review_path.write_text(_FRONTMATTER_TEMPLATE, encoding="utf-8")
++        self.plan_path = self.tmp_root / "plan.md"
++        self.plan_path.write_text("# Plan\n\n
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m checking the patch adversarially for correctness risks, not style. I’ll focus on places where the new flow can fail, silently skip, or mutate state in the wrong place, and I’ll mark anything that depends on unseen repo behavior as `[UNVERIFIED]`.
+exec
+/bin/zsh -lc "sed -n '220,330p' docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py && printf '\\n---\\n' && sed -n '1,220p' docs/workflow/operations/codex-skills/feature-factory/scripts/factory_deliver.py && printf '\\n---\\n' && sed -n '180,260p' docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py && printf '\\n---\\n' && sed -n '1,120p' docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py" in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 0ms:
+            return 0
+        _mark_delivery_state(
+            slug,
+            {
+                "merge_wait_state": "merged",
+                "merged_sha": merged_sha,
+                "merged_at_iso8601": merged_at,
+            },
+        )
+        print("nothing to resume")
+        return 0
+
+    print("nothing to resume")
+    return 0
+
+
+@mutates_state("deliver")
+def command_deliver(args: argparse.Namespace) -> int:
+    ensure_sync()
+    if not command_path("gh"):
+        raise SystemExit("deliver requires the gh CLI to be installed")
+    if args.override_judges and _nonblank(getattr(args, "reason", None)) is None:
+        print("deliver --override-judges requires --reason", file=sys.stderr)
+        raise SystemExit(2)
+
+    # PR #751 / FF Housekeeping Slice 3: implementation-rule WARN.
+    # Surface Claude-implementation cases at deliver time so the postmortem
+    # author sees them before pressing merge. Advisory, not blocking.
+    if getattr(args, "override_implementation_rule", False):
+        reason = (getattr(args, "override_implementation_reason", None) or "").strip()
+        if len(reason) < 10:
+            print(
+                "deliver --override-implementation-rule requires "
+                "--override-implementation-reason of at least 10 characters",
+                file=sys.stderr,
+            )
+            raise SystemExit(2)
+        from factory_deliver import record_implementation_rule_override
+        record_implementation_rule_override(args.slug, reason)
+    else:
+        from factory_deliver import check_implementation_rule
+        triggered, message = check_implementation_rule(args.slug)
+        if triggered:
+            print(message, file=sys.stderr)
+
+    auth = subprocess.run(["gh", "auth", "status", "--active"], text=True, capture_output=True)
+    if auth.returncode != 0:
+        raise SystemExit(trim_detail(auth.stderr or auth.stdout or "GitHub authentication is not ready"))
+
+    state = load_workflow_state(args.slug)
+
+    if args.resume_merge_wait:
+        delivery = state.get(DELIVERY_KEY, {})
+        return _resume_merge_wait_if_needed(args.slug, delivery)
+
+    if args.refresh:
+        pr = _current_pr_body_payload()
+        _update_pr_body_from_state(args.slug, pr, state)
+        print(f"branch: {current_branch_name() or '(unknown)'}")
+        print(f"head: {git_output('rev-parse', 'HEAD') or ''}")
+        if pr and pr.get("url"):
+            print(f"pr: {pr.get('url')}")
+        _emit_next_action(args.slug, "deliver")
+        return 0
+
+    if args.override_judges:
+        recorded_override = _record_override_if_needed(args.slug, args.reason)
+        if recorded_override:
+            state = load_workflow_state(args.slug)
+
+    # P1-1 (adversarial review finding): honor judge-advance verdicts at delivery
+    # the same way prerequisite_failure does, so an unhealthy manifest with an
+    # advance vote does not wall off delivery. Without this, every feature that
+    # hit the judge-panel cap has to hand-patch review SHAs to reach the PR.
+    stages_state = state.get("stages") or {}
+    for stage in REQUIRED_PREDELIVERY_STAGES:
+        manifest_path = checkpoint_manifest_path(args.slug, stage)
+        if not manifest_path.exists():
+            raise SystemExit(f"deliver requires completed {stage} checkpoint first")
+        healthy, detail = verify_checkpoint_manifest(manifest_path)
+        if not healthy:
+            stage_blob = stages_state.get(stage) or {}
+            if isinstance(stage_blob, dict) and stage_blob.get("judge_next_action") == "advance":
+                continue  # judge advance overrides manifest-drift-equals-unhealthy
+            raise SystemExit(f"deliver requires a healthy {stage} checkpoint first: {trim_detail(detail)}")
+
+    # P1-2 (adversarial review finding): block delivery when any stage carries
+    # open judge concerns. Without this, 2-of-3 judge proceed votes can ship a
+    # feature with unresolved HIGH concerns that only surface in the PR body.
+    # Operators must explicitly resolve them (--address/--defer/--dismiss) or
+    # use deliver --override-judges --reason to accept the risk.
+    if not args.override_judges:
+        open_concerns_by_stage: dict[str, list[dict]] = {}
+        for stage_name in ("spec", "plan", "tasks", "diff", "closeout"):
+            stage_blob = stages_state.get(stage_name) or {}
+            if not isinstance(stage_blob, dict):
+                continue
+            for concern in stage_blob.get("unresolved_concerns") or []:
+                if not isinstance(concern, dict):
+                    continue
+                if (
+                    concern.get("addressed_at") is None
+                    and not concern.get("deferred_reason")
+                    and not concern.get("dismissed_reason")
+                ):
+                    open_concerns_by_stage.setdefault(stage_name, []).append(concern)
+        if open_concerns_by_stage:
+            lines = [
+                "deliver blocked: open judge concerns on these stages — resolve before PR or pass --override-judges --reason:",
+            ]
+            for stage_name, concerns in open_concerns_by_stage.items():
+
+---
+#!/usr/bin/env python3
+"""GitHub CLI interaction, delivery records, and closeout text generation."""
+import json
+import os
+import subprocess
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+import sys
+
+_SCRIPT_DIR = Path(__file__).resolve().parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
+
+from factory_state import (  # noqa: E402
+    REPO_ROOT,
+    load_checkpoint_manifest,
+    load_workflow_state,
+    update_workflow_state,
+)
+
+REVIEW_SCRIPTS = REPO_ROOT / "docs" / "workflow" / "operations" / "codex-skills" / "review-lens" / "scripts"
+if str(REVIEW_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(REVIEW_SCRIPTS))
+
+from workflow_utils import resolve_stored_path  # noqa: E402
+
+from factory_git import current_branch_name, command_path  # noqa: E402
+from factory_stages import VERIFY_ON_CLOSEOUT_STAGES  # noqa: E402
+
+
+# ---------------------------------------------------------------------------
+# Implementation rule check (PR #751 / FF Housekeeping Slice 3)
+# ---------------------------------------------------------------------------
+
+_IMPLEMENTATION_RULE_THRESHOLD = 200
+_IMPLEMENTATION_RULE_CODE_GLOBS = ("*.py", "*.ts", "*.tsx", "*.js", "*.jsx")
+_IMPLEMENTATION_RULE_TEST_EXCLUDES = (
+    ":!**/test_*",
+    ":!**/*_test.py",
+    ":!**/tests/**",
+)
+
+
+def _resolve_branch_base() -> str | None:
+    """Find a sane branch base via origin/main → main → HEAD~50 fallback."""
+    for ref in ("origin/main", "main"):
+        result = subprocess.run(
+            ["git", "merge-base", ref, "HEAD"],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    result = subprocess.run(
+        ["git", "rev-parse", "HEAD~50"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0 and result.stdout.strip():
+        return result.stdout.strip()
+    return None
+
+
+def _added_code_lines(branch_base: str) -> int | None:
+    """Count added lines in code files (not tests, not docs) since branch_base."""
+    cmd = [
+        "git",
+        "diff",
+        "--numstat",
+        f"{branch_base}..HEAD",
+        "--",
+        *_IMPLEMENTATION_RULE_CODE_GLOBS,
+        *_IMPLEMENTATION_RULE_TEST_EXCLUDES,
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        return None
+    total_added = 0
+    for line in result.stdout.splitlines():
+        parts = line.split("\t")
+        if len(parts) < 2:
+            continue
+        added_str = parts[0]
+        if added_str == "-":
+            continue
+        try:
+            total_added += int(added_str)
+        except ValueError:
+            continue
+    return total_added
+
+
+def check_implementation_rule(slug: str) -> tuple[bool, str]:
+    """Return (triggered, message). See spec FR-012-016."""
+    branch_base = _resolve_branch_base()
+    if branch_base is None:
+        return (
+            False,
+            "implementation-rule check skipped: could not determine branch base.",
+        )
+    added = _added_code_lines(branch_base)
+    if added is None:
+        return (False, "implementation-rule check skipped: git diff failed.")
+    if added <= _IMPLEMENTATION_RULE_THRESHOLD:
+        return (False, "")
+
+    state = load_workflow_state(slug)
+    if state.get("codex_dispatches"):
+        return (False, "")
+
+    head_result = subprocess.run(
+        ["git", "rev-parse", "HEAD"], capture_output=True, text=True
+    )
+    head_sha = head_result.stdout.strip() if head_result.returncode == 0 else ""
+    override = state.get("implementation_rule_override") or {}
+    if isinstance(override, dict) and override.get("head_sha") == head_sha and head_sha:
+        return (False, "")
+
+    msg = (
+        f"⚠ implementation-rule: {added} non-test code lines added with no recorded "
+        f"Codex dispatch. The postmortem must explain why Claude implemented this PR. "
+        f"Suppress with --override-implementation-rule "
+        f"--override-implementation-reason \"<text>\" (>= 10 chars)."
+    )
+    return (True, msg)
+
+
+def record_implementation_rule_override(slug: str, reason: str) -> None:
+    head_result = subprocess.run(
+        ["git", "rev-parse", "HEAD"], capture_output=True, text=True
+    )
+    head_sha = head_result.stdout.strip() if head_result.returncode == 0 else ""
+    operator = os.environ.get("USER") or "unknown"
+    override = {
+        "at": int(time.time()),
+        "reason": reason.strip(),
+        "operator": operator,
+        "head_sha": head_sha,
+    }
+
+    def _mutate(state: dict) -> None:
+        state["implementation_rule_override"] = override
+
+    update_workflow_state(slug, _mutate)
+
+
+# ---------------------------------------------------------------------------
+# GitHub CLI helpers
+# ---------------------------------------------------------------------------
+
+
+def gh_json(args: list[str]) -> dict | list:
+    result = subprocess.run(["gh", *args], text=True, capture_output=True)
+    if result.returncode != 0:
+        message = (result.stderr or result.stdout or "gh command failed").strip()
+        raise SystemExit(message)
+    output = result.stdout.strip() or "{}"
+    return json.loads(output)
+
+
+def current_pr_payload(pr_number: int | None = None) -> dict | None:
+    cmd = [
+        "gh",
+        "pr",
+        "view",
+    ]
+    if pr_number is not None:
+        cmd.append(str(pr_number))
+    cmd.extend(
+        [
+            "--json",
+            "number,url,state,isDraft,headRefName,headRefOid,baseRefName,mergeable,mergeStateStatus,statusCheckRollup,body,mergeCommit,mergedAt",
+        ]
+    )
+    result = subprocess.run(
+        cmd,
+        text=True,
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        return None
+    return json.loads(result.stdout)
+
+
+def _normalize_iso8601_utc(value: object) -> str:
+    if not isinstance(value, str) or not value.strip():
+        return ""
+    candidate = value.strip().replace("Z", "+00:00")
+    try:
+        dt = datetime.fromisoformat(candidate)
+    except ValueError:
+        return value.strip()
+    return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def required_check_summary(pr_number: int | None = None, watch: bool = False, interval: int = 10) -> tuple[str, list[dict], str]:
+    cmd = ["gh", "pr", "checks"]
+    if pr_number is not None:
+        cmd.append(str(pr_number))
+    cmd.extend(["--required", "--json", "name,state,bucket,link,workflow"])
+    if watch:
+        cmd.extend(["--watch", "--interval", str(interval)])
+    result = subprocess.run(cmd, text=True, capture_output=True)
+    if result.returncode not in {0, 8}:
+        message = (result.stderr or result.stdout or "gh pr checks failed").strip()
+        raise SystemExit(message)
+    stdout = result.stdout.strip() or "[]"
+    checks = json.loads(stdout)
+    buckets = {item.get("bucket", "") for item in checks}
+    if not checks:
+        summary = "unknown"
+    elif "fail" in buckets or "cancel" in buckets:
+        summary = "fail"
+    elif "pending" in buckets:
+        summary = "pending"
+    elif buckets <= {"pass", "skipping"}:
+        summary = "pass"
+    else:
+        summary = "unknown"
+
+---
+        existing_state[INIT_HEAD_SHA_KEY] = head_sha
+    save_workflow_state(args.slug, existing_state)
+    print(str(root))
+    return 0
+
+
+@mutates_state("reconcile")
+def command_reconcile(args: argparse.Namespace) -> int:
+    ensure_sync()
+    plan_path = workflow_dir(args.slug) / "plan.md"
+
+    # PR #751 / FF Housekeeping Slice 2: route through factory_reconcile so
+    # frontmatter + body block + plan.md are pre-checked together. Three prior
+    # features (PR #744/#749/#750) hit verify_review_checkpoint drift errors;
+    # the helper raises pre-check failures BEFORE any partial write happens.
+    from factory_reconcile import reconcile_review_full  # noqa: E402
+    for review in args.review:
+        review_path = Path(review).resolve()
+        rc = reconcile_review_full(
+            review_path=review_path,
+            plan_path=plan_path,
+            status=args.status,
+            note=args.note,
+            update_review_script=UPDATE_REVIEW,
+            append_reconciliation_script=APPEND_RECONCILIATION,
+        )
+        if rc != 0:
+            return rc
+    review_args: list[str] = []
+    for review in args.review:
+        review_args.extend(["--review", str(Path(review).resolve())])
+    run([sys.executable, str(VERIFY_RECONCILIATION), "--plan", str(plan_path), *review_args])
+    _emit_next_action(args.slug, f"reconcile ({args.status})")
+    return 0
+
+
+@mutates_state("auto-reconcile")
+def command_auto_reconcile(args: argparse.Namespace) -> int:
+    """Auto-accept reviews with no HIGH or MEDIUM severity findings.
+
+    Scans all open (resolution_status == "open") reviews for the given stage.
+    Reviews with only LOW or no findings are accepted automatically.
+    Reviews with actionable findings are left open and listed for human review.
+
+    Prints a summary so the orchestrator knows exactly which reviews still need attention.
+    """
+    ensure_sync()
+    manifest = load_checkpoint_manifest(args.slug, args.stage)
+    if not manifest:
+        raise SystemExit(f"no checkpoint manifest found for {args.slug}/{args.stage} — run checkpoint first")
+
+    plan_path = workflow_dir(args.slug) / "plan.md"
+    required = manifest.get("required_reviews", [])
+
+    auto_accepted: list[str] = []
+    needs_review: list[str] = []
+
+    for spec in required:
+        review_path = Path(resolve_stored_path(spec["path"], REPO_ROOT))
+        if not review_path.exists():
+            needs_review.append(f"{spec['path']} (missing)")
+            continue
+        try:
+            data, _ = parse_review_frontmatter(review_path)
+        except Exception:
+            needs_review.append(f"{spec['path']} (unreadable)")
+            continue
+
+        status = data.get("resolution_status", "open")
+        if status != "open":
+            # Already reconciled — skip.
+            continue
+
+        if detect_actionable_findings(review_path):
+            needs_review.append(spec["path"])
+        else:
+            # Auto-accept: write resolution into file and append to plan reconciliation table.
+            run([
+                sys.executable, str(UPDATE_REVIEW),
+                "--review", str(review_path),
+                "--status", "accepted",
+
+---
+#!/usr/bin/env python3
+"""Path helpers, atomic I/O primitives, state constants, and workflow state
+management for the feature factory.
+
+No subprocess calls.  All I/O is file-based JSON read/write.
+Every public symbol is safe to import in tests without side effects.
+"""
+import json
+from contextlib import contextmanager
+import fcntl
+import errno
+import os
+import tempfile
+import time
+from pathlib import Path
+
+
+# ---------------------------------------------------------------------------
+# Repository root + canonical subdirectory roots
+# ---------------------------------------------------------------------------
+
+REPO_ROOT: Path = Path(__file__).resolve().parents[6]
+# PR #751 / FF Housekeeping Slice 4: honor FF_FACTORY_RUNS_ROOT env var so
+# tests can redirect the workflow root via subprocess env without monkey-
+# patching module state. Production paths are unaffected when absent.
+_RUNS_ROOT_OVERRIDE = os.environ.get("FF_FACTORY_RUNS_ROOT")
+FACTORY_RUNS_ROOT: Path = (
+    Path(_RUNS_ROOT_OVERRIDE).resolve()
+    if _RUNS_ROOT_OVERRIDE
+    else REPO_ROOT / "docs" / "workflow" / "feature-runs"
+)
+
+# ---------------------------------------------------------------------------
+# String constants used as workflow-state dictionary keys
+# ---------------------------------------------------------------------------
+
+FACTORY_STATE = "state.json"
+
+BLOCKED_KEY = "blocked"
+DISCOVERY_KEY = "discovery"
+DELIVERY_KEY = "delivery"
+DIRTY_OVERRIDE_KEY = "dirty_overrides"
+CHECKPOINT_FALLBACK_KEY = "checkpoint_fallback"
+CHECKPOINT_PROGRESS_KEY = "checkpoint_progress"
+PARALLEL_ANALYSIS_KEY = "parallel_analysis"
+INIT_HEAD_SHA_KEY = "init_head_sha"
+INVARIANT_WARNINGS_KEY = "invariant_warnings"
+_INVARIANT_WARNINGS_CAP = 100
+
+# ---------------------------------------------------------------------------
+# Atomic JSON I/O
+# ---------------------------------------------------------------------------
+
+
+def atomic_json_write(path: Path, data: dict) -> None:
+    """Write *data* to *path* as JSON atomically via a temp file + os.replace()."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = json.dumps(data, indent=2)
+    fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=".tmp.", suffix=".json")
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        tmp_path.replace(path)
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise
+
+
+def read_json_file(path: Path) -> tuple[dict | None, str]:
+    """Return (parsed_dict, "") on success, or (None, error_string) on failure."""
+    if not path.exists():
+        return None, ""
+    try:
+        return json.loads(path.read_text(encoding="utf-8")), ""
+    except Exception as exc:
+        return None, str(exc)
+
+
+# ---------------------------------------------------------------------------
+# Pure path helpers
+# ---------------------------------------------------------------------------
+
+
+def validated_slug(slug: str) -> str:
+    """Return a validated single-component workflow slug, or raise SystemExit."""
+    candidate = Path(slug)
+    if not slug or candidate.is_absolute() or len(candidate.parts) != 1:
+        raise SystemExit(f"Invalid workflow slug: {slug!r}")
+    part = candidate.parts[0]
+    if part in {".", ".."}:
+        raise SystemExit(f"Invalid workflow slug: {slug!r}")
+    resolved = (FACTORY_RUNS_ROOT / part).resolve()
+    try:
+        resolved.relative_to(FACTORY_RUNS_ROOT.resolve())
+    except ValueError as exc:
+        raise SystemExit(f"Invalid workflow slug: {slug!r}") from exc
+    return part
+
+
+def normalized_repo_path(raw: str, field_name: str) -> str:
+    """Resolve *raw* to a repo-relative path string, or raise SystemExit."""
+    stripped = raw.strip()
+    if not stripped or stripped.strip("/") == "":
+        raise SystemExit(f"Invalid {field_name}: {raw!r}")
+    candidate = Path(stripped)
+    resolved = (
+        candidate.resolve()
+        if candidate.is_absolute()
+        else (REPO_ROOT / candidate).resolve()
+    )
+    try:
+        relative = resolved.relative_to(REPO_ROOT.resolve())
+    except ValueError as exc:
+        raise SystemExit(f"Invalid {field_name}: {raw!r}") from exc
+    return str(relative)
+
+
+def workflow_dir(slug: str) -> Path:
+    return FACTORY_RUNS_ROOT / validated_slug(slug)
+
+exec
+/bin/zsh -lc 'rg -n "def command_deliver|override_implementation_rule|check_implementation_rule|record_implementation_rule_override|command_reconcile|FACTORY_RUNS_ROOT|reconcile_review_full" docs/workflow/operations/codex-skills/feature-factory/scripts -S' in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 0ms:
+docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py:187:def command_reconcile(args: argparse.Namespace) -> int:
+docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py:195:    from factory_reconcile import reconcile_review_full  # noqa: E402
+docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py:198:        rc = reconcile_review_full(
+docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py:365:    reconcile_parser.set_defaults(func=command_reconcile)
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_validation_only.py:54:            patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", self.tmp_root),
+docs/workflow/operations/codex-skills/feature-factory/scripts/backtest.py:135:    root = factory_state.FACTORY_RUNS_ROOT
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_deliver.py:94:def check_implementation_rule(slug: str) -> tuple[bool, str]:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_deliver.py:129:def record_implementation_rule_override(slug: str, reason: str) -> None:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py:237:def command_deliver(args: argparse.Namespace) -> int:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py:248:    if getattr(args, "override_implementation_rule", False):
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py:257:        from factory_deliver import record_implementation_rule_override
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py:258:        record_implementation_rule_override(args.slug, reason)
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py:260:        from factory_deliver import check_implementation_rule
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py:261:        triggered, message = check_implementation_rule(args.slug)
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_discover_append.py:38:            FACTORY_STATE, "FACTORY_RUNS_ROOT", self.tmp_root
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_three_way_reconcile.py:80:        return FACTORY_RECONCILE.reconcile_review_full(
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_reconcile.py:24:def reconcile_review_full(
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_completeness_veto.py:89:    with patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", Path(tmpdir)):
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_completeness_veto.py:182:        self._root_patch = patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", Path(self._tmpdir.name))
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_completeness_veto.py:345:            patch.object(__import__("factory_deliver"), "check_implementation_rule", return_value=(False, "")), \
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_mutating_registry.py:92:            "reconcile": RUN_FACTORY.command_reconcile,
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py:23:# PR #751 / FF Housekeeping Slice 4: honor FF_FACTORY_RUNS_ROOT env var so
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py:26:_RUNS_ROOT_OVERRIDE = os.environ.get("FF_FACTORY_RUNS_ROOT")
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py:27:FACTORY_RUNS_ROOT: Path = (
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py:93:    resolved = (FACTORY_RUNS_ROOT / part).resolve()
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py:95:        resolved.relative_to(FACTORY_RUNS_ROOT.resolve())
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py:120:    return FACTORY_RUNS_ROOT / validated_slug(slug)
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_deliver.py:114:        self._root_patch = patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", Path(self._tmpdir.name))
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_deliver.py:145:            patch.object(factory_deliver, "check_implementation_rule", return_value=(False, "")),
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_state.py:24:            with patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", Path(tmpdir)):
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_state.py:55:            with patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", Path(tmpdir)):
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_state.py:89:            with patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", Path(tmpdir)):
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_state.py:105:            with patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", Path(tmpdir)):
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_state.py:166:            with patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", Path(tmpdir)):
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_state.py:187:            with patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", Path(tmpdir)):
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_state.py:240:            with patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", Path(tmpdir)):
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_state.py:259:            with patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", Path(tmpdir)):
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_validation_only_smoke.py:101:        env["FF_FACTORY_RUNS_ROOT"] = str(self.runs_root)
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_implementation_rule.py:63:        self._patch = patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", self.tmp_root)
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_implementation_rule.py:76:            triggered, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_implementation_rule.py:83:            triggered, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_implementation_rule.py:92:            triggered, _ = FACTORY_DELIVER.check_implementation_rule(self.slug)
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_implementation_rule.py:105:            triggered, _ = FACTORY_DELIVER.check_implementation_rule(self.slug)
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_implementation_rule.py:118:            triggered, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_implementation_rule.py:124:            triggered, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_implementation_rule.py:134:        self._patch = patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", self.tmp_root)
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_implementation_rule.py:147:            FACTORY_DELIVER.record_implementation_rule_override(
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_checkpoint.py:63:    with patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", Path(tmpdir)):
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_checkpoint.py:130:        self._root_patch = patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", Path(self._tmpdir.name))
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_heartbeat.py:78:        self._root_patch = patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", Path(self._tmpdir.name))
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_telemetry.py:34:        self._root_patch = patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", Path(self._tmpdir.name))
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_migrate_blocked_workflows.py:57:        self._root_patch = patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", Path(self._tmpdir.name))
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_backtest.py:88:        self._root_patch = patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", self._root)
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_concern_lifecycle_cli.py:109:        self._root_patch = patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", Path(self._tmpdir.name))
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_review_gc.py:85:    with patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", Path(tmpdir)):
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_review_gc.py:119:        self._root_patch = patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", Path(self._tmpdir.name))
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_judge.py:115:    with patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", Path(tmpdir)):
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_judge.py:179:        self._root_patch = patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", Path(self._tmpdir.name))
+
+codex
+I’ve got enough code context now to look for actual breakage points, not just theoretical ones. The main risk areas are the new git-based rule check, the new reconcile wrapper, and the state-root override because those change control flow and persistence.
+exec
+/bin/zsh -lc "sed -n '1,220p' docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_three_way_reconcile.py" in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 0ms:
+"""Slice 2 — 3-way reconcile helper.
+
+Pre-check + sequential write of review frontmatter, body Resolution block,
+and plan.md reconciliation entry. Covers happy path, pre-check failure,
+idempotent re-run.
+"""
+import importlib.util
+import os
+import stat
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+
+SCRIPTS_DIR = Path(__file__).resolve().parents[1]
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+
+
+def _load(name: str):
+    spec = importlib.util.spec_from_file_location(name, SCRIPTS_DIR / f"{name}.py")
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+FACTORY_RECONCILE = _load("factory_reconcile")
+FACTORY_REVIEW = _load("factory_review")
+
+
+_FRONTMATTER_TEMPLATE = """---
+reviewer: "codex"
+lens: "feasibility-adversarial"
+stage: "spec"
+artifact_path: "docs/workflow/feature-runs/x/spec.md"
+artifact_sha256: "abc123"
+repo_root: "."
+git_head_sha: "deadbeef"
+git_base_ref: "origin/main"
+git_base_sha: "1234"
+generation_method: "codex-runner"
+resolution_status: "open"
+resolution_note: ""
+raw_output_path: ""
+narrowed_artifact_path: ""
+narrowed_artifact_sha256: ""
+coverage_status: "full"
+coverage_note: ""
+---
+
+# Review: spec feasibility-adversarial
+
+## Findings
+
+- HIGH: example finding.
+
+## Residual Risks
+
+- example risk.
+
+## Resolution
+- status: open
+- note:
+"""
+
+
+class ThreeWayReconcileTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmpdir = tempfile.mkdtemp()
+        self.tmp_root = Path(self.tmpdir)
+        self.review_path = self.tmp_root / "spec.codex.feasibility-adversarial.review.md"
+        self.review_path.write_text(_FRONTMATTER_TEMPLATE, encoding="utf-8")
+        self.plan_path = self.tmp_root / "plan.md"
+        self.plan_path.write_text("# Plan\n\n## Review Reconciliation\n\n", encoding="utf-8")
+
+    def _reconcile(self, status: str, note: str) -> int:
+        return FACTORY_RECONCILE.reconcile_review_full(
+            review_path=self.review_path,
+            plan_path=self.plan_path,
+            status=status,
+            note=note,
+            update_review_script=FACTORY_REVIEW.UPDATE_REVIEW,
+            append_reconciliation_script=FACTORY_REVIEW.APPEND_RECONCILIATION,
+        )
+
+    def test_happy_path_all_three_in_sync(self) -> None:
+        rc = self._reconcile("accepted", "all good")
+        self.assertEqual(rc, 0)
+
+        review_content = self.review_path.read_text(encoding="utf-8")
+        self.assertIn('resolution_status: "accepted"', review_content)
+        self.assertIn('resolution_note: "all good"', review_content)
+        # Body Resolution block matches frontmatter.
+        body_resolution = review_content.split("## Resolution", 1)[-1]
+        self.assertIn("- status: accepted", body_resolution)
+        self.assertIn("- note: all good", body_resolution)
+
+        plan_content = self.plan_path.read_text(encoding="utf-8")
+        self.assertIn(self.review_path.name, plan_content)
+        self.assertIn("status: accepted", plan_content)
+        self.assertIn("note: all good", plan_content)
+
+    def test_pre_check_review_does_not_exist(self) -> None:
+        self.review_path.unlink()
+        rc = self._reconcile("accepted", "x")
+        self.assertEqual(rc, 2)
+        # plan.md should NOT have been touched.
+        self.assertEqual(
+            self.plan_path.read_text(encoding="utf-8"),
+            "# Plan\n\n## Review Reconciliation\n\n",
+        )
+
+    def test_pre_check_plan_does_not_exist(self) -> None:
+        self.plan_path.unlink()
+        rc = self._reconcile("accepted", "x")
+        self.assertEqual(rc, 2)
+        # review file untouched.
+        review_content = self.review_path.read_text(encoding="utf-8")
+        self.assertIn('resolution_status: "open"', review_content)
+
+    def test_pre_check_plan_read_only(self) -> None:
+        os.chmod(self.plan_path, 0o444)
+        try:
+            rc = self._reconcile("accepted", "x")
+            self.assertEqual(rc, 2)
+            review_content = self.review_path.read_text(encoding="utf-8")
+            self.assertIn('resolution_status: "open"', review_content)
+        finally:
+            os.chmod(self.plan_path, 0o644)
+
+    def test_idempotent_rerun(self) -> None:
+        rc1 = self._reconcile("accepted", "ok")
+        self.assertEqual(rc1, 0)
+        plan_content_after_first = self.plan_path.read_text(encoding="utf-8")
+        rc2 = self._reconcile("accepted", "ok")
+        self.assertEqual(rc2, 0)
+        plan_content_after_second = self.plan_path.read_text(encoding="utf-8")
+        # Plan.md content shouldn't grow on re-run (dedup by review path).
+        self.assertEqual(plan_content_after_first, plan_content_after_second)
+
+    def test_drift_repair(self) -> None:
+        """Start with frontmatter and body block out of sync — helper repairs."""
+        # Hand-edit body block to "deferred" while frontmatter stays "open".
+        content = self.review_path.read_text(encoding="utf-8")
+        content = content.replace(
+            "## Resolution\n- status: open\n- note:\n",
+            "## Resolution\n- status: deferred\n- note: hand-edit\n",
+        )
+        self.review_path.write_text(content, encoding="utf-8")
+
+        rc = self._reconcile("accepted", "repair drift")
+        self.assertEqual(rc, 0)
+
+        # All three converge.
+        review_content = self.review_path.read_text(encoding="utf-8")
+        self.assertIn('resolution_status: "accepted"', review_content)
+        self.assertIn('resolution_note: "repair drift"', review_content)
+        body_resolution = review_content.split("## Resolution", 1)[-1]
+        self.assertIn("- status: accepted", body_resolution)
+        self.assertIn("- note: repair drift", body_resolution)
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+exec
+/bin/zsh -lc "sed -n '1,220p' docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_implementation_rule.py" in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 0ms:
+"""Slice 3 — implementation-rule WARN at deliver."""
+import importlib.util
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+
+SCRIPTS_DIR = Path(__file__).resolve().parents[1]
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+
+
+def _load(name: str):
+    spec = importlib.util.spec_from_file_location(name, SCRIPTS_DIR / f"{name}.py")
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+FACTORY_STATE = _load("factory_state")
+FACTORY_DELIVER = _load("factory_deliver")
+
+
+def _mock_run_factory(*, base_succeeds: bool = True, head_sha: str = "abcdef0", added_lines: int = 0):
+    """Build a side-effect for subprocess.run that simulates git commands."""
+    def side_effect(cmd, *args, **kwargs):
+        result = MagicMock()
+        result.stdout = ""
+        result.stderr = ""
+        result.returncode = 0
+        if cmd[:2] == ["git", "merge-base"]:
+            if base_succeeds:
+                result.stdout = "basesha\n"
+                result.returncode = 0
+            else:
+                result.returncode = 1
+        elif cmd[:2] == ["git", "rev-parse"] and "HEAD~50" in cmd:
+            if base_succeeds:
+                result.stdout = "basesha\n"
+            else:
+                result.returncode = 1
+        elif cmd[:2] == ["git", "rev-parse"] and cmd[2:] == ["HEAD"]:
+            result.stdout = head_sha + "\n"
+        elif cmd[:2] == ["git", "diff"]:
+            # numstat format: <added>\t<deleted>\t<file>
+            if added_lines > 0:
+                result.stdout = f"{added_lines}\t10\tsome_file.py\n"
+            else:
+                result.stdout = ""
+        return result
+    return side_effect
+
+
+class CheckImplementationRuleTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmpdir = tempfile.mkdtemp()
+        self.tmp_root = Path(self.tmpdir)
+        self.slug = "impl-rule-test"
+        self._patch = patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", self.tmp_root)
+        self._patch.start()
+        FACTORY_STATE.workflow_dir(self.slug).mkdir(parents=True, exist_ok=True)
+        FACTORY_STATE.atomic_json_write(
+            FACTORY_STATE.factory_state_path(self.slug),
+            FACTORY_STATE._default_workflow_state(),
+        )
+
+    def tearDown(self) -> None:
+        self._patch.stop()
+
+    def test_triggered_over_threshold_no_dispatches_no_override(self) -> None:
+        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(added_lines=250)):
+            triggered, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertTrue(triggered)
+        self.assertIn("250", msg)
+        self.assertIn("Codex dispatch", msg)
+
+    def test_under_threshold_not_triggered(self) -> None:
+        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(added_lines=50)):
+            triggered, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertFalse(triggered)
+        self.assertEqual(msg, "")
+
+    def test_codex_dispatch_recorded_suppresses(self) -> None:
+        state = FACTORY_STATE.load_workflow_state(self.slug)
+        state["codex_dispatches"] = [{"at": 12345, "command": "codex exec ..."}]
+        FACTORY_STATE.atomic_json_write(FACTORY_STATE.factory_state_path(self.slug), state)
+        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(added_lines=300)):
+            triggered, _ = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertFalse(triggered)
+
+    def test_override_matching_head_suppresses(self) -> None:
+        state = FACTORY_STATE.load_workflow_state(self.slug)
+        state["implementation_rule_override"] = {
+            "head_sha": "abcdef0",
+            "reason": "explained reason here",
+            "at": 12345,
+            "operator": "tester",
+        }
+        FACTORY_STATE.atomic_json_write(FACTORY_STATE.factory_state_path(self.slug), state)
+        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(added_lines=300, head_sha="abcdef0")):
+            triggered, _ = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertFalse(triggered)
+
+    def test_override_stale_head_does_not_suppress(self) -> None:
+        state = FACTORY_STATE.load_workflow_state(self.slug)
+        state["implementation_rule_override"] = {
+            "head_sha": "oldsha9",
+            "reason": "stale override from earlier HEAD",
+            "at": 12345,
+            "operator": "tester",
+        }
+        FACTORY_STATE.atomic_json_write(FACTORY_STATE.factory_state_path(self.slug), state)
+        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(added_lines=300, head_sha="newsha1")):
+            triggered, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertTrue(triggered)
+        self.assertIn("300", msg)
+
+    def test_skip_when_branch_base_unresolved(self) -> None:
+        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(base_succeeds=False)):
+            triggered, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertFalse(triggered)
+        self.assertIn("could not determine branch base", msg)
+
+
+class RecordOverrideTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmpdir = tempfile.mkdtemp()
+        self.tmp_root = Path(self.tmpdir)
+        self.slug = "override-test"
+        self._patch = patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", self.tmp_root)
+        self._patch.start()
+        FACTORY_STATE.workflow_dir(self.slug).mkdir(parents=True, exist_ok=True)
+        FACTORY_STATE.atomic_json_write(
+            FACTORY_STATE.factory_state_path(self.slug),
+            FACTORY_STATE._default_workflow_state(),
+        )
+
+    def tearDown(self) -> None:
+        self._patch.stop()
+
+    def test_record_writes_override_with_head_and_reason(self) -> None:
+        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(head_sha="ddd")):
+            FACTORY_DELIVER.record_implementation_rule_override(
+                self.slug, "  Codex quota exhausted, see postmortem  "
+            )
+        state = FACTORY_STATE.load_workflow_state(self.slug)
+        override = state["implementation_rule_override"]
+        self.assertEqual(override["head_sha"], "ddd")
+        self.assertEqual(override["reason"], "Codex quota exhausted, see postmortem")
+        self.assertGreater(override["at"], 0)
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+exec
+/bin/zsh -lc "sed -n '1,220p' docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_deliver.py" in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 0ms:
+import argparse
+import contextlib
+import importlib.util
+import io
+import json
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+
+SCRIPT_DIR = Path(__file__).resolve().parents[1]
+
+STATE_SPEC = importlib.util.spec_from_file_location("factory_state", SCRIPT_DIR / "factory_state.py")
+assert STATE_SPEC and STATE_SPEC.loader
+FACTORY_STATE = importlib.util.module_from_spec(STATE_SPEC)
+sys.modules[STATE_SPEC.name] = FACTORY_STATE
+STATE_SPEC.loader.exec_module(FACTORY_STATE)
+
+PR_BODY_SPEC = importlib.util.spec_from_file_location("factory_pr_body", SCRIPT_DIR / "factory_pr_body.py")
+assert PR_BODY_SPEC and PR_BODY_SPEC.loader
+FACTORY_PR_BODY = importlib.util.module_from_spec(PR_BODY_SPEC)
+sys.modules[PR_BODY_SPEC.name] = FACTORY_PR_BODY
+PR_BODY_SPEC.loader.exec_module(FACTORY_PR_BODY)
+
+DELIVER_SPEC = importlib.util.spec_from_file_location("factory_cmd_deliver", SCRIPT_DIR / "factory_cmd_deliver.py")
+assert DELIVER_SPEC and DELIVER_SPEC.loader
+DELIVER = importlib.util.module_from_spec(DELIVER_SPEC)
+sys.modules[DELIVER_SPEC.name] = DELIVER
+DELIVER_SPEC.loader.exec_module(DELIVER)
+
+
+SLUG = "ff-judge-panel"
+_UNSET = object()
+
+
+def _make_stage_state(
+    *,
+    unresolved_concerns: list[dict] | None = None,
+    annotations: list[dict] | None = None,
+    judge_rounds: int = 0,
+    judge_verdicts: list[list[dict]] | None = None,
+) -> dict:
+    return {
+        "adversarial_rounds": 3,
+        "judge_rounds": judge_rounds,
+        "judge_verdicts": judge_verdicts or [],
+        "annotations": annotations or [],
+        "unresolved_concerns": unresolved_concerns or [],
+        "adversarial_sha_history": ["sha-round-1", "sha-round-2", "sha-round-3"],
+        "initial_sha": "sha-round-1",
+    }
+
+
+def _make_state(stages: dict[str, dict]) -> dict:
+    state = FACTORY_STATE._default_workflow_state()
+    state["schema_version"] = 2
+    state["stages"] = stages
+    return state
+
+
+def _make_pr_payload(
+    *,
+    state: str = "OPEN",
+    body: str = "",
+    number: int = 17,
+    merge_commit: str = "",
+    merged_at: str = "",
+) -> dict:
+    payload = {
+        "number": number,
+        "url": f"https://example.test/pr/{number}",
+        "state": state,
+        "isDraft": False,
+        "headRefName": "feature/branch",
+        "headRefOid": "head-sha",
+        "baseRefName": "main",
+        "mergeable": "MERGEABLE",
+        "mergeStateStatus": "CLEAN",
+        "body": body,
+        "mergeCommit": {"oid": merge_commit} if merge_commit else None,
+        "mergedAt": merged_at,
+    }
+    return payload
+
+
+def _deliver_args(**overrides: object) -> argparse.Namespace:
+    args = {
+        "slug": SLUG,
+        "create_pr": False,
+        "draft": False,
+        "base": None,
+        "title": None,
+        "override_judges": False,
+        "reason": None,
+        "refresh": False,
+        "resume_merge_wait": False,
+        "watch_ci": False,
+        "interval": 10,
+        "merge_when_green": False,
+        "auto_merge": False,
+        "dry_run": False,
+    }
+    args.update(overrides)
+    return argparse.Namespace(**args)
+
+
+class FactoryDeliverTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmpdir.cleanup)
+        self._root_patch = patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", Path(self._tmpdir.name))
+        self._root_patch.start()
+        self.addCleanup(self._root_patch.stop)
+
+    def _write_state(self, state: dict) -> None:
+        path = FACTORY_STATE.factory_state_path(SLUG)
+        FACTORY_STATE.atomic_json_write(path, state)
+        reviews_dir = FACTORY_STATE.reviews_dir(SLUG)
+        reviews_dir.mkdir(parents=True, exist_ok=True)
+        for stage in ("spec", "plan", "tasks", "diff"):
+            manifest_path = FACTORY_STATE.checkpoint_manifest_path(SLUG, stage)
+            if not manifest_path.exists():
+                FACTORY_STATE.atomic_json_write(manifest_path, {"healthy": True})
+
+    def _base_patches(self):
+        # Import factory_deliver lazily so its globals can be patched here.
+        import importlib
+        factory_deliver = importlib.import_module("factory_deliver")
+        return [
+            patch.object(DELIVER, "ensure_sync", return_value=None),
+            patch.object(DELIVER, "command_path", return_value=True),
+            patch.object(DELIVER, "verify_checkpoint_manifest", return_value=(True, "")),
+            patch.object(DELIVER, "reconciliation_state", return_value=(True, "")),
+            patch.object(DELIVER, "current_branch_name", return_value="feature/branch"),
+            patch.object(DELIVER, "upstream_branch_name", return_value="origin/main"),
+            patch.object(DELIVER, "git_output", return_value="head-sha"),
+            patch.object(DELIVER, "commits_behind_upstream", return_value=0),
+            # PR #751: implementation-rule check makes its own git subprocess
+            # calls. Mock to a no-op for existing deliver tests so they don't
+            # trip on the new shell-out. Tests covering the rule live in
+            # test_implementation_rule.py.
+            patch.object(factory_deliver, "check_implementation_rule", return_value=(False, "")),
+        ]
+
+    def _run_deliver(
+        self,
+        args: argparse.Namespace,
+        *,
+        current_pr_payload: object = _UNSET,
+        required_check_summary: object = _UNSET,
+        gh_side_effect=None,
+    ) -> tuple[int, str, str]:
+        with contextlib.ExitStack() as stack:
+            for patcher in self._base_patches():
+                stack.enter_context(patcher)
+            if current_pr_payload is not _UNSET:
+                if isinstance(current_pr_payload, list):
+                    pr_values = iter(current_pr_payload)
+
+                    def _next_pr(*_args, **_kwargs):
+                        return next(pr_values)
+
+                    stack.enter_context(patch.object(DELIVER, "current_pr_payload", side_effect=_next_pr))
+                else:
+                    stack.enter_context(patch.object(DELIVER, "current_pr_payload", return_value=current_pr_payload))
+            if required_check_summary is not None:
+                if callable(required_check_summary):
+                    stack.enter_context(patch.object(DELIVER, "required_check_summary", side_effect=required_check_summary))
+                else:
+                    stack.enter_context(patch.object(DELIVER, "required_check_summary", return_value=required_check_summary))
+            if gh_side_effect is not None:
+                stack.enter_context(patch.object(DELIVER.subprocess, "run", side_effect=gh_side_effect))
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                rc = DELIVER.command_deliver(args)
+        return rc, stdout.getvalue(), stderr.getvalue()
+
+    def test_override_requires_reason(self) -> None:
+        with patch.object(DELIVER, "ensure_sync", return_value=None), patch.object(DELIVER, "command_path", return_value=True):
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()) as stderr:
+                with self.assertRaises(SystemExit) as ctx:
+                    DELIVER.command_deliver(_deliver_args(override_judges=True))
+
+        self.assertEqual(ctx.exception.code, 2)
+        self.assertIn("requires --reason", stderr.getvalue())
+
+    def test_override_records_state(self) -> None:
+        self._write_state(
+            _make_state(
+                {
+                    "plan": _make_stage_state(
+                        unresolved_concerns=[
+                            {
+                                "stage": "plan",
+                                "round": 2,
+                                "judge": "completeness",
+                                "confidence": 4,
+                                "reasoning": "Missing rollback path.",
+                                "also_raised_in_round": [1, 2],
+                            }
+                        ]
+                    ),
+                    "tasks": _make_stage_state(
+                        unresolved_concerns=[
+                            {
+                                "stage": "tasks",
+                                "round": 3,
+                                "judge": "implementation-risk",
+                                "confidence": 3,
+                                "reasoning": "Merge wait may stall forever.",
+                                "also_raised_in_round": [2, 3],
+                            }
+                        ]
+                    ),
+                }
+            )
+
+codex
+I’m checking the changed Python files for obvious syntax or import failures. That helps separate real breakage from speculative review comments.
+exec
+/bin/zsh -lc 'python -m py_compile docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py docs/workflow/operations/codex-skills/feature-factory/scripts/factory_deliver.py docs/workflow/operations/codex-skills/feature-factory/scripts/factory_reconcile.py docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_codex_quota_classifier.py docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_implementation_rule.py docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_three_way_reconcile.py docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_deliver.py docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_completeness_veto.py' in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ exited 127 in 0ms:
+zsh:1: command not found: python
+
+exec
+/bin/zsh -lc 'python3 -m py_compile docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py docs/workflow/operations/codex-skills/feature-factory/scripts/factory_deliver.py docs/workflow/operations/codex-skills/feature-factory/scripts/factory_reconcile.py docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_codex_quota_classifier.py docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_implementation_rule.py docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_three_way_reconcile.py docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_deliver.py docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_completeness_veto.py' in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 0ms:
+codex
+I’ve ruled out syntax problems. I’m running the new tests that exercise the changed flows so I can tell whether the patch has a latent behavior bug that the tests miss.
+exec
+/bin/zsh -lc 'python3 -m unittest docs.workflow.operations.codex-skills.feature-factory.scripts.tests.test_implementation_rule docs.workflow.operations.codex-skills.feature-factory.scripts.tests.test_three_way_reconcile docs.workflow.operations.codex-skills.feature-factory.scripts.tests.test_factory_cmd_deliver' in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 601ms:
+..........reconcile pre-check failed: plan.md does not exist: /var/folders/29/btkltdrj223_q4857sdj5s0m0000gn/T/tmps7u160hh/plan.md
+.reconcile pre-check failed: plan.md not writable: /var/folders/29/btkltdrj223_q4857sdj5s0m0000gn/T/tmp2vleoa2i/plan.md
+.reconcile pre-check failed: review file does not exist: /var/folders/29/btkltdrj223_q4857sdj5s0m0000gn/T/tmp60dtsl2s/spec.codex.feasibility-adversarial.review.md
+..........
+----------------------------------------------------------------------
+Ran 22 tests in 0.479s
+
+OK
+
+exec
+/bin/zsh -lc 'rg -n "dry_run|dry-run|override_implementation_rule|override_implementation_reason" docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_deliver.py docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_completeness_veto.py -S' in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+exec
+/bin/zsh -lc "sed -n '330,520p' docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py" in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 0ms:
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_completeness_veto.py:319:            dry_run=True,
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_completeness_veto.py:372:            dry_run=False,
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_deliver.py:104:        "dry_run": False,
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_deliver.py:236:                _deliver_args(override_judges=True, reason="judge calibration", dry_run=True),
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_deliver.py:295:            _deliver_args(create_pr=True, draft=True, dry_run=True, override_judges=True, reason="testing sentinel render"),
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_deliver.py:326:            _deliver_args(create_pr=True, draft=True, dry_run=True),
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py:248:    if getattr(args, "override_implementation_rule", False):
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py:249:        reason = (getattr(args, "override_implementation_reason", None) or "").strip()
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py:389:        if args.dry_run:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py:390:            cmd.append("--dry-run")
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py:394:        if args.dry_run:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py:411:            watch=args.watch_ci and not args.dry_run,
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py:420:        if args.dry_run:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py:431:        if args.auto_merge and not args.dry_run:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py:450:        elif args.merge_when_green and not args.dry_run:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py:486:        if pr.get("number") and not args.dry_run:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py:494:        if args.dry_run:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py:497:            print("pr: not created (dry-run)")
+
+ succeeded in 0ms:
+            for stage_name, concerns in open_concerns_by_stage.items():
+                for concern in concerns:
+                    cid = concern.get("id", "?")
+                    snippet = trim_detail(str(concern.get("reasoning", "") or ""), limit=80)
+                    lines.append(f"  - [{stage_name}] {cid}: {snippet}")
+            lines.append("")
+            lines.append("options per concern:")
+            lines.append("  python3 run_factory.py checkpoint --slug <slug> --stage <stage> --address <id> --evidence '<text>'")
+            lines.append("  python3 run_factory.py checkpoint --slug <slug> --stage <stage> --defer   <id> --reason   '<text>'")
+            lines.append("  python3 run_factory.py checkpoint --slug <slug> --stage <stage> --dismiss <id> --reason   '<text>'")
+            raise SystemExit("\n".join(lines))
+
+    recon_ok, recon_detail = reconciliation_state(args.slug)
+    if not recon_ok:
+        raise SystemExit(f"deliver requires terminal reconciliation first: {trim_detail(recon_detail)}")
+
+    branch = current_branch_name()
+    if not branch:
+        raise SystemExit("deliver requires a named branch; detached HEAD is not supported")
+    upstream = upstream_branch_name()
+    head_sha = git_output("rev-parse", "HEAD") or ""
+    diff_budget = diff_review_budget_state(args.slug)
+    if diff_budget.get("head_mismatch"):
+        recorded_head = str(diff_budget.get("recorded_head_sha", ""))[:12]
+        current_head = str(diff_budget.get("current_head_sha", ""))[:12]
+        raise SystemExit(
+            f"deliver requires the current branch to match the reviewed diff HEAD; "
+            f"diff artifact HEAD {recorded_head} does not match current HEAD {current_head}. "
+            "Rerun the diff checkpoint before delivering."
+        )
+
+    pr = current_pr_payload()
+    pr_closed = bool(pr) and pr.get("state") != "OPEN"
+    if pr_closed:
+        pr = None
+
+    if args.create_pr and not pr:
+        if not upstream:
+            raise SystemExit("deliver requires a published branch with an upstream before creating a PR")
+        behind = commits_behind_upstream()
+        if behind is not None and behind > 0:
+            print(f"warning: branch is {behind} commit{'s' if behind != 1 else ''} behind upstream — consider rebasing before creating PR")
+        title = args.title or f"Workflow: {args.slug}"
+        body, _ = _issue_pr_body(None, state, args.slug)
+        cmd = [
+            "gh",
+            "pr",
+            "create",
+            "--head",
+            branch,
+            "--title",
+            title,
+            "--body",
+            body,
+        ]
+        if args.base:
+            cmd.extend(["--base", args.base])
+        if args.draft:
+            cmd.append("--draft")
+        if args.dry_run:
+            cmd.append("--dry-run")
+        result = subprocess.run(cmd, text=True, capture_output=True)
+        if result.returncode != 0:
+            raise SystemExit(trim_detail(result.stderr or result.stdout or "PR creation failed"))
+        if args.dry_run:
+            print((result.stdout or "").strip())
+        else:
+            pr = current_pr_payload()
+
+    if (args.watch_ci or args.merge_when_green or args.auto_merge) and not pr:
+        raise SystemExit("deliver requires an open PR before watching checks or merging")
+
+    if pr:
+        head_mismatch = bool(pr.get("headRefOid")) and bool(head_sha) and pr.get("headRefOid") != head_sha
+        if head_mismatch and (args.merge_when_green or args.auto_merge):
+            raise SystemExit(
+                f"local HEAD {head_sha[:12]} does not match PR head {str(pr.get('headRefOid'))[:12]}; "
+                "push the branch or refresh the PR before merging"
+            )
+        checks_summary, checks, checks_detail = required_check_summary(
+            pr.get("number"),
+            watch=args.watch_ci and not args.dry_run,
+            interval=args.interval,
+        )
+        delivery_record = build_delivery_record(pr, checks_summary, checks, branch, head_sha)
+        delivery_record["upstream"] = upstream or ""
+        delivery_record["checks_detail"] = checks_detail
+        delivery_record["head_mismatch"] = head_mismatch
+        _update_pr_body_from_state(args.slug, pr, state, warn_on_missing=True)
+
+        if args.dry_run:
+            print(f"branch: {branch}")
+            print(f"head: {head_sha}")
+            print(f"pr: {delivery_record.get('pr_url', '') or 'not created'}")
+            print(f"checks: {checks_summary}")
+            if delivery_record.get("merge_state_status"):
+                print(f"merge-state: {delivery_record.get('merge_state_status')}")
+            if head_mismatch:
+                print("head-mismatch: yes")
+            return 0
+
+        if args.auto_merge and not args.dry_run:
+            merge_cmd = [
+                "gh",
+                "pr",
+                "merge",
+                str(pr["number"]),
+                "--auto",
+                "--squash",
+                "--match-head-commit",
+                head_sha,
+            ]
+            result = subprocess.run(merge_cmd, text=True, capture_output=True)
+            if result.returncode != 0:
+                raise SystemExit(trim_detail(result.stderr or result.stdout or "Auto-merge enable failed"))
+            refreshed_delivery = refresh_delivery_snapshot(delivery_record)
+            update_workflow_state(
+                args.slug,
+                lambda state: state.__setitem__(DELIVERY_KEY, refreshed_delivery),
+            )
+        elif args.merge_when_green and not args.dry_run:
+            if checks_summary != "pass":
+                raise SystemExit(f"cannot merge while required checks are {checks_summary}")
+            merged_pr_number = pr["number"]
+            merge_cmd = [
+                "gh",
+                "pr",
+                "merge",
+                str(merged_pr_number),
+                "--squash",
+                "--match-head-commit",
+                head_sha,
+            ]
+            result = subprocess.run(merge_cmd, text=True, capture_output=True)
+            if result.returncode != 0:
+                raise SystemExit(trim_detail(result.stderr or result.stdout or "Merge failed"))
+            pr = current_pr_payload()
+            checks_summary, checks, checks_detail = required_check_summary(merged_pr_number, watch=False)
+            update_workflow_state(
+                args.slug,
+                lambda state: state.__setitem__(
+                    DELIVERY_KEY,
+                    {
+                        **build_delivery_record(pr, checks_summary, checks, branch, head_sha),
+                        "upstream": upstream or "",
+                        "checks_detail": checks_detail,
+                        "head_mismatch": False,
+                    },
+                ),
+            )
+        else:
+            update_workflow_state(
+                args.slug,
+                lambda state: state.__setitem__(DELIVERY_KEY, delivery_record),
+            )
+
+        if pr.get("number") and not args.dry_run:
+            update_workflow_state(
+                args.slug,
+                lambda state: state.setdefault(DELIVERY_KEY, {}).update({"merge_wait_state": "waiting"}),
+            )
+            _poll_merge_wait(args.slug, int(pr["number"]))
+
+    else:
+        if args.dry_run:
+            print(f"branch: {branch}")
+            print(f"head: {head_sha}")
+            print("pr: not created (dry-run)")
+            return 0
+        if pr_closed:
+            # PR is already merged or closed — preserve the recorded delivery state
+            # rather than overwriting pr_url with "" and resetting the workflow.
+            state_snapshot = load_workflow_state(args.slug).get(DELIVERY_KEY, {})
+            print(f"branch: {branch}")
+            print(f"head: {head_sha}")
+            print(f"pr: {state_snapshot.get('pr_url', '')} (already closed/merged, state preserved)")
+            return 0
+        update_workflow_state(
+            args.slug,
+            lambda state: state.__setitem__(
+                DELIVERY_KEY,
+                {
+                    "branch": branch,
+                    "head_sha": head_sha,
+                    "updated_at": int(time.time()),
+                    "upstream": upstream or "",
+                    "pr_url": "",
+                    "checks_summary": "not-started",
+                },
+            ),
+        )
+
+exec
+/bin/zsh -lc "rg -n \"_record_override_if_needed|override_judges\" docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py -n -S && sed -n '80,180p' docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py && sed -n '300,360p' docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py" in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 0ms:
+118:def _record_override_if_needed(slug: str, reason: str) -> dict | None:
+241:    if args.override_judges and _nonblank(getattr(args, "reason", None)) is None:
+285:    if args.override_judges:
+286:        recorded_override = _record_override_if_needed(args.slug, args.reason)
+311:    if not args.override_judges:
+            f"- tasks: `docs/workflow/feature-runs/{slug}/tasks.md`",
+            "",
+            "## Verification",
+            "- Local workflow checkpoints completed through diff review.",
+        ]
+    )
+
+
+def _issue_pr_body(pr: dict | None, state: dict, slug: str) -> tuple[str, bool]:
+    rendered_block = render_judge_panel_block(state, slug=slug)
+    existing_body = str(pr.get("body", "")) if isinstance(pr, dict) else ""
+    if not existing_body:
+        body = _base_pr_body(slug)
+        if rendered_block:
+            body = body + "\n\n" + rendered_block
+        return body, False
+    body, missing_sentinels = upsert_judge_panel_block(existing_body, rendered_block)
+    return body, missing_sentinels
+
+
+def _current_pr_body_payload(pr_number: int | None = None) -> dict | None:
+    cmd = ["gh", "pr", "view"]
+    if pr_number is not None:
+        cmd.append(str(pr_number))
+    cmd.extend(["--json", "body"])
+    result = subprocess.run(cmd, text=True, capture_output=True)
+    if result.returncode != 0:
+        return None
+    output = (result.stdout or "").strip() or "{}"
+    return json.loads(output)
+
+
+def _edit_pr_body(body: str) -> None:
+    result = subprocess.run(["gh", "pr", "edit", "--body", body], text=True, capture_output=True)
+    if result.returncode != 0:
+        raise SystemExit(trim_detail(result.stderr or result.stdout or "PR body update failed"))
+
+
+def _record_override_if_needed(slug: str, reason: str) -> dict | None:
+    recorded: dict | None = None
+    with with_locked_state(slug) as state:
+        concerns, _, _, _ = collect_judge_panel_entries(state)
+        if not concerns:
+            return None
+        recorded = {
+            "reason": reason,
+            "timestamp_iso8601_utc": now_iso8601_utc(),
+            "operator_id": os.environ.get("USER", "unknown") or "unknown",
+            "affected_concerns": [dict(concern) for concern in concerns],
+        }
+        state["override"] = recorded
+    return recorded
+
+
+def _update_pr_body_from_state(slug: str, pr: dict | None, state: dict, *, warn_on_missing: bool = True) -> None:
+    if not pr:
+        raise SystemExit("deliver --refresh requires an open PR")
+    body, missing_sentinels = _issue_pr_body(pr, state, slug)
+    if missing_sentinels and warn_on_missing:
+        print("warn: ff-judge-panel sentinels were missing from the PR body; prepending judge block")
+    _edit_pr_body(body)
+
+
+def _normalize_pr_merge_fields(pr: dict | None) -> tuple[str, str]:
+    if not pr:
+        return "", ""
+    merge_commit = pr.get("mergeCommit")
+    if isinstance(merge_commit, dict):
+        merged_sha = str(merge_commit.get("oid", "") or "")
+    elif isinstance(merge_commit, str):
+        merged_sha = merge_commit
+    else:
+        merged_sha = ""
+    merged_at = str(pr.get("mergedAt", "") or "")
+    return merged_sha, merged_at
+
+
+def _mark_delivery_state(slug: str, updates: dict) -> None:
+    update_workflow_state(
+        slug,
+        lambda state: state.setdefault(DELIVERY_KEY, {}).update(updates),
+    )
+
+
+def _poll_merge_wait(slug: str, pr_number: int, interval_seconds: int = 60) -> dict | None:
+    with HeartbeatEmitter(slug, "deliver") as hb:
+        hb.set_activity(f"waiting for PR merge (PR #{pr_number})")
+        while True:
+            hb.set_activity(f"waiting for PR merge (PR #{pr_number})")
+            heartbeat_set_activity(f"waiting for PR merge (PR #{pr_number})")
+            pr = current_pr_payload(pr_number)
+            if not pr:
+                raise SystemExit("failed to read PR state while waiting for merge")
+
+            state_value = str(pr.get("state", "") or "").upper()
+            merged_sha, merged_at = _normalize_pr_merge_fields(pr)
+            if merged_sha or merged_at or state_value == "MERGED":
+                _mark_delivery_state(
+                    slug,
+                    {
+                        "merge_wait_state": "merged",
+        if not healthy:
+            stage_blob = stages_state.get(stage) or {}
+            if isinstance(stage_blob, dict) and stage_blob.get("judge_next_action") == "advance":
+                continue  # judge advance overrides manifest-drift-equals-unhealthy
+            raise SystemExit(f"deliver requires a healthy {stage} checkpoint first: {trim_detail(detail)}")
+
+    # P1-2 (adversarial review finding): block delivery when any stage carries
+    # open judge concerns. Without this, 2-of-3 judge proceed votes can ship a
+    # feature with unresolved HIGH concerns that only surface in the PR body.
+    # Operators must explicitly resolve them (--address/--defer/--dismiss) or
+    # use deliver --override-judges --reason to accept the risk.
+    if not args.override_judges:
+        open_concerns_by_stage: dict[str, list[dict]] = {}
+        for stage_name in ("spec", "plan", "tasks", "diff", "closeout"):
+            stage_blob = stages_state.get(stage_name) or {}
+            if not isinstance(stage_blob, dict):
+                continue
+            for concern in stage_blob.get("unresolved_concerns") or []:
+                if not isinstance(concern, dict):
+                    continue
+                if (
+                    concern.get("addressed_at") is None
+                    and not concern.get("deferred_reason")
+                    and not concern.get("dismissed_reason")
+                ):
+                    open_concerns_by_stage.setdefault(stage_name, []).append(concern)
+        if open_concerns_by_stage:
+            lines = [
+                "deliver blocked: open judge concerns on these stages — resolve before PR or pass --override-judges --reason:",
+            ]
+            for stage_name, concerns in open_concerns_by_stage.items():
+                for concern in concerns:
+                    cid = concern.get("id", "?")
+                    snippet = trim_detail(str(concern.get("reasoning", "") or ""), limit=80)
+                    lines.append(f"  - [{stage_name}] {cid}: {snippet}")
+            lines.append("")
+            lines.append("options per concern:")
+            lines.append("  python3 run_factory.py checkpoint --slug <slug> --stage <stage> --address <id> --evidence '<text>'")
+            lines.append("  python3 run_factory.py checkpoint --slug <slug> --stage <stage> --defer   <id> --reason   '<text>'")
+            lines.append("  python3 run_factory.py checkpoint --slug <slug> --stage <stage> --dismiss <id> --reason   '<text>'")
+            raise SystemExit("\n".join(lines))
+
+    recon_ok, recon_detail = reconciliation_state(args.slug)
+    if not recon_ok:
+        raise SystemExit(f"deliver requires terminal reconciliation first: {trim_detail(recon_detail)}")
+
+    branch = current_branch_name()
+    if not branch:
+        raise SystemExit("deliver requires a named branch; detached HEAD is not supported")
+    upstream = upstream_branch_name()
+    head_sha = git_output("rev-parse", "HEAD") or ""
+    diff_budget = diff_review_budget_state(args.slug)
+    if diff_budget.get("head_mismatch"):
+        recorded_head = str(diff_budget.get("recorded_head_sha", ""))[:12]
+        current_head = str(diff_budget.get("current_head_sha", ""))[:12]
+        raise SystemExit(
+            f"deliver requires the current branch to match the reviewed diff HEAD; "
+            f"diff artifact HEAD {recorded_head} does not match current HEAD {current_head}. "
+            "Rerun the diff checkpoint before delivering."
+        )
+
+
+exec
+/bin/zsh -lc 'rg -n "dry_run=True.*override_judges|override_judges.*dry_run|dry-run.*override" docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_deliver.py docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_completeness_veto.py -S' in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 0ms:
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_deliver.py:236:                _deliver_args(override_judges=True, reason="judge calibration", dry_run=True),
+docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_deliver.py:295:            _deliver_args(create_pr=True, draft=True, dry_run=True, override_judges=True, reason="testing sentinel render"),
+
+exec
+/bin/zsh -lc "sed -n '220,320p' docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_deliver.py" in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 0ms:
+            )
+        )
+
+        captured_bodies: list[str] = []
+
+        def gh_side_effect(cmd, *args, **kwargs):
+            if cmd[:3] == ["gh", "auth", "status"]:
+                return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+            if cmd[:3] == ["gh", "pr", "edit"]:
+                body_index = cmd.index("--body") + 1
+                captured_bodies.append(cmd[body_index])
+                return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+            raise AssertionError(f"unexpected command: {cmd}")
+
+        with patch.dict(DELIVER.os.environ, {"USER": "test-operator"}, clear=False):
+            rc, _, _ = self._run_deliver(
+                _deliver_args(override_judges=True, reason="judge calibration", dry_run=True),
+                current_pr_payload=_make_pr_payload(),
+                required_check_summary=("pass", [], ""),
+                gh_side_effect=gh_side_effect,
+            )
+
+        self.assertEqual(rc, 0)
+        state = json.loads(FACTORY_STATE.factory_state_path(SLUG).read_text(encoding="utf-8"))
+        override = state["override"]
+        self.assertEqual(override["reason"], "judge calibration")
+        self.assertEqual(override["operator_id"], "test-operator")
+        # Concerns now carry backfilled id + lifecycle fields (FR-011a). Check the
+        # stable subset rather than exact equality.
+        affected = override["affected_concerns"]
+        self.assertEqual(len(affected), 2)
+        self.assertEqual(affected[0]["stage"], "plan")
+        self.assertEqual(affected[0]["judge"], "completeness")
+        self.assertEqual(affected[0]["reasoning"], "Missing rollback path.")
+        self.assertTrue(affected[0].get("id"))
+        self.assertEqual(affected[1]["stage"], "tasks")
+        self.assertEqual(affected[1]["judge"], "implementation-risk")
+        self.assertTrue(affected[1].get("id"))
+        self.assertTrue(captured_bodies)
+        self.assertIn(FACTORY_PR_BODY.SENTINEL_BEGIN, captured_bodies[0])
+        self.assertIn("## ⚠ Shipped over judge objection", captured_bodies[0])
+
+    def test_pr_body_sentinel_block_rendered(self) -> None:
+        concern = {
+            "stage": "plan",
+            "round": 3,
+            "judge": "completeness",
+            "confidence": 4,
+            "reasoning": "Missing rollback path in the plan.",
+            "also_raised_in_round": [1, 2],
+        }
+        annotation = {
+            "stage": "plan",
+            "round": 3,
+            "judge": "restatement",
+            "confidence": 5,
+            "reasoning": "Same concern, but note the rollout assumption.",
+        }
+        self._write_state(_make_state({"plan": _make_stage_state(unresolved_concerns=[concern], annotations=[annotation])}))
+
+        captured_bodies: list[str] = []
+
+        def gh_side_effect(cmd, *args, **kwargs):
+            if cmd[:3] == ["gh", "auth", "status"]:
+                return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+            if cmd[:3] == ["gh", "pr", "create"]:
+                body_index = cmd.index("--body") + 1
+                captured_bodies.append(cmd[body_index])
+                return subprocess.CompletedProcess(cmd, 0, stdout="https://example.test/pr/17\n", stderr="")
+            raise AssertionError(f"unexpected command: {cmd}")
+
+        # Deliver now blocks on open concerns (P1-2 fix) unless --override-judges
+        # is used. This test verifies the PR body sentinel rendering, not the
+        # block-on-open-concerns gate (which has its own tests below).
+        rc, _, _ = self._run_deliver(
+            _deliver_args(create_pr=True, draft=True, dry_run=True, override_judges=True, reason="testing sentinel render"),
+            current_pr_payload=None,
+            gh_side_effect=gh_side_effect,
+        )
+
+        self.assertEqual(rc, 0)
+        self.assertTrue(captured_bodies)
+        body = captured_bodies[0]
+        self.assertIn(FACTORY_PR_BODY.SENTINEL_BEGIN, body)
+        self.assertIn(FACTORY_PR_BODY.SENTINEL_END, body)
+        judge_block = body.split(FACTORY_PR_BODY.SENTINEL_BEGIN, 1)[1].split(FACTORY_PR_BODY.SENTINEL_END, 1)[0]
+        self.assertIn("## ⚠ Unresolved Judge Concerns", judge_block)
+        self.assertIn("Missing rollback path in the plan.", judge_block)
+        self.assertIn("## Annotations", judge_block)
+        self.assertIn("restatement", judge_block)
+
+    def test_pr_body_sentinel_absent_no_concerns(self) -> None:
+        self._write_state(_make_state({"plan": _make_stage_state()}))
+
+        captured_bodies: list[str] = []
+
+        def gh_side_effect(cmd, *args, **kwargs):
+            if cmd[:3] == ["gh", "auth", "status"]:
+                return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+            if cmd[:3] == ["gh", "pr", "create"]:
+                body_index = cmd.index("--body") + 1
+
+exec
+/bin/zsh -lc "rg -n \"def ensure_sync|ensure_sync\\(\" docs/workflow/operations/codex-skills/feature-factory/scripts -S" in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 0ms:
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_block.py:23:    ensure_sync()
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_discover.py:30:    ensure_sync()
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_implement.py:325:    ensure_sync()
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_status.py:64:    ensure_sync()
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_status.py:243:    ensure_sync()
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py:526:    ensure_sync()
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py:238:    ensure_sync()
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py:543:    ensure_sync()
+docs/workflow/operations/codex-skills/feature-factory/scripts/factory_git.py:121:def ensure_sync() -> None:
+docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py:149:    ensure_sync()
+docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py:188:    ensure_sync()
+docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py:226:    ensure_sync()
+
+exec
+/bin/zsh -lc "sed -n '90,160p' docs/workflow/operations/codex-skills/feature-factory/scripts/factory_git.py" in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 0ms:
+
+def current_branch_name() -> str | None:
+    branch = git_output("rev-parse", "--abbrev-ref", "HEAD")
+    if not branch or branch == "HEAD":
+        return None
+    return branch
+
+
+def upstream_branch_name() -> str | None:
+    return git_output("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}")
+
+
+def commits_behind_upstream() -> int | None:
+    """Return how many commits HEAD is behind its upstream, or None if unknown."""
+    result = git_output("rev-list", "--count", "HEAD..@{upstream}")
+    if result is None:
+        return None
+    try:
+        return int(result)
+    except ValueError:
+        return None
+
+
+def repo_remote_url(remote_name: str) -> str | None:
+    return git_output("remote", "get-url", remote_name)
+
+
+def command_path(name: str) -> str | None:
+    return shutil.which(name)
+
+
+def ensure_sync() -> None:
+    run([sys.executable, str(SYNC_SCRIPT), "--sync-if-needed"])
+
+
+def ensure_file(path: Path, heading: str) -> None:
+    if not path.exists():
+        path.write_text(f"# {heading}\n", encoding="utf-8")
+
+
+def create_worktree(slug: str, index: int, run_fn=subprocess.run) -> Path:
+    safe_slug = "".join(
+        ch if ch.isalnum() or ch in "-_" else "_"
+        for ch in slug
+    )
+    path = Path(f"/tmp/wt-{safe_slug}-{os.getpid()}-{index}")
+
+    try:
+        if path.exists():
+            remove_worktree(path, run_fn)
+        run_fn(
+            ["git", "-C", str(REPO_ROOT), "worktree", "add", str(path), "HEAD"],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        return path
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(
+            f"failed to create worktree at {path}: {exc.stderr or exc.stdout or exc}"
+        ) from exc
+    except RuntimeError as exc:
+        raise RuntimeError(f"failed to create worktree at {path}: {exc}") from exc
+
+
+def remove_worktree(path: Path, run_fn=subprocess.run) -> None:
+    if not path.exists():
+        return
+    try:
+        run_fn(
+            ["git", "-C", str(REPO_ROOT), "worktree", "remove", "--force", str(path)],
+
+exec
+/bin/zsh -lc "rg -n \"def load_workflow_state|def update_workflow_state\" docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py -n -S && sed -n '160,280p' docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py" in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 0ms:
+384:def load_workflow_state(slug: str) -> dict:
+464:def update_workflow_state(slug: str, mutate) -> dict:
+        "updated_at": 0,
+        "answers": {},
+        "non_goals": [],
+        "acceptance_criteria": [],
+        "unresolved": [],
+    }
+
+
+def default_parallel_analysis_state() -> dict:
+    return {
+        "reviewed": False,
+        "found": False,
+        "note": "",
+        "updated_at": 0,
+    }
+
+
+def _default_workflow_state() -> dict:
+    """Return the baseline workflow state for a new or migrated run."""
+    return {
+        "review_policy": {
+            "sensitive": False,
+            "large_structural": False,
+            "performance_sensitive": False,
+            "extra_gemini_lenses": [],
+        },
+        BLOCKED_KEY: {
+            "active": False,
+            "reason": "",
+            "updated_at": 0,
+        },
+        DISCOVERY_KEY: default_discovery_state(),
+        DELIVERY_KEY: {},
+        DIRTY_OVERRIDE_KEY: {},
+        CHECKPOINT_FALLBACK_KEY: {},
+        PARALLEL_ANALYSIS_KEY: default_parallel_analysis_state(),
+        INIT_HEAD_SHA_KEY: "",
+        "token_usage": [],
+        "stages": {},
+        INVARIANT_WARNINGS_KEY: [],
+        "schema_version": 1,
+    }
+
+
+def _default_stage_state(state: dict | None = None, stage: str | None = None) -> dict:
+    """Return the canonical nested state blob for a single workflow stage."""
+    stage_state = {
+        "adversarial_rounds": 0,
+        "judge_rounds": 0,
+        "judge_verdicts": [],
+        "annotations": [],
+        "unresolved_concerns": [],
+        "adversarial_sha_history": [],
+        "initial_sha": "",
+    }
+    if state is None or stage is None:
+        return stage_state
+    for key in ("adversarial_rounds", "judge_rounds"):
+        legacy_key = f"{stage}_{key}"
+        if legacy_key in state:
+            stage_state[key] = state[legacy_key]
+    return stage_state
+
+
+@contextmanager
+def with_locked_state(slug: str):
+    """Lock state.json, yield the loaded state, and persist mutations on exit."""
+    path = factory_state_path(slug)
+    if not path.exists():
+        atomic_json_write(path, _default_workflow_state())
+
+    last_error: Exception | None = None
+    backoff_seconds = 0.1
+    for attempt in range(11):
+        with path.open("r+", encoding="utf-8") as lock_fh:
+            try:
+                fcntl.flock(lock_fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except Exception as exc:
+                busy_errno = getattr(exc, "errno", None)
+                if not isinstance(exc, BlockingIOError) and busy_errno not in {errno.EACCES, errno.EAGAIN}:
+                    raise
+                last_error = exc
+                if attempt == 10:
+                    break
+                time.sleep(backoff_seconds)
+                backoff_seconds *= 2
+                continue
+
+            try:
+                state = load_workflow_state(slug)
+                yield state
+                atomic_json_write(path, state)
+            finally:
+                fcntl.flock(lock_fh.fileno(), fcntl.LOCK_UN)
+            return
+
+    raise TimeoutError(f"Timed out acquiring exclusive lock for {path} after 10 retries") from last_error
+
+
+def migrate_discovery_state(d: dict) -> dict:
+    """Upgrade a V1 discovery blob to V2. Returns a new dict (does not mutate input.
+
+    Idempotent on V2+ blobs. Safe for malformed inputs.
+    """
+    try:
+        version = d.get("version", 1)
+        if not isinstance(version, (int, float)) or version >= 2:
+            return d
+    except Exception:
+        return d
+    d = dict(d)  # shallow copy — do not mutate caller's dict
+    d["version"] = 2
+    # Add missing V2 fields
+    if "answers" not in d:
+        d["answers"] = {}
+    if "non_goals" not in d:
+        d["non_goals"] = []
+    if "acceptance_criteria" not in d:
+        d["acceptance_criteria"] = []
+    # Sanitize unresolved: keep only valid dicts with a hashable "item" key
+    existing_unresolved = d.get("unresolved", [])
+
+exec
+/bin/zsh -lc "sed -n '384,520p' docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py" in /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+ succeeded in 0ms:
+def load_workflow_state(slug: str) -> dict:
+    """Load workflow state and add missing schema defaults without writing."""
+    path = factory_state_path(slug)
+    if not path.exists():
+        return _default_workflow_state()
+    state = json.loads(path.read_text(encoding="utf-8"))
+    defaults = _default_workflow_state()
+    state.setdefault("review_policy", defaults["review_policy"])
+    state.setdefault(BLOCKED_KEY, defaults[BLOCKED_KEY])
+    state.setdefault(DISCOVERY_KEY, default_discovery_state())
+    state.setdefault(DELIVERY_KEY, {})
+    state.setdefault(DIRTY_OVERRIDE_KEY, {})
+    state.setdefault(CHECKPOINT_FALLBACK_KEY, {})
+    state.setdefault(PARALLEL_ANALYSIS_KEY, default_parallel_analysis_state())
+    state.setdefault(INIT_HEAD_SHA_KEY, "")
+    state.setdefault("token_usage", [])
+    state.setdefault("stages", {})
+    state.setdefault(INVARIANT_WARNINGS_KEY, [])
+    state.setdefault("schema_version", 1)
+    _backfill_unresolved_concern_ids(state)
+    return state
+
+
+def _concern_id_stable(stage: str, judge: str, round_raised: int, reasoning: str) -> str:
+    """Stable concern ID per FR-003. Mirrored in factory_cmd_judge._concern_id.
+
+    Defined here so state-load backfill (FR-011a) does not need to import the
+    judge module at load time.
+    """
+    import hashlib
+    normalized = "".join(reasoning.split())[:48]
+    key = f"{stage}|{judge}|{round_raised}|{normalized}"
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()[:12]
+
+
+def _backfill_unresolved_concern_ids(state: dict) -> None:
+    """FR-011a — backfill `id` on any legacy unresolved_concern without one.
+
+    Older runs (including the run-033 fixture) wrote concerns before FR-003
+    added the stable-id field. On read, synthesize the id so the new
+    checkpoint lifecycle works on in-flight runs without a migration script.
+    Also default-fills addressed_at / addressed_by / deferred_reason /
+    dismissed_reason to ``None``.
+    """
+    stages = state.get("stages")
+    if not isinstance(stages, dict):
+        return
+    for stage_name, stage_state in stages.items():
+        if not isinstance(stage_state, dict):
+            continue
+        concerns = stage_state.get("unresolved_concerns")
+        if not isinstance(concerns, list):
+            continue
+        for concern in concerns:
+            if not isinstance(concern, dict):
+                continue
+            if not concern.get("id"):
+                # Defensive coercion — diff round-1 finding: older/corrupt
+                # state.json may store round_raised as a non-numeric string.
+                # Never let load_workflow_state raise.
+                try:
+                    round_raised = int(concern.get("round_raised") or 0)
+                except (TypeError, ValueError):
+                    round_raised = 0
+                concern["id"] = _concern_id_stable(
+                    str(concern.get("stage") or stage_name),
+                    str(concern.get("judge") or ""),
+                    round_raised,
+                    str(concern.get("reasoning") or ""),
+                )
+            for field in ("addressed_at", "addressed_by", "deferred_reason", "dismissed_reason"):
+                concern.setdefault(field, None)
+
+
+def save_workflow_state(slug: str, state: dict) -> Path:
+    path = factory_state_path(slug)
+    atomic_json_write(path, state)
+    return path
+
+
+def update_workflow_state(slug: str, mutate) -> dict:
+    """Mutate workflow state under the exclusive file lock."""
+    with with_locked_state(slug) as state:
+        mutate(state)
+    return state
+
+
+def update_stage_state(slug: str, stage: str, updates: dict) -> dict:
+    """Update nested stage state and mirror legacy top-level counters."""
+    with with_locked_state(slug) as state:
+        stages = state.get("stages")
+        if not isinstance(stages, dict):
+            stages = {}
+            state["stages"] = stages
+        stage_state = stages.get(stage)
+        if not isinstance(stage_state, dict):
+            stage_state = {}
+        defaults = _default_stage_state(state, stage)
+        for key, value in defaults.items():
+            stage_state.setdefault(key, value)
+        for key, value in updates.items():
+            stage_state[key] = value
+            if key in {"adversarial_rounds", "judge_rounds"}:
+                state[f"{stage}_{key}"] = value
+        stages[stage] = stage_state
+        try:
+            schema_version = int(state.get("schema_version", 1))
+        except (TypeError, ValueError):
+            schema_version = 1
+        if schema_version < 2:
+            state["schema_version"] = 2
+    return state
+
+
+def discovery_state(slug: str) -> dict:
+    state = load_workflow_state(slug).get(DISCOVERY_KEY, {})
+    merged = default_discovery_state()
+    merged.update(state if isinstance(state, dict) else {})
+    def _safe_list(val) -> list:
+        return list(val) if isinstance(val, list) else []
+    merged["questions"] = _safe_list(merged.get("questions"))
+    merged["assumptions"] = _safe_list(merged.get("assumptions"))
+    merged["unresolved"] = _safe_list(merged.get("unresolved"))
+    merged["non_goals"] = _safe_list(merged.get("non_goals"))
+    merged["acceptance_criteria"] = _safe_list(merged.get("acceptance_criteria"))
+    merged = migrate_discovery_state(merged)
+    return merged
+
+
+def update_discovery_state(slug: str, mutate) -> dict:
+    def _migrated_mutate(state: dict):
+        discovery = state.setdefault(DISCOVERY_KEY, default_discovery_state())
+        migrated = migrate_discovery_state(discovery)
+        state[DISCOVERY_KEY] = migrated
+        return mutate(migrated)
+    return update_workflow_state(slug, _migrated_mutate)
+
+

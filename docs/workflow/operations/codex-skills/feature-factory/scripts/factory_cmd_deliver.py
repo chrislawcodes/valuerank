@@ -242,6 +242,31 @@ def command_deliver(args: argparse.Namespace) -> int:
         print("deliver --override-judges requires --reason", file=sys.stderr)
         raise SystemExit(2)
 
+    # PR #751 / FF Housekeeping Slice 3: implementation-rule WARN.
+    # Validate the override flag combo eagerly (so a bad invocation fails
+    # fast), but defer the state-mutating override write until deliver gates
+    # have all passed (per Codex diff-review regression MEDIUM #2 — don't
+    # mutate state on an aborted/dry-run deliver).
+    impl_rule_override_pending = False
+    if getattr(args, "override_implementation_rule", False):
+        impl_rule_override_reason = (getattr(args, "override_implementation_reason", None) or "").strip()
+        if len(impl_rule_override_reason) < 10:
+            print(
+                "deliver --override-implementation-rule requires "
+                "--override-implementation-reason of at least 10 characters",
+                file=sys.stderr,
+            )
+            raise SystemExit(2)
+        impl_rule_override_pending = True
+    else:
+        from factory_deliver import check_implementation_rule
+        triggered, message = check_implementation_rule(args.slug)
+        if message:
+            # Per Codex diff-review regression MEDIUM #3: surface the info
+            # message even on the skip path (branch-base unresolved, git
+            # diff failed) so the guardrail doesn't disappear silently.
+            print(message, file=sys.stderr)
+
     auth = subprocess.run(["gh", "auth", "status", "--active"], text=True, capture_output=True)
     if auth.returncode != 0:
         raise SystemExit(trim_detail(auth.stderr or auth.stdout or "GitHub authentication is not ready"))
@@ -266,6 +291,13 @@ def command_deliver(args: argparse.Namespace) -> int:
         recorded_override = _record_override_if_needed(args.slug, args.reason)
         if recorded_override:
             state = load_workflow_state(args.slug)
+
+    # PR #751 / FF Housekeeping Slice 3 — record the implementation-rule
+    # override AFTER the early-exit paths (resume_merge_wait, refresh) have
+    # been taken, so we don't mutate state on a no-op deliver.
+    if impl_rule_override_pending:
+        from factory_deliver import record_implementation_rule_override
+        record_implementation_rule_override(args.slug, impl_rule_override_reason)
 
     # P1-1 (adversarial review finding): honor judge-advance verdicts at delivery
     # the same way prerequisite_failure does, so an unhealthy manifest with an

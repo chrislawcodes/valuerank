@@ -1,0 +1,9 @@
+## Findings
+- Medium: The `--validation-only` smoke test is not reliable as written if `FACTORY_RUNS_ROOT` is not already honored by the CLI. The fallback says to “patch at module level instead,” but that will not affect the subprocess the test launches, so the test would still hit real state or fail nondeterministically. This is a `[UNVERIFIED]` dependency on existing code behavior, but the plan needs a subprocess-visible override, not a process-local patch.
+- Medium: The implementation-rule check assumes `git merge-base origin/main HEAD` is always available and correct. In shallow clones, detached CI checkouts, or repos where `origin/main` is stale or absent, this can produce false warnings or miss real ones. This is `[UNVERIFIED]` because it depends on repo and CI setup, but the plan should define a fallback or fetch step.
+- Medium: The quota classifier is too broad. Treating any `rate limit` text or HTTP `429` as Codex quota exhaustion will misclassify transient throttling and unrelated API limits as `deferred`, which weakens triage and can hide real failures. The classifier needs a stricter match or explicit precedence rules.
+
+## Residual Risks
+- The 3-way reconcile flow is still non-transactional. A failure after one or two writes can leave the review, body, and plan temporarily out of sync until a rerun repairs it.
+- The plan still relies on heuristic text matching for external error output. If provider wording changes, the deferred mapping will drift.
+- The plan does not define how to handle concurrent reconcile or deliver invocations, so races can still reintroduce drift even if each individual step is idempotent.
