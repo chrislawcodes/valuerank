@@ -63,6 +63,10 @@ export async function claimAggregateRun(prepared: AggregateRunPreparation): Prom
           createdByUserId: prepared.templateRun.createdByUserId,
           experimentId: prepared.templateRun.experimentId,
           status: 'RUNNING',
+          // Aggregate runs are first-class production rollups. Without this,
+          // they fall through to the schema default (UNKNOWN_LEGACY) and pile
+          // up incorrectly. See migration 20260424_backfill_aggregate_run_category.
+          runCategory: 'PRODUCTION',
           config: claimConfig as unknown as Prisma.InputJsonValue,
           tags: {
             create: {

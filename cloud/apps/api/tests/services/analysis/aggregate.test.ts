@@ -309,6 +309,47 @@ describe('updateAggregateRun same-signature aggregate eligibility', () => {
     });
   });
 
+  it('creates new aggregate runs with runCategory = PRODUCTION', async () => {
+    const definition = await db.definition.create({
+      data: {
+        name: `aggregate-test-runcategory-${Date.now()}`,
+        content: {
+          schema_version: 1,
+          dimensions: [{ name: 'ValueA' }, { name: 'ValueB' }],
+        },
+      },
+    });
+    definitionIds.push(definition.id);
+
+    const scenarios = await db.scenario.createManyAndReturn({
+      data: [
+        { definitionId: definition.id, name: 'Scenario 1', content: { dimensions: { stakes: 1 } } },
+        { definitionId: definition.id, name: 'Scenario 2', content: { dimensions: { stakes: 2 } } },
+      ],
+      select: { id: true },
+    });
+    const scenarioIds = scenarios.map((scenario) => scenario.id);
+
+    await createSourceRun({
+      definitionId: definition.id,
+      scenarioIds,
+      modelScenarioMap: { 'gpt-4': scenarioIds },
+    });
+
+    const prepared = await prepareAggregateRunSnapshot(definition.id, 'pre-1', 1, 0.7);
+    expect(prepared).not.toBeNull();
+
+    const claim = await claimAggregateRun(prepared!);
+    const aggregateRun = await db.run.findUniqueOrThrow({
+      where: { id: claim.aggregateRunId },
+      select: { runCategory: true },
+    });
+
+    expect(aggregateRun.runCategory).toBe('PRODUCTION');
+
+    await releaseAggregateClaim(prepared!, claim);
+  });
+
   it('rejects stale aggregate claims before the final persist step', async () => {
     const definition = await db.definition.create({
       data: {
