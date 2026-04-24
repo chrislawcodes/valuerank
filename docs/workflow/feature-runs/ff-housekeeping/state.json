@@ -44,7 +44,6 @@
     "unresolved": []
   },
   "delivery": {},
-  "dirty_overrides": {},
   "checkpoint_fallback": {},
   "parallel_analysis": {
     "reviewed": true,
@@ -245,6 +244,54 @@
       "agent_id": null,
       "artifact_sha_at_time": "6a1cb7a4e3e5795f82b58a5507b831982ecd5a2562bdc79b74955193941f3bda",
       "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T22:54:42.105562Z",
+      "started_at": "2026-04-24T22:51:42.091645Z",
+      "ended_at": "2026-04-24T22:54:42.105562Z",
+      "duration_seconds": 180.012429,
+      "agent_id": null,
+      "artifact_sha_at_time": "f96026b26783906b6adb19ef69e82d2fec7a5c9c47faa84606fe53a3e4246e8f",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T22:56:53.249096Z",
+      "started_at": "2026-04-24T22:54:42.287097Z",
+      "ended_at": "2026-04-24T22:56:53.249096Z",
+      "duration_seconds": 130.960963,
+      "agent_id": null,
+      "artifact_sha_at_time": "f96026b26783906b6adb19ef69e82d2fec7a5c9c47faa84606fe53a3e4246e8f",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-24T22:57:38.100521Z",
+      "started_at": "2026-04-24T22:56:53.439266Z",
+      "ended_at": "2026-04-24T22:57:38.100521Z",
+      "duration_seconds": 44.660763,
+      "agent_id": null,
+      "artifact_sha_at_time": "f96026b26783906b6adb19ef69e82d2fec7a5c9c47faa84606fe53a3e4246e8f",
+      "parse_error": "no Gemini token stats found in stdout"
     }
   ],
   "stages": {
@@ -281,6 +328,17 @@
         "6a1cb7a4e3e5795f82b58a5507b831982ecd5a2562bdc79b74955193941f3bda"
       ],
       "initial_sha": "6a1cb7a4e3e5795f82b58a5507b831982ecd5a2562bdc79b74955193941f3bda"
+    },
+    "diff": {
+      "adversarial_rounds": 0,
+      "judge_rounds": 0,
+      "judge_verdicts": [],
+      "annotations": [],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [
+        "f96026b26783906b6adb19ef69e82d2fec7a5c9c47faa84606fe53a3e4246e8f"
+      ],
+      "initial_sha": "f96026b26783906b6adb19ef69e82d2fec7a5c9c47faa84606fe53a3e4246e8f"
     }
   },
   "invariant_warnings": [],
@@ -297,5 +355,7 @@
     "blockers": []
   },
   "plan_adversarial_rounds": 1,
-  "tasks_adversarial_rounds": 1
+  "tasks_adversarial_rounds": 1,
+  "diff_adversarial_rounds": 0,
+  "dirty_overrides": {}
 }

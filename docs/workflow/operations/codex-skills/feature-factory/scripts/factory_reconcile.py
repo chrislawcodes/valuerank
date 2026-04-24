@@ -46,17 +46,27 @@ def reconcile_review_full(
     """
     python_exe = python_exe or sys.executable
 
-    # --- Pre-check phase: validate both targets exist + writable ---
+    # --- Pre-check phase: validate review file + plan dir writable ---
+    # Note: plan.md may not yet exist on a first run; append_reconciliation_entry.py
+    # creates it. So we only require the parent dir to be writable, not plan.md
+    # itself. (Per PR #751 diff-review Codex regression MEDIUM #1.)
     pre_check_errors: list[str] = []
     if not review_path.exists():
         pre_check_errors.append(f"review file does not exist: {review_path}")
     elif not os.access(review_path, os.W_OK):
         pre_check_errors.append(f"review file not writable: {review_path}")
 
-    if not plan_path.exists():
-        pre_check_errors.append(f"plan.md does not exist: {plan_path}")
-    elif not os.access(plan_path, os.W_OK):
-        pre_check_errors.append(f"plan.md not writable: {plan_path}")
+    if plan_path.exists():
+        if not os.access(plan_path, os.W_OK):
+            pre_check_errors.append(f"plan.md not writable: {plan_path}")
+    else:
+        # plan.md doesn't exist yet — require its parent dir to be writable
+        # so append_reconciliation_entry.py can create it.
+        plan_dir = plan_path.parent
+        if not plan_dir.exists():
+            pre_check_errors.append(f"plan.md parent dir does not exist: {plan_dir}")
+        elif not os.access(plan_dir, os.W_OK):
+            pre_check_errors.append(f"plan.md parent dir not writable: {plan_dir}")
 
     if pre_check_errors:
         for err in pre_check_errors:

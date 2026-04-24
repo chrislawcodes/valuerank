@@ -2,12 +2,18 @@
 
 ## Review Reconciliation
 
-- review: reviews/spec.codex.feasibility-adversarial.review.md | status: accepted | note: HIGH atomicity FIXED (honest scoping); MEDIUM classifier FIXED (canonical helper); MEDIUM smoke test FIXED (cwd + env contract); MEDIUM sticky override FIXED (head_sha scope).
-- review: reviews/spec.codex.edge-cases-adversarial.review.md | status: accepted | note: HIGH atomicity + HIGH override scope FIXED. MEDIUM line-count + smoke test + quota classifier FIXED.
-- review: reviews/spec.gemini.requirements-adversarial.review.md | status: accepted | note: CRITICAL F-01 (atomicity) FIXED. HIGH F-02 (noisy line count) FIXED. MEDIUM F-03 (branch_base) FIXED. MEDIUM F-04 (HTTP 429) FIXED. LOW F-05 + LOW F-06 FIXED.
+- review: reviews/spec.codex.feasibility-adversarial.review.md | status: accepted | note: Addressed during spec/plan/tasks rounds (see plan.md reconciliation rollup).
+- review: reviews/spec.codex.edge-cases-adversarial.review.md | status: accepted | note: Addressed during spec/plan/tasks rounds (see plan.md reconciliation rollup).
+- review: reviews/spec.gemini.requirements-adversarial.review.md | status: accepted | note: Addressed during spec/plan/tasks rounds (see plan.md reconciliation rollup).
 - review: reviews/plan.codex.architecture-adversarial.review.md | status: accepted | note: No actionable findings detected — auto-accepted
 - review: reviews/plan.gemini.testability-adversarial.review.md | status: accepted | note: No actionable findings detected — auto-accepted
 - review: reviews/plan.codex.implementation-adversarial.review.md | status: accepted | note: MEDIUM (smoke test patch won't see subprocess): FIXED — FR-009a requires factory_state to honor FF_FACTORY_RUNS_ROOT env var, subprocess test sets it, no module-local patches. MEDIUM (merge-base fallback): FIXED — try origin/main → main → HEAD~50, info note if all fail. MEDIUM (quota too broad): FIXED — explicit phrase patterns OR (HTTP 429/402 + Codex/OpenAI context marker), plain 'rate limit' doesn't qualify alone.
+- review: reviews/diff.codex.regression-adversarial.review.md | status: accepted | note: MEDIUM #1 (plan.md missing hard-fail): FIXED — pre-check now allows missing plan.md as long as parent dir is writable; append script creates it. MEDIUM #2 (override recorded too early): FIXED — now recorded AFTER early-exit paths (resume_merge_wait, refresh). MEDIUM #3 (skip message swallowed): FIXED — message printed even on non-triggered skip path. MEDIUM #4 UNVERIFIED (codex_dispatches not freshness-bound): accepted as known limitation; nothing populates dispatches yet.
+- review: reviews/diff.gemini.quality-adversarial.review.md | status: accepted | note: HIGH (reconcile non-atomic): accepted limitation per spec FR-002 / Risk P3 — pre-check + sequential write, idempotent re-run is recovery. MEDIUM (trivial dispatch bypass): accepted — nothing populates codex_dispatches yet. MEDIUM (HEAD~50 fallback): accepted — long-lived branches > 50 commits would under-report. LOW (file types): accepted — list is intentionally narrow for this repo's code base. LOW (weak reason validation): accepted — automatic placeholder detection is hard.
+- review: reviews/diff.codex.correctness-adversarial.review.md | status: deferred | note: Codex subprocess failure (quota exhausted) — no content generated. Other diff reviews completed and findings addressed.
+- review: reviews/tasks.codex.dependency-order-adversarial.review.md | status: accepted | note: Addressed during spec/plan/tasks rounds (see plan.md reconciliation rollup).
+- review: reviews/tasks.codex.execution-adversarial.review.md | status: accepted | note: Addressed during spec/plan/tasks rounds (see plan.md reconciliation rollup).
+- review: reviews/tasks.gemini.coverage-adversarial.review.md | status: accepted | note: Addressed during spec/plan/tasks rounds (see plan.md reconciliation rollup).
 
 ## Architecture
 

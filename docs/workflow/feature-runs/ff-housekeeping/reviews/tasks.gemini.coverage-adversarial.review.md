@@ -3,14 +3,14 @@ reviewer: "gemini"
 lens: "coverage-adversarial"
 stage: "tasks"
 artifact_path: "docs/workflow/feature-runs/ff-housekeeping/tasks.md"
-artifact_sha256: "6a1cb7a4e3e5795f82b58a5507b831982ecd5a2562bdc79b74955193941f3bda"
+artifact_sha256: "3f6761834b9ba6f416c49e3c44bc9a1aa37f61e20dbbb97431279ad0556f84a5"
 repo_root: "."
 git_head_sha: "0c36f43209746964038a3ba98b1d7a8f3817c5d8"
 git_base_ref: "origin/main"
 git_base_sha: "85a91778b3c3de491fd6b326879d29fa5dc6d0fa"
 generation_method: "gemini-cli"
-resolution_status: "open"
-resolution_note: ""
+resolution_status: "accepted"
+resolution_note: "Addressed during spec/plan/tasks rounds (see plan.md reconciliation rollup)."
 raw_output_path: "docs/workflow/feature-runs/ff-housekeeping/reviews/tasks.gemini.coverage-adversarial.review.md.json"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -47,5 +47,5 @@ Even if all tasks are implemented as written, the following risks will remain:
 - `gemini-2.5-pro`: input=2787, output=905, total=17056
 
 ## Resolution
-- status: open
-- note:
+- status: accepted
+- note: Addressed during spec/plan/tasks rounds (see plan.md reconciliation rollup).

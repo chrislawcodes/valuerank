@@ -113,11 +113,32 @@ class ThreeWayReconcileTests(unittest.TestCase):
             "# Plan\n\n## Review Reconciliation\n\n",
         )
 
-    def test_pre_check_plan_does_not_exist(self) -> None:
+    def test_plan_missing_creates_it(self) -> None:
+        """When plan.md doesn't exist yet (first-run path), append script creates it.
+
+        Per PR #751 diff-review Codex regression MEDIUM #1 — earlier draft
+        hard-failed when plan.md was missing, regressing the legitimate
+        first-run case. Now we only require the parent dir to be writable.
+        """
         self.plan_path.unlink()
-        rc = self._reconcile("accepted", "x")
+        rc = self._reconcile("accepted", "first run")
+        self.assertEqual(rc, 0)
+        self.assertTrue(self.plan_path.exists())
+        plan_content = self.plan_path.read_text(encoding="utf-8")
+        self.assertIn(self.review_path.name, plan_content)
+
+    def test_plan_parent_missing_fails_pre_check(self) -> None:
+        """If even the parent dir of plan.md doesn't exist, fail clearly."""
+        bad_plan = self.tmp_root / "nonexistent_dir" / "plan.md"
+        rc = FACTORY_RECONCILE.reconcile_review_full(
+            review_path=self.review_path,
+            plan_path=bad_plan,
+            status="accepted",
+            note="x",
+            update_review_script=FACTORY_REVIEW.UPDATE_REVIEW,
+            append_reconciliation_script=FACTORY_REVIEW.APPEND_RECONCILIATION,
+        )
         self.assertEqual(rc, 2)
-        # review file untouched.
         review_content = self.review_path.read_text(encoding="utf-8")
         self.assertIn('resolution_status: "open"', review_content)
 

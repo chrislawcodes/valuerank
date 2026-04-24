@@ -1,0 +1,1162 @@
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py
+index 78ee2f2e..75e986d4 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py
+@@ -242,6 +242,26 @@ def command_deliver(args: argparse.Namespace) -> int:
+         print("deliver --override-judges requires --reason", file=sys.stderr)
+         raise SystemExit(2)
+ 
++    # PR #751 / FF Housekeeping Slice 3: implementation-rule WARN.
++    # Surface Claude-implementation cases at deliver time so the postmortem
++    # author sees them before pressing merge. Advisory, not blocking.
++    if getattr(args, "override_implementation_rule", False):
++        reason = (getattr(args, "override_implementation_reason", None) or "").strip()
++        if len(reason) < 10:
++            print(
++                "deliver --override-implementation-rule requires "
++                "--override-implementation-reason of at least 10 characters",
++                file=sys.stderr,
++            )
++            raise SystemExit(2)
++        from factory_deliver import record_implementation_rule_override
++        record_implementation_rule_override(args.slug, reason)
++    else:
++        from factory_deliver import check_implementation_rule
++        triggered, message = check_implementation_rule(args.slug)
++        if triggered:
++            print(message, file=sys.stderr)
++
+     auth = subprocess.run(["gh", "auth", "status", "--active"], text=True, capture_output=True)
+     if auth.returncode != 0:
+         raise SystemExit(trim_detail(auth.stderr or auth.stdout or "GitHub authentication is not ready"))
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_deliver.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_deliver.py
+index 73126675..bfcf3dcf 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_deliver.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_deliver.py
+@@ -1,6 +1,7 @@
+ #!/usr/bin/env python3
+ """GitHub CLI interaction, delivery records, and closeout text generation."""
+ import json
++import os
+ import subprocess
+ import time
+ from datetime import datetime, timezone
+@@ -14,6 +15,8 @@ if str(_SCRIPT_DIR) not in sys.path:
+ from factory_state import (  # noqa: E402
+     REPO_ROOT,
+     load_checkpoint_manifest,
++    load_workflow_state,
++    update_workflow_state,
+ )
+ 
+ REVIEW_SCRIPTS = REPO_ROOT / "docs" / "workflow" / "operations" / "codex-skills" / "review-lens" / "scripts"
+@@ -26,6 +29,122 @@ from factory_git import current_branch_name, command_path  # noqa: E402
+ from factory_stages import VERIFY_ON_CLOSEOUT_STAGES  # noqa: E402
+ 
+ 
++# ---------------------------------------------------------------------------
++# Implementation rule check (PR #751 / FF Housekeeping Slice 3)
++# ---------------------------------------------------------------------------
++
++_IMPLEMENTATION_RULE_THRESHOLD = 200
++_IMPLEMENTATION_RULE_CODE_GLOBS = ("*.py", "*.ts", "*.tsx", "*.js", "*.jsx")
++_IMPLEMENTATION_RULE_TEST_EXCLUDES = (
++    ":!**/test_*",
++    ":!**/*_test.py",
++    ":!**/tests/**",
++)
++
++
++def _resolve_branch_base() -> str | None:
++    """Find a sane branch base via origin/main → main → HEAD~50 fallback."""
++    for ref in ("origin/main", "main"):
++        result = subprocess.run(
++            ["git", "merge-base", ref, "HEAD"],
++            capture_output=True,
++            text=True,
++        )
++        if result.returncode == 0 and result.stdout.strip():
++            return result.stdout.strip()
++    result = subprocess.run(
++        ["git", "rev-parse", "HEAD~50"],
++        capture_output=True,
++        text=True,
++    )
++    if result.returncode == 0 and result.stdout.strip():
++        return result.stdout.strip()
++    return None
++
++
++def _added_code_lines(branch_base: str) -> int | None:
++    """Count added lines in code files (not tests, not docs) since branch_base."""
++    cmd = [
++        "git",
++        "diff",
++        "--numstat",
++        f"{branch_base}..HEAD",
++        "--",
++        *_IMPLEMENTATION_RULE_CODE_GLOBS,
++        *_IMPLEMENTATION_RULE_TEST_EXCLUDES,
++    ]
++    result = subprocess.run(cmd, capture_output=True, text=True)
++    if result.returncode != 0:
++        return None
++    total_added = 0
++    for line in result.stdout.splitlines():
++        parts = line.split("\t")
++        if len(parts) < 2:
++            continue
++        added_str = parts[0]
++        if added_str == "-":
++            continue
++        try:
++            total_added += int(added_str)
++        except ValueError:
++            continue
++    return total_added
++
++
++def check_implementation_rule(slug: str) -> tuple[bool, str]:
++    """Return (triggered, message). See spec FR-012-016."""
++    branch_base = _resolve_branch_base()
++    if branch_base is None:
++        return (
++            False,
++            "implementation-rule check skipped: could not determine branch base.",
++        )
++    added = _added_code_lines(branch_base)
++    if added is None:
++        return (False, "implementation-rule check skipped: git diff failed.")
++    if added <= _IMPLEMENTATION_RULE_THRESHOLD:
++        return (False, "")
++
++    state = load_workflow_state(slug)
++    if state.get("codex_dispatches"):
++        return (False, "")
++
++    head_result = subprocess.run(
++        ["git", "rev-parse", "HEAD"], capture_output=True, text=True
++    )
++    head_sha = head_result.stdout.strip() if head_result.returncode == 0 else ""
++    override = state.get("implementation_rule_override") or {}
++    if isinstance(override, dict) and override.get("head_sha") == head_sha and head_sha:
++        return (False, "")
++
++    msg = (
++        f"⚠ implementation-rule: {added} non-test code lines added with no recorded "
++        f"Codex dispatch. The postmortem must explain why Claude implemented this PR. "
++        f"Suppress with --override-implementation-rule "
++        f"--override-implementation-reason \"<text>\" (>= 10 chars)."
++    )
++    return (True, msg)
++
++
++def record_implementation_rule_override(slug: str, reason: str) -> None:
++    head_result = subprocess.run(
++        ["git", "rev-parse", "HEAD"], capture_output=True, text=True
++    )
++    head_sha = head_result.stdout.strip() if head_result.returncode == 0 else ""
++    operator = os.environ.get("USER") or "unknown"
++    override = {
++        "at": int(time.time()),
++        "reason": reason.strip(),
++        "operator": operator,
++        "head_sha": head_sha,
++    }
++
++    def _mutate(state: dict) -> None:
++        state["implementation_rule_override"] = override
++
++    update_workflow_state(slug, _mutate)
++
++
+ # ---------------------------------------------------------------------------
+ # GitHub CLI helpers
+ # ---------------------------------------------------------------------------
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_reconcile.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_reconcile.py
+new file mode 100644
+index 00000000..bce4effb
+--- /dev/null
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_reconcile.py
+@@ -0,0 +1,107 @@
++#!/usr/bin/env python3
++"""Three-way reconcile helper — keeps review frontmatter, body Resolution
++block, and plan.md reconciliation entry in sync.
++
++Why this exists:
++  Three prior feature runs (PR #744, #749, #750) hit `verify_review_checkpoint`
++  errors of the form "resolution status does not match frontmatter" or "plan.md
++  is missing reconciliation entry for reviews/foo.review.md". Every recovery
++  was hand-editing one or two of three sources to match. This helper bundles
++  the reconcile into a single entry point with a pre-check.
++
++Scope (per spec FR-002):
++  Pre-check + sequential write. NOT transactional. Mid-write failure can leave
++  drift; idempotent re-run is the recovery path.
++"""
++from __future__ import annotations
++
++import os
++import subprocess
++import sys
++from pathlib import Path
++
++
++def reconcile_review_full(
++    review_path: Path,
++    plan_path: Path,
++    status: str,
++    note: str,
++    *,
++    update_review_script: Path,
++    append_reconciliation_script: Path,
++    python_exe: str | None = None,
++) -> int:
++    """Update review frontmatter + body Resolution block + plan.md entry.
++
++    Returns 0 on success, 2 on pre-check or write failure.
++
++    Args:
++      review_path: absolute path to the .review.md file.
++      plan_path: absolute path to the workflow's plan.md.
++      status: one of "accepted", "rejected", "deferred", "open".
++      note: free-form note. Should be non-empty.
++      update_review_script: path to update_review_resolution.py (review-lens).
++      append_reconciliation_script: path to append_reconciliation_entry.py.
++      python_exe: Python executable. Defaults to sys.executable.
++    """
++    python_exe = python_exe or sys.executable
++
++    # --- Pre-check phase: validate both targets exist + writable ---
++    pre_check_errors: list[str] = []
++    if not review_path.exists():
++        pre_check_errors.append(f"review file does not exist: {review_path}")
++    elif not os.access(review_path, os.W_OK):
++        pre_check_errors.append(f"review file not writable: {review_path}")
++
++    if not plan_path.exists():
++        pre_check_errors.append(f"plan.md does not exist: {plan_path}")
++    elif not os.access(plan_path, os.W_OK):
++        pre_check_errors.append(f"plan.md not writable: {plan_path}")
++
++    if pre_check_errors:
++        for err in pre_check_errors:
++            print(f"reconcile pre-check failed: {err}", file=sys.stderr)
++        return 2
++
++    # --- Write phase 1: review frontmatter + body Resolution block ---
++    review_args = ["--review", str(review_path)]
++    update_cmd = [
++        python_exe,
++        str(update_review_script),
++        *review_args,
++        "--status",
++        status,
++        "--note",
++        note,
++    ]
++    update_result = subprocess.run(update_cmd, capture_output=True, text=True)
++    if update_result.returncode != 0:
++        print(
++            f"reconcile failed at update_review_resolution: {update_result.stderr.strip()}",
++            file=sys.stderr,
++        )
++        return 2
++
++    # --- Write phase 2: plan.md entry (dedup by review path) ---
++    append_cmd = [
++        python_exe,
++        str(append_reconciliation_script),
++        "--plan",
++        str(plan_path),
++        *review_args,
++        "--status",
++        status,
++        "--note",
++        note,
++    ]
++    append_result = subprocess.run(append_cmd, capture_output=True, text=True)
++    if append_result.returncode != 0:
++        print(
++            f"reconcile failed at append_reconciliation_entry: {append_result.stderr.strip()}\n"
++            f"  WARNING: review file at {review_path} was already updated; "
++            f"plan.md is now out of sync. Re-run reconcile to repair.",
++            file=sys.stderr,
++        )
++        return 2
++
++    return 0
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py
+index 6645a9be..c326d7d8 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py
+@@ -20,7 +20,15 @@ from pathlib import Path
+ # ---------------------------------------------------------------------------
+ 
+ REPO_ROOT: Path = Path(__file__).resolve().parents[6]
+-FACTORY_RUNS_ROOT: Path = REPO_ROOT / "docs" / "workflow" / "feature-runs"
++# PR #751 / FF Housekeeping Slice 4: honor FF_FACTORY_RUNS_ROOT env var so
++# tests can redirect the workflow root via subprocess env without monkey-
++# patching module state. Production paths are unaffected when absent.
++_RUNS_ROOT_OVERRIDE = os.environ.get("FF_FACTORY_RUNS_ROOT")
++FACTORY_RUNS_ROOT: Path = (
++    Path(_RUNS_ROOT_OVERRIDE).resolve()
++    if _RUNS_ROOT_OVERRIDE
++    else REPO_ROOT / "docs" / "workflow" / "feature-runs"
++)
+ 
+ # ---------------------------------------------------------------------------
+ # String constants used as workflow-state dictionary keys
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py
+index 7b99a445..1d9ae81a 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py
+@@ -187,12 +187,27 @@ def command_init(args: argparse.Namespace) -> int:
+ def command_reconcile(args: argparse.Namespace) -> int:
+     ensure_sync()
+     plan_path = workflow_dir(args.slug) / "plan.md"
+-    review_args = []
++
++    # PR #751 / FF Housekeeping Slice 2: route through factory_reconcile so
++    # frontmatter + body block + plan.md are pre-checked together. Three prior
++    # features (PR #744/#749/#750) hit verify_review_checkpoint drift errors;
++    # the helper raises pre-check failures BEFORE any partial write happens.
++    from factory_reconcile import reconcile_review_full  # noqa: E402
++    for review in args.review:
++        review_path = Path(review).resolve()
++        rc = reconcile_review_full(
++            review_path=review_path,
++            plan_path=plan_path,
++            status=args.status,
++            note=args.note,
++            update_review_script=UPDATE_REVIEW,
++            append_reconciliation_script=APPEND_RECONCILIATION,
++        )
++        if rc != 0:
++            return rc
++    review_args: list[str] = []
+     for review in args.review:
+         review_args.extend(["--review", str(Path(review).resolve())])
+-
+-    run([sys.executable, str(UPDATE_REVIEW), *review_args, "--status", args.status, "--note", args.note])
+-    run([sys.executable, str(APPEND_RECONCILIATION), "--plan", str(plan_path), *review_args, "--status", args.status, "--note", args.note])
+     run([sys.executable, str(VERIFY_RECONCILIATION), "--plan", str(plan_path), *review_args])
+     _emit_next_action(args.slug, f"reconcile ({args.status})")
+     return 0
+@@ -453,6 +468,11 @@ def build_parser() -> argparse.ArgumentParser:
+     deliver_parser.add_argument("--merge-when-green", action="store_true")
+     deliver_parser.add_argument("--auto-merge", action="store_true")
+     deliver_parser.add_argument("--dry-run", action="store_true")
++    deliver_parser.add_argument("--override-implementation-rule", action="store_true",
++        help="Suppress the implementation-rule WARN if Claude implemented "
++             "more than 200 lines without a Codex dispatch. Requires --override-implementation-reason.")
++    deliver_parser.add_argument("--override-implementation-reason",
++        help="Reason for overriding the implementation-rule WARN. Must be at least 10 characters.")
+     deliver_parser.set_defaults(func=command_deliver)
+ 
+     closeout_parser = subparsers.add_parser("closeout")
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_codex_quota_classifier.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_codex_quota_classifier.py
+new file mode 100644
+index 00000000..5fc9590b
+--- /dev/null
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_codex_quota_classifier.py
+@@ -0,0 +1,134 @@
++"""Slice 1 — `is_codex_quota_exhaustion` classifier + `write_quota_deferred` write path.
++
++Pin the matcher rules so future regressions are visible immediately.
++"""
++import importlib.util
++import sys
++import tempfile
++import unittest
++from pathlib import Path
++
++
++REVIEW_LENS_DIR = (
++    Path(__file__).resolve().parents[3]
++    / "review-lens"
++    / "scripts"
++)
++if str(REVIEW_LENS_DIR) not in sys.path:
++    sys.path.insert(0, str(REVIEW_LENS_DIR))
++
++
++def _load(name: str):
++    spec = importlib.util.spec_from_file_location(name, REVIEW_LENS_DIR / f"{name}.py")
++    assert spec and spec.loader
++    mod = importlib.util.module_from_spec(spec)
++    sys.modules[name] = mod
++    spec.loader.exec_module(mod)
++    return mod
++
++
++GEMINI_REVIEW = _load("run_gemini_review")
++
++
++class CodexQuotaClassifierTests(unittest.TestCase):
++    def _check(self, stderr: str = "", stdout: str = "") -> bool:
++        return GEMINI_REVIEW.is_codex_quota_exhaustion(stderr, stdout)
++
++    # Phrase-pattern positives
++    def test_youve_hit_your_usage_limit(self) -> None:
++        self.assertTrue(
++            self._check(stderr="ERROR: You've hit your usage limit. Upgrade to Pro.")
++        )
++
++    def test_usage_limit_exhausted(self) -> None:
++        self.assertTrue(self._check(stderr="usage_limit_exhausted: try again later"))
++
++    def test_quota_exceeded(self) -> None:
++        self.assertTrue(self._check(stderr="error: monthly quota exceeded"))
++
++    def test_monthly_quota(self) -> None:
++        self.assertTrue(self._check(stderr="Your monthly quota is depleted"))
++
++    def test_case_insensitive(self) -> None:
++        self.assertTrue(self._check(stderr="USAGE_LIMIT_EXHAUSTED"))
++
++    # HTTP status + Codex/OpenAI context positives
++    def test_429_with_openai_context(self) -> None:
++        self.assertTrue(
++            self._check(stderr="HTTP 429 from openai.com /v1/chat/completions")
++        )
++
++    def test_402_with_codex_context(self) -> None:
++        self.assertTrue(self._check(stderr="codex returned 402 Payment Required"))
++
++    def test_429_with_chatgpt_context(self) -> None:
++        self.assertTrue(self._check(stderr="429 from chatgpt.com api"))
++
++    # HTTP status WITHOUT Codex/OpenAI context — should NOT match
++    def test_429_alone_does_not_match(self) -> None:
++        self.assertFalse(self._check(stderr="429 Too Many Requests from upstream"))
++
++    def test_402_alone_does_not_match(self) -> None:
++        self.assertFalse(self._check(stderr="402 from billing system"))
++
++    def test_plain_rate_limit_text_alone(self) -> None:
++        """Per spec: 'rate limit' alone is NOT enough — needs HTTP status + context."""
++        self.assertFalse(self._check(stderr="rate limit triggered for unrelated API"))
++
++    # Genuine non-quota failures should NOT match
++    def test_timeout_does_not_match(self) -> None:
++        self.assertFalse(self._check(stderr="Codex review timed out after 300s"))
++
++    def test_malformed_json_does_not_match(self) -> None:
++        self.assertFalse(
++            self._check(stderr="json.JSONDecodeError: expecting value at line 1 col 1")
++        )
++
++    def test_empty_inputs(self) -> None:
++        self.assertFalse(self._check())
++
++    def test_stdout_alone_can_match(self) -> None:
++        """Either stderr or stdout may carry the pattern."""
++        self.assertTrue(
++            self._check(stdout="429 from openai.com")
++        )
++
++
++class WriteQuotaDeferredTests(unittest.TestCase):
++    def test_writes_deferred_status_and_note(self) -> None:
++        with tempfile.TemporaryDirectory() as tmpdir:
++            output_path = Path(tmpdir) / "spec.codex.feasibility-adversarial.review.md"
++            metadata = {
++                "reviewer": "codex",
++                "lens": "feasibility-adversarial",
++                "stage": "spec",
++                "artifact_path": "docs/workflow/feature-runs/x/spec.md",
++                "artifact_sha256": "abc",
++                "repo_root": ".",
++                "git_head_sha": "deadbeef",
++                "git_base_ref": "origin/main",
++                "git_base_sha": "1234",
++                "generation_method": "codex-runner",
++                "resolution_status": "open",
++                "resolution_note": "",
++                "raw_output_path": "",
++                "narrowed_artifact_path": "",
++                "narrowed_artifact_sha256": "",
++                "coverage_status": "full",
++                "coverage_note": "",
++            }
++            GEMINI_REVIEW.write_quota_deferred(output_path, metadata)
++
++            content = output_path.read_text(encoding="utf-8")
++            self.assertIn('resolution_status: "deferred"', content)
++            self.assertIn("Codex quota exhausted", content)
++            self.assertIn("https://chatgpt.com/codex/settings/usage", content)
++            # Frontmatter and body block must agree (fixes the verify_review_checkpoint
++            # 3-way drift problem from prior features).
++            body_resolution_idx = content.index("## Resolution")
++            body_block = content[body_resolution_idx:]
++            self.assertIn("- status: deferred", body_block)
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_completeness_veto.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_completeness_veto.py
+index 48ab6d4d..6dc87f3f 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_completeness_veto.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_completeness_veto.py
+@@ -342,6 +342,7 @@ class CompletenessVetoTests(unittest.TestCase):
+             }), \
+             patch.object(DELIVER, "required_check_summary", return_value=("pass", [], "")), \
+             patch.object(DELIVER.subprocess, "run", side_effect=gh_side_effect), \
++            patch.object(__import__("factory_deliver"), "check_implementation_rule", return_value=(False, "")), \
+             patch.dict(DELIVER.os.environ, {"USER": "test-operator"}, clear=False):
+             with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                 rc = DELIVER.command_deliver(args)
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_deliver.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_deliver.py
+index 3f5e4212..d52f74cf 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_deliver.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_cmd_deliver.py
+@@ -126,6 +126,9 @@ class FactoryDeliverTests(unittest.TestCase):
+                 FACTORY_STATE.atomic_json_write(manifest_path, {"healthy": True})
+ 
+     def _base_patches(self):
++        # Import factory_deliver lazily so its globals can be patched here.
++        import importlib
++        factory_deliver = importlib.import_module("factory_deliver")
+         return [
+             patch.object(DELIVER, "ensure_sync", return_value=None),
+             patch.object(DELIVER, "command_path", return_value=True),
+@@ -135,6 +138,11 @@ class FactoryDeliverTests(unittest.TestCase):
+             patch.object(DELIVER, "upstream_branch_name", return_value="origin/main"),
+             patch.object(DELIVER, "git_output", return_value="head-sha"),
+             patch.object(DELIVER, "commits_behind_upstream", return_value=0),
++            # PR #751: implementation-rule check makes its own git subprocess
++            # calls. Mock to a no-op for existing deliver tests so they don't
++            # trip on the new shell-out. Tests covering the rule live in
++            # test_implementation_rule.py.
++            patch.object(factory_deliver, "check_implementation_rule", return_value=(False, "")),
+         ]
+ 
+     def _run_deliver(
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_implementation_rule.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_implementation_rule.py
+new file mode 100644
+index 00000000..951cbd78
+--- /dev/null
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_implementation_rule.py
+@@ -0,0 +1,158 @@
++"""Slice 3 — implementation-rule WARN at deliver."""
++import importlib.util
++import sys
++import tempfile
++import unittest
++from pathlib import Path
++from unittest.mock import MagicMock, patch
++
++
++SCRIPTS_DIR = Path(__file__).resolve().parents[1]
++if str(SCRIPTS_DIR) not in sys.path:
++    sys.path.insert(0, str(SCRIPTS_DIR))
++
++
++def _load(name: str):
++    spec = importlib.util.spec_from_file_location(name, SCRIPTS_DIR / f"{name}.py")
++    assert spec and spec.loader
++    mod = importlib.util.module_from_spec(spec)
++    sys.modules[name] = mod
++    spec.loader.exec_module(mod)
++    return mod
++
++
++FACTORY_STATE = _load("factory_state")
++FACTORY_DELIVER = _load("factory_deliver")
++
++
++def _mock_run_factory(*, base_succeeds: bool = True, head_sha: str = "abcdef0", added_lines: int = 0):
++    """Build a side-effect for subprocess.run that simulates git commands."""
++    def side_effect(cmd, *args, **kwargs):
++        result = MagicMock()
++        result.stdout = ""
++        result.stderr = ""
++        result.returncode = 0
++        if cmd[:2] == ["git", "merge-base"]:
++            if base_succeeds:
++                result.stdout = "basesha\n"
++                result.returncode = 0
++            else:
++                result.returncode = 1
++        elif cmd[:2] == ["git", "rev-parse"] and "HEAD~50" in cmd:
++            if base_succeeds:
++                result.stdout = "basesha\n"
++            else:
++                result.returncode = 1
++        elif cmd[:2] == ["git", "rev-parse"] and cmd[2:] == ["HEAD"]:
++            result.stdout = head_sha + "\n"
++        elif cmd[:2] == ["git", "diff"]:
++            # numstat format: <added>\t<deleted>\t<file>
++            if added_lines > 0:
++                result.stdout = f"{added_lines}\t10\tsome_file.py\n"
++            else:
++                result.stdout = ""
++        return result
++    return side_effect
++
++
++class CheckImplementationRuleTests(unittest.TestCase):
++    def setUp(self) -> None:
++        self.tmpdir = tempfile.mkdtemp()
++        self.tmp_root = Path(self.tmpdir)
++        self.slug = "impl-rule-test"
++        self._patch = patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", self.tmp_root)
++        self._patch.start()
++        FACTORY_STATE.workflow_dir(self.slug).mkdir(parents=True, exist_ok=True)
++        FACTORY_STATE.atomic_json_write(
++            FACTORY_STATE.factory_state_path(self.slug),
++            FACTORY_STATE._default_workflow_state(),
++        )
++
++    def tearDown(self) -> None:
++        self._patch.stop()
++
++    def test_triggered_over_threshold_no_dispatches_no_override(self) -> None:
++        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(added_lines=250)):
++            triggered, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
++        self.assertTrue(triggered)
++        self.assertIn("250", msg)
++        self.assertIn("Codex dispatch", msg)
++
++    def test_under_threshold_not_triggered(self) -> None:
++        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(added_lines=50)):
++            triggered, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
++        self.assertFalse(triggered)
++        self.assertEqual(msg, "")
++
++    def test_codex_dispatch_recorded_suppresses(self) -> None:
++        state = FACTORY_STATE.load_workflow_state(self.slug)
++        state["codex_dispatches"] = [{"at": 12345, "command": "codex exec ..."}]
++        FACTORY_STATE.atomic_json_write(FACTORY_STATE.factory_state_path(self.slug), state)
++        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(added_lines=300)):
++            triggered, _ = FACTORY_DELIVER.check_implementation_rule(self.slug)
++        self.assertFalse(triggered)
++
++    def test_override_matching_head_suppresses(self) -> None:
++        state = FACTORY_STATE.load_workflow_state(self.slug)
++        state["implementation_rule_override"] = {
++            "head_sha": "abcdef0",
++            "reason": "explained reason here",
++            "at": 12345,
++            "operator": "tester",
++        }
++        FACTORY_STATE.atomic_json_write(FACTORY_STATE.factory_state_path(self.slug), state)
++        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(added_lines=300, head_sha="abcdef0")):
++            triggered, _ = FACTORY_DELIVER.check_implementation_rule(self.slug)
++        self.assertFalse(triggered)
++
++    def test_override_stale_head_does_not_suppress(self) -> None:
++        state = FACTORY_STATE.load_workflow_state(self.slug)
++        state["implementation_rule_override"] = {
++            "head_sha": "oldsha9",
++            "reason": "stale override from earlier HEAD",
++            "at": 12345,
++            "operator": "tester",
++        }
++        FACTORY_STATE.atomic_json_write(FACTORY_STATE.factory_state_path(self.slug), state)
++        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(added_lines=300, head_sha="newsha1")):
++            triggered, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
++        self.assertTrue(triggered)
++        self.assertIn("300", msg)
++
++    def test_skip_when_branch_base_unresolved(self) -> None:
++        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(base_succeeds=False)):
++            triggered, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
++        self.assertFalse(triggered)
++        self.assertIn("could not determine branch base", msg)
++
++
++class RecordOverrideTests(unittest.TestCase):
++    def setUp(self) -> None:
++        self.tmpdir = tempfile.mkdtemp()
++        self.tmp_root = Path(self.tmpdir)
++        self.slug = "override-test"
++        self._patch = patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", self.tmp_root)
++        self._patch.start()
++        FACTORY_STATE.workflow_dir(self.slug).mkdir(parents=True, exist_ok=True)
++        FACTORY_STATE.atomic_json_write(
++            FACTORY_STATE.factory_state_path(self.slug),
++            FACTORY_STATE._default_workflow_state(),
++        )
++
++    def tearDown(self) -> None:
++        self._patch.stop()
++
++    def test_record_writes_override_with_head_and_reason(self) -> None:
++        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(head_sha="ddd")):
++            FACTORY_DELIVER.record_implementation_rule_override(
++                self.slug, "  Codex quota exhausted, see postmortem  "
++            )
++        state = FACTORY_STATE.load_workflow_state(self.slug)
++        override = state["implementation_rule_override"]
++        self.assertEqual(override["head_sha"], "ddd")
++        self.assertEqual(override["reason"], "Codex quota exhausted, see postmortem")
++        self.assertGreater(override["at"], 0)
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_three_way_reconcile.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_three_way_reconcile.py
+new file mode 100644
+index 00000000..23b96a99
+--- /dev/null
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_three_way_reconcile.py
+@@ -0,0 +1,167 @@
++"""Slice 2 — 3-way reconcile helper.
++
++Pre-check + sequential write of review frontmatter, body Resolution block,
++and plan.md reconciliation entry. Covers happy path, pre-check failure,
++idempotent re-run.
++"""
++import importlib.util
++import os
++import stat
++import sys
++import tempfile
++import unittest
++from pathlib import Path
++
++
++SCRIPTS_DIR = Path(__file__).resolve().parents[1]
++if str(SCRIPTS_DIR) not in sys.path:
++    sys.path.insert(0, str(SCRIPTS_DIR))
++
++
++def _load(name: str):
++    spec = importlib.util.spec_from_file_location(name, SCRIPTS_DIR / f"{name}.py")
++    assert spec and spec.loader
++    mod = importlib.util.module_from_spec(spec)
++    sys.modules[name] = mod
++    spec.loader.exec_module(mod)
++    return mod
++
++
++FACTORY_RECONCILE = _load("factory_reconcile")
++FACTORY_REVIEW = _load("factory_review")
++
++
++_FRONTMATTER_TEMPLATE = """---
++reviewer: "codex"
++lens: "feasibility-adversarial"
++stage: "spec"
++artifact_path: "docs/workflow/feature-runs/x/spec.md"
++artifact_sha256: "abc123"
++repo_root: "."
++git_head_sha: "deadbeef"
++git_base_ref: "origin/main"
++git_base_sha: "1234"
++generation_method: "codex-runner"
++resolution_status: "open"
++resolution_note: ""
++raw_output_path: ""
++narrowed_artifact_path: ""
++narrowed_artifact_sha256: ""
++coverage_status: "full"
++coverage_note: ""
++---
++
++# Review: spec feasibility-adversarial
++
++## Findings
++
++- HIGH: example finding.
++
++## Residual Risks
++
++- example risk.
++
++## Resolution
++- status: open
++- note:
++"""
++
++
++class ThreeWayReconcileTests(unittest.TestCase):
++    def setUp(self) -> None:
++        self.tmpdir = tempfile.mkdtemp()
++        self.tmp_root = Path(self.tmpdir)
++        self.review_path = self.tmp_root / "spec.codex.feasibility-adversarial.review.md"
++        self.review_path.write_text(_FRONTMATTER_TEMPLATE, encoding="utf-8")
++        self.plan_path = self.tmp_root / "plan.md"
++        self.plan_path.write_text("# Plan\n\n## Review Reconciliation\n\n", encoding="utf-8")
++
++    def _reconcile(self, status: str, note: str) -> int:
++        return FACTORY_RECONCILE.reconcile_review_full(
++            review_path=self.review_path,
++            plan_path=self.plan_path,
++            status=status,
++            note=note,
++            update_review_script=FACTORY_REVIEW.UPDATE_REVIEW,
++            append_reconciliation_script=FACTORY_REVIEW.APPEND_RECONCILIATION,
++        )
++
++    def test_happy_path_all_three_in_sync(self) -> None:
++        rc = self._reconcile("accepted", "all good")
++        self.assertEqual(rc, 0)
++
++        review_content = self.review_path.read_text(encoding="utf-8")
++        self.assertIn('resolution_status: "accepted"', review_content)
++        self.assertIn('resolution_note: "all good"', review_content)
++        # Body Resolution block matches frontmatter.
++        body_resolution = review_content.split("## Resolution", 1)[-1]
++        self.assertIn("- status: accepted", body_resolution)
++        self.assertIn("- note: all good", body_resolution)
++
++        plan_content = self.plan_path.read_text(encoding="utf-8")
++        self.assertIn(self.review_path.name, plan_content)
++        self.assertIn("status: accepted", plan_content)
++        self.assertIn("note: all good", plan_content)
++
++    def test_pre_check_review_does_not_exist(self) -> None:
++        self.review_path.unlink()
++        rc = self._reconcile("accepted", "x")
++        self.assertEqual(rc, 2)
++        # plan.md should NOT have been touched.
++        self.assertEqual(
++            self.plan_path.read_text(encoding="utf-8"),
++            "# Plan\n\n## Review Reconciliation\n\n",
++        )
++
++    def test_pre_check_plan_does_not_exist(self) -> None:
++        self.plan_path.unlink()
++        rc = self._reconcile("accepted", "x")
++        self.assertEqual(rc, 2)
++        # review file untouched.
++        review_content = self.review_path.read_text(encoding="utf-8")
++        self.assertIn('resolution_status: "open"', review_content)
++
++    def test_pre_check_plan_read_only(self) -> None:
++        os.chmod(self.plan_path, 0o444)
++        try:
++            rc = self._reconcile("accepted", "x")
++            self.assertEqual(rc, 2)
++            review_content = self.review_path.read_text(encoding="utf-8")
++            self.assertIn('resolution_status: "open"', review_content)
++        finally:
++            os.chmod(self.plan_path, 0o644)
++
++    def test_idempotent_rerun(self) -> None:
++        rc1 = self._reconcile("accepted", "ok")
++        self.assertEqual(rc1, 0)
++        plan_content_after_first = self.plan_path.read_text(encoding="utf-8")
++        rc2 = self._reconcile("accepted", "ok")
++        self.assertEqual(rc2, 0)
++        plan_content_after_second = self.plan_path.read_text(encoding="utf-8")
++        # Plan.md content shouldn't grow on re-run (dedup by review path).
++        self.assertEqual(plan_content_after_first, plan_content_after_second)
++
++    def test_drift_repair(self) -> None:
++        """Start with frontmatter and body block out of sync — helper repairs."""
++        # Hand-edit body block to "deferred" while frontmatter stays "open".
++        content = self.review_path.read_text(encoding="utf-8")
++        content = content.replace(
++            "## Resolution\n- status: open\n- note:\n",
++            "## Resolution\n- status: deferred\n- note: hand-edit\n",
++        )
++        self.review_path.write_text(content, encoding="utf-8")
++
++        rc = self._reconcile("accepted", "repair drift")
++        self.assertEqual(rc, 0)
++
++        # All three converge.
++        review_content = self.review_path.read_text(encoding="utf-8")
++        self.assertIn('resolution_status: "accepted"', review_content)
++        self.assertIn('resolution_note: "repair drift"', review_content)
++        body_resolution = review_content.split("## Resolution", 1)[-1]
++        self.assertIn("- status: accepted", body_resolution)
++        self.assertIn("- note: repair drift", body_resolution)
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_validation_only_smoke.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_validation_only_smoke.py
+new file mode 100644
+index 00000000..138642c5
+--- /dev/null
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_validation_only_smoke.py
+@@ -0,0 +1,154 @@
++"""Slice 4 — end-to-end smoke test for `checkpoint --validation-only`.
++
++Drives the CLI via subprocess so argparse + command_checkpoint + the inner
++helper are all exercised. Catches argparse-level regressions that unit
++tests on the helper would miss.
++"""
++import hashlib
++import json
++import os
++import subprocess
++import sys
++import tempfile
++import unittest
++from pathlib import Path
++
++
++SCRIPTS_DIR = Path(__file__).resolve().parents[1]
++REPO_ROOT = Path(__file__).resolve().parents[6]
++RUN_FACTORY = SCRIPTS_DIR / "run_factory.py"
++
++
++_REVIEW_TEMPLATE = """---
++reviewer: "codex"
++lens: "{lens}"
++stage: "spec"
++artifact_path: "docs/workflow/feature-runs/{slug}/spec.md"
++artifact_sha256: "oldsha1234567890"
++repo_root: "."
++git_head_sha: "deadbeef"
++git_base_ref: "origin/main"
++git_base_sha: "1234"
++generation_method: "codex-runner"
++resolution_status: "accepted"
++resolution_note: "ok"
++raw_output_path: ""
++narrowed_artifact_path: ""
++narrowed_artifact_sha256: ""
++coverage_status: "full"
++coverage_note: ""
++---
++
++# Review: spec {lens}
++
++## Findings
++
++placeholder.
++
++## Residual Risks
++
++placeholder.
++
++## Resolution
++- status: accepted
++- note: ok
++"""
++
++
++class ValidationOnlySmokeTests(unittest.TestCase):
++    def setUp(self) -> None:
++        self.tmpdir = tempfile.mkdtemp()
++        self.runs_root = Path(self.tmpdir) / "feature-runs"
++        self.slug = "smoke"
++        workflow_dir = self.runs_root / self.slug
++        reviews_dir = workflow_dir / "reviews"
++        reviews_dir.mkdir(parents=True, exist_ok=True)
++
++        # Artifact with predictable content.
++        self.artifact = workflow_dir / "spec.md"
++        self.artifact.write_text("# Spec\n\nbody\n", encoding="utf-8")
++
++        # 3 review files, all with the same drifted SHA.
++        self.review_paths = []
++        for lens in ("feasibility-adversarial", "edge-cases-adversarial", "requirements-adversarial"):
++            reviewer = "gemini" if lens == "requirements-adversarial" else "codex"
++            p = reviews_dir / f"spec.{reviewer}.{lens}.review.md"
++            p.write_text(_REVIEW_TEMPLATE.format(lens=lens, slug=self.slug), encoding="utf-8")
++            self.review_paths.append(p)
++
++        # Manifest pointing to the 3 reviews. Use absolute paths so
++        # resolve_stored_path doesn't try to resolve relative to REPO_ROOT.
++        manifest = {
++            "feature_slug": self.slug,
++            "stage": "spec",
++            "artifact_path": str(self.artifact),
++            "required_reviews": [
++                {"reviewer": "codex", "lens": "feasibility-adversarial", "path": str(self.review_paths[0])},
++                {"reviewer": "codex", "lens": "edge-cases-adversarial", "path": str(self.review_paths[1])},
++                {"reviewer": "gemini", "lens": "requirements-adversarial", "path": str(self.review_paths[2])},
++            ],
++        }
++        (reviews_dir / "spec.checkpoint.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
++
++        # Minimal state.json.
++        (workflow_dir / "state.json").write_text(
++            json.dumps({"stages": {}}, indent=2),
++            encoding="utf-8",
++        )
++
++    def _env(self) -> dict:
++        env = dict(os.environ)
++        env["FF_FACTORY_RUNS_ROOT"] = str(self.runs_root)
++        return env
++
++    def test_validation_only_reseals_drifted_reviews(self) -> None:
++        result = subprocess.run(
++            [
++                sys.executable,
++                str(RUN_FACTORY),
++                "checkpoint",
++                "--slug",
++                self.slug,
++                "--stage",
++                "spec",
++                "--validation-only",
++            ],
++            cwd=str(REPO_ROOT),
++            env=self._env(),
++            capture_output=True,
++            text=True,
++        )
++        self.assertEqual(
++            result.returncode,
++            0,
++            msg=f"stdout={result.stdout!r}\nstderr={result.stderr!r}",
++        )
++        # All 3 reviews should now have the artifact's current SHA.
++        # We don't compute it directly here — just assert it's NOT the old one.
++        for p in self.review_paths:
++            content = p.read_text(encoding="utf-8")
++            self.assertNotIn('artifact_sha256: "oldsha1234567890"', content)
++
++    def test_validation_only_with_fast_is_mutually_exclusive(self) -> None:
++        result = subprocess.run(
++            [
++                sys.executable,
++                str(RUN_FACTORY),
++                "checkpoint",
++                "--slug",
++                self.slug,
++                "--stage",
++                "diff",  # --fast requires --stage diff
++                "--validation-only",
++                "--fast",
++            ],
++            cwd=str(REPO_ROOT),
++            env=self._env(),
++            capture_output=True,
++            text=True,
++        )
++        self.assertNotEqual(result.returncode, 0)
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/docs/workflow/operations/codex-skills/review-lens/scripts/run_codex_review.py b/docs/workflow/operations/codex-skills/review-lens/scripts/run_codex_review.py
+index ad9f4d03..757696ea 100644
+--- a/docs/workflow/operations/codex-skills/review-lens/scripts/run_codex_review.py
++++ b/docs/workflow/operations/codex-skills/review-lens/scripts/run_codex_review.py
+@@ -12,6 +12,7 @@ from run_gemini_review import (
+     ensure_allowed_path,
+     ensure_sections,
+     format_stats,
++    is_codex_quota_exhaustion,
+     normalized_artifact_text,
+     prompt_for,
+     read_text,
+@@ -24,6 +25,7 @@ from run_gemini_review import (
+     text_or_empty,
+     write_failure,
+     write_narrowed_artifact,
++    write_quota_deferred,
+     write_report,
+ )
+ 
+@@ -242,6 +244,19 @@ def main() -> int:
+         return 3
+     if result.returncode != 0:
+         last_message_path.unlink(missing_ok=True)
++        # PR #751 / FF Housekeeping Slice 1: detect Codex quota / usage-limit
++        # exhaustion in stderr/stdout and route to deferred (not failed) so the
++        # checkpoint doesn't lock up on a quota issue. Plain `rate limit` is
++        # not enough — see is_codex_quota_exhaustion for the precise rule.
++        if is_codex_quota_exhaustion(result.stderr, result.stdout):
++            write_quota_deferred(
++                output_path,
++                metadata,
++                stdout_path,
++                stderr_path,
++            )
++            log_attempt("deferred", 0, "Codex quota exhausted")
++            return 0
+         write_failure(
+             output_path,
+             metadata,
+diff --git a/docs/workflow/operations/codex-skills/review-lens/scripts/run_gemini_review.py b/docs/workflow/operations/codex-skills/review-lens/scripts/run_gemini_review.py
+index 7f861c73..a6374a46 100644
+--- a/docs/workflow/operations/codex-skills/review-lens/scripts/run_gemini_review.py
++++ b/docs/workflow/operations/codex-skills/review-lens/scripts/run_gemini_review.py
+@@ -289,6 +289,85 @@ def ensure_sections(response: str) -> tuple[str, str]:
+     return findings, residual
+ 
+ 
++_QUOTA_PHRASE_PATTERNS = (
++    "you've hit your usage limit",
++    "usage_limit_exhausted",
++    "quota exceeded",
++    "monthly quota",
++)
++_CODEX_CONTEXT_MARKERS = ("openai.com", "chatgpt.com", "codex", "usage")
++_CODEX_USAGE_URL = "https://chatgpt.com/codex/settings/usage"
++
++
++def is_codex_quota_exhaustion(stderr: str, stdout: str) -> bool:
++    """Detect Codex quota / usage-limit exhaustion in subprocess output.
++
++    Returns True iff EITHER:
++      - one of the explicit phrase patterns matches case-insensitively, OR
++      - HTTP 402 or 429 appears AND a Codex/OpenAI context marker
++        (openai.com, chatgpt.com, codex, or usage) appears in the same blob.
++
++    Plain `rate limit` text is NOT enough on its own — a Gemini 429 or any
++    other 429 should NOT be classified as Codex quota exhaustion. Combined
++    so the classifier is canonical (one source of truth, not duplicated).
++    """
++    blob = f"{stderr}\n{stdout}".lower()
++    for phrase in _QUOTA_PHRASE_PATTERNS:
++        if phrase in blob:
++            return True
++    if ("402" in blob or "429" in blob) and any(
++        marker in blob for marker in _CODEX_CONTEXT_MARKERS
++    ):
++        return True
++    return False
++
++
++def write_quota_deferred(
++    output_path: Path,
++    metadata: dict[str, str],
++    stdout_path: Path | None = None,
++    stderr_path: Path | None = None,
++) -> None:
++    """Write a review marked as deferred due to Codex quota exhaustion.
++
++    Used when run_codex_review's subprocess fails AND
++    :func:`is_codex_quota_exhaustion` matches the output. Replaces the
++    `failed` outcome which would block checkpoint progression.
++    """
++    metadata = dict(metadata)
++    metadata["resolution_status"] = "deferred"
++    note = f"Codex quota exhausted — re-run after quota refresh. See {_CODEX_USAGE_URL}"
++    metadata["resolution_note"] = note
++    body_lines = [
++        f"# Review: {metadata['stage']} {metadata['lens']}",
++        "",
++        "## Findings",
++        "",
++        "Codex quota exhausted before this review completed. The checkpoint is "
++        "deferred (not failed) so the workflow can advance; re-run the checkpoint "
++        "after quota refresh.",
++        "",
++        "## Residual Risks",
++        "",
++        "- Review coverage is reduced for this round; re-run to backfill.",
++        "",
++        "## Quota Evidence",
++    ]
++    if stdout_path:
++        body_lines.append(f"- stdout: `{stdout_path}`")
++    if stderr_path:
++        body_lines.append(f"- stderr: `{stderr_path}`")
++    body_lines.extend(
++        [
++            "",
++            "## Resolution",
++            "- status: deferred",
++            f"- note: {note}",
++        ]
++    )
++    write_report(output_path, metadata, "\n".join(body_lines))
++
++
+ def write_failure(
+     output_path: Path,
+     metadata: dict[str, str],

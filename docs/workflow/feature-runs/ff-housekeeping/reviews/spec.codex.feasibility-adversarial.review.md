@@ -9,8 +9,8 @@ git_head_sha: "abe37af6980410617bc8583fba79f3603ad9b221"
 git_base_ref: "origin/main"
 git_base_sha: "85a91778b3c3de491fd6b326879d29fa5dc6d0fa"
 generation_method: "codex-runner"
-resolution_status: "open"
-resolution_note: ""
+resolution_status: "accepted"
+resolution_note: "Addressed during spec/plan/tasks rounds (see plan.md reconciliation rollup)."
 raw_output_path: "docs/workflow/feature-runs/ff-housekeeping/reviews/spec.codex.feasibility-adversarial.review.md.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -38,5 +38,5 @@ coverage_note: ""
 - total_tokens=0
 
 ## Resolution
-- status: open
-- note: 
+- status: accepted
+- note: Addressed during spec/plan/tasks rounds (see plan.md reconciliation rollup).
