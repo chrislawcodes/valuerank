@@ -3,14 +3,14 @@ reviewer: "codex"
 lens: "feasibility-adversarial"
 stage: "spec"
 artifact_path: "docs/workflow/feature-runs/ff-runner-fixes/spec.md"
-artifact_sha256: "026757984d1f921d93c5a73e8885d9882a5c0c36b55f767bdabe655968cbeae0"
+artifact_sha256: "64a54910ad67fdd4b54e618d9f96b68b1fd5db4639f89e037aaad581c62481ba"
 repo_root: "."
-git_head_sha: "95c4e50c40146980f88be52ac1f48cf3170178fc"
+git_head_sha: "7b414cadc42e915c128f35f296d36dca61c9d85b"
 git_base_ref: "origin/claude/friendly-aryabhata-9efbf7"
 git_base_sha: "6f5ed232c83bbd0f51ac8419ac6fb9688b8b8fad"
 generation_method: "codex-runner"
-resolution_status: "accepted"
-resolution_note: "Round-2 findings addressed: MEDIUM US3-vs-FR-009 contradiction — US3 updated to say stderr matching FR-009. MEDIUM pr-body addressed_by — rendering now requires addressed_at (state-bearing field), matching _concern_is_resolved and the FR-004 gate. LOW fenced-code-block regex match — pinned as documented limitation with explicit test."
+resolution_status: "open"
+resolution_note: ""
 raw_output_path: "docs/workflow/feature-runs/ff-runner-fixes/reviews/spec.codex.feasibility-adversarial.review.md.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,17 +22,19 @@ coverage_note: ""
 
 ## Findings
 
-- Medium: The spec is internally contradictory about invariant-warning output. US3 still says the contradiction message is printed to stdout, but FR-009 later requires stderr-only, and the current implementation already emits stderr only. That leaves implementers and tests with two incompatible targets unless one side is removed. [CODE-CONFIRMED] See [factory_invariants.py](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_invariants.py#L23) and [factory_invariants.py](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_invariants.py#L36)
+- HIGH [CODE-CONFIRMED]: [`FR-003`](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/spec.md#L115) and [`FR-011a`](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/spec.md#L138) do not backfill `id` for existing `unresolved_concerns`. The required run-033 fixture already has open concerns without `id` in [`run-033-state-pre-fix.json`](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/fixtures/run-033-state-pre-fix.json#L1136), while new IDs are only created for freshly raised concerns in [`factory_cmd_judge.py`](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py#L159-L193). That means the regression input this spec explicitly requires cannot be addressed with `checkpoint --address/--defer/--dismiss`, so the new lifecycle is unusable on existing runs.
 
-- Medium: FR-005a says `addressed_by` is evidence only, not resolution, but the current PR-body resolver still treats any non-empty `addressed_by` as resolved. That means a concern can be displayed in the “resolved concerns” block even though FR-004 would still block the next checkpoint on it. [CODE-CONFIRMED] See [factory_pr_body.py](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_pr_body.py#L135) and [factory_pr_body.py](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_pr_body.py#L148)
+- MEDIUM [CODE-CONFIRMED]: [`FR-009`](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/spec.md#L135) omits `discover` and `parallel`, but the runner already treats both as state-mutating commands in [`run_factory.py`](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py#L102-L118). The guardrail would still miss contradictions after those commands, so the spec does not actually cover every state mutation path the codebase uses.
 
-- Low: FR-006’s “structural anchoring” still leaves fenced-code and quoted-example cases vulnerable, because the regex only checks line starts. A review that includes a literal example like `- HIGH:` or `Severity: HIGH` inside a code block will still match and be treated as actionable, but the spec only calls out prose false-positives. [CODE-CONFIRMED] See [factory_review_specs.py](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_review_specs.py#L20) and [test_factory_review_specs.py](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_review_specs.py#L116)
+- MEDIUM [CODE-CONFIRMED]: [`US1` scenario 3](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/spec.md#L68-L71) says the next checkpoint can treat concerns as closed when they are “referenced as `addressed` in plan annotations,” but [`FR-004`](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/spec.md#L116-L118) says annotations are display-only and only `addressed_at`, `deferred_reason`, or `dismissed_reason` close a concern. The implementation in [`factory_pr_body.py`](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_pr_body.py#L32-L47) follows FR-004, so the spec is internally inconsistent and will force a choice later.
+
+- MEDIUM [CODE-CONFIRMED]: [`FR-006`](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/spec.md#L122-L129) and [`FR-007`](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/spec.md#L130-L131) overstate the false-positive protection from structural anchoring. The current regex still matches literal severity lines inside fenced code blocks, and the test suite explicitly preserves that behavior in [`test_factory_review_specs.py`](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_review_specs.py#L177-L194). So a review that quotes a finding example in a code fence can still be auto-accepted.
 
 ## Residual Risks
 
-- The concern-ID scheme is still based on a 12-char hash of a reasoning prefix, so heavy paraphrasing can split one real concern into two IDs. The spec accepts that risk, but the lifecycle will remain fuzzy in practice.
-- If you want the regex fix to stay safe, add at least one negative case for fenced code blocks or blockquotes. The current test matrix only covers prose mid-sentence and one “code block prose” phrase, not literal markdown fences.
-- The run-033 regression fixture naming is still split between the existing `run-033-state-pre-fix.json` and the spec’s proposed `run-033-snapshot.json`. Pick one canonical fixture name so the regression input does not drift.
+- The invariant in [`FR-010`](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/spec.md#L136-L139) is still narrow. It only flags the same-stage `repair_<stage>_checkpoint` contradiction, so other bad next-action states can still slip through.
+
+- The ID scheme in [`FR-003`](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/spec.md#L115) remains paraphrase-sensitive by design. Even after backfilling old concerns, heavy rewording can still split one concern into multiple IDs.
 
 ## Runner Stats
 - total_input=0
@@ -40,5 +42,5 @@ coverage_note: ""
 - total_tokens=0
 
 ## Resolution
-- status: accepted
-- note: Round-2 findings addressed: MEDIUM US3-vs-FR-009 contradiction — US3 updated to say stderr matching FR-009. MEDIUM pr-body addressed_by — rendering now requires addressed_at (state-bearing field), matching _concern_is_resolved and the FR-004 gate. LOW fenced-code-block regex match — pinned as documented limitation with explicit test.
+- status: open
+- note: 

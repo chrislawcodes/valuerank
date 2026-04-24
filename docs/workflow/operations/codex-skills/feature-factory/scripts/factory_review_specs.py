@@ -60,8 +60,10 @@ _ACTIONABLE_FINDING_RE = re.compile(
     # 3. Bullet + bare severity + bracket tag: "- high [code-confirmed]:"
     r"^\s*-\s+" + _SEV + r"\s+\[[^\]]+\]\s*:"
     r"|"
-    # 4. Bullet + bold severity (with optional inner bracket tag): "- **high**:" or "- **high [code-confirmed]**:"
-    r"^\s*-\s+\*\*" + _SEV + r"(?:\s*\[[^\]]+\])?\*\*\s*:"
+    # 4. Bullet + bold severity (with optional inner bracket tag):
+    # "- **high**:" or "- **high [code-confirmed]**:" or
+    # "- **HIGH [CODE-CONFIRMED]** rest-of-line" (no colon, as some lenses emit)
+    r"^\s*-\s+\*\*" + _SEV + r"(?:\s*\[[^\]]+\])?\*\*(?:\s*:|\s+)"
     r"|"
     # 5. Table cell with bold severity: "| **high** |"
     r"^\|\s*\*\*" + _SEV + r"\*\*"

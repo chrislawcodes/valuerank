@@ -1,0 +1,50 @@
+{
+  "judge": "implementation-risk",
+  "model": "claude-sonnet-4-5",
+  "verdict": "block",
+  "confidence": 4,
+  "reasoning": "Four concrete snags would stop a competent implementer: (1) The emit-routing for Fix 8 warnings is specified three different ways across the three artifacts \u2014 always-stderr in the spec FR, conditional in the plan Risk P3, and a JSON_MODE context-var switch in T2.3. An implementer must pick one; tests written for the wrong choice will be wrong. (2) The Fix 1 decision-tree change is expressed as pseudocode calling an undefined function `continue_past_stage()` \u2014 the artifacts never show the source of `factory_next_action.py`, so the implementer has no artifact-grounded answer for what code to write. (3) The plan's reconcile-accepted list of state-mutating commands (init/discover/parallel) contradicts T2.4's enumeration, which omits those three call sites. An implementer following tasks.md will miss them. (4) The concern-ID hash formula is specified two different ways \u2014 FR-003 says 'stripped-of-whitespace then first 48 chars' and T3.5 says `reasoning[:48]` \u2014 producing different bytes and therefore different IDs.",
+  "evidence": [
+    {
+      "artifact": "spec",
+      "section": "FR-009",
+      "quote": "Emission rule (revised in spec review round 2 per Gemini requirements-adversarial MEDIUM #3): always stderr"
+    },
+    {
+      "artifact": "plan",
+      "section": "Slice 2 bullet",
+      "quote": "Emit to stderr when --json is in effect; stdout otherwise. Detect via a context var or explicit parameter threaded from the caller."
+    },
+    {
+      "artifact": "tasks",
+      "section": "T2.3",
+      "quote": "Add stdout-vs-stderr emit logic gated on a `factory_state.JSON_MODE` context variable set by `run_factory.py` when `--json` is present"
+    },
+    {
+      "artifact": "tasks",
+      "section": "T3.1",
+      "quote": "add `if stages[stage].get(\"judge_next_action\") == \"advance\": continue_past_stage()` check before each `not healthy` branch"
+    },
+    {
+      "artifact": "plan",
+      "section": "Review Reconciliation \u2014 edge-cases-adversarial",
+      "quote": "M#1 init/discover/parallel added to _STATE_MUTATING_COMMANDS"
+    },
+    {
+      "artifact": "tasks",
+      "section": "T2.4",
+      "quote": "Call `run_invariant_checks` at the tail of `cmd_checkpoint`, `cmd_judge`, `cmd_reconcile`, `cmd_auto_reconcile`, `cmd_implement`, `cmd_deliver`, `cmd_block` in `run_factory.py`"
+    },
+    {
+      "artifact": "spec",
+      "section": "FR-003",
+      "quote": "id = sha256(stage|judge|round_raised|<first-48-chars-of-reasoning-stripped-of-whitespace>)[:12]"
+    },
+    {
+      "artifact": "tasks",
+      "section": "T3.5",
+      "quote": "Compute `id` from `sha256(stage|judge|round_raised|reasoning[:48])[:12]` when writing"
+    }
+  ],
+  "timestamp": "2026-04-23T00:00:00Z"
+}

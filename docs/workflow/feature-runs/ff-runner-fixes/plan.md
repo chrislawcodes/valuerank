@@ -94,11 +94,11 @@ No new third-party dependencies. Tests run under the runner's existing `pytest` 
 - **Risk P2**: Fix 1's FR-004 concern verification could cause a run in progress (with existing unresolved_concerns) to block. Mitigation: state defaulting in FR-011a treats missing fields as None; only concerns that exist with non-null `round_raised` are carried forward and verified.
   **verification:** Slice 3 regression test runs against the run-033 fixture which has real unresolved concerns, and asserts the flow completes (via deferral or addressing).
 
-- **Risk P3**: Threading an `emit_to_stderr` flag into every command site is invasive and could leak. Mitigation: use a module-level context variable set at argparse time in `run_factory.py`, not a parameter.
-  **verification:** invariant self-check test asserts that running a command with `--json` does not contaminate stdout.
+- **Risk P3**: (Revised in spec round-3 judge panel per implementation-risk judge) Warnings go to stderr *always* — no conditional routing. The module-level `JSON_MODE` flag in `factory_invariants.py` is preserved for back-compat of `set_json_mode()` callers but has no behavioral effect on the emit target. This aligns spec FR-009, this plan, and the tests.
+  **verification:** invariant self-check test asserts warning goes to stderr in both JSON and non-JSON mode; stdout is always empty for warning output.
 
-- **Risk P4**: The spec-checkpoint review cycle for this feature was short-circuited after round 1 for time/cost reasons. Legitimate review findings might not have surfaced.
-  **verification:** human-in-the-loop PR review before merge. Decisions-summary in closeout documents exactly which review rounds were skipped and why.
+- **Risk P4**: After 3 spec-review rounds and a judge-panel round, the workflow may keep producing new findings without convergence. Mitigation: adversarial 3-round cap + judge panel 3-round cap combine to bound review churn; the operator may override via `deliver --override-judges` when judges block on already-deferred risks.
+  **verification:** judge panel verdicts are visible in `status --slug` and recorded in `state.invariant_warnings[]` if advance-with-block occurs.
 
 ## Out of scope
 
