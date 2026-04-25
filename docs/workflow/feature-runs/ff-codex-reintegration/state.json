@@ -2087,7 +2087,15 @@
       "adversarial_rounds": 2,
       "judge_rounds": 0,
       "judge_verdicts": [],
-      "annotations": [],
+      "annotations": [
+        {
+          "type": "validation-only-reseal",
+          "old_sha": "40a8ee740e3163a7e582c1ef27dc2ab224d80df06a9431c3bea2d555d0589a0a",
+          "new_sha": "1fd8fe3c110259e8024f6fe7f3e9df85aea725433e5cb27c7d64a69b56527d41",
+          "at": 1777099852,
+          "files_updated": 3
+        }
+      ],
       "unresolved_concerns": [],
       "adversarial_sha_history": [
         "5cd042c734fee7be7409bf9d3ca72236416f85cae57056ee1fbe43b381ff7020",

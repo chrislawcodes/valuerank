@@ -1,8 +1,8 @@
 {
   "repo_root": ".",
-  "git_head_sha": "a064b21790b9f3242627e791c143720066eb3e92",
-  "git_base_ref": "b3f8684b41da00fb97e55ce5c83f01fbd60d2fbc",
-  "git_base_sha": "b3f8684b41da00fb97e55ce5c83f01fbd60d2fbc",
+  "git_head_sha": "2b61124c4a94be7f5bcd982b212fafee968e3e65",
+  "git_base_ref": "a064b21790b9f3242627e791c143720066eb3e92",
+  "git_base_sha": "a064b21790b9f3242627e791c143720066eb3e92",
   "paths": [
     "docs/workflow/feature-runs/ff-codex-reintegration"
   ],
