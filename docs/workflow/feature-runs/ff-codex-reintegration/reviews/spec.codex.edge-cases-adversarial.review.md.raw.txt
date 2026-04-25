@@ -1,0 +1,10 @@
+## Findings
+1. Medium - `dispatch-codex` does not define what happens when the subprocess never produces a normal exit. The spec covers success, non-quota failure, and quota exhaustion, but not missing binary, `subprocess.run` launch errors, or a hung/interactively blocked Codex process. That leaves a real runner wedge path unspecified.
+2. Medium - The branch-base fallback order can still pick an inaccurate base on long-lived branches. FR-019 prefers `git merge-base main HEAD` ahead of `git merge-base --fork-point origin/main HEAD`. If local `main` lags behind `origin/main`, the spec will stop at the stale local base and never use the more accurate fork-point, which can still under-report code size on exactly the branches this fix is meant to protect.
+3. Medium - Dispatch identity is not unique in the state record when two runs land in the same microsecond. FR-003 anticipates `_NNN` suffixes on the on-disk directory, but FR-004 stores only `ts` and says it is “the same as the directory timestamp.” Two distinct dispatches can therefore share the same `ts`, which makes the audit trail and suppression note ambiguous.
+4. Medium [UNVERIFIED] - The banner-rename verification is scoped too narrowly. SC-005 only greps `docs/workflow/operations/codex-skills/feature-factory/scripts/`, while the spec describes runner behavior more broadly. That can let the check pass even if a live caller still emits `repair_*_checkpoint`. This depends on the existing repo layout, so it is unverified.
+
+## Residual Risks
+- The freshness rule still depends on git ancestry and line-count heuristics. Big refactors, file moves, or shallow clones can produce false negatives or skips.
+- The `advance` subcommand is a manual override. It records intent, but it can still be used to bypass a real manifest problem if the operator chooses poorly.
+- Recomputing a dispatch snapshot when `lines_added_at_dispatch_time` is null still depends on reachable git history. In sparse or shallow environments, that path may fall back to “not fresh” more often than intended.

@@ -43,22 +43,32 @@ _IMPLEMENTATION_RULE_TEST_EXCLUDES = (
 
 
 def _resolve_branch_base() -> str | None:
-    """Find a sane branch base via origin/main → main → HEAD~50 fallback."""
-    for ref in ("origin/main", "main"):
-        result = subprocess.run(
-            ["git", "merge-base", ref, "HEAD"],
-            capture_output=True,
-            text=True,
-        )
+    """Find a sane branch base.
+
+    Tries in order:
+      1. git merge-base origin/main HEAD
+      2. git merge-base --fork-point origin/main HEAD
+         (correct branch-point even on long-lived branches > 50 commits)
+      3. git merge-base main HEAD
+         (last resort; local main may have diverged from origin/main)
+      4. None — caller skips the implementation-rule check entirely
+         (per spec FR-021: honest skip beats silent under-report)
+    """
+    candidates: list[list[str]] = [
+        ["git", "merge-base", "origin/main", "HEAD"],
+        ["git", "merge-base", "--fork-point", "origin/main", "HEAD"],
+        ["git", "merge-base", "main", "HEAD"],
+    ]
+    for cmd in candidates:
+        try:
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=60
+            )
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired,
+                FileNotFoundError, OSError):
+            continue
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip()
-    result = subprocess.run(
-        ["git", "rev-parse", "HEAD~50"],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode == 0 and result.stdout.strip():
-        return result.stdout.strip()
     return None
 
 
@@ -95,10 +105,12 @@ def check_implementation_rule(slug: str) -> tuple[bool, str]:
     """Return (triggered, message). See spec FR-012-016."""
     branch_base = _resolve_branch_base()
     if branch_base is None:
-        return (
-            False,
-            "implementation-rule check skipped: could not determine branch base.",
+        message = (
+            "implementation-rule check skipped — could not resolve branch base "
+            "(origin/main, main, fork-point all failed)"
         )
+        print(message, file=sys.stderr)
+        return (False, message)
     added = _added_code_lines(branch_base)
     if added is None:
         return (False, "implementation-rule check skipped: git diff failed.")

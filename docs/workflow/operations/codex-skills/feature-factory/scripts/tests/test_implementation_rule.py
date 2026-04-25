@@ -1,8 +1,11 @@
 """Slice 3 — implementation-rule WARN at deliver."""
+import io
 import importlib.util
+import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -36,11 +39,6 @@ def _mock_run_factory(*, base_succeeds: bool = True, head_sha: str = "abcdef0", 
             if base_succeeds:
                 result.stdout = "basesha\n"
                 result.returncode = 0
-            else:
-                result.returncode = 1
-        elif cmd[:2] == ["git", "rev-parse"] and "HEAD~50" in cmd:
-            if base_succeeds:
-                result.stdout = "basesha\n"
             else:
                 result.returncode = 1
         elif cmd[:2] == ["git", "rev-parse"] and cmd[2:] == ["HEAD"]:
@@ -120,10 +118,103 @@ class CheckImplementationRuleTests(unittest.TestCase):
         self.assertIn("300", msg)
 
     def test_skip_when_branch_base_unresolved(self) -> None:
-        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(base_succeeds=False)):
+        message = (
+            "implementation-rule check skipped — could not resolve branch base "
+            "(origin/main, main, fork-point all failed)"
+        )
+        stderr = io.StringIO()
+        with patch.object(FACTORY_DELIVER, "_resolve_branch_base", return_value=None), redirect_stderr(stderr):
             triggered, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
         self.assertFalse(triggered)
-        self.assertIn("could not determine branch base", msg)
+        self.assertEqual(msg, message)
+        self.assertIn(message, stderr.getvalue())
+
+    def test_resolve_branch_base_returns_origin_main_sha(self) -> None:
+        expected = "origin-main-sha"
+
+        def side_effect(cmd, *args, **kwargs):
+            result = MagicMock()
+            result.returncode = 0
+            result.stdout = expected + "\n"
+            result.stderr = ""
+            return result
+
+        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=side_effect):
+            self.assertEqual(FACTORY_DELIVER._resolve_branch_base(), expected)
+
+    def test_resolve_branch_base_falls_through_to_fork_point(self) -> None:
+        fork_point_sha = "fork-point-sha"
+        results = [
+            MagicMock(returncode=1, stdout="", stderr=""),
+            MagicMock(returncode=0, stdout=fork_point_sha + "\n", stderr=""),
+        ]
+
+        def side_effect(cmd, *args, **kwargs):
+            return results.pop(0)
+
+        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=side_effect):
+            self.assertEqual(FACTORY_DELIVER._resolve_branch_base(), fork_point_sha)
+
+    def test_resolve_branch_base_falls_through_to_local_main(self) -> None:
+        local_main_sha = "local-main-sha"
+        results = [
+            MagicMock(returncode=1, stdout="", stderr=""),
+            MagicMock(returncode=1, stdout="", stderr=""),
+            MagicMock(returncode=0, stdout=local_main_sha + "\n", stderr=""),
+        ]
+
+        def side_effect(cmd, *args, **kwargs):
+            return results.pop(0)
+
+        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=side_effect):
+            self.assertEqual(FACTORY_DELIVER._resolve_branch_base(), local_main_sha)
+
+    def test_resolve_branch_base_returns_none_when_all_candidates_fail(self) -> None:
+        results = [
+            MagicMock(returncode=1, stdout="", stderr=""),
+            MagicMock(returncode=1, stdout="", stderr=""),
+            MagicMock(returncode=1, stdout="", stderr=""),
+        ]
+
+        def side_effect(cmd, *args, **kwargs):
+            return results.pop(0)
+
+        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=side_effect):
+            self.assertIsNone(FACTORY_DELIVER._resolve_branch_base())
+
+    def test_resolve_branch_base_skips_file_not_found_and_keeps_trying(self) -> None:
+        local_main_sha = "local-main-sha"
+        results = [
+            FileNotFoundError("git"),
+            MagicMock(returncode=1, stdout="", stderr=""),
+            MagicMock(returncode=0, stdout=local_main_sha + "\n", stderr=""),
+        ]
+
+        def side_effect(cmd, *args, **kwargs):
+            item = results.pop(0)
+            if isinstance(item, BaseException):
+                raise item
+            return item
+
+        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=side_effect):
+            self.assertEqual(FACTORY_DELIVER._resolve_branch_base(), local_main_sha)
+
+    def test_resolve_branch_base_skips_timeout_and_keeps_trying(self) -> None:
+        local_main_sha = "local-main-sha"
+        results = [
+            subprocess.TimeoutExpired(cmd=["git", "merge-base", "origin/main", "HEAD"], timeout=60),
+            MagicMock(returncode=1, stdout="", stderr=""),
+            MagicMock(returncode=0, stdout=local_main_sha + "\n", stderr=""),
+        ]
+
+        def side_effect(cmd, *args, **kwargs):
+            item = results.pop(0)
+            if isinstance(item, BaseException):
+                raise item
+            return item
+
+        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=side_effect):
+            self.assertEqual(FACTORY_DELIVER._resolve_branch_base(), local_main_sha)
 
 
 class RecordOverrideTests(unittest.TestCase):
