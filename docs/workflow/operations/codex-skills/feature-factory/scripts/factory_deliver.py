@@ -7,6 +7,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 import sys
+from typing import Literal
 
 _SCRIPT_DIR = Path(__file__).resolve().parent
 if str(_SCRIPT_DIR) not in sys.path:
@@ -101,8 +102,8 @@ def _added_code_lines(branch_base: str) -> int | None:
     return total_added
 
 
-def check_implementation_rule(slug: str) -> tuple[bool, str]:
-    """Return (triggered, message). See spec FR-012-016."""
+def check_implementation_rule(slug: str) -> tuple[Literal["triggered", "suppressed", "skipped", "ok"], str]:
+    """Return (status, message). See spec FR-012-016."""
     branch_base = _resolve_branch_base()
     if branch_base is None:
         message = (
@@ -110,16 +111,21 @@ def check_implementation_rule(slug: str) -> tuple[bool, str]:
             "(origin/main, main, fork-point all failed)"
         )
         print(message, file=sys.stderr)
-        return (False, message)
+        return ("skipped", message)
     added = _added_code_lines(branch_base)
     if added is None:
-        return (False, "implementation-rule check skipped: git diff failed.")
+        message = "implementation-rule check skipped: git diff failed."
+        print(message, file=sys.stderr)
+        return ("skipped", message)
     if added <= _IMPLEMENTATION_RULE_THRESHOLD:
-        return (False, "")
+        return ("ok", "")
 
     state = load_workflow_state(slug)
     if state.get("codex_dispatches"):
-        return (False, "")
+        return (
+            "suppressed",
+            "implementation-rule check skipped — codex_dispatches[] is non-empty (freshness check lands in Slice 3)",
+        )
 
     head_result = subprocess.run(
         ["git", "rev-parse", "HEAD"], capture_output=True, text=True
@@ -127,7 +133,7 @@ def check_implementation_rule(slug: str) -> tuple[bool, str]:
     head_sha = head_result.stdout.strip() if head_result.returncode == 0 else ""
     override = state.get("implementation_rule_override") or {}
     if isinstance(override, dict) and override.get("head_sha") == head_sha and head_sha:
-        return (False, "")
+        return ("ok", "")
 
     msg = (
         f"⚠ implementation-rule: {added} non-test code lines added with no recorded "
@@ -135,7 +141,7 @@ def check_implementation_rule(slug: str) -> tuple[bool, str]:
         f"Suppress with --override-implementation-rule "
         f"--override-implementation-reason \"<text>\" (>= 10 chars)."
     )
-    return (True, msg)
+    return ("triggered", msg)
 
 
 def record_implementation_rule_override(slug: str, reason: str) -> None:

@@ -71,26 +71,30 @@ class CheckImplementationRuleTests(unittest.TestCase):
 
     def test_triggered_over_threshold_no_dispatches_no_override(self) -> None:
         with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(added_lines=250)):
-            triggered, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
-        self.assertTrue(triggered)
+            status, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertEqual(status, "triggered")
         self.assertIn("250", msg)
         self.assertIn("Codex dispatch", msg)
 
     def test_under_threshold_not_triggered(self) -> None:
         with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(added_lines=50)):
-            triggered, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
-        self.assertFalse(triggered)
+            status, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertEqual(status, "ok")
         self.assertEqual(msg, "")
 
     def test_codex_dispatch_recorded_suppresses(self) -> None:
         state = FACTORY_STATE.load_workflow_state(self.slug)
-        state["codex_dispatches"] = [{"at": 12345, "command": "codex exec ..."}]
+        state["codex_dispatches"] = [
+            {"head_sha": "deadbeef-not-an-ancestor", "ts": "20260101T000000_000000Z"}
+        ]
         FACTORY_STATE.atomic_json_write(FACTORY_STATE.factory_state_path(self.slug), state)
         with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(added_lines=300)):
-            triggered, _ = FACTORY_DELIVER.check_implementation_rule(self.slug)
-        self.assertFalse(triggered)
+            status, note = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertEqual(status, "suppressed")
+        # Deliberate intermediate state for Slice 2. Slice 3 changes this to triggered.
+        self.assertTrue(note.startswith("implementation-rule check skipped — codex_dispatches[] is non-empty"))
 
-    def test_override_matching_head_suppresses(self) -> None:
+    def test_override_matching_head_returns_ok(self) -> None:
         state = FACTORY_STATE.load_workflow_state(self.slug)
         state["implementation_rule_override"] = {
             "head_sha": "abcdef0",
@@ -100,8 +104,8 @@ class CheckImplementationRuleTests(unittest.TestCase):
         }
         FACTORY_STATE.atomic_json_write(FACTORY_STATE.factory_state_path(self.slug), state)
         with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(added_lines=300, head_sha="abcdef0")):
-            triggered, _ = FACTORY_DELIVER.check_implementation_rule(self.slug)
-        self.assertFalse(triggered)
+            status, _ = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertEqual(status, "ok")
 
     def test_override_stale_head_does_not_suppress(self) -> None:
         state = FACTORY_STATE.load_workflow_state(self.slug)
@@ -113,8 +117,8 @@ class CheckImplementationRuleTests(unittest.TestCase):
         }
         FACTORY_STATE.atomic_json_write(FACTORY_STATE.factory_state_path(self.slug), state)
         with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(added_lines=300, head_sha="newsha1")):
-            triggered, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
-        self.assertTrue(triggered)
+            status, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertEqual(status, "triggered")
         self.assertIn("300", msg)
 
     def test_skip_when_branch_base_unresolved(self) -> None:
@@ -124,10 +128,31 @@ class CheckImplementationRuleTests(unittest.TestCase):
         )
         stderr = io.StringIO()
         with patch.object(FACTORY_DELIVER, "_resolve_branch_base", return_value=None), redirect_stderr(stderr):
-            triggered, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
-        self.assertFalse(triggered)
+            status, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertEqual(status, "skipped")
         self.assertEqual(msg, message)
         self.assertIn(message, stderr.getvalue())
+
+    def test_skip_when_git_diff_fails(self) -> None:
+        def side_effect(cmd, *args, **kwargs):
+            result = MagicMock()
+            result.stdout = ""
+            result.stderr = ""
+            result.returncode = 0
+            if cmd[:2] == ["git", "merge-base"]:
+                result.stdout = "basesha\n"
+            elif cmd[:2] == ["git", "diff"]:
+                result.returncode = 1
+            elif cmd[:2] == ["git", "rev-parse"] and cmd[2:] == ["HEAD"]:
+                result.stdout = "abcdef0\n"
+            return result
+
+        stderr = io.StringIO()
+        with redirect_stderr(stderr), patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=side_effect):
+            status, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertEqual(status, "skipped")
+        self.assertEqual(msg, "implementation-rule check skipped: git diff failed.")
+        self.assertIn("implementation-rule check skipped: git diff failed.", stderr.getvalue())
 
     def test_resolve_branch_base_returns_origin_main_sha(self) -> None:
         expected = "origin-main-sha"
