@@ -2,10 +2,8 @@
   "feature_slug": "paired-batch-count-min-of-two",
   "stage": "diff",
   "artifact_path": "docs/workflow/feature-runs/paired-batch-count-min-of-two/reviews/implementation.diff.patch",
-  "git_base_ref": "origin/main",
-  "allowed_dirty_paths": [
-    "docs/workflow/operations/review-attempts.jsonl"
-  ],
+  "git_base_ref": "HEAD~1",
+  "allowed_dirty_paths": [],
   "required_reviews": [
     {
       "reviewer": "codex",

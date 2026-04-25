@@ -1,345 +1,627 @@
+diff --git a/cloud/apps/api/src/graphql/queries/domain-coverage-gql-types.ts b/cloud/apps/api/src/graphql/queries/domain-coverage-gql-types.ts
+index 304d0fb8..48bec801 100644
+--- a/cloud/apps/api/src/graphql/queries/domain-coverage-gql-types.ts
++++ b/cloud/apps/api/src/graphql/queries/domain-coverage-gql-types.ts
+@@ -82,11 +82,13 @@ const DomainValueCoverageCellRef = builder
+       }),
+       pairedBatchCount: t.exposeInt('pairedBatchCount', {
+         description:
+-          'Count of paired-batch groups where the surviving (complete) ' +
+-          'companion run is fully complete. When both companions are complete, ' +
+-          'the pair counts as 1. When only one is complete, that one is the ' +
+-          'survivor and the pair counts as 1. When both are incomplete, the ' +
+-          'pair counts as 0 here (and as 1 toward incompleteBatchCount).',
++          'Count of pairable analysis-ready batches for this value pair, ' +
++          'computed as min(complete A-first non-aggregate runs, ' +
++          'complete B-first non-aggregate runs) where direction is read from ' +
++          'config.jobChoiceValueFirst. A launch where only one direction completed ' +
++          'contributes 0 here (the surviving complete run still appears in batchCount). ' +
++          'Runs without a recognizable direction token are excluded from both sides. ' +
++          'See docs/canonical-glossary.md "Paired Batch" for full semantic.',
+       }),
+       incompleteBatchCount: t.exposeInt('incompleteBatchCount', {
+         description:
 diff --git a/cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts b/cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts
-index b508c3e1..a6412175 100644
+index 9a7f61fc..2364edab 100644
 --- a/cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts
 +++ b/cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts
-@@ -247,3 +247,102 @@ export function getCoverageBatchGroupId(runConfig: unknown): string | null {
- 
-   return raw != null && raw.trim().length > 0 ? raw.trim() : null;
+@@ -29,99 +29,6 @@ export function selectPrimaryDefinitionCount(
+   };
  }
-+
-+/**
-+ * Read the direction token off a Run's config. Returns null for missing,
-+ * blank, or non-string `jobChoiceValueFirst`. Trimmed.
-+ */
-+export function getCoverageDirection(runConfig: unknown): string | null {
-+  const config = runConfig as { jobChoiceValueFirst?: unknown } | null;
-+  if (config == null || typeof config.jobChoiceValueFirst !== 'string') return null;
-+  const trimmed = config.jobChoiceValueFirst.trim();
-+  return trimmed.length > 0 ? trimmed : null;
-+}
-+
-+/**
-+ * Compute per-cell counts using the directional model.
-+ *
-+ * Sums `batchCount` across companion definitions (unchanged semantics).
-+ * Computes `pairedBatchCount = min(complete A-first, complete B-first)`
-+ * by merging per-direction Sets across companion definitions and taking
-+ * `min(set.size)` of the two directions. When >2 distinct directions
-+ * appear in the merged map (data corruption), takes min of the two
-+ * largest counts and emits a warning via `log.warn` (if provided).
-+ *
-+ * Tie-break for `primaryDefinitionId`: `(batchCount desc, directionCount desc, defId asc)`
-+ * where `directionCount = directionalGroupsByDefinitionId.get(defId)?.size ?? 0`.
-+ */
-+export function selectPrimaryDefinitionCountsByDirection(
-+  definitionIds: readonly string[],
-+  batchCountByDefinitionId: ReadonlyMap<string, number>,
-+  directionalGroupsByDefinitionId: ReadonlyMap<string, ReadonlyMap<string, ReadonlySet<string>>>,
-+  log?: { warn: (obj: object, msg: string) => void },
-+  cellKey?: string,
-+): { primaryDefinitionId: string | null; batchCount: number; pairedBatchCount: number } {
-+  const uniqueDefinitionIds = Array.from(new Set(definitionIds));
-+  if (uniqueDefinitionIds.length === 0) {
-+    return { primaryDefinitionId: null, batchCount: 0, pairedBatchCount: 0 };
-+  }
-+
-+  const directionCountFor = (defId: string): number =>
-+    directionalGroupsByDefinitionId.get(defId)?.size ?? 0;
-+
-+  const primaryDefinitionId = uniqueDefinitionIds.reduce((best, defId) => {
-+    const bestBatch = batchCountByDefinitionId.get(best) ?? 0;
-+    const thisBatch = batchCountByDefinitionId.get(defId) ?? 0;
-+    if (thisBatch > bestBatch) return defId;
-+    if (thisBatch < bestBatch) return best;
-+
-+    const bestDirs = directionCountFor(best);
-+    const thisDirs = directionCountFor(defId);
-+    if (thisDirs > bestDirs) return defId;
-+    if (thisDirs < bestDirs) return best;
-+
-+    return defId.localeCompare(best) < 0 ? defId : best;
-+  }, uniqueDefinitionIds[0] ?? '');
-+
-+  const batchCount = uniqueDefinitionIds.reduce(
-+    (total, defId) => total + (batchCountByDefinitionId.get(defId) ?? 0),
-+    0,
-+  );
-+
-+  // Merge per-direction Sets across companion definitions for this cell.
-+  const merged = new Map<string, Set<string>>();
-+  for (const defId of uniqueDefinitionIds) {
-+    const defMap = directionalGroupsByDefinitionId.get(defId);
-+    if (defMap == null) continue;
-+    for (const [direction, groupKeys] of defMap) {
-+      const existing = merged.get(direction) ?? new Set<string>();
-+      for (const key of groupKeys) existing.add(key);
-+      merged.set(direction, existing);
-+    }
-+  }
-+
-+  let pairedBatchCount: number;
-+  if (merged.size === 0 || merged.size === 1) {
-+    pairedBatchCount = 0;
-+  } else if (merged.size === 2) {
-+    const counts = Array.from(merged.values()).map((s) => s.size);
-+    pairedBatchCount = Math.min(counts[0]!, counts[1]!);
-+  } else {
-+    // >2 distinct direction tokens — data corruption. Take min of the two
-+    // largest counts and emit a warning. Do not throw; the operator should
-+    // still see a number.
-+    const sortedCounts = Array.from(merged.values())
-+      .map((s) => s.size)
-+      .sort((a, b) => b - a);
-+    pairedBatchCount = Math.min(sortedCounts[0]!, sortedCounts[1]!);
-+    if (log != null) {
-+      log.warn(
-+        { cellKey, directions: Array.from(merged.keys()), definitionIds: uniqueDefinitionIds },
-+        '>2 distinct jobChoiceValueFirst tokens in single coverage cell; using min of two largest',
-+      );
-+    }
-+  }
-+
-+  return {
-+    primaryDefinitionId: primaryDefinitionId === '' ? null : primaryDefinitionId,
-+    batchCount,
-+    pairedBatchCount,
-+  };
-+}
-diff --git a/cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts b/cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts
-index 574ce503..f5b96b5b 100644
---- a/cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts
-+++ b/cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts
-@@ -1,10 +1,12 @@
--import { describe, expect, it } from 'vitest';
-+import { describe, expect, it, vi } from 'vitest';
- import {
+ 
+-export function selectPrimaryDefinitionCounts(
+-  definitionIds: readonly string[],
+-  batchCountByDefinitionId: ReadonlyMap<string, number>,
+-  pairedBatchCountByDefinitionId: ReadonlyMap<string, number>,
+-  pairedBatchGroupIdsByDefinitionId?: ReadonlyMap<string, ReadonlySet<string>>,
+-  pairedBatchIncrementsByGroupId?: ReadonlyMap<string, ReadonlyMap<string, number>>,
+-): { primaryDefinitionId: string | null; batchCount: number; pairedBatchCount: number } {
+-  const uniqueDefinitionIds = Array.from(new Set(definitionIds));
+-  if (uniqueDefinitionIds.length === 0) {
+-    return { primaryDefinitionId: null, batchCount: 0, pairedBatchCount: 0 };
+-  }
+-
+-  const primaryDefinitionId = uniqueDefinitionIds.reduce((best, defId) => {
+-    const bestBatchCount = batchCountByDefinitionId.get(best) ?? 0;
+-    const thisBatchCount = batchCountByDefinitionId.get(defId) ?? 0;
+-    if (thisBatchCount > bestBatchCount) {
+-      return defId;
+-    }
+-    if (thisBatchCount < bestBatchCount) {
+-      return best;
+-    }
+-
+-    const bestPairedCount = pairedBatchCountByDefinitionId.get(best) ?? 0;
+-    const thisPairedCount = pairedBatchCountByDefinitionId.get(defId) ?? 0;
+-    if (thisPairedCount > bestPairedCount) {
+-      return defId;
+-    }
+-    if (thisPairedCount < bestPairedCount) {
+-      return best;
+-    }
+-
+-    return defId.localeCompare(best) < 0 ? defId : best;
+-  }, uniqueDefinitionIds[0] ?? '');
+-
+-  const batchCount = uniqueDefinitionIds.reduce(
+-    (total, defId) => total + (batchCountByDefinitionId.get(defId) ?? 0),
+-    0,
+-  );
+-
+-  // Deduplicate paired batch counts across companion definitions.
+-  // A_first and B_first share the same group IDs, so we merge group→increment
+-  // maps and take the max increment per group (not sum). Ungrouped runs are summed.
+-  let pairedBatchCount: number;
+-  if (pairedBatchGroupIdsByDefinitionId != null && pairedBatchIncrementsByGroupId != null) {
+-    // Merge increments: for each group ID, take the max increment across definitions
+-    // (companions have the same sps, so max === any, but max is safer)
+-    const mergedIncrements = new Map<string, number>();
+-    let ungroupedTotal = 0;
+-    for (const defId of uniqueDefinitionIds) {
+-      const defIncrements = pairedBatchIncrementsByGroupId.get(defId);
+-      if (defIncrements != null) {
+-        for (const [gid, inc] of defIncrements) {
+-          mergedIncrements.set(gid, Math.max(mergedIncrements.get(gid) ?? 0, inc));
+-        }
+-      }
+-      // Ungrouped portion: pairedBatchCount minus grouped total for this definition
+-      const defPairedCount = pairedBatchCountByDefinitionId.get(defId) ?? 0;
+-      const defGroupedTotal = defIncrements != null
+-        ? Array.from(defIncrements.values()).reduce((sum, v) => sum + v, 0)
+-        : 0;
+-      ungroupedTotal += Math.max(0, defPairedCount - defGroupedTotal);
+-    }
+-    pairedBatchCount = Array.from(mergedIncrements.values()).reduce((sum, v) => sum + v, 0) + ungroupedTotal;
+-  } else if (pairedBatchGroupIdsByDefinitionId != null) {
+-    // Legacy path: group IDs available but no increment tracking — count unique groups
+-    const mergedGroupIds = new Set<string>();
+-    let ungroupedCount = 0;
+-    for (const defId of uniqueDefinitionIds) {
+-      const groupIds = pairedBatchGroupIdsByDefinitionId.get(defId);
+-      if (groupIds != null) {
+-        for (const gid of groupIds) {
+-          mergedGroupIds.add(gid);
+-        }
+-      }
+-      const defPairedCount = pairedBatchCountByDefinitionId.get(defId) ?? 0;
+-      const defGroupedCount = groupIds?.size ?? 0;
+-      ungroupedCount += Math.max(0, defPairedCount - defGroupedCount);
+-    }
+-    pairedBatchCount = mergedGroupIds.size + ungroupedCount;
+-  } else {
+-    // Fallback: sum per-definition counts
+-    pairedBatchCount = uniqueDefinitionIds.reduce(
+-      (total, defId) => total + (pairedBatchCountByDefinitionId.get(defId) ?? 0),
+-      0,
+-    );
+-  }
+-
+-  return {
+-    primaryDefinitionId: primaryDefinitionId === '' ? null : primaryDefinitionId,
+-    batchCount,
+-    pairedBatchCount,
+-  };
+-}
+ 
+ export function getCoverageBatchIncrement(samplesPerScenario: unknown): number {
+   return Number.isInteger(samplesPerScenario) && (samplesPerScenario as number) >= 1
+@@ -276,7 +183,7 @@ export function getCoverageDirection(runConfig: unknown): string | null {
+  * Tie-break for `primaryDefinitionId`: `(batchCount desc, directionCount desc, defId asc)`
+  * where `directionCount = directionalGroupsByDefinitionId.get(defId)?.size ?? 0`.
+  */
+-export function selectPrimaryDefinitionCountsByDirection(
++export function selectPrimaryDefinitionCounts(
+   definitionIds: readonly string[],
+   batchCountByDefinitionId: ReadonlyMap<string, number>,
+   directionalGroupsByDefinitionId: ReadonlyMap<string, ReadonlyMap<string, ReadonlySet<string>>>,
+diff --git a/cloud/apps/api/src/graphql/queries/domain-coverage.ts b/cloud/apps/api/src/graphql/queries/domain-coverage.ts
+index 82e53c57..49aa7061 100644
+--- a/cloud/apps/api/src/graphql/queries/domain-coverage.ts
++++ b/cloud/apps/api/src/graphql/queries/domain-coverage.ts
+@@ -15,6 +15,7 @@ import {
+   type CoverageValueKey,
    extractValuePair,
    getCoverageBatchGroupId,
-   getCoverageBatchIncrement,
 +  getCoverageDirection,
+   selectPrimaryDefinitionCounts,
+   computePerModelTrialCounts,
+   deduplicateRunsByGroupId,
+@@ -128,9 +129,12 @@ builder.queryField('domainValueCoverage', (t) =>
+       // Count completed runs per definition, optionally filtered by signature and model
+       const definitionIds = Array.from(pairByDefinitionId.keys());
+       const batchCountByDefinitionId = new Map<string, number>();
+-      const pairedBatchCountByDefinitionId = new Map<string, number>();
+-      const pairedBatchGroupIdsByDefinitionId = new Map<string, Set<string>>();
+-      const pairedBatchIncrementsByGroupId = new Map<string, Map<string, number>>();
++      // Per-definition map: direction token -> Set<groupKey> where groupKey is
++      // the run's jobChoiceBatchGroupId (collapses retry duplicates within a
++      // launch group) or "__ungrouped__:<runId>" so each ungrouped run still
++      // counts once. Drives the new pairedBatchCount = min(A-first, B-first).
++      const directionalGroupsByDefinitionId =
++        new Map<string, Map<string, Set<string>>>();
+       const latestMatchingRunIdByDefinitionId = new Map<string, string>();
+       const latestAggregateRunIdByDefinitionId = new Map<string, string>();
+       const incompleteBatchCountByDefinitionId = new Map<string, number>();
+@@ -288,29 +292,22 @@ builder.queryField('domainValueCoverage', (t) =>
+             (batchCountByDefinitionId.get(run.definitionId) ?? 0) + 1,
+           );
+ 
+-          const pairedBatchGroupId = getCoverageBatchGroupId(run.config);
+-
+-          if (pairedBatchGroupId === null) {
+-            pairedBatchCountByDefinitionId.set(
+-              run.definitionId,
+-              (pairedBatchCountByDefinitionId.get(run.definitionId) ?? 0) + 1,
+-            );
+-            continue;
+-          }
+-
+-          const seenGroupIds = pairedBatchGroupIdsByDefinitionId.get(run.definitionId) ?? new Set<string>();
+-          if (!seenGroupIds.has(pairedBatchGroupId)) {
+-            seenGroupIds.add(pairedBatchGroupId);
+-            pairedBatchGroupIdsByDefinitionId.set(run.definitionId, seenGroupIds);
+-            pairedBatchCountByDefinitionId.set(
+-              run.definitionId,
+-              (pairedBatchCountByDefinitionId.get(run.definitionId) ?? 0) + 1,
+-            );
+-            // Track per-group increment for cross-definition dedup. Always 1
+-            // now; samplesPerScenario no longer multiplies.
+-            const defIncrements = pairedBatchIncrementsByGroupId.get(run.definitionId) ?? new Map<string, number>();
+-            defIncrements.set(pairedBatchGroupId, 1);
+-            pairedBatchIncrementsByGroupId.set(run.definitionId, defIncrements);
++          // pairedBatchCount semantic: count complete A-first vs B-first runs
++          // independently per the direction token in config.jobChoiceValueFirst.
++          // The Set<groupKey> collapses retry duplicates that share the same
++          // launch group; ungrouped runs use a unique sentinel so they each
++          // count once. Runs with no recognizable direction token are skipped
++          // here (they still count toward batchCount above).
++          const direction = getCoverageDirection(run.config);
++          if (direction !== null) {
++            const launchGroupId = getCoverageBatchGroupId(run.config);
++            const groupKey = launchGroupId ?? `__ungrouped__:${run.id}`;
++            const defMap = directionalGroupsByDefinitionId.get(run.definitionId)
++              ?? new Map<string, Set<string>>();
++            const dirSet = defMap.get(direction) ?? new Set<string>();
++            dirSet.add(groupKey);
++            defMap.set(direction, dirSet);
++            directionalGroupsByDefinitionId.set(run.definitionId, defMap);
+           }
+         }
+       }
+@@ -370,9 +367,9 @@ builder.queryField('domainValueCoverage', (t) =>
+             const { primaryDefinitionId, batchCount, pairedBatchCount } = selectPrimaryDefinitionCounts(
+               defIdsForPair,
+               batchCountByDefinitionId,
+-              pairedBatchCountByDefinitionId,
+-              pairedBatchGroupIdsByDefinitionId,
+-              pairedBatchIncrementsByGroupId,
++              directionalGroupsByDefinitionId,
++              ctx.log,
++              `${valueA}::${valueB}`,
+             );
+             const primaryDefId = primaryDefinitionId ?? '';
+             const primaryPair = pairByDefinitionId.get(primaryDefId);
+@@ -396,6 +393,11 @@ builder.queryField('domainValueCoverage', (t) =>
+             // When companions have different completeness, prefer the complete one
+             // for the trial-count computation. This is read-time consistency with
+             // batchCount: the surviving run is the one whose data feeds analysis.
++            //
++            // Intentionally unchanged by the directional-pairedBatchCount refactor:
++            // the trial-count path keeps the surviving-companion semantic so that
++            // healthy paired batches do not double their displayed trial counts.
++            // See spec §5.7 ("Per-model trial counts — intentionally unchanged").
+             const allNonAggregateRunsForPair = deduplicateRunsByGroupId(
+               defIdsForPair.flatMap((defId) => nonAggregateRunsByDefinitionId.get(defId) ?? []),
+               (run) => {
+diff --git a/cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts b/cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts
+index f5b96b5b..bd2e4272 100644
+--- a/cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts
++++ b/cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts
+@@ -6,7 +6,6 @@ import {
+   getCoverageDirection,
    selectPrimaryDefinitionCount,
    selectPrimaryDefinitionCounts,
-+  selectPrimaryDefinitionCountsByDirection,
+-  selectPrimaryDefinitionCountsByDirection,
    computePerModelTrialCounts,
    deduplicateRunsByGroupId,
  } from '../../../src/graphql/queries/domain-coverage-utils.js';
-@@ -481,3 +483,219 @@ describe('deduplicateRunsByGroupId', () => {
-     expect(result.minTrialCount).toBe(10); // 2 groups x 5 transcripts each
+@@ -88,126 +87,6 @@ describe('selectPrimaryDefinitionCount', () => {
+   });
+ });
+ 
+-describe('selectPrimaryDefinitionCounts', () => {
+-  it('returns the total cell counts while choosing a stable primary definition', () => {
+-    const batchCounts = new Map<string, number>([
+-      ['def-a', 2],
+-      ['def-b', 2],
+-    ]);
+-    const pairedCounts = new Map<string, number>([
+-      ['def-a', 1],
+-      ['def-b', 3],
+-    ]);
+-
+-    expect(selectPrimaryDefinitionCounts(['def-a', 'def-b'], batchCounts, pairedCounts)).toEqual({
+-      primaryDefinitionId: 'def-b',
+-      batchCount: 4,
+-      pairedBatchCount: 4,
+-    });
+-  });
+-
+-  it('prefers the higher paired count when batch counts tie', () => {
+-    const batchCounts = new Map<string, number>([
+-      ['def-a', 2],
+-      ['def-b', 2],
+-    ]);
+-    const pairedCounts = new Map<string, number>([
+-      ['def-a', 1],
+-      ['def-b', 3],
+-    ]);
+-
+-    expect(selectPrimaryDefinitionCounts(['def-a', 'def-b'], batchCounts, pairedCounts)).toEqual({
+-      primaryDefinitionId: 'def-b',
+-      batchCount: 4,
+-      pairedBatchCount: 4,
+-    });
+-  });
+-
+-  it('returns zero for an empty definition list', () => {
+-    expect(selectPrimaryDefinitionCounts([], new Map(), new Map())).toEqual({
+-      primaryDefinitionId: null,
+-      batchCount: 0,
+-      pairedBatchCount: 0,
+-    });
+-  });
+-
+-  it('deduplicates shared group IDs across companion definitions', () => {
+-    // A_first and B_first definitions share the same paired batch group IDs
+-    const batchCounts = new Map<string, number>([
+-      ['def-a-first', 5],
+-      ['def-b-first', 5],
+-    ]);
+-    const pairedCounts = new Map<string, number>([
+-      ['def-a-first', 3],
+-      ['def-b-first', 3],
+-    ]);
+-    const groupIds = new Map<string, Set<string>>([
+-      ['def-a-first', new Set(['group-1', 'group-2', 'group-3'])],
+-      ['def-b-first', new Set(['group-1', 'group-2', 'group-3'])],
+-    ]);
+-
+-    // Without dedup: 3 + 3 = 6. With dedup: 3 unique groups.
+-    expect(selectPrimaryDefinitionCounts(
+-      ['def-a-first', 'def-b-first'], batchCounts, pairedCounts, groupIds,
+-    )).toEqual({
+-      primaryDefinitionId: 'def-a-first',
+-      batchCount: 10,
+-      pairedBatchCount: 3,
+-    });
+-  });
+-
+-  it('counts ungrouped runs separately from grouped runs', () => {
+-    const batchCounts = new Map<string, number>([
+-      ['def-a', 3],
+-    ]);
+-    // pairedBatchCount = 2 grouped + 1 ungrouped = 3
+-    const pairedCounts = new Map<string, number>([
+-      ['def-a', 3],
+-    ]);
+-    const groupIds = new Map<string, Set<string>>([
+-      ['def-a', new Set(['group-1', 'group-2'])],
+-    ]);
+-
+-    expect(selectPrimaryDefinitionCounts(
+-      ['def-a'], batchCounts, pairedCounts, groupIds,
+-    )).toEqual({
+-      primaryDefinitionId: 'def-a',
+-      batchCount: 3,
+-      pairedBatchCount: 3, // 2 grouped + 1 ungrouped
+-    });
+-  });
+-
+-  it('deduplicates with samplesPerScenario increments across companions', () => {
+-    // 3 paired batch groups shared across A_first and B_first.
+-    // Group 1: sps=1, Group 2: sps=1, Group 3: sps=3 -> total 5 batches per side.
+-    const batchCounts = new Map<string, number>([
+-      ['def-a-first', 10],
+-      ['def-b-first', 10],
+-    ]);
+-    const pairedCounts = new Map<string, number>([
+-      ['def-a-first', 5],
+-      ['def-b-first', 5],
+-    ]);
+-    const groupIds = new Map<string, Set<string>>([
+-      ['def-a-first', new Set(['group-1', 'group-2', 'group-3'])],
+-      ['def-b-first', new Set(['group-1', 'group-2', 'group-3'])],
+-    ]);
+-    const increments = new Map<string, Map<string, number>>([
+-      ['def-a-first', new Map([['group-1', 1], ['group-2', 1], ['group-3', 3]])],
+-      ['def-b-first', new Map([['group-1', 1], ['group-2', 1], ['group-3', 3]])],
+-    ]);
+-
+-    // Without dedup: 5 + 5 = 10. With dedup: 1+1+3 = 5 (max increment per group).
+-    expect(selectPrimaryDefinitionCounts(
+-      ['def-a-first', 'def-b-first'], batchCounts, pairedCounts, groupIds, increments,
+-    )).toEqual({
+-      primaryDefinitionId: 'def-a-first',
+-      batchCount: 20,
+-      pairedBatchCount: 5,
+-    });
+-  });
+-});
+-
+ describe('getCoverageBatchIncrement', () => {
+ 
+   it('returns samplesPerScenario when it is a valid positive integer', () => {
+@@ -527,7 +406,7 @@ describe('getCoverageDirection', () => {
+   });
+ });
+ 
+-describe('selectPrimaryDefinitionCountsByDirection', () => {
++describe('selectPrimaryDefinitionCounts', () => {
+   function makeDirMap(
+     entries: Array<[string, Map<string, Set<string>>]>,
+   ): Map<string, Map<string, Set<string>>> {
+@@ -535,7 +414,7 @@ describe('selectPrimaryDefinitionCountsByDirection', () => {
+   }
+ 
+   it('returns zero for an empty definition list', () => {
+-    expect(selectPrimaryDefinitionCountsByDirection([], new Map(), new Map())).toEqual({
++    expect(selectPrimaryDefinitionCounts([], new Map(), new Map())).toEqual({
+       primaryDefinitionId: null,
+       batchCount: 0,
+       pairedBatchCount: 0,
+@@ -547,7 +426,7 @@ describe('selectPrimaryDefinitionCountsByDirection', () => {
+     const dirs = makeDirMap([[
+       'def-a', new Map([['vf-A', new Set(['g1'])]]),
+     ]]);
+-    expect(selectPrimaryDefinitionCountsByDirection(['def-a'], batches, dirs)).toEqual({
++    expect(selectPrimaryDefinitionCounts(['def-a'], batches, dirs)).toEqual({
+       primaryDefinitionId: 'def-a',
+       batchCount: 1,
+       pairedBatchCount: 0,
+@@ -562,7 +441,7 @@ describe('selectPrimaryDefinitionCountsByDirection', () => {
+         ['vf-B', new Set(['g1', 'g2'])],
+       ]),
+     ]]);
+-    expect(selectPrimaryDefinitionCountsByDirection(['def-a'], batches, dirs)).toEqual({
++    expect(selectPrimaryDefinitionCounts(['def-a'], batches, dirs)).toEqual({
+       primaryDefinitionId: 'def-a',
+       batchCount: 4,
+       pairedBatchCount: 2,
+@@ -577,7 +456,7 @@ describe('selectPrimaryDefinitionCountsByDirection', () => {
+         ['vf-B', new Set(['g1', 'g2'])],
+       ]),
+     ]]);
+-    expect(selectPrimaryDefinitionCountsByDirection(['def-a'], batches, dirs)).toEqual({
++    expect(selectPrimaryDefinitionCounts(['def-a'], batches, dirs)).toEqual({
+       primaryDefinitionId: 'def-a',
+       batchCount: 5,
+       pairedBatchCount: 2,
+@@ -591,7 +470,7 @@ describe('selectPrimaryDefinitionCountsByDirection', () => {
+       ['def-a', new Map([['vf-A', new Set(['g1', 'g2'])]])],
+       ['def-b', new Map([['vf-B', new Set(['g1', 'g2'])]])],
+     ]);
+-    const result = selectPrimaryDefinitionCountsByDirection(
++    const result = selectPrimaryDefinitionCounts(
+       ['def-a', 'def-b'], batches, dirs,
+     );
+     expect(result.batchCount).toBe(4);
+@@ -608,7 +487,7 @@ describe('selectPrimaryDefinitionCountsByDirection', () => {
+         ['vf-A', new Set(['g1'])], // Set already collapsed
+       ]),
+     ]]);
+-    expect(selectPrimaryDefinitionCountsByDirection(['def-a'], batches, dirs)).toEqual({
++    expect(selectPrimaryDefinitionCounts(['def-a'], batches, dirs)).toEqual({
+       primaryDefinitionId: 'def-a',
+       batchCount: 2,
+       pairedBatchCount: 0, // Only one direction
+@@ -625,7 +504,7 @@ describe('selectPrimaryDefinitionCountsByDirection', () => {
+       ]),
+     ]]);
+     const log = { warn: vi.fn() };
+-    const result = selectPrimaryDefinitionCountsByDirection(
++    const result = selectPrimaryDefinitionCounts(
+       ['def-a'], batches, dirs, log, 'Achievement::Tradition',
+     );
+     // Two largest counts: 3 and 1 -> min = 1
+@@ -650,7 +529,7 @@ describe('selectPrimaryDefinitionCountsByDirection', () => {
+         ['vf-B', new Set(['g3'])],
+       ])],
+     ]);
+-    const result = selectPrimaryDefinitionCountsByDirection(
++    const result = selectPrimaryDefinitionCounts(
+       ['def-a', 'def-b'], batches, dirs,
+     );
+     expect(result.primaryDefinitionId).toBe('def-b');
+@@ -662,7 +541,7 @@ describe('selectPrimaryDefinitionCountsByDirection', () => {
+       ['def-z', new Map([['vf-A', new Set(['g1', 'g2'])]])],
+       ['def-a', new Map([['vf-A', new Set(['g3', 'g4'])]])],
+     ]);
+-    const result = selectPrimaryDefinitionCountsByDirection(
++    const result = selectPrimaryDefinitionCounts(
+       ['def-z', 'def-a'], batches, dirs,
+     );
+     expect(result.primaryDefinitionId).toBe('def-a');
+@@ -681,7 +560,7 @@ describe('selectPrimaryDefinitionCountsByDirection', () => {
+         ['vf-B', new Set(['g1'])],
+       ]),
+     ]]);
+-    expect(selectPrimaryDefinitionCountsByDirection(['def-a'], batches, dirs).pairedBatchCount).toBe(1);
++    expect(selectPrimaryDefinitionCounts(['def-a'], batches, dirs).pairedBatchCount).toBe(1);
+   });
+ 
+   it('does not warn when no log is provided in the >2 corruption case', () => {
+@@ -695,7 +574,152 @@ describe('selectPrimaryDefinitionCountsByDirection', () => {
+     ]]);
+     // Should not throw without log, just compute the heuristic.
+     expect(() =>
+-      selectPrimaryDefinitionCountsByDirection(['def-a'], batches, dirs),
++      selectPrimaryDefinitionCounts(['def-a'], batches, dirs),
+     ).not.toThrow();
    });
  });
 +
-+describe('getCoverageDirection', () => {
-+  it('returns the trimmed string for a normal direction token', () => {
-+    expect(getCoverageDirection({ jobChoiceValueFirst: 'career' })).toBe('career');
-+  });
++/**
++ * Integration scenarios — exercise the directional inner-loop construction
++ * (mirroring domain-coverage.ts:178–315) plus the helper aggregation,
++ * verifying pairedBatchCount and trial-count metrics behave as
++ * spec §5.7 documents on the same fixture.
++ *
++ * These are functional integration tests: they construct realistic runs
++ * (config + transcripts) and run them through the same helpers the
++ * resolver uses, without Prisma. They catch wiring regressions that
++ * helper-only unit tests cannot.
++ */
++describe('domain-coverage integration scenarios', () => {
++  type RunFixture = {
++    id: string;
++    definitionId: string;
++    config: { jobChoiceValueFirst?: string; jobChoiceBatchGroupId?: string; samplesPerScenario?: number; models?: string[] };
++    transcripts: Array<{ modelId: string; scenarioId: string | null; sampleIndex: number }>;
++    scenarioIds: string[];
++  };
 +
-+  it('trims whitespace', () => {
-+    expect(getCoverageDirection({ jobChoiceValueFirst: '  career  ' })).toBe('career');
-+  });
-+
-+  it('returns null for an empty string', () => {
-+    expect(getCoverageDirection({ jobChoiceValueFirst: '' })).toBeNull();
-+  });
-+
-+  it('returns null for whitespace-only', () => {
-+    expect(getCoverageDirection({ jobChoiceValueFirst: '   ' })).toBeNull();
-+  });
-+
-+  it('returns null when the field is missing', () => {
-+    expect(getCoverageDirection({})).toBeNull();
-+  });
-+
-+  it('returns null for a non-string number value', () => {
-+    expect(getCoverageDirection({ jobChoiceValueFirst: 42 })).toBeNull();
-+  });
-+
-+  it('returns null for a non-string boolean value', () => {
-+    expect(getCoverageDirection({ jobChoiceValueFirst: true })).toBeNull();
-+  });
-+
-+  it('returns null for null config', () => {
-+    expect(getCoverageDirection(null)).toBeNull();
-+  });
-+
-+  it('returns the value even when launch mode is not PAIRED_BATCH (trust-but-do-not-validate tripwire)', () => {
-+    // The algorithm trusts jobChoiceValueFirst regardless of launch mode.
-+    // If a future change adds a launch-mode guard, this test should fail
-+    // and force a deliberate update.
-+    expect(
-+      getCoverageDirection({ jobChoiceLaunchMode: 'AD_HOC_BATCH', jobChoiceValueFirst: 'career' }),
-+    ).toBe('career');
-+  });
-+});
-+
-+describe('selectPrimaryDefinitionCountsByDirection', () => {
-+  function makeDirMap(
-+    entries: Array<[string, Map<string, Set<string>>]>,
++  function buildDirectionalMap(
++    runs: ReadonlyArray<RunFixture>,
 +  ): Map<string, Map<string, Set<string>>> {
-+    return new Map(entries);
++    const out = new Map<string, Map<string, Set<string>>>();
++    for (const run of runs) {
++      const direction = getCoverageDirection(run.config);
++      if (direction === null) continue;
++      const groupId = getCoverageBatchGroupId(run.config);
++      const groupKey = groupId ?? `__ungrouped__:${run.id}`;
++      const defMap = out.get(run.definitionId) ?? new Map<string, Set<string>>();
++      const dirSet = defMap.get(direction) ?? new Set<string>();
++      dirSet.add(groupKey);
++      defMap.set(direction, dirSet);
++      out.set(run.definitionId, defMap);
++    }
++    return out;
 +  }
 +
-+  it('returns zero for an empty definition list', () => {
-+    expect(selectPrimaryDefinitionCountsByDirection([], new Map(), new Map())).toEqual({
-+      primaryDefinitionId: null,
-+      batchCount: 0,
-+      pairedBatchCount: 0,
-+    });
++  function buildBatchCounts(runs: ReadonlyArray<RunFixture>): Map<string, number> {
++    // For these tests assume every fixture run is "complete" — the resolver
++    // already filters by isRunComplete before reaching this aggregation.
++    const out = new Map<string, number>();
++    for (const run of runs) {
++      out.set(run.definitionId, (out.get(run.definitionId) ?? 0) + 1);
++    }
++    return out;
++  }
++
++  it('I1 — Asymmetric pair: 2 A-first + 1 B-first across companion definitions → pairedBatchCount = 1', () => {
++    const runs: RunFixture[] = [
++      { id: 'r1', definitionId: 'def-a', config: { jobChoiceValueFirst: 'career', jobChoiceBatchGroupId: 'g1' }, transcripts: [], scenarioIds: [] },
++      { id: 'r2', definitionId: 'def-a', config: { jobChoiceValueFirst: 'career', jobChoiceBatchGroupId: 'g2' }, transcripts: [], scenarioIds: [] },
++      { id: 'r3', definitionId: 'def-b', config: { jobChoiceValueFirst: 'family', jobChoiceBatchGroupId: 'g1' }, transcripts: [], scenarioIds: [] },
++    ];
++    const dirs = buildDirectionalMap(runs);
++    const batches = buildBatchCounts(runs);
++    const result = selectPrimaryDefinitionCounts(['def-a', 'def-b'], batches, dirs);
++    expect(result.batchCount).toBe(3);
++    expect(result.pairedBatchCount).toBe(1); // min(2, 1) = 1
 +  });
 +
-+  it('single direction only -> pairedBatchCount = 0', () => {
-+    const batches = new Map([['def-a', 1]]);
-+    const dirs = makeDirMap([[
-+      'def-a', new Map([['vf-A', new Set(['g1'])]]),
-+    ]]);
-+    expect(selectPrimaryDefinitionCountsByDirection(['def-a'], batches, dirs)).toEqual({
-+      primaryDefinitionId: 'def-a',
-+      batchCount: 1,
-+      pairedBatchCount: 0,
-+    });
++  it('I2 — Metric divergence: 1 healthy paired batch → pairedBatchCount=1 but minTrialCount reflects only one companion', () => {
++    // Documented divergence per spec §5.7: pairedBatchCount counts both
++    // directions, but the trial-count path keeps deduplicateRunsByGroupId
++    // which picks one survivor per group.
++    const fiveTranscripts = Array.from({ length: 5 }, (_, i) => ({ modelId: 'model-a', scenarioId: 's1', sampleIndex: i }));
++    const runs: RunFixture[] = [
++      { id: 'r1', definitionId: 'def-a', config: { jobChoiceValueFirst: 'career', jobChoiceBatchGroupId: 'g1', samplesPerScenario: 5, models: ['model-a'] }, transcripts: fiveTranscripts, scenarioIds: ['s1'] },
++      { id: 'r2', definitionId: 'def-b', config: { jobChoiceValueFirst: 'family', jobChoiceBatchGroupId: 'g1', samplesPerScenario: 5, models: ['model-a'] }, transcripts: fiveTranscripts, scenarioIds: ['s1'] },
++    ];
++    const dirs = buildDirectionalMap(runs);
++    const batches = buildBatchCounts(runs);
++
++    // pairedBatchCount: 1 (both directions present, group g1 in each → min(1,1) = 1)
++    const cellResult = selectPrimaryDefinitionCounts(['def-a', 'def-b'], batches, dirs);
++    expect(cellResult.pairedBatchCount).toBe(1);
++    expect(cellResult.batchCount).toBe(2);
++
++    // Trial counts: deduplicateRunsByGroupId picks ONE survivor per groupId,
++    // so only one companion's 5 transcripts feed computePerModelTrialCounts.
++    const labels = new Map([['model-a', 'Model A']]);
++    const dedupedRuns = deduplicateRunsByGroupId(runs);
++    expect(dedupedRuns).toHaveLength(1); // only one survivor for groupId 'g1'
++    const trialResult = computePerModelTrialCounts(dedupedRuns, ['model-a'], labels);
++    expect(trialResult.minTrialCount).toBe(5); // not 10 — trial-count path takes one survivor
++
++    // The divergence: pairedBatchCount=1 says "we have a pair to analyze",
++    // but minTrialCount=5 reflects only one companion's transcripts. This is
++    // the documented (and intentional) divergence per spec §5.7.
 +  });
 +
-+  it('both directions equal -> pairedBatchCount = min(N, N)', () => {
-+    const batches = new Map([['def-a', 4]]);
-+    const dirs = makeDirMap([[
-+      'def-a', new Map([
-+        ['vf-A', new Set(['g1', 'g2'])],
-+        ['vf-B', new Set(['g1', 'g2'])],
-+      ]),
-+    ]]);
-+    expect(selectPrimaryDefinitionCountsByDirection(['def-a'], batches, dirs)).toEqual({
-+      primaryDefinitionId: 'def-a',
-+      batchCount: 4,
-+      pairedBatchCount: 2,
-+    });
++  it('I3 — Legacy run (no jobChoiceValueFirst) coexists with new runs in same cell', () => {
++    const runs: RunFixture[] = [
++      { id: 'r1', definitionId: 'def-a', config: { jobChoiceValueFirst: 'career', jobChoiceBatchGroupId: 'g1' }, transcripts: [], scenarioIds: [] },
++      // Legacy: missing jobChoiceValueFirst — contributes to batchCount but not directional counts
++      { id: 'r2', definitionId: 'def-a', config: { jobChoiceBatchGroupId: 'g0' }, transcripts: [], scenarioIds: [] },
++    ];
++    const dirs = buildDirectionalMap(runs);
++    const batches = buildBatchCounts(runs);
++    const result = selectPrimaryDefinitionCounts(['def-a'], batches, dirs);
++    expect(result.batchCount).toBe(2); // both runs count toward batchCount
++    expect(result.pairedBatchCount).toBe(0); // only one direction has any classifiable run
 +  });
 +
-+  it('both directions, A=3 B=2 -> pairedBatchCount = min(3, 2) = 2', () => {
-+    const batches = new Map([['def-a', 5]]);
-+    const dirs = makeDirMap([[
-+      'def-a', new Map([
-+        ['vf-A', new Set(['g1', 'g2', 'g3'])],
-+        ['vf-B', new Set(['g1', 'g2'])],
-+      ]),
-+    ]]);
-+    expect(selectPrimaryDefinitionCountsByDirection(['def-a'], batches, dirs)).toEqual({
-+      primaryDefinitionId: 'def-a',
-+      batchCount: 5,
-+      pairedBatchCount: 2,
-+    });
++  it('I4 — Retry duplicate within same launch group collapses via Set semantics', () => {
++    // Two completed A-first runs sharing the same jobChoiceBatchGroupId
++    // (theoretical retry case); plus one complete B-first in the same group.
++    const runs: RunFixture[] = [
++      { id: 'r1', definitionId: 'def-a', config: { jobChoiceValueFirst: 'career', jobChoiceBatchGroupId: 'g1' }, transcripts: [], scenarioIds: [] },
++      { id: 'r2', definitionId: 'def-a', config: { jobChoiceValueFirst: 'career', jobChoiceBatchGroupId: 'g1' }, transcripts: [], scenarioIds: [] }, // retry
++      { id: 'r3', definitionId: 'def-b', config: { jobChoiceValueFirst: 'family', jobChoiceBatchGroupId: 'g1' }, transcripts: [], scenarioIds: [] },
++    ];
++    const dirs = buildDirectionalMap(runs);
++    const batches = buildBatchCounts(runs);
++    const result = selectPrimaryDefinitionCounts(['def-a', 'def-b'], batches, dirs);
++    expect(result.batchCount).toBe(3);
++    // Set-of-groupIds collapses the two A-first runs into 1 → min(1, 1) = 1
++    expect(result.pairedBatchCount).toBe(1);
 +  });
 +
-+  it('cross-definition pair (companion structure) merges via Set.union per direction', () => {
-+    // def-a has all A-first runs, def-b has all B-first runs (companion definitions)
-+    const batches = new Map([['def-a', 2], ['def-b', 2]]);
-+    const dirs = makeDirMap([
-+      ['def-a', new Map([['vf-A', new Set(['g1', 'g2'])]])],
-+      ['def-b', new Map([['vf-B', new Set(['g1', 'g2'])]])],
-+    ]);
-+    const result = selectPrimaryDefinitionCountsByDirection(
-+      ['def-a', 'def-b'], batches, dirs,
-+    );
-+    expect(result.batchCount).toBe(4);
-+    expect(result.pairedBatchCount).toBe(2);
-+    // Tie-break: both have batchCount=2; both have directionCount=1; localeCompare picks 'def-a'
-+    expect(result.primaryDefinitionId).toBe('def-a');
-+  });
-+
-+  it('retry duplicate within group (Set collapses same groupId)', () => {
-+    // Set semantics: adding the same g1 twice still leaves size=1.
-+    const batches = new Map([['def-a', 2]]);
-+    const dirs = makeDirMap([[
-+      'def-a', new Map([
-+        ['vf-A', new Set(['g1'])], // Set already collapsed
-+      ]),
-+    ]]);
-+    expect(selectPrimaryDefinitionCountsByDirection(['def-a'], batches, dirs)).toEqual({
-+      primaryDefinitionId: 'def-a',
-+      batchCount: 2,
-+      pairedBatchCount: 0, // Only one direction
-+    });
-+  });
-+
-+  it('>2 directions corruption: takes min of two largest, calls log.warn', () => {
-+    const batches = new Map([['def-a', 5]]);
-+    const dirs = makeDirMap([[
-+      'def-a', new Map([
-+        ['vf-A', new Set(['g1', 'g2', 'g3'])], // 3
-+        ['vf-B', new Set(['g1'])],              // 1
-+        ['vf-X', new Set(['g4'])],              // 1
-+      ]),
-+    ]]);
++  it('I5 — >2 directions corruption: emits log.warn + uses two largest counts', () => {
++    const runs: RunFixture[] = [
++      { id: 'r1', definitionId: 'def-a', config: { jobChoiceValueFirst: 'career', jobChoiceBatchGroupId: 'g1' }, transcripts: [], scenarioIds: [] },
++      { id: 'r2', definitionId: 'def-a', config: { jobChoiceValueFirst: 'career', jobChoiceBatchGroupId: 'g2' }, transcripts: [], scenarioIds: [] },
++      { id: 'r3', definitionId: 'def-a', config: { jobChoiceValueFirst: 'career', jobChoiceBatchGroupId: 'g3' }, transcripts: [], scenarioIds: [] },
++      { id: 'r4', definitionId: 'def-a', config: { jobChoiceValueFirst: 'family', jobChoiceBatchGroupId: 'g4' }, transcripts: [], scenarioIds: [] },
++      { id: 'r5', definitionId: 'def-a', config: { jobChoiceValueFirst: 'leisure', jobChoiceBatchGroupId: 'g5' }, transcripts: [], scenarioIds: [] }, // 3rd direction
++    ];
++    const dirs = buildDirectionalMap(runs);
++    const batches = buildBatchCounts(runs);
 +    const log = { warn: vi.fn() };
-+    const result = selectPrimaryDefinitionCountsByDirection(
-+      ['def-a'], batches, dirs, log, 'Achievement::Tradition',
-+    );
-+    // Two largest counts: 3 and 1 -> min = 1
++    const result = selectPrimaryDefinitionCounts(['def-a'], batches, dirs, log, 'Achievement::Tradition');
++    // Counts: career=3, family=1, leisure=1 → two largest = 3, 1 → min = 1
 +    expect(result.pairedBatchCount).toBe(1);
 +    expect(log.warn).toHaveBeenCalledTimes(1);
 +    expect(log.warn).toHaveBeenCalledWith(
 +      expect.objectContaining({
 +        cellKey: 'Achievement::Tradition',
-+        directions: expect.arrayContaining(['vf-A', 'vf-B', 'vf-X']),
++        directions: expect.arrayContaining(['career', 'family', 'leisure']),
 +      }),
 +      expect.stringContaining('>2 distinct'),
 +    );
-+  });
-+
-+  it('tie-break on directionCount: prefers def with both directions', () => {
-+    // def-a and def-b tie on batchCount=2; def-b has both directions present
-+    const batches = new Map([['def-a', 2], ['def-b', 2]]);
-+    const dirs = makeDirMap([
-+      ['def-a', new Map([['vf-A', new Set(['g1', 'g2'])]])],
-+      ['def-b', new Map([
-+        ['vf-A', new Set(['g3'])],
-+        ['vf-B', new Set(['g3'])],
-+      ])],
-+    ]);
-+    const result = selectPrimaryDefinitionCountsByDirection(
-+      ['def-a', 'def-b'], batches, dirs,
-+    );
-+    expect(result.primaryDefinitionId).toBe('def-b');
-+  });
-+
-+  it('tie-break on defId.localeCompare when batchCount and directionCount tie', () => {
-+    const batches = new Map([['def-z', 2], ['def-a', 2]]);
-+    const dirs = makeDirMap([
-+      ['def-z', new Map([['vf-A', new Set(['g1', 'g2'])]])],
-+      ['def-a', new Map([['vf-A', new Set(['g3', 'g4'])]])],
-+    ]);
-+    const result = selectPrimaryDefinitionCountsByDirection(
-+      ['def-z', 'def-a'], batches, dirs,
-+    );
-+    expect(result.primaryDefinitionId).toBe('def-a');
-+  });
-+
-+  it('ignores samplesPerScenario — directional count is per (group, direction), not per sample (tripwire)', () => {
-+    // The new helper does NOT see samplesPerScenario at all. This test
-+    // documents that the post-PR-#756 semantic (each complete run = 1 batch
-+    // regardless of sps) is preserved by the new direction-based helper.
-+    // If someone re-adds sps multiplication, this test should still pass —
-+    // the helper has no input field for sps to influence.
-+    const batches = new Map([['def-a', 2]]);
-+    const dirs = makeDirMap([[
-+      'def-a', new Map([
-+        ['vf-A', new Set(['g1'])],
-+        ['vf-B', new Set(['g1'])],
-+      ]),
-+    ]]);
-+    expect(selectPrimaryDefinitionCountsByDirection(['def-a'], batches, dirs).pairedBatchCount).toBe(1);
-+  });
-+
-+  it('does not warn when no log is provided in the >2 corruption case', () => {
-+    const batches = new Map([['def-a', 5]]);
-+    const dirs = makeDirMap([[
-+      'def-a', new Map([
-+        ['vf-A', new Set(['g1', 'g2'])],
-+        ['vf-B', new Set(['g1'])],
-+        ['vf-X', new Set(['g4'])],
-+      ]),
-+    ]]);
-+    // Should not throw without log, just compute the heuristic.
-+    expect(() =>
-+      selectPrimaryDefinitionCountsByDirection(['def-a'], batches, dirs),
-+    ).not.toThrow();
 +  });
 +});
