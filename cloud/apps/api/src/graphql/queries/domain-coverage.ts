@@ -8,6 +8,7 @@
 
 import { builder } from '../builder.js';
 import { db, resolveDefinitionContent } from '@valuerank/db';
+import { AppError } from '@valuerank/shared';
 
 import {
   COVERAGE_VALUE_KEYS,
@@ -180,6 +181,24 @@ builder.queryField('domainValueCoverage', (t) =>
           // every (scenarioId × sampleIndex) slot. samplesPerScenario does not
           // multiply the count. Aggregate runs are excluded from both batch
           // and incomplete-batch counts (they are rollup records, not data).
+          //
+          // A COMPLETED run with null/malformed `config` or no `models` array
+          // is a data corruption signal; surface it instead of silently
+          // skipping. `samplesPerScenario` and `isAggregate` remain optional.
+          if (run.config === null || typeof run.config !== 'object') {
+            throw new AppError(
+              `Run ${run.id} has null or non-object config; cannot compute coverage`,
+              'RUN_CONFIG_INVALID',
+              500,
+              { runId: run.id },
+            );
+          }
+          const config = run.config as {
+            isAggregate?: boolean;
+            models?: unknown;
+            samplesPerScenario?: unknown;
+          };
+
           const scenarioIds = run.scenarioSelections.map((s) => s.scenarioId);
           const runWithScenarios = {
             id: run.id,
@@ -192,7 +211,7 @@ builder.queryField('domainValueCoverage', (t) =>
           existingRuns.push(runWithScenarios);
           signatureScopedRunsByDefinitionId.set(run.definitionId, existingRuns);
 
-          const isAggregateRun = (run.config as { isAggregate?: boolean } | null)?.isAggregate === true;
+          const isAggregateRun = config.isAggregate === true;
           if (isAggregateRun) {
             if (!latestAggregateRunIdByDefinitionId.has(run.definitionId)) {
               latestAggregateRunIdByDefinitionId.set(run.definitionId, run.id);
@@ -224,11 +243,26 @@ builder.queryField('domainValueCoverage', (t) =>
           // iff every (scenarioId × modelId × sampleIndex) slot has at least
           // one transcript. Extra transcripts in a slot do NOT break
           // completeness; only missing slots do.
-          const configModels = (run.config as { models?: unknown } | null)?.models;
-          const models = Array.isArray(configModels)
-            ? configModels.filter((m): m is string => typeof m === 'string' && m.length > 0)
-            : [];
-          const rawSamples = (run.config as { samplesPerScenario?: unknown } | null)?.samplesPerScenario;
+          if (!Array.isArray(config.models)) {
+            throw new AppError(
+              `Run ${run.id} config has no models array; cannot compute coverage`,
+              'RUN_CONFIG_INVALID',
+              500,
+              { runId: run.id },
+            );
+          }
+          const models = config.models.filter(
+            (m): m is string => typeof m === 'string' && m.length > 0,
+          );
+          if (models.length === 0) {
+            throw new AppError(
+              `Run ${run.id} has empty or invalid models array`,
+              'RUN_CONFIG_INVALID',
+              500,
+              { runId: run.id },
+            );
+          }
+          const rawSamples = config.samplesPerScenario;
           const samplesPerScenario = typeof rawSamples === 'number' ? rawSamples : null;
           const existingTranscripts = run.transcripts
             .filter((t): t is { scenarioId: string; modelId: string; sampleIndex: number } => t.scenarioId !== null);
