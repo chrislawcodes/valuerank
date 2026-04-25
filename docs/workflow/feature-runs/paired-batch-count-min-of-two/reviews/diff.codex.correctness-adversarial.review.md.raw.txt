@@ -1,0 +1,7 @@
+## Findings
+- [UNVERIFIED][MEDIUM] The new directional helper is not wired into the live coverage query path. `cloud/apps/api/src/graphql/queries/domain-coverage.ts:370-375` still calls `selectPrimaryDefinitionCounts(...)`, so this patch does not change the numbers surfaced to users. If the intent was to switch coverage cells to the directional model, the implementation is still inert.
+- [UNVERIFIED][MEDIUM] `selectPrimaryDefinitionCountsByDirection()` computes `pairedBatchCount` from `min(set.size)` after unioning per-direction sets. That assumes the two direction buckets contain the same batch-group IDs. If they drift, the function overcounts. Example: A-first `{g1,g2}` and B-first `{h1,h2}` would return `2` even though there are no matched pairs. The code does not verify or warn on that invariant.
+
+## Residual Risks
+- I could not verify the upstream guarantee that every paired batch shares the same group ID across both directions. If that invariant is strict, the overcount risk above is lower.
+- There are no tests here that exercise the actual GraphQL query output, only the new helper. That leaves room for a wiring regression even if the helper itself is correct.

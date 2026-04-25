@@ -1,0 +1,1376 @@
+Reading additional input from stdin...
+OpenAI Codex v0.125.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/busy-tesla-89e817
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019dc5de-2c4b-7f70-90e3-b1014999d54a
+--------
+user
+Review this diff artifact using a regression-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: implementation.diff.patch
+diff --git a/cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts b/cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts
+index b508c3e1..a6412175 100644
+--- a/cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts
++++ b/cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts
+@@ -247,3 +247,102 @@ export function getCoverageBatchGroupId(runConfig: unknown): string | null {
+ 
+   return raw != null && raw.trim().length > 0 ? raw.trim() : null;
+ }
++
++/**
++ * Read the direction token off a Run's config. Returns null for missing,
++ * blank, or non-string `jobChoiceValueFirst`. Trimmed.
++ */
++export function getCoverageDirection(runConfig: unknown): string | null {
++  const config = runConfig as { jobChoiceValueFirst?: unknown } | null;
++  if (config == null || typeof config.jobChoiceValueFirst !== 'string') return null;
++  const trimmed = config.jobChoiceValueFirst.trim();
++  return trimmed.length > 0 ? trimmed : null;
++}
++
++/**
++ * Compute per-cell counts using the directional model.
++ *
++ * Sums `batchCount` across companion definitions (unchanged semantics).
++ * Computes `pairedBatchCount = min(complete A-first, complete B-first)`
++ * by merging per-direction Sets across companion definitions and taking
++ * `min(set.size)` of the two directions. When >2 distinct directions
++ * appear in the merged map (data corruption), takes min of the two
++ * largest counts and emits a warning via `log.warn` (if provided).
++ *
++ * Tie-break for `primaryDefinitionId`: `(batchCount desc, directionCount desc, defId asc)`
++ * where `directionCount = directionalGroupsByDefinitionId.get(defId)?.size ?? 0`.
++ */
++export function selectPrimaryDefinitionCountsByDirection(
++  definitionIds: readonly string[],
++  batchCountByDefinitionId: ReadonlyMap<string, number>,
++  directionalGroupsByDefinitionId: ReadonlyMap<string, ReadonlyMap<string, ReadonlySet<string>>>,
++  log?: { warn: (obj: object, msg: string) => void },
++  cellKey?: string,
++): { primaryDefinitionId: string | null; batchCount: number; pairedBatchCount: number } {
++  const uniqueDefinitionIds = Array.from(new Set(definitionIds));
++  if (uniqueDefinitionIds.length === 0) {
++    return { primaryDefinitionId: null, batchCount: 0, pairedBatchCount: 0 };
++  }
++
++  const directionCountFor = (defId: string): number =>
++    directionalGroupsByDefinitionId.get(defId)?.size ?? 0;
++
++  const primaryDefinitionId = uniqueDefinitionIds.reduce((best, defId) => {
++    const bestBatch = batchCountByDefinitionId.get(best) ?? 0;
++    const thisBatch = batchCountByDefinitionId.get(defId) ?? 0;
++    if (thisBatch > bestBatch) return defId;
++    if (thisBatch < bestBatch) return best;
++
++    const bestDirs = directionCountFor(best);
++    const thisDirs = directionCountFor(defId);
++    if (thisDirs > bestDirs) return defId;
++    if (thisDirs < bestDirs) return best;
++
++    return defId.localeCompare(best) < 0 ? defId : best;
++  }, uniqueDefinitionIds[0] ?? '');
++
++  const batchCount = uniqueDefinitionIds.reduce(
++    (total, defId) => total + (batchCountByDefinitionId.get(defId) ?? 0),
++    0,
++  );
++
++  // Merge per-direction Sets across companion definitions for this cell.
++  const merged = new Map<string, Set<string>>();
++  for (const defId of uniqueDefinitionIds) {
++    const defMap = directionalGroupsByDefinitionId.get(defId);
++    if (defMap == null) continue;
++    for (const [direction, groupKeys] of defMap) {
++      const existing = merged.get(direction) ?? new Set<string>();
++      for (const key of groupKeys) existing.add(key);
++      merged.set(direction, existing);
++    }
++  }
++
++  let pairedBatchCount: number;
++  if (merged.size === 0 || merged.size === 1) {
++    pairedBatchCount = 0;
++  } else if (merged.size === 2) {
++    const counts = Array.from(merged.values()).map((s) => s.size);
++    pairedBatchCount = Math.min(counts[0]!, counts[1]!);
++  } else {
++    // >2 distinct direction tokens — data corruption. Take min of the two
++    // largest counts and emit a warning. Do not throw; the operator should
++    // still see a number.
++    const sortedCounts = Array.from(merged.values())
++      .map((s) => s.size)
++      .sort((a, b) => b - a);
++    pairedBatchCount = Math.min(sortedCounts[0]!, sortedCounts[1]!);
++    if (log != null) {
++      log.warn(
++        { cellKey, directions: Array.from(merged.keys()), definitionIds: uniqueDefinitionIds },
++        '>2 distinct jobChoiceValueFirst tokens in single coverage cell; using min of two largest',
++      );
++    }
++  }
++
++  return {
++    primaryDefinitionId: primaryDefinitionId === '' ? null : primaryDefinitionId,
++    batchCount,
++    pairedBatchCount,
++  };
++}
+diff --git a/cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts b/cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts
+index 574ce503..f5b96b5b 100644
+--- a/cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts
++++ b/cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts
+@@ -1,10 +1,12 @@
+-import { describe, expect, it } from 'vitest';
++import { describe, expect, it, vi } from 'vitest';
+ import {
+   extractValuePair,
+   getCoverageBatchGroupId,
+   getCoverageBatchIncrement,
++  getCoverageDirection,
+   selectPrimaryDefinitionCount,
+   selectPrimaryDefinitionCounts,
++  selectPrimaryDefinitionCountsByDirection,
+   computePerModelTrialCounts,
+   deduplicateRunsByGroupId,
+ } from '../../../src/graphql/queries/domain-coverage-utils.js';
+@@ -481,3 +483,219 @@ describe('deduplicateRunsByGroupId', () => {
+     expect(result.minTrialCount).toBe(10); // 2 groups x 5 transcripts each
+   });
+ });
++
++describe('getCoverageDirection', () => {
++  it('returns the trimmed string for a normal direction token', () => {
++    expect(getCoverageDirection({ jobChoiceValueFirst: 'career' })).toBe('career');
++  });
++
++  it('trims whitespace', () => {
++    expect(getCoverageDirection({ jobChoiceValueFirst: '  career  ' })).toBe('career');
++  });
++
++  it('returns null for an empty string', () => {
++    expect(getCoverageDirection({ jobChoiceValueFirst: '' })).toBeNull();
++  });
++
++  it('returns null for whitespace-only', () => {
++    expect(getCoverageDirection({ jobChoiceValueFirst: '   ' })).toBeNull();
++  });
++
++  it('returns null when the field is missing', () => {
++    expect(getCoverageDirection({})).toBeNull();
++  });
++
++  it('returns null for a non-string number value', () => {
++    expect(getCoverageDirection({ jobChoiceValueFirst: 42 })).toBeNull();
++  });
++
++  it('returns null for a non-string boolean value', () => {
++    expect(getCoverageDirection({ jobChoiceValueFirst: true })).toBeNull();
++  });
++
++  it('returns null for null config', () => {
++    expect(getCoverageDirection(null)).toBeNull();
++  });
++
++  it('returns the value even when launch mode is not PAIRED_BATCH (trust-but-do-not-validate tripwire)', () => {
++    // The algorithm trusts jobChoiceValueFirst regardless of launch mode.
++    // If a future change adds a launch-mode guard, this test should fail
++    // and force a deliberate update.
++    expect(
++      getCoverageDirection({ jobChoiceLaunchMode: 'AD_HOC_BATCH', jobChoiceValueFirst: 'career' }),
++    ).toBe('career');
++  });
++});
++
++describe('selectPrimaryDefinitionCountsByDirection', () => {
++  function makeDirMap(
++    entries: Array<[string, Map<string, Set<string>>]>,
++  ): Map<string, Map<string, Set<string>>> {
++    return new Map(entries);
++  }
++
++  it('returns zero for an empty definition list', () => {
++    expect(selectPrimaryDefinitionCountsByDirection([], new Map(), new Map())).toEqual({
++      primaryDefinitionId: null,
++      batchCount: 0,
++      pairedBatchCount: 0,
++    });
++  });
++
++  it('single direction only -> pairedBatchCount = 0', () => {
++    const batches = new Map([['def-a', 1]]);
++    const dirs = makeDirMap([[
++      'def-a', new Map([['vf-A', new Set(['g1'])]]),
++    ]]);
++    expect(selectPrimaryDefinitionCountsByDirection(['def-a'], batches, dirs)).toEqual({
++      primaryDefinitionId: 'def-a',
++      batchCount: 1,
++      pairedBatchCount: 0,
++    });
++  });
++
++  it('both directions equal -> pairedBatchCount = min(N, N)', () => {
++    const batches = new Map([['def-a', 4]]);
++    const dirs = makeDirMap([[
++      'def-a', new Map([
++        ['vf-A', new Set(['g1', 'g2'])],
++        ['vf-B', new Set(['g1', 'g2'])],
++      ]),
++    ]]);
++    expect(selectPrimaryDefinitionCountsByDirection(['def-a'], batches, dirs)).toEqual({
++      primaryDefinitionId: 'def-a',
++      batchCount: 4,
++      pairedBatchCount: 2,
++    });
++  });
++
++  it('both directions, A=3 B=2 -> pairedBatchCount = min(3, 2) = 2', () => {
++    const batches = new Map([['def-a', 5]]);
++    const dirs = makeDirMap([[
++      'def-a', new Map([
++        ['vf-A', new Set(['g1', 'g2', 'g3'])],
++        ['vf-B', new Set(['g1', 'g2'])],
++      ]),
++    ]]);
++    expect(selectPrimaryDefinitionCountsByDirection(['def-a'], batches, dirs)).toEqual({
++      primaryDefinitionId: 'def-a',
++      batchCount: 5,
++      pairedBatchCount: 2,
++    });
++  });
++
++  it('cross-definition pair (companion structure) merges via Set.union per direction', () => {
++    // def-a has all A-first runs, def-b has all B-first runs (companion definitions)
++    const batches = new Map([['def-a', 2], ['def-b', 2]]);
++    const dirs = makeDirMap([
++      ['def-a', new Map([['vf-A', new Set(['g1', 'g2'])]])],
++      ['def-b', new Map([['vf-B', new Set(['g1', 'g2'])]])],
++    ]);
++    const result = selectPrimaryDefinitionCountsByDirection(
++      ['def-a', 'def-b'], batches, dirs,
++    );
++    expect(result.batchCount).toBe(4);
++    expect(result.pairedBatchCount).toBe(2);
++    // Tie-break: both have batchCount=2; both have directionCount=1; localeCompare picks 'def-a'
++    expect(result.primaryDefinitionId).toBe('def-a');
++  });
++
++  it('retry duplicate within group (Set collapses same groupId)', () => {
++    // Set semantics: adding the same g1 twice still leaves size=1.
++    const batches = new Map([['def-a', 2]]);
++    const dirs = makeDirMap([[
++      'def-a', new Map([
++        ['vf-A', new Set(['g1'])], // Set already collapsed
++      ]),
++    ]]);
++    expect(selectPrimaryDefinitionCountsByDirection(['def-a'], batches, dirs)).toEqual({
++      primaryDefinitionId: 'def-a',
++      batchCount: 2,
++      pairedBatchCount: 0, // Only one direction
++    });
++  });
++
++  it('>2 directions corruption: takes min of two largest, calls log.warn', () => {
++    const batches = new Map([['def-a', 5]]);
++    const dirs = makeDirMap([[
++      'def-a', new Map([
++        ['vf-A', new Set(['g1', 'g2', 'g3'])], // 3
++        ['vf-B', new Set(['g1'])],              // 1
++        ['vf-X', new Set(['g4'])],              // 1
++      ]),
++    ]]);
++    const log = { warn: vi.fn() };
++    const result = selectPrimaryDefinitionCountsByDirection(
++      ['def-a'], batches, dirs, log, 'Achievement::Tradition',
++    );
++    // Two largest counts: 3 and 1 -> min = 1
++    expect(result.pairedBatchCount).toBe(1);
++    expect(log.warn).toHaveBeenCalledTimes(1);
++    expect(log.warn).toHaveBeenCalledWith(
++      expect.objectContaining({
++        cellKey: 'Achievement::Tradition',
++        directions: expect.arrayContaining(['vf-A', 'vf-B', 'vf-X']),
++      }),
++      expect.stringContaining('>2 distinct'),
++    );
++  });
++
++  it('tie-break on directionCount: prefers def with both directions', () => {
++    // def-a and def-b tie on batchCount=2; def-b has both directions present
++    const batches = new Map([['def-a', 2], ['def-b', 2]]);
++    const dirs = makeDirMap([
++      ['def-a', new Map([['vf-A', new Set(['g1', 'g2'])]])],
++      ['def-b', new Map([
++        ['vf-A', new Set(['g3'])],
++        ['vf-B', new Set(['g3'])],
++      ])],
++    ]);
++    const result = selectPrimaryDefinitionCountsByDirection(
++      ['def-a', 'def-b'], batches, dirs,
++    );
++    expect(result.primaryDefinitionId).toBe('def-b');
++  });
++
++  it('tie-break on defId.localeCompare when batchCount and directionCount tie', () => {
++    const batches = new Map([['def-z', 2], ['def-a', 2]]);
++    const dirs = makeDirMap([
++      ['def-z', new Map([['vf-A', new Set(['g1', 'g2'])]])],
++      ['def-a', new Map([['vf-A', new Set(['g3', 'g4'])]])],
++    ]);
++    const result = selectPrimaryDefinitionCountsByDirection(
++      ['def-z', 'def-a'], batches, dirs,
++    );
++    expect(result.primaryDefinitionId).toBe('def-a');
++  });
++
++  it('ignores samplesPerScenario — directional count is per (group, direction), not per sample (tripwire)', () => {
++    // The new helper does NOT see samplesPerScenario at all. This test
++    // documents that the post-PR-#756 semantic (each complete run = 1 batch
++    // regardless of sps) is preserved by the new direction-based helper.
++    // If someone re-adds sps multiplication, this test should still pass —
++    // the helper has no input field for sps to influence.
++    const batches = new Map([['def-a', 2]]);
++    const dirs = makeDirMap([[
++      'def-a', new Map([
++        ['vf-A', new Set(['g1'])],
++        ['vf-B', new Set(['g1'])],
++      ]),
++    ]]);
++    expect(selectPrimaryDefinitionCountsByDirection(['def-a'], batches, dirs).pairedBatchCount).toBe(1);
++  });
++
++  it('does not warn when no log is provided in the >2 corruption case', () => {
++    const batches = new Map([['def-a', 5]]);
++    const dirs = makeDirMap([[
++      'def-a', new Map([
++        ['vf-A', new Set(['g1', 'g2'])],
++        ['vf-B', new Set(['g1'])],
++        ['vf-X', new Set(['g4'])],
++      ]),
++    ]]);
++    // Should not throw without log, just compute the heuristic.
++    expect(() =>
++      selectPrimaryDefinitionCountsByDirection(['def-a'], batches, dirs),
++    ).not.toThrow();
++  });
++});
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m checking the surrounding implementation so I can separate real regressions from assumptions about how this helper will be used.
+exec
+/bin/zsh -lc "sed -n '1,360p' cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts" in /Users/chrislaw/valuerank/.claude/worktrees/busy-tesla-89e817
+ succeeded in 0ms:
+import { DOMAIN_ANALYSIS_VALUE_KEYS, extractValuePair, toPascalCaseKey, type DomainAnalysisValueKey } from './domain-analysis-values.js';
+
+export const COVERAGE_VALUE_KEYS = DOMAIN_ANALYSIS_VALUE_KEYS;
+export type CoverageValueKey = DomainAnalysisValueKey;
+export { extractValuePair, toPascalCaseKey };
+
+/**
+ * Extract the two canonical value dimension names from a definition's resolved content JSON.
+ * Returns null if the definition does not have exactly two recognized value dimensions.
+ */
+export function selectPrimaryDefinitionCount(
+  definitionIds: readonly string[],
+  batchCountByDefinitionId: ReadonlyMap<string, number>,
+): { primaryDefinitionId: string | null; batchCount: number } {
+  const uniqueDefinitionIds = Array.from(new Set(definitionIds));
+  if (uniqueDefinitionIds.length === 0) {
+    return { primaryDefinitionId: null, batchCount: 0 };
+  }
+
+  const primaryDefinitionId = uniqueDefinitionIds.reduce((best, defId) => {
+    const bestCount = batchCountByDefinitionId.get(best) ?? 0;
+    const thisCount = batchCountByDefinitionId.get(defId) ?? 0;
+    return thisCount > bestCount ? defId : best;
+  }, uniqueDefinitionIds[0] ?? '');
+
+  return {
+    primaryDefinitionId: primaryDefinitionId === '' ? null : primaryDefinitionId,
+    batchCount: primaryDefinitionId === '' ? 0 : (batchCountByDefinitionId.get(primaryDefinitionId) ?? 0),
+  };
+}
+
+export function selectPrimaryDefinitionCounts(
+  definitionIds: readonly string[],
+  batchCountByDefinitionId: ReadonlyMap<string, number>,
+  pairedBatchCountByDefinitionId: ReadonlyMap<string, number>,
+  pairedBatchGroupIdsByDefinitionId?: ReadonlyMap<string, ReadonlySet<string>>,
+  pairedBatchIncrementsByGroupId?: ReadonlyMap<string, ReadonlyMap<string, number>>,
+): { primaryDefinitionId: string | null; batchCount: number; pairedBatchCount: number } {
+  const uniqueDefinitionIds = Array.from(new Set(definitionIds));
+  if (uniqueDefinitionIds.length === 0) {
+    return { primaryDefinitionId: null, batchCount: 0, pairedBatchCount: 0 };
+  }
+
+  const primaryDefinitionId = uniqueDefinitionIds.reduce((best, defId) => {
+    const bestBatchCount = batchCountByDefinitionId.get(best) ?? 0;
+    const thisBatchCount = batchCountByDefinitionId.get(defId) ?? 0;
+    if (thisBatchCount > bestBatchCount) {
+      return defId;
+    }
+    if (thisBatchCount < bestBatchCount) {
+      return best;
+    }
+
+    const bestPairedCount = pairedBatchCountByDefinitionId.get(best) ?? 0;
+    const thisPairedCount = pairedBatchCountByDefinitionId.get(defId) ?? 0;
+    if (thisPairedCount > bestPairedCount) {
+      return defId;
+    }
+    if (thisPairedCount < bestPairedCount) {
+      return best;
+    }
+
+    return defId.localeCompare(best) < 0 ? defId : best;
+  }, uniqueDefinitionIds[0] ?? '');
+
+  const batchCount = uniqueDefinitionIds.reduce(
+    (total, defId) => total + (batchCountByDefinitionId.get(defId) ?? 0),
+    0,
+  );
+
+  // Deduplicate paired batch counts across companion definitions.
+  // A_first and B_first share the same group IDs, so we merge group→increment
+  // maps and take the max increment per group (not sum). Ungrouped runs are summed.
+  let pairedBatchCount: number;
+  if (pairedBatchGroupIdsByDefinitionId != null && pairedBatchIncrementsByGroupId != null) {
+    // Merge increments: for each group ID, take the max increment across definitions
+    // (companions have the same sps, so max === any, but max is safer)
+    const mergedIncrements = new Map<string, number>();
+    let ungroupedTotal = 0;
+    for (const defId of uniqueDefinitionIds) {
+      const defIncrements = pairedBatchIncrementsByGroupId.get(defId);
+      if (defIncrements != null) {
+        for (const [gid, inc] of defIncrements) {
+          mergedIncrements.set(gid, Math.max(mergedIncrements.get(gid) ?? 0, inc));
+        }
+      }
+      // Ungrouped portion: pairedBatchCount minus grouped total for this definition
+      const defPairedCount = pairedBatchCountByDefinitionId.get(defId) ?? 0;
+      const defGroupedTotal = defIncrements != null
+        ? Array.from(defIncrements.values()).reduce((sum, v) => sum + v, 0)
+        : 0;
+      ungroupedTotal += Math.max(0, defPairedCount - defGroupedTotal);
+    }
+    pairedBatchCount = Array.from(mergedIncrements.values()).reduce((sum, v) => sum + v, 0) + ungroupedTotal;
+  } else if (pairedBatchGroupIdsByDefinitionId != null) {
+    // Legacy path: group IDs available but no increment tracking — count unique groups
+    const mergedGroupIds = new Set<string>();
+    let ungroupedCount = 0;
+    for (const defId of uniqueDefinitionIds) {
+      const groupIds = pairedBatchGroupIdsByDefinitionId.get(defId);
+      if (groupIds != null) {
+        for (const gid of groupIds) {
+          mergedGroupIds.add(gid);
+        }
+      }
+      const defPairedCount = pairedBatchCountByDefinitionId.get(defId) ?? 0;
+      const defGroupedCount = groupIds?.size ?? 0;
+      ungroupedCount += Math.max(0, defPairedCount - defGroupedCount);
+    }
+    pairedBatchCount = mergedGroupIds.size + ungroupedCount;
+  } else {
+    // Fallback: sum per-definition counts
+    pairedBatchCount = uniqueDefinitionIds.reduce(
+      (total, defId) => total + (pairedBatchCountByDefinitionId.get(defId) ?? 0),
+      0,
+    );
+  }
+
+  return {
+    primaryDefinitionId: primaryDefinitionId === '' ? null : primaryDefinitionId,
+    batchCount,
+    pairedBatchCount,
+  };
+}
+
+export function getCoverageBatchIncrement(samplesPerScenario: unknown): number {
+  return Number.isInteger(samplesPerScenario) && (samplesPerScenario as number) >= 1
+    ? (samplesPerScenario as number)
+    : 1;
+}
+
+export type CoverageModelBreakdown = { modelId: string; label: string; trialCount: number };
+
+/**
+ * Deduplicate a list of runs by their paired-batch group ID.
+ *
+ * A-first and B-first companion definitions for the same value pair share the
+ * same `jobChoiceBatchGroupId` / `pairedBatchGroupId`. When runs are collected
+ * across both companion definitions and flattened into a single list, each paired
+ * batch appears twice. Call this before any aggregation (trial counts, model
+ * breakdowns, etc.) to ensure each batch is counted exactly once.
+ *
+ * Runs without a group ID (ungrouped / unpaired) are always kept.
+ *
+ * If `completenessOf` is provided, ties within a group are broken by preferring
+ * the complete companion. When both companions are complete (or both incomplete)
+ * the survivor is the one that appears first in input order. Callers that
+ * depend on deterministic survivor selection should pre-sort by `createdAt`
+ * (or another stable key) before calling.
+ */
+export function deduplicateRunsByGroupId<T extends { config: unknown }>(
+  runs: ReadonlyArray<T>,
+  completenessOf?: (run: T) => boolean,
+): T[] {
+  if (completenessOf == null) {
+    const seenGroupIds = new Set<string>();
+    return runs.filter((run) => {
+      const groupId = getCoverageBatchGroupId(run.config);
+      if (groupId === null) return true;
+      if (seenGroupIds.has(groupId)) return false;
+      seenGroupIds.add(groupId);
+      return true;
+    });
+  }
+
+  // Two-pass: first index every run by groupId, then pick the survivor with
+  // a "prefer complete" rule. Ungrouped runs pass through.
+  const groups = new Map<string, T[]>();
+  const ungrouped: T[] = [];
+  for (const run of runs) {
+    const groupId = getCoverageBatchGroupId(run.config);
+    if (groupId === null) {
+      ungrouped.push(run);
+      continue;
+    }
+    const existing = groups.get(groupId) ?? [];
+    existing.push(run);
+    groups.set(groupId, existing);
+  }
+
+  const survivors: T[] = [...ungrouped];
+  for (const [, members] of groups) {
+    if (members.length === 0) continue;
+    const complete = members.find((member) => completenessOf(member));
+    survivors.push(complete ?? members[0]!);
+  }
+  return survivors;
+}
+
+export function computePerModelTrialCounts(
+  runs: ReadonlyArray<{ config: unknown; transcripts: ReadonlyArray<{ modelId: string }> }>,
+  defaultModelIds: readonly string[],
+  modelLabelById: ReadonlyMap<string, string>,
+): { minTrialCount: number | null; maxTrialCount: number | null; modelBreakdown: CoverageModelBreakdown[] | null } {
+  if (defaultModelIds.length === 0) {
+    return { minTrialCount: null, maxTrialCount: null, modelBreakdown: null };
+  }
+
+  // Caller is responsible for deduplicating paired runs before passing them here.
+  // Use deduplicateRunsByGroupId() at the call site when collecting runs across
+  // companion definitions for the same value pair.
+  //
+  // We count actual transcript rows per model rather than the planned
+  // `samplesPerScenario × runs-where-model-present` value. This keeps the
+  // displayed trial count consistent with what the aggregate analysis pipeline
+  // actually consumes (every transcript becomes a sample, including any
+  // duplicates from worker retries or races -- see
+  // aggregate-preparation.ts:202). If we kept the planned value, runs with
+  // duplicate transcripts would silently have larger effective sample sizes
+  // in analysis than the UI advertised.
+  const trialCountByModel = new Map<string, number>(
+    defaultModelIds.map((modelId) => [modelId, 0]),
+  );
+
+  for (const run of runs) {
+    for (const transcript of run.transcripts) {
+      if (trialCountByModel.has(transcript.modelId)) {
+        trialCountByModel.set(transcript.modelId, (trialCountByModel.get(transcript.modelId) ?? 0) + 1);
+      }
+    }
+  }
+
+  const modelBreakdown: CoverageModelBreakdown[] = defaultModelIds.map((modelId) => ({
+    modelId,
+    label: modelLabelById.get(modelId) ?? modelId,
+    trialCount: trialCountByModel.get(modelId) ?? 0,
+  }));
+
+  const counts = modelBreakdown.map((b) => b.trialCount);
+  const minTrialCount = Math.min(...counts);
+  const maxTrialCount = Math.max(...counts);
+
+  return { minTrialCount, maxTrialCount, modelBreakdown };
+}
+
+export function getCoverageBatchGroupId(runConfig: unknown): string | null {
+  const config = runConfig as {
+    jobChoiceBatchGroupId?: unknown;
+    pairedBatchGroupId?: unknown;
+  } | null;
+
+  const raw = typeof config?.jobChoiceBatchGroupId === 'string'
+    ? config.jobChoiceBatchGroupId
+    : typeof config?.pairedBatchGroupId === 'string'
+      ? config.pairedBatchGroupId
+      : null;
+
+  return raw != null && raw.trim().length > 0 ? raw.trim() : null;
+}
+
+/**
+ * Read the direction token off a Run's config. Returns null for missing,
+ * blank, or non-string `jobChoiceValueFirst`. Trimmed.
+ */
+export function getCoverageDirection(runConfig: unknown): string | null {
+  const config = runConfig as { jobChoiceValueFirst?: unknown } | null;
+  if (config == null || typeof config.jobChoiceValueFirst !== 'string') return null;
+  const trimmed = config.jobChoiceValueFirst.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+/**
+ * Compute per-cell counts using the directional model.
+ *
+ * Sums `batchCount` across companion definitions (unchanged semantics).
+ * Computes `pairedBatchCount = min(complete A-first, complete B-first)`
+ * by merging per-direction Sets across companion definitions and taking
+ * `min(set.size)` of the two directions. When >2 distinct directions
+ * appear in the merged map (data corruption), takes min of the two
+ * largest counts and emits a warning via `log.warn` (if provided).
+ *
+ * Tie-break for `primaryDefinitionId`: `(batchCount desc, directionCount desc, defId asc)`
+ * where `directionCount = directionalGroupsByDefinitionId.get(defId)?.size ?? 0`.
+ */
+export function selectPrimaryDefinitionCountsByDirection(
+  definitionIds: readonly string[],
+  batchCountByDefinitionId: ReadonlyMap<string, number>,
+  directionalGroupsByDefinitionId: ReadonlyMap<string, ReadonlyMap<string, ReadonlySet<string>>>,
+  log?: { warn: (obj: object, msg: string) => void },
+  cellKey?: string,
+): { primaryDefinitionId: string | null; batchCount: number; pairedBatchCount: number } {
+  const uniqueDefinitionIds = Array.from(new Set(definitionIds));
+  if (uniqueDefinitionIds.length === 0) {
+    return { primaryDefinitionId: null, batchCount: 0, pairedBatchCount: 0 };
+  }
+
+  const directionCountFor = (defId: string): number =>
+    directionalGroupsByDefinitionId.get(defId)?.size ?? 0;
+
+  const primaryDefinitionId = uniqueDefinitionIds.reduce((best, defId) => {
+    const bestBatch = batchCountByDefinitionId.get(best) ?? 0;
+    const thisBatch = batchCountByDefinitionId.get(defId) ?? 0;
+    if (thisBatch > bestBatch) return defId;
+    if (thisBatch < bestBatch) return best;
+
+    const bestDirs = directionCountFor(best);
+    const thisDirs = directionCountFor(defId);
+    if (thisDirs > bestDirs) return defId;
+    if (thisDirs < bestDirs) return best;
+
+    return defId.localeCompare(best) < 0 ? defId : best;
+  }, uniqueDefinitionIds[0] ?? '');
+
+  const batchCount = uniqueDefinitionIds.reduce(
+    (total, defId) => total + (batchCountByDefinitionId.get(defId) ?? 0),
+    0,
+  );
+
+  // Merge per-direction Sets across companion definitions for this cell.
+  const merged = new Map<string, Set<string>>();
+  for (const defId of uniqueDefinitionIds) {
+    const defMap = directionalGroupsByDefinitionId.get(defId);
+    if (defMap == null) continue;
+    for (const [direction, groupKeys] of defMap) {
+      const existing = merged.get(direction) ?? new Set<string>();
+      for (const key of groupKeys) existing.add(key);
+      merged.set(direction, existing);
+    }
+  }
+
+  let pairedBatchCount: number;
+  if (merged.size === 0 || merged.size === 1) {
+    pairedBatchCount = 0;
+  } else if (merged.size === 2) {
+    const counts = Array.from(merged.values()).map((s) => s.size);
+    pairedBatchCount = Math.min(counts[0]!, counts[1]!);
+  } else {
+    // >2 distinct direction tokens — data corruption. Take min of the two
+    // largest counts and emit a warning. Do not throw; the operator should
+    // still see a number.
+    const sortedCounts = Array.from(merged.values())
+      .map((s) => s.size)
+      .sort((a, b) => b - a);
+    pairedBatchCount = Math.min(sortedCounts[0]!, sortedCounts[1]!);
+    if (log != null) {
+      log.warn(
+        { cellKey, directions: Array.from(merged.keys()), definitionIds: uniqueDefinitionIds },
+        '>2 distinct jobChoiceValueFirst tokens in single coverage cell; using min of two largest',
+      );
+    }
+  }
+
+  return {
+    primaryDefinitionId: primaryDefinitionId === '' ? null : primaryDefinitionId,
+    batchCount,
+    pairedBatchCount,
+  };
+}
+
+exec
+/bin/zsh -lc "rg -n \"selectPrimaryDefinitionCountsByDirection|getCoverageDirection|selectPrimaryDefinitionCounts\\(\" cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts cloud/apps/api/src/graphql/queries -g '*.ts'" in /Users/chrislaw/valuerank/.claude/worktrees/busy-tesla-89e817
+ succeeded in 0ms:
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:32:export function selectPrimaryDefinitionCounts(
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:255:export function getCoverageDirection(runConfig: unknown): string | null {
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:275:export function selectPrimaryDefinitionCountsByDirection(
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:370:            const { primaryDefinitionId, batchCount, pairedBatchCount } = selectPrimaryDefinitionCounts(
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:32:export function selectPrimaryDefinitionCounts(
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:255:export function getCoverageDirection(runConfig: unknown): string | null {
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:275:export function selectPrimaryDefinitionCountsByDirection(
+
+codex
+I found the existing count helper. I’m checking the call site now because the most likely regressions are mismatches between the new directional helper and the old aggregation rules.
+exec
+/bin/zsh -lc "sed -n '320,430p' cloud/apps/api/src/graphql/queries/domain-coverage.ts" in /Users/chrislaw/valuerank/.claude/worktrees/busy-tesla-89e817
+ succeeded in 0ms:
+        for (const run of runs) {
+          for (const transcript of run.transcripts) {
+            availableModelIds.add(transcript.modelId);
+          }
+        }
+      }
+
+      const modelDetailRows =
+        availableModelIds.size > 0
+          ? await db.llmModel.findMany({
+            where: { modelId: { in: Array.from(availableModelIds) } },
+            select: { modelId: true, displayName: true },
+            orderBy: { displayName: 'asc' },
+          })
+          : [];
+
+      const availableModels: CoverageModelOption[] = modelDetailRows.map((m) => ({
+        modelId: m.modelId,
+        label: m.displayName,
+      }));
+
+      // Build the symmetric 45-cell matrix (one cell per unique sorted pair)
+      const values = [...COVERAGE_VALUE_KEYS] as string[];
+      const cells: DomainValueCoverageCell[] = [];
+
+      for (const valueA of COVERAGE_VALUE_KEYS) {
+        for (const valueB of COVERAGE_VALUE_KEYS) {
+          // Only emit sorted pairs: skip diagonal and reversed pairs
+          if (valueA.localeCompare(valueB) >= 0) continue;
+
+          const key = `${valueA}::${valueB}`;
+          const defIdsForPair = definitionsByPairKey.get(key) ?? [];
+
+          if (defIdsForPair.length === 0) {
+            cells.push({
+              valueA,
+              valueB,
+              batchCount: 0,
+              pairedBatchCount: 0,
+              incompleteBatchCount: 0,
+              definitionId: null,
+              definitionName: null,
+              aggregateRunId: null,
+              minTrialCount: null,
+              maxTrialCount: null,
+              modelBreakdown: null,
+            });
+          } else {
+            // Use the total counts across all definitions for the visible cell, but
+            // still choose one stable definition for the analysis link target.
+            const { primaryDefinitionId, batchCount, pairedBatchCount } = selectPrimaryDefinitionCounts(
+              defIdsForPair,
+              batchCountByDefinitionId,
+              pairedBatchCountByDefinitionId,
+              pairedBatchGroupIdsByDefinitionId,
+              pairedBatchIncrementsByGroupId,
+            );
+            const primaryDefId = primaryDefinitionId ?? '';
+            const primaryPair = pairByDefinitionId.get(primaryDefId);
+            const aggregateRunId = primaryDefId === ''
+              ? null
+              : (latestAggregateRunIdByDefinitionId.get(primaryDefId)
+                ?? latestMatchingRunIdByDefinitionId.get(primaryDefId)
+                ?? null);
+
+            // Sum incompleteBatchCount across all definitions for this pair
+            const incompleteBatchCount = defIdsForPair.reduce(
+              (sum, defId) => sum + (incompleteBatchCountByDefinitionId.get(defId) ?? 0),
+              0,
+            );
+
+            // Compute per-model trial counts across all definitions for this pair.
+            // Deduplicate by group ID first: A-first and B-first companion definitions
+            // share the same jobChoiceBatchGroupId, so flatMapping across both would
+            // double-count each paired batch.
+            //
+            // When companions have different completeness, prefer the complete one
+            // for the trial-count computation. This is read-time consistency with
+            // batchCount: the surviving run is the one whose data feeds analysis.
+            const allNonAggregateRunsForPair = deduplicateRunsByGroupId(
+              defIdsForPair.flatMap((defId) => nonAggregateRunsByDefinitionId.get(defId) ?? []),
+              (run) => {
+                const configModels = (run.config as { models?: unknown } | null)?.models;
+                const models = Array.isArray(configModels)
+                  ? configModels.filter((m): m is string => typeof m === 'string' && m.length > 0)
+                  : [];
+                const rawSamples = (run.config as { samplesPerScenario?: unknown } | null)?.samplesPerScenario;
+                const existing = run.transcripts
+                  .filter((t): t is { scenarioId: string; modelId: string; sampleIndex: number } => t.scenarioId !== null);
+                return isRunComplete({
+                  scenarioIds: run.scenarioIds,
+                  models,
+                  samplesPerScenario: typeof rawSamples === 'number' ? rawSamples : null,
+                  existingTranscripts: existing,
+                });
+              },
+            );
+            const { minTrialCount, maxTrialCount, modelBreakdown } = computePerModelTrialCounts(
+              allNonAggregateRunsForPair,
+              effectiveModelIds,
+              defaultModelLabelById,
+            );
+
+            cells.push({
+              valueA,
+              valueB,
+              batchCount,
+              pairedBatchCount,
+              incompleteBatchCount,
+              definitionId: primaryDefId !== '' ? primaryDefId : null,
+              definitionName: primaryPair?.name ?? null,
+
+exec
+/bin/zsh -lc "rg -n \"jobChoiceValueFirst|pairedBatchCountByDefinitionId|directionalGroupsByDefinitionId|selectPrimaryDefinitionCountsByDirection\" cloud/apps/api/src/graphql/queries/domain-coverage.ts cloud/apps/api/src/graphql/queries -g '*.ts'" in /Users/chrislaw/valuerank/.claude/worktrees/busy-tesla-89e817
+ succeeded in 0ms:
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:131:      const pairedBatchCountByDefinitionId = new Map<string, number>();
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:294:            pairedBatchCountByDefinitionId.set(
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:296:              (pairedBatchCountByDefinitionId.get(run.definitionId) ?? 0) + 1,
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:305:            pairedBatchCountByDefinitionId.set(
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:307:              (pairedBatchCountByDefinitionId.get(run.definitionId) ?? 0) + 1,
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:373:              pairedBatchCountByDefinitionId,
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:131:      const pairedBatchCountByDefinitionId = new Map<string, number>();
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:294:            pairedBatchCountByDefinitionId.set(
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:296:              (pairedBatchCountByDefinitionId.get(run.definitionId) ?? 0) + 1,
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:305:            pairedBatchCountByDefinitionId.set(
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:307:              (pairedBatchCountByDefinitionId.get(run.definitionId) ?? 0) + 1,
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:373:              pairedBatchCountByDefinitionId,
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:35:  pairedBatchCountByDefinitionId: ReadonlyMap<string, number>,
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:54:    const bestPairedCount = pairedBatchCountByDefinitionId.get(best) ?? 0;
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:55:    const thisPairedCount = pairedBatchCountByDefinitionId.get(defId) ?? 0;
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:88:      const defPairedCount = pairedBatchCountByDefinitionId.get(defId) ?? 0;
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:106:      const defPairedCount = pairedBatchCountByDefinitionId.get(defId) ?? 0;
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:114:      (total, defId) => total + (pairedBatchCountByDefinitionId.get(defId) ?? 0),
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:253: * blank, or non-string `jobChoiceValueFirst`. Trimmed.
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:256:  const config = runConfig as { jobChoiceValueFirst?: unknown } | null;
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:257:  if (config == null || typeof config.jobChoiceValueFirst !== 'string') return null;
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:258:  const trimmed = config.jobChoiceValueFirst.trim();
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:273: * where `directionCount = directionalGroupsByDefinitionId.get(defId)?.size ?? 0`.
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:275:export function selectPrimaryDefinitionCountsByDirection(
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:278:  directionalGroupsByDefinitionId: ReadonlyMap<string, ReadonlyMap<string, ReadonlySet<string>>>,
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:288:    directionalGroupsByDefinitionId.get(defId)?.size ?? 0;
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:312:    const defMap = directionalGroupsByDefinitionId.get(defId);
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:338:        '>2 distinct jobChoiceValueFirst tokens in single coverage cell; using min of two largest',
+
+codex
+I’m checking how the source builds the per-definition counts, because the main regression risk is whether the new helper drops multiplicity or completeness information that the old path preserved.
+exec
+/bin/zsh -lc "sed -n '240,320p' cloud/apps/api/src/graphql/queries/domain-coverage.ts" in /Users/chrislaw/valuerank/.claude/worktrees/busy-tesla-89e817
+ succeeded in 0ms:
+          }
+
+          // Determine completeness using the existing helper. A run is complete
+          // iff every (scenarioId × modelId × sampleIndex) slot has at least
+          // one transcript. Extra transcripts in a slot do NOT break
+          // completeness; only missing slots do.
+          if (!Array.isArray(config.models)) {
+            throw new AppError(
+              `Run ${run.id} config has no models array; cannot compute coverage`,
+              'RUN_CONFIG_INVALID',
+              500,
+              { runId: run.id },
+            );
+          }
+          const models = config.models.filter(
+            (m): m is string => typeof m === 'string' && m.length > 0,
+          );
+          if (models.length === 0) {
+            throw new AppError(
+              `Run ${run.id} has empty or invalid models array`,
+              'RUN_CONFIG_INVALID',
+              500,
+              { runId: run.id },
+            );
+          }
+          const rawSamples = config.samplesPerScenario;
+          const samplesPerScenario = typeof rawSamples === 'number' ? rawSamples : null;
+          const existingTranscripts = run.transcripts
+            .filter((t): t is { scenarioId: string; modelId: string; sampleIndex: number } => t.scenarioId !== null);
+          const complete = isRunComplete({
+            scenarioIds,
+            models,
+            samplesPerScenario,
+            existingTranscripts,
+          });
+
+          if (!complete) {
+            incompleteBatchCountByDefinitionId.set(
+              run.definitionId,
+              (incompleteBatchCountByDefinitionId.get(run.definitionId) ?? 0) + 1,
+            );
+            continue;
+          }
+
+          // Run is complete: contribute exactly 1 to batchCount regardless of
+          // samplesPerScenario.
+          batchCountByDefinitionId.set(
+            run.definitionId,
+            (batchCountByDefinitionId.get(run.definitionId) ?? 0) + 1,
+          );
+
+          const pairedBatchGroupId = getCoverageBatchGroupId(run.config);
+
+          if (pairedBatchGroupId === null) {
+            pairedBatchCountByDefinitionId.set(
+              run.definitionId,
+              (pairedBatchCountByDefinitionId.get(run.definitionId) ?? 0) + 1,
+            );
+            continue;
+          }
+
+          const seenGroupIds = pairedBatchGroupIdsByDefinitionId.get(run.definitionId) ?? new Set<string>();
+          if (!seenGroupIds.has(pairedBatchGroupId)) {
+            seenGroupIds.add(pairedBatchGroupId);
+            pairedBatchGroupIdsByDefinitionId.set(run.definitionId, seenGroupIds);
+            pairedBatchCountByDefinitionId.set(
+              run.definitionId,
+              (pairedBatchCountByDefinitionId.get(run.definitionId) ?? 0) + 1,
+            );
+            // Track per-group increment for cross-definition dedup. Always 1
+            // now; samplesPerScenario no longer multiplies.
+            const defIncrements = pairedBatchIncrementsByGroupId.get(run.definitionId) ?? new Map<string, number>();
+            defIncrements.set(pairedBatchGroupId, 1);
+            pairedBatchIncrementsByGroupId.set(run.definitionId, defIncrements);
+          }
+        }
+      }
+
+      const availableModelIds = new Set<string>();
+      for (const runs of signatureScopedRunsByDefinitionId.values()) {
+        for (const run of runs) {
+
+exec
+/bin/zsh -lc "sed -n '1,220p' cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts" in /Users/chrislaw/valuerank/.claude/worktrees/busy-tesla-89e817
+ succeeded in 0ms:
+import { describe, expect, it, vi } from 'vitest';
+import {
+  extractValuePair,
+  getCoverageBatchGroupId,
+  getCoverageBatchIncrement,
+  getCoverageDirection,
+  selectPrimaryDefinitionCount,
+  selectPrimaryDefinitionCounts,
+  selectPrimaryDefinitionCountsByDirection,
+  computePerModelTrialCounts,
+  deduplicateRunsByGroupId,
+} from '../../../src/graphql/queries/domain-coverage-utils.js';
+
+describe('extractValuePair', () => {
+  it('normalizes lowercase dimension names to canonical coverage keys', () => {
+    expect(
+      extractValuePair({
+        dimensions: [
+          { name: 'achievement' },
+          { name: 'benevolence_dependability' },
+        ],
+      }),
+    ).toEqual({
+      valueA: 'Achievement',
+      valueB: 'Benevolence_Dependability',
+    });
+  });
+
+  it('preserves already-canonical keys', () => {
+    expect(
+      extractValuePair({
+        dimensions: [
+          { name: 'Self_Direction_Action' },
+          { name: 'Universalism_Nature' },
+        ],
+      }),
+    ).toEqual({
+      valueA: 'Self_Direction_Action',
+      valueB: 'Universalism_Nature',
+    });
+  });
+
+  it('returns dimension order regardless of methodology', () => {
+    expect(
+      extractValuePair({
+        dimensions: [
+          { name: 'achievement' },
+          { name: 'benevolence_dependability' },
+        ],
+        methodology: {},
+      }),
+    ).toEqual({
+      valueA: 'Achievement',
+      valueB: 'Benevolence_Dependability',
+    });
+  });
+
+  it('rejects definitions that do not resolve to known coverage keys', () => {
+    expect(
+      extractValuePair({
+        dimensions: [
+          { name: 'achievement' },
+          { name: 'not_a_real_dimension' },
+        ],
+      }),
+    ).toBeNull();
+  });
+});
+
+describe('selectPrimaryDefinitionCount', () => {
+  it('uses the primary definition count without summing sibling definitions', () => {
+    const counts = new Map<string, number>([
+      ['def-a', 2],
+      ['def-b', 1],
+    ]);
+
+    expect(selectPrimaryDefinitionCount(['def-a', 'def-b'], counts)).toEqual({
+      primaryDefinitionId: 'def-a',
+      batchCount: 2,
+    });
+  });
+
+  it('returns zero for an empty definition list', () => {
+    expect(selectPrimaryDefinitionCount([], new Map())).toEqual({
+      primaryDefinitionId: null,
+      batchCount: 0,
+    });
+  });
+});
+
+describe('selectPrimaryDefinitionCounts', () => {
+  it('returns the total cell counts while choosing a stable primary definition', () => {
+    const batchCounts = new Map<string, number>([
+      ['def-a', 2],
+      ['def-b', 2],
+    ]);
+    const pairedCounts = new Map<string, number>([
+      ['def-a', 1],
+      ['def-b', 3],
+    ]);
+
+    expect(selectPrimaryDefinitionCounts(['def-a', 'def-b'], batchCounts, pairedCounts)).toEqual({
+      primaryDefinitionId: 'def-b',
+      batchCount: 4,
+      pairedBatchCount: 4,
+    });
+  });
+
+  it('prefers the higher paired count when batch counts tie', () => {
+    const batchCounts = new Map<string, number>([
+      ['def-a', 2],
+      ['def-b', 2],
+    ]);
+    const pairedCounts = new Map<string, number>([
+      ['def-a', 1],
+      ['def-b', 3],
+    ]);
+
+    expect(selectPrimaryDefinitionCounts(['def-a', 'def-b'], batchCounts, pairedCounts)).toEqual({
+      primaryDefinitionId: 'def-b',
+      batchCount: 4,
+      pairedBatchCount: 4,
+    });
+  });
+
+  it('returns zero for an empty definition list', () => {
+    expect(selectPrimaryDefinitionCounts([], new Map(), new Map())).toEqual({
+      primaryDefinitionId: null,
+      batchCount: 0,
+      pairedBatchCount: 0,
+    });
+  });
+
+  it('deduplicates shared group IDs across companion definitions', () => {
+    // A_first and B_first definitions share the same paired batch group IDs
+    const batchCounts = new Map<string, number>([
+      ['def-a-first', 5],
+      ['def-b-first', 5],
+    ]);
+    const pairedCounts = new Map<string, number>([
+      ['def-a-first', 3],
+      ['def-b-first', 3],
+    ]);
+    const groupIds = new Map<string, Set<string>>([
+      ['def-a-first', new Set(['group-1', 'group-2', 'group-3'])],
+      ['def-b-first', new Set(['group-1', 'group-2', 'group-3'])],
+    ]);
+
+    // Without dedup: 3 + 3 = 6. With dedup: 3 unique groups.
+    expect(selectPrimaryDefinitionCounts(
+      ['def-a-first', 'def-b-first'], batchCounts, pairedCounts, groupIds,
+    )).toEqual({
+      primaryDefinitionId: 'def-a-first',
+      batchCount: 10,
+      pairedBatchCount: 3,
+    });
+  });
+
+  it('counts ungrouped runs separately from grouped runs', () => {
+    const batchCounts = new Map<string, number>([
+      ['def-a', 3],
+    ]);
+    // pairedBatchCount = 2 grouped + 1 ungrouped = 3
+    const pairedCounts = new Map<string, number>([
+      ['def-a', 3],
+    ]);
+    const groupIds = new Map<string, Set<string>>([
+      ['def-a', new Set(['group-1', 'group-2'])],
+    ]);
+
+    expect(selectPrimaryDefinitionCounts(
+      ['def-a'], batchCounts, pairedCounts, groupIds,
+    )).toEqual({
+      primaryDefinitionId: 'def-a',
+      batchCount: 3,
+      pairedBatchCount: 3, // 2 grouped + 1 ungrouped
+    });
+  });
+
+  it('deduplicates with samplesPerScenario increments across companions', () => {
+    // 3 paired batch groups shared across A_first and B_first.
+    // Group 1: sps=1, Group 2: sps=1, Group 3: sps=3 -> total 5 batches per side.
+    const batchCounts = new Map<string, number>([
+      ['def-a-first', 10],
+      ['def-b-first', 10],
+    ]);
+    const pairedCounts = new Map<string, number>([
+      ['def-a-first', 5],
+      ['def-b-first', 5],
+    ]);
+    const groupIds = new Map<string, Set<string>>([
+      ['def-a-first', new Set(['group-1', 'group-2', 'group-3'])],
+      ['def-b-first', new Set(['group-1', 'group-2', 'group-3'])],
+    ]);
+    const increments = new Map<string, Map<string, number>>([
+      ['def-a-first', new Map([['group-1', 1], ['group-2', 1], ['group-3', 3]])],
+      ['def-b-first', new Map([['group-1', 1], ['group-2', 1], ['group-3', 3]])],
+    ]);
+
+    // Without dedup: 5 + 5 = 10. With dedup: 1+1+3 = 5 (max increment per group).
+    expect(selectPrimaryDefinitionCounts(
+      ['def-a-first', 'def-b-first'], batchCounts, pairedCounts, groupIds, increments,
+    )).toEqual({
+      primaryDefinitionId: 'def-a-first',
+      batchCount: 20,
+      pairedBatchCount: 5,
+    });
+  });
+});
+
+describe('getCoverageBatchIncrement', () => {
+
+  it('returns samplesPerScenario when it is a valid positive integer', () => {
+    expect(getCoverageBatchIncrement(5)).toBe(5);
+  });
+
+  it('returns 1 when samplesPerScenario is 1', () => {
+    expect(getCoverageBatchIncrement(1)).toBe(1);
+  });
+
+
+codex
+I’m looking for other uses of `jobChoiceValueFirst` to see whether the helper is normalizing the same token shape the rest of the code expects.
+exec
+/bin/zsh -lc "rg -n \"jobChoiceValueFirst\" -g '*.ts' -g '*.js' cloud docs" in /Users/chrislaw/valuerank/.claude/worktrees/busy-tesla-89e817
+exec
+/bin/zsh -lc "rg -n \"directionalGroupsByDefinitionId|getCoverageDirection|selectPrimaryDefinitionCountsByDirection\" cloud -g '*.ts'" in /Users/chrislaw/valuerank/.claude/worktrees/busy-tesla-89e817
+ succeeded in 0ms:
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:253: * blank, or non-string `jobChoiceValueFirst`. Trimmed.
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:256:  const config = runConfig as { jobChoiceValueFirst?: unknown } | null;
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:257:  if (config == null || typeof config.jobChoiceValueFirst !== 'string') return null;
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:258:  const trimmed = config.jobChoiceValueFirst.trim();
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:338:        '>2 distinct jobChoiceValueFirst tokens in single coverage cell; using min of two largest',
+cloud/apps/web/src/api/run-json-types.ts:19:  jobChoiceValueFirst?: string | null;
+cloud/apps/api/src/graphql/mutations/domain/launch/execute-runs.ts:145:                jobChoiceValueFirst: tokens?.value_first.token,
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:489:    expect(getCoverageDirection({ jobChoiceValueFirst: 'career' })).toBe('career');
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:493:    expect(getCoverageDirection({ jobChoiceValueFirst: '  career  ' })).toBe('career');
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:497:    expect(getCoverageDirection({ jobChoiceValueFirst: '' })).toBeNull();
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:501:    expect(getCoverageDirection({ jobChoiceValueFirst: '   ' })).toBeNull();
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:509:    expect(getCoverageDirection({ jobChoiceValueFirst: 42 })).toBeNull();
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:513:    expect(getCoverageDirection({ jobChoiceValueFirst: true })).toBeNull();
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:521:    // The algorithm trusts jobChoiceValueFirst regardless of launch mode.
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:525:      getCoverageDirection({ jobChoiceLaunchMode: 'AD_HOC_BATCH', jobChoiceValueFirst: 'career' }),
+cloud/apps/api/src/graphql/mutations/domain/launch/plan-slots.ts:129:              jobChoiceValueFirst: tokens?.value_first.token,
+cloud/apps/api/src/graphql/types/run.ts:31:  jobChoiceValueFirst?: string | null;
+cloud/apps/api/tests/graphql/mutations/domain.test.ts:585:      expect(callA?.configExtras?.jobChoiceValueFirst).toBe('career');
+cloud/apps/api/tests/graphql/mutations/domain.test.ts:586:      expect(callB?.configExtras?.jobChoiceValueFirst).toBe('family');
+cloud/apps/api/tests/graphql/mutations/run.test.ts:684:      expect((aRun?.config as Record<string, unknown>).jobChoiceValueFirst).toBe('career');
+cloud/apps/api/tests/graphql/mutations/run.test.ts:685:      expect((bRun?.config as Record<string, unknown>).jobChoiceValueFirst).toBe('family');
+cloud/apps/api/src/graphql/mutations/run/lifecycle.ts:125:            jobChoiceValueFirst: pair.primaryValueFirst,
+cloud/apps/api/src/graphql/mutations/run/lifecycle.ts:136:            jobChoiceValueFirst: pair.companionValueFirst,
+
+ succeeded in 0ms:
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:255:export function getCoverageDirection(runConfig: unknown): string | null {
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:273: * where `directionCount = directionalGroupsByDefinitionId.get(defId)?.size ?? 0`.
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:275:export function selectPrimaryDefinitionCountsByDirection(
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:278:  directionalGroupsByDefinitionId: ReadonlyMap<string, ReadonlyMap<string, ReadonlySet<string>>>,
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:288:    directionalGroupsByDefinitionId.get(defId)?.size ?? 0;
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:312:    const defMap = directionalGroupsByDefinitionId.get(defId);
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:6:  getCoverageDirection,
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:9:  selectPrimaryDefinitionCountsByDirection,
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:487:describe('getCoverageDirection', () => {
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:489:    expect(getCoverageDirection({ jobChoiceValueFirst: 'career' })).toBe('career');
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:493:    expect(getCoverageDirection({ jobChoiceValueFirst: '  career  ' })).toBe('career');
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:497:    expect(getCoverageDirection({ jobChoiceValueFirst: '' })).toBeNull();
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:501:    expect(getCoverageDirection({ jobChoiceValueFirst: '   ' })).toBeNull();
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:505:    expect(getCoverageDirection({})).toBeNull();
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:509:    expect(getCoverageDirection({ jobChoiceValueFirst: 42 })).toBeNull();
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:513:    expect(getCoverageDirection({ jobChoiceValueFirst: true })).toBeNull();
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:517:    expect(getCoverageDirection(null)).toBeNull();
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:525:      getCoverageDirection({ jobChoiceLaunchMode: 'AD_HOC_BATCH', jobChoiceValueFirst: 'career' }),
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:530:describe('selectPrimaryDefinitionCountsByDirection', () => {
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:538:    expect(selectPrimaryDefinitionCountsByDirection([], new Map(), new Map())).toEqual({
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:550:    expect(selectPrimaryDefinitionCountsByDirection(['def-a'], batches, dirs)).toEqual({
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:565:    expect(selectPrimaryDefinitionCountsByDirection(['def-a'], batches, dirs)).toEqual({
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:580:    expect(selectPrimaryDefinitionCountsByDirection(['def-a'], batches, dirs)).toEqual({
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:594:    const result = selectPrimaryDefinitionCountsByDirection(
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:611:    expect(selectPrimaryDefinitionCountsByDirection(['def-a'], batches, dirs)).toEqual({
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:628:    const result = selectPrimaryDefinitionCountsByDirection(
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:653:    const result = selectPrimaryDefinitionCountsByDirection(
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:665:    const result = selectPrimaryDefinitionCountsByDirection(
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:684:    expect(selectPrimaryDefinitionCountsByDirection(['def-a'], batches, dirs).pairedBatchCount).toBe(1);
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:698:      selectPrimaryDefinitionCountsByDirection(['def-a'], batches, dirs),
+
+exec
+/bin/zsh -lc "sed -n '120,170p' cloud/apps/api/src/graphql/mutations/domain/launch/execute-runs.ts" in /Users/chrislaw/valuerank/.claude/worktrees/busy-tesla-89e817
+ succeeded in 0ms:
+      },
+    });
+    const hasActiveEquivalentRun = activeEquivalentRuns.some((run) => runMatchesSingleModel(run.config, group.modelId, snapshot.temperature));
+    if (hasActiveEquivalentRun) {
+      continue;
+    }
+
+    const batchGroupId = group.pairKey !== null ? randomUUID() : null;
+    const runResults = await Promise.allSettled(
+      group.definitions.map(async (definition) => {
+        const tokens = group.pairKey !== null ? getComponentTokens(definition.content) : null;
+        return startRunService({
+          definitionId: definition.id,
+          models: [group.modelId],
+          samplePercentage: snapshot.samplePercentage,
+          samplesPerScenario: snapshot.samplesPerScenario,
+          temperature: snapshot.temperature ?? undefined,
+          priority: 'NORMAL',
+          runCategory: scopeCategory,
+          userId,
+          ...(group.pairKey !== null
+            ? {
+                configExtras: {
+                jobChoiceLaunchMode: 'PAIRED_BATCH',
+                jobChoiceBatchGroupId: batchGroupId,
+                jobChoiceValueFirst: tokens?.value_first.token,
+                methodologySafe: true,
+              },
+            }
+            : {}),
+        });
+      }),
+    );
+
+    runResults.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        startedRuns += 1;
+        runs.push({
+          definitionId: result.value.run.definitionId,
+          runId: result.value.run.id,
+          modelIds: [group.modelId],
+        });
+        return;
+      }
+
+      failedDefinitions += 1;
+      const failedDefinition = group.definitions[index];
+      log.error(
+        {
+          domainEvaluationId,
+          definitionId: failedDefinition?.id ?? null,
+
+exec
+/bin/zsh -lc "sed -n '110,150p' cloud/apps/api/src/graphql/mutations/domain/launch/plan-slots.ts" in /Users/chrislaw/valuerank/.claude/worktrees/busy-tesla-89e817
+ succeeded in 0ms:
+      }
+      const groupCost = groupBaseCost * delta;
+      if (projectedCostUsd + groupCost > budgetCap) {
+        skippedForBudget += group.definitions.length * delta;
+        continue;
+      }
+      projectedCostUsd += groupCost;
+    }
+
+    for (let i = 0; i < delta; i++) {
+      if (group.pairKey !== null) {
+        const batchGroupId = randomUUID();
+        for (const def of group.definitions) {
+          const tokens = getComponentTokens(def.content);
+          launchSlots.push({
+            definition: def,
+            configExtras: {
+              jobChoiceLaunchMode: 'PAIRED_BATCH',
+              jobChoiceBatchGroupId: batchGroupId,
+              jobChoiceValueFirst: tokens?.value_first.token,
+              methodologySafe: true,
+            },
+          });
+        }
+      } else {
+        for (const def of group.definitions) {
+          launchSlots.push({ definition: def, configExtras: undefined });
+        }
+      }
+    }
+  }
+
+  const launchableDefinitions: DefinitionRow[] = Array.from(
+    new Map(launchSlots.map((slot) => [slot.definition.id, slot.definition])).values(),
+  );
+
+  return {
+    launchSlots,
+    launchableDefinitions,
+    projectedCostUsd,
+    skippedForBudget,
+
+codex
+## Findings
+- [UNVERIFIED] Medium: `selectPrimaryDefinitionCountsByDirection()` has no way to preserve complete runs that are not attached to a direction token. The existing aggregation path explicitly keeps ungrouped completed batches; this helper drops them entirely, so any cell that mixes grouped and ungrouped complete runs will report a lower `pairedBatchCount` than the current behavior.
+- [UNVERIFIED] Medium: `getCoverageDirection()` accepts any non-empty string and never checks `jobChoiceLaunchMode` or a known token set. If a stale or malformed config carries `jobChoiceValueFirst` outside a paired run, this code will treat it as a real direction and can pollute coverage counts instead of rejecting it.
+- [UNVERIFIED] Medium: The new primary-definition tie-break uses `directionCount` instead of paired completeness. That can select a less representative definition when batch counts tie, because a definition with two direction tokens but fewer completed batches can outrank one with fewer direction tokens and more complete data. That changes the chosen `definitionId`/link target for tied cells.
+
+## Residual Risks
+- The diff does not show the query wired over to the new helper, so end-to-end behavior is still unverified.
+- There are no tests here for mixed grouped/ungrouped cells or for invalid or legacy direction tokens beyond the permissive parser cases.
+
+2026-04-25T18:20:41.785309Z ERROR codex_core::session: failed to record rollout items: thread 019dc5de-2c4b-7f70-90e3-b1014999d54a not found
+tokens used
+28,246

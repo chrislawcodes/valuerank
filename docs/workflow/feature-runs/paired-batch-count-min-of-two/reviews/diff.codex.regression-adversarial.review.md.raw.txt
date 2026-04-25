@@ -1,0 +1,8 @@
+## Findings
+- [UNVERIFIED] Medium: `selectPrimaryDefinitionCountsByDirection()` has no way to preserve complete runs that are not attached to a direction token. The existing aggregation path explicitly keeps ungrouped completed batches; this helper drops them entirely, so any cell that mixes grouped and ungrouped complete runs will report a lower `pairedBatchCount` than the current behavior.
+- [UNVERIFIED] Medium: `getCoverageDirection()` accepts any non-empty string and never checks `jobChoiceLaunchMode` or a known token set. If a stale or malformed config carries `jobChoiceValueFirst` outside a paired run, this code will treat it as a real direction and can pollute coverage counts instead of rejecting it.
+- [UNVERIFIED] Medium: The new primary-definition tie-break uses `directionCount` instead of paired completeness. That can select a less representative definition when batch counts tie, because a definition with two direction tokens but fewer completed batches can outrank one with fewer direction tokens and more complete data. That changes the chosen `definitionId`/link target for tied cells.
+
+## Residual Risks
+- The diff does not show the query wired over to the new helper, so end-to-end behavior is still unverified.
+- There are no tests here for mixed grouped/ungrouped cells or for invalid or legacy direction tokens beyond the permissive parser cases.

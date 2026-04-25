@@ -1,0 +1,18 @@
+{
+  "repo_root": ".",
+  "git_head_sha": "04ab7e6288e547d237aba0269aef1ff3fb4be0db",
+  "git_base_ref": "origin/main",
+  "git_base_sha": "2cd6635c7bf0a0007e9f2c340a95e21779560a8b",
+  "paths": [
+    "cloud/apps/api/src/graphql/queries/domain-coverage-gql-types.ts",
+    "cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts",
+    "cloud/apps/api/src/graphql/queries/domain-coverage.ts",
+    "cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts"
+  ],
+  "allowed_dirty_paths": [
+    "docs/workflow/operations/review-attempts.jsonl"
+  ],
+  "untracked_files_included": [],
+  "artifact_path": "docs/workflow/feature-runs/paired-batch-count-min-of-two/reviews/implementation.diff.patch",
+  "allow_empty_diff": false
+}

@@ -251,10 +251,14 @@ export function getCoverageBatchGroupId(runConfig: unknown): string | null {
 /**
  * Read the direction token off a Run's config. Returns null for missing,
  * blank, or non-string `jobChoiceValueFirst`. Trimmed.
+ *
+ * Defensive against any non-object input (number, boolean, etc.); returns
+ * null without touching the value.
  */
 export function getCoverageDirection(runConfig: unknown): string | null {
-  const config = runConfig as { jobChoiceValueFirst?: unknown } | null;
-  if (config == null || typeof config.jobChoiceValueFirst !== 'string') return null;
+  if (typeof runConfig !== 'object' || runConfig === null) return null;
+  const config = runConfig as { jobChoiceValueFirst?: unknown };
+  if (typeof config.jobChoiceValueFirst !== 'string') return null;
   const trimmed = config.jobChoiceValueFirst.trim();
   return trimmed.length > 0 ? trimmed : null;
 }
