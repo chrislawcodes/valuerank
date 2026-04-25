@@ -1,12 +1,14 @@
 {
   "repo_root": ".",
-  "git_head_sha": "b3f8684b41da00fb97e55ce5c83f01fbd60d2fbc",
-  "git_base_ref": "origin/claude/ff-codex-reintegration",
+  "git_head_sha": "a064b21790b9f3242627e791c143720066eb3e92",
+  "git_base_ref": "b3f8684b41da00fb97e55ce5c83f01fbd60d2fbc",
   "git_base_sha": "b3f8684b41da00fb97e55ce5c83f01fbd60d2fbc",
   "paths": [
     "docs/workflow/feature-runs/ff-codex-reintegration"
   ],
-  "allowed_dirty_paths": [],
+  "allowed_dirty_paths": [
+    "docs/workflow/feature-runs/ff-codex-reintegration"
+  ],
   "untracked_files_included": [],
   "artifact_path": "docs/workflow/feature-runs/ff-codex-reintegration/reviews/implementation.diff.patch",
   "allow_empty_diff": false

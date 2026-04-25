@@ -2,8 +2,10 @@
   "feature_slug": "ff-codex-reintegration",
   "stage": "diff",
   "artifact_path": "docs/workflow/feature-runs/ff-codex-reintegration/reviews/implementation.diff.patch",
-  "git_base_ref": "origin/claude/ff-codex-reintegration",
-  "allowed_dirty_paths": [],
+  "git_base_ref": "b3f8684b41da00fb97e55ce5c83f01fbd60d2fbc",
+  "allowed_dirty_paths": [
+    "docs/workflow/feature-runs/ff-codex-reintegration"
+  ],
   "required_reviews": [
     {
       "reviewer": "codex",
@@ -30,7 +32,7 @@
       "model": "gemini-2.5-pro"
     }
   ],
-  "max_artifact_chars": 50000,
+  "max_artifact_chars": 100000,
   "max_context_chars": 60000,
   "max_total_chars": 250000
 }
