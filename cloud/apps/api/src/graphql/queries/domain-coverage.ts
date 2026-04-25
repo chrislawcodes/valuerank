@@ -8,17 +8,18 @@
 
 import { builder } from '../builder.js';
 import { db, resolveDefinitionContent } from '@valuerank/db';
+import { AppError } from '@valuerank/shared';
 
 import {
   COVERAGE_VALUE_KEYS,
   type CoverageValueKey,
   extractValuePair,
   getCoverageBatchGroupId,
-  getCoverageBatchIncrement,
   selectPrimaryDefinitionCounts,
   computePerModelTrialCounts,
   deduplicateRunsByGroupId,
 } from './domain-coverage-utils.js';
+import { isRunComplete } from '../../services/run/coverage-completeness.js';
 import { resolveEffectiveDefaultModelIds } from './domain/shared.js';
 import {
   DomainValueCoverageResultRef,
@@ -138,11 +139,13 @@ builder.queryField('domainValueCoverage', (t) =>
         definitionId: string;
         config: unknown;
         transcripts: Array<{ modelId: string; scenarioId: string | null; sampleIndex: number }>;
+        scenarioIds: string[];
       }>>();
       // Non-aggregate runs per definition (for per-model trial count computation)
       const nonAggregateRunsByDefinitionId = new Map<string, Array<{
         config: unknown;
         transcripts: Array<{ modelId: string; scenarioId: string | null; sampleIndex: number }>;
+        scenarioIds: string[];
       }>>();
 
       if (definitionIds.length > 0) {
@@ -156,13 +159,14 @@ builder.queryField('domainValueCoverage', (t) =>
           select: {
             id: true,
             definitionId: true,
+            createdAt: true,
             config: true,
             transcripts: {
               where: { deletedAt: null },
               select: { modelId: true, scenarioId: true, sampleIndex: true },
             },
-            _count: {
-              select: { scenarioSelections: true },
+            scenarioSelections: {
+              select: { scenarioId: true },
             },
           },
         });
@@ -172,11 +176,42 @@ builder.queryField('domainValueCoverage', (t) =>
           : completedRuns.filter((run) => runMatchesSignature(run.config, selectedSignature));
 
         for (const run of signatureScopedRuns) {
+          // Per the canonical glossary (docs/canonical-glossary.md), a `Batch` is
+          // one fully-complete run -- every selected model has a transcript at
+          // every (scenarioId × sampleIndex) slot. samplesPerScenario does not
+          // multiply the count. Aggregate runs are excluded from both batch
+          // and incomplete-batch counts (they are rollup records, not data).
+          //
+          // A COMPLETED run with null/malformed `config` or no `models` array
+          // is a data corruption signal; surface it instead of silently
+          // skipping. `samplesPerScenario` and `isAggregate` remain optional.
+          if (run.config === null || typeof run.config !== 'object') {
+            throw new AppError(
+              `Run ${run.id} has null or non-object config; cannot compute coverage`,
+              'RUN_CONFIG_INVALID',
+              500,
+              { runId: run.id },
+            );
+          }
+          const config = run.config as {
+            isAggregate?: boolean;
+            models?: unknown;
+            samplesPerScenario?: unknown;
+          };
+
+          const scenarioIds = run.scenarioSelections.map((s) => s.scenarioId);
+          const runWithScenarios = {
+            id: run.id,
+            definitionId: run.definitionId,
+            config: run.config,
+            transcripts: run.transcripts,
+            scenarioIds,
+          };
           const existingRuns = signatureScopedRunsByDefinitionId.get(run.definitionId) ?? [];
-          existingRuns.push(run);
+          existingRuns.push(runWithScenarios);
           signatureScopedRunsByDefinitionId.set(run.definitionId, existingRuns);
 
-          const isAggregateRun = (run.config as { isAggregate?: boolean } | null)?.isAggregate === true;
+          const isAggregateRun = config.isAggregate === true;
           if (isAggregateRun) {
             if (!latestAggregateRunIdByDefinitionId.has(run.definitionId)) {
               latestAggregateRunIdByDefinitionId.set(run.definitionId, run.id);
@@ -184,36 +219,18 @@ builder.queryField('domainValueCoverage', (t) =>
             continue;
           }
 
-          // Completeness check: flag if any expected slot is missing a transcript.
-          // Expected slots = scenarioSelections × models.length × samplesPerScenario.
-          // We compare against distinct (scenarioId, modelId, sampleIndex) tuples
-          // -- not the raw row count -- so duplicate transcripts (worker retries
-          // / races) can never mask a missing slot.
-          const samplesPerScenario =
-            (run.config as { samplesPerScenario?: unknown } | null)?.samplesPerScenario;
-          const configModels = (run.config as { models?: unknown } | null)?.models;
-          const modelCount = Array.isArray(configModels) ? configModels.length : 0;
-          const expectedCount =
-            run._count.scenarioSelections * modelCount * getCoverageBatchIncrement(samplesPerScenario);
-          if (modelCount > 0) {
-            const distinctSlots = new Set(
-              run.transcripts.map((t) => `${t.scenarioId ?? ''}|${t.modelId}|${t.sampleIndex}`),
-            );
-            if (distinctSlots.size < expectedCount) {
-              incompleteBatchCountByDefinitionId.set(
-                run.definitionId,
-                (incompleteBatchCountByDefinitionId.get(run.definitionId) ?? 0) + 1,
-              );
-            }
-          }
-
-          // Track non-aggregate runs for per-model trial count computation
+          // Track non-aggregate runs for per-model trial count computation.
           if (effectiveModelIds.length > 0) {
             const nonAggregateRuns = nonAggregateRunsByDefinitionId.get(run.definitionId) ?? [];
-            nonAggregateRuns.push({ config: run.config, transcripts: run.transcripts });
+            nonAggregateRuns.push({ config: run.config, transcripts: run.transcripts, scenarioIds });
             nonAggregateRunsByDefinitionId.set(run.definitionId, nonAggregateRuns);
           }
 
+          // Apply the model filter symmetrically: a run that doesn't match the
+          // requested model filter contributes to neither bucket. Without this
+          // the `incompleteBatchCount` view of a filtered query would mention
+          // runs that `batchCount` cannot, breaking the "exactly one bucket"
+          // invariant.
           const matchesModelFilter = filterModelIds.length === 0
             || run.transcripts.some((transcript) => filterModelIds.includes(transcript.modelId));
           if (!matchesModelFilter) continue;
@@ -221,10 +238,54 @@ builder.queryField('domainValueCoverage', (t) =>
           if (!latestMatchingRunIdByDefinitionId.has(run.definitionId)) {
             latestMatchingRunIdByDefinitionId.set(run.definitionId, run.id);
           }
-          const increment = getCoverageBatchIncrement(samplesPerScenario);
+
+          // Determine completeness using the existing helper. A run is complete
+          // iff every (scenarioId × modelId × sampleIndex) slot has at least
+          // one transcript. Extra transcripts in a slot do NOT break
+          // completeness; only missing slots do.
+          if (!Array.isArray(config.models)) {
+            throw new AppError(
+              `Run ${run.id} config has no models array; cannot compute coverage`,
+              'RUN_CONFIG_INVALID',
+              500,
+              { runId: run.id },
+            );
+          }
+          const models = config.models.filter(
+            (m): m is string => typeof m === 'string' && m.length > 0,
+          );
+          if (models.length === 0) {
+            throw new AppError(
+              `Run ${run.id} has empty or invalid models array`,
+              'RUN_CONFIG_INVALID',
+              500,
+              { runId: run.id },
+            );
+          }
+          const rawSamples = config.samplesPerScenario;
+          const samplesPerScenario = typeof rawSamples === 'number' ? rawSamples : null;
+          const existingTranscripts = run.transcripts
+            .filter((t): t is { scenarioId: string; modelId: string; sampleIndex: number } => t.scenarioId !== null);
+          const complete = isRunComplete({
+            scenarioIds,
+            models,
+            samplesPerScenario,
+            existingTranscripts,
+          });
+
+          if (!complete) {
+            incompleteBatchCountByDefinitionId.set(
+              run.definitionId,
+              (incompleteBatchCountByDefinitionId.get(run.definitionId) ?? 0) + 1,
+            );
+            continue;
+          }
+
+          // Run is complete: contribute exactly 1 to batchCount regardless of
+          // samplesPerScenario.
           batchCountByDefinitionId.set(
             run.definitionId,
-            (batchCountByDefinitionId.get(run.definitionId) ?? 0) + increment,
+            (batchCountByDefinitionId.get(run.definitionId) ?? 0) + 1,
           );
 
           const pairedBatchGroupId = getCoverageBatchGroupId(run.config);
@@ -232,7 +293,7 @@ builder.queryField('domainValueCoverage', (t) =>
           if (pairedBatchGroupId === null) {
             pairedBatchCountByDefinitionId.set(
               run.definitionId,
-              (pairedBatchCountByDefinitionId.get(run.definitionId) ?? 0) + increment,
+              (pairedBatchCountByDefinitionId.get(run.definitionId) ?? 0) + 1,
             );
             continue;
           }
@@ -243,11 +304,12 @@ builder.queryField('domainValueCoverage', (t) =>
             pairedBatchGroupIdsByDefinitionId.set(run.definitionId, seenGroupIds);
             pairedBatchCountByDefinitionId.set(
               run.definitionId,
-              (pairedBatchCountByDefinitionId.get(run.definitionId) ?? 0) + increment,
+              (pairedBatchCountByDefinitionId.get(run.definitionId) ?? 0) + 1,
             );
-            // Track increment per group ID for cross-definition dedup
+            // Track per-group increment for cross-definition dedup. Always 1
+            // now; samplesPerScenario no longer multiplies.
             const defIncrements = pairedBatchIncrementsByGroupId.get(run.definitionId) ?? new Map<string, number>();
-            defIncrements.set(pairedBatchGroupId, increment);
+            defIncrements.set(pairedBatchGroupId, 1);
             pairedBatchIncrementsByGroupId.set(run.definitionId, defIncrements);
           }
         }
@@ -330,8 +392,27 @@ builder.queryField('domainValueCoverage', (t) =>
             // Deduplicate by group ID first: A-first and B-first companion definitions
             // share the same jobChoiceBatchGroupId, so flatMapping across both would
             // double-count each paired batch.
+            //
+            // When companions have different completeness, prefer the complete one
+            // for the trial-count computation. This is read-time consistency with
+            // batchCount: the surviving run is the one whose data feeds analysis.
             const allNonAggregateRunsForPair = deduplicateRunsByGroupId(
               defIdsForPair.flatMap((defId) => nonAggregateRunsByDefinitionId.get(defId) ?? []),
+              (run) => {
+                const configModels = (run.config as { models?: unknown } | null)?.models;
+                const models = Array.isArray(configModels)
+                  ? configModels.filter((m): m is string => typeof m === 'string' && m.length > 0)
+                  : [];
+                const rawSamples = (run.config as { samplesPerScenario?: unknown } | null)?.samplesPerScenario;
+                const existing = run.transcripts
+                  .filter((t): t is { scenarioId: string; modelId: string; sampleIndex: number } => t.scenarioId !== null);
+                return isRunComplete({
+                  scenarioIds: run.scenarioIds,
+                  models,
+                  samplesPerScenario: typeof rawSamples === 'number' ? rawSamples : null,
+                  existingTranscripts: existing,
+                });
+              },
             );
             const { minTrialCount, maxTrialCount, modelBreakdown } = computePerModelTrialCounts(
               allNonAggregateRunsForPair,

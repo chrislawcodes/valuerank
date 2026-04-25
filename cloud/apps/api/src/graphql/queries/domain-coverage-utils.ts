@@ -141,16 +141,50 @@ export type CoverageModelBreakdown = { modelId: string; label: string; trialCoun
  * breakdowns, etc.) to ensure each batch is counted exactly once.
  *
  * Runs without a group ID (ungrouped / unpaired) are always kept.
+ *
+ * If `completenessOf` is provided, ties within a group are broken by preferring
+ * the complete companion. When both companions are complete (or both incomplete)
+ * the survivor is the one that appears first in input order. Callers that
+ * depend on deterministic survivor selection should pre-sort by `createdAt`
+ * (or another stable key) before calling.
  */
-export function deduplicateRunsByGroupId<T extends { config: unknown }>(runs: ReadonlyArray<T>): T[] {
-  const seenGroupIds = new Set<string>();
-  return runs.filter((run) => {
+export function deduplicateRunsByGroupId<T extends { config: unknown }>(
+  runs: ReadonlyArray<T>,
+  completenessOf?: (run: T) => boolean,
+): T[] {
+  if (completenessOf == null) {
+    const seenGroupIds = new Set<string>();
+    return runs.filter((run) => {
+      const groupId = getCoverageBatchGroupId(run.config);
+      if (groupId === null) return true;
+      if (seenGroupIds.has(groupId)) return false;
+      seenGroupIds.add(groupId);
+      return true;
+    });
+  }
+
+  // Two-pass: first index every run by groupId, then pick the survivor with
+  // a "prefer complete" rule. Ungrouped runs pass through.
+  const groups = new Map<string, T[]>();
+  const ungrouped: T[] = [];
+  for (const run of runs) {
     const groupId = getCoverageBatchGroupId(run.config);
-    if (groupId === null) return true;
-    if (seenGroupIds.has(groupId)) return false;
-    seenGroupIds.add(groupId);
-    return true;
-  });
+    if (groupId === null) {
+      ungrouped.push(run);
+      continue;
+    }
+    const existing = groups.get(groupId) ?? [];
+    existing.push(run);
+    groups.set(groupId, existing);
+  }
+
+  const survivors: T[] = [...ungrouped];
+  for (const [, members] of groups) {
+    if (members.length === 0) continue;
+    const complete = members.find((member) => completenessOf(member));
+    survivors.push(complete ?? members[0]!);
+  }
+  return survivors;
 }
 
 export function computePerModelTrialCounts(

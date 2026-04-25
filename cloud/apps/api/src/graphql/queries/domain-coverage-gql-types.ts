@@ -71,9 +71,30 @@ const DomainValueCoverageCellRef = builder
     fields: (t) => ({
       valueA: t.exposeString('valueA'),
       valueB: t.exposeString('valueB'),
-      batchCount: t.exposeInt('batchCount'),
-      pairedBatchCount: t.exposeInt('pairedBatchCount'),
-      incompleteBatchCount: t.exposeInt('incompleteBatchCount'),
+      batchCount: t.exposeInt('batchCount', {
+        description:
+          'Count of fully-complete non-aggregate runs for this value pair. ' +
+          'A run is complete when every selected model has at least one ' +
+          'transcript at every (scenario × sampleIndex) slot. samplesPerScenario ' +
+          'does not multiply this count -- a complete run contributes 1 ' +
+          'regardless of how many samples per scenario were planned. ' +
+          'Aggregate runs are excluded.',
+      }),
+      pairedBatchCount: t.exposeInt('pairedBatchCount', {
+        description:
+          'Count of paired-batch groups where the surviving (complete) ' +
+          'companion run is fully complete. When both companions are complete, ' +
+          'the pair counts as 1. When only one is complete, that one is the ' +
+          'survivor and the pair counts as 1. When both are incomplete, the ' +
+          'pair counts as 0 here (and as 1 toward incompleteBatchCount).',
+      }),
+      incompleteBatchCount: t.exposeInt('incompleteBatchCount', {
+        description:
+          'Count of non-aggregate runs that expect transcripts but are ' +
+          'missing one or more (model × scenario × sampleIndex) slots. ' +
+          'Per-run; samplesPerScenario does not multiply this count. ' +
+          'Aggregate runs and runs with zero expected slots are excluded.',
+      }),
       definitionId: t.exposeString('definitionId', { nullable: true }),
       definitionName: t.exposeString('definitionName', { nullable: true }),
       aggregateRunId: t.exposeString('aggregateRunId', { nullable: true }),

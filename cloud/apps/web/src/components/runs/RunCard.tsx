@@ -78,8 +78,8 @@ export function RunCard({ run, onClick }: RunCardProps) {
   const statusConfig = STATUS_CONFIG[run.status];
   const StatusIcon = statusConfig.icon;
   const progress = run.runProgress;
-  const batchCount = run.batchCount ?? 0;
-  const isAggregateRun = run.config?.isAggregate === true;
+  const isAggregateRun = run.isAggregate;
+  const batchCount = isAggregateRun ? 0 : 1;
   const batchLabel = batchCount === 1 ? 'Batch' : 'Batches';
   const trialSignature = formatTrialSignature(
     run.definitionVersion ?? run.definition?.version ?? null,

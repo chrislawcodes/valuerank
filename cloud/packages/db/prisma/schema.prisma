@@ -550,6 +550,14 @@ model Transcript {
   @@index([deletedAt])
   @@index([sampleIndex])
   @@index([runId, summarizedAt])
+  // NOTE: This table also has a partial unique index that is not declared
+  // here because Prisma 5.7 does not support partial unique indexes in
+  // schema.prisma syntax (no WHERE clause on @@unique). The index lives in:
+  //   cloud/packages/db/prisma/migrations/20260425000000_transcripts_live_slot_unique/migration.sql
+  // It enforces uniqueness on (run_id, scenario_id, model_id, sample_index)
+  // for live, non-null-scenario, post-2026-04-10 rows. See that migration
+  // for the full predicate and rationale (PR #585 / commit 465eccc4
+  // advisory lock backstop).
   @@map("transcripts")
 }
 

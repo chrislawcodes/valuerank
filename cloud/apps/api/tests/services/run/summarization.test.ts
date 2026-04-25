@@ -89,6 +89,9 @@ describe('summarization service', () => {
           runId: run.id,
           scenarioId: scenario.id,
           modelId: 'openai:gpt-4',
+          // Distinct sampleIndex per iteration so each row occupies its own
+          // slot under the transcripts_live_slot_unique partial index.
+          sampleIndex: i,
           content: { schema_version: 1, messages: [], model_response: 'test' },
           turnCount: 1,
           tokenCount: 100,

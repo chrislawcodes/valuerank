@@ -180,11 +180,14 @@ builder.objectType(RunRef, {
           : null;
       },
     }),
-    batchCount: t.int({
-      description: 'Number of batches represented by this saved record',
+    isAggregate: t.boolean({
+      description:
+        'True if this run is an aggregate rollup record (a saved summary derived from other runs) and does not have its own probe data. ' +
+        'False for normal runs that produced their own transcripts. ' +
+        'Use this to distinguish data-bearing runs from aggregates in UI / analysis.',
       resolve: (run) => {
         const config = run.config as RunConfig | null;
-        return config?.isAggregate === true ? 0 : 1;
+        return config?.isAggregate === true;
       },
     }),
     pairedBatchGroupId: t.string({
