@@ -346,12 +346,55 @@ describe('computePerModelTrialCounts', () => {
     expect(result.minTrialCount).toBe(2); // both counted - caller didn't dedup
   });
 
-  it('respects samplesPerScenario as the increment', () => {
+  it('counts every transcript row, not the planned samplesPerScenario value', () => {
+    // Trial count reflects actual transcripts so the displayed number matches
+    // what the aggregate analysis pipeline consumes. samplesPerScenario is
+    // ignored at this layer -- it's only used by batchCount, which counts
+    // intent rather than reality.
     const runs = [
-      { config: { jobChoiceBatchGroupId: 'g1', samplesPerScenario: 5 }, transcripts: [{ modelId: 'model-a' }] },
+      {
+        config: { jobChoiceBatchGroupId: 'g1', samplesPerScenario: 5 },
+        // Five real transcripts -> five trials.
+        transcripts: [
+          { modelId: 'model-a' }, { modelId: 'model-a' }, { modelId: 'model-a' },
+          { modelId: 'model-a' }, { modelId: 'model-a' },
+        ],
+      },
     ];
     const result = computePerModelTrialCounts(runs, ['model-a'], labels);
     expect(result.minTrialCount).toBe(5);
+  });
+
+  it('counts duplicate transcripts as separate trials (matches analysis pipeline)', () => {
+    // When the worker double-fires on the same (run, scenario, model, sample)
+    // slot, both transcripts land in the DB and the aggregate analysis treats
+    // them as independent samples. Trial count must reflect that.
+    const runs = [
+      {
+        config: { samplesPerScenario: 1 },
+        transcripts: [{ modelId: 'model-a' }, { modelId: 'model-a' }],
+      },
+    ];
+    const result = computePerModelTrialCounts(runs, ['model-a'], labels);
+    expect(result.minTrialCount).toBe(2);
+  });
+
+  it('ignores transcripts whose model is not in defaultModelIds', () => {
+    const runs = [
+      {
+        config: { samplesPerScenario: 1 },
+        transcripts: [
+          { modelId: 'model-a' },
+          { modelId: 'model-c' }, // not in defaults
+          { modelId: 'model-b' },
+        ],
+      },
+    ];
+    const result = computePerModelTrialCounts(runs, ['model-a', 'model-b'], labels);
+    expect(result.modelBreakdown).toEqual([
+      { modelId: 'model-a', label: 'Model A', trialCount: 1 },
+      { modelId: 'model-b', label: 'Model B', trialCount: 1 },
+    ]);
   });
 });
 
@@ -390,15 +433,18 @@ describe('deduplicateRunsByGroupId', () => {
 
   it('when combined with computePerModelTrialCounts, paired companions count once', () => {
     const labels = new Map([['model-a', 'Model A']]);
-    // Simulate A-first and B-first companion runs for the same batch group
+    // Simulate A-first and B-first companion runs for the same batch group.
+    // Each surviving (post-dedup) run contributes its actual transcript rows
+    // -- 5 here -- so two groups produce 10 trials total.
+    const fiveTranscripts = Array.from({ length: 5 }, () => ({ modelId: 'model-a' }));
     const runs = [
-      { config: { jobChoiceBatchGroupId: 'group-1', samplesPerScenario: 5 }, transcripts: [{ modelId: 'model-a' }] },
-      { config: { jobChoiceBatchGroupId: 'group-1', samplesPerScenario: 5 }, transcripts: [{ modelId: 'model-a' }] },
-      { config: { jobChoiceBatchGroupId: 'group-2', samplesPerScenario: 5 }, transcripts: [{ modelId: 'model-a' }] },
-      { config: { jobChoiceBatchGroupId: 'group-2', samplesPerScenario: 5 }, transcripts: [{ modelId: 'model-a' }] },
+      { config: { jobChoiceBatchGroupId: 'group-1', samplesPerScenario: 5 }, transcripts: fiveTranscripts },
+      { config: { jobChoiceBatchGroupId: 'group-1', samplesPerScenario: 5 }, transcripts: fiveTranscripts },
+      { config: { jobChoiceBatchGroupId: 'group-2', samplesPerScenario: 5 }, transcripts: fiveTranscripts },
+      { config: { jobChoiceBatchGroupId: 'group-2', samplesPerScenario: 5 }, transcripts: fiveTranscripts },
     ];
     const deduped = deduplicateRunsByGroupId(runs);
     const result = computePerModelTrialCounts(deduped, ['model-a'], labels);
-    expect(result.minTrialCount).toBe(10); // 2 groups x 5 samples each
+    expect(result.minTrialCount).toBe(10); // 2 groups x 5 transcripts each
   });
 });

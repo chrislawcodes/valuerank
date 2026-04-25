@@ -165,18 +165,23 @@ export function computePerModelTrialCounts(
   // Caller is responsible for deduplicating paired runs before passing them here.
   // Use deduplicateRunsByGroupId() at the call site when collecting runs across
   // companion definitions for the same value pair.
+  //
+  // We count actual transcript rows per model rather than the planned
+  // `samplesPerScenario × runs-where-model-present` value. This keeps the
+  // displayed trial count consistent with what the aggregate analysis pipeline
+  // actually consumes (every transcript becomes a sample, including any
+  // duplicates from worker retries or races -- see
+  // aggregate-preparation.ts:202). If we kept the planned value, runs with
+  // duplicate transcripts would silently have larger effective sample sizes
+  // in analysis than the UI advertised.
   const trialCountByModel = new Map<string, number>(
     defaultModelIds.map((modelId) => [modelId, 0]),
   );
 
   for (const run of runs) {
-    const increment = getCoverageBatchIncrement(
-      (run.config as { samplesPerScenario?: unknown } | null)?.samplesPerScenario,
-    );
-    const transcriptModelIds = new Set(run.transcripts.map((t) => t.modelId));
-    for (const modelId of defaultModelIds) {
-      if (transcriptModelIds.has(modelId)) {
-        trialCountByModel.set(modelId, (trialCountByModel.get(modelId) ?? 0) + increment);
+    for (const transcript of run.transcripts) {
+      if (trialCountByModel.has(transcript.modelId)) {
+        trialCountByModel.set(transcript.modelId, (trialCountByModel.get(transcript.modelId) ?? 0) + 1);
       }
     }
   }
