@@ -1,0 +1,10 @@
+## Findings
+- **Medium:** Slice 1 has a direct contradiction on `_resolve_branch_base()` fallback order. T02 says `origin/main -> --fork-point -> main`, but T05’s tests say `origin/main -> main -> --fork-point`. That is not just a wording issue; one of those paths will be wrong, so the implementation and tests cannot both be correct as written.
+- **Medium:** The skip path is specified inconsistently across slices. T03 says `check_implementation_rule()` prints the “branch base unresolved” message itself and returns `(False, message)`, while T09 says the caller should print the skip message after receiving `"skipped"`. If T03 is not explicitly removed or changed when Slice 2 lands, skipped checks will double-print.
+- **Medium:** T18’s `git rev-parse HEAD` call does not use `check=True` or any return-code check. If Git fails, the command can keep going with an empty or invalid `head_sha`, which would silently corrupt the `annotations` record instead of failing fast.
+- **Medium [UNVERIFIED]:** T14 assumes `_IMPLEMENTATION_RULE_CODE_GLOBS` already exists in `factory_deliver.py` and is the right source of truth for the recompute diff. Because no code context was provided, that dependency is unverified; if the constant moved or changed, the freshness recompute path and its tests will break.
+
+## Residual Risks
+- The plan still depends on Git behavior being stable across `origin/main`, local `main`, and fork-point resolution. Repo history changes or missing refs could still make branch-base detection flaky.
+- Several tests rely on timestamp ordering and collision suffixes. If the filesystem or mocked clock behavior differs from the plan’s assumptions, the freshness selection and `_NNN` collision cases may need adjustment.
+- The dispatch flow assumes prompt files are valid and readable. If a bad path is passed, the current task set does not define a clean user-facing error path for that failure.

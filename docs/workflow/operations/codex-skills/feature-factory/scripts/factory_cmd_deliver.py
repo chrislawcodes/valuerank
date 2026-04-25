@@ -260,12 +260,22 @@ def command_deliver(args: argparse.Namespace) -> int:
         impl_rule_override_pending = True
     else:
         from factory_deliver import check_implementation_rule
-        triggered, message = check_implementation_rule(args.slug)
-        if message:
-            # Per Codex diff-review regression MEDIUM #3: surface the info
-            # message even on the skip path (branch-base unresolved, git
-            # diff failed) so the guardrail doesn't disappear silently.
-            print(message, file=sys.stderr)
+        status, message = check_implementation_rule(args.slug)
+        if status == "triggered":
+            if message:
+                # Per Codex diff-review regression MEDIUM #3: surface the
+                # message so the guardrail doesn't disappear silently.
+                print(message, file=sys.stderr)
+        elif status == "suppressed":
+            if message:
+                print(message, file=sys.stderr)
+        elif status == "skipped":
+            if message:
+                print(message, file=sys.stderr)
+        elif status == "ok":
+            pass
+        else:
+            raise RuntimeError(f"unexpected check_implementation_rule status: {status!r}")
 
     auth = subprocess.run(["gh", "auth", "status", "--active"], text=True, capture_output=True)
     if auth.returncode != 0:
