@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mockDbRunFindFirst = vi.hoisted(() => vi.fn());
 const mockDbRunFindMany = vi.hoisted(() => vi.fn());
 const mockDbTranscriptFindFirst = vi.hoisted(() => vi.fn());
+const mockDbRunAnomalyFindFirst = vi.hoisted(() => vi.fn());
 const mockDbQueryRaw = vi.hoisted(() => vi.fn());
 const mockBossSchedule = vi.hoisted(() => vi.fn());
 const mockBossUnschedule = vi.hoisted(() => vi.fn());
@@ -19,6 +20,9 @@ vi.mock('@valuerank/db', () => ({
     },
     transcript: {
       findFirst: mockDbTranscriptFindFirst,
+    },
+    runAnomaly: {
+      findFirst: mockDbRunAnomalyFindFirst,
     },
     $queryRaw: mockDbQueryRaw,
   },
@@ -172,6 +176,43 @@ describe('getReconcileWindowDays', () => {
         fallbackDays: 30,
       }),
       'Invalid RUN_RECONCILE_WINDOW_DAYS, falling back to default'
+    );
+  });
+});
+
+describe('hasRecoveryActivity', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    delete process.env.RUN_RECONCILE_WINDOW_DAYS;
+    mockDbRunFindFirst.mockResolvedValue(null);
+    mockDbRunFindMany.mockResolvedValue([]);
+    mockDbTranscriptFindFirst.mockResolvedValue(null);
+    mockDbRunAnomalyFindFirst.mockResolvedValue(null);
+    mockDbQueryRaw.mockResolvedValue([]);
+  });
+
+  it('starts the scheduler when there are open default-source anomalies, even with no active runs', async () => {
+    // No active runs, no stranded transcripts, no orphan backlog -- but one
+    // open default-source anomaly. Without this wake-up condition, the
+    // scheduler would stay dormant forever and the stale anomaly would never
+    // get re-checked.
+    mockDbRunAnomalyFindFirst.mockResolvedValue({ id: 'anomaly-1' });
+
+    const { startRecoveryScheduler } = await loadScheduler();
+    await startRecoveryScheduler();
+
+    expect(mockLogInfo).toHaveBeenCalledWith('Recovery scheduler started (active runs detected)');
+    expect(mockLogInfo).not.toHaveBeenCalledWith(
+      'Recovery scheduler initialized but not running (no active runs)',
+    );
+  });
+
+  it('stays dormant when nothing -- no active runs, no transcripts, no anomalies', async () => {
+    const { startRecoveryScheduler } = await loadScheduler();
+    await startRecoveryScheduler();
+
+    expect(mockLogInfo).toHaveBeenCalledWith(
+      'Recovery scheduler initialized but not running (no active runs)',
     );
   });
 });
