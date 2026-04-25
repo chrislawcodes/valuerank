@@ -166,5 +166,57 @@ class FactoryNextActionJudgeAdvanceTests(unittest.TestCase):
         self.assertEqual(action, "author_plan")
 
 
+class FactoryNextActionBannerRenameTests(unittest.TestCase):
+    def test_returns_run_spec_checkpoint_when_spec_manifest_missing(self) -> None:
+        state = _base_state(adversarial_rounds=0, judge_rounds=0)
+        stages = _stages(plan_exists=False)
+        stages["spec"] = _base_stage_state(True, False, False)
+        action = NEXT_ACTION.recommended_next_action("banner-spec", state, stages, True)
+        self.assertEqual(action, "run_spec_checkpoint")
+
+    def test_returns_run_plan_checkpoint_when_plan_manifest_missing(self) -> None:
+        state = _base_state(adversarial_rounds=0, judge_rounds=0)
+        stages = _stages(plan_exists=True)
+        stages["plan"] = _base_stage_state(True, False, False)
+        action = NEXT_ACTION.recommended_next_action("banner-plan", state, stages, True)
+        self.assertEqual(action, "run_plan_checkpoint")
+
+    def test_returns_run_tasks_checkpoint_when_tasks_manifest_missing(self) -> None:
+        state = _base_state(adversarial_rounds=0, judge_rounds=0)
+        state["parallel_analysis"] = {"reviewed": True}
+        stages = _stages(plan_exists=True)
+        stages["plan"] = _base_stage_state(True, True, True)
+        stages["tasks"] = _base_stage_state(True, False, False)
+        action = NEXT_ACTION.recommended_next_action("banner-tasks", state, stages, True)
+        self.assertEqual(action, "run_tasks_checkpoint")
+
+    def test_returns_run_diff_checkpoint_when_diff_manifest_missing(self) -> None:
+        state = _base_state(adversarial_rounds=0, judge_rounds=0)
+        state["parallel_analysis"] = {"reviewed": True}
+        stages = _stages(plan_exists=True)
+        stages["plan"] = _base_stage_state(True, True, True)
+        stages["tasks"] = _base_stage_state(True, True, True)
+        stages["diff"] = _base_stage_state(True, False, False)
+        action = NEXT_ACTION.recommended_next_action("banner-diff", state, stages, True)
+        self.assertEqual(action, "run_diff_checkpoint")
+
+    def test_returns_run_closeout_checkpoint_when_closeout_unhealthy(self) -> None:
+        state = _base_state(adversarial_rounds=0, judge_rounds=0)
+        state["parallel_analysis"] = {"reviewed": True}
+        state["delivery"] = {
+            "pr_url": "https://example.com/pr/1",
+            "checks_summary": "pass",
+            "head_mismatch": False,
+            "merge_state_status": "clean",
+        }
+        stages = _stages(plan_exists=True)
+        stages["plan"] = _base_stage_state(True, True, True)
+        stages["tasks"] = _base_stage_state(True, True, True)
+        stages["diff"] = _base_stage_state(True, True, True)
+        stages["closeout"] = _base_stage_state(True, True, False)
+        action = NEXT_ACTION.recommended_next_action("banner-closeout", state, stages, True)
+        self.assertEqual(action, "run_closeout_checkpoint")
+
+
 if __name__ == "__main__":
     unittest.main()

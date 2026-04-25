@@ -1,0 +1,292 @@
+Reading additional input from stdin...
+OpenAI Codex v0.125.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019dc238-43a4-7013-89d1-f3fb9f6451de
+--------
+user
+Review this spec artifact using a edge-cases-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: spec.md
+# FF Codex Reintegration — Spec
+
+**Feature branch**: `claude/ff-codex-reintegration`
+**Slug**: `ff-codex-reintegration`
+**Created**: 2026-04-24
+**Status**: Draft spec (discovery complete)
+**Supporting context**: Codex usage quota was exhausted across PR #744, #749, #750, #751 — implementation fell back to Claude for four runs in a row. Quota is now restored (2026-04-24). PR #751 shipped an implementation-rule WARN at deliver that suppresses on `state.codex_dispatches[]`, but nothing populates that field today, so any legitimate Codex-driven feature now trips the WARN. This feature closes that gap and bundles four small follow-ups from the original `feature-factory-runner-fixes.md` plan.
+
+## Summary
+
+Five narrow runner improvements that together restore "Codex implements, Claude orchestrates" as the default flow:
+
+1. **`dispatch-codex` runner subcommand** — wraps `codex exec`, captures stdout/stderr to disk, appends a typed record to `state.codex_dispatches[]`. The missing producer for the field PR #751 added.
+2. **Freshness-bound suppression in `check_implementation_rule`** — the implementation-rule WARN suppresses only when a dispatch is an ancestor of HEAD AND its line count is within 50 of current. Stale or unrelated dispatches no longer suppress.
+3. **`advance` subcommand** (Fix 3 from `feature-factory-runner-fixes.md`) — manual escape hatch that sets `judge_next_action="advance"` with a recorded reason, for the rare case where the runner gets wedged on manifest drift after the 3-round adversarial cap.
+4. **Banner rename `repair_X_checkpoint` → `run_X_checkpoint`** (Fix 4 from `feature-factory-runner-fixes.md`) — pure string change. The word "repair" reads as "something broke"; "run" matches what the command actually does on the happy path.
+5. **Better branch-base fallback for the implementation-rule check** — replace `HEAD~50` (silently under-reports on long-lived branches) with `git merge-base --fork-point origin/main HEAD`, then skip the check entirely with a printed note if even that fails. Honest skip beats silent under-report.
+
+None of these changes are user-facing in the product; all of them are runner-facing for the FF workflow.
+
+## Problem statement
+
+### Fix 1 — `dispatch-codex` runner subcommand
+
+PR #751 added `factory_deliver.check_implementation_rule`, which counts non-test lines added on the branch and emits a WARN above 200 lines. The check suppresses when `state.codex_dispatches[]` is non-empty. The intent: if Codex did the work, the rule doesn't apply; if Claude did the work, surface it at deliver time.
+
+The producer side is missing. There's no runner command that writes to `codex_dispatches[]`. Today every feature that goes through Codex would still trip the WARN, because nothing records the dispatch. Operators currently dispatch Codex by running `codex exec` directly from the shell — outside the runner's view.
+
+This feature adds a `dispatch-codex` subcommand that:
+- Reads a prompt file the operator prepared.
+- Invokes `codex exec -m <model> -s workspace-write` from the repo root.
+- Streams stdout/stderr to `docs/workflow/feature-runs/<slug>/codex-dispatches/<UTC-timestamp>/{stdout.txt, stderr.txt}`.
+- Appends a structured record to `state.codex_dispatches[]`.
+- On Codex quota exhaustion (re-using `is_codex_quota_exhaustion` from PR #751's `run_codex_review.py`), exits 4 with a clear message and does NOT record the failed dispatch (no false suppression).
+
+### Fix 2 — Freshness-bound suppression in `check_implementation_rule`
+
+PR #751's review caught this as an accepted-limitation: today, any non-empty `codex_dispatches[]` suppresses the WARN. That means a stale dispatch from an earlier branch — or even a real dispatch followed by 5,000 lines of post-hoc Claude edits — still suppresses.
+
+The fix: a dispatch entry suppresses the WARN only when:
+- `git merge-base --is-ancestor <entry.head_sha> HEAD` succeeds (the dispatch happened on an ancestor of the current branch tip), AND
+- The current `_added_code_lines(branch_base)` is within 50 of `entry.lines_added_at_dispatch_time`.
+
+Stale dispatches (head_sha unreachable, or current line count is 50+ beyond the dispatch's recorded count) do NOT suppress. When a fresh dispatch DOES suppress, print a one-line note showing which dispatch covered the check.
+
+### Fix 3 — `advance` subcommand
+
+From `feature-factory-runner-fixes.md` Cause 5: there is no `--force-advance`, `--skip-manifest-check`, or `--accept-judge-verdict` flag in the runner. The judge panel writes `judge_next_action="advance"` to state.json (PR #744 wired the runner's decision tree to honor it), but if the manifest is also unhealthy due to post-judge artifact edits, the state can still feel wedged. Today the only escape is hand-editing state.json + review frontmatter SHAs.
+
+The fix: a small `advance` subcommand that sets `state.stages[stage].judge_next_action = "advance"` and appends `{stage, ts, reason, head_sha}` to `state.annotations[]`. Reason length is eager-validated (≥20 chars) before any state mutation. Combined with PR #744's decision-tree change, the runner moves past the stage on its next evaluation. The `repair` subcommand stays unchanged for actual manifest-repair cases.
+
+### Fix 4 — Banner rename `repair_X_checkpoint` → `run_X_checkpoint`
+
+From `feature-factory-runner-fixes.md` Cause 4: the state machine uses `repair_X_checkpoint` as the name for "this stage needs its checkpoint run." The word "repair" reads to a human (and to an orchestrating AI) as "something broke, fix it" — but mechanically it's just "run the checkpoint command for stage X." Every transition between stages surfaces a `repair_next_checkpoint` banner, making the workflow feel broken even on the happy path.
+
+The fix: pure string change in `factory_next_action.py` and any callers that emit the banner. The `repair` subcommand name stays as-is (it's used for actual manifest-repair). Test expectations updated to match.
+
+### Fix 5 — Better branch-base fallback for the implementation-rule check
+
+PR #751's `_resolve_branch_base()` falls back to `HEAD~50` when `origin/main` and `main` cannot be resolved as merge bases. On a long-lived feature branch with more than 50 commits since it diverged from main, `HEAD~50` lands inside the feature branch — so the diff-line count only reflects the last 50 commits, not the actual branch work. The check silently under-reports.
+
+The fix: new fallback chain:
+1. `git merge-base origin/main HEAD`
+2. `git merge-base main HEAD`
+3. `git merge-base --fork-point origin/main HEAD` (correct branch-point even on long-lived branches)
+4. Return `None` and **skip the check entirely** with a printed stderr note: `implementation-rule check skipped — could not resolve branch base (origin/main, main, fork-point all failed)`.
+
+Honest skip is better than a silent under-report.
+
+## Scope
+
+### In scope
+
+- **Fix 1**: new module `factory_cmd_dispatch.py` and `dispatch-codex` subcommand on `run_factory.py`. Captures stdout/stderr, appends to `state.codex_dispatches[]`. Routes Codex quota errors to exit 4. Decorated with `@mutates_state` (auto-registered for state mutation tracking).
+- **Fix 2**: in `factory_deliver.py:check_implementation_rule`, replace the boolean `bool(state.get("codex_dispatches"))` suppression with the freshness check described above. Helper added to `factory_state.py` (or co-located in `factory_deliver.py`) for `git merge-base --is-ancestor`.
+- **Fix 3**: new module `factory_cmd_advance.py` and `advance` subcommand on `run_factory.py`. Validates `--reason >=20 chars` eagerly. Writes `judge_next_action` and `annotations[]` atomically using existing `factory_state.update_state` helpers.
+- **Fix 4**: string find-replace `repair_X_checkpoint` → `run_X_checkpoint` across `factory_next_action.py` and any test that asserts on the old string. The `repair` CLI subcommand name does NOT change.
+- **Fix 5**: rewrite `factory_deliver.py:_resolve_branch_base()` per the chain above. Add stderr message when skipping. Update `check_implementation_rule` to handle the `None` branch-base by skipping (not warning).
+- New unit tests for each fix; extend `test_implementation_rule.py` with freshness cases.
+- All existing FF tests still pass (240+ tests baseline).
+
+### Out of scope (deferred)
+
+- **Reconcile atomicity** (P3 from #751) — idempotent re-run is the recovery path; hasn't bitten us yet.
+- **Stronger `--override-implementation-reason` validation** — semantic placeholder detection is a research project.
+- **Broader implementation-rule file globs** beyond `.py/.ts/.tsx/.js/.jsx` — current set covers ~95% of real work in this repo.
+- **Concurrent-dispatch handling / lock files** — single-process FF runner; unnecessary.
+- **Changes to reviewer prompts or `sync-codex-skills.py`** — out of band.
+
+## User stories
+
+### US1 — Codex dispatches are recorded by the runner (Priority: P1)
+
+**As** the orchestrator (Claude) preparing to dispatch Codex for an implementation slice
+**I need** a runner subcommand that wraps `codex exec`, captures output to disk, and records the dispatch in workflow state
+**So that** the implementation-rule WARN we shipped in PR #751 actually has a producer for the field it suppresses on, AND so the audit trail of "what Codex did when" lives next to the rest of the FF state.
+
+**Why P1**: PR #751's WARN is currently dead code on the suppression path. Without this, any legitimate Codex-driven feature trips the WARN and the operator must override every time, defeating the purpose.
+
+**Independent test**: invoke `dispatch-codex` with a mocked `subprocess.run` that returns success, asserts (a) stdout/stderr files exist under `docs/workflow/feature-runs/<slug>/codex-dispatches/<ts>/`, (b) `state.codex_dispatches[]` has a new entry with all required fields, (c) `prompt_sha256` matches the actual file content. Separate mock for quota exhaustion: assert exit code 4 AND that no entry was written to state.
+
+**Acceptance scenarios**:
+
+1. **Given** a prepared prompt file at `/tmp/codex-prompt.txt` and slug `X`, **when** `dispatch-codex --slug X --prompt-path /tmp/codex-prompt.txt` runs and Codex returns success, **then** `docs/workflow/feature-runs/X/codex-dispatches/<UTC-ts>/{stdout.txt, stderr.txt}` exist AND `state.codex_dispatches[-1]` has `{head_sha, ts, prompt_path, prompt_sha256, model, exit_code: 0, stdout_path, stderr_path, branch_base_sha, lines_added_at_dispatch_time}` (the latter two may be `null` together when branch-base is unresolved at dispatch time).
+2. **Given** a Codex subprocess that exits with the OpenAI quota-exhausted error pattern, **when** `dispatch-codex` runs, **then** exit code is 4 AND `state.codex_dispatches` is unchanged (no false-suppression record).
+3. **Given** a Codex subprocess that exits non-zero for a non-quota reason (e.g. exit 1 with normal stderr), **when** `dispatch-codex` runs, **then** the dispatch IS recorded (with `exit_code: 1`) so the operator can review the output, but the runner's exit code propagates the failure.
+4. **Given** the same prompt file dispatched twice in a row, **when** both runs complete, **then** there are two entries in `state.codex_dispatches[]` with distinct timestamps (append-only; no dedup).
+
+### US2 — Implementation-rule WARN suppresses only on fresh, relevant dispatches (Priority: P1)
+
+**As** the operator running `deliver` after Codex did the implementation work
+**I need** the implementation-rule check to suppress only when there's a Codex dispatch on an ancestor of HEAD whose recorded line count is close to current
+**So that** stale dispatches from earlier branches, or fresh dispatches followed by thousands of post-hoc Claude edits, do not silently suppress the warning.
+
+**Why P1**: this directly closes the accepted-limitation flagged by Codex regression review on PR #751. Without it, the WARN can be defeated by a single trivial dispatch from any prior point in history.
+
+**Independent test**: build state.json fixtures with (a) a dispatch on current HEAD with matching line count → suppress, (b) a dispatch on an unreachable SHA → do not suppress, (c) a dispatch with line count 100 lower than current → do not suppress, (d) no dispatches at all → do not suppress.
+
+**Acceptance scenarios**:
+
+1. **Given** `state.codex_dispatches` has one entry with `head_sha` = a real ancestor of HEAD AND `lines_added_at_dispatch_time` within 50 of current, **when** `check_implementation_rule(slug)` runs above the 200-line threshold, **then** the WARN is suppressed AND a one-line note prints showing which dispatch covered the check (`covered by codex dispatch <ts> (sha <head_sha[:7]>, +<lines>)`).
+2. **Given** `state.codex_dispatches` has one entry with `head_sha` that is NOT an ancestor of HEAD (different branch / missing object), **when** `check_implementation_rule(slug)` runs, **then** the WARN fires (suppression rejected).
+3. **Given** a fresh dispatch with `lines_added_at_dispatch_time = 250` and current `_added_code_lines = 800`, **when** `check_implementation_rule(slug)` runs, **then** the WARN fires (line drift exceeds 50).
+4. **Given** `state.codex_dispatches` is empty or missing, **when** `check_implementation_rule(slug)` runs above threshold with no `--override-implementation-rule` flag, **then** the WARN fires (existing behavior preserved).
+
+### US3 — Operator can manually advance a wedged stage (Priority: P2)
+
+**As** the operator on a feature where post-judge edits made the manifest unhealthy after the 3-round adversarial cap
+**I need** an `advance` subcommand that explicitly records "the judges have ruled — proceed" with a reason
+**So that** I don't have to hand-edit `state.json` or review frontmatter SHAs to escape the wedge.
+
+**Why P2**: PR #744 wired the runner's decision tree to honor `judge_next_action == "advance"`, which addressed most cases. The `advance` subcommand is the manual escape for the rare case where the judge wrote `advance` but later edits drifted the manifest. Useful, not load-bearing.
+
+**Independent test**: invoke `advance --slug X --stage spec --reason "Judge panel exhausted; addressed concerns in spec.md commit abc123"`. Assert state.json has `stages.spec.judge_next_action == "advance"` AND `annotations[-1] == {stage: "spec", reason: "...", ts, head_sha}`. Test that reason <20 chars exits non-zero with no state mutation.
+
+**Acceptance scenarios**:
+
+1. **Given** a spec stage where judge wrote `advance` but post-judge edits drifted the manifest, **when** `advance --slug X --stage spec --reason "<≥20 chars>"` runs, **then** state.json shows `judge_next_action="advance"` for spec AND a new entry in `annotations[]` with the reason.
+2. **Given** a `--reason` shorter than 20 characters, **when** `advance` runs, **then** exit is non-zero with a clear message AND no state mutation occurs (eager-validate before write).
+3. **Given** an unknown `--stage` value, **when** `advance` runs, **then** exit is non-zero with the list of valid stages AND no state mutation occurs.
+
+### US4 — Banner says "run" instead of "repair" on the happy path (Priority: P2)
+
+**As** the operator (or orchestrating AI) reading the runner's next-action banner after a checkpoint completes
+**I need** the banner to say `run_plan_checkpoint` not `repair_plan_checkpoint`
+**So that** I don't read the message as "something is broken" on the happy path.
+
+**Why P2**: pure UX. Doesn't fix any logic bug. But "feels broken on the happy path" was a recurring complaint in the runner-fixes plan and across runs.
+
+**Independent test**: unit test on `factory_next_action.compute_recommended_next_action(state)` (or its public name) — for a state where stage X is healthy and the next stage Y is empty, assert the recommended next action is `run_Y_checkpoint`. Existing tests that asserted `repair_Y_checkpoint` are updated to match.
+
+**Acceptance scenarios**:
+
+1. **Given** state where the spec stage is healthy and plan stage is empty, **when** `factory_next_action` is invoked, **then** the recommended action string is `run_plan_checkpoint`.
+2. **Given** the `repair` CLI subcommand, **when** invoked as before, **then** it still works (no rename to the CLI surface).
+
+### US5 — Branch-base fallback skips honestly instead of under-reporting (Priority: P2)
+
+**As** the operator on a long-lived feature branch (>50 commits past origin/main)
+**I need** the implementation-rule check to either find the true branch-point or skip with a printed note
+**So that** I don't get a false "under threshold" pass when the branch actually has 5,000 lines of new code.
+
+**Why P2**: real correctness hole, but only manifests on long-lived branches. Most feature branches are short.
+
+**Independent test**: mock `subprocess.run` to fail on `merge-base origin/main`, fail on `merge-base main`, succeed on `merge-base --fork-point origin/main` → assert that fork-point sha is used. Then mock all three to fail → assert `_resolve_branch_base()` returns `None` AND `check_implementation_rule` prints the skip message and returns `("skipped", message)` per FR-009a (distinct status from `"ok"`/`"triggered"`/`"suppressed"`).
+
+**Acceptance scenarios**:
+
+1. **Given** `origin/main` exists and `merge-base` succeeds, **when** `_resolve_branch_base()` runs, **then** the merge-base SHA is returned (existing behavior).
+2. **Given** `origin/main` and `main` both fail to resolve a merge-base, **when** `_resolve_branch_base()` runs, **then** `git merge-base --fork-point origin/main HEAD` is tried.
+3. **Given** all three fallbacks fail, **when** `_resolve_branch_base()` runs, **then** it returns `None` AND `check_implementation_rule` prints the skip stderr message AND returns `("skipped", message)` (not `"triggered"`, not `"ok"`).
+
+## Functional requirements
+
+### Fix 1 — `dispatch-codex`
+
+- **FR-001**: System MUST add a `dispatch-codex` subcommand to `run_factory.py` accepting `--slug <slug>` (required) and `--prompt-path <file>` (required) and `--model <name>` (optional, default `gpt-5.4-mini`).
+- **FR-002**: System MUST invoke Codex via `subprocess.run([codex_path, "exec", "-m", model, "-s", "workspace-write", prompt_text], cwd=REPO_ROOT, ...)` where `prompt_text` is the file's contents read into a Python string (NO shell substitution, NO `$(cat ...)`). This is the same contract as FR-004b. (Round-2 Codex feasibility HIGH #1 / edge-cases MEDIUM #2: round-1 had a shell-style example here that contradicted FR-004b.)
+- **FR-003**: System MUST write captured stdout to `docs/workflow/feature-runs/<slug>/codex-dispatches/<UTC-ISO-timestamp>/stdout.txt` and stderr to the sibling `stderr.txt`. Timestamp format: `YYYYMMDDTHHMMSS_ffffffZ` (microsecond precision). If by extreme coincidence the same microsecond directory already exists, System MUST append `_NNN` (3-digit counter) until the path is unique. This prevents collision on rapid back-to-back dispatches (per spec round-1 Codex edge-cases HIGH #1).
+- **FR-004**: On any invocation that is not classified as quota exhaustion (per FR-005), System MUST append to `state.codex_dispatches[]` a record with keys: `head_sha` (current `git rev-parse HEAD`), `ts` (same as the directory timestamp), `prompt_path` (as passed), `prompt_sha256` (sha256 of prompt file contents at dispatch time), `model`, `exit_code` (Codex's actual exit code, 0 on success, non-zero on failure), `stdout_path` (relative to repo root), `stderr_path` (relative to repo root), `branch_base_sha` (the SHA returned by `_resolve_branch_base()` at dispatch time; may be `null`), `lines_added_at_dispatch_time` (integer when `branch_base_sha` resolves, `null` when it does not).
+- **FR-004a**: When `_resolve_branch_base()` returns `None` at dispatch time, System MUST record both `branch_base_sha: null` AND `lines_added_at_dispatch_time: null` rather than failing the dispatch. (Round-2 Codex edge-cases MEDIUM #1: capturing the base alongside the count lets the consumer correctly handle base drift.)
+- **FR-004b**: System MUST invoke Codex via argv-style subprocess (no shell). (Round-2 trim of round-1's overstated ARG_MAX claim:) execve has a per-process argv+env total size limit (typically ~128KB–2MB depending on OS); this still bounds prompt size, but argv-style avoids the additional shell-quoting/escaping problems of `$(cat ...)`. Prompts in this repo are typically <50KB, well under the limit. If a future prompt exceeds the OS limit, a follow-up feature can switch to a stdin- or temp-file-based contract.
+- **FR-005**: On Codex quota exhaustion (detected via `is_codex_quota_exhaustion(stderr, stdout)` from `run_codex_review.py`), System MUST exit with code 4, print a clear message pointing to `https://chatgpt.com/codex/settings/usage`, AND NOT append to `state.codex_dispatches[]`.
+- **FR-006**: System MUST decorate the new command handler with `@mutates_state` so the auto-registration of mutating commands (PR #749) covers it.
+- **FR-007**: The runner's exit code MUST propagate Codex's exit code (except in the quota case, which becomes 4): exit 0 for success, non-zero for Codex failures.
+
+### Fix 2 — Freshness-bound suppression
+
+- **FR-008**: `factory_deliver.check_implementation_rule(slug)` MUST iterate `state.codex_dispatches[]` and consider an entry "fresh" only when ALL of (a) `entry.exit_code == 0`, AND (b) `git merge-base --is-ancestor <entry.head_sha> HEAD` returns 0, AND (c) `entry.lines_added_at_dispatch_time` is not null AND can be compared to a current snapshot (per FR-008b), AND (d) `abs(<current snapshot> - entry.lines_added_at_dispatch_time) <= 50`.
+- **FR-008a**: An entry with `lines_added_at_dispatch_time: null` MUST NOT be treated as fresh on its own. However (Round-2 Codex feasibility MEDIUM #1 recovery path), the consumer MAY recompute the count using `git diff --numstat <current_branch_base>..<entry.head_sha>` (with the same code-only globs) and treat the recomputed value as the dispatch's snapshot. If recomputation succeeds AND the resulting drift is ≤50, the entry MAY suppress. If recomputation fails (e.g., current branch-base also unresolved, or `entry.head_sha` unreachable), the entry stays not-fresh. This avoids permanently locking out dispatches whose branch-base was transiently unresolved at dispatch time.
+- **FR-008b**: When `entry.branch_base_sha` is recorded (non-null) AND differs from the current `_resolve_branch_base()` result, the consumer MUST recompute the dispatch's line count as `git diff --numstat <current_branch_base>..<entry.head_sha>` (re-baseline, not stored value), then compare to the current `_added_code_lines(current_branch_base)`. (Round-2 edge-cases MEDIUM #1: stored count is meaningful only against the base it was computed from; re-base when the base shifts.) When the bases match, use the stored value directly to save a git call.
+- **FR-009**: When at least one fresh entry is found and the line count is above threshold, System MUST suppress the WARN AND print a one-line note: `implementation-rule check skipped — covered by codex dispatch <ts> (sha <head_sha[:7]>, +<lines>)`. Use the most recent fresh entry for the note.
+- **FR-009a**: `check_implementation_rule(slug)` MUST return a tuple `(status, message)` where `status` is one of the literal strings `"triggered"`, `"suppressed"`, `"skipped"`, or `"ok"`. (Round-1 Codex MEDIUM #3: the prior `(bool, str)` shape conflated "skipped" with "below threshold," recreating the silent-under-report problem.) The boolean compatibility shim, if needed for callers, treats `"triggered"` as `True` and all other states as `False`.
+- **FR-010**: When no fresh entry is found, System MUST return `("triggered", message)` as it does today (caller emits the WARN).
+- **FR-011**: When `state.codex_dispatches[]` is empty or missing, behavior MUST be identical to today: return `("triggered", message)` above threshold, `("ok", "")` below threshold.
+
+### Fix 3 — `advance` subcommand
+
+- **FR-012**: System MUST add an `advance` subcommand accepting `--slug <slug>` (required), `--stage <spec|plan|tasks|implementation>` (required), `--reason <text>` (required, ≥20 chars after strip).
+- **FR-013**: Reason length validation MUST run BEFORE any state mutation. If `len(reason.strip()) < 20`, exit 2 with a clear message and do NOT touch state.
+- **FR-014**: On valid input, System MUST set `state.stages[<stage>].judge_next_action = "advance"` AND append `{stage, ts, reason, head_sha}` to `state.annotations[]`. Both writes MUST happen in a single atomic state update (existing `factory_state.update_state` helper).
+- **FR-015**: System MUST decorate the handler with `@mutates_state`.
+
+### Fix 4 — Banner rename
+
+- **FR-016**: `factory_next_action.py` MUST emit `run_<stage>_checkpoint` (not `repair_<stage>_checkpoint`) as the recommended-action string for the case "stage X is healthy, advance to stage Y, and stage Y has no manifest yet."
+- **FR-017**: The `repair` CLI subcommand and its underlying handler name MUST NOT change. Only the banner string changes.
+- **FR-018**: Existing tests that assert on the banner string MUST be updated to match the new string. Any callers that branch on the string value MUST be updated.
+
+### Fix 5 — Branch-base fallback
+
+- **FR-019**: `factory_deliver._resolve_branch_base()` MUST attempt branch-base resolution in this order: `git merge-base origin/main HEAD` → `git merge-base main HEAD` → `git merge-base --fork-point origin/main HEAD`. The first non-empty result wins.
+- **FR-020**: If all three fail, `_resolve_branch_base()` MUST return `None` (not a fallback SHA).
+- **FR-021**: When `_resolve_branch_base()` returns `None`, `check_implementation_rule` MUST print to stderr `implementation-rule check skipped — could not resolve branch base (origin/main, main, fork-point all failed)` AND return `("skipped", message)` (per FR-009a; distinct from `"ok"`/`"triggered"`/`"suppressed"`). It MUST NOT trigger the WARN, and MUST NOT pass silently with under-reported lines. Callers that need to distinguish "passed cleanly" from "could not check" MUST inspect `status`, not just the boolean compat shim.
+
+## Risks
+
+- **R1 (medium)**: Codex's CLI behavior across versions could differ (`-s workspace-write` flag, `-m` flag). **Mitigation**: tests mock `subprocess.run` directly; we do not assert on Codex internals. The dispatch script trusts the operator to have a working Codex CLI.
+- **R2 (medium)**: `git merge-base --fork-point` requires reflog data, which can be missing in shallow clones or after reflog expiry. **Mitigation**: skip-on-fail is the documented behavior; the message tells the operator to investigate.
+- **R3 (low)**: `lines_added_at_dispatch_time` is a snapshot at dispatch start, before Codex actually runs. So a 0-line dispatch (Codex makes no changes) records `lines_added_at_dispatch_time=0`, and at deliver time the WARN can still fire on subsequent Claude edits. This is intentional — we want post-dispatch Claude edits to be visible. **Mitigation**: documented behavior; the suppression note shows the `+<lines>` count so the operator can sanity-check.
+- **R4 (low)**: `prompt_sha256` is computed before Codex modifies anything, so if the operator edits the prompt file mid-run (between read and codex-exec), the recorded sha could be stale relative to what Codex saw. **Mitigation**: read the file once, hash, then pass via `cat` — the same content goes to both. (Implementation note for plan.)
+- **R5 (low)**: The `advance` subcommand bypasses the manifest health check by design. A careless reason field could mask a real issue. **Mitigation**: reason ≥20 chars + recorded in `annotations[]` with `head_sha` for audit. This matches the existing `--override-implementation-reason` pattern from PR #751.
+
+## Success criteria
+
+- **SC-001**: After this feature ships, a normal "Codex implements via dispatch-codex → Claude orchestrates → deliver" run completes WITHOUT triggering the implementation-rule WARN, in under 2 deliver iterations. (Measured by manually running one feature through the full path post-merge.)
+- **SC-002**: A re-run of `deliver` after the dispatch IS recorded prints the suppression note (`covered by codex dispatch <ts> ...`) so the operator has visible audit.
+- **SC-003**: The new `advance` subcommand resolves a wedge (set up by deliberately drifting a manifest after judge advance) in a single command, with the reason recorded in `annotations[]`.
+- **SC-004**: All existing FF tests pass; new tests cover all FR-001 through FR-021.
+- **SC-005**: Banner text on the happy path no longer contains the word "repair" (per `grep -r "repair_.*_checkpoint" docs/workflow/operations/codex-skills/feature-factory/scripts/` returning only the `repair` CLI subcommand definition).
+
+## Assumptions
+
+- The Codex CLI (`codex exec`) is on PATH and accepts `-m` and `-s workspace-write`. (Validated by the agent-invocation rule in `~/.claude/rules/agent-invocation.md`.)
+- The FF runner runs in a single-process context; no concurrent dispatches need to be handled.
+- `state.codex_dispatches[]` and `state.annotations[]` already exist as schema fields (verified at `factory_state.py:210` — `"annotations": []` is in the default state shape; PR #744 introduced it). We are adding entries, not creating the fields.
+- The existing atomic-update helper in `factory_state.py` (`update_state` and similar) accepts dict mutations on these list fields without coercion or schema rejection — verified by inspection of the `command_judge` and `command_deliver` paths from PR #744 / #751 which already write to both fields.
+- Reviewers reading this spec have context on the state schema from `factory_state.py`. Detailed schema docs are NOT in scope; the FR list above is the authoritative shape.
+
+## Out of scope (deferred to follow-up features)
+
+- Reconcile atomicity (P3 from #751).
+- Stronger `--override-implementation-reason` validation.
+- Broader implementation-rule file globs.
+- Concurrent-dispatch lock files.
+- Reviewer prompt changes.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m reviewing the spec itself for contradictions, edge cases, and places where it can fail under adversarial use. I’m not checking code behavior here, so anything that depends on the existing implementation will be marked `[UNVERIFIED]` and kept at medium severity or lower.
+codex
+## Findings
+1. Medium - `dispatch-codex` does not define what happens when the subprocess never produces a normal exit. The spec covers success, non-quota failure, and quota exhaustion, but not missing binary, `subprocess.run` launch errors, or a hung/interactively blocked Codex process. That leaves a real runner wedge path unspecified.
+2. Medium - The branch-base fallback order can still pick an inaccurate base on long-lived branches. FR-019 prefers `git merge-base main HEAD` ahead of `git merge-base --fork-point origin/main HEAD`. If local `main` lags behind `origin/main`, the spec will stop at the stale local base and never use the more accurate fork-point, which can still under-report code size on exactly the branches this fix is meant to protect.
+3. Medium - Dispatch identity is not unique in the state record when two runs land in the same microsecond. FR-003 anticipates `_NNN` suffixes on the on-disk directory, but FR-004 stores only `ts` and says it is “the same as the directory timestamp.” Two distinct dispatches can therefore share the same `ts`, which makes the audit trail and suppression note ambiguous.
+4. Medium [UNVERIFIED] - The banner-rename verification is scoped too narrowly. SC-005 only greps `docs/workflow/operations/codex-skills/feature-factory/scripts/`, while the spec describes runner behavior more broadly. That can let the check pass even if a live caller still emits `repair_*_checkpoint`. This depends on the existing repo layout, so it is unverified.
+
+## Residual Risks
+- The freshness rule still depends on git ancestry and line-count heuristics. Big refactors, file moves, or shallow clones can produce false negatives or skips.
+- The `advance` subcommand is a manual override. It records intent, but it can still be used to bypass a real manifest problem if the operator chooses poorly.
+- Recomputing a dispatch snapshot when `lines_added_at_dispatch_time` is null still depends on reachable git history. In sparse or shallow environments, that path may fall back to “not fresh” more often than intended.
+2026-04-25T01:20:18.541852Z ERROR codex_core::session: failed to record rollout items: thread 019dc238-43a4-7013-89d1-f3fb9f6451de not found
+tokens used
+17,385

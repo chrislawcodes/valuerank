@@ -142,7 +142,7 @@ class FactoryDeliverTests(unittest.TestCase):
             # calls. Mock to a no-op for existing deliver tests so they don't
             # trip on the new shell-out. Tests covering the rule live in
             # test_implementation_rule.py.
-            patch.object(factory_deliver, "check_implementation_rule", return_value=(False, "")),
+            patch.object(factory_deliver, "check_implementation_rule", return_value=("ok", "")),
         ]
 
     def _run_deliver(

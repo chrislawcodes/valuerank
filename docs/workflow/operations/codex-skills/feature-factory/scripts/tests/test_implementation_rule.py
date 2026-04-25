@@ -1,8 +1,11 @@
 """Slice 3 — implementation-rule WARN at deliver."""
+import io
 import importlib.util
+import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -38,11 +41,6 @@ def _mock_run_factory(*, base_succeeds: bool = True, head_sha: str = "abcdef0", 
                 result.returncode = 0
             else:
                 result.returncode = 1
-        elif cmd[:2] == ["git", "rev-parse"] and "HEAD~50" in cmd:
-            if base_succeeds:
-                result.stdout = "basesha\n"
-            else:
-                result.returncode = 1
         elif cmd[:2] == ["git", "rev-parse"] and cmd[2:] == ["HEAD"]:
             result.stdout = head_sha + "\n"
         elif cmd[:2] == ["git", "diff"]:
@@ -71,28 +69,232 @@ class CheckImplementationRuleTests(unittest.TestCase):
     def tearDown(self) -> None:
         self._patch.stop()
 
+    def _set_codex_dispatches(self, dispatches: list[dict]) -> None:
+        state = FACTORY_STATE.load_workflow_state(self.slug)
+        state["codex_dispatches"] = dispatches
+        FACTORY_STATE.atomic_json_write(FACTORY_STATE.factory_state_path(self.slug), state)
+
     def test_triggered_over_threshold_no_dispatches_no_override(self) -> None:
         with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(added_lines=250)):
-            triggered, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
-        self.assertTrue(triggered)
+            status, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertEqual(status, "triggered")
         self.assertIn("250", msg)
         self.assertIn("Codex dispatch", msg)
 
     def test_under_threshold_not_triggered(self) -> None:
         with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(added_lines=50)):
-            triggered, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
-        self.assertFalse(triggered)
+            status, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertEqual(status, "ok")
         self.assertEqual(msg, "")
 
-    def test_codex_dispatch_recorded_suppresses(self) -> None:
-        state = FACTORY_STATE.load_workflow_state(self.slug)
-        state["codex_dispatches"] = [{"at": 12345, "command": "codex exec ..."}]
-        FACTORY_STATE.atomic_json_write(FACTORY_STATE.factory_state_path(self.slug), state)
+    def test_stale_codex_dispatch_does_not_suppress(self) -> None:
+        self._set_codex_dispatches([
+            {
+                "head_sha": "deadbeef-not-an-ancestor",
+                "ts": "20260101T000000_000000Z",
+                "exit_code": 0,
+                "branch_base_sha": "basesha",
+                "lines_added_at_dispatch_time": 250,
+            }
+        ])
         with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(added_lines=300)):
-            triggered, _ = FACTORY_DELIVER.check_implementation_rule(self.slug)
-        self.assertFalse(triggered)
+            with patch.object(FACTORY_DELIVER, "is_ancestor_of_head", return_value=False):
+                status, note = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertEqual(status, "triggered")
+        self.assertIn("Codex dispatch", note)
 
-    def test_override_matching_head_suppresses(self) -> None:
+    def test_fresh_dispatch_matching_lines_suppresses(self) -> None:
+        self._set_codex_dispatches([
+            {
+                "exit_code": 0,
+                "head_sha": "abc",
+                "ts": "20260101T000000_000000Z",
+                "branch_base_sha": "basesha",
+                "lines_added_at_dispatch_time": 250,
+            }
+        ])
+        with patch.object(FACTORY_DELIVER, "_resolve_branch_base", return_value="basesha"):
+            with patch.object(FACTORY_DELIVER, "_added_code_lines", return_value=240):
+                with patch.object(FACTORY_DELIVER, "is_ancestor_of_head", return_value=True):
+                    status, note = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertEqual(status, "suppressed")
+        self.assertIn("covered by codex dispatch 20260101T000000_000000Z", note)
+        self.assertIn("(sha abc", note)
+        self.assertIn("+250)", note)
+
+    def test_non_ancestor_dispatch_does_not_suppress(self) -> None:
+        self._set_codex_dispatches([
+            {
+                "exit_code": 0,
+                "head_sha": "abc",
+                "ts": "20260101T000000_000000Z",
+                "branch_base_sha": "basesha",
+                "lines_added_at_dispatch_time": 240,
+            }
+        ])
+        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(head_sha="abcdef0")):
+            with patch.object(FACTORY_DELIVER, "_resolve_branch_base", return_value="basesha"):
+                with patch.object(FACTORY_DELIVER, "_added_code_lines", return_value=240):
+                    with patch.object(FACTORY_DELIVER, "is_ancestor_of_head", return_value=False):
+                        status, _ = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertEqual(status, "triggered")
+
+    def test_line_drift_above_boundary_does_not_suppress(self) -> None:
+        self._set_codex_dispatches([
+            {
+                "exit_code": 0,
+                "head_sha": "abc",
+                "ts": "20260101T000000_000000Z",
+                "branch_base_sha": "basesha",
+                "lines_added_at_dispatch_time": 100,
+            }
+        ])
+        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(head_sha="abcdef0")):
+            with patch.object(FACTORY_DELIVER, "_resolve_branch_base", return_value="basesha"):
+                with patch.object(FACTORY_DELIVER, "_added_code_lines", return_value=200):
+                    with patch.object(FACTORY_DELIVER, "is_ancestor_of_head", return_value=True):
+                        status, _ = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertEqual(status, "triggered")
+
+    def test_line_drift_at_boundary_suppresses(self) -> None:
+        self._set_codex_dispatches([
+            {
+                "exit_code": 0,
+                "head_sha": "abc",
+                "ts": "20260101T000000_000000Z",
+                "branch_base_sha": "basesha",
+                "lines_added_at_dispatch_time": 200,
+            }
+        ])
+        with patch.object(FACTORY_DELIVER, "_resolve_branch_base", return_value="basesha"):
+            with patch.object(FACTORY_DELIVER, "_added_code_lines", return_value=250):
+                with patch.object(FACTORY_DELIVER, "is_ancestor_of_head", return_value=True):
+                    status, note = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertEqual(status, "suppressed")
+        self.assertIn("covered by codex dispatch", note)
+
+    def test_failed_dispatch_is_not_fresh(self) -> None:
+        self._set_codex_dispatches([
+            {
+                "exit_code": 7,
+                "head_sha": "abc",
+                "ts": "20260101T000000_000000Z",
+                "branch_base_sha": "basesha",
+                "lines_added_at_dispatch_time": 250,
+            }
+        ])
+        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(head_sha="abcdef0")):
+            with patch.object(FACTORY_DELIVER, "_resolve_branch_base", return_value="basesha"):
+                with patch.object(FACTORY_DELIVER, "_added_code_lines", return_value=240):
+                    with patch.object(FACTORY_DELIVER, "is_ancestor_of_head", return_value=True):
+                        status, _ = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertEqual(status, "triggered")
+
+    def test_null_lines_added_recomputes_and_suppresses(self) -> None:
+        self._set_codex_dispatches([
+            {
+                "exit_code": 0,
+                "head_sha": "abc",
+                "ts": "20260101T000000_000000Z",
+                "branch_base_sha": "basesha",
+                "lines_added_at_dispatch_time": None,
+            }
+        ])
+        with patch.object(FACTORY_DELIVER, "_resolve_branch_base", return_value="basesha"):
+            with patch.object(FACTORY_DELIVER, "_added_code_lines", return_value=240):
+                with patch.object(FACTORY_DELIVER, "is_ancestor_of_head", return_value=True):
+                    with patch.object(FACTORY_DELIVER, "_recompute_lines_for_dispatch", return_value=240) as recompute:
+                        status, note = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertEqual(status, "suppressed")
+        self.assertIn("covered by codex dispatch", note)
+        recompute.assert_called_once()
+
+    def test_null_lines_added_recompute_failure_does_not_suppress(self) -> None:
+        self._set_codex_dispatches([
+            {
+                "exit_code": 0,
+                "head_sha": "abc",
+                "ts": "20260101T000000_000000Z",
+                "branch_base_sha": "basesha",
+                "lines_added_at_dispatch_time": None,
+            }
+        ])
+        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(head_sha="abcdef0")):
+            with patch.object(FACTORY_DELIVER, "_resolve_branch_base", return_value="basesha"):
+                with patch.object(FACTORY_DELIVER, "_added_code_lines", return_value=240):
+                    with patch.object(FACTORY_DELIVER, "is_ancestor_of_head", return_value=True):
+                        with patch.object(FACTORY_DELIVER, "_recompute_lines_for_dispatch", return_value=None):
+                            status, _ = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertEqual(status, "triggered")
+
+    def test_branch_base_mismatch_recomputes_lines(self) -> None:
+        dispatch = {
+            "exit_code": 0,
+            "head_sha": "abc",
+            "ts": "20260101T000000_000000Z",
+            "branch_base_sha": "old_base",
+            "lines_added_at_dispatch_time": 200,
+        }
+        self._set_codex_dispatches([dispatch])
+        with patch.object(FACTORY_DELIVER, "_resolve_branch_base", return_value="new_base"):
+            with patch.object(FACTORY_DELIVER, "_added_code_lines", return_value=240):
+                with patch.object(FACTORY_DELIVER, "is_ancestor_of_head", return_value=True):
+                    with patch.object(FACTORY_DELIVER, "_recompute_lines_for_dispatch", return_value=240) as recompute:
+                        status, _ = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertEqual(status, "suppressed")
+        recompute.assert_called_once_with(dispatch, "new_base")
+
+    def test_latest_fresh_dispatch_wins(self) -> None:
+        self._set_codex_dispatches([
+            {
+                "exit_code": 0,
+                "head_sha": "abc",
+                "ts": "20260101T000000_000000Z",
+                "branch_base_sha": "basesha",
+                "lines_added_at_dispatch_time": 250,
+            },
+            {
+                "exit_code": 0,
+                "head_sha": "def",
+                "ts": "20260102T000000_000000Z",
+                "branch_base_sha": "basesha",
+                "lines_added_at_dispatch_time": 250,
+            },
+        ])
+        with patch.object(FACTORY_DELIVER, "_resolve_branch_base", return_value="basesha"):
+            with patch.object(FACTORY_DELIVER, "_added_code_lines", return_value=240):
+                with patch.object(FACTORY_DELIVER, "is_ancestor_of_head", return_value=True):
+                    status, note = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertEqual(status, "suppressed")
+        self.assertIn("20260102T000000_000000Z", note)
+
+    def test_legacy_dispatch_missing_keys_does_not_raise(self) -> None:
+        self._set_codex_dispatches([
+            {"head_sha": "abc"},
+        ])
+        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(head_sha="abcdef0")):
+            with patch.object(FACTORY_DELIVER, "_resolve_branch_base", return_value="basesha"):
+                with patch.object(FACTORY_DELIVER, "_added_code_lines", return_value=240):
+                    status, _ = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertEqual(status, "triggered")
+
+    def test_below_threshold_with_stale_dispatch_returns_ok(self) -> None:
+        self._set_codex_dispatches([
+            {
+                "exit_code": 0,
+                "head_sha": "abc",
+                "ts": "20260101T000000_000000Z",
+                "branch_base_sha": "basesha",
+                "lines_added_at_dispatch_time": 250,
+            }
+        ])
+        with patch.object(FACTORY_DELIVER, "_resolve_branch_base", return_value="basesha"):
+            with patch.object(FACTORY_DELIVER, "_added_code_lines", return_value=100):
+                status, note = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertEqual(status, "ok")
+        self.assertEqual(note, "")
+
+    def test_override_matching_head_returns_ok(self) -> None:
         state = FACTORY_STATE.load_workflow_state(self.slug)
         state["implementation_rule_override"] = {
             "head_sha": "abcdef0",
@@ -102,8 +304,8 @@ class CheckImplementationRuleTests(unittest.TestCase):
         }
         FACTORY_STATE.atomic_json_write(FACTORY_STATE.factory_state_path(self.slug), state)
         with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(added_lines=300, head_sha="abcdef0")):
-            triggered, _ = FACTORY_DELIVER.check_implementation_rule(self.slug)
-        self.assertFalse(triggered)
+            status, _ = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertEqual(status, "ok")
 
     def test_override_stale_head_does_not_suppress(self) -> None:
         state = FACTORY_STATE.load_workflow_state(self.slug)
@@ -115,15 +317,129 @@ class CheckImplementationRuleTests(unittest.TestCase):
         }
         FACTORY_STATE.atomic_json_write(FACTORY_STATE.factory_state_path(self.slug), state)
         with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(added_lines=300, head_sha="newsha1")):
-            triggered, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
-        self.assertTrue(triggered)
+            status, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertEqual(status, "triggered")
         self.assertIn("300", msg)
 
     def test_skip_when_branch_base_unresolved(self) -> None:
-        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=_mock_run_factory(base_succeeds=False)):
-            triggered, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
-        self.assertFalse(triggered)
-        self.assertIn("could not determine branch base", msg)
+        message = (
+            "implementation-rule check skipped — could not resolve branch base "
+            "(origin/main, main, fork-point all failed)"
+        )
+        stderr = io.StringIO()
+        with patch.object(FACTORY_DELIVER, "_resolve_branch_base", return_value=None), redirect_stderr(stderr):
+            status, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertEqual(status, "skipped")
+        self.assertEqual(msg, message)
+        self.assertIn(message, stderr.getvalue())
+
+    def test_skip_when_git_diff_fails(self) -> None:
+        def side_effect(cmd, *args, **kwargs):
+            result = MagicMock()
+            result.stdout = ""
+            result.stderr = ""
+            result.returncode = 0
+            if cmd[:2] == ["git", "merge-base"]:
+                result.stdout = "basesha\n"
+            elif cmd[:2] == ["git", "diff"]:
+                result.returncode = 1
+            elif cmd[:2] == ["git", "rev-parse"] and cmd[2:] == ["HEAD"]:
+                result.stdout = "abcdef0\n"
+            return result
+
+        stderr = io.StringIO()
+        with redirect_stderr(stderr), patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=side_effect):
+            status, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertEqual(status, "skipped")
+        self.assertEqual(msg, "implementation-rule check skipped: git diff failed.")
+        self.assertIn("implementation-rule check skipped: git diff failed.", stderr.getvalue())
+
+    def test_resolve_branch_base_returns_origin_main_sha(self) -> None:
+        expected = "origin-main-sha"
+
+        def side_effect(cmd, *args, **kwargs):
+            result = MagicMock()
+            result.returncode = 0
+            result.stdout = expected + "\n"
+            result.stderr = ""
+            return result
+
+        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=side_effect):
+            self.assertEqual(FACTORY_DELIVER._resolve_branch_base(), expected)
+
+    def test_resolve_branch_base_falls_through_to_fork_point(self) -> None:
+        fork_point_sha = "fork-point-sha"
+        results = [
+            MagicMock(returncode=1, stdout="", stderr=""),
+            MagicMock(returncode=0, stdout=fork_point_sha + "\n", stderr=""),
+        ]
+
+        def side_effect(cmd, *args, **kwargs):
+            return results.pop(0)
+
+        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=side_effect):
+            self.assertEqual(FACTORY_DELIVER._resolve_branch_base(), fork_point_sha)
+
+    def test_resolve_branch_base_falls_through_to_local_main(self) -> None:
+        local_main_sha = "local-main-sha"
+        results = [
+            MagicMock(returncode=1, stdout="", stderr=""),
+            MagicMock(returncode=1, stdout="", stderr=""),
+            MagicMock(returncode=0, stdout=local_main_sha + "\n", stderr=""),
+        ]
+
+        def side_effect(cmd, *args, **kwargs):
+            return results.pop(0)
+
+        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=side_effect):
+            self.assertEqual(FACTORY_DELIVER._resolve_branch_base(), local_main_sha)
+
+    def test_resolve_branch_base_returns_none_when_all_candidates_fail(self) -> None:
+        results = [
+            MagicMock(returncode=1, stdout="", stderr=""),
+            MagicMock(returncode=1, stdout="", stderr=""),
+            MagicMock(returncode=1, stdout="", stderr=""),
+        ]
+
+        def side_effect(cmd, *args, **kwargs):
+            return results.pop(0)
+
+        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=side_effect):
+            self.assertIsNone(FACTORY_DELIVER._resolve_branch_base())
+
+    def test_resolve_branch_base_skips_file_not_found_and_keeps_trying(self) -> None:
+        local_main_sha = "local-main-sha"
+        results = [
+            FileNotFoundError("git"),
+            MagicMock(returncode=1, stdout="", stderr=""),
+            MagicMock(returncode=0, stdout=local_main_sha + "\n", stderr=""),
+        ]
+
+        def side_effect(cmd, *args, **kwargs):
+            item = results.pop(0)
+            if isinstance(item, BaseException):
+                raise item
+            return item
+
+        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=side_effect):
+            self.assertEqual(FACTORY_DELIVER._resolve_branch_base(), local_main_sha)
+
+    def test_resolve_branch_base_skips_timeout_and_keeps_trying(self) -> None:
+        local_main_sha = "local-main-sha"
+        results = [
+            subprocess.TimeoutExpired(cmd=["git", "merge-base", "origin/main", "HEAD"], timeout=60),
+            MagicMock(returncode=1, stdout="", stderr=""),
+            MagicMock(returncode=0, stdout=local_main_sha + "\n", stderr=""),
+        ]
+
+        def side_effect(cmd, *args, **kwargs):
+            item = results.pop(0)
+            if isinstance(item, BaseException):
+                raise item
+            return item
+
+        with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=side_effect):
+            self.assertEqual(FACTORY_DELIVER._resolve_branch_base(), local_main_sha)
 
 
 class RecordOverrideTests(unittest.TestCase):

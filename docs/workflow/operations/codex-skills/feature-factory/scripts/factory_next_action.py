@@ -109,7 +109,7 @@ def recommended_next_action(
     if not _judge_advanced("spec") and (
         not stages["spec"]["manifest_exists"] or not stages["spec"]["healthy"]
     ):
-        return "repair_spec_checkpoint"
+        return "run_spec_checkpoint"
     if not stages["plan"]["artifact_exists"] or not stages["plan"]["artifact_meaningful"]:
         if later_progress_exists(stages, "plan")[0]:
             return "mark_blocked"
@@ -117,7 +117,7 @@ def recommended_next_action(
     if not _judge_advanced("plan") and (
         not stages["plan"]["manifest_exists"] or not stages["plan"]["healthy"]
     ):
-        return "repair_plan_checkpoint"
+        return "run_plan_checkpoint"
     if not stages["tasks"]["artifact_exists"] or not stages["tasks"]["artifact_meaningful"]:
         if later_progress_exists(stages, "tasks")[0]:
             return "mark_blocked"
@@ -128,15 +128,15 @@ def recommended_next_action(
     if not _judge_advanced("tasks") and (
         not stages["tasks"]["manifest_exists"] or not stages["tasks"]["healthy"]
     ):
-        return "repair_tasks_checkpoint"
+        return "run_tasks_checkpoint"
     if not stages["diff"]["artifact_exists"]:
         return "dispatch_next_slice_to_codex"
     if not _judge_advanced("diff") and (
         not stages["diff"]["manifest_exists"] or not stages["diff"]["healthy"]
     ):
-        return "repair_diff_checkpoint"
+        return "run_diff_checkpoint"
     if not _judge_advanced("diff") and diff_review_budget_state(slug).get("head_mismatch"):
-        return "repair_diff_checkpoint"
+        return "run_diff_checkpoint"
     if not reconciliation_ok:
         return "reconcile_reviews"
     # If any tasks remain unchecked there are more slices to implement before delivering.
@@ -155,7 +155,7 @@ def recommended_next_action(
     if not stages["closeout"]["manifest_exists"]:
         return "closeout"
     if not _judge_advanced("closeout") and not stages["closeout"]["healthy"]:
-        return "repair_closeout_checkpoint"
+        return "run_closeout_checkpoint"
     postmortem_path = workflow_dir(slug) / "postmortem.md"
     if not postmortem_path.exists() or not postmortem_path.read_text(encoding="utf-8").strip():
         return "write_postmortem"

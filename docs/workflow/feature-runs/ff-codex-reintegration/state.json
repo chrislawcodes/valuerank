@@ -1,0 +1,2140 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": true,
+    "complete": true,
+    "question_count": 0,
+    "asked_count": 0,
+    "questions": [],
+    "assumptions": [],
+    "summary": "Make Codex-as-implementer work end-to-end now that quota is restored. Five fixes: dispatch-codex subcommand to populate codex_dispatches[], freshness binding for the implementation-rule check, advance subcommand (Fix 3), banner rename repair_X_checkpoint -> run_X_checkpoint (Fix 4), and replace HEAD~50 fallback with fork-point or skip.",
+    "updated_at": 1777079213,
+    "answers": {},
+    "non_goals": [
+      "Reconcile atomicity (P3 \u2014 idempotent re-run is the recovery path)",
+      "Stronger --override-implementation-reason validation (semantic placeholder detection is hard)",
+      "Broader implementation-rule file globs beyond .py/.ts/.tsx/.js/.jsx",
+      "Concurrent-dispatch handling / lock files (single-process FF runner)",
+      "Changes to reviewer prompts or sync-codex-skills.py"
+    ],
+    "acceptance_criteria": [
+      "dispatch-codex subcommand wraps codex exec, captures stdout/stderr to runs/<slug>/codex-dispatches/<ts>/, appends entry to state.codex_dispatches[]",
+      "Each dispatch entry records head_sha, ts, prompt_path, prompt_sha256, model, exit_code, stdout_path, stderr_path, lines_added_at_dispatch_time",
+      "On Codex quota exhaustion, dispatch-codex exits 4 and does NOT record the failed dispatch",
+      "check_implementation_rule suppresses the WARN only when a dispatch has head_sha that is an ancestor of HEAD AND lines_added is within 50 of current",
+      "Stale dispatches (head_sha unreachable or lines drifted >50) do NOT suppress; printed note shows which dispatch suppressed when one does",
+      "advance subcommand sets stages[stage].judge_next_action=advance and appends to annotations[]; reason >=20 chars eager-validated",
+      "Banner string repair_X_checkpoint renamed to run_X_checkpoint; repair subcommand name unchanged",
+      "Branch-base fallback chain: origin/main -> main -> git merge-base --fork-point origin/main HEAD -> skip with stderr message",
+      "All new behavior covered by unit tests; all existing FF tests still pass"
+    ],
+    "unresolved": []
+  },
+  "delivery": {},
+  "checkpoint_fallback": {},
+  "parallel_analysis": {
+    "reviewed": true,
+    "found": false,
+    "note": "Slices 1, 4, 5 are independent and can be implemented in any order; Slices 2 and 3 must be sequential (Slice 3 depends on Slice 2's status enum). Did not annotate with [P:] because each slice still has a [CHECKPOINT] gate and parallel execution complicates the per-slice preflight + commit pattern. Sequential is the safer choice for this PR.",
+    "updated_at": 1777095699
+  },
+  "init_head_sha": "80a77301dc580237a047b7093138f47ab77402ee",
+  "token_usage": [
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T01:10:23.009433Z",
+      "started_at": "2026-04-25T01:09:48.496644Z",
+      "ended_at": "2026-04-25T01:10:23.009433Z",
+      "duration_seconds": 34.512425,
+      "agent_id": null,
+      "artifact_sha_at_time": "1fc166c865e5ac18e9e4405fbc56969e7736cfe780854f92a273ec17f21b3476",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T01:11:18.537918Z",
+      "started_at": "2026-04-25T01:10:23.255408Z",
+      "ended_at": "2026-04-25T01:11:18.537918Z",
+      "duration_seconds": 55.281909,
+      "agent_id": null,
+      "artifact_sha_at_time": "1fc166c865e5ac18e9e4405fbc56969e7736cfe780854f92a273ec17f21b3476",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T01:12:10.999177Z",
+      "started_at": "2026-04-25T01:11:18.694308Z",
+      "ended_at": "2026-04-25T01:12:10.999177Z",
+      "duration_seconds": 52.304334,
+      "agent_id": null,
+      "artifact_sha_at_time": "1fc166c865e5ac18e9e4405fbc56969e7736cfe780854f92a273ec17f21b3476",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T01:14:27.263294Z",
+      "started_at": "2026-04-25T01:13:43.297472Z",
+      "ended_at": "2026-04-25T01:14:27.263294Z",
+      "duration_seconds": 43.965431,
+      "agent_id": null,
+      "artifact_sha_at_time": "6043fda91d6f527da60fd779aae2989b8a6241f40f5dd6a91e39fd9196b982fd",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T01:15:31.347014Z",
+      "started_at": "2026-04-25T01:14:27.445623Z",
+      "ended_at": "2026-04-25T01:15:31.347014Z",
+      "duration_seconds": 63.900792,
+      "agent_id": null,
+      "artifact_sha_at_time": "6043fda91d6f527da60fd779aae2989b8a6241f40f5dd6a91e39fd9196b982fd",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T01:16:10.903560Z",
+      "started_at": "2026-04-25T01:15:31.521611Z",
+      "ended_at": "2026-04-25T01:16:10.903560Z",
+      "duration_seconds": 39.38149,
+      "agent_id": null,
+      "artifact_sha_at_time": "6043fda91d6f527da60fd779aae2989b8a6241f40f5dd6a91e39fd9196b982fd",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T01:19:19.709835Z",
+      "started_at": "2026-04-25T01:18:36.506732Z",
+      "ended_at": "2026-04-25T01:19:19.709835Z",
+      "duration_seconds": 43.202645,
+      "agent_id": null,
+      "artifact_sha_at_time": "16effc541de3cc35fdd5ef8aa7458c1fc6730903c9395db4307b96eefc07ec98",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T01:20:18.684128Z",
+      "started_at": "2026-04-25T01:19:19.870288Z",
+      "ended_at": "2026-04-25T01:20:18.684128Z",
+      "duration_seconds": 58.813234,
+      "agent_id": null,
+      "artifact_sha_at_time": "16effc541de3cc35fdd5ef8aa7458c1fc6730903c9395db4307b96eefc07ec98",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T01:20:56.173475Z",
+      "started_at": "2026-04-25T01:20:18.892392Z",
+      "ended_at": "2026-04-25T01:20:56.173475Z",
+      "duration_seconds": 37.280675,
+      "agent_id": null,
+      "artifact_sha_at_time": "16effc541de3cc35fdd5ef8aa7458c1fc6730903c9395db4307b96eefc07ec98",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T01:22:27.466718Z",
+      "started_at": "2026-04-25T01:21:57.091043Z",
+      "ended_at": "2026-04-25T01:22:27.466718Z",
+      "duration_seconds": 30.375229,
+      "agent_id": null,
+      "artifact_sha_at_time": "16effc541de3cc35fdd5ef8aa7458c1fc6730903c9395db4307b96eefc07ec98",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T01:22:39.360962Z",
+      "started_at": "2026-04-25T01:21:57.091392Z",
+      "ended_at": "2026-04-25T01:22:39.360962Z",
+      "duration_seconds": 42.269305,
+      "agent_id": null,
+      "artifact_sha_at_time": "16effc541de3cc35fdd5ef8aa7458c1fc6730903c9395db4307b96eefc07ec98",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T01:23:01.978778Z",
+      "started_at": "2026-04-25T01:22:27.468408Z",
+      "ended_at": "2026-04-25T01:23:01.978778Z",
+      "duration_seconds": 34.510138,
+      "agent_id": null,
+      "artifact_sha_at_time": "16effc541de3cc35fdd5ef8aa7458c1fc6730903c9395db4307b96eefc07ec98",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T01:24:42.329537Z",
+      "started_at": "2026-04-25T01:21:57.091492Z",
+      "ended_at": "2026-04-25T01:24:42.329537Z",
+      "duration_seconds": 165.236908,
+      "agent_id": null,
+      "artifact_sha_at_time": "16effc541de3cc35fdd5ef8aa7458c1fc6730903c9395db4307b96eefc07ec98",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T01:27:08.491330Z",
+      "started_at": "2026-04-25T01:24:42.331588Z",
+      "ended_at": "2026-04-25T01:27:08.491330Z",
+      "duration_seconds": 146.158724,
+      "agent_id": null,
+      "artifact_sha_at_time": "16effc541de3cc35fdd5ef8aa7458c1fc6730903c9395db4307b96eefc07ec98",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T05:15:20.033672Z",
+      "started_at": "2026-04-25T05:14:37.988455Z",
+      "ended_at": "2026-04-25T05:15:20.033672Z",
+      "duration_seconds": 42.044918,
+      "agent_id": null,
+      "artifact_sha_at_time": "16effc541de3cc35fdd5ef8aa7458c1fc6730903c9395db4307b96eefc07ec98",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T05:15:44.771227Z",
+      "started_at": "2026-04-25T05:14:37.986741Z",
+      "ended_at": "2026-04-25T05:15:44.771227Z",
+      "duration_seconds": 66.784031,
+      "agent_id": null,
+      "artifact_sha_at_time": "16effc541de3cc35fdd5ef8aa7458c1fc6730903c9395db4307b96eefc07ec98",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T05:16:08.186280Z",
+      "started_at": "2026-04-25T05:15:20.035785Z",
+      "ended_at": "2026-04-25T05:16:08.186280Z",
+      "duration_seconds": 48.150137,
+      "agent_id": null,
+      "artifact_sha_at_time": "16effc541de3cc35fdd5ef8aa7458c1fc6730903c9395db4307b96eefc07ec98",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T05:17:32.845775Z",
+      "started_at": "2026-04-25T05:14:37.986464Z",
+      "ended_at": "2026-04-25T05:17:32.845775Z",
+      "duration_seconds": 174.857786,
+      "agent_id": null,
+      "artifact_sha_at_time": "16effc541de3cc35fdd5ef8aa7458c1fc6730903c9395db4307b96eefc07ec98",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T05:19:07.671071Z",
+      "started_at": "2026-04-25T05:17:32.847239Z",
+      "ended_at": "2026-04-25T05:19:07.671071Z",
+      "duration_seconds": 94.82316,
+      "agent_id": null,
+      "artifact_sha_at_time": "16effc541de3cc35fdd5ef8aa7458c1fc6730903c9395db4307b96eefc07ec98",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T05:22:41.129198Z",
+      "started_at": "2026-04-25T05:21:44.696659Z",
+      "ended_at": "2026-04-25T05:22:41.129198Z",
+      "duration_seconds": 56.431982,
+      "agent_id": null,
+      "artifact_sha_at_time": "6280cb4a1d4a08f186f43db9db0b5309d9868c1ce9f226459fff2ff241545c1b",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T05:23:30.193727Z",
+      "started_at": "2026-04-25T05:22:41.305553Z",
+      "ended_at": "2026-04-25T05:23:30.193727Z",
+      "duration_seconds": 48.887648,
+      "agent_id": null,
+      "artifact_sha_at_time": "6280cb4a1d4a08f186f43db9db0b5309d9868c1ce9f226459fff2ff241545c1b",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T05:24:17.364523Z",
+      "started_at": "2026-04-25T05:23:30.353483Z",
+      "ended_at": "2026-04-25T05:24:17.364523Z",
+      "duration_seconds": 47.010533,
+      "agent_id": null,
+      "artifact_sha_at_time": "6280cb4a1d4a08f186f43db9db0b5309d9868c1ce9f226459fff2ff241545c1b",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "plan",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T05:26:56.958383Z",
+      "started_at": "2026-04-25T05:26:11.439614Z",
+      "ended_at": "2026-04-25T05:26:56.958383Z",
+      "duration_seconds": 45.518271,
+      "agent_id": null,
+      "artifact_sha_at_time": "66c71cf9a115dfb0fe49759c8799e2ee8613a1bb509bcb5a9bde54c96d2b5701",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T05:27:40.731168Z",
+      "started_at": "2026-04-25T05:26:57.161774Z",
+      "ended_at": "2026-04-25T05:27:40.731168Z",
+      "duration_seconds": 43.568909,
+      "agent_id": null,
+      "artifact_sha_at_time": "66c71cf9a115dfb0fe49759c8799e2ee8613a1bb509bcb5a9bde54c96d2b5701",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T05:28:23.370376Z",
+      "started_at": "2026-04-25T05:27:40.937252Z",
+      "ended_at": "2026-04-25T05:28:23.370376Z",
+      "duration_seconds": 42.432663,
+      "agent_id": null,
+      "artifact_sha_at_time": "66c71cf9a115dfb0fe49759c8799e2ee8613a1bb509bcb5a9bde54c96d2b5701",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "plan",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T05:32:16.506574Z",
+      "started_at": "2026-04-25T05:31:00.846266Z",
+      "ended_at": "2026-04-25T05:32:16.506574Z",
+      "duration_seconds": 75.659889,
+      "agent_id": null,
+      "artifact_sha_at_time": "1ab2331c6d86b01698c6ca268ae5840b6dde43c6b10178bf281142119524d872",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T05:33:04.956503Z",
+      "started_at": "2026-04-25T05:32:16.705089Z",
+      "ended_at": "2026-04-25T05:33:04.956503Z",
+      "duration_seconds": 48.253225,
+      "agent_id": null,
+      "artifact_sha_at_time": "1ab2331c6d86b01698c6ca268ae5840b6dde43c6b10178bf281142119524d872",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T05:33:42.421632Z",
+      "started_at": "2026-04-25T05:33:05.110663Z",
+      "ended_at": "2026-04-25T05:33:42.421632Z",
+      "duration_seconds": 37.310677,
+      "agent_id": null,
+      "artifact_sha_at_time": "1ab2331c6d86b01698c6ca268ae5840b6dde43c6b10178bf281142119524d872",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T05:35:34.181264Z",
+      "started_at": "2026-04-25T05:35:05.644624Z",
+      "ended_at": "2026-04-25T05:35:34.181264Z",
+      "duration_seconds": 28.53649,
+      "agent_id": null,
+      "artifact_sha_at_time": "1ab2331c6d86b01698c6ca268ae5840b6dde43c6b10178bf281142119524d872",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T05:36:21.729164Z",
+      "started_at": "2026-04-25T05:35:34.183263Z",
+      "ended_at": "2026-04-25T05:36:21.729164Z",
+      "duration_seconds": 47.545656,
+      "agent_id": null,
+      "artifact_sha_at_time": "1ab2331c6d86b01698c6ca268ae5840b6dde43c6b10178bf281142119524d872",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T05:36:30.939435Z",
+      "started_at": "2026-04-25T05:35:05.642952Z",
+      "ended_at": "2026-04-25T05:36:30.939435Z",
+      "duration_seconds": 85.295774,
+      "agent_id": null,
+      "artifact_sha_at_time": "1ab2331c6d86b01698c6ca268ae5840b6dde43c6b10178bf281142119524d872",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T05:37:48.081632Z",
+      "started_at": "2026-04-25T05:35:05.643195Z",
+      "ended_at": "2026-04-25T05:37:48.081632Z",
+      "duration_seconds": 162.437407,
+      "agent_id": null,
+      "artifact_sha_at_time": "1ab2331c6d86b01698c6ca268ae5840b6dde43c6b10178bf281142119524d872",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T05:39:34.752545Z",
+      "started_at": "2026-04-25T05:37:48.083406Z",
+      "ended_at": "2026-04-25T05:39:34.752545Z",
+      "duration_seconds": 106.668498,
+      "agent_id": null,
+      "artifact_sha_at_time": "1ab2331c6d86b01698c6ca268ae5840b6dde43c6b10178bf281142119524d872",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T05:42:25.476484Z",
+      "started_at": "2026-04-25T05:41:42.622234Z",
+      "ended_at": "2026-04-25T05:42:25.476484Z",
+      "duration_seconds": 42.853838,
+      "agent_id": null,
+      "artifact_sha_at_time": "8b16978cd50f83b9d9bf393d15962d31b49f3e2c7c447b30081ba3a811f2a963",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T05:43:53.343692Z",
+      "started_at": "2026-04-25T05:42:25.663154Z",
+      "ended_at": "2026-04-25T05:43:53.343692Z",
+      "duration_seconds": 87.679803,
+      "agent_id": null,
+      "artifact_sha_at_time": "8b16978cd50f83b9d9bf393d15962d31b49f3e2c7c447b30081ba3a811f2a963",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T05:44:35.206523Z",
+      "started_at": "2026-04-25T05:43:53.547839Z",
+      "ended_at": "2026-04-25T05:44:35.206523Z",
+      "duration_seconds": 41.658255,
+      "agent_id": null,
+      "artifact_sha_at_time": "8b16978cd50f83b9d9bf393d15962d31b49f3e2c7c447b30081ba3a811f2a963",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "tasks",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T05:48:09.245932Z",
+      "started_at": "2026-04-25T05:47:01.455885Z",
+      "ended_at": "2026-04-25T05:48:09.245932Z",
+      "duration_seconds": 67.789421,
+      "agent_id": null,
+      "artifact_sha_at_time": "59bfc37fbe492ce3f19f0a915b22c585df047c9a99bede22e3557a8351dd195c",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T05:48:59.228938Z",
+      "started_at": "2026-04-25T05:48:09.417705Z",
+      "ended_at": "2026-04-25T05:48:59.228938Z",
+      "duration_seconds": 49.81076,
+      "agent_id": null,
+      "artifact_sha_at_time": "59bfc37fbe492ce3f19f0a915b22c585df047c9a99bede22e3557a8351dd195c",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T05:49:50.174761Z",
+      "started_at": "2026-04-25T05:48:59.417013Z",
+      "ended_at": "2026-04-25T05:49:50.174761Z",
+      "duration_seconds": 50.757277,
+      "agent_id": null,
+      "artifact_sha_at_time": "59bfc37fbe492ce3f19f0a915b22c585df047c9a99bede22e3557a8351dd195c",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "tasks",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T05:52:27.195819Z",
+      "started_at": "2026-04-25T05:51:31.272945Z",
+      "ended_at": "2026-04-25T05:52:27.195819Z",
+      "duration_seconds": 55.922349,
+      "agent_id": null,
+      "artifact_sha_at_time": "22da603154edfab0d185a7ccb107eb69cafb727802863801bbc829183f242102",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T05:53:29.593716Z",
+      "started_at": "2026-04-25T05:52:27.368432Z",
+      "ended_at": "2026-04-25T05:53:29.593716Z",
+      "duration_seconds": 62.224729,
+      "agent_id": null,
+      "artifact_sha_at_time": "22da603154edfab0d185a7ccb107eb69cafb727802863801bbc829183f242102",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T05:54:11.460992Z",
+      "started_at": "2026-04-25T05:53:29.785231Z",
+      "ended_at": "2026-04-25T05:54:11.460992Z",
+      "duration_seconds": 41.675337,
+      "agent_id": null,
+      "artifact_sha_at_time": "22da603154edfab0d185a7ccb107eb69cafb727802863801bbc829183f242102",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "tasks",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T05:54:28.367311Z",
+      "started_at": "2026-04-25T05:54:17.358475Z",
+      "ended_at": "2026-04-25T05:54:28.367311Z",
+      "duration_seconds": 11.008824,
+      "agent_id": null,
+      "artifact_sha_at_time": "22da603154edfab0d185a7ccb107eb69cafb727802863801bbc829183f242102",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T05:54:39.059985Z",
+      "started_at": "2026-04-25T05:54:28.370174Z",
+      "ended_at": "2026-04-25T05:54:39.059985Z",
+      "duration_seconds": 10.689776,
+      "agent_id": null,
+      "artifact_sha_at_time": "22da603154edfab0d185a7ccb107eb69cafb727802863801bbc829183f242102",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T05:54:50.383954Z",
+      "started_at": "2026-04-25T05:54:17.358430Z",
+      "ended_at": "2026-04-25T05:54:50.383954Z",
+      "duration_seconds": 33.025323,
+      "agent_id": null,
+      "artifact_sha_at_time": "22da603154edfab0d185a7ccb107eb69cafb727802863801bbc829183f242102",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T05:55:51.235189Z",
+      "started_at": "2026-04-25T05:54:50.385608Z",
+      "ended_at": "2026-04-25T05:55:51.235189Z",
+      "duration_seconds": 60.849228,
+      "agent_id": null,
+      "artifact_sha_at_time": "22da603154edfab0d185a7ccb107eb69cafb727802863801bbc829183f242102",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T05:56:58.844625Z",
+      "started_at": "2026-04-25T05:54:17.358165Z",
+      "ended_at": "2026-04-25T05:56:58.844625Z",
+      "duration_seconds": 161.485223,
+      "agent_id": null,
+      "artifact_sha_at_time": "22da603154edfab0d185a7ccb107eb69cafb727802863801bbc829183f242102",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T05:58:44.590250Z",
+      "started_at": "2026-04-25T05:56:58.846415Z",
+      "ended_at": "2026-04-25T05:58:44.590250Z",
+      "duration_seconds": 105.743182,
+      "agent_id": null,
+      "artifact_sha_at_time": "22da603154edfab0d185a7ccb107eb69cafb727802863801bbc829183f242102",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 2,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T05:59:13.559823Z",
+      "started_at": "2026-04-25T05:58:48.851865Z",
+      "ended_at": "2026-04-25T05:59:13.559823Z",
+      "duration_seconds": 24.707648,
+      "agent_id": null,
+      "artifact_sha_at_time": "22da603154edfab0d185a7ccb107eb69cafb727802863801bbc829183f242102",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 2,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T05:59:21.349828Z",
+      "started_at": "2026-04-25T05:58:48.852138Z",
+      "ended_at": "2026-04-25T05:59:21.349828Z",
+      "duration_seconds": 32.497498,
+      "agent_id": null,
+      "artifact_sha_at_time": "22da603154edfab0d185a7ccb107eb69cafb727802863801bbc829183f242102",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 2,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T06:00:14.504881Z",
+      "started_at": "2026-04-25T05:59:21.351622Z",
+      "ended_at": "2026-04-25T06:00:14.504881Z",
+      "duration_seconds": 53.152956,
+      "agent_id": null,
+      "artifact_sha_at_time": "22da603154edfab0d185a7ccb107eb69cafb727802863801bbc829183f242102",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 2,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T06:01:37.544637Z",
+      "started_at": "2026-04-25T05:58:48.852174Z",
+      "ended_at": "2026-04-25T06:01:37.544637Z",
+      "duration_seconds": 168.691399,
+      "agent_id": null,
+      "artifact_sha_at_time": "22da603154edfab0d185a7ccb107eb69cafb727802863801bbc829183f242102",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 2,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T06:03:22.712062Z",
+      "started_at": "2026-04-25T06:01:37.546509Z",
+      "ended_at": "2026-04-25T06:03:22.712062Z",
+      "duration_seconds": 105.164913,
+      "agent_id": null,
+      "artifact_sha_at_time": "22da603154edfab0d185a7ccb107eb69cafb727802863801bbc829183f242102",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T06:04:58.902193Z",
+      "started_at": "2026-04-25T06:04:44.852052Z",
+      "ended_at": "2026-04-25T06:04:58.902193Z",
+      "duration_seconds": 14.049937,
+      "agent_id": null,
+      "artifact_sha_at_time": "22da603154edfab0d185a7ccb107eb69cafb727802863801bbc829183f242102",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T06:05:17.891949Z",
+      "started_at": "2026-04-25T06:04:44.854874Z",
+      "ended_at": "2026-04-25T06:05:17.891949Z",
+      "duration_seconds": 33.036856,
+      "agent_id": null,
+      "artifact_sha_at_time": "22da603154edfab0d185a7ccb107eb69cafb727802863801bbc829183f242102",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T06:06:03.822619Z",
+      "started_at": "2026-04-25T06:05:17.893828Z",
+      "ended_at": "2026-04-25T06:06:03.822619Z",
+      "duration_seconds": 45.92853,
+      "agent_id": null,
+      "artifact_sha_at_time": "22da603154edfab0d185a7ccb107eb69cafb727802863801bbc829183f242102",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T06:07:44.879228Z",
+      "started_at": "2026-04-25T06:04:44.852343Z",
+      "ended_at": "2026-04-25T06:07:44.879228Z",
+      "duration_seconds": 180.020916,
+      "agent_id": null,
+      "artifact_sha_at_time": "22da603154edfab0d185a7ccb107eb69cafb727802863801bbc829183f242102",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 3,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T06:09:50.719591Z",
+      "started_at": "2026-04-25T06:07:44.881235Z",
+      "ended_at": "2026-04-25T06:09:50.719591Z",
+      "duration_seconds": 125.837152,
+      "agent_id": null,
+      "artifact_sha_at_time": "22da603154edfab0d185a7ccb107eb69cafb727802863801bbc829183f242102",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T06:42:56.205467Z",
+      "started_at": "2026-04-25T06:42:40.218406Z",
+      "ended_at": "2026-04-25T06:42:56.205467Z",
+      "duration_seconds": 15.986774,
+      "agent_id": null,
+      "artifact_sha_at_time": "5cd042c734fee7be7409bf9d3ca72236416f85cae57056ee1fbe43b381ff7020",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T06:43:11.740457Z",
+      "started_at": "2026-04-25T06:42:56.380404Z",
+      "ended_at": "2026-04-25T06:43:11.740457Z",
+      "duration_seconds": 15.359764,
+      "agent_id": null,
+      "artifact_sha_at_time": "5cd042c734fee7be7409bf9d3ca72236416f85cae57056ee1fbe43b381ff7020",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T06:43:45.248854Z",
+      "started_at": "2026-04-25T06:43:11.894956Z",
+      "ended_at": "2026-04-25T06:43:45.248854Z",
+      "duration_seconds": 33.353454,
+      "agent_id": null,
+      "artifact_sha_at_time": "5cd042c734fee7be7409bf9d3ca72236416f85cae57056ee1fbe43b381ff7020",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "diff",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T06:46:13.451490Z",
+      "started_at": "2026-04-25T06:45:32.002451Z",
+      "ended_at": "2026-04-25T06:46:13.451490Z",
+      "duration_seconds": 41.448559,
+      "agent_id": null,
+      "artifact_sha_at_time": "a7f01c4ad2828a15156ec1ebb3a791efbdc0f1a52269940bd9763f64b33f75de",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T06:46:41.062664Z",
+      "started_at": "2026-04-25T06:46:13.635089Z",
+      "ended_at": "2026-04-25T06:46:41.062664Z",
+      "duration_seconds": 27.427193,
+      "agent_id": null,
+      "artifact_sha_at_time": "a7f01c4ad2828a15156ec1ebb3a791efbdc0f1a52269940bd9763f64b33f75de",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T06:47:20.201715Z",
+      "started_at": "2026-04-25T06:46:41.225821Z",
+      "ended_at": "2026-04-25T06:47:20.201715Z",
+      "duration_seconds": 38.975449,
+      "agent_id": null,
+      "artifact_sha_at_time": "a7f01c4ad2828a15156ec1ebb3a791efbdc0f1a52269940bd9763f64b33f75de",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "diff",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T06:48:28.270708Z",
+      "started_at": "2026-04-25T06:47:40.502454Z",
+      "ended_at": "2026-04-25T06:48:28.270708Z",
+      "duration_seconds": 47.767723,
+      "agent_id": null,
+      "artifact_sha_at_time": "40a8ee740e3163a7e582c1ef27dc2ab224d80df06a9431c3bea2d555d0589a0a",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T06:48:54.128228Z",
+      "started_at": "2026-04-25T06:48:28.417733Z",
+      "ended_at": "2026-04-25T06:48:54.128228Z",
+      "duration_seconds": 25.710114,
+      "agent_id": null,
+      "artifact_sha_at_time": "40a8ee740e3163a7e582c1ef27dc2ab224d80df06a9431c3bea2d555d0589a0a",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T06:49:23.992449Z",
+      "started_at": "2026-04-25T06:48:54.285088Z",
+      "ended_at": "2026-04-25T06:49:23.992449Z",
+      "duration_seconds": 29.706987,
+      "agent_id": null,
+      "artifact_sha_at_time": "40a8ee740e3163a7e582c1ef27dc2ab224d80df06a9431c3bea2d555d0589a0a",
+      "parse_error": "no Gemini token stats found in stdout"
+    }
+  ],
+  "stages": {
+    "spec": {
+      "adversarial_rounds": 3,
+      "judge_rounds": 2,
+      "judge_verdicts": [
+        [
+          {
+            "judge": "completeness",
+            "model": "gpt-5.5",
+            "verdict": "block",
+            "confidence": 5,
+            "reasoning": "spec.gemini.requirements-adversarial.review#high-1 is not addressed in the current artifact chain. In `docs/workflow/feature-runs/models-tab/spec.md` and `docs/workflow/feature-runs/models-tab/plan.md`, the only related text is `Stability visibility` with `All`, `Stable only`, and `Low stability only`; there is no named mitigation for the missing [50,74] moderate-stability band and no explicit accepted-limitation note. That is not specific enough to implement.",
+            "unaddressed_high_finding_ids": [
+              "spec.gemini.requirements-adversarial.review#high-1"
+            ],
+            "evidence": [],
+            "timestamp": "2026-04-25T01:22:14Z"
+          },
+          {
+            "judge": "restatement",
+            "model": "gpt-5",
+            "verdict": "proceed-with-annotation",
+            "confidence": 5,
+            "reasoning": "No prior findings exist, so restatement analysis is not possible in this round. Per the first-round rule, the correct verdict is proceed-with-annotation. I am treating every latest finding as NEW baseline signal for future comparison, not because each is necessarily load-bearing, but because there is no earlier round to show the same concern was already raised and substantively addressed. Baseline classifications from the provided text: spec.codex.edge-cases-adversarial.review#medium-1 NEW, failure mode: unspecified subprocess wedge paths including launch errors, missing binary, or hung/interactively blocked Codex runs; spec.codex.edge-cases-adversarial.review#medium-2 NEW, failure mode: stale local-main-first branch-base fallback can under-report code size on long-lived branches; spec.codex.edge-cases-adversarial.review#medium-3 NEW, failure mode: same-microsecond dispatches can share ts and make audit/suppression records ambiguous; spec.codex.edge-cases-adversarial.review#medium-4 NEW, failure mode: rename verification can pass while live callers still emit old repair_*_checkpoint banners outside the grepped path; spec.codex.feasibility-adversarial.review#medium-1 NEW, failure mode: no single unambiguous identifier for back-to-back dispatches in the same microsecond, making audit records hard to round-trip; spec.codex.feasibility-adversarial.review#medium-2 NEW, failure mode: skipped status can be collapsed by boolean/truthiness shims and recreate silent under-reporting; spec.codex.feasibility-adversarial.review#medium-3 NEW, failure mode: oversized prompt argv can exceed OS limits and fail dispatch unpredictably; spec.gemini.requirements-adversarial.review#high-1 NEW, but the specific failure mode is not available in the excerpt provided; spec.gemini.requirements-adversarial.review#medium-2 NEW, but the specific failure mode is not available in the excerpt provided; spec.gemini.requirements-adversarial.review#low-3 NEW, but the specific failure mode is not available in the excerpt provided.",
+            "unaddressed_high_finding_ids": [
+              "spec.gemini.requirements-adversarial.review#high-1"
+            ],
+            "evidence": [
+              {
+                "artifact": "spec.codex.edge-cases-adversarial.review.md",
+                "section": "medium-1",
+                "quote": "`dispatch-codex` does not define what happens when the subprocess never produces a normal exit. The spec covers success, non-quota failure, and quota exhaustion, but not missing binary, `subprocess.run` launch errors, or a hung/interactively blocked Codex process."
+              },
+              {
+                "artifact": "spec.codex.edge-cases-adversarial.review.md",
+                "section": "medium-2",
+                "quote": "FR-019 prefers `git merge-base main HEAD` ahead of `git merge-base --fork-point origin/main HEAD`. If local `main` lags behind `origin/main`, the spec will stop at the stale local base and never use the more accurate fork-point, which can still under-report code size"
+              },
+              {
+                "artifact": "spec.codex.edge-cases-adversarial.review.md",
+                "section": "medium-3",
+                "quote": "FR-003 anticipates `_NNN` suffixes on the on-disk directory, but FR-004 stores only `ts` and says it is \u201cthe same as the directory timestamp.\u201d Two distinct dispatches can therefore share the same `ts`, which makes the audit trail and suppression note ambiguous."
+              },
+              {
+                "artifact": "spec.codex.edge-cases-adversarial.review.md",
+                "section": "medium-4",
+                "quote": "SC-005 only greps `docs/workflow/operations/codex-skills/feature-factory/scripts/`, while the spec describes runner behavior more broadly. That can let the check pass even if a live caller still emits `repair_*_checkpoint`."
+              },
+              {
+                "artifact": "spec.codex.feasibility-adversarial.review.md",
+                "section": "medium-1",
+                "quote": "`FR-003` and `FR-004` do not define a single, unambiguous identifier for back-to-back dispatches that land in the same microsecond. The spec says to append `_NNN` to make the path unique, but it also says `ts` is the \u201csame as the directory timestamp\u201d and fixes the timestamp format without the suffix."
+              },
+              {
+                "artifact": "spec.codex.feasibility-adversarial.review.md",
+                "section": "medium-2",
+                "quote": "The new `skipped` status in `FR-009a`/`FR-021` can be erased by the proposed boolean compatibility shim. If any caller keeps using truthiness or only checks for `\"triggered\"`, a branch-base resolution failure will look the same as a clean pass, which recreates the silent-under-report problem"
+              },
+              {
+                "artifact": "spec.codex.feasibility-adversarial.review.md",
+                "section": "medium-3",
+                "quote": "`dispatch-codex` passes the entire prompt as a single argv argument and defines no hard size limit or fallback path. The spec says prompts are usually small, but it does not say what happens when one is large enough to hit the OS argv limit."
+              },
+              {
+                "artifact": "spec.gemini.requirements-adversarial.review.md",
+                "section": "high-1",
+                "quote": "### Severity: HIGH"
+              },
+              {
+                "artifact": "spec.gemini.requirements-adversarial.review.md",
+                "section": "medium-2",
+                "quote": "### Severity: MEDIUM"
+              },
+              {
+                "artifact": "spec.gemini.requirements-adversarial.review.md",
+                "section": "low-3",
+                "quote": "### Severity: LOW"
+              }
+            ],
+            "timestamp": "2026-04-24T12:00:00-07:00"
+          },
+          {
+            "judge": "implementation-risk",
+            "model": "claude-opus-4-5",
+            "verdict": "proceed-with-annotation",
+            "confidence": 3,
+            "reasoning": "Four real implementation gaps exist, none permanently blocking but each would cause a wrong-first-try moment. (1) FR-002 shows subprocess.run with bare '...' hiding whether capture_output=True and text=True are set \u2014 both are load-bearing: without capture_output the output can't be written to files, and without text=True the bytes result passed to is_codex_quota_exhaustion likely mismatches the str-expecting function from run_codex_review.py. (2) FR-005 writes is_codex_quota_exhaustion(stderr, stdout) with stderr first \u2014 atypical argument order, and the actual function signature in run_codex_review.py is not quoted anywhere; an implementer who swaps the args gets silent quota-detection failures, meaning quota-exhausted Codex runs get recorded as real dispatches and permanently suppress the implementation-rule WARN. (3) The spec asserts 'state.codex_dispatches[] already exist as schema fields' but only cites factory_state.py:210 for the annotations field; if codex_dispatches is not in the default state shape, the first append in factory_cmd_dispatch.py raises KeyError. (4) FR-008b says recompute line count 'with the same code-only globs' but those globs live in _added_code_lines() which is never quoted \u2014 the implementer must read the existing code to get the exact glob list or silently compute a different number. Items 2 and 3 are the sharpest: item 2 can ship a silent correctness bug, item 3 can cause an immediate runtime crash.",
+            "unaddressed_high_finding_ids": [],
+            "evidence": [
+              {
+                "artifact": "spec",
+                "section": "FR-002 and FR-005",
+                "quote": "System MUST invoke Codex via subprocess.run([codex_path, \"exec\", \"-m\", model, \"-s\", \"workspace-write\", prompt_text], cwd=REPO_ROOT, ...) ... On Codex quota exhaustion (detected via is_codex_quota_exhaustion(stderr, stdout) from run_codex_review.py), System MUST exit with code 4"
+              },
+              {
+                "artifact": "spec",
+                "section": "Assumptions",
+                "quote": "state.codex_dispatches[] and state.annotations[] already exist as schema fields (verified at factory_state.py:210 \u2014 'annotations': [] is in the default state shape; PR #744 introduced it). We are adding entries, not creating the fields."
+              },
+              {
+                "artifact": "spec",
+                "section": "FR-008b",
+                "quote": "the consumer MUST recompute the dispatch's line count as git diff --numstat <current_branch_base>..<entry.head_sha> (with the same code-only globs) and treat the recomputed value as the dispatch's snapshot"
+              },
+              {
+                "artifact": "spec",
+                "section": "FR-009a and FR-018",
+                "quote": "Callers MUST be migrated to consume status directly. (Round-3 Codex feasibility MEDIUM #2: do not provide a boolean compat shim) ... Any callers that branch on the string value MUST be updated."
+              }
+            ],
+            "timestamp": "2026-04-24T00:00:00Z"
+          }
+        ],
+        [
+          {
+            "judge": "completeness",
+            "model": "gpt-5.4-mini",
+            "verdict": "proceed",
+            "confidence": 5,
+            "reasoning": "spec.gemini.requirements-adversarial.review#high-1 ('Skipped Check Masquerades as Success') is addressed in `docs/workflow/feature-runs/ff-codex-reintegration/spec.md` FR-009a and FR-021: FR-009a forbids a boolean compat shim and requires `factory_cmd_deliver.py` to switch on `status` explicitly, and FR-021 requires `_resolve_branch_base()` failures to return `(\"skipped\", message)` so callers must inspect `status` instead of treating skip as pass. The plan also records this as fixed in `docs/workflow/feature-runs/ff-codex-reintegration/plan.md`. That mitigation is specific enough to implement.",
+            "evidence": [
+              {
+                "artifact": "SPEC",
+                "section": "Functional Requirements (FR-009a)",
+                "quote": "do not provide a boolean compat shim ... factory_cmd_deliver.py MUST switch on status explicitly"
+              },
+              {
+                "artifact": "SPEC",
+                "section": "Functional Requirements (FR-021)",
+                "quote": "return (\"skipped\", message) ... Callers ... MUST inspect status, not just the boolean compat shim"
+              },
+              {
+                "artifact": "PLAN",
+                "section": "Review Reconciliation",
+                "quote": "MEDIUM #2 (boolean compat shim defeats status enum): FIXED \u2014 FR-009a removes compat shim, mandates explicit status switch in factory_cmd_deliver"
+              }
+            ],
+            "timestamp": "2026-04-25T05:15:36Z"
+          },
+          {
+            "judge": "restatement",
+            "model": "gpt-5",
+            "verdict": "proceed-with-annotation",
+            "confidence": 5,
+            "reasoning": "First-round case applies because the prior-round record is only \"No prior findings yet.\" With no earlier findings and no orchestrator responses, none of the latest findings can be classified as RESTATEMENT. I therefore classify every latest finding as NEW for baseline purposes. NEW failure modes surfaced here are: spec.codex.edge-cases-adversarial.review#medium-1 = unspecified subprocess launch-error / missing-binary / hung-process wedge path; spec.codex.edge-cases-adversarial.review#medium-2 = stale local `main` can be chosen before `origin/main` fork-point, causing inaccurate branch base and under-reported code size; spec.codex.edge-cases-adversarial.review#medium-3 = dispatch audit ambiguity when two runs share the same microsecond timestamp; spec.codex.edge-cases-adversarial.review#medium-4 = rename verification limited to one scripts directory can miss live callers elsewhere; spec.codex.feasibility-adversarial.review#medium-1 = same microsecond-collision identity ambiguity, framed as round-trip auditability; spec.codex.feasibility-adversarial.review#medium-2 = `skipped` status can be collapsed by boolean compatibility handling and silently look like a clean pass; spec.codex.feasibility-adversarial.review#medium-3 = argv-size overflow risk when the full prompt is passed as one argument. The Gemini findings are also NEW in the baseline sense, but the provided excerpt contains only severity labels, not the underlying reasoning text, so their specific failure modes cannot be extracted from this record. Under the explicit first-round rule, the correct verdict is proceed-with-annotation so later rounds have a comparison baseline.",
+            "unaddressed_high_finding_ids": [
+              "spec.gemini.requirements-adversarial.review#high-1"
+            ],
+            "evidence": [
+              {
+                "artifact": "input",
+                "section": "Earlier rounds' findings",
+                "quote": "No prior findings yet."
+              },
+              {
+                "artifact": "spec.codex.edge-cases-adversarial.review.md",
+                "section": "medium-1",
+                "quote": "`dispatch-codex` does not define what happens when the subprocess never produces a normal exit. The spec covers success, non-quota failure, and quota exhaustion, but not missing binary, `subprocess.run` launch errors, or a hung/interactively blocked Codex process. That leaves a real runner wedge path unspecified."
+              },
+              {
+                "artifact": "spec.codex.edge-cases-adversarial.review.md",
+                "section": "medium-2",
+                "quote": "The branch-base fallback order can still pick an inaccurate base on long-lived branches. FR-019 prefers `git merge-base main HEAD` ahead of `git merge-base --fork-point origin/main HEAD`. If local `main` lags behind `origin/main`, the spec will stop at the stale local base and never use the more accurate fork-point, which can still under-report code size on exactly the branches this fix is meant to protect."
+              },
+              {
+                "artifact": "spec.codex.edge-cases-adversarial.review.md",
+                "section": "medium-3",
+                "quote": "Dispatch identity is not unique in the state record when two runs land in the same microsecond. FR-003 anticipates `_NNN` suffixes on the on-disk directory, but FR-004 stores only `ts` and says it is \"the same as the directory timestamp.\" Two distinct dispatches can therefore share the same `ts`, which makes the audit trail and suppression note ambiguous."
+              },
+              {
+                "artifact": "spec.codex.edge-cases-adversarial.review.md",
+                "section": "medium-4",
+                "quote": "[UNVERIFIED] - The banner-rename verification is scoped too narrowly. SC-005 only greps `docs/workflow/operations/codex-skills/feature-factory/scripts/`, while the spec describes runner behavior more broadly. That can let the check pass even if a live caller still emits `repair_*_checkpoint`. This depends on the existing repo layout, so it is unverified."
+              },
+              {
+                "artifact": "spec.codex.feasibility-adversarial.review.md",
+                "section": "medium-1",
+                "quote": "`FR-003` and `FR-004` do not define a single, unambiguous identifier for back-to-back dispatches that land in the same microsecond. The spec says to append `_NNN` to make the path unique, but it also says `ts` is the \u201csame as the directory timestamp\u201d and fixes the timestamp format without the suffix. That leaves `ts` either non-unique or out of spec. This will make audit records hard to round-trip back to the filesystem."
+              },
+              {
+                "artifact": "spec.codex.feasibility-adversarial.review.md",
+                "section": "medium-2",
+                "quote": "[UNVERIFIED] The new `skipped` status in `FR-009a`/`FR-021` can be erased by the proposed boolean compatibility shim. If any caller keeps using truthiness or only checks for `\"triggered\"`, a branch-base resolution failure will look the same as a clean pass, which recreates the silent-under-report problem the spec is trying to fix. The spec should force status-aware handling at the deliver call site, not just \u201cif needed\u201d guidance."
+              },
+              {
+                "artifact": "spec.codex.feasibility-adversarial.review.md",
+                "section": "medium-3",
+                "quote": "`dispatch-codex` passes the entire prompt as a single argv argument and defines no hard size limit or fallback path. The spec says prompts are usually small, but it does not say what happens when one is large enough to hit the OS argv limit. That makes a core workflow step fail unpredictably on longer prompts, and this command is supposed to be the only producer for `state.codex_dispatches[]`."
+              },
+              {
+                "artifact": "spec.gemini.requirements-adversarial.review.md",
+                "section": "high-1",
+                "quote": "### Severity: HIGH"
+              },
+              {
+                "artifact": "spec.gemini.requirements-adversarial.review.md",
+                "section": "medium-2",
+                "quote": "### Severity: MEDIUM"
+              },
+              {
+                "artifact": "spec.gemini.requirements-adversarial.review.md",
+                "section": "low-3",
+                "quote": "### Severity: LOW"
+              }
+            ],
+            "timestamp": "2026-04-24T12:00:00-07:00"
+          },
+          {
+            "judge": "implementation-risk",
+            "model": "claude-sonnet-4-6",
+            "verdict": "proceed-with-annotation",
+            "confidence": 3,
+            "reasoning": "Five concrete implementation gaps found. None individually block the whole feature, but each is a point where an implementer would stop and guess rather than follow the spec. (1) FR-002 uses `codex_path` as a variable in a required subprocess call without ever defining how to obtain it \u2014 PATH lookup via shutil.which? A codebase constant? A config value? The agent-invocation convention shows 'codex exec' but doesn't resolve this. (2) The Assumptions section claims both `state.codex_dispatches[]` and `state.annotations[]` already exist in the default state schema, but the only cited evidence (factory_state.py:210) only quotes the annotations field. If `codex_dispatches` is absent from the default shape, append behavior depends on undocumented `update_state` contract. (3) `check_implementation_rule` is placed in `factory_deliver.py` in the Fix 2 scope section but FR-009a requires `factory_cmd_deliver.py` to switch on status \u2014 the implementer must infer the correct module boundary without an explicit statement. (4) FR-005 specifies `is_codex_quota_exhaustion(stderr, stdout)` with stderr as the first argument, which is unusual; the actual signature in `run_codex_review.py` is unverified in the artifacts, and a transposed call silently misclassifies quota errors. (5) FR-008b and FR-008a both say 'with the same code-only globs' when describing recomputation via `git diff --numstat`, but never enumerate those globs \u2014 the implementer must reverse-engineer them from `_added_code_lines()`, and a mismatch produces silent line-count divergence.",
+            "unaddressed_high_finding_ids": [],
+            "evidence": [
+              {
+                "artifact": "spec",
+                "section": "FR-002",
+                "quote": "System MUST invoke Codex via subprocess.run([codex_path, \"exec\", \"-m\", model, \"-s\", \"workspace-write\", prompt_text], cwd=REPO_ROOT, ...) where prompt_text is the file's contents read into a Python string"
+              },
+              {
+                "artifact": "spec",
+                "section": "Assumptions",
+                "quote": "state.codex_dispatches[] and state.annotations[] already exist as schema fields (verified at factory_state.py:210 \u2014 \"annotations\": [] is in the default state shape; PR #744 introduced it). We are adding entries, not creating the fields."
+              },
+              {
+                "artifact": "spec",
+                "section": "In scope / Fix 2",
+                "quote": "in factory_deliver.py:check_implementation_rule, replace the boolean bool(state.get(\"codex_dispatches\")) suppression with the freshness check described above"
+              },
+              {
+                "artifact": "spec",
+                "section": "FR-009a",
+                "quote": "factory_cmd_deliver.py MUST switch on status explicitly: \"triggered\" \u2192 block (or honor --override-implementation-rule), \"suppressed\" \u2192 print suppression note + proceed, \"skipped\" \u2192 print skip stderr message + proceed, \"ok\" \u2192 proceed silently"
+              },
+              {
+                "artifact": "spec",
+                "section": "FR-005",
+                "quote": "On Codex quota exhaustion (detected via is_codex_quota_exhaustion(stderr, stdout) from run_codex_review.py)"
+              },
+              {
+                "artifact": "spec",
+                "section": "FR-008a",
+                "quote": "the consumer MAY recompute the count using git diff --numstat <current_branch_base>..<entry.head_sha> (with the same code-only globs) and treat the recomputed value as the dispatch's snapshot"
+              }
+            ],
+            "timestamp": "2026-04-24T00:00:00Z"
+          }
+        ]
+      ],
+      "annotations": [
+        {
+          "stage": "spec",
+          "round": 1,
+          "judge": "restatement",
+          "confidence": 5,
+          "reasoning": "No prior findings exist, so restatement analysis is not possible in this round. Per the first-round rule, the correct verdict is proceed-with-annotation. I am treating every latest finding as NEW baseline signal for future comparison, not because each is necessarily load-bearing, but because there is no earlier round to show the same concern was already raised and substantively addressed. Baseline classifications from the provided text: spec.codex.edge-cases-adversarial.review#medium-1 NEW, failure mode: unspecified subprocess wedge paths including launch errors, missing binary, or hung/interactively blocked Codex runs; spec.codex.edge-cases-adversarial.review#medium-2 NEW, failure mode: stale local-main-first branch-base fallback can under-report code size on long-lived branches; spec.codex.edge-cases-adversarial.review#medium-3 NEW, failure mode: same-microsecond dispatches can share ts and make audit/suppression records ambiguous; spec.codex.edge-cases-adversarial.review#medium-4 NEW, failure mode: rename verification can pass while live callers still emit old repair_*_checkpoint banners outside the grepped path; spec.codex.feasibility-adversarial.review#medium-1 NEW, failure mode: no single unambiguous identifier for back-to-back dispatches in the same microsecond, making audit records hard to round-trip; spec.codex.feasibility-adversarial.review#medium-2 NEW, failure mode: skipped status can be collapsed by boolean/truthiness shims and recreate silent under-reporting; spec.codex.feasibility-adversarial.review#medium-3 NEW, failure mode: oversized prompt argv can exceed OS limits and fail dispatch unpredictably; spec.gemini.requirements-adversarial.review#high-1 NEW, but the specific failure mode is not available in the excerpt provided; spec.gemini.requirements-adversarial.review#medium-2 NEW, but the specific failure mode is not available in the excerpt provided; spec.gemini.requirements-adversarial.review#low-3 NEW, but the specific failure mode is not available in the excerpt provided.",
+          "artifact_sha_at_time": "a5c63e6b5023c4375e276c1b04c7be6befb282392049e3ea3a885f8780b688bb"
+        },
+        {
+          "stage": "spec",
+          "round": 1,
+          "judge": "implementation-risk",
+          "confidence": 3,
+          "reasoning": "Four real implementation gaps exist, none permanently blocking but each would cause a wrong-first-try moment. (1) FR-002 shows subprocess.run with bare '...' hiding whether capture_output=True and text=True are set \u2014 both are load-bearing: without capture_output the output can't be written to files, and without text=True the bytes result passed to is_codex_quota_exhaustion likely mismatches the str-expecting function from run_codex_review.py. (2) FR-005 writes is_codex_quota_exhaustion(stderr, stdout) with stderr first \u2014 atypical argument order, and the actual function signature in run_codex_review.py is not quoted anywhere; an implementer who swaps the args gets silent quota-detection failures, meaning quota-exhausted Codex runs get recorded as real dispatches and permanently suppress the implementation-rule WARN. (3) The spec asserts 'state.codex_dispatches[] already exist as schema fields' but only cites factory_state.py:210 for the annotations field; if codex_dispatches is not in the default state shape, the first append in factory_cmd_dispatch.py raises KeyError. (4) FR-008b says recompute line count 'with the same code-only globs' but those globs live in _added_code_lines() which is never quoted \u2014 the implementer must read the existing code to get the exact glob list or silently compute a different number. Items 2 and 3 are the sharpest: item 2 can ship a silent correctness bug, item 3 can cause an immediate runtime crash.",
+          "artifact_sha_at_time": "a5c63e6b5023c4375e276c1b04c7be6befb282392049e3ea3a885f8780b688bb"
+        },
+        {
+          "stage": "spec",
+          "round": 2,
+          "judge": "restatement",
+          "confidence": 5,
+          "reasoning": "First-round case applies because the prior-round record is only \"No prior findings yet.\" With no earlier findings and no orchestrator responses, none of the latest findings can be classified as RESTATEMENT. I therefore classify every latest finding as NEW for baseline purposes. NEW failure modes surfaced here are: spec.codex.edge-cases-adversarial.review#medium-1 = unspecified subprocess launch-error / missing-binary / hung-process wedge path; spec.codex.edge-cases-adversarial.review#medium-2 = stale local `main` can be chosen before `origin/main` fork-point, causing inaccurate branch base and under-reported code size; spec.codex.edge-cases-adversarial.review#medium-3 = dispatch audit ambiguity when two runs share the same microsecond timestamp; spec.codex.edge-cases-adversarial.review#medium-4 = rename verification limited to one scripts directory can miss live callers elsewhere; spec.codex.feasibility-adversarial.review#medium-1 = same microsecond-collision identity ambiguity, framed as round-trip auditability; spec.codex.feasibility-adversarial.review#medium-2 = `skipped` status can be collapsed by boolean compatibility handling and silently look like a clean pass; spec.codex.feasibility-adversarial.review#medium-3 = argv-size overflow risk when the full prompt is passed as one argument. The Gemini findings are also NEW in the baseline sense, but the provided excerpt contains only severity labels, not the underlying reasoning text, so their specific failure modes cannot be extracted from this record. Under the explicit first-round rule, the correct verdict is proceed-with-annotation so later rounds have a comparison baseline.",
+          "artifact_sha_at_time": "a5c63e6b5023c4375e276c1b04c7be6befb282392049e3ea3a885f8780b688bb"
+        },
+        {
+          "stage": "spec",
+          "round": 2,
+          "judge": "implementation-risk",
+          "confidence": 3,
+          "reasoning": "Five concrete implementation gaps found. None individually block the whole feature, but each is a point where an implementer would stop and guess rather than follow the spec. (1) FR-002 uses `codex_path` as a variable in a required subprocess call without ever defining how to obtain it \u2014 PATH lookup via shutil.which? A codebase constant? A config value? The agent-invocation convention shows 'codex exec' but doesn't resolve this. (2) The Assumptions section claims both `state.codex_dispatches[]` and `state.annotations[]` already exist in the default state schema, but the only cited evidence (factory_state.py:210) only quotes the annotations field. If `codex_dispatches` is absent from the default shape, append behavior depends on undocumented `update_state` contract. (3) `check_implementation_rule` is placed in `factory_deliver.py` in the Fix 2 scope section but FR-009a requires `factory_cmd_deliver.py` to switch on status \u2014 the implementer must infer the correct module boundary without an explicit statement. (4) FR-005 specifies `is_codex_quota_exhaustion(stderr, stdout)` with stderr as the first argument, which is unusual; the actual signature in `run_codex_review.py` is unverified in the artifacts, and a transposed call silently misclassifies quota errors. (5) FR-008b and FR-008a both say 'with the same code-only globs' when describing recomputation via `git diff --numstat`, but never enumerate those globs \u2014 the implementer must reverse-engineer them from `_added_code_lines()`, and a mismatch produces silent line-count divergence.",
+          "artifact_sha_at_time": "a5c63e6b5023c4375e276c1b04c7be6befb282392049e3ea3a885f8780b688bb"
+        }
+      ],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [
+        "1fc166c865e5ac18e9e4405fbc56969e7736cfe780854f92a273ec17f21b3476",
+        "6043fda91d6f527da60fd779aae2989b8a6241f40f5dd6a91e39fd9196b982fd",
+        "16effc541de3cc35fdd5ef8aa7458c1fc6730903c9395db4307b96eefc07ec98"
+      ],
+      "initial_sha": "1fc166c865e5ac18e9e4405fbc56969e7736cfe780854f92a273ec17f21b3476",
+      "judge_next_action": "advance"
+    },
+    "plan": {
+      "adversarial_rounds": 3,
+      "judge_rounds": 1,
+      "judge_verdicts": [
+        [
+          {
+            "judge": "completeness",
+            "model": "gpt-5.4-mini",
+            "verdict": "block",
+            "confidence": 4,
+            "reasoning": "plan.gemini.testability-adversarial.review#high-1 (TEST-H-01, crash-safety of dispatch write order) is not fully addressed: docs/workflow/feature-runs/ff-codex-reintegration/plan.md Slice 5 only says to write stdout/stderr first, append state second, and \"Document this in the module docstring\"; it does not add the requested crash-simulation test or an explicit acknowledgement that the test is intentionally omitted. The manual-callsite concern the user called out as high-3 appears in the visible review file as TEST-M-03, not a HIGH; docs/workflow/feature-runs/ff-codex-reintegration/plan.md Slice 2 does give it a named mitigation via the grep-based caller audit plus explicit status switching and \"No boolean compatibility shim,\" so it does not change the block decision.",
+            "unaddressed_high_finding_ids": [
+              "TEST-H-01"
+            ],
+            "evidence": [
+              {
+                "artifact": "/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-codex-reintegration/reviews/plan.gemini.testability-adversarial.review.md",
+                "section": "High Severity / TEST-H-01",
+                "quote": "The plan correctly identifies the critical write order (artifacts first, then state) to prevent inconsistent state in case of a crash. However, it proposes to \"Document this in the module docstring\" rather than testing it. A test should be added that simulates a crash after artifact writing (e.g., by mocking the state update call to raise an exception) and asserts that the state file remains unmodified while the orphaned artifact directory exists."
+              },
+              {
+                "artifact": "/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-codex-reintegration/plan.md",
+                "section": "Slice 5",
+                "quote": "write `stdout.txt` + `stderr.txt` ... FIRST, THEN append to `state.codex_dispatches[]`. Crash between steps leaves an orphaned artifact dir + no state record. The orphan is harmless ... Document this in the module docstring."
+              },
+              {
+                "artifact": "/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-codex-reintegration/plan.md",
+                "section": "Slice 2",
+                "quote": "before changing the signature, run `grep -rn \"check_implementation_rule\" ...` and inventory ALL callers ... verify that's still the only caller before proceeding ... Update `factory_cmd_deliver.py` caller to switch on `status` explicitly ... **No boolean compatibility shim**"
+              }
+            ],
+            "timestamp": "2026-04-24T00:00:00Z"
+          },
+          {
+            "judge": "restatement",
+            "model": "gpt-5",
+            "verdict": "proceed-with-annotation",
+            "confidence": 5,
+            "reasoning": "No prior findings exist, so restatement cannot be assessed in this round. Per the first-round rule, the correct verdict is proceed-with-annotation. I am recording the latest findings as the baseline for later comparison, and all are classified as NEW by default. NEW classifications and uncovered failure modes: plan.codex.architecture-adversarial.review#medium-1: NEW, concurrent read-modify-write state updates can lose dispatch records or annotations even with atomic replace; plan.codex.architecture-adversarial.review#medium-2: NEW, freshness suppression can flip when the branch base moves and malformed or missing ts values can mis-order or crash selection; plan.codex.architecture-adversarial.review#medium-3: NEW, tuple-return migration can break unscanned callers outside the audited scripts directory; plan.codex.implementation-adversarial.review#medium-1: NEW, hidden boolean-style callers may silently become always-truthy and disable enforcement; plan.codex.implementation-adversarial.review#medium-2: NEW, unresolved branch-base resolution creates an environment-dependent bypass that marks checks skipped; plan.codex.implementation-adversarial.review#medium-3: NEW, passing the full prompt on the command line leaks it via process listings and can fail for long or unusual inputs; plan.codex.implementation-adversarial.review#medium-4: NEW, timeout without process-group cleanup can leave child processes running and mutating the workspace after the parent exits; plan.codex.implementation-adversarial.review#medium-5: NEW, malformed SHAs or git failures in freshness helpers can turn one bad record into a hard rule failure instead of a safe skip; plan.gemini.testability-adversarial.review#high-1: NEW but not comparable in substance because the finding text is only 'Severity'; plan.gemini.testability-adversarial.review#medium-2: NEW but not comparable in substance because the finding text is only 'Severity'; plan.gemini.testability-adversarial.review#high-3: NEW, rejecting a compatibility shim leaves missed callers dependent on manual, non-repeatable verification; plan.gemini.testability-adversarial.review#low-4: NEW but not comparable in substance because the finding text is only 'Severity'. Several findings overlap in theme within this same latest round, especially the return-shape migration concerns, but without any earlier round and orchestrator response they still count as first-round baseline signal rather than restatements.",
+            "unaddressed_high_finding_ids": [
+              "plan.gemini.testability-adversarial.review#high-1",
+              "plan.gemini.testability-adversarial.review#high-3"
+            ],
+            "evidence": [
+              {
+                "artifact": "plan.codex.architecture-adversarial.review.md",
+                "section": "plan.codex.architecture-adversarial.review#medium-1",
+                "quote": "State writes can race and lose data. `dispatch-codex` and `advance` both do read-modify-write updates to the same state file, but the plan only mentions atomic file replacement."
+              },
+              {
+                "artifact": "plan.codex.architecture-adversarial.review.md",
+                "section": "plan.codex.architecture-adversarial.review#medium-2",
+                "quote": "Freshness suppression is non-monotonic and timestamp-fragile. Recomputing `lines_added_at_dispatch_time` against the current branch base means upstream movement alone can flip a dispatch from suppressing to not suppressing."
+              },
+              {
+                "artifact": "plan.codex.architecture-adversarial.review.md",
+                "section": "plan.codex.architecture-adversarial.review#medium-3",
+                "quote": "The return-shape migration is brittle because the compatibility scope is too narrow. Slice 2 removes the boolean contract without a shim, but the pre-step audit only greps one scripts directory."
+              },
+              {
+                "artifact": "plan.codex.implementation-adversarial.review.md",
+                "section": "plan.codex.implementation-adversarial.review#medium-1",
+                "quote": "The Slice 2 migration removes the boolean return contract from `check_implementation_rule()` after only a grep-based caller audit. If any hidden caller still does `if check_implementation_rule(...):`, the returned tuple will always be truthy and enforcement will silently stop working."
+              },
+              {
+                "artifact": "plan.codex.implementation-adversarial.review.md",
+                "section": "plan.codex.implementation-adversarial.review#medium-2",
+                "quote": "The plan treats unresolved branch-base resolution as `skipped` and proceeds. If a clone cannot resolve `origin/main`, `main`, or fork-point, the implementation rule is effectively disabled in that environment."
+              },
+              {
+                "artifact": "plan.codex.implementation-adversarial.review.md",
+                "section": "plan.codex.implementation-adversarial.review#medium-3",
+                "quote": "`dispatch-codex` passes the full prompt text as a command-line argument to `codex exec`. That exposes the prompt in process listings and audit logs, and it is brittle for long or unusual prompt contents."
+              },
+              {
+                "artifact": "plan.codex.implementation-adversarial.review.md",
+                "section": "plan.codex.implementation-adversarial.review#medium-4",
+                "quote": "The timeout path uses `subprocess.run(timeout=600)` but does not specify process-group cleanup. If Codex spawns child processes, they can survive after the parent times out, keep mutating the workspace, and leave no dispatch record."
+              },
+              {
+                "artifact": "plan.codex.implementation-adversarial.review.md",
+                "section": "plan.codex.implementation-adversarial.review#medium-5",
+                "quote": "The freshness helpers only define `None` handling, not malformed SHAs or git command failures. A pruned or corrupt dispatch record can make `merge-base` or `diff` throw instead of being treated as not fresh."
+              },
+              {
+                "artifact": "plan.gemini.testability-adversarial.review.md",
+                "section": "plan.gemini.testability-adversarial.review#high-1",
+                "quote": "Severity"
+              },
+              {
+                "artifact": "plan.gemini.testability-adversarial.review.md",
+                "section": "plan.gemini.testability-adversarial.review#medium-2",
+                "quote": "Severity"
+              },
+              {
+                "artifact": "plan.gemini.testability-adversarial.review.md",
+                "section": "plan.gemini.testability-adversarial.review#high-3",
+                "quote": "risk and relies on a manual, non-repeatable verification step. The risk could be lowered by temporarily adding a compatibility shim and a `DeprecationWarning` to catch any missed callers during testing. The plan explicitly rejects this (\"No boolean compatibility shim\")."
+              },
+              {
+                "artifact": "plan.gemini.testability-adversarial.review.md",
+                "section": "plan.gemini.testability-adversarial.review#low-4",
+                "quote": "Severity"
+              }
+            ],
+            "timestamp": "2026-04-24T00:00:00-07:00"
+          },
+          {
+            "judge": "implementation-risk",
+            "model": "claude-sonnet-4-6",
+            "verdict": "proceed-with-annotation",
+            "confidence": 3,
+            "reasoning": "Four infrastructure gaps require reading existing code that is not in the artifacts. None individually blocks a competent implementer, but together they mean the implementer will guess or stall at each: (1) REPO_ROOT is used in FR-002 and Slice 5 as a cwd argument but is never defined in the artifacts \u2014 a new module (factory_cmd_dispatch.py) has no declared import source for it; (2) @mutates_state is required by FR-006 and FR-015 but no module import path is given anywhere in spec or plan; (3) factory_state.update_state calling convention is described only as 'existing helper \u2014 verified by inspection,' with no signature \u2014 the Fix 3 atomic two-field write (nested dict set + list append in one call) requires guessing the API shape; (4) FR-002 mandates subprocess.run while Slice 5 mandates subprocess.Popen with start_new_session=True and proc.communicate(timeout=600) \u2014 these are different APIs and the timeout/SIGKILL path in Slice 5 is impossible with subprocess.run. A plan-over-spec reading resolves item 4, but items 1\u20133 require codebase spelunking outside the artifacts. No finding rises to a hard block because all four gaps are resolvable by reading the referenced existing files.",
+            "unaddressed_high_finding_ids": [],
+            "evidence": [
+              {
+                "artifact": "spec",
+                "section": "FR-002",
+                "quote": "System MUST invoke Codex via `subprocess.run([codex_path, \"exec\", \"-m\", model, \"-s\", \"workspace-write\", prompt_text], cwd=REPO_ROOT, ...)` where `prompt_text` is the file's contents read into a Python string"
+              },
+              {
+                "artifact": "plan",
+                "section": "Slice 5",
+                "quote": "Invoke Codex via `subprocess.Popen([codex_path, \"exec\", \"-m\", model, \"-s\", \"workspace-write\", prompt_text], cwd=REPO_ROOT, stdout=PIPE, stderr=PIPE, text=True, start_new_session=True)` then `proc.communicate(timeout=600)`"
+              },
+              {
+                "artifact": "spec",
+                "section": "FR-006",
+                "quote": "System MUST decorate the new command handler with `@mutates_state` so the auto-registration of mutating commands (PR #749) covers it."
+              },
+              {
+                "artifact": "spec",
+                "section": "Assumptions",
+                "quote": "The existing atomic-update helper in `factory_state.py` (`update_state` and similar) accepts dict mutations on these list fields without coercion or schema rejection \u2014 verified by inspection of the `command_judge` and `command_deliver` paths from PR #744 / #751 which already write to both fields."
+              },
+              {
+                "artifact": "plan",
+                "section": "Slice 5",
+                "quote": "`codex_path` = `shutil.which(\"codex\")` or fail with a clear message + exit 2 if not found"
+              }
+            ],
+            "timestamp": "2026-04-24T00:00:00Z"
+          }
+        ]
+      ],
+      "annotations": [
+        {
+          "stage": "plan",
+          "round": 1,
+          "judge": "restatement",
+          "confidence": 5,
+          "reasoning": "No prior findings exist, so restatement cannot be assessed in this round. Per the first-round rule, the correct verdict is proceed-with-annotation. I am recording the latest findings as the baseline for later comparison, and all are classified as NEW by default. NEW classifications and uncovered failure modes: plan.codex.architecture-adversarial.review#medium-1: NEW, concurrent read-modify-write state updates can lose dispatch records or annotations even with atomic replace; plan.codex.architecture-adversarial.review#medium-2: NEW, freshness suppression can flip when the branch base moves and malformed or missing ts values can mis-order or crash selection; plan.codex.architecture-adversarial.review#medium-3: NEW, tuple-return migration can break unscanned callers outside the audited scripts directory; plan.codex.implementation-adversarial.review#medium-1: NEW, hidden boolean-style callers may silently become always-truthy and disable enforcement; plan.codex.implementation-adversarial.review#medium-2: NEW, unresolved branch-base resolution creates an environment-dependent bypass that marks checks skipped; plan.codex.implementation-adversarial.review#medium-3: NEW, passing the full prompt on the command line leaks it via process listings and can fail for long or unusual inputs; plan.codex.implementation-adversarial.review#medium-4: NEW, timeout without process-group cleanup can leave child processes running and mutating the workspace after the parent exits; plan.codex.implementation-adversarial.review#medium-5: NEW, malformed SHAs or git failures in freshness helpers can turn one bad record into a hard rule failure instead of a safe skip; plan.gemini.testability-adversarial.review#high-1: NEW but not comparable in substance because the finding text is only 'Severity'; plan.gemini.testability-adversarial.review#medium-2: NEW but not comparable in substance because the finding text is only 'Severity'; plan.gemini.testability-adversarial.review#high-3: NEW, rejecting a compatibility shim leaves missed callers dependent on manual, non-repeatable verification; plan.gemini.testability-adversarial.review#low-4: NEW but not comparable in substance because the finding text is only 'Severity'. Several findings overlap in theme within this same latest round, especially the return-shape migration concerns, but without any earlier round and orchestrator response they still count as first-round baseline signal rather than restatements.",
+          "artifact_sha_at_time": "41ab3826b96a1e03a912c17085797ac2592523acb688b33cd775604eaba259c2"
+        },
+        {
+          "stage": "plan",
+          "round": 1,
+          "judge": "implementation-risk",
+          "confidence": 3,
+          "reasoning": "Four infrastructure gaps require reading existing code that is not in the artifacts. None individually blocks a competent implementer, but together they mean the implementer will guess or stall at each: (1) REPO_ROOT is used in FR-002 and Slice 5 as a cwd argument but is never defined in the artifacts \u2014 a new module (factory_cmd_dispatch.py) has no declared import source for it; (2) @mutates_state is required by FR-006 and FR-015 but no module import path is given anywhere in spec or plan; (3) factory_state.update_state calling convention is described only as 'existing helper \u2014 verified by inspection,' with no signature \u2014 the Fix 3 atomic two-field write (nested dict set + list append in one call) requires guessing the API shape; (4) FR-002 mandates subprocess.run while Slice 5 mandates subprocess.Popen with start_new_session=True and proc.communicate(timeout=600) \u2014 these are different APIs and the timeout/SIGKILL path in Slice 5 is impossible with subprocess.run. A plan-over-spec reading resolves item 4, but items 1\u20133 require codebase spelunking outside the artifacts. No finding rises to a hard block because all four gaps are resolvable by reading the referenced existing files.",
+          "artifact_sha_at_time": "41ab3826b96a1e03a912c17085797ac2592523acb688b33cd775604eaba259c2"
+        }
+      ],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [
+        "6280cb4a1d4a08f186f43db9db0b5309d9868c1ce9f226459fff2ff241545c1b",
+        "66c71cf9a115dfb0fe49759c8799e2ee8613a1bb509bcb5a9bde54c96d2b5701",
+        "1ab2331c6d86b01698c6ca268ae5840b6dde43c6b10178bf281142119524d872"
+      ],
+      "initial_sha": "6280cb4a1d4a08f186f43db9db0b5309d9868c1ce9f226459fff2ff241545c1b",
+      "judge_next_action": "advance"
+    },
+    "tasks": {
+      "adversarial_rounds": 3,
+      "judge_rounds": 3,
+      "judge_verdicts": [
+        [
+          {
+            "judge": "completeness",
+            "model": "gpt-5.4-mini",
+            "verdict": "block",
+            "confidence": 5,
+            "reasoning": "H-01 is not addressed in the current artifact chain. The only named filesystem handling in the dispatch-codex plan is collision retry on FileExistsError for the dispatch directory, plus a timeout path; there is no explicit mitigation for PermissionError or generic OSError around mkdir or writing stdout/stderr, and no written accepted-limitation statement for that risk. Because the HIGH finding remains unmitigated by name, this is not specific enough to implement as-is.",
+            "unaddressed_high_finding_ids": [
+              "tasks.gemini.coverage-adversarial.review#high-1"
+            ],
+            "evidence": [
+              {
+                "artifact": "SPEC \u2014 FF Codex Reintegration",
+                "section": "FR-003 / Fix 1 scope",
+                "quote": "Stream stdout/stderr to `docs/workflow/feature-runs/<slug>/codex-dispatches/<UTC-timestamp>/{stdout.txt, stderr.txt}`."
+              },
+              {
+                "artifact": "PLAN \u2014 FF Codex Reintegration",
+                "section": "Slice 5 \u2014 `dispatch-codex` subcommand",
+                "quote": "Use `Path(<dir>).mkdir(parents=True, exist_ok=False)` to atomically reserve the directory before any subprocess invocation. On `FileExistsError`, increment `_NNN` counter (000, 001, ...) and retry."
+              },
+              {
+                "artifact": "TASKS \u2014 FF Codex Reintegration",
+                "section": "T23",
+                "quote": "Try `dir_path.mkdir(parents=True, exist_ok=False)`. On `FileExistsError`, append `_NNN` (start `_000`, increment `_001`, `_002`, ...) and retry until success."
+              }
+            ],
+            "timestamp": "2026-04-24T00:00:00Z"
+          },
+          {
+            "judge": "restatement",
+            "model": "gpt-5.5",
+            "verdict": "proceed-with-annotation",
+            "confidence": 5,
+            "reasoning": "First-round case applies because the comparison set says \"No prior findings yet.\" Restatement cannot be established without an earlier concern plus a substantive response, so the required verdict is proceed-with-annotation. I treat every latest finding as NEW baseline signal for future rounds. NEW `tasks.codex.dependency-order-adversarial.review#medium-1`: contradictory fallback precedence could let branch-base resolution prefer local `main` over `--fork-point`. NEW `#medium-2`: post-directory-creation failures can orphan `codex-dispatches/<id>` artifacts without a state record. NEW `#medium-3`: concurrent `update_state` appends can drop a dispatch record and poison freshness decisions. NEW `tasks.codex.execution-adversarial.review#medium-1`: cross-slice contradiction means implementation and tests cannot both encode the right `_resolve_branch_base()` order. NEW `#medium-2`: skip-path ownership is inconsistent and can double-print messages. NEW `#medium-3`: missing return-code enforcement on `git rev-parse HEAD` can write invalid `head_sha` into annotations. NEW `#medium-4`: recompute logic depends on an unverified constant location/source of truth. NEW `tasks.gemini.coverage-adversarial.review#high-1`: artifact directory/file write exceptions after `codex` runs can lose run artifacts and leave unclear state. NEW `#medium-2`: timeout exits without a durable state entry for the attempt. NEW `#medium-3`: malformed field types in dispatch history can misclassify successful runs as failures. NEW `#low-4`: shallow-clone fork-point behavior can degrade base selection accuracy. NEW `#low-5`: grep-based caller audit can miss aliased or dynamic callers. NEW `#low-6`: advance records `head_sha` without dirty-tree state, so the recorded commit may not match the user's actual worktree. Because there are no earlier rounds, none of these can be labeled RESTATEMENT yet; they establish the baseline for later comparison.",
+            "unaddressed_high_finding_ids": [
+              "tasks.gemini.coverage-adversarial.review#high-1"
+            ],
+            "evidence": [
+              {
+                "artifact": "prompt",
+                "section": "Earlier rounds' findings",
+                "quote": "No prior findings yet."
+              },
+              {
+                "artifact": "tasks.codex.dependency-order-adversarial.review.md",
+                "section": "tasks.codex.dependency-order-adversarial.review#medium-1",
+                "quote": "[UNVERIFIED]: T05 does not pin the fallback precedence from T02. The wording \"falls through to main then to --fork-point\" can be satisfied by the wrong order, so a regression that prefers local `main` over `--fork-point` could slip through. That breaks the dependency-order guarantee for branch-base resolution."
+              },
+              {
+                "artifact": "tasks.codex.dependency-order-adversarial.review.md",
+                "section": "tasks.codex.dependency-order-adversarial.review#medium-2",
+                "quote": "[UNVERIFIED]: T23/T24 do not handle failures between dispatch directory creation and state append, beyond PATH lookup. `Path.read_text`, `Popen`, or `update_state` can fail after the directory is created, leaving orphaned `codex-dispatches/<id>` artifacts with no state record. That weakens the artifact-first audit trail the slice is trying to establish."
+              },
+              {
+                "artifact": "tasks.codex.dependency-order-adversarial.review.md",
+                "section": "tasks.codex.dependency-order-adversarial.review#medium-3",
+                "quote": "[UNVERIFIED]: The plan assumes `factory_state.update_state` is safe under concurrent `dispatch-codex` runs, but it never requires locking or retry-on-conflict behavior. If two dispatches append at the same time, one record can be dropped, and Slice 3's freshness check will make decisions from incomplete history."
+              },
+              {
+                "artifact": "tasks.codex.execution-adversarial.review.md",
+                "section": "tasks.codex.execution-adversarial.review#medium-1",
+                "quote": "Slice 1 has a direct contradiction on `_resolve_branch_base()` fallback order. T02 says `origin/main -> --fork-point -> main`, but T05\u2019s tests say `origin/main -> main -> --fork-point`. That is not just a wording issue; one of those paths will be wrong, so the implementation and tests cannot both be correct as written."
+              },
+              {
+                "artifact": "tasks.codex.execution-adversarial.review.md",
+                "section": "tasks.codex.execution-adversarial.review#medium-2",
+                "quote": "The skip path is specified inconsistently across slices. T03 says `check_implementation_rule()` prints the \"branch base unresolved\" message itself and returns `(False, message)`, while T09 says the caller should print the skip message after receiving `\"skipped\"`. If T03 is not explicitly removed or changed when Slice 2 lands, skipped checks will double-print."
+              },
+              {
+                "artifact": "tasks.codex.execution-adversarial.review.md",
+                "section": "tasks.codex.execution-adversarial.review#medium-3",
+                "quote": "T18\u2019s `git rev-parse HEAD` call does not use `check=True` or any return-code check. If Git fails, the command can keep going with an empty or invalid `head_sha`, which would silently corrupt the `annotations` record instead of failing fast."
+              },
+              {
+                "artifact": "tasks.codex.execution-adversarial.review.md",
+                "section": "tasks.codex.execution-adversarial.review#medium-4",
+                "quote": "[UNVERIFIED]: T14 assumes `_IMPLEMENTATION_RULE_CODE_GLOBS` already exists in `factory_deliver.py` and is the right source of truth for the recompute diff. Because no code context was provided, that dependency is unverified; if the constant moved or changed, the freshness recompute path and its tests will break."
+              },
+              {
+                "artifact": "tasks.gemini.coverage-adversarial.review.md",
+                "section": "tasks.gemini.coverage-adversarial.review#high-1",
+                "quote": "| H-01 | In `dispatch-codex` (`T23`), filesystem operations for creating the dispatch directory and writing artifact files (`stdout.txt`, `stderr.txt`) do not handle exceptions like `PermissionError` or `OSError`. An error here could cause the task to fail with an unhandled exception after the `codex` process has already run, potentially losing the run artifacts and leaving the system in an unclear state."
+              },
+              {
+                "artifact": "tasks.gemini.coverage-adversarial.review.md",
+                "section": "tasks.gemini.coverage-adversarial.review#medium-2",
+                "quote": "| M-01 | In `dispatch-codex` (`T23`), the timeout handling logic raises `SystemExit(5)` but does not append a dispatch record to `state.json`. While this prevents a \"stale\" record from being used for suppression, it means there is no durable, machine-readable record of the timed-out attempt within the feature run's state. An operator would need to manually inspect logs or the filesystem to diagnose a timeout, rather than seeing it in the run's history."
+              },
+              {
+                "artifact": "tasks.gemini.coverage-adversarial.review.md",
+                "section": "tasks.gemini.coverage-adversarial.review#medium-3",
+                "quote": "| M-02 | [UNVERIFIED] The freshness logic in `check_implementation_rule` (`T15`) defensively uses `.get()` on dispatch record dictionaries but does not validate the types of the retrieved values. A record with, for example, `exit_code: \"0\"` (a string) instead of `exit_code: 0` (an integer) would be incorrectly treated as a failed dispatch, causing the implementation rule to trigger when it should be suppressed."
+              },
+              {
+                "artifact": "tasks.gemini.coverage-adversarial.review.md",
+                "section": "tasks.gemini.coverage-adversarial.review#low-4",
+                "quote": "| L-01 | The `_resolve_branch_base` logic (`T02`) uses `git merge-base --fork-point`, which can fail or produce unexpected results in CI environments with shallow clones. While the logic correctly falls back, it could lead to using a stale local `main` as the base, resulting in an inaccurate line count for the implementation rule."
+              },
+              {
+                "artifact": "tasks.gemini.coverage-adversarial.review.md",
+                "section": "tasks.gemini.coverage-adversarial.review#low-5",
+                "quote": "| L-02 | The audits in `T00` and `T07` use `grep` to find callers of `check_implementation_rule`. This is a reasonable heuristic but could miss instances where the function is aliased or called dynamically. This poses a small risk of a caller being missed during the signature migration in Slice 2."
+              },
+              {
+                "artifact": "tasks.gemini.coverage-adversarial.review.md",
+                "section": "tasks.gemini.coverage-adversarial.review#low-6",
+                "quote": "| L-03 | In the `advance` subcommand (`T18`), the `head_sha` is captured, but the \"dirty\" status of the working tree is not. An advance could be recorded against a commit that does not reflect the user's current (uncommitted) code, leading to confusion if the user expected the advance to apply to their latest work."
+              }
+            ],
+            "timestamp": "2026-04-24T00:00:00-07:00"
+          },
+          {
+            "judge": "implementation-risk",
+            "model": "claude-opus-4-5",
+            "verdict": "block",
+            "confidence": 4,
+            "reasoning": "Two load-bearing dependencies in new modules are referenced throughout but never given a source module or import path: (1) the `REPO_ROOT` constant used as `cwd=REPO_ROOT` and in path construction throughout `factory_cmd_dispatch.py` and `factory_cmd_advance.py`, and (2) the `@mutates_state` decorator required by FR-006, FR-015, and all new command handlers. A cold implementer writing these new files cannot complete them without knowing where to import these symbols. Additionally, the non-quota exit-code contract is directly contradicted between spec FR-007 ('propagate Codex exit code') and tasks T23 step 12 ('collapse any non-zero to 1'); the T25 test resolves this in favor of the tasks, making it annotate-level rather than a standalone block, but the contradiction requires the implementer to notice and resolve it. A secondary contradiction exists in the branch-base resolution order: spec FR-019 specifies origin/main \u2192 main \u2192 fork-point, while tasks T02 specifies origin/main \u2192 fork-point \u2192 main with an explicit rationale for the reorder. Both order documents are normative-looking and an implementer without the review history would not know which wins.",
+            "unaddressed_high_finding_ids": [],
+            "evidence": [
+              {
+                "artifact": "tasks",
+                "section": "Slice 5 \u2014 T23 step 7",
+                "quote": "Invoke Codex via `Popen([codex_path, \"exec\", \"-m\", args.model, \"-s\", \"workspace-write\", prompt_text], cwd=REPO_ROOT, stdout=PIPE, stderr=PIPE, text=True, start_new_session=True)`"
+              },
+              {
+                "artifact": "tasks",
+                "section": "Slice 4 \u2014 T18",
+                "quote": "Decorate with `@mutates_state` from the existing decorator module."
+              },
+              {
+                "artifact": "spec",
+                "section": "Functional requirements \u2014 Fix 1 FR-007",
+                "quote": "The runner's exit code MUST propagate Codex's exit code (except in the quota case, which becomes 4): exit 0 for success, non-zero for Codex failures."
+              },
+              {
+                "artifact": "tasks",
+                "section": "Slice 5 \u2014 T23 step 12",
+                "quote": "do NOT propagate raw Codex exit codes verbatim. Map them: Codex `0` \u2192 runner `0`; any non-zero Codex exit \u2192 runner `1` (collapsed; the actual codex exit_code is preserved in `state.codex_dispatches[-1].exit_code` for audit). The runner reserves: `2` (validation: bad prompt size, codex not on PATH); `4` (quota detected by wrapper); `5` (timeout detected by wrapper)."
+              },
+              {
+                "artifact": "spec",
+                "section": "Functional requirements \u2014 Fix 5 FR-019",
+                "quote": "`factory_deliver._resolve_branch_base()` MUST attempt branch-base resolution in this order: `git merge-base origin/main HEAD` \u2192 `git merge-base main HEAD` \u2192 `git merge-base --fork-point origin/main HEAD`. The first non-empty result wins."
+              },
+              {
+                "artifact": "tasks",
+                "section": "Slice 1 \u2014 T02",
+                "quote": "rewrite `_resolve_branch_base()` to try `git merge-base origin/main HEAD` \u2192 `git merge-base --fork-point origin/main HEAD` \u2192 `git merge-base main HEAD` \u2192 return `None`. (Tasks-round-1 Gemini L-01 reorder: fork-point ahead of local `main` because local `main` may have diverged from `origin/main`)"
+              }
+            ],
+            "timestamp": "2026-04-24T00:00:00Z"
+          }
+        ],
+        [
+          {
+            "judge": "completeness",
+            "model": "gpt-5.4-mini",
+            "verdict": "block",
+            "confidence": 5,
+            "reasoning": "tasks.gemini.coverage-adversarial.review#high-1 is not addressed anywhere in the current artifact chain. The closest text is tasks.md Slice 5 T23, which says to create the dispatch directory and write stdout.txt/stderr.txt, but it only names a mkdir collision retry and artifact write order; it does not name any mitigation for PermissionError/OSError, and it does not explicitly acknowledge those failures as an accepted limitation. Because this HIGH finding remains unaddressed by name, block.",
+            "unaddressed_high_finding_ids": [
+              "tasks.gemini.coverage-adversarial.review#high-1"
+            ],
+            "evidence": [],
+            "timestamp": "2026-04-24T00:00:00Z"
+          },
+          {
+            "judge": "restatement",
+            "model": "gpt-5",
+            "verdict": "proceed-with-annotation",
+            "confidence": 5,
+            "reasoning": "First-round case applies because the prior-round record says \"No prior findings yet.\" That means none of the latest findings can be classified as RESTATEMENT; all are NEW baseline findings for later comparison. Classification by finding: tasks.codex.dependency-order-adversarial.review#medium-1 NEW: it surfaces an unpinned fallback-order failure mode where tests could allow preferring local main over --fork-point. tasks.codex.dependency-order-adversarial.review#medium-2 NEW: it surfaces orphaned dispatch directories when read_text, Popen, or update_state fail after directory creation. tasks.codex.dependency-order-adversarial.review#medium-3 NEW: it surfaces a concurrent update_state race that can drop dispatch records and poison freshness decisions. tasks.codex.execution-adversarial.review#medium-1 NEW: it surfaces an internal spec contradiction between T02 and T05 on branch-base fallback order. tasks.codex.execution-adversarial.review#medium-2 NEW: it surfaces a double-print skip-path failure mode caused by inconsistent ownership of the skip message between T03 and T09. tasks.codex.execution-adversarial.review#medium-3 NEW: it surfaces silent annotation corruption if git rev-parse HEAD fails and head_sha is empty or invalid. tasks.codex.execution-adversarial.review#medium-4 NEW: it surfaces an unverified dependency on _IMPLEMENTATION_RULE_CODE_GLOBS that could break the recompute diff path. tasks.gemini.coverage-adversarial.review#high-1 NEW: it surfaces unhandled filesystem exceptions during dispatch artifact creation/writes after codex has already run, risking lost artifacts and unclear state. tasks.gemini.coverage-adversarial.review#medium-2 NEW: it surfaces the missing durable state record for timed-out dispatches. tasks.gemini.coverage-adversarial.review#medium-3 NEW: it surfaces malformed record types causing false freshness-trigger behavior. tasks.gemini.coverage-adversarial.review#low-4 NEW: it surfaces shallow-clone fork-point behavior leading to stale local main as base. tasks.gemini.coverage-adversarial.review#low-5 NEW: it surfaces grep-based caller audits missing aliased or dynamic calls. tasks.gemini.coverage-adversarial.review#low-6 NEW: it surfaces advance recording HEAD without dirty-tree state, causing provenance confusion. Because there is no earlier round, this judge cannot call saturation or restatement; the correct verdict is proceed-with-annotation so these findings become the baseline for future rounds.",
+            "unaddressed_high_finding_ids": [
+              "tasks.gemini.coverage-adversarial.review#high-1"
+            ],
+            "evidence": [
+              {
+                "artifact": "earlier-rounds",
+                "section": "prior findings",
+                "quote": "No prior findings yet."
+              },
+              {
+                "artifact": "tasks.codex.dependency-order-adversarial.review.md",
+                "section": "medium-1",
+                "quote": "T05 does not pin the fallback precedence from T02. The wording \"falls through to main then to --fork-point\" can be satisfied by the wrong order, so a regression that prefers local `main` over `--fork-point` could slip through."
+              },
+              {
+                "artifact": "tasks.codex.dependency-order-adversarial.review.md",
+                "section": "medium-2",
+                "quote": "T23/T24 do not handle failures between dispatch directory creation and state append, beyond PATH lookup. `Path.read_text`, `Popen`, or `update_state` can fail after the directory is created, leaving orphaned `codex-dispatches/<id>` artifacts with no state record."
+              },
+              {
+                "artifact": "tasks.codex.dependency-order-adversarial.review.md",
+                "section": "medium-3",
+                "quote": "The plan assumes `factory_state.update_state` is safe under concurrent `dispatch-codex` runs, but it never requires locking or retry-on-conflict behavior. If two dispatches append at the same time, one record can be dropped."
+              },
+              {
+                "artifact": "tasks.codex.execution-adversarial.review.md",
+                "section": "medium-1",
+                "quote": "Slice 1 has a direct contradiction on `_resolve_branch_base()` fallback order. T02 says `origin/main -> --fork-point -> main`, but T05\u2019s tests say `origin/main -> main -> --fork-point`."
+              },
+              {
+                "artifact": "tasks.codex.execution-adversarial.review.md",
+                "section": "medium-2",
+                "quote": "The skip path is specified inconsistently across slices. T03 says `check_implementation_rule()` prints the \u201cbranch base unresolved\u201d message itself and returns `(False, message)`, while T09 says the caller should print the skip message after receiving `\"skipped\"`."
+              },
+              {
+                "artifact": "tasks.codex.execution-adversarial.review.md",
+                "section": "medium-3",
+                "quote": "T18\u2019s `git rev-parse HEAD` call does not use `check=True` or any return-code check. If Git fails, the command can keep going with an empty or invalid `head_sha`, which would silently corrupt the `annotations` record instead of failing fast."
+              },
+              {
+                "artifact": "tasks.codex.execution-adversarial.review.md",
+                "section": "medium-4",
+                "quote": "T14 assumes `_IMPLEMENTATION_RULE_CODE_GLOBS` already exists in `factory_deliver.py` and is the right source of truth for the recompute diff. Because no code context was provided, that dependency is unverified."
+              },
+              {
+                "artifact": "tasks.gemini.coverage-adversarial.review.md",
+                "section": "high-1",
+                "quote": "In `dispatch-codex` (`T23`), filesystem operations for creating the dispatch directory and writing artifact files (`stdout.txt`, `stderr.txt`) do not handle exceptions like `PermissionError` or `OSError`. An error here could cause the task to fail with an unhandled exception after the `codex` process has already run, potentially losing the run artifacts and leaving the system in an unclear state."
+              },
+              {
+                "artifact": "tasks.gemini.coverage-adversarial.review.md",
+                "section": "medium-2",
+                "quote": "In `dispatch-codex` (`T23`), the timeout handling logic raises `SystemExit(5)` but does not append a dispatch record to `state.json`. While this prevents a \"stale\" record from being used for suppression, it means there is no durable, machine-readable record of the timed-out attempt within the feature run's state."
+              },
+              {
+                "artifact": "tasks.gemini.coverage-adversarial.review.md",
+                "section": "medium-3",
+                "quote": "The freshness logic in `check_implementation_rule` (`T15`) defensively uses `.get()` on dispatch record dictionaries but does not validate the *types* of the retrieved values. A record with, for example, `exit_code: \"0\"` (a string) instead of `exit_code: 0` (an integer) would be incorrectly treated as a failed dispatch."
+              },
+              {
+                "artifact": "tasks.gemini.coverage-adversarial.review.md",
+                "section": "low-4",
+                "quote": "The `_resolve_branch_base` logic (`T02`) uses `git merge-base --fork-point`, which can fail or produce unexpected results in CI environments with shallow clones. While the logic correctly falls back, it could lead to using a stale local `main` as the base."
+              },
+              {
+                "artifact": "tasks.gemini.coverage-adversarial.review.md",
+                "section": "low-5",
+                "quote": "The audits in `T00` and `T07` use `grep` to find callers of `check_implementation_rule`. This is a reasonable heuristic but could miss instances where the function is aliased or called dynamically."
+              },
+              {
+                "artifact": "tasks.gemini.coverage-adversarial.review.md",
+                "section": "low-6",
+                "quote": "In the `advance` subcommand (`T18`), the `head_sha` is captured, but the \"dirty\" status of the working tree is not. An advance could be recorded against a commit that does not reflect the user's current (uncommitted) code."
+              }
+            ],
+            "timestamp": "2026-04-24T00:00:00-07:00"
+          },
+          {
+            "judge": "implementation-risk",
+            "model": "claude-sonnet-4-5",
+            "verdict": "block",
+            "confidence": 4,
+            "reasoning": "Two load-bearing contradictions between the spec FRs and the tasks make it impossible to implement both correctly at once: (1) FR-007 says propagate Codex's exit code verbatim; T23 step 12 says collapse all non-zero Codex exits to runner exit 1. The T25 test cases encode the collapsed behavior, so tests enforce one rule while the spec enforces the other. (2) FR-019 specifies branch-base fallback order as origin/main \u2192 main \u2192 fork-point; T02 explicitly reorders to origin/main \u2192 fork-point \u2192 main with a justification note ('Tasks-round-1 Gemini L-01 reorder') but the spec was never updated, leaving two authoritative but contradictory orderings. A third risk: the Slice-2 intermediate return of ('suppressed', note) requires a note string but the only note format defined in the artifacts (FR-009) requires freshness data\u2014ts, head_sha[:7], lines\u2014that doesn't exist in the Slice-2 suppression path, so the implementer must guess the note content. Finally, T23 step 9 instructs importing is_codex_quota_exhaustion directly from run_codex_review.py (a runner script), but no artifact confirms the file is free of module-level side effects that would break a bare import.",
+            "unaddressed_high_finding_ids": [],
+            "evidence": [
+              {
+                "artifact": "SPEC",
+                "section": "Functional requirements \u2014 Fix 1 \u2014 FR-007",
+                "quote": "The runner's exit code MUST propagate Codex's exit code (except in the quota case, which becomes 4): exit 0 for success, non-zero for Codex failures."
+              },
+              {
+                "artifact": "TASKS",
+                "section": "Slice 5 \u2014 T23 step 12",
+                "quote": "Map them: Codex `0` \u2192 runner `0`; any non-zero Codex exit \u2192 runner `1` (collapsed; the actual codex exit_code is preserved in `state.codex_dispatches[-1].exit_code` for audit). The runner reserves: `2` (validation: bad prompt size, codex not on PATH); `4` (quota detected by wrapper); `5` (timeout detected by wrapper). This eliminates collisions where codex's own exit code coincidentally equaled `2`, `4`, or `5`."
+              },
+              {
+                "artifact": "SPEC",
+                "section": "Functional requirements \u2014 Fix 5 \u2014 FR-019",
+                "quote": "`factory_deliver._resolve_branch_base()` MUST attempt branch-base resolution in this order: `git merge-base origin/main HEAD` \u2192 `git merge-base main HEAD` \u2192 `git merge-base --fork-point origin/main HEAD`. The first non-empty result wins."
+              },
+              {
+                "artifact": "TASKS",
+                "section": "Slice 1 \u2014 T02",
+                "quote": "rewrite `_resolve_branch_base()` to try `git merge-base origin/main HEAD` \u2192 `git merge-base --fork-point origin/main HEAD` \u2192 `git merge-base main HEAD` \u2192 return `None`. (Tasks-round-1 Gemini L-01 reorder: fork-point ahead of local `main` because local `main` may have diverged from `origin/main`; canonical remote first, then fork-point as the next-most-canonical, then local `main` as last resort.)"
+              },
+              {
+                "artifact": "TASKS",
+                "section": "Slice 2 \u2014 T08",
+                "quote": "\"above threshold and codex_dispatches non-empty\" \u2192 `(\"suppressed\", note)` (rule unchanged from PR #751 in this slice; freshness binding lands in Slice 3)"
+              },
+              {
+                "artifact": "SPEC",
+                "section": "Functional requirements \u2014 Fix 2 \u2014 FR-009",
+                "quote": "When at least one fresh entry is found and the line count is above threshold, System MUST suppress the WARN AND print a one-line note: `implementation-rule check skipped \u2014 covered by codex dispatch <ts> (sha <head_sha[:7]>, +<lines>)`. Use the most recent fresh entry for the note."
+              },
+              {
+                "artifact": "TASKS",
+                "section": "Slice 5 \u2014 T23 step 9",
+                "quote": "Classify quota: `from run_codex_review import is_codex_quota_exhaustion`. If `is_codex_quota_exhaustion(stderr, stdout)`: print `Codex quota exhausted \u2014 see https://chatgpt.com/codex/settings/usage` to stderr; raise `SystemExit(4)` WITHOUT appending to state."
+              }
+            ],
+            "timestamp": "2026-04-24T00:00:00Z"
+          }
+        ],
+        [
+          {
+            "judge": "completeness",
+            "model": "gpt-5.4-mini",
+            "verdict": "block",
+            "confidence": 5,
+            "reasoning": "tasks.gemini.coverage-adversarial.review#high-1 is not addressed by name anywhere in the artifact chain. The closest text is spec R6 and plan Slice 5 T23, but those only discuss subprocess.Popen OSError/PermissionError on Codex invocation and the write-order tradeoff; they do not add a named mitigation or an explicit accepted-limitation statement for PermissionError/OSError from creating the dispatch directory or writing stdout.txt/stderr.txt after Codex has already run. Because this HIGH remains unaddressed, the gate stays BLOCK.",
+            "unaddressed_high_finding_ids": [
+              "tasks.gemini.coverage-adversarial.review#high-1"
+            ],
+            "evidence": [],
+            "timestamp": "2026-04-24T00:00:00Z"
+          },
+          {
+            "judge": "restatement",
+            "model": "gpt-5",
+            "verdict": "proceed-with-annotation",
+            "confidence": 5,
+            "reasoning": "First-round case applies because the record explicitly says \"No prior findings yet.\" With no earlier round and no orchestrator responses, none of the latest findings can be judged as RESTATEMENTs. I classify every latest finding as NEW for baseline-setting purposes. Specific uncovered failure modes are: tasks.codex.dependency-order-adversarial.review#medium-1 NEW: ambiguous test wording could permit the wrong branch-base fallback precedence; tasks.codex.dependency-order-adversarial.review#medium-2 NEW: failures after dispatch directory creation but before state append can orphan artifacts without a state record; tasks.codex.dependency-order-adversarial.review#medium-3 NEW: concurrent state appends can drop a dispatch record and mislead freshness checks; tasks.codex.execution-adversarial.review#medium-1 NEW: direct contradiction between specified and tested fallback order means implementation and tests cannot both be right; tasks.codex.execution-adversarial.review#medium-2 NEW: inconsistent skip-path ownership can cause duplicate skip messages; tasks.codex.execution-adversarial.review#medium-3 NEW: missing return-code enforcement on HEAD resolution can record invalid annotations state; tasks.codex.execution-adversarial.review#medium-4 NEW: freshness recompute depends on an unverified constant location/source of truth; tasks.gemini.coverage-adversarial.review#high-1 NEW: unhandled filesystem write/create exceptions after codex runs can lose artifacts and leave unclear state; tasks.gemini.coverage-adversarial.review#medium-2 NEW: timeout path lacks durable state history for the failed attempt; tasks.gemini.coverage-adversarial.review#medium-3 NEW: malformed dispatch record types can trigger incorrect freshness decisions; tasks.gemini.coverage-adversarial.review#low-4 NEW: shallow-clone fork-point behavior can degrade branch-base accuracy; tasks.gemini.coverage-adversarial.review#low-5 NEW: grep-based caller audit can miss aliased or dynamic call sites; tasks.gemini.coverage-adversarial.review#low-6 NEW: advance records commit SHA without dirty-tree context, causing operator confusion. Verdict is proceed-with-annotation, not block or proceed, because this round establishes the baseline for later restatement checks rather than showing saturation.",
+            "unaddressed_high_finding_ids": [
+              "tasks.gemini.coverage-adversarial.review#high-1"
+            ],
+            "evidence": [
+              {
+                "artifact": "tasks.codex.dependency-order-adversarial.review.md",
+                "section": "tasks.codex.dependency-order-adversarial.review#medium-1",
+                "quote": "T05 does not pin the fallback precedence from T02. The wording \"falls through to main then to --fork-point\" can be satisfied by the wrong order, so a regression that prefers local `main` over `--fork-point` could slip through."
+              },
+              {
+                "artifact": "tasks.codex.dependency-order-adversarial.review.md",
+                "section": "tasks.codex.dependency-order-adversarial.review#medium-2",
+                "quote": "T23/T24 do not handle failures between dispatch directory creation and state append, beyond PATH lookup. `Path.read_text`, `Popen`, or `update_state` can fail after the directory is created, leaving orphaned `codex-dispatches/<id>` artifacts with no state record."
+              },
+              {
+                "artifact": "tasks.codex.dependency-order-adversarial.review.md",
+                "section": "tasks.codex.dependency-order-adversarial.review#medium-3",
+                "quote": "The plan assumes `factory_state.update_state` is safe under concurrent `dispatch-codex` runs, but it never requires locking or retry-on-conflict behavior. If two dispatches append at the same time, one record can be dropped."
+              },
+              {
+                "artifact": "tasks.codex.execution-adversarial.review.md",
+                "section": "tasks.codex.execution-adversarial.review#medium-1",
+                "quote": "Slice 1 has a direct contradiction on `_resolve_branch_base()` fallback order. T02 says `origin/main -> --fork-point -> main`, but T05\u2019s tests say `origin/main -> main -> --fork-point`. That is not just a wording issue; one of those paths will be wrong."
+              },
+              {
+                "artifact": "tasks.codex.execution-adversarial.review.md",
+                "section": "tasks.codex.execution-adversarial.review#medium-2",
+                "quote": "The skip path is specified inconsistently across slices. T03 says `check_implementation_rule()` prints the \u201cbranch base unresolved\u201d message itself and returns `(False, message)`, while T09 says the caller should print the skip message after receiving `\"skipped\"`. If T03 is not explicitly removed or changed when Slice 2 lands, skipped checks will double-print."
+              },
+              {
+                "artifact": "tasks.codex.execution-adversarial.review.md",
+                "section": "tasks.codex.execution-adversarial.review#medium-3",
+                "quote": "T18\u2019s `git rev-parse HEAD` call does not use `check=True` or any return-code check. If Git fails, the command can keep going with an empty or invalid `head_sha`, which would silently corrupt the `annotations` record instead of failing fast."
+              },
+              {
+                "artifact": "tasks.codex.execution-adversarial.review.md",
+                "section": "tasks.codex.execution-adversarial.review#medium-4",
+                "quote": "T14 assumes `_IMPLEMENTATION_RULE_CODE_GLOBS` already exists in `factory_deliver.py` and is the right source of truth for the recompute diff. Because no code context was provided, that dependency is unverified; if the constant moved or changed, the freshness recompute path and its tests will break."
+              },
+              {
+                "artifact": "tasks.gemini.coverage-adversarial.review.md",
+                "section": "tasks.gemini.coverage-adversarial.review#high-1",
+                "quote": "In `dispatch-codex` (`T23`), filesystem operations for creating the dispatch directory and writing artifact files (`stdout.txt`, `stderr.txt`) do not handle exceptions like `PermissionError` or `OSError`. An error here could cause the task to fail with an unhandled exception after the `codex` process has already run, potentially losing the run artifacts and leaving the system in an unclear state."
+              },
+              {
+                "artifact": "tasks.gemini.coverage-adversarial.review.md",
+                "section": "tasks.gemini.coverage-adversarial.review#medium-2",
+                "quote": "In `dispatch-codex` (`T23`), the timeout handling logic raises `SystemExit(5)` but does not append a dispatch record to `state.json`. While this prevents a \"stale\" record from being used for suppression, it means there is no durable, machine-readable record of the timed-out attempt within the feature run's state."
+              },
+              {
+                "artifact": "tasks.gemini.coverage-adversarial.review.md",
+                "section": "tasks.gemini.coverage-adversarial.review#medium-3",
+                "quote": "The freshness logic in `check_implementation_rule` (`T15`) defensively uses `.get()` on dispatch record dictionaries but does not validate the *types* of the retrieved values. A record with, for example, `exit_code: \"0\"` (a string) instead of `exit_code: 0` (an integer) would be incorrectly treated as a failed dispatch."
+              },
+              {
+                "artifact": "tasks.gemini.coverage-adversarial.review.md",
+                "section": "tasks.gemini.coverage-adversarial.review#low-4",
+                "quote": "The `_resolve_branch_base` logic (`T02`) uses `git merge-base --fork-point`, which can fail or produce unexpected results in CI environments with shallow clones. While the logic correctly falls back, it could lead to using a stale local `main` as the base, resulting in an inaccurate line count for the implementation rule."
+              },
+              {
+                "artifact": "tasks.gemini.coverage-adversarial.review.md",
+                "section": "tasks.gemini.coverage-adversarial.review#low-5",
+                "quote": "The audits in `T00` and `T07` use `grep` to find callers of `check_implementation_rule`. This is a reasonable heuristic but could miss instances where the function is aliased or called dynamically."
+              },
+              {
+                "artifact": "tasks.gemini.coverage-adversarial.review.md",
+                "section": "tasks.gemini.coverage-adversarial.review#low-6",
+                "quote": "In the `advance` subcommand (`T18`), the `head_sha` is captured, but the \"dirty\" status of the working tree is not. An advance could be recorded against a commit that does not reflect the user's current (uncommitted) code, leading to confusion if the user expected the advance to apply to their latest work."
+              },
+              {
+                "artifact": "conversation",
+                "section": "earlier-rounds",
+                "quote": "Earlier rounds' findings (with orchestrator responses): - No prior findings yet."
+              }
+            ],
+            "timestamp": "2026-04-24T00:00:00-07:00"
+          },
+          {
+            "judge": "implementation-risk",
+            "model": "claude-opus-4-5",
+            "verdict": "block",
+            "confidence": 4,
+            "reasoning": "Three load-bearing gaps would cause a competent implementer to stall or ship the wrong behavior. First, REPO_ROOT is used as a constant in every subprocess call and path construction across both new modules (factory_cmd_dispatch.py, factory_cmd_advance.py) but no artifact names which module defines it or how to import it. An implementer creating a new file from these artifacts alone cannot write a correct import line without grepping outside them. Second, @mutates_state is required by FR-006, FR-015, and three separate task items but is described only as coming from 'the existing decorator module' \u2014 the module is never named, so the import line is a guess. Third, the fallback order for _resolve_branch_base() directly contradicts between FR-019 ('origin/main \u2192 fork-point \u2192 main') and Plan Slice 1 prose ('origin/main \u2192 main \u2192 fork-point'). Tasks T02 agrees with FR-019 and explicitly explains the rationale for putting fork-point before local main, but an implementer who follows the Plan's Slice 1 description \u2014 which is the implementation guide \u2014 will code the wrong order. This is not aesthetic: choosing the wrong order defeats the stated purpose of Fix 5 on long-lived branches.",
+            "unaddressed_high_finding_ids": [],
+            "evidence": [
+              {
+                "artifact": "tasks",
+                "section": "Slice 5 \u2014 T23 step 4 and step 7",
+                "quote": "head_sha = subprocess.run([\"git\", \"rev-parse\", \"HEAD\"], cwd=REPO_ROOT, ...) ... Popen([codex_path, \"exec\", \"-m\", args.model, \"-s\", \"workspace-write\", prompt_text], cwd=REPO_ROOT, ...)"
+              },
+              {
+                "artifact": "tasks",
+                "section": "Slice 4 \u2014 T18",
+                "quote": "Decorate with `@mutates_state` from the existing decorator module."
+              },
+              {
+                "artifact": "spec",
+                "section": "Functional requirements \u2014 FR-019",
+                "quote": "`factory_deliver._resolve_branch_base()` MUST attempt branch-base resolution in this order: `git merge-base origin/main HEAD` \u2192 `git merge-base --fork-point origin/main HEAD` \u2192 `git merge-base main HEAD`."
+              },
+              {
+                "artifact": "plan",
+                "section": "Slice 1 \u2014 Banner rename + branch-base fallback",
+                "quote": "rewrite `_resolve_branch_base()` to try in order: `git merge-base origin/main HEAD` \u2192 `git merge-base main HEAD` \u2192 `git merge-base --fork-point origin/main HEAD` \u2192 return `None`."
+              }
+            ],
+            "timestamp": "2026-04-24T00:00:00Z"
+          }
+        ]
+      ],
+      "annotations": [
+        {
+          "stage": "tasks",
+          "round": 1,
+          "judge": "restatement",
+          "confidence": 5,
+          "reasoning": "First-round case applies because the comparison set says \"No prior findings yet.\" Restatement cannot be established without an earlier concern plus a substantive response, so the required verdict is proceed-with-annotation. I treat every latest finding as NEW baseline signal for future rounds. NEW `tasks.codex.dependency-order-adversarial.review#medium-1`: contradictory fallback precedence could let branch-base resolution prefer local `main` over `--fork-point`. NEW `#medium-2`: post-directory-creation failures can orphan `codex-dispatches/<id>` artifacts without a state record. NEW `#medium-3`: concurrent `update_state` appends can drop a dispatch record and poison freshness decisions. NEW `tasks.codex.execution-adversarial.review#medium-1`: cross-slice contradiction means implementation and tests cannot both encode the right `_resolve_branch_base()` order. NEW `#medium-2`: skip-path ownership is inconsistent and can double-print messages. NEW `#medium-3`: missing return-code enforcement on `git rev-parse HEAD` can write invalid `head_sha` into annotations. NEW `#medium-4`: recompute logic depends on an unverified constant location/source of truth. NEW `tasks.gemini.coverage-adversarial.review#high-1`: artifact directory/file write exceptions after `codex` runs can lose run artifacts and leave unclear state. NEW `#medium-2`: timeout exits without a durable state entry for the attempt. NEW `#medium-3`: malformed field types in dispatch history can misclassify successful runs as failures. NEW `#low-4`: shallow-clone fork-point behavior can degrade base selection accuracy. NEW `#low-5`: grep-based caller audit can miss aliased or dynamic callers. NEW `#low-6`: advance records `head_sha` without dirty-tree state, so the recorded commit may not match the user's actual worktree. Because there are no earlier rounds, none of these can be labeled RESTATEMENT yet; they establish the baseline for later comparison.",
+          "artifact_sha_at_time": "22da603154edfab0d185a7ccb107eb69cafb727802863801bbc829183f242102"
+        },
+        {
+          "stage": "tasks",
+          "round": 2,
+          "judge": "restatement",
+          "confidence": 5,
+          "reasoning": "First-round case applies because the prior-round record says \"No prior findings yet.\" That means none of the latest findings can be classified as RESTATEMENT; all are NEW baseline findings for later comparison. Classification by finding: tasks.codex.dependency-order-adversarial.review#medium-1 NEW: it surfaces an unpinned fallback-order failure mode where tests could allow preferring local main over --fork-point. tasks.codex.dependency-order-adversarial.review#medium-2 NEW: it surfaces orphaned dispatch directories when read_text, Popen, or update_state fail after directory creation. tasks.codex.dependency-order-adversarial.review#medium-3 NEW: it surfaces a concurrent update_state race that can drop dispatch records and poison freshness decisions. tasks.codex.execution-adversarial.review#medium-1 NEW: it surfaces an internal spec contradiction between T02 and T05 on branch-base fallback order. tasks.codex.execution-adversarial.review#medium-2 NEW: it surfaces a double-print skip-path failure mode caused by inconsistent ownership of the skip message between T03 and T09. tasks.codex.execution-adversarial.review#medium-3 NEW: it surfaces silent annotation corruption if git rev-parse HEAD fails and head_sha is empty or invalid. tasks.codex.execution-adversarial.review#medium-4 NEW: it surfaces an unverified dependency on _IMPLEMENTATION_RULE_CODE_GLOBS that could break the recompute diff path. tasks.gemini.coverage-adversarial.review#high-1 NEW: it surfaces unhandled filesystem exceptions during dispatch artifact creation/writes after codex has already run, risking lost artifacts and unclear state. tasks.gemini.coverage-adversarial.review#medium-2 NEW: it surfaces the missing durable state record for timed-out dispatches. tasks.gemini.coverage-adversarial.review#medium-3 NEW: it surfaces malformed record types causing false freshness-trigger behavior. tasks.gemini.coverage-adversarial.review#low-4 NEW: it surfaces shallow-clone fork-point behavior leading to stale local main as base. tasks.gemini.coverage-adversarial.review#low-5 NEW: it surfaces grep-based caller audits missing aliased or dynamic calls. tasks.gemini.coverage-adversarial.review#low-6 NEW: it surfaces advance recording HEAD without dirty-tree state, causing provenance confusion. Because there is no earlier round, this judge cannot call saturation or restatement; the correct verdict is proceed-with-annotation so these findings become the baseline for future rounds.",
+          "artifact_sha_at_time": "22da603154edfab0d185a7ccb107eb69cafb727802863801bbc829183f242102"
+        },
+        {
+          "stage": "tasks",
+          "round": 3,
+          "judge": "restatement",
+          "confidence": 5,
+          "reasoning": "First-round case applies because the record explicitly says \"No prior findings yet.\" With no earlier round and no orchestrator responses, none of the latest findings can be judged as RESTATEMENTs. I classify every latest finding as NEW for baseline-setting purposes. Specific uncovered failure modes are: tasks.codex.dependency-order-adversarial.review#medium-1 NEW: ambiguous test wording could permit the wrong branch-base fallback precedence; tasks.codex.dependency-order-adversarial.review#medium-2 NEW: failures after dispatch directory creation but before state append can orphan artifacts without a state record; tasks.codex.dependency-order-adversarial.review#medium-3 NEW: concurrent state appends can drop a dispatch record and mislead freshness checks; tasks.codex.execution-adversarial.review#medium-1 NEW: direct contradiction between specified and tested fallback order means implementation and tests cannot both be right; tasks.codex.execution-adversarial.review#medium-2 NEW: inconsistent skip-path ownership can cause duplicate skip messages; tasks.codex.execution-adversarial.review#medium-3 NEW: missing return-code enforcement on HEAD resolution can record invalid annotations state; tasks.codex.execution-adversarial.review#medium-4 NEW: freshness recompute depends on an unverified constant location/source of truth; tasks.gemini.coverage-adversarial.review#high-1 NEW: unhandled filesystem write/create exceptions after codex runs can lose artifacts and leave unclear state; tasks.gemini.coverage-adversarial.review#medium-2 NEW: timeout path lacks durable state history for the failed attempt; tasks.gemini.coverage-adversarial.review#medium-3 NEW: malformed dispatch record types can trigger incorrect freshness decisions; tasks.gemini.coverage-adversarial.review#low-4 NEW: shallow-clone fork-point behavior can degrade branch-base accuracy; tasks.gemini.coverage-adversarial.review#low-5 NEW: grep-based caller audit can miss aliased or dynamic call sites; tasks.gemini.coverage-adversarial.review#low-6 NEW: advance records commit SHA without dirty-tree context, causing operator confusion. Verdict is proceed-with-annotation, not block or proceed, because this round establishes the baseline for later restatement checks rather than showing saturation.",
+          "artifact_sha_at_time": "fe493f2233af69d766f32a89be1c05b4354710f37e00494c7fb528a99f04af8b"
+        }
+      ],
+      "unresolved_concerns": [
+        {
+          "id": "d58c6d762a05",
+          "stage": "tasks",
+          "judge": "completeness",
+          "model": "gpt-5.4-mini",
+          "confidence": 5,
+          "reasoning": "tasks.gemini.coverage-adversarial.review#high-1 is not addressed by name anywhere in the artifact chain. The closest text is spec R6 and plan Slice 5 T23, but those only discuss subprocess.Popen OSError/PermissionError on Codex invocation and the write-order tradeoff; they do not add a named mitigation or an explicit accepted-limitation statement for PermissionError/OSError from creating the dispatch directory or writing stdout.txt/stderr.txt after Codex has already run. Because this HIGH remains unaddressed, the gate stays BLOCK.",
+          "round_raised": 3,
+          "also_raised_in_round": [],
+          "addressed_at": 1777099355,
+          "addressed_by": "Spec R6 (a-e) explicitly addresses argv prompt visibility + OSError on dir-create + OSError on artifact-write; Slice 5 implementation in commit b3f8684b carries the artifacts-first ordering + structured exit code mapping.",
+          "deferred_reason": null,
+          "dismissed_reason": null
+        },
+        {
+          "id": "8c92e9d90adc",
+          "stage": "tasks",
+          "judge": "implementation-risk",
+          "model": "claude-opus-4-5",
+          "confidence": 4,
+          "reasoning": "Three load-bearing gaps would cause a competent implementer to stall or ship the wrong behavior. First, REPO_ROOT is used as a constant in every subprocess call and path construction across both new modules (factory_cmd_dispatch.py, factory_cmd_advance.py) but no artifact names which module defines it or how to import it. An implementer creating a new file from these artifacts alone cannot write a correct import line without grepping outside them. Second, @mutates_state is required by FR-006, FR-015, and three separate task items but is described only as coming from 'the existing decorator module' \u2014 the module is never named, so the import line is a guess. Third, the fallback order for _resolve_branch_base() directly contradicts between FR-019 ('origin/main \u2192 fork-point \u2192 main') and Plan Slice 1 prose ('origin/main \u2192 main \u2192 fork-point'). Tasks T02 agrees with FR-019 and explicitly explains the rationale for putting fork-point before local main, but an implementer who follows the Plan's Slice 1 description \u2014 which is the implementation guide \u2014 will code the wrong order. This is not aesthetic: choosing the wrong order defeats the stated purpose of Fix 5 on long-lived branches.",
+          "round_raised": 3,
+          "also_raised_in_round": [],
+          "addressed_at": 1777099355,
+          "addressed_by": "Tasks header pins import paths; Plan Slice 1 prose + FR-019 + T02 aligned on origin/main -> fork-point -> main; commit b3f8684b implements with these exact imports.",
+          "deferred_reason": null,
+          "dismissed_reason": null
+        }
+      ],
+      "adversarial_sha_history": [
+        "8b16978cd50f83b9d9bf393d15962d31b49f3e2c7c447b30081ba3a811f2a963",
+        "59bfc37fbe492ce3f19f0a915b22c585df047c9a99bede22e3557a8351dd195c",
+        "22da603154edfab0d185a7ccb107eb69cafb727802863801bbc829183f242102"
+      ],
+      "initial_sha": "8b16978cd50f83b9d9bf393d15962d31b49f3e2c7c447b30081ba3a811f2a963",
+      "judge_next_action": "advance"
+    },
+    "diff": {
+      "adversarial_rounds": 2,
+      "judge_rounds": 0,
+      "judge_verdicts": [],
+      "annotations": [
+        {
+          "type": "validation-only-reseal",
+          "old_sha": "40a8ee740e3163a7e582c1ef27dc2ab224d80df06a9431c3bea2d555d0589a0a",
+          "new_sha": "1fd8fe3c110259e8024f6fe7f3e9df85aea725433e5cb27c7d64a69b56527d41",
+          "at": 1777099852,
+          "files_updated": 3
+        }
+      ],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [
+        "5cd042c734fee7be7409bf9d3ca72236416f85cae57056ee1fbe43b381ff7020",
+        "a7f01c4ad2828a15156ec1ebb3a791efbdc0f1a52269940bd9763f64b33f75de",
+        "40a8ee740e3163a7e582c1ef27dc2ab224d80df06a9431c3bea2d555d0589a0a"
+      ],
+      "initial_sha": "5cd042c734fee7be7409bf9d3ca72236416f85cae57056ee1fbe43b381ff7020"
+    }
+  },
+  "invariant_warnings": [],
+  "schema_version": 2,
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  },
+  "spec_adversarial_rounds": 3,
+  "last_action_result": {
+    "next": "reconcile_reviews",
+    "reason": "diff checkpoint completed",
+    "blockers": []
+  },
+  "spec_judge_rounds": 2,
+  "plan_adversarial_rounds": 3,
+  "plan_judge_rounds": 1,
+  "tasks_adversarial_rounds": 3,
+  "tasks_judge_rounds": 3,
+  "diff_adversarial_rounds": 2,
+  "dirty_overrides": {
+    "allowed_dirty_paths": [
+      "docs/workflow/feature-runs/ff-codex-reintegration"
+    ],
+    "used": true,
+    "updated_at": 1777099660
+  },
+  "implementation_rule_override": {
+    "at": 1777099867,
+    "reason": "Self-fixing PR \u2014 Slice 5 builds the dispatch-codex subcommand itself; cannot dogfood it before it lands. All 5 slices were dispatched via 'codex exec' from the shell with explicit prompts at /tmp/codex-slice{1,2,3,4,5}-spec.txt; 5 commits 47fa..b3f8 attribute Codex via Co-Authored-By trailer. Future features will use the new dispatch-codex subcommand and populate codex_dispatches[] for the freshness check this PR ships.",
+    "operator": "chrislaw",
+    "head_sha": "6c6e4bf923909ca5e115791f67cffd3e0c210d82"
+  }
+}
