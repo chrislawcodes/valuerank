@@ -85,17 +85,25 @@ describe('get_unsummarized_transcripts MCP Tool [T021]', () => {
     return run;
   }
 
+  // Per-(run,scenario,model) sample-index counter so each transcript created
+  // by this helper occupies a distinct slot under the
+  // transcripts_live_slot_unique partial index.
+  const sampleIndexBySlot = new Map<string, number>();
   async function createTestTranscript(
     runId: string,
     modelId: string,
     scenarioId: string,
     options?: { summarized?: boolean; failed?: boolean }
   ) {
+    const slotKey = `${runId}|${scenarioId}|${modelId}`;
+    const sampleIndex = sampleIndexBySlot.get(slotKey) ?? 0;
+    sampleIndexBySlot.set(slotKey, sampleIndex + 1);
     const transcript = await db.transcript.create({
       data: {
         runId,
         modelId,
         scenarioId,
+        sampleIndex,
         content: { schema_version: 1, messages: [], model_response: 'test' },
         turnCount: 1,
         tokenCount: 100,

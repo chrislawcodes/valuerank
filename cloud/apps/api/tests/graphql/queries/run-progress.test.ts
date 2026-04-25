@@ -175,12 +175,18 @@ describe('Run progress GraphQL queries', () => {
       { modelId: 'anthropic:claude-3' },
     ];
 
+    // Per-model sampleIndex counter so transcripts in the same slot occupy
+    // distinct sampleIndex values under transcripts_live_slot_unique.
+    const sampleIndexByModel = new Map<string, number>();
     for (const transcriptData of transcripts) {
+      const sampleIndex = sampleIndexByModel.get(transcriptData.modelId) ?? 0;
+      sampleIndexByModel.set(transcriptData.modelId, sampleIndex + 1);
       const transcript = await db.transcript.create({
         data: {
           runId: run.id,
           scenarioId: createdScenarioIds[0]!,
           modelId: transcriptData.modelId,
+          sampleIndex,
           content: { schema_version: 1, messages: [], costSnapshot: { estimatedCost: 1 } },
           turnCount: 1,
           tokenCount: 100,
