@@ -181,7 +181,18 @@ builder.objectType(RunRef, {
       },
     }),
     batchCount: t.int({
-      description: 'Number of batches represented by this saved record',
+      // NOTE: This field returns 0 for aggregate runs and 1 otherwise -- a
+      // per-record indicator. It is NOT the same concept as
+      // `DomainValueCoverageCell.batchCount` (queries/domain-coverage-gql-types.ts),
+      // which counts only fully-complete non-aggregate runs. The two fields
+      // share a name but have different semantics; this field will be renamed
+      // in a follow-up to remove the collision. Web clients (RunCard.tsx)
+      // currently depend on the existing meaning.
+      description:
+        'Indicator: 1 if this run has its own transcript data, 0 if it is an ' +
+        'aggregate-only record. NOT the same as DomainValueCoverageCell.batchCount ' +
+        '(which counts complete runs). Field name is being deprecated; treat as ' +
+        'isOwnDataRecord.',
       resolve: (run) => {
         const config = run.config as RunConfig | null;
         return config?.isAggregate === true ? 0 : 1;

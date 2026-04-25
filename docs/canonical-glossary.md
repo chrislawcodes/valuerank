@@ -113,7 +113,7 @@ Avoid confusion:
 
 ### `Run`
 
-A run is a saved record of a model evaluation or launch. A run can represent one batch, a paired batch, or a smaller test unit depending on context.
+A run is a saved record of a model evaluation or launch. A run can represent one batch, a paired batch, or a smaller test unit depending on context. A run that is fully complete — every selected model has answered every planned condition at every sample index — is also a `Batch` (see below). A run that exists but is missing transcripts in any planned slot is an `Incomplete Batch`.
 
 Example:
 
@@ -160,20 +160,35 @@ Avoid confusion:
 
 ### `Batch`
 
-A batch is one complete pass where a model answers every planned condition for a vignette once.
+A batch is one complete run: every selected model has answered every planned condition for the vignette at every sample index. A run that is missing any expected transcript slot is an `Incomplete Batch` and does not contribute to batch counts.
 
 Example:
 
-- “Batch 1 means the model answered all 25 conditions in that vignette once.”
+- “Batch 1 means all 8 selected models answered every condition in that vignette.”
 
 Avoid confusion:
 
+- a batch is a whole run, not one model's pass through the run
 - a batch contains many trials
-- use `batch` for the full pass, not as another word for trial
+- `samplesPerScenario` controls how many trials each slot gets — it does not multiply the batch count
+- extra transcripts in a slot (worker retries, races) do not break completeness; only missing slots do
+
+### `Incomplete Batch`
+
+An incomplete batch is a run that expects transcripts but is missing one or more (model × scenario × sample-index) slots. Tracked separately as `incompleteBatchCount`. Does not contribute to `batchCount`.
+
+Example:
+
+- “This run shows up under Incomplete Batches because deepseek-reasoner failed on conditions 18 and 22.”
+
+Avoid confusion:
+
+- an incomplete batch is a real run with real (partial) data — not a launch failure
+- a run that has no expected transcripts (e.g., never started) is neither a batch nor an incomplete batch
 
 ### `Paired Batch`
 
-A paired batch is a set of two batches that use two vignettes in reverse order.
+A paired batch is a set of two batches that use two vignettes in reverse order. A paired batch counts as one when both companion runs are complete; if one companion is incomplete, the complete one is the survivor and the pair counts as one paired batch. If both companions are incomplete, the pair is treated as one incomplete batch.
 
 Example:
 
