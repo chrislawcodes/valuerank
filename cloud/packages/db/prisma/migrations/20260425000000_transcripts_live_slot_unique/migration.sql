@@ -10,18 +10,18 @@
 --   created_at >= '2026-04-10' -- the day the upstream race fix landed; rows
 --                                 before that timestamp may be legitimate
 --                                 historical duplicates retained as bonus
---                                 samples for analysis (~261 such slots
---                                 verified on prod).
+--                                 samples for analysis.
 --
--- Why no CONCURRENTLY: Prisma 5.7 runs migrations inside an implicit
--- transaction, and CREATE INDEX CONCURRENTLY cannot run in a transaction.
--- The partial set covered by this index is ~200k rows on production today
--- (well under the full transcripts table of ~440k), so a transactional
--- CREATE UNIQUE INDEX completes in a few seconds and only briefly blocks
--- writes. If the partial set grows materially (say, > 5M rows), revisit
--- this with `prisma db execute` or a Prisma 6+ non-transactional migration.
+-- This index was applied manually to production via CREATE INDEX CONCURRENTLY
+-- before this migration was merged, to avoid the brief write lock that an
+-- inline CREATE INDEX would impose. Prisma 5.7 wraps every migration in an
+-- implicit transaction, and CONCURRENTLY cannot run inside a transaction --
+-- so this migration uses IF NOT EXISTS as a tracking-only no-op on the
+-- production deploy. On test / dev databases that have not been pre-built,
+-- it falls through to a regular CREATE UNIQUE INDEX (acceptable: small data,
+-- not a hot table in those environments).
 
-CREATE UNIQUE INDEX "transcripts_live_slot_unique"
+CREATE UNIQUE INDEX IF NOT EXISTS "transcripts_live_slot_unique"
 ON "transcripts" ("run_id", "scenario_id", "model_id", "sample_index")
 WHERE "deleted_at" IS NULL
   AND "scenario_id" IS NOT NULL
