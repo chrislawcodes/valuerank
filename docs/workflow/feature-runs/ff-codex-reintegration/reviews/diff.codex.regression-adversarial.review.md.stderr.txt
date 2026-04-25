@@ -1,0 +1,70 @@
+Reading additional input from stdin...
+OpenAI Codex v0.125.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019dc360-88f0-74a2-9eb7-7612494abd24
+--------
+user
+Review this diff artifact using a regression-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: implementation.diff.patch
+diff --git a/docs/workflow/feature-runs/ff-codex-reintegration/state.json b/docs/workflow/feature-runs/ff-codex-reintegration/state.json
+index 61dca2e0..2c46a6b1 100644
+--- a/docs/workflow/feature-runs/ff-codex-reintegration/state.json
++++ b/docs/workflow/feature-runs/ff-codex-reintegration/state.json
+@@ -1912,8 +1912,8 @@
+           "reasoning": "tasks.gemini.coverage-adversarial.review#high-1 is not addressed by name anywhere in the artifact chain. The closest text is spec R6 and plan Slice 5 T23, but those only discuss subprocess.Popen OSError/PermissionError on Codex invocation and the write-order tradeoff; they do not add a named mitigation or an explicit accepted-limitation statement for PermissionError/OSError from creating the dispatch directory or writing stdout.txt/stderr.txt after Codex has already run. Because this HIGH remains unaddressed, the gate stays BLOCK.",
+           "round_raised": 3,
+           "also_raised_in_round": [],
+-          "addressed_at": null,
+-          "addressed_by": null,
++          "addressed_at": 1777099355,
++          "addressed_by": "Spec R6 (a-e) explicitly addresses argv prompt visibility + OSError on dir-create + OSError on artifact-write; Slice 5 implementation in commit b3f8684b carries the artifacts-first ordering + structured exit code mapping.",
+           "deferred_reason": null,
+           "dismissed_reason": null
+         },
+@@ -1926,8 +1926,8 @@
+           "reasoning": "Three load-bearing gaps would cause a competent implementer to stall or ship the wrong behavior. First, REPO_ROOT is used as a constant in every subprocess call and path construction across both new modules (factory_cmd_dispatch.py, factory_cmd_advance.py) but no artifact names which module defines it or how to import it. An implementer creating a new file from these artifacts alone cannot write a correct import line without grepping outside them. Second, @mutates_state is required by FR-006, FR-015, and three separate task items but is described only as coming from 'the existing decorator module' \u2014 the module is never named, so the import line is a guess. Third, the fallback order for _resolve_branch_base() directly contradicts between FR-019 ('origin/main \u2192 fork-point \u2192 main') and Plan Slice 1 prose ('origin/main \u2192 main \u2192 fork-point'). Tasks T02 agrees with FR-019 and explicitly explains the rationale for putting fork-point before local main, but an implementer who follows the Plan's Slice 1 description \u2014 which is the implementation guide \u2014 will code the wrong order. This is not aesthetic: choosing the wrong order defeats the stated purpose of Fix 5 on long-lived branches.",
+           "round_raised": 3,
+           "also_raised_in_round": [],
+-          "addressed_at": null,
+-          "addressed_by": null,
++          "addressed_at": 1777099355,
++          "addressed_by": "Tasks header pins import paths; Plan Slice 1 prose + FR-019 + T02 aligned on origin/main -> fork-point -> main; commit b3f8684b implements with these exact imports.",
+           "deferred_reason": null,
+           "dismissed_reason": null
+         }
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m checking the patch as a review artifact, not the underlying code. The main question is whether these state updates are justified by the evidence in the artifact chain or whether they risk clearing blockers too early.
+codex
+## Findings
+- **MEDIUM [UNVERIFIED]** The first blocker is marked addressed even though the original complaint was narrower than the new summary. The unresolved point was not just “error handling exists,” but an explicit mitigation or accepted-limitation statement for `PermissionError`/`OSError` around dispatch-directory creation and post-run artifact writes. The new `addressed_by` text names those error classes, but this patch does not prove the artifact chain now contains the required explicit statement. If this field feeds a gate, it can clear a still-underspecified failure path.
+- **MEDIUM [UNVERIFIED]** The second blocker is also marked addressed, but the patch does not remove the underlying ambiguity it describes. The existing reasoning says the plan prose conflicted on branch-base fallback order, and this diff only updates status metadata. That means a future reader can still hit the stale contradictory guidance even though the state now says the issue is resolved. If the resolution is used to unblock implementation, this can still steer someone into the wrong fallback order.
+
+## Residual Risks
+- This is a metadata-only change. It does not itself verify that the referenced spec, plan slice, or commit really contain the claimed fixes.
+- The unblock decision now depends on external artifacts remaining consistent. If any of those documents still disagree, the state file will overstate confidence.
+- I did not inspect the underlying implementation or the cited commit, so any claim that the functional bug is truly fixed remains unverified.
+2026-04-25T06:43:11.570701Z ERROR codex_core::session: failed to record rollout items: thread 019dc360-88f0-74a2-9eb7-7612494abd24 not found
+tokens used
+4,251

@@ -42,7 +42,6 @@
     "unresolved": []
   },
   "delivery": {},
-  "dirty_overrides": {},
   "checkpoint_fallback": {},
   "parallel_analysis": {
     "reviewed": true,
@@ -979,6 +978,54 @@
       "agent_id": null,
       "artifact_sha_at_time": "22da603154edfab0d185a7ccb107eb69cafb727802863801bbc829183f242102",
       "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T06:42:56.205467Z",
+      "started_at": "2026-04-25T06:42:40.218406Z",
+      "ended_at": "2026-04-25T06:42:56.205467Z",
+      "duration_seconds": 15.986774,
+      "agent_id": null,
+      "artifact_sha_at_time": "5cd042c734fee7be7409bf9d3ca72236416f85cae57056ee1fbe43b381ff7020",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T06:43:11.740457Z",
+      "started_at": "2026-04-25T06:42:56.380404Z",
+      "ended_at": "2026-04-25T06:43:11.740457Z",
+      "duration_seconds": 15.359764,
+      "agent_id": null,
+      "artifact_sha_at_time": "5cd042c734fee7be7409bf9d3ca72236416f85cae57056ee1fbe43b381ff7020",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-25T06:43:45.248854Z",
+      "started_at": "2026-04-25T06:43:11.894956Z",
+      "ended_at": "2026-04-25T06:43:45.248854Z",
+      "duration_seconds": 33.353454,
+      "agent_id": null,
+      "artifact_sha_at_time": "5cd042c734fee7be7409bf9d3ca72236416f85cae57056ee1fbe43b381ff7020",
+      "parse_error": "no Gemini token stats found in stdout"
     }
   ],
   "stages": {
@@ -1912,8 +1959,8 @@
           "reasoning": "tasks.gemini.coverage-adversarial.review#high-1 is not addressed by name anywhere in the artifact chain. The closest text is spec R6 and plan Slice 5 T23, but those only discuss subprocess.Popen OSError/PermissionError on Codex invocation and the write-order tradeoff; they do not add a named mitigation or an explicit accepted-limitation statement for PermissionError/OSError from creating the dispatch directory or writing stdout.txt/stderr.txt after Codex has already run. Because this HIGH remains unaddressed, the gate stays BLOCK.",
           "round_raised": 3,
           "also_raised_in_round": [],
-          "addressed_at": null,
-          "addressed_by": null,
+          "addressed_at": 1777099355,
+          "addressed_by": "Spec R6 (a-e) explicitly addresses argv prompt visibility + OSError on dir-create + OSError on artifact-write; Slice 5 implementation in commit b3f8684b carries the artifacts-first ordering + structured exit code mapping.",
           "deferred_reason": null,
           "dismissed_reason": null
         },
@@ -1926,8 +1973,8 @@
           "reasoning": "Three load-bearing gaps would cause a competent implementer to stall or ship the wrong behavior. First, REPO_ROOT is used as a constant in every subprocess call and path construction across both new modules (factory_cmd_dispatch.py, factory_cmd_advance.py) but no artifact names which module defines it or how to import it. An implementer creating a new file from these artifacts alone cannot write a correct import line without grepping outside them. Second, @mutates_state is required by FR-006, FR-015, and three separate task items but is described only as coming from 'the existing decorator module' \u2014 the module is never named, so the import line is a guess. Third, the fallback order for _resolve_branch_base() directly contradicts between FR-019 ('origin/main \u2192 fork-point \u2192 main') and Plan Slice 1 prose ('origin/main \u2192 main \u2192 fork-point'). Tasks T02 agrees with FR-019 and explicitly explains the rationale for putting fork-point before local main, but an implementer who follows the Plan's Slice 1 description \u2014 which is the implementation guide \u2014 will code the wrong order. This is not aesthetic: choosing the wrong order defeats the stated purpose of Fix 5 on long-lived branches.",
           "round_raised": 3,
           "also_raised_in_round": [],
-          "addressed_at": null,
-          "addressed_by": null,
+          "addressed_at": 1777099355,
+          "addressed_by": "Tasks header pins import paths; Plan Slice 1 prose + FR-019 + T02 aligned on origin/main -> fork-point -> main; commit b3f8684b implements with these exact imports.",
           "deferred_reason": null,
           "dismissed_reason": null
         }
@@ -1939,6 +1986,17 @@
       ],
       "initial_sha": "8b16978cd50f83b9d9bf393d15962d31b49f3e2c7c447b30081ba3a811f2a963",
       "judge_next_action": "advance"
+    },
+    "diff": {
+      "adversarial_rounds": 1,
+      "judge_rounds": 0,
+      "judge_verdicts": [],
+      "annotations": [],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [
+        "5cd042c734fee7be7409bf9d3ca72236416f85cae57056ee1fbe43b381ff7020"
+      ],
+      "initial_sha": "5cd042c734fee7be7409bf9d3ca72236416f85cae57056ee1fbe43b381ff7020"
     }
   },
   "invariant_warnings": [],
@@ -1950,21 +2008,15 @@
   },
   "spec_adversarial_rounds": 3,
   "last_action_result": {
-    "next": "dispatch_next_slice_to_codex",
-    "reason": "judge panel exhausted; advancing with unresolved concerns",
-    "blockers": [
-      "tasks.gemini.coverage-adversarial.review#high-1 is not addressed by name anywhere in the artifact chain. The closest text is spec R6 and plan Slice 5 T23, but those only discuss subprocess.Popen OSError/PermissionError on Codex invocation and the write-order tradeoff; they do not add a named mitigation or an explicit accepted-limitation statement for PermissionError/OSError from creating the dispatch directory or writing stdout.txt/stderr.txt after Codex has already run. Because this HIGH remains unaddressed, the gate stays BLOCK.",
-      "Three load-bearing gaps would cause a competent implementer to stall or ship the wrong behavior. First, REPO_ROOT is used as a constant in every subprocess call and path construction across both new modules (factory_cmd_dispatch.py, factory_cmd_advance.py) but no artifact names which module defines it or how to import it. An implementer creating a new file from these artifacts alone cannot write a correct import line without grepping outside them. Second, @mutates_state is required by FR-006, FR-015, and three separate task items but is described only as coming from 'the existing decorator module' \u2014 the module is never named, so the import line is a guess. Third, the fallback order for _resolve_branch_base() directly contradicts between FR-019 ('origin/main \u2192 fork-point \u2192 main') and Plan Slice 1 prose ('origin/main \u2192 main \u2192 fork-point'). Tasks T02 agrees with FR-019 and explicitly explains the rationale for putting fork-point before local main, but an implementer who follows the Plan's Slice 1 description \u2014 which is the implementation guide \u2014 will code the wrong order. This is not aesthetic: choosing the wrong order defeats the stated purpose of Fix 5 on long-lived branches."
-    ],
-    "outcome": "advance",
-    "proceed_count": 1,
-    "block_count": 2,
-    "timestamp": "2026-04-25T06:10:58.684615Z",
-    "judge_round": 3
+    "next": "reconcile_reviews",
+    "reason": "diff checkpoint completed",
+    "blockers": []
   },
   "spec_judge_rounds": 2,
   "plan_adversarial_rounds": 3,
   "plan_judge_rounds": 1,
   "tasks_adversarial_rounds": 3,
-  "tasks_judge_rounds": 3
+  "tasks_judge_rounds": 3,
+  "diff_adversarial_rounds": 1,
+  "dirty_overrides": {}
 }

@@ -14,7 +14,7 @@ Five narrow runner improvements that together restore "Codex implements, Claude 
 2. **Freshness-bound suppression in `check_implementation_rule`** — the implementation-rule WARN suppresses only when a dispatch is an ancestor of HEAD AND its line count is within 50 of current. Stale or unrelated dispatches no longer suppress.
 3. **`advance` subcommand** (Fix 3 from `feature-factory-runner-fixes.md`) — manual escape hatch that sets `judge_next_action="advance"` with a recorded reason, for the rare case where the runner gets wedged on manifest drift after the 3-round adversarial cap.
 4. **Banner rename `repair_X_checkpoint` → `run_X_checkpoint`** (Fix 4 from `feature-factory-runner-fixes.md`) — pure string change. The word "repair" reads as "something broke"; "run" matches what the command actually does on the happy path.
-5. **Better branch-base fallback for the implementation-rule check** — replace `HEAD~50` (silently under-reports on long-lived branches) with `git merge-base --fork-point origin/main HEAD`, then skip the check entirely with a printed note if even that fails. Honest skip beats silent under-report.
+5. **Better branch-base fallback for the implementation-rule check** — replace the `HEAD~50` fallback (silently under-reports on long-lived branches) with a chain `origin/main` → `git merge-base --fork-point origin/main HEAD` → local `main`, then skip the check entirely with a printed note if all three fail. Honest skip beats silent under-report. (Authoritative order: FR-019.)
 
 None of these changes are user-facing in the product; all of them are runner-facing for the FF workflow.
 
@@ -61,8 +61,8 @@ PR #751's `_resolve_branch_base()` falls back to `HEAD~50` when `origin/main` an
 
 The fix: new fallback chain:
 1. `git merge-base origin/main HEAD`
-2. `git merge-base main HEAD`
-3. `git merge-base --fork-point origin/main HEAD` (correct branch-point even on long-lived branches)
+2. `git merge-base --fork-point origin/main HEAD` (correct branch-point even on long-lived branches; ahead of local `main` because the local branch may have diverged from `origin/main` — see FR-019 / R6)
+3. `git merge-base main HEAD` (last resort)
 4. Return `None` and **skip the check entirely** with a printed stderr note: `implementation-rule check skipped — could not resolve branch base (origin/main, main, fork-point all failed)`.
 
 Honest skip is better than a silent under-report.
@@ -162,12 +162,12 @@ Honest skip is better than a silent under-report.
 
 **Why P2**: real correctness hole, but only manifests on long-lived branches. Most feature branches are short.
 
-**Independent test**: mock `subprocess.run` to fail on `merge-base origin/main`, fail on `merge-base main`, succeed on `merge-base --fork-point origin/main` → assert that fork-point sha is used. Then mock all three to fail → assert `_resolve_branch_base()` returns `None` AND `check_implementation_rule` prints the skip message and returns `("skipped", message)` per FR-009a (distinct status from `"ok"`/`"triggered"`/`"suppressed"`).
+**Independent test**: mock `subprocess.run` to fail on `merge-base origin/main`, succeed on `merge-base --fork-point origin/main` → assert that fork-point sha is used (per FR-019 chain order). Mock fork-point to also fail, succeed on `merge-base main` → assert that local `main` sha is used. Then mock all three to fail → assert `_resolve_branch_base()` returns `None` AND `check_implementation_rule` prints the skip message and returns `("skipped", message)` per FR-009a (distinct status from `"ok"`/`"triggered"`/`"suppressed"`).
 
 **Acceptance scenarios**:
 
 1. **Given** `origin/main` exists and `merge-base` succeeds, **when** `_resolve_branch_base()` runs, **then** the merge-base SHA is returned (existing behavior).
-2. **Given** `origin/main` and `main` both fail to resolve a merge-base, **when** `_resolve_branch_base()` runs, **then** `git merge-base --fork-point origin/main HEAD` is tried.
+2. **Given** `origin/main` fails to resolve a merge-base, **when** `_resolve_branch_base()` runs, **then** `git merge-base --fork-point origin/main HEAD` is tried (per FR-019 chain). If fork-point also fails, `git merge-base main HEAD` is the final attempt before returning `None`.
 3. **Given** all three fallbacks fail, **when** `_resolve_branch_base()` runs, **then** it returns `None` AND `check_implementation_rule` prints the skip stderr message AND returns `("skipped", message)` (not `"triggered"`, not `"ok"`).
 
 ## Functional requirements

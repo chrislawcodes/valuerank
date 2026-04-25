@@ -1,0 +1,8 @@
+## Findings
+- **MEDIUM [UNVERIFIED]** The first blocker is marked addressed even though the original complaint was narrower than the new summary. The unresolved point was not just “error handling exists,” but an explicit mitigation or accepted-limitation statement for `PermissionError`/`OSError` around dispatch-directory creation and post-run artifact writes. The new `addressed_by` text names those error classes, but this patch does not prove the artifact chain now contains the required explicit statement. If this field feeds a gate, it can clear a still-underspecified failure path.
+- **MEDIUM [UNVERIFIED]** The second blocker is also marked addressed, but the patch does not remove the underlying ambiguity it describes. The existing reasoning says the plan prose conflicted on branch-base fallback order, and this diff only updates status metadata. That means a future reader can still hit the stale contradictory guidance even though the state now says the issue is resolved. If the resolution is used to unblock implementation, this can still steer someone into the wrong fallback order.
+
+## Residual Risks
+- This is a metadata-only change. It does not itself verify that the referenced spec, plan slice, or commit really contain the claimed fixes.
+- The unblock decision now depends on external artifacts remaining consistent. If any of those documents still disagree, the state file will overstate confidence.
+- I did not inspect the underlying implementation or the cited commit, so any claim that the functional bug is truly fixed remains unverified.
