@@ -2,7 +2,8 @@
 """Path helpers, atomic I/O primitives, state constants, and workflow state
 management for the feature factory.
 
-No subprocess calls.  All I/O is file-based JSON read/write.
+All core I/O is file-based JSON read/write.  A small git ancestor helper is
+also exposed for implementation-rule freshness checks.
 Every public symbol is safe to import in tests without side effects.
 """
 import json
@@ -10,6 +11,7 @@ from contextlib import contextmanager
 import fcntl
 import errno
 import os
+import subprocess
 import tempfile
 import time
 from pathlib import Path
@@ -114,6 +116,27 @@ def normalized_repo_path(raw: str, field_name: str) -> str:
     except ValueError as exc:
         raise SystemExit(f"Invalid {field_name}: {raw!r}") from exc
     return str(relative)
+
+
+def is_ancestor_of_head(sha: str | None) -> bool:
+    """True iff `sha` is an ancestor of HEAD via `git merge-base --is-ancestor`.
+
+    Returns False on any subprocess exception (malformed SHA, missing object,
+    git not on PATH, timeout, etc.) — never raises.
+    """
+    if not sha or not isinstance(sha, str):
+        return False
+    try:
+        result = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", sha, "HEAD"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            timeout=60,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired,
+            FileNotFoundError, OSError):
+        return False
+    return result.returncode == 0
 
 
 def workflow_dir(slug: str) -> Path:

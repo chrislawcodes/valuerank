@@ -17,6 +17,7 @@ from factory_state import (  # noqa: E402
     REPO_ROOT,
     load_checkpoint_manifest,
     load_workflow_state,
+    is_ancestor_of_head,
     update_workflow_state,
 )
 
@@ -102,6 +103,50 @@ def _added_code_lines(branch_base: str) -> int | None:
     return total_added
 
 
+def _recompute_lines_for_dispatch(
+    entry: dict, current_branch_base: str | None
+) -> int | None:
+    """Recompute lines_added for a dispatch entry against the current branch base.
+
+    Used when entry.branch_base_sha differs from current_branch_base, OR when
+    entry.lines_added_at_dispatch_time is None (recovery from a transient base
+    failure at dispatch time).
+
+    Returns None on any subprocess exception (malformed SHA, missing object,
+    git not on PATH, timeout) — never raises.
+    """
+    head_sha = entry.get("head_sha")
+    if not head_sha or not isinstance(head_sha, str) or not current_branch_base:
+        return None
+    cmd = [
+        "git", "diff", "--numstat",
+        f"{current_branch_base}..{head_sha}",
+        "--",
+        *_IMPLEMENTATION_RULE_CODE_GLOBS,
+        *_IMPLEMENTATION_RULE_TEST_EXCLUDES,
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired,
+            FileNotFoundError, OSError):
+        return None
+    if result.returncode != 0:
+        return None
+    total_added = 0
+    for line in result.stdout.splitlines():
+        parts = line.split("\t")
+        if len(parts) < 2:
+            continue
+        added_str = parts[0]
+        if added_str == "-":
+            continue
+        try:
+            total_added += int(added_str)
+        except ValueError:
+            continue
+    return total_added
+
+
 def check_implementation_rule(slug: str) -> tuple[Literal["triggered", "suppressed", "skipped", "ok"], str]:
     """Return (status, message). See spec FR-012-016."""
     branch_base = _resolve_branch_base()
@@ -121,11 +166,38 @@ def check_implementation_rule(slug: str) -> tuple[Literal["triggered", "suppress
         return ("ok", "")
 
     state = load_workflow_state(slug)
-    if state.get("codex_dispatches"):
-        return (
-            "suppressed",
-            "implementation-rule check skipped — codex_dispatches[] is non-empty (freshness check lands in Slice 3)",
+    dispatches = state.get("codex_dispatches") or []
+    fresh_entries: list[tuple[dict, int]] = []
+    for entry in dispatches:
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("exit_code") != 0:
+            continue
+        if not is_ancestor_of_head(entry.get("head_sha")):
+            continue
+        entry_base = entry.get("branch_base_sha")
+        entry_lines = entry.get("lines_added_at_dispatch_time")
+        if entry_base == branch_base and isinstance(entry_lines, int):
+            snapshot = entry_lines
+        else:
+            snapshot = _recompute_lines_for_dispatch(entry, branch_base)
+        if snapshot is None:
+            continue
+        if abs(added - snapshot) > 50:
+            continue
+        fresh_entries.append((entry, snapshot))
+
+    if fresh_entries:
+        best_entry, best_snapshot = max(
+            fresh_entries,
+            key=lambda pair: pair[0].get("ts") or "",
         )
+        head_short = (best_entry.get("head_sha") or "")[:7]
+        note = (
+            f"implementation-rule check skipped — covered by codex dispatch "
+            f"{best_entry.get('ts')} (sha {head_short}, +{best_snapshot})"
+        )
+        return ("suppressed", note)
 
     head_result = subprocess.run(
         ["git", "rev-parse", "HEAD"], capture_output=True, text=True
