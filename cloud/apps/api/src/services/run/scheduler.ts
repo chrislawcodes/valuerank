@@ -172,7 +172,31 @@ async function hasRecoveryActivity(): Promise<boolean> {
     LIMIT 1
   `;
 
-  return orphanBacklog.length > 0;
+  if (orphanBacklog.length > 0) {
+    return true;
+  }
+
+  // Wake on lingering open anomalies even when transcript state is clean.
+  // The reconciler clears stale default-source anomalies via
+  // syncAnomalies(..., [], 'default'), but only when it actually runs. Without
+  // this check, an idle system can't auto-resolve anomalies that have already
+  // self-cleared underneath, leaving rows in run_anomalies forever.
+  const staleAnomaly = await db.runAnomaly.findFirst({
+    where: {
+      resolvedAt: null,
+      source: 'default',
+      run: {
+        deletedAt: null,
+        status: 'COMPLETED',
+        updatedAt: {
+          gt: new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000),
+        },
+      },
+    },
+    select: { id: true },
+  });
+
+  return staleAnomaly !== null;
 }
 
 export async function enqueueRunStateReconcileJobs(): Promise<number> {
