@@ -137,12 +137,12 @@ builder.queryField('domainValueCoverage', (t) =>
         id: string;
         definitionId: string;
         config: unknown;
-        transcripts: Array<{ modelId: string }>;
+        transcripts: Array<{ modelId: string; scenarioId: string | null; sampleIndex: number }>;
       }>>();
       // Non-aggregate runs per definition (for per-model trial count computation)
       const nonAggregateRunsByDefinitionId = new Map<string, Array<{
         config: unknown;
-        transcripts: Array<{ modelId: string }>;
+        transcripts: Array<{ modelId: string; scenarioId: string | null; sampleIndex: number }>;
       }>>();
 
       if (definitionIds.length > 0) {
@@ -159,7 +159,7 @@ builder.queryField('domainValueCoverage', (t) =>
             config: true,
             transcripts: {
               where: { deletedAt: null },
-              select: { modelId: true },
+              select: { modelId: true, scenarioId: true, sampleIndex: true },
             },
             _count: {
               select: { scenarioSelections: true },
@@ -184,19 +184,27 @@ builder.queryField('domainValueCoverage', (t) =>
             continue;
           }
 
-          // Completeness check: flag if actual transcript count < expected.
-          // Expected = scenarioSelections × models.length × samplesPerScenario.
+          // Completeness check: flag if any expected slot is missing a transcript.
+          // Expected slots = scenarioSelections × models.length × samplesPerScenario.
+          // We compare against distinct (scenarioId, modelId, sampleIndex) tuples
+          // -- not the raw row count -- so duplicate transcripts (worker retries
+          // / races) can never mask a missing slot.
           const samplesPerScenario =
             (run.config as { samplesPerScenario?: unknown } | null)?.samplesPerScenario;
           const configModels = (run.config as { models?: unknown } | null)?.models;
           const modelCount = Array.isArray(configModels) ? configModels.length : 0;
           const expectedCount =
             run._count.scenarioSelections * modelCount * getCoverageBatchIncrement(samplesPerScenario);
-          if (modelCount > 0 && run.transcripts.length < expectedCount) {
-            incompleteBatchCountByDefinitionId.set(
-              run.definitionId,
-              (incompleteBatchCountByDefinitionId.get(run.definitionId) ?? 0) + 1,
+          if (modelCount > 0) {
+            const distinctSlots = new Set(
+              run.transcripts.map((t) => `${t.scenarioId ?? ''}|${t.modelId}|${t.sampleIndex}`),
             );
+            if (distinctSlots.size < expectedCount) {
+              incompleteBatchCountByDefinitionId.set(
+                run.definitionId,
+                (incompleteBatchCountByDefinitionId.get(run.definitionId) ?? 0) + 1,
+              );
+            }
           }
 
           // Track non-aggregate runs for per-model trial count computation
