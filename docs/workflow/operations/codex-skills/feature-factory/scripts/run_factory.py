@@ -83,6 +83,7 @@ from factory_next_action import recommended_next_action  # noqa: E402
 from factory_cmd_checkpoint import command_checkpoint  # noqa: E402
 from factory_cmd_discover import command_discover  # noqa: E402
 from factory_cmd_advance import command_advance  # noqa: E402
+from factory_cmd_dispatch import command_dispatch_codex  # noqa: E402
 from factory_deliver import (  # noqa: E402
     compose_closeout_text,
     current_pr_payload,
@@ -392,6 +393,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     advance_parser.add_argument("--reason", required=True)
     advance_parser.set_defaults(func=command_advance)
+
+    dispatch_parser = subparsers.add_parser("dispatch-codex")
+    dispatch_parser.add_argument("--slug", required=True)
+    dispatch_parser.add_argument("--prompt-path", required=True)
+    dispatch_parser.add_argument("--model", default="gpt-5.4-mini")
+    dispatch_parser.set_defaults(func=command_dispatch_codex)
 
     judge_parser = subparsers.add_parser("judge")
     judge_parser.add_argument("--slug", required=True)

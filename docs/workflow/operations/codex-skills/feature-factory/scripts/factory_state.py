@@ -491,6 +491,11 @@ def update_workflow_state(slug: str, mutate) -> dict:
     return state
 
 
+# Slice 5 dispatch command uses the shorter legacy name expected by the task
+# notes. Keep it as a direct alias so both names share the same atomic helper.
+update_state = update_workflow_state
+
+
 def update_stage_state(slug: str, stage: str, updates: dict) -> dict:
     """Update nested stage state and mirror legacy top-level counters."""
     with with_locked_state(slug) as state:

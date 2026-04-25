@@ -162,7 +162,7 @@ def check_implementation_rule(slug: str) -> tuple[Literal["triggered", "suppress
         message = "implementation-rule check skipped: git diff failed."
         print(message, file=sys.stderr)
         return ("skipped", message)
-    if added <= _IMPLEMENTATION_RULE_THRESHOLD:
+    if added < _IMPLEMENTATION_RULE_THRESHOLD:
         return ("ok", "")
 
     state = load_workflow_state(slug)
