@@ -85,15 +85,15 @@ class AdvanceSubcommandTests(unittest.TestCase):
         return rc, stdout.getvalue(), stderr.getvalue()
 
     def test_happy_path_records_stage_and_annotation(self) -> None:
-        rc, stdout, stderr = self._run_command("a meaningful reason for advance")
+        rc, stdout, stderr = self._run_command("a meaningful reason for advance", stage="diff")
 
         self.assertEqual(rc, 0)
         self.assertEqual(stderr, "")
-        self.assertIn("[workflow] ✓ advance (spec)", stdout)
+        self.assertIn("[workflow] ✓ advance (diff)", stdout)
         state = self._read_state()
-        self.assertEqual(state["stages"]["spec"]["judge_next_action"], "advance")
+        self.assertEqual(state["stages"]["diff"]["judge_next_action"], "advance")
         self.assertEqual(state["annotations"][-1], {
-            "stage": "spec",
+            "stage": "diff",
             "ts": FIXED_TS,
             "reason": "a meaningful reason for advance",
             "head_sha": FIXED_SHA,
@@ -153,6 +153,33 @@ class AdvanceSubcommandTests(unittest.TestCase):
 
         self.assertEqual(ctx.exception.code, 2)
         self.assertEqual(before, self._read_state())
+
+    def test_advance_rejects_implementation_stage(self) -> None:
+        before = self._read_state()
+        with self.assertRaises(SystemExit) as ctx:
+            with contextlib.redirect_stderr(io.StringIO()):
+                self._parser().parse_args([
+                    "advance",
+                    "--slug",
+                    SLUG,
+                    "--stage",
+                    "implementation",
+                    "--reason",
+                    "a meaningful reason for advance",
+                ])
+
+        self.assertEqual(ctx.exception.code, 2)
+        self.assertEqual(before, self._read_state())
+
+    def test_advance_argparse_choices_explicit(self) -> None:
+        parser = self._parser()
+        subparsers_action = next(
+            action for action in parser._actions if isinstance(action, argparse._SubParsersAction)
+        )
+        advance_parser = subparsers_action.choices["advance"]
+        stage_action = next(action for action in advance_parser._actions if getattr(action, "dest", None) == "stage")
+        self.assertIn("diff", stage_action.choices)
+        self.assertNotIn("implementation", stage_action.choices)
 
     def test_whitespace_trimmed_reason_below_minimum_rejects(self) -> None:
         before = self._read_state()

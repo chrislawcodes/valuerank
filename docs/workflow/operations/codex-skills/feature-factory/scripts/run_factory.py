@@ -389,7 +389,7 @@ def build_parser() -> argparse.ArgumentParser:
     advance_parser.add_argument(
         "--stage",
         required=True,
-        choices=["spec", "plan", "tasks", "implementation"],
+        choices=["spec", "plan", "tasks", "diff"],
     )
     advance_parser.add_argument("--reason", required=True)
     advance_parser.set_defaults(func=command_advance)

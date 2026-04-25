@@ -228,7 +228,7 @@ class DispatchCodexTests(unittest.TestCase):
         self.assertEqual(rc, 4)
         self.assertEqual(stdout, "")
         self.assertIn("Codex quota exhausted", stderr)
-        run_mock.assert_called_once()
+        run_mock.assert_not_called()
         popen_mock.assert_called_once()
         update_state_mock.assert_not_called()
         dispatch_root = self._dispatch_root()
