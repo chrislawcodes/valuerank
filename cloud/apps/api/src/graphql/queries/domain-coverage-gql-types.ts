@@ -22,6 +22,7 @@ export type DomainValueCoverageCell = {
   valueB: string;
   batchCount: number;
   pairedBatchCount: number;
+  orphanedBatchCount: number;
   /** Number of non-aggregate runs whose transcript count is less than expected. */
   incompleteBatchCount: number;
   definitionId: string | null;
@@ -89,6 +90,14 @@ const DomainValueCoverageCellRef = builder
           'contributes 0 here (the surviving complete run still appears in batchCount). ' +
           'Runs without a recognizable direction token are excluded from both sides. ' +
           'See docs/canonical-glossary.md "Paired Batch" for full semantic.',
+      }),
+      orphanedBatchCount: t.exposeInt('orphanedBatchCount', {
+        description:
+          'Count of unmatched directional runs for this value pair, computed as ' +
+          'max(complete A-first runs, complete B-first runs) - ' +
+          'min(complete A-first runs, complete B-first runs). When both directions ' +
+          'are equal this is 0; when only one direction has runs this is the count ' +
+          'of that side. Runs without a recognizable direction token are excluded.',
       }),
       incompleteBatchCount: t.exposeInt('incompleteBatchCount', {
         description:

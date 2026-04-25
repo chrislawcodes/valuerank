@@ -418,10 +418,11 @@ describe('selectPrimaryDefinitionCounts', () => {
       primaryDefinitionId: null,
       batchCount: 0,
       pairedBatchCount: 0,
+      orphanedBatchCount: 0,
     });
   });
 
-  it('single direction only -> pairedBatchCount = 0', () => {
+  it('single direction only -> pairedBatchCount = 0, orphanedBatchCount = N', () => {
     const batches = new Map([['def-a', 1]]);
     const dirs = makeDirMap([[
       'def-a', new Map([['vf-A', new Set(['g1'])]]),
@@ -430,10 +431,11 @@ describe('selectPrimaryDefinitionCounts', () => {
       primaryDefinitionId: 'def-a',
       batchCount: 1,
       pairedBatchCount: 0,
+      orphanedBatchCount: 1,
     });
   });
 
-  it('both directions equal -> pairedBatchCount = min(N, N)', () => {
+  it('both directions equal -> pairedBatchCount = min(N, N), orphanedBatchCount = 0', () => {
     const batches = new Map([['def-a', 4]]);
     const dirs = makeDirMap([[
       'def-a', new Map([
@@ -445,10 +447,11 @@ describe('selectPrimaryDefinitionCounts', () => {
       primaryDefinitionId: 'def-a',
       batchCount: 4,
       pairedBatchCount: 2,
+      orphanedBatchCount: 0,
     });
   });
 
-  it('both directions, A=3 B=2 -> pairedBatchCount = min(3, 2) = 2', () => {
+  it('both directions, A=3 B=2 -> pairedBatchCount = min(3, 2) = 2, orphanedBatchCount = 1', () => {
     const batches = new Map([['def-a', 5]]);
     const dirs = makeDirMap([[
       'def-a', new Map([
@@ -460,6 +463,7 @@ describe('selectPrimaryDefinitionCounts', () => {
       primaryDefinitionId: 'def-a',
       batchCount: 5,
       pairedBatchCount: 2,
+      orphanedBatchCount: 1,
     });
   });
 
@@ -491,6 +495,7 @@ describe('selectPrimaryDefinitionCounts', () => {
       primaryDefinitionId: 'def-a',
       batchCount: 2,
       pairedBatchCount: 0, // Only one direction
+      orphanedBatchCount: 1, // single-direction Set has size 1
     });
   });
 
@@ -576,6 +581,80 @@ describe('selectPrimaryDefinitionCounts', () => {
     expect(() =>
       selectPrimaryDefinitionCounts(['def-a'], batches, dirs),
     ).not.toThrow();
+  });
+
+  describe('orphanedBatchCount', () => {
+    it('symmetric pair (A=B) -> orphanedBatchCount = 0', () => {
+      const batches = new Map([['def-a', 6]]);
+      const dirs = makeDirMap([[
+        'def-a', new Map([
+          ['vf-A', new Set(['g1', 'g2', 'g3'])],
+          ['vf-B', new Set(['g1', 'g2', 'g3'])],
+        ]),
+      ]]);
+      const result = selectPrimaryDefinitionCounts(['def-a'], batches, dirs);
+      expect(result.pairedBatchCount).toBe(3);
+      expect(result.orphanedBatchCount).toBe(0);
+    });
+
+    it('asymmetric pair (A=4, B=1) -> orphanedBatchCount = abs difference', () => {
+      const batches = new Map([['def-a', 5]]);
+      const dirs = makeDirMap([[
+        'def-a', new Map([
+          ['vf-A', new Set(['g1', 'g2', 'g3', 'g4'])],
+          ['vf-B', new Set(['g1'])],
+        ]),
+      ]]);
+      const result = selectPrimaryDefinitionCounts(['def-a'], batches, dirs);
+      expect(result.pairedBatchCount).toBe(1);
+      expect(result.orphanedBatchCount).toBe(3); // 4 - 1
+    });
+
+    it('fully missing side (only A-first present) -> orphanedBatchCount = count of present side', () => {
+      const batches = new Map([['def-a', 3]]);
+      const dirs = makeDirMap([[
+        'def-a', new Map([
+          ['vf-A', new Set(['g1', 'g2', 'g3'])],
+        ]),
+      ]]);
+      const result = selectPrimaryDefinitionCounts(['def-a'], batches, dirs);
+      expect(result.pairedBatchCount).toBe(0);
+      expect(result.orphanedBatchCount).toBe(3);
+    });
+
+    it('no directions at all -> orphanedBatchCount = 0', () => {
+      const batches = new Map([['def-a', 2]]);
+      const dirs = makeDirMap([['def-a', new Map()]]);
+      const result = selectPrimaryDefinitionCounts(['def-a'], batches, dirs);
+      expect(result.pairedBatchCount).toBe(0);
+      expect(result.orphanedBatchCount).toBe(0);
+    });
+
+    it('cross-definition asymmetric (def-a A-first only, def-b B-first only) -> orphanedBatchCount reflects merged sets', () => {
+      const batches = new Map([['def-a', 3], ['def-b', 1]]);
+      const dirs = makeDirMap([
+        ['def-a', new Map([['vf-A', new Set(['g1', 'g2', 'g3'])]])],
+        ['def-b', new Map([['vf-B', new Set(['g1'])]])],
+      ]);
+      const result = selectPrimaryDefinitionCounts(['def-a', 'def-b'], batches, dirs);
+      expect(result.pairedBatchCount).toBe(1);
+      expect(result.orphanedBatchCount).toBe(2); // 3 - 1
+    });
+
+    it('>2 directions corruption: orphanedBatchCount uses max - min of two largest counts', () => {
+      const batches = new Map([['def-a', 5]]);
+      const dirs = makeDirMap([[
+        'def-a', new Map([
+          ['vf-A', new Set(['g1', 'g2', 'g3'])], // 3
+          ['vf-B', new Set(['g1'])],              // 1
+          ['vf-X', new Set(['g4'])],              // 1
+        ]),
+      ]]);
+      const result = selectPrimaryDefinitionCounts(['def-a'], batches, dirs);
+      // Two largest: 3, 1 -> paired = min = 1, orphaned = 3 - 1 = 2
+      expect(result.pairedBatchCount).toBe(1);
+      expect(result.orphanedBatchCount).toBe(2);
+    });
   });
 });
 

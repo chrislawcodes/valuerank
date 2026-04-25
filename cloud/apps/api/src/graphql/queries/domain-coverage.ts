@@ -353,6 +353,7 @@ builder.queryField('domainValueCoverage', (t) =>
               valueB,
               batchCount: 0,
               pairedBatchCount: 0,
+              orphanedBatchCount: 0,
               incompleteBatchCount: 0,
               definitionId: null,
               definitionName: null,
@@ -364,7 +365,7 @@ builder.queryField('domainValueCoverage', (t) =>
           } else {
             // Use the total counts across all definitions for the visible cell, but
             // still choose one stable definition for the analysis link target.
-            const { primaryDefinitionId, batchCount, pairedBatchCount } = selectPrimaryDefinitionCounts(
+            const { primaryDefinitionId, batchCount, pairedBatchCount, orphanedBatchCount } = selectPrimaryDefinitionCounts(
               defIdsForPair,
               batchCountByDefinitionId,
               directionalGroupsByDefinitionId,
@@ -427,6 +428,7 @@ builder.queryField('domainValueCoverage', (t) =>
               valueB,
               batchCount,
               pairedBatchCount,
+              orphanedBatchCount,
               incompleteBatchCount,
               definitionId: primaryDefId !== '' ? primaryDefId : null,
               definitionName: primaryPair?.name ?? null,

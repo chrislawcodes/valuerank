@@ -180,6 +180,11 @@ export function getCoverageDirection(runConfig: unknown): string | null {
  * appear in the merged map (data corruption), takes min of the two
  * largest counts and emits a warning via `log.warn` (if provided).
  *
+ * Computes `orphanedBatchCount = max - min` of the same two directional
+ * counts used for `pairedBatchCount`. When only one direction is present,
+ * the other side is treated as 0 and orphanedBatchCount equals the count
+ * of the present side.
+ *
  * Tie-break for `primaryDefinitionId`: `(batchCount desc, directionCount desc, defId asc)`
  * where `directionCount = directionalGroupsByDefinitionId.get(defId)?.size ?? 0`.
  */
@@ -189,10 +194,10 @@ export function selectPrimaryDefinitionCounts(
   directionalGroupsByDefinitionId: ReadonlyMap<string, ReadonlyMap<string, ReadonlySet<string>>>,
   log?: { warn: (obj: object, msg: string) => void },
   cellKey?: string,
-): { primaryDefinitionId: string | null; batchCount: number; pairedBatchCount: number } {
+): { primaryDefinitionId: string | null; batchCount: number; pairedBatchCount: number; orphanedBatchCount: number } {
   const uniqueDefinitionIds = Array.from(new Set(definitionIds));
   if (uniqueDefinitionIds.length === 0) {
-    return { primaryDefinitionId: null, batchCount: 0, pairedBatchCount: 0 };
+    return { primaryDefinitionId: null, batchCount: 0, pairedBatchCount: 0, orphanedBatchCount: 0 };
   }
 
   const directionCountFor = (defId: string): number =>
@@ -230,11 +235,18 @@ export function selectPrimaryDefinitionCounts(
   }
 
   let pairedBatchCount: number;
-  if (merged.size === 0 || merged.size === 1) {
+  let orphanedBatchCount: number;
+  if (merged.size === 0) {
     pairedBatchCount = 0;
+    orphanedBatchCount = 0;
+  } else if (merged.size === 1) {
+    const onlyCount = Array.from(merged.values())[0]!.size;
+    pairedBatchCount = 0;
+    orphanedBatchCount = onlyCount;
   } else if (merged.size === 2) {
     const counts = Array.from(merged.values()).map((s) => s.size);
     pairedBatchCount = Math.min(counts[0]!, counts[1]!);
+    orphanedBatchCount = Math.max(counts[0]!, counts[1]!) - pairedBatchCount;
   } else {
     // >2 distinct direction tokens — data corruption. Take min of the two
     // largest counts and emit a warning. Do not throw; the operator should
@@ -243,6 +255,7 @@ export function selectPrimaryDefinitionCounts(
       .map((s) => s.size)
       .sort((a, b) => b - a);
     pairedBatchCount = Math.min(sortedCounts[0]!, sortedCounts[1]!);
+    orphanedBatchCount = sortedCounts[0]! - pairedBatchCount;
     if (log != null) {
       log.warn(
         { cellKey, directions: Array.from(merged.keys()), definitionIds: uniqueDefinitionIds },
@@ -255,5 +268,6 @@ export function selectPrimaryDefinitionCounts(
     primaryDefinitionId: primaryDefinitionId === '' ? null : primaryDefinitionId,
     batchCount,
     pairedBatchCount,
+    orphanedBatchCount,
   };
 }
