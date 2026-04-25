@@ -1,0 +1,15 @@
+{
+  "paths": [
+    "cloud/apps/api/src/graphql/queries/domain-coverage-gql-types.ts",
+    "cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts",
+    "cloud/apps/api/src/graphql/queries/domain-coverage.ts",
+    "cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/api/src/graphql/queries/domain-coverage-gql-types.ts",
+    "cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts",
+    "cloud/apps/api/src/graphql/queries/domain-coverage.ts",
+    "cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts",
+    "docs/workflow/feature-runs/paired-batch-count-min-of-two"
+  ]
+}

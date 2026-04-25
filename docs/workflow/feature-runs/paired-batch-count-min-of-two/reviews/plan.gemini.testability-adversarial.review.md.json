@@ -1,0 +1,57 @@
+{
+  "session_id": "2e7fa588-0443-449d-9646-113d6f63ead8",
+  "response": "## Findings\n\n| Severity | Finding | Evidence |\n|---|---|---|\n| HIGH | The plan's verification for logging the `>2 directions` corruption case relies on post-deploy manual log monitoring. | [CODE-CONFIRMED] |\n| MEDIUM | The test plan for `selectPrimaryDefinitionCounts` does not adequately test the upstream construction of its main input, `directionalGroupsByDefinitionId`. | [CODE-CONFIRMED] |\n| MEDIUM | Verification for the expected and potentially confusing divergence between `pairedBatchCount` and trial-count metrics relies on manual queries and documentation rather than comprehensive automated testing. | [CODE-CONFIRMED] |\n| LOW | The plan does not explicitly include a test case for legacy runs lacking the `jobChoiceValueFirst` field, which is a known data condition that will affect the new logic. | [UNVERIFIED] |\n\n### HIGH: Logging verification is manual\n\nThe plan's verification for the critical `>2 directions` warning (Plan \u00a74, Risk 5) is to \"watch logs for 24h after the rollout\". This is not a test; it is a manual, post-hoc audit. While a unit test is proposed to assert that `log.warn` is called, this only confirms the call happens in a mocked environment. It does not test the logging infrastructure, formatting, or observability in a staging or production-like context. A failure in the logging transport or configuration would render the warning useless, and this would not be caught by the proposed test plan.\n\n**[CODE-CONFIRMED]** The plan itself (in sections 4 and 5) specifies the verification method is manual log review. The proposed unit test in \u00a73.1 and \u00a73.5 involves passing an optional `log` object, confirming that logging is a side-effect whose actual occurrence in a real environment is not tested by the automated suite.\n\n### MEDIUM: Key data structure construction is under-tested\n\nThe plan correctly focuses unit tests on the `selectPrimaryDefinitionCounts` helper. However, the correctness of `pairedBatchCount` depends entirely on the `directionalGroupsByDefinitionId` map that is passed into it. This map is constructed inside the main resolver's inner loop (Plan \u00a73.2).\n\nThe plan's unit tests (\u00a73.5) will feed a pre-constructed, idealized map to the helper. They will not validate the loop logic that builds this map from raw `run` objects. A bug in the loop (e.g., incorrect handling of `getCoverageDirection` or `getCoverageBatchGroupId`) would not be caught by the unit tests for the downstream helper, and the plan's description of the integration test is too generic to confirm it covers this specific risk.\n\n**[CODE-CONFIRMED]** The plan's implementation details in \u00a73.2 show new logic for populating `directionalGroupsByDefinitionId` inside the `domain-coverage.ts` run loop. The test plan in \u00a73.5 focuses on unit testing the helper function that consumes this map, not the loop that builds it.\n\n### MEDIUM: Metric divergence verification is manual\n\nThe plan correctly identifies the risk that `pairedBatchCount` can be 0 while `minTrialCount` is greater than 0 for the same cell, which could confuse operators (Plan \u00a74, Risk 6). The verification for this is to add a comment to a test, update the glossary, and perform a \"manual GraphQL query\" (Plan \u00a75, R4; \u00a76, step 5).\n\nRelying on manual queries and documentation to verify a key, potentially confusing, system behavior is a testability weakness. A robust, automated integration test should be the primary vehicle for this verification. It should create an asymmetric paired-batch scenario and explicitly assert that `pairedBatchCount` is the expected `min()` value while `minTrialCount` reflects the surviving companion's transcript count. The plan mentions an integration test but gives more weight to the manual verification, suggesting the automated test is not considered sufficient.\n\n**[CODE-CONFIRMED]** The plan's implementation details show that `pairedBatchCount` and trial counts are computed via different paths (`selectPrimaryDefinitionCounts` vs `computePerModelTrialCounts`). The existing `deduplicateRunsByGroupId` helper, used for trial counts, has different logic (\"prefer complete\" survivor) than the new proposed logic for `pairedBatchCount` (\"min of two directions\"). This confirms the divergence is real. The plan's risk and verification sections (\u00a74, \u00a75) emphasize manual checks.\n\n### LOW: Test plan omits legacy data case\n\nThe plan correctly identifies that legacy runs without `jobChoiceValueFirst` will be excluded from the new `pairedBatchCount` logic (Plan \u00a75, R2). However, the test plan outlined in \u00a73.5 does not explicitly mention adding a test case with such legacy data. The verification is a pre-deploy SQL query to assess impact, not a test to confirm the code behaves correctly. An automated test should create a run fixture with a `config` object lacking the `jobChoiceValueFirst` key and assert that it contributes to `batchCount` but not `pairedBatchCount`.\n\n**[UNVERIFIED]** The code in `start.ts` and related files confirms that `jobChoiceValueFirst` is a field added to the `config` object at run creation, so older runs may lack it. The test files themselves are provided, but the *planned new tests* described in the artifact do not include this specific case, making it an omission in the plan.\n\n## Residual Risks\n\nThe plan's \"Residual Risks\" section (\u00a75) is well-identified, but the verification strategies are weak from a testability perspective, relying heavily on manual, one-off checks rather than automated, repeatable tests.\n\n1.  **Detective vs. Preventative Testing:** Risks R1, R2, and R3 are verified with pre-deploy SQL queries. These are detective impact-analysis steps, not preventative tests of the code's logic. For example, R3 (a manually-launched run being miscounted) should be verified with a unit test that asserts an `AD_HOC_BATCH` run *is* counted by the new logic (as the plan's defensive test correctly proposes), confirming the \"trust but don't validate\" behavior is explicitly tested. The pre-deploy query is a good safety check, but it doesn't test the code.\n\n2.  **Manual Process Dependencies:** The verification for R4 (trial count dedup behavior), R5 (`>2 directions` warning), and R6 (UI impact) all depend on manual steps: a GraphQL query, watching logs, and clicking through the UI. These manual checks are brittle, not easily repeatable in CI, and prone to human error. A more testable plan would seek to automate these assertions, for example by having the test runner capture and inspect log output for R5.\n\n3.  **Inconsistent Data States:** The risk of loose-pairing (R1) creating pairs with mismatched parameters highlights a testability gap. The system allows an inconsistent state to be created. The verification is an audit, not a test. A more robust approach would involve tests that assert how downstream consumers (like the `domainValueCoverage` query) behave when they encounter this known-but-undesirable data state.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 36807
+        },
+        "tokens": {
+          "input": 47619,
+          "prompt": 47619,
+          "candidates": 1553,
+          "total": 51106,
+          "cached": 0,
+          "thoughts": 1934,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 36807,
+            "tokens": {
+              "input": 47619,
+              "prompt": 47619,
+              "candidates": 1553,
+              "total": 51106,
+              "cached": 0,
+              "thoughts": 1934,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}
