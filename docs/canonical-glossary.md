@@ -177,6 +177,8 @@ Avoid confusion:
 
 An incomplete batch is a run that expects transcripts but is missing one or more (model × scenario × sample-index) slots. Tracked separately as `incompleteBatchCount`. Does not contribute to `batchCount`.
 
+A broken pair (one direction complete, one incomplete) contributes one `Incomplete Batch` from its abandoned side.
+
 Example:
 
 - “This run shows up under Incomplete Batches because deepseek-reasoner failed on conditions 18 and 22.”
@@ -188,7 +190,9 @@ Avoid confusion:
 
 ### `Paired Batch`
 
-A paired batch is a set of two batches that use two vignettes in reverse order. A paired batch counts as one when both companion runs are complete; if one companion is incomplete, the complete one is the survivor and the pair counts as one paired batch. If both companions are incomplete, the pair is treated as one incomplete batch.
+A paired batch is counted whenever there is one complete A-first run and one complete B-first run that can be paired off. The Domain Overview shows `min(complete A-first, complete B-first)` for each value pair: when both directions have the same number of completed runs, that is the paired-batch count; when one direction has more, the surplus is unpaired and is **not** counted as a paired batch (the unpaired complete run still appears in `Batch` count).
+
+A paired launch where one companion finishes and the other does not is a **broken pair**: the complete companion contributes 1 to `Batch`, the incomplete companion contributes 1 to `Incomplete Batch`, and the launch contributes 0 to `Paired Batch`.
 
 Example:
 
@@ -198,6 +202,10 @@ Avoid confusion:
 
 - a paired batch is two batches together, not one batch
 - use `paired batch` when you mean the matched set, not either side by itself
+
+**Note on terminology overlap:** "paired batch" is also used in the launch path to describe two runs that share a `jobChoiceBatchGroupId` because they were launched together (e.g., the anomaly detector at `cloud/apps/api/src/services/run/anomaly-detection.ts` finds "sibling runs" by group ID). That is the *launch-time* concept of a paired batch — runs that were spun up as a co-launched pair. The display-time concept above counts pairable analysis-ready data and does not require runs to share a launch group. Both senses are valid in their own contexts; the launch-time grouping still drives anomaly detection while the display-time count drives the Domain Overview hub.
+
+**Note on metric divergence within a cell:** within a single Domain Overview cell, `Paired Batch` (display-time) and the per-model trial counts operate on different subsets of the underlying runs. The trial-count path picks one survivor per `jobChoiceBatchGroupId` (the launch-time concept), so for a healthy paired launch with both companions complete, only one companion's transcripts feed the trial counts. The paired-batch count picks both. The two metrics are correct in their own terms but are not directly comparable arithmetically (e.g., 1 paired batch does not imply 2× the trial-count of an unpaired complete run).
 
 ### `Transcript`
 

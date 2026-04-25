@@ -22,6 +22,7 @@ export type DomainValueCoverageCell = {
   valueB: string;
   batchCount: number;
   pairedBatchCount: number;
+  orphanedBatchCount: number;
   /** Number of non-aggregate runs whose transcript count is less than expected. */
   incompleteBatchCount: number;
   definitionId: string | null;
@@ -82,11 +83,21 @@ const DomainValueCoverageCellRef = builder
       }),
       pairedBatchCount: t.exposeInt('pairedBatchCount', {
         description:
-          'Count of paired-batch groups where the surviving (complete) ' +
-          'companion run is fully complete. When both companions are complete, ' +
-          'the pair counts as 1. When only one is complete, that one is the ' +
-          'survivor and the pair counts as 1. When both are incomplete, the ' +
-          'pair counts as 0 here (and as 1 toward incompleteBatchCount).',
+          'Count of pairable analysis-ready batches for this value pair, ' +
+          'computed as min(complete A-first non-aggregate runs, ' +
+          'complete B-first non-aggregate runs) where direction is read from ' +
+          'config.jobChoiceValueFirst. A launch where only one direction completed ' +
+          'contributes 0 here (the surviving complete run still appears in batchCount). ' +
+          'Runs without a recognizable direction token are excluded from both sides. ' +
+          'See docs/canonical-glossary.md "Paired Batch" for full semantic.',
+      }),
+      orphanedBatchCount: t.exposeInt('orphanedBatchCount', {
+        description:
+          'Count of unmatched directional runs for this value pair, computed as ' +
+          'max(complete A-first runs, complete B-first runs) - ' +
+          'min(complete A-first runs, complete B-first runs). When both directions ' +
+          'are equal this is 0; when only one direction has runs this is the count ' +
+          'of that side. Runs without a recognizable direction token are excluded.',
       }),
       incompleteBatchCount: t.exposeInt('incompleteBatchCount', {
         description:

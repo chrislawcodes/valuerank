@@ -29,99 +29,6 @@ export function selectPrimaryDefinitionCount(
   };
 }
 
-export function selectPrimaryDefinitionCounts(
-  definitionIds: readonly string[],
-  batchCountByDefinitionId: ReadonlyMap<string, number>,
-  pairedBatchCountByDefinitionId: ReadonlyMap<string, number>,
-  pairedBatchGroupIdsByDefinitionId?: ReadonlyMap<string, ReadonlySet<string>>,
-  pairedBatchIncrementsByGroupId?: ReadonlyMap<string, ReadonlyMap<string, number>>,
-): { primaryDefinitionId: string | null; batchCount: number; pairedBatchCount: number } {
-  const uniqueDefinitionIds = Array.from(new Set(definitionIds));
-  if (uniqueDefinitionIds.length === 0) {
-    return { primaryDefinitionId: null, batchCount: 0, pairedBatchCount: 0 };
-  }
-
-  const primaryDefinitionId = uniqueDefinitionIds.reduce((best, defId) => {
-    const bestBatchCount = batchCountByDefinitionId.get(best) ?? 0;
-    const thisBatchCount = batchCountByDefinitionId.get(defId) ?? 0;
-    if (thisBatchCount > bestBatchCount) {
-      return defId;
-    }
-    if (thisBatchCount < bestBatchCount) {
-      return best;
-    }
-
-    const bestPairedCount = pairedBatchCountByDefinitionId.get(best) ?? 0;
-    const thisPairedCount = pairedBatchCountByDefinitionId.get(defId) ?? 0;
-    if (thisPairedCount > bestPairedCount) {
-      return defId;
-    }
-    if (thisPairedCount < bestPairedCount) {
-      return best;
-    }
-
-    return defId.localeCompare(best) < 0 ? defId : best;
-  }, uniqueDefinitionIds[0] ?? '');
-
-  const batchCount = uniqueDefinitionIds.reduce(
-    (total, defId) => total + (batchCountByDefinitionId.get(defId) ?? 0),
-    0,
-  );
-
-  // Deduplicate paired batch counts across companion definitions.
-  // A_first and B_first share the same group IDs, so we merge group→increment
-  // maps and take the max increment per group (not sum). Ungrouped runs are summed.
-  let pairedBatchCount: number;
-  if (pairedBatchGroupIdsByDefinitionId != null && pairedBatchIncrementsByGroupId != null) {
-    // Merge increments: for each group ID, take the max increment across definitions
-    // (companions have the same sps, so max === any, but max is safer)
-    const mergedIncrements = new Map<string, number>();
-    let ungroupedTotal = 0;
-    for (const defId of uniqueDefinitionIds) {
-      const defIncrements = pairedBatchIncrementsByGroupId.get(defId);
-      if (defIncrements != null) {
-        for (const [gid, inc] of defIncrements) {
-          mergedIncrements.set(gid, Math.max(mergedIncrements.get(gid) ?? 0, inc));
-        }
-      }
-      // Ungrouped portion: pairedBatchCount minus grouped total for this definition
-      const defPairedCount = pairedBatchCountByDefinitionId.get(defId) ?? 0;
-      const defGroupedTotal = defIncrements != null
-        ? Array.from(defIncrements.values()).reduce((sum, v) => sum + v, 0)
-        : 0;
-      ungroupedTotal += Math.max(0, defPairedCount - defGroupedTotal);
-    }
-    pairedBatchCount = Array.from(mergedIncrements.values()).reduce((sum, v) => sum + v, 0) + ungroupedTotal;
-  } else if (pairedBatchGroupIdsByDefinitionId != null) {
-    // Legacy path: group IDs available but no increment tracking — count unique groups
-    const mergedGroupIds = new Set<string>();
-    let ungroupedCount = 0;
-    for (const defId of uniqueDefinitionIds) {
-      const groupIds = pairedBatchGroupIdsByDefinitionId.get(defId);
-      if (groupIds != null) {
-        for (const gid of groupIds) {
-          mergedGroupIds.add(gid);
-        }
-      }
-      const defPairedCount = pairedBatchCountByDefinitionId.get(defId) ?? 0;
-      const defGroupedCount = groupIds?.size ?? 0;
-      ungroupedCount += Math.max(0, defPairedCount - defGroupedCount);
-    }
-    pairedBatchCount = mergedGroupIds.size + ungroupedCount;
-  } else {
-    // Fallback: sum per-definition counts
-    pairedBatchCount = uniqueDefinitionIds.reduce(
-      (total, defId) => total + (pairedBatchCountByDefinitionId.get(defId) ?? 0),
-      0,
-    );
-  }
-
-  return {
-    primaryDefinitionId: primaryDefinitionId === '' ? null : primaryDefinitionId,
-    batchCount,
-    pairedBatchCount,
-  };
-}
 
 export function getCoverageBatchIncrement(samplesPerScenario: unknown): number {
   return Number.isInteger(samplesPerScenario) && (samplesPerScenario as number) >= 1
@@ -246,4 +153,121 @@ export function getCoverageBatchGroupId(runConfig: unknown): string | null {
       : null;
 
   return raw != null && raw.trim().length > 0 ? raw.trim() : null;
+}
+
+/**
+ * Read the direction token off a Run's config. Returns null for missing,
+ * blank, or non-string `jobChoiceValueFirst`. Trimmed.
+ *
+ * Defensive against any non-object input (number, boolean, etc.); returns
+ * null without touching the value.
+ */
+export function getCoverageDirection(runConfig: unknown): string | null {
+  if (typeof runConfig !== 'object' || runConfig === null) return null;
+  const config = runConfig as { jobChoiceValueFirst?: unknown };
+  if (typeof config.jobChoiceValueFirst !== 'string') return null;
+  const trimmed = config.jobChoiceValueFirst.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+/**
+ * Compute per-cell counts using the directional model.
+ *
+ * Sums `batchCount` across companion definitions (unchanged semantics).
+ * Computes `pairedBatchCount = min(complete A-first, complete B-first)`
+ * by merging per-direction Sets across companion definitions and taking
+ * `min(set.size)` of the two directions. When >2 distinct directions
+ * appear in the merged map (data corruption), takes min of the two
+ * largest counts and emits a warning via `log.warn` (if provided).
+ *
+ * Computes `orphanedBatchCount = max - min` of the same two directional
+ * counts used for `pairedBatchCount`. When only one direction is present,
+ * the other side is treated as 0 and orphanedBatchCount equals the count
+ * of the present side.
+ *
+ * Tie-break for `primaryDefinitionId`: `(batchCount desc, directionCount desc, defId asc)`
+ * where `directionCount = directionalGroupsByDefinitionId.get(defId)?.size ?? 0`.
+ */
+export function selectPrimaryDefinitionCounts(
+  definitionIds: readonly string[],
+  batchCountByDefinitionId: ReadonlyMap<string, number>,
+  directionalGroupsByDefinitionId: ReadonlyMap<string, ReadonlyMap<string, ReadonlySet<string>>>,
+  log?: { warn: (obj: object, msg: string) => void },
+  cellKey?: string,
+): { primaryDefinitionId: string | null; batchCount: number; pairedBatchCount: number; orphanedBatchCount: number } {
+  const uniqueDefinitionIds = Array.from(new Set(definitionIds));
+  if (uniqueDefinitionIds.length === 0) {
+    return { primaryDefinitionId: null, batchCount: 0, pairedBatchCount: 0, orphanedBatchCount: 0 };
+  }
+
+  const directionCountFor = (defId: string): number =>
+    directionalGroupsByDefinitionId.get(defId)?.size ?? 0;
+
+  const primaryDefinitionId = uniqueDefinitionIds.reduce((best, defId) => {
+    const bestBatch = batchCountByDefinitionId.get(best) ?? 0;
+    const thisBatch = batchCountByDefinitionId.get(defId) ?? 0;
+    if (thisBatch > bestBatch) return defId;
+    if (thisBatch < bestBatch) return best;
+
+    const bestDirs = directionCountFor(best);
+    const thisDirs = directionCountFor(defId);
+    if (thisDirs > bestDirs) return defId;
+    if (thisDirs < bestDirs) return best;
+
+    return defId.localeCompare(best) < 0 ? defId : best;
+  }, uniqueDefinitionIds[0] ?? '');
+
+  const batchCount = uniqueDefinitionIds.reduce(
+    (total, defId) => total + (batchCountByDefinitionId.get(defId) ?? 0),
+    0,
+  );
+
+  // Merge per-direction Sets across companion definitions for this cell.
+  const merged = new Map<string, Set<string>>();
+  for (const defId of uniqueDefinitionIds) {
+    const defMap = directionalGroupsByDefinitionId.get(defId);
+    if (defMap == null) continue;
+    for (const [direction, groupKeys] of defMap) {
+      const existing = merged.get(direction) ?? new Set<string>();
+      for (const key of groupKeys) existing.add(key);
+      merged.set(direction, existing);
+    }
+  }
+
+  let pairedBatchCount: number;
+  let orphanedBatchCount: number;
+  if (merged.size === 0) {
+    pairedBatchCount = 0;
+    orphanedBatchCount = 0;
+  } else if (merged.size === 1) {
+    const onlyCount = Array.from(merged.values())[0]!.size;
+    pairedBatchCount = 0;
+    orphanedBatchCount = onlyCount;
+  } else if (merged.size === 2) {
+    const counts = Array.from(merged.values()).map((s) => s.size);
+    pairedBatchCount = Math.min(counts[0]!, counts[1]!);
+    orphanedBatchCount = Math.max(counts[0]!, counts[1]!) - pairedBatchCount;
+  } else {
+    // >2 distinct direction tokens — data corruption. Take min of the two
+    // largest counts and emit a warning. Do not throw; the operator should
+    // still see a number.
+    const sortedCounts = Array.from(merged.values())
+      .map((s) => s.size)
+      .sort((a, b) => b - a);
+    pairedBatchCount = Math.min(sortedCounts[0]!, sortedCounts[1]!);
+    orphanedBatchCount = sortedCounts[0]! - pairedBatchCount;
+    if (log != null) {
+      log.warn(
+        { cellKey, directions: Array.from(merged.keys()), definitionIds: uniqueDefinitionIds },
+        '>2 distinct jobChoiceValueFirst tokens in single coverage cell; using min of two largest',
+      );
+    }
+  }
+
+  return {
+    primaryDefinitionId: primaryDefinitionId === '' ? null : primaryDefinitionId,
+    batchCount,
+    pairedBatchCount,
+    orphanedBatchCount,
+  };
 }

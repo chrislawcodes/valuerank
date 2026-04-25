@@ -1,0 +1,57 @@
+MCP issues detected. Run /mcp list for status.{
+  "session_id": "7d4d1f3c-4765-4847-8c03-23d314c5888a",
+  "response": "## Findings\n\n### HIGH\n\n1.  **Inconsistent Data Aggregation Between Paired Batch and Trial Counts.** The core logic for `pairedBatchCount` and `minTrialCount` will operate on different underlying datasets. The new algorithm for `pairedBatchCount` uses \"loose pairing\" to count all complete A-first and B-first runs, taking the minimum. However, the `minTrialCount` calculation still uses `deduplicateRunsByGroupId`, which selects a single \"survivor\" run from each launch group (e.g., from a complete pair, it uses either the A-first or B-first run, but not both). As a result, an operator looking at a cell will see a `pairedBatchCount` derived from one set of runs and a `minTrialCount` derived from a subset of those runs. This fundamental inconsistency could lead to significant confusion, as it is not intuitive that half the data from every healthy pair is excluded from the trial count. [CODE-CONFIRMED]\n    *   **Evidence:** The spec confirms in §5.7 that `computePerModelTrialCounts` is unchanged and is called with data from `deduplicateRunsByGroupId` (`domain-coverage.ts:399`). `domain-coverage-utils.ts:167` shows that `deduplicateRunsByGroupId` discards one of two companion runs. The new `pairedBatchCount` algorithm in §5.4 does not do this, instead counting runs from both directions.\n\n### MEDIUM\n\n1.  **Algorithm Assumes Any Run with `jobChoiceValueFirst` is a Paired Run.** The proposed direction-extraction logic (`getCoverageDirection` in §5.2) checks only for the existence of the `jobChoiceValueFirst` field in a run's config. It does not validate that the run was part of a `PAIRED_BATCH` launch. This makes it possible for a standard or ad-hoc run, if launched with a `jobChoiceValueFirst` field in its `configExtras`, to be incorrectly counted towards `pairedBatchCount`. While existing launch paths in `lifecycle.ts` only add this field for paired batches, relying on this convention without explicit validation in the read path is a weak assumption. [CODE-CONFIRMED]\n    *   **Evidence:** The launch logic in `cloud/apps/api/src/graphql/mutations/run/lifecycle.ts:125-146` shows `jobChoiceValueFirst` and `jobChoiceBatchGroupId` are added for `PAIRED_BATCH` mode. However, the `startRun` service it calls accepts arbitrary `configExtras`. The proposed algorithm in spec §5.2 does not include a check on `jobChoiceLaunchMode`.\n2.  **Glossary Update Obscures Trial Count Inconsistency.** The proposed glossary update in §5.8 correctly distinguishes between the \"launch-time\" and \"display-time\" concepts of a \"Paired Batch.\" However, it fails to mention that `minTrialCount` is still based on the launch-time concept (a single survivor per group), while `pairedBatchCount` uses the new display-time concept (all pairable runs). By omitting this detail, the glossary creates a new ambiguity where the relationship between metrics in the same UI component is unclear. [CODE-CONFIRMED]\n    *   **Evidence:** The spec's description of the trial count path (§5.7) and the existing implementation of `deduplicateRunsByGroupId` in `cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts` confirm `trialCount` is based on a surviving run. The proposed glossary text in §5.8 does not reflect this nuance.\n\n### LOW\n\n1.  **Unused Function Creates Maintenance Overhead.** The function `getCoverageBatchIncrement` and its corresponding tests in `domain-coverage.test.ts` are not used anywhere in the `domain-coverage.ts` logic, yet the function appears directly relevant. The spec (§11, R3 #3) acknowledges this as pre-existing debt and defers removal. However, modifying files that contain apparently-relevant but-unused code and tests increases the risk of developer confusion and adds to test maintenance burden. [CODE-CONFIRMED]\n    *   **Evidence:** The file `cloud/apps/api/src/graphql/queries/domain-coverage.ts` does not contain any calls to `getCoverageBatchIncrement`. The tests for it exist in `cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts`, suggesting it is live code.\n\n## Residual Risks\n\n1.  **Loose Pairing May Compare Dissimilar Runs.** The spec explicitly chooses a \"loose pairing\" model (§2a), which allows pairing runs from different launch events. The justification is that operator-driven configurations are \"generally consistent.\" This is an untested assumption. If parameters like `temperature` or `models` differ between an A-first run from one launch and a B-first run from another, any subsequent order-bias analysis would be invalid, comparing apples to oranges.\n2.  **UI Fallback Logic Will Create a Confusing Display.** The spec notes in §2b that the UI has a fallback: if `pairedBatchCount` is 0, it displays `batchCount`. Under the new logic, a launch with only one of two pairs completing will have `pairedBatchCount = 0` but `batchCount = 1`. The operator will see \"1 batch\" in the cell but \"0 paired batches\" in the popover, which is a confusing and unintuitive state for what was intended as a paired launch. Deferring this UI change misses an opportunity to improve clarity and creates a potentially misleading display.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 51251
+        },
+        "tokens": {
+          "input": 53326,
+          "prompt": 53326,
+          "candidates": 1224,
+          "total": 58629,
+          "cached": 0,
+          "thoughts": 4079,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 51251,
+            "tokens": {
+              "input": 53326,
+              "prompt": 53326,
+              "candidates": 1224,
+              "total": 58629,
+              "cached": 0,
+              "thoughts": 4079,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

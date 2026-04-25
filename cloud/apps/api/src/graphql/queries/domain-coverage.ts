@@ -15,6 +15,7 @@ import {
   type CoverageValueKey,
   extractValuePair,
   getCoverageBatchGroupId,
+  getCoverageDirection,
   selectPrimaryDefinitionCounts,
   computePerModelTrialCounts,
   deduplicateRunsByGroupId,
@@ -128,9 +129,12 @@ builder.queryField('domainValueCoverage', (t) =>
       // Count completed runs per definition, optionally filtered by signature and model
       const definitionIds = Array.from(pairByDefinitionId.keys());
       const batchCountByDefinitionId = new Map<string, number>();
-      const pairedBatchCountByDefinitionId = new Map<string, number>();
-      const pairedBatchGroupIdsByDefinitionId = new Map<string, Set<string>>();
-      const pairedBatchIncrementsByGroupId = new Map<string, Map<string, number>>();
+      // Per-definition map: direction token -> Set<groupKey> where groupKey is
+      // the run's jobChoiceBatchGroupId (collapses retry duplicates within a
+      // launch group) or "__ungrouped__:<runId>" so each ungrouped run still
+      // counts once. Drives the new pairedBatchCount = min(A-first, B-first).
+      const directionalGroupsByDefinitionId =
+        new Map<string, Map<string, Set<string>>>();
       const latestMatchingRunIdByDefinitionId = new Map<string, string>();
       const latestAggregateRunIdByDefinitionId = new Map<string, string>();
       const incompleteBatchCountByDefinitionId = new Map<string, number>();
@@ -288,29 +292,22 @@ builder.queryField('domainValueCoverage', (t) =>
             (batchCountByDefinitionId.get(run.definitionId) ?? 0) + 1,
           );
 
-          const pairedBatchGroupId = getCoverageBatchGroupId(run.config);
-
-          if (pairedBatchGroupId === null) {
-            pairedBatchCountByDefinitionId.set(
-              run.definitionId,
-              (pairedBatchCountByDefinitionId.get(run.definitionId) ?? 0) + 1,
-            );
-            continue;
-          }
-
-          const seenGroupIds = pairedBatchGroupIdsByDefinitionId.get(run.definitionId) ?? new Set<string>();
-          if (!seenGroupIds.has(pairedBatchGroupId)) {
-            seenGroupIds.add(pairedBatchGroupId);
-            pairedBatchGroupIdsByDefinitionId.set(run.definitionId, seenGroupIds);
-            pairedBatchCountByDefinitionId.set(
-              run.definitionId,
-              (pairedBatchCountByDefinitionId.get(run.definitionId) ?? 0) + 1,
-            );
-            // Track per-group increment for cross-definition dedup. Always 1
-            // now; samplesPerScenario no longer multiplies.
-            const defIncrements = pairedBatchIncrementsByGroupId.get(run.definitionId) ?? new Map<string, number>();
-            defIncrements.set(pairedBatchGroupId, 1);
-            pairedBatchIncrementsByGroupId.set(run.definitionId, defIncrements);
+          // pairedBatchCount semantic: count complete A-first vs B-first runs
+          // independently per the direction token in config.jobChoiceValueFirst.
+          // The Set<groupKey> collapses retry duplicates that share the same
+          // launch group; ungrouped runs use a unique sentinel so they each
+          // count once. Runs with no recognizable direction token are skipped
+          // here (they still count toward batchCount above).
+          const direction = getCoverageDirection(run.config);
+          if (direction !== null) {
+            const launchGroupId = getCoverageBatchGroupId(run.config);
+            const groupKey = launchGroupId ?? `__ungrouped__:${run.id}`;
+            const defMap = directionalGroupsByDefinitionId.get(run.definitionId)
+              ?? new Map<string, Set<string>>();
+            const dirSet = defMap.get(direction) ?? new Set<string>();
+            dirSet.add(groupKey);
+            defMap.set(direction, dirSet);
+            directionalGroupsByDefinitionId.set(run.definitionId, defMap);
           }
         }
       }
@@ -356,6 +353,7 @@ builder.queryField('domainValueCoverage', (t) =>
               valueB,
               batchCount: 0,
               pairedBatchCount: 0,
+              orphanedBatchCount: 0,
               incompleteBatchCount: 0,
               definitionId: null,
               definitionName: null,
@@ -367,12 +365,12 @@ builder.queryField('domainValueCoverage', (t) =>
           } else {
             // Use the total counts across all definitions for the visible cell, but
             // still choose one stable definition for the analysis link target.
-            const { primaryDefinitionId, batchCount, pairedBatchCount } = selectPrimaryDefinitionCounts(
+            const { primaryDefinitionId, batchCount, pairedBatchCount, orphanedBatchCount } = selectPrimaryDefinitionCounts(
               defIdsForPair,
               batchCountByDefinitionId,
-              pairedBatchCountByDefinitionId,
-              pairedBatchGroupIdsByDefinitionId,
-              pairedBatchIncrementsByGroupId,
+              directionalGroupsByDefinitionId,
+              ctx.log,
+              `${valueA}::${valueB}`,
             );
             const primaryDefId = primaryDefinitionId ?? '';
             const primaryPair = pairByDefinitionId.get(primaryDefId);
@@ -396,6 +394,11 @@ builder.queryField('domainValueCoverage', (t) =>
             // When companions have different completeness, prefer the complete one
             // for the trial-count computation. This is read-time consistency with
             // batchCount: the surviving run is the one whose data feeds analysis.
+            //
+            // Intentionally unchanged by the directional-pairedBatchCount refactor:
+            // the trial-count path keeps the surviving-companion semantic so that
+            // healthy paired batches do not double their displayed trial counts.
+            // See spec §5.7 ("Per-model trial counts — intentionally unchanged").
             const allNonAggregateRunsForPair = deduplicateRunsByGroupId(
               defIdsForPair.flatMap((defId) => nonAggregateRunsByDefinitionId.get(defId) ?? []),
               (run) => {
@@ -425,6 +428,7 @@ builder.queryField('domainValueCoverage', (t) =>
               valueB,
               batchCount,
               pairedBatchCount,
+              orphanedBatchCount,
               incompleteBatchCount,
               definitionId: primaryDefId !== '' ? primaryDefId : null,
               definitionName: primaryPair?.name ?? null,

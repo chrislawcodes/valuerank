@@ -1,0 +1,69 @@
+{
+  "feature_slug": "paired-batch-count-min-of-two",
+  "stage": "plan",
+  "artifact_path": "docs/workflow/feature-runs/paired-batch-count-min-of-two/plan.md",
+  "git_base_ref": "",
+  "allowed_dirty_paths": [],
+  "required_reviews": [
+    {
+      "reviewer": "codex",
+      "lens": "implementation-adversarial",
+      "stage": "plan",
+      "path": "docs/workflow/feature-runs/paired-batch-count-min-of-two/reviews/plan.codex.implementation-adversarial.review.md",
+      "context_paths": [
+        "docs/canonical-glossary.md",
+        "cloud/apps/api/src/graphql/queries/domain-coverage.ts",
+        "cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts",
+        "cloud/apps/api/src/graphql/queries/domain-coverage-gql-types.ts",
+        "cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts",
+        "cloud/apps/api/src/services/run/start.ts",
+        "cloud/apps/api/src/services/run/anomaly-detection.ts",
+        "cloud/apps/api/src/graphql/mutations/run/lifecycle.ts",
+        "cloud/apps/api/src/graphql/mutations/domain/launch/plan-slots.ts",
+        "cloud/apps/api/src/graphql/mutations/domain/launch/execute-runs.ts"
+      ],
+      "model": "gpt-5.4-mini"
+    },
+    {
+      "reviewer": "codex",
+      "lens": "architecture-adversarial",
+      "stage": "plan",
+      "path": "docs/workflow/feature-runs/paired-batch-count-min-of-two/reviews/plan.codex.architecture-adversarial.review.md",
+      "context_paths": [
+        "docs/canonical-glossary.md",
+        "cloud/apps/api/src/graphql/queries/domain-coverage.ts",
+        "cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts",
+        "cloud/apps/api/src/graphql/queries/domain-coverage-gql-types.ts",
+        "cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts",
+        "cloud/apps/api/src/services/run/start.ts",
+        "cloud/apps/api/src/services/run/anomaly-detection.ts",
+        "cloud/apps/api/src/graphql/mutations/run/lifecycle.ts",
+        "cloud/apps/api/src/graphql/mutations/domain/launch/plan-slots.ts",
+        "cloud/apps/api/src/graphql/mutations/domain/launch/execute-runs.ts"
+      ],
+      "model": "gpt-5.4-mini"
+    },
+    {
+      "reviewer": "gemini",
+      "lens": "testability-adversarial",
+      "stage": "plan",
+      "path": "docs/workflow/feature-runs/paired-batch-count-min-of-two/reviews/plan.gemini.testability-adversarial.review.md",
+      "context_paths": [
+        "docs/canonical-glossary.md",
+        "cloud/apps/api/src/graphql/queries/domain-coverage.ts",
+        "cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts",
+        "cloud/apps/api/src/graphql/queries/domain-coverage-gql-types.ts",
+        "cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts",
+        "cloud/apps/api/src/services/run/start.ts",
+        "cloud/apps/api/src/services/run/anomaly-detection.ts",
+        "cloud/apps/api/src/graphql/mutations/run/lifecycle.ts",
+        "cloud/apps/api/src/graphql/mutations/domain/launch/plan-slots.ts",
+        "cloud/apps/api/src/graphql/mutations/domain/launch/execute-runs.ts"
+      ],
+      "model": "gemini-2.5-pro"
+    }
+  ],
+  "max_artifact_chars": 50000,
+  "max_context_chars": 60000,
+  "max_total_chars": 250000
+}

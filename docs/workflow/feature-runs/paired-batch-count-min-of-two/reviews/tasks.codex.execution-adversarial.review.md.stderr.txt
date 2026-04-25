@@ -1,0 +1,166 @@
+Reading additional input from stdin...
+OpenAI Codex v0.125.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/busy-tesla-89e817
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019dc5d2-ac62-76a3-80c6-de6244a1533a
+--------
+user
+Review this tasks artifact using a execution-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: tasks.md
+# Tasks — `pairedBatchCount` as `min(A-first complete, B-first complete)`
+
+**Slug:** `paired-batch-count-min-of-two`
+**Spec:** [spec.md](spec.md) · **Plan:** [plan.md](plan.md)
+
+Two slices, each `[CHECKPOINT]`-bounded. Total expected diff: ~360 lines across 5 files. Slice 1 keeps the integration test wiring temporarily on the old codepath so its diff stays self-contained; Slice 2 swaps the wiring and updates tests.
+
+---
+
+## Slice 1 — Helper rewrite + helper-level tests
+
+**Estimated diff size:** ~150 lines (~80 in `domain-coverage-utils.ts` + ~70 in tests).
+
+**Files this slice writes to:**
+- `cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts`
+- `cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts` (helper-test additions only)
+
+### Tasks
+
+- [ ] **T1.1** Add `getCoverageDirection(runConfig: unknown): string | null` to `domain-coverage-utils.ts` with the body specified in plan §3.1. Export it from the same module.
+- [ ] **T1.2** Refactor `selectPrimaryDefinitionCounts` to the new signature in plan §3.1:
+  - Drop the optional `pairedBatchCountByDefinitionId`, `pairedBatchGroupIdsByDefinitionId`, `pairedBatchIncrementsByGroupId` parameters.
+  - Add the required `directionalGroupsByDefinitionId: ReadonlyMap<string, ReadonlyMap<string, ReadonlySet<string>>>` parameter.
+  - Add optional `log?: { warn: (obj: object, msg: string) => void }` and `cellKey?: string` parameters.
+  - Implement the three internal steps in plan §3.1: tie-break by `(batchCount desc, directionCount desc, defId asc)`; sum `batchCount`; merge per-direction Sets and apply the 0/1/2/>2 reduction.
+  - For `>2 directions`: log a warning if `log` provided, then return min of two largest counts.
+  - Keep the existing function exports (`deduplicateRunsByGroupId`, `getCoverageBatchGroupId`, `selectPrimaryDefinitionCount` singular, `getCoverageBatchIncrement`, `computePerModelTrialCounts`) untouched.
+- [ ] **T1.3** Add helper-level unit tests in `domain-coverage.test.ts`:
+  - `getCoverageDirection` block covering the 9 cases in plan §3.5 second table.
+  - `selectPrimaryDefinitionCounts` block: drop the existing tests at lines 132–207 (groupIds/increments-based), keep the empty-list and tie-break tests, add the 9 new cases in plan §3.5 first table.
+- [ ] **T1.4** Run `npx turbo build --filter=@valuerank/api` from `cloud/`. Expect type errors at the `selectPrimaryDefinitionCounts` call site in `domain-coverage.ts` because Slice 1 has not yet rewired the caller. **This is expected** — the build error confirms Slice 1's helper change is reaching the caller. Do **not** edit `domain-coverage.ts` in this slice.
+
+  Workaround for type-check during slice 1: temporarily mark the unused old-style call argument with a `// @ts-expect-error — fixed in Slice 2` directive at the call site IF the build error blocks T1.5 from running. Remove this directive in Slice 2. Track this as a "do not ship Slice 1 alone" marker.
+
+  Alternative (preferred if mechanically simple): land Slice 1 + Slice 2 in two consecutive commits within one PR; do not push Slice 1 until Slice 2 lands locally. Then both are in the same green tree at every preflight step.
+- [ ] **T1.5** Run `npx turbo test --filter=@valuerank/api -- domain-coverage` from `cloud/`. The new helper tests should pass. The integration test `domainValueCoverage` resolver tests will fail until Slice 2 — note them as expected failures.
+
+### `[CHECKPOINT]` — slice 1 boundary
+
+Diff review (per FF SKILL diff stage): `correctness` + `regression` (Codex) + `quality` (Gemini). Reviewers should verify:
+- The new helper's return shape matches the old one exactly.
+- The `getCoverageDirection` whitespace/null-coercion logic matches spec §5.2.
+- The `>2 directions` log call uses `log.warn` (not `log.error`) and includes the cell key.
+- The tie-break order is `(batchCount desc, directionCount desc, defId asc)`.
+
+---
+
+## Slice 2 — Wire `domain-coverage.ts` + integration tests + GQL desc + glossary
+
+**Estimated diff size:** ~210 lines (~50 in `domain-coverage.ts` + ~120 integration tests in `domain-coverage.test.ts` + ~10 in GQL types + ~30 in glossary).
+
+**Files this slice writes to:**
+- `cloud/apps/api/src/graphql/queries/domain-coverage.ts`
+- `cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts` (integration tests)
+- `cloud/apps/api/src/graphql/queries/domain-coverage-gql-types.ts`
+- `docs/canonical-glossary.md`
+
+### Tasks
+
+- [ ] **T2.1** In `domain-coverage.ts`, add `getCoverageDirection` to the import list from `./domain-coverage-utils.js`.
+- [ ] **T2.2** Replace the local maps `pairedBatchCountByDefinitionId`, `pairedBatchGroupIdsByDefinitionId`, `pairedBatchIncrementsByGroupId` (declared near `domain-coverage.ts:131–133`) with a single `directionalGroupsByDefinitionId: Map<string, Map<string, Set<string>>>`.
+- [ ] **T2.3** Replace the inner-loop `pairedBatchCount` block at `domain-coverage.ts:291–314` with the new direction-counting body from plan §3.2 (compute `direction`; if non-null, look up `groupKey = getCoverageBatchGroupId(...) ?? '__ungrouped__:' + run.id`; add to `defMap[direction]`).
+- [ ] **T2.4** Update the `selectPrimaryDefinitionCounts` call site (currently `domain-coverage.ts:370–376`) to pass `directionalGroupsByDefinitionId`, `ctx.log`, and `${valueA}::${valueB}` in place of the old group-id maps. Remove the now-unused old-map arguments.
+- [ ] **T2.5** Verify the trial-count path (`deduplicateRunsByGroupId(...)` block at `domain-coverage.ts:399`) is **unchanged** — it still feeds `computePerModelTrialCounts` exactly as today. Add an inline comment confirming this is intentional per spec §5.7.
+- [ ] **T2.6** [P: cloud/apps/api/src/graphql/queries/domain-coverage-gql-types.ts] Update `domain-coverage-gql-types.ts:83`: replace the `pairedBatchCount` field description with the new text in plan §3.3.
+- [ ] **T2.7** [P: docs/canonical-glossary.md] Update `docs/canonical-glossary.md`: replace the `Paired Batch` entry per spec §5.8; replace the `Incomplete Batch` entry's body per spec §5.8; append the two glossary notes ("Note on terminology overlap" and "Note on metric divergence within a cell") at the end of the `Paired Batch` entry.
+- [ ] **T2.8** [P: cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts] Add the 5 integration tests (I1–I5) from plan §3.5 to `domain-coverage.test.ts`. Each test uses the existing fixture pattern (or constructs minimal mock prisma responses). I5 mocks `ctx.log` with `vi.fn()` and asserts `log.warn` is called with the cell key + 3 direction tokens.
+- [ ] **T2.9** Remove the temporary `// @ts-expect-error` directive added in T1.4, if used. (If the alternative two-commit-one-PR approach was used, this step is N/A.)
+- [ ] **T2.10** Run from `cloud/`:
+  - `npx turbo lint --filter=@valuerank/api` — must pass.
+  - `npx turbo test --filter=@valuerank/api` — must pass with the new tests included. Record the new test count delta.
+  - `npx turbo build --filter=@valuerank/api` — must pass.
+- [ ] **T2.11** Run from `cloud/`:
+  - `npx turbo lint --filter=@valuerank/web` — must pass.
+  - `npx turbo test --filter=@valuerank/web` — must pass.
+  - `npx turbo build --filter=@valuerank/web` — must pass.
+- [ ] **T2.12** Manual verification: from `cloud/`, run `npm run dev --workspace @valuerank/api`. Issue a GraphQL query against `http://localhost:3031/graphql` for one known value pair on the seed/test DB. Confirm the response includes `pairedBatchCount` and the value matches the expected `min(A-first, B-first)` for the seeded fixtures. (If no seeded fixtures with paired runs exist, this step can be skipped — note in PR description.)
+
+### `[CHECKPOINT]` — slice 2 boundary (also the merge boundary)
+
+Diff review: `correctness` + `regression` (Codex) + `quality` (Gemini). Reviewers should verify:
+- All diffs match plan §3 exactly (no scope creep).
+- Spec §10 forbidden files list — confirm `git diff --stat origin/main..HEAD` shows only the 5 files in spec §10's edits list.
+- Glossary text is verbatim from spec §5.8.
+- GQL field description is verbatim from plan §3.3.
+- I2 integration test asserts BOTH `pairedBatchCount` and `minTrialCount` on the same fixture (the divergence assertion).
+
+---
+
+## Pre-merge checklist
+
+Before opening PR:
+
+- [ ] **PM1** `git diff --stat origin/main..HEAD` lists exactly these files: `domain-coverage.ts`, `domain-coverage-utils.ts`, `domain-coverage-gql-types.ts`, `domain-coverage.test.ts`, `canonical-glossary.md`. Anything else is scope creep.
+- [ ] **PM2** Run all 8 preflight steps from MEMORY.md (lint+test+build for `@valuerank/shared`, `@valuerank/db`, `@valuerank/api`, `@valuerank/web`). Skip the database-only ones if the changes don't touch DB. All must pass.
+- [ ] **PM3** Pre-deploy SQL spot-checks against prod (read-only, via Railway DB):
+  - **Q1** (R3 verification — guard against ad-hoc runs with valueFirst): `SELECT COUNT(*) FROM runs WHERE config->>'jobChoiceLaunchMode' != 'PAIRED_BATCH' AND config ? 'jobChoiceValueFirst' AND status='COMPLETED' AND deleted_at IS NULL;` Expected: 0.
+  - **Q2** (R5 verification — guard against >2 directions in any cell): `SELECT definition_id, COUNT(DISTINCT BTRIM(config->>'jobChoiceValueFirst')) AS dirs FROM runs WHERE status='COMPLETED' AND deleted_at IS NULL AND (config->>'isAggregate')::boolean IS NOT TRUE AND BTRIM(COALESCE(config->>'jobChoiceValueFirst',''))<>'' GROUP BY definition_id HAVING COUNT(DISTINCT BTRIM(config->>'jobChoiceValueFirst')) > 2;` Expected: 0 rows.
+  - **Q3** (Risk verification — guard against retry duplicates): `SELECT config->>'jobChoiceBatchGroupId' AS bgid, config->>'jobChoiceValueFirst' AS vf, COUNT(*) FROM runs WHERE status='COMPLETED' AND deleted_at IS NULL AND (config->>'isAggregate')::boolean IS NOT TRUE GROUP BY 1,2 HAVING COUNT(*) > 1;` Expected: 0 rows. If non-zero, those cells will see `pairedBatchCount` decrease.
+  - **Q4** (R2 verification — pre-record cells that will shift): pick at least 3 value pairs with non-trivial completed runs; for each, record current `pairedBatchCount` from the live Domain Overview, expected post-deploy value (per spec semantic), and category (clean / asymmetric / legacy-only). Save in PR description.
+- [ ] **PM4** PR description includes:
+  - Summary linking to spec/plan/closeout artifacts.
+  - "Validation" section listing exact preflight commands run with pass/fail.
+  - "Pre-deploy verification" section with results from PM3 Q1–Q4.
+  - "Post-deploy verification plan" copying spec §9 step list.
+- [ ] **PM5** PR opened against `chrislawcodes/valuerank` (per AGENTS.md). Not merged. Left for human review.
+
+---
+
+## Parallel analysis
+
+- T1.1 + T1.2 + T1.3 must be sequential (T1.3 imports the helper symbols from T1.1/T1.2).
+- T2.1 → T2.5 must be sequential (they all touch `domain-coverage.ts`).
+- T2.6 (GQL types) and T2.7 (glossary) **can run in parallel** with T2.8 (integration tests): they touch disjoint files. **[P: cloud/apps/api/src/graphql/queries/domain-coverage-gql-types.ts, docs/canonical-glossary.md]**
+
+No cross-slice parallelism within this small a refactor — T1 and T2 are tightly coupled through the helper signature change.
+
+---
+
+## Notes
+
+- **Diff size discipline:** Slice 1 ≤ 150 lines, Slice 2 ≤ 250 lines. Both well under the ~300-line `[CHECKPOINT]` cap. If implementation grows beyond these bounds (e.g. test fixtures balloon), split T2.8 (integration tests) into its own checkpoint between T2.6/2.7 and T2.9.
+- **Forbidden files** (spec §10, repeated for emphasis): do not touch `start.ts`, `lifecycle.ts`, `plan-slots.ts`, `execute-runs.ts`, `anomaly-detection.ts`, `aggregate/*`, `circumplex/*`, `types/run.ts`, any web file, `CLAUDE.md`, `AGENTS.md`, `MEMORY.md`. If implementation discovers a need to edit any of these, **stop** and re-open the spec.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+## Findings
+- High: T1.4 and the slice boundary conflict. T1.4 says `domain-coverage.ts` must not be edited in Slice 1, but the only workaround it offers for the expected type error is a `// @ts-expect-error` at the call site in that same file. That makes Slice 1 impossible to execute cleanly: either the branch stays broken for the whole slice, or the slice boundary is violated before Slice 2.
+- Medium: PM2 is internally ambiguous. It says to run all 8 preflight steps from `MEMORY.md`, but also says some database-only ones can be skipped if the change does not touch DB. The checklist never says whether skipped steps count as passing, so the pre-merge gate is not objectively satisfiable as written.
+- [UNVERIFIED] Medium: The plan assumes `selectPrimaryDefinitionCounts` has only the one call site in `domain-coverage.ts`. If that assumption is wrong, the staged split in T1/T2 will still leave the API red and the temporary `ts-expect-error` will not be enough to keep the branch green.
+
+## Residual Risks
+- The plan allows a warning-only fallback for cells with more than two directions. If production data violates the “two directions per cell” assumption, the metric will still be approximate even when all tests pass.
+- T2.12 depends on local seeded data containing paired runs. If that fixture shape is absent, the end-to-end manual check will be skipped and the final validation will lean entirely on automated tests.
+- I could not verify the current codebase against the artifact, so the implementation may still need adjustment once the actual call sites and fixtures are opened.
+2026-04-25T18:07:32.247116Z ERROR codex_core::session: failed to record rollout items: thread 019dc5d2-ac62-76a3-80c6-de6244a1533a not found
+tokens used
+11,060
