@@ -1,10 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   extractValuePair,
   getCoverageBatchGroupId,
   getCoverageBatchIncrement,
+  getCoverageDirection,
   selectPrimaryDefinitionCount,
   selectPrimaryDefinitionCounts,
+  selectPrimaryDefinitionCountsByDirection,
   computePerModelTrialCounts,
   deduplicateRunsByGroupId,
 } from '../../../src/graphql/queries/domain-coverage-utils.js';
@@ -479,5 +481,221 @@ describe('deduplicateRunsByGroupId', () => {
     const deduped = deduplicateRunsByGroupId(runs);
     const result = computePerModelTrialCounts(deduped, ['model-a'], labels);
     expect(result.minTrialCount).toBe(10); // 2 groups x 5 transcripts each
+  });
+});
+
+describe('getCoverageDirection', () => {
+  it('returns the trimmed string for a normal direction token', () => {
+    expect(getCoverageDirection({ jobChoiceValueFirst: 'career' })).toBe('career');
+  });
+
+  it('trims whitespace', () => {
+    expect(getCoverageDirection({ jobChoiceValueFirst: '  career  ' })).toBe('career');
+  });
+
+  it('returns null for an empty string', () => {
+    expect(getCoverageDirection({ jobChoiceValueFirst: '' })).toBeNull();
+  });
+
+  it('returns null for whitespace-only', () => {
+    expect(getCoverageDirection({ jobChoiceValueFirst: '   ' })).toBeNull();
+  });
+
+  it('returns null when the field is missing', () => {
+    expect(getCoverageDirection({})).toBeNull();
+  });
+
+  it('returns null for a non-string number value', () => {
+    expect(getCoverageDirection({ jobChoiceValueFirst: 42 })).toBeNull();
+  });
+
+  it('returns null for a non-string boolean value', () => {
+    expect(getCoverageDirection({ jobChoiceValueFirst: true })).toBeNull();
+  });
+
+  it('returns null for null config', () => {
+    expect(getCoverageDirection(null)).toBeNull();
+  });
+
+  it('returns the value even when launch mode is not PAIRED_BATCH (trust-but-do-not-validate tripwire)', () => {
+    // The algorithm trusts jobChoiceValueFirst regardless of launch mode.
+    // If a future change adds a launch-mode guard, this test should fail
+    // and force a deliberate update.
+    expect(
+      getCoverageDirection({ jobChoiceLaunchMode: 'AD_HOC_BATCH', jobChoiceValueFirst: 'career' }),
+    ).toBe('career');
+  });
+});
+
+describe('selectPrimaryDefinitionCountsByDirection', () => {
+  function makeDirMap(
+    entries: Array<[string, Map<string, Set<string>>]>,
+  ): Map<string, Map<string, Set<string>>> {
+    return new Map(entries);
+  }
+
+  it('returns zero for an empty definition list', () => {
+    expect(selectPrimaryDefinitionCountsByDirection([], new Map(), new Map())).toEqual({
+      primaryDefinitionId: null,
+      batchCount: 0,
+      pairedBatchCount: 0,
+    });
+  });
+
+  it('single direction only -> pairedBatchCount = 0', () => {
+    const batches = new Map([['def-a', 1]]);
+    const dirs = makeDirMap([[
+      'def-a', new Map([['vf-A', new Set(['g1'])]]),
+    ]]);
+    expect(selectPrimaryDefinitionCountsByDirection(['def-a'], batches, dirs)).toEqual({
+      primaryDefinitionId: 'def-a',
+      batchCount: 1,
+      pairedBatchCount: 0,
+    });
+  });
+
+  it('both directions equal -> pairedBatchCount = min(N, N)', () => {
+    const batches = new Map([['def-a', 4]]);
+    const dirs = makeDirMap([[
+      'def-a', new Map([
+        ['vf-A', new Set(['g1', 'g2'])],
+        ['vf-B', new Set(['g1', 'g2'])],
+      ]),
+    ]]);
+    expect(selectPrimaryDefinitionCountsByDirection(['def-a'], batches, dirs)).toEqual({
+      primaryDefinitionId: 'def-a',
+      batchCount: 4,
+      pairedBatchCount: 2,
+    });
+  });
+
+  it('both directions, A=3 B=2 -> pairedBatchCount = min(3, 2) = 2', () => {
+    const batches = new Map([['def-a', 5]]);
+    const dirs = makeDirMap([[
+      'def-a', new Map([
+        ['vf-A', new Set(['g1', 'g2', 'g3'])],
+        ['vf-B', new Set(['g1', 'g2'])],
+      ]),
+    ]]);
+    expect(selectPrimaryDefinitionCountsByDirection(['def-a'], batches, dirs)).toEqual({
+      primaryDefinitionId: 'def-a',
+      batchCount: 5,
+      pairedBatchCount: 2,
+    });
+  });
+
+  it('cross-definition pair (companion structure) merges via Set.union per direction', () => {
+    // def-a has all A-first runs, def-b has all B-first runs (companion definitions)
+    const batches = new Map([['def-a', 2], ['def-b', 2]]);
+    const dirs = makeDirMap([
+      ['def-a', new Map([['vf-A', new Set(['g1', 'g2'])]])],
+      ['def-b', new Map([['vf-B', new Set(['g1', 'g2'])]])],
+    ]);
+    const result = selectPrimaryDefinitionCountsByDirection(
+      ['def-a', 'def-b'], batches, dirs,
+    );
+    expect(result.batchCount).toBe(4);
+    expect(result.pairedBatchCount).toBe(2);
+    // Tie-break: both have batchCount=2; both have directionCount=1; localeCompare picks 'def-a'
+    expect(result.primaryDefinitionId).toBe('def-a');
+  });
+
+  it('retry duplicate within group (Set collapses same groupId)', () => {
+    // Set semantics: adding the same g1 twice still leaves size=1.
+    const batches = new Map([['def-a', 2]]);
+    const dirs = makeDirMap([[
+      'def-a', new Map([
+        ['vf-A', new Set(['g1'])], // Set already collapsed
+      ]),
+    ]]);
+    expect(selectPrimaryDefinitionCountsByDirection(['def-a'], batches, dirs)).toEqual({
+      primaryDefinitionId: 'def-a',
+      batchCount: 2,
+      pairedBatchCount: 0, // Only one direction
+    });
+  });
+
+  it('>2 directions corruption: takes min of two largest, calls log.warn', () => {
+    const batches = new Map([['def-a', 5]]);
+    const dirs = makeDirMap([[
+      'def-a', new Map([
+        ['vf-A', new Set(['g1', 'g2', 'g3'])], // 3
+        ['vf-B', new Set(['g1'])],              // 1
+        ['vf-X', new Set(['g4'])],              // 1
+      ]),
+    ]]);
+    const log = { warn: vi.fn() };
+    const result = selectPrimaryDefinitionCountsByDirection(
+      ['def-a'], batches, dirs, log, 'Achievement::Tradition',
+    );
+    // Two largest counts: 3 and 1 -> min = 1
+    expect(result.pairedBatchCount).toBe(1);
+    expect(log.warn).toHaveBeenCalledTimes(1);
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cellKey: 'Achievement::Tradition',
+        directions: expect.arrayContaining(['vf-A', 'vf-B', 'vf-X']),
+      }),
+      expect.stringContaining('>2 distinct'),
+    );
+  });
+
+  it('tie-break on directionCount: prefers def with both directions', () => {
+    // def-a and def-b tie on batchCount=2; def-b has both directions present
+    const batches = new Map([['def-a', 2], ['def-b', 2]]);
+    const dirs = makeDirMap([
+      ['def-a', new Map([['vf-A', new Set(['g1', 'g2'])]])],
+      ['def-b', new Map([
+        ['vf-A', new Set(['g3'])],
+        ['vf-B', new Set(['g3'])],
+      ])],
+    ]);
+    const result = selectPrimaryDefinitionCountsByDirection(
+      ['def-a', 'def-b'], batches, dirs,
+    );
+    expect(result.primaryDefinitionId).toBe('def-b');
+  });
+
+  it('tie-break on defId.localeCompare when batchCount and directionCount tie', () => {
+    const batches = new Map([['def-z', 2], ['def-a', 2]]);
+    const dirs = makeDirMap([
+      ['def-z', new Map([['vf-A', new Set(['g1', 'g2'])]])],
+      ['def-a', new Map([['vf-A', new Set(['g3', 'g4'])]])],
+    ]);
+    const result = selectPrimaryDefinitionCountsByDirection(
+      ['def-z', 'def-a'], batches, dirs,
+    );
+    expect(result.primaryDefinitionId).toBe('def-a');
+  });
+
+  it('ignores samplesPerScenario — directional count is per (group, direction), not per sample (tripwire)', () => {
+    // The new helper does NOT see samplesPerScenario at all. This test
+    // documents that the post-PR-#756 semantic (each complete run = 1 batch
+    // regardless of sps) is preserved by the new direction-based helper.
+    // If someone re-adds sps multiplication, this test should still pass —
+    // the helper has no input field for sps to influence.
+    const batches = new Map([['def-a', 2]]);
+    const dirs = makeDirMap([[
+      'def-a', new Map([
+        ['vf-A', new Set(['g1'])],
+        ['vf-B', new Set(['g1'])],
+      ]),
+    ]]);
+    expect(selectPrimaryDefinitionCountsByDirection(['def-a'], batches, dirs).pairedBatchCount).toBe(1);
+  });
+
+  it('does not warn when no log is provided in the >2 corruption case', () => {
+    const batches = new Map([['def-a', 5]]);
+    const dirs = makeDirMap([[
+      'def-a', new Map([
+        ['vf-A', new Set(['g1', 'g2'])],
+        ['vf-B', new Set(['g1'])],
+        ['vf-X', new Set(['g4'])],
+      ]),
+    ]]);
+    // Should not throw without log, just compute the heuristic.
+    expect(() =>
+      selectPrimaryDefinitionCountsByDirection(['def-a'], batches, dirs),
+    ).not.toThrow();
   });
 });

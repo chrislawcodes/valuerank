@@ -247,3 +247,102 @@ export function getCoverageBatchGroupId(runConfig: unknown): string | null {
 
   return raw != null && raw.trim().length > 0 ? raw.trim() : null;
 }
+
+/**
+ * Read the direction token off a Run's config. Returns null for missing,
+ * blank, or non-string `jobChoiceValueFirst`. Trimmed.
+ */
+export function getCoverageDirection(runConfig: unknown): string | null {
+  const config = runConfig as { jobChoiceValueFirst?: unknown } | null;
+  if (config == null || typeof config.jobChoiceValueFirst !== 'string') return null;
+  const trimmed = config.jobChoiceValueFirst.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+/**
+ * Compute per-cell counts using the directional model.
+ *
+ * Sums `batchCount` across companion definitions (unchanged semantics).
+ * Computes `pairedBatchCount = min(complete A-first, complete B-first)`
+ * by merging per-direction Sets across companion definitions and taking
+ * `min(set.size)` of the two directions. When >2 distinct directions
+ * appear in the merged map (data corruption), takes min of the two
+ * largest counts and emits a warning via `log.warn` (if provided).
+ *
+ * Tie-break for `primaryDefinitionId`: `(batchCount desc, directionCount desc, defId asc)`
+ * where `directionCount = directionalGroupsByDefinitionId.get(defId)?.size ?? 0`.
+ */
+export function selectPrimaryDefinitionCountsByDirection(
+  definitionIds: readonly string[],
+  batchCountByDefinitionId: ReadonlyMap<string, number>,
+  directionalGroupsByDefinitionId: ReadonlyMap<string, ReadonlyMap<string, ReadonlySet<string>>>,
+  log?: { warn: (obj: object, msg: string) => void },
+  cellKey?: string,
+): { primaryDefinitionId: string | null; batchCount: number; pairedBatchCount: number } {
+  const uniqueDefinitionIds = Array.from(new Set(definitionIds));
+  if (uniqueDefinitionIds.length === 0) {
+    return { primaryDefinitionId: null, batchCount: 0, pairedBatchCount: 0 };
+  }
+
+  const directionCountFor = (defId: string): number =>
+    directionalGroupsByDefinitionId.get(defId)?.size ?? 0;
+
+  const primaryDefinitionId = uniqueDefinitionIds.reduce((best, defId) => {
+    const bestBatch = batchCountByDefinitionId.get(best) ?? 0;
+    const thisBatch = batchCountByDefinitionId.get(defId) ?? 0;
+    if (thisBatch > bestBatch) return defId;
+    if (thisBatch < bestBatch) return best;
+
+    const bestDirs = directionCountFor(best);
+    const thisDirs = directionCountFor(defId);
+    if (thisDirs > bestDirs) return defId;
+    if (thisDirs < bestDirs) return best;
+
+    return defId.localeCompare(best) < 0 ? defId : best;
+  }, uniqueDefinitionIds[0] ?? '');
+
+  const batchCount = uniqueDefinitionIds.reduce(
+    (total, defId) => total + (batchCountByDefinitionId.get(defId) ?? 0),
+    0,
+  );
+
+  // Merge per-direction Sets across companion definitions for this cell.
+  const merged = new Map<string, Set<string>>();
+  for (const defId of uniqueDefinitionIds) {
+    const defMap = directionalGroupsByDefinitionId.get(defId);
+    if (defMap == null) continue;
+    for (const [direction, groupKeys] of defMap) {
+      const existing = merged.get(direction) ?? new Set<string>();
+      for (const key of groupKeys) existing.add(key);
+      merged.set(direction, existing);
+    }
+  }
+
+  let pairedBatchCount: number;
+  if (merged.size === 0 || merged.size === 1) {
+    pairedBatchCount = 0;
+  } else if (merged.size === 2) {
+    const counts = Array.from(merged.values()).map((s) => s.size);
+    pairedBatchCount = Math.min(counts[0]!, counts[1]!);
+  } else {
+    // >2 distinct direction tokens — data corruption. Take min of the two
+    // largest counts and emit a warning. Do not throw; the operator should
+    // still see a number.
+    const sortedCounts = Array.from(merged.values())
+      .map((s) => s.size)
+      .sort((a, b) => b - a);
+    pairedBatchCount = Math.min(sortedCounts[0]!, sortedCounts[1]!);
+    if (log != null) {
+      log.warn(
+        { cellKey, directions: Array.from(merged.keys()), definitionIds: uniqueDefinitionIds },
+        '>2 distinct jobChoiceValueFirst tokens in single coverage cell; using min of two largest',
+      );
+    }
+  }
+
+  return {
+    primaryDefinitionId: primaryDefinitionId === '' ? null : primaryDefinitionId,
+    batchCount,
+    pairedBatchCount,
+  };
+}
