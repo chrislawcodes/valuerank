@@ -2130,5 +2130,11 @@
     ],
     "used": true,
     "updated_at": 1777099660
+  },
+  "implementation_rule_override": {
+    "at": 1777099867,
+    "reason": "Self-fixing PR \u2014 Slice 5 builds the dispatch-codex subcommand itself; cannot dogfood it before it lands. All 5 slices were dispatched via 'codex exec' from the shell with explicit prompts at /tmp/codex-slice{1,2,3,4,5}-spec.txt; 5 commits 47fa..b3f8 attribute Codex via Co-Authored-By trailer. Future features will use the new dispatch-codex subcommand and populate codex_dispatches[] for the freshness check this PR ships.",
+    "operator": "chrislaw",
+    "head_sha": "6c6e4bf923909ca5e115791f67cffd3e0c210d82"
   }
 }
