@@ -49,6 +49,31 @@ export function findMissingTranscriptKeys({
 }
 
 /**
+ * Convenience wrapper for completeness checks done at display time, where the
+ * caller already has the run's config, scenarioIds, and transcripts in memory
+ * (e.g., the Domain Overview resolver).
+ *
+ * A run is "complete" iff every expected (scenarioId × modelId × sampleIndex)
+ * slot has at least one transcript present. Extra transcripts in a slot do
+ * NOT break completeness — only missing slots do. This matches the canonical
+ * glossary definition of Batch (a complete pass; duplicates from worker retries
+ * are bonus samples, not errors).
+ *
+ * Returns false when the expectation has zero slots (vacuous-completeness
+ * guard) so empty / degenerate runs are not silently classified as complete.
+ */
+export function isRunComplete(
+  expectation: TranscriptExpectation & { existingTranscripts: TranscriptKey[] },
+): boolean {
+  const samples = normalizeSamplesPerScenario(expectation.samplesPerScenario);
+  const expectedSlotCount = expectation.scenarioIds.length * expectation.models.length * samples;
+  if (expectedSlotCount === 0) {
+    return false;
+  }
+  return findMissingTranscriptKeys(expectation).length === 0;
+}
+
+/**
  * Finds which (scenarioId × modelId × sampleIndex) tuples are missing transcripts
  * for a given run, by reading the run's config and scenario selections from the DB.
  *

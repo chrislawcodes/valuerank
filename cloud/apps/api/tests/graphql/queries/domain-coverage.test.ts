@@ -431,6 +431,39 @@ describe('deduplicateRunsByGroupId', () => {
     expect(deduplicateRunsByGroupId([])).toHaveLength(0);
   });
 
+  it('with completenessOf callback, prefers the complete companion within a group', () => {
+    const runs = [
+      { config: { jobChoiceBatchGroupId: 'group-1' }, transcripts: [], complete: false },
+      { config: { jobChoiceBatchGroupId: 'group-1' }, transcripts: [], complete: true },
+      { config: { jobChoiceBatchGroupId: 'group-2' }, transcripts: [], complete: false },
+      { config: { jobChoiceBatchGroupId: 'group-2' }, transcripts: [], complete: false },
+    ];
+    const survivors = deduplicateRunsByGroupId(runs, (run) => run.complete);
+    expect(survivors).toHaveLength(2);
+    // group-1 winner is the complete one; group-2 has no complete -- first-seen wins.
+    expect(survivors.find((r) => r.config.jobChoiceBatchGroupId === 'group-1')?.complete).toBe(true);
+  });
+
+  it('with completenessOf, both-incomplete groups keep first-seen survivor', () => {
+    const runs = [
+      { config: { jobChoiceBatchGroupId: 'g1' }, transcripts: [], tag: 'first' },
+      { config: { jobChoiceBatchGroupId: 'g1' }, transcripts: [], tag: 'second' },
+    ];
+    const survivors = deduplicateRunsByGroupId(runs, () => false);
+    expect(survivors).toHaveLength(1);
+    expect(survivors[0]?.tag).toBe('first');
+  });
+
+  it('with completenessOf, ungrouped runs always survive regardless of completeness', () => {
+    const runs = [
+      { config: {}, transcripts: [], complete: false },
+      { config: {}, transcripts: [], complete: false },
+      { config: { jobChoiceBatchGroupId: 'g1' }, transcripts: [], complete: true },
+    ];
+    const survivors = deduplicateRunsByGroupId(runs, (run) => run.complete);
+    expect(survivors).toHaveLength(3);
+  });
+
   it('when combined with computePerModelTrialCounts, paired companions count once', () => {
     const labels = new Map([['model-a', 'Model A']]);
     // Simulate A-first and B-first companion runs for the same batch group.
