@@ -85,7 +85,11 @@ def _added_code_lines(branch_base: str) -> int | None:
         *_IMPLEMENTATION_RULE_CODE_GLOBS,
         *_IMPLEMENTATION_RULE_TEST_EXCLUDES,
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired,
+            FileNotFoundError, OSError):
+        return None
     if result.returncode != 0:
         return None
     total_added = 0
@@ -153,7 +157,7 @@ def check_implementation_rule(slug: str) -> tuple[Literal["triggered", "suppress
     if branch_base is None:
         message = (
             "implementation-rule check skipped — could not resolve branch base "
-            "(origin/main, main, fork-point all failed)"
+            "(origin/main, fork-point, main all failed)"
         )
         print(message, file=sys.stderr)
         return ("skipped", message)

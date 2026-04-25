@@ -101,22 +101,6 @@ def command_dispatch_codex(args: argparse.Namespace) -> int:
         raise SystemExit(2)
     prompt_sha256 = hashlib.sha256(prompt_bytes).hexdigest()
 
-    head_sha = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=factory_state.REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=True,
-        timeout=10,
-    ).stdout.strip()
-
-    branch_base = factory_deliver._resolve_branch_base()
-    lines_added = (
-        factory_deliver._added_code_lines(branch_base)
-        if branch_base is not None
-        else None
-    )
-
     base_id = datetime.utcnow().strftime("%Y%m%dT%H%M%S_%fZ")
     dispatch_dir = _allocate_dispatch_dir(args.slug, base_id)
     dispatch_id = dispatch_dir.name
@@ -155,6 +139,25 @@ def command_dispatch_codex(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         raise SystemExit(4)
+
+    try:
+        head_result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=factory_state.REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        head_sha = head_result.stdout.strip() if head_result.returncode == 0 else None
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired,
+            FileNotFoundError, OSError):
+        head_sha = None
+
+    branch_base = factory_deliver._resolve_branch_base()
+    if branch_base is not None:
+        lines_added = factory_deliver._added_code_lines(branch_base)
+    else:
+        lines_added = None
 
     record = {
         "head_sha": head_sha,

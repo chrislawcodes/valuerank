@@ -87,6 +87,34 @@ class CheckImplementationRuleTests(unittest.TestCase):
         self.assertEqual(status, "ok")
         self.assertEqual(msg, "")
 
+    def test_threshold_boundary_200_triggers(self) -> None:
+        self._set_codex_dispatches([])
+        with patch.object(FACTORY_DELIVER, "_resolve_branch_base", return_value="basesha"):
+            with patch.object(FACTORY_DELIVER, "_added_code_lines", return_value=200):
+                status, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertEqual(status, "triggered")
+        self.assertIn("200", msg)
+
+    def test_threshold_boundary_199_returns_ok(self) -> None:
+        self._set_codex_dispatches([])
+        with patch.object(FACTORY_DELIVER, "_resolve_branch_base", return_value="basesha"):
+            with patch.object(FACTORY_DELIVER, "_added_code_lines", return_value=199):
+                status, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertEqual(status, "ok")
+        self.assertEqual(msg, "")
+
+    def test_added_code_lines_handles_subprocess_exceptions(self) -> None:
+        exceptions = [
+            subprocess.CalledProcessError(returncode=1, cmd=["git", "diff"]),
+            subprocess.TimeoutExpired(cmd=["git", "diff"], timeout=60),
+            FileNotFoundError(2, "No such file or directory", "git"),
+            OSError(13, "Permission denied"),
+        ]
+        for exc in exceptions:
+            with self.subTest(exception=type(exc).__name__):
+                with patch.object(FACTORY_DELIVER.subprocess, "run", side_effect=exc):
+                    self.assertIsNone(FACTORY_DELIVER._added_code_lines("any_sha"))
+
     def test_stale_codex_dispatch_does_not_suppress(self) -> None:
         self._set_codex_dispatches([
             {
@@ -322,16 +350,141 @@ class CheckImplementationRuleTests(unittest.TestCase):
         self.assertIn("300", msg)
 
     def test_skip_when_branch_base_unresolved(self) -> None:
-        message = (
-            "implementation-rule check skipped — could not resolve branch base "
-            "(origin/main, main, fork-point all failed)"
-        )
         stderr = io.StringIO()
         with patch.object(FACTORY_DELIVER, "_resolve_branch_base", return_value=None), redirect_stderr(stderr):
             status, msg = FACTORY_DELIVER.check_implementation_rule(self.slug)
         self.assertEqual(status, "skipped")
-        self.assertEqual(msg, message)
-        self.assertIn(message, stderr.getvalue())
+        self.assertTrue(
+            msg.startswith(
+                "implementation-rule check skipped — could not resolve branch base "
+                "(origin/main, fork-point, main"
+            )
+        )
+        self.assertEqual(
+            msg,
+            "implementation-rule check skipped — could not resolve branch base "
+            "(origin/main, fork-point, main all failed)",
+        )
+        self.assertIn("could not resolve branch base (origin/main, fork-point, main all failed)", stderr.getvalue())
+
+    def test_check_implementation_rule_handles_null_head_sha(self) -> None:
+        self._set_codex_dispatches([
+            {
+                "head_sha": None,
+                "exit_code": 0,
+                "branch_base_sha": "abc",
+                "lines_added_at_dispatch_time": 500,
+                "ts": "20260101T000000_000000Z",
+            }
+        ])
+        with patch.object(FACTORY_DELIVER, "_resolve_branch_base", return_value="abc"):
+            with patch.object(FACTORY_DELIVER, "_added_code_lines", return_value=500):
+                status, _ = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertEqual(status, "triggered")
+
+    def test_check_implementation_rule_handles_recompute_failure(self) -> None:
+        self._set_codex_dispatches([
+            {
+                "head_sha": "abc",
+                "exit_code": 0,
+                "branch_base_sha": "basesha",
+                "lines_added_at_dispatch_time": None,
+                "ts": "20260101T000000_000000Z",
+            }
+        ])
+        with patch.object(FACTORY_DELIVER, "_resolve_branch_base", return_value="basesha"):
+            with patch.object(FACTORY_DELIVER, "_added_code_lines", return_value=500):
+                with patch.object(FACTORY_DELIVER, "is_ancestor_of_head", return_value=True):
+                    with patch.object(FACTORY_DELIVER, "_recompute_lines_for_dispatch", return_value=None) as recompute:
+                        status, _ = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertEqual(status, "triggered")
+        recompute.assert_called_once()
+
+    def test_check_implementation_rule_handles_null_branch_base_sha(self) -> None:
+        self._set_codex_dispatches([
+            {
+                "head_sha": "abc",
+                "exit_code": 0,
+                "branch_base_sha": None,
+                "lines_added_at_dispatch_time": None,
+                "ts": "20260101T000000_000000Z",
+            }
+        ])
+        with patch.object(FACTORY_DELIVER, "_resolve_branch_base", return_value="basesha"):
+            with patch.object(FACTORY_DELIVER, "_added_code_lines", return_value=500):
+                with patch.object(FACTORY_DELIVER, "is_ancestor_of_head", return_value=True):
+                    with patch.object(FACTORY_DELIVER, "_recompute_lines_for_dispatch", return_value=None) as recompute:
+                        status, _ = FACTORY_DELIVER.check_implementation_rule(self.slug)
+        self.assertEqual(status, "triggered")
+        recompute.assert_called_once()
+
+    def test_check_implementation_rule_mixed_partial_records(self) -> None:
+        valid_head = "abc1234"
+        current_base = "basesha"
+        with self.subTest("null head sha"):
+            self._set_codex_dispatches([
+                {
+                    "head_sha": None,
+                    "exit_code": 0,
+                    "branch_base_sha": current_base,
+                    "lines_added_at_dispatch_time": 500,
+                    "ts": "20260101T000000_000000Z",
+                }
+            ])
+            with patch.object(FACTORY_DELIVER, "_resolve_branch_base", return_value=current_base):
+                with patch.object(FACTORY_DELIVER, "_added_code_lines", return_value=500):
+                    status, _ = FACTORY_DELIVER.check_implementation_rule(self.slug)
+            self.assertEqual(status, "triggered")
+
+        with self.subTest("null lines recompute suppresses"):
+            self._set_codex_dispatches([
+                {
+                    "head_sha": valid_head,
+                    "exit_code": 0,
+                    "branch_base_sha": current_base,
+                    "lines_added_at_dispatch_time": None,
+                    "ts": "20260101T000000_000000Z",
+                }
+            ])
+            with patch.object(FACTORY_DELIVER, "_resolve_branch_base", return_value=current_base):
+                with patch.object(FACTORY_DELIVER, "_added_code_lines", return_value=500):
+                    with patch.object(FACTORY_DELIVER, "is_ancestor_of_head", return_value=True):
+                        with patch.object(FACTORY_DELIVER, "_recompute_lines_for_dispatch", return_value=480):
+                            status, note = FACTORY_DELIVER.check_implementation_rule(self.slug)
+            self.assertEqual(status, "suppressed")
+            self.assertIn("covered by codex dispatch", note)
+
+        with self.subTest("null branch base recomputes current base"):
+            dispatch = {
+                "head_sha": valid_head,
+                "exit_code": 0,
+                "branch_base_sha": None,
+                "lines_added_at_dispatch_time": 500,
+                "ts": "20260101T000000_000000Z",
+            }
+            self._set_codex_dispatches([dispatch])
+            with patch.object(FACTORY_DELIVER, "_resolve_branch_base", return_value=current_base):
+                with patch.object(FACTORY_DELIVER, "_added_code_lines", return_value=500):
+                    with patch.object(FACTORY_DELIVER, "is_ancestor_of_head", return_value=True):
+                        with patch.object(FACTORY_DELIVER, "_recompute_lines_for_dispatch", return_value=500) as recompute:
+                            status, _ = FACTORY_DELIVER.check_implementation_rule(self.slug)
+            self.assertEqual(status, "suppressed")
+            recompute.assert_called_with(dispatch, current_base)
+
+        with self.subTest("missing ts field"):
+            self._set_codex_dispatches([
+                {
+                    "head_sha": valid_head,
+                    "exit_code": 0,
+                    "branch_base_sha": current_base,
+                    "lines_added_at_dispatch_time": 500,
+                }
+            ])
+            with patch.object(FACTORY_DELIVER, "_resolve_branch_base", return_value=current_base):
+                with patch.object(FACTORY_DELIVER, "_added_code_lines", return_value=500):
+                    with patch.object(FACTORY_DELIVER, "is_ancestor_of_head", return_value=True):
+                        status, _ = FACTORY_DELIVER.check_implementation_rule(self.slug)
+            self.assertEqual(status, "suppressed")
 
     def test_skip_when_git_diff_fails(self) -> None:
         def side_effect(cmd, *args, **kwargs):
