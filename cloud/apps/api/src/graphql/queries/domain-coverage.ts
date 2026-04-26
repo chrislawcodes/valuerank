@@ -214,20 +214,20 @@ builder.queryField('domainValueCoverage', (t) =>
           existingRuns.push(runWithScenarios);
           signatureScopedRunsByDefinitionId.set(run.definitionId, existingRuns);
 
+          const isAggregateRun = config.isAggregate === true;
+          if (isAggregateRun) {
+            if (!latestAggregateRunIdByDefinitionId.has(run.definitionId)) {
+              latestAggregateRunIdByDefinitionId.set(run.definitionId, run.id);
+            }
+            continue;
+          }
+
           const models = Array.isArray(config.models)
             ? config.models.filter((m): m is string => typeof m === 'string' && m.length > 0)
             : null;
           const matchesEffectiveModelSet = effectiveModelIds.length === 0
             || (models !== null && effectiveModelIds.every((id) => models.includes(id)));
           if (!matchesEffectiveModelSet) {
-            continue;
-          }
-
-          const isAggregateRun = config.isAggregate === true;
-          if (isAggregateRun) {
-            if (!latestAggregateRunIdByDefinitionId.has(run.definitionId)) {
-              latestAggregateRunIdByDefinitionId.set(run.definitionId, run.id);
-            }
             continue;
           }
 
