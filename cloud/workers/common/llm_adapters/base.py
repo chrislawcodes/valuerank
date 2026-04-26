@@ -254,6 +254,48 @@ def is_billing_exhaustion_response(status_code: int, response_text: str) -> bool
     return any(pattern in text_lower for pattern in BILLING_EXHAUSTION_PATTERNS)
 
 
+def raise_if_empty_content(
+    *,
+    provider: str,
+    content: Optional[str],
+    output_tokens: Optional[int],
+    finish_reason: Optional[str],
+) -> None:
+    """Fail loudly when the adapter parsed a response into empty content.
+
+    Two failure modes are caught here:
+    - Provider billed for output tokens but the visible content field is empty
+      (e.g. deepseek-reasoner emitting all output as ``reasoning_content`` while
+      ``message.content`` comes back blank, which the adapter would silently
+      coerce to ``""``).
+    - Provider returned no output tokens and no content (a silent provider-side
+      drop, observed on xAI ``finish_reason=""`` responses).
+
+    Without this guard the probe worker writes an empty transcript and marks the
+    probe_results row SUCCESS, which downstream parsers cannot resolve to a
+    canonical decision.
+    """
+    if content is not None and content.strip():
+        return
+    out_tokens = output_tokens or 0
+    if out_tokens > 0:
+        message = (
+            f"{provider} returned empty content despite output_tokens={out_tokens} "
+            f"(finish_reason={finish_reason!r}); reasoning-only response or adapter "
+            f"discarded the visible answer"
+        )
+    else:
+        message = (
+            f"{provider} returned no content and output_tokens={out_tokens} "
+            f"(finish_reason={finish_reason!r}); empty provider response"
+        )
+    raise LLMError(
+        message=message,
+        code=ErrorCode.INVALID_RESPONSE,
+        details=message,
+    )
+
+
 def post_json(
     url: str,
     headers: dict[str, str],

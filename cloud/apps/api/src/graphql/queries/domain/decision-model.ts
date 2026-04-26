@@ -154,11 +154,16 @@ export function resolveCanonicalDecision(input: DecisionModelInput): CanonicalDe
 
   const parsedPath = parseDecisionPath(input.raw.parsePath);
   const cachedDecision = input.cachedDecision ?? null;
-  if (cachedDecision && cachedDecision.decisionState !== 'unknown') {
-    // When cachedDecision.decisionState is 'unknown', skip the cache and
-    // fall through to re-resolve from raw evidence. This handles cases where
-    // the cache was built with incorrect config (e.g. wrong value statements
-    // or label prefix for the domain family).
+  if (
+    cachedDecision
+    && cachedDecision.decisionState !== 'unknown'
+    && cachedDecision.decisionState !== 'parse_failed'
+  ) {
+    // When cachedDecision.decisionState is 'unknown' or 'parse_failed', skip
+    // the cache and fall through to re-resolve from raw evidence. Both states
+    // signal "no decision recovered" — re-resolving may succeed if the cache
+    // was built with incorrect config (wrong value statements or label prefix)
+    // or if the parser was upgraded after the empty-response was recorded.
 
     if (cachedDecision.decisionState === 'neutral') {
       return buildCanonicalDecisionFromPair(

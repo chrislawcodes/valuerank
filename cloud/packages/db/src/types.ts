@@ -180,7 +180,14 @@ export type SummaryCacheSummary = {
   decisionMetadata: Record<string, unknown> | null;
   canonicalDecision?: {
     cacheVersion: 2;
-    decisionState: 'resolved' | 'neutral' | 'unknown' | 'refusal';
+    /**
+     * `parse_failed` is an explicit sentinel emitted by the summarizer when the
+     * parser cannot extract any decision (e.g. empty `targetResponse`,
+     * unparseable output). It is structurally equivalent to `unknown` in every
+     * downstream consumer, but distinguishes parser failure from a model that
+     * gave a confused-but-real answer. See PR adding fail-on-empty guards.
+     */
+    decisionState: 'resolved' | 'neutral' | 'unknown' | 'refusal' | 'parse_failed';
     favoredValueKey: string | null;
     strength: 'strong' | 'lean' | 'neutral' | 'unknown';
   };

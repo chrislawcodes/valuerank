@@ -341,6 +341,69 @@ describe('summarize-transcript handler', () => {
       });
     });
 
+    it('emits the parse_failed sentinel instead of null when no value can be pinned', async () => {
+      // Reproduces the path where the resolver leaves favoredValueKey null while
+      // direction/strength are not themselves marked unknown — previously this
+      // returned null, which the persistence layer omitted from the JSONB,
+      // yielding silent missing-canonicalDecision rows in prod.
+      const transcript = makeTranscript({
+        scenarioId: 'scenario-2',
+        definitionSnapshot: {
+          dimensions: [{ name: 'Achievement' }, { name: 'Tradition' }],
+        },
+      });
+      mockFindUnique.mockResolvedValueOnce(transcript as never);
+      mockScenarioFindUnique.mockResolvedValueOnce({ orientationFlipped: false } as never);
+      mockResolveTranscriptDecisionModel.mockReturnValueOnce({
+        canonical: {
+          direction: 'favor_first',
+          strength: 'strong',
+          favoredValueKey: null,
+        },
+      } as ReturnType<typeof resolveTranscriptDecisionModel>);
+
+      mockSpawnPython.mockResolvedValueOnce({
+        success: true,
+        data: {
+          success: true,
+          summary: buildSuccessfulWorkerSummary(
+            { turns: [{ probePrompt: 'p', targetResponse: 'r' }] },
+            {
+              decisionText: null,
+              decisionMetadata: {
+                matchedText: null,
+                matchedLabel: null,
+                parseClass: 'ambiguous',
+                parsePath: 'text_label_ambiguous',
+                parserVersion: 'parser-1',
+                responseExcerpt: null,
+              },
+            },
+          ),
+        },
+      } as never);
+
+      const handler = createSummarizeTranscriptHandler();
+      const job: MockJob<{ runId: string; transcriptId: string }> = {
+        id: 'test-job-id',
+        data: { runId: transcript.runId, transcriptId: transcript.id },
+      };
+
+      await handler([job] as Parameters<typeof handler>[0]);
+
+      expect(mockPersistSuccess).toHaveBeenCalledTimes(1);
+      const call = mockPersistSuccess.mock.calls[0];
+      if (!call) throw new Error('expected persistSuccessfulSummary call');
+      // Sentinel keeps a parser failure visible in JSONB instead of silently
+      // dropping the canonicalDecision key.
+      expect(call[5]).toEqual({
+        cacheVersion: 2,
+        decisionState: 'parse_failed',
+        favoredValueKey: null,
+        strength: 'unknown',
+      });
+    });
+
     it('batches multiple transcripts into one Python spawn', async () => {
       const first = makeTranscript({ id: 'transcript-1', runId: 'run-a' });
       const second = makeTranscript({ id: 'transcript-2', runId: 'run-b' });
