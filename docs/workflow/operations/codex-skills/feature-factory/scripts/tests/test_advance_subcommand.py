@@ -181,6 +181,70 @@ class AdvanceSubcommandTests(unittest.TestCase):
         self.assertIn("diff", stage_action.choices)
         self.assertNotIn("implementation", stage_action.choices)
 
+    def test_empty_head_sha_aborts_before_state_mutation(self) -> None:
+        """Regression: blank head_sha in annotations[] is forensically useless.
+
+        Pre-fix, _git_head_sha returned "" on any subprocess error and the
+        annotation was written with head_sha="" — confusable with "advance
+        ran on the empty tree." The fix exits 2 instead.
+        """
+        before = self._read_state()
+        args = self._parser().parse_args([
+            "advance",
+            "--slug",
+            SLUG,
+            "--stage",
+            "spec",
+            "--reason",
+            "valid reason longer than minimum",
+        ])
+        stderr = io.StringIO()
+        with self.assertRaises(SystemExit) as ctx:
+            with patch.object(
+                self.advance.subprocess,
+                "run",
+                side_effect=FileNotFoundError("git not on PATH"),
+            ), contextlib.redirect_stdout(io.StringIO()), \
+                    contextlib.redirect_stderr(stderr):
+                args.func(args)
+
+        self.assertEqual(ctx.exception.code, 2)
+        self.assertIn("could not resolve HEAD", stderr.getvalue())
+        self.assertEqual(before, self._read_state())
+
+    def test_nonzero_git_returncode_aborts_before_state_mutation(self) -> None:
+        """Same as above but covers `git rev-parse HEAD` returning non-zero
+        (e.g., REPO_ROOT is not inside a git work tree).
+        """
+        before = self._read_state()
+        args = self._parser().parse_args([
+            "advance",
+            "--slug",
+            SLUG,
+            "--stage",
+            "spec",
+            "--reason",
+            "valid reason longer than minimum",
+        ])
+        stderr = io.StringIO()
+        with self.assertRaises(SystemExit) as ctx:
+            with patch.object(
+                self.advance.subprocess,
+                "run",
+                return_value=subprocess.CompletedProcess(
+                    args=["git", "rev-parse", "HEAD"],
+                    returncode=128,
+                    stdout="",
+                    stderr="fatal: not a git repository\n",
+                ),
+            ), contextlib.redirect_stdout(io.StringIO()), \
+                    contextlib.redirect_stderr(stderr):
+                args.func(args)
+
+        self.assertEqual(ctx.exception.code, 2)
+        self.assertIn("could not resolve HEAD", stderr.getvalue())
+        self.assertEqual(before, self._read_state())
+
     def test_whitespace_trimmed_reason_below_minimum_rejects(self) -> None:
         before = self._read_state()
         args = self._parser().parse_args([

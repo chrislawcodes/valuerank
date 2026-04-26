@@ -38,6 +38,7 @@ def _eager_validate(args: argparse.Namespace) -> str:
 
 
 def _git_head_sha() -> str:
+    """Return current HEAD sha or empty string if git could not resolve it."""
     try:
         result = subprocess.run(
             ["git", "rev-parse", "HEAD"],
@@ -58,6 +59,15 @@ def command_advance(args: argparse.Namespace) -> int:
     reason = _eager_validate(args)
 
     head_sha = _git_head_sha()
+    if not head_sha:
+        # An empty head_sha in annotations[] is forensically useless and would
+        # be confused with "advance ran on the empty tree." Refuse to write.
+        print(
+            "could not resolve HEAD via 'git rev-parse'; aborting before "
+            "state mutation. Re-run from a clean git checkout.",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
     ts = datetime.utcnow().strftime("%Y%m%dT%H%M%S_%fZ")
 
     def mutate(state: dict) -> None:
