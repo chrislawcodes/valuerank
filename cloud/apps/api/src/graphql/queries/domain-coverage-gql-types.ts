@@ -23,6 +23,8 @@ export type DomainValueCoverageCell = {
   batchCount: number;
   pairedBatchCount: number;
   orphanedBatchCount: number;
+  aFirstBatchCount: number;
+  bFirstBatchCount: number;
   /** Number of non-aggregate runs whose transcript count is less than expected. */
   incompleteBatchCount: number;
   definitionId: string | null;
@@ -98,6 +100,16 @@ const DomainValueCoverageCellRef = builder
           'min(complete A-first runs, complete B-first runs). When both directions ' +
           'are equal this is 0; when only one direction has runs this is the count ' +
           'of that side. Runs without a recognizable direction token are excluded.',
+      }),
+      aFirstBatchCount: t.exposeInt('aFirstBatchCount', {
+        description:
+          'Count of complete A-first runs for this value pair after model-set filtering. ' +
+          'This is the filtered directional count for the first value in the pair.',
+      }),
+      bFirstBatchCount: t.exposeInt('bFirstBatchCount', {
+        description:
+          'Count of complete B-first runs for this value pair after model-set filtering. ' +
+          'This is the filtered directional count for the second value in the pair.',
       }),
       incompleteBatchCount: t.exposeInt('incompleteBatchCount', {
         description:

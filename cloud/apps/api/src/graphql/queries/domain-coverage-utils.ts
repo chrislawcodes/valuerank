@@ -192,12 +192,28 @@ export function selectPrimaryDefinitionCounts(
   definitionIds: readonly string[],
   batchCountByDefinitionId: ReadonlyMap<string, number>,
   directionalGroupsByDefinitionId: ReadonlyMap<string, ReadonlyMap<string, ReadonlySet<string>>>,
+  valueA: string,
+  valueB: string,
   log?: { warn: (obj: object, msg: string) => void },
   cellKey?: string,
-): { primaryDefinitionId: string | null; batchCount: number; pairedBatchCount: number; orphanedBatchCount: number } {
+): {
+  primaryDefinitionId: string | null;
+  batchCount: number;
+  pairedBatchCount: number;
+  orphanedBatchCount: number;
+  aFirstBatchCount: number;
+  bFirstBatchCount: number;
+} {
   const uniqueDefinitionIds = Array.from(new Set(definitionIds));
   if (uniqueDefinitionIds.length === 0) {
-    return { primaryDefinitionId: null, batchCount: 0, pairedBatchCount: 0, orphanedBatchCount: 0 };
+    return {
+      primaryDefinitionId: null,
+      batchCount: 0,
+      pairedBatchCount: 0,
+      orphanedBatchCount: 0,
+      aFirstBatchCount: 0,
+      bFirstBatchCount: 0,
+    };
   }
 
   const directionCountFor = (defId: string): number =>
@@ -264,10 +280,15 @@ export function selectPrimaryDefinitionCounts(
     }
   }
 
+  const aFirstBatchCount = merged.get(valueA)?.size ?? 0;
+  const bFirstBatchCount = merged.get(valueB)?.size ?? 0;
+
   return {
     primaryDefinitionId: primaryDefinitionId === '' ? null : primaryDefinitionId,
     batchCount,
     pairedBatchCount,
     orphanedBatchCount,
+    aFirstBatchCount,
+    bFirstBatchCount,
   };
 }
