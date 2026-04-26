@@ -8,7 +8,7 @@ from typing import Any, Optional
 from ...config import get_config
 from ...errors import ErrorCode, LLMError
 from ...logging import get_logger
-from ..base import BaseLLMAdapter, post_json
+from ..base import BaseLLMAdapter, ensure_nonempty_content, post_json
 from ..config_utils import get_config_value, resolve_max_tokens, resolve_temperature
 from ..constants import DEFAULT_TIMEOUT, normalize_finish_reason
 from ..types import LLMResponse
@@ -123,8 +123,17 @@ class AnthropicAdapter(BaseLLMAdapter):
                 },
             }
 
+            joined_content = "\n".join(text_parts).strip()
+            ensure_nonempty_content(
+                joined_content,
+                provider="anthropic",
+                model=model,
+                output_tokens=usage.get("output_tokens"),
+                finish_reason=raw_stop_reason,
+            )
+
             return LLMResponse(
-                content="\n".join(text_parts).strip(),
+                content=joined_content,
                 input_tokens=usage.get("input_tokens"),
                 output_tokens=usage.get("output_tokens"),
                 model_version=model_version,

@@ -8,7 +8,7 @@ from typing import Any, Optional
 from ...config import get_config
 from ...errors import ErrorCode, LLMError
 from ...logging import get_logger
-from ..base import BaseLLMAdapter, post_json
+from ..base import BaseLLMAdapter, ensure_nonempty_content, post_json
 from ..config_utils import get_config_value, resolve_max_tokens, resolve_temperature
 from ..constants import DEFAULT_TIMEOUT, normalize_finish_reason
 from ..types import LLMResponse
@@ -132,6 +132,15 @@ class OpenAIAdapter(BaseLLMAdapter):
                     model=model,
                     finish_reason=raw_finish_reason,
                 )
+
+            ensure_nonempty_content(
+                content,
+                provider="openai",
+                model=model,
+                output_tokens=usage.get("completion_tokens"),
+                reasoning_tokens=reasoning_tokens,
+                finish_reason=raw_finish_reason,
+            )
 
             return LLMResponse(
                 content=content.strip() if content else "",

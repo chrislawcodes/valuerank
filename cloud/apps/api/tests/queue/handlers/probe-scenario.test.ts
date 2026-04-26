@@ -31,6 +31,23 @@ describe('isRetryableError', () => {
       expect(isRetryableError(new Error('HTTP 504 Gateway Timeout'))).toBe(true);
     });
 
+    it('returns true for empty response errors regardless of token-count digits', () => {
+      // The Python worker raises EMPTY_RESPONSE with retryable=true when an
+      // adapter returns no content. The thrown TS Error includes token counts
+      // in the message (e.g. output_tokens=400) which would otherwise hit the
+      // non-retryable '400' keyword and override the worker's classification.
+      expect(
+        isRetryableError(
+          new Error(
+            'EMPTY_RESPONSE: deepseek returned empty content for deepseek-reasoner | output_tokens=400, reasoning_tokens=200, finish_reason=stop'
+          )
+        )
+      ).toBe(true);
+      expect(
+        isRetryableError(new Error('EMPTY_RESPONSE: google returned empty content'))
+      ).toBe(true);
+    });
+
     it('returns true for unknown errors (default)', () => {
       expect(isRetryableError(new Error('Something unexpected happened'))).toBe(true);
     });

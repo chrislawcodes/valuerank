@@ -230,6 +230,33 @@ class TestXAIAdapter:
             assert result.content == "This is a mock response."
             assert result.input_tokens == 50
 
+    def test_empty_content_raises(self, adapter: XAIAdapter) -> None:
+        """grok silent-empty shape must raise EMPTY_RESPONSE."""
+        empty_response = {
+            "id": "chatcmpl-empty",
+            "model": "grok-2",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {"role": "assistant", "content": ""},
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {"prompt_tokens": 30, "completion_tokens": 0},
+        }
+
+        with patch("requests.post") as mock_post:
+            mock_post.return_value = MockResponse(empty_response, 200)
+
+            with pytest.raises(LLMError) as exc_info:
+                adapter.generate(
+                    "grok-2",
+                    [{"role": "user", "content": "Hello"}],
+                )
+
+            assert exc_info.value.code == ErrorCode.EMPTY_RESPONSE
+            assert exc_info.value.retryable is True
+
 
 class TestDeepSeekAdapter:
     """Tests for DeepSeek adapter."""
@@ -274,6 +301,102 @@ class TestDeepSeekAdapter:
             payload = call_args.kwargs.get("json") or call_args[1].get("json")
             # deepseek-chat caps at 8192, deepseek-reasoner caps at 65536
             assert payload["max_tokens"] == 8192
+
+    def test_empty_content_with_reasoning_tokens_raises(
+        self,
+        adapter: DeepSeekAdapter,
+    ) -> None:
+        """deepseek-reasoner all-in-reasoning shape must fail loudly, not return ''."""
+        response_with_reasoning_only = {
+            "id": "chatcmpl-empty",
+            "model": "deepseek-reasoner",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {"role": "assistant", "content": ""},
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 30,
+                "completion_tokens": 800,
+                "completion_tokens_details": {"reasoning_tokens": 800},
+            },
+        }
+
+        with patch("requests.post") as mock_post:
+            mock_post.return_value = MockResponse(response_with_reasoning_only, 200)
+
+            with pytest.raises(LLMError) as exc_info:
+                adapter.generate(
+                    "deepseek-reasoner",
+                    [{"role": "user", "content": "Hello"}],
+                )
+
+            assert exc_info.value.code == ErrorCode.EMPTY_RESPONSE
+            assert exc_info.value.retryable is True
+            details = exc_info.value.details or ""
+            assert "output_tokens=800" in details
+            assert "reasoning_tokens=800" in details
+
+    def test_empty_content_with_zero_output_tokens_raises(
+        self,
+        adapter: DeepSeekAdapter,
+    ) -> None:
+        """No content and no output tokens (silent-failure shape) must raise."""
+        empty_response = {
+            "id": "chatcmpl-empty",
+            "model": "deepseek-chat",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {"role": "assistant", "content": ""},
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {"prompt_tokens": 30, "completion_tokens": 0},
+        }
+
+        with patch("requests.post") as mock_post:
+            mock_post.return_value = MockResponse(empty_response, 200)
+
+            with pytest.raises(LLMError) as exc_info:
+                adapter.generate(
+                    "deepseek-chat",
+                    [{"role": "user", "content": "Hello"}],
+                )
+
+            assert exc_info.value.code == ErrorCode.EMPTY_RESPONSE
+            assert exc_info.value.retryable is True
+
+    def test_null_content_raises(
+        self,
+        adapter: DeepSeekAdapter,
+    ) -> None:
+        """null content (some providers return null instead of '') must raise."""
+        null_content_response = {
+            "id": "chatcmpl-null",
+            "model": "deepseek-chat",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {"role": "assistant", "content": None},
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {"prompt_tokens": 30, "completion_tokens": 0},
+        }
+
+        with patch("requests.post") as mock_post:
+            mock_post.return_value = MockResponse(null_content_response, 200)
+
+            with pytest.raises(LLMError) as exc_info:
+                adapter.generate(
+                    "deepseek-chat",
+                    [{"role": "user", "content": "Hello"}],
+                )
+
+            assert exc_info.value.code == ErrorCode.EMPTY_RESPONSE
 
 
 class TestMistralAdapter:

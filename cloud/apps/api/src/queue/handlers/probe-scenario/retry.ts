@@ -22,6 +22,14 @@ export function isRetryableError(error: unknown): boolean {
 
   const message = error.message.toLowerCase();
 
+  // Worker-classified retryable codes — must be checked BEFORE the keyword
+  // patterns below, because the formatted message can contain token counts
+  // (e.g. "output_tokens=400") that would otherwise hit the non-retryable
+  // keyword list and override the worker's retryable=true classification.
+  if (message.includes('empty_response')) {
+    return true;
+  }
+
   // Network errors - retryable
   const networkErrorPatterns = [
     'econnrefused',

@@ -89,6 +89,39 @@ from common.logging import get_logger
 log = get_logger("probe")
 
 
+def ensure_response_has_content(
+    response: LLMResponse,
+    *,
+    model_id: str,
+    turn_number: int,
+    prompt_label: str,
+) -> None:
+    """Reject empty/whitespace-only responses so they don't get persisted as SUCCESS.
+
+    Adapters already raise EMPTY_RESPONSE at the source for the OpenAI-compatible
+    silent-empty shape, but this is the universal safety net — it also catches
+    the Google blocked-prompt path, future adapters, and anything that slips by.
+    """
+    if response.content and response.content.strip():
+        return
+
+    metadata = response.provider_metadata or {}
+    provider = metadata.get("provider", "unknown")
+    finish_reason = metadata.get("finishReason")
+    raise LLMError(
+        message=(
+            f"{provider} returned empty content for {model_id} "
+            f"on turn {turn_number} ({prompt_label})"
+        ),
+        code=ErrorCode.EMPTY_RESPONSE,
+        details=(
+            f"output_tokens={response.output_tokens}, "
+            f"reasoning_tokens={response.reasoning_tokens}, "
+            f"finish_reason={finish_reason}"
+        ),
+    )
+
+
 def build_provider_metadata(response: LLMResponse) -> Optional[dict[str, Any]]:
     """Merge provider metadata with adapter instrumentation fields."""
     metadata = dict(response.provider_metadata) if response.provider_metadata else {}
@@ -290,6 +323,13 @@ def run_probe(data: dict[str, Any]) -> dict[str, Any]:
             **generate_kwargs,
         )
 
+        ensure_response_has_content(
+            response,
+            model_id=model_id,
+            turn_number=1,
+            prompt_label="scenario_prompt",
+        )
+
         turn = Turn(
             turn_number=1,
             prompt_label="scenario_prompt",
@@ -324,6 +364,13 @@ def run_probe(data: dict[str, Any]) -> dict[str, Any]:
                 model_id,
                 messages,
                 **generate_kwargs,
+            )
+
+            ensure_response_has_content(
+                response,
+                model_id=model_id,
+                turn_number=turn_num,
+                prompt_label=followup_label,
             )
 
             turn = Turn(

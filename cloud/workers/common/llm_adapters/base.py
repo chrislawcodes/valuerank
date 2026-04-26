@@ -110,6 +110,37 @@ _REQUEST_METADATA: ContextVar[Optional[dict[str, Any]]] = ContextVar(
 )
 
 
+def ensure_nonempty_content(
+    content: Optional[str],
+    *,
+    provider: str,
+    model: str,
+    output_tokens: Optional[int],
+    reasoning_tokens: Optional[int] = None,
+    finish_reason: Optional[str] = None,
+) -> None:
+    """Raise LLMError(EMPTY_RESPONSE) when an adapter would return blank text.
+
+    Catches the silent-failure shape where a 2xx HTTP response carries no
+    usable assistant text — for example deepseek-reasoner emitting all tokens
+    in reasoning_content with empty content, or providers returning an empty
+    string after a content filter. Token counts are included so the surfaced
+    error is diagnosable without re-running the request.
+    """
+    if content is not None and content.strip():
+        return
+
+    raise LLMError(
+        message=f"{provider} returned empty content for {model}",
+        code=ErrorCode.EMPTY_RESPONSE,
+        details=(
+            f"output_tokens={output_tokens}, "
+            f"reasoning_tokens={reasoning_tokens}, "
+            f"finish_reason={finish_reason}"
+        ),
+    )
+
+
 class BaseLLMAdapter(ABC):
     """Abstract base class for LLM providers."""
 

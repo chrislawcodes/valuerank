@@ -17,6 +17,10 @@ class ErrorCode(Enum):
     TIMEOUT = "TIMEOUT"
     NETWORK_ERROR = "NETWORK_ERROR"
     SERVER_ERROR = "SERVER_ERROR"
+    # Provider returned a 2xx with no usable assistant text (e.g. all tokens
+    # spent in reasoning, content filter, or finish_reason=length with empty
+    # content). Treat as transient — another sample often succeeds.
+    EMPTY_RESPONSE = "EMPTY_RESPONSE"
 
     # Non-retryable errors
     AUTH_ERROR = "AUTH_ERROR"
@@ -36,6 +40,7 @@ RETRYABLE_CODES = {
     ErrorCode.TIMEOUT,
     ErrorCode.NETWORK_ERROR,
     ErrorCode.SERVER_ERROR,
+    ErrorCode.EMPTY_RESPONSE,
 }
 
 

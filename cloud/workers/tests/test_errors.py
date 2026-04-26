@@ -24,6 +24,7 @@ class TestErrorCode:
         assert ErrorCode.TIMEOUT in RETRYABLE_CODES
         assert ErrorCode.NETWORK_ERROR in RETRYABLE_CODES
         assert ErrorCode.SERVER_ERROR in RETRYABLE_CODES
+        assert ErrorCode.EMPTY_RESPONSE in RETRYABLE_CODES
 
     def test_non_retryable_codes(self) -> None:
         """Verify non-retryable error codes."""

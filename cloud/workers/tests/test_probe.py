@@ -261,6 +261,63 @@ class TestRunProbe:
         assert result["error"]["code"] == "RATE_LIMIT"
         assert result["error"]["retryable"] is True
 
+    def test_empty_response_fails_loudly(self, valid_input: dict[str, Any]) -> None:
+        """Empty/whitespace-only response must fail rather than write blank transcript."""
+        from probe import run_probe
+
+        valid_input["scenario"]["followups"] = []
+
+        with patch("probe.generate") as mock_generate:
+            mock_generate.return_value = LLMResponse(
+                content="",
+                input_tokens=50,
+                output_tokens=0,
+                model_version="some-model",
+                provider_metadata={"provider": "google", "finishReason": "SAFETY"},
+            )
+
+            result = run_probe(valid_input)
+
+        assert result["success"] is False
+        assert result["error"]["code"] == "EMPTY_RESPONSE"
+        assert result["error"]["retryable"] is True
+        assert "google" in result["error"]["message"]
+        assert "finish_reason=SAFETY" in (result["error"]["details"] or "")
+
+    def test_whitespace_only_response_fails_loudly(self, valid_input: dict[str, Any]) -> None:
+        """Whitespace-only content (e.g. just newlines) must also fail."""
+        from probe import run_probe
+
+        valid_input["scenario"]["followups"] = []
+
+        with patch("probe.generate") as mock_generate:
+            mock_generate.return_value = LLMResponse(
+                content="   \n\n  \t",
+                input_tokens=50,
+                output_tokens=5,
+            )
+
+            result = run_probe(valid_input)
+
+        assert result["success"] is False
+        assert result["error"]["code"] == "EMPTY_RESPONSE"
+
+    def test_empty_followup_response_fails_loudly(self, valid_input: dict[str, Any]) -> None:
+        """If a later turn returns empty, the whole probe must fail (no half-written transcript)."""
+        from probe import run_probe
+
+        with patch("probe.generate") as mock_generate:
+            mock_generate.side_effect = [
+                LLMResponse(content="First answer", input_tokens=50, output_tokens=10),
+                LLMResponse(content="", input_tokens=60, output_tokens=0),
+            ]
+
+            result = run_probe(valid_input)
+
+        assert result["success"] is False
+        assert result["error"]["code"] == "EMPTY_RESPONSE"
+        assert "followup_1" in result["error"]["message"]
+
     def test_timing_captured(self, valid_input: dict[str, Any]) -> None:
         """Test that timing information is captured."""
         from probe import run_probe
