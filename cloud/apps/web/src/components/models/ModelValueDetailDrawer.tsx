@@ -15,7 +15,7 @@ type ModelValueDetailDrawerProps = {
 };
 
 function formatPercent(value: number | null): string {
-  if (value == null || Number.isNaN(value)) return 'n/a';
+  if (value == null || Number.isNaN(value)) return '—';
   return `${Math.round(value)}%`;
 }
 

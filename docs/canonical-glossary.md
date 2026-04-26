@@ -292,14 +292,16 @@ Avoid confusion:
 
 ### `winRate`
 
-`winRate` is the fraction of vignettes where a model prioritized a value out of all vignettes where a decision was recorded for that value. It uses `prioritized / (prioritized + deprioritized + neutral)` and returns `0.5` when there is no data at all. In code version `1.2.0`, this denominator includes neutrals.
+`winRate` is the fraction of decisions where a model prioritized a value, computed as `prioritized / (prioritized + deprioritized + neutral)`. When a value has zero decisions, `winRate` is `null` — meaning no data, not a neutral result. A value of `0.5` means the model genuinely split evenly across decisions. In code version `1.2.0`, the denominator includes neutrals.
 
 Example:
 
 - “The model’s `winRate` for Achievement was 0.73 after neutrals were included in the denominator.”
+- “A `winRate` of `null` means no trials recorded a decision for that value — it shows as `—` in the UI.”
 
 Avoid confusion:
 
+- `null` means no data; `0.5` means a genuinely even split — these are distinct states
 - `winRate` is not the same as the share of only decisive responses
 - it is a rate for one `(model, value)` pair, not a whole run or vignette
 

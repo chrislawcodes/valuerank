@@ -31,7 +31,7 @@ export type RepeatabilityShape = {
 
 export type ConsistencyPerConditionShape = {
   netPressureRank: number;
-  winRate: number;
+  winRate: number | null;
   matches: number;
   trials: number;
   scenarioId: string;
@@ -137,7 +137,7 @@ builder.objectType(RepeatabilityRef, {
 builder.objectType(ConsistencyPerConditionRef, {
   fields: (t) => ({
     netPressureRank: t.exposeInt('netPressureRank'),
-    winRate: t.exposeFloat('winRate'),
+    winRate: t.exposeFloat('winRate', { nullable: true }),
     matches: t.exposeInt('matches'),
     trials: t.exposeInt('trials'),
     scenarioId: t.exposeString('scenarioId'),

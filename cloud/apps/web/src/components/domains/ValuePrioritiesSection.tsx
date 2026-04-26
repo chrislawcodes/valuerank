@@ -345,7 +345,7 @@ export function ValuePrioritiesSection({
                       >
                           <span>
                             {(() => {
-                              if (cellValue === null) return 'n/a';
+                              if (cellValue === null) return '—';
                               if (scoreMode === 'WIN_RATE') return `${cellValue.toFixed(1)}%`;
                               return `${cellValue > 0 ? '+' : ''}${cellValue.toFixed(2)}`;
                             })()}

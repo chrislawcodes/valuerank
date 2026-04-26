@@ -26,7 +26,7 @@ export const zValueStats = z.object({
     deprioritized: z.number(),
     neutral: z.number(),
   }),
-  winRate: z.number(),
+  winRate: z.number().nullable(),
 });
 
 export const zModelStats = z.object({
@@ -104,7 +104,7 @@ export const zBernoulliScenarioSummary = z.object({
 export const zPerConditionSummary = z.object({
   scenarioId: z.string(),
   netPressureRank: z.number().int().nullable(),
-  winRate: z.number(),
+  winRate: z.number().nullable(),
   matches: z.number().int().nonnegative(),
   trials: z.number().int().nonnegative(),
 }).passthrough();
