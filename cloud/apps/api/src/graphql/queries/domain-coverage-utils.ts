@@ -167,7 +167,10 @@ export function getCoverageDirection(runConfig: unknown): string | null {
   const config = runConfig as { jobChoiceValueFirst?: unknown };
   if (typeof config.jobChoiceValueFirst !== 'string') return null;
   const trimmed = config.jobChoiceValueFirst.trim();
-  return trimmed.length > 0 ? trimmed : null;
+  if (trimmed.length === 0) return null;
+  // Normalize to PascalCase_Underscore to match COVERAGE_VALUE_KEYS.
+  // Prod stores tokens as lowercase (e.g. "hedonism"); keys are "Hedonism".
+  return toPascalCaseKey(trimmed);
 }
 
 /**
