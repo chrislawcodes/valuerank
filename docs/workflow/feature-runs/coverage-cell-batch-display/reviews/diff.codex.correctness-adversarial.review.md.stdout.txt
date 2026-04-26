@@ -1,5 +1,5 @@
 ## Findings
-None.
+No findings. This patch only changes a comment, so it does not alter runtime behavior or correctness.
 
 ## Residual Risks
-- [UNVERIFIED] This patch only changes a comment, so I did not re-validate the surrounding model-filter logic. If the comment is meant to describe a broader filtering path than `filterModelIds`, the wording may still be misleading even though the code is unchanged.
+- [UNVERIFIED] The comment claims the explicit model-ID filter is applied symmetrically to preserve the “exactly one bucket” invariant. Without surrounding code, I cannot verify that the implementation still matches that description. If the invariant is already broken elsewhere, this patch would not fix it.

@@ -9,8 +9,8 @@ git_head_sha: "eab6ffbb2ad3a2f01ce5cd3ffa2dfd3c317349e9"
 git_base_ref: "origin/main"
 git_base_sha: "eab6ffbb2ad3a2f01ce5cd3ffa2dfd3c317349e9"
 generation_method: "codex-runner"
-resolution_status: "open"
-resolution_note: ""
+resolution_status: "accepted"
+resolution_note: "No actionable findings — showing pairedBatchCount for directional cells is intentional design; badge fires on imbalance"
 raw_output_path: "docs/workflow/feature-runs/coverage-cell-batch-display/reviews/spec.codex.feasibility-adversarial.review.md.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -34,5 +34,5 @@ coverage_note: ""
 - total_tokens=0
 
 ## Resolution
-- status: open
-- note: 
+- status: accepted
+- note: No actionable findings — showing pairedBatchCount for directional cells is intentional design; badge fires on imbalance

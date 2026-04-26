@@ -1,7 +1,13 @@
 ## Findings
-- HIGH [CODE-CONFIRMED]: The plan narrows `batchCount`, but it does not carry the same filter through `incompleteBatchCount`. The current code explicitly says the model filter is applied symmetrically so incomplete runs do not mention runs that `batchCount` cannot, to preserve the “exactly one bucket” invariant. As written, the plan would break that invariant and let a cell report batches and incomplete batches from different run sets.
-- MEDIUM [CODE-CONFIRMED]: The plan changes the headline batch scope but leaves `allNonAggregateRunsForPair` / `computePerModelTrialCounts` unchanged. In the current code, the per-model breakdown is computed from all non-aggregate runs for the pair, not just the runs that pass the new model-set gate. That means the popover can still show trial counts from runs that no longer contribute to the visible batch count.
+- High: The plan drops an existing public filter on `domainValueCoverage`. The resolver still accepts `modelIds` and currently applies `run.transcripts.some(...)` to honor it, but the plan only describes replacing that gate with the `effectiveModelIds.every(...)` check. If implemented as written, any caller that relies on `modelIds` will get a different matrix even though the API still advertises the argument. [CODE-CONFIRMED]
+
+- Medium: The new `aFirstBatchCount` / `bFirstBatchCount` logic assumes `jobChoiceValueFirst` tokens can be used directly as matrix value keys, but `getCoverageDirection()` only trims an arbitrary string and never normalizes or validates it against `COVERAGE_VALUE_KEYS`. That means token drift, casing changes, or alternate labels will silently collapse the new directional counts to zero. [CODE-CONFIRMED]
+
+- Medium: The plan changes the counted cohort but leaves `aggregateRunId` selection untouched. In the resolver, the aggregate link target is chosen from `latestAggregateRunIdByDefinitionId` before any model-set gating, so the cell can show filtered counts while the “View Vignette Analysis” link still opens an aggregate run that does not match the filtered cohort. [CODE-CONFIRMED]
 
 ## Residual Risks
-- [UNVERIFIED] The new `aFirstBatchCount` / `bFirstBatchCount` logic assumes `jobChoiceValueFirst` uses the canonical value names exactly. The provided code only preserves a trimmed string and does not validate the vocabulary, so any historical spelling variant would silently read as zero.
-- [CODE-CONFIRMED] `availableModels` is still built from every signature-scoped run, not from the filtered batch cohort. If any UI or downstream consumer starts relying on that field for scope, it will remain broader than the new batch-count behavior.
+- The provided code does not prove what exact strings are stored in `jobChoiceValueFirst`, so the directional-count change still depends on a data-format assumption that may be false in some environments.
+
+- The plan does not say whether the analysis link is supposed to stay global or follow the same filtered cohort as the cell counts. If product expects one behavior and the implementation keeps the other, users will still see a mismatch between the matrix and the drill-down target.
+
+- Any existing downstream consumer of `domainValueCoverage` outside this UI will see changed `batchCount` and `pairedBatchCount` semantics once the model-set gate lands, even though the query shape itself does not change.

@@ -8,7 +8,7 @@ approval: never
 sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
 reasoning effort: high
 reasoning summaries: none
-session id: 019dcc21-06ea-77c3-ab3b-d2a344ff0158
+session id: 019dcc22-61df-7133-96ad-a1500b288233
 --------
 user
 Review this diff artifact using a regression-adversarial lens.
@@ -23,21 +23,20 @@ Keep the response concrete and ordered by severity.
 
 Artifact: implementation.diff.patch
 diff --git a/cloud/apps/api/src/graphql/queries/domain-coverage.ts b/cloud/apps/api/src/graphql/queries/domain-coverage.ts
-index c419d804..2295cd93 100644
+index 2295cd93..e9b1871b 100644
 --- a/cloud/apps/api/src/graphql/queries/domain-coverage.ts
 +++ b/cloud/apps/api/src/graphql/queries/domain-coverage.ts
-@@ -231,11 +231,9 @@ builder.queryField('domainValueCoverage', (t) =>
+@@ -231,9 +231,10 @@ builder.queryField('domainValueCoverage', (t) =>
              continue;
            }
  
--          // Apply the model filter symmetrically: a run that doesn't match the
--          // requested model filter contributes to neither bucket. Without this
--          // the `incompleteBatchCount` view of a filtered query would mention
--          // runs that `batchCount` cannot, breaking the "exactly one bucket"
--          // invariant.
-+          // Explicit model-ID filter (passed as query arg): applied symmetrically
-+          // so incompleteBatchCount never references runs that batchCount cannot,
-+          // preserving the "exactly one bucket" invariant.
+-          // Explicit model-ID filter (passed as query arg): applied symmetrically
+-          // so incompleteBatchCount never references runs that batchCount cannot,
+-          // preserving the "exactly one bucket" invariant.
++          // Apply the explicit model-ID filter symmetrically: a run that doesn't
++          // match contributes to neither bucket. Without this, incompleteBatchCount
++          // would mention runs that batchCount cannot, breaking the "exactly one
++          // bucket" invariant.
            const matchesModelFilter = filterModelIds.length === 0
              || run.transcripts.some((transcript) => filterModelIds.includes(transcript.modelId));
            if (!matchesModelFilter) continue;
@@ -49,11 +48,11 @@ Return only markdown with exactly these sections:
 Do not include any other sections.
 codex
 ## Findings
-None.
+No findings.
 
 ## Residual Risks
-- [UNVERIFIED] I could not inspect surrounding code, so I cannot verify that the comment precisely matches the current filter behavior. Because this patch is comment-only, I did not find a functional regression.
-- If the implementation around this block has already drifted, this change will not surface it, since no logic was changed.
-2026-04-26T23:30:17.872781Z ERROR codex_core::session: failed to record rollout items: thread 019dcc21-06ea-77c3-ab3b-d2a344ff0158 not found
+- The patch only changes a comment, so there is no code-path change to validate here.
+- The invariant described in the comment is not rechecked in this artifact; if the surrounding filtering logic changes later, the comment may become stale without any compiler or test signal.
+2026-04-26T23:31:44.503183Z ERROR codex_core::session: failed to record rollout items: thread 019dcc22-61df-7133-96ad-a1500b288233 not found
 tokens used
-2,304
+692

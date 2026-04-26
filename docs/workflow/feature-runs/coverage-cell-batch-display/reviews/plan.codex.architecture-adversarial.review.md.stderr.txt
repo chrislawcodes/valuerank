@@ -8,7 +8,7 @@ approval: never
 sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
 reasoning effort: high
 reasoning summaries: none
-session id: 019dcc0d-9d59-7252-a2ed-9877c73a911e
+session id: 019dcc24-40fb-7ef1-8abb-715595b0040d
 --------
 user
 Review this plan artifact using a architecture-adversarial lens.
@@ -220,12 +220,28 @@ export function selectPrimaryDefinitionCounts(
   definitionIds: readonly string[],
   batchCountByDefinitionId: ReadonlyMap<string, number>,
   directionalGroupsByDefinitionId: ReadonlyMap<string, ReadonlyMap<string, ReadonlySet<string>>>,
+  valueA: string,
+  valueB: string,
   log?: { warn: (obj: object, msg: string) => void },
   cellKey?: string,
-): { primaryDefinitionId: string | null; batchCount: number; pairedBatchCount: number; orphanedBatchCount: number } {
+): {
+  primaryDefinitionId: string | null;
+  batchCount: number;
+  pairedBatchCount: number;
+  orphanedBatchCount: number;
+  aFirstBatchCount: number;
+  bFirstBatchCount: number;
+} {
   const uniqueDefinitionIds = Array.from(new Set(definitionIds));
   if (uniqueDefinitionIds.length === 0) {
-    return { primaryDefinitionId: null, batchCount: 0, pairedBatchCount: 0, orphanedBatchCount: 0 };
+    return {
+      primaryDefinitionId: null,
+      batchCount: 0,
+      pairedBatchCount: 0,
+      orphanedBatchCount: 0,
+      aFirstBatchCount: 0,
+      bFirstBatchCount: 0,
+    };
   }
 
   const directionCountFor = (defId: string): number =>
@@ -292,11 +308,16 @@ export function selectPrimaryDefinitionCounts(
     }
   }
 
+  const aFirstBatchCount = merged.get(valueA)?.size ?? 0;
+  const bFirstBatchCount = merged.get(valueB)?.size ?? 0;
+
   return {
     primaryDefinitionId: primaryDefinitionId === '' ? null : primaryDefinitionId,
     batchCount,
     pairedBatchCount,
     orphanedBatchCount,
+    aFirstBatchCount,
+    bFirstBatchCount,
   };
 }
 
@@ -327,6 +348,8 @@ export type DomainValueCoverageCell = {
   batchCount: number;
   pairedBatchCount: number;
   orphanedBatchCount: number;
+  aFirstBatchCount: number;
+  bFirstBatchCount: number;
   /** Number of non-aggregate runs whose transcript count is less than expected. */
   incompleteBatchCount: number;
   definitionId: string | null;
@@ -402,6 +425,16 @@ const DomainValueCoverageCellRef = builder
           'min(complete A-first runs, complete B-first runs). When both directions ' +
           'are equal this is 0; when only one direction has runs this is the count ' +
           'of that side. Runs without a recognizable direction token are excluded.',
+      }),
+      aFirstBatchCount: t.exposeInt('aFirstBatchCount', {
+        description:
+          'Count of complete A-first runs for this value pair after model-set filtering. ' +
+          'This is the filtered directional count for the first value in the pair.',
+      }),
+      bFirstBatchCount: t.exposeInt('bFirstBatchCount', {
+        description:
+          'Count of complete B-first runs for this value pair after model-set filtering. ' +
+          'This is the filtered directional count for the second value in the pair.',
       }),
       incompleteBatchCount: t.exposeInt('incompleteBatchCount', {
         description:
@@ -672,7 +705,6 @@ builder.queryField('domainValueCoverage', (t) =>
             models?: unknown;
             samplesPerScenario?: unknown;
           };
-
           const scenarioIds = run.scenarioSelections.map((s) => s.scenarioId);
           const runWithScenarios = {
             id: run.id,
@@ -693,18 +725,19 @@ builder.queryField('domainValueCoverage', (t) =>
             continue;
           }
 
-          // Track non-aggregate runs for per-model trial count computation.
-          if (effectiveModelIds.length > 0) {
-            const nonAggregateRuns = nonAggregateRunsByDefinitionId.get(run.definitionId) ?? [];
-            nonAggregateRuns.push({ config: run.config, transcripts: run.transcripts, scenarioIds });
-            nonAggregateRunsByDefinitionId.set(run.definitionId, nonAggregateRuns);
+          const models = Array.isArray(config.models)
+            ? config.models.filter((m): m is string => typeof m === 'string' && m.length > 0)
+            : null;
+          const matchesEffectiveModelSet = effectiveModelIds.length === 0
+            || (models !== null && effectiveModelIds.every((id) => models.includes(id)));
+          if (!matchesEffectiveModelSet) {
+            continue;
           }
 
-          // Apply the model filter symmetrically: a run that doesn't match the
-          // requested model filter contributes to neither bucket. Without this
-          // the `incompleteBatchCount` view of a filtered query would mention
-          // runs that `batchCount` cannot, breaking the "exactly one bucket"
-          // invariant.
+          // Apply the explicit model-ID filter symmetrically: a run that doesn't
+          // match contributes to neither bucket. Without this, incompleteBatchCount
+          // would mention runs that batchCount cannot, breaking the "exactly one
+          // bucket" invariant.
           const matchesModelFilter = filterModelIds.length === 0
             || run.transcripts.some((transcript) => filterModelIds.includes(transcript.modelId));
           if (!matchesModelFilter) continue;
@@ -713,11 +746,16 @@ builder.queryField('domainValueCoverage', (t) =>
             latestMatchingRunIdByDefinitionId.set(run.definitionId, run.id);
           }
 
+          // Track non-aggregate runs for per-model trial count computation.
+          const nonAggregateRuns = nonAggregateRunsByDefinitionId.get(run.definitionId) ?? [];
+          nonAggregateRuns.push({ config: run.config, transcripts: run.transcripts, scenarioIds });
+          nonAggregateRunsByDefinitionId.set(run.definitionId, nonAggregateRuns);
+
           // Determine completeness using the existing helper. A run is complete
           // iff every (scenarioId × modelId × sampleIndex) slot has at least
           // one transcript. Extra transcripts in a slot do NOT break
           // completeness; only missing slots do.
-          if (!Array.isArray(config.models)) {
+          if (models === null) {
             throw new AppError(
               `Run ${run.id} config has no models array; cannot compute coverage`,
               'RUN_CONFIG_INVALID',
@@ -725,9 +763,6 @@ builder.queryField('domainValueCoverage', (t) =>
               { runId: run.id },
             );
           }
-          const models = config.models.filter(
-            (m): m is string => typeof m === 'string' && m.length > 0,
-          );
           if (models.length === 0) {
             throw new AppError(
               `Run ${run.id} has empty or invalid models array`,
@@ -824,6 +859,8 @@ builder.queryField('domainValueCoverage', (t) =>
               batchCount: 0,
               pairedBatchCount: 0,
               orphanedBatchCount: 0,
+              aFirstBatchCount: 0,
+              bFirstBatchCount: 0,
               incompleteBatchCount: 0,
               definitionId: null,
               definitionName: null,
@@ -835,10 +872,19 @@ builder.queryField('domainValueCoverage', (t) =>
           } else {
             // Use the total counts across all definitions for the visible cell, but
             // still choose one stable definition for the analysis link target.
-            const { primaryDefinitionId, batchCount, pairedBatchCount, orphanedBatchCount } = selectPrimaryDefinitionCounts(
+            const {
+              primaryDefinitionId,
+              batchCount,
+              pairedBatchCount,
+              orphanedBatchCount,
+              aFirstBatchCount,
+              bFirstBatchCount,
+            } = selectPrimaryDefinitionCounts(
               defIdsForPair,
               batchCountByDefinitionId,
               directionalGroupsByDefinitionId,
+              valueA,
+              valueB,
               ctx.log,
               `${valueA}::${valueB}`,
             );
@@ -899,6 +945,8 @@ builder.queryField('domainValueCoverage', (t) =>
               batchCount,
               pairedBatchCount,
               orphanedBatchCount,
+              aFirstBatchCount,
+              bFirstBatchCount,
               incompleteBatchCount,
               definitionId: primaryDefId !== '' ? primaryDefId : null,
               definitionName: primaryPair?.name ?? null,
@@ -947,6 +995,9 @@ export type DomainValueCoverageCell = {
   valueB: string;
   batchCount: number;
   pairedBatchCount: number;
+  orphanedBatchCount: number;
+  aFirstBatchCount: number;
+  bFirstBatchCount: number;
   incompleteBatchCount: number;
   definitionId: string | null;
   definitionName: string | null;
@@ -996,11 +1047,12 @@ type CoverageCellProps = {
   valueB: string;
   batchCount: number;
   pairedBatchCount: number;
+  orphanedBatchCount: number;
+  aFirstBatchCount: number;
+  bFirstBatchCount: number;
   incompleteBatchCount?: number | null;
   definitionId: string | null;
   aggregateRunId: string | null;
-  minTrialCount?: number | null;
-  maxTrialCount?: number | null;
   modelBreakdown?: CoverageModelBreakdownItem[] | null;
 };
 
@@ -1009,30 +1061,28 @@ export function CoverageCell({
   valueB,
   batchCount,
   pairedBatchCount,
+  orphanedBatchCount,
+  aFirstBatchCount,
+  bFirstBatchCount,
   incompleteBatchCount,
   definitionId,
   aggregateRunId,
-  minTrialCount,
-  maxTrialCount,
   modelBreakdown,
 }: CoverageCellProps) {
   const [isOpen, setIsOpen] = useState(false);
   const isDiagonal = valueA === valueB;
   const hasVignette = definitionId !== null;
   const hasIncompleteBatches = (incompleteBatchCount ?? 0) > 0;
-  const hasPerModelData = minTrialCount !== null && minTrialCount !== undefined;
-  const displayCount = hasPerModelData ? minTrialCount : (pairedBatchCount > 0 ? pairedBatchCount : batchCount);
-  const hasMismatch = hasPerModelData && maxTrialCount !== null && maxTrialCount !== undefined && minTrialCount < maxTrialCount;
+  const displayCount = pairedBatchCount > 0 ? pairedBatchCount : batchCount;
+  const hasMismatch = aFirstBatchCount !== bFirstBatchCount;
   const visibleLabel = isDiagonal || !hasVignette ? '—' : displayCount.toLocaleString();
   const xLabel = VALUE_LABELS[valueB as keyof typeof VALUE_LABELS] ?? valueB;
   const yLabel = VALUE_LABELS[valueA as keyof typeof VALUE_LABELS] ?? valueA;
-  const batchLabel = hasPerModelData
-    ? (displayCount === 1 ? 'trial (min)' : 'trials (min)')
-    : (pairedBatchCount > 0
-      ? (displayCount === 1 ? 'paired batch' : 'paired batches')
-      : (displayCount === 1 ? 'batch' : 'batches'));
+  const batchLabel = pairedBatchCount > 0
+    ? (displayCount === 1 ? 'paired batch' : 'paired batches')
+    : (displayCount === 1 ? 'batch' : 'batches');
 
-  const countForColor = hasPerModelData ? minTrialCount : batchCount;
+  const countForColor = displayCount;
 
   let bgColorClass = 'bg-gray-50';
   if (isDiagonal) {
@@ -1048,9 +1098,14 @@ export function CoverageCell({
     bgColorClass = 'bg-emerald-500 hover:bg-emerald-600 transition-colors text-white';
   }
 
-  const tooltipBreakdown = modelBreakdown != null && modelBreakdown.length > 0
-    ? modelBreakdown.map((b) => `${b.label}: ${b.trialCount} trial${b.trialCount === 1 ? '' : 's'}`).join('\n')
-    : undefined;
+  let tooltipBreakdown: string | undefined;
+  if (hasMismatch) {
+    tooltipBreakdown = `A-first: ${aFirstBatchCount} ${aFirstBatchCount === 1 ? 'batch' : 'batches'}\nB-first: ${bFirstBatchCount} ${bFirstBatchCount === 1 ? 'batch' : 'batches'}`;
+  } else if (modelBreakdown != null && modelBreakdown.length > 0) {
+    tooltipBreakdown = modelBreakdown
+      .map((b) => `${b.label}: ${b.trialCount} trial${b.trialCount === 1 ? '' : 's'}`)
+      .join('\n');
+  }
 
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
@@ -1065,7 +1120,9 @@ export function CoverageCell({
               ? 'Not applicable'
               : !hasVignette
                 ? `${xLabel} versus ${yLabel}: no vignette`
-                : `${xLabel} versus ${yLabel}: ${displayCount} ${batchLabel}`
+                : hasMismatch
+                  ? `${xLabel} versus ${yLabel}: ${displayCount} ${batchLabel}; A-first ${aFirstBatchCount}, B-first ${bFirstBatchCount}`
+                  : `${xLabel} versus ${yLabel}: ${displayCount} ${batchLabel}`
           }
           className={cn(
             'relative w-full h-full min-h-[48px] p-2 flex flex-col items-center justify-center text-sm font-medium border rounded-none focus:ring-0 focus:ring-offset-0',
@@ -1079,7 +1136,7 @@ export function CoverageCell({
         >
           {visibleLabel}
           {hasMismatch && (
-            <span className="text-[10px] text-orange-600 font-normal leading-none mt-0.5" aria-label="trial count mismatch across models">
+            <span className="text-[10px] text-orange-600 font-normal leading-none mt-0.5" aria-label="direction imbalance across batches">
               ⚠
             </span>
           )}
@@ -1113,14 +1170,30 @@ export function CoverageCell({
                   />
                   {displayCount} {batchLabel}
                 </div>
+                {hasMismatch && (
+                  <div className="mt-2 rounded border border-orange-200 bg-orange-50 px-2 py-1.5 text-xs text-orange-900">
+                    <div className="font-medium text-orange-800">Direction imbalance</div>
+                    <div className="mt-1 flex items-center justify-between gap-3">
+                      <span className="text-orange-700">A-first</span>
+                      <span className="font-medium">{aFirstBatchCount}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-orange-700">B-first</span>
+                      <span className="font-medium">{bFirstBatchCount}</span>
+                    </div>
+                    {orphanedBatchCount > 0 && (
+                      <div className="mt-1 text-[11px] text-orange-700">
+                        {orphanedBatchCount} unpaired directional batch{orphanedBatchCount === 1 ? '' : 'es'}
+                      </div>
+                    )}
+                  </div>
+                )}
                 {modelBreakdown != null && modelBreakdown.length > 0 && (
                   <div className="mt-2 space-y-0.5">
                     {modelBreakdown.map((b) => (
                       <div key={b.modelId} className="flex items-center justify-between text-xs text-gray-600">
                         <span className="truncate mr-2">{b.label}</span>
-                        <span className={cn('font-medium', hasMismatch && b.trialCount === minTrialCount ? 'text-orange-600' : '')}>
-                          {b.trialCount}
-                        </span>
+                        <span className="font-medium">{b.trialCount}</span>
                       </div>
                     ))}
                   </div>
@@ -1489,11 +1562,12 @@ export const CoverageMatrix = forwardRef<HTMLDivElement, { domainId: string }>(
                             valueB={colVal}
                             batchCount={cell?.batchCount ?? 0}
                             pairedBatchCount={cell?.pairedBatchCount ?? 0}
+                            orphanedBatchCount={cell?.orphanedBatchCount ?? 0}
+                            aFirstBatchCount={cell?.aFirstBatchCount ?? 0}
+                            bFirstBatchCount={cell?.bFirstBatchCount ?? 0}
                             incompleteBatchCount={cell?.incompleteBatchCount ?? 0}
                             definitionId={cell?.definitionId ?? null}
                             aggregateRunId={cell?.aggregateRunId ?? null}
-                            minTrialCount={cell?.minTrialCount ?? null}
-                            maxTrialCount={cell?.maxTrialCount ?? null}
                             modelBreakdown={cell?.modelBreakdown ?? null}
                           />
                         </td>
@@ -1580,7 +1654,7 @@ If neither direction matches `valueA` or `valueB` (unknown token), both counts a
 **Changes:**
 1. `domain-coverage-utils.ts`: Add `valueA: string` and `valueB: string` to `selectPrimaryDefinitionCounts` signature. After computing `merged`, look up `merged.get(valueA)?.size ?? 0` and `merged.get(valueB)?.size ?? 0` for the new fields. Update return type to include `aFirstBatchCount` and `bFirstBatchCount`.
 2. `domain-coverage-gql-types.ts`: Add `aFirstBatchCount: number` and `bFirstBatchCount: number` to `DomainValueCoverageCell` TypeScript type and expose them in the Pothos objectRef.
-3. `domain-coverage.ts`: Apply model-set filter — when `effectiveModelIds.length > 0`, replace the `matchesModelFilter` check with `effectiveModelIds.every(id => models.includes(id))`. Pass `valueA` and `valueB` to `selectPrimaryDefinitionCounts`. Populate `aFirstBatchCount` and `bFirstBatchCount` in both cell branches (zero-cell and real-cell).
+3. `domain-coverage.ts`: Apply model-set filter — when `effectiveModelIds.length > 0`, replace the `matchesModelFilter` check with `effectiveModelIds.every(id => models.includes(id))`. The filter gates ALL per-run counters symmetrically: `batchCountByDefinitionId`, `directionalGroupsByDefinitionId`, `incompleteBatchCountByDefinitionId`, and `nonAggregateRunsByDefinitionId` (move `nonAggregateRunsByDefinitionId` population to after the filter check, not before it). This preserves the "exactly one bucket" invariant and keeps popover trial counts consistent with the batch count cohort. Pass `valueA` and `valueB` to `selectPrimaryDefinitionCounts`. Populate `aFirstBatchCount` and `bFirstBatchCount` in both cell branches (zero-cell and real-cell).
 
 **[CHECKPOINT]**
 
@@ -1622,15 +1696,21 @@ Return only markdown with exactly these sections:
 ## Residual Risks
 Do not include any other sections.
 codex
-I’m checking the plan against the code paths that actually compute coverage, not just the stated intent. I’ll focus on places where the plan’s assumptions don’t line up with current data flow or where it can silently miscount.
+I’m checking the plan against the current query and cell code first, then I’ll call out only the parts that the code actually supports.
 codex
 ## Findings
-- HIGH [CODE-CONFIRMED]: The plan narrows `batchCount`, but it does not carry the same filter through `incompleteBatchCount`. The current code explicitly says the model filter is applied symmetrically so incomplete runs do not mention runs that `batchCount` cannot, to preserve the “exactly one bucket” invariant. As written, the plan would break that invariant and let a cell report batches and incomplete batches from different run sets.
-- MEDIUM [CODE-CONFIRMED]: The plan changes the headline batch scope but leaves `allNonAggregateRunsForPair` / `computePerModelTrialCounts` unchanged. In the current code, the per-model breakdown is computed from all non-aggregate runs for the pair, not just the runs that pass the new model-set gate. That means the popover can still show trial counts from runs that no longer contribute to the visible batch count.
+- High: The plan drops an existing public filter on `domainValueCoverage`. The resolver still accepts `modelIds` and currently applies `run.transcripts.some(...)` to honor it, but the plan only describes replacing that gate with the `effectiveModelIds.every(...)` check. If implemented as written, any caller that relies on `modelIds` will get a different matrix even though the API still advertises the argument. [CODE-CONFIRMED]
+
+- Medium: The new `aFirstBatchCount` / `bFirstBatchCount` logic assumes `jobChoiceValueFirst` tokens can be used directly as matrix value keys, but `getCoverageDirection()` only trims an arbitrary string and never normalizes or validates it against `COVERAGE_VALUE_KEYS`. That means token drift, casing changes, or alternate labels will silently collapse the new directional counts to zero. [CODE-CONFIRMED]
+
+- Medium: The plan changes the counted cohort but leaves `aggregateRunId` selection untouched. In the resolver, the aggregate link target is chosen from `latestAggregateRunIdByDefinitionId` before any model-set gating, so the cell can show filtered counts while the “View Vignette Analysis” link still opens an aggregate run that does not match the filtered cohort. [CODE-CONFIRMED]
 
 ## Residual Risks
-- [UNVERIFIED] The new `aFirstBatchCount` / `bFirstBatchCount` logic assumes `jobChoiceValueFirst` uses the canonical value names exactly. The provided code only preserves a trimmed string and does not validate the vocabulary, so any historical spelling variant would silently read as zero.
-- [CODE-CONFIRMED] `availableModels` is still built from every signature-scoped run, not from the filtered batch cohort. If any UI or downstream consumer starts relying on that field for scope, it will remain broader than the new batch-count behavior.
-2026-04-26T23:10:14.086312Z ERROR codex_core::session: failed to record rollout items: thread 019dcc0d-9d59-7252-a2ed-9877c73a911e not found
+- The provided code does not prove what exact strings are stored in `jobChoiceValueFirst`, so the directional-count change still depends on a data-format assumption that may be false in some environments.
+
+- The plan does not say whether the analysis link is supposed to stay global or follow the same filtered cohort as the cell counts. If product expects one behavior and the implementation keeps the other, users will still see a mismatch between the matrix and the drill-down target.
+
+- Any existing downstream consumer of `domainValueCoverage` outside this UI will see changed `batchCount` and `pairedBatchCount` semantics once the model-set gate lands, even though the query shape itself does not change.
+2026-04-26T23:34:29.683619Z ERROR codex_core::session: failed to record rollout items: thread 019dcc24-40fb-7ef1-8abb-715595b0040d not found
 tokens used
-28,971
+44,948

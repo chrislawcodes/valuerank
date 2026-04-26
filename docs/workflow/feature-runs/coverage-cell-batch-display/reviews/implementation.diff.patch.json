@@ -1,8 +1,8 @@
 {
   "repo_root": ".",
-  "git_head_sha": "d41ff83e7dfc6201bd8df7bcf80b8580c99b201f",
-  "git_base_ref": "d9588174cc27cf09e6467a9efa7f45b40d26a798",
-  "git_base_sha": "d9588174cc27cf09e6467a9efa7f45b40d26a798",
+  "git_head_sha": "0842af56c8b34162a05e3b010f28873378ec6bb2",
+  "git_base_ref": "d41ff83e7dfc6201bd8df7bcf80b8580c99b201f",
+  "git_base_sha": "d41ff83e7dfc6201bd8df7bcf80b8580c99b201f",
   "paths": [
     "cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts",
     "cloud/apps/api/src/graphql/queries/domain-coverage.ts",

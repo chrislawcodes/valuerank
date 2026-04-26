@@ -9,8 +9,8 @@ git_head_sha: "eab6ffbb2ad3a2f01ce5cd3ffa2dfd3c317349e9"
 git_base_ref: "origin/main"
 git_base_sha: "eab6ffbb2ad3a2f01ce5cd3ffa2dfd3c317349e9"
 generation_method: "codex-runner"
-resolution_status: "open"
-resolution_note: ""
+resolution_status: "accepted"
+resolution_note: "Finding 1 HIGH: Fixed FR-007 — badge condition aFirstBatchCount !== bFirstBatchCount. Finding 2 HIGH: Fixed effectiveModelIds edge case. Findings 3-5: intentional or deferred. All addressed."
 raw_output_path: "docs/workflow/feature-runs/coverage-cell-batch-display/reviews/spec.codex.edge-cases-adversarial.review.md.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -42,5 +42,5 @@ coverage_note: ""
 - total_tokens=0
 
 ## Resolution
-- status: open
-- note: 
+- status: accepted
+- note: Finding 1 HIGH: Fixed FR-007 — badge condition aFirstBatchCount !== bFirstBatchCount. Finding 2 HIGH: Fixed effectiveModelIds edge case. Findings 3-5: intentional or deferred. All addressed.

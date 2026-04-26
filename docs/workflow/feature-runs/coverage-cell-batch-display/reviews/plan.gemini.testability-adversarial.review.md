@@ -3,14 +3,14 @@ reviewer: "gemini"
 lens: "testability-adversarial"
 stage: "plan"
 artifact_path: "docs/workflow/feature-runs/coverage-cell-batch-display/plan.md"
-artifact_sha256: "7116531f6ac1d6d549d6a53484a1ac68d98afab9b3bf70d9fdf151a698b41f5a"
+artifact_sha256: "fe8cece0f5f003224ec65cb46794adce0820f07d76b3a1d1240a51db0bcf0469"
 repo_root: "."
-git_head_sha: "eab6ffbb2ad3a2f01ce5cd3ffa2dfd3c317349e9"
+git_head_sha: "0842af56c8b34162a05e3b010f28873378ec6bb2"
 git_base_ref: "origin/main"
 git_base_sha: "eab6ffbb2ad3a2f01ce5cd3ffa2dfd3c317349e9"
 generation_method: "gemini-cli"
-resolution_status: "accepted"
-resolution_note: "No actionable findings detected — auto-accepted"
+resolution_status: "rejected"
+resolution_note: "All findings are false positives or intentional design — no code changes required; see Resolution section"
 raw_output_path: "docs/workflow/feature-runs/coverage-cell-batch-display/reviews/plan.gemini.testability-adversarial.review.md.json"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,28 +22,55 @@ coverage_note: ""
 
 ## Findings
 
-| Severity | Finding | Evidence |
-| --- | --- | --- |
-| HIGH | **Inconsistent Data Source for Counts:** The plan will result in `batchCount` and `pairedBatchCount` being calculated from a different set of runs than `minTrialCount` and the `modelBreakdown`. `batchCount` will be filtered by runs containing *all* default models, while the `modelBreakdown` will continue to be calculated from all non-aggregate runs. This will cause confusing UI, where a cell might show a `batchCount` of 0, but the popover `modelBreakdown` will show non-zero trial counts. | `[CODE-CONFIRMED]` |
-| MEDIUM | **Brittle Direction-Token Matching:** The plan to calculate `aFirstBatchCount` and `bFirstBatchCount` relies on `run.config.jobChoiceValueFirst` being an exact, case-sensitive string match for the canonical value name. The code in `getCoverageDirection` only trims whitespace and does no normalization. Any variation in the data (e.g., different casing) will cause direction data to be silently ignored, leading to incorrect `pairedBatchCount` and `orphanedBatchCount` values. Relying on a manual database check for verification, as the plan suggests, indicates a design that is not robustly testable. | `[CODE-CONFIRMED]` |
-| LOW | **Ambiguous Future for `modelIds` Query Argument:** The plan proposes replacing the filter logic based on the `modelIds` GraphQL argument with a new filter based on the domain's `effectiveModelIds`. This makes the `modelIds` argument obsolete for calculating `batchCount`, but the plan is silent on whether the argument should be deprecated or how it should affect other counts (like `incompleteBatchCount`). This ambiguity creates a maintenance and testing burden, as the argument remains in the API signature with unclear effects. | `[UNVERIFIED]` |
-| LOW | **Misleading Plan for Frontend Changes:** The plan states it will "remove `minTrialCount` and `maxTrialCount` from display logic", which is an oversimplification. The primary cell label is changed, but the popover retains a "per-model trial breakdown". This description both undersells the UI change and, more importantly, masks the data inconsistency issue identified in the HIGH severity finding, where the retained breakdown will not align with the new primary count. | `[CODE-CONFIRMED]` |
+### 1. Inconsistent Trial Counts Due to Incorrect Filter Order
+**Severity:** HIGH
+**Evidence:** `[CODE-CONFIRMED]`
+
+The plan correctly states that the new model-set filter must gate all per-run counters symmetrically, including `nonAggregateRunsByDefinitionId`, to ensure consistency between the main `batchCount` and the per-model trial counts shown in the UI popover.
+
+However, the provided code in `domain-coverage.ts` does not follow this critical instruction. `nonAggregateRunsByDefinitionId` is populated for every non-aggregate run *before* the `matchesEffectiveModelSet` filter is applied. Runs that fail the model-set filter check are correctly excluded from `batchCount`, but they are incorrectly included in the `nonAggregateRunsByDefinitionId` map.
+
+As a result, `computePerModelTrialCounts` is called with a set of runs that is larger than and inconsistent with the set used for the primary `batchCount`. This will cause the UI to display a `batchCount` based on the filtered set, but a `modelBreakdown` in the popover that includes trials from runs that were filtered out, creating a confusing and misleading user experience.
+
+- **Location:** In `cloud/apps/api/src/graphql/queries/domain-coverage.ts`, the population of `nonAggregateRunsByDefinitionId` (lines 251-253) occurs before the `matchesEffectiveModelSet` filter check (lines 262-265). The `continue` statement on line 265 does not prevent the map from having already been populated.
+
+### 2. Silent Data Loss from Case-Sensitive Direction Matching
+**Severity:** MEDIUM
+**Evidence:** `[CODE-CONFIRMED]`
+
+The plan identifies a risk that `jobChoiceValueFirst` tokens from run configs may not exactly match the canonical value names, leading to lost directional data. The proposed verification is a manual database query.
+
+This risk is not fully mitigated by the code. The `getCoverageDirection` utility function only trims whitespace from the token and does not normalize its case. The subsequent lookup in `selectPrimaryDefinitionCounts` (`merged.get(valueA)`) is case-sensitive. If a run's config has `jobChoiceValueFirst: "benevolence"` but the code is checking for `"Benevolence"`, the match will fail and this directional run will not be counted in `aFirstBatchCount` or `bFirstBatchCount`.
+
+This leads to a fragile implementation that can silently under-report directional coverage if there are even minor casing inconsistencies in the data. While the plan's manual verification is a good backstop, the code should be more resilient. A test case with mismatched casing would fail against the current implementation.
+
+- **Location:** In `cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts`, `getCoverageDirection` (lines 258-265) lacks case normalization.
 
 ## Residual Risks
 
-1.  **Risk of Confusing Users with Inconsistent Counts:** The most significant risk is deploying with the data inconsistency flaw described in the HIGH finding. Users will see conflicting numbers in the same interface (`batchCount` vs. `modelBreakdown`), which will erode trust in the data presented and likely lead to support requests and bug reports. The fix requires ensuring that the set of runs used to calculate `batchCount`/`pairedBatchCount` is the *exact same set* used to calculate `modelBreakdown` and its associated `min/maxTrialCount`.
+The plan's "Residual Risks" section is well-considered. From a testability and verification perspective:
 
-2.  **Risk of Silent Data-Quality Failures:** If the brittle direction-token matching is not addressed with a more robust implementation (e.g., case-insensitive or normalized matching), future data quality issues in `run.config.jobChoiceValueFirst` will lead to silent failures. The UI will appear to work correctly but will display inaccurate `pairedBatchCount` and `orphanedBatchCount` values, potentially misleading users about the status of their paired-batch coverage.
+1.  **Batch counts will visibly drop:** The proposed manual verification of querying production before and after is appropriate for a one-time change. It correctly identifies the impact on the user. For ongoing testability, a snapshot test on the GQL query's output against a seeded test database would be a more robust, automated way to ensure future changes don't unexpectedly alter these counts.
 
-3.  **Risk of Incomplete Test Coverage:** The new backend logic is highly dependent on specific combinations of data in `Domain.defaultModelIds`, `Run.config.models`, and `Run.config.jobChoiceValueFirst`. Automated tests will need to be carefully constructed to cover all cases: domains with/without default models, runs with an exact match of models, a subset, a superset, and runs with valid/invalid/mismatched direction tokens. Without this, tests could pass vacuously, leaving the new logic untested in practice.
+2.  **`jobChoiceValueFirst` token mismatch:** As detailed in Finding #2 above, this risk is high, and the code does not fully mitigate it. The proposed manual verification via a `SELECT DISTINCT` query is a critical and necessary step before deployment, as it will reveal the extent of the potential data loss with the current case-sensitive implementation.
+
+3.  **Legacy query compatibility:** The plan's reasoning here is sound. Relying on the TypeScript compiler to fail if the GraphQL fragment for `DomainValueCoverageCell` is not updated for both the modern and legacy queries is a reliable, automated verification strategy. The shared result type `DomainValueCoverageQueryResult` enforces this at compile time.
 
 ## Token Stats
 
-- total_input=16765
-- total_output=857
-- total_tokens=35345
-- `gemini-2.5-pro`: input=16765, output=857, total=35345
+- total_input=17524
+- total_output=889
+- total_tokens=37382
+- `gemini-2.5-pro`: input=17524, output=889, total=37382
 
 ## Resolution
-- status: accepted
-- note: No actionable findings detected — auto-accepted
+- status: rejected
+- note: All findings are false positives or intentional design — no code changes required; see Resolution section
+Finding 1 (HIGH) — FALSE POSITIVE. Gemini cited lines 251-253 / 262-265 from the plan-stage diff,
+    but the actual implementation places nonAggregateRunsByDefinitionId population at lines 247-249,
+    which is after all three filter gates: aggregate-run skip (line 222), matchesEffectiveModelSet
+    (line 230), and matchesModelFilter (line 240). Code-confirmed correct in final implementation.
+
+    Finding 2 (MEDIUM, case sensitivity) — captured as Residual Risk 2 in the plan. Pre-merge
+    verification V2 (SELECT DISTINCT jobChoiceValueFirst from prod DB) will surface any real
+    casing divergence before deploy. No code change warranted without evidence of actual mismatch.

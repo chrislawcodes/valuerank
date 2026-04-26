@@ -9,8 +9,8 @@ git_head_sha: "eab6ffbb2ad3a2f01ce5cd3ffa2dfd3c317349e9"
 git_base_ref: "origin/main"
 git_base_sha: "eab6ffbb2ad3a2f01ce5cd3ffa2dfd3c317349e9"
 generation_method: "gemini-cli"
-resolution_status: "open"
-resolution_note: ""
+resolution_status: "accepted"
+resolution_note: "Finding 1 HIGH: Fixed FR-007 (badge uses aFirstBatchCount !== bFirstBatchCount). Finding 2 MEDIUM: orphanedBatchCount used as badge trigger; directional counts in tooltip. Finding 3 MEDIUM: direction token IS the value name — direct lookup via valueA/valueB params. Residuals accepted."
 raw_output_path: "docs/workflow/feature-runs/coverage-cell-batch-display/reviews/spec.gemini.requirements-adversarial.review.md.json"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -73,5 +73,5 @@ Currently, in `domain-coverage.ts`, the same `matchesModelFilter` check is appli
 - `gemini-2.5-pro`: input=2536, output=1137, total=36441
 
 ## Resolution
-- status: open
-- note:
+- status: accepted
+- note: Finding 1 HIGH: Fixed FR-007 (badge uses aFirstBatchCount !== bFirstBatchCount). Finding 2 MEDIUM: orphanedBatchCount used as badge trigger; directional counts in tooltip. Finding 3 MEDIUM: direction token IS the value name — direct lookup via valueA/valueB params. Residuals accepted.

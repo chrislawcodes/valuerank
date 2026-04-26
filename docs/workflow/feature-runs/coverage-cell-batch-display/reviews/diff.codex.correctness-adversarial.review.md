@@ -3,11 +3,11 @@ reviewer: "codex"
 lens: "correctness-adversarial"
 stage: "diff"
 artifact_path: "docs/workflow/feature-runs/coverage-cell-batch-display/reviews/implementation.diff.patch"
-artifact_sha256: "07bb599de9fef528574fa3409924355ec16d8899289e08e064d45f2d1753992c"
+artifact_sha256: "87152053b61ef4e77bf2576be5687de1d0b15924d9bebb5865973085fe1f7ea5"
 repo_root: "."
-git_head_sha: "d41ff83e7dfc6201bd8df7bcf80b8580c99b201f"
-git_base_ref: "d9588174cc27cf09e6467a9efa7f45b40d26a798"
-git_base_sha: "d9588174cc27cf09e6467a9efa7f45b40d26a798"
+git_head_sha: "0842af56c8b34162a05e3b010f28873378ec6bb2"
+git_base_ref: "d41ff83e7dfc6201bd8df7bcf80b8580c99b201f"
+git_base_sha: "d41ff83e7dfc6201bd8df7bcf80b8580c99b201f"
 generation_method: "codex-runner"
 resolution_status: "accepted"
 resolution_note: "No actionable findings detected — auto-accepted"
@@ -22,11 +22,11 @@ coverage_note: ""
 
 ## Findings
 
-None.
+No findings. This patch only changes a comment, so it does not alter runtime behavior or correctness.
 
 ## Residual Risks
 
-- [UNVERIFIED] This patch only changes a comment, so I did not re-validate the surrounding model-filter logic. If the comment is meant to describe a broader filtering path than `filterModelIds`, the wording may still be misleading even though the code is unchanged.
+- [UNVERIFIED] The comment claims the explicit model-ID filter is applied symmetrically to preserve the “exactly one bucket” invariant. Without surrounding code, I cannot verify that the implementation still matches that description. If the invariant is already broken elsewhere, this patch would not fix it.
 
 ## Runner Stats
 - total_input=0
