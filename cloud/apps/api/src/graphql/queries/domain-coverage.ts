@@ -231,11 +231,9 @@ builder.queryField('domainValueCoverage', (t) =>
             continue;
           }
 
-          // Apply the model filter symmetrically: a run that doesn't match the
-          // requested model filter contributes to neither bucket. Without this
-          // the `incompleteBatchCount` view of a filtered query would mention
-          // runs that `batchCount` cannot, breaking the "exactly one bucket"
-          // invariant.
+          // Explicit model-ID filter (passed as query arg): applied symmetrically
+          // so incompleteBatchCount never references runs that batchCount cannot,
+          // preserving the "exactly one bucket" invariant.
           const matchesModelFilter = filterModelIds.length === 0
             || run.transcripts.some((transcript) => filterModelIds.includes(transcript.modelId));
           if (!matchesModelFilter) continue;
