@@ -124,10 +124,15 @@ export type ParsedDecisionPath = {
  * - `"unknown"`: parser could not resolve.
  * - `"refusal"`: model explicitly refused to answer. Signalled by the Python
  *   worker setting `decisionMetadata.refusal = true`.
+ * - `"parse_failed"`: explicit sentinel for "no decision recoverable" — emitted
+ *   when buildWinnerFirstSummaryCache would otherwise have returned null
+ *   (e.g. empty model response, unparseable output). Shape and downstream
+ *   handling match `"unknown"`; the distinct label makes parser failures
+ *   visible in queries instead of silently null in the JSONB.
  */
 export type CachedWinnerFirstDecision = {
   cacheVersion: 2;
-  decisionState: 'resolved' | 'neutral' | 'unknown' | 'refusal';
+  decisionState: 'resolved' | 'neutral' | 'unknown' | 'refusal' | 'parse_failed';
   favoredValueKey: DomainAnalysisValueKey | null;
   strength: DecisionStrength;
 };

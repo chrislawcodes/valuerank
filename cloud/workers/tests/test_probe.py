@@ -432,3 +432,80 @@ class TestErrorClassification:
         assert result["success"] is False
         assert result["error"]["code"] == "SERVER_ERROR"
         assert result["error"]["retryable"] is True
+
+
+class TestEmptyResponseRefused:
+    """Probe must refuse to write a transcript when the model returns empty content.
+
+    The adapter-level guard catches OpenAI-compatible empty-content paths, but
+    the Google adapter intentionally returns empty content with a "blocked"
+    finishReason as a deliberate signal. This probe-level check ensures we never
+    persist a probe_results row marked SUCCESS with no usable answer.
+    """
+
+    @pytest.fixture
+    def valid_input(self) -> dict[str, Any]:
+        return {
+            "runId": "run-123",
+            "scenarioId": "scenario-456",
+            "modelId": "gemini-2.5-pro",
+            "scenario": {"prompt": "Pick A or B.", "followups": []},
+            "config": {"maxTokens": 1024, "maxTurns": 10},
+        }
+
+    def test_empty_string_content_returns_invalid_response(
+        self, valid_input: dict[str, Any]
+    ) -> None:
+        from probe import run_probe
+
+        with patch("probe.generate") as mock_generate:
+            mock_generate.return_value = LLMResponse(
+                content="",
+                input_tokens=100,
+                output_tokens=0,
+                provider_metadata={"provider": "google", "finishReason": "blocked"},
+            )
+
+            result = run_probe(valid_input)
+
+        assert result["success"] is False
+        assert result["error"]["code"] == "INVALID_RESPONSE"
+        assert "Empty response" in result["error"]["message"]
+        assert "scenario_prompt" in result["error"]["message"]
+        # The transcript was never written
+        assert "transcript" not in result
+
+    def test_whitespace_only_content_returns_invalid_response(
+        self, valid_input: dict[str, Any]
+    ) -> None:
+        from probe import run_probe
+
+        with patch("probe.generate") as mock_generate:
+            mock_generate.return_value = LLMResponse(content="  \n\t  ")
+
+            result = run_probe(valid_input)
+
+        assert result["success"] is False
+        assert result["error"]["code"] == "INVALID_RESPONSE"
+
+    def test_empty_followup_response_returns_invalid_response(
+        self, valid_input: dict[str, Any]
+    ) -> None:
+        """First turn succeeds, second turn comes back empty — probe still refuses."""
+        from probe import run_probe
+
+        valid_input["scenario"]["followups"] = [
+            {"label": "followup_1", "prompt": "Are you sure?"},
+        ]
+
+        with patch("probe.generate") as mock_generate:
+            mock_generate.side_effect = [
+                LLMResponse(content="Yes, A.", output_tokens=5),
+                LLMResponse(content="", output_tokens=0),
+            ]
+
+            result = run_probe(valid_input)
+
+        assert result["success"] is False
+        assert result["error"]["code"] == "INVALID_RESPONSE"
+        assert "followup_1" in result["error"]["message"]

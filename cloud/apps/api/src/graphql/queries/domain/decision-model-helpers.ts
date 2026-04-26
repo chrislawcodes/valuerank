@@ -62,6 +62,7 @@ export function isCachedWinnerFirstDecision(value: unknown): value is CachedWinn
     && decision.decisionState !== 'neutral'
     && decision.decisionState !== 'unknown'
     && decision.decisionState !== 'refusal'
+    && decision.decisionState !== 'parse_failed'
   ) {
     return false;
   }
@@ -78,10 +79,11 @@ export function isCachedWinnerFirstDecision(value: unknown): value is CachedWinn
     return decision.favoredValueKey === null && decision.strength === 'neutral';
   }
 
-  // 'unknown' and 'refusal' share the same field shape: no favored value,
-  // strength reported as 'unknown'. Keeping them separate decisionStates
-  // preserves the semantic signal (parser failure vs model refusal) without
-  // requiring any other field to differ.
+  // 'unknown', 'refusal', and 'parse_failed' share the same field shape: no
+  // favored value, strength reported as 'unknown'. Keeping them separate
+  // decisionStates preserves the semantic signal (parser ambiguity vs model
+  // refusal vs explicit parse-failure sentinel) without requiring any other
+  // field to differ.
   return decision.favoredValueKey === null && decision.strength === 'unknown';
 }
 

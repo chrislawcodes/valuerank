@@ -83,6 +83,7 @@ export function isWinnerFirstSummaryCache(value: unknown): value is WinnerFirstS
     && value.decisionState !== 'neutral'
     && value.decisionState !== 'unknown'
     && value.decisionState !== 'refusal'
+    && value.decisionState !== 'parse_failed'
   ) {
     return false;
   }
@@ -99,7 +100,9 @@ export function isWinnerFirstSummaryCache(value: unknown): value is WinnerFirstS
     return value.favoredValueKey === null && value.strength === 'neutral';
   }
 
-  // "unknown" and "refusal" — both have null favored key and strength 'unknown'.
+  // "unknown", "refusal", and "parse_failed" — all carry null favored key and
+  // strength 'unknown'. Distinct labels preserve the semantic signal (parser
+  // ambiguity vs model refusal vs explicit parse-failure sentinel).
   return value.favoredValueKey === null && value.strength === 'unknown';
 }
 

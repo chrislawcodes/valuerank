@@ -8,7 +8,7 @@ from typing import Any, Optional
 from ...config import get_config
 from ...errors import ErrorCode, LLMError
 from ...logging import get_logger
-from ..base import BaseLLMAdapter, post_json
+from ..base import BaseLLMAdapter, post_json, raise_if_empty_content
 from ..config_utils import get_config_value, resolve_max_tokens, resolve_temperature
 from ..constants import DEFAULT_TIMEOUT, normalize_finish_reason
 from ..types import LLMResponse
@@ -98,6 +98,13 @@ class MistralAdapter(BaseLLMAdapter):
                     "finish_reason": raw_finish_reason,
                 },
             }
+
+            raise_if_empty_content(
+                provider="mistral",
+                content=content,
+                output_tokens=usage.get("completion_tokens"),
+                finish_reason=raw_finish_reason,
+            )
 
             return LLMResponse(
                 content=content.strip() if content else "",

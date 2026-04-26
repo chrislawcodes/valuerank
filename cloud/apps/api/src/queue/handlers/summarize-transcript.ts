@@ -115,7 +115,7 @@ function getProviderNameFromModelId(modelId: string, fallbackProvider: string): 
 async function buildWinnerFirstSummaryCache(
   transcript: TranscriptRecord,
   summary: SuccessfulSummarizeWorkerSummary,
-): Promise<WinnerFirstSummaryCache | null> {
+): Promise<WinnerFirstSummaryCache> {
   const scenarioId = transcript.scenarioId;
   const scenario = scenarioId == null
     ? null
@@ -160,7 +160,17 @@ async function buildWinnerFirstSummaryCache(
   }
 
   if (canonical.favoredValueKey == null) {
-    return null;
+    // Explicit sentinel instead of returning null — makes parser failures
+    // visible in JSONB queries as decisionState='parse_failed' rather than
+    // a missing canonicalDecision key. Structurally identical to 'unknown';
+    // the distinct label flags that the resolver could not pin a value even
+    // though direction/strength were not themselves marked unknown.
+    return {
+      cacheVersion: 2,
+      decisionState: 'parse_failed',
+      favoredValueKey: null,
+      strength: 'unknown',
+    };
   }
 
   return {

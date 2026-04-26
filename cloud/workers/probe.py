@@ -108,6 +108,31 @@ def build_provider_metadata(response: LLMResponse) -> Optional[dict[str, Any]]:
     return metadata or None
 
 
+def _ensure_non_empty_response(response: LLMResponse, *, model_id: str, turn_label: str) -> None:
+    """Defense-in-depth check: refuse to write a transcript turn with no content.
+
+    Adapter-level guards in the OpenAI-compatible providers raise
+    INVALID_RESPONSE before we get here, but the Google adapter intentionally
+    returns empty content with a "blocked" finish_reason as a deliberate signal,
+    and any future adapter could regress. Catching empty content here ensures we
+    never persist a probe_results row marked SUCCESS with no usable answer.
+    """
+    if response.content is not None and response.content.strip():
+        return
+    finish_reason = None
+    if response.provider_metadata:
+        finish_reason = response.provider_metadata.get("finishReason")
+    out_tokens = response.output_tokens or 0
+    raise LLMError(
+        message=(
+            f"Empty response from {model_id} on turn {turn_label!r} "
+            f"(output_tokens={out_tokens}, finish_reason={finish_reason!r}); "
+            f"refusing to write empty transcript"
+        ),
+        code=ErrorCode.INVALID_RESPONSE,
+    )
+
+
 @dataclass
 class Turn:
     """A single turn in the conversation."""
@@ -289,6 +314,7 @@ def run_probe(data: dict[str, Any]) -> dict[str, Any]:
             messages,
             **generate_kwargs,
         )
+        _ensure_non_empty_response(response, model_id=model_id, turn_label="scenario_prompt")
 
         turn = Turn(
             turn_number=1,
@@ -325,6 +351,7 @@ def run_probe(data: dict[str, Any]) -> dict[str, Any]:
                 messages,
                 **generate_kwargs,
             )
+            _ensure_non_empty_response(response, model_id=model_id, turn_label=followup_label)
 
             turn = Turn(
                 turn_number=turn_num,
