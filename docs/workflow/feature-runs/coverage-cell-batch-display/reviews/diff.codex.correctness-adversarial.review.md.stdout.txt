@@ -1,0 +1,5 @@
+## Findings
+None.
+
+## Residual Risks
+- [UNVERIFIED] This patch only changes a comment, so I did not re-validate the surrounding model-filter logic. If the comment is meant to describe a broader filtering path than `filterModelIds`, the wording may still be misleading even though the code is unchanged.

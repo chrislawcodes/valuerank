@@ -1,0 +1,16 @@
+{
+  "repo_root": ".",
+  "git_head_sha": "d41ff83e7dfc6201bd8df7bcf80b8580c99b201f",
+  "git_base_ref": "d9588174cc27cf09e6467a9efa7f45b40d26a798",
+  "git_base_sha": "d9588174cc27cf09e6467a9efa7f45b40d26a798",
+  "paths": [
+    "cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts",
+    "cloud/apps/api/src/graphql/queries/domain-coverage.ts",
+    "cloud/apps/web/src/components/domains/CoverageCell.tsx",
+    "cloud/apps/web/src/components/domains/CoverageMatrix.tsx"
+  ],
+  "allowed_dirty_paths": [],
+  "untracked_files_included": [],
+  "artifact_path": "docs/workflow/feature-runs/coverage-cell-batch-display/reviews/implementation.diff.patch",
+  "allow_empty_diff": false
+}

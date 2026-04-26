@@ -9,6 +9,9 @@
 - review: reviews/plan.gemini.testability-adversarial.review.md | status: accepted | note: No actionable findings detected — auto-accepted
 - review: reviews/plan.codex.architecture-adversarial.review.md | status: accepted | note: HIGH: Fixed — model-set filter now explicitly gates incompleteBatchCount and nonAggregateRunsByDefinitionId (moved to after filter check), preserving the one-bucket invariant and keeping popover trial counts consistent with batch count cohort. MEDIUM: Fixed as part of the same change — nonAggregateRunsByDefinitionId only populated for model-set-matched runs. Unverified risk on jobChoiceValueFirst spelling already captured as Residual Risk 2 with verification step. availableModels scope noted as out of scope — no UI currently depends on it being the filtered cohort.
 - review: reviews/tasks.codex.execution-adversarial.review.md | status: accepted | note: No actionable findings detected — auto-accepted
+- review: reviews/diff.codex.correctness-adversarial.review.md | status: accepted | note: No actionable findings detected — auto-accepted
+- review: reviews/diff.codex.regression-adversarial.review.md | status: accepted | note: No actionable findings detected — auto-accepted
+- review: reviews/diff.gemini.quality-adversarial.review.md | status: accepted | note: MEDIUM: Fixed — restored the 'without this...' failure-mode rationale and removed the 'passed as query arg' hardcoding. Comment now generic and explains why symmetric filtering matters. LOW: Fixed as part of same change.
 
 ## Architecture
 

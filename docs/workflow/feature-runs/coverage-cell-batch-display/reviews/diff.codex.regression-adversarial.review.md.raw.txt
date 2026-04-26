@@ -1,0 +1,6 @@
+## Findings
+None.
+
+## Residual Risks
+- [UNVERIFIED] I could not inspect surrounding code, so I cannot verify that the comment precisely matches the current filter behavior. Because this patch is comment-only, I did not find a functional regression.
+- If the implementation around this block has already drifted, this change will not surface it, since no logic was changed.
