@@ -1,0 +1,5 @@
+## Findings
+1. [HIGH][CODE-CONFIRMED] The spec still preserves the existing `pairedBatchCount > 0 ? pairedBatchCount : batchCount` display rule in FR-004/FR-005, and the current UI code in [CoverageCell.tsx](/Users/chrislaw/valuerank/.claude/worktrees/loving-bose-6ba4a1/cloud/apps/web/src/components/domains/CoverageCell.tsx) uses that exact rule for both the label and the color. That means cells with both directions present will continue to show the smaller paired count, not the full model-set-filtered batch total the spec says should be visible. A 4-batch cell split 3/1 would still render as `1`, so the primary number remains wrong in the common balanced-but-uneven case.
+
+## Residual Risks
+- [UNVERIFIED] The spec assumes `jobChoiceValueFirst` can be matched directly against `valueA`/`valueB`, but the provided code only shows it as an arbitrary string token and already treats more than two distinct tokens as corruption. If production tokens are aliases or not normalized to the canonical value names, the new direction counts will bucket incorrectly.

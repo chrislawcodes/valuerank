@@ -1,0 +1,7 @@
+## Findings
+- HIGH [CODE-CONFIRMED]: The plan narrows `batchCount`, but it does not carry the same filter through `incompleteBatchCount`. The current code explicitly says the model filter is applied symmetrically so incomplete runs do not mention runs that `batchCount` cannot, to preserve the “exactly one bucket” invariant. As written, the plan would break that invariant and let a cell report batches and incomplete batches from different run sets.
+- MEDIUM [CODE-CONFIRMED]: The plan changes the headline batch scope but leaves `allNonAggregateRunsForPair` / `computePerModelTrialCounts` unchanged. In the current code, the per-model breakdown is computed from all non-aggregate runs for the pair, not just the runs that pass the new model-set gate. That means the popover can still show trial counts from runs that no longer contribute to the visible batch count.
+
+## Residual Risks
+- [UNVERIFIED] The new `aFirstBatchCount` / `bFirstBatchCount` logic assumes `jobChoiceValueFirst` uses the canonical value names exactly. The provided code only preserves a trimmed string and does not validate the vocabulary, so any historical spelling variant would silently read as zero.
+- [CODE-CONFIRMED] `availableModels` is still built from every signature-scoped run, not from the filtered batch cohort. If any UI or downstream consumer starts relying on that field for scope, it will remain broader than the new batch-count behavior.

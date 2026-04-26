@@ -1,0 +1,57 @@
+{
+  "session_id": "530a7175-cd2e-4f09-8b53-dd4200dfc611",
+  "response": "## Findings\n\n| Severity | Finding | Evidence |\n| --- | --- | --- |\n| HIGH | **Inconsistent Data Source for Counts:** The plan will result in `batchCount` and `pairedBatchCount` being calculated from a different set of runs than `minTrialCount` and the `modelBreakdown`. `batchCount` will be filtered by runs containing *all* default models, while the `modelBreakdown` will continue to be calculated from all non-aggregate runs. This will cause confusing UI, where a cell might show a `batchCount` of 0, but the popover `modelBreakdown` will show non-zero trial counts. | `[CODE-CONFIRMED]` |\n| MEDIUM | **Brittle Direction-Token Matching:** The plan to calculate `aFirstBatchCount` and `bFirstBatchCount` relies on `run.config.jobChoiceValueFirst` being an exact, case-sensitive string match for the canonical value name. The code in `getCoverageDirection` only trims whitespace and does no normalization. Any variation in the data (e.g., different casing) will cause direction data to be silently ignored, leading to incorrect `pairedBatchCount` and `orphanedBatchCount` values. Relying on a manual database check for verification, as the plan suggests, indicates a design that is not robustly testable. | `[CODE-CONFIRMED]` |\n| LOW | **Ambiguous Future for `modelIds` Query Argument:** The plan proposes replacing the filter logic based on the `modelIds` GraphQL argument with a new filter based on the domain's `effectiveModelIds`. This makes the `modelIds` argument obsolete for calculating `batchCount`, but the plan is silent on whether the argument should be deprecated or how it should affect other counts (like `incompleteBatchCount`). This ambiguity creates a maintenance and testing burden, as the argument remains in the API signature with unclear effects. | `[UNVERIFIED]` |\n| LOW | **Misleading Plan for Frontend Changes:** The plan states it will \"remove `minTrialCount` and `maxTrialCount` from display logic\", which is an oversimplification. The primary cell label is changed, but the popover retains a \"per-model trial breakdown\". This description both undersells the UI change and, more importantly, masks the data inconsistency issue identified in the HIGH severity finding, where the retained breakdown will not align with the new primary count. | `[CODE-CONFIRMED]` |\n\n## Residual Risks\n\n1.  **Risk of Confusing Users with Inconsistent Counts:** The most significant risk is deploying with the data inconsistency flaw described in the HIGH finding. Users will see conflicting numbers in the same interface (`batchCount` vs. `modelBreakdown`), which will erode trust in the data presented and likely lead to support requests and bug reports. The fix requires ensuring that the set of runs used to calculate `batchCount`/`pairedBatchCount` is the *exact same set* used to calculate `modelBreakdown` and its associated `min/maxTrialCount`.\n\n2.  **Risk of Silent Data-Quality Failures:** If the brittle direction-token matching is not addressed with a more robust implementation (e.g., case-insensitive or normalized matching), future data quality issues in `run.config.jobChoiceValueFirst` will lead to silent failures. The UI will appear to work correctly but will display inaccurate `pairedBatchCount` and `orphanedBatchCount` values, potentially misleading users about the status of their paired-batch coverage.\n\n3.  **Risk of Incomplete Test Coverage:** The new backend logic is highly dependent on specific combinations of data in `Domain.defaultModelIds`, `Run.config.models`, and `Run.config.jobChoiceValueFirst`. Automated tests will need to be carefully constructed to cover all cases: domains with/without default models, runs with an exact match of models, a subset, a superset, and runs with valid/invalid/mismatched direction tokens. Without this, tests could pass vacuously, leaving the new logic untested in practice.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 54845
+        },
+        "tokens": {
+          "input": 16765,
+          "prompt": 29638,
+          "candidates": 857,
+          "total": 35345,
+          "cached": 12873,
+          "thoughts": 4850,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 54845,
+            "tokens": {
+              "input": 16765,
+              "prompt": 29638,
+              "candidates": 857,
+              "total": 35345,
+              "cached": 12873,
+              "thoughts": 4850,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}
