@@ -194,7 +194,10 @@ describe('run anomaly detection', () => {
     ]);
   });
 
-  it('skips audit-mode invalid response failures that already have an open anomaly', async () => {
+  it('forward-takes-precedence when same slot matches both PATH A and PATH B', async () => {
+    // The same slot has BOTH a FAILED probe (PATH A) AND an empty transcript (PATH B).
+    // Rare in practice but possible if a stale historical empty transcript predates a
+    // fresh FAILED probe at the same slot. Forward should win — historical is skipped.
     mockQueryRaw.mockResolvedValueOnce([
       {
         probeResultsId: 'pr-1',
@@ -205,47 +208,13 @@ describe('run anomaly detection', () => {
       },
     ]).mockResolvedValueOnce([
       {
-        transcriptId: 't-1',
+        transcriptId: 't-stale',
         runId: 'run-1',
         scenarioId: 'scenario-1',
         modelId: 'model-1',
         sampleIndex: 0,
         content: {
-          turns: [
-            { targetResponse: '' },
-          ],
-        },
-      },
-    ]);
-    mockRunAnomalyFindMany.mockResolvedValueOnce([
-      {
-        subject: 'run-1:scenario-1:model-1:0',
-      },
-    ]);
-
-    await expect(
-      detectInvalidResponseFailures('run-1', 'audit')
-    ).resolves.toEqual([]);
-
-    mockQueryRaw.mockResolvedValueOnce([
-      {
-        probeResultsId: 'pr-1',
-        runId: 'run-1',
-        scenarioId: 'scenario-1',
-        modelId: 'model-1',
-        sampleIndex: 0,
-      },
-    ]).mockResolvedValueOnce([
-      {
-        transcriptId: 't-1',
-        runId: 'run-1',
-        scenarioId: 'scenario-1',
-        modelId: 'model-1',
-        sampleIndex: 0,
-        content: {
-          turns: [
-            { targetResponse: '' },
-          ],
+          turns: [{ targetResponse: '' }],
         },
       },
     ]);
@@ -267,6 +236,67 @@ describe('run anomaly detection', () => {
         },
       },
     ]);
+  });
+
+  it('handles null scenarioId in subject format', async () => {
+    // ORPHAN_TRANSCRIPT-style transcripts have scenario_id NULL when the source
+    // scenario was deleted. The slot subject must still be unique and parseable.
+    mockQueryRaw.mockResolvedValueOnce([]).mockResolvedValueOnce([
+      {
+        transcriptId: 't-1',
+        runId: 'run-1',
+        scenarioId: null,
+        modelId: 'model-1',
+        sampleIndex: 0,
+        content: {
+          turns: [{ targetResponse: '' }],
+        },
+      },
+    ]);
+
+    await expect(
+      detectInvalidResponseFailures('run-1')
+    ).resolves.toEqual([
+      {
+        type: 'INVALID_RESPONSE_FAILURE',
+        subject: 'run-1::model-1:0',
+        details: {
+          scenarioId: null,
+          modelId: 'model-1',
+          sampleIndex: 0,
+          transcriptId: 't-1',
+          probeResultId: null,
+          shape: 'historical',
+          reprobeAttempts: 0,
+        },
+      },
+    ]);
+  });
+
+  it('returns identical drafts in default and audit modes (source coexistence is intentional)', async () => {
+    // The detector must return the same drafts regardless of mode. Filtering audit
+    // drafts inside the detector would be unsafe: syncAnomalies() resolves any open
+    // anomaly whose subject is missing from the draft list, so a filtered audit draft
+    // would resolve a still-valid audit-source anomaly on the next sweep. The
+    // unique constraint (runId, type, subject, source) explicitly allows default+audit
+    // coexistence; the UI dedupes by subject when rendering.
+    const probeRows = [{
+      probeResultsId: 'pr-1',
+      runId: 'run-1',
+      scenarioId: 'scenario-1',
+      modelId: 'model-1',
+      sampleIndex: 0,
+    }];
+
+    mockQueryRaw.mockResolvedValueOnce(probeRows).mockResolvedValueOnce([]);
+    const defaultDrafts = await detectInvalidResponseFailures('run-1', 'default');
+
+    mockQueryRaw.mockResolvedValueOnce(probeRows).mockResolvedValueOnce([]);
+    const auditDrafts = await detectInvalidResponseFailures('run-1', 'audit');
+
+    expect(auditDrafts).toEqual(defaultDrafts);
+    expect(auditDrafts).toHaveLength(1);
+    expect(auditDrafts[0].subject).toBe('run-1:scenario-1:model-1:0');
   });
 
   it('detects pair asymmetry when sibling success rates diverge enough', async () => {
