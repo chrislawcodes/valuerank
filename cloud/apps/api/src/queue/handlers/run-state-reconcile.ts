@@ -5,6 +5,7 @@ import { DEFAULT_JOB_OPTIONS, type RunStateReconcileJobData } from '../types.js'
 import { maybeAdvanceRunStatus } from '../../services/run/index.js';
 import {
   detectModelTranscriptShortfall,
+  detectInvalidResponseFailures,
   detectPairAsymmetry,
   detectScheduledCountMismatch,
   detectStrandedTranscript,
@@ -279,6 +280,13 @@ export function createRunStateReconcileHandler(): PgBoss.WorkHandler<RunStateRec
             }
           } catch (error) {
             log.warn({ runId, err: error }, 'Scheduled count mismatch detection failed');
+          }
+
+          try {
+            const invalidResponseFailures = await detectInvalidResponseFailures(runId, 'default');
+            await syncAnomalies(runId, 'INVALID_RESPONSE_FAILURE', invalidResponseFailures, 'default');
+          } catch (error) {
+            log.warn({ runId, err: error }, 'Invalid response failure detection failed');
           }
 
           try {

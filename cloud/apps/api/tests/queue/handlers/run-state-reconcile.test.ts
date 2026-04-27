@@ -13,6 +13,7 @@ const mockDetectStrandedTranscript = vi.hoisted(() => vi.fn());
 const mockDetectPairAsymmetry = vi.hoisted(() => vi.fn());
 const mockDetectModelTranscriptShortfall = vi.hoisted(() => vi.fn());
 const mockDetectScheduledCountMismatch = vi.hoisted(() => vi.fn());
+const mockDetectInvalidResponseFailures = vi.hoisted(() => vi.fn());
 const mockDetectSummarizingStall = vi.hoisted(() => vi.fn());
 const mockFindOrphanTranscripts = vi.hoisted(() => vi.fn());
 const mockCountOrphanTranscripts = vi.hoisted(() => vi.fn());
@@ -59,6 +60,7 @@ vi.mock('../../../src/services/run/anomaly-detection.js', () => ({
   detectPairAsymmetry: mockDetectPairAsymmetry,
   detectModelTranscriptShortfall: mockDetectModelTranscriptShortfall,
   detectScheduledCountMismatch: mockDetectScheduledCountMismatch,
+  detectInvalidResponseFailures: mockDetectInvalidResponseFailures,
   detectSummarizingStall: mockDetectSummarizingStall,
   findOrphanTranscripts: mockFindOrphanTranscripts,
   countOrphanTranscripts: mockCountOrphanTranscripts,
@@ -95,6 +97,7 @@ describe('createRunStateReconcileHandler', () => {
       draft: null,
       canonicalTotal: 1,
     });
+    mockDetectInvalidResponseFailures.mockResolvedValue([]);
     mockDetectSummarizingStall.mockResolvedValue(null);
     mockFindOrphanTranscripts.mockResolvedValue([]);
     mockCountOrphanTranscripts.mockResolvedValue(0);
@@ -144,6 +147,7 @@ describe('createRunStateReconcileHandler', () => {
       { runId: 'run-1', transcriptId: 't-2' },
       expect.objectContaining({ singletonKey: 't-2' })
     );
+    expect(mockDetectInvalidResponseFailures).toHaveBeenCalledWith('run-1', 'default');
     expect(mockMaybeAdvanceRunStatus).not.toHaveBeenCalled();
   });
 

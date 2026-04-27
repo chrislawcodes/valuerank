@@ -6,6 +6,7 @@ const {
   mockProbeResultCount,
   mockProbeResultGroupBy,
   mockTranscriptFindMany,
+  mockRunAnomalyFindMany,
   mockQueryRaw,
 } = vi.hoisted(() => ({
   mockRunFindMany: vi.fn(),
@@ -13,6 +14,7 @@ const {
   mockProbeResultCount: vi.fn(),
   mockProbeResultGroupBy: vi.fn(),
   mockTranscriptFindMany: vi.fn(),
+  mockRunAnomalyFindMany: vi.fn(),
   mockQueryRaw: vi.fn(),
 }));
 
@@ -30,6 +32,9 @@ vi.mock('@valuerank/db', () => ({
     },
     transcript: {
       findMany: mockTranscriptFindMany,
+    },
+    runAnomaly: {
+      findMany: mockRunAnomalyFindMany,
     },
     $queryRaw: mockQueryRaw,
   },
@@ -52,6 +57,7 @@ vi.mock('@valuerank/shared', () => ({
 
 import {
   detectModelTranscriptShortfall,
+  detectInvalidResponseFailures,
   detectOrphanTranscript,
   detectPairAsymmetry,
   detectScheduledCountMismatch,
@@ -95,6 +101,172 @@ describe('run anomaly detection', () => {
       details: { transcriptIds: ['t-1'] },
     });
     await expect(detectOrphanTranscript('run-2')).resolves.toBeNull();
+  });
+
+  it('detects invalid response failures from failed probes without transcripts', async () => {
+    mockQueryRaw.mockResolvedValueOnce([
+      {
+        probeResultsId: 'pr-1',
+        runId: 'run-1',
+        scenarioId: 'scenario-1',
+        modelId: 'model-1',
+        sampleIndex: 0,
+      },
+    ]).mockResolvedValueOnce([
+      {
+        transcriptId: 't-1',
+        runId: 'run-1',
+        scenarioId: 'scenario-2',
+        modelId: 'model-2',
+        sampleIndex: 1,
+        content: {
+          turns: [
+            { targetResponse: 'visible response' },
+          ],
+        },
+      },
+    ]);
+
+    await expect(
+      detectInvalidResponseFailures('run-1')
+    ).resolves.toEqual([
+      {
+        type: 'INVALID_RESPONSE_FAILURE',
+        subject: 'run-1:scenario-1:model-1:0',
+        details: {
+          scenarioId: 'scenario-1',
+          modelId: 'model-1',
+          sampleIndex: 0,
+          transcriptId: null,
+          probeResultId: 'pr-1',
+          shape: 'forward',
+          reprobeAttempts: 0,
+        },
+      },
+    ]);
+  });
+
+  it('detects historical invalid response failures from empty transcripts', async () => {
+    mockQueryRaw.mockResolvedValueOnce([]).mockResolvedValueOnce([
+      {
+        transcriptId: 't-1',
+        runId: 'run-1',
+        scenarioId: 'scenario-1',
+        modelId: 'model-1',
+        sampleIndex: 0,
+        content: {
+          turns: [
+            { targetResponse: '   ' },
+            { targetResponse: '' },
+          ],
+        },
+      },
+      {
+        transcriptId: 't-2',
+        runId: 'run-1',
+        scenarioId: 'scenario-2',
+        modelId: 'model-2',
+        sampleIndex: 1,
+        content: {
+          turns: [
+            { targetResponse: 'has response text' },
+          ],
+        },
+      },
+    ]);
+
+    await expect(
+      detectInvalidResponseFailures('run-1')
+    ).resolves.toEqual([
+      {
+        type: 'INVALID_RESPONSE_FAILURE',
+        subject: 'run-1:scenario-1:model-1:0',
+        details: {
+          scenarioId: 'scenario-1',
+          modelId: 'model-1',
+          sampleIndex: 0,
+          transcriptId: 't-1',
+          probeResultId: null,
+          shape: 'historical',
+          reprobeAttempts: 0,
+        },
+      },
+    ]);
+  });
+
+  it('skips audit-mode invalid response failures that already have an open anomaly', async () => {
+    mockQueryRaw.mockResolvedValueOnce([
+      {
+        probeResultsId: 'pr-1',
+        runId: 'run-1',
+        scenarioId: 'scenario-1',
+        modelId: 'model-1',
+        sampleIndex: 0,
+      },
+    ]).mockResolvedValueOnce([
+      {
+        transcriptId: 't-1',
+        runId: 'run-1',
+        scenarioId: 'scenario-1',
+        modelId: 'model-1',
+        sampleIndex: 0,
+        content: {
+          turns: [
+            { targetResponse: '' },
+          ],
+        },
+      },
+    ]);
+    mockRunAnomalyFindMany.mockResolvedValueOnce([
+      {
+        subject: 'run-1:scenario-1:model-1:0',
+      },
+    ]);
+
+    await expect(
+      detectInvalidResponseFailures('run-1', 'audit')
+    ).resolves.toEqual([]);
+
+    mockQueryRaw.mockResolvedValueOnce([
+      {
+        probeResultsId: 'pr-1',
+        runId: 'run-1',
+        scenarioId: 'scenario-1',
+        modelId: 'model-1',
+        sampleIndex: 0,
+      },
+    ]).mockResolvedValueOnce([
+      {
+        transcriptId: 't-1',
+        runId: 'run-1',
+        scenarioId: 'scenario-1',
+        modelId: 'model-1',
+        sampleIndex: 0,
+        content: {
+          turns: [
+            { targetResponse: '' },
+          ],
+        },
+      },
+    ]);
+
+    await expect(
+      detectInvalidResponseFailures('run-1')
+    ).resolves.toEqual([
+      {
+        type: 'INVALID_RESPONSE_FAILURE',
+        subject: 'run-1:scenario-1:model-1:0',
+        details: {
+          scenarioId: 'scenario-1',
+          modelId: 'model-1',
+          sampleIndex: 0,
+          transcriptId: null,
+          probeResultId: 'pr-1',
+          shape: 'forward',
+          reprobeAttempts: 0,
+        },
+      },
+    ]);
   });
 
   it('detects pair asymmetry when sibling success rates diverge enough', async () => {

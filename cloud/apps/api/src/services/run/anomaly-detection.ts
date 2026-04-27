@@ -1,5 +1,6 @@
 import { db, Prisma } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
+import { getTranscriptResponseText } from '../../queue/handlers/summarize-types.js';
 import {
   MODEL_SHORTFALL_ABSOLUTE_RATE,
   MODEL_SHORTFALL_MIN_PROBES,
@@ -19,7 +20,8 @@ export type RunAnomalyType =
   | 'PAIR_ASYMMETRY'
   | 'SUMMARIZING_STALL'
   | 'MODEL_TRANSCRIPT_SHORTFALL'
-  | 'SCHEDULED_COUNT_MISMATCH';
+  | 'SCHEDULED_COUNT_MISMATCH'
+  | 'INVALID_RESPONSE_FAILURE';
 
 export type AnomalyDraft = {
   type: RunAnomalyType;
@@ -55,6 +57,23 @@ type OrphanTranscriptRow = {
   createdAt: Date;
   durationMs: number;
   tokenCount: number;
+  content: unknown;
+};
+
+type InvalidResponseFailureProbeRow = {
+  probeResultsId: string;
+  runId: string;
+  scenarioId: string | null;
+  modelId: string;
+  sampleIndex: number;
+};
+
+type InvalidResponseFailureTranscriptRow = {
+  transcriptId: string;
+  runId: string;
+  scenarioId: string | null;
+  modelId: string;
+  sampleIndex: number;
   content: unknown;
 };
 
@@ -377,6 +396,143 @@ export function detectSummarizingStall(run: RunSnapshot): AnomalyDraft | null {
       ageMinutes,
     }),
   };
+}
+
+function buildInvalidResponseFailureSubject(
+  runId: string,
+  scenarioId: string | null,
+  modelId: string,
+  sampleIndex: number,
+): string {
+  return `${runId}:${scenarioId ?? ''}:${modelId}:${sampleIndex}`;
+}
+
+function buildInvalidResponseFailureDraft(
+  runId: string,
+  scenarioId: string | null,
+  modelId: string,
+  sampleIndex: number,
+  shape: 'forward' | 'historical',
+  transcriptId: string | null,
+  probeResultId: string | null,
+): AnomalyDraft {
+  return {
+    type: 'INVALID_RESPONSE_FAILURE',
+    subject: buildInvalidResponseFailureSubject(runId, scenarioId, modelId, sampleIndex),
+    details: toJsonValue({
+      scenarioId,
+      modelId,
+      sampleIndex,
+      transcriptId,
+      probeResultId,
+      shape,
+      reprobeAttempts: 0,
+    }),
+  };
+}
+
+export async function detectInvalidResponseFailures(
+  runId: string,
+  options?: AnomalyDetectionMode | AnomalyThresholds,
+): Promise<AnomalyDraft[]> {
+  const detection = normalizeDetectionOptions(options);
+
+  const probeResultRows = await db.$queryRaw<InvalidResponseFailureProbeRow[]>`
+    SELECT pr.id AS "probeResultsId",
+           pr.run_id AS "runId",
+           pr.scenario_id AS "scenarioId",
+           pr.model_id AS "modelId",
+           pr.sample_index AS "sampleIndex"
+    FROM probe_results pr
+    WHERE pr.run_id = ${runId}
+      AND pr.status = 'FAILED'
+      AND pr.error_code = 'INVALID_RESPONSE'
+      AND pr.deleted_at IS NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM transcripts t
+        WHERE t.run_id = pr.run_id
+          AND t.scenario_id = pr.scenario_id
+          AND t.model_id = pr.model_id
+          AND t.sample_index = pr.sample_index
+          AND t.deleted_at IS NULL
+      )
+  `;
+
+  const draftsBySlot = new Map<string, AnomalyDraft>();
+  for (const row of probeResultRows) {
+    const subject = buildInvalidResponseFailureSubject(row.runId, row.scenarioId, row.modelId, row.sampleIndex);
+    draftsBySlot.set(
+      subject,
+      buildInvalidResponseFailureDraft(
+        row.runId,
+        row.scenarioId,
+        row.modelId,
+        row.sampleIndex,
+        'forward',
+        null,
+        row.probeResultsId,
+      )
+    );
+  }
+
+  const transcriptRows = await db.$queryRaw<InvalidResponseFailureTranscriptRow[]>`
+    SELECT t.id AS "transcriptId",
+           t.run_id AS "runId",
+           t.scenario_id AS "scenarioId",
+           t.model_id AS "modelId",
+           t.sample_index AS "sampleIndex",
+           t.content AS "content"
+    FROM transcripts t
+    WHERE t.run_id = ${runId}
+      AND t.deleted_at IS NULL
+      AND t.summarized_at IS NOT NULL
+  `;
+
+  for (const row of transcriptRows) {
+    if (getTranscriptResponseText(row.content).length !== 0) {
+      continue;
+    }
+
+    const subject = buildInvalidResponseFailureSubject(row.runId, row.scenarioId, row.modelId, row.sampleIndex);
+    if (draftsBySlot.has(subject)) {
+      continue;
+    }
+
+    draftsBySlot.set(
+      subject,
+      buildInvalidResponseFailureDraft(
+        row.runId,
+        row.scenarioId,
+        row.modelId,
+        row.sampleIndex,
+        'historical',
+        row.transcriptId,
+        null,
+      )
+    );
+  }
+
+  const drafts = [...draftsBySlot.values()];
+  if (detection.mode !== 'audit' || drafts.length === 0) {
+    return drafts;
+  }
+
+  const openAnomalies = await db.runAnomaly.findMany({
+    where: {
+      runId,
+      type: 'INVALID_RESPONSE_FAILURE',
+      subject: { in: drafts.map((draft) => draft.subject) },
+      resolvedAt: null,
+    },
+    select: { subject: true },
+  });
+
+  if (openAnomalies.length === 0) {
+    return drafts;
+  }
+
+  const openSubjects = new Set(openAnomalies.map((anomaly) => anomaly.subject));
+  return drafts.filter((draft) => !openSubjects.has(draft.subject));
 }
 
 export async function detectModelTranscriptShortfall(
