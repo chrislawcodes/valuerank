@@ -366,11 +366,13 @@ describe('deduplicateRunsByGroupId', () => {
 
 describe('getCoverageDirection', () => {
   it('returns the trimmed string for a normal direction token', () => {
-    expect(getCoverageDirection({ jobChoiceValueFirst: 'career' })).toBe('career');
+    // Normalizes to PascalCase_Underscore to match COVERAGE_VALUE_KEYS.
+    // Prod tokens are lowercase (e.g. "career"); keys are "Career".
+    expect(getCoverageDirection({ jobChoiceValueFirst: 'career' })).toBe('Career');
   });
 
   it('trims whitespace', () => {
-    expect(getCoverageDirection({ jobChoiceValueFirst: '  career  ' })).toBe('career');
+    expect(getCoverageDirection({ jobChoiceValueFirst: '  career  ' })).toBe('Career');
   });
 
   it('returns null for an empty string', () => {
@@ -403,7 +405,7 @@ describe('getCoverageDirection', () => {
     // and force a deliberate update.
     expect(
       getCoverageDirection({ jobChoiceLaunchMode: 'AD_HOC_BATCH', jobChoiceValueFirst: 'career' }),
-    ).toBe('career');
+    ).toBe('Career');
   });
 });
 
@@ -844,13 +846,14 @@ describe('domain-coverage integration scenarios', () => {
     const batches = buildBatchCounts(runs);
     const log = { warn: vi.fn() };
     const result = selectPrimaryDefinitionCounts(['def-a'], batches, dirs, 'vf-A', 'vf-B', log, 'Achievement::Tradition');
-    // Counts: career=3, family=1, leisure=1 → two largest = 3, 1 → min = 1
+    // Counts: Career=3, Family=1, Leisure=1 → two largest = 3, 1 → min = 1
+    // Direction tokens normalized to PascalCase by getCoverageDirection.
     expect(result.pairedBatchCount).toBe(1);
     expect(log.warn).toHaveBeenCalledTimes(1);
     expect(log.warn).toHaveBeenCalledWith(
       expect.objectContaining({
         cellKey: 'Achievement::Tradition',
-        directions: expect.arrayContaining(['career', 'family', 'leisure']),
+        directions: expect.arrayContaining(['Career', 'Family', 'Leisure']),
       }),
       expect.stringContaining('>2 distinct'),
     );
