@@ -105,7 +105,41 @@ describe('CoverageCell', () => {
     }));
   });
 
-  it('keeps Match Pair Counts hidden on aggregate cells', async () => {
+  it('hides Match Pair Counts on cells with no imbalance signal, even when aggregateRunId is set', async () => {
+    // Regression for diff-review HIGH (2026-04-27): an earlier draft gated the
+    // Match Pair Counts CTA on `aggregateRunId === null`. The resolver sets
+    // `aggregateRunId` from `latestAggregateRunIdByDefinitionId ?? latestMatchingRunIdByDefinitionId`,
+    // so it is non-null on every cell with any completed run — the gate was
+    // hiding the CTA on virtually every cell with real data. The correct gate
+    // is `hasImbalance` only; cells with purely aggregate data already report
+    // `orphanedBatchCount = 0` and `orphanedConditionCount = 0` because the
+    // resolver excludes aggregate runs from those counts. So setting
+    // aggregateRunId without any imbalance signal must hide the CTA.
+    const user = userEvent.setup();
+    renderCell({
+      aggregateRunId: 'run-1',
+      orphanedBatchCount: 0,
+      orphanedConditionCount: 0,
+      aFirstBatchCount: 2,
+      bFirstBatchCount: 2,
+      directionalCoverage: [
+        { direction: 'Achievement', completeBatches: 2, filledSlots: 8, leftoverConditions: 0, definitionIds: ['def-a'] },
+        { direction: 'Power_Dominance', completeBatches: 2, filledSlots: 8, leftoverConditions: 0, definitionIds: ['def-b'] },
+      ],
+      incompleteBatchCount: 0,
+    });
+
+    await user.click(screen.getByRole('button', { name: /power versus achievement/i }));
+
+    expect(screen.getByRole('link', { name: /start paired batch/i })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /match pair counts/i })).not.toBeInTheDocument();
+  });
+
+  it('shows Match Pair Counts on imbalanced cells regardless of aggregateRunId', async () => {
+    // Companion to the test above: when the cell has an imbalance signal
+    // (orphanedBatchCount, orphanedConditionCount, mismatched filledSlots, or
+    // mismatched a/b-first batch counts), the CTA must show even when
+    // aggregateRunId is non-null.
     const user = userEvent.setup();
     renderCell({
       aggregateRunId: 'run-1',
@@ -113,7 +147,6 @@ describe('CoverageCell', () => {
 
     await user.click(screen.getByRole('button', { name: /power versus achievement/i }));
 
-    expect(screen.getByRole('link', { name: /start paired batch/i })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /match pair counts/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /match pair counts/i })).toBeInTheDocument();
   });
 });

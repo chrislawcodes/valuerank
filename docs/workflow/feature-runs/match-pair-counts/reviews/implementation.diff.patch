@@ -76,7 +76,7 @@ index 62ed2f5d..820dd094 100644
          description:
            'Count of non-aggregate runs that expect transcripts but are ' +
 diff --git a/cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts b/cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts
-index fc78e1d0..71de36b1 100644
+index fc78e1d0..b6e2bb4e 100644
 --- a/cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts
 +++ b/cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts
 @@ -37,6 +37,7 @@ export function getCoverageBatchIncrement(samplesPerScenario: unknown): number {
@@ -87,7 +87,7 @@ index fc78e1d0..71de36b1 100644
  
  /**
   * Deduplicate a list of runs by their paired-batch group ID.
-@@ -295,3 +296,97 @@ export function selectPrimaryDefinitionCounts(
+@@ -295,3 +296,103 @@ export function selectPrimaryDefinitionCounts(
      bFirstBatchCount,
    };
  }
@@ -167,16 +167,22 @@ index fc78e1d0..71de36b1 100644
 +  if (merged.size === 1) {
 +    const onlyCount = Array.from(merged.values())[0]!.size;
 +    orphanedConditionCount = onlyCount;
-+  } else if (merged.size === 2) {
-+    const counts = Array.from(merged.values()).map((slotSet) => slotSet.size);
-+    pairedConditionCount = Math.min(counts[0]!, counts[1]!);
-+    orphanedConditionCount = Math.max(counts[0]!, counts[1]!) - pairedConditionCount;
-+  } else if (merged.size > 2) {
-+    const sortedCounts = Array.from(merged.values())
-+      .map((slotSet) => slotSet.size)
-+      .sort((left, right) => right - left);
-+    pairedConditionCount = Math.min(sortedCounts[0]!, sortedCounts[1]!);
-+    orphanedConditionCount = sortedCounts[0]! - pairedConditionCount;
++  } else if (merged.size >= 2) {
++    // For >2 directions (corruption case), use the two largest slot sets — same
++    // shape as selectPrimaryDefinitionCounts. The paired/orphaned semantics use
++    // ACTUAL set intersection and symmetric difference, not just size comparison;
++    // two equal-sized sets with disjoint slot identities (e.g. {s1,s2} vs {s3,s4})
++    // must report 0 paired and 4 orphaned, not 2 paired and 0 orphaned.
++    const sortedSets = Array.from(merged.values()).sort((left, right) => right.size - left.size);
++    const slotsA = sortedSets[0]!;
++    const slotsB = sortedSets[1]!;
++    let intersectionSize = 0;
++    for (const slot of slotsA) {
++      if (slotsB.has(slot)) intersectionSize++;
++    }
++    pairedConditionCount = intersectionSize;
++    // |A △ B| = |A| + |B| - 2|A ∩ B|
++    orphanedConditionCount = slotsA.size + slotsB.size - 2 * intersectionSize;
 +  }
 +
 +  return {
@@ -347,7 +353,7 @@ index e9b1871b..eb5a6fa8 100644
                definitionId: primaryDefId !== '' ? primaryDefId : null,
                definitionName: primaryPair?.name ?? null,
 diff --git a/cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts b/cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts
-index 6b5fb3a9..09c1c0c6 100644
+index 6b5fb3a9..f2ab414d 100644
 --- a/cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts
 +++ b/cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts
 @@ -4,6 +4,7 @@ import {
@@ -358,7 +364,7 @@ index 6b5fb3a9..09c1c0c6 100644
    selectPrimaryDefinitionCount,
    selectPrimaryDefinitionCounts,
    computePerModelTrialCounts,
-@@ -714,6 +715,85 @@ describe('selectPrimaryDefinitionCounts', () => {
+@@ -714,6 +715,124 @@ describe('selectPrimaryDefinitionCounts', () => {
    });
  });
  
@@ -424,6 +430,45 @@ index 6b5fb3a9..09c1c0c6 100644
 +    });
 +  });
 +
++  it('reports zero paired and full orphaned when both directions have disjoint slot identities', () => {
++    // Regression for diff-review HIGH (2026-04-27): a prior implementation used
++    // `min(setA.size, setB.size)` for pairedConditionCount, which incorrectly
++    // reported "fully paired" whenever the sizes were equal — even when no
++    // slot identity actually appeared in both directions. The fix is to use
++    // real Set intersection / symmetric difference. {s1,s2} vs {s3,s4} must
++    // report paired=0, orphaned=4.
++    const slots = makeSlotMap([
++      ['def-a', new Map([
++        ['vf-A', new Set(['s1|m1|0', 's2|m1|0'])],
++        ['vf-B', new Set(['s3|m1|0', 's4|m1|0'])],
++      ])],
++    ]);
++
++    const result = computeConditionCounts(['def-a'], slots);
++
++    expect(result.pairedConditionCount).toBe(0);
++    expect(result.orphanedConditionCount).toBe(4);
++    expect(result.perDirection.get('vf-A')?.filledSlots).toBe(2);
++    expect(result.perDirection.get('vf-B')?.filledSlots).toBe(2);
++  });
++
++  it('reports partial overlap with paired = |intersection| and orphaned = |symmetric difference|', () => {
++    // Mixed case: A has {s1, s2, s3}, B has {s2, s3, s4, s5}.
++    // Intersection = {s2, s3} → paired = 2.
++    // Symmetric difference = {s1, s4, s5} → orphaned = 3.
++    const slots = makeSlotMap([
++      ['def-a', new Map([
++        ['vf-A', new Set(['s1|m1|0', 's2|m1|0', 's3|m1|0'])],
++        ['vf-B', new Set(['s2|m1|0', 's3|m1|0', 's4|m1|0', 's5|m1|0'])],
++      ])],
++    ]);
++
++    const result = computeConditionCounts(['def-a'], slots);
++
++    expect(result.pairedConditionCount).toBe(2);
++    expect(result.orphanedConditionCount).toBe(3);
++  });
++
 +  it('keeps the two largest directions when corruption adds a third', () => {
 +    const slots = makeSlotMap([
 +      ['def-a', new Map([
@@ -444,7 +489,7 @@ index 6b5fb3a9..09c1c0c6 100644
  /**
   * Integration scenarios — exercise the directional inner-loop construction
   * (mirroring domain-coverage.ts:178–315) plus the helper aggregation,
-@@ -951,3 +1031,282 @@ describe('domain-coverage integration scenarios', () => {
+@@ -951,3 +1070,282 @@ describe('domain-coverage integration scenarios', () => {
      expect(nonAggregateRunsByDefinitionId.get('def-a')).toHaveLength(1);
    });
  });

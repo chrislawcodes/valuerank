@@ -3,9 +3,9 @@ reviewer: "gemini"
 lens: "quality-adversarial"
 stage: "diff"
 artifact_path: "docs/workflow/feature-runs/match-pair-counts/reviews/implementation.diff.patch"
-artifact_sha256: "4ea9c576f7ad890e6f3f0d9fa2728fbdcc2097d2d17ac2ca6261a32c8f19dd93"
+artifact_sha256: "f5767512f7a8da77a961e73a6b6cc9e181b1d4396faf536310ddecaa4d026e02"
 repo_root: "."
-git_head_sha: "303354ed964bee3e919795283c5255f170487ff9"
+git_head_sha: "146b1eef20cacdf5e9a336214d3f6f9b4dfe490f"
 git_base_ref: "origin/main"
 git_base_sha: "3878e844e43ff1bda98ddc0e810a7a7bbb2cf3d5"
 generation_method: "gemini-cli"
@@ -22,25 +22,23 @@ coverage_note: ""
 
 ## Findings
 
-| Severity | Finding | Location |
-| :--- | :--- | :--- |
-| **Medium** | **[UNVERIFIED]** The "Match Pair Counts" feature relies on two utility functions, `computeLaggingDirection` and `computeLaunchTrialCount`, whose source code is not provided in the diff. The correctness of the feature, which allows users to fix data imbalances, is critically dependent on the correct implementation of these functions. An error in `computeLaggingDirection` could cause the system to suggest adding data to the wrong side of a pair, worsening the imbalance. An error in `computeLaunchTrialCount` would result in showing the user an incorrect preview of the outcome of their action. | `cloud/apps/web/src/components/domains/CoverageCell.tsx`<br/>`cloud/apps/web/src/pages/DefinitionDetail/StartPairedBatchPage.tsx` |
-| **Low** | The `computeConditionCounts` function implements a heuristic to handle cases with more than two coverage directions for a value pair: it finds the paired and orphaned counts based on only the two largest directions. While this is a reasonable approach to handle data noise or corruption, it silently discards the presence of a third (or fourth, etc.) direction. This could mask a deeper data configuration issue from the user, as the UI will not indicate that an unexpected extra direction was found and ignored. | `cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts` |
-| **Low** | A beneficial bug fix was made to filter out transcripts with a `null` `sampleIndex` when checking if a run is complete. However, a similar filter (`matchingTranscripts`) earlier in the same function was not updated with this stricter `sampleIndex` check. While the logic is currently structured to prevent this from causing a bug downstream, it creates a minor inconsistency where a set of transcripts could be considered "matching" at first but are then implicitly filtered later. | `cloud/apps/api/src/graphql/queries/domain-coverage.ts` |
-| **Informational** | The `domainValueCoverage` GraphQL resolver's computational complexity has increased. It now builds several additional in-memory maps by iterating over all runs and transcripts to calculate condition-level statistics. This exacerbates a pre-existing architectural characteristic where this query is computationally heavy, potentially leading to slower performance as the dataset grows. | `cloud/apps/api/src/graphql/queries/domain-coverage.ts` |
+| Severity | Finding |
+| --- | --- |
+| MEDIUM [UNVERIFIED] | **The "Match Pair Counts" top-up feature assumes the correct vignette can be selected for a lagging direction.** The new top-up workflow launches a run against a single `launchDefinitionId`. The logic for selecting this ID appears to be in `computeLaggingDirection`, a utility function not included in the diff. There is a risk that this utility could select a vignette that does not contain the necessary scenarios to fill the gaps in the lagging direction. While the UI warns about a `residualMismatch` post-launch, it could still guide the user to launch a run that is ineffective or worsens the imbalance if the initial vignette selection is wrong. |
+| LOW | **Logic for identifying valid transcript "slots" has been improved.** In `domain-coverage.ts`, the filter for valid transcripts was correctly tightened from `t.scenarioId !== null` to `t.scenarioId !== null && t.sampleIndex !== null`. This prevents incomplete transcript records from being counted as filled condition slots, improving the accuracy of the new condition-level metrics. |
+| INFO | **Paired/orphaned condition counting correctly handles disjoint sets.** The implementation of `computeConditionCounts` correctly calculates the intersection of condition slots between two directions rather than relying on a simple `min(sizeA, sizeB)`. This avoids a potential bug where two directions with identically-sized but completely different sets of conditions would have been incorrectly reported as fully paired. The inclusion of a specific regression test for this scenario (`reports zero paired and full orphaned when both directions have disjoint slot identities`) is a strong indicator of quality. |
+| INFO | **UI for coverage imbalance is significantly more detailed and actionable.** The definition of an "imbalance" in `CoverageCell.tsx` has been expanded beyond simple batch counts to include condition-level counts (`filledSlots`) and orphaned entities. The popover and tooltip now provide a much clearer breakdown of both batch and condition-level disparities, and the new "Match Pair Counts" link provides a direct workflow to address the imbalance, including a live-updating preview of the outcome. |
 
 ## Residual Risks
 
-- **Incorrect Imbalance Correction:** If the unverified utility functions (`computeLaggingDirection` or `computeLaunchTrialCount`) contain bugs, the primary feature of this change—fixing coverage imbalances—may fail. Users could be prompted to launch runs that do not fix the imbalance or even make it worse, leading to wasted time and compute resources.
-- **Masked Data Issues:** The heuristic for handling more than two directions in backend calculations may prevent users from noticing underlying data configuration problems. A misconfigured vignette producing data for an extraneous direction would not be surfaced, as the system would silently calculate imbalance based on the two most prominent directions only.
-- **Incomplete Feature Implementation:** The diff introduces a new `launchMode` of `PAIRED_BATCH_TOPUP`, which is sent from the frontend to the backend. The diff does not contain the corresponding backend logic that consumes this new mode to perform the top-up. The successful operation of the feature depends on this un-reviewed server-side implementation.
+- The correctness of the "Match Pair Counts" top-up feature is entirely dependent on the behavior of two utility functions not present in this diff: `computeLaggingDirection` and `computeLaunchTrialCount`. Any bugs or incorrect assumptions in these shared utilities will directly lead to incorrect behavior or UI previews in the top-up workflow. Specifically, if `computeLaggingDirection` fails to select the correct vignette to launch against, the feature will not resolve the coverage gap as intended.
 
 ## Token Stats
 
-- total_input=27413
-- total_output=742
-- total_tokens=31428
-- `gemini-2.5-pro`: input=27413, output=742, total=31428
+- total_input=28117
+- total_output=553
+- total_tokens=32046
+- `gemini-2.5-pro`: input=28117, output=553, total=32046
 
 ## Resolution
 - status: open

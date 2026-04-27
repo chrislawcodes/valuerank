@@ -265,7 +265,17 @@ export function CoverageCell(props: CoverageCellProps) {
               </Link>
             )}
 
-            {hasVignette && hasImbalance && aggregateRunId === null && launchDefinitionId !== null && (
+            {/*
+              Match Pair Counts gate: `hasImbalance` already excludes cells whose
+              data is purely aggregate (aggregate runs do not contribute to
+              orphanedBatchCount or orphanedConditionCount per the resolver).
+              An earlier draft also gated on `aggregateRunId === null`, but the
+              resolver sets that field from `latestAggregateRunIdByDefinitionId
+              ?? latestMatchingRunIdByDefinitionId`, so it is non-null on every
+              cell that has any completed run — making the gate hide the CTA
+              on virtually every cell with real data. The gate is removed.
+            */}
+            {hasVignette && hasImbalance && launchDefinitionId !== null && (
               <Link
                 to={`/definitions/${launchDefinitionId}/start-paired-batch`}
                 state={{
