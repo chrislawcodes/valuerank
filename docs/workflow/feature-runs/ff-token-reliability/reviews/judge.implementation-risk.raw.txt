@@ -1,0 +1,38 @@
+```json
+{
+  "judge": "implementation-risk",
+  "model": "claude-sonnet-4-5",
+  "verdict": "proceed-with-annotation",
+  "confidence": 4,
+  "reasoning": "Four concrete snags found. (1) The actual state-key name for the recorded HEAD inside diff_review_budget is never given — the artifact offers two candidates and defers to a grep, meaning an implementer working from the artifact alone cannot write T05 correctly without stopping to inspect the live codebase. Wrong key silently fails auto-reseal. (2) TelemetryCounters dataclass is referenced by name in T04 ('provides a counter object... TelemetryCounters dataclass') but is never defined anywhere in the artifacts — no file, no fields, no location. The counter fields can be inferred from prose, but the class must be invented. (3) T07 explicitly says pre_dispatch_status is captured 'for the deletion-routing logic in T08 below,' but T08 never references it. The implementer cannot tell whether T08 is incomplete or the variable is dead code. A wrong guess in either direction either ships dead code or a missing safety check. (4) T03 and T07 use Python 3.10+ union syntax ('str | None', 'dict[str, str | None]') in function signatures without 'from __future__ import annotations'; the CI job says only 'Python 3.x' with no lower bound, so the code will fail at import time on any 3.9 or earlier runtime. These are specific and concrete; none are aesthetic. The rest of the spec (check_workflow_isolation.py, review-extract module, error-message updates) is sufficiently specified to implement directly.",
+  "unaddressed_high_finding_ids": [],
+  "evidence": [
+    {
+      "artifact": "TASKS",
+      "section": "T05",
+      "quote": "mutate state to update state[\"diff_review_budget\"][\"recorded_head\"] = head_at_end ... If the existing diff_review_budget key shape doesn't match, use whatever key holds the recorded HEAD — verify via grep for recorded_head or recorded-base."
+    },
+    {
+      "artifact": "TASKS",
+      "section": "T04",
+      "quote": "provides a counter object the command can increment for input_bytes_read, output_bytes_written, files_read, files_written, subprocess_invocations. Counter mechanism (round-3 tasks Codex dep + Gemini MEDIUMs): thread-local _telemetry_ctx. Helper factory_telemetry_commands.current_ctx() returns a TelemetryCounters dataclass"
+    },
+    {
+      "artifact": "TASKS",
+      "section": "T07 and T08",
+      "quote": "T07: 'The status prefix is captured separately as pre_dispatch_status (dict path → 2-char status code) for the deletion-routing logic in T08 below.' T08 then defines codex_modified_existing_dirty and codex_introduced without any reference to pre_dispatch_status."
+    },
+    {
+      "artifact": "TASKS",
+      "section": "T03 (factory_telemetry_commands.py listing)",
+      "quote": "def record_command_telemetry(\n    slug: str,\n    command: str,\n    stage: str | None,"
+    },
+    {
+      "artifact": "TASKS",
+      "section": "T23",
+      "quote": "git add docs/workflow/operations/codex-skills/feature-factory/scripts/factory_mutating.py ... [list continues but factory_io.py is absent despite T04 requiring creation of factory_io.read_text() helper]"
+    }
+  ],
+  "timestamp": "2026-04-26T00:00:00Z"
+}
+```

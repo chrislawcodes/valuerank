@@ -189,7 +189,14 @@ class DispatchCodexTests(unittest.TestCase):
 
         self.assertEqual(rc, 0)
         self.assertIn("[workflow] ✓ dispatch-codex", stdout)
-        self.assertEqual(stderr, "")
+        # Auto-commit warnings fire when git is unavailable in the unit-test
+        # env; this is documented behavior (FR-007 round-1 Gemini LOW). Allow
+        # auto-commit-warning lines but no other stderr noise.
+        for line in stderr.splitlines():
+            self.assertTrue(
+                line.startswith("[auto-commit-warning]"),
+                f"unexpected stderr line: {line}",
+            )
         run_mock.assert_called_once()
         popen_mock.assert_called_once()
         update_state_mock.assert_called_once()
@@ -197,7 +204,10 @@ class DispatchCodexTests(unittest.TestCase):
         record = state["codex_dispatches"][-1]
         expected_prompt_sha = hashlib.sha256(DEFAULT_PROMPT.encode("utf-8")).hexdigest()
         expected_rel = f"docs/workflow/feature-runs/{SLUG}/codex-dispatches/{FIXED_TS}"
-        self.assertEqual(record, {
+        # auto_commit is ALWAYS present (T08 contract); in unit-test env without
+        # git, the auto-commit path skips with a documented reason.
+        record_without_auto_commit = {k: v for k, v in record.items() if k != "auto_commit"}
+        self.assertEqual(record_without_auto_commit, {
             "head_sha": FIXED_HEAD_SHA,
             "ts": FIXED_TS,
             "prompt_path": str(prompt_path),
@@ -209,13 +219,20 @@ class DispatchCodexTests(unittest.TestCase):
             "branch_base_sha": DEFAULT_BRANCH_BASE,
             "lines_added_at_dispatch_time": DEFAULT_LINES,
         })
+        self.assertIn("auto_commit", record)
+        self.assertTrue(record["auto_commit"].get("skipped"))
 
     def test_non_zero_codex_exit_collapses_to_one(self) -> None:
         rc, stdout, stderr, _, _, update_state_mock, _, _, _, _ = self._invoke(proc_returncode=7)
 
         self.assertEqual(rc, 1)
         self.assertIn("exit 7", stdout)
-        self.assertEqual(stderr, "")
+        # auto-commit warnings allowed (no git in unit-test env).
+        for line in stderr.splitlines():
+            self.assertTrue(
+                line.startswith("[auto-commit-warning]"),
+                f"unexpected stderr line: {line}",
+            )
         update_state_mock.assert_called_once()
         self.assertEqual(self._read_state()["codex_dispatches"][-1]["exit_code"], 7)
 

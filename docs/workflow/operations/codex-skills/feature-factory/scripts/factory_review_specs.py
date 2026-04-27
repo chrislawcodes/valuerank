@@ -7,6 +7,8 @@ factory_review.py to keep each module under the 400-line source limit.
 import re
 from pathlib import Path
 
+from factory_io import read_text
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -112,7 +114,7 @@ def detect_actionable_findings(review_path: Path) -> bool:
     Returns False if the file cannot be read, treating unreadable files as non-blocking.
     """
     try:
-        text = review_path.read_text(encoding="utf-8").lower()
+        text = read_text(review_path).lower()
     except OSError:
         return False
     return bool(_ACTIONABLE_FINDING_RE.search(text))

@@ -1,0 +1,9 @@
+{
+  "judge": "completeness",
+  "model": "gpt-5.4-mini",
+  "verdict": "block",
+  "confidence": 0,
+  "reasoning": "schema_violation: missing required field: timestamp",
+  "evidence": [],
+  "timestamp": "2026-04-27T06:45:26.951181Z"
+}

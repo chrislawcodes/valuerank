@@ -7,6 +7,8 @@ from collections.abc import Callable, Iterable, Iterator
 from functools import wraps
 from typing import Any
 
+from factory_telemetry_commands import command_telemetry_scope
+
 
 def _attach_command_flag(func: Callable[..., Any], attr_name: str, command_name: str) -> Callable[..., Any]:
     setattr(func, attr_name, command_name)
@@ -18,6 +20,17 @@ def mutates_state(command_name: str) -> Callable[[Callable[..., Any]], Callable[
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(func)
         def wrapped(*args: Any, **kwargs: Any) -> Any:
+            if args and command_name in {
+                "checkpoint",
+                "judge",
+                "reconcile",
+                "deliver",
+                "auto-reconcile",
+            }:
+                slug = getattr(args[0], "slug", None)
+                stage = getattr(args[0], "stage", None)
+                with command_telemetry_scope(slug, command_name, stage):
+                    return func(*args, **kwargs)
             return func(*args, **kwargs)
 
         return _attach_command_flag(wrapped, "__ff_mutates_state__", command_name)

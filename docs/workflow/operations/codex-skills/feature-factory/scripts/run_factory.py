@@ -81,9 +81,11 @@ from factory_review import (  # noqa: E402
 from factory_emit import _emit_next_action  # noqa: E402
 from factory_next_action import recommended_next_action  # noqa: E402
 from factory_cmd_checkpoint import command_checkpoint  # noqa: E402
+from factory_cmd_reconcile import command_reconcile  # noqa: E402
 from factory_cmd_discover import command_discover  # noqa: E402
 from factory_cmd_advance import command_advance  # noqa: E402
 from factory_cmd_dispatch import command_dispatch_codex  # noqa: E402
+from factory_cmd_review_extract import command_review_extract  # noqa: E402
 from factory_deliver import (  # noqa: E402
     compose_closeout_text,
     current_pr_payload,
@@ -92,6 +94,7 @@ from factory_deliver import (  # noqa: E402
     required_check_summary,
 )
 from factory_cmd_deliver import command_deliver, command_closeout  # noqa: E402
+from check_workflow_isolation import command_check_workflow_isolation  # noqa: E402
 from factory_cmd_block import command_block  # noqa: E402
 from factory_cmd_judge import run_judge  # noqa: E402
 from factory_cmd_implement import command_implement, command_parallel, _run_serial, _run_parallel  # noqa: E402
@@ -182,36 +185,6 @@ def command_init(args: argparse.Namespace) -> int:
         existing_state[INIT_HEAD_SHA_KEY] = head_sha
     save_workflow_state(args.slug, existing_state)
     print(str(root))
-    return 0
-
-
-@mutates_state("reconcile")
-def command_reconcile(args: argparse.Namespace) -> int:
-    ensure_sync()
-    plan_path = workflow_dir(args.slug) / "plan.md"
-
-    # PR #751 / FF Housekeeping Slice 2: route through factory_reconcile so
-    # frontmatter + body block + plan.md are pre-checked together. Three prior
-    # features (PR #744/#749/#750) hit verify_review_checkpoint drift errors;
-    # the helper raises pre-check failures BEFORE any partial write happens.
-    from factory_reconcile import reconcile_review_full  # noqa: E402
-    for review in args.review:
-        review_path = Path(review).resolve()
-        rc = reconcile_review_full(
-            review_path=review_path,
-            plan_path=plan_path,
-            status=args.status,
-            note=args.note,
-            update_review_script=UPDATE_REVIEW,
-            append_reconciliation_script=APPEND_RECONCILIATION,
-        )
-        if rc != 0:
-            return rc
-    review_args: list[str] = []
-    for review in args.review:
-        review_args.extend(["--review", str(Path(review).resolve())])
-    run([sys.executable, str(VERIFY_RECONCILIATION), "--plan", str(plan_path), *review_args])
-    _emit_next_action(args.slug, f"reconcile ({args.status})")
     return 0
 
 
@@ -311,6 +284,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     status_parser = subparsers.add_parser("status")
     status_parser.add_argument("--slug", required=True)
+    status_parser.add_argument(
+        "--tokens",
+        action="store_true",
+        help="Print the last 10 command telemetry records; input_bytes_read is a proxy because only FF helper reads are counted.",
+    )
     status_parser.set_defaults(func=command_status)
 
     repair_parser = subparsers.add_parser("repair")
@@ -398,6 +376,7 @@ def build_parser() -> argparse.ArgumentParser:
     dispatch_parser.add_argument("--slug", required=True)
     dispatch_parser.add_argument("--prompt-path", required=True)
     dispatch_parser.add_argument("--model", default="gpt-5.4-mini")
+    dispatch_parser.add_argument("--no-auto-commit", action="store_true")
     dispatch_parser.set_defaults(func=command_dispatch_codex)
 
     judge_parser = subparsers.add_parser("judge")
@@ -496,6 +475,20 @@ def build_parser() -> argparse.ArgumentParser:
     closeout_parser = subparsers.add_parser("closeout")
     closeout_parser.add_argument("--slug", required=True)
     closeout_parser.set_defaults(func=command_closeout)
+
+    review_extract_parser = subparsers.add_parser("review-extract")
+    review_extract_parser.add_argument("--slug", required=True)
+    review_extract_parser.add_argument("--stage", required=True, choices=["spec", "plan", "tasks", "diff", "closeout"])
+    review_extract_parser.add_argument("--format", choices=["jsonl", "json"], default="jsonl")
+    review_extract_parser.add_argument("--out")
+    review_extract_parser.set_defaults(func=command_review_extract)
+
+    check_isolation_parser = subparsers.add_parser("check-isolation")
+    isolation_group = check_isolation_parser.add_mutually_exclusive_group(required=True)
+    isolation_group.add_argument("--capture-baseline", type=Path)
+    isolation_group.add_argument("--check", action="store_true")
+    check_isolation_parser.add_argument("--baseline", type=Path)
+    check_isolation_parser.set_defaults(func=command_check_workflow_isolation)
 
     return parser
 
