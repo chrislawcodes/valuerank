@@ -38,11 +38,14 @@ vi.mock('../../../src/services/run/anomaly-detection.js', () => ({
   detectStrandedTranscript: mockDetectStrandedTranscript,
   detectSummarizingStall: mockDetectSummarizingStall,
   detectScheduledCountMismatch: mockDetectScheduledCountMismatch,
-  detectInvalidResponseFailures: mockDetectInvalidResponseFailures,
 }));
 
 vi.mock('../../../src/services/run/anomaly-persistence.js', () => ({
   syncAnomalies: mockSyncAnomalies,
+}));
+
+vi.mock('../../../src/services/run/anomaly-invalid-response-detection.js', () => ({
+  detectInvalidResponseFailures: mockDetectInvalidResponseFailures,
 }));
 
 import { createRunStateAuditHandler } from '../../../src/queue/handlers/run-state-audit.js';

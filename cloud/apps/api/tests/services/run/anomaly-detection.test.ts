@@ -57,13 +57,13 @@ vi.mock('@valuerank/shared', () => ({
 
 import {
   detectModelTranscriptShortfall,
-  detectInvalidResponseFailures,
   detectOrphanTranscript,
   detectPairAsymmetry,
   detectScheduledCountMismatch,
   detectStrandedTranscript,
   detectSummarizingStall,
 } from '../../../src/services/run/anomaly-detection.js';
+import { detectInvalidResponseFailures } from '../../../src/services/run/anomaly-invalid-response-detection.js';
 
 describe('run anomaly detection', () => {
   beforeEach(() => {

@@ -60,7 +60,6 @@ vi.mock('../../../src/services/run/anomaly-detection.js', () => ({
   detectPairAsymmetry: mockDetectPairAsymmetry,
   detectModelTranscriptShortfall: mockDetectModelTranscriptShortfall,
   detectScheduledCountMismatch: mockDetectScheduledCountMismatch,
-  detectInvalidResponseFailures: mockDetectInvalidResponseFailures,
   detectSummarizingStall: mockDetectSummarizingStall,
   findOrphanTranscripts: mockFindOrphanTranscripts,
   countOrphanTranscripts: mockCountOrphanTranscripts,
@@ -69,6 +68,10 @@ vi.mock('../../../src/services/run/anomaly-detection.js', () => ({
 vi.mock('../../../src/services/run/anomaly-persistence.js', () => ({
   syncAnomalies: mockSyncAnomalies,
   repairScheduledCount: mockRepairScheduledCount,
+}));
+
+vi.mock('../../../src/services/run/anomaly-invalid-response-detection.js', () => ({
+  detectInvalidResponseFailures: mockDetectInvalidResponseFailures,
 }));
 
 vi.mock('../../../src/services/probe-result/index.js', () => ({

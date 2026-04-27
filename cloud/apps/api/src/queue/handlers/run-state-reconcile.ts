@@ -5,7 +5,6 @@ import { DEFAULT_JOB_OPTIONS, type RunStateReconcileJobData } from '../types.js'
 import { maybeAdvanceRunStatus } from '../../services/run/index.js';
 import {
   detectModelTranscriptShortfall,
-  detectInvalidResponseFailures,
   detectPairAsymmetry,
   detectScheduledCountMismatch,
   detectStrandedTranscript,
@@ -14,6 +13,7 @@ import {
   findOrphanTranscripts,
   type RunSnapshot,
 } from '../../services/run/anomaly-detection.js';
+import { detectInvalidResponseFailures } from '../../services/run/anomaly-invalid-response-detection.js';
 import {
   repairScheduledCount,
   syncAnomalies,

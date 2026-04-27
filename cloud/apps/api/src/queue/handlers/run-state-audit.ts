@@ -3,7 +3,6 @@ import { db } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 import { getReconcileWindowDays } from '../../services/run/scheduler.js';
 import {
-  detectInvalidResponseFailures,
   detectModelTranscriptShortfall,
   detectOrphanTranscript,
   detectPairAsymmetry,
@@ -13,6 +12,7 @@ import {
   type AnomalyDraft,
   type RunSnapshot,
 } from '../../services/run/anomaly-detection.js';
+import { detectInvalidResponseFailures } from '../../services/run/anomaly-invalid-response-detection.js';
 import { syncAnomalies } from '../../services/run/anomaly-persistence.js';
 import type { RunStateAuditJobData } from '../types.js';
 
