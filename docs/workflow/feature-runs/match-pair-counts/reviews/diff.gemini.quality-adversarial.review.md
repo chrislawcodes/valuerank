@@ -9,8 +9,8 @@ git_head_sha: "146b1eef20cacdf5e9a336214d3f6f9b4dfe490f"
 git_base_ref: "origin/main"
 git_base_sha: "3878e844e43ff1bda98ddc0e810a7a7bbb2cf3d5"
 generation_method: "gemini-cli"
-resolution_status: "open"
-resolution_note: ""
+resolution_status: "accepted"
+resolution_note: "R2 MED (UNVERIFIED helper source): helpers ARE in diff (coverageGap.ts, launch-trial-count.ts) with tests. LOW (sampleIndex tightening): positive observation. INFO (disjoint slot test): positive observation — that's the regression test I added. INFO (UI detail): positive observation."
 raw_output_path: "docs/workflow/feature-runs/match-pair-counts/reviews/diff.gemini.quality-adversarial.review.md.json"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -41,5 +41,5 @@ coverage_note: ""
 - `gemini-2.5-pro`: input=28117, output=553, total=32046
 
 ## Resolution
-- status: open
-- note:
+- status: accepted
+- note: R2 MED (UNVERIFIED helper source): helpers ARE in diff (coverageGap.ts, launch-trial-count.ts) with tests. LOW (sampleIndex tightening): positive observation. INFO (disjoint slot test): positive observation — that's the regression test I added. INFO (UI detail): positive observation.

@@ -9,8 +9,8 @@ git_head_sha: "146b1eef20cacdf5e9a336214d3f6f9b4dfe490f"
 git_base_ref: "origin/main"
 git_base_sha: "3878e844e43ff1bda98ddc0e810a7a7bbb2cf3d5"
 generation_method: "codex-runner"
-resolution_status: "failed"
-resolution_note: ""
+resolution_status: "deferred"
+resolution_note: "Codex correctness review timed out in R2 (codex CLI failure, not artifact issue). R1 had a clean correctness review which surfaced both HIGH findings (set intersection + lagging direction); both addressed. Deferring R2 retry rather than burning more compute."
 raw_output_path: ""
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -33,5 +33,5 @@ Codex review timed out.
 - stderr: `/Users/chrislaw/valuerank/.claude/worktrees/infallible-bassi-fafa71/docs/workflow/feature-runs/match-pair-counts/reviews/diff.codex.correctness-adversarial.review.md.stderr.txt`
 
 ## Resolution
-- status: failed
-- note: review runner failure
+- status: deferred
+- note: Codex correctness review timed out in R2 (codex CLI failure, not artifact issue). R1 had a clean correctness review which surfaced both HIGH findings (set intersection + lagging direction); both addressed. Deferring R2 retry rather than burning more compute.

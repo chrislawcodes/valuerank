@@ -2114,6 +2114,42 @@
       "files_written": 6,
       "subprocess_invocations": 12,
       "ttl_crossed": true
+    },
+    {
+      "command": "reconcile",
+      "stage": null,
+      "ts": "2026-04-27T21:03:51Z",
+      "wall_seconds": 0.609,
+      "input_bytes_read": 457756,
+      "output_bytes_written": 0,
+      "files_read": 8,
+      "files_written": 0,
+      "subprocess_invocations": 34,
+      "ttl_crossed": false
+    },
+    {
+      "command": "reconcile",
+      "stage": null,
+      "ts": "2026-04-27T21:03:52Z",
+      "wall_seconds": 0.58,
+      "input_bytes_read": 457927,
+      "output_bytes_written": 0,
+      "files_read": 8,
+      "files_written": 0,
+      "subprocess_invocations": 34,
+      "ttl_crossed": false
+    },
+    {
+      "command": "reconcile",
+      "stage": null,
+      "ts": "2026-04-27T21:03:53Z",
+      "wall_seconds": 0.594,
+      "input_bytes_read": 832781,
+      "output_bytes_written": 0,
+      "files_read": 12,
+      "files_written": 0,
+      "subprocess_invocations": 36,
+      "ttl_crossed": false
     }
   ],
   "diff_review_budget": {

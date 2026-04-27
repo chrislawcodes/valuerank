@@ -9,8 +9,8 @@ git_head_sha: "146b1eef20cacdf5e9a336214d3f6f9b4dfe490f"
 git_base_ref: "origin/main"
 git_base_sha: "3878e844e43ff1bda98ddc0e810a7a7bbb2cf3d5"
 generation_method: "codex-runner"
-resolution_status: "open"
-resolution_note: ""
+resolution_status: "accepted"
+resolution_note: "R2 HIGH (aggregateRunId gate): FIXED in 5674b32d. Gate removed; pure-aggregate cells already excluded via hasImbalance. Tests updated. R2 MED (computeLaggingDirection ties): documented edge case (disjoint slot identities with equal sizes) — alphabetical fallback acceptable per spec tie-breaker chain. R2 MED (UNVERIFIED multi-def): per spec DefinitionId-to-launch rule, alphabetical-first definitionId is correct deterministic choice."
 raw_output_path: "docs/workflow/feature-runs/match-pair-counts/reviews/diff.codex.regression-adversarial.review.md.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -37,5 +37,5 @@ coverage_note: ""
 - total_tokens=0
 
 ## Resolution
-- status: open
-- note: 
+- status: accepted
+- note: R2 HIGH (aggregateRunId gate): FIXED in 5674b32d. Gate removed; pure-aggregate cells already excluded via hasImbalance. Tests updated. R2 MED (computeLaggingDirection ties): documented edge case (disjoint slot identities with equal sizes) — alphabetical fallback acceptable per spec tie-breaker chain. R2 MED (UNVERIFIED multi-def): per spec DefinitionId-to-launch rule, alphabetical-first definitionId is correct deterministic choice.
