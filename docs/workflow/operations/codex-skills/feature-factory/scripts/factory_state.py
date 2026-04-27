@@ -15,6 +15,13 @@ import subprocess
 import tempfile
 import time
 from pathlib import Path
+import sys
+
+_SCRIPT_DIR = Path(__file__).resolve().parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
+
+from factory_io import atomic_write_text, read_text
 
 
 # ---------------------------------------------------------------------------
@@ -58,15 +65,7 @@ def atomic_json_write(path: Path, data: dict) -> None:
     """Write *data* to *path* as JSON atomically via a temp file + os.replace()."""
     path.parent.mkdir(parents=True, exist_ok=True)
     text = json.dumps(data, indent=2)
-    fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=".tmp.", suffix=".json")
-    tmp_path = Path(tmp_name)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(text)
-        tmp_path.replace(path)
-    except Exception:
-        tmp_path.unlink(missing_ok=True)
-        raise
+    atomic_write_text(path, text)
 
 
 def read_json_file(path: Path) -> tuple[dict | None, str]:
@@ -74,7 +73,7 @@ def read_json_file(path: Path) -> tuple[dict | None, str]:
     if not path.exists():
         return None, ""
     try:
-        return json.loads(path.read_text(encoding="utf-8")), ""
+        return json.loads(read_text(path)), ""
     except Exception as exc:
         return None, str(exc)
 
@@ -218,10 +217,24 @@ def _default_workflow_state() -> dict:
         PARALLEL_ANALYSIS_KEY: default_parallel_analysis_state(),
         INIT_HEAD_SHA_KEY: "",
         "token_usage": [],
+        "command_telemetry": [],
+        "diff_review_budget": {
+            "recorded_head": "",
+            "last_review_only_advance_at": 0,
+        },
         "stages": {},
         INVARIANT_WARNINGS_KEY: [],
         "schema_version": 1,
     }
+
+
+def _cap_command_telemetry(state: dict, max_records: int = 100) -> None:
+    records = state.get("command_telemetry", [])
+    if not isinstance(records, list):
+        state["command_telemetry"] = []
+        return
+    if len(records) > max_records:
+        state["command_telemetry"] = records[-max_records:]
 
 
 def _default_stage_state(state: dict | None = None, stage: str | None = None) -> dict:
@@ -366,7 +379,7 @@ def discovery_blockers_are_malformed(discovery: dict) -> bool:
 
 
 def parse_review_frontmatter(path: Path) -> tuple[dict[str, str], str]:
-    text = path.read_text(encoding="utf-8")
+    text = read_text(path)
     if not text.startswith("---\n"):
         raise ValueError(f"{path} is missing frontmatter")
     _, rest = text.split("---\n", 1)
@@ -384,7 +397,7 @@ def load_scope_manifest(slug: str) -> dict:
     path = scope_manifest_path(slug)
     if not path.exists():
         return {"paths": [], "allowed_dirty_paths": []}
-    return json.loads(path.read_text(encoding="utf-8"))
+    return json.loads(read_text(path))
 
 
 def save_scope_manifest(slug: str, paths: list[str]) -> Path:
@@ -409,7 +422,7 @@ def load_workflow_state(slug: str) -> dict:
     path = factory_state_path(slug)
     if not path.exists():
         return _default_workflow_state()
-    state = json.loads(path.read_text(encoding="utf-8"))
+    state = json.loads(read_text(path))
     defaults = _default_workflow_state()
     state.setdefault("review_policy", defaults["review_policy"])
     state.setdefault(BLOCKED_KEY, defaults[BLOCKED_KEY])
@@ -420,6 +433,8 @@ def load_workflow_state(slug: str) -> dict:
     state.setdefault(PARALLEL_ANALYSIS_KEY, default_parallel_analysis_state())
     state.setdefault(INIT_HEAD_SHA_KEY, "")
     state.setdefault("token_usage", [])
+    state.setdefault("command_telemetry", [])
+    state.setdefault("diff_review_budget", defaults["diff_review_budget"])
     state.setdefault("stages", {})
     state.setdefault(INVARIANT_WARNINGS_KEY, [])
     state.setdefault("schema_version", 1)

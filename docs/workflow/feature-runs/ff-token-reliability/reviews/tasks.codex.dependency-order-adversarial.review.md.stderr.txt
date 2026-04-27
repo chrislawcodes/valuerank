@@ -1,0 +1,566 @@
+Reading additional input from stdin...
+OpenAI Codex v0.125.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019dcda9-afa7-7830-b230-ddbf218abc5b
+--------
+user
+Review this tasks artifact using a dependency-order-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: tasks.md
+# Tasks — FF Token & Reliability
+
+Single slice. End with `[CHECKPOINT]`: run preflight (`python3 -m unittest discover docs/workflow/operations/codex-skills/feature-factory/scripts/tests` from repo root, exit code checked directly per PR #758 T17 pattern — no pipe).
+
+**Module imports** (carry-over):
+- `from factory_state import REPO_ROOT, update_workflow_state` (REPO_ROOT defined factory_state.py:22)
+- `from factory_mutating import mutates_state`
+- For tests, mock `factory_state.REPO_ROOT` and `factory_state.FACTORY_RUNS_ROOT` (both module-level constants computed at import; PR #758 T16 pattern).
+
+---
+
+## Slice — All 6 fixes `[CHECKPOINT]`
+
+### Production code
+
+- [ ] T01: In `factory_state.py`, add `"command_telemetry": []` to `_default_workflow_state()` dict (alongside `"token_usage": []`). Verify via `grep -n "token_usage" docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py` BEFORE editing — DO NOT touch the `token_usage` list shape (per FR-009, separate field). Add `state.setdefault("command_telemetry", [])` to the `load_workflow_state` defaults-merge path (factory_state.py:413 area). (FR-009)
+
+- [ ] T02: In `factory_state.py`, add helper `_cap_command_telemetry(state, max_records=100)`. **CRITICAL — round-1 tasks Gemini HIGH** (slice expression doesn't mutate; must assign):
+  ```python
+  def _cap_command_telemetry(state: dict, max_records: int = 100) -> None:
+      records = state.get("command_telemetry", [])
+      if len(records) > max_records:
+          state["command_telemetry"] = records[-max_records:]
+  ```
+  Note the assignment. Sliced expression alone does NOT modify the list in place; it returns a new list. (FR-009b)
+
+- [ ] T03: NEW module `factory_telemetry_commands.py`:
+  ```python
+  """Per-command instrumentation for Claude orchestrator token tracking.
+
+  See spec FR-010/011: input_bytes_read is a PROXY, not cache-aware.
+  Useful for relative comparison only ("which command grew over time").
+  """
+  import sys
+  import time
+  from datetime import datetime
+  from pathlib import Path
+
+  _SCRIPT_DIR = Path(__file__).resolve().parent
+  if str(_SCRIPT_DIR) not in sys.path:
+      sys.path.insert(0, str(_SCRIPT_DIR))
+
+  from factory_state import update_workflow_state, _cap_command_telemetry
+
+  _TTL_SECONDS = 270.0
+
+
+  def record_command_telemetry(
+      slug: str,
+      command: str,
+      stage: str | None,
+      wall_seconds: float,
+      input_bytes_read: int,
+      output_bytes_written: int,
+      files_read: int,
+      files_written: int,
+      subprocess_invocations: int,
+  ) -> None:
+      """Best-effort: append a telemetry record. Never raises."""
+      try:
+          ttl_crossed = wall_seconds > _TTL_SECONDS
+          record = {
+              "command": command,
+              "stage": stage,
+              "ts": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "wall_seconds": round(wall_seconds, 3),
+              "input_bytes_read": int(input_bytes_read),
+              "output_bytes_written": int(output_bytes_written),
+              "files_read": int(files_read),
+              "files_written": int(files_written),
+              "subprocess_invocations": int(subprocess_invocations),
+              "ttl_crossed": ttl_crossed,
+          }
+
+          def mutate(state: dict) -> None:
+              state.setdefault("command_telemetry", []).append(record)
+              _cap_command_telemetry(state)
+
+          update_workflow_state(slug, mutate)
+
+          if ttl_crossed:
+              print(
+                  f"[ttl-warning] {command} crossed the 5-minute prompt-cache TTL "
+                  f"(wall={wall_seconds:.1f}s); subsequent orchestrator reads will be "
+                  f"uncached. Consider batching follow-up reads.",
+                  file=sys.stderr,
+              )
+      except Exception as exc:
+          print(f"[telemetry-warning] failed to record command telemetry: {exc}", file=sys.stderr)
+  ```
+  (FR-010, FR-011, FR-012, FR-019)
+
+- [ ] T04: In `factory_mutating.py` (or wherever the central command dispatcher lives — verify via `grep -rn "@mutates_state" docs/workflow/operations/codex-skills/feature-factory/scripts/` BEFORE editing), wrap the command invocation with a context manager that:
+  - Captures `start = time.perf_counter()`.
+  - Provides a counter object the command can increment for `input_bytes_read`, `output_bytes_written`, `files_read`, `files_written`, `subprocess_invocations`. Implementation: simple counter dict mutated by helpers.
+  - On exit (any exit, including exception): captures `wall_seconds = time.perf_counter() - start`, calls `record_command_telemetry(slug, command_name, stage_or_None, wall_seconds, ...)`. **MUST swallow** any telemetry-side exception so the original command exit code is preserved (FR-010 best-effort).
+  - The wrapping point: best to add to the @mutates_state decorator OR to a sibling decorator @instrument_command. Keep changes minimal — telemetry is recorded for ALL FF commands that are routed through the central dispatcher. If wrapping every command at the dispatcher level requires touching too many files, fall back to wrapping just the highest-value commands: `checkpoint`, `judge`, `dispatch-codex`, `reconcile`, `deliver`, `auto-reconcile`. The other commands (init, status, repair, block, etc.) can ship without telemetry — they're cheap.
+
+- [ ] T05: In `factory_cmd_reconcile.py`, find `command_reconcile`:
+  - At the start of the function, BEFORE any state mutation, capture:
+    ```python
+    head_at_start = subprocess.run(["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, capture_output=True, text=True, timeout=10).stdout.strip()
+    dirty_at_start = set(subprocess.run(["git", "status", "--porcelain"], cwd=REPO_ROOT, capture_output=True, text=True, timeout=10).stdout.splitlines())
+    ```
+    Wrap each in try/except for the standard four exception classes (PR #758 FR-006a pattern); on exception, the auto-reseal will skip (the head_delta check fails on None).
+  - Run the existing reconcile logic.
+  - After the existing logic completes, capture `head_at_end`, `dirty_at_end` similarly.
+  - Check the four FR-001 conditions (HEAD changed, paths under reviews/ or plan.md, dirty unchanged, no merge/rebase). For paths-under check: use `git diff --name-only head_at_start head_at_end` (NOT `git log --name-only` — works with un-committed-but-staged changes too). For merge/rebase check (round-2 tasks Codex execution MEDIUM [UNVERIFIED] — `.git` is a FILE in worktrees, not a directory; use git rev-parse to find the actual git dir):
+    ```python
+    # Get the actual git dir — for the main checkout this is REPO_ROOT/.git;
+    # for a worktree (current case) it's main-repo/.git/worktrees/<name>/
+    git_dir = subprocess.run(
+        ["git", "rev-parse", "--git-dir"],
+        cwd=REPO_ROOT, capture_output=True, text=True, check=False, timeout=10,
+    ).stdout.strip()
+    if not git_dir:
+        # git rev-parse failed; can't check sentinels safely; skip auto-reseal
+        return
+    git_dir_path = Path(git_dir) if Path(git_dir).is_absolute() else REPO_ROOT / git_dir
+    sentinels = [
+        ("MERGE_HEAD", "merge"),
+        ("rebase-merge", "interactive rebase"),
+        ("rebase-apply", "rebase/am"),
+        ("BISECT_LOG", "bisect"),
+        ("CHERRY_PICK_HEAD", "cherry-pick"),
+        ("REVERT_HEAD", "revert"),
+    ]
+    for sentinel_name, op_name in sentinels:
+        if (git_dir_path / sentinel_name).exists():
+            # operator is in the middle of <op_name>; skip auto-reseal
+            return
+    ```
+    If ANY sentinel is present, skip auto-reseal (operator should not have FF advancing in the middle of unusual git operations).
+  - If all conditions pass, mutate state to update `state["diff_review_budget"]["recorded_head"] = head_at_end` AND `state["diff_review_budget"]["last_review_only_advance_at"] = ts`. If the existing `diff_review_budget` key shape doesn't match, use whatever key holds the recorded HEAD — verify via grep for `recorded_head` or `recorded-base`. (FR-001, FR-002, FR-003)
+
+- [ ] T06: In `factory_cmd_dispatch.py`, find `command_dispatch_codex`. Add `--no-auto-commit` argparse flag (default False) at the appropriate registration point. (FR-006)
+
+- [ ] T07: In `command_dispatch_codex` body, BEFORE the Codex invocation (Popen), capture:
+  ```python
+  pre_dispatch_dirty = _capture_porcelain_with_shas(REPO_ROOT)
+  ```
+  where `_capture_porcelain_with_shas` is a new helper that runs `git status --porcelain` and for each path computes a content hash. **Use `git hash-object <path>` (NOT `git ls-files -s`)** — round-2 tasks Codex execution HIGH #1 — because `git ls-files -s` returns the INDEX object SHA which reflects the last `git add`, not the working-tree content. We need working-tree content to detect actual drift across Codex. For deleted-but-tracked paths (porcelain ` D path`), `git hash-object` would fail; record `None` for those (they're absent from worktree). For untracked paths (porcelain `?? path`), `git hash-object <path>` works. Wrap each `git hash-object` in try/except (PR #758 FR-006a pattern); on exception, record `None` for that path. **Path extraction**: `git status --porcelain` lines have the form `XY <path>` (X=staged, Y=unstaged status; e.g., ` M`, `??`, ` D`); the helper MUST strip the 3-character status prefix (cols 1-2 + space) and store the path key only. The status prefix is captured separately as `pre_dispatch_status` (dict path → 2-char status code) for the deletion-routing logic in T08 below.
+  Returns `dict[str, str | None]` mapping path → object SHA (None for untracked/deleted files). Wrap in try/except; on exception, **emit a non-fatal warning to stderr** (round-1 tasks Gemini LOW T07): `[auto-commit-warning] could not capture pre-dispatch dirty state: <exc>; overlap detection disabled for this dispatch`. Set `pre_dispatch_dirty = {}` (empty). Operator sees the warning; auto-commit still runs but without the overlap-with-operator-dirty safety check.
+
+- [ ] T08: In `command_dispatch_codex`, AFTER `proc.communicate()` returns successfully AND after the snapshot capture (PR #758 FR-001 block), add the auto-commit block. If `args.no_auto_commit` is True, skip commit but STILL append `auto_commit = {skipped: True, reason: "--no-auto-commit flag"}` (round-1 tasks Codex execution MEDIUM #4 contract clarification: ALWAYS append the auto_commit field for audit; the test in T17 case D matches this — no longer "either no block or skipped=True", always skipped=True with reason).
+  Else:
+  ```python
+  post_dispatch_dirty = _capture_porcelain_with_shas(REPO_ROOT)
+  pre_paths = set(pre_dispatch_dirty.keys())
+  post_paths = set(post_dispatch_dirty.keys())
+  # Round-2 tasks Codex execution HIGH #2: a path that WAS in pre_dispatch_dirty
+  # AND is NOT in post_dispatch_dirty is operator-dirty-then-deleted-by-Codex.
+  # That's overlap-with-operator-dirty (Codex destroyed operator's pending work),
+  # NOT a clean Codex deletion. Route it to codex_modified_existing_dirty.
+  codex_modified_existing_dirty = {
+      p for p in pre_paths
+      if (
+          # path no longer dirty post-dispatch — Codex committed/cleaned operator's work — overlap
+          p not in post_paths
+          # OR path is dirty in both pre and post but content drifted — overlap
+          or pre_dispatch_dirty.get(p) != post_dispatch_dirty.get(p)
+      )
+  }
+  # codex_introduced: post-paths NOT in pre — clean adds/modifies/deletions of files that were clean before
+  codex_introduced = post_paths - pre_paths
+  # Codex-deleted-clean-tracked files appear as ' D path' in post_dispatch_dirty
+  # (porcelain shows them) — they're already in `codex_introduced` because the
+  # path was clean (not in pre_dispatch_dirty) and is now dirty (in post).
+  # Round-1 tasks Gemini MEDIUM was about deleted CLEAN files; they ARE captured
+  # via codex_introduced because porcelain shows the deletion. The round-2 HIGH
+  # was about deleted DIRTY files; those go to codex_modified_existing_dirty above.
+  to_stage = codex_introduced
+  ```
+  Then per FR-004:
+  - If `codex_modified_existing_dirty`: print warning, set `auto_commit = {skipped: True, reason: "overlap with operator dirty", overlap_paths: sorted(...)}`, skip commit.
+  - Elif not `to_stage`: log "no Codex-introduced changes; skipping auto-commit" to stderr, set `auto_commit = {skipped: True, reason: "no codex-introduced changes"}`, skip commit.
+  - Else: run `git add -A -- <each path in sorted(to_stage)>` (the `-A` flag with explicit paths handles deletions; `git add -A -- <deleted_path>` stages the deletion). Run `git commit -m <FR-004a canonical template>`. On commit failure, exit 1 + print git error + still append dispatch record (FR-005). On success, capture new HEAD via `git rev-parse HEAD` (try/except per FR-006a per-field), set `auto_commit = {introduced_paths: sorted(codex_introduced), deleted_paths: sorted(codex_deleted), commit_sha: <sha>}`. Update the dispatch record's `head_sha` to the auto-commit SHA.
+  Append `auto_commit` dict to the dispatch record **ALWAYS** — even on skip, even on `--no-auto-commit`, even on commit failure — for audit.
+
+- [ ] T09: NEW script `docs/workflow/operations/codex-skills/feature-factory/scripts/check_workflow_isolation.py`:
+  ```python
+  #!/usr/bin/env python3
+  """Test-isolation gate for FF feature-factory tests.
+
+  Captures the porcelain status of docs/workflow/feature-runs/ before the
+  test suite, then checks whether the suite mutated any tracked or untracked
+  state under that path. PR #758 motivated this — an e2e test silently
+  emptied the live workflow's spec/plan/tasks files.
+
+  Usage:
+    check_workflow_isolation.py --capture-baseline /tmp/baseline.json
+    python3 -m unittest discover ...
+    check_workflow_isolation.py --check --baseline /tmp/baseline.json
+  """
+  import argparse
+  import json
+  import subprocess
+  import sys
+  from pathlib import Path
+
+  WORKFLOW_PATH = "docs/workflow/feature-runs/"
+
+
+  def _capture() -> set[str]:
+      result = subprocess.run(
+          ["git", "status", "--porcelain", WORKFLOW_PATH],
+          capture_output=True, text=True, check=False,
+      )
+      return set(result.stdout.splitlines())
+
+
+  def main() -> int:
+      parser = argparse.ArgumentParser()
+      group = parser.add_mutually_exclusive_group(required=True)
+      group.add_argument("--capture-baseline", type=Path)
+      group.add_argument("--check", action="store_true")
+      parser.add_argument("--baseline", type=Path)
+      args = parser.parse_args()
+
+      paths = _capture()
+      if args.capture_baseline:
+          args.capture_baseline.write_text(json.dumps(sorted(paths)))
+          return 0
+
+      if not args.baseline:
+          print("--check requires --baseline <path>", file=sys.stderr)
+          return 2
+
+      pre = set(json.loads(args.baseline.read_text()))
+      post = paths
+      added = post - pre
+      removed = pre - post
+      if not added and not removed:
+          return 0
+
+      lines = [
+          "[isolation-fail] tests modified workflow state under docs/workflow/feature-runs/:",
+      ]
+      if added:
+          lines.append("  Files dirtied (or newly modified) by the suite:")
+          for p in sorted(added):
+              lines.append(f"    {p}")
+      if removed:
+          lines.append("  Files DELETED or restored by the suite:")
+          for p in sorted(removed):
+              lines.append(f"    {p}")
+      lines.append("")
+      lines.append(
+          "If your test calls factory_state.update_workflow_state, you MUST "
+          "patch BOTH factory_state.REPO_ROOT and factory_state.FACTORY_RUNS_ROOT "
+          "(both computed at import time, factory_state.py:22 and 28-29) to a "
+          "tempdir before the call. See PR #758 test_dispatch_codex_e2e.py for "
+          "the working pattern."
+      )
+      print("\n".join(lines), file=sys.stderr)
+      return 1
+
+
+  if __name__ == "__main__":
+      raise SystemExit(main())
+  ```
+  Make executable: `chmod +x check_workflow_isolation.py`. (FR-007, FR-008)
+
+- [ ] T10: In `run_factory.py`, register `check-isolation` subcommand wrapping `check_workflow_isolation.py`. Argparse mirrors the script's flags. (FR-008a)
+
+- [ ] T11 (frontmatter parser note — round-1 tasks Gemini HIGH): the inline parser uses `partition(":")` which splits on FIRST `:` only. Values containing `:` (timestamps, URLs, SHAs) end up correctly on the right side of the split. Verified mentally: `"git_head_sha: \"abc:123\""` → `partition(":")` returns `("git_head_sha", ":", " \"abc:123\"")`. Reviewer's concern that partition will "break on URLs" is mistaken (partition is the SAFER choice vs `split(":")`). However: if `pyyaml` is available in the runtime, prefer `yaml.safe_load(yaml_text)` for the frontmatter block — it handles multi-line values and quote nesting correctly. Implementation: try `import yaml` at top; if available, use `yaml.safe_load`; else fall back to the partition-based parser below. Both produce the same dict for the simple frontmatter format used by current FF reviews.
+
+- [ ] T11: NEW module `factory_cmd_review_extract.py`:
+  ```python
+  """Deterministic review-finding extractor.
+
+  Parses YAML frontmatter + ## Findings section of review.md files; emits
+  one record per finding. NO LLM call. See spec FR-014-018.
+  """
+  import argparse
+  import json
+  import re
+  import sys
+  from pathlib import Path
+
+  _SCRIPT_DIR = Path(__file__).resolve().parent
+  if str(_SCRIPT_DIR) not in sys.path:
+      sys.path.insert(0, str(_SCRIPT_DIR))
+
+  from factory_state import REPO_ROOT, FACTORY_RUNS_ROOT
+
+  # Severity regex set — re-used from factory_review_specs.py:20-45 (PR #744 Fix 2).
+  # Round-1 tasks Codex execution MEDIUM: heading regex must require ":" or
+  # end-of-line after severity tag, NOT just \b — otherwise "## Low-level details"
+  # matches "LOW" via word boundary on "-".
+  _SEVERITY_PATTERNS = (
+      re.compile(r"^\s*-\s*\*\*(HIGH|MEDIUM|LOW)\*\*[\s:\[]", re.IGNORECASE),    # bullet bold
+      re.compile(r"^\s*-\s*(HIGH|MEDIUM|LOW)\s*:", re.IGNORECASE),                 # bullet plain
+      re.compile(r"^\s*\d+\.\s*\*\*(HIGH|MEDIUM|LOW)\*\*", re.IGNORECASE),         # numbered list
+      re.compile(r"^#+\s*(HIGH|MEDIUM|LOW)(\s*:|\s*$)", re.IGNORECASE),            # heading — REQUIRE ":" or EOL after severity
+      re.compile(r"^\s*\*\*(HIGH|MEDIUM|LOW)[\s:\[]", re.IGNORECASE),              # bold prefix
+      re.compile(r"^\s*Severity:\s*(HIGH|MEDIUM|LOW)", re.IGNORECASE),             # inline field
+      re.compile(r"^\s*\|\s*\*\*(HIGH|MEDIUM|LOW)\*\*\s*\|", re.IGNORECASE),       # table cell bold
+  )
+
+  _FINDINGS_HEADING = re.compile(r"^##\s+Findings\b", re.IGNORECASE)
+  _NEXT_SECTION_HEADING = re.compile(r"^##\s+\S")  # any ## heading after Findings ends a finding
+
+
+  def _parse_frontmatter(text: str) -> tuple[dict, int]:
+      """Returns (frontmatter dict, body_line_offset). Raises ValueError on malformed."""
+      lines = text.splitlines()
+      if not lines or lines[0].strip() != "---":
+          raise ValueError("missing opening frontmatter delimiter ---")
+      end_idx = None
+      for i, line in enumerate(lines[1:], start=1):
+          if line.strip() == "---":
+              end_idx = i
+              break
+      if end_idx is None:
+          raise ValueError("missing closing frontmatter delimiter ---")
+      # Cheap YAML parse: split on : ; tolerate quotes
+      fm = {}
+      for line in lines[1:end_idx]:
+          if ":" in line:
+              k, _, v = line.partition(":")
+              fm[k.strip()] = v.strip().strip('"').strip("'")
+      return fm, end_idx + 1
+
+
+  def _extract_findings(body_lines: list[str], body_offset: int) -> list[dict]:
+      """Iterate body lines starting from line index 0 (relative to body_lines).
+      Returns list of finding-record dicts (without review/review_index).
+      """
+      # Find ## Findings start
+      findings_start = None
+      for i, line in enumerate(body_lines):
+          if _FINDINGS_HEADING.match(line):
+              findings_start = i + 1
+              break
+      if findings_start is None:
+          return []
+
+      # Walk lines from findings_start, tracking fence depth; collect finding starts
+      fence_open = False
+      finding_starts: list[tuple[int, str, str]] = []  # (line_idx, severity, first_line_text)
+      end_of_findings = len(body_lines)
+      for i in range(findings_start, len(body_lines)):
+          line = body_lines[i]
+          stripped = line.strip()
+          if stripped.startswith("```"):
+              fence_open = not fence_open
+              continue
+          if fence_open:
+              continue
+          if _NEXT_SECTION_HEADING.match(line):
+              # Different section ends Findings (e.g., "## Residual Risks")
+              end_of_findings = i
+              break
+          for pat in _SEVERITY_PATTERNS:
+              m = pat.match(line)
+              if m:
+                  severity = m.group(1).upper()
+                  # First-line text: trim leading severity tag remnants
+                  text_after = line[m.end():].strip().lstrip(":*").strip()
+                  if not text_after:
+                      # Look ahead up to 5 lines for first non-empty
+                      for j in range(i + 1, min(i + 6, len(body_lines))):
+                          candidate = body_lines[j].strip()
+                          if candidate and not candidate.startswith("```"):
+                              text_after = candidate.lstrip("-*").strip()
+                              break
+                  finding_starts.append((i, severity, text_after))
+                  break  # only first matching pattern per line
+
+      # Compute end lines
+      records: list[dict] = []
+      for idx, (start_idx, severity, first_line) in enumerate(finding_starts):
+          if idx + 1 < len(finding_starts):
+              end_idx = finding_starts[idx + 1][0] - 1
+          else:
+              end_idx = end_of_findings - 1
+          records.append({
+              "review_index": idx,
+              "severity": severity,
+              "first_line": first_line,
+              "line_start": start_idx + 1 + body_offset,  # 1-indexed, with offset
+              "line_end": end_idx + 1 + body_offset,
+          })
+      return records
+
+
+  def command_review_extract(args: argparse.Namespace) -> int:
+      runs_root = FACTORY_RUNS_ROOT
+      slug_dir = runs_root / args.slug
+      reviews_dir = slug_dir / "reviews"
+      if not reviews_dir.exists():
+          print(f"reviews dir not found: {reviews_dir}", file=sys.stderr)
+          return 2
+
+      pattern = f"{args.stage}.*.review.md"
+      files = sorted(reviews_dir.glob(pattern))
+
+      output_records = []
+      for fp in files:
+          text = fp.read_text(encoding="utf-8")
+          try:
+              fm, body_offset = _parse_frontmatter(text)
+          except ValueError as exc:
+              print(f"error: malformed frontmatter in {fp}: {exc}", file=sys.stderr)
+              return 2
+          body_lines = text.splitlines()[body_offset:]
+          records = _extract_findings(body_lines, body_offset)
+          for rec in records:
+              rec["review"] = str(fp.relative_to(REPO_ROOT)) if fp.is_relative_to(REPO_ROOT) else str(fp)
+              rec["frontmatter_status"] = fm.get("resolution_status") or None
+              output_records.append(rec)
+
+      if args.format == "json":
+          out_text = json.dumps(output_records, indent=2)
+      else:  # jsonl
+          out_text = "\n".join(json.dumps(r) for r in output_records)
+
+      if args.out:
+          Path(args.out).write_text(out_text)
+      else:
+          print(out_text)
+      return 0
+  ```
+  (FR-014, FR-015, FR-015a, FR-016, FR-016a, FR-017, FR-018)
+
+- [ ] T12: In `run_factory.py`, register `review-extract` subcommand. Argparse: `--slug <required>`, `--stage <choices>`, `--format <jsonl|json default jsonl>`, `--out <optional path>`. Wire to `factory_cmd_review_extract.command_review_extract`.
+
+- [ ] T13: In `factory_cmd_status.py` (or wherever `command_status` lives — verify via `grep -rn 'def command_status' docs/workflow/operations/codex-skills/feature-factory/scripts/`), add `--tokens` flag. When set, after the normal status output, print a table of the last 10 entries from `state.get("command_telemetry", [])` (defensive `.get()` per round-1 tasks Gemini LOW — handles missing key on legacy state files) with columns: command, stage, ts, wall_seconds, input_bytes_read, output_bytes_written, ttl_crossed. Help text MUST include the FR-011 fidelity caveat. (FR-013)
+
+- [ ] T14: Update blocking error messages per FR-020. Find each via grep:
+  - `grep -n "exceeds hard cap" docs/workflow/operations/codex-skills/feature-factory/scripts/` (diff cap)
+  - `grep -n "is dirty outside" docs/workflow/operations/codex-skills/feature-factory/scripts/` (dirty path)
+  - `grep -n "rerun the diff checkpoint" docs/workflow/operations/codex-skills/feature-factory/scripts/` (HEAD mismatch)
+  - `grep -n "unresolved-concerns-from" docs/workflow/operations/codex-skills/feature-factory/scripts/` (concerns)
+  Update each message text to include the exact flag invocation. Don't change error semantics; only the message text.
+
+### CI / non-test
+
+- [ ] T15: Add a new job `feature-factory-tests` to `.github/workflows/ci.yml`. The job:
+  - Runs on `ubuntu-latest`.
+  - Steps: checkout (fetch-depth 2), setup Python 3.x, run `python3 docs/workflow/operations/codex-skills/feature-factory/scripts/check_workflow_isolation.py --capture-baseline /tmp/ff-baseline.json`, run `python3 -m unittest discover docs/workflow/operations/codex-skills/feature-factory/scripts/tests`, run `python3 docs/workflow/operations/codex-skills/feature-factory/scripts/check_workflow_isolation.py --check --baseline /tmp/ff-baseline.json`.
+  - Runs unconditionally (not gated on path filter; the suite is ~7s — negligible cost). Per FR-008a alternative.
+
+### Tests
+
+- [ ] T16: NEW `tests/test_auto_reseal.py`:
+  - Setup: tempdir git repo (PR #758 pattern); slug; baseline state.
+  - Case 1: Fake a reconcile commit that touches only `reviews/foo.review.md`. Call `command_reconcile`. Assert `state.diff_review_budget.recorded_head` equals the new HEAD AND `last_review_only_advance_at` is set.
+  - Case 2: Fake a reconcile commit that touches `factory_deliver.py` (production code). Call `command_reconcile`. Assert `recorded_head` is UNCHANGED.
+  - Case 3: Pre-existing dirty file outside reviews/ at command start → assert no auto-reseal (dirty unchanged check fails).
+  - Case 4: Active merge (`MERGE_HEAD` exists) → assert no auto-reseal.
+
+- [ ] T17: Extend `tests/test_dispatch_codex_e2e.py` (PR #758) with auto-commit cases:
+  - Case A: Codex modifies 2 files, no operator pre-existing dirt. After dispatch, assert exactly 1 commit was created with the canonical FR-004a message; assert dispatch record has `auto_commit.commit_sha` and `auto_commit.introduced_paths == [path1, path2]`.
+  - Case B: Operator has 1 dirty file pre-dispatch. Codex modifies a DIFFERENT file. After dispatch, assert auto-commit only stages Codex's file; the operator's pre-dirty file is unchanged.
+  - Case C: Operator has dirty file `foo.py`. Codex ALSO modifies `foo.py`. After dispatch, assert auto-commit is SKIPPED, dispatch record has `auto_commit.skipped == True` and `reason == "overlap with operator dirty"` and `overlap_paths == ["foo.py"]`.
+  - Case D: `--no-auto-commit` flag passed. Codex modifies files. After dispatch, assert NO commit was created; uncommitted changes remain; dispatch record has `auto_commit.skipped == True` with reason `"--no-auto-commit flag"` (per round-1 tasks Codex execution MEDIUM #4 contract: ALWAYS append auto_commit dict).
+  - Case E: `git commit` fails (mock to return non-zero). Assert dispatch record IS appended; runner exits 1; git error printed to stderr.
+  - **Case F (round-1 tasks Gemini MEDIUM — Codex deletion case)**: Codex deletes a clean tracked file `bar.py`. After dispatch, assert auto-commit was created; assert `auto_commit.deleted_paths == ["bar.py"]`; assert the file is staged as deleted in the commit.
+
+- [ ] T18: NEW `tests/test_check_workflow_isolation.py`:
+  - Case 1: capture baseline, no changes, check passes (exit 0).
+  - Case 2: capture baseline, write a file under `docs/workflow/feature-runs/` between capture and check, check fails (exit 1) with the file path in the error.
+  - Case 3: capture baseline with a pre-existing dirty file, check passes (exit 0) because the dirty file was in baseline.
+  - Case 4: deletion case — pre-existing dirty file is removed between capture and check, check fails (exit 1) with the file path.
+
+- [ ] T19: NEW `tests/test_command_telemetry.py`:
+  - Case 1: call `record_command_telemetry`, assert `state.command_telemetry[-1]` matches the expected shape with all 9 fields.
+  - Case 2: call 105 times, assert `len(state.command_telemetry) == 100` (cap holds).
+  - Case 3: simulate exception in `update_workflow_state` (mock to raise). Assert `record_command_telemetry` returns normally, prints to stderr, does NOT raise.
+  - Case 4: pass `wall_seconds=271`, assert TTL warning printed to stderr AND record has `ttl_crossed: True`.
+
+- [ ] T20: NEW `tests/test_review_extract.py`:
+  - Setup: write fixture review files under tempdir slug.
+  - Case 1: bullet-with-bold severity → 1 record.
+  - Case 2: numbered-list severity → 1 record per finding.
+  - Case 3: heading-style → 1 record per heading.
+  - Case 4: code fence false positive (severity tag inside ` ``` ` block) → ZERO records (FR-016a).
+  - Case 5: empty `## Findings` section → ZERO records.
+  - Case 6: malformed frontmatter → exit 2.
+  - Case 7: severity tag with no inline text → first_line populated from next non-empty line (FR-015a fallback).
+  - Case 8: severity tag immediately followed by `## Residual Risks` → line_end correctly set to the line before the next heading.
+  - Case 9: frontmatter with `resolution_status: rejected` → `frontmatter_status == "rejected"` (FR-015 enum).
+
+- [ ] T21: NEW `tests/test_self_documenting_errors.py`:
+  - Parameterize over the 4 known blocking errors. For each, trigger the error and assert the message text contains the expected flag string.
+
+### Preflight + commit
+
+- [ ] T22: Run preflight directly (NO PIPE per PR #758 T17 lesson):
+  ```bash
+  cd /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+  python3 -m unittest discover docs/workflow/operations/codex-skills/feature-factory/scripts/tests
+  ```
+  Inspect exit code. If non-zero, fix the cause. Tests must pass (~305-310).
+
+- [ ] T23: Commit. Stage explicitly (NOT `git add -A`):
+  ```
+  git add docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py
+  git add docs/workflow/operations/codex-skills/feature-factory/scripts/factory_telemetry_commands.py
+  git add docs/workflow/operations/codex-skills/feature-factory/scripts/factory_mutating.py
+  git add docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_reconcile.py
+  git add docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_dispatch.py
+  git add docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_review_extract.py
+  git add docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_status.py
+  git add docs/workflow/operations/codex-skills/feature-factory/scripts/check_workflow_isolation.py
+  git add docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py
+  git add docs/workflow/operations/codex-skills/feature-factory/scripts/tests/
+  git add .github/workflows/ci.yml
+  ```
+  (Whatever is in the modified set; list updated based on actual edits.)
+  Commit with the canonical message format from spec FR-004a (this PR's auto-commit format will dogfood once shipped — for THIS PR, use a manual commit message).
+
+## DO NOT TOUCH
+
+- CLAUDE.md, AGENTS.md, MEMORY.md, .gitignore, cloud/CLAUDE.md
+- Any file outside `docs/workflow/operations/codex-skills/feature-factory/scripts/` (except `.github/workflows/ci.yml` per T15)
+- The `repair`, `block`, `discover`, `parallel` CLI subcommand handler names
+- Existing reviewer scripts under `docs/workflow/operations/codex-skills/review-lens/scripts/` (out of scope)
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m reviewing this as a dependency-order and assumption audit, not a feature review. I’ll look for places where later tasks silently depend on earlier ones, where the artifact assumes code behavior it does not prove, and where the ordering makes the slice brittle.
+codex
+## Findings
+- High: T08 references `codex_deleted` in `auto_commit.deleted_paths`, but that variable is never defined anywhere in the task. The success path is therefore internally broken, and Case F in T17 cannot be satisfied as written.
+- Medium [UNVERIFIED]: T04 assumes a central dispatcher wrapper can collect `input_bytes_read`, `output_bytes_written`, `files_read`, `files_written`, and `subprocess_invocations` without specifying how those counters reach the actual command code. If the existing command functions do not already share a mutable context object, this task either turns into broad signature churn or records empty telemetry.
+- Medium: T07/T08 omit rename and copy handling in the porcelain snapshot logic. `git status --porcelain` emits rename lines like `R  old -> new`, but the task says to strip the 3-character prefix and store a single path key. That is not enough to stage or compare renames correctly, so overlap detection and auto-commit selection will be wrong in those cases.
+- Medium [UNVERIFIED]: T11 is internally inconsistent and fragile. The note says to prefer `yaml.safe_load` when available, but the actual extractor stub only uses the line-splitting parser. On top of that, the lookahead for empty finding text can steal the first line of the next finding. This depends on the existing review file shape, so I am not assuming it is already a real case.
+
+## Residual Risks
+- I did not verify the current dispatcher structure, so the telemetry plumbing and `@mutates_state` integration may still need redesign after code inspection.
+- The git-status-based auto-commit logic still has edge cases beyond the ones named here, especially renames, submodules, and any porcelain variants the repo uses.
+- The review extractor still assumes a narrow frontmatter format. If review files evolve beyond simple key/value headers, the parser will need a stricter contract or a real YAML path.
+2026-04-27T06:39:56.815034Z ERROR codex_core::session: failed to record rollout items: thread 019dcda9-afa7-7830-b230-ddbf218abc5b not found
+tokens used
+15,843

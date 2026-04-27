@@ -258,6 +258,8 @@ def _render_open_concern_block(prior_stage: str, concerns: list[dict]) -> None:
         concern_id = str(concern.get("id", "") or "")
         snippet = _concern_reasoning_snippet(concern)
         print(f"- {concern_id}: {snippet}", file=sys.stderr)
+        # Substitute concrete concern id so the message is directly actionable
+        # (FR-020 self-documenting errors).
         print(
             f"  checkpoint --address {concern_id} --evidence \"fixed in commit abc\"",
             file=sys.stderr,
@@ -682,13 +684,14 @@ def command_checkpoint(args: argparse.Namespace) -> int:
             raise SystemExit(
                 "Large diff rerun would regenerate the Codex review for a "
                 f"{len(artifact_path.read_text(encoding='utf-8')) if artifact_path.exists() else 0}-character artifact. "
-                "Batch more implementation fixes before rerunning the diff checkpoint, "
+                "Batch more implementation fixes before rerunning the diff checkpoint with "
+                f"checkpoint --slug {args.slug} --stage diff --max-artifact-chars <N> --allow-large-diff-rerun, "
                 "or pass --allow-large-diff-rerun if this spend is intentional."
             )
     if args.stage == "diff" and not args.use_existing_artifact:
         if not scope_manifest.exists():
             raise SystemExit("Diff checkpoint requires a saved scope manifest or explicit --path values")
-        run(
+        write_diff_result = subprocess.run(
             [
                 sys.executable,
                 str(WRITE_DIFF),
@@ -700,8 +703,15 @@ def command_checkpoint(args: argparse.Namespace) -> int:
                 str(scope_manifest),
                 *sum((["--allow-dirty-path", path] for path in allow_dirty_paths), []),
                 *([] if not args.base_ref else ["--base-ref", args.base_ref]),
-            ]
+            ],
+            text=True,
+            capture_output=True,
         )
+        if write_diff_result.returncode != 0:
+            detail = trim_detail(write_diff_result.stderr or write_diff_result.stdout or "diff generation failed")
+            raise SystemExit(
+                f"{detail} Re-run with checkpoint --slug {args.slug} --stage diff --allow-dirty-path <path> for each path that is intentionally dirty outside the diff scope."
+            )
         diff_meta_path = artifact_path.with_suffix(artifact_path.suffix + ".json")
         if diff_meta_path.exists():
             diff_meta = json.loads(diff_meta_path.read_text(encoding="utf-8"))
@@ -731,7 +741,8 @@ def command_checkpoint(args: argparse.Namespace) -> int:
         if len(diff_text) > HARD_DIFF_ARTIFACT_MAX_CHARS:
             raise SystemExit(
                 f"Diff artifact exceeds hard cap ({len(diff_text)} > {HARD_DIFF_ARTIFACT_MAX_CHARS}). "
-                "Split the review scope into smaller workflow paths or use a smaller diff artifact."
+                "Split the review scope into smaller workflow paths or use a smaller diff artifact. "
+                "To intentionally override, pass --max-artifact-chars <N> --allow-large-diff-rerun."
             )
         if len(diff_text) >= LARGE_DIFF_RERUN_WARN_CHARS:
             print(

@@ -27,6 +27,7 @@ from factory_state import (  # noqa: E402
     load_checkpoint_manifest,
     parse_review_frontmatter,
 )
+from factory_io import read_text  # noqa: E402
 
 REVIEW_SCRIPTS = REPO_ROOT / "docs" / "workflow" / "operations" / "codex-skills" / "review-lens" / "scripts"
 if str(REVIEW_SCRIPTS) not in sys.path:
@@ -137,7 +138,7 @@ def _default_checkpoint_progress() -> dict:
 def artifact_has_meaningful_content(stage: str, path: Path) -> bool:
     if not path.exists():
         return False
-    text = path.read_text(encoding="utf-8").strip()
+    text = read_text(path).strip()
     heading = STAGE_ARTIFACT_HEADINGS.get(stage)
     if not text:
         return False
@@ -175,21 +176,34 @@ def diff_review_budget_state(slug: str) -> dict[str, object]:
         "head_mismatch": False,
         "scope_basis": "branch-merge-base",
         "suggested_base_ref": "",
+        "last_review_only_advance_at": 0,
         "codex_review_path": None,
         "codex_review_present": False,
         "artifact_changed_since_codex": False,
     }
+    workflow_state = load_workflow_state(slug)
+    review_budget = workflow_state.get("diff_review_budget", {})
+    if isinstance(review_budget, dict):
+        recorded_head_override = str(review_budget.get("recorded_head", ""))
+        if recorded_head_override:
+            state["recorded_head_sha"] = recorded_head_override
+        try:
+            state["last_review_only_advance_at"] = int(review_budget.get("last_review_only_advance_at", 0) or 0)
+        except (TypeError, ValueError):
+            state["last_review_only_advance_at"] = 0
     meta_path = artifact_path.with_suffix(artifact_path.suffix + ".json")
     if meta_path.exists():
         try:
-            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            meta = json.loads(read_text(meta_path))
             state["recorded_base_ref"] = meta.get("git_base_ref", "")
             state["recorded_base_sha"] = meta.get("git_base_sha", "")
-            state["recorded_head_sha"] = meta.get("git_head_sha", "")
+            if not state["recorded_head_sha"]:
+                state["recorded_head_sha"] = meta.get("git_head_sha", "")
         except Exception:
             state["recorded_base_ref"] = ""
             state["recorded_base_sha"] = ""
-            state["recorded_head_sha"] = ""
+            if not state["recorded_head_sha"]:
+                state["recorded_head_sha"] = ""
     recorded_head = str(state["recorded_head_sha"])
     current_head = str(state["current_head_sha"])
     state["head_mismatch"] = bool(recorded_head and current_head and recorded_head != current_head)

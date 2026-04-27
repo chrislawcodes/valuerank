@@ -377,7 +377,8 @@ def command_deliver(args: argparse.Namespace) -> int:
         raise SystemExit(
             f"deliver requires the current branch to match the reviewed diff HEAD; "
             f"diff artifact HEAD {recorded_head} does not match current HEAD {current_head}. "
-            "Rerun the diff checkpoint before delivering."
+            "Rerun reconcile first so the diff manifest can auto-reseal, or run "
+            f"checkpoint --slug {args.slug} --stage diff --validation-only before delivering."
         )
 
     pr = current_pr_payload()

@@ -1,0 +1,8 @@
+{
+  "paths": [
+    "docs/workflow/feature-runs/ff-token-reliability"
+  ],
+  "allowed_dirty_paths": [
+    "docs/workflow/feature-runs/ff-token-reliability"
+  ]
+}

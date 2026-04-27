@@ -59,6 +59,33 @@ from factory_deliver import refresh_delivery_snapshot  # noqa: E402
 from factory_mutating import mutates_state, readonly_command  # noqa: E402
 
 
+def _print_command_telemetry(state: dict) -> None:
+    records = state.get("command_telemetry", [])
+    if not isinstance(records, list):
+        records = []
+    recent = records[-10:]
+    print("")
+    print("command-telemetry:")
+    if not recent:
+        print("- (no records)")
+        return
+    header = (
+        f"{'command':<16} {'stage':<10} {'ts':<20} {'wall_seconds':<12} "
+        f"{'input_bytes_read':<17} {'output_bytes_written':<20} {'ttl_crossed':<11}"
+    )
+    print(header)
+    for record in recent:
+        print(
+            f"{str(record.get('command', '')):<16} "
+            f"{str(record.get('stage', '')):<10} "
+            f"{str(record.get('ts', '')):<20} "
+            f"{str(record.get('wall_seconds', '')):<12} "
+            f"{str(record.get('input_bytes_read', '')):<17} "
+            f"{str(record.get('output_bytes_written', '')):<20} "
+            f"{str(record.get('ttl_crossed', '')):<11}"
+        )
+
+
 @readonly_command("status")
 def command_status(args: argparse.Namespace) -> int:
     ensure_sync()
@@ -234,6 +261,8 @@ def command_status(args: argparse.Namespace) -> int:
 
     print("")
     print(f"next-action: {next_action}")
+    if getattr(args, "tokens", False):
+        _print_command_telemetry(state)
     return 0
 
 

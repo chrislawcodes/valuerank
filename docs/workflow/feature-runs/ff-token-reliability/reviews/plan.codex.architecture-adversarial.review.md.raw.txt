@@ -1,0 +1,7 @@
+## Findings
+- [MEDIUM] [UNVERIFIED] The proposed workflow-isolation guard is too narrow and can fail open. It only snapshots `docs/workflow/feature-runs/`, so a test that writes elsewhere in the repo would not be detected, and the plan does not say the post-suite check runs with `if: always()`. If the test suite fails before the post-check, the isolation verification never runs, which defeats the point of adding it.
+- [LOW] [CODE-CONFIRMED] `ci.yml` currently uses path-based gating plus skip jobs to keep expensive checks off unrelated changes. Making `feature-factory-tests` unconditional breaks that model and forces every PR/push to pay for a suite that most `cloud/**` changes cannot affect. That is a real CI-cost regression, even if the suite is currently small.
+
+## Residual Risks
+- The new job and isolation script are not present in the provided code, so I could not verify their exact shell semantics, dependency requirements, or whether cleanup/error handling is guarded.
+- If the feature-factory suite grows, the unconditional job will become more expensive over time unless you reintroduce selective gating or split it into a separate workflow.

@@ -30,6 +30,7 @@ from factory_state import (  # noqa: E402
     load_checkpoint_manifest,
     parse_review_frontmatter,
 )
+from factory_io import read_text  # noqa: E402
 
 REVIEW_SCRIPTS = REPO_ROOT / "docs" / "workflow" / "operations" / "codex-skills" / "review-lens" / "scripts"
 if str(REVIEW_SCRIPTS) not in sys.path:
@@ -272,7 +273,7 @@ def fallback_review_command(spec: dict, artifact_path: Path, checkpoint: dict, w
 
 
 def run_checkpoint_fallback(manifest_path: Path, workspace_root: Path, gemini_timeout_seconds: int, gemini_retries: int) -> tuple[bool, str]:
-    checkpoint = json.loads(manifest_path.read_text(encoding="utf-8"))
+    checkpoint = json.loads(read_text(manifest_path))
     artifact_path = resolve_stored_path(checkpoint["artifact_path"], REPO_ROOT)
     workspace_dir = workspace_root.resolve()
 
@@ -375,5 +376,4 @@ def _advance_checkpoint_progress(slug: str, stage: str, pending_head_sha: str) -
         slug,
         lambda s: s.__setitem__(CHECKPOINT_PROGRESS_KEY, new_progress),
     )
-
 

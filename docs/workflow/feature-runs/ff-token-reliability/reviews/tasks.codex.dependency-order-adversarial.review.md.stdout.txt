@@ -1,0 +1,10 @@
+## Findings
+- High: T08 references `codex_deleted` in `auto_commit.deleted_paths`, but that variable is never defined anywhere in the task. The success path is therefore internally broken, and Case F in T17 cannot be satisfied as written.
+- Medium [UNVERIFIED]: T04 assumes a central dispatcher wrapper can collect `input_bytes_read`, `output_bytes_written`, `files_read`, `files_written`, and `subprocess_invocations` without specifying how those counters reach the actual command code. If the existing command functions do not already share a mutable context object, this task either turns into broad signature churn or records empty telemetry.
+- Medium: T07/T08 omit rename and copy handling in the porcelain snapshot logic. `git status --porcelain` emits rename lines like `R  old -> new`, but the task says to strip the 3-character prefix and store a single path key. That is not enough to stage or compare renames correctly, so overlap detection and auto-commit selection will be wrong in those cases.
+- Medium [UNVERIFIED]: T11 is internally inconsistent and fragile. The note says to prefer `yaml.safe_load` when available, but the actual extractor stub only uses the line-splitting parser. On top of that, the lookahead for empty finding text can steal the first line of the next finding. This depends on the existing review file shape, so I am not assuming it is already a real case.
+
+## Residual Risks
+- I did not verify the current dispatcher structure, so the telemetry plumbing and `@mutates_state` integration may still need redesign after code inspection.
+- The git-status-based auto-commit logic still has edge cases beyond the ones named here, especially renames, submodules, and any porcelain variants the repo uses.
+- The review extractor still assumes a narrow frontmatter format. If review files evolve beyond simple key/value headers, the parser will need a stricter contract or a real YAML path.

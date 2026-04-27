@@ -90,6 +90,29 @@ jobs:
           TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
         run: npx turbo lint build
 
+  feature-factory-tests:
+    name: Feature Factory Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Capture workflow isolation baseline
+        run: python3 docs/workflow/operations/codex-skills/feature-factory/scripts/check_workflow_isolation.py --capture-baseline /tmp/ff-baseline.json
+
+      - name: Run feature-factory tests
+        run: python3 -m unittest discover docs/workflow/operations/codex-skills/feature-factory/scripts/tests
+
+      - name: Verify workflow isolation
+        if: always()
+        run: python3 docs/workflow/operations/codex-skills/feature-factory/scripts/check_workflow_isolation.py --check --baseline /tmp/ff-baseline.json
+
   web-tests:
     name: Web Tests (${{ matrix.shard }}/${{ matrix.total }})
     needs: changes

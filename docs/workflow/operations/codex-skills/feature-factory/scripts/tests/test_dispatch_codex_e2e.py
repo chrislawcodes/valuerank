@@ -1,6 +1,7 @@
 import argparse
 import contextlib
 import importlib
+import hashlib
 import io
 import json
 import os
@@ -119,7 +120,7 @@ class DispatchCodexE2ETests(unittest.TestCase):
         which_patcher.start()
         self.addCleanup(which_patcher.stop)
 
-    def _dispatch_args(self, prompt_path: Path) -> argparse.Namespace:
+    def _dispatch_args(self, prompt_path: Path, extra_args: list[str] | None = None) -> argparse.Namespace:
         return run_factory.build_parser().parse_args(
             [
                 "dispatch-codex",
@@ -129,6 +130,7 @@ class DispatchCodexE2ETests(unittest.TestCase):
                 str(prompt_path),
                 "--model",
                 DEFAULT_MODEL,
+                *(extra_args or []),
             ]
         )
 
@@ -144,23 +146,53 @@ class DispatchCodexE2ETests(unittest.TestCase):
             text=True,
         ).stdout.strip()
 
-    def _simulate_codex_writing(self, n_lines: int) -> None:
+    def _commit_count(self) -> int:
+        return int(
+            subprocess.run(
+                ["git", "rev-list", "--count", "HEAD"],
+                cwd=self.repo_dir,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+        )
+
+    def _latest_commit_message(self) -> str:
+        return subprocess.run(
+            ["git", "log", "-1", "--pretty=%B"],
+            cwd=self.repo_dir,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+
+    def _simulate_codex_changes(self, changes: dict[str, str | None], *, commit: bool) -> None:
+        for rel_path, content in changes.items():
+            target = self.repo_dir / rel_path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if content is None:
+                target.unlink(missing_ok=True)
+            else:
+                target.write_text(content, encoding="utf-8")
+        if commit:
+            subprocess.run(["git", "add", "."], cwd=self.repo_dir, check=True, capture_output=True, text=True)
+            subprocess.run(
+                ["git", "commit", "-m", "codex changes"],
+                cwd=self.repo_dir,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+    def _simulate_codex_writing(self, n_lines: int, *, commit: bool = True) -> None:
         target = self.repo_dir / "feature.py"
         existing = target.read_text(encoding="utf-8") if target.exists() else ""
         if existing and not existing.endswith("\n"):
             existing += "\n"
         new_content = existing + "\n".join(f"x{i} = {i}" for i in range(n_lines)) + "\n"
-        target.write_text(new_content, encoding="utf-8")
-        subprocess.run(["git", "add", "."], cwd=self.repo_dir, check=True, capture_output=True, text=True)
-        subprocess.run(
-            ["git", "commit", "-m", f"add {n_lines} lines"],
-            cwd=self.repo_dir,
-            check=True,
-            capture_output=True,
-            text=True,
-        )
+        self._simulate_codex_changes({"feature.py": new_content}, commit=commit)
 
-    def _argv_scoped_popen(self, n_lines_codex_writes: int = 500, returncode: int = 0):
+    def _argv_scoped_popen(self, n_lines_codex_writes: int = 500, returncode: int = 0, *, commit_changes: bool = True, edit_changes: dict[str, str | None] | None = None):
         captured_real = _REAL_POPEN
         test = self
 
@@ -178,7 +210,10 @@ class DispatchCodexE2ETests(unittest.TestCase):
                     # Always simulate the Codex write so the post-dispatch
                     # freshness path sees a real code delta, even when we force
                     # a non-zero exit for the record.
-                    test._simulate_codex_writing(n_lines_codex_writes)
+                    if edit_changes is not None:
+                        test._simulate_codex_changes(edit_changes, commit=commit_changes)
+                    else:
+                        test._simulate_codex_writing(n_lines_codex_writes, commit=commit_changes)
                     self._is_mock = True
                     self._returncode = returncode
                     self._stdout = ""
@@ -233,10 +268,10 @@ class DispatchCodexE2ETests(unittest.TestCase):
 
         return mock.patch.object(factory_cmd_dispatch.subprocess, "Popen", FakePopen)
 
-    def _run_dispatch(self, popen_cm, run_cm=None, prompt_text: str = DEFAULT_PROMPT):
+    def _run_dispatch(self, popen_cm, run_cm=None, prompt_text: str = DEFAULT_PROMPT, extra_args: list[str] | None = None):
         prompt_path = self.repo_dir / "prompt.txt"
         prompt_path.write_text(prompt_text, encoding="utf-8")
-        args = self._dispatch_args(prompt_path)
+        args = self._dispatch_args(prompt_path, extra_args=extra_args)
         stdout = io.StringIO()
         stderr = io.StringIO()
         with contextlib.ExitStack() as stack:
@@ -358,6 +393,157 @@ class DispatchCodexE2ETests(unittest.TestCase):
             status, note = factory_deliver.check_implementation_rule(self.slug)
         self.assertEqual(status, "triggered")
         self.assertIn("500", note)
+
+    def test_e2e_auto_commit_creates_commit_and_updates_state(self) -> None:
+        rc, _, _, prompt_path = self._run_dispatch(
+            self._argv_scoped_popen(
+                returncode=0,
+                commit_changes=False,
+                edit_changes={
+                    "feature_a.py": "alpha = 1\n",
+                    "feature_b.py": "beta = 2\n",
+                },
+            )
+        )
+        self.assertEqual(rc, 0)
+        self.assertEqual(self._commit_count(), 2)
+        state = self._read_state()
+        record = state["codex_dispatches"][-1]
+        self.assertEqual(record["head_sha"], self._current_head_sha())
+        self.assertEqual(record["auto_commit"]["commit_sha"], self._current_head_sha())
+        self.assertEqual(record["auto_commit"]["introduced_paths"], ["feature_a.py", "feature_b.py"])
+        expected_prompt_sha = hashlib.sha256(DEFAULT_PROMPT.encode("utf-8")).hexdigest()
+        expected_message = (
+            "dispatch-codex auto-commit: prompt.txt\n\n"
+            f"Prompt sha256: {expected_prompt_sha}\n"
+            f"Dispatch ID: {record['ts']}\n"
+            f"Model: {DEFAULT_MODEL}\n\n"
+            f"Co-Authored-By: Codex ({DEFAULT_MODEL}) <noreply@openai.com>"
+        )
+        self.assertEqual(self._latest_commit_message(), expected_message)
+        self.assertEqual(record["prompt_path"], str(prompt_path))
+
+    def test_e2e_auto_commit_preserves_operator_dirty_file(self) -> None:
+        operator_file = self.repo_dir / "operator.py"
+        operator_file.write_text("operator = 1\n", encoding="utf-8")
+        subprocess.run(["git", "add", "operator.py"], cwd=self.repo_dir, check=True, capture_output=True, text=True)
+        subprocess.run(["git", "commit", "-m", "add operator file"], cwd=self.repo_dir, check=True, capture_output=True, text=True)
+        operator_file.write_text("operator = 2\n", encoding="utf-8")
+
+        rc, _, _, _ = self._run_dispatch(
+            self._argv_scoped_popen(
+                returncode=0,
+                commit_changes=False,
+                edit_changes={"feature.py": "feature = 1\n"},
+            )
+        )
+        self.assertEqual(rc, 0)
+        status = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=self.repo_dir,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+        self.assertIn(" M operator.py", status)
+        self.assertNotIn("feature.py", status)
+        record = self._read_state()["codex_dispatches"][-1]
+        self.assertEqual(record["auto_commit"]["introduced_paths"], ["feature.py"])
+
+    def test_e2e_auto_commit_skips_on_operator_overlap(self) -> None:
+        foo_file = self.repo_dir / "foo.py"
+        foo_file.write_text("foo = 1\n", encoding="utf-8")
+        subprocess.run(["git", "add", "foo.py"], cwd=self.repo_dir, check=True, capture_output=True, text=True)
+        subprocess.run(["git", "commit", "-m", "add foo file"], cwd=self.repo_dir, check=True, capture_output=True, text=True)
+        foo_file.write_text("foo = 2\n", encoding="utf-8")
+
+        rc, _, stderr, _ = self._run_dispatch(
+            self._argv_scoped_popen(
+                returncode=0,
+                commit_changes=False,
+                edit_changes={"foo.py": "foo = 3\n"},
+            )
+        )
+        self.assertEqual(rc, 0)
+        self.assertIn("overlap with operator dirty", stderr)
+        self.assertEqual(self._commit_count(), 2)
+        record = self._read_state()["codex_dispatches"][-1]
+        self.assertTrue(record["auto_commit"]["skipped"])
+        self.assertEqual(record["auto_commit"]["reason"], "overlap with operator dirty")
+        self.assertEqual(record["auto_commit"]["overlap_paths"], ["foo.py"])
+
+    def test_e2e_no_auto_commit_flag_leaves_dirty(self) -> None:
+        rc, _, _, _ = self._run_dispatch(
+            self._argv_scoped_popen(
+                returncode=0,
+                commit_changes=False,
+                edit_changes={
+                    "feature_a.py": "alpha = 1\n",
+                    "feature_b.py": "beta = 2\n",
+                },
+            ),
+            extra_args=["--no-auto-commit"],
+        )
+        self.assertEqual(rc, 0)
+        self.assertEqual(self._commit_count(), 1)
+        status = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=self.repo_dir,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+        self.assertIn("?? feature_a.py", status)
+        self.assertIn("?? feature_b.py", status)
+        record = self._read_state()["codex_dispatches"][-1]
+        self.assertTrue(record["auto_commit"]["skipped"])
+        self.assertEqual(record["auto_commit"]["reason"], "--no-auto-commit flag")
+
+    def test_e2e_commit_failure_appends_record_and_returns_one(self) -> None:
+        def side_effect(cmd, *args, **kwargs):
+            if isinstance(cmd, list) and len(cmd) >= 2 and cmd[:2] == ["git", "commit"]:
+                return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="pre-commit hook rejected")
+            return _REAL_RUN(cmd, *args, **kwargs)
+
+        rc, _, stderr, _ = self._run_dispatch(
+            self._argv_scoped_popen(
+                returncode=0,
+                commit_changes=False,
+                edit_changes={"feature.py": "feature = 1\n"},
+            ),
+            run_cm=mock.patch.object(factory_cmd_dispatch.subprocess, "run", side_effect=side_effect),
+        )
+        self.assertEqual(rc, 1)
+        self.assertIn("pre-commit hook rejected", stderr)
+        self.assertEqual(self._commit_count(), 1)
+        record = self._read_state()["codex_dispatches"][-1]
+        self.assertTrue(record["auto_commit"]["skipped"])
+        self.assertEqual(record["auto_commit"]["reason"], "git commit failed")
+
+    def test_e2e_deleted_clean_tracked_file_is_auto_committed(self) -> None:
+        bar_file = self.repo_dir / "bar.py"
+        bar_file.write_text("bar = 1\n", encoding="utf-8")
+        subprocess.run(["git", "add", "bar.py"], cwd=self.repo_dir, check=True, capture_output=True, text=True)
+        subprocess.run(["git", "commit", "-m", "add bar file"], cwd=self.repo_dir, check=True, capture_output=True, text=True)
+
+        rc, _, _, _ = self._run_dispatch(
+            self._argv_scoped_popen(
+                returncode=0,
+                commit_changes=False,
+                edit_changes={"bar.py": None},
+            )
+        )
+        self.assertEqual(rc, 0)
+        self.assertEqual(self._commit_count(), 3)
+        record = self._read_state()["codex_dispatches"][-1]
+        self.assertIn("bar.py", record["auto_commit"]["introduced_paths"])
+        self.assertIn("D\tbar.py", subprocess.run(
+            ["git", "log", "-1", "--name-status", "--pretty=format:"],
+            cwd=self.repo_dir,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout)
 
 
 if __name__ == "__main__":
