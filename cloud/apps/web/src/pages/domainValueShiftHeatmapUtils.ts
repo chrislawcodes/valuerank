@@ -86,7 +86,7 @@ export function formatPointShift(value: number | null): string {
 }
 
 export function formatPercent(value: number | null): string {
-  if (value == null || !Number.isFinite(value)) return 'n/a';
+  if (value == null || !Number.isFinite(value)) return '—';
   return `${Math.round(value)}%`;
 }
 

@@ -120,7 +120,7 @@ export function aggregateAnalysesLogic(
 
     type ValueStatsBuilder = {
       count: { prioritized: number; deprioritized: number; neutral: number };
-      winRate: number;
+      winRate: number | null;
     };
     const aggregatedValues: Record<string, ValueStatsBuilder> = {};
     const modelValueRates: Record<string, number[]> = {};
@@ -142,7 +142,9 @@ export function aggregateAnalysesLogic(
         target.count.prioritized += valueStats.count.prioritized;
         target.count.deprioritized += valueStats.count.deprioritized;
         target.count.neutral += valueStats.count.neutral;
-        modelValueRates[valueId]!.push(valueStats.winRate);
+        if (valueStats.winRate != null) {
+          modelValueRates[valueId]!.push(valueStats.winRate);
+        }
       });
     });
 
@@ -154,7 +156,7 @@ export function aggregateAnalysesLogic(
       const totalWins = target.count.prioritized;
       const totalResponses =
         target.count.prioritized + target.count.deprioritized + target.count.neutral;
-      target.winRate = totalResponses > 0 ? totalWins / totalResponses : 0;
+      target.winRate = totalResponses > 0 ? totalWins / totalResponses : null;
 
       const rates = modelValueRates[valueId] || [];
       if (rates.length === 0) return;
