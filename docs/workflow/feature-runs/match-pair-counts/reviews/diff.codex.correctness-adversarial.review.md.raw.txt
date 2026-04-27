@@ -1,0 +1,8 @@
+## Findings
+1. **High** - `computeConditionCounts` does not actually compute an intersection or symmetric difference; it only compares set sizes. In `cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts`, the two-direction path sets `pairedConditionCount = min(countA, countB)` and `orphanedConditionCount = max - min`, which is wrong whenever the slot identities do not overlap. For example, A = `{s1, s2}` and B = `{s3, s4}` would be reported as fully paired even though the true intersection is `0` and the true unmatched count is `4`.
+
+2. **Medium** - The new top-up route can choose the wrong direction when the imbalance is driven by orphaned conditions rather than a filled-slot count gap. `CoverageCell` now treats `orphanedConditionCount > 0` as an imbalance, but `computeLaggingDirection` in `cloud/apps/web/src/utils/coverageGap.ts` only looks at `filledSlots` and `completeBatches`. If those tie, it returns `null`, and `CoverageCell` falls back to `valueA <= valueB ? valueA : valueB`, which is arbitrary for this case. That can send the user to `StartPairedBatchPage` with the wrong `topUpDirection`.
+
+## Residual Risks
+- The new tests still do not cover disjoint slot sets, so the most important failure mode for the condition math is easy to miss again.
+- The pairing logic still assumes the two displayed directions are the only meaningful ones. If extra directions show up in real data, both the counts and the top-up target become less trustworthy.

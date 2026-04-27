@@ -372,16 +372,22 @@ export function computeConditionCounts(
   if (merged.size === 1) {
     const onlyCount = Array.from(merged.values())[0]!.size;
     orphanedConditionCount = onlyCount;
-  } else if (merged.size === 2) {
-    const counts = Array.from(merged.values()).map((slotSet) => slotSet.size);
-    pairedConditionCount = Math.min(counts[0]!, counts[1]!);
-    orphanedConditionCount = Math.max(counts[0]!, counts[1]!) - pairedConditionCount;
-  } else if (merged.size > 2) {
-    const sortedCounts = Array.from(merged.values())
-      .map((slotSet) => slotSet.size)
-      .sort((left, right) => right - left);
-    pairedConditionCount = Math.min(sortedCounts[0]!, sortedCounts[1]!);
-    orphanedConditionCount = sortedCounts[0]! - pairedConditionCount;
+  } else if (merged.size >= 2) {
+    // For >2 directions (corruption case), use the two largest slot sets — same
+    // shape as selectPrimaryDefinitionCounts. The paired/orphaned semantics use
+    // ACTUAL set intersection and symmetric difference, not just size comparison;
+    // two equal-sized sets with disjoint slot identities (e.g. {s1,s2} vs {s3,s4})
+    // must report 0 paired and 4 orphaned, not 2 paired and 0 orphaned.
+    const sortedSets = Array.from(merged.values()).sort((left, right) => right.size - left.size);
+    const slotsA = sortedSets[0]!;
+    const slotsB = sortedSets[1]!;
+    let intersectionSize = 0;
+    for (const slot of slotsA) {
+      if (slotsB.has(slot)) intersectionSize++;
+    }
+    pairedConditionCount = intersectionSize;
+    // |A △ B| = |A| + |B| - 2|A ∩ B|
+    orphanedConditionCount = slotsA.size + slotsB.size - 2 * intersectionSize;
   }
 
   return {

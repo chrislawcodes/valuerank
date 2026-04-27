@@ -777,6 +777,45 @@ describe('computeConditionCounts', () => {
     });
   });
 
+  it('reports zero paired and full orphaned when both directions have disjoint slot identities', () => {
+    // Regression for diff-review HIGH (2026-04-27): a prior implementation used
+    // `min(setA.size, setB.size)` for pairedConditionCount, which incorrectly
+    // reported "fully paired" whenever the sizes were equal — even when no
+    // slot identity actually appeared in both directions. The fix is to use
+    // real Set intersection / symmetric difference. {s1,s2} vs {s3,s4} must
+    // report paired=0, orphaned=4.
+    const slots = makeSlotMap([
+      ['def-a', new Map([
+        ['vf-A', new Set(['s1|m1|0', 's2|m1|0'])],
+        ['vf-B', new Set(['s3|m1|0', 's4|m1|0'])],
+      ])],
+    ]);
+
+    const result = computeConditionCounts(['def-a'], slots);
+
+    expect(result.pairedConditionCount).toBe(0);
+    expect(result.orphanedConditionCount).toBe(4);
+    expect(result.perDirection.get('vf-A')?.filledSlots).toBe(2);
+    expect(result.perDirection.get('vf-B')?.filledSlots).toBe(2);
+  });
+
+  it('reports partial overlap with paired = |intersection| and orphaned = |symmetric difference|', () => {
+    // Mixed case: A has {s1, s2, s3}, B has {s2, s3, s4, s5}.
+    // Intersection = {s2, s3} → paired = 2.
+    // Symmetric difference = {s1, s4, s5} → orphaned = 3.
+    const slots = makeSlotMap([
+      ['def-a', new Map([
+        ['vf-A', new Set(['s1|m1|0', 's2|m1|0', 's3|m1|0'])],
+        ['vf-B', new Set(['s2|m1|0', 's3|m1|0', 's4|m1|0', 's5|m1|0'])],
+      ])],
+    ]);
+
+    const result = computeConditionCounts(['def-a'], slots);
+
+    expect(result.pairedConditionCount).toBe(2);
+    expect(result.orphanedConditionCount).toBe(3);
+  });
+
   it('keeps the two largest directions when corruption adds a third', () => {
     const slots = makeSlotMap([
       ['def-a', new Map([
