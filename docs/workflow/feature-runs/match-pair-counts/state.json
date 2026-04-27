@@ -2150,6 +2150,30 @@
       "files_written": 0,
       "subprocess_invocations": 36,
       "ttl_crossed": false
+    },
+    {
+      "command": "deliver",
+      "stage": null,
+      "ts": "2026-04-27T21:12:10Z",
+      "wall_seconds": 3.637,
+      "input_bytes_read": 1576639,
+      "output_bytes_written": 0,
+      "files_read": 14,
+      "files_written": 0,
+      "subprocess_invocations": 38,
+      "ttl_crossed": false
+    },
+    {
+      "command": "deliver",
+      "stage": null,
+      "ts": "2026-04-27T21:13:01Z",
+      "wall_seconds": 3.577,
+      "input_bytes_read": 1205943,
+      "output_bytes_written": 0,
+      "files_read": 13,
+      "files_written": 0,
+      "subprocess_invocations": 32,
+      "ttl_crossed": false
     }
   ],
   "diff_review_budget": {
