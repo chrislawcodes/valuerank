@@ -1,0 +1,2732 @@
+Reading additional input from stdin...
+OpenAI Codex v0.125.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/infallible-bassi-fafa71
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019dcd90-8de3-7503-a8ce-12e580feac65
+--------
+user
+Review this spec artifact using a edge-cases-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+Code context files are provided above. Before asserting any finding, check whether it is confirmed or refuted by the provided code. Each finding must include an evidence tag:
+  [CODE-CONFIRMED] — the code directly supports this finding
+  [CODE-REFUTED] — the code contradicts this finding (do not include as a finding)
+  [UNVERIFIED] — relevant code was not provided; treat as lower confidence
+Only assign HIGH severity to CODE-CONFIRMED findings.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Context: start-plan.ts
+import { createLogger, ValidationError } from '@valuerank/shared';
+import { sampleScenarios } from './start-helpers.js';
+
+const log = createLogger('services:run:start');
+
+export type RunJobPlanItem = {
+  modelId: string;
+  scenarioId: string;
+  samples: number;
+};
+
+type BuildRunJobPlanInput = {
+  definitionId: string;
+  models: string[];
+  definitionScenarioIds: string[];
+  scenarioIds?: string[];
+  samplePercentage: number;
+  sampleSeed?: number;
+  samplesPerScenario: number;
+};
+
+export async function buildRunJobPlan(input: BuildRunJobPlanInput): Promise<{
+  selectedScenarioIds: string[];
+  jobPlan: RunJobPlanItem[];
+}> {
+  const {
+    definitionId,
+    models,
+    definitionScenarioIds,
+    scenarioIds,
+    samplePercentage,
+    sampleSeed,
+    samplesPerScenario,
+  } = input;
+
+  let selectedScenarioIds: string[] = [];
+  const jobPlan: RunJobPlanItem[] = [];
+
+  if (Array.isArray(scenarioIds) && scenarioIds.length > 0) {
+    const allScenarioIdSet = new Set(definitionScenarioIds);
+    selectedScenarioIds = Array.from(new Set(scenarioIds));
+
+    const invalidScenarioIds = selectedScenarioIds.filter((scenarioId) => !allScenarioIdSet.has(scenarioId));
+    if (invalidScenarioIds.length > 0) {
+      throw new ValidationError(
+        `Invalid scenarioIds for definition ${definitionId}: ${invalidScenarioIds.join(', ')}`
+      );
+    }
+
+    for (const modelId of models) {
+      for (const scenarioId of selectedScenarioIds) {
+        jobPlan.push({
+          modelId,
+          scenarioId,
+          samples: samplesPerScenario,
+        });
+      }
+    }
+
+    log.debug(
+      { definitionId, selectedScenarios: selectedScenarioIds.length },
+      'Using explicit scenario selection'
+    );
+    return { selectedScenarioIds, jobPlan };
+  }
+
+  selectedScenarioIds = sampleScenarios(definitionScenarioIds, samplePercentage, definitionId, sampleSeed);
+
+  for (const modelId of models) {
+    for (const scenarioId of selectedScenarioIds) {
+      jobPlan.push({
+        modelId,
+        scenarioId,
+        samples: samplesPerScenario,
+      });
+    }
+  }
+
+  log.debug(
+    { definitionId, totalScenarios: definitionScenarioIds.length, sampledScenarios: selectedScenarioIds.length },
+    'Scenarios sampled'
+  );
+
+  return { selectedScenarioIds, jobPlan };
+}
+
+
+Context: lifecycle.ts
+import { db, type RunCategory } from '@valuerank/db';
+import { AuthenticationError, ValidationError } from '@valuerank/shared';
+import { builder } from '../../builder.js';
+import { RunRef } from '../../types/refs.js';
+import { StartRunInput } from '../../types/inputs/start-run.js';
+import {
+  cancelRun as cancelRunService,
+  pauseRun as pauseRunService,
+  resumeRun as resumeRunService,
+  startRun as startRunService,
+} from '../../../services/run/index.js';
+import { createAuditLog } from '../../../services/audit/index.js';
+import {
+  getEquivalentModelIds,
+  resolveModelIdFromAvailable,
+} from '../../../services/models/aliases.js';
+import { parseRunCategory } from '../../../services/run/query.js';
+import { StartRunPayload } from './payloads.js';
+import {
+  isRecord,
+  loadRunForResult,
+  persistPairedCompanionRunIds,
+  resolvePairedDefinition,
+} from './lifecycle-helpers.js';
+
+export { persistPairedCompanionRunIds } from './lifecycle-helpers.js';
+
+type StartRunArgs = {
+  definitionId: string | number;
+  models: string[];
+  samplePercentage?: number | null;
+  sampleSeed?: number | null;
+  samplesPerScenario?: number | null;
+  temperature?: number | null;
+  priority?: string | null;
+  runCategory?: RunCategory | null;
+  experimentId?: string | number | null;
+  launchMode?: string | null;
+  scenarioIds?: Array<string | number> | null;
+};
+
+builder.mutationField('startRun', (t) =>
+  t.field({
+    type: StartRunPayload,
+    description: `
+      Start a new evaluation run.
+
+      Creates a run record and queues probe_scenario jobs for each model-scenario combination.
+      Requires authentication.
+
+      Returns the created run and the number of jobs queued.
+    `,
+    args: {
+      input: t.arg({
+        type: StartRunInput,
+        required: true,
+        description: 'Configuration for the new run',
+      }),
+    },
+    resolve: async (_root, args, ctx) => {
+      if (!ctx.user) {
+        throw new AuthenticationError('Authentication required');
+      }
+
+      const userId = ctx.user.id;
+      const input = args.input as StartRunArgs;
+
+      ctx.log.info(
+        { userId, definitionId: input.definitionId, modelCount: input.models.length },
+        'Starting run via GraphQL'
+      );
+
+      const activeModelsForAliases = await db.llmModel.findMany({
+        where: {
+          status: 'ACTIVE',
+          modelId: {
+            in: Array.from(new Set(input.models.flatMap((id) => getEquivalentModelIds(id)))),
+          },
+        },
+        select: { modelId: true },
+      });
+      const activeModelIdSet = new Set(activeModelsForAliases.map((model) => model.modelId));
+
+      const models = input.models.map((id) => resolveModelIdFromAvailable(id, activeModelIdSet) ?? id);
+      const launchMode = input.launchMode ?? 'STANDARD';
+      const requestedRunCategory =
+        typeof input.runCategory === 'string' && input.runCategory.trim() !== ''
+          ? input.runCategory
+          : undefined;
+      const parsedRunCategory = parseRunCategory(requestedRunCategory);
+      if (requestedRunCategory !== undefined && parsedRunCategory === undefined) {
+        throw new ValidationError(
+          'Invalid runCategory. Expected PILOT, PRODUCTION, REPLICATION, VALIDATION, or UNKNOWN_LEGACY.'
+        );
+      }
+      const sharedInput = {
+        models,
+        samplePercentage: input.samplePercentage ?? undefined,
+        sampleSeed: input.sampleSeed ?? undefined,
+        samplesPerScenario: input.samplesPerScenario ?? undefined,
+        temperature: input.temperature ?? undefined,
+        priority: input.priority ?? 'NORMAL',
+        runCategory: parsedRunCategory ?? (launchMode === 'PAIRED_BATCH' ? 'PRODUCTION' : undefined),
+        experimentId:
+          input.experimentId !== undefined && input.experimentId !== null && input.experimentId !== ''
+            ? String(input.experimentId)
+            : undefined,
+        userId,
+        scenarioIds: input.scenarioIds?.map((scenarioId) => String(scenarioId)),
+      };
+
+      let result;
+      let pairedRunIds: string[] | undefined;
+
+      if (launchMode === 'PAIRED_BATCH') {
+        const pair = await resolvePairedDefinition(String(input.definitionId));
+        const batchGroupId = crypto.randomUUID();
+
+        const primaryRun = await startRunService({
+          definitionId: pair.primary.id,
+          ...sharedInput,
+          configExtras: {
+            jobChoiceLaunchMode: launchMode,
+            jobChoiceBatchGroupId: batchGroupId,
+            jobChoiceValueFirst: pair.primaryValueFirst,
+            methodologySafe: true,
+          },
+        });
+
+        const companionRun = await startRunService({
+          definitionId: pair.companionId,
+          ...sharedInput,
+          configExtras: {
+            jobChoiceLaunchMode: launchMode,
+            jobChoiceBatchGroupId: batchGroupId,
+            jobChoiceValueFirst: pair.companionValueFirst,
+            methodologySafe: true,
+          },
+        });
+
+        await persistPairedCompanionRunIds(primaryRun.run.id, companionRun.run.id);
+
+        result = {
+          run: {
+            ...primaryRun.run,
+            config: {
+              ...(isRecord(primaryRun.run.config) ? primaryRun.run.config : {}),
+              companionRunId: companionRun.run.id,
+            },
+          },
+          jobCount: primaryRun.jobCount + companionRun.jobCount,
+        };
+        pairedRunIds = [companionRun.run.id];
+      } else {
+        result = await startRunService({
+          definitionId: String(input.definitionId),
+          ...sharedInput,
+          configExtras: launchMode === 'AD_HOC_BATCH'
+            ? {
+                jobChoiceLaunchMode: launchMode,
+                methodologySafe: false,
+              }
+            : undefined,
+        });
+      }
+
+      ctx.log.info(
+        { userId, runId: result.run.id, jobCount: result.jobCount },
+        'Run started successfully'
+      );
+
+      void createAuditLog({
+        action: 'CREATE',
+        entityType: 'Run',
+        entityId: result.run.id,
+        userId,
+        metadata: {
+          definitionId: String(input.definitionId),
+          models: input.models,
+          jobCount: result.jobCount,
+        },
+      });
+
+      return {
+        ...result,
+        pairedRunIds,
+      };
+    },
+  })
+);
+
+builder.mutationField('pauseRun', (t) =>
+  t.field({
+    type: RunRef,
+    description: `
+      Pause a running evaluation.
+
+      Jobs currently being processed will complete, but no new jobs
+      will be started until the run is resumed.
+
+      Requires authentication. Run must be in PENDING or RUNNING state.
+    `,
+    args: {
+      runId: t.arg.id({
+        required: true,
+        description: 'The ID of the run to pause',
+      }),
+    },
+    resolve: async (_root, args, ctx) => {
+      if (!ctx.user) {
+        throw new AuthenticationError('Authentication required');
+      }
+
+      const runId = String(args.runId);
+      ctx.log.info({ userId: ctx.user.id, runId }, 'Pausing run via GraphQL');
+
+      const result = await pauseRunService(runId);
+
+      ctx.log.info({ userId: ctx.user.id, runId, status: result.status }, 'Run paused');
+
+      void createAuditLog({
+        action: 'ACTION',
+        entityType: 'Run',
+        entityId: runId,
+        userId: ctx.user.id,
+        metadata: { action: 'pause', previousStatus: result.status },
+      });
+
+      return loadRunForResult(result.id, ctx);
+    },
+  })
+);
+
+builder.mutationField('resumeRun', (t) =>
+  t.field({
+    type: RunRef,
+    description: `
+      Resume a paused evaluation.
+
+      Jobs will begin processing again from where they left off.
+
+      Requires authentication. Run must be in PAUSED state.
+    `,
+    args: {
+      runId: t.arg.id({
+        required: true,
+        description: 'The ID of the run to resume',
+      }),
+    },
+    resolve: async (_root, args, ctx) => {
+      if (!ctx.user) {
+        throw new AuthenticationError('Authentication required');
+      }
+
+      const runId = String(args.runId);
+      ctx.log.info({ userId: ctx.user.id, runId }, 'Resuming run via GraphQL');
+
+      const result = await resumeRunService(runId);
+
+      ctx.log.info({ userId: ctx.user.id, runId, status: result.status }, 'Run resumed');
+
+      void createAuditLog({
+        action: 'ACTION',
+        entityType: 'Run',
+        entityId: runId,
+        userId: ctx.user.id,
+        metadata: { action: 'resume', newStatus: result.status },
+      });
+
+      return loadRunForResult(result.id, ctx);
+    },
+  })
+);
+
+builder.mutationField('cancelRun', (t) =>
+  t.field({
+    type: RunRef,
+    description: `
+      Cancel an evaluation run.
+
+      Jobs currently being processed will complete, but all pending jobs
+      will be removed from the queue. Completed results are preserved.
+
+      Requires authentication. Run must be in PENDING, RUNNING, or PAUSED state.
+    `,
+    args: {
+      runId: t.arg.id({
+        required: true,
+        description: 'The ID of the run to cancel',
+      }),
+    },
+    resolve: async (_root, args, ctx) => {
+      if (!ctx.user) {
+        throw new AuthenticationError('Authentication required');
+      }
+
+      const runId = String(args.runId);
+      ctx.log.info({ userId: ctx.user.id, runId }, 'Cancelling run via GraphQL');
+
+      const result = await cancelRunService(runId);
+
+      ctx.log.info({ userId: ctx.user.id, runId, status: result.status }, 'Run cancelled');
+
+      void createAuditLog({
+        action: 'ACTION',
+        entityType: 'Run',
+        entityId: runId,
+        userId: ctx.user.id,
+        metadata: { action: 'cancel', finalStatus: result.status },
+      });
+
+      return loadRunForResult(result.id, ctx);
+    },
+  })
+);
+
+
+Context: start-helpers.ts
+import type { DefinitionContent } from '@valuerank/db';
+import { AppError, createLogger } from '@valuerank/shared';
+import type { JobInsert } from 'pg-boss';
+import { getBoss } from '../../queue/boss.js';
+import type { JobOptions, ProbeScenarioJobData } from '../../queue/types.js';
+import { getJudgeModel, getSummarizerModel } from '../infra-models.js';
+export type {
+  SurveyPlan,
+  SurveyQuestion,
+  SurveyResponseOption,
+} from './start-survey.js';
+export { syncSurveyScenariosFromPlan } from './start-survey.js';
+
+const log = createLogger('services:run:start');
+
+export type JobEntry = {
+  queueName: string;
+  data: ProbeScenarioJobData;
+  options: JobOptions;
+};
+
+export type FindingsSnapshotModelConfig = {
+  modelId: string;
+  providerId: string;
+  providerName: string;
+  displayName: string;
+  apiConfig: Record<string, unknown> | null;
+};
+
+export type EnqueueFailure = {
+  job: JobEntry;
+  error: string;
+};
+
+const ENQUEUE_CHUNK_SIZE = 50;
+export const RETRY_ENQUEUE_CHUNK_SIZE = 10;
+
+export async function enqueueJobs(
+  jobs: JobEntry[],
+  send: (queueName: string, data: ProbeScenarioJobData, options: JobOptions) => Promise<string | null>,
+  chunkSize = ENQUEUE_CHUNK_SIZE
+): Promise<{ jobIds: string[]; failures: EnqueueFailure[] }> {
+  const jobIds: string[] = [];
+  const failures: EnqueueFailure[] = [];
+
+  for (let i = 0; i < jobs.length; i += chunkSize) {
+    const chunk = jobs.slice(i, i + chunkSize);
+    const chunkResults = await Promise.allSettled(
+      chunk.map(async (job) => {
+        const id = await send(job.queueName, job.data, job.options);
+        if (id === null) {
+          throw new AppError('send returned null job id', 'QUEUE_SEND_FAILED');
+        }
+        return id;
+      })
+    );
+
+    chunkResults.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        jobIds.push(result.value);
+        return;
+      }
+      failures.push({
+        // Result order matches input order from Promise.allSettled.
+        // Index is guaranteed to map to an entry in `chunk`.
+        job: chunk[index]!,
+        error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+      });
+    });
+  }
+
+  return { jobIds, failures };
+}
+
+/**
+ * Bulk-inserts all jobs for a run using boss.insert(), grouped by queue name.
+ *
+ * A single INSERT ... VALUES (...), (...) round-trip per queue replaces the
+ * N individual boss.send() calls that were the primary bottleneck when
+ * launching many runs at once (e.g. target-batch top-up across 75 vignettes).
+ */
+export async function bulkEnqueueJobs(
+  jobs: JobEntry[],
+): Promise<{ jobIds: string[]; failures: EnqueueFailure[] }> {
+  if (jobs.length === 0) return { jobIds: [], failures: [] };
+
+  const boss = getBoss();
+
+  // Group by queue name — boss.insert() takes a single queue name per call.
+  const jobsByQueue = new Map<string, JobEntry[]>();
+  for (const job of jobs) {
+    const existing = jobsByQueue.get(job.queueName) ?? [];
+    existing.push(job);
+    jobsByQueue.set(job.queueName, existing);
+  }
+
+  const jobIds: string[] = [];
+  const failures: EnqueueFailure[] = [];
+
+  for (const [queueName, queueJobs] of jobsByQueue) {
+    const insertPayloads: JobInsert<ProbeScenarioJobData>[] = queueJobs.map((job) => ({
+      data: job.data,
+      priority: job.options.priority,
+      retryLimit: job.options.retryLimit,
+      retryDelay: job.options.retryDelay,
+      retryBackoff: job.options.retryBackoff,
+      expireInSeconds: job.options.expireInSeconds,
+      ...(job.options.singletonKey !== undefined ? { singletonKey: job.options.singletonKey } : {}),
+    }));
+
+    try {
+      const ids = await boss.insert(queueName, insertPayloads);
+      if (ids === null || ids.length === 0) {
+        failures.push(
+          ...queueJobs.map((job) => ({ job, error: 'bulk insert returned no ids' })),
+        );
+      } else {
+        jobIds.push(...ids);
+        if (ids.length < queueJobs.length) {
+          log.warn(
+            { queueName, expected: queueJobs.length, got: ids.length },
+            'Bulk insert dropped some jobs (possible singleton dedup)',
+          );
+          // We cannot identify which specific jobs were dropped; surface the
+          // count discrepancy so the caller's integrity check catches it.
+          const droppedCount = queueJobs.length - ids.length;
+          for (let i = 0; i < droppedCount; i++) {
+            failures.push({ job: queueJobs[i]!, error: 'dropped by bulk insert' });
+          }
+        }
+      }
+    } catch (err) {
+      failures.push(
+        ...queueJobs.map((job) => ({
+          job,
+          error: err instanceof Error ? err.message : String(err),
+        })),
+      );
+    }
+  }
+
+  return { jobIds, failures };
+}
+
+/**
+ * Generates a numeric hash from a string (for deterministic seeding).
+ * Uses DJB2-style hash algorithm.
+ */
+export function hashString(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash | 0; // Convert to 32-bit integer
+  }
+  return Math.abs(hash);
+}
+
+/**
+ * Deterministically samples scenarios based on percentage and seed.
+ * When no seed is provided, derives one from definitionId for reproducibility.
+ */
+export function sampleScenarios(
+  scenarioIds: string[],
+  percentage: number,
+  definitionId: string,
+  seed?: number
+): string[] {
+  if (percentage >= 100) {
+    return scenarioIds;
+  }
+
+  // Calculate target count
+  const targetCount = Math.max(1, Math.floor((scenarioIds.length * percentage) / 100));
+
+  // Create a simple seeded random number generator
+  const seededRandom = (s: number) => {
+    // Simple LCG for deterministic sampling
+    const m = 2147483647;
+    const a = 16807;
+    let state = s;
+    return () => {
+      state = (state * a) % m;
+      return state / m;
+    };
+  };
+
+  // Use provided seed or derive from definitionId for reproducible sampling
+  const effectiveSeed = seed ?? hashString(definitionId);
+  const random = seededRandom(effectiveSeed);
+
+  // Fisher-Yates shuffle with seeded random, then take first N
+  const shuffled = [...scenarioIds];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    const temp = shuffled[i];
+    shuffled[i] = shuffled[j] as string;
+    shuffled[j] = temp as string;
+  }
+
+  return shuffled.slice(0, targetCount);
+}
+
+/**
+ * Converts a zero-based index to an alphabetical suffix.
+ * 0 -> A, 1 -> B, ..., 25 -> Z, 26 -> AA, 27 -> AB
+ */
+export function convertToAlpha(n: number): string {
+  if (n < 0) return '';
+
+  let result = '';
+  // Convert to 1-based index for cleaner math logic
+  let x = n + 1;
+
+  while (x > 0) {
+    // 1-based remainder
+    const remainder = (x - 1) % 26;
+    result = String.fromCharCode(65 + remainder) + result;
+    x = Math.floor((x - 1) / 26);
+  }
+
+  return result;
+}
+
+export function asRecord(value: unknown): Record<string, unknown> | null {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+export function buildResolvedValueStatements(
+  resolvedContent: DefinitionContent,
+  availableStatements: Array<{ id: string; token: string; body: string; domainId: string }>,
+): Array<Record<string, unknown>> | null {
+  const components = resolvedContent.components;
+  if (!components) return null;
+
+  return [
+    components.value_first,
+    components.value_second,
+  ].map((component) => {
+    const matched = availableStatements.find((statement) => statement.token === component.token);
+    return {
+      id: matched?.id ?? null,
+      domainId: matched?.domainId ?? null,
+      token: component.token,
+      body: matched?.body ?? component.body,
+      intensity: component.intensity ?? null,
+    };
+  });
+}
+
+export async function buildFindingsSnapshot(input: {
+  definition: {
+    domainId: string | null;
+    domainContext: { id: string; domainId: string; text: string; version: number } | null;
+    levelPresetVersion: {
+      id: string;
+      version: string;
+      levelPresetId: string;
+      l1: string;
+      l2: string;
+      l3: string;
+      l4: string;
+      l5: string;
+    } | null;
+    preambleVersion: { id: string; version: string; content: string; preambleId: string } | null;
+    domain: {
+      id: string;
+      valueStatements: Array<{ id: string; token: string; body: string; domainId: string }>;
+    } | null;
+  };
+  resolvedContent: DefinitionContent;
+  selectedModels: FindingsSnapshotModelConfig[];
+}): Promise<Record<string, unknown>> {
+  const { definition, resolvedContent, selectedModels } = input;
+  const [judgeModel, summarizerModel] = await Promise.all([
+    getJudgeModel(),
+    getSummarizerModel(),
+  ]);
+
+  const resolvedContext = definition.domainContext
+    ? {
+      id: definition.domainContext.id,
+      domainId: definition.domainContext.domainId,
+      text: definition.domainContext.text,
+      version: definition.domainContext.version,
+    }
+    : null;
+
+  const resolvedValueStatements = definition.domain
+    ? buildResolvedValueStatements(resolvedContent, definition.domain.valueStatements)
+    : null;
+
+  const resolvedLevelWords = definition.levelPresetVersion
+    ? {
+      id: definition.levelPresetVersion.id,
+      levelPresetId: definition.levelPresetVersion.levelPresetId,
+      version: definition.levelPresetVersion.version,
+      words: [
+        definition.levelPresetVersion.l1,
+        definition.levelPresetVersion.l2,
+        definition.levelPresetVersion.l3,
+        definition.levelPresetVersion.l4,
+        definition.levelPresetVersion.l5,
+      ],
+    }
+    : null;
+
+  return {
+    findingsSnapshotVersion: 'v1',
+    resolvedPreamble: definition.preambleVersion
+      ? {
+        id: definition.preambleVersion.id,
+        preambleId: definition.preambleVersion.preambleId,
+        version: definition.preambleVersion.version,
+        content: definition.preambleVersion.content,
+      }
+      : null,
+    resolvedContext,
+    resolvedValueStatements,
+    resolvedLevelWords,
+    targetModelConfigs: selectedModels.map((model) => ({
+      modelId: model.modelId,
+      providerId: model.providerId,
+      providerName: model.providerName,
+      displayName: model.displayName,
+      apiConfig: model.apiConfig,
+    })),
+    evaluatorConfig: {
+      modelId: judgeModel.modelId,
+      providerId: judgeModel.providerId,
+      providerName: judgeModel.providerName,
+      displayName: judgeModel.displayName,
+      apiConfig: judgeModel.apiConfig ?? null,
+    },
+    summarizerConfig: {
+      modelId: summarizerModel.modelId,
+      providerId: summarizerModel.providerId,
+      providerName: summarizerModel.providerName,
+      displayName: summarizerModel.displayName,
+      apiConfig: summarizerModel.apiConfig ?? null,
+    },
+  };
+}
+
+
+Context: CLAUDE.md
+# Cloud ValueRank - Project Constitution
+
+This document defines the cloud-specific coding standards and push checks for ValueRank.
+
+Repo-wide agent behavior, delivery paths, terminology policy, and memory policy live in the repo-root `AGENTS.md`.
+
+## Push And PR Checks
+
+- Use Pull Requests for changes that will land on `main`.
+- Ask the human before running `git push`.
+- Run the Preflight Gate before any `git push` or PR creation.
+
+## Workflow State
+
+- For Feature Factory, use the repo-owned workflow docs and `docs/workflow/feature-runs/<slug>/state.json` as the source of truth.
+- Repo-root `MEMORY.md` is a persistent reference index. Keep it lean — no shipped feature history or long-term archives.
+
+### Pre-push Hook (Preferred)
+
+The pre-push hook automatically detects which workspaces changed and runs lint, test, and build only for those. Install once:
+
+```bash
+./scripts/hooks/install-hooks.sh
+```
+
+The hook compares your branch to `origin/main` and respects the dependency graph:
+- `shared` changes → checks shared, db, api, web
+- `db` changes → checks db, api
+- `api` changes → checks api only
+- `web` changes → checks web only
+- Root config changes (`turbo.json`, `package.json`, etc.) → checks everything
+
+### Manual Preflight (If Hook Not Installed)
+
+Run from `cloud/` for the workspaces you changed:
+
+```bash
+# Always run for the workspaces you touched:
+npx turbo lint --filter=@valuerank/<workspace>
+npx turbo test --filter=@valuerank/<workspace>
+npx turbo build --filter=@valuerank/<workspace>
+
+# If you touched db or api, also set up the test database first:
+npm run db:test:setup
+```
+
+**Hard rules:**
+- Do not push if any preflight command fails.
+- Do not use `git push --no-verify` except emergency hotfix with explicit human approval.
+- If unrelated local files break checks, validate in a clean worktree from `origin/main` before push.
+- Every PR must include a `Validation` section listing exact commands run and pass/fail results.
+
+---
+
+## Core Principles
+
+1. **Small, focused files** - Easy to read, test, and maintain
+2. **Type safety** - Catch errors at compile time, not runtime
+3. **Test coverage** - Confidence to refactor and deploy
+4. **Observable** - Debug issues in production without guessing
+
+---
+
+## File Structure
+
+Enforced mechanically — do not treat these as soft guidance.
+
+| Check | Enforced by | Thresholds |
+|-------|-------------|------------|
+| File size | `cloud/scripts/check-file-sizes.sh` (CI + pre-push), ESLint `max-lines` (editor) | prod: warn 400 / error 700 — tests: warn 800 / error 1200 |
+| Placeholder filenames | `cloud/scripts/check-filenames.sh` | bans `-helper(s).ts`, `-util(s).ts`, `-misc.ts`, `-types-detail.ts` |
+| Trivial re-export barrels | `cloud/scripts/check-barrels.sh` | rejects new `index.ts` < 15 lines that is export-only |
+| Known fragmented clusters | `cloud/scripts/check-tech-debt.sh` | informational reminders; see `docs/tech-debt/file-structure.md` |
+
+Grandfathered files live in the allowlists next to each script. See
+[`docs/tech-debt/file-structure.md`](../docs/tech-debt/file-structure.md)
+for what to collapse when touching the area.
+
+Guidance when the size warning fires: do not split just to silence it. Ask
+whether the file has one responsibility. If yes, keep it. If no, split by
+responsibility and give the new module a domain-meaningful name.
+
+---
+
+## TypeScript Standards
+
+### No `any` Types
+
+Never use `any`. Use the actual type, or `unknown` if the type is truly dynamic:
+
+```typescript
+function parseJson(input: string): unknown { ... }
+function handleError(err: unknown): void { ... }
+```
+
+### Strict Mode Required
+
+`tsconfig.json` must have `strict: true`, `noImplicitAny: true`, `strictNullChecks: true`, `noUncheckedIndexedAccess: true`.
+
+### Strict Boolean Checks
+
+Use explicit checks for `null` and `undefined` — do not rely on truthiness for numbers or strings (linting error):
+
+```typescript
+// Bad - fails strict-boolean-expressions
+if (!value) { ... }
+
+// Good
+if (value != null) { ... }
+if (value === 0) { ... }
+```
+
+### Types vs Interfaces
+
+Use `type` for data shapes; use `interface` for service contracts.
+
+---
+
+## Testing Requirements
+
+### Coverage Targets
+
+| Metric | Minimum | Target |
+|--------|---------|--------|
+| Line coverage | 80% | 90% |
+| Branch coverage | 75% | 85% |
+| Function coverage | 80% | 90% |
+
+### What to Test
+
+- **Always test**: Business logic, data transformations, edge cases
+- **Mock**: Database, external APIs, LLM providers
+- **Integration tests**: API routes with test database
+- **Skip**: Simple getters, direct ORM pass-through
+
+### Required Environment Variables for Tests
+
+```bash
+JWT_SECRET="test-secret-that-is-at-least-32-characters-long"
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank_test"
+```
+
+Setup test DB: `npm run db:test:setup` (from `cloud/`). Reset on data pollution: `npm run db:test:reset`.
+
+---
+
+## Logging Standards
+
+All logging goes through the centralized logger — never use `console.log` directly.
+
+```typescript
+import { createLogger } from '@valuerank/shared';
+const log = createLogger('runs');
+
+log.info({ runId: run.id }, 'Run created');
+log.error({ err, config }, 'Failed to create run');
+```
+
+Always use structured data (object + message), never string interpolation.
+
+### Log Levels
+
+| Level | Use For |
+|-------|---------|
+| `error` | Exceptions, failed operations that need attention |
+| `warn` | Recoverable issues, deprecations, retry attempts |
+| `info` | Key business events (run started, completed, user action) |
+| `debug` | Detailed flow info, useful for local debugging |
+
+---
+
+## Code Organization
+
+### Import Order
+
+1. Node built-ins (`fs`, `path`)
+2. External packages (`express`, `zod`)
+3. Internal packages (`@valuerank/shared`, `@valuerank/db`)
+4. Relative imports (`./validation`, `./types`)
+
+### Folder Structure
+
+```
+apps/api/src/
+├── auth/         # Authentication middleware and JWT handling
+├── cli/          # Admin scripts (create-user, normalize, shadow)
+├── config/       # Server configuration
+├── graphql/      # GraphQL schema, queries, mutations, types
+├── mcp/          # MCP server tools and OAuth
+├── middleware/    # Express middleware
+├── queue/        # PgBoss job handlers and queue orchestration
+├── routes/       # Express route handlers (REST, CSV, OData)
+├── services/     # Business logic
+└── utils/        # Pure utility functions
+
+apps/web/src/
+├── api/          # GraphQL operations and client setup
+├── components/   # React components
+├── hooks/        # Custom hooks
+├── lib/          # Shared libraries (statistics, formatting)
+├── pages/        # Route pages
+└── utils/        # Pure utility functions
+```
+
+---
+
+## Error Handling
+
+Use custom error classes (`AppError`, `NotFoundError`, `ValidationError`) from `packages/shared`. Always catch and forward to error middleware in routes — never swallow errors silently.
+
+---
+
+## Database Access
+
+### Use Prisma with Type Safety
+
+Use typed queries and `$transaction` for multi-step operations.
+
+### Soft Delete Pattern
+
+Entities use soft delete via `deletedAt` timestamp. **Never physically delete** — set `deletedAt` instead.
+
+**Tables with soft delete:** `definitions`, `definition_tags`, `scenarios`
+
+```typescript
+// ALWAYS filter out soft-deleted records
+const definitions = await prisma.definition.findMany({
+  where: { deletedAt: null },  // Required!
+});
+
+// When "deleting", set deletedAt
+await prisma.definition.update({
+  where: { id: definitionId },
+  data: { deletedAt: new Date() },
+});
+```
+
+`deletedAt` is **never exposed** in GraphQL schema. All resolvers must filter `deletedAt: null` automatically.
+
+---
+
+## Database Connections
+
+The project uses PostgreSQL with PgBouncer for connection pooling.
+
+**Application** (via PgBouncer): `DATABASE_URL` — include `?pgbouncer=true` to disable prepared statements.
+
+**Migrations** (direct): `DIRECT_URL` — Prisma Migrate requires a direct connection, not a pooler.
+
+```bash
+# .env
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:6432/valuerank?pgbouncer=true"
+DIRECT_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank"
+```
+
+Start local DB: `docker-compose up -d` from `cloud/`.
+
+---
+
+## Schema Changes (Migrations)
+
+**Always use Prisma Migrate — never `db push`.**
+
+```bash
+# Create and apply a migration
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank" \
+  npx prisma migrate dev --name add_feature_tables --schema packages/db/prisma/schema.prisma
+```
+
+Production deployments run `prisma migrate deploy` automatically on startup.
+
+---
+
+## Quick Reference
+
+```
+File size:      enforced by scripts (prod warn 400/err 700, tests warn 800/err 1200)
+any types:      NEVER (use unknown if truly unknown)
+Test coverage:  80% minimum
+Console.log:    NEVER (use logger)
+Error handling: Custom AppError classes
+Imports:        Node → External → Internal → Relative
+```
+
+---
+
+## Terminology
+
+Canonical source: `docs/canonical-glossary.md`
+
+- Follow the terminology policy in repo-root `AGENTS.md`.
+- In cloud code, older names like `definition`, `dimension`, and `scenario` may still appear in code, schema, or APIs. Map them to glossary terms instead of renaming them casually.
+
+
+Context: domain-coverage.ts
+/**
+ * Domain Coverage Query
+ *
+ * Returns a value-pair coverage matrix for a domain: how many completed
+ * trial batches (runs) exist for each Schwartz value pair vignette.
+ * Scoped to the same 10-value set used in domain analysis.
+ */
+
+import { builder } from '../builder.js';
+import { db, resolveDefinitionContent } from '@valuerank/db';
+
+import {
+  COVERAGE_VALUE_KEYS,
+  type CoverageValueKey,
+  extractValuePair,
+  getCoverageBatchGroupId,
+  getCoverageBatchIncrement,
+  selectPrimaryDefinitionCounts,
+  computePerModelTrialCounts,
+  deduplicateRunsByGroupId,
+} from './domain-coverage-utils.js';
+import { resolveEffectiveDefaultModelIds } from './domain/shared.js';
+import {
+  DomainValueCoverageResultRef,
+  type DomainValueCoverageCell,
+  type CoverageModelOption,
+  runMatchesSignature,
+} from './domain-coverage-gql-types.js';
+
+const VALUE_PAIR_RESOLVE_CHUNK_SIZE = 20;
+
+builder.queryField('domainValueCoverage', (t) =>
+  t.field({
+    type: DomainValueCoverageResultRef,
+    nullable: true,
+    description: `
+      Returns a Schwartz value-pair coverage matrix for a domain.
+
+      Each cell shows how many completed trial batches (runs) exist for the vignette
+      that tests that pair of values in conflict. Optionally filtered to count only
+      runs that included the specified model IDs.
+
+      The matrix is symmetric: each unique value pair appears once, with the cell key
+      sorted alphabetically (valueA < valueB). Diagonal cells are omitted.
+    `,
+    args: {
+      domainId: t.arg.id({
+        required: true,
+        description: 'Domain to compute coverage for',
+      }),
+      modelIds: t.arg.stringList({
+        required: false,
+        description: 'If provided, only count runs that included at least one of these model IDs',
+      }),
+      signature: t.arg.string({
+        required: false,
+        description: 'If provided, only count completed runs matching this trial signature',
+      }),
+    },
+    resolve: async (_root, args, ctx) => {
+      const domainId = String(args.domainId);
+      const filterModelIds = args.modelIds?.map(String) ?? [];
+      const selectedSignature = typeof args.signature === 'string' && args.signature.trim() !== ''
+        ? args.signature.trim()
+        : null;
+
+      ctx.log.debug({ domainId, filterModelIds, selectedSignature }, 'Computing domain value coverage');
+
+      const domain = await db.domain.findUnique({ where: { id: domainId }, select: { id: true, defaultModelIds: true } });
+      if (!domain) return null;
+
+      // Resolve effective model IDs: use domain-specific list if set, otherwise fall back
+      // to globally defaulted models (isDefault=true, ACTIVE) from the Models settings page.
+      const effectiveModelIds = await resolveEffectiveDefaultModelIds(domain.defaultModelIds);
+
+      // Pre-fetch labels for effective models so we can populate model breakdown
+      const defaultModelLabelById = new Map<string, string>();
+      if (effectiveModelIds.length > 0) {
+        const defaultModelRows = await db.llmModel.findMany({
+          where: { modelId: { in: effectiveModelIds } },
+          select: { modelId: true, displayName: true },
+        });
+        for (const row of defaultModelRows) {
+          defaultModelLabelById.set(row.modelId, row.displayName);
+        }
+      }
+
+      // Fetch all non-deleted definitions (need IDs to resolve content)
+      const definitions = await db.definition.findMany({
+        where: { domainId, deletedAt: null },
+        select: { id: true, name: true },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      // Map definition ID -> value pair (only those with recognized canonical pair)
+      type DefValuePair = { valueA: CoverageValueKey; valueB: CoverageValueKey; name: string };
+      const pairByDefinitionId = new Map<string, DefValuePair>();
+      // Map directional pair key -> definition IDs (to detect multi-vignette cells)
+      const definitionsByPairKey = new Map<string, string[]>();
+
+      // Resolve definition contents in chunks to handle inheritance
+      for (let offset = 0; offset < definitions.length; offset += VALUE_PAIR_RESOLVE_CHUNK_SIZE) {
+        const batch = definitions.slice(offset, offset + VALUE_PAIR_RESOLVE_CHUNK_SIZE);
+        const settled = await Promise.allSettled(
+          batch.map(async (def) => {
+            const resolvedContent = (await resolveDefinitionContent(def.id) as { resolvedContent: unknown }).resolvedContent;
+            const pair = extractValuePair(resolvedContent);
+            if (pair == null) return;
+
+            pairByDefinitionId.set(def.id, { ...pair, name: def.name ?? '' });
+            const key = `${pair.valueA}::${pair.valueB}`;
+            const existing = definitionsByPairKey.get(key) ?? [];
+            existing.push(def.id);
+            definitionsByPairKey.set(key, existing);
+          })
+        );
+        settled.forEach((result, idx) => {
+          if (result.status === 'rejected') {
+            ctx.log.error(
+              { err: result.reason as unknown, definitionId: batch[idx]?.id },
+              'Failed to resolve definition content for coverage grid'
+            );
+          }
+        });
+      }
+
+      // Count completed runs per definition, optionally filtered by signature and model
+      const definitionIds = Array.from(pairByDefinitionId.keys());
+      const batchCountByDefinitionId = new Map<string, number>();
+      const pairedBatchCountByDefinitionId = new Map<string, number>();
+      const pairedBatchGroupIdsByDefinitionId = new Map<string, Set<string>>();
+      const pairedBatchIncrementsByGroupId = new Map<string, Map<string, number>>();
+      const latestMatchingRunIdByDefinitionId = new Map<string, string>();
+      const latestAggregateRunIdByDefinitionId = new Map<string, string>();
+      const incompleteBatchCountByDefinitionId = new Map<string, number>();
+      const signatureScopedRunsByDefinitionId = new Map<string, Array<{
+        id: string;
+        definitionId: string;
+        config: unknown;
+        transcripts: Array<{ modelId: string }>;
+      }>>();
+      // Non-aggregate runs per definition (for per-model trial count computation)
+      const nonAggregateRunsByDefinitionId = new Map<string, Array<{
+        config: unknown;
+        transcripts: Array<{ modelId: string }>;
+      }>>();
+
+      if (definitionIds.length > 0) {
+        const completedRuns = await db.run.findMany({
+          where: {
+            definitionId: { in: definitionIds },
+            status: 'COMPLETED',
+            deletedAt: null,
+          },
+          orderBy: [{ definitionId: 'asc' }, { createdAt: 'desc' }],
+          select: {
+            id: true,
+            definitionId: true,
+            config: true,
+            transcripts: {
+              where: { deletedAt: null },
+              select: { modelId: true },
+            },
+            _count: {
+              select: { scenarioSelections: true },
+            },
+          },
+        });
+
+        const signatureScopedRuns = selectedSignature === null
+          ? completedRuns
+          : completedRuns.filter((run) => runMatchesSignature(run.config, selectedSignature));
+
+        for (const run of signatureScopedRuns) {
+          const existingRuns = signatureScopedRunsByDefinitionId.get(run.definitionId) ?? [];
+          existingRuns.push(run);
+          signatureScopedRunsByDefinitionId.set(run.definitionId, existingRuns);
+
+          const isAggregateRun = (run.config as { isAggregate?: boolean } | null)?.isAggregate === true;
+          if (isAggregateRun) {
+            if (!latestAggregateRunIdByDefinitionId.has(run.definitionId)) {
+              latestAggregateRunIdByDefinitionId.set(run.definitionId, run.id);
+            }
+            continue;
+          }
+
+          // Completeness check: flag if actual transcript count < expected.
+          // Expected = scenarioSelections × models.length × samplesPerScenario.
+          const samplesPerScenario =
+            (run.config as { samplesPerScenario?: unknown } | null)?.samplesPerScenario;
+          const configModels = (run.config as { models?: unknown } | null)?.models;
+          const modelCount = Array.isArray(configModels) ? configModels.length : 0;
+          const expectedCount =
+            run._count.scenarioSelections * modelCount * getCoverageBatchIncrement(samplesPerScenario);
+          if (modelCount > 0 && run.transcripts.length < expectedCount) {
+            incompleteBatchCountByDefinitionId.set(
+              run.definitionId,
+              (incompleteBatchCountByDefinitionId.get(run.definitionId) ?? 0) + 1,
+            );
+          }
+
+          // Track non-aggregate runs for per-model trial count computation
+          if (effectiveModelIds.length > 0) {
+            const nonAggregateRuns = nonAggregateRunsByDefinitionId.get(run.definitionId) ?? [];
+            nonAggregateRuns.push({ config: run.config, transcripts: run.transcripts });
+            nonAggregateRunsByDefinitionId.set(run.definitionId, nonAggregateRuns);
+          }
+
+          const matchesModelFilter = filterModelIds.length === 0
+            || run.transcripts.some((transcript) => filterModelIds.includes(transcript.modelId));
+          if (!matchesModelFilter) continue;
+
+          if (!latestMatchingRunIdByDefinitionId.has(run.definitionId)) {
+            latestMatchingRunIdByDefinitionId.set(run.definitionId, run.id);
+          }
+          const increment = getCoverageBatchIncrement(samplesPerScenario);
+          batchCountByDefinitionId.set(
+            run.definitionId,
+            (batchCountByDefinitionId.get(run.definitionId) ?? 0) + increment,
+          );
+
+          const pairedBatchGroupId = getCoverageBatchGroupId(run.config);
+
+          if (pairedBatchGroupId === null) {
+            pairedBatchCountByDefinitionId.set(
+              run.definitionId,
+              (pairedBatchCountByDefinitionId.get(run.definitionId) ?? 0) + increment,
+            );
+            continue;
+          }
+
+          const seenGroupIds = pairedBatchGroupIdsByDefinitionId.get(run.definitionId) ?? new Set<string>();
+          if (!seenGroupIds.has(pairedBatchGroupId)) {
+            seenGroupIds.add(pairedBatchGroupId);
+            pairedBatchGroupIdsByDefinitionId.set(run.definitionId, seenGroupIds);
+            pairedBatchCountByDefinitionId.set(
+              run.definitionId,
+              (pairedBatchCountByDefinitionId.get(run.definitionId) ?? 0) + increment,
+            );
+            // Track increment per group ID for cross-definition dedup
+            const defIncrements = pairedBatchIncrementsByGroupId.get(run.definitionId) ?? new Map<string, number>();
+            defIncrements.set(pairedBatchGroupId, increment);
+            pairedBatchIncrementsByGroupId.set(run.definitionId, defIncrements);
+          }
+        }
+      }
+
+      const availableModelIds = new Set<string>();
+      for (const runs of signatureScopedRunsByDefinitionId.values()) {
+        for (const run of runs) {
+          for (const transcript of run.transcripts) {
+            availableModelIds.add(transcript.modelId);
+          }
+        }
+      }
+
+      const modelDetailRows =
+        availableModelIds.size > 0
+          ? await db.llmModel.findMany({
+            where: { modelId: { in: Array.from(availableModelIds) } },
+            select: { modelId: true, displayName: true },
+            orderBy: { displayName: 'asc' },
+          })
+          : [];
+
+      const availableModels: CoverageModelOption[] = modelDetailRows.map((m) => ({
+        modelId: m.modelId,
+        label: m.displayName,
+      }));
+
+      // Build the symmetric 45-cell matrix (one cell per unique sorted pair)
+      const values = [...COVERAGE_VALUE_KEYS] as string[];
+      const cells: DomainValueCoverageCell[] = [];
+
+      for (const valueA of COVERAGE_VALUE_KEYS) {
+        for (const valueB of COVERAGE_VALUE_KEYS) {
+          // Only emit sorted pairs: skip diagonal and reversed pairs
+          if (valueA.localeCompare(valueB) >= 0) continue;
+
+          const key = `${valueA}::${valueB}`;
+          const defIdsForPair = definitionsByPairKey.get(key) ?? [];
+
+          if (defIdsForPair.length === 0) {
+            cells.push({
+              valueA,
+              valueB,
+              batchCount: 0,
+              pairedBatchCount: 0,
+              incompleteBatchCount: 0,
+              definitionId: null,
+              definitionName: null,
+              aggregateRunId: null,
+              minTrialCount: null,
+              maxTrialCount: null,
+              modelBreakdown: null,
+            });
+          } else {
+            // Use the total counts across all definitions for the visible cell, but
+            // still choose one stable definition for the analysis link target.
+            const { primaryDefinitionId, batchCount, pairedBatchCount } = selectPrimaryDefinitionCounts(
+              defIdsForPair,
+              batchCountByDefinitionId,
+              pairedBatchCountByDefinitionId,
+              pairedBatchGroupIdsByDefinitionId,
+              pairedBatchIncrementsByGroupId,
+            );
+            const primaryDefId = primaryDefinitionId ?? '';
+            const primaryPair = pairByDefinitionId.get(primaryDefId);
+            const aggregateRunId = primaryDefId === ''
+              ? null
+              : (latestAggregateRunIdByDefinitionId.get(primaryDefId)
+                ?? latestMatchingRunIdByDefinitionId.get(primaryDefId)
+                ?? null);
+
+            // Sum incompleteBatchCount across all definitions for this pair
+            const incompleteBatchCount = defIdsForPair.reduce(
+              (sum, defId) => sum + (incompleteBatchCountByDefinitionId.get(defId) ?? 0),
+              0,
+            );
+
+            // Compute per-model trial counts across all definitions for this pair.
+            // Deduplicate by group ID first: A-first and B-first companion definitions
+            // share the same jobChoiceBatchGroupId, so flatMapping across both would
+            // double-count each paired batch.
+            const allNonAggregateRunsForPair = deduplicateRunsByGroupId(
+              defIdsForPair.flatMap((defId) => nonAggregateRunsByDefinitionId.get(defId) ?? []),
+            );
+            const { minTrialCount, maxTrialCount, modelBreakdown } = computePerModelTrialCounts(
+              allNonAggregateRunsForPair,
+              effectiveModelIds,
+              defaultModelLabelById,
+            );
+
+            cells.push({
+              valueA,
+              valueB,
+              batchCount,
+              pairedBatchCount,
+              incompleteBatchCount,
+              definitionId: primaryDefId !== '' ? primaryDefId : null,
+              definitionName: primaryPair?.name ?? null,
+              aggregateRunId,
+              minTrialCount,
+              maxTrialCount,
+              modelBreakdown,
+            });
+          }
+        }
+      }
+
+      ctx.log.debug({ domainId, cellCount: cells.length }, 'Domain value coverage computed');
+      return { domainId, values, cells, availableModels };
+    },
+  })
+);
+
+
+Context: schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  // Direct connection for migrations (bypasses PgBouncer)
+  // Required because Prisma Migrate doesn't support connection pooling
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================================================
+// AUTHENTICATION
+// ============================================================================
+
+enum UserRole {
+  ADMIN
+  VISITOR
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  name         String?
+  role         UserRole  @default(ADMIN)
+  mustChangePassword Boolean @default(false) @map("must_change_password")
+  lastLoginAt  DateTime? @map("last_login_at")
+  passwordChangedAt DateTime? @map("password_changed_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  apiKeys ApiKey[]
+
+  // Audit relations
+  auditLogs          AuditLog[]
+  createdDefinitions Definition[] @relation("DefinitionCreator")
+  deletedDefinitions Definition[] @relation("DefinitionDeleter")
+  createdRuns        Run[]        @relation("RunCreator")
+  createdDomainEvaluations DomainEvaluation[] @relation("DomainEvaluationCreator")
+  deletedRuns        Run[]        @relation("RunDeleter")
+  createdTags        Tag[]        @relation("TagCreator")
+  createdLlmModels         LlmModel[]               @relation("LlmModelCreator")
+  createdBalanceSyncLogs   ProviderBalanceSyncLog[] @relation("ProviderBalanceSyncLogCreator")
+
+  @@map("users")
+}
+
+model ApiKey {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  name      String
+  keyHash   String    @unique @map("key_hash")
+  keyPrefix String    @map("key_prefix") @db.VarChar(12)
+  lastUsed  DateTime? @map("last_used")
+  expiresAt DateTime? @map("expires_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([keyPrefix])
+  @@index([userId])
+  @@map("api_keys")
+}
+
+// ============================================================================
+// OAUTH 2.1 (MCP Authentication)
+// ============================================================================
+
+model OAuthClient {
+  id                      String   @id @default(cuid())
+  clientId                String   @unique @map("client_id")
+  clientSecretHash        String   @map("client_secret_hash")
+  clientName              String?  @map("client_name")
+  redirectUris            String[] @map("redirect_uris")
+  tokenEndpointAuthMethod String   @default("client_secret_post") @map("token_endpoint_auth_method")
+  grantTypes              String[] @default(["authorization_code", "refresh_token"]) @map("grant_types")
+  responseTypes           String[] @default(["code"]) @map("response_types")
+  scope                   String   @default("mcp:read mcp:write")
+  createdAt               DateTime @default(now()) @map("created_at")
+
+  refreshTokens OAuthRefreshToken[]
+
+  @@map("oauth_clients")
+}
+
+model OAuthRefreshToken {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique @map("token_hash")
+  clientId  String   @map("client_id")
+  userId    String   @map("user_id")
+  scope     String
+  resource  String
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  client OAuthClient @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("oauth_refresh_tokens")
+}
+
+// ============================================================================
+// CORE DOMAIN
+// ============================================================================
+
+model Definition {
+  id                String    @id @default(cuid())
+  parentId          String?   @map("parent_id")
+  domainId          String?   @map("domain_id")
+  domainContextId   String?   @map("domain_context_id")
+  name              String
+  content           Json      @db.JsonB
+  expansionProgress Json?     @map("expansion_progress") @db.JsonB
+  expansionDebug    Json?     @map("expansion_debug") @db.JsonB
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  lastAccessedAt    DateTime? @map("last_accessed_at")
+  deletedAt         DateTime? @map("deleted_at")
+
+  // Audit fields
+  createdByUserId String? @map("created_by_user_id")
+  deletedByUserId String? @map("deleted_by_user_id")
+
+  parent   Definition?  @relation("DefinitionVersions", fields: [parentId], references: [id])
+  children Definition[] @relation("DefinitionVersions")
+  domain   Domain?      @relation(fields: [domainId], references: [id], onDelete: SetNull)
+  domainContext DomainContext? @relation(fields: [domainContextId], references: [id], onDelete: SetNull)
+
+  runs      Run[]
+  scenarios Scenario[]
+  tags      DefinitionTag[]
+  assumptionVignetteSelections AssumptionVignetteSelection[]
+
+  // Audit relations
+  createdBy User? @relation("DefinitionCreator", fields: [createdByUserId], references: [id])
+  deletedBy User? @relation("DefinitionDeleter", fields: [deletedByUserId], references: [id])
+
+  // Preamble integration
+  preambleVersionId String?          @map("preamble_version_id")
+  preambleVersion   PreambleVersion? @relation(fields: [preambleVersionId], references: [id])
+  version           Int              @default(1)
+
+  // Level preset integration
+  levelPresetVersionId String?             @map("level_preset_version_id")
+  levelPresetVersion   LevelPresetVersion? @relation(fields: [levelPresetVersionId], references: [id])
+
+  // Cost visibility - per-definition token statistics (P3)
+  tokenStatistics ModelTokenStatistics[]
+
+  @@index([parentId])
+  @@index([domainId])
+  @@index([domainContextId])
+  @@index([preambleVersionId])
+  @@index([levelPresetVersionId])
+  @@map("definitions")
+}
+
+model Domain {
+  id             String   @id @default(cuid())
+  name           String
+  normalizedName String   @unique @map("normalized_name")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  defaultLevelPresetVersionId String?             @map("default_level_preset_version_id")
+  defaultLevelPresetVersion   LevelPresetVersion? @relation(fields: [defaultLevelPresetVersionId], references: [id])
+
+  defaultPreambleVersionId String?          @map("default_preamble_version_id")
+  defaultPreambleVersion   PreambleVersion? @relation(fields: [defaultPreambleVersionId], references: [id])
+
+  defaultContextId String?        @map("default_context_id")
+  defaultContext   DomainContext? @relation("DomainDefaultContext", fields: [defaultContextId], references: [id])
+
+  defaultModelIds String[] @default([]) @map("default_model_ids")
+
+  sentencePrefix String? @map("sentence_prefix")
+  labelPrefix    String? @map("label_prefix")
+
+  definitions     Definition[]
+  contexts        DomainContext[] @relation("DomainContexts")
+  valueStatements ValueStatement[]
+  evaluations     DomainEvaluation[]
+  configSnapshots DomainConfigSnapshot[]
+
+  @@index([defaultLevelPresetVersionId])
+  @@index([defaultPreambleVersionId])
+  @@index([defaultContextId])
+  @@map("domains")
+}
+
+model DomainContext {
+  id        String   @id @default(cuid())
+  domainId  String   @map("domain_id")
+  text      String
+  version   Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  domain          Domain       @relation("DomainContexts", fields: [domainId], references: [id])
+  domainsAsDefault Domain[]    @relation("DomainDefaultContext")
+  definitions     Definition[]
+  domainConfigSnapshots DomainConfigSnapshot[]
+
+  @@map("domain_contexts")
+}
+
+model ValueStatement {
+  id        String   @id @default(cuid())
+  domainId  String   @map("domain_id")
+  token     String
+  body      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  domain   Domain                 @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  versions ValueStatementVersion[]
+
+  @@unique([domainId, token])
+  @@index([domainId])
+  @@map("value_statements")
+}
+
+model ValueStatementVersion {
+  id          String   @id @default(cuid())
+  statementId String   @map("statement_id")
+  content     String   @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  statement ValueStatement @relation(fields: [statementId], references: [id], onDelete: Cascade)
+
+  @@index([statementId, createdAt(sort: Desc)])
+  @@map("value_statement_versions")
+}
+
+model DomainConfigSnapshot {
+  id                       String   @id @default(cuid())
+  domainId                 String   @map("domain_id")
+  preambleVersionId        String?  @map("preamble_version_id")
+  levelPresetVersionId     String?  @map("level_preset_version_id")
+  contextId                String?  @map("context_id")
+  valueStatementVersionIds String[] @map("value_statement_version_ids")
+  fingerprint              String
+  createdAt                DateTime @default(now()) @map("created_at")
+
+  domain               Domain              @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  preambleVersion      PreambleVersion?    @relation(fields: [preambleVersionId], references: [id])
+  levelPresetVersion   LevelPresetVersion? @relation(fields: [levelPresetVersionId], references: [id])
+  context              DomainContext?      @relation(fields: [contextId], references: [id])
+  runs                 Run[]
+
+  @@unique([domainId, fingerprint])
+  @@index([domainId, createdAt(sort: Desc)])
+  @@map("domain_config_snapshots")
+}
+
+model Preamble {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  versions PreambleVersion[]
+
+  @@map("preambles")
+}
+
+model LevelPreset {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  versions LevelPresetVersion[]
+
+  @@map("level_presets")
+}
+
+model LevelPresetVersion {
+  id            String   @id @default(cuid())
+  levelPresetId String   @map("level_preset_id")
+  version       String
+  l1            String
+  l2            String
+  l3            String
+  l4            String
+  l5            String
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  levelPreset LevelPreset  @relation(fields: [levelPresetId], references: [id], onDelete: Cascade)
+  domains     Domain[]
+  definitions Definition[]
+  domainConfigSnapshots DomainConfigSnapshot[]
+
+  @@index([levelPresetId])
+  @@map("level_preset_versions")
+}
+
+model PreambleVersion {
+  id         String   @id @default(cuid())
+  preambleId String   @map("preamble_id")
+  version    String   // User-facing version label (e.g. "2024-02-01 12:00 PST")
+  content    String   @db.Text
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  preamble    Preamble     @relation(fields: [preambleId], references: [id], onDelete: Cascade)
+  definitions Definition[]
+  domains     Domain[]
+  domainConfigSnapshots DomainConfigSnapshot[]
+
+  @@index([preambleId])
+  @@map("preamble_versions")
+}
+
+model Tag {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Audit fields
+  createdByUserId String? @map("created_by_user_id")
+
+  definitions DefinitionTag[]
+  runs        RunTag[]
+
+  // Audit relations
+  createdBy User? @relation("TagCreator", fields: [createdByUserId], references: [id])
+
+  @@map("tags")
+}
+
+model DefinitionTag {
+  id           String    @id @default(cuid())
+  definitionId String    @map("definition_id")
+  tagId        String    @map("tag_id")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  definition Definition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  tag        Tag        @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([definitionId, tagId])
+  @@index([definitionId])
+  @@index([tagId])
+  @@map("definition_tags")
+}
+
+model RunTag {
+  id        String   @id @default(cuid())
+  runId     String   @map("run_id")
+  tagId     String   @map("tag_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  run Run @relation(fields: [runId], references: [id], onDelete: Cascade)
+  tag Tag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, tagId])
+  @@index([runId])
+  @@index([tagId])
+  @@map("run_tags")
+}
+
+model Run {
+  id                 String    @id @default(cuid())
+  name               String?   @map("name")
+  definitionId       String    @map("definition_id")
+  experimentId       String?   @map("experiment_id")
+  status             RunStatus @default(PENDING)
+  runCategory        RunCategory @default(UNKNOWN_LEGACY) @map("run_category")
+  config             Json      @db.JsonB
+  progress           Json?     @db.JsonB
+  summarizeProgress  Json?     @map("summarize_progress") @db.JsonB
+  stalledModels      String[]  @default([]) @map("stalled_models")
+  startedAt          DateTime? @map("started_at")
+  completedAt        DateTime? @map("completed_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  lastAccessedAt     DateTime? @map("last_accessed_at")
+  deletedAt          DateTime? @map("deleted_at")
+  // Retention settings (for future pruning)
+  retentionDays      Int?      @map("retention_days")
+  archivePermanently Boolean   @default(true) @map("archive_permanently")
+
+  // Audit fields
+  createdByUserId String? @map("created_by_user_id")
+  deletedByUserId String? @map("deleted_by_user_id")
+
+  definition Definition  @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  experiment Experiment? @relation(fields: [experimentId], references: [id])
+  tags       RunTag[]
+
+  // Domain config snapshot at run creation time
+  domainConfigSnapshotId String?              @map("domain_config_snapshot_id")
+  domainConfigSnapshot   DomainConfigSnapshot? @relation(fields: [domainConfigSnapshotId], references: [id])
+
+  transcripts     Transcript[]
+  analysisResults AnalysisResult[]
+  domainEvaluationMembership DomainEvaluationRun?
+  baselineFor     RunComparison[]  @relation("BaselineRun")
+  comparisonFor   RunComparison[]  @relation("ComparisonRun")
+  scenarioSelections RunScenarioSelection[]
+  probeResults    ProbeResult[]
+
+  // Audit relations
+  createdBy User? @relation("RunCreator", fields: [createdByUserId], references: [id])
+  deletedBy User? @relation("RunDeleter", fields: [deletedByUserId], references: [id])
+
+  @@index([definitionId])
+  @@index([experimentId])
+  @@index([status])
+  @@index([runCategory])
+  @@index([domainConfigSnapshotId])
+  @@map("runs")
+}
+
+model DomainEvaluation {
+  id               String                        @id @default(cuid())
+  domainId         String                        @map("domain_id")
+  domainNameAtLaunch String                      @map("domain_name_at_launch")
+  scopeCategory    DomainEvaluationScopeCategory @map("scope_category")
+  status           DomainEvaluationStatus        @default(PENDING)
+  configSnapshot   Json                          @map("config_snapshot") @db.JsonB
+  createdAt        DateTime                      @default(now()) @map("created_at")
+  startedAt        DateTime?                     @map("started_at")
+  completedAt      DateTime?                     @map("completed_at")
+  createdByUserId  String?                       @map("created_by_user_id")
+  deletedAt        DateTime?                     @map("deleted_at")
+
+  domain    Domain               @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  createdBy User?                @relation("DomainEvaluationCreator", fields: [createdByUserId], references: [id])
+  members   DomainEvaluationRun[]
+
+  @@index([domainId])
+  @@index([scopeCategory])
+  @@index([status])
+  @@index([createdByUserId])
+  @@map("domain_evaluations")
+}
+
+model DomainEvaluationRun {
+  id                    String   @id @default(cuid())
+  domainEvaluationId    String   @map("domain_evaluation_id")
+  runId                 String   @unique @map("run_id")
+  definitionIdAtLaunch  String   @map("definition_id_at_launch")
+  definitionNameAtLaunch String  @map("definition_name_at_launch")
+  domainIdAtLaunch      String   @map("domain_id_at_launch")
+  createdAt             DateTime @default(now()) @map("created_at")
+  deletedAt             DateTime? @map("deleted_at")
+
+  domainEvaluation DomainEvaluation @relation(fields: [domainEvaluationId], references: [id], onDelete: Cascade)
+  run              Run              @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([domainEvaluationId])
+  @@index([definitionIdAtLaunch])
+  @@index([domainIdAtLaunch])
+  @@map("domain_evaluation_runs")
+}
+
+enum RunStatus {
+  PENDING
+  RUNNING
+  PAUSED
+  SUMMARIZING   // Probing complete, generating summaries
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum DomainEvaluationScopeCategory {
+  PILOT
+  PRODUCTION
+  REPLICATION
+  VALIDATION
+}
+
+enum DomainEvaluationStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum RunCategory {
+  PILOT
+  PRODUCTION
+  REPLICATION
+  VALIDATION
+  UNKNOWN_LEGACY
+}
+
+model Transcript {
+  id                 String    @id @default(cuid())
+  runId              String    @map("run_id")
+  scenarioId         String?   @map("scenario_id")
+  // Model versioning (renamed from target_model for consistency)
+  modelId            String    @map("model_id")
+  modelVersion       String?   @map("model_version")
+  // Multi-sample support: index within sample set (0 to N-1)
+  sampleIndex        Int       @default(0) @map("sample_index")
+  // Definition snapshot (captures exact definition at run time)
+  definitionSnapshot Json?     @map("definition_snapshot") @db.JsonB
+  // Transcript content
+  content            Json      @db.JsonB
+  turnCount          Int       @map("turn_count")
+  tokenCount         Int       @map("token_count")
+  durationMs         Int       @map("duration_ms")
+  // Cost tracking (USD, computed from token counts and model pricing)
+  estimatedCost      Float?    @map("estimated_cost")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  lastAccessedAt     DateTime? @map("last_accessed_at")
+  // Retention (NULL = permanent, default)
+  contentExpiresAt   DateTime? @map("content_expires_at")
+  // Summary fields (populated after run completes).
+  // decision_code and decision_code_source columns were dropped after the
+  // remove-decisionCode PR migrated all transcripts to canonicalDecision as
+  // the single source of truth (PR #713, commit f86c2579).
+  decisionText       String?   @map("decision_text")     // LLM-generated summary
+  decisionMetadata   Json?     @map("decision_metadata") @db.JsonB
+  summarizedAt       DateTime? @map("summarized_at")     // When summary was generated
+  // Soft delete
+  deletedAt          DateTime? @map("deleted_at")
+
+  run      Run       @relation(fields: [runId], references: [id], onDelete: Cascade)
+  scenario Scenario? @relation(fields: [scenarioId], references: [id])
+
+  @@index([runId])
+  @@index([scenarioId])
+  @@index([modelId])
+  @@index([deletedAt])
+  @@index([sampleIndex])
+  @@map("transcripts")
+}
+
+model Scenario {
+  id           String    @id @default(cuid())
+  definitionId String    @map("definition_id")
+  name         String
+  content      Json      @db.JsonB
+  orientationFlipped Boolean @default(false) @map("orientation_flipped")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  definition Definition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  transcripts Transcript[]
+  runSelections RunScenarioSelection[]
+  probeResults ProbeResult[]
+  sourceAssumptionPairs AssumptionScenarioPair[] @relation("SourceAssumptionScenario")
+  variantAssumptionPairs AssumptionScenarioPair[] @relation("VariantAssumptionScenario")
+
+  @@index([definitionId])
+  @@map("scenarios")
+}
+
+model AssumptionVignetteSelection {
+  id           String   @id @default(cuid())
+  assumptionKey String  @map("assumption_key")
+  definitionId String   @map("definition_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  definition Definition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+
+  @@unique([assumptionKey, definitionId])
+  @@index([definitionId])
+  @@map("assumption_vignette_selections")
+}
+
+model AssumptionScenarioPair {
+  id                    String    @id @default(cuid())
+  assumptionKey         String    @map("assumption_key")
+  sourceScenarioId      String    @map("source_scenario_id")
+  variantScenarioId     String    @map("variant_scenario_id")
+  variantType           String    @map("variant_type")
+  equivalenceReviewStatus String? @map("equivalence_review_status")
+  equivalenceReviewedBy String?   @map("equivalence_reviewed_by")
+  equivalenceReviewedAt DateTime? @map("equivalence_reviewed_at")
+  equivalenceReviewNotes String?  @map("equivalence_review_notes") @db.Text
+  createdAt             DateTime  @default(now()) @map("created_at")
+
+  sourceScenario  Scenario @relation("SourceAssumptionScenario", fields: [sourceScenarioId], references: [id], onDelete: Cascade)
+  variantScenario Scenario @relation("VariantAssumptionScenario", fields: [variantScenarioId], references: [id], onDelete: Cascade)
+
+  @@unique([assumptionKey, sourceScenarioId, variantScenarioId])
+  @@index([assumptionKey])
+  @@index([sourceScenarioId])
+  @@index([variantScenarioId])
+  @@map("assumption_scenario_pairs")
+}
+
+// Join table to track which scenarios were sampled for a run
+model RunScenarioSelection {
+  id         String   @id @default(cuid())
+  runId      String   @map("run_id")
+  scenarioId String   @map("scenario_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  run      Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
+  scenario Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, scenarioId])
+  @@index([runId])
+  @@index([scenarioId])
+  @@map("run_scenario_selections")
+}
+
+// ============================================================================
+// JOB RESULTS (Probe outcome tracking)
+// ============================================================================
+
+model ProbeResult {
+  id          String            @id @default(cuid())
+  runId       String            @map("run_id")
+  scenarioId  String            @map("scenario_id")
+  modelId     String            @map("model_id")
+  // Multi-sample support: index within sample set (0 to N-1)
+  sampleIndex Int               @default(0) @map("sample_index")
+  status      ProbeResultStatus
+  // Success fields
+  transcriptId   String?        @map("transcript_id")
+  durationMs     Int?           @map("duration_ms")
+  inputTokens    Int?           @map("input_tokens")
+  outputTokens   Int?           @map("output_tokens")
+  // Failure fields
+  errorCode    String?          @map("error_code")
+  errorMessage String?          @map("error_message")
+  retryCount   Int              @default(0) @map("retry_count")
+  // Timestamps
+  createdAt    DateTime         @default(now()) @map("created_at")
+  completedAt  DateTime?        @map("completed_at")
+  deletedAt    DateTime?        @map("deleted_at")
+
+  run      Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
+  scenario Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+
+  // Updated unique constraint to include sampleIndex for multi-sample runs
+  @@unique([runId, scenarioId, modelId, sampleIndex])
+  @@index([runId])
+  @@index([scenarioId])
+  @@index([modelId])
+  @@index([status])
+  @@index([sampleIndex])
+  @@map("probe_results")
+}
+
+enum ProbeResultStatus {
+  SUCCESS
+  FAILED
+}
+
+// ============================================================================
+// ANALYSIS & EXPERIMENTS
+// ============================================================================
+
+model Experiment {
+  id           String   @id @default(cuid())
+  name         String
+  hypothesis   String?
+  analysisPlan Json?    @map("analysis_plan") @db.JsonB
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  runs        Run[]
+  comparisons RunComparison[]
+
+  @@map("experiments")
+}
+
+model RunComparison {
+  id              String   @id @default(cuid())
+  experimentId    String?  @map("experiment_id")
+  baselineRunId   String   @map("baseline_run_id")
+  comparisonRunId String   @map("comparison_run_id")
+  deltaData       Json?    @map("delta_data") @db.JsonB
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  experiment    Experiment? @relation(fields: [experimentId], references: [id])
+  baselineRun   Run         @relation("BaselineRun", fields: [baselineRunId], references: [id])
+  comparisonRun Run         @relation("ComparisonRun", fields: [comparisonRunId], references: [id])
+
+  @@index([experimentId])
+  @@index([baselineRunId])
+  @@index([comparisonRunId])
+  @@map("run_comparisons")
+}
+
+model AnalysisResult {
+  id           String         @id @default(cuid())
+  runId        String         @map("run_id")
+  analysisType String         @map("analysis_type")
+  inputHash    String         @map("input_hash")
+  codeVersion  String         @map("code_version")
+  output       Json           @db.JsonB
+  status       AnalysisStatus @default(CURRENT)
+  createdAt    DateTime       @default(now()) @map("created_at")
+  // Soft delete
+  deletedAt    DateTime?      @map("deleted_at")
+
+  run Run @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+  @@index([analysisType])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("analysis_results")
+}
+
+enum AnalysisStatus {
+  CURRENT
+  SUPERSEDED
+}
+
+enum AssumptionAnalysisStatus {
+  CURRENT
+  SUPERSEDED
+}
+
+model AssumptionAnalysisSnapshot {
+  id            String                   @id @default(cuid())
+  assumptionKey String                   @map("assumption_key")
+  analysisType  String                   @map("analysis_type")
+  inputHash     String                   @map("input_hash")
+  codeVersion   String                   @map("code_version")
+  configSignature String                 @map("config_signature")
+  config        Json                     @db.JsonB
+  output        Json                     @db.JsonB
+  status        AssumptionAnalysisStatus @default(CURRENT)
+  createdAt     DateTime                 @default(now()) @map("created_at")
+  deletedAt     DateTime?                @map("deleted_at")
+
+  @@index([assumptionKey])
+  @@index([analysisType])
+  @@index([inputHash])
+  @@index([configSignature])
+  @@index([status])
+  @@index([deletedAt])
+  @@index([assumptionKey, analysisType, inputHash, status])
+  @@map("assumption_analysis_snapshots")
+}
+
+model Rubric {
+  id        String   @id @default(cuid())
+  version   Int      @unique
+  content   Json     @db.JsonB
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("rubrics")
+}
+
+// ============================================================================
+// COHORTS (for segment analysis)
+// ============================================================================
+
+model Cohort {
+  id        String   @id @default(cuid())
+  name      String
+  criteria  Json     @db.JsonB
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("cohorts")
+}
+
+// ============================================================================
+// LLM PROVIDERS & MODELS
+// ============================================================================
+
+model LlmProvider {
+  id                  String   @id @default(cuid())
+  name                String   @unique
+  displayName         String   @map("display_name")
+  maxParallelRequests Int      @default(1) @map("max_parallel_requests")
+  requestsPerMinute   Int      @default(60) @map("requests_per_minute")
+  isEnabled           Boolean  @default(true) @map("is_enabled")
+  balance             Decimal? @db.Decimal(10, 4)
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  models          LlmModel[]
+  balanceSyncLogs ProviderBalanceSyncLog[]
+
+  @@map("llm_providers")
+}
+
+model ProviderBalanceSyncLog {
+  id                  String   @id @default(cuid())
+  providerId          String   @map("provider_id")
+  systemBalanceAtSync Decimal  @map("system_balance_at_sync") @db.Decimal(10, 4)
+  enteredBalance      Decimal  @map("entered_balance") @db.Decimal(10, 4)
+  delta               Decimal  @db.Decimal(10, 4)
+  syncedAt            DateTime @default(now()) @map("synced_at")
+  createdByUserId     String?  @map("created_by_user_id")
+
+  provider  LlmProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  createdBy User?       @relation("ProviderBalanceSyncLogCreator", fields: [createdByUserId], references: [id])
+
+  @@index([providerId])
+  @@map("provider_balance_sync_logs")
+}
+
+model LlmModel {
+  id                   String         @id @default(cuid())
+  providerId           String         @map("provider_id")
+  modelId              String         @map("model_id")
+  displayName          String         @map("display_name")
+  costInputPerMillion  Decimal        @map("cost_input_per_million") @db.Decimal(10, 4)
+  costOutputPerMillion Decimal        @map("cost_output_per_million") @db.Decimal(10, 4)
+  status               LlmModelStatus @default(ACTIVE)
+  isDefault            Boolean        @default(false) @map("is_default")
+  apiConfig            Json?          @map("api_config") @db.JsonB
+  createdAt            DateTime       @default(now()) @map("created_at")
+  updatedAt            DateTime       @updatedAt @map("updated_at")
+
+  // Audit fields
+  createdByUserId String? @map("created_by_user_id")
+
+  provider LlmProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  // Audit relations
+  createdBy User? @relation("LlmModelCreator", fields: [createdByUserId], references: [id])
+
+  // Cost visibility - token statistics for cost prediction
+  tokenStatistics ModelTokenStatistics[]
+
+  @@unique([providerId, modelId])
+  @@index([providerId])
+  @@index([status])
+  @@map("llm_models")
+}
+
+enum LlmModelStatus {
+  ACTIVE
+  DEPRECATED
+}
+
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json     @db.JsonB
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("system_settings")
+}
+
+// ============================================================================
+// COST VISIBILITY - Token Statistics
+// ============================================================================
+
+model ModelTokenStatistics {
+  id              String     @id @default(cuid())
+  modelId         String     @map("model_id")
+  definitionId    String?    @map("definition_id")
+  avgInputTokens  Decimal    @default(100) @map("avg_input_tokens") @db.Decimal(10, 2)
+  avgOutputTokens Decimal    @default(900) @map("avg_output_tokens") @db.Decimal(10, 2)
+  sampleCount     Int        @default(0) @map("sample_count")
+  lastUpdatedAt   DateTime   @updatedAt @map("last_updated_at")
+  createdAt       DateTime   @default(now()) @map("created_at")
+
+  model      LlmModel    @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  definition Definition? @relation(fields: [definitionId], references: [id], onDelete: SetNull)
+
+  @@unique([modelId, definitionId])
+  @@index([modelId])
+  @@index([definitionId])
+  @@map("model_token_statistics")
+}
+
+// ============================================================================
+// AUDIT LOGGING
+// ============================================================================
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  action     String   // CREATE, UPDATE, DELETE, ACTION
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  userId     String?  @map("user_id")
+  metadata   Json?    @db.JsonB
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([createdAt])
+  @@index([action])
+  @@map("audit_logs")
+}
+
+
+Context: coverage-completeness.ts
+import { db } from '@valuerank/db';
+
+export type TranscriptKey = {
+  scenarioId: string;
+  modelId: string;
+  sampleIndex: number;
+};
+
+export type TranscriptExpectation = {
+  scenarioIds: string[];
+  models: string[];
+  samplesPerScenario?: number | null;
+};
+
+function transcriptKeyToString({ scenarioId, modelId, sampleIndex }: TranscriptKey): string {
+  return JSON.stringify({ scenarioId, modelId, sampleIndex });
+}
+
+export function normalizeSamplesPerScenario(samplesPerScenario: unknown): number {
+  return Number.isInteger(samplesPerScenario) && (samplesPerScenario as number) >= 1
+    ? (samplesPerScenario as number)
+    : 1;
+}
+
+export function findMissingTranscriptKeys({
+  scenarioIds,
+  models,
+  samplesPerScenario,
+  existingTranscripts,
+}: TranscriptExpectation & {
+  existingTranscripts: TranscriptKey[];
+}): TranscriptKey[] {
+  const normalizedSamplesPerScenario = normalizeSamplesPerScenario(samplesPerScenario);
+  const existingKeys = new Set(existingTranscripts.map(transcriptKeyToString));
+  const missing: TranscriptKey[] = [];
+
+  for (const modelId of models) {
+    for (const scenarioId of scenarioIds) {
+      for (let sampleIndex = 0; sampleIndex < normalizedSamplesPerScenario; sampleIndex++) {
+        const key: TranscriptKey = { scenarioId, modelId, sampleIndex };
+        if (!existingKeys.has(transcriptKeyToString(key))) {
+          missing.push(key);
+        }
+      }
+    }
+  }
+
+  return missing;
+}
+
+/**
+ * Finds which (scenarioId × modelId × sampleIndex) tuples are missing transcripts
+ * for a given run, by reading the run's config and scenario selections from the DB.
+ *
+ * Returns [] if the run does not exist or has no expected probes.
+ */
+export async function findMissingProbes(runId: string): Promise<TranscriptKey[]> {
+  const run = await db.run.findUnique({
+    where: { id: runId },
+    select: {
+      config: true,
+      scenarioSelections: {
+        select: { scenarioId: true },
+      },
+    },
+  });
+
+  if (run === null) {
+    return [];
+  }
+
+  const config =
+    run.config != null && typeof run.config === 'object'
+      ? (run.config as { models?: string[]; samplesPerScenario?: number })
+      : {};
+  const models = config.models ?? [];
+  const samplesPerScenario = normalizeSamplesPerScenario(config.samplesPerScenario);
+  const scenarioIds = run.scenarioSelections.map((s) => s.scenarioId);
+
+  const existingTranscripts = await db.transcript.findMany({
+    where: { runId },
+    select: { scenarioId: true, modelId: true, sampleIndex: true },
+  });
+
+  const existing = existingTranscripts
+    .filter((t): t is TranscriptKey => t.scenarioId !== null)
+    .map(({ scenarioId, modelId, sampleIndex }) => ({ scenarioId, modelId, sampleIndex }));
+
+  return findMissingTranscriptKeys({
+    scenarioIds,
+    models,
+    samplesPerScenario,
+    existingTranscripts: existing,
+  });
+}
+
+
+Artifact: spec.md
+# Feature Spec: Match Pair Counts and condition-level coverage detection
+
+## Summary
+
+Add condition-level (per-trial) counting to the domain value coverage system, surface it in the cell popover using "X batches + Y conditions" notation, and add a "Match Pair Counts" action that opens the existing Start Paired Batch page pre-configured to top up the lagging direction at trial granularity.
+
+PR #759 (commit `057658f0` on main) added `orphanedBatchCount`. Operator feedback: batch-level detection is too coarse. A 1-trial gap is invisible when both directions have the same number of complete batches, and the system over-corrects when one batch is incomplete (it would propose launching a whole new batch when the real fix is to top up a single missing transcript). The right unit for the operator's mental model is "complete batches + leftover conditions" per direction — like "1 hour 22 minutes" rather than "82 minutes."
+
+---
+
+## Granularity constraint: launches are whole `(model × scenario × samples)` jobs
+
+The backend `buildRunJobPlan()` only emits full `model × scenario × samples` jobs ([`start-plan.ts:50-69`](cloud/apps/api/src/services/run/start-plan.ts)). There is no path to "launch exactly the missing 3 transcript slots." The smallest unit a launch can produce is `selectedModels.length × scenarios.length × samplesPerScenario` transcripts.
+
+This means Match Pair Counts is **approximate at the trial level**. The card's job is to:
+- Show the operator the gap honestly (in trials)
+- Let them configure the launch to overshoot or undershoot the gap if needed (the live-recompute card flags residual mismatches)
+- Submit the launch and let it produce its full set of trials
+
+The spec does NOT promise "launch only the missing slots." It promises "let the operator close the gap with one launch when the gap fits a clean `(model × scenario × samples)` shape, and visualise the residual otherwise." The card copy MUST be consistent with this — never imply individual-slot targeting.
+
+---
+
+## Architecture decision: single-direction launch
+
+The existing `startRun` mutation in [`lifecycle.ts:115-153`](cloud/apps/api/src/graphql/mutations/run/lifecycle.ts) hardcodes `PAIRED_BATCH` mode to launch BOTH the primary and companion runs as a coupled pair. There is no way today to launch just one direction as a partner-of-record for an existing batch group.
+
+The standalone alternative is `AD_HOC_BATCH`, but that mode sets `methodologySafe: false` and does not set `jobChoiceValueFirst` or `jobChoiceBatchGroupId`, so an AD_HOC run cannot serve as the lagging-side partner of an existing paired-batch group.
+
+**Resolution: introduce a single-direction launch capability.** This feature adds a new launch mode (or equivalent contract — the plan stage chooses the exact shape) such that the backend can launch ONE run with `methodologySafe: true`, the correct `jobChoiceValueFirst`, and either a fresh `jobChoiceBatchGroupId` or one bound to the existing companion's group. This is the only path that lets Match Pair Counts perform the surgical top-up the operator wants.
+
+User-facing implications:
+- The `<RunForm>` component on the Start Paired Batch page gains the ability to render in a "single-direction top-up" mode when arrived at via Match Pair Counts. In that mode the launch mode selector is hidden or pinned to the new top-up mode.
+- Aggregate analysis treats the top-up run as a regular completed run for that direction. It contributes to `batchCount` and to the directional-groups bookkeeping just like any other run, so subsequent paired batches it helps form have full statistical weight.
+- The `runCategory` for top-up runs is `'PRODUCTION'` (matching paired-batch semantics, not ad-hoc).
+
+The plan stage must specify: the exact mutation contract change, what config keys the run carries, how aggregate analysis discovers it, and any migration concerns for in-flight code paths.
+
+---
+
+## User Stories (prioritized)
+
+### US-1 (P0): See condition-level imbalance per direction
+
+**As a** researcher reviewing the value coverage matrix,
+**I want to** see how many complete batches AND how many leftover conditions each direction has,
+**so that** I can tell at a glance whether the imbalance is whole-batch-sized or trial-sized.
+
+**Acceptance criteria:**
+- The cell popover displays each direction in the form `X batches + Y conditions` (e.g. "1 batch + 22 conditions")
+- "Y conditions" reflects the count of (scenario × model × sampleIndex) slots filled by transcripts inside non-complete batches for that direction. (Definition note: a "complete" batch is one where every selected slot has at least one transcript; extra transcripts in a slot of a complete batch are not counted as leftovers. If real production data shows complete batches with surplus transcripts due to retries, the resolver author may revisit the definition during the plan stage.)
+- "X batches" is unchanged: count of complete (per `isRunComplete`) non-aggregate runs per direction
+- Both numbers are read from new GraphQL fields on `DomainValueCoverageCell` — added additively, no breaking changes to existing fields
+- When a cell has zero runs in a direction, the popover shows `0 batches + 0 conditions`
+- Empty cells (no vignette) continue to show their existing popover content ("No batch for this value pair") — the new condition-level fields do not change empty-cell behaviour
+
+### US-2 (P0): Add Transcripts column header to per-model breakdown
+
+**As a** researcher looking at the per-model trial breakdown in the popover,
+**I want to** see a "Transcripts" header above the model count column,
+**so that** I know what those numbers represent without having to guess.
+
+**Acceptance criteria:**
+- The per-model breakdown rows in the popover gain a single header row labelled "Transcripts" above the count column
+- Header is visible only when at least one model row is shown
+- Header styling is consistent with existing popover typography
+- Model name column remains unlabelled (the model name is self-explanatory)
+
+### US-3 (P0): Trigger Match Pair Counts from a cell with a gap
+
+**As a** researcher seeing a cell with an imbalance,
+**I want to** click a "Match Pair Counts" action in the popover,
+**so that** I can launch only the trials needed to bring the lagging direction up to the leading direction.
+
+**Acceptance criteria:**
+- The popover shows "Match Pair Counts" as a second action *alongside* (not replacing) "Start Paired Batch"
+- Match Pair Counts is visible only when the cell has a real gap: `orphanedBatchCount > 0` OR (a yet-to-be-named) `orphanedConditionCount > 0`
+- "Start Paired Batch" remains visible whenever the cell has a vignette, regardless of gap
+- Clicking Match Pair Counts navigates to the existing `/definitions/<definitionId>/start-paired-batch` route, with route state that carries:
+  - `pairKey` (e.g. `"achievement::power_dominance"`)
+  - All `definitionId`s contributing to that cell's value pair (because cells aggregate companion definitions — the popover's primary `definitionId` is just the link target, not the full set)
+  - The before-state directional counts: per direction, complete batches + leftover conditions
+  - The lagging direction's value name (e.g. `"achievement"`) so the launch can pin `jobChoiceValueFirst`
+  - The pair name as displayed (formatted with `VALUE_LABELS`) so the card doesn't have to re-derive it
+- **Lagging-direction tie-breaker rule** (deterministic, documented). Operates entirely on filled-condition counts (since post-#756 each batch counts as 1 regardless of size):
+  - Let `filled[A]` and `filled[B]` be the count of DISTINCT (scenarioId, modelId, sampleIndex) slots filled by transcripts in direction A and B respectively (across all runs in the cell, deduped, including incomplete runs)
+  - If `filled[A] < filled[B]` → A is the lagging direction
+  - If `filled[A] > filled[B]` → B is the lagging direction
+  - If `filled[A] == filled[B]` AND batches differ → the direction with fewer complete batches is lagging
+  - If both filled-conditions and batches are equal → there is no gap; Match Pair Counts is not offered
+  - If a cell has zero runs in one direction (filled=0, batches=0) → that direction is the lagging one
+  - Final tie-breaker (extremely rare — both filled and batches identical, but they're somehow "different"): prefer the direction whose value name sorts alphabetically earlier. This is a deterministic fallback, not a human-meaningful preference
+  - If a cell aggregates multiple companion definitions, the rule is applied to the AGGREGATED counts (per the resolver's existing aggregation), not per-definition
+
+- **DefinitionId-to-launch rule** (deterministic, separate from the lagging-direction rule). Cells can aggregate multiple companion definitions; the launch needs ONE `definitionId`:
+  - The launch uses the definition whose primary value name matches the lagging direction's value name (i.e., the definition that produces A-first runs when launching against direction A)
+  - This corresponds to the existing `pair.primary.id` vs `pair.companionId` choice in [`lifecycle.ts:115-153`](cloud/apps/api/src/graphql/mutations/run/lifecycle.ts) — the new single-direction launch mode picks one of these based on the lagging direction
+  - When multiple definitions in the cell have the same primary value name (rare; would indicate duplicated companion definitions), the cell's existing `primaryDefinitionId` from the resolver is used as the tie-breaker (the resolver already has a deterministic primary picker)
+- When `incompleteBatchCount > 0` is also present on the cell, Match Pair Counts is still visible but the popover shows an informational warning above the action: *"This pair has incomplete batches — topping up may not converge in one launch. Check the existing batches' status first."* The warning intentionally avoids quoting a specific count, because the existing resolver sums `incompleteBatchCount` across companion definitions and may double-count incomplete paired-launch pairs. (The plan stage may revisit deduplication for this signal; spec does not block on it.) The warning is informational; it does not link to a fix-incomplete-batches surface (that surface does not exist yet)
+
+### US-4 (P0): See what the launch will produce on the Start Paired Batch page
+
+**As a** researcher who clicked Match Pair Counts,
+**I want to** see a compact summary card above the launch form showing the before/after diff,
+**so that** I know what the launch will accomplish before I submit it.
+
+**Acceptance criteria:**
+- A summary card is rendered above the existing `<RunForm>` only when the page is reached via Match Pair Counts (route state present)
+- Card shows the pair name (formatted as "Value A × Value B" using human-readable labels from `VALUE_LABELS`)
+- Card shows two rows, one per direction, each with: direction label, before-state, after-state, in both batch and condition columns
+- Card shows a footer line summarising the delta. **One condition equals one transcript** (per the dedupe rule: a condition is one slot, filled or unfilled). The card uses TRIAL count as the user-facing magnitude and shows condition count only as a secondary label when the gap is sub-batch-sized:
+  - When the launch closes a sub-batch gap (e.g., 3 missing transcripts): *"Adding: 3 trials"*
+  - When the launch closes a whole-batch gap or larger: *"Adding: 2 batches (50 trials)"* — the card shows batches as the headline because the user is closing batch-level imbalances, with trial count as the consequence
+  - Never use the form *"1 condition (5 trials)"* — that conflates the slot definition with the transcript count and misleads users when `samplesPerScenario > 1`
+- The "after" values recompute live whenever ANY of the following form inputs change: `selectedModels` (count), `samplePercentage`, `samplesPerScenario`, `scenarioCount` (or selected `scenarioIds` if specific-condition mode), `launchMode`, and `temperatureInput` if it affects which existing runs match the signature
+- The trial-count math has two branches and MUST exactly match the backend `sampleScenarios()` formula in [`cloud/apps/api/src/services/run/start-helpers.ts`](cloud/apps/api/src/services/run/start-helpers.ts):
+  - **Sample-percentage mode** (`samplePercentage < 100` and no explicit `scenarioIds`): `effective_scenarios = max(1, floor(total_scenarios × samplePercentage / 100))`. Total trials per launched direction = `selectedModels.length × effective_scenarios × samplesPerScenario`. Note: `Math.floor`, not `Math.ceil` and not "rounded" — the existing `useRunForm.ts` UI preview uses `Math.ceil` which DISAGREES with the backend; the card must use the backend's formula
+  - **Specific-condition mode** (explicit `scenarioIds` provided, equivalent to backend `runMode: 'SPECIFIC_CONDITION'`): `effective_scenarios = (deduped scenarioIds).length` (the backend dedupes inside `buildRunJobPlan`). Total trials per launched direction = `selectedModels.length × effective_scenarios × samplesPerScenario`. The card MUST distinguish this mode and not apply the percentage formula
+- The plan stage MUST reuse or extract the existing backend helper logic (in `cloud/apps/api/src/services/run/start-helpers.ts` and `start-plan.ts`) to keep the card's math aligned with the backend's. A pure shared helper (e.g., `computeLaunchTrialCount(input)` consumable by both `useRunForm.ts` and the new card) is the recommended approach to prevent drift
+- If the live recomputation shows the launch would *not* close the gap, would overshoot in either direction, or would require multiple launches to converge, the card shows a yellow note describing the residual mismatch and what the user could change to converge in one launch
+- If the user navigates to the page without Match Pair Counts state (the existing entry point), the form behaves exactly as today — no card, no extra form behaviour
+
+### US-5 (P1): Form passes through unchanged when not in Match Pair Counts mode
+
+**As a** researcher using the existing Start Paired Batch entry point,
+**I want** the page to look and behave exactly as it does today,
+**so that** existing workflows are not disturbed.
+
+**Acceptance criteria:**
+- When the page is loaded without Match Pair Counts route state, no summary card is shown
+- `<RunForm>` props and behaviour are unchanged in the no-Match-Pair-Counts case
+- Existing tests for the page still pass
+
+### US-6 (P0): Backend launches a single direction as a paired-batch top-up
+
+**As a** backend service triggered by Match Pair Counts,
+**I want to** launch ONE run with the correct `jobChoiceValueFirst` and `methodologySafe: true`,
+**so that** the operator's surgical top-up actually reaches the lagging direction without overshooting the leading one.
+
+**Acceptance criteria:**
+- A new launch contract (mode flag, mutation argument, or equivalent — plan stage decides the shape) lets `startRun` create a single run that:
+  - Sets `methodologySafe: true` (matching paired-batch semantics, not ad-hoc)
+  - Sets `jobChoiceValueFirst` to the lagging-direction value name
+  - Sets `jobChoiceLaunchMode` to identify the run as a top-up (the exact value is plan-stage's choice)
+  - Either inherits an existing `jobChoiceBatchGroupId` (so it joins an existing launch group) OR is given a fresh group ID (so it stands as its own launch group). Plan to choose one.
+  - Sets `runCategory: 'PRODUCTION'`
+- The new mode does NOT create a companion run — it launches exactly one run
+- Existing `PAIRED_BATCH` and `AD_HOC_BATCH` modes continue to work exactly as today; no regression
+- Aggregate analysis treats the top-up run as a regular completed run for that direction (it contributes to `batchCount` and to directional-groups bookkeeping in the coverage resolver)
+- Mutation validation: caller must specify both `definitionId` (the lagging direction's vignette) and the direction value name; mismatched combos return a clear error
+- The web client's launch path (used by Match Pair Counts) calls this new mode via the existing `startRun` mutation
+
+**Why this priority:** without this, the rest of the feature is non-functional. Match Pair Counts cannot be implemented as the operator wants without a single-direction launch capability.
+
+### US-7 (P2): Resolver handles edge cases without exceptions
+
+**As a** backend operator,
+**I want** the new condition-level counting logic to handle edge cases (no transcripts, mixed sampleIndex, ungrouped runs, >2 directions corruption),
+**so that** the resolver never throws on real production data.
+
+**Acceptance criteria:**
+- Cells where neither direction has any runs return zero condition counts (paired = 0, orphaned = 0)
+- Cells where only one direction has runs return `pairedConditionCount = 0` and `orphanedConditionCount = count of that direction`
+- The corruption case (>2 distinct direction tokens for one cell) does not throw; logs a warning consistent with the existing batch-level handling
+- Aggregate runs continue to be excluded from condition-level counts
+- Deleted runs and deleted transcripts continue to be excluded
+
+---
+
+## What is NOT in scope
+
+- A separate "fix incomplete batches" remediation surface (different worker path, different feature)
+- Detecting trial-count drift caused by mismatched `samplesPerScenario` across batches in the same direction (rare; flagged as known limitation)
+- Auto-thresholding (system deciding whether a gap is "worth" topping up). Operator decides.
+- Changing the existing Start Paired Batch entry from the vignette detail page (it must continue to work as today)
+- Changing the existing `PAIRED_BATCH` or `AD_HOC_BATCH` launch mode behaviour — those remain exactly as today
+- Web-side consumption of the existing `orphanedBatchCount` field beyond what's needed to drive the new gating logic
+- Banners, notifications, or proactive UI elsewhere on the page — Match Pair Counts lives only in the cell popover
+- Modifying `CLAUDE.md`, `AGENTS.md`, `cloud/CLAUDE.md`, `cloud/AGENTS.md`, `MEMORY.md`, `.gitignore`, or any file not listed in `scope.json`
+
+---
+
+## Definitions
+
+| Term | Meaning |
+|------|---------|
+| Batch | A complete non-aggregate run for a value-pair vignette. Per `isRunComplete`, every selected (scenarioId × modelId × sampleIndex) slot has at least one transcript |
+| Condition | A single (runId, scenarioId, modelId, sampleIndex) slot. Each slot is identified by exactly that 4-tuple |
+| Filled condition | A condition that has at least one transcript. Multiple transcripts on the same condition (from worker retries; the `Transcript` table has no uniqueness on the 4-tuple) count as one filled condition for `pairedConditionCount` / `orphanedConditionCount`. The dedupe is by `DISTINCT (runId, scenarioId, modelId, sampleIndex)` |
+| Direction | The value of `config.jobChoiceValueFirst` on a run (e.g. "achievement"). Two directions per value pair |
+| Paired condition (cell-level) | A `(scenarioId, modelId, sampleIndex)` slot that has at least one filled condition in BOTH directions across runs in the cell's value pair |
+| Orphaned condition (cell-level) | A `(scenarioId, modelId, sampleIndex)` slot that has at least one filled condition in ONLY ONE direction |
+| Leftover condition (UI term) | A filled condition whose containing run is not yet complete (per `isRunComplete`). Counted separately from the batch count |
+| Gap | A directional imbalance: either `orphanedBatchCount > 0` or `orphanedConditionCount > 0` |
+
+**Dedupe rule (HIGH-priority spec invariant):** Both `pairedConditionCount` and `orphanedConditionCount` are computed from the set of DISTINCT `(scenarioId, modelId, sampleIndex)` slots that have any transcript present in each direction. Transcript-row counts are NEVER summed directly into these fields. Without this invariant, retries that produce two transcripts for the same slot would inflate the counts. The plan must specify the SQL-or-code path that enforces the DISTINCT constraint (e.g., `DISTINCT ON (...)` in the Prisma query, or a `Set<string>` keyed on the slot tuple in resolver memory).
+
+The terms "paired condition" and "orphaned condition" are working names. The resolver author may propose better field names during plan stage.
+
+---
+
+## Edge Cases
+
+| Case | Behavior |
+|------|----------|
+| Cell with no runs in either direction | `orphanedBatchCount = 0`, `orphanedConditionCount = 0`, popover shows `0 batches + 0 conditions` per direction. Match Pair Counts not shown |
+| Cell with one direction only (e.g. A-first only) | Existing `orphanedBatchCount` reflects the batch-level orphan. New condition-level fields reflect the trial-level orphan. Match Pair Counts shown |
+| Cell with both `orphanedBatchCount > 0` AND `incompleteBatchCount > 0` | Match Pair Counts shown WITH an informational warning: *"1 batch on this pair is incomplete — topping up may not converge in one launch. Check the existing batch's status first."* The warning is informational only — there is no in-app fix-incomplete-batches tool yet, and the warning does not pretend there is one |
+| Cell with `orphanedBatchCount = 0` AND `orphanedConditionCount = 0` (fully balanced) | Match Pair Counts hidden. Start Paired Batch remains visible |
+| Cell with `orphanedBatchCount = 0` but `orphanedConditionCount > 0` | (Possible if both directions have the same number of complete batches but a mismatched number of in-flight transcripts inside incomplete batches.) Match Pair Counts shown |
+| User navigates away from Match Pair Counts page (back button / cancel) | Falls back to the originating coverage page (existing return-to logic preserved) |
+| User submits the form with no live edits | The launch produces what the card preview said it would |
+| User changes `samplesPerScenario` to 0 or negative | Form validation (existing) blocks submission. Card shows zero delta or warns |
+| Direction token in `config.jobChoiceValueFirst` is missing/blank for a run | Run is excluded from directional counts but still included in `batchCount` (existing semantics, unchanged) |
+| >2 distinct direction tokens in one cell (data corruption) | Log warning (existing batch-level pattern), use the two largest counts for paired/orphaned condition computations |
+| Aggregate run encountered | Excluded from both batch-level and condition-level counts (existing semantics) |
+
+---
+
+## Open design questions for the plan stage
+
+These are not blocking the spec, but the plan author must resolve them:
+
+1. **Schema shape for the new fields.** Add `pairedConditionCount` and `orphanedConditionCount` directly on `DomainValueCoverageCell`, or introduce a sub-object like `conditionCoverage { paired, orphaned, perDirection }`. The plan should pick one and justify it. Naming may also be revised (e.g. `pairedTrialCount` if "trial" reads more clearly than "condition" for clients).
+2. **Per-direction breakdown exposure.** The popover wants per-direction condition counts (not just aggregated paired/orphaned). The resolver must expose per-direction `{ direction, completeBatches, partialConditions }` or equivalent. Plan to specify the exact shape.
+3. **Resolver query expansion.** The current `domainValueCoverage` resolver query in [`domain-coverage.ts`](cloud/apps/api/src/graphql/queries/domain-coverage.ts) selects only `transcripts.modelId`. Computing condition-level counts requires also selecting `scenarioId` and `sampleIndex` per transcript. Plan to specify whether the existing `transcripts` field selection is widened (cheap) or a separate query path is used (cleaner separation, but more code).
+4. **Single-direction launch contract shape.** Pick exactly one of: (a) new launch mode value `'PAIRED_BATCH_TOPUP'`, (b) existing mode plus a new flag like `topUpDirection: string`, (c) a new mutation `startPairedBatchTopUp`. Plan to recommend one with rationale (back-compat, validation surface, log discoverability).
+5. **Top-up batch group binding.** When the new mode launches a single run, decide whether it (a) inherits an existing `jobChoiceBatchGroupId` from a sibling run on the lagging side, (b) gets a fresh group ID of its own, or (c) reuses the group ID of the leading-side run that the launch is meant to partner with. Each has implications for the resolver's `Set<groupKey>` deduplication logic. The plan stage MUST resolve this before any backend work begins, because the resolver's `selectPrimaryDefinitionCounts` collapses batches by group ID — the wrong choice will cause the top-up run to be silently merged into an existing batch's count or to count as zero, defeating the feature. Recommendation to plan author: option (b) — fresh group ID of its own — keeps the top-up run individually visible in directional counts and avoids depending on the leading-side run's metadata.
+6. **Pre-fill defaults on the launch form.** When the page is reached via Match Pair Counts, decide whether to seed `samplesPerScenario`, `samplePercentage`, and scenario selection to close the gap most precisely, or leave at defaults and let the live-recompute card flag mismatches.
+7. **PR split.** Detection (resolver + new fields), backend launch (single-direction mode + tests), and UI (popover + Match Pair Counts + card) are three sub-features. Plan to recommend one PR or a slice split based on diff size and reviewability.
+
+---
+
+## Success Criteria
+
+- **SC-1**: Operator can identify whether a coverage cell's imbalance is whole-batch-level or trial-level by reading the popover
+- **SC-2**: Operator can launch a top-up from a single click in the popover, see what they're about to launch, and submit without re-deriving the gap math
+- **SC-3**: The new GraphQL fields return correct values on real production data when smoke-tested with at least three distinct cell shapes (symmetric, asymmetric, fully one-sided)
+- **SC-4**: No existing GraphQL consumer of `DomainValueCoverageCell` breaks (additive schema changes only)
+- **SC-5**: No regression in the existing Start Paired Batch entry from the vignette detail page
+- **SC-6**: Single-direction top-up runs land in the correct directional Set in the coverage resolver and bring `orphanedBatchCount` / `orphanedConditionCount` down to zero on the next page load (verified by an end-to-end test or manual smoke test)
+- **SC-7**: Refresh / open-in-new-tab behaviour: the Match Pair Counts page falls back to the standard launch form (no card) without crashing if route state is missing, since `location.state` is in-memory only
+
+---
+
+## Verified facts (do not re-flag)
+
+These were checked during prior rounds of spec review and are correct:
+
+- **`Run` and `Transcript` tables both have `deletedAt` columns.** Verified in `cloud/packages/db/prisma/schema.prisma` (Run line 122, Transcript line 633). The `cloud/CLAUDE.md` quick-reference list of soft-deleted tables is incomplete and stale; it cites only `definitions`, `definition_tags`, `scenarios`, but the schema has at least 10 models with `deletedAt`. The existing `domain-coverage.ts` resolver (shipped in PR #759) already filters `runs.deletedAt: null` and `transcripts.deletedAt: null` in production. This spec's references to "deleted runs and deleted transcripts" are correct.
+
+- **Soft-delete is the only delete pattern for runs.** No physical-delete code path exists for runs in the active product (cloud/).
+
+- **`batchCount` is now 1 per complete run regardless of `samplesPerScenario`.** As of PR #756 ("Realign batch semantics across glossary, code, and database") and PR #759 (this feature's predecessor), the post-merge `domain-coverage.ts` resolver no longer multiplies batch counts by `samplesPerScenario`. A complete run contributes exactly 1 to `batchCount`. The pre-#756 `getCoverageBatchIncrement(samplesPerScenario)` multiplication path is dead in main HEAD `057658f0` for this purpose (it survives only on incomplete planned-trial calculations, not the visible batchCount). **Reviewers seeing the OLD multiplication behaviour are looking at this branch's stale HEAD `728da7d1`, which predates #756. The implementation will fork from main `057658f0`, so the new condition counting can rely on the post-#756 batch semantic.**
+
+- **The branch HEAD this review process is running against is pre-#756 / pre-#759.** Reviewers should not flag findings about coverage-resolver behaviour that are based on the worktree's stale code unless the finding also applies to current main. When in doubt, refer to `git log origin/main -- cloud/apps/api/src/graphql/queries/domain-coverage.ts` for the actual current behaviour.
+
+- **`expectedCount = scenarioSelections × modelCount × getCoverageBatchIncrement(samplesPerScenario)` is DEAD CODE post-#756.** The pre-#756 path that compared raw transcript counts to a planned-trial product was replaced with `isRunComplete()` (in `cloud/apps/api/src/services/run/coverage-completeness.ts`), which performs slot-by-slot completeness checking. `isRunComplete` walks every (scenarioId × modelId × sampleIndex) combination and confirms each has at least one transcript — it does not depend on `getCoverageBatchIncrement`. Reviewers seeing `expectedCount` arithmetic on this branch's stale HEAD should not flag it; that path was deleted in main.
+
+---
+
+## Constitutional / Cross-cutting
+
+- The active product is under `cloud/`. `src/` (legacy) is out of scope.
+- Branch must fork from `main` HEAD `057658f0` (latest after PR #759).
+- All new fields are additive on `DomainValueCoverageCell`; no breaking changes.
+- Glossary terminology: prefer "condition" for the (scenario × model × sample) slot and "trial" for an individual transcript only when contrasted with "batch." UI may use "trials" colloquially where it reads better; spec uses both consistently.
+- Production smoke test (per the ship skill's Step 4.5) is required before merge: a real GraphQL query against production confirming the new fields return non-zero, sensible values for a known asymmetric cell.
+
+---
+
+## Assumptions carried in from discovery
+
+1. New fields are added additively on `DomainValueCoverageCell`, matching the `orphanedBatchCount` pattern. Naming TBD by plan stage.
+2. Popover notation: each direction shows "X batches + Y conditions". A "Transcripts" column header is added above the per-model breakdown.
+3. Match Pair Counts opens the existing Start Paired Batch page. A summary card above the form shows the before/after diff and recalculates "after" live as the user edits the form. No aggressive auto-fill.
+4. Match Pair Counts is shown only when `orphanedBatchCount > 0` OR `orphanedConditionCount > 0`. When `incompleteBatchCount > 0` also applies, a warning is surfaced rather than hiding the action.
+5. Match Pair Counts is exposed only in the cell popover. No banners, notifications, or proactive UI elsewhere.
+
+## Discovery decisions
+
+- **Q1 — Where does Match Pair Counts go in the popover?** Answer: **Option B (sit alongside).** "Start Paired Batch" stays as the unconditional escape hatch. Match Pair Counts appears as a second link only when there's a gap to fix.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m checking the spec against the code paths that actually drive run creation and coverage counts, then I’ll call out only the edge cases the code can support or contradict.
+codex
+## Findings
+- High [CODE-CONFIRMED]: The spec contradicts itself on the dedupe key for condition counts. One definition says a filled condition is `DISTINCT (runId, scenarioId, modelId, sampleIndex)`, but the high-priority invariant later says `pairedConditionCount` and `orphanedConditionCount` must dedupe on `(scenarioId, modelId, sampleIndex)` across runs. That slot-based rule matches the existing completeness logic in [coverage-completeness.ts](/Users/chrislaw/valuerank/.claude/worktrees/infallible-bassi-fafa71/cloud/apps/api/src/services/run/coverage-completeness.ts) and the fact that [Transcript](/Users/chrislaw/valuerank/.claude/worktrees/infallible-bassi-fafa71/cloud/packages/db/prisma/schema.prisma) has no uniqueness on the slot tuple. If the implementation follows the run-scoped version, retries will inflate counts and the gap gate will fire when it should not.
+
+- Medium [CODE-CONFIRMED]: The launch preview is under-specified for cells that aggregate multiple companion definitions. [buildRunJobPlan()](/Users/chrislaw/valuerank/.claude/worktrees/infallible-bassi-fafa71/cloud/apps/api/src/services/run/start-plan.ts) computes the job plan from one definition’s `definitionScenarioIds`, not a cell-level union, so the card must know which exact definition is being launched before it can compute the correct `scenarioCount` and after-state. The spec only says the route state should carry “all definitionIds contributing to that cell”, which is not enough to derive the right launch math when those definitions do not share the same scenario set.
+
+- Low [CODE-CONFIRMED]: The incomplete-batch warning text is written as a singular example, but the resolver already accumulates a count across runs/definitions for the cell. In [domain-coverage.ts](/Users/chrislaw/valuerank/.claude/worktrees/infallible-bassi-fafa71/cloud/apps/api/src/graphql/queries/domain-coverage.ts), `incompleteBatchCount` is summed, so the real value can be greater than 1. As written, the warning copy will be inaccurate for any cell with more than one incomplete batch.
+
+## Residual Risks
+- The spec still does not pin the exact GraphQL field names or returned shape for the new per-direction condition data, so implementation can drift unless the plan locks that schema down.
+- The new single-direction launch mode and the popover/card wiring are not present in the provided code, so the refresh/new-tab fallback and the exact `definitionId` versus lagging-direction validation remain unverified.
+- The spec still leaves the definition-selection rule open when an aggregated cell spans definitions with different scenario counts, so that edge case needs an explicit test even after the launch contract is finalized.
+2026-04-27T06:13:03.085726Z ERROR codex_core::session: failed to record rollout items: thread 019dcd90-8de3-7503-a8ce-12e580feac65 not found
+tokens used
+39,662

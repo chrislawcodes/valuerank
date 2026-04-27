@@ -1,0 +1,232 @@
+00001: generator client {
+00002:   provider = "prisma-client-js"
+00003: }
+00004: 
+00005: datasource db {
+00006:   provider = "postgresql"
+00007:   url      = env("DATABASE_URL")
+00008:   // Direct connection for migrations (bypasses PgBouncer)
+00009:   // Required because Prisma Migrate doesn't support connection pooling
+00010:   directUrl = env("DIRECT_URL")
+00011: }
+00012: 
+00013: // ============================================================================
+00014: // AUTHENTICATION
+00015: // ============================================================================
+00016: 
+00017: enum UserRole {
+00018:   ADMIN
+00019:   VISITOR
+00020: }
+00021: 
+00022: model User {
+00023:   id           String    @id @default(cuid())
+00024:   email        String    @unique
+00025:   passwordHash String    @map("password_hash")
+00026:   name         String?
+00027:   role         UserRole  @default(ADMIN)
+00028:   mustChangePassword Boolean @default(false) @map("must_change_password")
+00029:   lastLoginAt  DateTime? @map("last_login_at")
+00030:   passwordChangedAt DateTime? @map("password_changed_at")
+00031:   createdAt         DateTime  @default(now()) @map("created_at")
+00032:   updatedAt    DateTime  @updatedAt @map("updated_at")
+00033: 
+00034:   apiKeys ApiKey[]
+00035: 
+00036:   // Audit relations
+00037:   auditLogs          AuditLog[]
+00038:   createdDefinitions Definition[] @relation("DefinitionCreator")
+00039:   deletedDefinitions Definition[] @relation("DefinitionDeleter")
+00040:   createdRuns        Run[]        @relation("RunCreator")
+00041:   createdDomainEvaluations DomainEvaluation[] @relation("DomainEvaluationCreator")
+00042:   deletedRuns        Run[]        @relation("RunDeleter")
+00043:   createdTags        Tag[]        @relation("TagCreator")
+00044:   createdLlmModels         LlmModel[]               @relation("LlmModelCreator")
+00045:   createdBalanceSyncLogs   ProviderBalanceSyncLog[] @relation("ProviderBalanceSyncLogCreator")
+00046: 
+00047:   @@map("users")
+00048: }
+00049: 
+00050: model ApiKey {
+00051:   id        String    @id @default(cuid())
+00052:   userId    String    @map("user_id")
+00053:   name      String
+00054:   keyHash   String    @unique @map("key_hash")
+00055:   keyPrefix String    @map("key_prefix") @db.VarChar(12)
+00056:   lastUsed  DateTime? @map("last_used")
+00057:   expiresAt DateTime? @map("expires_at")
+00058:   createdAt DateTime  @default(now()) @map("created_at")
+00059: 
+00060:   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+00061: 
+00062:   @@index([keyPrefix])
+00063:   @@index([userId])
+00064:   @@map("api_keys")
+00065: }
+00066: 
+00067: // ============================================================================
+00068: // OAUTH 2.1 (MCP Authentication)
+00069: // ============================================================================
+00070: 
+00071: model OAuthClient {
+00072:   id                      String   @id @default(cuid())
+00073:   clientId                String   @unique @map("client_id")
+00074:   clientSecretHash        String   @map("client_secret_hash")
+00075:   clientName              String?  @map("client_name")
+00076:   redirectUris            String[] @map("redirect_uris")
+00077:   tokenEndpointAuthMethod String   @default("client_secret_post") @map("token_endpoint_auth_method")
+00078:   grantTypes              String[] @default(["authorization_code", "refresh_token"]) @map("grant_types")
+00079:   responseTypes           String[] @default(["code"]) @map("response_types")
+00080:   scope                   String   @default("mcp:read mcp:write")
+00081:   createdAt               DateTime @default(now()) @map("created_at")
+00082: 
+00083:   refreshTokens OAuthRefreshToken[]
+00084: 
+00085:   @@map("oauth_clients")
+00086: }
+00087: 
+00088: model OAuthRefreshToken {
+00089:   id        String   @id @default(cuid())
+00090:   tokenHash String   @unique @map("token_hash")
+00091:   clientId  String   @map("client_id")
+00092:   userId    String   @map("user_id")
+00093:   scope     String
+00094:   resource  String
+00095:   expiresAt DateTime @map("expires_at")
+00096:   createdAt DateTime @default(now()) @map("created_at")
+00097: 
+00098:   client OAuthClient @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+00099: 
+00100:   @@index([clientId])
+00101:   @@index([userId])
+00102:   @@index([expiresAt])
+00103:   @@map("oauth_refresh_tokens")
+00104: }
+00105: 
+00106: // ============================================================================
+00107: // CORE DOMAIN
+00108: // ============================================================================
+00109: 
+00110: model Definition {
+00111:   id                String    @id @default(cuid())
+00112:   parentId          String?   @map("parent_id")
+00113:   domainId          String?   @map("domain_id")
+00114:   domainContextId   String?   @map("domain_context_id")
+00115:   name              String
+00116:   content           Json      @db.JsonB
+00117:   expansionProgress Json?
+
+... [narrowed review slice: middle omitted] ...
+
+ecimal(10, 4)
+00778:   createdAt           DateTime @default(now()) @map("created_at")
+00779:   updatedAt           DateTime @updatedAt @map("updated_at")
+00780: 
+00781:   models          LlmModel[]
+00782:   balanceSyncLogs ProviderBalanceSyncLog[]
+00783: 
+00784:   @@map("llm_providers")
+00785: }
+00786: 
+00787: model ProviderBalanceSyncLog {
+00788:   id                  String   @id @default(cuid())
+00789:   providerId          String   @map("provider_id")
+00790:   systemBalanceAtSync Decimal  @map("system_balance_at_sync") @db.Decimal(10, 4)
+00791:   enteredBalance      Decimal  @map("entered_balance") @db.Decimal(10, 4)
+00792:   delta               Decimal  @db.Decimal(10, 4)
+00793:   syncedAt            DateTime @default(now()) @map("synced_at")
+00794:   createdByUserId     String?  @map("created_by_user_id")
+00795: 
+00796:   provider  LlmProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+00797:   createdBy User?       @relation("ProviderBalanceSyncLogCreator", fields: [createdByUserId], references: [id])
+00798: 
+00799:   @@index([providerId])
+00800:   @@map("provider_balance_sync_logs")
+00801: }
+00802: 
+00803: model LlmModel {
+00804:   id                   String         @id @default(cuid())
+00805:   providerId           String         @map("provider_id")
+00806:   modelId              String         @map("model_id")
+00807:   displayName          String         @map("display_name")
+00808:   costInputPerMillion  Decimal        @map("cost_input_per_million") @db.Decimal(10, 4)
+00809:   costOutputPerMillion Decimal        @map("cost_output_per_million") @db.Decimal(10, 4)
+00810:   status               LlmModelStatus @default(ACTIVE)
+00811:   isDefault            Boolean        @default(false) @map("is_default")
+00812:   apiConfig            Json?          @map("api_config") @db.JsonB
+00813:   createdAt            DateTime       @default(now()) @map("created_at")
+00814:   updatedAt            DateTime       @updatedAt @map("updated_at")
+00815: 
+00816:   // Audit fields
+00817:   createdByUserId String? @map("created_by_user_id")
+00818: 
+00819:   provider LlmProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+00820: 
+00821:   // Audit relations
+00822:   createdBy User? @relation("LlmModelCreator", fields: [createdByUserId], references: [id])
+00823: 
+00824:   // Cost visibility - token statistics for cost prediction
+00825:   tokenStatistics ModelTokenStatistics[]
+00826: 
+00827:   @@unique([providerId, modelId])
+00828:   @@index([providerId])
+00829:   @@index([status])
+00830:   @@map("llm_models")
+00831: }
+00832: 
+00833: enum LlmModelStatus {
+00834:   ACTIVE
+00835:   DEPRECATED
+00836: }
+00837: 
+00838: model SystemSetting {
+00839:   id        String   @id @default(cuid())
+00840:   key       String   @unique
+00841:   value     Json     @db.JsonB
+00842:   updatedAt DateTime @updatedAt @map("updated_at")
+00843: 
+00844:   @@map("system_settings")
+00845: }
+00846: 
+00847: // ============================================================================
+00848: // COST VISIBILITY - Token Statistics
+00849: // ============================================================================
+00850: 
+00851: model ModelTokenStatistics {
+00852:   id              String     @id @default(cuid())
+00853:   modelId         String     @map("model_id")
+00854:   definitionId    String?    @map("definition_id")
+00855:   avgInputTokens  Decimal    @default(100) @map("avg_input_tokens") @db.Decimal(10, 2)
+00856:   avgOutputTokens Decimal    @default(900) @map("avg_output_tokens") @db.Decimal(10, 2)
+00857:   sampleCount     Int        @default(0) @map("sample_count")
+00858:   lastUpdatedAt   DateTime   @updatedAt @map("last_updated_at")
+00859:   createdAt       DateTime   @default(now()) @map("created_at")
+00860: 
+00861:   model      LlmModel    @relation(fields: [modelId], references: [id], onDelete: Cascade)
+00862:   definition Definition? @relation(fields: [definitionId], references: [id], onDelete: SetNull)
+00863: 
+00864:   @@unique([modelId, definitionId])
+00865:   @@index([modelId])
+00866:   @@index([definitionId])
+00867:   @@map("model_token_statistics")
+00868: }
+00869: 
+00870: // ============================================================================
+00871: // AUDIT LOGGING
+00872: // ============================================================================
+00873: 
+00874: model AuditLog {
+00875:   id         String   @id @default(cuid())
+00876:   action     String   // CREATE, UPDATE, DELETE, ACTION
+00877:   entityType String   @map("entity_type")
+00878:   entityId   String   @map("entity_id")
+00879:   userId     String?  @map("user_id")
+00880:   metadata   Json?    @db.JsonB
+00881:   createdAt  DateTime @default(now()) @map("created_at")
+00882: 
+00883:   user User? @relation(fields: [userId], references: [id])
+00884: 
+00885:   @@index([entityType, entityId])
+00886:   @@index([userId])
+00887:   @@index([createdAt])
+00888:   @@index([

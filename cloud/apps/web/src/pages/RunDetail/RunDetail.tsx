@@ -27,6 +27,26 @@ import { formatTemperatureSetting } from '../../lib/temperature';
 import { getDefinitionMethodology, getDefinitionMethodologyLabel } from '../../utils/methodology';
 import { StalledModelsBanner, UnresolvableBanner, formatRunDate, getDisplaySignature } from './RunDetailBanners';
 import { useRunDetailHandlers } from './useRunDetailHandlers';
+import type { Run } from '../../api/operations/runs';
+
+function formatLaunchModeLabel(launchMode: Run['config']['jobChoiceLaunchMode']): string | null {
+  switch (launchMode) {
+    case 'AD_HOC_BATCH':
+      return 'Ad Hoc Batch';
+    case 'PAIRED_BATCH':
+      return 'Paired Batch';
+    case 'PAIRED_BATCH_TOPUP':
+      return 'Paired batch top-up';
+    case 'STANDARD':
+    case null:
+    case undefined:
+      return null;
+    default: {
+      const _exhaustiveCheck: never = launchMode;
+      return _exhaustiveCheck;
+    }
+  }
+}
 
 export function RunDetail() {
   const navigate = useNavigate();
@@ -86,10 +106,12 @@ export function RunDetail() {
   const methodology = getDefinitionMethodology(run.definition?.content);
   const methodologyLabel = getDefinitionMethodologyLabel(run.definition?.content, run.definition?.domain?.name ?? null);
   const isPairedRun = methodology?.pair_key != null;
-  const launchModeLabel = isPairedRun
-    ? run.config?.jobChoiceLaunchMode === 'AD_HOC_BATCH' ? 'Ad Hoc Batch'
-    : run.config?.jobChoiceLaunchMode === 'PAIRED_BATCH' ? 'Paired Batch' : null
-    : null;
+  const launchModeLabel = isPairedRun ? formatLaunchModeLabel(run.config?.jobChoiceLaunchMode) : null;
+  const launchModeBadgeClass = launchModeLabel === 'Paired Batch'
+    ? 'bg-teal-100 text-teal-800'
+    : launchModeLabel === 'Paired batch top-up'
+      ? 'bg-amber-100 text-amber-800'
+      : 'bg-gray-100 text-gray-700';
 
   return (
     <div className="space-y-6">
@@ -157,7 +179,7 @@ export function RunDetail() {
                   <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">{methodologyLabel}</span>
                 )}
                 {launchModeLabel && (
-                  <span className={`rounded-full px-2 py-1 text-xs font-medium ${launchModeLabel === 'Paired Batch' ? 'bg-teal-100 text-teal-800' : 'bg-gray-100 text-gray-700'}`}>
+                  <span className={`rounded-full px-2 py-1 text-xs font-medium ${launchModeBadgeClass}`}>
                     {launchModeLabel}
                   </span>
                 )}

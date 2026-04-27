@@ -21,6 +21,14 @@ export type CoverageModelBreakdownItem = {
   trialCount: number;
 };
 
+export type DirectionalCoverageItem = {
+  direction: string;
+  completeBatches: number;
+  filledSlots: number;
+  leftoverConditions: number;
+  definitionIds: string[];
+};
+
 export type DomainValueCoverageCell = {
   valueA: string;
   valueB: string;
@@ -29,6 +37,10 @@ export type DomainValueCoverageCell = {
   orphanedBatchCount: number;
   aFirstBatchCount: number;
   bFirstBatchCount: number;
+  pairedConditionCount: number;
+  orphanedConditionCount: number;
+  directionalCoverage: DirectionalCoverageItem[];
+  contributingDefinitionIds: string[];
   incompleteBatchCount: number;
   definitionId: string | null;
   definitionName: string | null;

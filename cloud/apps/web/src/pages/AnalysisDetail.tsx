@@ -54,6 +54,23 @@ function parseCoverageCountParam(value: string | null): number | null {
   return Number.isSafeInteger(parsed) ? parsed : null;
 }
 
+function formatLaunchModeLabel(launchMode: string | null | undefined): string | null {
+  switch (launchMode) {
+    case 'AD_HOC_BATCH':
+      return 'Ad Hoc Batch';
+    case 'PAIRED_BATCH':
+      return 'Paired Batch';
+    case 'PAIRED_BATCH_TOPUP':
+      return 'Paired batch top-up';
+    case 'STANDARD':
+    case null:
+    case undefined:
+      return null;
+    default:
+      return null;
+  }
+}
+
 function buildAnalysisDetailParams(
   searchParams: URLSearchParams,
   tab: AnalysisTab,
@@ -287,13 +304,7 @@ export function AnalysisDetail() {
   const methodology = getDefinitionMethodology(definitionContent);
   const runLaunchMode = run.config?.jobChoiceLaunchMode;
   const isPairedBatch = runLaunchMode === 'PAIRED_BATCH';
-  const launchModeLabel = methodology?.pair_key != null
-    ? runLaunchMode === 'AD_HOC_BATCH'
-      ? 'Ad Hoc Batch'
-      : runLaunchMode === 'PAIRED_BATCH'
-        ? 'Paired Batch'
-        : null
-    : null;
+  const launchModeLabel = methodology?.pair_key != null ? formatLaunchModeLabel(runLaunchMode) : null;
   const handleSingleVignetteChange = (nextRunId: string) => {
     if (!nextRunId || nextRunId === run.id) {
       return;
@@ -360,4 +371,3 @@ export function AnalysisDetail() {
     </div>
   );
 }
-

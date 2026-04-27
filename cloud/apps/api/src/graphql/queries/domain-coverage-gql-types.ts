@@ -25,6 +25,10 @@ export type DomainValueCoverageCell = {
   orphanedBatchCount: number;
   aFirstBatchCount: number;
   bFirstBatchCount: number;
+  pairedConditionCount: number;
+  orphanedConditionCount: number;
+  directionalCoverage: DirectionalCoverage[];
+  contributingDefinitionIds: string[];
   /** Number of non-aggregate runs whose transcript count is less than expected. */
   incompleteBatchCount: number;
   definitionId: string | null;
@@ -38,6 +42,14 @@ export type DomainValueCoverageCell = {
 export type CoverageModelOption = {
   modelId: string;
   label: string;
+};
+
+export type DirectionalCoverage = {
+  direction: string;
+  completeBatches: number;
+  filledSlots: number;
+  leftoverConditions: number;
+  definitionIds: string[];
 };
 
 export type DomainValueCoverageResult = {
@@ -65,6 +77,18 @@ const CoverageModelBreakdownRef = builder
       modelId: t.exposeString('modelId'),
       label: t.exposeString('label'),
       trialCount: t.exposeInt('trialCount'),
+    }),
+  });
+
+const DirectionalCoverageRef = builder
+  .objectRef<DirectionalCoverage>('DirectionalCoverage')
+  .implement({
+    fields: (t) => ({
+      direction: t.exposeString('direction'),
+      completeBatches: t.exposeInt('completeBatches'),
+      filledSlots: t.exposeInt('filledSlots'),
+      leftoverConditions: t.exposeInt('leftoverConditions'),
+      definitionIds: t.exposeStringList('definitionIds'),
     }),
   });
 
@@ -110,6 +134,27 @@ const DomainValueCoverageCellRef = builder
         description:
           'Count of complete B-first runs for this value pair after model-set filtering. ' +
           'This is the filtered directional count for the second value in the pair.',
+      }),
+      pairedConditionCount: t.exposeInt('pairedConditionCount', {
+        description:
+          'Count of matched condition slots across both directions, computed as the ' +
+          'size of the intersection of filled (scenarioId, modelId, sampleIndex) slots.',
+      }),
+      orphanedConditionCount: t.exposeInt('orphanedConditionCount', {
+        description:
+          'Count of unmatched condition slots across both directions, computed as the ' +
+          'size of the symmetric difference of filled (scenarioId, modelId, sampleIndex) slots.',
+      }),
+      directionalCoverage: t.field({
+        type: [DirectionalCoverageRef],
+        resolve: (parent) => parent.directionalCoverage,
+        description:
+          'Per-direction condition coverage for this value pair, including complete batches, ' +
+          'filled slots, leftover conditions from incomplete runs, and contributing definition IDs.',
+      }),
+      contributingDefinitionIds: t.exposeStringList('contributingDefinitionIds', {
+        description:
+          'Union of definition IDs that contribute data to this coverage cell, sorted alphabetically.',
       }),
       incompleteBatchCount: t.exposeInt('incompleteBatchCount', {
         description:

@@ -360,7 +360,7 @@ export type ConsistencyPerCondition = {
   netPressureRank: Scalars['Int']['output'];
   scenarioId: Scalars['String']['output'];
   trials: Scalars['Int']['output'];
-  winRate?: Maybe<Scalars['Float']['output']>;
+  winRate: Scalars['Float']['output'];
 };
 
 export type ConsistencyPerDomain = {
@@ -666,6 +666,15 @@ export type DeprecateModelResult = {
   model: LlmModel;
   /** The new default model (if previous default was deprecated) */
   newDefault?: Maybe<LlmModel>;
+};
+
+export type DirectionalCoverage = {
+  __typename?: 'DirectionalCoverage';
+  completeBatches: Scalars['Int']['output'];
+  definitionIds: Array<Scalars['ID']['output']>;
+  direction: Scalars['String']['output'];
+  filledSlots: Scalars['Int']['output'];
+  leftoverConditions: Scalars['Int']['output'];
 };
 
 /** A single domain used to group vignettes */
@@ -1134,24 +1143,25 @@ export type DomainTrialRunStatus = {
 
 export type DomainValueCoverageCell = {
   __typename?: 'DomainValueCoverageCell';
+  aFirstBatchCount: Scalars['Int']['output'];
   aggregateRunId?: Maybe<Scalars['String']['output']>;
+  bFirstBatchCount: Scalars['Int']['output'];
   /** Count of fully-complete non-aggregate runs for this value pair. A run is complete when every selected model has at least one transcript at every (scenario × sampleIndex) slot. samplesPerScenario does not multiply this count -- a complete run contributes 1 regardless of how many samples per scenario were planned. Aggregate runs are excluded. */
   batchCount: Scalars['Int']['output'];
-  /** Count of complete A-first runs for this value pair after model-set filtering. This is the filtered directional count for the first value in the pair. */
-  aFirstBatchCount: Scalars['Int']['output'];
+  contributingDefinitionIds: Array<Scalars['ID']['output']>;
   definitionId?: Maybe<Scalars['String']['output']>;
   definitionName?: Maybe<Scalars['String']['output']>;
+  directionalCoverage: Array<DirectionalCoverage>;
   /** Count of non-aggregate runs that expect transcripts but are missing one or more (model × scenario × sampleIndex) slots. Per-run; samplesPerScenario does not multiply this count. Aggregate runs and runs with zero expected slots are excluded. */
   incompleteBatchCount: Scalars['Int']['output'];
   maxTrialCount?: Maybe<Scalars['Int']['output']>;
   minTrialCount?: Maybe<Scalars['Int']['output']>;
   modelBreakdown?: Maybe<Array<CoverageModelBreakdown>>;
-  /** Count of unmatched directional runs for this value pair, computed as max(complete A-first runs, complete B-first runs) - min(complete A-first runs, complete B-first runs). When both directions are equal this is 0; when only one direction has runs this is the count of that side. Runs without a recognizable direction token are excluded. */
   orphanedBatchCount: Scalars['Int']['output'];
+  orphanedConditionCount: Scalars['Int']['output'];
   /** Count of paired-batch groups where the surviving (complete) companion run is fully complete. When both companions are complete, the pair counts as 1. When only one is complete, that one is the survivor and the pair counts as 1. When both are incomplete, the pair counts as 0 here (and as 1 toward incompleteBatchCount). */
   pairedBatchCount: Scalars['Int']['output'];
-  /** Count of complete B-first runs for this value pair after model-set filtering. This is the filtered directional count for the second value in the pair. */
-  bFirstBatchCount: Scalars['Int']['output'];
+  pairedConditionCount: Scalars['Int']['output'];
   valueA: Scalars['String']['output'];
   valueB: Scalars['String']['output'];
 };
@@ -3341,7 +3351,7 @@ export type StartRunInput = {
   definitionId: Scalars['ID']['input'];
   /** Optional experiment to associate this run with */
   experimentId?: InputMaybe<Scalars['ID']['input']>;
-  /** Launch mode hint: STANDARD, PAIRED_BATCH, or AD_HOC_BATCH */
+  /** Launch mode hint: STANDARD, PAIRED_BATCH, PAIRED_BATCH_TOPUP, or AD_HOC_BATCH */
   launchMode?: InputMaybe<Scalars['String']['input']>;
   /** List of model IDs to evaluate (e.g., ["gpt-4", "claude-3"]) */
   models: Array<Scalars['String']['input']>;
@@ -3359,6 +3369,8 @@ export type StartRunInput = {
   scenarioIds?: InputMaybe<Array<Scalars['ID']['input']>>;
   /** Optional sampling temperature (0-2). If omitted, provider default is used. */
   temperature?: InputMaybe<Scalars['Float']['input']>;
+  /** Direction to top up for paired-batch top-up launches */
+  topUpDirection?: InputMaybe<Scalars['String']['input']>;
 };
 
 /** Result of starting a new run */
@@ -3997,7 +4009,7 @@ export type DomainValueCoverageQueryVariables = Exact<{
 }>;
 
 
-export type DomainValueCoverageQuery = { __typename?: 'Query', domainValueCoverage?: { __typename?: 'DomainValueCoverageResult', domainId: string, values: Array<string>, cells: Array<{ __typename?: 'DomainValueCoverageCell', valueA: string, valueB: string, batchCount: number, pairedBatchCount: number, orphanedBatchCount: number, aFirstBatchCount: number, bFirstBatchCount: number, incompleteBatchCount: number, definitionId?: string | null, definitionName?: string | null, aggregateRunId?: string | null, minTrialCount?: number | null, maxTrialCount?: number | null, modelBreakdown?: Array<{ __typename?: 'CoverageModelBreakdown', modelId: string, label: string, trialCount: number }> | null }>, availableModels: Array<{ __typename?: 'CoverageModelOption', modelId: string, label: string }> } | null };
+export type DomainValueCoverageQuery = { __typename?: 'Query', domainValueCoverage?: { __typename?: 'DomainValueCoverageResult', domainId: string, values: Array<string>, cells: Array<{ __typename?: 'DomainValueCoverageCell', valueA: string, valueB: string, batchCount: number, pairedBatchCount: number, orphanedBatchCount: number, aFirstBatchCount: number, bFirstBatchCount: number, pairedConditionCount: number, orphanedConditionCount: number, contributingDefinitionIds: Array<string>, incompleteBatchCount: number, definitionId?: string | null, definitionName?: string | null, aggregateRunId?: string | null, minTrialCount?: number | null, maxTrialCount?: number | null, directionalCoverage: Array<{ __typename?: 'DirectionalCoverage', direction: string, completeBatches: number, filledSlots: number, leftoverConditions: number, definitionIds: Array<string> }>, modelBreakdown?: Array<{ __typename?: 'CoverageModelBreakdown', modelId: string, label: string, trialCount: number }> | null }>, availableModels: Array<{ __typename?: 'CoverageModelOption', modelId: string, label: string }> } | null };
 
 export type DomainValueCoverageLegacyQueryVariables = Exact<{
   domainId: Scalars['ID']['input'];
@@ -4005,7 +4017,7 @@ export type DomainValueCoverageLegacyQueryVariables = Exact<{
 }>;
 
 
-export type DomainValueCoverageLegacyQuery = { __typename?: 'Query', domainValueCoverage?: { __typename?: 'DomainValueCoverageResult', domainId: string, values: Array<string>, cells: Array<{ __typename?: 'DomainValueCoverageCell', valueA: string, valueB: string, batchCount: number, pairedBatchCount: number, orphanedBatchCount: number, aFirstBatchCount: number, bFirstBatchCount: number, definitionId?: string | null, definitionName?: string | null, aggregateRunId?: string | null }>, availableModels: Array<{ __typename?: 'CoverageModelOption', modelId: string, label: string }> } | null };
+export type DomainValueCoverageLegacyQuery = { __typename?: 'Query', domainValueCoverage?: { __typename?: 'DomainValueCoverageResult', domainId: string, values: Array<string>, cells: Array<{ __typename?: 'DomainValueCoverageCell', valueA: string, valueB: string, batchCount: number, pairedBatchCount: number, orphanedBatchCount: number, aFirstBatchCount: number, bFirstBatchCount: number, pairedConditionCount: number, orphanedConditionCount: number, contributingDefinitionIds: Array<string>, definitionId?: string | null, definitionName?: string | null, aggregateRunId?: string | null, directionalCoverage: Array<{ __typename?: 'DirectionalCoverage', direction: string, completeBatches: number, filledSlots: number, leftoverConditions: number, definitionIds: Array<string> }> }>, availableModels: Array<{ __typename?: 'CoverageModelOption', modelId: string, label: string }> } | null };
 
 export type DomainsQueryVariables = Exact<{
   search?: InputMaybe<Scalars['String']['input']>;
@@ -4338,7 +4350,7 @@ export type ModelsConsistencyQueryVariables = Exact<{
 }>;
 
 
-export type ModelsConsistencyQuery = { __typename?: 'Query', modelsConsistency: { __typename?: 'ModelsConsistencyResult', models: Array<{ __typename?: 'ModelConsistency', modelId: string, label: string, providerName: string, repeatability: { __typename?: 'Repeatability', value: number, ciLow: number, ciHigh: number, withinScenarioSd: number, betweenScenarioSd: number, scenariosMeasured: number, perDomain: Array<{ __typename?: 'ConsistencyPerDomain', domainId: string, domainName: string, value: number, ciLow: number, ciHigh: number, scenariosMeasured: number }>, perScenario: Array<{ __typename?: 'ConsistencyPerScenario', scenarioId: string, matches: number, trials: number, p: number, ciLow: number, ciHigh: number }> }, coherence: { __typename?: 'Coherence', value: number, coherentPairs: number, determinatePairs: number, indeterminatePairs: number, perPair: Array<{ __typename?: 'ConsistencyPerPair', domainId: string, valueKey: string, rho?: number | null, pValue?: number | null, coherent: boolean, determinate: boolean, targetAnalysisRunId?: string | null, targetCompanionRunId?: string | null, primaryConditionIds: Array<string>, companionConditionIds: Array<string>, perCondition: Array<{ __typename?: 'ConsistencyPerCondition', scenarioId: string, netPressureRank: number, winRate?: number | null, matches: number, trials: number }> }> }, orderEffect: { __typename?: 'OrderEffect', samePct: number, flippedPct: number, noisyPct: number, notApplicable: boolean } }>, insufficient: Array<{ __typename?: 'InsufficientModel', modelId: string, label: string, providerName: string, reason: string }> } };
+export type ModelsConsistencyQuery = { __typename?: 'Query', modelsConsistency: { __typename?: 'ModelsConsistencyResult', models: Array<{ __typename?: 'ModelConsistency', modelId: string, label: string, providerName: string, repeatability: { __typename?: 'Repeatability', value: number, ciLow: number, ciHigh: number, withinScenarioSd: number, betweenScenarioSd: number, scenariosMeasured: number, perDomain: Array<{ __typename?: 'ConsistencyPerDomain', domainId: string, domainName: string, value: number, ciLow: number, ciHigh: number, scenariosMeasured: number }>, perScenario: Array<{ __typename?: 'ConsistencyPerScenario', scenarioId: string, matches: number, trials: number, p: number, ciLow: number, ciHigh: number }> }, coherence: { __typename?: 'Coherence', value: number, coherentPairs: number, determinatePairs: number, indeterminatePairs: number, perPair: Array<{ __typename?: 'ConsistencyPerPair', domainId: string, valueKey: string, rho?: number | null, pValue?: number | null, coherent: boolean, determinate: boolean, targetAnalysisRunId?: string | null, targetCompanionRunId?: string | null, primaryConditionIds: Array<string>, companionConditionIds: Array<string>, perCondition: Array<{ __typename?: 'ConsistencyPerCondition', scenarioId: string, netPressureRank: number, winRate: number, matches: number, trials: number }> }> }, orderEffect: { __typename?: 'OrderEffect', samePct: number, flippedPct: number, noisyPct: number, notApplicable: boolean } }>, insufficient: Array<{ __typename?: 'InsufficientModel', modelId: string, label: string, providerName: string, reason: string }> } };
 
 export type CreatePairedVignetteMutationVariables = Exact<{
   input: CreatePairedVignetteInput;
@@ -5745,6 +5757,16 @@ export const DomainValueCoverageDocument = gql`
       orphanedBatchCount
       aFirstBatchCount
       bFirstBatchCount
+      pairedConditionCount
+      orphanedConditionCount
+      directionalCoverage {
+        direction
+        completeBatches
+        filledSlots
+        leftoverConditions
+        definitionIds
+      }
+      contributingDefinitionIds
       incompleteBatchCount
       definitionId
       definitionName
@@ -5781,6 +5803,16 @@ export const DomainValueCoverageLegacyDocument = gql`
       orphanedBatchCount
       aFirstBatchCount
       bFirstBatchCount
+      pairedConditionCount
+      orphanedConditionCount
+      directionalCoverage {
+        direction
+        completeBatches
+        filledSlots
+        leftoverConditions
+        definitionIds
+      }
+      contributingDefinitionIds
       definitionId
       definitionName
       aggregateRunId

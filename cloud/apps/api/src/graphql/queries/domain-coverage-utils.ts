@@ -37,6 +37,7 @@ export function getCoverageBatchIncrement(samplesPerScenario: unknown): number {
 }
 
 export type CoverageModelBreakdown = { modelId: string; label: string; trialCount: number };
+export type CoverageConditionBreakdown = { filledSlots: number; definitionIds: string[] };
 
 /**
  * Deduplicate a list of runs by their paired-batch group ID.
@@ -293,5 +294,105 @@ export function selectPrimaryDefinitionCounts(
     orphanedBatchCount,
     aFirstBatchCount,
     bFirstBatchCount,
+  };
+}
+
+type DirectionSetMap = ReadonlyMap<string, ReadonlySet<string>>;
+
+function mergeDirectionSets(
+  definitionIds: readonly string[],
+  directionSetsByDefinitionId: ReadonlyMap<string, DirectionSetMap>,
+): Map<string, Set<string>> {
+  const merged = new Map<string, Set<string>>();
+
+  for (const defId of new Set(definitionIds)) {
+    const defMap = directionSetsByDefinitionId.get(defId);
+    if (defMap == null) continue;
+
+    for (const [direction, slotKeys] of defMap) {
+      const existing = merged.get(direction) ?? new Set<string>();
+      for (const slotKey of slotKeys) {
+        existing.add(slotKey);
+      }
+      merged.set(direction, existing);
+    }
+  }
+
+  return merged;
+}
+
+function collectDefinitionIdsForDirection(
+  definitionIds: readonly string[],
+  directionSetsByDefinitionId: ReadonlyMap<string, DirectionSetMap>,
+  direction: string,
+): string[] {
+  const contributors = new Set<string>();
+
+  for (const defId of new Set(definitionIds)) {
+    const defMap = directionSetsByDefinitionId.get(defId);
+    if (defMap == null) continue;
+    const slotSet = defMap.get(direction);
+    if (slotSet == null || slotSet.size === 0) continue;
+    contributors.add(defId);
+  }
+
+  return Array.from(contributors).sort((left, right) => left.localeCompare(right));
+}
+
+export function computeConditionCounts(
+  definitionIds: readonly string[],
+  directionSetsByDefinitionId: ReadonlyMap<string, DirectionSetMap>,
+): {
+  pairedConditionCount: number;
+  orphanedConditionCount: number;
+  perDirection: Map<string, CoverageConditionBreakdown>;
+} {
+  const uniqueDefinitionIds = Array.from(new Set(definitionIds));
+  if (uniqueDefinitionIds.length === 0) {
+    return {
+      pairedConditionCount: 0,
+      orphanedConditionCount: 0,
+      perDirection: new Map(),
+    };
+  }
+
+  const merged = mergeDirectionSets(uniqueDefinitionIds, directionSetsByDefinitionId);
+  const perDirection = new Map<string, CoverageConditionBreakdown>();
+
+  for (const [direction, slotKeys] of merged) {
+    perDirection.set(direction, {
+      filledSlots: slotKeys.size,
+      definitionIds: collectDefinitionIdsForDirection(uniqueDefinitionIds, directionSetsByDefinitionId, direction),
+    });
+  }
+
+  let pairedConditionCount = 0;
+  let orphanedConditionCount = 0;
+
+  if (merged.size === 1) {
+    const onlyCount = Array.from(merged.values())[0]!.size;
+    orphanedConditionCount = onlyCount;
+  } else if (merged.size >= 2) {
+    // For >2 directions (corruption case), use the two largest slot sets — same
+    // shape as selectPrimaryDefinitionCounts. The paired/orphaned semantics use
+    // ACTUAL set intersection and symmetric difference, not just size comparison;
+    // two equal-sized sets with disjoint slot identities (e.g. {s1,s2} vs {s3,s4})
+    // must report 0 paired and 4 orphaned, not 2 paired and 0 orphaned.
+    const sortedSets = Array.from(merged.values()).sort((left, right) => right.size - left.size);
+    const slotsA = sortedSets[0]!;
+    const slotsB = sortedSets[1]!;
+    let intersectionSize = 0;
+    for (const slot of slotsA) {
+      if (slotsB.has(slot)) intersectionSize++;
+    }
+    pairedConditionCount = intersectionSize;
+    // |A △ B| = |A| + |B| - 2|A ∩ B|
+    orphanedConditionCount = slotsA.size + slotsB.size - 2 * intersectionSize;
+  }
+
+  return {
+    pairedConditionCount,
+    orphanedConditionCount,
+    perDirection,
   };
 }

@@ -9,14 +9,14 @@ export type RunFormState = {
   samplePercentage: number;
   samplesPerScenario: number;
   temperatureInput: string;
-  launchMode: 'PAIRED_BATCH' | 'AD_HOC_BATCH';
+  launchMode: 'PAIRED_BATCH' | 'PAIRED_BATCH_TOPUP' | 'AD_HOC_BATCH';
 };
 
 type UseRunFormOptions = {
   definitionId: string;
   scenarioCount?: number;
   initialTemperature?: number | null;
-  defaultLaunchMode?: 'PAIRED_BATCH' | 'AD_HOC_BATCH';
+  defaultLaunchMode?: 'PAIRED_BATCH' | 'PAIRED_BATCH_TOPUP' | 'AD_HOC_BATCH';
   onSubmit: (input: StartRunInput) => Promise<void>;
   models: AvailableModel[];
   loadingModels: boolean;
@@ -38,7 +38,7 @@ type UseRunFormResult = {
   handleSampleChange: (value: number) => void;
   handleSamplesPerScenarioChange: (value: number) => void;
   handleTemperatureChange: (value: string) => void;
-  handleLaunchModeChange: (launchMode: 'PAIRED_BATCH' | 'AD_HOC_BATCH') => void;
+  handleLaunchModeChange: (launchMode: 'PAIRED_BATCH' | 'PAIRED_BATCH_TOPUP' | 'AD_HOC_BATCH') => void;
   handleSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   handleCloseConditionModal: () => void;
   handleImmediateConditionSelect: (rowLevel: string, colLevel: string, scenarioIds: string[]) => void;
@@ -150,7 +150,7 @@ export function useRunForm({
     setValidationError(null);
   }, []);
 
-  const handleLaunchModeChange = useCallback((launchMode: 'PAIRED_BATCH' | 'AD_HOC_BATCH') => {
+  const handleLaunchModeChange = useCallback((launchMode: 'PAIRED_BATCH' | 'PAIRED_BATCH_TOPUP' | 'AD_HOC_BATCH') => {
     setFormState((previousState) => ({
       ...previousState,
       launchMode,

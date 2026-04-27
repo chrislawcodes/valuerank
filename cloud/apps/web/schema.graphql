@@ -1166,6 +1166,14 @@ type DomainTrialRunStatus {
   updatedAt: DateTime!
 }
 
+type DirectionalCoverage {
+  completeBatches: Int!
+  definitionIds: [ID!]!
+  direction: String!
+  filledSlots: Int!
+  leftoverConditions: Int!
+}
+
 type DomainValueCoverageCell {
   aggregateRunId: String
 
@@ -1180,9 +1188,16 @@ type DomainValueCoverageCell {
   Count of non-aggregate runs that expect transcripts but are missing one or more (model × scenario × sampleIndex) slots. Per-run; samplesPerScenario does not multiply this count. Aggregate runs and runs with zero expected slots are excluded.
   """
   incompleteBatchCount: Int!
+  pairedConditionCount: Int!
+  orphanedBatchCount: Int!
+  orphanedConditionCount: Int!
+  contributingDefinitionIds: [ID!]!
+  directionalCoverage: [DirectionalCoverage!]!
   maxTrialCount: Int
   minTrialCount: Int
   modelBreakdown: [CoverageModelBreakdown!]
+  aFirstBatchCount: Int!
+  bFirstBatchCount: Int!
 
   """
   Count of paired-batch groups where the surviving (complete) companion run is fully complete. When both companions are complete, the pair counts as 1. When only one is complete, that one is the survivor and the pair counts as 1. When both are incomplete, the pair counts as 0 here (and as 1 toward incompleteBatchCount).
@@ -3003,7 +3018,7 @@ input StartRunInput {
   """Optional experiment to associate this run with"""
   experimentId: ID
 
-  """Launch mode hint: STANDARD, PAIRED_BATCH, or AD_HOC_BATCH"""
+  """Launch mode hint: STANDARD, PAIRED_BATCH, PAIRED_BATCH_TOPUP, or AD_HOC_BATCH"""
   launchMode: String
 
   """List of model IDs to evaluate (e.g., ["gpt-4", "claude-3"])"""
@@ -3030,6 +3045,9 @@ input StartRunInput {
 
   """Optional explicit scenario IDs to run instead of percentage sampling"""
   scenarioIds: [ID!]
+
+  """Direction to top up for paired-batch top-up launches"""
+  topUpDirection: String
 
   """
   Optional sampling temperature (0-2). If omitted, provider default is used.

@@ -1,0 +1,151 @@
+---
+reviewer: "gpt-5.4"
+lens: "restatement-judge"
+stage: "plan"
+artifact_path: "docs/workflow/feature-runs/match-pair-counts/plan.md"
+artifact_sha256: "552bf20a0efdaab21464d9d6bfcb1b650486978832232f780518fe95602f26ad"
+repo_root: "."
+git_head_sha: "728da7d111003c5b052de4afad7f33501fbe10ba"
+git_base_ref: "origin/main"
+git_base_sha: "ee49253d6dd9ce8c0dfd6789aad31716b74634e8"
+generation_method: "judge-panel"
+resolution_status: "open"
+resolution_note: "schema_violation: Reading prompt from stdin... OpenAI Codex v0.125.0 (research preview) -------- workdir: /Users/chrislaw/valuerank/.claude/worktrees/infallible-bassi-fafa71 model: gpt-5.4 provider: openai approval: never sandbox: worksp..."
+raw_output_path: "docs/workflow/feature-runs/match-pair-counts/reviews/judge.restatement.raw.txt"
+narrowed_artifact_path: ""
+narrowed_artifact_sha256: ""
+coverage_status: "full"
+coverage_note: ""
+---
+
+# Review: plan restatement-judge
+
+## Findings
+
+schema_violation: Reading prompt from stdin...
+OpenAI Codex v0.125.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/infallible-bassi-fafa71
+model: gpt-5.4
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019dcdd2-9b78-75b0-8534-6800005b62ef
+--------
+user
+You are a review-loop auditor.
+
+Your only job: determine whether the findings from the LATEST
+adversarial round are genuinely new issues, or whether they are
+restatements of themes already raised and addressed in earlier
+rounds.
+
+Review loops can go forever if each round produces cosmetic
+variations of already-handled concerns. Your output decides
+whether the loop is producing signal or noise.
+
+A finding is a RESTATEMENT if:
+- Earlier rounds raised the same underlying concern, AND
+- The orchestrator made a substantive change in response, AND
+- The new finding does not point at a new failure mode
+
+A finding is NEW if:
+- No earlier round raised this concern, OR
+- Earlier rounds raised it but the mitigation is now itself flawed
+  in a way the new finding surfaces
+
+Proceed when 70%+ of the latest round's findings are restatements.
+Block when substantial new concerns are surfacing — the loop is
+still earning its keep.
+
+Be concrete. Quote specific text from both the old and new rounds
+when calling something a restatement.
+
+Earlier rounds' findings (with orchestrator responses):
+- No prior findings yet.
+
+Latest round's findings:
+- HIGH plan.codex.architecture-adversarial.review#high-1: **: The plan does not define enough data to choose the correct launch vignette when a coverage cell aggregates multiple definitions. The resolver already stores multiple definition IDs per pair (`definitionsByPairKey`) and then collapses them to one `primaryDefinitionId` for the cell link target, so the proposed `computeLaggingDirection` cannot deterministically pick a `launchDefinitionId` from only aggregate `directionalCoverage` plus `contributingDefinitionIds`. That makes the Match Pair Counts action ambiguous or wrong for multi-definition cells. [CODE-CONFIRMED] (plan.codex.architecture-adversarial.review.md)
+- MEDIUM plan.codex.architecture-adversarial.review#medium-2: **: The plan uses `aggregateRunId === null` as if it were an aggregate-cell marker, but the current resolver uses `aggregateRunId` as a general “best analysis link” pointer that falls back to the latest matching non-aggregate run. That means non-aggregate cells often have a non-null `aggregateRunId`, so the proposed gating will misclassify cells and hide/show Match Pair Counts incorrectly. [CODE-CONFIRMED] (plan.codex.architecture-adversarial.review.md)
+- MEDIUM plan.codex.architecture-adversarial.review#medium-3: **: The top-up mode rollout is incomplete on the run list surface. `RunCard` marks any run with a `pairedBatchGroupId` as “Paired batch”, but the plan says top-up runs should be standalone production runs with a fresh batch group and no companion. Without updating this badge logic, top-up runs will still be shown as paired in list views even though the plan treats them as a separate launch shape. [CODE-CONFIRMED] (plan.codex.architecture-adversarial.review.md)
+- HIGH plan.codex.implementation-adversarial.review#high-1: ** [CODE-CONFIRMED] The planned `Match Pair Counts` gate is keyed off `aggregateRunId === null`, but the current resolver does not use `aggregateRunId` as an “aggregate-only” flag. It sets that field to `latestAggregateRunId ?? latestMatchingRunId ?? null`, so ordinary covered cells will usually have a non-null value too. That means the action would be hidden on most usable cells, not just aggregate ones. See [`cloud/apps/api/src/graphql/queries/domain-coverage.ts#L309`](file:///Users/chrislaw/valuerank/.claude/worktrees/infallible-bassi-fafa71/cloud/apps/api/src/graphql/queries/domain-coverage.ts#L309) and [`cloud/apps/api/src/graphql/queries/domain-coverage.ts#L313`](file:///Users/chrislaw/valuerank/.claude/worktrees/infallible-bassi-fafa71/cloud/apps/api/src/graphql/queries/domain-coverage.ts#L313). (plan.codex.implementation-adversarial.review.md)
+- HIGH plan.codex.implementation-adversarial.review#high-2: ** [CODE-CONFIRMED] The plan assumes the top-up flow can be layered onto the existing paired-batch form without changing the form API, but the current form state only supports `PAIRED_BATCH | AD_HOC_BATCH`, and `RunForm` hardcodes `defaultLaunchMode: 'PAIRED_BATCH'`. There is no path here to prefill or lock a third launch mode the way the artifact describes. See [`cloud/apps/web/src/components/runs/useRunForm.ts#L12`](file:///Users/chrislaw/valuerank/.claude/worktrees/infallible-bassi-fafa71/cloud/apps/web/src/components/runs/useRunForm.ts#L12), [`cloud/apps/web/src/components/runs/useRunForm.ts#L41`](file:///Users/chrislaw/valuerank/.claude/worktrees/infallible-bassi-fafa71/cloud/apps/web/src/components/runs/useRunForm.ts#L41), [`cloud/apps/web/src/components/runs/useRunForm.ts#L114`](file:///Users/chrislaw/valuerank/.claude/worktrees/infallible-bassi-fafa71/cloud/apps/web/src/components/runs/useRunForm.ts#L114), and [`cloud/apps/web/src/components/runs/RunForm.tsx#L110`](file:///Users/chrislaw/valuerank/.claude/worktrees/infallible-bassi-fafa71/cloud/apps/web/src/components/runs/RunForm.tsx#L110). (plan.codex.implementation-adversarial.review.md)
+- MEDIUM plan.codex.implementation-adversarial.review#medium-3: ** [CODE-CONFIRMED] The plan points the shared trial-count helper at `cloud/apps/shared/src/launch-trial-count.ts`, but the repo’s shared workspace is `cloud/packages/shared`, not `cloud/apps/shared`. As written, that path will not match the actual package layout and the import strategy in the artifact will not work without rewriting the location. See [`cloud/packages/shared/package.json#L2`](file:///Users/chrislaw/valuerank/.claude/worktrees/infallible-bassi-fafa71/cloud/packages/shared/package.json#L2). (plan.codex.implementation-adversarial.review.md)
+- MEDIUM plan.codex.implementation-adversarial.review#medium-4: ** [CODE-CONFIRMED] The new coverage counts are not scoped to the same `modelIds` filter unless the implementation explicitly preserves the current guard. The existing resolver applies `matchesModelFilter` before incrementing `batchCount` and `pairedBatchCount`; the plan never calls out reusing that filtered run set for the new slot-based counts, so a filtered coverage view could end up with batch counts and condition counts that disagree. See [`cloud/apps/api/src/graphql/queries/domain-coverage.ts#L209`](file:///Users/chrislaw/valuerank/.claude/worktrees/infallible-bassi-fafa71/cloud/apps/api/src/graphql/queries/domain-coverage.ts#L209) through [`cloud/apps/api/src/graphql/queries/domain-coverage.ts#L229`](file:///Users/chrislaw/valuerank/.claude/worktrees/infallible-bassi-fafa71/cloud/apps/api/src/graphql/queries/domain-coverage.ts#L229). (plan.codex.implementation-adversarial.review.md)
+- HIGH plan.gemini.testability-adversarial.review#high-1: ** | Plan's "Verified Fact" about `orphanedBatchCount` is contradicted by provided code. | `[CODE-CONFIRMED]` (plan.gemini.testability-adversarial.review.md)
+- MEDIUM plan.gemini.testability-adversarial.review#medium-2: ** | Plan is ambiguous about the core tie-breaking logic for identifying the lagging pair. | `[UNVERIFIED]` (plan.gemini.testability-adversarial.review.md)
+- LOW plan.gemini.testability-adversarial.review#low-3: ** | The plan's proposed GraphQL schema inaccurately uses an `enum` for `LaunchMode`. | `[CODE-CONFIRMED]` (plan.gemini.testability-adversarial.review.md)
+- HIGH plan.gemini.testability-adversarial.review#high-4: **Severity:** HIGH (plan.gemini.testability-adversarial.review.md)
+- HIGH plan.gemini.testability-adversarial.review#high-5: risk of implementation failure, required rework, and incorrect test assumptions. While the plan notes the worktree may be stale, an adversarial review cannot accept a contradicted assertion as verified. This foundational discrepancy must be resolved before implementation begins. (plan.gemini.testability-adversarial.review.md)
+- MEDIUM plan.gemini.testability-adversarial.review#medium-6: **Severity:** MEDIUM (plan.gemini.testability-adversarial.review.md)
+- LOW plan.gemini.testability-adversarial.review#low-7: **Severity:** LOW (plan.gemini.testability-adversarial.review.md)
+
+For each latest finding:
+1. Classify as NEW or RESTATEMENT
+2. If RESTATEMENT, quote the earlier finding it echoes and the
+   orchestrator response that addressed it
+3. If NEW, state the specific failure mode that was not previously
+   covered
+
+Then emit verdict JSON. Proceed = loop is saturated, block = loop
+is still finding real issues.
+
+Your previous response did not match the required JSON schema.
+Please emit ONLY a single JSON object matching this schema:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "JudgeVerdict",
+  "type": "object",
+  "required": ["judge", "model", "verdict", "confidence", "reasoning", "evidence", "timestamp"],
+  "properties": {
+    "judge": {"type": "string", "enum": ["completeness", "restatement", "implementation-risk"]},
+    "model": {"type": "string"},
+    "verdict": {"type": "string", "enum": ["proceed", "proceed-with-annotation", "block"]},
+    "confidence": {"type": "integer", "minimum": 0, "maximum": 5},
+    "reasoning": {"type": "string", "minLength": 10},
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["artifact", "section", "quote"],
+        "properties": {
+          "artifact": {"type": "string"},
+          "section": {"type": "string"},
+          "quote": {"type": "string"}
+        }
+      }
+    },
+    "timestamp": {"type": "string", "format": "date-time"}
+  },
+  "additionalProperties": false
+}
+
+Do not include any prose outside the JSON.
+
+ERROR: You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 2:28 AM.
+ERROR: You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 2:28 AM.
+2026-04-27T07:23:46.911134Z ERROR codex_core::session: failed to record rollout items: thread 019dcdd2-9b78-75b0-8534-6800005b62ef not found
+
+## Residual Risks
+
+- None.
+
+## Verdict (structured)
+
+```json
+{
+  "confidence": 0,
+  "evidence": [],
+  "judge": "restatement",
+  "model": "gpt-5.4",
+  "reasoning": "schema_violation: Reading prompt from stdin...\nOpenAI Codex v0.125.0 (research preview)\n--------\nworkdir: /Users/chrislaw/valuerank/.claude/worktrees/infallible-bassi-fafa71\nmodel: gpt-5.4\nprovider: openai\napproval: never\nsandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]\nreasoning effort: high\nreasoning summaries: none\nsession id: 019dcdd2-9b78-75b0-8534-6800005b62ef\n--------\nuser\nYou are a review-loop auditor.\n\nYour only job: determine whether the findings from the LATEST\nadversarial round are genuinely new issues, or whether they are\nrestatements of themes already raised and addressed in earlier\nrounds.\n\nReview loops can go forever if each round produces cosmetic\nvariations of already-handled concerns. Your output decides\nwhether the loop is producing signal or noise.\n\nA finding is a RESTATEMENT if:\n- Earlier rounds raised the same underlying concern, AND\n- The orchestrator made a substantive change in response, AND\n- The new finding does not point at a new failure mode\n\nA finding is NEW if:\n- No earlier round raised this concern, OR\n- Earlier rounds raised it but the mitigation is now itself flawed\n  in a way the new finding surfaces\n\nProceed when 70%+ of the latest round's findings are restatements.\nBlock when substantial new concerns are surfacing \u2014 the loop is\nstill earning its keep.\n\nBe concrete. Quote specific text from both the old and new rounds\nwhen calling something a restatement.\n\nEarlier rounds' findings (with orchestrator responses):\n- No prior findings yet.\n\nLatest round's findings:\n- HIGH plan.codex.architecture-adversarial.review#high-1: **: The plan does not define enough data to choose the correct launch vignette when a coverage cell aggregates multiple definitions. The resolver already stores multiple definition IDs per pair (`definitionsByPairKey`) and then collapses them to one `primaryDefinitionId` for the cell link target, so the proposed `computeLaggingDirection` cannot deterministically pick a `launchDefinitionId` from only aggregate `directionalCoverage` plus `contributingDefinitionIds`. That makes the Match Pair Counts action ambiguous or wrong for multi-definition cells. [CODE-CONFIRMED] (plan.codex.architecture-adversarial.review.md)\n- MEDIUM plan.codex.architecture-adversarial.review#medium-2: **: The plan uses `aggregateRunId === null` as if it were an aggregate-cell marker, but the current resolver uses `aggregateRunId` as a general \u201cbest analysis link\u201d pointer that falls back to the latest matching non-aggregate run. That means non-aggregate cells often have a non-null `aggregateRunId`, so the proposed gating will misclassify cells and hide/show Match Pair Counts incorrectly. [CODE-CONFIRMED] (plan.codex.architecture-adversarial.review.md)\n- MEDIUM plan.codex.architecture-adversarial.review#medium-3: **: The top-up mode rollout is incomplete on the run list surface. `RunCard` marks any run with a `pairedBatchGroupId` as \u201cPaired batch\u201d, but the plan says top-up runs should be standalone production runs with a fresh batch group and no companion. Without updating this badge logic, top-up runs will still be shown as paired in list views even though the plan treats them as a separate launch shape. [CODE-CONFIRMED] (plan.codex.architecture-adversarial.review.md)\n- HIGH plan.codex.implementation-adversarial.review#high-1: ** [CODE-CONFIRMED] The planned `Match Pair Counts` gate is keyed off `aggregateRunId === null`, but the current resolver does not use `aggregateRunId` as an \u201caggregate-only\u201d flag. It sets that field to `latestAggregateRunId ?? latestMatchingRunId ?? null`, so ordinary covered cells will usually have a non-null value too. That means the action would be hidden on most usable cells, not just aggregate ones. See [`cloud/apps/api/src/graphql/queries/domain-coverage.ts#L309`](file:///Users/chrislaw/valuerank/.claude/worktrees/infallible-bassi-fafa71/cloud/apps/api/src/graphql/queries/domain-coverage.ts#L309) and [`cloud/apps/api/src/graphql/queries/domain-coverage.ts#L313`](file:///Users/chrislaw/valuerank/.claude/worktrees/infallible-bassi-fafa71/cloud/apps/api/src/graphql/queries/domain-coverage.ts#L313). (plan.codex.implementation-adversarial.review.md)\n- HIGH plan.codex.implementation-adversarial.review#high-2: ** [CODE-CONFIRMED] The plan assumes the top-up flow can be layered onto the existing paired-batch form without changing the form API, but the current form state only supports `PAIRED_BATCH | AD_HOC_BATCH`, and `RunForm` hardcodes `defaultLaunchMode: 'PAIRED_BATCH'`. There is no path here to prefill or lock a third launch mode the way the artifact describes. See [`cloud/apps/web/src/components/runs/useRunForm.ts#L12`](file:///Users/chrislaw/valuerank/.claude/worktrees/infallible-bassi-fafa71/cloud/apps/web/src/components/runs/useRunForm.ts#L12), [`cloud/apps/web/src/components/runs/useRunForm.ts#L41`](file:///Users/chrislaw/valuerank/.claude/worktrees/infallible-bassi-fafa71/cloud/apps/web/src/components/runs/useRunForm.ts#L41), [`cloud/apps/web/src/components/runs/useRunForm.ts#L114`](file:///Users/chrislaw/valuerank/.claude/worktrees/infallible-bassi-fafa71/cloud/apps/web/src/components/runs/useRunForm.ts#L114), and [`cloud/apps/web/src/components/runs/RunForm.tsx#L110`](file:///Users/chrislaw/valuerank/.claude/worktrees/infallible-bassi-fafa71/cloud/apps/web/src/components/runs/RunForm.tsx#L110). (plan.codex.implementation-adversarial.review.md)\n- MEDIUM plan.codex.implementation-adversarial.review#medium-3: ** [CODE-CONFIRMED] The plan points the shared trial-count helper at `cloud/apps/shared/src/launch-trial-count.ts`, but the repo\u2019s shared workspace is `cloud/packages/shared`, not `cloud/apps/shared`. As written, that path will not match the actual package layout and the import strategy in the artifact will not work without rewriting the location. See [`cloud/packages/shared/package.json#L2`](file:///Users/chrislaw/valuerank/.claude/worktrees/infallible-bassi-fafa71/cloud/packages/shared/package.json#L2). (plan.codex.implementation-adversarial.review.md)\n- MEDIUM plan.codex.implementation-adversarial.review#medium-4: ** [CODE-CONFIRMED] The new coverage counts are not scoped to the same `modelIds` filter unless the implementation explicitly preserves the current guard. The existing resolver applies `matchesModelFilter` before incrementing `batchCount` and `pairedBatchCount`; the plan never calls out reusing that filtered run set for the new slot-based counts, so a filtered coverage view could end up with batch counts and condition counts that disagree. See [`cloud/apps/api/src/graphql/queries/domain-coverage.ts#L209`](file:///Users/chrislaw/valuerank/.claude/worktrees/infallible-bassi-fafa71/cloud/apps/api/src/graphql/queries/domain-coverage.ts#L209) through [`cloud/apps/api/src/graphql/queries/domain-coverage.ts#L229`](file:///Users/chrislaw/valuerank/.claude/worktrees/infallible-bassi-fafa71/cloud/apps/api/src/graphql/queries/domain-coverage.ts#L229). (plan.codex.implementation-adversarial.review.md)\n- HIGH plan.gemini.testability-adversarial.review#high-1: ** | Plan's \"Verified Fact\" about `orphanedBatchCount` is contradicted by provided code. | `[CODE-CONFIRMED]` (plan.gemini.testability-adversarial.review.md)\n- MEDIUM plan.gemini.testability-adversarial.review#medium-2: ** | Plan is ambiguous about the core tie-breaking logic for identifying the lagging pair. | `[UNVERIFIED]` (plan.gemini.testability-adversarial.review.md)\n- LOW plan.gemini.testability-adversarial.review#low-3: ** | The plan's proposed GraphQL schema inaccurately uses an `enum` for `LaunchMode`. | `[CODE-CONFIRMED]` (plan.gemini.testability-adversarial.review.md)\n- HIGH plan.gemini.testability-adversarial.review#high-4: **Severity:** HIGH (plan.gemini.testability-adversarial.review.md)\n- HIGH plan.gemini.testability-adversarial.review#high-5: risk of implementation failure, required rework, and incorrect test assumptions. While the plan notes the worktree may be stale, an adversarial review cannot accept a contradicted assertion as verified. This foundational discrepancy must be resolved before implementation begins. (plan.gemini.testability-adversarial.review.md)\n- MEDIUM plan.gemini.testability-adversarial.review#medium-6: **Severity:** MEDIUM (plan.gemini.testability-adversarial.review.md)\n- LOW plan.gemini.testability-adversarial.review#low-7: **Severity:** LOW (plan.gemini.testability-adversarial.review.md)\n\nFor each latest finding:\n1. Classify as NEW or RESTATEMENT\n2. If RESTATEMENT, quote the earlier finding it echoes and the\n   orchestrator response that addressed it\n3. If NEW, state the specific failure mode that was not previously\n   covered\n\nThen emit verdict JSON. Proceed = loop is saturated, block = loop\nis still finding real issues.\n\nYour previous response did not match the required JSON schema.\nPlease emit ONLY a single JSON object matching this schema:\n{\n  \"$schema\": \"http://json-schema.org/draft-07/schema#\",\n  \"title\": \"JudgeVerdict\",\n  \"type\": \"object\",\n  \"required\": [\"judge\", \"model\", \"verdict\", \"confidence\", \"reasoning\", \"evidence\", \"timestamp\"],\n  \"properties\": {\n    \"judge\": {\"type\": \"string\", \"enum\": [\"completeness\", \"restatement\", \"implementation-risk\"]},\n    \"model\": {\"type\": \"string\"},\n    \"verdict\": {\"type\": \"string\", \"enum\": [\"proceed\", \"proceed-with-annotation\", \"block\"]},\n    \"confidence\": {\"type\": \"integer\", \"minimum\": 0, \"maximum\": 5},\n    \"reasoning\": {\"type\": \"string\", \"minLength\": 10},\n    \"evidence\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"required\": [\"artifact\", \"section\", \"quote\"],\n        \"properties\": {\n          \"artifact\": {\"type\": \"string\"},\n          \"section\": {\"type\": \"string\"},\n          \"quote\": {\"type\": \"string\"}\n        }\n      }\n    },\n    \"timestamp\": {\"type\": \"string\", \"format\": \"date-time\"}\n  },\n  \"additionalProperties\": false\n}\n\nDo not include any prose outside the JSON.\n\nERROR: You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 2:28 AM.\nERROR: You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 2:28 AM.\n2026-04-27T07:23:46.911134Z ERROR codex_core::session: failed to record rollout items: thread 019dcdd2-9b78-75b0-8534-6800005b62ef not found\n",
+  "timestamp": "2026-04-27T07:23:46.926274Z",
+  "verdict": "block"
+}
+```
+
+## Resolution
+- status: open
+- note: schema_violation: Reading prompt from stdin... OpenAI Codex v0.125.0 (research preview) -------- workdir: /Users/chrislaw/valuerank/.claude/worktrees/infallible-bassi-fafa71 model: gpt-5.4 provider: openai approval: never sandbox: worksp...

@@ -1,0 +1,57 @@
+MCP issues detected. Run /mcp list for status.{
+  "session_id": "8c213768-dbd3-493b-a1f2-f306161a4cfc",
+  "response": "## Findings\n\n| Severity | Finding |\n| --- | --- |\n| MEDIUM [UNVERIFIED] | **The \"Match Pair Counts\" top-up feature assumes the correct vignette can be selected for a lagging direction.** The new top-up workflow launches a run against a single `launchDefinitionId`. The logic for selecting this ID appears to be in `computeLaggingDirection`, a utility function not included in the diff. There is a risk that this utility could select a vignette that does not contain the necessary scenarios to fill the gaps in the lagging direction. While the UI warns about a `residualMismatch` post-launch, it could still guide the user to launch a run that is ineffective or worsens the imbalance if the initial vignette selection is wrong. |\n| LOW | **Logic for identifying valid transcript \"slots\" has been improved.** In `domain-coverage.ts`, the filter for valid transcripts was correctly tightened from `t.scenarioId !== null` to `t.scenarioId !== null && t.sampleIndex !== null`. This prevents incomplete transcript records from being counted as filled condition slots, improving the accuracy of the new condition-level metrics. |\n| INFO | **Paired/orphaned condition counting correctly handles disjoint sets.** The implementation of `computeConditionCounts` correctly calculates the intersection of condition slots between two directions rather than relying on a simple `min(sizeA, sizeB)`. This avoids a potential bug where two directions with identically-sized but completely different sets of conditions would have been incorrectly reported as fully paired. The inclusion of a specific regression test for this scenario (`reports zero paired and full orphaned when both directions have disjoint slot identities`) is a strong indicator of quality. |\n| INFO | **UI for coverage imbalance is significantly more detailed and actionable.** The definition of an \"imbalance\" in `CoverageCell.tsx` has been expanded beyond simple batch counts to include condition-level counts (`filledSlots`) and orphaned entities. The popover and tooltip now provide a much clearer breakdown of both batch and condition-level disparities, and the new \"Match Pair Counts\" link provides a direct workflow to address the imbalance, including a live-updating preview of the outcome. |\n\n## Residual Risks\n\n- The correctness of the \"Match Pair Counts\" top-up feature is entirely dependent on the behavior of two utility functions not present in this diff: `computeLaggingDirection` and `computeLaunchTrialCount`. Any bugs or incorrect assumptions in these shared utilities will directly lead to incorrect behavior or UI previews in the top-up workflow. Specifically, if `computeLaggingDirection` fails to select the correct vignette to launch against, the feature will not resolve the coverage gap as intended.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 41188
+        },
+        "tokens": {
+          "input": 28117,
+          "prompt": 28117,
+          "candidates": 553,
+          "total": 32046,
+          "cached": 0,
+          "thoughts": 3376,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 41188,
+            "tokens": {
+              "input": 28117,
+              "prompt": 28117,
+              "candidates": 553,
+              "total": 32046,
+              "cached": 0,
+              "thoughts": 3376,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}
