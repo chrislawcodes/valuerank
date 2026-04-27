@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import hashlib
+import re
 from pathlib import Path
 
 
@@ -35,24 +36,47 @@ def resolve_stored_path(raw: str, repo_root: Path, stored_repo_root: str = "") -
     return candidate
 
 
+def _strip_plan_reconciliation_section(text: str) -> str:
+    lines = text.splitlines(keepends=True)
+    in_fence = False
+    starts: list[int] = []
+    heading_re = re.compile(r"^##\s+Review Reconciliation\s*$")
+    for idx, line in enumerate(lines):
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+            continue
+        if not in_fence and heading_re.match(line.rstrip()):
+            starts.append(idx)
+    if len(starts) != 1:
+        return text
+    start = starts[0]
+    end = len(lines)
+    for idx in range(start + 1, len(lines)):
+        if re.match(r"^##\s+\S", lines[idx]):
+            end = idx
+            break
+    return "".join(lines[:start]).rstrip() + "\n\n" + "".join(lines[end:]).lstrip()
+
+
 def normalized_artifact_text(stage: str, path: Path) -> str:
     text = path.read_text(encoding="utf-8")
-    # Strip the Review Reconciliation section from the hash computation for
-    # every artifact stage, not just plan. Previously this stripping was
-    # plan-only, which caused spec (and tasks, and closeout) adversarial
-    # reviews to be marked "stale" every time the orchestrator added a
-    # reconciliation entry — creating an infinite loop where the reviews
-    # could never converge. The Review Reconciliation section is
-    # orchestrator-added metadata and its content has no bearing on whether
-    # a review of the artifact's substantive content is still valid.
-    if "## Review Reconciliation" not in text:
-        return text
-    before, remainder = text.split("## Review Reconciliation", 1)
-    trailing = remainder.split("\n## ", 1)
-    if len(trailing) == 2:
-        return before.rstrip() + "\n\n## " + trailing[1].lstrip()
-    return before.rstrip() + "\n"
+    if stage == "plan":
+        return _strip_plan_reconciliation_section(text).rstrip() + "\n"
+    return text
 
 
 def normalized_artifact_hash(stage: str, path: Path) -> str:
     return hashlib.sha256(normalized_artifact_text(stage, path).encode("utf-8")).hexdigest()
+
+
+def full_artifact_hash(path: Path) -> str:
+    return hashlib.sha256(path.read_text(encoding="utf-8").encode("utf-8")).hexdigest()
+
+
+def artifact_hash_matches(stage: str, path: Path, data: dict) -> bool:
+    current = normalized_artifact_hash(stage, path)
+    if data.get("artifact_sha256") == current:
+        return True
+    if stage == "plan" and not data.get("narrowed_artifact_sha256"):
+        return data.get("artifact_sha256") == full_artifact_hash(path)
+    return False

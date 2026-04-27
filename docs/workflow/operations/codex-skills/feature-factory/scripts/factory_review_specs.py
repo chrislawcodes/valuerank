@@ -17,7 +17,7 @@ DEFAULT_GEMINI_MODEL = "gemini-2.5-pro"
 DEFAULT_CODEX_MODEL = "gpt-5.4-mini"
 
 SMALL_TASK_SET_THRESHOLD = 15
-_AUTO_ACCEPT_NOTE = "No actionable findings detected — auto-accepted"
+_AUTO_ACCEPT_NOTE = "No HIGH/MEDIUM/LOW/CRITICAL findings detected — auto-accepted"
 
 # Every pattern below is matched against text that has already been lowercased
 # by detect_actionable_findings(). All patterns anchor to start-of-line (after
@@ -52,7 +52,7 @@ ACTIONABLE_FINDING_SHAPES = (
     "inline-severity-field-plain",
 )
 
-_SEV = r"(?:critical|high|medium)"
+_SEV = r"(?:critical|high|medium|low)"
 
 _ACTIONABLE_FINDING_RE = re.compile(
     r"(?:"
@@ -102,6 +102,42 @@ _ACTIONABLE_FINDING_RE = re.compile(
 )
 
 
+def _strip_non_finding_markdown(text: str) -> str:
+    """Remove common quoted/example Markdown so severity examples do not match."""
+    text = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
+    text = re.sub(r"```.*?```", "", text, flags=re.DOTALL)
+    text = re.sub(r"`[^`\n]*`", "", text)
+    text = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", text)
+    text = re.sub(r"\[[^\]]*\]\([^)]*\)", "", text)
+    kept: list[str] = []
+    in_indented = False
+    for line in text.splitlines():
+        stripped = line.lstrip()
+        if line.startswith("    "):
+            in_indented = True
+            continue
+        if in_indented and not stripped:
+            continue
+        in_indented = False
+        if stripped.startswith(">"):
+            continue
+        kept.append(line)
+    return "\n".join(kept)
+
+
+def _findings_scan_text(text: str) -> str:
+    lines = text.splitlines()
+    starts = [
+        idx
+        for idx, line in enumerate(lines)
+        if re.match(r"^##\s+Findings\s*$", line, flags=re.IGNORECASE)
+    ]
+    if not starts:
+        return text
+    first = starts[0] + 1
+    return "\n".join(lines[first:])
+
+
 # ---------------------------------------------------------------------------
 # Review helpers
 # ---------------------------------------------------------------------------
@@ -114,7 +150,7 @@ def detect_actionable_findings(review_path: Path) -> bool:
     Returns False if the file cannot be read, treating unreadable files as non-blocking.
     """
     try:
-        text = read_text(review_path).lower()
+        text = _strip_non_finding_markdown(_findings_scan_text(read_text(review_path))).lower()
     except OSError:
         return False
     return bool(_ACTIONABLE_FINDING_RE.search(text))

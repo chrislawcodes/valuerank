@@ -14,7 +14,7 @@ VERIFY = SCRIPT_DIR / "verify_review_checkpoint.py"
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from workflow_utils import normalized_artifact_hash, normalized_artifact_text, resolve_stored_path
+from workflow_utils import artifact_hash_matches, normalized_artifact_text, resolve_stored_path
 
 REPO_ROOT = SCRIPT_DIR.parents[5]
 REPAIR_LIMIT_BUFFER_CHARS = 1000
@@ -51,7 +51,7 @@ def review_is_healthy(spec: dict, artifact_path: Path) -> bool:
     recorded_artifact = resolve_stored_path(data.get("artifact_path", ""), REPO_ROOT, data.get("repo_root", ""))
     if recorded_artifact != artifact_path:
         return False
-    if data.get("artifact_sha256") != normalized_artifact_hash(spec.get("stage", ""), artifact_path):
+    if not artifact_hash_matches(spec.get("stage", ""), artifact_path, data):
         return False
     if data.get("resolution_status") == "failed":
         return False

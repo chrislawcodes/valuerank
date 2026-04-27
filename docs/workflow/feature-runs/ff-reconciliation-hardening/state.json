@@ -1,0 +1,2165 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": true,
+    "complete": true,
+    "question_count": 0,
+    "asked_count": 0,
+    "questions": [],
+    "assumptions": [],
+    "summary": "The run hardens Feature Factory reconciliation after PR #765 exposed operator lockouts in plan-stage iteration. Scope is limited to CRITICAL severity detection, semantic reconciliation-note comparison, checkpoint-flag persistence with content-aware plan staleness, and safer plan/diff auto-context defaults.",
+    "updated_at": 1777319043,
+    "answers": {},
+    "non_goals": [
+      "No production ValueRank app behavior changes.",
+      "No database schema, migration, seed, backfill, deployment, or credential changes.",
+      "No rewrite of the full Feature Factory runner or review-lens architecture.",
+      "No change to reviewer model selection or adversarial review policy.",
+      "No attempt to repair unrelated dirty worktrees or prior feature-run artifacts.",
+      "No change to legacy terminology outside workflow-runner docs."
+    ],
+    "acceptance_criteria": [
+      "Reviews containing CRITICAL severity markers are never auto-accepted as no-action reviews.",
+      "Auto-reconcile starts reviews open and only accepts them after confirming no HIGH, MEDIUM, LOW, or CRITICAL markers are present.",
+      "Pure prose reviews with no severity markers still auto-accept with a note naming all checked severities.",
+      "Reconciliation verification treats YAML-escaped and raw quotes as the same note content after canonical whitespace normalization.",
+      "Reconciliation verification still rejects case differences in notes.",
+      "Successful checkpoint flags are persisted per stage without changing existing token_usage or command_telemetry shapes.",
+      "Repair reuses the last successful checkpoint flags for a stage unless the operator explicitly overrides them.",
+      "Plan review staleness ignores edits limited to the Review Reconciliation section but detects edits to any other plan content.",
+      "Plan and diff checkpoints default to no auto-context, while spec and tasks keep auto-context enabled by default.",
+      "The workflow docs explain the plan/diff auto-context default and the override flag."
+    ],
+    "unresolved": []
+  },
+  "delivery": {},
+  "checkpoint_fallback": {},
+  "parallel_analysis": {
+    "reviewed": true,
+    "found": false,
+    "note": "Parallel opportunities exist conceptually between review-lens and feature-factory runner files, but this run will execute sequentially to avoid cross-slice integration conflicts.",
+    "updated_at": 1777331276
+  },
+  "init_head_sha": "3878e844e43ff1bda98ddc0e810a7a7bbb2cf3d5",
+  "token_usage": [
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T19:46:06.676449Z",
+      "started_at": "2026-04-27T19:45:26.426894Z",
+      "ended_at": "2026-04-27T19:46:06.676449Z",
+      "duration_seconds": 40.249171,
+      "agent_id": null,
+      "artifact_sha_at_time": "3d418ece7bb09bf77aee37d05240fc1f54b7709bcab111d0ce751e6deb5be828",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T19:47:05.848365Z",
+      "started_at": "2026-04-27T19:46:07.080697Z",
+      "ended_at": "2026-04-27T19:47:05.848365Z",
+      "duration_seconds": 58.76715,
+      "agent_id": null,
+      "artifact_sha_at_time": "3d418ece7bb09bf77aee37d05240fc1f54b7709bcab111d0ce751e6deb5be828",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T19:47:51.817440Z",
+      "started_at": "2026-04-27T19:47:06.022302Z",
+      "ended_at": "2026-04-27T19:47:51.817440Z",
+      "duration_seconds": 45.794691,
+      "agent_id": null,
+      "artifact_sha_at_time": "3d418ece7bb09bf77aee37d05240fc1f54b7709bcab111d0ce751e6deb5be828",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T19:50:02.238081Z",
+      "started_at": "2026-04-27T19:49:11.117948Z",
+      "ended_at": "2026-04-27T19:50:02.238081Z",
+      "duration_seconds": 51.119655,
+      "agent_id": null,
+      "artifact_sha_at_time": "3f0419f5aa50683d72fc771f1a409033afaebcfe3a4a03217f8ec798a7009c4e",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T19:51:02.963951Z",
+      "started_at": "2026-04-27T19:50:02.420003Z",
+      "ended_at": "2026-04-27T19:51:02.963951Z",
+      "duration_seconds": 60.543412,
+      "agent_id": null,
+      "artifact_sha_at_time": "3f0419f5aa50683d72fc771f1a409033afaebcfe3a4a03217f8ec798a7009c4e",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T19:51:53.285460Z",
+      "started_at": "2026-04-27T19:51:03.104884Z",
+      "ended_at": "2026-04-27T19:51:53.285460Z",
+      "duration_seconds": 50.180086,
+      "agent_id": null,
+      "artifact_sha_at_time": "3f0419f5aa50683d72fc771f1a409033afaebcfe3a4a03217f8ec798a7009c4e",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T19:53:35.947068Z",
+      "started_at": "2026-04-27T19:52:39.380919Z",
+      "ended_at": "2026-04-27T19:53:35.947068Z",
+      "duration_seconds": 56.565661,
+      "agent_id": null,
+      "artifact_sha_at_time": "29c09dc13c0f84585a92377741466fe054682e164be4c625e06f3a7e5aa2fecd",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T19:54:28.172758Z",
+      "started_at": "2026-04-27T19:53:36.115895Z",
+      "ended_at": "2026-04-27T19:54:28.172758Z",
+      "duration_seconds": 52.056366,
+      "agent_id": null,
+      "artifact_sha_at_time": "29c09dc13c0f84585a92377741466fe054682e164be4c625e06f3a7e5aa2fecd",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T19:55:07.438548Z",
+      "started_at": "2026-04-27T19:54:28.319334Z",
+      "ended_at": "2026-04-27T19:55:07.438548Z",
+      "duration_seconds": 39.118851,
+      "agent_id": null,
+      "artifact_sha_at_time": "29c09dc13c0f84585a92377741466fe054682e164be4c625e06f3a7e5aa2fecd",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T19:59:14.230044Z",
+      "started_at": "2026-04-27T19:58:35.142382Z",
+      "ended_at": "2026-04-27T19:59:14.230044Z",
+      "duration_seconds": 39.087331,
+      "agent_id": null,
+      "artifact_sha_at_time": "b85ab5620b6358690fc1104cccc068e0b3b06ee2a78f356c5f075b0caed40a9f",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T20:00:05.313464Z",
+      "started_at": "2026-04-27T19:59:14.366149Z",
+      "ended_at": "2026-04-27T20:00:05.313464Z",
+      "duration_seconds": 50.946835,
+      "agent_id": null,
+      "artifact_sha_at_time": "b85ab5620b6358690fc1104cccc068e0b3b06ee2a78f356c5f075b0caed40a9f",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T20:00:42.968583Z",
+      "started_at": "2026-04-27T20:00:05.473658Z",
+      "ended_at": "2026-04-27T20:00:42.968583Z",
+      "duration_seconds": 37.494547,
+      "agent_id": null,
+      "artifact_sha_at_time": "b85ab5620b6358690fc1104cccc068e0b3b06ee2a78f356c5f075b0caed40a9f",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "plan",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T20:02:16.952279Z",
+      "started_at": "2026-04-27T20:01:39.704441Z",
+      "ended_at": "2026-04-27T20:02:16.952279Z",
+      "duration_seconds": 37.247476,
+      "agent_id": null,
+      "artifact_sha_at_time": "cbb7f75af2eab14a34b3181d84d27c683e5323511b6c0932bcfa3dda5e9bdfa7",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T20:02:56.676790Z",
+      "started_at": "2026-04-27T20:02:17.100937Z",
+      "ended_at": "2026-04-27T20:02:56.676790Z",
+      "duration_seconds": 39.575437,
+      "agent_id": null,
+      "artifact_sha_at_time": "cbb7f75af2eab14a34b3181d84d27c683e5323511b6c0932bcfa3dda5e9bdfa7",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T20:03:44.427268Z",
+      "started_at": "2026-04-27T20:02:56.848998Z",
+      "ended_at": "2026-04-27T20:03:44.427268Z",
+      "duration_seconds": 47.577869,
+      "agent_id": null,
+      "artifact_sha_at_time": "cbb7f75af2eab14a34b3181d84d27c683e5323511b6c0932bcfa3dda5e9bdfa7",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "plan",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T23:03:45.998146Z",
+      "started_at": "2026-04-27T23:02:58.200334Z",
+      "ended_at": "2026-04-27T23:03:45.998146Z",
+      "duration_seconds": 47.797377,
+      "agent_id": null,
+      "artifact_sha_at_time": "2a0a7d1ffcee556c484b38b7e56b9aa8754c0cf4604364a5b969615910ba4043",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T23:04:38.518092Z",
+      "started_at": "2026-04-27T23:03:46.291331Z",
+      "ended_at": "2026-04-27T23:04:38.518092Z",
+      "duration_seconds": 52.225893,
+      "agent_id": null,
+      "artifact_sha_at_time": "2a0a7d1ffcee556c484b38b7e56b9aa8754c0cf4604364a5b969615910ba4043",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T23:05:18.622300Z",
+      "started_at": "2026-04-27T23:04:38.689835Z",
+      "ended_at": "2026-04-27T23:05:18.622300Z",
+      "duration_seconds": 39.932095,
+      "agent_id": null,
+      "artifact_sha_at_time": "2a0a7d1ffcee556c484b38b7e56b9aa8754c0cf4604364a5b969615910ba4043",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "tasks",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T23:08:39.886714Z",
+      "started_at": "2026-04-27T23:08:01.208091Z",
+      "ended_at": "2026-04-27T23:08:39.886714Z",
+      "duration_seconds": 38.678192,
+      "agent_id": null,
+      "artifact_sha_at_time": "fe9dea3f4fbbab0cb4b2164deb724406d8713108f62e3565d16330bdfd9a6670",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T23:09:14.671677Z",
+      "started_at": "2026-04-27T23:08:40.027402Z",
+      "ended_at": "2026-04-27T23:09:14.671677Z",
+      "duration_seconds": 34.643934,
+      "agent_id": null,
+      "artifact_sha_at_time": "fe9dea3f4fbbab0cb4b2164deb724406d8713108f62e3565d16330bdfd9a6670",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T23:09:58.904813Z",
+      "started_at": "2026-04-27T23:09:14.853631Z",
+      "ended_at": "2026-04-27T23:09:58.904813Z",
+      "duration_seconds": 44.050794,
+      "agent_id": null,
+      "artifact_sha_at_time": "fe9dea3f4fbbab0cb4b2164deb724406d8713108f62e3565d16330bdfd9a6670",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "tasks",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T23:11:31.781972Z",
+      "started_at": "2026-04-27T23:10:54.818570Z",
+      "ended_at": "2026-04-27T23:11:31.781972Z",
+      "duration_seconds": 36.963051,
+      "agent_id": null,
+      "artifact_sha_at_time": "46da318fd21dc8cc862918400c92d4222f6853cb29179e4b631ae91fe5cb310f",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T23:12:11.095287Z",
+      "started_at": "2026-04-27T23:11:31.955526Z",
+      "ended_at": "2026-04-27T23:12:11.095287Z",
+      "duration_seconds": 39.139401,
+      "agent_id": null,
+      "artifact_sha_at_time": "46da318fd21dc8cc862918400c92d4222f6853cb29179e4b631ae91fe5cb310f",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T23:12:55.469497Z",
+      "started_at": "2026-04-27T23:12:11.268573Z",
+      "ended_at": "2026-04-27T23:12:55.469497Z",
+      "duration_seconds": 44.200537,
+      "agent_id": null,
+      "artifact_sha_at_time": "46da318fd21dc8cc862918400c92d4222f6853cb29179e4b631ae91fe5cb310f",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "tasks",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T23:14:21.320559Z",
+      "started_at": "2026-04-27T23:13:42.480250Z",
+      "ended_at": "2026-04-27T23:14:21.320559Z",
+      "duration_seconds": 38.839964,
+      "agent_id": null,
+      "artifact_sha_at_time": "35549db5d406356c59bc58a54950b2b88622a895a1281db6a34f9c1ed69ce509",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T23:15:04.873755Z",
+      "started_at": "2026-04-27T23:14:21.481289Z",
+      "ended_at": "2026-04-27T23:15:04.873755Z",
+      "duration_seconds": 43.39209,
+      "agent_id": null,
+      "artifact_sha_at_time": "35549db5d406356c59bc58a54950b2b88622a895a1281db6a34f9c1ed69ce509",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T23:15:34.885632Z",
+      "started_at": "2026-04-27T23:15:05.069890Z",
+      "ended_at": "2026-04-27T23:15:34.885632Z",
+      "duration_seconds": 29.815325,
+      "agent_id": null,
+      "artifact_sha_at_time": "35549db5d406356c59bc58a54950b2b88622a895a1281db6a34f9c1ed69ce509",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T23:24:24.487164Z",
+      "started_at": "2026-04-27T23:24:21.003824Z",
+      "ended_at": "2026-04-27T23:24:24.487164Z",
+      "duration_seconds": 3.483197,
+      "agent_id": null,
+      "artifact_sha_at_time": "ca07a1da15061da5744bf86be458df52c070b7b73bc79d130f58d289f50889f1",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T23:24:27.345061Z",
+      "started_at": "2026-04-27T23:24:24.626538Z",
+      "ended_at": "2026-04-27T23:24:27.345061Z",
+      "duration_seconds": 2.718428,
+      "agent_id": null,
+      "artifact_sha_at_time": "ca07a1da15061da5744bf86be458df52c070b7b73bc79d130f58d289f50889f1",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T23:25:28.655308Z",
+      "started_at": "2026-04-27T23:24:27.494300Z",
+      "ended_at": "2026-04-27T23:25:28.655308Z",
+      "duration_seconds": 61.160486,
+      "agent_id": null,
+      "artifact_sha_at_time": "ca07a1da15061da5744bf86be458df52c070b7b73bc79d130f58d289f50889f1",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "diff",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T23:29:27.612181Z",
+      "started_at": "2026-04-27T23:29:23.068222Z",
+      "ended_at": "2026-04-27T23:29:27.612181Z",
+      "duration_seconds": 4.543799,
+      "agent_id": null,
+      "artifact_sha_at_time": "6d3423dfd364d1175e48a60fe7a0e1623a8fe2ab74c3a3c452920ab9d2a7cb51",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T23:29:32.065893Z",
+      "started_at": "2026-04-27T23:29:27.784070Z",
+      "ended_at": "2026-04-27T23:29:32.065893Z",
+      "duration_seconds": 4.281688,
+      "agent_id": null,
+      "artifact_sha_at_time": "6d3423dfd364d1175e48a60fe7a0e1623a8fe2ab74c3a3c452920ab9d2a7cb51",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T23:30:55.991471Z",
+      "started_at": "2026-04-27T23:29:32.208294Z",
+      "ended_at": "2026-04-27T23:30:55.991471Z",
+      "duration_seconds": 83.78169,
+      "agent_id": null,
+      "artifact_sha_at_time": "6d3423dfd364d1175e48a60fe7a0e1623a8fe2ab74c3a3c452920ab9d2a7cb51",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "diff",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T23:35:22.148684Z",
+      "started_at": "2026-04-27T23:35:19.072791Z",
+      "ended_at": "2026-04-27T23:35:22.148684Z",
+      "duration_seconds": 3.075787,
+      "agent_id": null,
+      "artifact_sha_at_time": "dbf598fdf148ec80ec9b353880585dd991797d76c26fb9d0e97e43337eedd5d4",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T23:35:25.011910Z",
+      "started_at": "2026-04-27T23:35:22.319439Z",
+      "ended_at": "2026-04-27T23:35:25.011910Z",
+      "duration_seconds": 2.692349,
+      "agent_id": null,
+      "artifact_sha_at_time": "dbf598fdf148ec80ec9b353880585dd991797d76c26fb9d0e97e43337eedd5d4",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T23:36:21.070771Z",
+      "started_at": "2026-04-27T23:35:25.154820Z",
+      "ended_at": "2026-04-27T23:36:21.070771Z",
+      "duration_seconds": 55.915465,
+      "agent_id": null,
+      "artifact_sha_at_time": "dbf598fdf148ec80ec9b353880585dd991797d76c26fb9d0e97e43337eedd5d4",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "tasks",
+      "round": 3,
+      "activity_type": "implementation",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T23:39:59.754015Z",
+      "started_at": "2026-04-27T23:39:53.836308Z",
+      "ended_at": "2026-04-27T23:39:59.754015Z",
+      "duration_seconds": 5.917543,
+      "agent_id": null,
+      "artifact_sha_at_time": "35549db5d406356c59bc58a54950b2b88622a895a1281db6a34f9c1ed69ce509",
+      "parse_error": "no Codex token block found in stderr"
+    }
+  ],
+  "command_telemetry": [
+    {
+      "command": "checkpoint",
+      "stage": "spec",
+      "ts": "2026-04-27T19:47:52Z",
+      "wall_seconds": 145.907,
+      "input_bytes_read": 76270,
+      "output_bytes_written": 16057,
+      "files_read": 17,
+      "files_written": 5,
+      "subprocess_invocations": 18,
+      "ttl_crossed": false
+    },
+    {
+      "command": "auto-reconcile",
+      "stage": "spec",
+      "ts": "2026-04-27T19:47:55Z",
+      "wall_seconds": 0.206,
+      "input_bytes_read": 44192,
+      "output_bytes_written": 0,
+      "files_read": 12,
+      "files_written": 0,
+      "subprocess_invocations": 12,
+      "ttl_crossed": false
+    },
+    {
+      "command": "reconcile",
+      "stage": null,
+      "ts": "2026-04-27T19:49:06Z",
+      "wall_seconds": 0.406,
+      "input_bytes_read": 24140,
+      "output_bytes_written": 0,
+      "files_read": 5,
+      "files_written": 0,
+      "subprocess_invocations": 24,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "spec",
+      "ts": "2026-04-27T19:51:53Z",
+      "wall_seconds": 162.7,
+      "input_bytes_read": 108373,
+      "output_bytes_written": 28232,
+      "files_read": 17,
+      "files_written": 5,
+      "subprocess_invocations": 18,
+      "ttl_crossed": false
+    },
+    {
+      "command": "auto-reconcile",
+      "stage": "spec",
+      "ts": "2026-04-27T19:51:59Z",
+      "wall_seconds": 0.275,
+      "input_bytes_read": 48467,
+      "output_bytes_written": 0,
+      "files_read": 12,
+      "files_written": 0,
+      "subprocess_invocations": 16,
+      "ttl_crossed": false
+    },
+    {
+      "command": "reconcile",
+      "stage": null,
+      "ts": "2026-04-27T19:52:34Z",
+      "wall_seconds": 0.296,
+      "input_bytes_read": 27235,
+      "output_bytes_written": 0,
+      "files_read": 5,
+      "files_written": 0,
+      "subprocess_invocations": 20,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "spec",
+      "ts": "2026-04-27T19:55:07Z",
+      "wall_seconds": 148.596,
+      "input_bytes_read": 131814,
+      "output_bytes_written": 39435,
+      "files_read": 17,
+      "files_written": 5,
+      "subprocess_invocations": 18,
+      "ttl_crossed": false
+    },
+    {
+      "command": "judge",
+      "stage": "spec",
+      "ts": "2026-04-27T19:55:12Z",
+      "wall_seconds": 0.106,
+      "input_bytes_read": 119899,
+      "output_bytes_written": 12649,
+      "files_read": 25,
+      "files_written": 1,
+      "subprocess_invocations": 6,
+      "ttl_crossed": false
+    },
+    {
+      "command": "judge",
+      "stage": "spec",
+      "ts": "2026-04-27T19:55:30Z",
+      "wall_seconds": 0.06,
+      "input_bytes_read": 126244,
+      "output_bytes_written": 13951,
+      "files_read": 25,
+      "files_written": 1,
+      "subprocess_invocations": 6,
+      "ttl_crossed": false
+    },
+    {
+      "command": "judge",
+      "stage": "spec",
+      "ts": "2026-04-27T19:56:00Z",
+      "wall_seconds": 8.993,
+      "input_bytes_read": 150236,
+      "output_bytes_written": 16755,
+      "files_read": 28,
+      "files_written": 1,
+      "subprocess_invocations": 12,
+      "ttl_crossed": false
+    },
+    {
+      "command": "reconcile",
+      "stage": null,
+      "ts": "2026-04-27T19:57:14Z",
+      "wall_seconds": 0.446,
+      "input_bytes_read": 36731,
+      "output_bytes_written": 0,
+      "files_read": 5,
+      "files_written": 0,
+      "subprocess_invocations": 28,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "plan",
+      "ts": "2026-04-27T19:58:15Z",
+      "wall_seconds": 0.064,
+      "input_bytes_read": 69796,
+      "output_bytes_written": 17373,
+      "files_read": 4,
+      "files_written": 1,
+      "subprocess_invocations": 4,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "spec",
+      "ts": "2026-04-27T19:58:28Z",
+      "wall_seconds": 0.019,
+      "input_bytes_read": 17686,
+      "output_bytes_written": 17745,
+      "files_read": 1,
+      "files_written": 1,
+      "subprocess_invocations": 2,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "spec",
+      "ts": "2026-04-27T19:58:28Z",
+      "wall_seconds": 0.019,
+      "input_bytes_read": 18058,
+      "output_bytes_written": 18117,
+      "files_read": 1,
+      "files_written": 1,
+      "subprocess_invocations": 2,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "spec",
+      "ts": "2026-04-27T19:58:28Z",
+      "wall_seconds": 0.128,
+      "input_bytes_read": 18430,
+      "output_bytes_written": 18489,
+      "files_read": 1,
+      "files_written": 1,
+      "subprocess_invocations": 2,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "plan",
+      "ts": "2026-04-27T20:00:43Z",
+      "wall_seconds": 128.577,
+      "input_bytes_read": 241350,
+      "output_bytes_written": 78611,
+      "files_read": 20,
+      "files_written": 5,
+      "subprocess_invocations": 28,
+      "ttl_crossed": false
+    },
+    {
+      "command": "auto-reconcile",
+      "stage": "plan",
+      "ts": "2026-04-27T20:00:47Z",
+      "wall_seconds": 0.28,
+      "input_bytes_read": 72971,
+      "output_bytes_written": 0,
+      "files_read": 13,
+      "files_written": 0,
+      "subprocess_invocations": 16,
+      "ttl_crossed": false
+    },
+    {
+      "command": "reconcile",
+      "stage": null,
+      "ts": "2026-04-27T20:01:35Z",
+      "wall_seconds": 0.464,
+      "input_bytes_read": 52683,
+      "output_bytes_written": 0,
+      "files_read": 6,
+      "files_written": 0,
+      "subprocess_invocations": 28,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "plan",
+      "ts": "2026-04-27T20:03:45Z",
+      "wall_seconds": 125.506,
+      "input_bytes_read": 269860,
+      "output_bytes_written": 89308,
+      "files_read": 20,
+      "files_written": 5,
+      "subprocess_invocations": 28,
+      "ttl_crossed": false
+    },
+    {
+      "command": "auto-reconcile",
+      "stage": "plan",
+      "ts": "2026-04-27T23:01:51Z",
+      "wall_seconds": 0.377,
+      "input_bytes_read": 77597,
+      "output_bytes_written": 0,
+      "files_read": 13,
+      "files_written": 0,
+      "subprocess_invocations": 20,
+      "ttl_crossed": false
+    },
+    {
+      "command": "reconcile",
+      "stage": null,
+      "ts": "2026-04-27T23:02:49Z",
+      "wall_seconds": 0.424,
+      "input_bytes_read": 56559,
+      "output_bytes_written": 0,
+      "files_read": 6,
+      "files_written": 0,
+      "subprocess_invocations": 24,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "plan",
+      "ts": "2026-04-27T23:05:19Z",
+      "wall_seconds": 141.206,
+      "input_bytes_read": 295468,
+      "output_bytes_written": 100502,
+      "files_read": 20,
+      "files_written": 5,
+      "subprocess_invocations": 28,
+      "ttl_crossed": false
+    },
+    {
+      "command": "judge",
+      "stage": "plan",
+      "ts": "2026-04-27T23:05:23Z",
+      "wall_seconds": 0.069,
+      "input_bytes_read": 185099,
+      "output_bytes_written": 27920,
+      "files_read": 25,
+      "files_written": 1,
+      "subprocess_invocations": 6,
+      "ttl_crossed": false
+    },
+    {
+      "command": "judge",
+      "stage": "plan",
+      "ts": "2026-04-27T23:05:27Z",
+      "wall_seconds": 0.064,
+      "input_bytes_read": 191444,
+      "output_bytes_written": 29222,
+      "files_read": 25,
+      "files_written": 1,
+      "subprocess_invocations": 6,
+      "ttl_crossed": false
+    },
+    {
+      "command": "judge",
+      "stage": "plan",
+      "ts": "2026-04-27T23:05:40Z",
+      "wall_seconds": 8.754,
+      "input_bytes_read": 228300,
+      "output_bytes_written": 32020,
+      "files_read": 28,
+      "files_written": 1,
+      "subprocess_invocations": 14,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "plan",
+      "ts": "2026-04-27T23:06:19Z",
+      "wall_seconds": 0.02,
+      "input_bytes_read": 32331,
+      "output_bytes_written": 32390,
+      "files_read": 1,
+      "files_written": 1,
+      "subprocess_invocations": 2,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "plan",
+      "ts": "2026-04-27T23:06:19Z",
+      "wall_seconds": 0.02,
+      "input_bytes_read": 32702,
+      "output_bytes_written": 32761,
+      "files_read": 1,
+      "files_written": 1,
+      "subprocess_invocations": 2,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "plan",
+      "ts": "2026-04-27T23:06:19Z",
+      "wall_seconds": 0.126,
+      "input_bytes_read": 33073,
+      "output_bytes_written": 33132,
+      "files_read": 1,
+      "files_written": 1,
+      "subprocess_invocations": 2,
+      "ttl_crossed": false
+    },
+    {
+      "command": "auto-reconcile",
+      "stage": "plan",
+      "ts": "2026-04-27T23:06:26Z",
+      "wall_seconds": 0.389,
+      "input_bytes_read": 89183,
+      "output_bytes_written": 0,
+      "files_read": 13,
+      "files_written": 0,
+      "subprocess_invocations": 16,
+      "ttl_crossed": false
+    },
+    {
+      "command": "reconcile",
+      "stage": null,
+      "ts": "2026-04-27T23:07:04Z",
+      "wall_seconds": 0.496,
+      "input_bytes_read": 67604,
+      "output_bytes_written": 0,
+      "files_read": 6,
+      "files_written": 0,
+      "subprocess_invocations": 28,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "tasks",
+      "ts": "2026-04-27T23:09:59Z",
+      "wall_seconds": 118.583,
+      "input_bytes_read": 417240,
+      "output_bytes_written": 140446,
+      "files_read": 23,
+      "files_written": 5,
+      "subprocess_invocations": 36,
+      "ttl_crossed": false
+    },
+    {
+      "command": "auto-reconcile",
+      "stage": "tasks",
+      "ts": "2026-04-27T23:10:05Z",
+      "wall_seconds": 0.335,
+      "input_bytes_read": 100472,
+      "output_bytes_written": 0,
+      "files_read": 14,
+      "files_written": 0,
+      "subprocess_invocations": 16,
+      "ttl_crossed": false
+    },
+    {
+      "command": "reconcile",
+      "stage": null,
+      "ts": "2026-04-27T23:10:49Z",
+      "wall_seconds": 0.675,
+      "input_bytes_read": 79950,
+      "output_bytes_written": 0,
+      "files_read": 7,
+      "files_written": 0,
+      "subprocess_invocations": 36,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "tasks",
+      "ts": "2026-04-27T23:12:56Z",
+      "wall_seconds": 121.61,
+      "input_bytes_read": 446948,
+      "output_bytes_written": 151251,
+      "files_read": 23,
+      "files_written": 5,
+      "subprocess_invocations": 36,
+      "ttl_crossed": false
+    },
+    {
+      "command": "auto-reconcile",
+      "stage": "tasks",
+      "ts": "2026-04-27T23:13:02Z",
+      "wall_seconds": 0.442,
+      "input_bytes_read": 101825,
+      "output_bytes_written": 0,
+      "files_read": 14,
+      "files_written": 0,
+      "subprocess_invocations": 24,
+      "ttl_crossed": false
+    },
+    {
+      "command": "reconcile",
+      "stage": null,
+      "ts": "2026-04-27T23:13:37Z",
+      "wall_seconds": 0.48,
+      "input_bytes_read": 83124,
+      "output_bytes_written": 0,
+      "files_read": 7,
+      "files_written": 0,
+      "subprocess_invocations": 28,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "tasks",
+      "ts": "2026-04-27T23:15:35Z",
+      "wall_seconds": 113.37,
+      "input_bytes_read": 473245,
+      "output_bytes_written": 162449,
+      "files_read": 23,
+      "files_written": 5,
+      "subprocess_invocations": 36,
+      "ttl_crossed": false
+    },
+    {
+      "command": "judge",
+      "stage": "tasks",
+      "ts": "2026-04-27T23:15:41Z",
+      "wall_seconds": 0.066,
+      "input_bytes_read": 227742,
+      "output_bytes_written": 43396,
+      "files_read": 25,
+      "files_written": 1,
+      "subprocess_invocations": 6,
+      "ttl_crossed": false
+    },
+    {
+      "command": "judge",
+      "stage": "tasks",
+      "ts": "2026-04-27T23:15:47Z",
+      "wall_seconds": 0.063,
+      "input_bytes_read": 234088,
+      "output_bytes_written": 44699,
+      "files_read": 25,
+      "files_written": 1,
+      "subprocess_invocations": 6,
+      "ttl_crossed": false
+    },
+    {
+      "command": "judge",
+      "stage": "tasks",
+      "ts": "2026-04-27T23:15:56Z",
+      "wall_seconds": 5.091,
+      "input_bytes_read": 280847,
+      "output_bytes_written": 47517,
+      "files_read": 28,
+      "files_written": 1,
+      "subprocess_invocations": 16,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "tasks",
+      "ts": "2026-04-27T23:16:12Z",
+      "wall_seconds": 0.019,
+      "input_bytes_read": 47829,
+      "output_bytes_written": 47889,
+      "files_read": 1,
+      "files_written": 1,
+      "subprocess_invocations": 2,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "tasks",
+      "ts": "2026-04-27T23:16:12Z",
+      "wall_seconds": 0.019,
+      "input_bytes_read": 48203,
+      "output_bytes_written": 48263,
+      "files_read": 1,
+      "files_written": 1,
+      "subprocess_invocations": 2,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "tasks",
+      "ts": "2026-04-27T23:16:12Z",
+      "wall_seconds": 0.123,
+      "input_bytes_read": 48577,
+      "output_bytes_written": 48637,
+      "files_read": 1,
+      "files_written": 1,
+      "subprocess_invocations": 2,
+      "ttl_crossed": false
+    },
+    {
+      "command": "auto-reconcile",
+      "stage": "tasks",
+      "ts": "2026-04-27T23:16:16Z",
+      "wall_seconds": 0.299,
+      "input_bytes_read": 110399,
+      "output_bytes_written": 0,
+      "files_read": 14,
+      "files_written": 0,
+      "subprocess_invocations": 16,
+      "ttl_crossed": false
+    },
+    {
+      "command": "reconcile",
+      "stage": null,
+      "ts": "2026-04-27T23:17:00Z",
+      "wall_seconds": 0.623,
+      "input_bytes_read": 93513,
+      "output_bytes_written": 0,
+      "files_read": 7,
+      "files_written": 0,
+      "subprocess_invocations": 36,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "diff",
+      "ts": "2026-04-27T23:25:29Z",
+      "wall_seconds": 69.053,
+      "input_bytes_read": 866008,
+      "output_bytes_written": 305482,
+      "files_read": 36,
+      "files_written": 8,
+      "subprocess_invocations": 56,
+      "ttl_crossed": false
+    },
+    {
+      "command": "auto-reconcile",
+      "stage": "diff",
+      "ts": "2026-04-27T23:25:38Z",
+      "wall_seconds": 0.452,
+      "input_bytes_read": 175134,
+      "output_bytes_written": 0,
+      "files_read": 19,
+      "files_written": 0,
+      "subprocess_invocations": 24,
+      "ttl_crossed": false
+    },
+    {
+      "command": "reconcile",
+      "stage": null,
+      "ts": "2026-04-27T23:28:31Z",
+      "wall_seconds": 0.652,
+      "input_bytes_read": 154453,
+      "output_bytes_written": 0,
+      "files_read": 12,
+      "files_written": 0,
+      "subprocess_invocations": 36,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "diff",
+      "ts": "2026-04-27T23:30:56Z",
+      "wall_seconds": 94.384,
+      "input_bytes_read": 919503,
+      "output_bytes_written": 323468,
+      "files_read": 42,
+      "files_written": 8,
+      "subprocess_invocations": 56,
+      "ttl_crossed": false
+    },
+    {
+      "command": "reconcile",
+      "stage": null,
+      "ts": "2026-04-27T23:33:41Z",
+      "wall_seconds": 0.648,
+      "input_bytes_read": 159838,
+      "output_bytes_written": 0,
+      "files_read": 12,
+      "files_written": 0,
+      "subprocess_invocations": 36,
+      "ttl_crossed": false
+    },
+    {
+      "command": "auto-reconcile",
+      "stage": "diff",
+      "ts": "2026-04-27T23:33:51Z",
+      "wall_seconds": 0.427,
+      "input_bytes_read": 187019,
+      "output_bytes_written": 0,
+      "files_read": 19,
+      "files_written": 0,
+      "subprocess_invocations": 22,
+      "ttl_crossed": false
+    },
+    {
+      "command": "reconcile",
+      "stage": null,
+      "ts": "2026-04-27T23:34:17Z",
+      "wall_seconds": 0.645,
+      "input_bytes_read": 161278,
+      "output_bytes_written": 0,
+      "files_read": 12,
+      "files_written": 0,
+      "subprocess_invocations": 36,
+      "ttl_crossed": false
+    },
+    {
+      "command": "reconcile",
+      "stage": null,
+      "ts": "2026-04-27T23:34:19Z",
+      "wall_seconds": 0.648,
+      "input_bytes_read": 162084,
+      "output_bytes_written": 0,
+      "files_read": 12,
+      "files_written": 0,
+      "subprocess_invocations": 36,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "diff",
+      "ts": "2026-04-27T23:36:21Z",
+      "wall_seconds": 63.413,
+      "input_bytes_read": 849106,
+      "output_bytes_written": 344311,
+      "files_read": 34,
+      "files_written": 8,
+      "subprocess_invocations": 52,
+      "ttl_crossed": false
+    },
+    {
+      "command": "reconcile",
+      "stage": null,
+      "ts": "2026-04-27T23:37:43Z",
+      "wall_seconds": 0.63,
+      "input_bytes_read": 104850,
+      "output_bytes_written": 0,
+      "files_read": 8,
+      "files_written": 0,
+      "subprocess_invocations": 34,
+      "ttl_crossed": false
+    },
+    {
+      "command": "reconcile",
+      "stage": null,
+      "ts": "2026-04-27T23:37:44Z",
+      "wall_seconds": 0.627,
+      "input_bytes_read": 105157,
+      "output_bytes_written": 0,
+      "files_read": 8,
+      "files_written": 0,
+      "subprocess_invocations": 34,
+      "ttl_crossed": false
+    },
+    {
+      "command": "reconcile",
+      "stage": null,
+      "ts": "2026-04-27T23:37:45Z",
+      "wall_seconds": 0.611,
+      "input_bytes_read": 105465,
+      "output_bytes_written": 0,
+      "files_read": 8,
+      "files_written": 0,
+      "subprocess_invocations": 34,
+      "ttl_crossed": false
+    },
+    {
+      "command": "judge",
+      "stage": "diff",
+      "ts": "2026-04-27T23:38:14Z",
+      "wall_seconds": 0.065,
+      "input_bytes_read": 298108,
+      "output_bytes_written": 60920,
+      "files_read": 25,
+      "files_written": 1,
+      "subprocess_invocations": 6,
+      "ttl_crossed": false
+    },
+    {
+      "command": "judge",
+      "stage": "diff",
+      "ts": "2026-04-27T23:38:34Z",
+      "wall_seconds": 0.064,
+      "input_bytes_read": 304453,
+      "output_bytes_written": 62222,
+      "files_read": 25,
+      "files_written": 1,
+      "subprocess_invocations": 6,
+      "ttl_crossed": false
+    },
+    {
+      "command": "judge",
+      "stage": "diff",
+      "ts": "2026-04-27T23:38:42Z",
+      "wall_seconds": 6.699,
+      "input_bytes_read": 352580,
+      "output_bytes_written": 65036,
+      "files_read": 28,
+      "files_written": 1,
+      "subprocess_invocations": 18,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "diff",
+      "ts": "2026-04-27T23:39:30Z",
+      "wall_seconds": 0.001,
+      "input_bytes_read": 0,
+      "output_bytes_written": 0,
+      "files_read": 0,
+      "files_written": 0,
+      "subprocess_invocations": 0,
+      "ttl_crossed": false
+    },
+    {
+      "command": "deliver",
+      "stage": null,
+      "ts": "2026-04-27T23:40:20Z",
+      "wall_seconds": 0.871,
+      "input_bytes_read": 344694,
+      "output_bytes_written": 135984,
+      "files_read": 12,
+      "files_written": 2,
+      "subprocess_invocations": 32,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "diff",
+      "ts": "2026-04-27T23:41:09Z",
+      "wall_seconds": 0.337,
+      "input_bytes_read": 491093,
+      "output_bytes_written": 205696,
+      "files_read": 11,
+      "files_written": 4,
+      "subprocess_invocations": 10,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "diff",
+      "ts": "2026-04-27T23:41:10Z",
+      "wall_seconds": 0.002,
+      "input_bytes_read": 68435,
+      "output_bytes_written": 68741,
+      "files_read": 1,
+      "files_written": 1,
+      "subprocess_invocations": 0,
+      "ttl_crossed": false
+    },
+    {
+      "command": "deliver",
+      "stage": null,
+      "ts": "2026-04-27T23:42:01Z",
+      "wall_seconds": 1.278,
+      "input_bytes_read": 353652,
+      "output_bytes_written": 138108,
+      "files_read": 12,
+      "files_written": 2,
+      "subprocess_invocations": 34,
+      "ttl_crossed": false
+    }
+  ],
+  "diff_review_budget": {
+    "recorded_head": "",
+    "last_review_only_advance_at": 0
+  },
+  "stages": {
+    "spec": {
+      "adversarial_rounds": 3,
+      "judge_rounds": 3,
+      "judge_verdicts": [
+        [
+          {
+            "judge": "completeness",
+            "model": "gpt-5.4-mini",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: maximum recursion depth exceeded",
+            "evidence": [],
+            "timestamp": "2026-04-27T19:55:12.006353Z"
+          },
+          {
+            "judge": "restatement",
+            "model": "gpt-5.4",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: maximum recursion depth exceeded",
+            "evidence": [],
+            "timestamp": "2026-04-27T19:55:12.007655Z"
+          },
+          {
+            "judge": "implementation-risk",
+            "model": "claude-sonnet-4-6",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: maximum recursion depth exceeded",
+            "evidence": [],
+            "timestamp": "2026-04-27T19:55:12.009028Z"
+          }
+        ],
+        [
+          {
+            "judge": "completeness",
+            "model": "gpt-5.4-mini",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: maximum recursion depth exceeded",
+            "evidence": [],
+            "timestamp": "2026-04-27T19:55:30.425412Z"
+          },
+          {
+            "judge": "restatement",
+            "model": "gpt-5.4",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: maximum recursion depth exceeded",
+            "evidence": [],
+            "timestamp": "2026-04-27T19:55:30.426775Z"
+          },
+          {
+            "judge": "implementation-risk",
+            "model": "claude-sonnet-4-6",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: maximum recursion depth exceeded",
+            "evidence": [],
+            "timestamp": "2026-04-27T19:55:30.428151Z"
+          }
+        ],
+        [
+          {
+            "judge": "completeness",
+            "model": "gpt-5.4-mini",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: maximum recursion depth exceeded",
+            "evidence": [],
+            "timestamp": "2026-04-27T19:55:51.634802Z"
+          },
+          {
+            "judge": "restatement",
+            "model": "gpt-5.4",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: maximum recursion depth exceeded",
+            "evidence": [],
+            "timestamp": "2026-04-27T19:55:51.633287Z"
+          },
+          {
+            "judge": "implementation-risk",
+            "model": "claude-sonnet-4-6",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: maximum recursion depth exceeded",
+            "evidence": [],
+            "timestamp": "2026-04-27T19:55:51.636441Z"
+          }
+        ]
+      ],
+      "annotations": [],
+      "unresolved_concerns": [
+        {
+          "id": "96586a09d17f",
+          "stage": "spec",
+          "judge": "completeness",
+          "model": "gpt-5.4-mini",
+          "confidence": 0,
+          "reasoning": "schema_violation: maximum recursion depth exceeded",
+          "round_raised": 3,
+          "also_raised_in_round": [
+            1,
+            2
+          ],
+          "addressed_at": null,
+          "addressed_by": null,
+          "deferred_reason": null,
+          "dismissed_reason": "judge schema_violation recursion; no substantive spec finding"
+        },
+        {
+          "id": "cca4c8737e37",
+          "stage": "spec",
+          "judge": "restatement",
+          "model": "gpt-5.4",
+          "confidence": 0,
+          "reasoning": "schema_violation: maximum recursion depth exceeded",
+          "round_raised": 3,
+          "also_raised_in_round": [
+            1,
+            2
+          ],
+          "addressed_at": null,
+          "addressed_by": null,
+          "deferred_reason": null,
+          "dismissed_reason": "judge schema_violation recursion; no substantive spec finding"
+        },
+        {
+          "id": "436367ecbf3b",
+          "stage": "spec",
+          "judge": "implementation-risk",
+          "model": "claude-sonnet-4-6",
+          "confidence": 0,
+          "reasoning": "schema_violation: maximum recursion depth exceeded",
+          "round_raised": 3,
+          "also_raised_in_round": [
+            1,
+            2
+          ],
+          "addressed_at": null,
+          "addressed_by": null,
+          "deferred_reason": null,
+          "dismissed_reason": "judge schema_violation recursion; no substantive spec finding"
+        }
+      ],
+      "adversarial_sha_history": [
+        "3d418ece7bb09bf77aee37d05240fc1f54b7709bcab111d0ce751e6deb5be828",
+        "3f0419f5aa50683d72fc771f1a409033afaebcfe3a4a03217f8ec798a7009c4e",
+        "29c09dc13c0f84585a92377741466fe054682e164be4c625e06f3a7e5aa2fecd"
+      ],
+      "initial_sha": "3d418ece7bb09bf77aee37d05240fc1f54b7709bcab111d0ce751e6deb5be828",
+      "judge_next_action": "advance"
+    },
+    "plan": {
+      "adversarial_rounds": 3,
+      "judge_rounds": 3,
+      "judge_verdicts": [
+        [
+          {
+            "judge": "completeness",
+            "model": "gpt-5.4-mini",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: maximum recursion depth exceeded",
+            "evidence": [],
+            "timestamp": "2026-04-27T23:05:23.237572Z"
+          },
+          {
+            "judge": "restatement",
+            "model": "gpt-5.4",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: maximum recursion depth exceeded",
+            "evidence": [],
+            "timestamp": "2026-04-27T23:05:23.236144Z"
+          },
+          {
+            "judge": "implementation-risk",
+            "model": "claude-sonnet-4-6",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: maximum recursion depth exceeded",
+            "evidence": [],
+            "timestamp": "2026-04-27T23:05:23.234753Z"
+          }
+        ],
+        [
+          {
+            "judge": "completeness",
+            "model": "gpt-5.4-mini",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: maximum recursion depth exceeded",
+            "evidence": [],
+            "timestamp": "2026-04-27T23:05:27.371117Z"
+          },
+          {
+            "judge": "restatement",
+            "model": "gpt-5.4",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: maximum recursion depth exceeded",
+            "evidence": [],
+            "timestamp": "2026-04-27T23:05:27.372657Z"
+          },
+          {
+            "judge": "implementation-risk",
+            "model": "claude-sonnet-4-6",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: maximum recursion depth exceeded",
+            "evidence": [],
+            "timestamp": "2026-04-27T23:05:27.373992Z"
+          }
+        ],
+        [
+          {
+            "judge": "completeness",
+            "model": "gpt-5.4-mini",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: maximum recursion depth exceeded",
+            "evidence": [],
+            "timestamp": "2026-04-27T23:05:31.845714Z"
+          },
+          {
+            "judge": "restatement",
+            "model": "gpt-5.4",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: maximum recursion depth exceeded",
+            "evidence": [],
+            "timestamp": "2026-04-27T23:05:31.842899Z"
+          },
+          {
+            "judge": "implementation-risk",
+            "model": "claude-sonnet-4-6",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: maximum recursion depth exceeded",
+            "evidence": [],
+            "timestamp": "2026-04-27T23:05:31.844287Z"
+          }
+        ]
+      ],
+      "annotations": [],
+      "unresolved_concerns": [
+        {
+          "id": "0a4d5cacfec9",
+          "stage": "plan",
+          "judge": "completeness",
+          "model": "gpt-5.4-mini",
+          "confidence": 0,
+          "reasoning": "schema_violation: maximum recursion depth exceeded",
+          "round_raised": 3,
+          "also_raised_in_round": [
+            1,
+            2
+          ],
+          "addressed_at": null,
+          "addressed_by": null,
+          "deferred_reason": null,
+          "dismissed_reason": "judge schema_violation recursion; no substantive plan finding"
+        },
+        {
+          "id": "3db12f8f5980",
+          "stage": "plan",
+          "judge": "restatement",
+          "model": "gpt-5.4",
+          "confidence": 0,
+          "reasoning": "schema_violation: maximum recursion depth exceeded",
+          "round_raised": 3,
+          "also_raised_in_round": [
+            1,
+            2
+          ],
+          "addressed_at": null,
+          "addressed_by": null,
+          "deferred_reason": null,
+          "dismissed_reason": "judge schema_violation recursion; no substantive plan finding"
+        },
+        {
+          "id": "39386d4cd325",
+          "stage": "plan",
+          "judge": "implementation-risk",
+          "model": "claude-sonnet-4-6",
+          "confidence": 0,
+          "reasoning": "schema_violation: maximum recursion depth exceeded",
+          "round_raised": 3,
+          "also_raised_in_round": [
+            1,
+            2
+          ],
+          "addressed_at": null,
+          "addressed_by": null,
+          "deferred_reason": null,
+          "dismissed_reason": "judge schema_violation recursion; no substantive plan finding"
+        }
+      ],
+      "adversarial_sha_history": [
+        "b85ab5620b6358690fc1104cccc068e0b3b06ee2a78f356c5f075b0caed40a9f",
+        "cbb7f75af2eab14a34b3181d84d27c683e5323511b6c0932bcfa3dda5e9bdfa7",
+        "2a0a7d1ffcee556c484b38b7e56b9aa8754c0cf4604364a5b969615910ba4043"
+      ],
+      "initial_sha": "b85ab5620b6358690fc1104cccc068e0b3b06ee2a78f356c5f075b0caed40a9f",
+      "judge_next_action": "advance"
+    },
+    "tasks": {
+      "adversarial_rounds": 3,
+      "judge_rounds": 3,
+      "judge_verdicts": [
+        [
+          {
+            "judge": "completeness",
+            "model": "gpt-5.4-mini",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: maximum recursion depth exceeded",
+            "evidence": [],
+            "timestamp": "2026-04-27T23:15:41.370094Z"
+          },
+          {
+            "judge": "restatement",
+            "model": "gpt-5.4",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: maximum recursion depth exceeded",
+            "evidence": [],
+            "timestamp": "2026-04-27T23:15:41.371415Z"
+          },
+          {
+            "judge": "implementation-risk",
+            "model": "claude-sonnet-4-6",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: maximum recursion depth exceeded",
+            "evidence": [],
+            "timestamp": "2026-04-27T23:15:41.372799Z"
+          }
+        ],
+        [
+          {
+            "judge": "completeness",
+            "model": "gpt-5.4-mini",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: maximum recursion depth exceeded",
+            "evidence": [],
+            "timestamp": "2026-04-27T23:15:47.668145Z"
+          },
+          {
+            "judge": "restatement",
+            "model": "gpt-5.4",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: maximum recursion depth exceeded",
+            "evidence": [],
+            "timestamp": "2026-04-27T23:15:47.669583Z"
+          },
+          {
+            "judge": "implementation-risk",
+            "model": "claude-sonnet-4-6",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: maximum recursion depth exceeded",
+            "evidence": [],
+            "timestamp": "2026-04-27T23:15:47.670988Z"
+          }
+        ],
+        [
+          {
+            "judge": "completeness",
+            "model": "gpt-5.4-mini",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: maximum recursion depth exceeded",
+            "evidence": [],
+            "timestamp": "2026-04-27T23:15:51.961184Z"
+          },
+          {
+            "judge": "restatement",
+            "model": "gpt-5.4",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: maximum recursion depth exceeded",
+            "evidence": [],
+            "timestamp": "2026-04-27T23:15:51.962520Z"
+          },
+          {
+            "judge": "implementation-risk",
+            "model": "claude-sonnet-4-6",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: maximum recursion depth exceeded",
+            "evidence": [],
+            "timestamp": "2026-04-27T23:15:51.959738Z"
+          }
+        ]
+      ],
+      "annotations": [],
+      "unresolved_concerns": [
+        {
+          "id": "e91e3b0e9962",
+          "stage": "tasks",
+          "judge": "completeness",
+          "model": "gpt-5.4-mini",
+          "confidence": 0,
+          "reasoning": "schema_violation: maximum recursion depth exceeded",
+          "round_raised": 3,
+          "also_raised_in_round": [
+            1,
+            2
+          ],
+          "addressed_at": null,
+          "addressed_by": null,
+          "deferred_reason": null,
+          "dismissed_reason": "judge schema_violation recursion; no substantive tasks finding"
+        },
+        {
+          "id": "cfefd0472769",
+          "stage": "tasks",
+          "judge": "restatement",
+          "model": "gpt-5.4",
+          "confidence": 0,
+          "reasoning": "schema_violation: maximum recursion depth exceeded",
+          "round_raised": 3,
+          "also_raised_in_round": [
+            1,
+            2
+          ],
+          "addressed_at": null,
+          "addressed_by": null,
+          "deferred_reason": null,
+          "dismissed_reason": "judge schema_violation recursion; no substantive tasks finding"
+        },
+        {
+          "id": "b9b915f40eb0",
+          "stage": "tasks",
+          "judge": "implementation-risk",
+          "model": "claude-sonnet-4-6",
+          "confidence": 0,
+          "reasoning": "schema_violation: maximum recursion depth exceeded",
+          "round_raised": 3,
+          "also_raised_in_round": [
+            1,
+            2
+          ],
+          "addressed_at": null,
+          "addressed_by": null,
+          "deferred_reason": null,
+          "dismissed_reason": "judge schema_violation recursion; no substantive tasks finding"
+        }
+      ],
+      "adversarial_sha_history": [
+        "fe9dea3f4fbbab0cb4b2164deb724406d8713108f62e3565d16330bdfd9a6670",
+        "46da318fd21dc8cc862918400c92d4222f6853cb29179e4b631ae91fe5cb310f",
+        "35549db5d406356c59bc58a54950b2b88622a895a1281db6a34f9c1ed69ce509"
+      ],
+      "initial_sha": "fe9dea3f4fbbab0cb4b2164deb724406d8713108f62e3565d16330bdfd9a6670",
+      "judge_next_action": "advance"
+    },
+    "diff": {
+      "adversarial_rounds": 3,
+      "judge_rounds": 3,
+      "judge_verdicts": [
+        [
+          {
+            "judge": "completeness",
+            "model": "gpt-5.4-mini",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: maximum recursion depth exceeded",
+            "evidence": [],
+            "timestamp": "2026-04-27T23:38:14.923565Z"
+          },
+          {
+            "judge": "restatement",
+            "model": "gpt-5.4",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: maximum recursion depth exceeded",
+            "evidence": [],
+            "timestamp": "2026-04-27T23:38:14.920947Z"
+          },
+          {
+            "judge": "implementation-risk",
+            "model": "claude-sonnet-4-6",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: maximum recursion depth exceeded",
+            "evidence": [],
+            "timestamp": "2026-04-27T23:38:14.922201Z"
+          }
+        ],
+        [
+          {
+            "judge": "completeness",
+            "model": "gpt-5.4-mini",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: maximum recursion depth exceeded",
+            "evidence": [],
+            "timestamp": "2026-04-27T23:38:34.912296Z"
+          },
+          {
+            "judge": "restatement",
+            "model": "gpt-5.4",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: maximum recursion depth exceeded",
+            "evidence": [],
+            "timestamp": "2026-04-27T23:38:34.915245Z"
+          },
+          {
+            "judge": "implementation-risk",
+            "model": "claude-sonnet-4-6",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: maximum recursion depth exceeded",
+            "evidence": [],
+            "timestamp": "2026-04-27T23:38:34.913764Z"
+          }
+        ],
+        [
+          {
+            "judge": "completeness",
+            "model": "gpt-5.4-mini",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: maximum recursion depth exceeded",
+            "evidence": [],
+            "timestamp": "2026-04-27T23:38:35.415678Z"
+          },
+          {
+            "judge": "restatement",
+            "model": "gpt-5.4",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: maximum recursion depth exceeded",
+            "evidence": [],
+            "timestamp": "2026-04-27T23:38:35.414294Z"
+          },
+          {
+            "judge": "implementation-risk",
+            "model": "claude-sonnet-4-6",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: maximum recursion depth exceeded",
+            "evidence": [],
+            "timestamp": "2026-04-27T23:38:35.416977Z"
+          }
+        ]
+      ],
+      "annotations": [
+        {
+          "type": "validation-only-reseal",
+          "old_sha": "dbf598fdf148ec80ec9b353880585dd991797d76c26fb9d0e97e43337eedd5d4",
+          "new_sha": "ae363e9c7e35f5def87f17ccc0ad80954fd73e486dec6a16299d7d3a0b1e6922",
+          "at": 1777333270,
+          "files_updated": 3
+        }
+      ],
+      "unresolved_concerns": [
+        {
+          "id": "e9603ea8dc66",
+          "stage": "diff",
+          "judge": "completeness",
+          "model": "gpt-5.4-mini",
+          "confidence": 0,
+          "reasoning": "schema_violation: maximum recursion depth exceeded",
+          "round_raised": 3,
+          "also_raised_in_round": [
+            1,
+            2
+          ],
+          "addressed_at": null,
+          "addressed_by": null,
+          "deferred_reason": null,
+          "dismissed_reason": null
+        },
+        {
+          "id": "1c138fb6f518",
+          "stage": "diff",
+          "judge": "restatement",
+          "model": "gpt-5.4",
+          "confidence": 0,
+          "reasoning": "schema_violation: maximum recursion depth exceeded",
+          "round_raised": 3,
+          "also_raised_in_round": [
+            1,
+            2
+          ],
+          "addressed_at": null,
+          "addressed_by": null,
+          "deferred_reason": null,
+          "dismissed_reason": null
+        },
+        {
+          "id": "06e4c543b36f",
+          "stage": "diff",
+          "judge": "implementation-risk",
+          "model": "claude-sonnet-4-6",
+          "confidence": 0,
+          "reasoning": "schema_violation: maximum recursion depth exceeded",
+          "round_raised": 3,
+          "also_raised_in_round": [
+            1,
+            2
+          ],
+          "addressed_at": null,
+          "addressed_by": null,
+          "deferred_reason": null,
+          "dismissed_reason": null
+        }
+      ],
+      "adversarial_sha_history": [
+        "ca07a1da15061da5744bf86be458df52c070b7b73bc79d130f58d289f50889f1",
+        "6d3423dfd364d1175e48a60fe7a0e1623a8fe2ab74c3a3c452920ab9d2a7cb51",
+        "dbf598fdf148ec80ec9b353880585dd991797d76c26fb9d0e97e43337eedd5d4"
+      ],
+      "initial_sha": "ca07a1da15061da5744bf86be458df52c070b7b73bc79d130f58d289f50889f1",
+      "judge_next_action": "advance"
+    }
+  },
+  "invariant_warnings": [],
+  "schema_version": 2,
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  },
+  "spec_adversarial_rounds": 3,
+  "last_action_result": {
+    "next": "judge_panel",
+    "reason": "diff reached adversarial round cap",
+    "blockers": [
+      "diff.adversarial_rounds >= 3"
+    ]
+  },
+  "spec_judge_rounds": 3,
+  "plan_adversarial_rounds": 3,
+  "plan_judge_rounds": 3,
+  "tasks_adversarial_rounds": 3,
+  "tasks_judge_rounds": 3,
+  "last_successful_checkpoint_flags": {
+    "diff": {
+      "schema_version": 1,
+      "stage": "diff",
+      "artifact_path": "/Users/chrislaw/valuerank/.worktrees/ff-reconciliation-hardening/docs/workflow/feature-runs/ff-reconciliation-hardening/reviews/implementation.diff.patch",
+      "artifact_sha256": "dbf598fdf148ec80ec9b353880585dd991797d76c26fb9d0e97e43337eedd5d4",
+      "no_auto_context": true,
+      "max_artifact_chars": 200000,
+      "max_context_chars": 60000,
+      "max_total_chars": 400000,
+      "gemini_timeout_seconds": 120,
+      "gemini_retries": 1,
+      "repair_timeout_seconds": 900,
+      "allow_large_diff_rerun": false,
+      "keep_intermediates": false
+    }
+  },
+  "diff_adversarial_rounds": 3,
+  "dirty_overrides": {},
+  "diff_judge_rounds": 3,
+  "override": {
+    "reason": "Judge panel schema recursion exhausted with no substantive verdict",
+    "timestamp_iso8601_utc": "2026-04-27T23:42:00.562487Z",
+    "operator_id": "chrislaw",
+    "affected_concerns": [
+      {
+        "id": "e9603ea8dc66",
+        "stage": "diff",
+        "judge": "completeness",
+        "model": "gpt-5.4-mini",
+        "confidence": 0,
+        "reasoning": "schema_violation: maximum recursion depth exceeded",
+        "round_raised": 3,
+        "also_raised_in_round": [
+          1,
+          2
+        ],
+        "addressed_at": null,
+        "addressed_by": null,
+        "deferred_reason": null,
+        "dismissed_reason": null
+      },
+      {
+        "id": "1c138fb6f518",
+        "stage": "diff",
+        "judge": "restatement",
+        "model": "gpt-5.4",
+        "confidence": 0,
+        "reasoning": "schema_violation: maximum recursion depth exceeded",
+        "round_raised": 3,
+        "also_raised_in_round": [
+          1,
+          2
+        ],
+        "addressed_at": null,
+        "addressed_by": null,
+        "deferred_reason": null,
+        "dismissed_reason": null
+      },
+      {
+        "id": "06e4c543b36f",
+        "stage": "diff",
+        "judge": "implementation-risk",
+        "model": "claude-sonnet-4-6",
+        "confidence": 0,
+        "reasoning": "schema_violation: maximum recursion depth exceeded",
+        "round_raised": 3,
+        "also_raised_in_round": [
+          1,
+          2
+        ],
+        "addressed_at": null,
+        "addressed_by": null,
+        "deferred_reason": null,
+        "dismissed_reason": null
+      }
+    ]
+  },
+  "implementation_rule_override": {
+    "at": 1777333320,
+    "reason": "Implementation completed inline because the prompt explicitly assigned Codex as the autonomous orchestrator.",
+    "operator": "chrislaw",
+    "head_sha": "276b74cb52d25d601ce7296e737a38bc2763d5a6"
+  }
+}

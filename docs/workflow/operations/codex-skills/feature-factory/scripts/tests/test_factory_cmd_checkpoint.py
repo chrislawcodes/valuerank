@@ -137,6 +137,31 @@ class FactoryCheckpointTests(unittest.TestCase):
     def _patch_runtime(self):
         return contextlib.ExitStack()
 
+    def test_effective_auto_context_defaults_to_spec_and_tasks_only(self) -> None:
+        def enabled(stage: str) -> bool:
+            return CHECKPOINT._effective_auto_context(argparse.Namespace(
+                stage=stage,
+                auto_context=False,
+                no_auto_context=False,
+            ))
+
+        self.assertTrue(enabled("spec"))
+        self.assertTrue(enabled("tasks"))
+        self.assertFalse(enabled("plan"))
+        self.assertFalse(enabled("diff"))
+
+    def test_effective_auto_context_flags_override_stage_defaults(self) -> None:
+        self.assertTrue(CHECKPOINT._effective_auto_context(argparse.Namespace(
+            stage="diff",
+            auto_context=True,
+            no_auto_context=False,
+        )))
+        self.assertFalse(CHECKPOINT._effective_auto_context(argparse.Namespace(
+            stage="spec",
+            auto_context=False,
+            no_auto_context=True,
+        )))
+
     def test_checkpoint_increments_adversarial_rounds_on_success(self) -> None:
         self._prepare_state(2)
         args = _args()

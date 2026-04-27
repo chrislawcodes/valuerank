@@ -20,8 +20,12 @@ import sys
 _SCRIPT_DIR = Path(__file__).resolve().parent
 if str(_SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPT_DIR))
+_REVIEW_SCRIPTS = _SCRIPT_DIR.parents[1] / "review-lens" / "scripts"
+if str(_REVIEW_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(_REVIEW_SCRIPTS))
 
 from factory_io import atomic_write_text, read_text
+from workflow_utils import normalized_artifact_hash, normalized_artifact_text
 
 
 # ---------------------------------------------------------------------------
@@ -218,6 +222,7 @@ def _default_workflow_state() -> dict:
         INIT_HEAD_SHA_KEY: "",
         "token_usage": [],
         "command_telemetry": [],
+        "last_successful_checkpoint_flags": {},
         "diff_review_budget": {
             "recorded_head": "",
             "last_review_only_advance_at": 0,
@@ -434,6 +439,8 @@ def load_workflow_state(slug: str) -> dict:
     state.setdefault(INIT_HEAD_SHA_KEY, "")
     state.setdefault("token_usage", [])
     state.setdefault("command_telemetry", [])
+    flags = state.get("last_successful_checkpoint_flags", {})
+    state["last_successful_checkpoint_flags"] = flags if isinstance(flags, dict) else {}
     state.setdefault("diff_review_budget", defaults["diff_review_budget"])
     state.setdefault("stages", {})
     state.setdefault(INVARIANT_WARNINGS_KEY, [])
@@ -509,6 +516,11 @@ def update_workflow_state(slug: str, mutate) -> dict:
 # Slice 5 dispatch command uses the shorter legacy name expected by the task
 # notes. Keep it as a direct alias so both names share the same atomic helper.
 update_state = update_workflow_state
+
+
+def compute_narrowed_artifact_sha(path: Path) -> str:
+    stage = "plan" if path.name == "plan.md" else path.stem
+    return normalized_artifact_hash(stage, path)
 
 
 def update_stage_state(slug: str, stage: str, updates: dict) -> dict:

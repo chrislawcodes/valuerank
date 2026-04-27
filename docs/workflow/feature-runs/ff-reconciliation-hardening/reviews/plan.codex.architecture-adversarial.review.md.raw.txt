@@ -1,0 +1,9 @@
+## Findings
+- MEDIUM [UNVERIFIED] `last_successful_checkpoint_flags` is keyed only by `stage`. That lets a later repair inherit flags from any previous successful run at the same stage, even if the artifact content or surrounding workflow state changed. For replay safety, the persisted flags need a stronger identity than stage alone.
+- MEDIUM [UNVERIFIED] The hash change is underspecified: the plan says to update `normalized_artifact_hash` “or its callers.” That creates a split-brain risk where one freshness path uses the narrowed `## Review Reconciliation` hash and another still uses the full file hash, so stale plan reviews can survive on one path while another path thinks they are fresh.
+- MEDIUM [UNVERIFIED] The Markdown preprocessor removes code blocks, quotes, comments, and inline code, but the plan never requires boundary-preserving replacement. If those regions are deleted rather than masked, neighboring text can collapse into new severity matches or hide real ones at section boundaries, which weakens the new strict finding grammar.
+
+## Residual Risks
+- PyYAML fallback will still make reconciliation verification environment-sensitive, so local and CI behavior can diverge if the dependency is missing or version-skewed.
+- The severity grammar still excludes aliases and lowercase forms, so any future review style that uses `P0`, `SEV`, or non-uppercase markers will be ignored.
+- The auto-reopen path still depends on the underlying review update API accepting accepted-to-open transitions; if that assumption is wrong, the stale-accepted-review state will persist.

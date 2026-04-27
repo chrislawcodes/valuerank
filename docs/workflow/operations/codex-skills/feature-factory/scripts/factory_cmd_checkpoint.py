@@ -355,6 +355,57 @@ def _handle_concern_lifecycle(args: argparse.Namespace) -> int | None:
     return 0
 
 
+_CHECKPOINT_FLAG_KEYS = (
+    "no_auto_context",
+    "max_artifact_chars",
+    "max_context_chars",
+    "max_total_chars",
+    "gemini_timeout_seconds",
+    "gemini_retries",
+    "repair_timeout_seconds",
+    "allow_large_diff_rerun",
+    "keep_intermediates",
+)
+
+
+def _effective_auto_context(args: argparse.Namespace) -> bool:
+    if getattr(args, "auto_context", False) and getattr(args, "no_auto_context", False):
+        raise SystemExit("--auto-context cannot be combined with --no-auto-context")
+    if getattr(args, "auto_context", False):
+        return True
+    if getattr(args, "no_auto_context", False):
+        return False
+    return args.stage in {"spec", "tasks"}
+
+
+def _checkpoint_flag_record(args: argparse.Namespace, artifact_path: Path, auto_context: bool) -> dict:
+    record: dict[str, object] = {
+        "schema_version": 1,
+        "stage": args.stage,
+        "artifact_path": str(artifact_path),
+        "artifact_sha256": normalized_artifact_hash(args.stage, artifact_path),
+        "no_auto_context": not auto_context,
+    }
+    for key in _CHECKPOINT_FLAG_KEYS:
+        if key == "no_auto_context":
+            continue
+        value = getattr(args, key, None)
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            record[key] = value
+    return record
+
+
+def _persist_checkpoint_flags(slug: str, stage: str, record: dict) -> None:
+    def mutate(state: dict) -> None:
+        flags = state.get("last_successful_checkpoint_flags")
+        if not isinstance(flags, dict):
+            flags = {}
+        flags[stage] = record
+        state["last_successful_checkpoint_flags"] = flags
+
+    update_workflow_state(slug, mutate)
+
+
 def _run_validation_only(slug: str, stage: str) -> int:
     """Feature B Slice 3 — re-seal the manifest against the current artifact
     SHA without dispatching any reviewer.
@@ -508,6 +559,7 @@ def command_checkpoint(args: argparse.Namespace) -> int:
     fast = getattr(args, "fast", False)
     if fast and args.stage != "diff":
         raise SystemExit("--fast requires --stage diff")
+    auto_context_enabled = _effective_auto_context(args)
 
     # Feature B Slice 3 — --validation-only is mutually exclusive with all
     # state-mutating review modes. Argparse can't express this with required
@@ -659,7 +711,7 @@ def command_checkpoint(args: argparse.Namespace) -> int:
 
     # Auto-add files mentioned in the spec/artifact as context so reviewers
     # can verify assumptions against real code rather than generating unfounded findings.
-    if args.stage in ("spec", "plan") and not getattr(args, "no_auto_context", False):
+    if auto_context_enabled:
         auto_context = _extract_file_paths_from_artifact(artifact_path, REPO_ROOT)
         for p in auto_context:
             if len(context_paths) >= _AUTO_CONTEXT_MAX_FILES:
@@ -892,6 +944,11 @@ def command_checkpoint(args: argparse.Namespace) -> int:
                 if reverted:
                     print(f"reverted protected files: {', '.join(reverted)}", file=sys.stderr)
                 _advance_checkpoint_progress(args.slug, args.stage, pending_head_sha)
+                _persist_checkpoint_flags(
+                    args.slug,
+                    args.stage,
+                    _checkpoint_flag_record(args, artifact_path, auto_context_enabled),
+                )
                 post_state = load_workflow_state(args.slug)
                 payload = _checkpoint_next_action_payload(args.slug, post_state, args.stage)
                 _persist_last_action_result(args.slug, payload)
@@ -922,6 +979,11 @@ def command_checkpoint(args: argparse.Namespace) -> int:
             print(f"reverted protected files: {', '.join(reverted)}", file=sys.stderr)
         record_checkpoint_fallback(args.slug, args.stage, fallback_reason)
         _advance_checkpoint_progress(args.slug, args.stage, pending_head_sha)
+        _persist_checkpoint_flags(
+            args.slug,
+            args.stage,
+            _checkpoint_flag_record(args, artifact_path, auto_context_enabled),
+        )
         heartbeat_set_activity("aggregating results")
         print(f"warning: fallback checkpoint path used for {args.stage} on {args.slug}: {fallback_reason}", file=sys.stderr)
         post_state = load_workflow_state(args.slug)

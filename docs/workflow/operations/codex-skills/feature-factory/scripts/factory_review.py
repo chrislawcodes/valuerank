@@ -36,7 +36,7 @@ REVIEW_SCRIPTS = REPO_ROOT / "docs" / "workflow" / "operations" / "codex-skills"
 if str(REVIEW_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(REVIEW_SCRIPTS))
 
-from workflow_utils import normalized_artifact_hash, repo_relative_path, resolve_stored_path  # noqa: E402
+from workflow_utils import artifact_hash_matches, normalized_artifact_hash, repo_relative_path, resolve_stored_path  # noqa: E402
 
 from factory_stages import (  # noqa: E402
     VERIFY_CHECKPOINT,
@@ -207,32 +207,121 @@ def repair_checkpoint_args(slug: str, stage: str, state: dict[str, object]) -> a
     if stage == "diff" and not allow_dirty_paths:
         dirty_override = workflow_state.get(DIRTY_OVERRIDE_KEY, {})
         allow_dirty_paths = list(dict.fromkeys(dirty_override.get("allowed_dirty_paths", [])))
-    return argparse.Namespace(
-        slug=slug,
-        stage=stage,
-        artifact=str(state["artifact_path"]),
-        base_ref=base_ref or None,
-        context=context_paths,
-        path=[],
-        required_reviews=manifest.get("required_reviews"),
-        extra_gemini_lens=[],
-        sensitive=False,
-        large_structural=False,
-        performance_sensitive=False,
-        use_existing_artifact=use_existing_artifact,
-        allow_dirty_path=allow_dirty_paths,
-        max_artifact_chars=manifest.get("max_artifact_chars"),
-        max_context_chars=manifest.get("max_context_chars"),
-        max_total_chars=manifest.get("max_total_chars"),
-        gemini_timeout_seconds=120,
-        gemini_retries=1,
-        repair_timeout_seconds=300,
-        allow_large_diff_rerun=bool(diff_budget.get("artifact_changed_since_codex")),
-        fallback=False,
-        json=False,
-        no_auto_context=False,
-        fast=False,
-    )
+    values = {
+        "slug": slug,
+        "stage": stage,
+        "artifact": str(state["artifact_path"]),
+        "base_ref": base_ref or None,
+        "context": context_paths,
+        "path": [],
+        "required_reviews": manifest.get("required_reviews"),
+        "extra_gemini_lens": [],
+        "sensitive": False,
+        "large_structural": False,
+        "performance_sensitive": False,
+        "use_existing_artifact": use_existing_artifact,
+        "allow_dirty_path": allow_dirty_paths,
+        "max_artifact_chars": manifest.get("max_artifact_chars"),
+        "max_context_chars": manifest.get("max_context_chars"),
+        "max_total_chars": manifest.get("max_total_chars"),
+        "gemini_timeout_seconds": 120,
+        "gemini_retries": 1,
+        "repair_timeout_seconds": 300,
+        "allow_large_diff_rerun": bool(diff_budget.get("artifact_changed_since_codex")),
+        "fallback": False,
+        "json": False,
+        "auto_context": False,
+        "no_auto_context": False,
+        "fast": False,
+        "keep_intermediates": False,
+    }
+    _apply_persisted_checkpoint_flags(workflow_state, stage, str(state["artifact_path"]), values)
+    return argparse.Namespace(**values)
+
+
+_REPAIR_FLAG_ALLOWLIST = {
+    "no_auto_context",
+    "max_artifact_chars",
+    "max_context_chars",
+    "max_total_chars",
+    "gemini_timeout_seconds",
+    "gemini_retries",
+    "repair_timeout_seconds",
+    "allow_large_diff_rerun",
+    "keep_intermediates",
+}
+
+
+_BOOLEAN_REPAIR_FLAGS = {
+    "no_auto_context",
+    "allow_large_diff_rerun",
+    "keep_intermediates",
+}
+
+_POSITIVE_INT_REPAIR_FLAGS = {
+    "max_artifact_chars",
+    "max_context_chars",
+    "max_total_chars",
+    "gemini_timeout_seconds",
+    "repair_timeout_seconds",
+}
+
+_NONNEGATIVE_INT_REPAIR_FLAGS = {
+    "gemini_retries",
+}
+
+
+def _valid_persisted_repair_flag(key: str, value: object) -> bool:
+    if key in _BOOLEAN_REPAIR_FLAGS:
+        return isinstance(value, bool)
+    if key in _POSITIVE_INT_REPAIR_FLAGS:
+        return isinstance(value, int) and not isinstance(value, bool) and value > 0
+    if key in _NONNEGATIVE_INT_REPAIR_FLAGS:
+        return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+    return False
+
+
+def _flag_to_cli(key: str, value: object) -> list[str]:
+    name = "--" + key.replace("_", "-")
+    if isinstance(value, bool):
+        return [name] if value else []
+    if value is None:
+        return []
+    return [name, str(value)]
+
+
+def _apply_persisted_checkpoint_flags(
+    workflow_state: dict,
+    stage: str,
+    artifact_path: str,
+    values: dict,
+) -> None:
+    all_flags = workflow_state.get("last_successful_checkpoint_flags", {})
+    if not isinstance(all_flags, dict):
+        return
+    saved = all_flags.get(stage)
+    if not isinstance(saved, dict):
+        return
+    if saved.get("schema_version") != 1 or saved.get("stage") != stage:
+        return
+    if str(saved.get("artifact_path", "")) != artifact_path:
+        return
+    try:
+        current_hash = normalized_artifact_hash(stage, Path(artifact_path))
+    except Exception:
+        return
+    if saved.get("artifact_sha256") != current_hash:
+        return
+    applied: list[str] = []
+    for key, value in saved.items():
+        if key not in _REPAIR_FLAG_ALLOWLIST:
+            continue
+        if not _valid_persisted_repair_flag(key, value):
+            continue
+        values[key] = value
+        applied.extend(_flag_to_cli(key, value))
+    if applied:
+        print(f"[repair] re-using flags from last successful checkpoint: {' '.join(applied)}")
 
 
 # ---------------------------------------------------------------------------
@@ -285,7 +374,7 @@ def run_checkpoint_fallback(manifest_path: Path, workspace_root: Path, gemini_ti
             data, _ = parse_review_frontmatter(review_path)
         except Exception:
             data = {}
-        return data.get("artifact_sha256") == normalized_artifact_hash(checkpoint.get("stage", ""), artifact_path)
+        return artifact_hash_matches(checkpoint.get("stage", ""), artifact_path, data)
 
     def _run_review(spec: dict, no_gemini_lock: bool = False) -> str | None:
         if _already_done(spec):
@@ -376,4 +465,3 @@ def _advance_checkpoint_progress(slug: str, stage: str, pending_head_sha: str) -
         slug,
         lambda s: s.__setitem__(CHECKPOINT_PROGRESS_KEY, new_progress),
     )
-

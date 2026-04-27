@@ -1,0 +1,1061 @@
+Reading additional input from stdin...
+OpenAI Codex v0.125.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.worktrees/ff-reconciliation-hardening
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019dd14c-1e9a-7b73-bfab-96d47fa8fbf1
+--------
+user
+Review this diff artifact using a correctness-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: implementation.diff.patch
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/SKILL.md b/docs/workflow/operations/codex-skills/feature-factory/SKILL.md
+index d12247d3..96e612c2 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/SKILL.md
++++ b/docs/workflow/operations/codex-skills/feature-factory/SKILL.md
+@@ -243,10 +243,19 @@ At each checkpoint:
+ 
+ 1. create or update the artifact
+ 2. run the checkpoint
+-3. run `auto-reconcile --slug <slug> --stage <stage>` — auto-accepts reviews with no HIGH or MEDIUM findings and prints which reviews still need attention
++3. run `auto-reconcile --slug <slug> --stage <stage>` — auto-accepts reviews with no HIGH, MEDIUM, LOW, or CRITICAL findings and prints which reviews still need attention
+ 4. read and reconcile only the reviews listed under `needs-review` in the auto-reconcile output
+ 5. only then move forward
+ 
++### Auto-Context Defaults
++
++Checkpoint auto-context is enabled by default for `spec` and `tasks` stages.
++It is disabled by default for `plan` and `diff` stages because those artifacts
++are already the review source of truth and extra inferred context often pushes
++review payloads over character limits. Use `--auto-context` to force inferred
++context back on for plan or diff. Use `--no-auto-context` to force it off for
++any stage.
++
+ ### Progress Heartbeat
+ 
+ Long-running runner activity needs a heartbeat. Follow the FR-023a cadence: emit progress every 10 minutes PT, and keep the operator-orchestrator heartbeat discipline from FR-023d in mind. If the workflow is still alive, the user should be able to tell at a glance which stage is active and whether progress is still moving.
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py
+index 48063e49..77ae75bb 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py
+@@ -355,6 +355,57 @@ def _handle_concern_lifecycle(args: argparse.Namespace) -> int | None:
+     return 0
+ 
+ 
++_CHECKPOINT_FLAG_KEYS = (
++    "no_auto_context",
++    "max_artifact_chars",
++    "max_context_chars",
++    "max_total_chars",
++    "gemini_timeout_seconds",
++    "gemini_retries",
++    "repair_timeout_seconds",
++    "allow_large_diff_rerun",
++    "keep_intermediates",
++)
++
++
++def _effective_auto_context(args: argparse.Namespace) -> bool:
++    if getattr(args, "auto_context", False) and getattr(args, "no_auto_context", False):
++        raise SystemExit("--auto-context cannot be combined with --no-auto-context")
++    if getattr(args, "auto_context", False):
++        return True
++    if getattr(args, "no_auto_context", False):
++        return False
++    return args.stage in {"spec", "tasks"}
++
++
++def _checkpoint_flag_record(args: argparse.Namespace, artifact_path: Path, auto_context: bool) -> dict:
++    record: dict[str, object] = {
++        "schema_version": 1,
++        "stage": args.stage,
++        "artifact_path": str(artifact_path),
++        "artifact_sha256": normalized_artifact_hash(args.stage, artifact_path),
++        "no_auto_context": not auto_context,
++    }
++    for key in _CHECKPOINT_FLAG_KEYS:
++        if key == "no_auto_context":
++            continue
++        value = getattr(args, key, None)
++        if isinstance(value, (str, int, float, bool)) or value is None:
++            record[key] = value
++    return record
++
++
++def _persist_checkpoint_flags(slug: str, stage: str, record: dict) -> None:
++    def mutate(state: dict) -> None:
++        flags = state.get("last_successful_checkpoint_flags")
++        if not isinstance(flags, dict):
++            flags = {}
++        flags[stage] = record
++        state["last_successful_checkpoint_flags"] = flags
++
++    update_workflow_state(slug, mutate)
++
++
+ def _run_validation_only(slug: str, stage: str) -> int:
+     """Feature B Slice 3 — re-seal the manifest against the current artifact
+     SHA without dispatching any reviewer.
+@@ -508,6 +559,7 @@ def command_checkpoint(args: argparse.Namespace) -> int:
+     fast = getattr(args, "fast", False)
+     if fast and args.stage != "diff":
+         raise SystemExit("--fast requires --stage diff")
++    auto_context_enabled = _effective_auto_context(args)
+ 
+     # Feature B Slice 3 — --validation-only is mutually exclusive with all
+     # state-mutating review modes. Argparse can't express this with required
+@@ -659,7 +711,7 @@ def command_checkpoint(args: argparse.Namespace) -> int:
+ 
+     # Auto-add files mentioned in the spec/artifact as context so reviewers
+     # can verify assumptions against real code rather than generating unfounded findings.
+-    if args.stage in ("spec", "plan") and not getattr(args, "no_auto_context", False):
++    if args.stage in ("spec", "plan") and auto_context_enabled:
+         auto_context = _extract_file_paths_from_artifact(artifact_path, REPO_ROOT)
+         for p in auto_context:
+             if len(context_paths) >= _AUTO_CONTEXT_MAX_FILES:
+@@ -892,6 +944,11 @@ def command_checkpoint(args: argparse.Namespace) -> int:
+                 if reverted:
+                     print(f"reverted protected files: {', '.join(reverted)}", file=sys.stderr)
+                 _advance_checkpoint_progress(args.slug, args.stage, pending_head_sha)
++                _persist_checkpoint_flags(
++                    args.slug,
++                    args.stage,
++                    _checkpoint_flag_record(args, artifact_path, auto_context_enabled),
++                )
+                 post_state = load_workflow_state(args.slug)
+                 payload = _checkpoint_next_action_payload(args.slug, post_state, args.stage)
+                 _persist_last_action_result(args.slug, payload)
+@@ -922,6 +979,11 @@ def command_checkpoint(args: argparse.Namespace) -> int:
+             print(f"reverted protected files: {', '.join(reverted)}", file=sys.stderr)
+         record_checkpoint_fallback(args.slug, args.stage, fallback_reason)
+         _advance_checkpoint_progress(args.slug, args.stage, pending_head_sha)
++        _persist_checkpoint_flags(
++            args.slug,
++            args.stage,
++            _checkpoint_flag_record(args, artifact_path, auto_context_enabled),
++        )
+         heartbeat_set_activity("aggregating results")
+         print(f"warning: fallback checkpoint path used for {args.stage} on {args.slug}: {fallback_reason}", file=sys.stderr)
+         post_state = load_workflow_state(args.slug)
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_review.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_review.py
+index 8f843a3d..2c8ce68d 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_review.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_review.py
+@@ -36,7 +36,7 @@ REVIEW_SCRIPTS = REPO_ROOT / "docs" / "workflow" / "operations" / "codex-skills"
+ if str(REVIEW_SCRIPTS) not in sys.path:
+     sys.path.insert(0, str(REVIEW_SCRIPTS))
+ 
+-from workflow_utils import normalized_artifact_hash, repo_relative_path, resolve_stored_path  # noqa: E402
++from workflow_utils import artifact_hash_matches, normalized_artifact_hash, repo_relative_path, resolve_stored_path  # noqa: E402
+ 
+ from factory_stages import (  # noqa: E402
+     VERIFY_CHECKPOINT,
+@@ -207,32 +207,121 @@ def repair_checkpoint_args(slug: str, stage: str, state: dict[str, object]) -> a
+     if stage == "diff" and not allow_dirty_paths:
+         dirty_override = workflow_state.get(DIRTY_OVERRIDE_KEY, {})
+         allow_dirty_paths = list(dict.fromkeys(dirty_override.get("allowed_dirty_paths", [])))
+-    return argparse.Namespace(
+-        slug=slug,
+-        stage=stage,
+-        artifact=str(state["artifact_path"]),
+-        base_ref=base_ref or None,
+-        context=context_paths,
+-        path=[],
+-        required_reviews=manifest.get("required_reviews"),
+-        extra_gemini_lens=[],
+-        sensitive=False,
+-        large_structural=False,
+-        performance_sensitive=False,
+-        use_existing_artifact=use_existing_artifact,
+-        allow_dirty_path=allow_dirty_paths,
+-        max_artifact_chars=manifest.get("max_artifact_chars"),
+-        max_context_chars=manifest.get("max_context_chars"),
+-        max_total_chars=manifest.get("max_total_chars"),
+-        gemini_timeout_seconds=120,
+-        gemini_retries=1,
+-        repair_timeout_seconds=300,
+-        allow_large_diff_rerun=bool(diff_budget.get("artifact_changed_since_codex")),
+-        fallback=False,
+-        json=False,
+-        no_auto_context=False,
+-        fast=False,
+-    )
++    values = {
++        "slug": slug,
++        "stage": stage,
++        "artifact": str(state["artifact_path"]),
++        "base_ref": base_ref or None,
++        "context": context_paths,
++        "path": [],
++        "required_reviews": manifest.get("required_reviews"),
++        "extra_gemini_lens": [],
++        "sensitive": False,
++        "large_structural": False,
++        "performance_sensitive": False,
++        "use_existing_artifact": use_existing_artifact,
++        "allow_dirty_path": allow_dirty_paths,
++        "max_artifact_chars": manifest.get("max_artifact_chars"),
++        "max_context_chars": manifest.get("max_context_chars"),
++        "max_total_chars": manifest.get("max_total_chars"),
++        "gemini_timeout_seconds": 120,
++        "gemini_retries": 1,
++        "repair_timeout_seconds": 300,
++        "allow_large_diff_rerun": bool(diff_budget.get("artifact_changed_since_codex")),
++        "fallback": False,
++        "json": False,
++        "auto_context": False,
++        "no_auto_context": False,
++        "fast": False,
++        "keep_intermediates": False,
++    }
++    _apply_persisted_checkpoint_flags(workflow_state, stage, str(state["artifact_path"]), values)
++    return argparse.Namespace(**values)
++
++
++_REPAIR_FLAG_ALLOWLIST = {
++    "no_auto_context",
++    "max_artifact_chars",
++    "max_context_chars",
++    "max_total_chars",
++    "gemini_timeout_seconds",
++    "gemini_retries",
++    "repair_timeout_seconds",
++    "allow_large_diff_rerun",
++    "keep_intermediates",
++}
++
++
++_BOOLEAN_REPAIR_FLAGS = {
++    "no_auto_context",
++    "allow_large_diff_rerun",
++    "keep_intermediates",
++}
++
++_POSITIVE_INT_REPAIR_FLAGS = {
++    "max_artifact_chars",
++    "max_context_chars",
++    "max_total_chars",
++    "gemini_timeout_seconds",
++    "repair_timeout_seconds",
++}
++
++_NONNEGATIVE_INT_REPAIR_FLAGS = {
++    "gemini_retries",
++}
++
++
++def _valid_persisted_repair_flag(key: str, value: object) -> bool:
++    if key in _BOOLEAN_REPAIR_FLAGS:
++        return isinstance(value, bool)
++    if key in _POSITIVE_INT_REPAIR_FLAGS:
++        return isinstance(value, int) and not isinstance(value, bool) and value > 0
++    if key in _NONNEGATIVE_INT_REPAIR_FLAGS:
++        return isinstance(value, int) and not isinstance(value, bool) and value >= 0
++    return False
++
++
++def _flag_to_cli(key: str, value: object) -> list[str]:
++    name = "--" + key.replace("_", "-")
++    if isinstance(value, bool):
++        return [name] if value else []
++    if value is None:
++        return []
++    return [name, str(value)]
++
++
++def _apply_persisted_checkpoint_flags(
++    workflow_state: dict,
++    stage: str,
++    artifact_path: str,
++    values: dict,
++) -> None:
++    all_flags = workflow_state.get("last_successful_checkpoint_flags", {})
++    if not isinstance(all_flags, dict):
++        return
++    saved = all_flags.get(stage)
++    if not isinstance(saved, dict):
++        return
++    if saved.get("schema_version") != 1 or saved.get("stage") != stage:
++        return
++    if str(saved.get("artifact_path", "")) != artifact_path:
++        return
++    try:
++        current_hash = normalized_artifact_hash(stage, Path(artifact_path))
++    except Exception:
++        return
++    if saved.get("artifact_sha256") != current_hash:
++        return
++    applied: list[str] = []
++    for key, value in saved.items():
++        if key not in _REPAIR_FLAG_ALLOWLIST:
++            continue
++        if not _valid_persisted_repair_flag(key, value):
++            continue
++        values[key] = value
++        applied.extend(_flag_to_cli(key, value))
++    if applied:
++        print(f"[repair] re-using flags from last successful checkpoint: {' '.join(applied)}")
+ 
+ 
+ # ---------------------------------------------------------------------------
+@@ -285,7 +374,7 @@ def run_checkpoint_fallback(manifest_path: Path, workspace_root: Path, gemini_ti
+             data, _ = parse_review_frontmatter(review_path)
+         except Exception:
+             data = {}
+-        return data.get("artifact_sha256") == normalized_artifact_hash(checkpoint.get("stage", ""), artifact_path)
++        return artifact_hash_matches(checkpoint.get("stage", ""), artifact_path, data)
+ 
+     def _run_review(spec: dict, no_gemini_lock: bool = False) -> str | None:
+         if _already_done(spec):
+@@ -376,4 +465,3 @@ def _advance_checkpoint_progress(slug: str, stage: str, pending_head_sha: str) -
+         slug,
+         lambda s: s.__setitem__(CHECKPOINT_PROGRESS_KEY, new_progress),
+     )
+-
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_review_specs.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_review_specs.py
+index 42c3e2b7..fbb5cb2e 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_review_specs.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_review_specs.py
+@@ -17,7 +17,7 @@ DEFAULT_GEMINI_MODEL = "gemini-2.5-pro"
+ DEFAULT_CODEX_MODEL = "gpt-5.4-mini"
+ 
+ SMALL_TASK_SET_THRESHOLD = 15
+-_AUTO_ACCEPT_NOTE = "No actionable findings detected — auto-accepted"
++_AUTO_ACCEPT_NOTE = "No HIGH/MEDIUM/LOW/CRITICAL findings detected — auto-accepted"
+ 
+ # Every pattern below is matched against text that has already been lowercased
+ # by detect_actionable_findings(). All patterns anchor to start-of-line (after
+@@ -52,7 +52,7 @@ ACTIONABLE_FINDING_SHAPES = (
+     "inline-severity-field-plain",
+ )
+ 
+-_SEV = r"(?:critical|high|medium)"
++_SEV = r"(?:critical|high|medium|low)"
+ 
+ _ACTIONABLE_FINDING_RE = re.compile(
+     r"(?:"
+@@ -102,6 +102,42 @@ _ACTIONABLE_FINDING_RE = re.compile(
+ )
+ 
+ 
++def _strip_non_finding_markdown(text: str) -> str:
++    """Remove common quoted/example Markdown so severity examples do not match."""
++    text = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
++    text = re.sub(r"```.*?```", "", text, flags=re.DOTALL)
++    text = re.sub(r"`[^`\n]*`", "", text)
++    text = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", text)
++    text = re.sub(r"\[[^\]]*\]\([^)]*\)", "", text)
++    kept: list[str] = []
++    in_indented = False
++    for line in text.splitlines():
++        stripped = line.lstrip()
++        if line.startswith("    "):
++            in_indented = True
++            continue
++        if in_indented and not stripped:
++            continue
++        in_indented = False
++        if stripped.startswith(">"):
++            continue
++        kept.append(line)
++    return "\n".join(kept)
++
++
++def _findings_scan_text(text: str) -> str:
++    lines = text.splitlines()
++    starts = [
++        idx
++        for idx, line in enumerate(lines)
++        if re.match(r"^##\s+Findings\s*$", line, flags=re.IGNORECASE)
++    ]
++    if not starts:
++        return text
++    first = starts[0] + 1
++    return "\n".join(lines[first:])
++
++
+ # ---------------------------------------------------------------------------
+ # Review helpers
+ # ---------------------------------------------------------------------------
+@@ -114,7 +150,7 @@ def detect_actionable_findings(review_path: Path) -> bool:
+     Returns False if the file cannot be read, treating unreadable files as non-blocking.
+     """
+     try:
+-        text = read_text(review_path).lower()
++        text = _strip_non_finding_markdown(_findings_scan_text(read_text(review_path))).lower()
+     except OSError:
+         return False
+     return bool(_ACTIONABLE_FINDING_RE.search(text))
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py
+index c5bfc28f..9fb1dec5 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py
+@@ -20,8 +20,12 @@ import sys
+ _SCRIPT_DIR = Path(__file__).resolve().parent
+ if str(_SCRIPT_DIR) not in sys.path:
+     sys.path.insert(0, str(_SCRIPT_DIR))
++_REVIEW_SCRIPTS = _SCRIPT_DIR.parents[1] / "review-lens" / "scripts"
++if str(_REVIEW_SCRIPTS) not in sys.path:
++    sys.path.insert(0, str(_REVIEW_SCRIPTS))
+ 
+ from factory_io import atomic_write_text, read_text
++from workflow_utils import normalized_artifact_hash, normalized_artifact_text
+ 
+ 
+ # ---------------------------------------------------------------------------
+@@ -218,6 +222,7 @@ def _default_workflow_state() -> dict:
+         INIT_HEAD_SHA_KEY: "",
+         "token_usage": [],
+         "command_telemetry": [],
++        "last_successful_checkpoint_flags": {},
+         "diff_review_budget": {
+             "recorded_head": "",
+             "last_review_only_advance_at": 0,
+@@ -434,6 +439,8 @@ def load_workflow_state(slug: str) -> dict:
+     state.setdefault(INIT_HEAD_SHA_KEY, "")
+     state.setdefault("token_usage", [])
+     state.setdefault("command_telemetry", [])
++    flags = state.get("last_successful_checkpoint_flags", {})
++    state["last_successful_checkpoint_flags"] = flags if isinstance(flags, dict) else {}
+     state.setdefault("diff_review_budget", defaults["diff_review_budget"])
+     state.setdefault("stages", {})
+     state.setdefault(INVARIANT_WARNINGS_KEY, [])
+@@ -511,6 +518,11 @@ def update_workflow_state(slug: str, mutate) -> dict:
+ update_state = update_workflow_state
+ 
+ 
++def compute_narrowed_artifact_sha(path: Path) -> str:
++    stage = "plan" if path.name == "plan.md" else path.stem
++    return normalized_artifact_hash(stage, path)
++
++
+ def update_stage_state(slug: str, stage: str, updates: dict) -> dict:
+     """Update nested stage state and mirror legacy top-level counters."""
+     with with_locked_state(slug) as state:
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py
+index 87e672b2..3172ff97 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py
+@@ -220,13 +220,25 @@ def command_auto_reconcile(args: argparse.Namespace) -> int:
+             needs_review.append(f"{spec['path']} (unreadable)")
+             continue
+ 
+-        status = data.get("resolution_status", "open")
+-        if status != "open":
+-            # Already reconciled — skip.
+-            continue
+-
+         if detect_actionable_findings(review_path):
++            reopen_note = "Actionable HIGH/MEDIUM/LOW/CRITICAL finding detected — review required"
++            run([
++                sys.executable, str(UPDATE_REVIEW),
++                "--review", str(review_path),
++                "--status", "open",
++                "--note", reopen_note,
++            ])
++            run([
++                sys.executable, str(APPEND_RECONCILIATION),
++                "--plan", str(plan_path),
++                "--review", str(review_path),
++                "--status", "open",
++                "--note", reopen_note,
++            ])
+             needs_review.append(spec["path"])
++        elif data.get("resolution_status", "open") != "open":
++            # Already reconciled and still clean — skip.
++            continue
+         else:
+             # Auto-accept: write resolution into file and append to plan reconciliation table.
+             run([
+@@ -313,8 +325,10 @@ def build_parser() -> argparse.ArgumentParser:
+     checkpoint_parser.add_argument("--large-structural", action="store_true")
+     checkpoint_parser.add_argument("--performance-sensitive", action="store_true")
+     checkpoint_parser.add_argument("--use-existing-artifact", action="store_true")
++    checkpoint_parser.add_argument("--auto-context", action="store_true",
++                                   help="Enable automatic context file extraction. Defaults on for spec/tasks and off for plan/diff.")
+     checkpoint_parser.add_argument("--no-auto-context", action="store_true",
+-                                   help="Disable automatic context file extraction from the artifact")
++                                   help="Disable automatic context file extraction from the artifact. Defaults off for plan/diff.")
+     checkpoint_parser.add_argument("--allow-dirty-path", action="append", default=[])
+     checkpoint_parser.add_argument("--max-artifact-chars", type=int, default=50000)
+     checkpoint_parser.add_argument("--max-context-chars", type=int, default=60000)
+@@ -346,7 +360,7 @@ def build_parser() -> argparse.ArgumentParser:
+ 
+     auto_reconcile_parser = subparsers.add_parser(
+         "auto-reconcile",
+-        help="Auto-accept reviews with no HIGH or MEDIUM findings; list remaining ones for human review",
++        help="Auto-accept reviews with no HIGH, MEDIUM, LOW, or CRITICAL findings; list remaining ones for human review",
+     )
+     auto_reconcile_parser.add_argument("--slug", required=True)
+     auto_reconcile_parser.add_argument(
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_review_persisted_flags.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_review_persisted_flags.py
+new file mode 100644
+index 00000000..c49dc05f
+--- /dev/null
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_review_persisted_flags.py
+@@ -0,0 +1,106 @@
++import importlib.util
++import sys
++import tempfile
++import unittest
++from pathlib import Path
++from unittest.mock import patch
++
++
++SCRIPTS_DIR = Path(__file__).resolve().parents[1]
++REVIEW_SCRIPTS_DIR = Path(__file__).resolve().parents[3] / "review-lens" / "scripts"
++for path in (SCRIPTS_DIR, REVIEW_SCRIPTS_DIR):
++    if str(path) not in sys.path:
++        sys.path.insert(0, str(path))
++
++
++def _load(name: str):
++    spec = importlib.util.spec_from_file_location(name, SCRIPTS_DIR / f"{name}.py")
++    assert spec and spec.loader
++    mod = importlib.util.module_from_spec(spec)
++    sys.modules[name] = mod
++    spec.loader.exec_module(mod)
++    return mod
++
++
++FACTORY_STATE = _load("factory_state")
++FACTORY_REVIEW = _load("factory_review")
++
++
++class PersistedCheckpointFlagTests(unittest.TestCase):
++    def setUp(self) -> None:
++        self.tmpdir = tempfile.TemporaryDirectory()
++        self.addCleanup(self.tmpdir.cleanup)
++        self.root = Path(self.tmpdir.name)
++        self.slug = "persisted-flags"
++        self.workflow_dir = self.root / self.slug
++        self.workflow_dir.mkdir(parents=True)
++        self.artifact = self.workflow_dir / "spec.md"
++        self.artifact.write_text("# Spec\n\nBody.\n", encoding="utf-8")
++        self.patches = [
++            patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", self.root),
++            patch.object(FACTORY_REVIEW, "REPO_ROOT", self.root),
++        ]
++        for item in self.patches:
++            item.start()
++            self.addCleanup(item.stop)
++
++    def _state(self, saved: dict) -> dict:
++        return {
++            "last_successful_checkpoint_flags": {
++                "spec": {
++                    "schema_version": 1,
++                    "stage": "spec",
++                    "artifact_path": str(self.artifact),
++                    "artifact_sha256": FACTORY_REVIEW.normalized_artifact_hash("spec", self.artifact),
++                    **saved,
++                }
++            }
++        }
++
++    def test_persisted_flags_reuse_safe_values(self) -> None:
++        values = {"max_artifact_chars": 50000, "gemini_retries": 1}
++        FACTORY_REVIEW._apply_persisted_checkpoint_flags(
++            self._state({"max_artifact_chars": 12000, "gemini_retries": 0, "no_auto_context": True}),
++            "spec",
++            str(self.artifact),
++            values,
++        )
++        self.assertEqual(values["max_artifact_chars"], 12000)
++        self.assertEqual(values["gemini_retries"], 0)
++        self.assertIs(values["no_auto_context"], True)
++
++    def test_persisted_flags_ignore_bad_types_and_ranges(self) -> None:
++        values = {
++            "max_artifact_chars": 50000,
++            "gemini_retries": 1,
++            "repair_timeout_seconds": 300,
++            "allow_large_diff_rerun": False,
++        }
++        FACTORY_REVIEW._apply_persisted_checkpoint_flags(
++            self._state({
++                "max_artifact_chars": "999999",
++                "gemini_retries": -1,
++                "repair_timeout_seconds": 0,
++                "allow_large_diff_rerun": "true",
++                "keep_intermediates": ["yes"],
++            }),
++            "spec",
++            str(self.artifact),
++            values,
++        )
++        self.assertEqual(values["max_artifact_chars"], 50000)
++        self.assertEqual(values["gemini_retries"], 1)
++        self.assertEqual(values["repair_timeout_seconds"], 300)
++        self.assertIs(values["allow_large_diff_rerun"], False)
++        self.assertNotIn("keep_intermediates", values)
++
++    def test_persisted_flags_ignore_stale_artifact_hash(self) -> None:
++        values = {"max_artifact_chars": 50000}
++        state = self._state({"max_artifact_chars": 12000})
++        state["last_successful_checkpoint_flags"]["spec"]["artifact_sha256"] = "0" * 64
++        FACTORY_REVIEW._apply_persisted_checkpoint_flags(state, "spec", str(self.artifact), values)
++        self.assertEqual(values["max_artifact_chars"], 50000)
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_review_specs.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_review_specs.py
+index 8fd610d2..94904d12 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_review_specs.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_review_specs.py
+@@ -167,11 +167,10 @@ class ActionableFindingRegexNegativeTests(unittest.TestCase):
+     def test_empty_review(self) -> None:
+         self.assertFalse(FRS.detect_actionable_findings(_review("")))
+ 
+-    def test_low_severity_not_actionable(self) -> None:
+-        """LOW findings are not actionable — auto-accept is fine."""
+-        self.assertFalse(FRS.detect_actionable_findings(_review("- low: minor typo\n")))
+-        self.assertFalse(FRS.detect_actionable_findings(_review("### LOW: minor typo\n")))
+-        self.assertFalse(FRS.detect_actionable_findings(_review("**LOW**: typo\n")))
++    def test_low_severity_is_actionable(self) -> None:
++        self.assertTrue(FRS.detect_actionable_findings(_review("- low: minor typo\n")))
++        self.assertTrue(FRS.detect_actionable_findings(_review("### LOW: minor typo\n")))
++        self.assertTrue(FRS.detect_actionable_findings(_review("**LOW**: typo\n")))
+ 
+     def test_word_higher_not_match(self) -> None:
+         self.assertFalse(
+@@ -205,13 +204,7 @@ class ActionableFindingRegexNegativeTests(unittest.TestCase):
+             FRS.detect_actionable_findings(_review("## MEDIUM-term plan\n"))
+         )
+ 
+-    def test_fenced_code_block_with_literal_severity_line_is_documented_limitation(self) -> None:
+-        """Known limitation: lines inside fenced code blocks are NOT excluded.
+-
+-        A review that quotes a literal ``- HIGH:`` example inside a code fence
+-        will match. This is called out in spec residual risks; the test pins
+-        the current behavior so a future fix can intentionally flip it.
+-        """
++    def test_fenced_code_block_with_literal_severity_line_is_ignored(self) -> None:
+         body = (
+             "Here is an example of the pattern:\n"
+             "```\n"
+@@ -219,9 +212,22 @@ class ActionableFindingRegexNegativeTests(unittest.TestCase):
+             "```\n"
+             "This review itself has no real findings.\n"
+         )
+-        # Current behavior: matches. If this test starts failing, someone has
+-        # tightened the regex to exclude code fences — delete this test and
+-        # add a negative one asserting False.
++        self.assertFalse(FRS.detect_actionable_findings(_review(body)))
++
++    def test_blockquote_and_inline_code_severity_are_ignored(self) -> None:
++        body = "> - CRITICAL: quoted example\n\nInline `- HIGH: example` only.\n"
++        self.assertFalse(FRS.detect_actionable_findings(_review(body)))
++
++    def test_links_and_image_alt_text_are_ignored(self) -> None:
++        body = "[CRITICAL: old note](https://example.com)\n![LOW: alt](image.png)\n"
++        self.assertFalse(FRS.detect_actionable_findings(_review(body)))
++
++    def test_auto_accept_note_does_not_self_trigger(self) -> None:
++        body = "## Resolution\n- status: accepted\n- note: No HIGH/MEDIUM/LOW/CRITICAL findings detected — auto-accepted\n"
++        self.assertFalse(FRS.detect_actionable_findings(_review(body)))
++
++    def test_duplicate_findings_sections_scan_past_first(self) -> None:
++        body = "## Findings\n\nNo issues.\n\n## Findings\n\n- CRITICAL: hidden later issue\n"
+         self.assertTrue(FRS.detect_actionable_findings(_review(body)))
+ 
+ 
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_workflow_utils.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_workflow_utils.py
+index 65f54e2a..2421ab62 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_workflow_utils.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_workflow_utils.py
+@@ -19,12 +19,7 @@ WORKFLOW_UTILS_SPEC.loader.exec_module(WORKFLOW_UTILS)
+ 
+ 
+ class NormalizedArtifactTextTests(unittest.TestCase):
+-    """The Review Reconciliation section is orchestrator-added metadata. Its
+-    content must not participate in artifact hashes — otherwise every
+-    reconciliation edit invalidates the reviews and creates an infinite loop.
+-    Regression tests cover every stage that authors can add a reconciliation
+-    section to.
+-    """
++    """Plan reconciliation is metadata and should not stale plan reviews."""
+ 
+     def setUp(self) -> None:
+         self._tmpdir = tempfile.TemporaryDirectory()
+@@ -64,17 +59,14 @@ class NormalizedArtifactTextTests(unittest.TestCase):
+     def test_plan_reconciliation_stripped(self) -> None:
+         self._assert_reconciliation_stripped("plan")
+ 
+-    def test_spec_reconciliation_stripped(self) -> None:
+-        """Regression: prior implementation only stripped Reconciliation for
+-        the plan stage, which caused spec adversarial reviews to be marked
+-        stale every time the orchestrator recorded a reconciliation."""
+-        self._assert_reconciliation_stripped("spec")
+-
+-    def test_tasks_reconciliation_stripped(self) -> None:
+-        self._assert_reconciliation_stripped("tasks")
+-
+-    def test_closeout_reconciliation_stripped(self) -> None:
+-        self._assert_reconciliation_stripped("closeout")
++    def test_non_plan_reconciliation_not_stripped(self) -> None:
++        body = "# Spec\n\nBody.\n\n## Review Reconciliation\n\n- review: a\n"
++        path = self._write("spec.md", body)
++        import hashlib
++        self.assertEqual(
++            WORKFLOW_UTILS.normalized_artifact_hash("spec", path),
++            hashlib.sha256(body.encode("utf-8")).hexdigest(),
++        )
+ 
+     def test_body_without_reconciliation_unchanged(self) -> None:
+         body = "# Artifact\n\nNo reconciliation section here.\n"
+@@ -97,13 +89,66 @@ class NormalizedArtifactTextTests(unittest.TestCase):
+         body_b = "# Artifact\n\nBody B.\n\n## Review Reconciliation\n\n- review: a\n"
+         path_a = self._write("a.md", body_a)
+         path_b = self._write("b.md", body_b)
+-        for stage in ("spec", "plan", "tasks", "closeout"):
++        for stage in ("plan",):
+             self.assertNotEqual(
+                 WORKFLOW_UTILS.normalized_artifact_hash(stage, path_a),
+                 WORKFLOW_UTILS.normalized_artifact_hash(stage, path_b),
+                 f"stage={stage}: substantive body differences must change hash",
+             )
+ 
++    def test_duplicate_reconciliation_heading_falls_back_to_full_hash(self) -> None:
++        body = "# Plan\n\nBody.\n\n## Review Reconciliation\n\nA\n\n## Review Reconciliation\n\nB\n"
++        path = self._write("dup.md", body)
++        import hashlib
++        self.assertEqual(
++            WORKFLOW_UTILS.normalized_artifact_hash("plan", path),
++            hashlib.sha256(body.encode("utf-8")).hexdigest(),
++        )
++
++    def test_heading_spacing_is_allowed(self) -> None:
++        body_without = "# Plan\n\nBody.\n\n## Next\n\nMore.\n"
++        path = self._write(
++            "spaced.md",
++            "# Plan\n\nBody.\n\n##   Review Reconciliation   \n\n- review: a\n\n## Next\n\nMore.\n",
++        )
++        self.assertEqual(
++            WORKFLOW_UTILS.normalized_artifact_hash("plan", self._write("plain2.md", body_without)),
++            WORKFLOW_UTILS.normalized_artifact_hash("plan", path),
++        )
++
++    def test_plan_artifact_hash_matches_current_normalized_hash(self) -> None:
++        path = self._write(
++            "plan-current.md",
++            "# Plan\n\nBody.\n\n## Review Reconciliation\n\n- review: a\n",
++        )
++        data = {
++            "artifact_sha256": WORKFLOW_UTILS.normalized_artifact_hash("plan", path),
++            "narrowed_artifact_sha256": "",
++        }
++        self.assertTrue(WORKFLOW_UTILS.artifact_hash_matches("plan", path, data))
++
++    def test_plan_artifact_hash_matches_legacy_full_hash_without_narrowed_hash(self) -> None:
++        path = self._write(
++            "plan-legacy.md",
++            "# Plan\n\nBody.\n\n## Review Reconciliation\n\n- review: a\n",
++        )
++        data = {
++            "artifact_sha256": WORKFLOW_UTILS.full_artifact_hash(path),
++            "narrowed_artifact_sha256": "",
++        }
++        self.assertTrue(WORKFLOW_UTILS.artifact_hash_matches("plan", path, data))
++
++    def test_plan_artifact_hash_rejects_legacy_full_hash_after_narrowed_hash_exists(self) -> None:
++        path = self._write(
++            "plan-new.md",
++            "# Plan\n\nBody.\n\n## Review Reconciliation\n\n- review: a\n",
++        )
++        data = {
++            "artifact_sha256": WORKFLOW_UTILS.full_artifact_hash(path),
++            "narrowed_artifact_sha256": "present",
++        }
++        self.assertFalse(WORKFLOW_UTILS.artifact_hash_matches("plan", path, data))
++
+ 
+ if __name__ == "__main__":
+     unittest.main()
+diff --git a/docs/workflow/operations/codex-skills/review-lens/scripts/repair_review_checkpoint.py b/docs/workflow/operations/codex-skills/review-lens/scripts/repair_review_checkpoint.py
+index 3e4eb6b7..16cb6833 100644
+--- a/docs/workflow/operations/codex-skills/review-lens/scripts/repair_review_checkpoint.py
++++ b/docs/workflow/operations/codex-skills/review-lens/scripts/repair_review_checkpoint.py
+@@ -14,7 +14,7 @@ VERIFY = SCRIPT_DIR / "verify_review_checkpoint.py"
+ if str(SCRIPT_DIR) not in sys.path:
+     sys.path.insert(0, str(SCRIPT_DIR))
+ 
+-from workflow_utils import normalized_artifact_hash, normalized_artifact_text, resolve_stored_path
++from workflow_utils import artifact_hash_matches, normalized_artifact_text, resolve_stored_path
+ 
+ REPO_ROOT = SCRIPT_DIR.parents[5]
+ REPAIR_LIMIT_BUFFER_CHARS = 1000
+@@ -51,7 +51,7 @@ def review_is_healthy(spec: dict, artifact_path: Path) -> bool:
+     recorded_artifact = resolve_stored_path(data.get("artifact_path", ""), REPO_ROOT, data.get("repo_root", ""))
+     if recorded_artifact != artifact_path:
+         return False
+-    if data.get("artifact_sha256") != normalized_artifact_hash(spec.get("stage", ""), artifact_path):
++    if not artifact_hash_matches(spec.get("stage", ""), artifact_path, data):
+         return False
+     if data.get("resolution_status") == "failed":
+         return False
+diff --git a/docs/workflow/operations/codex-skills/review-lens/scripts/verify_reconciliation.py b/docs/workflow/operations/codex-skills/review-lens/scripts/verify_reconciliation.py
+index 7c6e75a0..54a9e8e0 100644
+--- a/docs/workflow/operations/codex-skills/review-lens/scripts/verify_reconciliation.py
++++ b/docs/workflow/operations/codex-skills/review-lens/scripts/verify_reconciliation.py
+@@ -1,11 +1,26 @@
+ #!/usr/bin/env python3
+ import argparse
++import re
++import sys
++import unicodedata
+ from pathlib import Path
+ 
++try:
++    import yaml
++except ImportError:  # pragma: no cover - exercised by monkeypatch in tests
++    yaml = None  # type: ignore[assignment]
+ 
+ SECTION_HEADER = "## Review Reconciliation"
+ COLUMN_PREFIX = "- review: "
+ TERMINAL_STATUSES = {"accepted", "rejected", "deferred"}
++_WARNED_YAML_FALLBACK = False
++
++
++def canonical_note(value: object) -> str | None:
++    if not isinstance(value, str):
++        return None
++    text = unicodedata.normalize("NFC", value).replace("\r\n", "\n").replace("\r", "\n")
++    return re.sub(r"\s+", " ", text).strip()
+ 
+ 
+ def parse_frontmatter(path: Path) -> dict[str, str]:
+@@ -14,6 +29,18 @@ def parse_frontmatter(path: Path) -> dict[str, str]:
+         raise ValueError(f"{path} is missing frontmatter")
+     _, rest = text.split("---\n", 1)
+     fm_text, _ = rest.split("\n---\n", 1)
++    global _WARNED_YAML_FALLBACK
++    if yaml is not None:
++        loaded = yaml.safe_load(fm_text)  # type: ignore[union-attr]
++        if not isinstance(loaded, dict):
++            raise ValueError(f"{path} frontmatter is not a mapping")
++        return {str(key): value for key, value in loaded.items()}
++    if not _WARNED_YAML_FALLBACK:
++        print(
++            "yaml not available; falling back to byte comparison; YAML escaping mismatches may surface as note mismatches",
++            file=sys.stderr,
++        )
++        _WARNED_YAML_FALLBACK = True
+     data: dict[str, str] = {}
+     for line in fm_text.splitlines():
+         if not line.strip():
+@@ -84,7 +111,9 @@ def main() -> int:
+         status, note = entries[ref]
+         if status != data.get("resolution_status", ""):
+             errors.append(f"{plan_path} status mismatch for {ref}")
+-        if note != data.get("resolution_note", ""):
++        frontmatter_note = canonical_note(data.get("resolution_note", ""))
++        plan_note = canonical_note(note)
++        if frontmatter_note is None or plan_note is None or plan_note != frontmatter_note:
+             errors.append(f"{plan_path} note mismatch for {ref}")
+         if args.require_terminal and status not in TERMINAL_STATUSES:
+             errors.append(
+diff --git a/docs/workflow/operations/codex-skills/review-lens/scripts/verify_review_checkpoint.py b/docs/workflow/operations/codex-skills/review-lens/scripts/verify_review_checkpoint.py
+index 95bb7fe1..46c6a388 100644
+--- a/docs/workflow/operations/codex-skills/review-lens/scripts/verify_review_checkpoint.py
++++ b/docs/workflow/operations/codex-skills/review-lens/scripts/verify_review_checkpoint.py
+@@ -10,7 +10,7 @@ REPO_ROOT = SCRIPT_DIR.parents[5]
+ if str(SCRIPT_DIR) not in sys.path:
+     sys.path.insert(0, str(SCRIPT_DIR))
+ 
+-from workflow_utils import normalized_artifact_hash, resolve_stored_path
++from workflow_utils import artifact_hash_matches, normalized_artifact_hash, resolve_stored_path
+ 
+ 
+ REQUIRED_KEYS = {
+@@ -170,7 +170,7 @@ def main() -> int:
+         if data.get("resolution_status") in {"failed", "insufficient"}:
+             errors.append(f"{review_path} has unsatisfied status: {data.get('resolution_status')}")
+ 
+-        if data.get("artifact_sha256") != current_hash:
++        if not artifact_hash_matches(expected_stage or data.get("stage", ""), artifact_path, data):
+             errors.append(f"{review_path} is stale for {artifact_path}")
+ 
+         recorded_artifact_path = resolve_stored_path(data.get("artifact_path", ""), REPO_ROOT, data.get("repo_root", ""))
+diff --git a/docs/workflow/operations/codex-skills/review-lens/scripts/workflow_utils.py b/docs/workflow/operations/codex-skills/review-lens/scripts/workflow_utils.py
+index 69a0daee..751618b1 100644
+--- a/docs/workflow/operations/codex-skills/review-lens/scripts/workflow_utils.py
++++ b/docs/workflow/operations/codex-skills/review-lens/scripts/workflow_utils.py
+@@ -1,5 +1,6 @@
+ #!/usr/bin/env python3
+ import hashlib
++import re
+ from pathlib import Path
+ 
+ 
+@@ -35,24 +36,47 @@ def resolve_stored_path(raw: str, repo_root: Path, stored_repo_root: str = "") -
+     return candidate
+ 
+ 
++def _strip_plan_reconciliation_section(text: str) -> str:
++    lines = text.splitlines(keepends=True)
++    in_fence = False
++    starts: list[int] = []
++    heading_re = re.compile(r"^##\s+Review Reconciliation\s*$")
++    for idx, line in enumerate(lines):
++        if line.lstrip().startswith("```"):
++            in_fence = not in_fence
++            continue
++        if not in_fence and heading_re.match(line.rstrip()):
++            starts.append(idx)
++    if len(starts) != 1:
++        return text
++    start = starts[0]
++    end = len(lines)
++    for idx in range(start + 1, len(lines)):
++        if re.match(r"^##\s+\S", lines[idx]):
++            end = idx
++            break
++    return "".join(lines[:start]).rstrip() + "\n\n" + "".join(lines[end:]).lstrip()
++
++
+ def normalized_artifact_text(stage: str, path: Path) -> str:
+     text = path.read_text(encoding="utf-8")
+-    # Strip the Review Reconciliation section from the hash computation for
+-    # every artifact stage, not just plan. Previously this stripping was
+-    # plan-only, which caused spec (and tasks, and closeout) adversarial
+-    # reviews to be marked "stale" every time the orchestrator added a
+-    # reconciliation entry — creating an infinite loop where the reviews
+-    # could never converge. The Review Reconciliation section is
+-    # orchestrator-added metadata and its content has no bearing on whether
+-    # a review of the artifact's substantive content is still valid.
+-    if "## Review Reconciliation" not in text:
+-        return text
+-    before, remainder = text.split("## Review Reconciliation", 1)
+-    trailing = remainder.split("\n## ", 1)
+-    if len(trailing) == 2:
+-        return before.rstrip() + "\n\n## " + trailing[1].lstrip()
+-    return before.rstrip() + "\n"
++    if stage == "plan":
++        return _strip_plan_reconciliation_section(text).rstrip() + "\n"
++    return text
+ 
+ 
+ def normalized_artifact_hash(stage: str, path: Path) -> str:
+     return hashlib.sha256(normalized_artifact_text(stage, path).encode("utf-8")).hexdigest()
++
++
++def full_artifact_hash(path: Path) -> str:
++    return hashlib.sha256(path.read_text(encoding="utf-8").encode("utf-8")).hexdigest()
++
++
++def artifact_hash_matches(stage: str, path: Path, data: dict) -> bool:
++    current = normalized_artifact_hash(stage, path)
++    if data.get("artifact_sha256") == current:
++        return True
++    if stage == "plan" and not data.get("narrowed_artifact_sha256"):
++        return data.get("artifact_sha256") == full_artifact_hash(path)
++    return False
+diff --git a/docs/workflow/operations/codex-skills/review-lens/test_verify_reconciliation.py b/docs/workflow/operations/codex-skills/review-lens/test_verify_reconciliation.py
+new file mode 100644
+index 00000000..3fea6121
+--- /dev/null
++++ b/docs/workflow/operations/codex-skills/review-lens/test_verify_reconciliation.py
+@@ -0,0 +1,73 @@
++import contextlib
++import importlib.util
++import io
++import tempfile
++import unittest
++from pathlib import Path
++from unittest.mock import patch
++
++
++SCRIPT = Path(__file__).resolve().parent / "scripts" / "verify_reconciliation.py"
++SPEC = importlib.util.spec_from_file_location("verify_reconciliation_under_test", SCRIPT)
++assert SPEC and SPEC.loader
++VR = importlib.util.module_from_spec(SPEC)
++SPEC.loader.exec_module(VR)
++
++
++class VerifyReconciliationTests(unittest.TestCase):
++    def setUp(self) -> None:
++        self.tmp = tempfile.TemporaryDirectory()
++        self.addCleanup(self.tmp.cleanup)
++        self.root = Path(self.tmp.name)
++        self.plan = self.root / "plan.md"
++        self.reviews = self.root / "reviews"
++        self.reviews.mkdir()
++
++    def _review(self, note: str) -> Path:
++        path = self.reviews / "a.review.md"
++        path.write_text(
++            "---\nresolution_status: \"accepted\"\nresolution_note: "
++            + note
++            + "\n---\n\n## Findings\n\nNone.\n",
++            encoding="utf-8",
++        )
++        return path
++
++    def _plan(self, note: str) -> None:
++        self.plan.write_text(
++            "# Plan\n\n## Review Reconciliation\n\n"
++            f"- review: reviews/a.review.md | status: accepted | note: {note}\n",
++            encoding="utf-8",
++        )
++
++    def test_escaped_quotes_match_raw_quotes(self) -> None:
++        review = self._review('"fixed \\"flapping\\" note"')
++        self._plan('fixed "flapping" note')
++        entries, errors = VR.parse_reconciliation(self.plan)
++        self.assertEqual(errors, [])
++        data = VR.parse_frontmatter(review)
++        self.assertEqual(VR.canonical_note(entries["reviews/a.review.md"][1]), VR.canonical_note(data["resolution_note"]))
++
++    def test_case_difference_mismatches(self) -> None:
++        self.assertNotEqual(VR.canonical_note("Fixed note"), VR.canonical_note("fixed note"))
++
++    def test_whitespace_collapses(self) -> None:
++        self.assertEqual(VR.canonical_note("a\t b\r\nc\u00a0d"), "a b c d")
++
++    def test_non_string_note_is_invalid(self) -> None:
++        review = self._review("true")
++        data = VR.parse_frontmatter(review)
++        self.assertIsNone(VR.canonical_note(data["resolution_note"]))
++
++    def test_yaml_fallback_warns(self) -> None:
++        review = self._review('"note"')
++        with patch.object(VR, "yaml", None), patch.object(VR, "_WARNED_YAML_FALLBACK", False):
++            stderr = io.StringIO()
++            with contextlib.redirect_stderr(stderr):
++                data = VR.parse_frontmatter(review)
++        self.assertEqual(data["resolution_note"], "note")
++        self.assertIn("yaml not available; falling back to byte comparison", stderr.getvalue())
++
++
++if __name__ == "__main__":
++    unittest.main()
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+2026-04-27T23:35:20.442029Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: prompt must be at most 128 characters path=/Users/chrislaw/.codex/.tmp/plugins/plugins/build-ios-apps/.codex-plugin/plugin.json
+2026-04-27T23:35:20.443515Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: maximum of 3 prompts is supported path=/Users/chrislaw/.codex/.tmp/plugins/plugins/plugin-eval/.codex-plugin/plugin.json
+2026-04-27T23:35:20.979204Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: prompt must be at most 128 characters path=/Users/chrislaw/.codex/.tmp/plugins/plugins/build-ios-apps/.codex-plugin/plugin.json
+2026-04-27T23:35:20.979457Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: maximum of 3 prompts is supported path=/Users/chrislaw/.codex/.tmp/plugins/plugins/plugin-eval/.codex-plugin/plugin.json
+2026-04-27T23:35:21.931384Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: prompt must be at most 128 characters path=/Users/chrislaw/.codex/.tmp/plugins/plugins/build-ios-apps/.codex-plugin/plugin.json
+2026-04-27T23:35:21.931615Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: maximum of 3 prompts is supported path=/Users/chrislaw/.codex/.tmp/plugins/plugins/plugin-eval/.codex-plugin/plugin.json
+ERROR: You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Apr 29th, 2026 10:44 PM.
+ERROR: You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Apr 29th, 2026 10:44 PM.
+2026-04-27T23:35:22.130417Z ERROR codex_core::session: failed to record rollout items: thread 019dd14c-1e9a-7b73-bfab-96d47fa8fbf1 not found

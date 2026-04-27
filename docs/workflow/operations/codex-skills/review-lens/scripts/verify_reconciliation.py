@@ -1,11 +1,26 @@
 #!/usr/bin/env python3
 import argparse
+import re
+import sys
+import unicodedata
 from pathlib import Path
 
+try:
+    import yaml
+except ImportError:  # pragma: no cover - exercised by monkeypatch in tests
+    yaml = None  # type: ignore[assignment]
 
 SECTION_HEADER = "## Review Reconciliation"
 COLUMN_PREFIX = "- review: "
 TERMINAL_STATUSES = {"accepted", "rejected", "deferred"}
+_WARNED_YAML_FALLBACK = False
+
+
+def canonical_note(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = unicodedata.normalize("NFC", value).replace("\r\n", "\n").replace("\r", "\n")
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def parse_frontmatter(path: Path) -> dict[str, str]:
@@ -14,6 +29,18 @@ def parse_frontmatter(path: Path) -> dict[str, str]:
         raise ValueError(f"{path} is missing frontmatter")
     _, rest = text.split("---\n", 1)
     fm_text, _ = rest.split("\n---\n", 1)
+    global _WARNED_YAML_FALLBACK
+    if yaml is not None:
+        loaded = yaml.safe_load(fm_text)  # type: ignore[union-attr]
+        if not isinstance(loaded, dict):
+            raise ValueError(f"{path} frontmatter is not a mapping")
+        return {str(key): value for key, value in loaded.items()}
+    if not _WARNED_YAML_FALLBACK:
+        print(
+            "yaml not available; falling back to byte comparison; YAML escaping mismatches may surface as note mismatches",
+            file=sys.stderr,
+        )
+        _WARNED_YAML_FALLBACK = True
     data: dict[str, str] = {}
     for line in fm_text.splitlines():
         if not line.strip():
@@ -84,7 +111,9 @@ def main() -> int:
         status, note = entries[ref]
         if status != data.get("resolution_status", ""):
             errors.append(f"{plan_path} status mismatch for {ref}")
-        if note != data.get("resolution_note", ""):
+        frontmatter_note = canonical_note(data.get("resolution_note", ""))
+        plan_note = canonical_note(note)
+        if frontmatter_note is None or plan_note is None or plan_note != frontmatter_note:
             errors.append(f"{plan_path} note mismatch for {ref}")
         if args.require_terminal and status not in TERMINAL_STATUSES:
             errors.append(
