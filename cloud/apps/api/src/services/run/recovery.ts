@@ -13,6 +13,8 @@
 import { db } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 import { findMissingProbes } from './coverage-completeness.js';
+import { computeRunProgress } from './derived-progress.js';
+import { maybeAdvanceRunStatus } from './progress.js';
 import { ACTIVE_PROBE_QUEUE_SQL } from '../queue/probe-queues.js';
 import {
   countJobsForRun,
@@ -146,18 +148,14 @@ export async function recoverOrphanedRun(
     });
 
     if (currentRun?.status === 'RUNNING') {
-      const progress = currentRun.progress as { total: number; completed: number; failed: number };
+      const progress = await computeRunProgress(runId);
       if (progress.completed + progress.failed >= progress.total) {
         // Progress complete, trigger summarization
         log.info({ runId }, 'Triggering summarization for completed run');
-        await db.run.update({
-          where: { id: runId },
-          data: { status: 'SUMMARIZING', stalledModels: [] },
-        });
-
-        // Queue summarize jobs for unsummarized transcripts
-        const queuedCount = await queueSummarizeJobsForRecovery(runId);
-        return { action: 'triggered_summarization', requeuedCount: queuedCount };
+        const advanceResult = await maybeAdvanceRunStatus(runId);
+        if (advanceResult.enteredSummarizing) {
+          return { action: 'triggered_summarization' };
+        }
       }
     }
 
@@ -176,7 +174,7 @@ export async function recoverOrphanedRun(
       if (pendingCount === 0) {
         // Check if there are unsummarized transcripts
         const unsummarizedCount = await db.transcript.count({
-          where: { runId, summarizedAt: null },
+          where: { runId, deletedAt: null, summarizedAt: null, summarizeFailedAt: null },
         });
 
         if (unsummarizedCount > 0) {
@@ -187,11 +185,10 @@ export async function recoverOrphanedRun(
         } else {
           // All transcripts summarized, mark as complete
           log.info({ runId }, 'All transcripts summarized, completing run');
-          await db.run.update({
-            where: { id: runId },
-            data: { status: 'COMPLETED', completedAt: new Date(), stalledModels: [] },
-          });
-          return { action: 'completed_run' };
+          const advanceResult = await maybeAdvanceRunStatus(runId);
+          if (advanceResult.completed) {
+            return { action: 'completed_run' };
+          }
         }
       }
     }

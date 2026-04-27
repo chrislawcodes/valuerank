@@ -81,7 +81,11 @@ from factory_review import (  # noqa: E402
 from factory_emit import _emit_next_action  # noqa: E402
 from factory_next_action import recommended_next_action  # noqa: E402
 from factory_cmd_checkpoint import command_checkpoint  # noqa: E402
+from factory_cmd_reconcile import command_reconcile  # noqa: E402
 from factory_cmd_discover import command_discover  # noqa: E402
+from factory_cmd_advance import command_advance  # noqa: E402
+from factory_cmd_dispatch import command_dispatch_codex  # noqa: E402
+from factory_cmd_review_extract import command_review_extract  # noqa: E402
 from factory_deliver import (  # noqa: E402
     compose_closeout_text,
     current_pr_payload,
@@ -90,13 +94,57 @@ from factory_deliver import (  # noqa: E402
     required_check_summary,
 )
 from factory_cmd_deliver import command_deliver, command_closeout  # noqa: E402
+from check_workflow_isolation import command_check_workflow_isolation  # noqa: E402
 from factory_cmd_block import command_block  # noqa: E402
 from factory_cmd_judge import run_judge  # noqa: E402
 from factory_cmd_implement import command_implement, command_parallel, _run_serial, _run_parallel  # noqa: E402
 from factory_cmd_status import command_status, command_repair, command_doctor  # noqa: E402
+from factory_invariants import run_invariant_checks, set_json_mode  # noqa: E402
+from factory_mutating import (  # noqa: E402
+    collect_mutating_command_names,
+    enumerate_subparser_handlers,
+    mutates_state,
+)
+from factory_stages import stage_manifest_state  # noqa: E402  (re-imported for invariant check)
 from workflow_utils import resolve_stored_path  # noqa: E402
 
 
+_MUTATING_CACHE: frozenset[str] | None = None
+
+
+def _get_mutating_commands() -> frozenset[str]:
+    global _MUTATING_CACHE
+    if _MUTATING_CACHE is None:
+        _MUTATING_CACHE = collect_mutating_command_names(
+            handler for _, handler in enumerate_subparser_handlers(build_parser())
+        )
+    return _MUTATING_CACHE
+
+
+def _run_post_invariants(slug: str | None, command_name: str) -> None:
+    """Run invariant checks after a state-mutating command.
+
+    Uses the same ``recon_ok`` signal as ``factory_cmd_status`` / the real
+    checkpoint decision path, so the contradiction detector evaluates the
+    user-visible next-action string — not a hypothetical happy-path one.
+    Errors are swallowed — the invariant helper must never abort the caller.
+    """
+    if not slug:
+        return
+    try:
+        from factory_stages import reconciliation_state  # local import — avoid cycles
+        state = load_workflow_state(slug)
+        stages = {name: stage_manifest_state(slug, name) for name in CHECKPOINT_STAGES}
+        recon_ok, _ = reconciliation_state(slug)
+        recommended = recommended_next_action(slug, state, stages, recon_ok)
+        appended = run_invariant_checks(state, command_name, recommended)
+        if appended:
+            save_workflow_state(slug, state)
+    except Exception:  # noqa: BLE001 — invariant failure must not abort the caller
+        return
+
+
+@mutates_state("init")
 def command_init(args: argparse.Namespace) -> int:
     if not args.path:
         raise SystemExit(
@@ -140,20 +188,7 @@ def command_init(args: argparse.Namespace) -> int:
     return 0
 
 
-def command_reconcile(args: argparse.Namespace) -> int:
-    ensure_sync()
-    plan_path = workflow_dir(args.slug) / "plan.md"
-    review_args = []
-    for review in args.review:
-        review_args.extend(["--review", str(Path(review).resolve())])
-
-    run([sys.executable, str(UPDATE_REVIEW), *review_args, "--status", args.status, "--note", args.note])
-    run([sys.executable, str(APPEND_RECONCILIATION), "--plan", str(plan_path), *review_args, "--status", args.status, "--note", args.note])
-    run([sys.executable, str(VERIFY_RECONCILIATION), "--plan", str(plan_path), *review_args])
-    _emit_next_action(args.slug, f"reconcile ({args.status})")
-    return 0
-
-
+@mutates_state("auto-reconcile")
 def command_auto_reconcile(args: argparse.Namespace) -> int:
     """Auto-accept reviews with no HIGH or MEDIUM severity findings.
 
@@ -223,6 +258,18 @@ def command_auto_reconcile(args: argparse.Namespace) -> int:
     return 0
 
 
+@mutates_state("judge")
+def command_judge(args: argparse.Namespace) -> int:
+    return run_judge(
+        args.slug,
+        args.stage,
+        json_output=args.json,
+        prompt_override=args.prompt_override,
+        override_reason=args.override_reason,
+        migration_bypass=args.migration_bypass,
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -237,6 +284,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     status_parser = subparsers.add_parser("status")
     status_parser.add_argument("--slug", required=True)
+    status_parser.add_argument(
+        "--tokens",
+        action="store_true",
+        help="Print the last 10 command telemetry records; input_bytes_read is a proxy because only FF helper reads are counted.",
+    )
     status_parser.set_defaults(func=command_status)
 
     repair_parser = subparsers.add_parser("repair")
@@ -246,6 +298,12 @@ def build_parser() -> argparse.ArgumentParser:
     checkpoint_parser = subparsers.add_parser("checkpoint")
     checkpoint_parser.add_argument("--slug", required=True)
     checkpoint_parser.add_argument("--stage", required=True, choices=CHECKPOINT_STAGES)
+    lifecycle_group = checkpoint_parser.add_mutually_exclusive_group()
+    lifecycle_group.add_argument("--address", metavar="CONCERN_ID")
+    lifecycle_group.add_argument("--defer", metavar="CONCERN_ID")
+    lifecycle_group.add_argument("--dismiss", metavar="CONCERN_ID")
+    checkpoint_parser.add_argument("--evidence", metavar="TEXT")
+    checkpoint_parser.add_argument("--reason", metavar="TEXT")
     checkpoint_parser.add_argument("--artifact")
     checkpoint_parser.add_argument("--base-ref")
     checkpoint_parser.add_argument("--context", action="append", default=[])
@@ -258,17 +316,25 @@ def build_parser() -> argparse.ArgumentParser:
     checkpoint_parser.add_argument("--no-auto-context", action="store_true",
                                    help="Disable automatic context file extraction from the artifact")
     checkpoint_parser.add_argument("--allow-dirty-path", action="append", default=[])
-    checkpoint_parser.add_argument("--max-artifact-chars", type=int)
-    checkpoint_parser.add_argument("--max-context-chars", type=int)
-    checkpoint_parser.add_argument("--max-total-chars", type=int)
+    checkpoint_parser.add_argument("--max-artifact-chars", type=int, default=50000)
+    checkpoint_parser.add_argument("--max-context-chars", type=int, default=60000)
+    checkpoint_parser.add_argument("--max-total-chars", type=int, default=250000)
     checkpoint_parser.add_argument("--gemini-timeout-seconds", type=int, default=120)
     checkpoint_parser.add_argument("--gemini-retries", type=int, default=1)
     checkpoint_parser.add_argument("--repair-timeout-seconds", type=int, default=300)
     checkpoint_parser.add_argument("--allow-large-diff-rerun", action="store_true")
     checkpoint_parser.add_argument("--fallback", action="store_true")
     checkpoint_parser.add_argument("--json", action="store_true")
+    checkpoint_parser.add_argument(
+        "--keep-intermediates",
+        action="store_true",
+        help="Preserve review intermediate files for debugging instead of deleting them at checkpoint start",
+    )
     checkpoint_parser.add_argument("--fast", action="store_true",
         help="Fast path: skip prerequisites, run 1 Gemini + 1 Codex review. Requires --stage diff.")
+    checkpoint_parser.add_argument("--validation-only", action="store_true",
+        help="Re-seal the manifest against the current artifact SHA without dispatching any reviewer. "
+             "Used to re-sync after post-cap edits. Mutually exclusive with --fallback, --address, --defer, --dismiss.")
     checkpoint_parser.set_defaults(func=command_checkpoint)
 
     reconcile_parser = subparsers.add_parser("reconcile")
@@ -296,6 +362,23 @@ def build_parser() -> argparse.ArgumentParser:
     block_parser.add_argument("--clear", action="store_true")
     block_parser.set_defaults(func=command_block)
 
+    advance_parser = subparsers.add_parser("advance")
+    advance_parser.add_argument("--slug", required=True)
+    advance_parser.add_argument(
+        "--stage",
+        required=True,
+        choices=["spec", "plan", "tasks", "diff"],
+    )
+    advance_parser.add_argument("--reason", required=True)
+    advance_parser.set_defaults(func=command_advance)
+
+    dispatch_parser = subparsers.add_parser("dispatch-codex")
+    dispatch_parser.add_argument("--slug", required=True)
+    dispatch_parser.add_argument("--prompt-path", required=True)
+    dispatch_parser.add_argument("--model", default="gpt-5.4-mini")
+    dispatch_parser.add_argument("--no-auto-commit", action="store_true")
+    dispatch_parser.set_defaults(func=command_dispatch_codex)
+
     judge_parser = subparsers.add_parser("judge")
     judge_parser.add_argument("--slug", required=True)
     judge_parser.add_argument("--stage", required=True, choices=CHECKPOINT_STAGES)
@@ -303,14 +386,7 @@ def build_parser() -> argparse.ArgumentParser:
     judge_parser.add_argument("--prompt-override", type=Path)
     judge_parser.add_argument("--override-reason")
     judge_parser.add_argument("--migration-bypass", action="store_true")
-    judge_parser.set_defaults(func=lambda args: run_judge(
-        args.slug,
-        args.stage,
-        json_output=args.json,
-        prompt_override=args.prompt_override,
-        override_reason=args.override_reason,
-        migration_bypass=args.migration_bypass,
-    ))
+    judge_parser.set_defaults(func=command_judge)
 
     discover_parser = subparsers.add_parser("discover")
     discover_parser.add_argument("--slug", required=True)
@@ -328,10 +404,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Remove an item from unresolved[] by exact text match")
     discover_parser.add_argument("--defer", type=str,
         help="Mark an unresolved item as deferred by exact text match")
-    discover_parser.add_argument("--non-goal", type=str, dest="non_goal",
-        help="Add a string to non_goals[]")
-    discover_parser.add_argument("--acceptance-criteria", type=str, dest="acceptance_criteria",
-        help="Add a string to acceptance_criteria[]")
+    discover_parser.add_argument("--non-goal", action="append", dest="non_goal", default=None,
+        help="Add a string to non_goals[]. Repeat the flag to append multiple values. "
+             "If --clear-non-goals is also set, the clear applies BEFORE these appends in the same invocation. "
+             "Empty/whitespace-only values are rejected.")
+    discover_parser.add_argument("--acceptance-criteria", action="append", dest="acceptance_criteria", default=None,
+        help="Add a string to acceptance_criteria[]. Repeat the flag to append multiple values. "
+             "If --clear-acceptance-criteria is also set, the clear applies BEFORE these appends in the same invocation. "
+             "Empty/whitespace-only values are rejected.")
+    discover_parser.add_argument("--clear-non-goals", action="store_true",
+        help="Empty discovery.non_goals[] BEFORE any --non-goal appends in the same invocation.")
+    discover_parser.add_argument("--clear-acceptance-criteria", action="store_true",
+        help="Empty discovery.acceptance_criteria[] BEFORE any --acceptance-criteria appends in the same invocation.")
     discover_parser.add_argument("--answer", nargs=2, metavar=("QUESTION", "ANSWER"),
         help="Record answers[QUESTION] = ANSWER")
     discover_parser.add_argument("--force-complete", action="store_true")
@@ -381,11 +465,30 @@ def build_parser() -> argparse.ArgumentParser:
     deliver_parser.add_argument("--merge-when-green", action="store_true")
     deliver_parser.add_argument("--auto-merge", action="store_true")
     deliver_parser.add_argument("--dry-run", action="store_true")
+    deliver_parser.add_argument("--override-implementation-rule", action="store_true",
+        help="Suppress the implementation-rule WARN if Claude implemented "
+             "more than 200 lines without a Codex dispatch. Requires --override-implementation-reason.")
+    deliver_parser.add_argument("--override-implementation-reason",
+        help="Reason for overriding the implementation-rule WARN. Must be at least 10 characters.")
     deliver_parser.set_defaults(func=command_deliver)
 
     closeout_parser = subparsers.add_parser("closeout")
     closeout_parser.add_argument("--slug", required=True)
     closeout_parser.set_defaults(func=command_closeout)
+
+    review_extract_parser = subparsers.add_parser("review-extract")
+    review_extract_parser.add_argument("--slug", required=True)
+    review_extract_parser.add_argument("--stage", required=True, choices=["spec", "plan", "tasks", "diff", "closeout"])
+    review_extract_parser.add_argument("--format", choices=["jsonl", "json"], default="jsonl")
+    review_extract_parser.add_argument("--out")
+    review_extract_parser.set_defaults(func=command_review_extract)
+
+    check_isolation_parser = subparsers.add_parser("check-isolation")
+    isolation_group = check_isolation_parser.add_mutually_exclusive_group(required=True)
+    isolation_group.add_argument("--capture-baseline", type=Path)
+    isolation_group.add_argument("--check", action="store_true")
+    check_isolation_parser.add_argument("--baseline", type=Path)
+    check_isolation_parser.set_defaults(func=command_check_workflow_isolation)
 
     return parser
 
@@ -393,7 +496,37 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
-    return args.func(args)
+    # FR-009: route invariant-warning output to stderr (always).
+    set_json_mode(bool(getattr(args, "json", False)))
+    command_name = getattr(args, "_factory_command", None) or _infer_command_name(args)
+    # Diff round-1 finding: run invariants in a `finally` so contradictions
+    # introduced by a partial-state write before an exception still get
+    # caught — the exact class of bug the guardrail exists to detect.
+    exit_code = 0
+    try:
+        exit_code = args.func(args)
+        return exit_code
+    finally:
+        if command_name in _get_mutating_commands():
+            _run_post_invariants(getattr(args, "slug", None), command_name)
+
+
+def _infer_command_name(args: argparse.Namespace) -> str | None:
+    """Best-effort extraction of the subcommand name from parsed argparse args."""
+    # argparse doesn't expose the selected subcommand name cleanly; inspect the
+    # configured func and map it back to a known subcommand.
+    func = getattr(args, "func", None)
+    if func is None:
+        return None
+    qualname = getattr(func, "__qualname__", "") or ""
+    name = getattr(func, "__name__", "") or ""
+    # Common mapping — command_X -> X
+    if name.startswith("command_"):
+        return name[len("command_"):].replace("_", "-")
+    # run_judge is wrapped in a lambda for the judge subcommand.
+    if "run_judge" in qualname or name == "<lambda>":
+        return "judge"
+    return None
 
 
 if __name__ == "__main__":

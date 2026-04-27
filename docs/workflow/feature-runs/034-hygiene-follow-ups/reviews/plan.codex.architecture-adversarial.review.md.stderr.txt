@@ -1,0 +1,1915 @@
+Reading additional input from stdin...
+OpenAI Codex v0.124.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: medium
+reasoning summaries: none
+session id: 019dbe0f-2974-7181-8799-8912e60fd27f
+--------
+user
+Review this plan artifact using a architecture-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+Code context files are provided above. Before asserting any finding, check whether it is confirmed or refuted by the provided code. Each finding must include an evidence tag:
+  [CODE-CONFIRMED] — the code directly supports this finding
+  [CODE-REFUTED] — the code contradicts this finding (do not include as a finding)
+  [UNVERIFIED] — relevant code was not provided; treat as lower confidence
+Only assign HIGH severity to CODE-CONFIRMED findings.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Context: scheduler.ts
+/**
+ * Run Recovery Scheduler
+ *
+ * Manages the periodic recovery job that detects and recovers orphaned runs.
+ * Uses setInterval for simplicity - PgBoss schedule() is for distributed cron,
+ * but we only need one instance running recovery.
+ *
+ * Activity-based scheduling:
+ * - Recovery only runs for 1 hour after the last run was started
+ * - When a new run starts, the activity timeout is reset
+ * - This prevents wasting resources checking for orphaned runs when no runs are active
+ */
+
+import { db } from '@valuerank/db';
+import { createLogger } from '@valuerank/shared';
+import {
+  recoverOrphanedRuns,
+  detectAndRecoverStuckJobs,
+  RECOVERY_INTERVAL_MS,
+  runStartupRecovery
+} from './recovery.js';
+import { detectAndUpdateStalledRuns } from './stall-detection.js';
+import { RECENT_COMPLETED_RUN_WINDOW_DAYS } from './anomaly-thresholds.js';
+import { PROBE_QUEUE_DEPTH_PER_PROVIDER } from './start-queue.js';
+import { enqueueTopUpProbesSingleton } from '../../queue/handlers/top-up-probes.js';
+import { DEFAULT_JOB_OPTIONS } from '../../queue/types.js';
+import { getBoss } from '../../queue/boss.js';
+import { getQueueNameForModel } from '../parallelism/index.js';
+
+const log = createLogger('services:run:scheduler');
+
+type RunConfig = {
+  models?: string[];
+};
+
+let recoveryInterval: NodeJS.Timeout | null = null;
+let activityTimeout: NodeJS.Timeout | null = null;
+let isRecovering = false;
+
+// How long to keep recovery running after the last run was started (1 hour)
+export const RECOVERY_ACTIVITY_WINDOW_MS = 60 * 60 * 1000;
+
+function parseRunConfig(config: unknown): RunConfig {
+  return config !== null && typeof config === 'object' ? (config as RunConfig) : {};
+}
+
+async function getPendingJobsForQueue(runId: string, queueName: string): Promise<number> {
+  const rows = await db.$queryRaw<Array<{ count: bigint }>>`
+    SELECT COUNT(*) AS count
+    FROM pgboss.job
+    WHERE name = ${queueName}
+      AND data->>'runId' = ${runId}
+      AND state IN ('created', 'retry', 'active')
+  `;
+
+  return Number(rows[0]?.count ?? 0);
+}
+
+async function sweepRunForTopUp(run: { id: string; config: unknown }): Promise<boolean> {
+  const models = parseRunConfig(run.config).models ?? [];
+  if (models.length === 0) {
+    return false;
+  }
+
+  const queueNames = new Set<string>();
+  for (const modelId of models) {
+    queueNames.add(await getQueueNameForModel(modelId));
+  }
+
+  for (const queueName of queueNames) {
+    const pendingJobs = await getPendingJobsForQueue(run.id, queueName);
+    if (pendingJobs < PROBE_QUEUE_DEPTH_PER_PROVIDER / 2) {
+      await enqueueTopUpProbesSingleton(run.id);
+      log.debug({ runId: run.id, queueName, pendingJobs }, 'Queued recovery top-up sweep');
+      return true;
+    }
+  }
+
+  return false;
+}
+
+async function hasRecoveryActivity(): Promise<boolean> {
+  const activeRuns = await db.run.findFirst({
+    where: {
+      deletedAt: null,
+      status: { in: ['RUNNING', 'SUMMARIZING', 'PAUSED'] },
+    },
+    select: { id: true },
+  });
+
+  if (activeRuns !== null) {
+    return true;
+  }
+
+  const strandedTranscript = await db.transcript.findFirst({
+    where: {
+      deletedAt: null,
+      summarizedAt: null,
+      summarizeFailedAt: null,
+      run: {
+        deletedAt: null,
+        status: 'COMPLETED',
+        updatedAt: {
+          gt: new Date(Date.now() - RECENT_COMPLETED_RUN_WINDOW_DAYS * 24 * 60 * 60 * 1000),
+        },
+      },
+    },
+    select: { id: true },
+  });
+
+  return strandedTranscript !== null;
+}
+
+async function enqueueRunStateReconcileJobs(): Promise<number> {
+  const boss = getBoss();
+  const jobOptions = DEFAULT_JOB_OPTIONS['run_state_reconcile'];
+
+  const runs = await db.$queryRaw<Array<{ run_id: string }>>`
+    SELECT id AS run_id
+    FROM runs
+    WHERE deleted_at IS NULL
+      AND status IN ('RUNNING', 'SUMMARIZING', 'PAUSED')
+
+    UNION
+
+    SELECT DISTINCT r.id AS run_id
+    FROM runs r
+    JOIN transcripts t ON t.run_id = r.id
+    WHERE r.deleted_at IS NULL
+      AND r.status = 'COMPLETED'
+      AND r.updated_at > NOW() - (${RECENT_COMPLETED_RUN_WINDOW_DAYS} || ' days')::interval
+      AND t.deleted_at IS NULL
+      AND t.summarized_at IS NULL
+      AND t.summarize_failed_at IS NULL
+  `;
+
+  let queued = 0;
+  for (const run of runs) {
+    await boss.send(
+      'run_state_reconcile',
+      { runId: run.run_id },
+      {
+        ...jobOptions,
+        singletonKey: run.run_id,
+      }
+    );
+    queued++;
+  }
+
+  if (queued > 0) {
+    log.info({ queued }, 'Queued run_state_reconcile jobs');
+  }
+
+  return queued;
+}
+
+/**
+ * Runs the recovery job, preventing concurrent executions.
+ */
+async function runRecoveryJob(): Promise<void> {
+  if (isRecovering) {
+    log.debug('Recovery already in progress, skipping');
+    return;
+  }
+
+  isRecovering = true;
+  try {
+    const result = await recoverOrphanedRuns();
+    const zombieResult = await detectAndRecoverStuckJobs();
+    const stallResult = await detectAndUpdateStalledRuns();
+    const runningRuns = await db.run.findMany({
+      where: { status: 'RUNNING', deletedAt: null },
+      select: { id: true, config: true },
+    });
+
+    let topUpQueued = 0;
+    for (const run of runningRuns) {
+      if (await sweepRunForTopUp(run)) {
+        topUpQueued++;
+      }
+    }
+
+    const reconcileQueued = await enqueueRunStateReconcileJobs();
+
+    if (
+      result.detected.length > 0 ||
+      result.errors.length > 0 ||
+      zombieResult.recovered > 0 ||
+      topUpQueued > 0 ||
+      reconcileQueued > 0
+    ) {
+      log.info(
+        {
+          detected: result.detected.length,
+          recovered: result.recovered.length,
+          zombiesKilled: zombieResult.recovered,
+          errors: result.errors.length + zombieResult.errors,
+          recoveryTopUps: topUpQueued,
+          reconcileQueued,
+        },
+        'Recovery job completed'
+      );
+    }
+
+    if (await hasRecoveryActivity()) {
+      signalRunActivity();
+    }
+
+    if (stallResult.totalStalled > 0) {
+      // Keep scheduler alive while stalls persist (not just when new stalls appear)
+      signalRunActivity();
+    }
+  } catch (error) {
+    log.error({ error }, 'Recovery job failed');
+  } finally {
+    isRecovering = false;
+  }
+}
+
+/**
+ * Clears the activity timeout if set.
+ */
+function clearActivityTimeout(): void {
+  if (activityTimeout !== null) {
+    clearTimeout(activityTimeout);
+    activityTimeout = null;
+  }
+}
+
+/**
+ * Starts the activity timeout that will stop recovery after RECOVERY_ACTIVITY_WINDOW_MS.
+ */
+function startActivityTimeout(): void {
+  clearActivityTimeout();
+
+  activityTimeout = setTimeout(() => {
+    log.info(
+      { windowMs: RECOVERY_ACTIVITY_WINDOW_MS },
+      'Activity window expired, stopping recovery scheduler'
+    );
+    stopRecoveryInterval();
+  }, RECOVERY_ACTIVITY_WINDOW_MS);
+}
+
+/**
+ * Stops only the recovery interval (not the activity tracking).
+ */
+function stopRecoveryInterval(): void {
+  if (recoveryInterval !== null) {
+    clearInterval(recoveryInterval);
+    recoveryInterval = null;
+    log.info('Recovery interval stopped');
+  }
+}
+
+/**
+ * Starts the recovery interval if not already running.
+ */
+function startRecoveryInterval(): void {
+  if (recoveryInterval !== null) {
+    return; // Already running
+  }
+
+  recoveryInterval = setInterval(() => { void runRecoveryJob(); }, RECOVERY_INTERVAL_MS);
+  log.info({ intervalMs: RECOVERY_INTERVAL_MS }, 'Recovery interval started');
+}
+
+/**
+ * Signals that a run has been started.
+ * This resets the activity window and ensures recovery is running.
+ */
+export function signalRunActivity(): void {
+  log.debug('Run activity signaled, resetting activity window');
+
+  // Ensure recovery is running
+  startRecoveryInterval();
+
+  // Reset the activity timeout
+  startActivityTimeout();
+}
+
+/**
+ * Starts the recovery scheduler.
+ * Runs recovery immediately on startup, then schedules periodic recovery
+ * only if there are active runs (detected during startup recovery).
+ */
+export async function startRecoveryScheduler(): Promise<void> {
+  if (recoveryInterval !== null) {
+    log.warn('Recovery scheduler already running');
+    return;
+  }
+
+  log.info(
+    { intervalMs: RECOVERY_INTERVAL_MS, activityWindowMs: RECOVERY_ACTIVITY_WINDOW_MS },
+    'Starting recovery scheduler'
+  );
+
+  // Run startup recovery first
+  let hasActiveRuns = false;
+  try {
+    const startupResult = await runStartupRecovery();
+    if (startupResult.detected.length > 0) {
+      log.info(
+        {
+          detected: startupResult.detected.length,
+          recovered: startupResult.recovered.length,
+          errors: startupResult.errors.length,
+        },
+        'Startup recovery completed'
+      );
+      // If we found orphaned runs, keep recovery running
+      hasActiveRuns = true;
+    }
+    if (!hasActiveRuns) {
+      hasActiveRuns = await hasRecoveryActivity();
+    }
+  } catch (error) {
+    log.error({ error }, 'Startup recovery failed');
+    // Don't throw - we still want to proceed
+  }
+
+  // Only start the interval if we found active runs during startup
+  if (hasActiveRuns) {
+    startRecoveryInterval();
+    startActivityTimeout();
+    log.info('Recovery scheduler started (active runs detected)');
+  } else {
+    log.info('Recovery scheduler initialized but not running (no active runs)');
+  }
+}
+
+/**
+ * Stops the recovery scheduler completely (interval and activity timeout).
+ */
+export function stopRecoveryScheduler(): void {
+  stopRecoveryInterval();
+  clearActivityTimeout();
+  log.info('Recovery scheduler stopped');
+}
+
+/**
+ * Checks if the recovery scheduler is running.
+ */
+export function isRecoverySchedulerRunning(): boolean {
+  return recoveryInterval !== null;
+}
+
+/**
+ * Manually triggers a recovery run (for debugging/admin).
+ */
+export async function triggerRecovery(): Promise<{
+  detected: number;
+  recovered: number;
+  errors: number;
+}> {
+  const result = await recoverOrphanedRuns();
+  return {
+    detected: result.detected.length,
+    recovered: result.recovered.length,
+    errors: result.errors.length,
+  };
+}
+
+
+Context: run-state-reconcile.ts
+import type * as PgBoss from 'pg-boss';
+import { db } from '@valuerank/db';
+import { createLogger } from '@valuerank/shared';
+import { DEFAULT_JOB_OPTIONS, type RunStateReconcileJobData } from '../types.js';
+import { maybeAdvanceRunStatus } from '../../services/run/index.js';
+import {
+  detectModelTranscriptShortfall,
+  detectPairAsymmetry,
+  detectScheduledCountMismatch,
+  detectStrandedTranscript,
+  detectSummarizingStall,
+  findOrphanTranscripts,
+  type AnomalyDraft,
+  type RunSnapshot,
+} from '../../services/run/anomaly-detection.js';
+import {
+  persistAnomalyDrafts,
+  repairScheduledCount,
+  resolveAnomaly,
+} from '../../services/run/anomaly-persistence.js';
+import { recordProbeSuccess } from '../../services/probe-result/index.js';
+
+const log = createLogger('queue:run-state-reconcile');
+
+function extractTranscriptTokenUsage(
+  content: unknown,
+  fallbackTokenCount: number,
+): { inputTokens: number; outputTokens: number } {
+  if (content === null || content === undefined || typeof content !== 'object') {
+    return { inputTokens: 0, outputTokens: fallbackTokenCount };
+  }
+
+  const record = content as Record<string, unknown>;
+  const snapshot = record.costSnapshot;
+  if (snapshot !== null && snapshot !== undefined && typeof snapshot === 'object') {
+    const snap = snapshot as Record<string, unknown>;
+    if (typeof snap.inputTokens === 'number' && typeof snap.outputTokens === 'number') {
+      return { inputTokens: snap.inputTokens, outputTokens: snap.outputTokens };
+    }
+  }
+
+  const turns = Array.isArray(record.turns) ? record.turns : [];
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let found = false;
+
+  for (const turn of turns) {
+    if (turn === null || typeof turn !== 'object') {
+      continue;
+    }
+
+    const turnRecord = turn as Record<string, unknown>;
+    if (typeof turnRecord.inputTokens === 'number') {
+      inputTokens += turnRecord.inputTokens;
+      found = true;
+    }
+    if (typeof turnRecord.outputTokens === 'number') {
+      outputTokens += turnRecord.outputTokens;
+      found = true;
+    }
+  }
+
+  if (!found) {
+    return { inputTokens: 0, outputTokens: fallbackTokenCount };
+  }
+
+  return { inputTokens, outputTokens };
+}
+
+async function enqueueSummarizeTranscriptJob(runId: string, transcriptId: string): Promise<void> {
+  const bossModule = await import('../boss.js');
+  if (!bossModule.isBossRunning()) {
+    log.warn({ runId, transcriptId }, 'Boss not running, skipping summarize enqueue');
+    return;
+  }
+  const boss = bossModule.getBoss();
+  await boss.send(
+    'summarize_transcript',
+    { runId, transcriptId },
+    {
+      ...DEFAULT_JOB_OPTIONS['summarize_transcript'],
+      singletonKey: transcriptId,
+    }
+  );
+}
+
+async function syncAnomalies(runId: string, type: AnomalyDraft['type'], drafts: AnomalyDraft[]): Promise<void> {
+  await persistAnomalyDrafts(runId, drafts);
+
+  const currentSubjects = new Set(drafts.map((draft) => draft.subject));
+  const existing = await db.runAnomaly.findMany({
+    where: { runId, type },
+    select: { subject: true },
+  });
+
+  for (const anomaly of existing) {
+    if (!currentSubjects.has(anomaly.subject)) {
+      await resolveAnomaly({ runId, type, subject: anomaly.subject });
+    }
+  }
+}
+
+async function reconstructOrphans(runId: string): Promise<{ orphanIds: string[]; failedIds: string[]; reconstructedCount: number }> {
+  const orphans = await findOrphanTranscripts(runId);
+  const failedIds: string[] = [];
+  let reconstructedCount = 0;
+
+  for (const orphan of orphans) {
+    if (orphan.scenarioId === null) {
+      failedIds.push(orphan.id);
+      continue;
+    }
+
+    try {
+      const tokenUsage = extractTranscriptTokenUsage(orphan.content, orphan.tokenCount);
+      await recordProbeSuccess({
+        runId,
+        scenarioId: orphan.scenarioId,
+        modelId: orphan.modelId,
+        sampleIndex: orphan.sampleIndex,
+        transcriptId: orphan.id,
+        durationMs: orphan.durationMs,
+        inputTokens: tokenUsage.inputTokens,
+        outputTokens: tokenUsage.outputTokens,
+      });
+      reconstructedCount++;
+    } catch (error) {
+      failedIds.push(orphan.id);
+      log.warn({ runId, transcriptId: orphan.id, err: error }, 'Failed to reconstruct orphan transcript');
+    }
+  }
+
+  return {
+    orphanIds: orphans.map((orphan) => orphan.id),
+    failedIds,
+    reconstructedCount,
+  };
+}
+
+async function getRunSnapshot(runId: string): Promise<RunSnapshot | null> {
+  return db.run.findUnique({
+    where: { id: runId },
+    select: {
+      id: true,
+      status: true,
+      updatedAt: true,
+      config: true,
+      progress: true,
+      deletedAt: true,
+    },
+  });
+}
+
+export function createRunStateReconcileHandler(): PgBoss.WorkHandler<RunStateReconcileJobData> {
+  return async (jobs: PgBoss.Job<RunStateReconcileJobData>[]) => {
+    if (jobs.length === 0) {
+      return;
+    }
+
+    await Promise.all(
+      jobs.map(async (job) => {
+        const runId = job.data.runId;
+        log.debug({ jobId: job.id, runId }, 'Reconciling run state');
+
+        let run = await getRunSnapshot(runId);
+        if (run === null || run.deletedAt !== null) {
+          log.debug({ runId }, 'Skipping reconcile for missing or deleted run');
+          return;
+        }
+
+        if (run.status === 'FAILED' || run.status === 'CANCELLED') {
+          log.debug({ runId, status: run.status }, 'Skipping reconcile for terminal run');
+          return;
+        }
+
+        // Reconstruct orphan transcripts FIRST so their ProbeResult rows exist
+        // before we compute derived progress (maybeAdvanceRunStatus) and before
+        // the stranded-transcript rescue fans out summarize jobs. Without this
+        // ordering, orphans reconstructed on COMPLETED runs would wait a full
+        // sweep cycle (5-10 min) before getting summarized.
+        try {
+          const orphanResult = await reconstructOrphans(runId);
+          if (orphanResult.failedIds.length > 0) {
+            await syncAnomalies(runId, 'ORPHAN_TRANSCRIPT', [{
+              type: 'ORPHAN_TRANSCRIPT',
+              subject: '',
+              details: {
+                transcriptIds: orphanResult.failedIds,
+              },
+            }]);
+          } else {
+            await syncAnomalies(runId, 'ORPHAN_TRANSCRIPT', []);
+          }
+        } catch (error) {
+          log.warn({ runId, err: error }, 'Orphan transcript reconciliation failed');
+        }
+
+        try {
+          const stranded = await detectStrandedTranscript(runId);
+          if (stranded !== null) {
+            const transcripts = await db.transcript.findMany({
+              where: {
+                runId,
+                deletedAt: null,
+                summarizedAt: null,
+                summarizeFailedAt: null,
+              },
+              select: { id: true },
+              orderBy: { createdAt: 'asc' },
+            });
+
+            for (const transcript of transcripts) {
+              await enqueueSummarizeTranscriptJob(runId, transcript.id);
+            }
+
+            await syncAnomalies(runId, stranded.type, [stranded]);
+          } else {
+            await syncAnomalies(runId, 'STRANDED_TRANSCRIPT', []);
+          }
+        } catch (error) {
+          log.warn({ runId, err: error }, 'Late transcript rescue failed');
+        }
+
+        if (run.status === 'RUNNING' || run.status === 'SUMMARIZING' || run.status === 'PAUSED') {
+          try {
+            const advanceResult = await maybeAdvanceRunStatus(runId);
+            log.debug({ runId, advanceResult }, 'Reconciled run state');
+            run = (await getRunSnapshot(runId)) ?? run;
+          } catch (error) {
+            log.warn({ runId, err: error }, 'Failed to advance run state during reconciliation');
+          }
+        }
+
+        if (run.status === 'COMPLETED') {
+          try {
+            const pair = await detectPairAsymmetry(run);
+            await syncAnomalies(runId, 'PAIR_ASYMMETRY', pair === null ? [] : [pair]);
+          } catch (error) {
+            log.warn({ runId, err: error }, 'Pair asymmetry detection failed');
+          }
+
+          try {
+            const shortfalls = await detectModelTranscriptShortfall(run);
+            await syncAnomalies(runId, 'MODEL_TRANSCRIPT_SHORTFALL', shortfalls);
+          } catch (error) {
+            log.warn({ runId, err: error }, 'Model shortfall detection failed');
+          }
+        } else {
+          try {
+            const pair = await detectPairAsymmetry(run);
+            await syncAnomalies(runId, 'PAIR_ASYMMETRY', pair === null ? [] : [pair]);
+          } catch (error) {
+            log.warn({ runId, err: error }, 'Pair asymmetry detection failed');
+          }
+
+          try {
+            const stall = await detectSummarizingStall(run);
+            await syncAnomalies(runId, 'SUMMARIZING_STALL', stall === null ? [] : [stall]);
+          } catch (error) {
+            log.warn({ runId, err: error }, 'Summarizing stall detection failed');
+          }
+
+          try {
+            const scheduled = await detectScheduledCountMismatch(run);
+            await syncAnomalies(runId, 'SCHEDULED_COUNT_MISMATCH', scheduled.draft === null ? [] : [scheduled.draft]);
+            if (scheduled.draft !== null) {
+              await repairScheduledCount(runId, scheduled.canonicalTotal);
+            }
+          } catch (error) {
+            log.warn({ runId, err: error }, 'Scheduled count mismatch detection failed');
+          }
+
+          try {
+            const shortfalls = await detectModelTranscriptShortfall(run);
+            await syncAnomalies(runId, 'MODEL_TRANSCRIPT_SHORTFALL', shortfalls);
+          } catch (error) {
+            log.warn({ runId, err: error }, 'Model shortfall detection failed');
+          }
+        }
+
+        log.info({ runId }, 'Run reconciliation completed');
+      })
+    );
+  };
+}
+
+
+Context: anomaly-detection.ts
+import { db, type Prisma } from '@valuerank/db';
+import { createLogger } from '@valuerank/shared';
+import {
+  MODEL_SHORTFALL_ABSOLUTE_RATE,
+  MODEL_SHORTFALL_MIN_PROBES,
+  MODEL_SHORTFALL_PEER_RATE,
+  MODEL_SHORTFALL_RELATIVE_RATE,
+  ORPHAN_TRANSCRIPT_MIN_AGE_SECONDS,
+  PAIR_ASYMMETRY_MIN_PROBES,
+  PAIR_ASYMMETRY_THRESHOLD_PCT,
+  SUMMARIZING_STALL_MINUTES,
+} from './anomaly-thresholds.js';
+
+const log = createLogger('services:run:anomaly-detection');
+
+export type RunAnomalyType =
+  | 'STRANDED_TRANSCRIPT'
+  | 'ORPHAN_TRANSCRIPT'
+  | 'PAIR_ASYMMETRY'
+  | 'SUMMARIZING_STALL'
+  | 'MODEL_TRANSCRIPT_SHORTFALL'
+  | 'SCHEDULED_COUNT_MISMATCH';
+
+export type AnomalyDraft = {
+  type: RunAnomalyType;
+  subject: string;
+  details: Prisma.InputJsonValue;
+};
+
+type RunSnapshot = {
+  id: string;
+  status: string;
+  updatedAt: Date;
+  config: unknown;
+  progress: unknown;
+  deletedAt: Date | null;
+};
+
+type RunConfig = {
+  models?: string[];
+  samplesPerScenario?: number;
+  jobChoiceBatchGroupId?: string | null;
+};
+
+type SuccessCountRow = {
+  modelId: string;
+  _count: { _all: number };
+};
+
+type OrphanTranscriptRow = {
+  id: string;
+  scenarioId: string | null;
+  modelId: string;
+  sampleIndex: number;
+  createdAt: Date;
+  durationMs: number;
+  tokenCount: number;
+  content: unknown;
+};
+
+function parseRunConfig(config: unknown): RunConfig {
+  if (config === null || typeof config !== 'object') {
+    return {};
+  }
+
+  return config as RunConfig;
+}
+
+function getModelIds(config: unknown): string[] {
+  const models = parseRunConfig(config).models ?? [];
+  return models.filter((modelId) => typeof modelId === 'string' && modelId.length > 0);
+}
+
+function getSamplesPerScenario(config: unknown): number {
+  const samples = parseRunConfig(config).samplesPerScenario;
+  return typeof samples === 'number' && Number.isFinite(samples) && samples > 0 ? samples : 1;
+}
+
+function getGroupId(config: unknown): string | null {
+  const groupId = parseRunConfig(config).jobChoiceBatchGroupId;
+  return typeof groupId === 'string' && groupId.trim() !== '' ? groupId : null;
+}
+
+function getProgressTotal(progress: unknown): number {
+  if (progress === null || progress === undefined || typeof progress !== 'object') {
+    return 0;
+  }
+
+  const total = (progress as Record<string, unknown>).total;
+  return typeof total === 'number' && Number.isFinite(total) ? total : 0;
+}
+
+function toJsonValue(value: unknown): Prisma.InputJsonValue {
+  return value as Prisma.InputJsonValue;
+}
+
+export async function detectStrandedTranscript(runId: string): Promise<AnomalyDraft | null> {
+  const transcripts = await db.transcript.findMany({
+    where: {
+      runId,
+      deletedAt: null,
+      summarizedAt: null,
+      summarizeFailedAt: null,
+    },
+    select: { id: true },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  if (transcripts.length === 0) {
+    return null;
+  }
+
+  return {
+    type: 'STRANDED_TRANSCRIPT',
+    subject: '',
+    details: toJsonValue({
+      transcriptIds: transcripts.map((transcript) => transcript.id),
+    }),
+  };
+}
+
+export async function findOrphanTranscripts(runId: string): Promise<OrphanTranscriptRow[]> {
+  const minAge = new Date(Date.now() - ORPHAN_TRANSCRIPT_MIN_AGE_SECONDS * 1000);
+  return db.$queryRaw<OrphanTranscriptRow[]>`
+    SELECT
+      t.id,
+      t.scenario_id AS "scenarioId",
+      t.model_id AS "modelId",
+      t.sample_index AS "sampleIndex",
+      t.created_at AS "createdAt",
+      t.duration_ms AS "durationMs",
+      t.token_count AS "tokenCount",
+      t.content AS "content"
+    FROM transcripts t
+    LEFT JOIN probe_results p
+      ON p.run_id = t.run_id
+     AND p.scenario_id = t.scenario_id
+     AND p.model_id = t.model_id
+     AND p.sample_index = t.sample_index
+     AND p.deleted_at IS NULL
+    WHERE t.run_id = ${runId}
+      AND t.deleted_at IS NULL
+      AND t.created_at < ${minAge}
+      AND p.id IS NULL
+    ORDER BY t.created_at ASC
+  `;
+}
+
+export async function detectOrphanTranscript(runId: string): Promise<AnomalyDraft | null> {
+  const orphans = await findOrphanTranscripts(runId);
+  if (orphans.length === 0) {
+    return null;
+  }
+
+  return {
+    type: 'ORPHAN_TRANSCRIPT',
+    subject: '',
+    details: toJsonValue({
+      transcriptIds: orphans.map((transcript) => transcript.id),
+    }),
+  };
+}
+
+export async function detectPairAsymmetry(run: RunSnapshot): Promise<AnomalyDraft | null> {
+  const groupId = getGroupId(run.config);
+  if (groupId === null) {
+    return null;
+  }
+
+  const siblings = await db.run.findMany({
+    where: {
+      deletedAt: null,
+      config: {
+        path: ['jobChoiceBatchGroupId'],
+        equals: groupId,
+      },
+    },
+    select: {
+      id: true,
+      config: true,
+    },
+    orderBy: { updatedAt: 'asc' },
+  });
+
+  if (siblings.length < 2) {
+    return null;
+  }
+
+  const sibling = siblings.find((candidate) => candidate.id !== run.id) ?? null;
+  if (sibling === null) {
+    return null;
+  }
+
+  const scheduledCounts = await Promise.all(
+    [run, sibling].map(async (candidate) => {
+      const modelCount = getModelIds(candidate.config).length;
+      const scenarioCount = await db.runScenarioSelection.count({ where: { runId: candidate.id } });
+      const samplesPerScenario = getSamplesPerScenario(candidate.config);
+      return {
+        runId: candidate.id,
+        scheduled: scenarioCount * modelCount * samplesPerScenario,
+      };
+    })
+  );
+
+  const currentScheduled = scheduledCounts.find((item) => item.runId === run.id)?.scheduled ?? 0;
+  const siblingScheduled = scheduledCounts.find((item) => item.runId === sibling.id)?.scheduled ?? 0;
+
+  if (currentScheduled < PAIR_ASYMMETRY_MIN_PROBES || siblingScheduled < PAIR_ASYMMETRY_MIN_PROBES) {
+    return null;
+  }
+
+  const successResults = await Promise.all(
+    [run.id, sibling.id].map(async (runId) => {
+      const successCount = await db.probeResult.count({
+        where: { runId, deletedAt: null, status: 'SUCCESS' },
+      });
+      const total = scheduledCounts.find((item) => item.runId === runId)?.scheduled ?? 0;
+      return {
+        runId,
+        successRate: total === 0 ? 0 : successCount / total,
+      };
+    })
+  );
+  const currentSuccess = successResults[0];
+  const siblingSuccess = successResults[1];
+  if (!currentSuccess || !siblingSuccess) {
+    return null;
+  }
+
+  const deltaPct = Math.abs(currentSuccess.successRate - siblingSuccess.successRate) * 100;
+  // <= so identical rates (deltaPct === 0) don't fire when threshold is 0.
+  // At threshold=0 the detector fires on any measurable asymmetry.
+  if (deltaPct <= PAIR_ASYMMETRY_THRESHOLD_PCT) {
+    return null;
+  }
+
+  return {
+    type: 'PAIR_ASYMMETRY',
+    subject: groupId,
+    details: toJsonValue({
+      runId: run.id,
+      siblingRunId: sibling.id,
+      currentSuccessRate: currentSuccess.successRate,
+      siblingSuccessRate: siblingSuccess.successRate,
+      scheduled: currentScheduled,
+      siblingScheduled,
+    }),
+  };
+}
+
+export async function detectSummarizingStall(run: RunSnapshot): Promise<AnomalyDraft | null> {
+  if (run.status !== 'SUMMARIZING') {
+    return null;
+  }
+
+  const ageMinutes = Math.floor((Date.now() - run.updatedAt.getTime()) / 60000);
+  if (ageMinutes < SUMMARIZING_STALL_MINUTES) {
+    return null;
+  }
+
+  return {
+    type: 'SUMMARIZING_STALL',
+    subject: '',
+    details: toJsonValue({
+      updatedAt: run.updatedAt.toISOString(),
+      ageMinutes,
+    }),
+  };
+}
+
+export async function detectModelTranscriptShortfall(run: RunSnapshot): Promise<AnomalyDraft[]> {
+  const modelIds = getModelIds(run.config);
+  if (modelIds.length === 0) {
+    return [];
+  }
+
+  const scenarioCount = await db.runScenarioSelection.count({ where: { runId: run.id } });
+  const samplesPerScenario = getSamplesPerScenario(run.config);
+  const scheduledPerModel = scenarioCount * samplesPerScenario;
+
+  if (scheduledPerModel < MODEL_SHORTFALL_MIN_PROBES) {
+    return [];
+  }
+
+  const successRows = await db.probeResult.groupBy({
+    by: ['modelId'],
+    where: {
+      runId: run.id,
+      deletedAt: null,
+      status: 'SUCCESS',
+    },
+    _count: { _all: true },
+  });
+
+  const successesByModel = new Map<string, number>();
+  for (const row of successRows as SuccessCountRow[]) {
+    successesByModel.set(row.modelId, row._count._all);
+  }
+
+  const rates = modelIds.map((modelId) => {
+    const successes = successesByModel.get(modelId) ?? 0;
+    return {
+      modelId,
+      successes,
+      scheduled: scheduledPerModel,
+      rate: scheduledPerModel === 0 ? 0 : successes / scheduledPerModel,
+    };
+  });
+
+  const sorted = [...rates].map((rate) => rate.rate).sort((left, right) => left - right);
+  const peerMedianRate = sorted.length === 0
+    ? 0
+    : sorted.length % 2 === 0
+      ? ((sorted[sorted.length / 2 - 1] ?? 0) + (sorted[sorted.length / 2] ?? 0)) / 2
+      : sorted[Math.floor(sorted.length / 2)] ?? 0;
+
+  return rates
+    .filter((rate) => rate.rate < MODEL_SHORTFALL_ABSOLUTE_RATE || (
+      rate.rate < MODEL_SHORTFALL_RELATIVE_RATE && peerMedianRate > MODEL_SHORTFALL_PEER_RATE
+    ))
+    .map((rate) => ({
+      type: 'MODEL_TRANSCRIPT_SHORTFALL' as const,
+      subject: rate.modelId,
+      details: toJsonValue({
+        runId: run.id,
+        modelId: rate.modelId,
+        successes: rate.successes,
+        scheduled: rate.scheduled,
+        rate: rate.rate,
+        peerMedianRate,
+      }),
+    }));
+}
+
+export async function detectScheduledCountMismatch(
+  run: RunSnapshot,
+): Promise<{ draft: AnomalyDraft | null; canonicalTotal: number }> {
+  const modelCount = getModelIds(run.config).length;
+  const scenarioCount = await db.runScenarioSelection.count({ where: { runId: run.id } });
+  const samplesPerScenario = getSamplesPerScenario(run.config);
+  const canonicalTotal = modelCount * scenarioCount * samplesPerScenario;
+  const currentTotal = getProgressTotal(run.progress);
+
+  if (currentTotal === canonicalTotal) {
+    return { draft: null, canonicalTotal };
+  }
+
+  return {
+    draft: {
+      type: 'SCHEDULED_COUNT_MISMATCH',
+      subject: '',
+      details: toJsonValue({
+        runId: run.id,
+        canonicalTotal,
+        currentTotal,
+        modelCount,
+        scenarioCount,
+        samplesPerScenario,
+      }),
+    },
+    canonicalTotal,
+  };
+}
+
+export async function detectRunAnomalies(run: RunSnapshot): Promise<AnomalyDraft[]> {
+  const drafts: AnomalyDraft[] = [];
+
+  const stranded = await detectStrandedTranscript(run.id);
+  if (stranded !== null) drafts.push(stranded);
+
+  const orphan = await detectOrphanTranscript(run.id);
+  if (orphan !== null) drafts.push(orphan);
+
+  const pair = await detectPairAsymmetry(run);
+  if (pair !== null) drafts.push(pair);
+
+  const stall = await detectSummarizingStall(run);
+  if (stall !== null) drafts.push(stall);
+
+  drafts.push(...await detectModelTranscriptShortfall(run));
+
+  const scheduled = await detectScheduledCountMismatch(run);
+  if (scheduled.draft !== null) drafts.push(scheduled.draft);
+
+  log.debug({ runId: run.id, anomalyCount: drafts.length }, 'Detected run anomalies');
+  return drafts;
+}
+
+export type { RunSnapshot };
+
+
+Context: anomaly-thresholds.ts
+// Severity gates dropped to 0 per reviewer guidance (2026-04-23):
+// flag any measurable deviation; keep MIN_PROBES/AGE/STALL filters to skip
+// statistical noise and in-flight states.
+export const PAIR_ASYMMETRY_THRESHOLD_PCT = 0;
+export const PAIR_ASYMMETRY_MIN_PROBES = 10;
+export const SUMMARIZING_STALL_MINUTES = 30;
+export const MODEL_SHORTFALL_MIN_PROBES = 10;
+// Kept non-zero per adversarial review: this is the ONLY branch that detects
+// the "every model fails equally" (systemic) case. Without an absolute floor,
+// the detector misses runs where every model is broken at the same time — the
+// exact Mistral-style failure this anomaly exists to catch.
+export const MODEL_SHORTFALL_ABSOLUTE_RATE = 0.30;
+export const MODEL_SHORTFALL_RELATIVE_RATE = 0;
+export const MODEL_SHORTFALL_PEER_RATE = 0;
+export const ORPHAN_TRANSCRIPT_MIN_AGE_SECONDS = 60;
+export const RECENT_COMPLETED_RUN_WINDOW_DAYS = 30;
+
+
+Context: run-state-reconcile.test.ts
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mockRunFindUnique = vi.hoisted(() => vi.fn());
+const mockTranscriptFindMany = vi.hoisted(() => vi.fn());
+const mockRunAnomalyFindMany = vi.hoisted(() => vi.fn());
+const mockBossSend = vi.hoisted(() => vi.fn());
+const mockMaybeAdvanceRunStatus = vi.hoisted(() => vi.fn());
+const mockDetectStrandedTranscript = vi.hoisted(() => vi.fn());
+const mockDetectPairAsymmetry = vi.hoisted(() => vi.fn());
+const mockDetectModelTranscriptShortfall = vi.hoisted(() => vi.fn());
+const mockDetectScheduledCountMismatch = vi.hoisted(() => vi.fn());
+const mockDetectSummarizingStall = vi.hoisted(() => vi.fn());
+const mockFindOrphanTranscripts = vi.hoisted(() => vi.fn());
+const mockPersistAnomalyDrafts = vi.hoisted(() => vi.fn());
+const mockResolveAnomaly = vi.hoisted(() => vi.fn());
+const mockRepairScheduledCount = vi.hoisted(() => vi.fn());
+const mockRecordProbeSuccess = vi.hoisted(() => vi.fn());
+
+vi.mock('@valuerank/db', () => ({
+  db: {
+    run: {
+      findUnique: mockRunFindUnique,
+    },
+    transcript: {
+      findMany: mockTranscriptFindMany,
+    },
+    runAnomaly: {
+      findMany: mockRunAnomalyFindMany,
+    },
+  },
+}));
+
+vi.mock('@valuerank/shared', () => ({
+  createLogger: () => ({
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }),
+}));
+
+vi.mock('../../../src/queue/boss.js', () => ({
+  getBoss: () => ({
+    send: mockBossSend,
+  }),
+  isBossRunning: vi.fn(() => true),
+}));
+
+vi.mock('../../../src/services/run/index.js', () => ({
+  maybeAdvanceRunStatus: mockMaybeAdvanceRunStatus,
+}));
+
+vi.mock('../../../src/services/run/anomaly-detection.js', () => ({
+  detectStrandedTranscript: mockDetectStrandedTranscript,
+  detectPairAsymmetry: mockDetectPairAsymmetry,
+  detectModelTranscriptShortfall: mockDetectModelTranscriptShortfall,
+  detectScheduledCountMismatch: mockDetectScheduledCountMismatch,
+  detectSummarizingStall: mockDetectSummarizingStall,
+  findOrphanTranscripts: mockFindOrphanTranscripts,
+}));
+
+vi.mock('../../../src/services/run/anomaly-persistence.js', () => ({
+  persistAnomalyDrafts: mockPersistAnomalyDrafts,
+  resolveAnomaly: mockResolveAnomaly,
+  repairScheduledCount: mockRepairScheduledCount,
+}));
+
+vi.mock('../../../src/services/probe-result/index.js', () => ({
+  recordProbeSuccess: mockRecordProbeSuccess,
+}));
+
+import { createRunStateReconcileHandler } from '../../../src/queue/handlers/run-state-reconcile.js';
+
+describe('createRunStateReconcileHandler', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockRunFindUnique.mockResolvedValue({
+      id: 'run-1',
+      status: 'RUNNING',
+      updatedAt: new Date('2026-04-23T00:00:00.000Z'),
+      config: {},
+      progress: { total: 1 },
+      deletedAt: null,
+    });
+    mockTranscriptFindMany.mockResolvedValue([]);
+    mockRunAnomalyFindMany.mockResolvedValue([]);
+    mockDetectStrandedTranscript.mockResolvedValue(null);
+    mockDetectPairAsymmetry.mockResolvedValue(null);
+    mockDetectModelTranscriptShortfall.mockResolvedValue([]);
+    mockDetectScheduledCountMismatch.mockResolvedValue({
+      draft: null,
+      canonicalTotal: 1,
+    });
+    mockDetectSummarizingStall.mockResolvedValue(null);
+    mockFindOrphanTranscripts.mockResolvedValue([]);
+    mockMaybeAdvanceRunStatus.mockResolvedValue({ enteredSummarizing: false, completed: false });
+    mockRecordProbeSuccess.mockResolvedValue(undefined);
+    mockPersistAnomalyDrafts.mockResolvedValue(undefined);
+    mockResolveAnomaly.mockResolvedValue(undefined);
+    mockRepairScheduledCount.mockResolvedValue(false);
+  });
+
+  it('queues summarize jobs for stranded transcripts on a completed run without advancing status', async () => {
+    mockRunFindUnique.mockResolvedValueOnce({
+      id: 'run-1',
+      status: 'COMPLETED',
+      updatedAt: new Date('2026-04-23T00:00:00.000Z'),
+      config: { models: ['m1'], samplesPerScenario: 1 },
+      progress: { total: 1 },
+      deletedAt: null,
+    });
+    mockDetectStrandedTranscript.mockResolvedValueOnce({
+      type: 'STRANDED_TRANSCRIPT',
+      subject: '',
+      details: { transcriptIds: ['t-1', 't-2'] },
+    });
+    mockTranscriptFindMany.mockResolvedValueOnce([
+      { id: 't-1' },
+      { id: 't-2' },
+    ]);
+
+    const handler = createRunStateReconcileHandler();
+    await handler([
+      {
+        id: 'job-1',
+        data: { runId: 'run-1' },
+      } as never,
+    ]);
+
+    expect(mockBossSend).toHaveBeenCalledTimes(2);
+    expect(mockBossSend).toHaveBeenNthCalledWith(
+      1,
+      'summarize_transcript',
+      { runId: 'run-1', transcriptId: 't-1' },
+      expect.objectContaining({ singletonKey: 't-1' })
+    );
+    expect(mockBossSend).toHaveBeenNthCalledWith(
+      2,
+      'summarize_transcript',
+      { runId: 'run-1', transcriptId: 't-2' },
+      expect.objectContaining({ singletonKey: 't-2' })
+    );
+    expect(mockMaybeAdvanceRunStatus).not.toHaveBeenCalled();
+  });
+
+  it('advances running runs and repairs scheduled count mismatches', async () => {
+    mockDetectScheduledCountMismatch.mockResolvedValueOnce({
+      draft: {
+        type: 'SCHEDULED_COUNT_MISMATCH',
+        subject: '',
+        details: { canonicalTotal: 12, currentTotal: 9 },
+      },
+      canonicalTotal: 12,
+    });
+    mockRepairScheduledCount.mockResolvedValueOnce(true);
+
+    const handler = createRunStateReconcileHandler();
+    await handler([
+      {
+        id: 'job-2',
+        data: { runId: 'run-1' },
+      } as never,
+    ]);
+
+    expect(mockMaybeAdvanceRunStatus).toHaveBeenCalledOnce();
+    expect(mockRepairScheduledCount).toHaveBeenCalledWith('run-1', 12);
+  });
+});
+
+
+Context: anomaly-detection.test.ts
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const {
+  mockRunFindMany,
+  mockRunScenarioSelectionCount,
+  mockProbeResultCount,
+  mockProbeResultGroupBy,
+  mockTranscriptFindMany,
+  mockQueryRaw,
+} = vi.hoisted(() => ({
+  mockRunFindMany: vi.fn(),
+  mockRunScenarioSelectionCount: vi.fn(),
+  mockProbeResultCount: vi.fn(),
+  mockProbeResultGroupBy: vi.fn(),
+  mockTranscriptFindMany: vi.fn(),
+  mockQueryRaw: vi.fn(),
+}));
+
+vi.mock('@valuerank/db', () => ({
+  db: {
+    run: {
+      findMany: mockRunFindMany,
+    },
+    runScenarioSelection: {
+      count: mockRunScenarioSelectionCount,
+    },
+    probeResult: {
+      count: mockProbeResultCount,
+      groupBy: mockProbeResultGroupBy,
+    },
+    transcript: {
+      findMany: mockTranscriptFindMany,
+    },
+    $queryRaw: mockQueryRaw,
+  },
+}));
+
+vi.mock('@valuerank/shared', () => ({
+  createLogger: () => ({
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }),
+}));
+
+import {
+  detectModelTranscriptShortfall,
+  detectOrphanTranscript,
+  detectPairAsymmetry,
+  detectScheduledCountMismatch,
+  detectStrandedTranscript,
+  detectSummarizingStall,
+} from '../../../src/services/run/anomaly-detection.js';
+
+describe('run anomaly detection', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('detects stranded transcripts and ignores runs with none', async () => {
+    mockTranscriptFindMany.mockResolvedValueOnce([{ id: 't-1' }]).mockResolvedValueOnce([]);
+
+    await expect(detectStrandedTranscript('run-1')).resolves.toEqual({
+      type: 'STRANDED_TRANSCRIPT',
+      subject: '',
+      details: { transcriptIds: ['t-1'] },
+    });
+    await expect(detectStrandedTranscript('run-2')).resolves.toBeNull();
+  });
+
+  it('detects orphan transcripts only when rows exist', async () => {
+    mockQueryRaw.mockResolvedValueOnce([
+      {
+        id: 't-1',
+        scenarioId: 'scenario-1',
+        modelId: 'model-1',
+        sampleIndex: 0,
+        createdAt: new Date('2026-04-23T00:00:00.000Z'),
+        durationMs: 10,
+        tokenCount: 20,
+        content: {},
+      },
+    ]).mockResolvedValueOnce([]);
+
+    await expect(detectOrphanTranscript('run-1')).resolves.toEqual({
+      type: 'ORPHAN_TRANSCRIPT',
+      subject: '',
+      details: { transcriptIds: ['t-1'] },
+    });
+    await expect(detectOrphanTranscript('run-2')).resolves.toBeNull();
+  });
+
+  it('detects pair asymmetry when sibling success rates diverge enough', async () => {
+    mockRunFindMany.mockResolvedValue([
+      { id: 'run-1', config: { jobChoiceBatchGroupId: 'group-1', models: ['m1'], samplesPerScenario: 10 } },
+      { id: 'run-2', config: { jobChoiceBatchGroupId: 'group-1', models: ['m1'], samplesPerScenario: 10 } },
+    ]);
+    mockRunScenarioSelectionCount.mockResolvedValue(1);
+    mockProbeResultCount
+      .mockResolvedValueOnce(3)
+      .mockResolvedValueOnce(9);
+
+    await expect(
+      detectPairAsymmetry({
+        id: 'run-1',
+        status: 'COMPLETED',
+        updatedAt: new Date('2026-04-23T00:00:00.000Z'),
+        config: { jobChoiceBatchGroupId: 'group-1', models: ['m1'], samplesPerScenario: 10 },
+        progress: { total: 10 },
+        deletedAt: null,
+      })
+    ).resolves.toMatchObject({
+      type: 'PAIR_ASYMMETRY',
+      subject: 'group-1',
+    });
+
+    mockRunFindMany.mockResolvedValue([
+      { id: 'run-1', config: { jobChoiceBatchGroupId: 'group-1', models: ['m1'], samplesPerScenario: 10 } },
+      { id: 'run-2', config: { jobChoiceBatchGroupId: 'group-1', models: ['m1'], samplesPerScenario: 10 } },
+    ]);
+    mockProbeResultCount
+      .mockResolvedValueOnce(8)
+      .mockResolvedValueOnce(8);
+
+    await expect(
+      detectPairAsymmetry({
+        id: 'run-1',
+        status: 'COMPLETED',
+        updatedAt: new Date('2026-04-23T00:00:00.000Z'),
+        config: { jobChoiceBatchGroupId: 'group-1', models: ['m1'], samplesPerScenario: 10 },
+        progress: { total: 10 },
+        deletedAt: null,
+      })
+    ).resolves.toBeNull();
+  });
+
+  it('detects summarizing stalls only after the threshold', async () => {
+    await expect(
+      detectSummarizingStall({
+        id: 'run-1',
+        status: 'SUMMARIZING',
+        updatedAt: new Date(Date.now() - 31 * 60 * 1000),
+        config: {},
+        progress: { total: 1 },
+        deletedAt: null,
+      })
+    ).resolves.toMatchObject({ type: 'SUMMARIZING_STALL', subject: '' });
+
+    await expect(
+      detectSummarizingStall({
+        id: 'run-1',
+        status: 'RUNNING',
+        updatedAt: new Date(Date.now() - 31 * 60 * 1000),
+        config: {},
+        progress: { total: 1 },
+        deletedAt: null,
+      })
+    ).resolves.toBeNull();
+  });
+
+  it('detects model transcript shortfalls using derived success rates', async () => {
+    mockRunScenarioSelectionCount.mockResolvedValue(5);
+    mockProbeResultGroupBy.mockResolvedValue([
+      { modelId: 'm1', _count: { _all: 2 } },
+      { modelId: 'm2', _count: { _all: 9 } },
+    ]);
+
+    await expect(
+      detectModelTranscriptShortfall({
+        id: 'run-1',
+        status: 'COMPLETED',
+        updatedAt: new Date('2026-04-23T00:00:00.000Z'),
+        config: { models: ['m1', 'm2'], samplesPerScenario: 2 },
+        progress: { total: 20 },
+        deletedAt: null,
+      })
+    ).resolves.toEqual([
+      expect.objectContaining({
+        type: 'MODEL_TRANSCRIPT_SHORTFALL',
+        subject: 'm1',
+      }),
+    ]);
+
+    mockRunScenarioSelectionCount.mockResolvedValue(5);
+    mockProbeResultGroupBy.mockResolvedValue([
+      { modelId: 'm1', _count: { _all: 8 } },
+      { modelId: 'm2', _count: { _all: 9 } },
+    ]);
+
+    await expect(
+      detectModelTranscriptShortfall({
+        id: 'run-1',
+        status: 'COMPLETED',
+        updatedAt: new Date('2026-04-23T00:00:00.000Z'),
+        config: { models: ['m1', 'm2'], samplesPerScenario: 2 },
+        progress: { total: 20 },
+        deletedAt: null,
+      })
+    ).resolves.toEqual([]);
+  });
+
+  it('detects scheduled total mismatches and returns null when canonical totals match', async () => {
+    mockRunScenarioSelectionCount.mockResolvedValue(4);
+
+    await expect(
+      detectScheduledCountMismatch({
+        id: 'run-1',
+        status: 'RUNNING',
+        updatedAt: new Date('2026-04-23T00:00:00.000Z'),
+        config: { models: ['m1', 'm2'], samplesPerScenario: 2 },
+        progress: { total: 6 },
+        deletedAt: null,
+      })
+    ).resolves.toMatchObject({
+      canonicalTotal: 16,
+      draft: expect.objectContaining({
+        type: 'SCHEDULED_COUNT_MISMATCH',
+        subject: '',
+      }),
+    });
+
+    await expect(
+      detectScheduledCountMismatch({
+        id: 'run-1',
+        status: 'RUNNING',
+        updatedAt: new Date('2026-04-23T00:00:00.000Z'),
+        config: { models: ['m1', 'm2'], samplesPerScenario: 2 },
+        progress: { total: 16 },
+        deletedAt: null,
+      })
+    ).resolves.toEqual({
+      draft: null,
+      canonicalTotal: 16,
+    });
+  });
+});
+
+
+Context: CLAUDE.md
+# Cloud ValueRank - Project Constitution
+
+This document defines the cloud-specific coding standards and push checks for ValueRank.
+
+Repo-wide agent behavior, delivery paths, terminology policy, and memory policy live in the repo-root `AGENTS.md`.
+
+## Push And PR Checks
+
+- Use Pull Requests for changes that will land on `main`.
+- Ask the human before running `git push`.
+- Run the Preflight Gate before any `git push` or PR creation.
+
+## Workflow State
+
+- For Feature Factory, use the repo-owned workflow docs and `docs/workflow/feature-runs/<slug>/state.json` as the source of truth.
+- Repo-root `MEMORY.md` is a persistent reference index. Keep it lean — no shipped feature history or long-term archives.
+
+### Pre-push Hook (Preferred)
+
+The pre-push hook automatically detects which workspaces changed and runs lint, test, and build only for those. Install once:
+
+```bash
+./scripts/hooks/install-hooks.sh
+```
+
+The hook compares your branch to `origin/main` and respects the dependency graph:
+- `shared` changes → checks shared, db, api, web
+- `db` changes → checks db, api
+- `api` changes → checks api only
+- `web` changes → checks web only
+- Root config changes (`turbo.json`, `package.json`, etc.) → checks everything
+
+### Manual Preflight (If Hook Not Installed)
+
+Run from `cloud/` for the workspaces you changed:
+
+```bash
+# Always run for the workspaces you touched:
+npx turbo lint --filter=@valuerank/<workspace>
+npx turbo test --filter=@valuerank/<workspace>
+npx turbo build --filter=@valuerank/<workspace>
+
+# If you touched db or api, also set up the test database first:
+npm run db:test:setup
+```
+
+**Hard rules:**
+- Do not push if any preflight command fails.
+- Do not use `git push --no-verify` except emergency hotfix with explicit human approval.
+- If unrelated local files break checks, validate in a clean worktree from `origin/main` before push.
+- Every PR must include a `Validation` section listing exact commands run and pass/fail results.
+
+---
+
+## Core Principles
+
+1. **Small, focused files** - Easy to read, test, and maintain
+2. **Type safety** - Catch errors at compile time, not runtime
+3. **Test coverage** - Confidence to refactor and deploy
+4. **Observable** - Debug issues in production without guessing
+
+---
+
+## File Structure
+
+Enforced mechanically — do not treat these as soft guidance.
+
+| Check | Enforced by | Thresholds |
+|-------|-------------|------------|
+| File size | `cloud/scripts/check-file-sizes.sh` (CI + pre-push), ESLint `max-lines` (editor) | prod: warn 400 / error 700 — tests: warn 800 / error 1200 |
+| Placeholder filenames | `cloud/scripts/check-filenames.sh` | bans `-helper(s).ts`, `-util(s).ts`, `-misc.ts`, `-types-detail.ts` |
+| Trivial re-export barrels | `cloud/scripts/check-barrels.sh` | rejects new `index.ts` < 15 lines that is export-only |
+| Known fragmented clusters | `cloud/scripts/check-tech-debt.sh` | informational reminders; see `docs/tech-debt/file-structure.md` |
+
+Grandfathered files live in the allowlists next to each script. See
+[`docs/tech-debt/file-structure.md`](../docs/tech-debt/file-structure.md)
+for what to collapse when touching the area.
+
+Guidance when the size warning fires: do not split just to silence it. Ask
+whether the file has one responsibility. If yes, keep it. If no, split by
+responsibility and give the new module a domain-meaningful name.
+
+---
+
+## TypeScript Standards
+
+### No `any` Types
+
+Never use `any`. Use the actual type, or `unknown` if the type is truly dynamic:
+
+```typescript
+function parseJson(input: string): unknown { ... }
+function handleError(err: unknown): void { ... }
+```
+
+### Strict Mode Required
+
+`tsconfig.json` must have `strict: true`, `noImplicitAny: true`, `strictNullChecks: true`, `noUncheckedIndexedAccess: true`.
+
+### Strict Boolean Checks
+
+Use explicit checks for `null` and `undefined` — do not rely on truthiness for numbers or strings (linting error):
+
+```typescript
+// Bad - fails strict-boolean-expressions
+if (!value) { ... }
+
+// Good
+if (value != null) { ... }
+if (value === 0) { ... }
+```
+
+### Types vs Interfaces
+
+Use `type` for data shapes; use `interface` for service contracts.
+
+---
+
+## Testing Requirements
+
+### Coverage Targets
+
+| Metric | Minimum | Target |
+|--------|---------|--------|
+| Line coverage | 80% | 90% |
+| Branch coverage | 75% | 85% |
+| Function coverage | 80% | 90% |
+
+### What to Test
+
+- **Always test**: Business logic, data transformations, edge cases
+- **Mock**: Database, external APIs, LLM providers
+- **Integration tests**: API routes with test database
+- **Skip**: Simple getters, direct ORM pass-through
+
+### Required Environment Variables for Tests
+
+```bash
+JWT_SECRET="test-secret-that-is-at-least-32-characters-long"
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank_test"
+```
+
+Setup test DB: `npm run db:test:setup` (from `cloud/`). Reset on data pollution: `npm run db:test:reset`.
+
+---
+
+## Logging Standards
+
+All logging goes through the centralized logger — never use `console.log` directly.
+
+```typescript
+import { createLogger } from '@valuerank/shared';
+const log = createLogger('runs');
+
+log.info({ runId: run.id }, 'Run created');
+log.error({ err, config }, 'Failed to create run');
+```
+
+Always use structured data (object + message), never string interpolation.
+
+### Log Levels
+
+| Level | Use For |
+|-------|---------|
+| `error` | Exceptions, failed operations that need attention |
+| `warn` | Recoverable issues, deprecations, retry attempts |
+| `info` | Key business events (run started, completed, user action) |
+| `debug` | Detailed flow info, useful for local debugging |
+
+---
+
+## Code Organization
+
+### Import Order
+
+1. Node built-ins (`fs`, `path`)
+2. External packages (`express`, `zod`)
+3. Internal packages (`@valuerank/shared`, `@valuerank/db`)
+4. Relative imports (`./validation`, `./types`)
+
+### Folder Structure
+
+```
+apps/api/src/
+├── auth/         # Authentication middleware and JWT handling
+├── cli/          # Admin scripts (create-user, normalize, shadow)
+├── config/       # Server configuration
+├── graphql/      # GraphQL schema, queries, mutations, types
+├── mcp/          # MCP server tools and OAuth
+├── middleware/    # Express middleware
+├── queue/        # PgBoss job handlers and queue orchestration
+├── routes/       # Express route handlers (REST, CSV, OData)
+├── services/     # Business logic
+└── utils/        # Pure utility functions
+
+apps/web/src/
+├── api/          # GraphQL operations and client setup
+├── components/   # React components
+├── hooks/        # Custom hooks
+├── lib/          # Shared libraries (statistics, formatting)
+├── pages/        # Route pages
+└── utils/        # Pure utility functions
+```
+
+---
+
+## Error Handling
+
+Use custom error classes (`AppError`, `NotFoundError`, `ValidationError`) from `packages/shared`. Always catch and forward to error middleware in routes — never swallow errors silently.
+
+---
+
+## Database Access
+
+### Use Prisma with Type Safety
+
+Use typed queries and `$transaction` for multi-step operations.
+
+### Soft Delete Pattern
+
+Entities use soft delete via `deletedAt` timestamp. **Never physically delete** — set `deletedAt` instead.
+
+**Tables with soft delete:** `definitions`, `definition_tags`, `scenarios`
+
+```typescript
+// ALWAYS filter out soft-deleted records
+const definitions = await prisma.definition.findMany({
+  where: { deletedAt: null },  // Required!
+});
+
+// When "deleting", set deletedAt
+await prisma.definition.update({
+  where: { id: definitionId },
+  data: { deletedAt: new Date() },
+});
+```
+
+`deletedAt` is **never exposed** in GraphQL schema. All resolvers must filter `deletedAt: null` automatically.
+
+---
+
+## Database Connections
+
+The project uses PostgreSQL with PgBouncer for connection pooling.
+
+**Application** (via PgBouncer): `DATABASE_URL` — include `?pgbouncer=true` to disable prepared statements.
+
+**Migrations** (direct): `DIRECT_URL` — Prisma Migrate requires a direct connection, not a pooler.
+
+```bash
+# .env
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:6432/valuerank?pgbouncer=true"
+DIRECT_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank"
+```
+
+Start local DB: `docker-compose up -d` from `cloud/`.
+
+---
+
+## Schema Changes (Migrations)
+
+**Always use Prisma Migrate — never `db push`.**
+
+```bash
+# Create and apply a migration
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank" \
+  npx prisma migrate dev --name add_feature_tables --schema packages/db/prisma/schema.prisma
+```
+
+Production deployments run `prisma migrate deploy` automatically on startup.
+
+---
+
+## Quick Reference
+
+```
+File size:      enforced by scripts (prod warn 400/err 700, tests warn 800/err 1200)
+any types:      NEVER (use unknown if truly unknown)
+Test coverage:  80% minimum
+Console.log:    NEVER (use logger)
+Error handling: Custom AppError classes
+Imports:        Node → External → Internal → Relative
+```
+
+---
+
+## Terminology
+
+Canonical source: `docs/canonical-glossary.md`
+
+- Follow the terminology policy in repo-root `AGENTS.md`.
+- In cloud code, older names like `definition`, `dimension`, and `scenario` may still appear in code, schema, or APIs. Map them to glossary terms instead of renaming them casually.
+
+
+Artifact: plan.md
+# Plan — Feature 034: Hygiene Follow-ups
+
+**Branch**: feat/034-hygiene-follow-ups
+**Source spec**: `spec.md` in this directory
+
+---
+
+## Implementation Waves
+
+### Wave 1 — US-1 env-var window [CHECKPOINT]
+
+**Files**
+- `cloud/apps/api/src/services/run/scheduler.ts`: add `function getReconcileWindowDays(): number` helper that reads `process.env.RUN_RECONCILE_WINDOW_DAYS`, parses as int, falls back to `RECENT_COMPLETED_RUN_WINDOW_DAYS` when unset/invalid, `log.warn` on invalid. Replace both hardcoded reads of `RECENT_COMPLETED_RUN_WINDOW_DAYS` (in `hasRecoveryActivity` and `enqueueRunStateReconcileJobs`) with calls to the helper.
+- `cloud/apps/api/tests/services/run/scheduler.test.ts` (if it exists, else a new focused test file): test helper with valid/invalid/unset env values.
+
+**Estimated size**: ~40 lines.
+
+### Wave 2 — US-2 strict-mode + US-4 DB cap [CHECKPOINT]
+
+**Files**
+- `cloud/apps/api/src/queue/handlers/run-state-reconcile.ts`: rewrite `extractTranscriptTokenUsage` to return discriminated union `{kind:'ok',...} | {kind:'malformed',reason}`. Update `reconstructOrphans` to switch on `kind`, routing malformed to `failedIds` with reason logged. Extend `findOrphanTranscripts` signature to accept `limit?: number` and apply `take` in the Prisma query. `reconstructOrphans` calls with `limit = ORPHAN_RECONSTRUCTION_CAP_PER_TICK`. Also fetch a count of unbounded orphan backlog (`count` only, not row contents) so the handler can log `info` with total backlog size when capped.
+- `cloud/apps/api/src/services/run/anomaly-detection.ts`: confirm `findOrphanTranscripts` helper (if it lives here) supports the new limit parameter. If it lives in `run-state-reconcile.ts`, no change here.
+- `cloud/apps/api/src/services/run/anomaly-thresholds.ts`: add `export const ORPHAN_RECONSTRUCTION_CAP_PER_TICK = 500`.
+- `cloud/apps/api/tests/queue/handlers/run-state-reconcile.test.ts`: tests for strict-mode returning malformed, cap at 500, backlog logging.
+
+**Estimated size**: ~150 lines.
+
+### Wave 3 — US-3 multi-sibling pair asymmetry [CHECKPOINT]
+
+**Files**
+- `cloud/apps/api/src/services/run/anomaly-detection.ts`: rewrite `detectPairAsymmetry` to fetch all siblings, compute success rates, filter by per-sibling `PAIR_ASYMMETRY_MIN_PROBES` guard, compute max delta, fire when `> PAIR_ASYMMETRY_THRESHOLD_PCT`. Extend `details` payload additively (keep existing fields pointing at max-delta sibling; add `siblingRunIds`, `siblingSuccessRates`, `maxDeltaPct`, `skippedUnderSampledRunIds`).
+- `cloud/apps/api/tests/services/run/anomaly-detection.test.ts`: tests for 3-sibling group (one outlier), all-under-sampled case, all-equal case.
+
+**Estimated size**: ~120 lines.
+
+### Wave 4 — US-4 scheduler activity extension + STATUS update [CHECKPOINT]
+
+**Files**
+- `cloud/apps/api/src/services/run/scheduler.ts`: extend `hasRecoveryActivity()` to also return true when orphan transcripts exist on runs within the reconcile window. The new predicate: `transcripts exist with summarizedAt IS NOT NULL AND NOT EXISTS (SELECT 1 FROM probe_results p WHERE p.run_id = t.run_id AND p.scenario_id = t.scenario_id AND p.model_id = t.model_id AND p.sample_index = t.sample_index)` scoped to the reconcile window. Heavy query — use indexed columns and a subquery or JOIN that hits the existing `transcripts(run_id, ...)` index.
+- `cloud/apps/api/tests/services/run/scheduler.test.ts`: test that pure-orphan-backlog run keeps the scheduler active.
+- `STATUS.md`: remove resolved items (#1, #4, #5, #6).
+
+**Estimated size**: ~80 lines.
+
+### Wave 5 — verification + soak [CHECKPOINT]
+
+- Preflight lint + test + build for `@valuerank/api`.
+- `grep -RIn "RECENT_COMPLETED_RUN_WINDOW_DAYS" cloud/apps/api/src` — all matches either inside the helper or replaced with the helper call.
+- `grep -RIn "inputTokens: 0" cloud/apps/api/src/queue/handlers/run-state-reconcile.ts` — zero matches (the silent-zero branch is gone).
+- Manual smoke: set `RUN_RECONCILE_WINDOW_DAYS=60` in test env, verify the predicate in scheduler reflects 60 not 30.
+
+---
+
+## Residual Risks (each with `verification:`)
+
+- **Risk: memoizing `getReconcileWindowDays()` means env var changes need a process restart. Operator who changes the value mid-session won't see it.**
+  verification: comment explicitly in the helper. Acceptable; env-var changes are deploy-time config. Documented in STATUS.md if hot-reload becomes needed.
+
+- **Risk: the new orphan activity predicate is a heavier query (JOIN or subquery) that runs every scheduler tick.**
+  verification: before merge, `EXPLAIN` the new `hasRecoveryActivity` query against a production snapshot; target < 100 ms p99; add a functional index if the plan is sequential.
+
+- **Risk: discriminated-union return type for `extractTranscriptTokenUsage` changes its public signature.**
+  verification: grep for every caller; confirm all callers updated in the same wave. No external consumers.
+
+- **Risk: US-4 capped orphan draining means a 10k-backlog takes 20 ticks × 5 min = ~100 min to fully drain.**
+  verification: operator-acceptable at current scale. If backlog becomes common, raise the cap or run the sweep at a tighter cadence — follow-up on STATUS.md.
+
+- **Risk: US-3 additive details shape means the payload grows over time. On a 10-run pair group, `siblingRunIds` is 9 entries, `siblingSuccessRates` is 9 entries. JSONB column stays manageable.**
+  verification: size sanity — confirm `details` stays < 4 KB for realistic pair groups.
+
+---
+
+## Verification Before Push
+
+Per `cloud/CLAUDE.md` preflight:
+1. `npx turbo lint --filter=@valuerank/api`
+2. `npm run db:test:setup`
+3. `npx turbo test --filter=@valuerank/api`
+4. `npx turbo build --filter=@valuerank/api`
+
+Validation section in the PR description lists each command and pass/fail.
+
+---
+
+## Constitution Validation
+
+| Requirement | Status |
+|---|---|
+| Type safety — no `any` | PASS — discriminated union is strict-typed |
+| File size ≤ 400 lines prod | PASS — edits small, no new files |
+| Test coverage ≥ 80% | PASS — each wave has test coverage |
+| Structured logging | PASS — new logs use existing `log.*` |
+| Prisma migrations | N/A — no schema change |
+| Protected files untouched | PASS — CLAUDE.md, AGENTS.md, MEMORY.md, .gitignore off-limits; STATUS.md only touched in wave 4 for the resolved-item cleanup |
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m checking the artifact against the actual scheduler and anomaly code first, then I’ll call out only the architectural gaps that are confirmed by the code.
+codex
+## Findings
+- **HIGH [CODE-CONFIRMED]** Wave 4’s orphan-activity predicate is keyed on `summarizedAt IS NOT NULL`, but the actual orphan detector in [`anomaly-detection.ts`](/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/services/run/anomaly-detection.ts) only checks for aged transcripts with no matching `probe_results`. It does not require any summary state. As written, the scheduler would stay asleep for the orphan backlog this wave is supposed to cover.
+
+- **HIGH [CODE-CONFIRMED]** The plan only extends scheduler activity tracking, but the only enqueue path for `run_state_reconcile` jobs in [`scheduler.ts`](/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/services/run/scheduler.ts) still selects completed runs only when they have at least one transcript with `summarized_at IS NULL` and `summarize_failed_at IS NULL`. A completed run whose only remaining problem is orphaned probe results, with all transcripts already summarized, would never be queued by this path, so the backlog can remain undrained even if the scheduler stays alive.
+
+## Residual Risks
+- The new orphan-activity query is likely to be one of the hottest scheduler-path queries, but the artifact does not prove the needed index coverage or query shape. If the join or subquery is not well supported, recovery tick latency can become the bottleneck.
+
+- Wave 2 changes `extractTranscriptTokenUsage` from a permissive fallback to a malformed/fail path. That is directionally sound, but the plan does not spell out how many historical or partially malformed transcripts will now be treated as failures, so behavior may change more than expected.
+
+- The env-var window helper makes reconcile behavior deployment-config driven, but the plan does not make the restart requirement explicit in the implementation contract. If operators expect live reload of `RUN_RECONCILE_WINDOW_DAYS`, they will not get it.
+tokens used
+35,881

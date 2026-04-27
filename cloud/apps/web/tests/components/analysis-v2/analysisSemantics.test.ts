@@ -10,6 +10,7 @@ vi.mock('@valuerank/shared', () => ({
 }));
 
 import { buildAnalysisSemanticsView, buildPairedAnalysisSemanticsView } from '../../../src/components/analysis-v2/analysisSemantics';
+import { parseRawPreferenceValueStats } from '../../../src/components/analysis-v2/analysisSemantics.utils';
 
 function createPreferenceSummary(overrides?: Record<string, unknown>): RawPreferenceSummary {
   return {
@@ -671,5 +672,17 @@ describe('buildPairedAnalysisSemanticsView', () => {
     expect(semantics.preference.byModel['claude-3']?.topPrioritizedValues[0]?.name).toBe('TestValue');
     expect(semantics.preference.byModel['claude-3']?.topPrioritizedValues[0]?.winRate).toBeCloseTo(0.6, 10);
     expect(semantics.preference.byModel['claude-3']?.topPrioritizedValues[0]).not.toHaveProperty('count');
+  });
+});
+
+describe('parseRawPreferenceValueStats — null winRate from no-data analysis', () => {
+  it('returns null when winRate is null, treating the value as no-data', () => {
+    const result = parseRawPreferenceValueStats({ winRate: null, count: { prioritized: 0, deprioritized: 0, neutral: 0 } });
+    expect(result).toBeNull();
+  });
+
+  it('returns null when winRate is absent from stored analysis output', () => {
+    const result = parseRawPreferenceValueStats({ count: { prioritized: 0, deprioritized: 0, neutral: 0 } });
+    expect(result).toBeNull();
   });
 });

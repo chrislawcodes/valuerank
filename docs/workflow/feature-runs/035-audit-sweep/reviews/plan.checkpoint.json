@@ -1,0 +1,69 @@
+{
+  "feature_slug": "035-audit-sweep",
+  "stage": "plan",
+  "artifact_path": "docs/workflow/feature-runs/035-audit-sweep/plan.md",
+  "git_base_ref": "",
+  "allowed_dirty_paths": [],
+  "required_reviews": [
+    {
+      "reviewer": "codex",
+      "lens": "implementation-adversarial",
+      "stage": "plan",
+      "path": "docs/workflow/feature-runs/035-audit-sweep/reviews/plan.codex.implementation-adversarial.review.md",
+      "context_paths": [
+        "cloud/packages/db/prisma/schema.prisma",
+        "cloud/apps/api/src/services/run/anomaly-persistence.ts",
+        "cloud/apps/api/tests/services/run/anomaly-persistence.test.ts",
+        "cloud/apps/api/src/services/run/anomaly-detection.ts",
+        "cloud/apps/api/tests/services/run/anomaly-detection.test.ts",
+        "cloud/apps/api/src/queue/handlers/run-state-reconcile.ts",
+        "cloud/apps/api/tests/queue/handlers/run-state-reconcile.test.ts",
+        "cloud/apps/api/src/queue/types.ts",
+        "cloud/apps/api/src/queue/handlers/index.ts",
+        "cloud/apps/api/src/services/run/scheduler.ts"
+      ],
+      "model": "gpt-5.4-mini"
+    },
+    {
+      "reviewer": "codex",
+      "lens": "architecture-adversarial",
+      "stage": "plan",
+      "path": "docs/workflow/feature-runs/035-audit-sweep/reviews/plan.codex.architecture-adversarial.review.md",
+      "context_paths": [
+        "cloud/packages/db/prisma/schema.prisma",
+        "cloud/apps/api/src/services/run/anomaly-persistence.ts",
+        "cloud/apps/api/tests/services/run/anomaly-persistence.test.ts",
+        "cloud/apps/api/src/services/run/anomaly-detection.ts",
+        "cloud/apps/api/tests/services/run/anomaly-detection.test.ts",
+        "cloud/apps/api/src/queue/handlers/run-state-reconcile.ts",
+        "cloud/apps/api/tests/queue/handlers/run-state-reconcile.test.ts",
+        "cloud/apps/api/src/queue/types.ts",
+        "cloud/apps/api/src/queue/handlers/index.ts",
+        "cloud/apps/api/src/services/run/scheduler.ts"
+      ],
+      "model": "gpt-5.4-mini"
+    },
+    {
+      "reviewer": "gemini",
+      "lens": "testability-adversarial",
+      "stage": "plan",
+      "path": "docs/workflow/feature-runs/035-audit-sweep/reviews/plan.gemini.testability-adversarial.review.md",
+      "context_paths": [
+        "cloud/packages/db/prisma/schema.prisma",
+        "cloud/apps/api/src/services/run/anomaly-persistence.ts",
+        "cloud/apps/api/tests/services/run/anomaly-persistence.test.ts",
+        "cloud/apps/api/src/services/run/anomaly-detection.ts",
+        "cloud/apps/api/tests/services/run/anomaly-detection.test.ts",
+        "cloud/apps/api/src/queue/handlers/run-state-reconcile.ts",
+        "cloud/apps/api/tests/queue/handlers/run-state-reconcile.test.ts",
+        "cloud/apps/api/src/queue/types.ts",
+        "cloud/apps/api/src/queue/handlers/index.ts",
+        "cloud/apps/api/src/services/run/scheduler.ts"
+      ],
+      "model": "gemini-2.5-pro"
+    }
+  ],
+  "max_artifact_chars": 50000,
+  "max_context_chars": 60000,
+  "max_total_chars": 250000
+}

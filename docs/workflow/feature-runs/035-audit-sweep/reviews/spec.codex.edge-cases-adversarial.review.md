@@ -1,0 +1,42 @@
+---
+reviewer: "codex"
+lens: "edge-cases-adversarial"
+stage: "spec"
+artifact_path: "docs/workflow/feature-runs/035-audit-sweep/spec.md"
+artifact_sha256: "b557df51cab17301aa8f7ad3143eb33bd88598783db0f36c557cceec039a17f6"
+repo_root: "."
+git_head_sha: "67082dc3d4eeede3775a50ee4769cb22d2cb7e09"
+git_base_ref: "origin/main"
+git_base_sha: "67082dc3d4eeede3775a50ee4769cb22d2cb7e09"
+generation_method: "codex-runner"
+resolution_status: "open"
+resolution_note: ""
+raw_output_path: "docs/workflow/feature-runs/035-audit-sweep/reviews/spec.codex.edge-cases-adversarial.review.md.raw.txt"
+narrowed_artifact_path: ""
+narrowed_artifact_sha256: ""
+coverage_status: "full"
+coverage_note: ""
+---
+
+# Review: spec edge-cases-adversarial
+
+## Findings
+
+- HIGH: The audit sweep plan will misclassify normal in-flight work as anomalies if it reuses `detectStrandedTranscript()` on the same run scope as the default reconcile flow. That detector flags every transcript whose `summarizedAt` and `summarizeFailedAt` are still null, with no age gate or terminal-state check, and the current reconcile handler uses it specifically to rescue active runs by enqueueing summarize jobs, not as a diagnostic signal. A daily audit over active runs would therefore dump ordinary unfinished transcripts into `run_anomalies`, which defeats the feature’s purpose. [CODE-CONFIRMED] (`/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/services/run/anomaly-detection.ts:126`, `/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/queue/handlers/run-state-reconcile.ts:212`, `/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/queue/handlers/run-state-reconcile.ts:245`)
+
+- MEDIUM: The spec also leaves `detectScheduledCountMismatch()` unsafe for audit mode on active runs. In the current code it is a pure consistency check that compares `progress.total` to the canonical total and, in the default reconcile path, any mismatch is immediately repaired for non-terminal runs. If the audit job scans the same run set without excluding this detector, it will persist expected in-flight progress drift as a permanent anomaly instead of a useful audit signal. [CODE-CONFIRMED] (`/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/services/run/anomaly-detection.ts:394`, `/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/queue/handlers/run-state-reconcile.ts:277`, `/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/queue/handlers/run-state-reconcile.ts:292`)
+
+## Residual Risks
+
+- The spec depends on `boss.schedule()` behaving idempotently across process restarts, but the provided code has no existing schedule-registration pattern to confirm that. If PgBoss does not dedupe schedules the way the spec assumes, audit cadence could be duplicated or missed. [UNVERIFIED]
+
+- The spec only names `run.anomalies` as the consumer of the new `source` field. Any other downstream query or mutation that still keys anomalies by `(runId, type, subject)` will need source-aware changes too, but that code was not provided here. [UNVERIFIED]
+
+## Runner Stats
+- total_input=0
+- total_output=0
+- total_tokens=0
+
+## Resolution
+- status: open
+- note: 

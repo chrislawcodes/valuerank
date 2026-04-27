@@ -1,0 +1,57 @@
+{
+  "session_id": "7357021b-08ef-41b9-8b6a-d90f1c89af27",
+  "response": "## Findings\n\n| Severity | Finding | Evidence |\n| --- | --- | --- |\n| **HIGH** | Plan's \"Verified Fact\" about `orphanedBatchCount` is contradicted by provided code. | `[CODE-CONFIRMED]` |\n| **MEDIUM** | Plan is ambiguous about the core tie-breaking logic for identifying the lagging pair. | `[UNVERIFIED]` |\n| **LOW** | The plan's proposed GraphQL schema inaccurately uses an `enum` for `LaunchMode`. | `[CODE-CONFIRMED]` |\n\n---\n\n- **Severity:** HIGH\n  - **Finding:** Plan's \"Verified Fact\" about `orphanedBatchCount` is contradicted by provided code.\n  - **Details:** The plan asserts as a \"Verified Fact\" that the field `orphanedBatchCount` exists on `DomainValueCoverageCell` in the main branch. However, the provided code contexts directly refute this. The `DomainValueCoverageCell` type definition in `cloud/apps/api/src/graphql/generated/graphql.ts`, `cloud/apps/web/src/api/operations/domainCoverage.ts`, and the props in `cloud/apps/web/src/components/domains/CoverageCell.tsx` all lack the `orphanedBatchCount` field. Slice 3 of the plan is critically dependent on this field for its UI gating logic (`orphanedBatchCount > 0 || orphanedConditionCount > 0`).\n  - **Impact:** Building the feature based on a \"Verified Fact\" that is shown to be false by the provided code introduces a high risk of implementation failure, required rework, and incorrect test assumptions. While the plan notes the worktree may be stale, an adversarial review cannot accept a contradicted assertion as verified. This foundational discrepancy must be resolved before implementation begins.\n  - **Evidence:** `[CODE-CONFIRMED]`\n\n- **Severity:** MEDIUM\n  - **Finding:** Plan is ambiguous about the core tie-breaking logic for identifying the lagging pair.\n  - **Details:** Slice 3 of the plan calls for a new pure helper, `computeLaggingDirection`, to implement a \"6-rule tie-breaker\" for deciding which side of a pair to top up. The plan does not specify what these six rules are, their inputs, their priority order, or how to resolve conflicts between them.\n  - **Impact:** This ambiguity creates significant implementation and testability risks. The developer is left to guess or reverse-engineer the business logic, making it highly probable that edge cases will be missed. Testers cannot write effective unit tests without a clear specification of the expected behavior for all possible input combinations (e.g., a cell with both orphaned batches and orphaned conditions in opposite directions).\n  - **Evidence:** `[UNVERIFIED]`\n\n- **Severity:** LOW\n  - **Finding:** The plan's proposed GraphQL schema inaccurately uses an `enum` for `LaunchMode`.\n  - **Details:** In its \"GraphQL Schema\" section, the plan proposes `enum LaunchMode { ... PAIRED_BATCH_TOPUP }`. However, analysis of `graphql.ts` shows that `StartRunInput.launchMode` is currently a `String`, and `run-json-types.ts` confirms the application uses a string literal union type.\n  - **Impact:** This inaccuracy could mislead an implementer into creating a new GraphQL enum, which would be an unnecessary schema modification that deviates from the existing pattern. The implementation should follow the established pattern of treating this as a string field, as the plan correctly intuits in other sections.\n  - **Evidence:** `[CODE-CONFIRMED]`\n\n## Residual Risks\n\nThe plan's \"Residual Risks\" section is comprehensive. The following are additional risks identified during this adversarial review.\n\n- **Risk:** Logic drift between backend-calculated coverage gaps and client-side lagging direction detection.\n  - **Description:** The backend resolver computes fields like `orphanedConditionCount` to determine *if* a cell has a gap. A separate client-side helper, `computeLaggingDirection`, re-evaluates the cell's data to determine *which* direction is lagging. These two pieces of logic, being developed and executed in different environments, could have subtle disagreements. This could lead to a \"Match Pair Counts\" action appearing for a cell where the client helper can't find a gap, leading to a dead end.\n  - **Evidence:** `[UNVERIFIED]`\n  - **Suggested Mitigation:** Create a cross-layer unit test. The backend resolver tests (Slice 1) should output fixture objects for `DomainValueCoverageCell`. A corresponding client-side test (Slice 3) should ingest these exact fixtures and assert that the `computeLaggingDirection` helper's output is consistent with the backend's calculations (e.g., it finds a lagging direction if and only if the backend calculated a non-zero orphan count).\n\n- **Risk:** Race condition with deleted definitions in `contributingDefinitionIds`.\n  - **Description:** The UI passes a list of `contributingDefinitionIds` and a specific `launchDefinitionId` via route state. If a user deletes one of these definitions after the page loads but before the top-up run is launched, the `startRun` mutation could fail ungracefully.\n  - **Evidence:** `[UNVERIFIED]`\n  - **Suggested Mitigation:** The `startRun` mutation handler must be hardened to re-verify that the `launchDefinitionId` and any other critical definition IDs from the input still exist and are not soft-deleted *within the same transaction as the run creation*. The error returned to the client in case of failure should be specific (e.g., \"Vignette to be launched has been deleted since the page was loaded.\").",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 75386
+        },
+        "tokens": {
+          "input": 88165,
+          "prompt": 100053,
+          "candidates": 1224,
+          "total": 106720,
+          "cached": 11888,
+          "thoughts": 5443,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 75386,
+            "tokens": {
+              "input": 88165,
+              "prompt": 100053,
+              "candidates": 1224,
+              "total": 106720,
+              "cached": 11888,
+              "thoughts": 5443,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

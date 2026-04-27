@@ -1,0 +1,57 @@
+MCP issues detected. Run /mcp list for status.{
+  "session_id": "725202a2-f2ea-4259-9565-bde8ed564bec",
+  "response": "## Findings\n\n| Severity | Finding | Task(s) |\n| :--- | :--- | :--- |\n| **HIGH** | The review extractor (`review-extract`) will fail to correctly parse findings that contain markdown subheadings. | T11, T20 |\n| **MEDIUM** | The plan for telemetry instrumentation has a critical design gap. It does not specify the mechanism by which instrumented commands report metrics (like bytes read/written) back to the telemetry wrapper. | T04 |\n| **MEDIUM** | **[UNVERIFIED]** The auto-commit logic may not correctly detect conflicts involving file mode changes (e.g., making a script executable). The logic relies on `git hash-object`, which only hashes file content, and the task is unclear if the file status codes are used to augment this check. | T07, T08 |\n| **LOW** | The `check_workflow_isolation.py` script can be bypassed. A test that creates and then deletes temporary files inside the `feature-runs` directory will not be detected, as the script only compares the `git status` before and after the entire suite. | T09, T15 |\n| **LOW** | The TTL warning message is inconsistent with the implementation. The user-facing warning in `record_command_telemetry` mentions a \"5-minute prompt-cache TTL\", but the internal constant `_TTL_SECONDS` is set to 270.0 (4.5 minutes). | T03 |\n| **LOW** | **[UNVERIFIED]** The telemetry capping function is not robust against state corruption. If the `command_telemetry` field in the state file becomes a non-list type, the `_cap_command_telemetry` function could fail or behave unexpectedly. | T02 |\n\n---\n\n### **Details**\n\n**HIGH: Review Extractor Parsing Flaw**\nThe logic in `factory_cmd_review_extract.py` (T11) to determine the end of a finding is flawed. It identifies the start of the *next* finding or the start of the next major `##` section (like `## Residual Risks`) to mark the end of the current one. However, it will misinterpret any `##` subheading within a finding's description as the end of that finding, prematurely truncating its content. The test plan in T20 does not include a case to detect this specific failure mode.\n\n**MEDIUM: Telemetry Instrumentation Design Gap**\nTask T04 specifies wrapping commands to capture telemetry, including metrics like `input_bytes_read` and `files_written`. However, it completely omits the design for how the wrapped command is supposed to communicate these metrics to the wrapper. Without a clearly defined mechanism (e.g., context variable, dependency injection), this task is incomplete and carries a high risk of inconsistent or failed implementation.\n\n**MEDIUM [UNVERIFIED]: Auto-Commit Blind Spot for File Modes**\nThe auto-commit logic described in T07 and T08 uses `git hash-object` to detect if a file's content has changed. This correctly detects content drift but is blind to metadata changes, such as file permissions (mode). If an operator modifies a file's content and Codex subsequently changes only its mode (e.g., `chmod +x`), the content hash will remain the same as the operator's version, and the logic might incorrectly classify this as a conflict or miss the change entirely.\n\n## Residual Risks\n\n- **Implementation Complexity**: Several tasks involve complex interactions with `git` CLI state (`T05`, `T08`), file parsing (`T11`), and decorators/wrappers (`T04`). Even with a detailed plan, the risk of implementation error is high due to subtle edge cases in these systems (e.g., git submodules, file encodings, symbolic links) that are not explicitly addressed in the tasks.\n- **State Corruption**: The system's robustness depends heavily on the integrity of the `state.json` file. While some defensive `get()` calls are planned (T13), a corrupted file could still cause crashes in places where a specific data type is assumed (e.g., `T02` assuming `command_telemetry` is a list). There is no task for validating or recovering from a corrupt state file.\n- **Incomplete Telemetry**: The fallback plan in T04 (instrumenting only a subset of commands if a central dispatcher modification is too complex) is a pragmatic tradeoff. However, it introduces a risk that the telemetry data will be incomplete, potentially misleading future analysis if less-frequently used but expensive commands are omitted from instrumentation.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 55241
+        },
+        "tokens": {
+          "input": 21476,
+          "prompt": 21476,
+          "candidates": 997,
+          "total": 26684,
+          "cached": 0,
+          "thoughts": 4211,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 55241,
+            "tokens": {
+              "input": 21476,
+              "prompt": 21476,
+              "candidates": 997,
+              "total": 26684,
+              "cached": 0,
+              "thoughts": 4211,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

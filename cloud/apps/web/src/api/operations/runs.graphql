@@ -9,7 +9,7 @@ fragment RunFields on Run {
   config
   stalledModels
   companionRunId
-  batchCount
+  isAggregate
   pairedBatchGroupId
   progress
   runProgress {

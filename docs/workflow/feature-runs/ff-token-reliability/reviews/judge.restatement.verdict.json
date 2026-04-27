@@ -1,0 +1,47 @@
+{
+  "judge": "restatement",
+  "model": "gpt-5",
+  "verdict": "proceed-with-annotation",
+  "confidence": 5,
+  "reasoning": "First-round case applies because the comparison set explicitly says \"No prior findings yet.\" With no earlier round, none of the latest findings can be classified as RESTATEMENT under the stated rule; they establish the baseline for future restatement checks. Classification for this round: `tasks.codex.dependency-order-adversarial.review#high-1` NEW \u2014 undefined `codex_deleted` breaks the deletion-audit success path and T17 Case F; `#medium-2` NEW \u2014 telemetry counters have no specified path back from command execution into the wrapper; `#medium-3` NEW \u2014 porcelain rename/copy entries are mis-modeled, so overlap detection and auto-commit can be wrong; `#medium-4` NEW \u2014 review-extractor parser design is internally inconsistent and can swallow the next finding; `tasks.codex.execution-adversarial.review#high-1` NEW \u2014 CI isolation post-check can be skipped when tests fail early; `#high-2` NEW \u2014 comparing only porcelain line sets misses content changes to already-dirty files; `#medium-3` NEW \u2014 repeats the undefined `codex_deleted` and rename/copy parsing gap, but this is only an intra-round duplicate, not a prior-round restatement; `tasks.gemini.coverage-adversarial.review#high-1` NEW \u2014 markdown subheadings can break the review extractor; `#medium-2` NEW \u2014 repeats the telemetry reporting-path gap, again only as an intra-round duplicate; `#medium-3` NEW \u2014 file mode changes may evade content-hash-based conflict detection; `#low-4` NEW \u2014 create-then-delete temp files can evade before/after status-only isolation checks; `#low-5` NEW \u2014 TTL warning text mismatches `_TTL_SECONDS = 270.0`; `#low-6` NEW \u2014 telemetry capping may fail on corrupted non-list state; `#high-7` NEW \u2014 repeats the extractor parsing flaw theme from `high-1`, but still counts as baseline in a first round. Because there is no prior round to compare against, the correct verdict is `proceed-with-annotation`, while recording these themes as the baseline for later loops.",
+  "unaddressed_high_finding_ids": [
+    "tasks.codex.dependency-order-adversarial.review#high-1",
+    "tasks.codex.execution-adversarial.review#high-1",
+    "tasks.codex.execution-adversarial.review#high-2",
+    "tasks.gemini.coverage-adversarial.review#high-1",
+    "tasks.gemini.coverage-adversarial.review#high-7"
+  ],
+  "evidence": [
+    {
+      "artifact": "user-provided round summary",
+      "section": "Earlier rounds",
+      "quote": "No prior findings yet."
+    },
+    {
+      "artifact": "tasks.codex.dependency-order-adversarial.review.md",
+      "section": "tasks.codex.dependency-order-adversarial.review#high-1",
+      "quote": "T08 references `codex_deleted` in `auto_commit.deleted_paths`, but that variable is never defined anywhere in the task."
+    },
+    {
+      "artifact": "tasks.codex.execution-adversarial.review.md",
+      "section": "tasks.codex.execution-adversarial.review#high-2",
+      "quote": "T05/T09/T18 compare only `git status --porcelain` line sets, so they miss changes to files that were already dirty."
+    },
+    {
+      "artifact": "tasks.gemini.coverage-adversarial.review.md",
+      "section": "tasks.gemini.coverage-adversarial.review#high-1",
+      "quote": "The review extractor (`review-extract`) will fail to correctly parse findings that contain markdown subheadings."
+    },
+    {
+      "artifact": "tasks.gemini.coverage-adversarial.review.md",
+      "section": "tasks.gemini.coverage-adversarial.review#medium-2",
+      "quote": "The plan for telemetry instrumentation has a critical design gap. It does not specify the mechanism by which instrumented commands report metrics"
+    },
+    {
+      "artifact": "tasks.gemini.coverage-adversarial.review.md",
+      "section": "tasks.gemini.coverage-adversarial.review#high-7",
+      "quote": "Review Extractor Parsing Flaw"
+    }
+  ],
+  "timestamp": "2026-04-26T00:00:00-07:00"
+}

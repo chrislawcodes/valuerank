@@ -56,8 +56,37 @@ from factory_review import (  # noqa: E402
 from factory_next_action import recommended_next_action  # noqa: E402
 
 from factory_deliver import refresh_delivery_snapshot  # noqa: E402
+from factory_mutating import mutates_state, readonly_command  # noqa: E402
 
 
+def _print_command_telemetry(state: dict) -> None:
+    records = state.get("command_telemetry", [])
+    if not isinstance(records, list):
+        records = []
+    recent = records[-10:]
+    print("")
+    print("command-telemetry:")
+    if not recent:
+        print("- (no records)")
+        return
+    header = (
+        f"{'command':<16} {'stage':<10} {'ts':<20} {'wall_seconds':<12} "
+        f"{'input_bytes_read':<17} {'output_bytes_written':<20} {'ttl_crossed':<11}"
+    )
+    print(header)
+    for record in recent:
+        print(
+            f"{str(record.get('command', '')):<16} "
+            f"{str(record.get('stage', '')):<10} "
+            f"{str(record.get('ts', '')):<20} "
+            f"{str(record.get('wall_seconds', '')):<12} "
+            f"{str(record.get('input_bytes_read', '')):<17} "
+            f"{str(record.get('output_bytes_written', '')):<20} "
+            f"{str(record.get('ttl_crossed', '')):<11}"
+        )
+
+
+@readonly_command("status")
 def command_status(args: argparse.Namespace) -> int:
     ensure_sync()
     state = load_workflow_state(args.slug)
@@ -217,11 +246,27 @@ def command_status(args: argparse.Namespace) -> int:
         ):
             print("- advice: batch more implementation fixes before rerunning the diff checkpoint")
 
+    invariant_warnings = state.get("invariant_warnings") or []
+    if invariant_warnings:
+        print("")
+        print("invariant-warnings:")
+        total = len(invariant_warnings)
+        print(f"- total: {total}")
+        for entry in invariant_warnings[-5:]:
+            at = entry.get("at", 0)
+            command = entry.get("command", "")
+            stage = entry.get("stage", "")
+            detail = trim_detail(str(entry.get("detail", "")))
+            print(f"- [{at}] {command} stage={stage}: {detail}")
+
     print("")
     print(f"next-action: {next_action}")
+    if getattr(args, "tokens", False):
+        _print_command_telemetry(state)
     return 0
 
 
+@mutates_state("repair")
 def command_repair(args: argparse.Namespace) -> int:
     from factory_cmd_checkpoint import command_checkpoint  # noqa: E402
     ensure_sync()
@@ -307,6 +352,7 @@ def command_repair(args: argparse.Namespace) -> int:
     return 0
 
 
+@readonly_command("doctor")
 def command_doctor(args: argparse.Namespace) -> int:
     from factory_git import git_output  # noqa: E402
     checks: list[tuple[str, str, str]] = []

@@ -1,0 +1,12 @@
+## Findings
+1. High: The plan tells you to edit `cloud/apps/web/src/api/operations/domainCoverage.ts` to add the new GraphQL fields, but that file is only a generated wrapper that re-exports `DomainValueCoverageDocument` and `DomainValueCoverageLegacyDocument`. There is no fragment text in that file to change, so this plan will not actually update the query unless the real codegen source is edited instead. [CODE-CONFIRMED]  
+   Link: [/Users/chrislaw/valuerank/.claude/worktrees/loving-bose-6ba4a1/cloud/apps/web/src/api/operations/domainCoverage.ts](/Users/chrislaw/valuerank/.claude/worktrees/loving-bose-6ba4a1/cloud/apps/web/src/api/operations/domainCoverage.ts)
+
+2. Medium: The plan narrows `batchCount` to the effective model set, but it does not reconcile the `aggregateRunId` fallback. In `domain-coverage.ts`, the cell still picks `latestAggregateRunIdByDefinitionId` first and only then `latestMatchingRunIdByDefinitionId`, and both are maintained independently of the new cohort rule. That means the cell can still link to an analysis run that does not match the displayed filtered batch cohort. [CODE-CONFIRMED]  
+   Link: [/Users/chrislaw/valuerank/.claude/worktrees/loving-bose-6ba4a1/cloud/apps/api/src/graphql/queries/domain-coverage.ts](/Users/chrislaw/valuerank/.claude/worktrees/loving-bose-6ba4a1/cloud/apps/api/src/graphql/queries/domain-coverage.ts)
+
+3. Low: The plan assumes `jobChoiceValueFirst` is stored as the exact canonical value string used for `valueA`/`valueB`. The provided code only shows that it is read as a trimmed raw string; it does not prove that the stored token matches the coverage keys exactly. If the token casing or labels differ, the new `aFirstBatchCount` / `bFirstBatchCount` fields will quietly collapse to zero. [UNVERIFIED]
+
+## Residual Risks
+- The plan still needs an explicit regression test for a mixed cell with complete runs, incomplete runs, aggregate runs, and both directions. Without that, a partial implementation can pass basic count checks while breaking the cohort consistency between `batchCount`, `incompleteBatchCount`, and the directional counts.
+- The plan does not say whether any downstream consumer uses `availableModels` as the legend for the cell cohort. If it does, that list may remain broader than the filtered counts after the model-set gate changes.

@@ -1,0 +1,57 @@
+{
+  "session_id": "5c26dc83-ac98-4858-b8b7-f3ea7a87a823",
+  "response": "## Findings\n\n| Severity | Finding | Evidence |\n| :--- | :--- | :--- |\n| **HIGH** | Spec's \"Verified Facts\" section contradicts provided source code, creating ambiguity for implementation. | `[CODE-CONFIRMED]` |\n| **MEDIUM** | The proposed single-direction launch introduces a new run variant whose pairing lifecycle is not fully specified. | `[UNVERIFIED]` |\n| **MEDIUM** | The existing check for incomplete batches is brittle and can misreport run completeness. | `[CODE-CONFIRMED]` |\n| **LOW** | The specification defers a key UI decision about pre-filling the launch form, potentially undermining the feature's goal of reducing user error. | `[UNVERIFIED]` |\n\n---\n\n### **Finding 1: Spec's \"Verified Facts\" section contradicts provided source code, creating ambiguity for implementation.**\n\n**Severity:** HIGH\n**Evidence:** `[CODE-CONFIRMED]`\n\nThe spec's \"Verified facts\" section asserts that logic for determining run completeness using `expectedCount` arithmetic (`scenarioSelections \u00d7 modelCount \u00d7 samplesPerScenario`) is \"DEAD CODE\" in the `main` branch, having been replaced by a more robust slot-by-slot check.\n\nHowever, the provided `cloud/apps/api/src/graphql/queries/domain-coverage.ts` context file explicitly uses this exact arithmetic (lines 205-210) to calculate `incompleteBatchCount`. While the spec instructs reviewers to ignore this as stale code, its presence in the provided context creates a direct contradiction. An engineer implementing this feature will be faced with conflicting sources of truth: trust the spec's assertion about `main`'s state, or trust the provided code context. This ambiguity forces unnecessary verification work to discover the true state of the codebase and increases the risk of building upon an incorrect or outdated understanding of the system.\n\n### **Finding 2: The proposed single-direction launch introduces a new run variant whose pairing lifecycle is not fully specified.**\n\n**Severity:** MEDIUM\n**Evidence:** `[UNVERIFIED]`\n\nThe spec correctly identifies the need for a single-direction launch capability (US-6) and astutely defers the decision on how to handle the `jobChoiceBatchGroupId` to the plan stage (Open question #5). However, this deferral hides a significant architectural risk. The spec recommends giving the top-up run a fresh group ID of its own. If this path is taken, it's unclear how downstream analysis will recognize this new run as the \"partner\" to an existing batch.\n\nThe existing resolver in `domain-coverage.ts` (lines 235-247) uses these group IDs to deduplicate paired batches. A top-up run with a unique ID will be counted as a new, independent batch. While this correctly contributes to the overall directional count, it fails to logically pair it with the batch it's intended to complete. This could lead to incorrect calculations in other analyses that rely on strict batch pairing. The spec does not sufficiently address how to maintain the paired relationship for analysis when a top-up run is introduced with its own identity.\n\n### **Finding 3: The existing check for incomplete batches is brittle and can misreport run completeness.**\n\n**Severity:** MEDIUM\n**Evidence:** `[CODE-CONFIRMED]`\n\nThe logic to detect incomplete batches in `domain-coverage.ts` (lines 205-210) compares the total number of transcript records to an expected product (`scenarioSelections * modelCount * samplesPerScenario`). This method is flawed because it cannot detect uneven transcript distribution. For example, a run could have the correct *total* number of transcripts, but some `(scenario, model, sample)` slots could have been missed while others were retried, yielding extra transcripts for the same slot. The simple count comparison would incorrectly mark such a run as complete.\n\nThis creates a risk that the `incompleteBatchCount` surfaced to the user is understated. The spec itself notes that a warning about incomplete batches should be displayed, but the logic powering this warning is unreliable. The provided `cloud/apps/api/src/scripts/audit-domain-coverage-completeness.ts` file contains a much more robust slot-by-slot verification method (`findMissingTranscriptKeys`). The resolver's reliance on the primitive count comparison is a known flaw that affects the reliability of the data presented to the user.\n\n### **Finding 4: The specification defers a key UI decision about pre-filling the launch form, potentially undermining the feature's goal of reducing user error.**\n\n**Severity:** LOW\n**Evidence:** `[UNVERIFIED]`\n\nThe spec's \"Open design questions\" section (item #6) defers the decision on whether to pre-fill the \"Match Pair Counts\" launch form with values calculated to precisely close the detected trial gap. A primary goal of the feature is to allow an operator to easily correct an imbalance. By not requiring the form to be pre-filled, the feature risks re-introducing the manual effort and potential for human error it is designed to eliminate.\n\nWhile the proposed live-recompute card (US-4) would provide feedback on the user's manual input, a superior user experience would be to present them with a form that is already pre-configured for the optimal top-up launch. Deferring this decision creates uncertainty about a core aspect of the user workflow and may result in a less effective final implementation.\n\n## Residual Risks\n\n*   **Documentation Debt:** The spec correctly notes in its \"Verified facts\" that the project constitution (`CLAUDE.md`) contains outdated information about which database tables use soft-deletes. While this feature's implementation can proceed with the correct knowledge, other developers referencing the constitution may be misled, posing a risk to future features that involve data deletion.\n*   **Incomplete Batch Remediation:** The spec wisely scopes out a remediation path for incomplete batches. However, by adding UI that explicitly warns about them (\"This pair has incomplete batches...\"), it increases the visibility of a problem without offering a solution. This may lead to user frustration, as they will be alerted to an issue they cannot fix within the application.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 58985
+        },
+        "tokens": {
+          "input": 40924,
+          "prompt": 54425,
+          "candidates": 1306,
+          "total": 60009,
+          "cached": 13501,
+          "thoughts": 4278,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 58985,
+            "tokens": {
+              "input": 40924,
+              "prompt": 54425,
+              "candidates": 1306,
+              "total": 60009,
+              "cached": 13501,
+              "thoughts": 4278,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

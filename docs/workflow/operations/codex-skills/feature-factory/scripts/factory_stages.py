@@ -27,6 +27,7 @@ from factory_state import (  # noqa: E402
     load_checkpoint_manifest,
     parse_review_frontmatter,
 )
+from factory_io import read_text  # noqa: E402
 
 REVIEW_SCRIPTS = REPO_ROOT / "docs" / "workflow" / "operations" / "codex-skills" / "review-lens" / "scripts"
 if str(REVIEW_SCRIPTS) not in sys.path:
@@ -137,7 +138,7 @@ def _default_checkpoint_progress() -> dict:
 def artifact_has_meaningful_content(stage: str, path: Path) -> bool:
     if not path.exists():
         return False
-    text = path.read_text(encoding="utf-8").strip()
+    text = read_text(path).strip()
     heading = STAGE_ARTIFACT_HEADINGS.get(stage)
     if not text:
         return False
@@ -175,21 +176,34 @@ def diff_review_budget_state(slug: str) -> dict[str, object]:
         "head_mismatch": False,
         "scope_basis": "branch-merge-base",
         "suggested_base_ref": "",
+        "last_review_only_advance_at": 0,
         "codex_review_path": None,
         "codex_review_present": False,
         "artifact_changed_since_codex": False,
     }
+    workflow_state = load_workflow_state(slug)
+    review_budget = workflow_state.get("diff_review_budget", {})
+    if isinstance(review_budget, dict):
+        recorded_head_override = str(review_budget.get("recorded_head", ""))
+        if recorded_head_override:
+            state["recorded_head_sha"] = recorded_head_override
+        try:
+            state["last_review_only_advance_at"] = int(review_budget.get("last_review_only_advance_at", 0) or 0)
+        except (TypeError, ValueError):
+            state["last_review_only_advance_at"] = 0
     meta_path = artifact_path.with_suffix(artifact_path.suffix + ".json")
     if meta_path.exists():
         try:
-            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            meta = json.loads(read_text(meta_path))
             state["recorded_base_ref"] = meta.get("git_base_ref", "")
             state["recorded_base_sha"] = meta.get("git_base_sha", "")
-            state["recorded_head_sha"] = meta.get("git_head_sha", "")
+            if not state["recorded_head_sha"]:
+                state["recorded_head_sha"] = meta.get("git_head_sha", "")
         except Exception:
             state["recorded_base_ref"] = ""
             state["recorded_base_sha"] = ""
-            state["recorded_head_sha"] = ""
+            if not state["recorded_head_sha"]:
+                state["recorded_head_sha"] = ""
     recorded_head = str(state["recorded_head_sha"])
     current_head = str(state["current_head_sha"])
     state["head_mismatch"] = bool(recorded_head and current_head and recorded_head != current_head)
@@ -359,13 +373,80 @@ def reconciliation_state(slug: str) -> tuple[bool, str]:
 
 
 def prerequisite_failure(slug: str, stage: str) -> str | None:
+    """Return a human-readable reason if *stage*'s prerequisites aren't ready.
+
+    FR-001 / FR-002 — an "unhealthy" prerequisite manifest is still acceptable
+    when the judge panel has voted ``judge_next_action == "advance"`` for that
+    prerequisite. The drift is recorded as an annotation the first time this
+    branch is taken (see :func:`record_advance_with_drift_if_needed`).
+    """
+    from factory_state import load_workflow_state  # local import — avoid cycle
+    state = load_workflow_state(slug)
+    stages_state = state.get("stages") or {}
     for prereq in STAGE_PREREQUISITES.get(stage, []):
         prereq_state = stage_manifest_state(slug, prereq)
         if not prereq_state["manifest_exists"]:
             return f"{stage} checkpoint requires completed {prereq} checkpoint first"
         if not prereq_state["healthy"]:
+            prereq_stage_state = stages_state.get(prereq, {}) if isinstance(stages_state, dict) else {}
+            if isinstance(prereq_stage_state, dict) and prereq_stage_state.get("judge_next_action") == "advance":
+                record_advance_with_drift_if_needed(slug, prereq, prereq_stage_state, prereq_state)
+                continue  # judge advance overrides the manifest-drift-equals-unhealthy rule
             return f"{stage} checkpoint requires a healthy {prereq} checkpoint first"
     return None
+
+
+def record_advance_with_drift_if_needed(
+    slug: str,
+    stage: str,
+    stage_state: dict,
+    manifest_state: dict,
+) -> None:
+    """FR-002 — record drift once per advance-with-drift pair.
+
+    Appends a single ``{type: advance-with-drift, old_sha, new_sha, at, reason}``
+    entry to ``stages.<stage>.annotations[]``. Idempotent — if the same
+    old-sha/new-sha pair is already recorded, no new entry is written.
+    """
+    import time
+    from factory_state import workflow_dir, load_workflow_state, save_workflow_state
+    from workflow_utils import normalized_artifact_hash
+
+    artifact_path = manifest_state.get("artifact_path")
+    if artifact_path is None:
+        return
+    try:
+        current_sha = normalized_artifact_hash(artifact_path)
+    except Exception:  # noqa: BLE001
+        return
+    history = stage_state.get("adversarial_sha_history") or []
+    manifest_sha = history[-1] if isinstance(history, list) and history else stage_state.get("initial_sha", "")
+    if not manifest_sha or manifest_sha == current_sha:
+        return
+
+    fresh_state = load_workflow_state(slug)
+    stage_blob = (fresh_state.get("stages") or {}).get(stage) or {}
+    annotations = stage_blob.get("annotations") or []
+    for entry in annotations:
+        if (
+            isinstance(entry, dict)
+            and entry.get("type") == "advance-with-drift"
+            and entry.get("old_sha") == manifest_sha
+            and entry.get("new_sha") == current_sha
+        ):
+            return  # already recorded
+    annotations.append(
+        {
+            "type": "advance-with-drift",
+            "old_sha": manifest_sha,
+            "new_sha": current_sha,
+            "at": int(time.time()),
+            "reason": "post-judge-edits-only",
+        }
+    )
+    stage_blob["annotations"] = annotations
+    fresh_state.setdefault("stages", {})[stage] = stage_blob
+    save_workflow_state(slug, fresh_state)
 
 
 def status_md_changed_since_init(slug: str) -> bool:

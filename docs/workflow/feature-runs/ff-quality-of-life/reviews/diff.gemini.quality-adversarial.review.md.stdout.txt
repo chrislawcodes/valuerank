@@ -1,0 +1,57 @@
+MCP issues detected. Run /mcp list for status.{
+  "session_id": "c20f3f74-7d86-45b9-ae94-ea726ca8a612",
+  "response": "## Findings\n\n| Severity | Finding | File |\n| :--- | :--- | :--- |\n| **HIGH** | **Data Loss Risk in State Update Logic** | `docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py` |\n| | The logic for updating the state file (`state.json`) after a successful `--validation-only` run is unsafe. The code pattern `if not isinstance(stage_blob, dict): stage_blob = {}; stages_state[stage] = stage_blob` (and a similar pattern for the `annotations` list) will destructively overwrite existing data with an empty object/list if the data is of an unexpected type. Instead of silently deleting potentially critical data, the script should raise a schema validation error and exit. The new tests do not cover this failure mode, as they operate on a pristine state file. | |\n| **MEDIUM** | **[UNVERIFIED] Race Condition in Artifact Resealing** | `docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py` |\n| | The `_run_validation_only` function is vulnerable to a Time-of-check to time-of-use (TOCTOU) race condition. It calculates the artifact's SHA at the beginning and then updates multiple review files. If the artifact is modified *after* the SHA is calculated but *before* the review files are written, the review files will be updated with a now-stale SHA. This undermines the tool's purpose of ensuring SHA consistency. This finding is marked `[UNVERIFIED]` because its exploitability depends on concurrent system processes, which cannot be confirmed from the artifact alone. | |\n| **LOW** | **[UNVERIFIED] Brittle Frontmatter Parsing with Regex** | `docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py` |\n| | The script uses regular expressions to read and update the `artifact_sha256` field in review file frontmatter. This method is brittle and can fail if the file format has slight variations (e.g., extra whitespace, different quoting) or if the `artifact_sha256` key appears elsewhere in the file (e.g., in a code block). Using a dedicated YAML/frontmatter parser that preserves file structure would be a more robust solution. | |\n| **LOW** | **Misleading Annotation Log for Old SHAs** | `docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py` |\n| | When creating the `validation-only-reseal` annotation, the `old_sha` field is populated by arbitrarily picking one SHA from the set of all SHAs that existed before the update. If different review files had drifted to different incorrect SHAs, the log would only record one of them, providing an incomplete and potentially misleading audit trail. Logging the full set of unique old SHAs would be more accurate. | |\n\n## Residual Risks\n\n- **State Schema Corruption**: The most significant residual risk is the potential for silent data loss identified in the HIGH severity finding. If the central `state.json` file becomes corrupted or malformed for any reason (e.g., a bug in another tool, a manual edit), running this new `checkpoint --validation-only` command could permanently delete data from it instead of halting with a schema error.\n- **Severity-Drop Rule Gaming**: The new prompt rule in `restatement.md` requiring verbatim quotes to justify a severity drop is a strong safeguard against gaming the review process. However, it still relies on the judge agent's ability to assess the *relevance* of the quoted text. A low-quality agent could satisfy the rule's letter by quoting an irrelevant sentence from the prior finding, creating a false signal of convergence. The risk of this cannot be eliminated by prompt engineering alone.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 47481
+        },
+        "tokens": {
+          "input": 556,
+          "prompt": 23892,
+          "candidates": 847,
+          "total": 28905,
+          "cached": 23336,
+          "thoughts": 4166,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 47481,
+            "tokens": {
+              "input": 556,
+              "prompt": 23892,
+              "candidates": 847,
+              "total": 28905,
+              "cached": 23336,
+              "thoughts": 4166,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

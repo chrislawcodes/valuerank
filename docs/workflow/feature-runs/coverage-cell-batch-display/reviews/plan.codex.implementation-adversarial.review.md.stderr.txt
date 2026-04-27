@@ -1,0 +1,1715 @@
+Reading additional input from stdin...
+OpenAI Codex v0.125.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/loving-bose-6ba4a1
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019dcc23-446c-7c00-8b17-7ceb34f37e2b
+--------
+user
+Review this plan artifact using a implementation-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+Code context files are provided above. Before asserting any finding, check whether it is confirmed or refuted by the provided code. Each finding must include an evidence tag:
+  [CODE-CONFIRMED] — the code directly supports this finding
+  [CODE-REFUTED] — the code contradicts this finding (do not include as a finding)
+  [UNVERIFIED] — relevant code was not provided; treat as lower confidence
+Only assign HIGH severity to CODE-CONFIRMED findings.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Context: domain-coverage-utils.ts
+import { DOMAIN_ANALYSIS_VALUE_KEYS, extractValuePair, toPascalCaseKey, type DomainAnalysisValueKey } from './domain-analysis-values.js';
+
+export const COVERAGE_VALUE_KEYS = DOMAIN_ANALYSIS_VALUE_KEYS;
+export type CoverageValueKey = DomainAnalysisValueKey;
+export { extractValuePair, toPascalCaseKey };
+
+/**
+ * Extract the two canonical value dimension names from a definition's resolved content JSON.
+ * Returns null if the definition does not have exactly two recognized value dimensions.
+ */
+export function selectPrimaryDefinitionCount(
+  definitionIds: readonly string[],
+  batchCountByDefinitionId: ReadonlyMap<string, number>,
+): { primaryDefinitionId: string | null; batchCount: number } {
+  const uniqueDefinitionIds = Array.from(new Set(definitionIds));
+  if (uniqueDefinitionIds.length === 0) {
+    return { primaryDefinitionId: null, batchCount: 0 };
+  }
+
+  const primaryDefinitionId = uniqueDefinitionIds.reduce((best, defId) => {
+    const bestCount = batchCountByDefinitionId.get(best) ?? 0;
+    const thisCount = batchCountByDefinitionId.get(defId) ?? 0;
+    return thisCount > bestCount ? defId : best;
+  }, uniqueDefinitionIds[0] ?? '');
+
+  return {
+    primaryDefinitionId: primaryDefinitionId === '' ? null : primaryDefinitionId,
+    batchCount: primaryDefinitionId === '' ? 0 : (batchCountByDefinitionId.get(primaryDefinitionId) ?? 0),
+  };
+}
+
+
+export function getCoverageBatchIncrement(samplesPerScenario: unknown): number {
+  return Number.isInteger(samplesPerScenario) && (samplesPerScenario as number) >= 1
+    ? (samplesPerScenario as number)
+    : 1;
+}
+
+export type CoverageModelBreakdown = { modelId: string; label: string; trialCount: number };
+
+/**
+ * Deduplicate a list of runs by their paired-batch group ID.
+ *
+ * A-first and B-first companion definitions for the same value pair share the
+ * same `jobChoiceBatchGroupId` / `pairedBatchGroupId`. When runs are collected
+ * across both companion definitions and flattened into a single list, each paired
+ * batch appears twice. Call this before any aggregation (trial counts, model
+ * breakdowns, etc.) to ensure each batch is counted exactly once.
+ *
+ * Runs without a group ID (ungrouped / unpaired) are always kept.
+ *
+ * If `completenessOf` is provided, ties within a group are broken by preferring
+ * the complete companion. When both companions are complete (or both incomplete)
+ * the survivor is the one that appears first in input order. Callers that
+ * depend on deterministic survivor selection should pre-sort by `createdAt`
+ * (or another stable key) before calling.
+ */
+export function deduplicateRunsByGroupId<T extends { config: unknown }>(
+  runs: ReadonlyArray<T>,
+  completenessOf?: (run: T) => boolean,
+): T[] {
+  if (completenessOf == null) {
+    const seenGroupIds = new Set<string>();
+    return runs.filter((run) => {
+      const groupId = getCoverageBatchGroupId(run.config);
+      if (groupId === null) return true;
+      if (seenGroupIds.has(groupId)) return false;
+      seenGroupIds.add(groupId);
+      return true;
+    });
+  }
+
+  // Two-pass: first index every run by groupId, then pick the survivor with
+  // a "prefer complete" rule. Ungrouped runs pass through.
+  const groups = new Map<string, T[]>();
+  const ungrouped: T[] = [];
+  for (const run of runs) {
+    const groupId = getCoverageBatchGroupId(run.config);
+    if (groupId === null) {
+      ungrouped.push(run);
+      continue;
+    }
+    const existing = groups.get(groupId) ?? [];
+    existing.push(run);
+    groups.set(groupId, existing);
+  }
+
+  const survivors: T[] = [...ungrouped];
+  for (const [, members] of groups) {
+    if (members.length === 0) continue;
+    const complete = members.find((member) => completenessOf(member));
+    survivors.push(complete ?? members[0]!);
+  }
+  return survivors;
+}
+
+export function computePerModelTrialCounts(
+  runs: ReadonlyArray<{ config: unknown; transcripts: ReadonlyArray<{ modelId: string }> }>,
+  defaultModelIds: readonly string[],
+  modelLabelById: ReadonlyMap<string, string>,
+): { minTrialCount: number | null; maxTrialCount: number | null; modelBreakdown: CoverageModelBreakdown[] | null } {
+  if (defaultModelIds.length === 0) {
+    return { minTrialCount: null, maxTrialCount: null, modelBreakdown: null };
+  }
+
+  // Caller is responsible for deduplicating paired runs before passing them here.
+  // Use deduplicateRunsByGroupId() at the call site when collecting runs across
+  // companion definitions for the same value pair.
+  //
+  // We count actual transcript rows per model rather than the planned
+  // `samplesPerScenario × runs-where-model-present` value. This keeps the
+  // displayed trial count consistent with what the aggregate analysis pipeline
+  // actually consumes (every transcript becomes a sample, including any
+  // duplicates from worker retries or races -- see
+  // aggregate-preparation.ts:202). If we kept the planned value, runs with
+  // duplicate transcripts would silently have larger effective sample sizes
+  // in analysis than the UI advertised.
+  const trialCountByModel = new Map<string, number>(
+    defaultModelIds.map((modelId) => [modelId, 0]),
+  );
+
+  for (const run of runs) {
+    for (const transcript of run.transcripts) {
+      if (trialCountByModel.has(transcript.modelId)) {
+        trialCountByModel.set(transcript.modelId, (trialCountByModel.get(transcript.modelId) ?? 0) + 1);
+      }
+    }
+  }
+
+  const modelBreakdown: CoverageModelBreakdown[] = defaultModelIds.map((modelId) => ({
+    modelId,
+    label: modelLabelById.get(modelId) ?? modelId,
+    trialCount: trialCountByModel.get(modelId) ?? 0,
+  }));
+
+  const counts = modelBreakdown.map((b) => b.trialCount);
+  const minTrialCount = Math.min(...counts);
+  const maxTrialCount = Math.max(...counts);
+
+  return { minTrialCount, maxTrialCount, modelBreakdown };
+}
+
+export function getCoverageBatchGroupId(runConfig: unknown): string | null {
+  const config = runConfig as {
+    jobChoiceBatchGroupId?: unknown;
+    pairedBatchGroupId?: unknown;
+  } | null;
+
+  const raw = typeof config?.jobChoiceBatchGroupId === 'string'
+    ? config.jobChoiceBatchGroupId
+    : typeof config?.pairedBatchGroupId === 'string'
+      ? config.pairedBatchGroupId
+      : null;
+
+  return raw != null && raw.trim().length > 0 ? raw.trim() : null;
+}
+
+/**
+ * Read the direction token off a Run's config. Returns null for missing,
+ * blank, or non-string `jobChoiceValueFirst`. Trimmed.
+ *
+ * Defensive against any non-object input (number, boolean, etc.); returns
+ * null without touching the value.
+ */
+export function getCoverageDirection(runConfig: unknown): string | null {
+  if (typeof runConfig !== 'object' || runConfig === null) return null;
+  const config = runConfig as { jobChoiceValueFirst?: unknown };
+  if (typeof config.jobChoiceValueFirst !== 'string') return null;
+  const trimmed = config.jobChoiceValueFirst.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+/**
+ * Compute per-cell counts using the directional model.
+ *
+ * Sums `batchCount` across companion definitions (unchanged semantics).
+ * Computes `pairedBatchCount = min(complete A-first, complete B-first)`
+ * by merging per-direction Sets across companion definitions and taking
+ * `min(set.size)` of the two directions. When >2 distinct directions
+ * appear in the merged map (data corruption), takes min of the two
+ * largest counts and emits a warning via `log.warn` (if provided).
+ *
+ * Computes `orphanedBatchCount = max - min` of the same two directional
+ * counts used for `pairedBatchCount`. When only one direction is present,
+ * the other side is treated as 0 and orphanedBatchCount equals the count
+ * of the present side.
+ *
+ * Tie-break for `primaryDefinitionId`: `(batchCount desc, directionCount desc, defId asc)`
+ * where `directionCount = directionalGroupsByDefinitionId.get(defId)?.size ?? 0`.
+ */
+export function selectPrimaryDefinitionCounts(
+  definitionIds: readonly string[],
+  batchCountByDefinitionId: ReadonlyMap<string, number>,
+  directionalGroupsByDefinitionId: ReadonlyMap<string, ReadonlyMap<string, ReadonlySet<string>>>,
+  valueA: string,
+  valueB: string,
+  log?: { warn: (obj: object, msg: string) => void },
+  cellKey?: string,
+): {
+  primaryDefinitionId: string | null;
+  batchCount: number;
+  pairedBatchCount: number;
+  orphanedBatchCount: number;
+  aFirstBatchCount: number;
+  bFirstBatchCount: number;
+} {
+  const uniqueDefinitionIds = Array.from(new Set(definitionIds));
+  if (uniqueDefinitionIds.length === 0) {
+    return {
+      primaryDefinitionId: null,
+      batchCount: 0,
+      pairedBatchCount: 0,
+      orphanedBatchCount: 0,
+      aFirstBatchCount: 0,
+      bFirstBatchCount: 0,
+    };
+  }
+
+  const directionCountFor = (defId: string): number =>
+    directionalGroupsByDefinitionId.get(defId)?.size ?? 0;
+
+  const primaryDefinitionId = uniqueDefinitionIds.reduce((best, defId) => {
+    const bestBatch = batchCountByDefinitionId.get(best) ?? 0;
+    const thisBatch = batchCountByDefinitionId.get(defId) ?? 0;
+    if (thisBatch > bestBatch) return defId;
+    if (thisBatch < bestBatch) return best;
+
+    const bestDirs = directionCountFor(best);
+    const thisDirs = directionCountFor(defId);
+    if (thisDirs > bestDirs) return defId;
+    if (thisDirs < bestDirs) return best;
+
+    return defId.localeCompare(best) < 0 ? defId : best;
+  }, uniqueDefinitionIds[0] ?? '');
+
+  const batchCount = uniqueDefinitionIds.reduce(
+    (total, defId) => total + (batchCountByDefinitionId.get(defId) ?? 0),
+    0,
+  );
+
+  // Merge per-direction Sets across companion definitions for this cell.
+  const merged = new Map<string, Set<string>>();
+  for (const defId of uniqueDefinitionIds) {
+    const defMap = directionalGroupsByDefinitionId.get(defId);
+    if (defMap == null) continue;
+    for (const [direction, groupKeys] of defMap) {
+      const existing = merged.get(direction) ?? new Set<string>();
+      for (const key of groupKeys) existing.add(key);
+      merged.set(direction, existing);
+    }
+  }
+
+  let pairedBatchCount: number;
+  let orphanedBatchCount: number;
+  if (merged.size === 0) {
+    pairedBatchCount = 0;
+    orphanedBatchCount = 0;
+  } else if (merged.size === 1) {
+    const onlyCount = Array.from(merged.values())[0]!.size;
+    pairedBatchCount = 0;
+    orphanedBatchCount = onlyCount;
+  } else if (merged.size === 2) {
+    const counts = Array.from(merged.values()).map((s) => s.size);
+    pairedBatchCount = Math.min(counts[0]!, counts[1]!);
+    orphanedBatchCount = Math.max(counts[0]!, counts[1]!) - pairedBatchCount;
+  } else {
+    // >2 distinct direction tokens — data corruption. Take min of the two
+    // largest counts and emit a warning. Do not throw; the operator should
+    // still see a number.
+    const sortedCounts = Array.from(merged.values())
+      .map((s) => s.size)
+      .sort((a, b) => b - a);
+    pairedBatchCount = Math.min(sortedCounts[0]!, sortedCounts[1]!);
+    orphanedBatchCount = sortedCounts[0]! - pairedBatchCount;
+    if (log != null) {
+      log.warn(
+        { cellKey, directions: Array.from(merged.keys()), definitionIds: uniqueDefinitionIds },
+        '>2 distinct jobChoiceValueFirst tokens in single coverage cell; using min of two largest',
+      );
+    }
+  }
+
+  const aFirstBatchCount = merged.get(valueA)?.size ?? 0;
+  const bFirstBatchCount = merged.get(valueB)?.size ?? 0;
+
+  return {
+    primaryDefinitionId: primaryDefinitionId === '' ? null : primaryDefinitionId,
+    batchCount,
+    pairedBatchCount,
+    orphanedBatchCount,
+    aFirstBatchCount,
+    bFirstBatchCount,
+  };
+}
+
+
+Context: domain-coverage-gql-types.ts
+/**
+ * Domain Coverage GQL Types
+ *
+ * Pothos objectRef implementations and shared types for the domainValueCoverage
+ * query. Extracted to keep domain-coverage.ts under the 400-line limit.
+ */
+
+import { builder } from '../builder.js';
+import {
+  formatTrialSignature,
+  isVnewSignature,
+  parseVnewTemperature,
+} from '@valuerank/shared/trial-signature';
+import { parseDefinitionVersion } from '../../utils/definition-version.js';
+import { parseTemperature } from '../../utils/temperature.js';
+import type { CoverageModelBreakdown } from './domain-coverage-utils.js';
+
+// ─── TypeScript types ─────────────────────────────────────────────────────────
+
+export type DomainValueCoverageCell = {
+  valueA: string;
+  valueB: string;
+  batchCount: number;
+  pairedBatchCount: number;
+  orphanedBatchCount: number;
+  aFirstBatchCount: number;
+  bFirstBatchCount: number;
+  /** Number of non-aggregate runs whose transcript count is less than expected. */
+  incompleteBatchCount: number;
+  definitionId: string | null;
+  definitionName: string | null;
+  aggregateRunId: string | null;
+  minTrialCount: number | null;
+  maxTrialCount: number | null;
+  modelBreakdown: CoverageModelBreakdown[] | null;
+};
+
+export type CoverageModelOption = {
+  modelId: string;
+  label: string;
+};
+
+export type DomainValueCoverageResult = {
+  domainId: string;
+  values: string[];
+  cells: DomainValueCoverageCell[];
+  availableModels: CoverageModelOption[];
+};
+
+// ─── Pothos GQL objectRefs ────────────────────────────────────────────────────
+
+const CoverageModelOptionRef = builder
+  .objectRef<CoverageModelOption>('CoverageModelOption')
+  .implement({
+    fields: (t) => ({
+      modelId: t.exposeString('modelId'),
+      label: t.exposeString('label'),
+    }),
+  });
+
+const CoverageModelBreakdownRef = builder
+  .objectRef<CoverageModelBreakdown>('CoverageModelBreakdown')
+  .implement({
+    fields: (t) => ({
+      modelId: t.exposeString('modelId'),
+      label: t.exposeString('label'),
+      trialCount: t.exposeInt('trialCount'),
+    }),
+  });
+
+const DomainValueCoverageCellRef = builder
+  .objectRef<DomainValueCoverageCell>('DomainValueCoverageCell')
+  .implement({
+    fields: (t) => ({
+      valueA: t.exposeString('valueA'),
+      valueB: t.exposeString('valueB'),
+      batchCount: t.exposeInt('batchCount', {
+        description:
+          'Count of fully-complete non-aggregate runs for this value pair. ' +
+          'A run is complete when every selected model has at least one ' +
+          'transcript at every (scenario × sampleIndex) slot. samplesPerScenario ' +
+          'does not multiply this count -- a complete run contributes 1 ' +
+          'regardless of how many samples per scenario were planned. ' +
+          'Aggregate runs are excluded.',
+      }),
+      pairedBatchCount: t.exposeInt('pairedBatchCount', {
+        description:
+          'Count of pairable analysis-ready batches for this value pair, ' +
+          'computed as min(complete A-first non-aggregate runs, ' +
+          'complete B-first non-aggregate runs) where direction is read from ' +
+          'config.jobChoiceValueFirst. A launch where only one direction completed ' +
+          'contributes 0 here (the surviving complete run still appears in batchCount). ' +
+          'Runs without a recognizable direction token are excluded from both sides. ' +
+          'See docs/canonical-glossary.md "Paired Batch" for full semantic.',
+      }),
+      orphanedBatchCount: t.exposeInt('orphanedBatchCount', {
+        description:
+          'Count of unmatched directional runs for this value pair, computed as ' +
+          'max(complete A-first runs, complete B-first runs) - ' +
+          'min(complete A-first runs, complete B-first runs). When both directions ' +
+          'are equal this is 0; when only one direction has runs this is the count ' +
+          'of that side. Runs without a recognizable direction token are excluded.',
+      }),
+      aFirstBatchCount: t.exposeInt('aFirstBatchCount', {
+        description:
+          'Count of complete A-first runs for this value pair after model-set filtering. ' +
+          'This is the filtered directional count for the first value in the pair.',
+      }),
+      bFirstBatchCount: t.exposeInt('bFirstBatchCount', {
+        description:
+          'Count of complete B-first runs for this value pair after model-set filtering. ' +
+          'This is the filtered directional count for the second value in the pair.',
+      }),
+      incompleteBatchCount: t.exposeInt('incompleteBatchCount', {
+        description:
+          'Count of non-aggregate runs that expect transcripts but are ' +
+          'missing one or more (model × scenario × sampleIndex) slots. ' +
+          'Per-run; samplesPerScenario does not multiply this count. ' +
+          'Aggregate runs and runs with zero expected slots are excluded.',
+      }),
+      definitionId: t.exposeString('definitionId', { nullable: true }),
+      definitionName: t.exposeString('definitionName', { nullable: true }),
+      aggregateRunId: t.exposeString('aggregateRunId', { nullable: true }),
+      minTrialCount: t.exposeInt('minTrialCount', { nullable: true }),
+      maxTrialCount: t.exposeInt('maxTrialCount', { nullable: true }),
+      modelBreakdown: t.expose('modelBreakdown', {
+        type: [CoverageModelBreakdownRef],
+        nullable: true,
+      }),
+    }),
+  });
+
+export const DomainValueCoverageResultRef = builder
+  .objectRef<DomainValueCoverageResult>('DomainValueCoverageResult')
+  .implement({
+    fields: (t) => ({
+      domainId: t.exposeString('domainId'),
+      values: t.exposeStringList('values'),
+      cells: t.field({
+        type: [DomainValueCoverageCellRef],
+        resolve: (parent) => parent.cells,
+      }),
+      availableModels: t.field({
+        type: [CoverageModelOptionRef],
+        resolve: (parent) => parent.availableModels,
+      }),
+    }),
+  });
+
+// ─── Signature helpers ────────────────────────────────────────────────────────
+
+export function formatRunSignature(config: unknown): string {
+  const runConfig = config as {
+    definitionSnapshot?: {
+      _meta?: { definitionVersion?: unknown };
+      version?: unknown;
+    };
+    temperature?: unknown;
+  } | null;
+  const definitionVersion =
+    parseDefinitionVersion(runConfig?.definitionSnapshot?._meta?.definitionVersion) ??
+    parseDefinitionVersion(runConfig?.definitionSnapshot?.version);
+  const temperature = parseTemperature(runConfig?.temperature);
+  return formatTrialSignature(definitionVersion, temperature);
+}
+
+export function runMatchesSignature(runConfig: unknown, signature: string): boolean {
+  if (isVnewSignature(signature)) {
+    return (
+      parseTemperature((runConfig as { temperature?: unknown } | null)?.temperature) ===
+      parseVnewTemperature(signature)
+    );
+  }
+  return formatRunSignature(runConfig) === signature;
+}
+
+
+Context: domain-coverage.ts
+/**
+ * Domain Coverage Query
+ *
+ * Returns a value-pair coverage matrix for a domain: how many completed
+ * trial batches (runs) exist for each Schwartz value pair vignette.
+ * Scoped to the same 10-value set used in domain analysis.
+ */
+
+import { builder } from '../builder.js';
+import { db, resolveDefinitionContent } from '@valuerank/db';
+import { AppError } from '@valuerank/shared';
+
+import {
+  COVERAGE_VALUE_KEYS,
+  type CoverageValueKey,
+  extractValuePair,
+  getCoverageBatchGroupId,
+  getCoverageDirection,
+  selectPrimaryDefinitionCounts,
+  computePerModelTrialCounts,
+  deduplicateRunsByGroupId,
+} from './domain-coverage-utils.js';
+import { isRunComplete } from '../../services/run/coverage-completeness.js';
+import { resolveEffectiveDefaultModelIds } from './domain/shared.js';
+import {
+  DomainValueCoverageResultRef,
+  type DomainValueCoverageCell,
+  type CoverageModelOption,
+  runMatchesSignature,
+} from './domain-coverage-gql-types.js';
+
+const VALUE_PAIR_RESOLVE_CHUNK_SIZE = 20;
+
+builder.queryField('domainValueCoverage', (t) =>
+  t.field({
+    type: DomainValueCoverageResultRef,
+    nullable: true,
+    description: `
+      Returns a Schwartz value-pair coverage matrix for a domain.
+
+      Each cell shows how many completed trial batches (runs) exist for the vignette
+      that tests that pair of values in conflict. Optionally filtered to count only
+      runs that included the specified model IDs.
+
+      The matrix is symmetric: each unique value pair appears once, with the cell key
+      sorted alphabetically (valueA < valueB). Diagonal cells are omitted.
+    `,
+    args: {
+      domainId: t.arg.id({
+        required: true,
+        description: 'Domain to compute coverage for',
+      }),
+      modelIds: t.arg.stringList({
+        required: false,
+        description: 'If provided, only count runs that included at least one of these model IDs',
+      }),
+      signature: t.arg.string({
+        required: false,
+        description: 'If provided, only count completed runs matching this trial signature',
+      }),
+    },
+    resolve: async (_root, args, ctx) => {
+      const domainId = String(args.domainId);
+      const filterModelIds = args.modelIds?.map(String) ?? [];
+      const selectedSignature = typeof args.signature === 'string' && args.signature.trim() !== ''
+        ? args.signature.trim()
+        : null;
+
+      ctx.log.debug({ domainId, filterModelIds, selectedSignature }, 'Computing domain value coverage');
+
+      const domain = await db.domain.findUnique({ where: { id: domainId }, select: { id: true, defaultModelIds: true } });
+      if (!domain) return null;
+
+      // Resolve effective model IDs: use domain-specific list if set, otherwise fall back
+      // to globally defaulted models (isDefault=true, ACTIVE) from the Models settings page.
+      const effectiveModelIds = await resolveEffectiveDefaultModelIds(domain.defaultModelIds);
+
+      // Pre-fetch labels for effective models so we can populate model breakdown
+      const defaultModelLabelById = new Map<string, string>();
+      if (effectiveModelIds.length > 0) {
+        const defaultModelRows = await db.llmModel.findMany({
+          where: { modelId: { in: effectiveModelIds } },
+          select: { modelId: true, displayName: true },
+        });
+        for (const row of defaultModelRows) {
+          defaultModelLabelById.set(row.modelId, row.displayName);
+        }
+      }
+
+      // Fetch all non-deleted definitions (need IDs to resolve content)
+      const definitions = await db.definition.findMany({
+        where: { domainId, deletedAt: null },
+        select: { id: true, name: true },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      // Map definition ID -> value pair (only those with recognized canonical pair)
+      type DefValuePair = { valueA: CoverageValueKey; valueB: CoverageValueKey; name: string };
+      const pairByDefinitionId = new Map<string, DefValuePair>();
+      // Map directional pair key -> definition IDs (to detect multi-vignette cells)
+      const definitionsByPairKey = new Map<string, string[]>();
+
+      // Resolve definition contents in chunks to handle inheritance
+      for (let offset = 0; offset < definitions.length; offset += VALUE_PAIR_RESOLVE_CHUNK_SIZE) {
+        const batch = definitions.slice(offset, offset + VALUE_PAIR_RESOLVE_CHUNK_SIZE);
+        const settled = await Promise.allSettled(
+          batch.map(async (def) => {
+            const resolvedContent = (await resolveDefinitionContent(def.id) as { resolvedContent: unknown }).resolvedContent;
+            const pair = extractValuePair(resolvedContent);
+            if (pair == null) return;
+
+            pairByDefinitionId.set(def.id, { ...pair, name: def.name ?? '' });
+            const key = `${pair.valueA}::${pair.valueB}`;
+            const existing = definitionsByPairKey.get(key) ?? [];
+            existing.push(def.id);
+            definitionsByPairKey.set(key, existing);
+          })
+        );
+        settled.forEach((result, idx) => {
+          if (result.status === 'rejected') {
+            ctx.log.error(
+              { err: result.reason as unknown, definitionId: batch[idx]?.id },
+              'Failed to resolve definition content for coverage grid'
+            );
+          }
+        });
+      }
+
+      // Count completed runs per definition, optionally filtered by signature and model
+      const definitionIds = Array.from(pairByDefinitionId.keys());
+      const batchCountByDefinitionId = new Map<string, number>();
+      // Per-definition map: direction token -> Set<groupKey> where groupKey is
+      // the run's jobChoiceBatchGroupId (collapses retry duplicates within a
+      // launch group) or "__ungrouped__:<runId>" so each ungrouped run still
+      // counts once. Drives the new pairedBatchCount = min(A-first, B-first).
+      const directionalGroupsByDefinitionId =
+        new Map<string, Map<string, Set<string>>>();
+      const latestMatchingRunIdByDefinitionId = new Map<string, string>();
+      const latestAggregateRunIdByDefinitionId = new Map<string, string>();
+      const incompleteBatchCountByDefinitionId = new Map<string, number>();
+      const signatureScopedRunsByDefinitionId = new Map<string, Array<{
+        id: string;
+        definitionId: string;
+        config: unknown;
+        transcripts: Array<{ modelId: string; scenarioId: string | null; sampleIndex: number }>;
+        scenarioIds: string[];
+      }>>();
+      // Non-aggregate runs per definition (for per-model trial count computation)
+      const nonAggregateRunsByDefinitionId = new Map<string, Array<{
+        config: unknown;
+        transcripts: Array<{ modelId: string; scenarioId: string | null; sampleIndex: number }>;
+        scenarioIds: string[];
+      }>>();
+
+      if (definitionIds.length > 0) {
+        const completedRuns = await db.run.findMany({
+          where: {
+            definitionId: { in: definitionIds },
+            status: 'COMPLETED',
+            deletedAt: null,
+          },
+          orderBy: [{ definitionId: 'asc' }, { createdAt: 'desc' }],
+          select: {
+            id: true,
+            definitionId: true,
+            createdAt: true,
+            config: true,
+            transcripts: {
+              where: { deletedAt: null },
+              select: { modelId: true, scenarioId: true, sampleIndex: true },
+            },
+            scenarioSelections: {
+              select: { scenarioId: true },
+            },
+          },
+        });
+
+        const signatureScopedRuns = selectedSignature === null
+          ? completedRuns
+          : completedRuns.filter((run) => runMatchesSignature(run.config, selectedSignature));
+
+        for (const run of signatureScopedRuns) {
+          // Per the canonical glossary (docs/canonical-glossary.md), a `Batch` is
+          // one fully-complete run -- every selected model has a transcript at
+          // every (scenarioId × sampleIndex) slot. samplesPerScenario does not
+          // multiply the count. Aggregate runs are excluded from both batch
+          // and incomplete-batch counts (they are rollup records, not data).
+          //
+          // A COMPLETED run with null/malformed `config` or no `models` array
+          // is a data corruption signal; surface it instead of silently
+          // skipping. `samplesPerScenario` and `isAggregate` remain optional.
+          if (run.config === null || typeof run.config !== 'object') {
+            throw new AppError(
+              `Run ${run.id} has null or non-object config; cannot compute coverage`,
+              'RUN_CONFIG_INVALID',
+              500,
+              { runId: run.id },
+            );
+          }
+          const config = run.config as {
+            isAggregate?: boolean;
+            models?: unknown;
+            samplesPerScenario?: unknown;
+          };
+          const scenarioIds = run.scenarioSelections.map((s) => s.scenarioId);
+          const runWithScenarios = {
+            id: run.id,
+            definitionId: run.definitionId,
+            config: run.config,
+            transcripts: run.transcripts,
+            scenarioIds,
+          };
+          const existingRuns = signatureScopedRunsByDefinitionId.get(run.definitionId) ?? [];
+          existingRuns.push(runWithScenarios);
+          signatureScopedRunsByDefinitionId.set(run.definitionId, existingRuns);
+
+          const isAggregateRun = config.isAggregate === true;
+          if (isAggregateRun) {
+            if (!latestAggregateRunIdByDefinitionId.has(run.definitionId)) {
+              latestAggregateRunIdByDefinitionId.set(run.definitionId, run.id);
+            }
+            continue;
+          }
+
+          const models = Array.isArray(config.models)
+            ? config.models.filter((m): m is string => typeof m === 'string' && m.length > 0)
+            : null;
+          const matchesEffectiveModelSet = effectiveModelIds.length === 0
+            || (models !== null && effectiveModelIds.every((id) => models.includes(id)));
+          if (!matchesEffectiveModelSet) {
+            continue;
+          }
+
+          // Apply the explicit model-ID filter symmetrically: a run that doesn't
+          // match contributes to neither bucket. Without this, incompleteBatchCount
+          // would mention runs that batchCount cannot, breaking the "exactly one
+          // bucket" invariant.
+          const matchesModelFilter = filterModelIds.length === 0
+            || run.transcripts.some((transcript) => filterModelIds.includes(transcript.modelId));
+          if (!matchesModelFilter) continue;
+
+          if (!latestMatchingRunIdByDefinitionId.has(run.definitionId)) {
+            latestMatchingRunIdByDefinitionId.set(run.definitionId, run.id);
+          }
+
+          // Track non-aggregate runs for per-model trial count computation.
+          const nonAggregateRuns = nonAggregateRunsByDefinitionId.get(run.definitionId) ?? [];
+          nonAggregateRuns.push({ config: run.config, transcripts: run.transcripts, scenarioIds });
+          nonAggregateRunsByDefinitionId.set(run.definitionId, nonAggregateRuns);
+
+          // Determine completeness using the existing helper. A run is complete
+          // iff every (scenarioId × modelId × sampleIndex) slot has at least
+          // one transcript. Extra transcripts in a slot do NOT break
+          // completeness; only missing slots do.
+          if (models === null) {
+            throw new AppError(
+              `Run ${run.id} config has no models array; cannot compute coverage`,
+              'RUN_CONFIG_INVALID',
+              500,
+              { runId: run.id },
+            );
+          }
+          if (models.length === 0) {
+            throw new AppError(
+              `Run ${run.id} has empty or invalid models array`,
+              'RUN_CONFIG_INVALID',
+              500,
+              { runId: run.id },
+            );
+          }
+          const rawSamples = config.samplesPerScenario;
+          const samplesPerScenario = typeof rawSamples === 'number' ? rawSamples : null;
+          const existingTranscripts = run.transcripts
+            .filter((t): t is { scenarioId: string; modelId: string; sampleIndex: number } => t.scenarioId !== null);
+          const complete = isRunComplete({
+            scenarioIds,
+            models,
+            samplesPerScenario,
+            existingTranscripts,
+          });
+
+          if (!complete) {
+            incompleteBatchCountByDefinitionId.set(
+              run.definitionId,
+              (incompleteBatchCountByDefinitionId.get(run.definitionId) ?? 0) + 1,
+            );
+            continue;
+          }
+
+          // Run is complete: contribute exactly 1 to batchCount regardless of
+          // samplesPerScenario.
+          batchCountByDefinitionId.set(
+            run.definitionId,
+            (batchCountByDefinitionId.get(run.definitionId) ?? 0) + 1,
+          );
+
+          // pairedBatchCount semantic: count complete A-first vs B-first runs
+          // independently per the direction token in config.jobChoiceValueFirst.
+          // The Set<groupKey> collapses retry duplicates that share the same
+          // launch group; ungrouped runs use a unique sentinel so they each
+          // count once. Runs with no recognizable direction token are skipped
+          // here (they still count toward batchCount above).
+          const direction = getCoverageDirection(run.config);
+          if (direction !== null) {
+            const launchGroupId = getCoverageBatchGroupId(run.config);
+            const groupKey = launchGroupId ?? `__ungrouped__:${run.id}`;
+            const defMap = directionalGroupsByDefinitionId.get(run.definitionId)
+              ?? new Map<string, Set<string>>();
+            const dirSet = defMap.get(direction) ?? new Set<string>();
+            dirSet.add(groupKey);
+            defMap.set(direction, dirSet);
+            directionalGroupsByDefinitionId.set(run.definitionId, defMap);
+          }
+        }
+      }
+
+      const availableModelIds = new Set<string>();
+      for (const runs of signatureScopedRunsByDefinitionId.values()) {
+        for (const run of runs) {
+          for (const transcript of run.transcripts) {
+            availableModelIds.add(transcript.modelId);
+          }
+        }
+      }
+
+      const modelDetailRows =
+        availableModelIds.size > 0
+          ? await db.llmModel.findMany({
+            where: { modelId: { in: Array.from(availableModelIds) } },
+            select: { modelId: true, displayName: true },
+            orderBy: { displayName: 'asc' },
+          })
+          : [];
+
+      const availableModels: CoverageModelOption[] = modelDetailRows.map((m) => ({
+        modelId: m.modelId,
+        label: m.displayName,
+      }));
+
+      // Build the symmetric 45-cell matrix (one cell per unique sorted pair)
+      const values = [...COVERAGE_VALUE_KEYS] as string[];
+      const cells: DomainValueCoverageCell[] = [];
+
+      for (const valueA of COVERAGE_VALUE_KEYS) {
+        for (const valueB of COVERAGE_VALUE_KEYS) {
+          // Only emit sorted pairs: skip diagonal and reversed pairs
+          if (valueA.localeCompare(valueB) >= 0) continue;
+
+          const key = `${valueA}::${valueB}`;
+          const defIdsForPair = definitionsByPairKey.get(key) ?? [];
+
+          if (defIdsForPair.length === 0) {
+            cells.push({
+              valueA,
+              valueB,
+              batchCount: 0,
+              pairedBatchCount: 0,
+              orphanedBatchCount: 0,
+              aFirstBatchCount: 0,
+              bFirstBatchCount: 0,
+              incompleteBatchCount: 0,
+              definitionId: null,
+              definitionName: null,
+              aggregateRunId: null,
+              minTrialCount: null,
+              maxTrialCount: null,
+              modelBreakdown: null,
+            });
+          } else {
+            // Use the total counts across all definitions for the visible cell, but
+            // still choose one stable definition for the analysis link target.
+            const {
+              primaryDefinitionId,
+              batchCount,
+              pairedBatchCount,
+              orphanedBatchCount,
+              aFirstBatchCount,
+              bFirstBatchCount,
+            } = selectPrimaryDefinitionCounts(
+              defIdsForPair,
+              batchCountByDefinitionId,
+              directionalGroupsByDefinitionId,
+              valueA,
+              valueB,
+              ctx.log,
+              `${valueA}::${valueB}`,
+            );
+            const primaryDefId = primaryDefinitionId ?? '';
+            const primaryPair = pairByDefinitionId.get(primaryDefId);
+            const aggregateRunId = primaryDefId === ''
+              ? null
+              : (latestAggregateRunIdByDefinitionId.get(primaryDefId)
+                ?? latestMatchingRunIdByDefinitionId.get(primaryDefId)
+                ?? null);
+
+            // Sum incompleteBatchCount across all definitions for this pair
+            const incompleteBatchCount = defIdsForPair.reduce(
+              (sum, defId) => sum + (incompleteBatchCountByDefinitionId.get(defId) ?? 0),
+              0,
+            );
+
+            // Compute per-model trial counts across all definitions for this pair.
+            // Deduplicate by group ID first: A-first and B-first companion definitions
+            // share the same jobChoiceBatchGroupId, so flatMapping across both would
+            // double-count each paired batch.
+            //
+            // When companions have different completeness, prefer the complete one
+            // for the trial-count computation. This is read-time consistency with
+            // batchCount: the surviving run is the one whose data feeds analysis.
+            //
+            // Intentionally unchanged by the directional-pairedBatchCount refactor:
+            // the trial-count path keeps the surviving-companion semantic so that
+            // healthy paired batches do not double their displayed trial counts.
+            // See spec §5.7 ("Per-model trial counts — intentionally unchanged").
+            const allNonAggregateRunsForPair = deduplicateRunsByGroupId(
+              defIdsForPair.flatMap((defId) => nonAggregateRunsByDefinitionId.get(defId) ?? []),
+              (run) => {
+                const configModels = (run.config as { models?: unknown } | null)?.models;
+                const models = Array.isArray(configModels)
+                  ? configModels.filter((m): m is string => typeof m === 'string' && m.length > 0)
+                  : [];
+                const rawSamples = (run.config as { samplesPerScenario?: unknown } | null)?.samplesPerScenario;
+                const existing = run.transcripts
+                  .filter((t): t is { scenarioId: string; modelId: string; sampleIndex: number } => t.scenarioId !== null);
+                return isRunComplete({
+                  scenarioIds: run.scenarioIds,
+                  models,
+                  samplesPerScenario: typeof rawSamples === 'number' ? rawSamples : null,
+                  existingTranscripts: existing,
+                });
+              },
+            );
+            const { minTrialCount, maxTrialCount, modelBreakdown } = computePerModelTrialCounts(
+              allNonAggregateRunsForPair,
+              effectiveModelIds,
+              defaultModelLabelById,
+            );
+
+            cells.push({
+              valueA,
+              valueB,
+              batchCount,
+              pairedBatchCount,
+              orphanedBatchCount,
+              aFirstBatchCount,
+              bFirstBatchCount,
+              incompleteBatchCount,
+              definitionId: primaryDefId !== '' ? primaryDefId : null,
+              definitionName: primaryPair?.name ?? null,
+              aggregateRunId,
+              minTrialCount,
+              maxTrialCount,
+              modelBreakdown,
+            });
+          }
+        }
+      }
+
+      ctx.log.debug({ domainId, cellCount: cells.length }, 'Domain value coverage computed');
+      return { domainId, values, cells, availableModels };
+    },
+  })
+);
+
+
+Context: domainCoverage.ts
+import type {
+  DomainValueCoverageQuery as GeneratedDomainValueCoverageQuery,
+  DomainValueCoverageLegacyQuery as GeneratedDomainValueCoverageLegacyQuery,
+  DomainValueCoverageQueryVariables as GeneratedDomainValueCoverageQueryVariables,
+} from '../../generated/graphql';
+
+// ============================================================================
+// QUERIES
+// ============================================================================
+
+export { DomainValueCoverageDocument as DOMAIN_VALUE_COVERAGE_QUERY } from '../../generated/graphql';
+export { DomainValueCoverageLegacyDocument as DOMAIN_VALUE_COVERAGE_QUERY_LEGACY } from '../../generated/graphql';
+
+// ============================================================================
+// TYPES
+// ============================================================================
+
+export type CoverageModelBreakdownItem = {
+  modelId: string;
+  label: string;
+  trialCount: number;
+};
+
+export type DomainValueCoverageCell = {
+  valueA: string;
+  valueB: string;
+  batchCount: number;
+  pairedBatchCount: number;
+  orphanedBatchCount: number;
+  aFirstBatchCount: number;
+  bFirstBatchCount: number;
+  incompleteBatchCount: number;
+  definitionId: string | null;
+  definitionName: string | null;
+  aggregateRunId: string | null;
+  minTrialCount: number | null;
+  maxTrialCount: number | null;
+  modelBreakdown: CoverageModelBreakdownItem[] | null;
+};
+
+export type CoverageModelOption = {
+  modelId: string;
+  label: string;
+};
+
+export type DomainValueCoverageResult = {
+  domainId: string;
+  values: string[];
+  cells: DomainValueCoverageCell[];
+  availableModels: CoverageModelOption[];
+};
+
+// ============================================================================
+// RESULT TYPES
+// ============================================================================
+
+export type DomainValueCoverageQueryVariables = GeneratedDomainValueCoverageQueryVariables;
+export type DomainValueCoverageQueryResult = GeneratedDomainValueCoverageQuery;
+export type DomainValueCoverageLegacyQueryResult = GeneratedDomainValueCoverageLegacyQuery;
+
+
+Context: CoverageCell.tsx
+import { useState, type SVGProps } from 'react';
+import { Link } from 'react-router-dom';
+import { ChevronRight, FileSearch } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '../ui/Popover';
+import { cn } from '../../lib/utils';
+import { VALUE_LABELS } from './domainAnalysisData';
+
+type CoverageModelBreakdownItem = {
+  modelId: string;
+  label: string;
+  trialCount: number;
+};
+
+type CoverageCellProps = {
+  valueA: string;
+  valueB: string;
+  batchCount: number;
+  pairedBatchCount: number;
+  orphanedBatchCount: number;
+  aFirstBatchCount: number;
+  bFirstBatchCount: number;
+  incompleteBatchCount?: number | null;
+  definitionId: string | null;
+  aggregateRunId: string | null;
+  modelBreakdown?: CoverageModelBreakdownItem[] | null;
+};
+
+export function CoverageCell({
+  valueA,
+  valueB,
+  batchCount,
+  pairedBatchCount,
+  orphanedBatchCount,
+  aFirstBatchCount,
+  bFirstBatchCount,
+  incompleteBatchCount,
+  definitionId,
+  aggregateRunId,
+  modelBreakdown,
+}: CoverageCellProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const isDiagonal = valueA === valueB;
+  const hasVignette = definitionId !== null;
+  const hasIncompleteBatches = (incompleteBatchCount ?? 0) > 0;
+  const displayCount = pairedBatchCount > 0 ? pairedBatchCount : batchCount;
+  const hasMismatch = aFirstBatchCount !== bFirstBatchCount;
+  const visibleLabel = isDiagonal || !hasVignette ? '—' : displayCount.toLocaleString();
+  const xLabel = VALUE_LABELS[valueB as keyof typeof VALUE_LABELS] ?? valueB;
+  const yLabel = VALUE_LABELS[valueA as keyof typeof VALUE_LABELS] ?? valueA;
+  const batchLabel = pairedBatchCount > 0
+    ? (displayCount === 1 ? 'paired batch' : 'paired batches')
+    : (displayCount === 1 ? 'batch' : 'batches');
+
+  const countForColor = displayCount;
+
+  let bgColorClass = 'bg-gray-50';
+  if (isDiagonal) {
+    bgColorClass =
+      'bg-[url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPjxwYXRoIGQ9Ik0wLDggTDgsMCBMMCw4IFoiIHN0cm9rZT0iI2U1ZTdlYiIgc3Ryb2tlLXdpZHRoPSIxIi8+PC9zdmc+")] bg-gray-100';
+  } else if (!hasVignette) {
+    bgColorClass = 'bg-gray-50';
+  } else if (countForColor < 3) {
+    bgColorClass = 'bg-rose-100 hover:bg-rose-200 transition-colors text-rose-900';
+  } else if (countForColor < 10) {
+    bgColorClass = 'bg-amber-100 hover:bg-amber-200 transition-colors text-amber-900';
+  } else {
+    bgColorClass = 'bg-emerald-500 hover:bg-emerald-600 transition-colors text-white';
+  }
+
+  let tooltipBreakdown: string | undefined;
+  if (hasMismatch) {
+    tooltipBreakdown = `A-first: ${aFirstBatchCount} ${aFirstBatchCount === 1 ? 'batch' : 'batches'}\nB-first: ${bFirstBatchCount} ${bFirstBatchCount === 1 ? 'batch' : 'batches'}`;
+  } else if (modelBreakdown != null && modelBreakdown.length > 0) {
+    tooltipBreakdown = modelBreakdown
+      .map((b) => `${b.label}: ${b.trialCount} trial${b.trialCount === 1 ? '' : 's'}`)
+      .join('\n');
+  }
+
+  return (
+    <Popover open={isOpen} onOpenChange={setIsOpen}>
+      <PopoverTrigger asChild>
+        {/* eslint-disable-next-line react/forbid-elements */}
+        <button
+          type="button"
+          disabled={isDiagonal}
+          title={tooltipBreakdown}
+          aria-label={
+            isDiagonal
+              ? 'Not applicable'
+              : !hasVignette
+                ? `${xLabel} versus ${yLabel}: no vignette`
+                : hasMismatch
+                  ? `${xLabel} versus ${yLabel}: ${displayCount} ${batchLabel}; A-first ${aFirstBatchCount}, B-first ${bFirstBatchCount}`
+                  : `${xLabel} versus ${yLabel}: ${displayCount} ${batchLabel}`
+          }
+          className={cn(
+            'relative w-full h-full min-h-[48px] p-2 flex flex-col items-center justify-center text-sm font-medium border rounded-none focus:ring-0 focus:ring-offset-0',
+            hasMismatch ? 'border-orange-400 border-2' : 'border-gray-100',
+            bgColorClass,
+            isDiagonal && 'cursor-not-allowed text-transparent font-normal',
+            !isDiagonal && !hasVignette && 'text-gray-500 cursor-pointer hover:bg-gray-100',
+            hasVignette && countForColor < 3 && 'text-rose-900',
+            hasVignette && countForColor >= 3 && countForColor < 10 && 'text-amber-900'
+          )}
+        >
+          {visibleLabel}
+          {hasMismatch && (
+            <span className="text-[10px] text-orange-600 font-normal leading-none mt-0.5" aria-label="direction imbalance across batches">
+              ⚠
+            </span>
+          )}
+          {hasIncompleteBatches && (
+            <span
+              className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-400"
+              aria-label={`${incompleteBatchCount ?? 0} incomplete batch${(incompleteBatchCount ?? 0) === 1 ? '' : 'es'}`}
+            />
+          )}
+        </button>
+      </PopoverTrigger>
+      {!isDiagonal && (
+        <PopoverContent
+          className="w-64 p-0 shadow-lg border-gray-200"
+          align="center"
+          sideOffset={5}
+        >
+          <div className="p-3 border-b border-gray-100 bg-gray-50/50 rounded-t-md">
+            {hasVignette ? (
+              <>
+                <div className="mt-2 text-xs text-gray-600 flex items-center">
+                  <span
+                    className={cn(
+                      'inline-block w-2 h-2 rounded-full mr-1.5',
+                      countForColor < 3
+                        ? 'bg-rose-500'
+                        : countForColor < 10
+                          ? 'bg-amber-500'
+                          : 'bg-emerald-500'
+                    )}
+                  />
+                  {displayCount} {batchLabel}
+                </div>
+                {hasMismatch && (
+                  <div className="mt-2 rounded border border-orange-200 bg-orange-50 px-2 py-1.5 text-xs text-orange-900">
+                    <div className="font-medium text-orange-800">Direction imbalance</div>
+                    <div className="mt-1 flex items-center justify-between gap-3">
+                      <span className="text-orange-700">A-first</span>
+                      <span className="font-medium">{aFirstBatchCount}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-orange-700">B-first</span>
+                      <span className="font-medium">{bFirstBatchCount}</span>
+                    </div>
+                    {orphanedBatchCount > 0 && (
+                      <div className="mt-1 text-[11px] text-orange-700">
+                        {orphanedBatchCount} unpaired directional batch{orphanedBatchCount === 1 ? '' : 'es'}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {modelBreakdown != null && modelBreakdown.length > 0 && (
+                  <div className="mt-2 space-y-0.5">
+                    {modelBreakdown.map((b) => (
+                      <div key={b.modelId} className="flex items-center justify-between text-xs text-gray-600">
+                        <span className="truncate mr-2">{b.label}</span>
+                        <span className="font-medium">{b.trialCount}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {hasIncompleteBatches && (
+                  <div className="mt-2 flex items-center gap-1.5 text-xs text-amber-700">
+                    <span className="inline-block w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
+                    {incompleteBatchCount ?? 0} incomplete batch{(incompleteBatchCount ?? 0) === 1 ? '' : 'es'} — not all transcripts generated
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="mt-2 text-xs text-gray-500">No batch for this value pair</div>
+            )}
+          </div>
+
+          <div className="p-1 flex flex-col">
+            {hasVignette && aggregateRunId !== null && (
+              <Link
+                to={`/analysis/${aggregateRunId}?tab=overview&mode=single&coverageBatchCount=${batchCount}&coveragePairedBatchCount=${pairedBatchCount}`}
+                className="flex items-center justify-between px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-sm w-full text-left"
+                onClick={() => setIsOpen(false)}
+              >
+                <span className="flex items-center">
+                  <FileSearch className="w-4 h-4 mr-2 text-gray-400" />
+                  View Vignette Analysis
+                </span>
+                <ChevronRight className="w-4 h-4 text-gray-400" />
+              </Link>
+            )}
+
+            {hasVignette && (
+              <Link
+                to={`/definitions/${definitionId}/start-paired-batch`}
+                state={{
+                  returnLabel: 'Back to Value coverage',
+                  returnTo: `${window.location.pathname}${window.location.search}`,
+                }}
+                className="flex items-center justify-between px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-sm w-full text-left"
+                onClick={() => setIsOpen(false)}
+              >
+                <span className="flex items-center">
+                  <PlayIcon className="w-4 h-4 mr-2 text-teal-600" />
+                  Start Paired Batch
+                </span>
+                <ChevronRight className="w-4 h-4 text-gray-400" />
+              </Link>
+            )}
+          </div>
+        </PopoverContent>
+      )}
+    </Popover>
+  );
+}
+
+function PlayIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    >
+      <polygon points="6 3 20 12 6 21 6 3" />
+    </svg>
+  );
+}
+
+
+Context: CoverageMatrix.tsx
+import { forwardRef, useEffect, useMemo, useState } from 'react';
+import { useQuery } from 'urql';
+import { ErrorMessage } from '../ui/ErrorMessage';
+import { Loading } from '../ui/Loading';
+import {
+  DOMAIN_VALUE_COVERAGE_QUERY,
+  DOMAIN_VALUE_COVERAGE_QUERY_LEGACY,
+  type DomainValueCoverageQueryResult,
+  type DomainValueCoverageQueryVariables,
+} from '../../api/operations/domainCoverage';
+import {
+  DOMAIN_AVAILABLE_SIGNATURES_QUERY,
+  type DomainAvailableSignature,
+  type DomainAvailableSignaturesQueryResult,
+} from '../../api/operations/domainAnalysis';
+import { VALUE_LABELS } from './domainAnalysisData';
+import { formatDisplayLabel } from '../../utils/displayLabels';
+import { cn } from '../../lib/utils';
+import { getCanonicalDimension } from '@valuerank/shared';
+import { CoverageCell } from './CoverageCell';
+import { selectPreferredSignature } from './coverageMatrixHelpers';
+
+type CategoryGroup = {
+  name: string;
+  color: string;
+  values: string[];
+};
+
+/**
+ * CoverageMatrix — embeddable coverage matrix component.
+ *
+ * Accepts a domainId prop; manages its own signature and model state internally.
+ * No URL sync — the parent page owns URL state for domainId.
+ */
+export const CoverageMatrix = forwardRef<HTMLDivElement, { domainId: string }>(
+  function CoverageMatrix({ domainId }, ref) {
+  const [selectedSignature, setSelectedSignature] = useState<string>('');
+  const [allowAllSignatures, setAllowAllSignatures] = useState(false);
+  const [useLegacyQuery, setUseLegacyQuery] = useState(false);
+
+  const [{ data: signatureData, fetching: signaturesLoading, error: signaturesError }] = useQuery<
+    DomainAvailableSignaturesQueryResult,
+    { domainId: string }
+  >({
+    query: DOMAIN_AVAILABLE_SIGNATURES_QUERY,
+    variables: { domainId },
+    pause: domainId === '',
+    requestPolicy: 'network-only',
+  });
+
+  const signatureOptions = useMemo<DomainAvailableSignature[]>(
+    () => signatureData?.domainAvailableSignatures ?? [],
+    [signatureData],
+  );
+  const preferredSignature = useMemo(
+    () => selectPreferredSignature(signatureOptions),
+    [signatureOptions],
+  );
+  const hasValidSelectedSignature = useMemo(
+    () => selectedSignature === '' || signatureOptions.some((option) => option.signature === selectedSignature),
+    [selectedSignature, signatureOptions],
+  );
+  const signatureSelectionReady = domainId !== ''
+    && !signaturesLoading
+    && hasValidSelectedSignature
+    && (selectedSignature !== '' || allowAllSignatures || signatureOptions.length === 0);
+
+  // Reset state when domainId changes
+  useEffect(() => {
+    setSelectedSignature('');
+    setAllowAllSignatures(false);
+    setUseLegacyQuery(false);
+  }, [domainId]);
+
+  useEffect(() => {
+    if (signaturesLoading) return;
+    if (signatureOptions.length === 0) {
+      if (selectedSignature !== '') setSelectedSignature('');
+      return;
+    }
+    if (selectedSignature !== '' && signatureOptions.some((option) => option.signature === selectedSignature)) return;
+    if (selectedSignature === '' && allowAllSignatures) return;
+    setSelectedSignature(preferredSignature);
+  }, [allowAllSignatures, preferredSignature, selectedSignature, signatureOptions, signaturesLoading]);
+
+  const [{ data: scoredData, fetching: scoredFetching, error: scoredError }] = useQuery<
+    DomainValueCoverageQueryResult,
+    DomainValueCoverageQueryVariables
+  >({
+    query: DOMAIN_VALUE_COVERAGE_QUERY,
+    variables: {
+      domainId,
+      signature: selectedSignature === '' ? undefined : selectedSignature,
+    },
+    pause: domainId === '' || !signatureSelectionReady || useLegacyQuery,
+    requestPolicy: 'network-only',
+  });
+
+  const [{ data: legacyData, fetching: legacyFetching, error: legacyError }] = useQuery<
+    DomainValueCoverageQueryResult,
+    Omit<DomainValueCoverageQueryVariables, 'signature'>
+  >({
+    query: DOMAIN_VALUE_COVERAGE_QUERY_LEGACY,
+    variables: {
+      domainId,
+    },
+    pause: domainId === '' || !signatureSelectionReady || !useLegacyQuery,
+    requestPolicy: 'network-only',
+  });
+
+  useEffect(() => {
+    const message = scoredError?.message ?? '';
+    const isUnknownArgumentError = message.includes('Unknown argument "signature"');
+    const isUnknownFieldError = message.includes('Cannot query field') || message.includes('Unknown field');
+    if ((isUnknownArgumentError || isUnknownFieldError) && !useLegacyQuery) {
+      setUseLegacyQuery(true);
+    }
+  }, [scoredError, useLegacyQuery]);
+
+  const data = useLegacyQuery ? legacyData : scoredData;
+  const fetching = useLegacyQuery ? legacyFetching : scoredFetching;
+  const error = useLegacyQuery ? legacyError : scoredError;
+
+  const canonicalValues = data?.domainValueCoverage?.values ?? [];
+
+  const cellLookup = useMemo(() => {
+    const defaultCells = data?.domainValueCoverage?.cells ?? [];
+    const map = new Map<string, (typeof defaultCells)[0]>();
+    for (const cell of defaultCells) {
+      map.set([cell.valueA, cell.valueB].sort().join('::'), cell);
+    }
+    return map;
+  }, [data?.domainValueCoverage?.cells]);
+
+  const valueGroups = useMemo(() => {
+    const defaultCanonicalValues = data?.domainValueCoverage?.values ?? [];
+    if (defaultCanonicalValues.length === 0) return [];
+
+    const categories: Record<string, CategoryGroup> = {
+      Openness_to_Change: {
+        name: 'Openness',
+        color: 'bg-orange-100 border-orange-200 text-orange-800',
+        values: [],
+      },
+      Self_Enhancement: {
+        name: 'Enhancement',
+        color: 'bg-purple-100 border-purple-200 text-purple-800',
+        values: [],
+      },
+      Conservation: {
+        name: 'Conservation',
+        color: 'bg-blue-100 border-blue-200 text-blue-800',
+        values: [],
+      },
+      Self_Transcendence: {
+        name: 'Transcendence',
+        color: 'bg-emerald-100 border-emerald-200 text-emerald-800',
+        values: [],
+      },
+    };
+
+    defaultCanonicalValues.forEach((val) => {
+      const canonical = getCanonicalDimension(val);
+      if (canonical) {
+        categories[canonical.higherOrder]?.values.push(val);
+      }
+    });
+
+    return Object.values(categories).filter((c) => c.values.length > 0);
+  }, [data?.domainValueCoverage?.values]);
+
+  const displayValues = useMemo(
+    () => valueGroups.flatMap((group) => group.values),
+    [valueGroups],
+  );
+
+  return (
+    <div className="space-y-4">
+      {(signaturesError || error) && (
+        <ErrorMessage
+          message={`Failed to load coverage data: ${(signaturesError ?? error)?.message ?? 'Unknown error'}`}
+        />
+      )}
+      {useLegacyQuery && selectedSignature !== '' && (
+        <ErrorMessage message="Coverage API does not yet support signature filtering in this environment. Showing all signatures." />
+      )}
+
+      {/* Controls */}
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
+        <div className="flex items-center justify-between w-full md:w-auto">
+          <h2 className="text-sm font-semibold text-gray-900 min-w-[140px]">Batch Signature</h2>
+        </div>
+        <div className="flex items-center gap-3 flex-1">
+          <select
+            aria-label="Batch Signature"
+            className="rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 flex-1 max-w-sm"
+            value={selectedSignature}
+            onChange={(event) => {
+              const nextSignature = event.target.value;
+              setAllowAllSignatures(nextSignature === '');
+              setSelectedSignature(nextSignature);
+            }}
+            disabled={signaturesLoading}
+          >
+            <option value="">All signatures</option>
+            {signatureOptions.map((signatureOption) => (
+              <option key={signatureOption.signature} value={signatureOption.signature}>
+                {signatureOption.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Matrix */}
+      {(signaturesLoading || (fetching && canonicalValues.length === 0)) ? (
+        <Loading size="lg" text="Loading coverage matrix..." />
+      ) : canonicalValues.length > 0 ? (
+        <div ref={ref} className="overflow-x-auto border border-gray-200 rounded-lg bg-white shadow-sm">
+          <table className="w-full min-w-full table-fixed border-collapse">
+            <thead>
+              <tr>
+                <th className="p-0 border-b border-gray-200 bg-gray-50/50" colSpan={2} rowSpan={2} />
+                {valueGroups.map((group) => (
+                  <th
+                    key={`col-group-${group.name}`}
+                    colSpan={group.values.length}
+                    className={cn(
+                      'p-1.5 text-[11px] font-semibold text-center border-b border-l border-gray-200 tracking-normal',
+                      group.color
+                    )}
+                  >
+                    {group.name}
+                  </th>
+                ))}
+              </tr>
+              <tr>
+                {valueGroups.flatMap((group, groupIndex) =>
+                  group.values.map((val, valIndex) => (
+                    <th
+                      key={`col-${val}`}
+                      className={cn(
+                        'w-[6.5rem] p-1.5 text-[11px] font-medium text-gray-600 border-b border-gray-200 align-top text-center leading-tight whitespace-normal break-words',
+                        valIndex === 0 && 'border-l',
+                        groupIndex % 2 === 0 ? 'bg-gray-50/30' : 'bg-white'
+                      )}
+                    >
+                      <div className="mx-auto max-w-[6.5rem]">
+                        {VALUE_LABELS[val as keyof typeof VALUE_LABELS] ?? formatDisplayLabel(val)}
+                      </div>
+                    </th>
+                  ))
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {valueGroups.flatMap((rowGroup, rowGroupIdx) =>
+                rowGroup.values.map((rowVal, rowValIdx) => (
+                  <tr key={`row-${rowVal}`}>
+                    {rowValIdx === 0 && (
+                      <th
+                        rowSpan={rowGroup.values.length}
+                        className={cn(
+                          'w-[6.75rem] px-1 py-1.5 text-[11px] font-medium text-center border-t border-r border-gray-200 tracking-normal leading-tight whitespace-normal break-words overflow-hidden align-middle',
+                          rowGroup.color
+                        )}
+                      >
+                        {rowGroup.name}
+                      </th>
+                    )}
+                    <th
+                      className={cn(
+                        'w-[8rem] px-0.5 py-1 text-[11px] font-medium text-gray-600 text-right border-t border-r border-gray-200 whitespace-normal break-words leading-tight',
+                        rowGroupIdx % 2 === 0 ? 'bg-gray-50/30' : 'bg-white'
+                      )}
+                    >
+                      {VALUE_LABELS[rowVal as keyof typeof VALUE_LABELS] ??
+                        formatDisplayLabel(rowVal)}
+                    </th>
+
+                    {displayValues.map((colVal) => {
+                      const keyA = [colVal, rowVal].sort().join('::');
+                      const cell = cellLookup.get(keyA);
+
+                      return (
+                        <td
+                          key={`cell-${rowVal}-${colVal}`}
+                          className="h-12 w-[3.5rem] border border-gray-100 p-0"
+                        >
+                          <CoverageCell
+                            valueA={rowVal}
+                            valueB={colVal}
+                            batchCount={cell?.batchCount ?? 0}
+                            pairedBatchCount={cell?.pairedBatchCount ?? 0}
+                            orphanedBatchCount={cell?.orphanedBatchCount ?? 0}
+                            aFirstBatchCount={cell?.aFirstBatchCount ?? 0}
+                            bFirstBatchCount={cell?.bFirstBatchCount ?? 0}
+                            incompleteBatchCount={cell?.incompleteBatchCount ?? 0}
+                            definitionId={cell?.definitionId ?? null}
+                            aggregateRunId={cell?.aggregateRunId ?? null}
+                            modelBreakdown={cell?.modelBreakdown ?? null}
+                          />
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="text-center py-12 text-gray-500 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+          <p>No coverage data available for this domain yet.</p>
+          <p className="mt-1 text-sm">Create vignettes in the Vignettes tab, then run evaluations to see coverage here.</p>
+        </div>
+      )}
+
+      {!fetching && canonicalValues.length > 0 && (
+        <div className="px-1 pt-2 text-xs text-gray-500">
+          <p>
+            Batches per cell are{' '}
+            <span className="font-medium text-rose-700">red (&lt;3)</span>,{' '}
+            <span className="font-medium text-amber-700">yellow (3-9)</span>, or{' '}
+            <span className="font-medium text-emerald-700">green (10+)</span>. Click any cell to add a batch.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+});
+
+CoverageMatrix.displayName = 'CoverageMatrix';
+
+
+Artifact: plan.md
+# Plan: Fix Coverage Matrix Cell to Show Model-Set-Filtered Batch Count
+
+## Architecture
+
+### Core change: model-set filter on batch counting
+
+In `domain-coverage.ts`, each completed run currently passes the `matchesModelFilter` gate if it contains at least one transcript for any of the explicit `filterModelIds` arg (which the frontend currently never sends). The new behavior replaces this for the `effectiveModelIds` case:
+
+**When `effectiveModelIds.length > 0`**: a run must have all effective default model IDs present in its `config.models` array to count toward `batchCount` and the directional trackers. The check is `effectiveModelIds.every(id => models.includes(id))` where `models` is the run's `config.models`.
+
+**When `effectiveModelIds.length === 0`**: all complete runs count (existing behavior).
+
+This filter is applied before `batchCountByDefinitionId` and `directionalGroupsByDefinitionId` are updated — same location as the existing `matchesModelFilter` check.
+
+### New fields: `aFirstBatchCount` and `bFirstBatchCount`
+
+`selectPrimaryDefinitionCounts` in `domain-coverage-utils.ts` currently returns `{ primaryDefinitionId, batchCount, pairedBatchCount, orphanedBatchCount }`. It will gain two new parameters (`valueA: string`, `valueB: string`) and return two new fields.
+
+The direction token stored in `jobChoiceValueFirst` is the value name (e.g., `"Benevolence"`). So for a cell with `valueA = "Benevolence"` and `valueB = "Power"`:
+- `aFirstBatchCount = merged.get("Benevolence")?.size ?? 0`
+- `bFirstBatchCount = merged.get("Power")?.size ?? 0`
+
+If neither direction matches `valueA` or `valueB` (unknown token), both counts are 0 — same semantics as no direction data.
+
+### Frontend: remove trial display, repurpose badge
+
+`CoverageCell.tsx` removes the `hasPerModelData` / `minTrialCount` display branch entirely. The display logic becomes:
+- `displayCount = pairedBatchCount > 0 ? pairedBatchCount : batchCount`
+- `countForColor = displayCount`
+- `hasMismatch = aFirstBatchCount !== bFirstBatchCount` — badge fires on direction imbalance only
+- Tooltip: when `hasMismatch`, shows `A-first: {aFirstBatchCount}, B-first: {bFirstBatchCount}`
+- Popover: direction breakdown row when `hasMismatch`; per-model trial breakdown retained below
+
+`orphanedBatchCount` is already in the API response but currently unused on the frontend. It will be threaded through (`domainCoverage.ts` fragment → `CoverageMatrix.tsx` → `CoverageCell.tsx`) as a cross-check but the badge condition uses the individual counts.
+
+---
+
+## Implementation Slices
+
+### Slice 1 — API: model-set filter + directional count fields
+
+**Files:**
+- `cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts`
+- `cloud/apps/api/src/graphql/queries/domain-coverage-gql-types.ts`
+- `cloud/apps/api/src/graphql/queries/domain-coverage.ts`
+- Tests: `cloud/apps/api/src/graphql/queries/` (existing coverage tests)
+
+**Changes:**
+1. `domain-coverage-utils.ts`: Add `valueA: string` and `valueB: string` to `selectPrimaryDefinitionCounts` signature. After computing `merged`, look up `merged.get(valueA)?.size ?? 0` and `merged.get(valueB)?.size ?? 0` for the new fields. Update return type to include `aFirstBatchCount` and `bFirstBatchCount`.
+2. `domain-coverage-gql-types.ts`: Add `aFirstBatchCount: number` and `bFirstBatchCount: number` to `DomainValueCoverageCell` TypeScript type and expose them in the Pothos objectRef.
+3. `domain-coverage.ts`: Apply model-set filter — when `effectiveModelIds.length > 0`, replace the `matchesModelFilter` check with `effectiveModelIds.every(id => models.includes(id))`. The filter gates ALL per-run counters symmetrically: `batchCountByDefinitionId`, `directionalGroupsByDefinitionId`, `incompleteBatchCountByDefinitionId`, and `nonAggregateRunsByDefinitionId` (move `nonAggregateRunsByDefinitionId` population to after the filter check, not before it). This preserves the "exactly one bucket" invariant and keeps popover trial counts consistent with the batch count cohort. Pass `valueA` and `valueB` to `selectPrimaryDefinitionCounts`. Populate `aFirstBatchCount` and `bFirstBatchCount` in both cell branches (zero-cell and real-cell).
+
+**[CHECKPOINT]**
+
+### Slice 2 — Frontend: cell display + badge repurpose
+
+**Files:**
+- `cloud/apps/web/src/api/operations/domainCoverage.ts`
+- `cloud/apps/web/src/components/domains/CoverageCell.tsx`
+- `cloud/apps/web/src/components/domains/CoverageMatrix.tsx`
+
+**Changes:**
+1. `domainCoverage.ts`: Add `aFirstBatchCount`, `bFirstBatchCount`, `orphanedBatchCount` to the GraphQL query fragment (both `DOMAIN_VALUE_COVERAGE_QUERY` and `DOMAIN_VALUE_COVERAGE_QUERY_LEGACY`).
+2. `CoverageCell.tsx`:
+   - Add props `aFirstBatchCount: number` and `bFirstBatchCount: number`; remove `minTrialCount` and `maxTrialCount` from display logic (props can remain for type compat but unused in display)
+   - Replace `hasPerModelData` / `displayCount` / `countForColor` / `batchLabel` logic with batch-count-only path
+   - Replace `hasMismatch` condition: `aFirstBatchCount !== bFirstBatchCount`
+   - Replace tooltip with direction breakdown when mismatch
+   - Add direction breakdown row in popover header when mismatch
+3. `CoverageMatrix.tsx`: Pass `aFirstBatchCount`, `bFirstBatchCount`, `orphanedBatchCount` from cell data to `CoverageCell`.
+
+**[CHECKPOINT]**
+
+---
+
+## Residual Risks
+
+1. **Batch counts will visibly drop for domains with default models** when the filter is applied. Older runs predating the current model set will no longer count. This is correct behavior but may surprise users who see lower numbers after deploy.
+   **verification:** Before merging, query prod via MCP `graphql_query` for one domain with known default models; compare `batchCount` returned by the new query against the current count; confirm the delta is explainable by runs whose `config.models` did not include all default models.
+
+2. **`jobChoiceValueFirst` token may not exactly match COVERAGE_VALUE_KEYS spellings.** If casing or formatting differs, `merged.get(valueA)` returns 0 and directional data is silently lost.
+   **verification:** Before merging, grep prod run configs via `DATABASE_PUBLIC_URL` with `SELECT DISTINCT config->>'jobChoiceValueFirst' FROM "Run" WHERE config->>'jobChoiceValueFirst' IS NOT NULL LIMIT 100` and compare results against COVERAGE_VALUE_KEYS in the codebase.
+
+3. **Legacy query (`DOMAIN_VALUE_COVERAGE_QUERY_LEGACY`) does not take the `signature` arg.** The fragment change must be applied to both queries or the legacy path will miss the new fields.
+   **verification:** TypeScript build will fail if the fragment shape diverges from the generated types — build output confirms this.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m checking the plan against the actual query and UI code first, then I’ll call out only the parts that the code clearly supports as risky or wrong.
+codex
+## Findings
+1. High: The plan tells you to edit `cloud/apps/web/src/api/operations/domainCoverage.ts` to add the new GraphQL fields, but that file is only a generated wrapper that re-exports `DomainValueCoverageDocument` and `DomainValueCoverageLegacyDocument`. There is no fragment text in that file to change, so this plan will not actually update the query unless the real codegen source is edited instead. [CODE-CONFIRMED]  
+   Link: [/Users/chrislaw/valuerank/.claude/worktrees/loving-bose-6ba4a1/cloud/apps/web/src/api/operations/domainCoverage.ts](/Users/chrislaw/valuerank/.claude/worktrees/loving-bose-6ba4a1/cloud/apps/web/src/api/operations/domainCoverage.ts)
+
+2. Medium: The plan narrows `batchCount` to the effective model set, but it does not reconcile the `aggregateRunId` fallback. In `domain-coverage.ts`, the cell still picks `latestAggregateRunIdByDefinitionId` first and only then `latestMatchingRunIdByDefinitionId`, and both are maintained independently of the new cohort rule. That means the cell can still link to an analysis run that does not match the displayed filtered batch cohort. [CODE-CONFIRMED]  
+   Link: [/Users/chrislaw/valuerank/.claude/worktrees/loving-bose-6ba4a1/cloud/apps/api/src/graphql/queries/domain-coverage.ts](/Users/chrislaw/valuerank/.claude/worktrees/loving-bose-6ba4a1/cloud/apps/api/src/graphql/queries/domain-coverage.ts)
+
+3. Low: The plan assumes `jobChoiceValueFirst` is stored as the exact canonical value string used for `valueA`/`valueB`. The provided code only shows that it is read as a trimmed raw string; it does not prove that the stored token matches the coverage keys exactly. If the token casing or labels differ, the new `aFirstBatchCount` / `bFirstBatchCount` fields will quietly collapse to zero. [UNVERIFIED]
+
+## Residual Risks
+- The plan still needs an explicit regression test for a mixed cell with complete runs, incomplete runs, aggregate runs, and both directions. Without that, a partial implementation can pass basic count checks while breaking the cohort consistency between `batchCount`, `incompleteBatchCount`, and the directional counts.
+- The plan does not say whether any downstream consumer uses `availableModels` as the legend for the cell cohort. If it does, that list may remain broader than the filtered counts after the model-set gate changes.
+2026-04-26T23:33:40.445071Z ERROR codex_core::session: failed to record rollout items: thread 019dcc23-446c-7c00-8b17-7ceb34f37e2b not found
+tokens used
+27,806

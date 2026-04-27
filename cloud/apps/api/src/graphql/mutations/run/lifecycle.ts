@@ -1,4 +1,4 @@
-import { db, type RunCategory } from '@valuerank/db';
+import { db, resolveDefinitionContent, type RunCategory } from '@valuerank/db';
 import { AuthenticationError, ValidationError } from '@valuerank/shared';
 import { builder } from '../../builder.js';
 import { RunRef } from '../../types/refs.js';
@@ -16,6 +16,7 @@ import {
 } from '../../../services/models/aliases.js';
 import { parseRunCategory } from '../../../services/run/query.js';
 import { StartRunPayload } from './payloads.js';
+import { extractValuePair } from '../../queries/domain-coverage-utils.js';
 import {
   isRecord,
   loadRunForResult,
@@ -36,6 +37,7 @@ type StartRunArgs = {
   runCategory?: RunCategory | null;
   experimentId?: string | number | null;
   launchMode?: string | null;
+  topUpDirection?: string | null;
   scenarioIds?: Array<string | number> | null;
 };
 
@@ -151,6 +153,48 @@ builder.mutationField('startRun', (t) =>
           jobCount: primaryRun.jobCount + companionRun.jobCount,
         };
         pairedRunIds = [companionRun.run.id];
+      } else if (launchMode === 'PAIRED_BATCH_TOPUP') {
+        const topUpDirection = typeof input.topUpDirection === 'string' ? input.topUpDirection.trim() : '';
+        if (topUpDirection.length === 0) {
+          throw new ValidationError('topUpDirection is required for paired-batch top-up launches');
+        }
+
+        if (requestedRunCategory !== undefined && parsedRunCategory !== 'PRODUCTION') {
+          throw new ValidationError('paired-batch top-up launches must use runCategory PRODUCTION');
+        }
+
+        const definitionId = String(input.definitionId);
+        const definition = await db.definition.findUnique({
+          where: { id: definitionId },
+          select: {
+            id: true,
+            deletedAt: true,
+          },
+        });
+        if (!definition || definition.deletedAt !== null) {
+          throw new ValidationError(`Definition ${definitionId} not found`);
+        }
+
+        const resolvedContent = (await resolveDefinitionContent(definition.id) as { resolvedContent: unknown }).resolvedContent;
+        const pair = extractValuePair(resolvedContent);
+        if (pair == null) {
+          throw new ValidationError('Paired-batch top-up launches require a definition with exactly two values');
+        }
+        if (topUpDirection !== pair.valueA && topUpDirection !== pair.valueB) {
+          throw new ValidationError(`topUpDirection must be one of ${pair.valueA} or ${pair.valueB}`);
+        }
+
+        result = await startRunService({
+          definitionId,
+          ...sharedInput,
+          runCategory: 'PRODUCTION',
+          configExtras: {
+            jobChoiceLaunchMode: launchMode,
+            jobChoiceBatchGroupId: crypto.randomUUID(),
+            jobChoiceValueFirst: topUpDirection,
+            methodologySafe: true,
+          },
+        });
       } else {
         result = await startRunService({
           definitionId: String(input.definitionId),
@@ -169,6 +213,19 @@ builder.mutationField('startRun', (t) =>
         'Run started successfully'
       );
 
+      if (launchMode === 'PAIRED_BATCH_TOPUP') {
+        ctx.log.info(
+          {
+            runId: result.run.id,
+            definitionId: String(input.definitionId),
+            userId,
+            launchMode: 'PAIRED_BATCH_TOPUP',
+            topUpDirection: typeof input.topUpDirection === 'string' ? input.topUpDirection.trim() : '',
+          },
+          'Top-up run started'
+        );
+      }
+
       void createAuditLog({
         action: 'CREATE',
         entityType: 'Run',
@@ -178,6 +235,12 @@ builder.mutationField('startRun', (t) =>
           definitionId: String(input.definitionId),
           models: input.models,
           jobCount: result.jobCount,
+          ...(launchMode === 'PAIRED_BATCH_TOPUP'
+            ? {
+                launchMode: 'PAIRED_BATCH_TOPUP',
+                topUpDirection: typeof input.topUpDirection === 'string' ? input.topUpDirection.trim() : '',
+              }
+            : {}),
         },
       });
 

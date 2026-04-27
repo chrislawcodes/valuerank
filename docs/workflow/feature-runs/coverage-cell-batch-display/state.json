@@ -1,0 +1,1065 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": true,
+    "complete": true,
+    "question_count": 2,
+    "asked_count": 1,
+    "questions": [
+      {
+        "question": "What to do with the mismatch badge?",
+        "recommendation": "Repurpose it for direction imbalance",
+        "rationale": "The trial mismatch signal goes away with batch display; direction imbalance is more actionable",
+        "updated_at": 1777243880
+      }
+    ],
+    "assumptions": [
+      "When no default models are configured, show all complete batches unfiltered",
+      "pairedBatchCount uses existing min(A-first, B-first) logic unchanged",
+      "Color thresholds red<3 yellow 3-9 green 10+ stay the same, now applied to pairedBatchCount or batchCount",
+      "modelBreakdown data stays in the API response for the popover"
+    ],
+    "summary": "",
+    "updated_at": 1777243940,
+    "answers": {
+      "What to do with the mismatch badge?": "Repurpose: fire when batchCount > pairedBatchCount (direction imbalance). Remove trial mismatch logic.",
+      "What should the mismatch badge show?": "Show A-first vs B-first batch counts in tooltip/popover so user can see which direction is ahead"
+    },
+    "non_goals": [],
+    "acceptance_criteria": [],
+    "unresolved": []
+  },
+  "delivery": {},
+  "checkpoint_fallback": {},
+  "parallel_analysis": {
+    "reviewed": true,
+    "found": false,
+    "note": "No parallel opportunities \u2014 Slice 2 depends on Slice 1 API types compiling first",
+    "updated_at": 1777245171
+  },
+  "init_head_sha": "eab6ffbb2ad3a2f01ce5cd3ffa2dfd3c317349e9",
+  "token_usage": [
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-26T22:56:22.949247Z",
+      "started_at": "2026-04-26T22:55:03.996302Z",
+      "ended_at": "2026-04-26T22:56:22.949247Z",
+      "duration_seconds": 78.952336,
+      "agent_id": null,
+      "artifact_sha_at_time": "f09c93a6de915d9a761b5d27be7cf1c7af7c116905a670d3be7a2c2c10687a8c",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-26T22:57:51.977936Z",
+      "started_at": "2026-04-26T22:56:23.108621Z",
+      "ended_at": "2026-04-26T22:57:51.977936Z",
+      "duration_seconds": 88.868698,
+      "agent_id": null,
+      "artifact_sha_at_time": "f09c93a6de915d9a761b5d27be7cf1c7af7c116905a670d3be7a2c2c10687a8c",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-26T22:58:44.456303Z",
+      "started_at": "2026-04-26T22:57:52.147559Z",
+      "ended_at": "2026-04-26T22:58:44.456303Z",
+      "duration_seconds": 52.308331,
+      "agent_id": null,
+      "artifact_sha_at_time": "f09c93a6de915d9a761b5d27be7cf1c7af7c116905a670d3be7a2c2c10687a8c",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-26T23:02:52.950133Z",
+      "started_at": "2026-04-26T23:01:19.598810Z",
+      "ended_at": "2026-04-26T23:02:52.950133Z",
+      "duration_seconds": 93.350665,
+      "agent_id": null,
+      "artifact_sha_at_time": "88a9c826b210026d07456169efc8b2a6a0851e5a74553fb0be0b2bcce778a34a",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-26T23:03:56.365071Z",
+      "started_at": "2026-04-26T23:02:53.094319Z",
+      "ended_at": "2026-04-26T23:03:56.365071Z",
+      "duration_seconds": 63.270283,
+      "agent_id": null,
+      "artifact_sha_at_time": "88a9c826b210026d07456169efc8b2a6a0851e5a74553fb0be0b2bcce778a34a",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-26T23:05:01.601002Z",
+      "started_at": "2026-04-26T23:03:56.525800Z",
+      "ended_at": "2026-04-26T23:05:01.601002Z",
+      "duration_seconds": 65.074715,
+      "agent_id": null,
+      "artifact_sha_at_time": "88a9c826b210026d07456169efc8b2a6a0851e5a74553fb0be0b2bcce778a34a",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-26T23:05:10.328884Z",
+      "started_at": "2026-04-26T23:05:02.382045Z",
+      "ended_at": "2026-04-26T23:05:10.328884Z",
+      "duration_seconds": 7.946705,
+      "agent_id": null,
+      "artifact_sha_at_time": "c3964bb3b70a957ec9b233c7dd3653f6ba17701ab00facf88ae1393dc6155577",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-26T23:05:17.330248Z",
+      "started_at": "2026-04-26T23:05:10.481111Z",
+      "ended_at": "2026-04-26T23:05:17.330248Z",
+      "duration_seconds": 6.848981,
+      "agent_id": null,
+      "artifact_sha_at_time": "c3964bb3b70a957ec9b233c7dd3653f6ba17701ab00facf88ae1393dc6155577",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-26T23:05:44.716717Z",
+      "started_at": "2026-04-26T23:05:17.491455Z",
+      "ended_at": "2026-04-26T23:05:44.716717Z",
+      "duration_seconds": 27.224999,
+      "agent_id": null,
+      "artifact_sha_at_time": "c3964bb3b70a957ec9b233c7dd3653f6ba17701ab00facf88ae1393dc6155577",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "plan",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-26T23:08:56.644385Z",
+      "started_at": "2026-04-26T23:07:09.867779Z",
+      "ended_at": "2026-04-26T23:08:56.644385Z",
+      "duration_seconds": 106.775869,
+      "agent_id": null,
+      "artifact_sha_at_time": "7116531f6ac1d6d549d6a53484a1ac68d98afab9b3bf70d9fdf151a698b41f5a",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-26T23:10:14.167882Z",
+      "started_at": "2026-04-26T23:08:56.851071Z",
+      "ended_at": "2026-04-26T23:10:14.167882Z",
+      "duration_seconds": 77.314423,
+      "agent_id": null,
+      "artifact_sha_at_time": "7116531f6ac1d6d549d6a53484a1ac68d98afab9b3bf70d9fdf151a698b41f5a",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-26T23:11:13.988387Z",
+      "started_at": "2026-04-26T23:10:14.317970Z",
+      "ended_at": "2026-04-26T23:11:13.988387Z",
+      "duration_seconds": 59.66951,
+      "agent_id": null,
+      "artifact_sha_at_time": "7116531f6ac1d6d549d6a53484a1ac68d98afab9b3bf70d9fdf151a698b41f5a",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "tasks",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-26T23:13:30.350084Z",
+      "started_at": "2026-04-26T23:13:00.184870Z",
+      "ended_at": "2026-04-26T23:13:30.350084Z",
+      "duration_seconds": 30.164904,
+      "agent_id": null,
+      "artifact_sha_at_time": "030f264ea09d4d7617dc31189ad177b594ea88a0e90f9282edaa22278f808c73",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "tasks",
+      "round": 1,
+      "activity_type": "implementation",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-26T23:19:40.937990Z",
+      "started_at": "2026-04-26T23:13:53.365575Z",
+      "ended_at": "2026-04-26T23:19:40.937990Z",
+      "duration_seconds": 347.569959,
+      "agent_id": null,
+      "artifact_sha_at_time": "030f264ea09d4d7617dc31189ad177b594ea88a0e90f9282edaa22278f808c73",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-26T23:25:32.689686Z",
+      "started_at": "2026-04-26T23:22:45.319791Z",
+      "ended_at": "2026-04-26T23:25:32.689686Z",
+      "duration_seconds": 167.368653,
+      "agent_id": null,
+      "artifact_sha_at_time": "5bca421c1461399b673c84b19ec86a32fce619f43aaa2998de37fa6bd3ba6f3a",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-26T23:27:10.004660Z",
+      "started_at": "2026-04-26T23:25:32.821010Z",
+      "ended_at": "2026-04-26T23:27:10.004660Z",
+      "duration_seconds": 97.182897,
+      "agent_id": null,
+      "artifact_sha_at_time": "5bca421c1461399b673c84b19ec86a32fce619f43aaa2998de37fa6bd3ba6f3a",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-26T23:27:48.057693Z",
+      "started_at": "2026-04-26T23:27:10.159438Z",
+      "ended_at": "2026-04-26T23:27:48.057693Z",
+      "duration_seconds": 37.89789,
+      "agent_id": null,
+      "artifact_sha_at_time": "5bca421c1461399b673c84b19ec86a32fce619f43aaa2998de37fa6bd3ba6f3a",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-26T23:30:09.165210Z",
+      "started_at": "2026-04-26T23:29:57.217455Z",
+      "ended_at": "2026-04-26T23:30:09.165210Z",
+      "duration_seconds": 11.947597,
+      "agent_id": null,
+      "artifact_sha_at_time": "07bb599de9fef528574fa3409924355ec16d8899289e08e064d45f2d1753992c",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-26T23:30:18.000260Z",
+      "started_at": "2026-04-26T23:30:09.308909Z",
+      "ended_at": "2026-04-26T23:30:18.000260Z",
+      "duration_seconds": 8.691191,
+      "agent_id": null,
+      "artifact_sha_at_time": "07bb599de9fef528574fa3409924355ec16d8899289e08e064d45f2d1753992c",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-26T23:30:42.809452Z",
+      "started_at": "2026-04-26T23:30:18.140839Z",
+      "ended_at": "2026-04-26T23:30:42.809452Z",
+      "duration_seconds": 24.668346,
+      "agent_id": null,
+      "artifact_sha_at_time": "07bb599de9fef528574fa3409924355ec16d8899289e08e064d45f2d1753992c",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "diff",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-26T23:31:38.008448Z",
+      "started_at": "2026-04-26T23:31:31.905102Z",
+      "ended_at": "2026-04-26T23:31:38.008448Z",
+      "duration_seconds": 6.103185,
+      "agent_id": null,
+      "artifact_sha_at_time": "87152053b61ef4e77bf2576be5687de1d0b15924d9bebb5865973085fe1f7ea5",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-26T23:31:44.674060Z",
+      "started_at": "2026-04-26T23:31:38.157992Z",
+      "ended_at": "2026-04-26T23:31:44.674060Z",
+      "duration_seconds": 6.515928,
+      "agent_id": null,
+      "artifact_sha_at_time": "87152053b61ef4e77bf2576be5687de1d0b15924d9bebb5865973085fe1f7ea5",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-26T23:32:11.395682Z",
+      "started_at": "2026-04-26T23:31:44.780111Z",
+      "ended_at": "2026-04-26T23:32:11.395682Z",
+      "duration_seconds": 26.615282,
+      "agent_id": null,
+      "artifact_sha_at_time": "87152053b61ef4e77bf2576be5687de1d0b15924d9bebb5865973085fe1f7ea5",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "plan",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-26T23:33:40.533173Z",
+      "started_at": "2026-04-26T23:32:36.054044Z",
+      "ended_at": "2026-04-26T23:33:40.533173Z",
+      "duration_seconds": 64.47864,
+      "agent_id": null,
+      "artifact_sha_at_time": "fe8cece0f5f003224ec65cb46794adce0820f07d76b3a1d1240a51db0bcf0469",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-26T23:34:29.817567Z",
+      "started_at": "2026-04-26T23:33:40.685081Z",
+      "ended_at": "2026-04-26T23:34:29.817567Z",
+      "duration_seconds": 49.132033,
+      "agent_id": null,
+      "artifact_sha_at_time": "fe8cece0f5f003224ec65cb46794adce0820f07d76b3a1d1240a51db0bcf0469",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-26T23:35:35.691183Z",
+      "started_at": "2026-04-26T23:34:29.987075Z",
+      "ended_at": "2026-04-26T23:35:35.691183Z",
+      "duration_seconds": 65.703573,
+      "agent_id": null,
+      "artifact_sha_at_time": "fe8cece0f5f003224ec65cb46794adce0820f07d76b3a1d1240a51db0bcf0469",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-26T23:44:08.891001Z",
+      "started_at": "2026-04-26T23:43:35.511710Z",
+      "ended_at": "2026-04-26T23:44:08.891001Z",
+      "duration_seconds": 33.3788,
+      "agent_id": null,
+      "artifact_sha_at_time": "fe8cece0f5f003224ec65cb46794adce0820f07d76b3a1d1240a51db0bcf0469",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-26T23:44:44.033707Z",
+      "started_at": "2026-04-26T23:44:08.892594Z",
+      "ended_at": "2026-04-26T23:44:44.033707Z",
+      "duration_seconds": 35.140904,
+      "agent_id": null,
+      "artifact_sha_at_time": "fe8cece0f5f003224ec65cb46794adce0820f07d76b3a1d1240a51db0bcf0469",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-26T23:44:44.779606Z",
+      "started_at": "2026-04-26T23:43:35.514386Z",
+      "ended_at": "2026-04-26T23:44:44.779606Z",
+      "duration_seconds": 69.264749,
+      "agent_id": null,
+      "artifact_sha_at_time": "fe8cece0f5f003224ec65cb46794adce0820f07d76b3a1d1240a51db0bcf0469",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-26T23:45:32.068176Z",
+      "started_at": "2026-04-26T23:43:35.512124Z",
+      "ended_at": "2026-04-26T23:45:32.068176Z",
+      "duration_seconds": 116.555285,
+      "agent_id": null,
+      "artifact_sha_at_time": "fe8cece0f5f003224ec65cb46794adce0820f07d76b3a1d1240a51db0bcf0469",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-26T23:45:55.657455Z",
+      "started_at": "2026-04-26T23:44:44.780905Z",
+      "ended_at": "2026-04-26T23:45:55.657455Z",
+      "duration_seconds": 70.8761,
+      "agent_id": null,
+      "artifact_sha_at_time": "fe8cece0f5f003224ec65cb46794adce0820f07d76b3a1d1240a51db0bcf0469",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-26T23:46:10.485460Z",
+      "started_at": "2026-04-26T23:45:45.627084Z",
+      "ended_at": "2026-04-26T23:46:10.485460Z",
+      "duration_seconds": 24.85824,
+      "agent_id": null,
+      "artifact_sha_at_time": "fe8cece0f5f003224ec65cb46794adce0820f07d76b3a1d1240a51db0bcf0469",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-26T23:46:43.118433Z",
+      "started_at": "2026-04-26T23:46:10.487425Z",
+      "ended_at": "2026-04-26T23:46:43.118433Z",
+      "duration_seconds": 32.630813,
+      "agent_id": null,
+      "artifact_sha_at_time": "fe8cece0f5f003224ec65cb46794adce0820f07d76b3a1d1240a51db0bcf0469",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-26T23:47:07.727528Z",
+      "started_at": "2026-04-26T23:45:32.069337Z",
+      "ended_at": "2026-04-26T23:47:07.727528Z",
+      "duration_seconds": 95.657423,
+      "agent_id": null,
+      "artifact_sha_at_time": "fe8cece0f5f003224ec65cb46794adce0820f07d76b3a1d1240a51db0bcf0469",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-26T23:47:27.706082Z",
+      "started_at": "2026-04-26T23:45:45.627168Z",
+      "ended_at": "2026-04-26T23:47:27.706082Z",
+      "duration_seconds": 102.077472,
+      "agent_id": null,
+      "artifact_sha_at_time": "fe8cece0f5f003224ec65cb46794adce0820f07d76b3a1d1240a51db0bcf0469",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-26T23:48:12.865776Z",
+      "started_at": "2026-04-26T23:45:45.626922Z",
+      "ended_at": "2026-04-26T23:48:12.865776Z",
+      "duration_seconds": 147.236768,
+      "agent_id": null,
+      "artifact_sha_at_time": "fe8cece0f5f003224ec65cb46794adce0820f07d76b3a1d1240a51db0bcf0469",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-26T23:48:27.310321Z",
+      "started_at": "2026-04-26T23:47:27.707628Z",
+      "ended_at": "2026-04-26T23:48:27.310321Z",
+      "duration_seconds": 59.602064,
+      "agent_id": null,
+      "artifact_sha_at_time": "fe8cece0f5f003224ec65cb46794adce0820f07d76b3a1d1240a51db0bcf0469",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "judge_panel",
+      "model": "claude-sonnet-4-6",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-26T23:50:05.003861Z",
+      "started_at": "2026-04-26T23:48:12.867135Z",
+      "ended_at": "2026-04-26T23:50:05.003861Z",
+      "duration_seconds": 112.135912,
+      "agent_id": null,
+      "artifact_sha_at_time": "fe8cece0f5f003224ec65cb46794adce0820f07d76b3a1d1240a51db0bcf0469",
+      "parse_error": "no Claude token counts found in stdout or stderr"
+    }
+  ],
+  "stages": {
+    "spec": {
+      "judge_next_action": "advance",
+      "adversarial_rounds": 2,
+      "judge_rounds": 0,
+      "judge_verdicts": [],
+      "annotations": [],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [
+        "f09c93a6de915d9a761b5d27be7cf1c7af7c116905a670d3be7a2c2c10687a8c",
+        "88a9c826b210026d07456169efc8b2a6a0851e5a74553fb0be0b2bcce778a34a"
+      ],
+      "initial_sha": "f09c93a6de915d9a761b5d27be7cf1c7af7c116905a670d3be7a2c2c10687a8c"
+    },
+    "plan": {
+      "adversarial_rounds": 3,
+      "judge_rounds": 2,
+      "judge_verdicts": [
+        [
+          {
+            "judge": "completeness",
+            "model": "gpt-5.5",
+            "verdict": "proceed",
+            "confidence": 4,
+            "reasoning": "All three HIGH findings are addressed in the chain. `plan.codex.architecture-adversarial.review#high-1` is explicitly called a false positive, and the resolution note says the existing `matchesModelFilter` check is preserved while `matchesEffectiveModelSet` is only an added gate. `plan.codex.implementation-adversarial.review#high-1` is also explicitly resolved as a false positive, with the real fragment source named as `cloud/apps/web/src/api/operations/domainCoverage.graphql` and the generated types updated. `plan.gemini.testability-adversarial.review#high-1` is covered by the Slice 1 task that moves `nonAggregateRunsByDefinitionId` after the filter gate so the popover counts stay consistent with the filtered `batchCount`. Each mitigation is specific enough to implement.",
+            "unaddressed_high_finding_ids": [],
+            "evidence": [
+              {
+                "artifact": "docs/workflow/feature-runs/coverage-cell-batch-display/reviews/plan.codex.architecture-adversarial.review.md",
+                "section": "Resolution",
+                "quote": "Finding 1 (HIGH, modelIds filter dropped) \u2014 FALSE POSITIVE. The existing matchesModelFilter check (lines 238-240) for the explicit filterModelIds query arg is preserved unchanged. matchesEffectiveModelSet is an additional gate applied before it. Both filters co-exist."
+              },
+              {
+                "artifact": "docs/workflow/feature-runs/coverage-cell-batch-display/reviews/plan.codex.implementation-adversarial.review.md",
+                "section": "Resolution",
+                "quote": "Finding 1 (HIGH, domainCoverage.ts is generated wrapper) \u2014 FALSE POSITIVE for this implementation. Codex correctly added cloud/apps/web/src/api/operations/domainCoverage.graphql as the actual fragment source and updated the generated types. Build passes."
+              },
+              {
+                "artifact": "docs/workflow/feature-runs/coverage-cell-batch-display/tasks.md",
+                "section": "1.3",
+                "quote": "Move `nonAggregateRunsByDefinitionId` population to AFTER this gate (currently it's before `matchesModelFilter`). Pass `valueA` and `valueB` to `selectPrimaryDefinitionCounts`. Populate `aFirstBatchCount` and `bFirstBatchCount` in both the zero-cell branch and the real-cell branch."
+              }
+            ],
+            "timestamp": "2026-04-26T00:00:00Z"
+          },
+          {
+            "judge": "restatement",
+            "model": "gpt-5.5",
+            "verdict": "proceed-with-annotation",
+            "confidence": 5,
+            "reasoning": "No restatement assessment is possible because this is the first adversarial round: there are no earlier findings and no orchestrator responses to compare against. Per the first-round rule, the correct verdict is proceed-with-annotation. Baseline classifications for later rounds: NEW `plan.codex.architecture-adversarial.review#high-1` because it introduces a public-API regression failure mode where `modelIds` filtering could be dropped while the argument remains exposed; NEW `plan.codex.architecture-adversarial.review#medium-2` because it introduces a normalization/validation failure mode where raw `jobChoiceValueFirst` tokens may not match canonical coverage keys, collapsing directional counts to zero; NEW `plan.codex.architecture-adversarial.review#medium-3` because it introduces a link-target mismatch failure mode where displayed filtered counts can point to an aggregate run outside the filtered cohort; NEW `plan.codex.implementation-adversarial.review#high-1` because it introduces an implementation-path failure mode where editing a generated re-export file would not update the real GraphQL query source; NEW `plan.codex.implementation-adversarial.review#medium-2` because it repeats the aggregate-link mismatch at implementation level as a concrete unresolved failure mode in `domain-coverage.ts`; NEW `plan.codex.implementation-adversarial.review#low-3` because it repeats the token-normalization concern at implementation level, with the specific failure mode that stored token casing/labels may differ from canonical keys and zero out new fields; NEW `plan.gemini.testability-adversarial.review#high-1` and NEW `plan.gemini.testability-adversarial.review#medium-2` only in the narrow first-round sense, but the provided text does not describe any concrete failure mode beyond severity labels, so they establish no usable comparison baseline except that an unspecified issue was asserted.",
+            "unaddressed_high_finding_ids": [
+              "plan.codex.architecture-adversarial.review#high-1",
+              "plan.codex.implementation-adversarial.review#high-1",
+              "plan.gemini.testability-adversarial.review#high-1"
+            ],
+            "evidence": [
+              {
+                "artifact": "user prompt",
+                "section": "Earlier rounds' findings",
+                "quote": "Earlier rounds' findings (with orchestrator responses):\n- No prior findings yet."
+              },
+              {
+                "artifact": "plan.codex.architecture-adversarial.review.md",
+                "section": "high-1",
+                "quote": "The plan drops an existing public filter on `domainValueCoverage`. The resolver still accepts `modelIds` and currently applies `run.transcripts.some(...)` to honor it, but the plan only describes replacing that gate with the `effectiveModelIds.every(...)` check. If implemented as written, any caller that relies on `modelIds` will get a different matrix even though the API still advertises the argument."
+              },
+              {
+                "artifact": "plan.codex.architecture-adversarial.review.md",
+                "section": "medium-2",
+                "quote": "The new `aFirstBatchCount` / `bFirstBatchCount` logic assumes `jobChoiceValueFirst` tokens can be used directly as matrix value keys, but `getCoverageDirection()` only trims an arbitrary string and never normalizes or validates it against `COVERAGE_VALUE_KEYS`. That means token drift, casing changes, or alternate labels will silently collapse the new directional counts to zero."
+              },
+              {
+                "artifact": "plan.codex.architecture-adversarial.review.md",
+                "section": "medium-3",
+                "quote": "The plan changes the counted cohort but leaves `aggregateRunId` selection untouched. In the resolver, the aggregate link target is chosen from `latestAggregateRunIdByDefinitionId` before any model-set gating, so the cell can show filtered counts while the \u201cView Vignette Analysis\u201d link still opens an aggregate run that does not match the filtered cohort."
+              },
+              {
+                "artifact": "plan.codex.implementation-adversarial.review.md",
+                "section": "high-1",
+                "quote": "The plan tells you to edit `cloud/apps/web/src/api/operations/domainCoverage.ts` to add the new GraphQL fields, but that file is only a generated wrapper that re-exports `DomainValueCoverageDocument` and `DomainValueCoverageLegacyDocument`. There is no fragment text in that file to change, so this plan will not actually update the query unless the real codegen source is edited instead."
+              },
+              {
+                "artifact": "plan.codex.implementation-adversarial.review.md",
+                "section": "medium-2",
+                "quote": "The plan narrows `batchCount` to the effective model set, but it does not reconcile the `aggregateRunId` fallback. In `domain-coverage.ts`, the cell still picks `latestAggregateRunIdByDefinitionId` first and only then `latestMatchingRunIdByDefinitionId`, and both are maintained independently of the new cohort rule. That means the cell can still link to an analysis run that does not match the displayed filtered batch cohort."
+              },
+              {
+                "artifact": "plan.codex.implementation-adversarial.review.md",
+                "section": "low-3",
+                "quote": "The plan assumes `jobChoiceValueFirst` is stored as the exact canonical value string used for `valueA`/`valueB`. The provided code only shows that it is read as a trimmed raw string; it does not prove that the stored token matches the coverage keys exactly. If the token casing or labels differ, the new `aFirstBatchCount` / `bFirstBatchCount` fields will quietly collapse to zero."
+              },
+              {
+                "artifact": "plan.gemini.testability-adversarial.review.md",
+                "section": "high-1",
+                "quote": "Severity:** HIGH"
+              },
+              {
+                "artifact": "plan.gemini.testability-adversarial.review.md",
+                "section": "medium-2",
+                "quote": "Severity:** MEDIUM"
+              }
+            ],
+            "timestamp": "2026-04-26T00:00:00-07:00"
+          },
+          {
+            "judge": "implementation-risk",
+            "model": "claude-opus-4-5",
+            "verdict": "block",
+            "confidence": 4,
+            "reasoning": "Two load-bearing ambiguities will cause an implementer to guess wrong. First: the badge condition is contradicted between FR-007 and the Edge Cases section. FR-007 says fire when `aFirstBatchCount !== bFirstBatchCount`; the edge case 'pairedBatchCount = 0, batchCount > 0' says fire 'because batchCount > pairedBatchCount'. These diverge when all direction tokens are unrecognized: both counts are 0, so FR-007 suppresses the badge, but the edge case fires it. Both sections are authoritative; an implementer will pick one and ship the wrong behavior for that scenario. Second: tasks 1.3 repeatedly references `effectiveModelIds` as already in scope ('when effectiveModelIds.length > 0, add a secondary gate') but no artifact states where this variable comes from in domain-coverage.ts\u2014whether it is already computed at the filter application point, what it is named in the existing code, or whether the implementer must call `resolveEffectiveDefaultModelIds` themselves. Three lower-severity risks are also present: (a) moving `nonAggregateRunsByDefinitionId` after the model filter silently changes popover trial counts for filtered cohorts, which the spec never explicitly acknowledges as a behavioral change to the popover; (b) whether `DOMAIN_VALUE_COVERAGE_QUERY_LEGACY` shares the same fragment or inlines its own fields is unstated, leaving the implementer to guess the structure; (c) `valueA`/`valueB` variable names at the `selectPrimaryDefinitionCounts` call site in `domain-coverage.ts` are not stated, requiring the implementer to infer them from the existing loop structure.",
+            "unaddressed_high_finding_ids": [],
+            "evidence": [
+              {
+                "artifact": "SPEC",
+                "section": "Edge Cases",
+                "quote": "pairedBatchCount = 0, batchCount > 0: Cell shows batchCount. \u26a0 fires because batchCount > pairedBatchCount. Direction tooltip shows 0 for the missing direction."
+              },
+              {
+                "artifact": "SPEC",
+                "section": "Functional Requirements / FR-007",
+                "quote": "The \u26a0 mismatch badge MUST fire when aFirstBatchCount !== bFirstBatchCount (equivalently, orphanedBatchCount > 0). It MUST NOT fire when directional data is absent (both counts are 0) and MUST NOT fire for trial count differences."
+              },
+              {
+                "artifact": "TASKS",
+                "section": "Slice 1 / Task 1.3",
+                "quote": "Apply model-set filter \u2014 after the existing matchesModelFilter check, when effectiveModelIds.length > 0, add a secondary gate: effectiveModelIds.every(id => models.includes(id))."
+              },
+              {
+                "artifact": "PLAN",
+                "section": "Architecture / Core change",
+                "quote": "When effectiveModelIds.length > 0: a run must have all effective default model IDs present in its config.models array to count toward batchCount and the directional trackers."
+              },
+              {
+                "artifact": "TASKS",
+                "section": "Slice 1 / Task 1.3",
+                "quote": "Move nonAggregateRunsByDefinitionId population to AFTER this gate (currently it's before matchesModelFilter)."
+              },
+              {
+                "artifact": "PLAN",
+                "section": "Residual Risks",
+                "quote": "Legacy query (DOMAIN_VALUE_COVERAGE_QUERY_LEGACY) does not take the signature arg. The fragment change must be applied to both queries or the legacy path will miss the new fields."
+              }
+            ],
+            "timestamp": "2026-04-26T00:00:00Z"
+          }
+        ],
+        [
+          {
+            "judge": "completeness",
+            "model": "gpt-5.5",
+            "verdict": "proceed",
+            "confidence": 4,
+            "reasoning": "plan.codex.architecture-adversarial.review#high-1 is addressed in the review Resolution note, which says the existing public filter remains and the effective-model check is additive, so the concern is specifically resolved. plan.codex.implementation-adversarial.review#high-1 is addressed in the review Resolution note, which says the real GraphQL fragment source was updated and the generated types were updated, so the implementation target is named clearly enough. plan.gemini.testability-adversarial.review#high-1 is addressed in the plan/tasks by explicitly moving nonAggregateRunsByDefinitionId after the model-set gate and applying the same filter to all per-run counters, which is specific enough to implement. No HIGH finding remains unaddressed.",
+            "evidence": [
+              {
+                "artifact": "docs/workflow/feature-runs/coverage-cell-batch-display/reviews/plan.codex.architecture-adversarial.review.md",
+                "section": "Resolution",
+                "quote": "matchesModelFilter check ... is preserved unchanged."
+              },
+              {
+                "artifact": "docs/workflow/feature-runs/coverage-cell-batch-display/reviews/plan.codex.implementation-adversarial.review.md",
+                "section": "Resolution",
+                "quote": "actual fragment source and updated the generated types."
+              },
+              {
+                "artifact": "docs/workflow/feature-runs/coverage-cell-batch-display/tasks.md",
+                "section": "1.3",
+                "quote": "Move nonAggregateRunsByDefinitionId population to AFTER this gate."
+              }
+            ],
+            "timestamp": "2026-04-26T23:48:19Z"
+          },
+          {
+            "judge": "restatement",
+            "model": "gpt-5",
+            "verdict": "proceed-with-annotation",
+            "confidence": 5,
+            "reasoning": "First-round case applies because the supplied history says \"No prior findings yet.\" With no earlier findings and no orchestrator responses, none of the latest items can be labeled RESTATEMENT. I classify every latest finding as NEW baseline signal for later rounds. plan.codex.architecture-adversarial.review#high-1 is NEW: it surfaces a new failure mode where the public `modelIds` filter would remain in the API but stop affecting the matrix because the existing `run.transcripts.some(...)` gate would be dropped. plan.codex.architecture-adversarial.review#medium-2 is NEW: it surfaces a new failure mode where raw `jobChoiceValueFirst` tokens are not normalized against `COVERAGE_VALUE_KEYS`, so directional counts can silently fall to zero on token drift or casing changes. plan.codex.architecture-adversarial.review#medium-3 is NEW: it surfaces a new failure mode where displayed filtered counts and the `aggregateRunId` link target can point at different cohorts. plan.codex.implementation-adversarial.review#high-1 is NEW: it surfaces a new failure mode where the plan edits a generated wrapper file instead of the real GraphQL source, so the query would not actually change. plan.codex.implementation-adversarial.review#medium-2 is NEW: it repeats the same underlying link/cohort mismatch failure mode as architecture medium-3, but because there are still no prior rounds it remains baseline NEW rather than a restatement across rounds. plan.codex.implementation-adversarial.review#low-3 is NEW: it repeats the same underlying token-normalization failure mode as architecture medium-2, but again there is no earlier round for restatement analysis. plan.gemini.testability-adversarial.review#high-1 is NEW only as a placeholder baseline because the supplied text gives no failure mode beyond \"Severity:** HIGH\". plan.gemini.testability-adversarial.review#medium-2 is NEW only as a placeholder baseline because the supplied text gives no failure mode beyond \"Severity:** MEDIUM\". Verdict is proceed-with-annotation, not block, because this judge cannot assess loop saturation on round one; these findings should be preserved as the comparison baseline for future restatement checks.",
+            "unaddressed_high_finding_ids": [
+              "plan.codex.architecture-adversarial.review#high-1",
+              "plan.codex.implementation-adversarial.review#high-1",
+              "plan.gemini.testability-adversarial.review#high-1"
+            ],
+            "evidence": [
+              {
+                "artifact": "user prompt",
+                "section": "Earlier rounds' findings",
+                "quote": "No prior findings yet."
+              },
+              {
+                "artifact": "plan.codex.architecture-adversarial.review.md",
+                "section": "high-1",
+                "quote": "The plan drops an existing public filter on `domainValueCoverage`. The resolver still accepts `modelIds` and currently applies `run.transcripts.some(...)` to honor it, but the plan only describes replacing that gate with the `effectiveModelIds.every(...)` check."
+              },
+              {
+                "artifact": "plan.codex.architecture-adversarial.review.md",
+                "section": "medium-2",
+                "quote": "The new `aFirstBatchCount` / `bFirstBatchCount` logic assumes `jobChoiceValueFirst` tokens can be used directly as matrix value keys, but `getCoverageDirection()` only trims an arbitrary string and never normalizes or validates it against `COVERAGE_VALUE_KEYS`."
+              },
+              {
+                "artifact": "plan.codex.architecture-adversarial.review.md",
+                "section": "medium-3",
+                "quote": "the cell can show filtered counts while the \u201cView Vignette Analysis\u201d link still opens an aggregate run that does not match the filtered cohort."
+              },
+              {
+                "artifact": "plan.codex.implementation-adversarial.review.md",
+                "section": "high-1",
+                "quote": "The plan tells you to edit `cloud/apps/web/src/api/operations/domainCoverage.ts` to add the new GraphQL fields, but that file is only a generated wrapper that re-exports `DomainValueCoverageDocument` and `DomainValueCoverageLegacyDocument`."
+              },
+              {
+                "artifact": "plan.codex.implementation-adversarial.review.md",
+                "section": "medium-2",
+                "quote": "the cell still picks `latestAggregateRunIdByDefinitionId` first and only then `latestMatchingRunIdByDefinitionId`, and both are maintained independently of the new cohort rule."
+              },
+              {
+                "artifact": "plan.codex.implementation-adversarial.review.md",
+                "section": "low-3",
+                "quote": "The plan assumes `jobChoiceValueFirst` is stored as the exact canonical value string used for `valueA`/`valueB`. The provided code only shows that it is read as a trimmed raw string; it does not prove that the stored token matches the coverage keys exactly."
+              },
+              {
+                "artifact": "plan.gemini.testability-adversarial.review.md",
+                "section": "high-1",
+                "quote": "Severity:** HIGH"
+              },
+              {
+                "artifact": "plan.gemini.testability-adversarial.review.md",
+                "section": "medium-2",
+                "quote": "Severity:** MEDIUM"
+              }
+            ],
+            "timestamp": "2026-04-26T00:00:00-07:00"
+          },
+          {
+            "judge": "implementation-risk",
+            "model": "claude-opus-4-5",
+            "verdict": "block",
+            "confidence": 4,
+            "reasoning": "Three load-bearing gaps would cause a competent implementer to either get stuck or ship a bug. (1) Task 1.3 explicitly says the model-set filter gates `incompleteBatchCountByDefinitionId`, but the Scope section explicitly says 'Changes to `incompleteBatchCount` or the amber dot indicator' are NOT in scope \u2014 these directly contradict. Following the task literally changes amber-dot behavior that is banned by scope. (2) The spec references `resolveEffectiveDefaultModelIds` as the authoritative source of `effectiveModelIds` (including global fallback resolution), but this function is never located, imported, or shown to exist anywhere in the artifact chain. An implementer cannot be confident it exists or where to import it from. (3) The edge case 'pairedBatchCount = 0, batchCount > 0: \u26a0 fires because batchCount > pairedBatchCount' is ambiguous: it covers both the case where one directional count is zero (badge should fire per FR-007) AND the case where both are zero with unrecognized tokens (badge must NOT fire per FR-007 and the 'No directional data' edge case). The two sub-cases are indistinguishable from the edge-case description alone, and an implementer who relies on that description without also reading FR-007 will produce wrong badge logic. Secondary concern: Task 1.3 says to 'Move nonAggregateRunsByDefinitionId population to AFTER this gate (currently it's before matchesModelFilter)' but the diff is broken (fatal: bad revision), so the implementer has no artifact-visible confirmation of the current structure and could misplace the move. The `incompleteBatchCount` contradiction alone is sufficient to block.",
+            "unaddressed_high_finding_ids": [],
+            "evidence": [
+              {
+                "artifact": "tasks",
+                "section": "Slice 1 \u2014 Task 1.3",
+                "quote": "This gates `batchCountByDefinitionId`, `directionalGroupsByDefinitionId`, and `incompleteBatchCountByDefinitionId`."
+              },
+              {
+                "artifact": "spec",
+                "section": "Scope \u2014 Not in scope",
+                "quote": "Changes to `incompleteBatchCount` or the amber dot indicator"
+              },
+              {
+                "artifact": "spec",
+                "section": "Edge Cases \u2014 No default models",
+                "quote": "Note: an empty per-domain `defaultModelIds` does not guarantee `effectiveModelIds` is empty; global defaults may still apply... `resolveEffectiveDefaultModelIds` returns an empty array"
+              },
+              {
+                "artifact": "spec",
+                "section": "Edge Cases \u2014 pairedBatchCount = 0, batchCount > 0",
+                "quote": "Cell shows `batchCount`. \u26a0 fires because `batchCount > pairedBatchCount`. Direction tooltip shows 0 for the missing direction."
+              },
+              {
+                "artifact": "spec",
+                "section": "Edge Cases \u2014 No directional data",
+                "quote": "If no runs have a recognized direction token (`jobChoiceValueFirst`), `pairedBatchCount = 0` and `aFirstBatchCount = bFirstBatchCount = 0`. No \u26a0 badge. Runs with missing or blank `jobChoiceValueFirst` are excluded from directional counts but still contribute to `batchCount`."
+              },
+              {
+                "artifact": "diff",
+                "section": "diff block",
+                "quote": "fatal: bad revision '7116531f6ac1d6d549d6a53484a1ac68d98afab9b3bf70d9fdf151a698b41f5a'"
+              },
+              {
+                "artifact": "tasks",
+                "section": "Slice 1 \u2014 Task 1.3",
+                "quote": "Move `nonAggregateRunsByDefinitionId` population to AFTER this gate (currently it's before `matchesModelFilter`)."
+              },
+              {
+                "artifact": "plan",
+                "section": "Slice 2 \u2014 Changes",
+                "quote": "`orphanedBatchCount` is already in the API response but currently unused on the frontend. It will be threaded through... as a cross-check but the badge condition uses the individual counts."
+              }
+            ],
+            "timestamp": "2026-04-26T00:00:00Z"
+          }
+        ]
+      ],
+      "annotations": [
+        {
+          "stage": "plan",
+          "round": 1,
+          "judge": "restatement",
+          "confidence": 5,
+          "reasoning": "No restatement assessment is possible because this is the first adversarial round: there are no earlier findings and no orchestrator responses to compare against. Per the first-round rule, the correct verdict is proceed-with-annotation. Baseline classifications for later rounds: NEW `plan.codex.architecture-adversarial.review#high-1` because it introduces a public-API regression failure mode where `modelIds` filtering could be dropped while the argument remains exposed; NEW `plan.codex.architecture-adversarial.review#medium-2` because it introduces a normalization/validation failure mode where raw `jobChoiceValueFirst` tokens may not match canonical coverage keys, collapsing directional counts to zero; NEW `plan.codex.architecture-adversarial.review#medium-3` because it introduces a link-target mismatch failure mode where displayed filtered counts can point to an aggregate run outside the filtered cohort; NEW `plan.codex.implementation-adversarial.review#high-1` because it introduces an implementation-path failure mode where editing a generated re-export file would not update the real GraphQL query source; NEW `plan.codex.implementation-adversarial.review#medium-2` because it repeats the aggregate-link mismatch at implementation level as a concrete unresolved failure mode in `domain-coverage.ts`; NEW `plan.codex.implementation-adversarial.review#low-3` because it repeats the token-normalization concern at implementation level, with the specific failure mode that stored token casing/labels may differ from canonical keys and zero out new fields; NEW `plan.gemini.testability-adversarial.review#high-1` and NEW `plan.gemini.testability-adversarial.review#medium-2` only in the narrow first-round sense, but the provided text does not describe any concrete failure mode beyond severity labels, so they establish no usable comparison baseline except that an unspecified issue was asserted.",
+          "artifact_sha_at_time": "fe8cece0f5f003224ec65cb46794adce0820f07d76b3a1d1240a51db0bcf0469"
+        },
+        {
+          "stage": "plan",
+          "round": 2,
+          "judge": "restatement",
+          "confidence": 5,
+          "reasoning": "First-round case applies because the supplied history says \"No prior findings yet.\" With no earlier findings and no orchestrator responses, none of the latest items can be labeled RESTATEMENT. I classify every latest finding as NEW baseline signal for later rounds. plan.codex.architecture-adversarial.review#high-1 is NEW: it surfaces a new failure mode where the public `modelIds` filter would remain in the API but stop affecting the matrix because the existing `run.transcripts.some(...)` gate would be dropped. plan.codex.architecture-adversarial.review#medium-2 is NEW: it surfaces a new failure mode where raw `jobChoiceValueFirst` tokens are not normalized against `COVERAGE_VALUE_KEYS`, so directional counts can silently fall to zero on token drift or casing changes. plan.codex.architecture-adversarial.review#medium-3 is NEW: it surfaces a new failure mode where displayed filtered counts and the `aggregateRunId` link target can point at different cohorts. plan.codex.implementation-adversarial.review#high-1 is NEW: it surfaces a new failure mode where the plan edits a generated wrapper file instead of the real GraphQL source, so the query would not actually change. plan.codex.implementation-adversarial.review#medium-2 is NEW: it repeats the same underlying link/cohort mismatch failure mode as architecture medium-3, but because there are still no prior rounds it remains baseline NEW rather than a restatement across rounds. plan.codex.implementation-adversarial.review#low-3 is NEW: it repeats the same underlying token-normalization failure mode as architecture medium-2, but again there is no earlier round for restatement analysis. plan.gemini.testability-adversarial.review#high-1 is NEW only as a placeholder baseline because the supplied text gives no failure mode beyond \"Severity:** HIGH\". plan.gemini.testability-adversarial.review#medium-2 is NEW only as a placeholder baseline because the supplied text gives no failure mode beyond \"Severity:** MEDIUM\". Verdict is proceed-with-annotation, not block, because this judge cannot assess loop saturation on round one; these findings should be preserved as the comparison baseline for future restatement checks.",
+          "artifact_sha_at_time": "fe8cece0f5f003224ec65cb46794adce0820f07d76b3a1d1240a51db0bcf0469"
+        }
+      ],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [
+        "c3964bb3b70a957ec9b233c7dd3653f6ba17701ab00facf88ae1393dc6155577",
+        "7116531f6ac1d6d549d6a53484a1ac68d98afab9b3bf70d9fdf151a698b41f5a",
+        "fe8cece0f5f003224ec65cb46794adce0820f07d76b3a1d1240a51db0bcf0469"
+      ],
+      "initial_sha": "c3964bb3b70a957ec9b233c7dd3653f6ba17701ab00facf88ae1393dc6155577",
+      "judge_next_action": "advance"
+    },
+    "tasks": {
+      "judge_next_action": "advance",
+      "adversarial_rounds": 1,
+      "judge_rounds": 0,
+      "judge_verdicts": [],
+      "annotations": [],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [
+        "030f264ea09d4d7617dc31189ad177b594ea88a0e90f9282edaa22278f808c73"
+      ],
+      "initial_sha": "030f264ea09d4d7617dc31189ad177b594ea88a0e90f9282edaa22278f808c73"
+    },
+    "diff": {
+      "adversarial_rounds": 2,
+      "judge_rounds": 0,
+      "judge_verdicts": [],
+      "annotations": [],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [
+        "5bca421c1461399b673c84b19ec86a32fce619f43aaa2998de37fa6bd3ba6f3a",
+        "07bb599de9fef528574fa3409924355ec16d8899289e08e064d45f2d1753992c",
+        "87152053b61ef4e77bf2576be5687de1d0b15924d9bebb5865973085fe1f7ea5"
+      ],
+      "initial_sha": "5bca421c1461399b673c84b19ec86a32fce619f43aaa2998de37fa6bd3ba6f3a",
+      "judge_next_action": "advance"
+    }
+  },
+  "invariant_warnings": [],
+  "schema_version": 2,
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  },
+  "annotations": [
+    {
+      "stage": "spec",
+      "ts": "20260426T225458_576907Z",
+      "reason": "spec.md authored with 3 user stories, 11 FRs, edge cases, and scope boundaries",
+      "head_sha": "eab6ffbb2ad3a2f01ce5cd3ffa2dfd3c317349e9"
+    },
+    {
+      "stage": "plan",
+      "ts": "20260426T230704_926436Z",
+      "reason": "plan.md authored: 2-slice breakdown (API then frontend), model-set filter approach, directional count lookup via value name, 3 residual risks with verifications",
+      "head_sha": "eab6ffbb2ad3a2f01ce5cd3ffa2dfd3c317349e9"
+    },
+    {
+      "stage": "tasks",
+      "ts": "20260426T231256_487163Z",
+      "reason": "tasks.md authored: 2 slices with CHECKPOINT markers, ~80+60 line estimates, 3 pre-merge verifications",
+      "head_sha": "eab6ffbb2ad3a2f01ce5cd3ffa2dfd3c317349e9"
+    },
+    {
+      "stage": "plan",
+      "ts": "20260426T234812_678357Z",
+      "reason": "Implementation already complete via Codex dispatch in prior session; diff checkpoint passed 2 adversarial rounds (all accepted); pre-merge verifications pending before deliver",
+      "head_sha": "0842af56c8b34162a05e3b010f28873378ec6bb2"
+    },
+    {
+      "stage": "tasks",
+      "ts": "20260426T234824_415050Z",
+      "reason": "Implementation already complete via Codex dispatch in prior session; diff checkpoint passed",
+      "head_sha": "0842af56c8b34162a05e3b010f28873378ec6bb2"
+    },
+    {
+      "stage": "diff",
+      "ts": "20260426T234831_734404Z",
+      "reason": "Diff checkpoint complete; 2 adversarial rounds passed; all reviews resolved",
+      "head_sha": "0842af56c8b34162a05e3b010f28873378ec6bb2"
+    }
+  ],
+  "spec_adversarial_rounds": 2,
+  "last_action_result": {
+    "next": "dispatch_next_slice_to_codex",
+    "reason": "plan judge panel completed: advance",
+    "blockers": [
+      "Three load-bearing gaps would cause a competent implementer to either get stuck or ship a bug. (1) Task 1.3 explicitly says the model-set filter gates `incompleteBatchCountByDefinitionId`, but the Scope section explicitly says 'Changes to `incompleteBatchCount` or the amber dot indicator' are NOT in scope \u2014 these directly contradict. Following the task literally changes amber-dot behavior that is banned by scope. (2) The spec references `resolveEffectiveDefaultModelIds` as the authoritative source of `effectiveModelIds` (including global fallback resolution), but this function is never located, imported, or shown to exist anywhere in the artifact chain. An implementer cannot be confident it exists or where to import it from. (3) The edge case 'pairedBatchCount = 0, batchCount > 0: \u26a0 fires because batchCount > pairedBatchCount' is ambiguous: it covers both the case where one directional count is zero (badge should fire per FR-007) AND the case where both are zero with unrecognized tokens (badge must NOT fire per FR-007 and the 'No directional data' edge case). The two sub-cases are indistinguishable from the edge-case description alone, and an implementer who relies on that description without also reading FR-007 will produce wrong badge logic. Secondary concern: Task 1.3 says to 'Move nonAggregateRunsByDefinitionId population to AFTER this gate (currently it's before matchesModelFilter)' but the diff is broken (fatal: bad revision), so the implementer has no artifact-visible confirmation of the current structure and could misplace the move. The `incompleteBatchCount` contradiction alone is sufficient to block."
+    ],
+    "outcome": "advance",
+    "proceed_count": 2,
+    "block_count": 1,
+    "timestamp": "2026-04-26T23:50:05.154796Z",
+    "judge_round": 2
+  },
+  "plan_adversarial_rounds": 3,
+  "tasks_adversarial_rounds": 1,
+  "diff_adversarial_rounds": 2,
+  "dirty_overrides": {},
+  "plan_judge_rounds": 2
+}

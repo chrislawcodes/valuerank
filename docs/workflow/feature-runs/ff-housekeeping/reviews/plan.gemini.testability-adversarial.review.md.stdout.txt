@@ -1,0 +1,57 @@
+MCP issues detected. Run /mcp list for status.{
+  "session_id": "5bf3923e-4938-4d88-9ea1-cdb6f080756c",
+  "response": "## Findings\n\n| Severity | Finding | Slice |\n| :--- | :--- | :--- |\n| **[HIGH]** | **Brittle Override Mechanism:** Tying the `implementation_rule_override` to a specific `HEAD` SHA is user-hostile. A common action like `git commit --amend` or an interactive rebase will change the SHA, invalidating the override. This forces the developer to repeat the override process for trivial commit modifications, adding friction to the workflow. A branch-based or timestamp-based override would be more robust. | 3 |\n| **[HIGH]** | **Fragile Quota Classifier:** The `_is_codex_quota_exhaustion` helper relies exclusively on substring matching against `stdout` and `stderr`. This is brittle and likely to fail if the API provider changes its error message formatting, or if the error is returned in a structured format like JSON or HTML which is then printed to the console. It will miss many real-world failure modes. | 1 |\n| **[MEDIUM]** | **Concurrency Not Tested in Reconciler:** The plan correctly notes that the 3-way reconcile is not a transaction and relies on an idempotent re-run for recovery. However, the testing approach includes no test for concurrent executions. Without simulating a race condition, it's impossible to verify what state is left behind or to prove that the re-run can reliably recover from it. | 2 |\n| **[MEDIUM]** | **Underspecified Smoke Test Assertions:** The plan for the `validation-only` smoke test states it will assert that \"all 3 review SHAs updated, annotation appended\". This is insufficient. A robust test must assert that the SHAs are updated to the *correct, expected* values and that the appended annotation contains the *correct* content and metadata, not just that a change occurred. | 4 |\n| **[MEDIUM]**| **Missed Quota Error Path:** The logic is specified as \"when subprocess fails AND classifier returns True\". This creates a blind spot. A tool could encounter a quota exhaustion error, print the details to `stdout`, and still exit with code 0. In this scenario, the failure would be missed entirely because the subprocess did not \"fail\". | 1 |\n| **[MEDIUM]** | **[UNVERIFIED] Naive Line Count for Implementation Rule:** The `git diff` command to calculate added lines for the implementation rule is simplistic. By only filtering for a few code extensions, it will incorrectly count lines from checked-in generated code, large configuration files (e.g., JSON, YAML), or documentation, leading to frequent false-positive warnings. | 3 |\n| **[LOW]** | **[UNVERIFIED] Brittle `plan.md` Deduplication:** The plan to \"replace any existing line matching `review: reviews/<basename>`\" is likely too simple. This approach is sensitive to minor variations in whitespace or formatting and may fail to update the line or, worse, add a duplicate line if the existing entry doesn't match the expected string exactly. | 2 |\n| **[LOW]** | **Overly Broad Suppression for Implementation Rule:** The condition to suppress the warning if `state[\"codex_dispatches\"]` is non-empty is too general. This could create a false negative, where the warning is silenced because of an old or unrelated dispatch, defeating the purpose of the check. | 3 |\n\n## Residual Risks\n\nEven if the findings above are addressed, the following risks remain inherent to the design:\n\n1.  **API Error Drift:** The quota classifier (Risk P1) will remain fundamentally reactive. Even with improved pattern matching, it will always be chasing changes made by the upstream API provider. A future change in error reporting could cause quota-related failures to be miscategorized as `failed` instead of `deferred` until the classifier is updated.\n2.  **Reconciler Race Conditions:** The decision to not make the 3-way reconcile transactional (Risk P3) means that a mid-write failure (e.g., due to disk full, permissions change, or process kill) will leave the feature-run files in an inconsistent state. While the idempotent re-run is the designed recovery path, its success depends on the operator correctly identifying the issue and re-triggering the action. There is no automated rollback or recovery.\n3.  **Heuristic-Based Warnings:** The implementation rule check (Risk P2) is a heuristic, not a guarantee. It will be prone to both false positives (as noted in the findings) and false negatives (e.g., a large change made across many small files might fly under the radar). The override mechanism is a necessary escape hatch but introduces a manual step that relies on developer judgment.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 37316
+        },
+        "tokens": {
+          "input": 13830,
+          "prompt": 13830,
+          "candidates": 1013,
+          "total": 17062,
+          "cached": 0,
+          "thoughts": 2219,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 37316,
+            "tokens": {
+              "input": 13830,
+              "prompt": 13830,
+              "candidates": 1013,
+              "total": 17062,
+              "cached": 0,
+              "thoughts": 2219,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

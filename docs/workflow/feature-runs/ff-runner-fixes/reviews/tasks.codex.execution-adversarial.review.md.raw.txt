@@ -1,0 +1,9 @@
+## Findings
+- Medium [UNVERIFIED]: Slice 3 only broadens `recommended_next_action` for `spec`, `plan`, and `tasks`, and the regression coverage is limited to run-033. That leaves a gap if any other unhealthy stage, branch, or caller uses the same `judge_next_action == "advance"` decision path. The fix can look complete while the broader class of mis-recommendations still exists.
+- Medium [UNVERIFIED]: Slice 2 forces invariant warnings to `stderr` in every mode, but the tasks never say how JSON or scripted callers should keep structured output clean. If the current CLI contract expects machine-readable stdout in JSON mode, this can contaminate consumer output or break parsing.
+- Low [UNVERIFIED]: Slice 3.5 backfills only `id` on existing `unresolved_concerns` entries. The new fields `addressed_at`, `addressed_by`, `deferred_reason`, and `dismissed_reason` are not normalized for old records, so mixed-shape data can still trip downstream readers that assume the new schema is fully populated.
+
+## Residual Risks
+- The fixture strategy proves the run-033 case, but it does not prove the fix against other stage combinations or future variants of the unhealthy-branch logic.
+- The checklist is heavy on unit tests, but it does not call for a separate end-to-end verification of the full runner flow after the last commit.
+- Several tasks assume the existing CLI and state formats already match the new helpers and warnings. If those assumptions are off, some adapter work may still be needed.

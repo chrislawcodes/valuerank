@@ -14,7 +14,7 @@ export type RunConfig = {
   temperature?: number | null;
   priority?: string;
   companionRunId?: string | null;
-  jobChoiceLaunchMode?: 'PAIRED_BATCH' | 'AD_HOC_BATCH' | 'STANDARD' | null;
+  jobChoiceLaunchMode?: 'PAIRED_BATCH' | 'PAIRED_BATCH_TOPUP' | 'AD_HOC_BATCH' | 'STANDARD' | null;
   jobChoiceBatchGroupId?: string | null;
   jobChoiceValueFirst?: string | null;
   isAggregate?: boolean;

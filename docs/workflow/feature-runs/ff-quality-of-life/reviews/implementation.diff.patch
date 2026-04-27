@@ -1,0 +1,851 @@
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/judge-prompts/restatement.md b/docs/workflow/operations/codex-skills/feature-factory/judge-prompts/restatement.md
+index 39409918..de15c738 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/judge-prompts/restatement.md
++++ b/docs/workflow/operations/codex-skills/feature-factory/judge-prompts/restatement.md
+@@ -34,6 +34,16 @@ are materially less severe than prior rounds):** PROCEED. Severity
+ is ranked HIGH > MEDIUM > LOW. If prior rounds had HIGH findings
+ and the latest round has only MEDIUM/LOW, the loop is converging.
+ 
++**Evidence requirement for severity-drop claims**: when citing
++severity drop as your proceed justification, your verdict reasoning
++MUST quote the prior-round reasoning text verbatim — at least 60
++characters, OR the full reasoning text if it is shorter than 60
++characters — and name the specific finding whose severity allegedly
++dropped. If you cannot quote a prior round's text for the finding
++in question, severity-drop is NOT a valid proceed basis. Fall back
++to other rules (true-saturation, real-progress) instead. This
++prevents gaming via injected-then-downgraded fake HIGH findings.
++
+ **True-saturation case (70%+ of latest findings are literal
+ restatements of prior-round findings):** PROCEED.
+ 
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py
+index 3165d01a..709b7d3f 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py
+@@ -2,8 +2,10 @@
+ """command_checkpoint implementation."""
+ import argparse
+ import json
++import os
+ import subprocess
+ import sys
++import tempfile
+ import time
+ from pathlib import Path
+ 
+@@ -351,12 +353,157 @@ def _handle_concern_lifecycle(args: argparse.Namespace) -> int | None:
+     return 0
+ 
+ 
++def _run_validation_only(slug: str, stage: str) -> int:
++    """Feature B Slice 3 — re-seal the manifest against the current artifact
++    SHA without dispatching any reviewer.
++
++    Lets an operator who has edited the artifact past the 3-round adversarial
++    cap re-sync the manifest instead of hand-editing review frontmatter SHAs.
++    Pure manifest-sync tool — does NOT bypass the concern-lifecycle gate or
++    the judge advance verdict.
++
++    Flow (per spec FR-004-007):
++      1. Load manifest; missing → exit 2.
++      2. Pre-check: every review path exists + is writable. Any failure →
++         exit 2 BEFORE any write so partial-state is impossible.
++      3. Compute current artifact SHA.
++      4. Read each review's frontmatter artifact_sha256.
++      5. If all match → print success, exit 0 (no-op).
++      6. Else: atomic-write each mismatching review with new SHA. Any failure
++         mid-loop → exit 2 with clear error (already-written reviews keep new
++         SHA; operator re-runs to catch the rest, per accepted Risk P3).
++      7. On full success: append advance-with-drift-style annotation to
++         stages[stage].annotations[] and print summary.
++    """
++    import re
++
++    manifest_path = checkpoint_manifest_path(slug, stage)
++    if not manifest_path.exists():
++        print(
++            f"no manifest to validate for stage={stage} — run checkpoint first",
++            file=sys.stderr,
++        )
++        return 2
++
++    try:
++        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
++    except json.JSONDecodeError as exc:
++        print(f"invalid manifest at {manifest_path}: {exc}", file=sys.stderr)
++        return 2
++
++    artifact_path = default_artifact_path(slug, stage)
++    if not artifact_path.exists():
++        print(f"no artifact to validate at {artifact_path}", file=sys.stderr)
++        return 2
++    current_sha = normalized_artifact_hash(stage, artifact_path)
++
++    required_reviews = manifest.get("required_reviews") or []
++    review_paths: list[Path] = []
++    from workflow_utils import resolve_stored_path  # local import
++    for entry in required_reviews:
++        raw = entry.get("path")
++        if not raw:
++            continue
++        review_paths.append(resolve_stored_path(raw, REPO_ROOT))
++
++    # Pre-check every target file before any write (Gemini MEDIUM F-03 best-effort).
++    pre_check_errors: list[str] = []
++    for p in review_paths:
++        if not p.exists():
++            pre_check_errors.append(f"pre-check failed: {p} does not exist")
++        elif not os.access(p, os.W_OK):
++            pre_check_errors.append(f"pre-check failed: {p} not writable")
++    if pre_check_errors:
++        for err in pre_check_errors:
++            print(err, file=sys.stderr)
++        return 2
++
++    # Classify each review as "needs update" or "already matches".
++    frontmatter_re = re.compile(r'(artifact_sha256:\s*)"[^"]*"')
++    needs_update: list[tuple[Path, str, str]] = []  # (path, old, new)
++    old_shas: set[str] = set()
++    for p in review_paths:
++        content = p.read_text(encoding="utf-8")
++        m = re.search(r'artifact_sha256:\s*"([a-f0-9]+)"', content)
++        old = m.group(1) if m else ""
++        old_shas.add(old)
++        if old != current_sha:
++            needs_update.append((p, old, current_sha))
++
++    if not needs_update:
++        print(f"manifest already matches artifact (sha={current_sha[:12]})")
++        return 0
++
++    # Atomic write per file: temp file in same dir + os.replace.
++    for p, _old, _new in needs_update:
++        try:
++            content = p.read_text(encoding="utf-8")
++            new_content = frontmatter_re.sub(
++                lambda m: f'{m.group(1)}"{current_sha}"', content, count=1
++            )
++            fd, tmp_name = tempfile.mkstemp(dir=p.parent, prefix=".reseal.", suffix=".md")
++            try:
++                with os.fdopen(fd, "w", encoding="utf-8") as fh:
++                    fh.write(new_content)
++                os.replace(tmp_name, p)
++            except Exception:
++                Path(tmp_name).unlink(missing_ok=True)
++                raise
++        except Exception as exc:  # noqa: BLE001 — report + bail, partial is accepted risk
++            print(
++                f"reseal partial failure at {p}: {exc} — re-run --validation-only to recover",
++                file=sys.stderr,
++            )
++            return 2
++
++    # Record annotation on full success.
++    old_sha_display = next(iter(old_shas - {current_sha}), "unknown")
++    annotation = {
++        "type": "validation-only-reseal",
++        "old_sha": old_sha_display,
++        "new_sha": current_sha,
++        "at": int(time.time()),
++        "files_updated": len(needs_update),
++    }
++    with with_locked_state(slug) as state:
++        stages_state = state.setdefault("stages", {})
++        stage_blob = stages_state.setdefault(stage, {})
++        if not isinstance(stage_blob, dict):
++            stage_blob = {}
++            stages_state[stage] = stage_blob
++        annotations = stage_blob.setdefault("annotations", [])
++        if not isinstance(annotations, list):
++            annotations = []
++            stage_blob["annotations"] = annotations
++        annotations.append(annotation)
++
++    print(
++        f"manifest re-sealed: {len(needs_update)} review file"
++        f"{'s' if len(needs_update) != 1 else ''} updated to sha={current_sha[:12]}"
++    )
++    return 0
++
++
+ @mutates_state("checkpoint")
+ def command_checkpoint(args: argparse.Namespace) -> int:
+     fast = getattr(args, "fast", False)
+     if fast and args.stage != "diff":
+         raise SystemExit("--fast requires --stage diff")
+ 
++    # Feature B Slice 3 — --validation-only is mutually exclusive with all
++    # state-mutating review modes. Argparse can't express this with required
++    # args cleanly; check at runtime.
++    if getattr(args, "validation_only", False):
++        if getattr(args, "fallback", False):
++            raise SystemExit("--validation-only cannot be combined with --fallback")
++        if getattr(args, "address", None):
++            raise SystemExit("--validation-only cannot be combined with --address")
++        if getattr(args, "defer", None):
++            raise SystemExit("--validation-only cannot be combined with --defer")
++        if getattr(args, "dismiss", None):
++            raise SystemExit("--validation-only cannot be combined with --dismiss")
++        return _run_validation_only(args.slug, args.stage)
++
+     ensure_sync()
+     lifecycle_rc = _handle_concern_lifecycle(args)
+     if lifecycle_rc is not None:
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_discover.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_discover.py
+index 41db609e..256b8816 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_discover.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_discover.py
+@@ -46,6 +46,8 @@ def command_discover(args: argparse.Namespace) -> int:
+             getattr(args, "defer", None) is not None,
+             getattr(args, "non_goal", None) is not None,
+             getattr(args, "acceptance_criteria", None) is not None,
++            getattr(args, "clear_non_goals", False),
++            getattr(args, "clear_acceptance_criteria", False),
+             getattr(args, "answer", None) is not None,
+         ]
+     ):
+@@ -70,6 +72,8 @@ def command_discover(args: argparse.Namespace) -> int:
+             getattr(args, "defer", None) is not None,
+             getattr(args, "non_goal", None) is not None,
+             getattr(args, "acceptance_criteria", None) is not None,
++            getattr(args, "clear_non_goals", False),
++            getattr(args, "clear_acceptance_criteria", False),
+             getattr(args, "answer", None) is not None,
+         ]
+     ):
+@@ -178,14 +182,28 @@ def command_discover(args: argparse.Namespace) -> int:
+                 if u["item"] == defer_text:
+                     u["deferred"] = True
+                     break
+-        if getattr(args, "non_goal", None) is not None:
++        # Feature B Slice 2 — append semantics + clear flags.
++        # --clear-non-goals runs BEFORE any --non-goal appends in the same invocation.
++        if getattr(args, "clear_non_goals", False):
++            discovery["non_goals"] = []
++        if getattr(args, "clear_acceptance_criteria", False):
++            discovery["acceptance_criteria"] = []
++        non_goals_in = getattr(args, "non_goal", None) or []
++        for raw in non_goals_in:
++            stripped = str(raw or "").strip()
++            if not stripped:
++                raise SystemExit("discover --non-goal cannot be empty or whitespace-only")
+             ng = discovery.setdefault("non_goals", [])
+-            if args.non_goal not in ng:
+-                ng.append(args.non_goal)
+-        if getattr(args, "acceptance_criteria", None) is not None:
++            if stripped not in ng:
++                ng.append(stripped)
++        acceptance_in = getattr(args, "acceptance_criteria", None) or []
++        for raw in acceptance_in:
++            stripped = str(raw or "").strip()
++            if not stripped:
++                raise SystemExit("discover --acceptance-criteria cannot be empty or whitespace-only")
+             ac = discovery.setdefault("acceptance_criteria", [])
+-            if args.acceptance_criteria not in ac:
+-                ac.append(args.acceptance_criteria)
++            if stripped not in ac:
++                ac.append(stripped)
+         blocking = blocking_unresolved_items(discovery)
+         if args.complete:
+             if blocking:
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py
+index 0ff3bc4f..7b99a445 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py
+@@ -321,9 +321,9 @@ def build_parser() -> argparse.ArgumentParser:
+     checkpoint_parser.add_argument("--no-auto-context", action="store_true",
+                                    help="Disable automatic context file extraction from the artifact")
+     checkpoint_parser.add_argument("--allow-dirty-path", action="append", default=[])
+-    checkpoint_parser.add_argument("--max-artifact-chars", type=int)
+-    checkpoint_parser.add_argument("--max-context-chars", type=int)
+-    checkpoint_parser.add_argument("--max-total-chars", type=int)
++    checkpoint_parser.add_argument("--max-artifact-chars", type=int, default=50000)
++    checkpoint_parser.add_argument("--max-context-chars", type=int, default=60000)
++    checkpoint_parser.add_argument("--max-total-chars", type=int, default=250000)
+     checkpoint_parser.add_argument("--gemini-timeout-seconds", type=int, default=120)
+     checkpoint_parser.add_argument("--gemini-retries", type=int, default=1)
+     checkpoint_parser.add_argument("--repair-timeout-seconds", type=int, default=300)
+@@ -337,6 +337,9 @@ def build_parser() -> argparse.ArgumentParser:
+     )
+     checkpoint_parser.add_argument("--fast", action="store_true",
+         help="Fast path: skip prerequisites, run 1 Gemini + 1 Codex review. Requires --stage diff.")
++    checkpoint_parser.add_argument("--validation-only", action="store_true",
++        help="Re-seal the manifest against the current artifact SHA without dispatching any reviewer. "
++             "Used to re-sync after post-cap edits. Mutually exclusive with --fallback, --address, --defer, --dismiss.")
+     checkpoint_parser.set_defaults(func=command_checkpoint)
+ 
+     reconcile_parser = subparsers.add_parser("reconcile")
+@@ -389,10 +392,18 @@ def build_parser() -> argparse.ArgumentParser:
+         help="Remove an item from unresolved[] by exact text match")
+     discover_parser.add_argument("--defer", type=str,
+         help="Mark an unresolved item as deferred by exact text match")
+-    discover_parser.add_argument("--non-goal", type=str, dest="non_goal",
+-        help="Add a string to non_goals[]")
+-    discover_parser.add_argument("--acceptance-criteria", type=str, dest="acceptance_criteria",
+-        help="Add a string to acceptance_criteria[]")
++    discover_parser.add_argument("--non-goal", action="append", dest="non_goal", default=None,
++        help="Add a string to non_goals[]. Repeat the flag to append multiple values. "
++             "If --clear-non-goals is also set, the clear applies BEFORE these appends in the same invocation. "
++             "Empty/whitespace-only values are rejected.")
++    discover_parser.add_argument("--acceptance-criteria", action="append", dest="acceptance_criteria", default=None,
++        help="Add a string to acceptance_criteria[]. Repeat the flag to append multiple values. "
++             "If --clear-acceptance-criteria is also set, the clear applies BEFORE these appends in the same invocation. "
++             "Empty/whitespace-only values are rejected.")
++    discover_parser.add_argument("--clear-non-goals", action="store_true",
++        help="Empty discovery.non_goals[] BEFORE any --non-goal appends in the same invocation.")
++    discover_parser.add_argument("--clear-acceptance-criteria", action="store_true",
++        help="Empty discovery.acceptance_criteria[] BEFORE any --acceptance-criteria appends in the same invocation.")
+     discover_parser.add_argument("--answer", nargs=2, metavar=("QUESTION", "ANSWER"),
+         help="Record answers[QUESTION] = ANSWER")
+     discover_parser.add_argument("--force-complete", action="store_true")
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_char_budget_defaults.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_char_budget_defaults.py
+new file mode 100644
+index 00000000..77e9de70
+--- /dev/null
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_char_budget_defaults.py
+@@ -0,0 +1,54 @@
++"""Slice 1 test — argparse defaults for checkpoint character budgets."""
++import importlib.util
++import sys
++import unittest
++from pathlib import Path
++
++
++SCRIPTS_DIR = Path(__file__).resolve().parents[1]
++if str(SCRIPTS_DIR) not in sys.path:
++    sys.path.insert(0, str(SCRIPTS_DIR))
++
++
++class CharBudgetDefaultsTests(unittest.TestCase):
++    """FR-001: default --max-*-chars values match real spec sizes in this codebase.
++
++    Previously the three budget args had no defaults, forcing operators to pass
++    explicit flags on every invocation. Both PR #744 and PR #749 runs hit this.
++    """
++
++    def setUp(self) -> None:
++        spec = importlib.util.spec_from_file_location(
++            "run_factory", SCRIPTS_DIR / "run_factory.py"
++        )
++        assert spec and spec.loader
++        self.run_factory = importlib.util.module_from_spec(spec)
++        sys.modules[spec.name] = self.run_factory
++        spec.loader.exec_module(self.run_factory)
++
++    def _parse(self, argv: list[str]):
++        parser = self.run_factory.build_parser()
++        return parser.parse_args(argv)
++
++    def test_default_max_artifact_chars_is_50000(self) -> None:
++        args = self._parse(["checkpoint", "--slug", "x", "--stage", "spec"])
++        self.assertEqual(args.max_artifact_chars, 50000)
++
++    def test_default_max_context_chars_is_60000(self) -> None:
++        args = self._parse(["checkpoint", "--slug", "x", "--stage", "spec"])
++        self.assertEqual(args.max_context_chars, 60000)
++
++    def test_default_max_total_chars_is_250000(self) -> None:
++        args = self._parse(["checkpoint", "--slug", "x", "--stage", "spec"])
++        self.assertEqual(args.max_total_chars, 250000)
++
++    def test_explicit_value_overrides_default(self) -> None:
++        args = self._parse([
++            "checkpoint", "--slug", "x", "--stage", "spec",
++            "--max-artifact-chars", "10000",
++        ])
++        self.assertEqual(args.max_artifact_chars, 10000)
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_discover_append.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_discover_append.py
+new file mode 100644
+index 00000000..8995c762
+--- /dev/null
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_discover_append.py
+@@ -0,0 +1,159 @@
++"""Slice 2 tests — discover CLI append semantics + clear flags.
++
++All tests are integration-level via argparse CLI invocation per Gemini MEDIUM F-04.
++"""
++import importlib.util
++import json
++import sys
++import tempfile
++import unittest
++from pathlib import Path
++from unittest.mock import patch
++
++
++SCRIPTS_DIR = Path(__file__).resolve().parents[1]
++if str(SCRIPTS_DIR) not in sys.path:
++    sys.path.insert(0, str(SCRIPTS_DIR))
++
++
++def _load(name: str):
++    spec = importlib.util.spec_from_file_location(name, SCRIPTS_DIR / f"{name}.py")
++    assert spec and spec.loader
++    mod = importlib.util.module_from_spec(spec)
++    sys.modules[name] = mod
++    spec.loader.exec_module(mod)
++    return mod
++
++
++FACTORY_STATE = _load("factory_state")
++RUN_FACTORY = _load("run_factory")
++
++
++class DiscoverAppendTests(unittest.TestCase):
++    def setUp(self) -> None:
++        self.tmpdir = tempfile.mkdtemp()
++        self.tmp_root = Path(self.tmpdir)
++        self.slug = "discover-test"
++        self._factory_runs_patch = patch.object(
++            FACTORY_STATE, "FACTORY_RUNS_ROOT", self.tmp_root
++        )
++        self._factory_runs_patch.start()
++        FACTORY_STATE.workflow_dir(self.slug).mkdir(parents=True, exist_ok=True)
++        state = FACTORY_STATE._default_workflow_state()
++        FACTORY_STATE.atomic_json_write(FACTORY_STATE.factory_state_path(self.slug), state)
++        # Ensure ensure_sync is bypassed for the CLI invocation.
++        self._sync_patch = patch.object(RUN_FACTORY, "ensure_sync", lambda: None)
++        self._sync_patch.start()
++
++    def tearDown(self) -> None:
++        self._factory_runs_patch.stop()
++        self._sync_patch.stop()
++
++    def _run(self, argv: list[str]) -> int:
++        parser = RUN_FACTORY.build_parser()
++        args = parser.parse_args(argv)
++        try:
++            return args.func(args) or 0
++        except SystemExit as exc:
++            return int(exc.code) if isinstance(exc.code, int) else 1
++
++    def _load_discovery(self) -> dict:
++        state = json.loads(
++            FACTORY_STATE.factory_state_path(self.slug).read_text(encoding="utf-8")
++        )
++        return state.get("discovery", {})
++
++    # US4.1 — append multiple in single invocation
++    def test_non_goal_appends_all_values_in_single_call(self) -> None:
++        rc = self._run([
++            "discover", "--slug", self.slug,
++            "--non-goal", "A", "--non-goal", "B",
++        ])
++        self.assertEqual(rc, 0)
++        self.assertEqual(self._load_discovery()["non_goals"], ["A", "B"])
++
++    # US4.2 — append preserves existing
++    def test_non_goal_appends_to_existing_list(self) -> None:
++        self._run(["discover", "--slug", self.slug, "--non-goal", "A"])
++        rc = self._run([
++            "discover", "--slug", self.slug,
++            "--non-goal", "B", "--non-goal", "C",
++        ])
++        self.assertEqual(rc, 0)
++        self.assertEqual(self._load_discovery()["non_goals"], ["A", "B", "C"])
++
++    # US4.3 — clear empties the list
++    def test_clear_non_goals_empties_list(self) -> None:
++        self._run([
++            "discover", "--slug", self.slug,
++            "--non-goal", "A", "--non-goal", "B",
++        ])
++        rc = self._run(["discover", "--slug", self.slug, "--clear-non-goals"])
++        self.assertEqual(rc, 0)
++        self.assertEqual(self._load_discovery()["non_goals"], [])
++
++    # US4.4 — clear-then-append in single invocation
++    def test_clear_then_append_same_invocation(self) -> None:
++        self._run(["discover", "--slug", self.slug, "--non-goal", "A", "--non-goal", "B"])
++        rc = self._run([
++            "discover", "--slug", self.slug,
++            "--clear-non-goals", "--non-goal", "D",
++        ])
++        self.assertEqual(rc, 0)
++        self.assertEqual(self._load_discovery()["non_goals"], ["D"])
++
++    # US4.5 — same semantics for acceptance_criteria
++    def test_acceptance_criteria_parallel_behavior(self) -> None:
++        rc = self._run([
++            "discover", "--slug", self.slug,
++            "--acceptance-criteria", "A", "--acceptance-criteria", "B",
++        ])
++        self.assertEqual(rc, 0)
++        self.assertEqual(self._load_discovery()["acceptance_criteria"], ["A", "B"])
++
++        rc = self._run([
++            "discover", "--slug", self.slug,
++            "--clear-acceptance-criteria", "--acceptance-criteria", "Z",
++        ])
++        self.assertEqual(rc, 0)
++        self.assertEqual(self._load_discovery()["acceptance_criteria"], ["Z"])
++
++    # Edge: empty-string rejected
++    def test_empty_string_non_goal_rejected(self) -> None:
++        rc = self._run(["discover", "--slug", self.slug, "--non-goal", ""])
++        self.assertEqual(rc, 1)
++        self.assertEqual(self._load_discovery().get("non_goals", []), [])
++
++    # Edge: whitespace-only rejected
++    def test_whitespace_only_non_goal_rejected(self) -> None:
++        rc = self._run(["discover", "--slug", self.slug, "--non-goal", "   "])
++        self.assertEqual(rc, 1)
++
++    # Edge: dedup keeps single occurrence
++    def test_dedup_exact_match(self) -> None:
++        rc = self._run([
++            "discover", "--slug", self.slug,
++            "--non-goal", "A", "--non-goal", "A",
++        ])
++        self.assertEqual(rc, 0)
++        self.assertEqual(self._load_discovery()["non_goals"], ["A"])
++
++    # Edge: interleaved flags — clear still applies before any append
++    def test_interleaved_clear_and_appends(self) -> None:
++        """Per argparse, the action=append collects all values regardless of flag
++        order; clear flag also ends up True. Per FR-014 docs, clear applies first."""
++        self._run([
++            "discover", "--slug", self.slug,
++            "--non-goal", "A", "--non-goal", "B",
++        ])
++        rc = self._run([
++            "discover", "--slug", self.slug,
++            "--non-goal", "X", "--clear-non-goals", "--non-goal", "Y",
++        ])
++        self.assertEqual(rc, 0)
++        # Clear runs first, then appends — documented behavior per FR-014.
++        self.assertEqual(self._load_discovery()["non_goals"], ["X", "Y"])
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_restatement_prompt.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_restatement_prompt.py
+new file mode 100644
+index 00000000..3e6c1416
+--- /dev/null
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_restatement_prompt.py
+@@ -0,0 +1,48 @@
++"""Slice 1 test — restatement judge prompt contains the quote-evidence rule."""
++import unittest
++from pathlib import Path
++
++
++PROMPT_PATH = (
++    Path(__file__).resolve().parents[2]
++    / "judge-prompts"
++    / "restatement.md"
++)
++
++
++class RestatementPromptTests(unittest.TestCase):
++    """FR-008 + FR-009 + FR-010 — prompt text contract.
++
++    Feature B Slice 1 adds the evidence requirement for severity-drop proceed
++    claims. This test asserts the phrase is present AND that the preserved
++    rules from PR #744 (first-round, true-saturation) are still in place.
++    """
++
++    def setUp(self) -> None:
++        self.assertTrue(PROMPT_PATH.exists(), f"missing: {PROMPT_PATH}")
++        self.text = PROMPT_PATH.read_text(encoding="utf-8")
++
++    def test_contains_quote_evidence_requirement(self) -> None:
++        """FR-008 — severity-drop claims must cite verbatim prior-round text."""
++        self.assertIn("Evidence requirement for severity-drop claims", self.text)
++        self.assertIn("quote the prior-round reasoning text verbatim", self.text)
++        self.assertIn("at least 60", self.text)
++
++    def test_mentions_shorter_text_fallback(self) -> None:
++        """Per Gemini tasks HIGH F-02 — 60-char rule has an explicit short-text fallback."""
++        self.assertIn("OR the full reasoning text if it is shorter", self.text)
++
++    def test_names_fallback_rules(self) -> None:
++        """FR-009 / FR-010 — preserved first-round and true-saturation rules."""
++        self.assertIn("First-round case", self.text)
++        self.assertIn("PROCEED-WITH-ANNOTATION", self.text)
++        self.assertIn("True-saturation case", self.text)
++        self.assertIn("70%+", self.text)
++
++    def test_real_progress_case_remains_block(self) -> None:
++        self.assertIn("Real-progress case", self.text)
++        self.assertIn("BLOCK", self.text)
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_validation_only.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_validation_only.py
+new file mode 100644
+index 00000000..a5082c20
+--- /dev/null
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_validation_only.py
+@@ -0,0 +1,265 @@
++"""Slice 3 tests — checkpoint --validation-only.
++
++All tests are integration-level via argparse CLI invocation per Gemini MEDIUM F-04.
++"""
++import importlib.util
++import json
++import os
++import sys
++import tempfile
++import unittest
++from pathlib import Path
++from unittest.mock import patch
++
++
++SCRIPTS_DIR = Path(__file__).resolve().parents[1]
++if str(SCRIPTS_DIR) not in sys.path:
++    sys.path.insert(0, str(SCRIPTS_DIR))
++
++
++def _load(name: str):
++    spec = importlib.util.spec_from_file_location(name, SCRIPTS_DIR / f"{name}.py")
++    assert spec and spec.loader
++    mod = importlib.util.module_from_spec(spec)
++    sys.modules[name] = mod
++    spec.loader.exec_module(mod)
++    return mod
++
++
++FACTORY_STATE = _load("factory_state")
++CHECKPOINT = _load("factory_cmd_checkpoint")
++RUN_FACTORY = _load("run_factory")
++
++
++_FM_TEMPLATE = """---
++reviewer: "codex"
++lens: "feasibility-adversarial"
++stage: "spec"
++artifact_path: "docs/workflow/feature-runs/{slug}/spec.md"
++artifact_sha256: "{sha}"
++resolution_status: "accepted"
++resolution_note: "ok"
++---
++
++# Review body placeholder.
++"""
++
++
++class ValidationOnlyBase(unittest.TestCase):
++    def setUp(self) -> None:
++        self.tmpdir = tempfile.mkdtemp()
++        self.tmp_root = Path(self.tmpdir)
++        self.slug = "val-test"
++        self._patches = [
++            patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", self.tmp_root),
++            patch.object(CHECKPOINT, "REPO_ROOT", self.tmp_root),
++        ]
++        for p in self._patches:
++            p.start()
++
++        # Seed workflow dir + reviews dir + artifact + manifest + 3 review files.
++        workflow_dir = FACTORY_STATE.workflow_dir(self.slug)
++        reviews_dir = workflow_dir / "reviews"
++        reviews_dir.mkdir(parents=True, exist_ok=True)
++        self.artifact = workflow_dir / "spec.md"
++        self.artifact.write_text("# Spec\n\nBody content.\n", encoding="utf-8")
++        from workflow_utils import normalized_artifact_hash
++        self.current_sha = normalized_artifact_hash("spec", self.artifact)
++
++        self.review_paths = []
++        for lens in ("feasibility-adversarial", "edge-cases-adversarial", "requirements-adversarial"):
++            reviewer = "gemini" if lens == "requirements-adversarial" else "codex"
++            p = reviews_dir / f"spec.{reviewer}.{lens}.review.md"
++            p.write_text(
++                _FM_TEMPLATE.format(slug=self.slug, sha="old_sha_placeholder" * 4)[:200],
++                encoding="utf-8",
++            )
++            # Rewrite properly
++            p.write_text(
++                f'---\nreviewer: "{reviewer}"\nlens: "{lens}"\nstage: "spec"\n'
++                f'artifact_path: "docs/workflow/feature-runs/{self.slug}/spec.md"\n'
++                f'artifact_sha256: "oldsha1234567890"\nresolution_status: "accepted"\n'
++                f'resolution_note: "ok"\n---\n\nbody\n',
++                encoding="utf-8",
++            )
++            self.review_paths.append(p)
++
++        manifest = {
++            "feature_slug": self.slug,
++            "stage": "spec",
++            "artifact_path": f"docs/workflow/feature-runs/{self.slug}/spec.md",
++            "required_reviews": [
++                {"reviewer": "codex", "lens": "feasibility-adversarial",
++                 "path": str(self.review_paths[0].relative_to(self.tmp_root))},
++                {"reviewer": "codex", "lens": "edge-cases-adversarial",
++                 "path": str(self.review_paths[1].relative_to(self.tmp_root))},
++                {"reviewer": "gemini", "lens": "requirements-adversarial",
++                 "path": str(self.review_paths[2].relative_to(self.tmp_root))},
++            ],
++        }
++        (reviews_dir / "spec.checkpoint.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
++
++        state = FACTORY_STATE._default_workflow_state()
++        FACTORY_STATE.atomic_json_write(FACTORY_STATE.factory_state_path(self.slug), state)
++
++        self._sync_patch = patch.object(RUN_FACTORY, "ensure_sync", lambda: None)
++        self._sync_patch.start()
++
++    def tearDown(self) -> None:
++        for p in self._patches:
++            p.stop()
++        self._sync_patch.stop()
++
++    def _run(self, argv: list[str]) -> int:
++        parser = RUN_FACTORY.build_parser()
++        args = parser.parse_args(argv)
++        try:
++            return args.func(args) or 0
++        except SystemExit as exc:
++            return int(exc.code) if isinstance(exc.code, int) else 1
++
++
++class ValidationOnlyHappyPaths(ValidationOnlyBase):
++    def test_drift_triggers_reseal(self) -> None:
++        """US2.1 — drifted artifact → reseal all review SHAs, annotation appended, exit 0."""
++        rc = self._run([
++            "checkpoint", "--slug", self.slug, "--stage", "spec",
++            "--validation-only",
++        ])
++        self.assertEqual(rc, 0)
++        # Every review file now has the current SHA.
++        for p in self.review_paths:
++            content = p.read_text(encoding="utf-8")
++            self.assertIn(f'artifact_sha256: "{self.current_sha}"', content)
++        # Annotation was appended.
++        state = json.loads(
++            FACTORY_STATE.factory_state_path(self.slug).read_text(encoding="utf-8")
++        )
++        annotations = state["stages"]["spec"]["annotations"]
++        self.assertEqual(len(annotations), 1)
++        self.assertEqual(annotations[0]["type"], "validation-only-reseal")
++        self.assertEqual(annotations[0]["new_sha"], self.current_sha)
++        self.assertEqual(annotations[0]["files_updated"], 3)
++
++    def test_already_matches_no_op(self) -> None:
++        """US2.3 — artifact SHA already matches manifest → no-op, no writes, exit 0."""
++        # First reseal so everything matches.
++        self._run(["checkpoint", "--slug", self.slug, "--stage", "spec", "--validation-only"])
++        # Now invoke again; nothing should change.
++        state_before = FACTORY_STATE.factory_state_path(self.slug).read_text(encoding="utf-8")
++        rc = self._run([
++            "checkpoint", "--slug", self.slug, "--stage", "spec",
++            "--validation-only",
++        ])
++        self.assertEqual(rc, 0)
++        state_after = FACTORY_STATE.factory_state_path(self.slug).read_text(encoding="utf-8")
++        # Annotation count doesn't grow on no-op.
++        before = json.loads(state_before)
++        after = json.loads(state_after)
++        self.assertEqual(
++            len(before["stages"]["spec"]["annotations"]),
++            len(after["stages"]["spec"]["annotations"]),
++        )
++
++    def test_missing_manifest_exits_2(self) -> None:
++        """US2.4 — no manifest → exit 2 with clear error."""
++        manifest_path = FACTORY_STATE.reviews_dir(self.slug) / "spec.checkpoint.json"
++        manifest_path.unlink()
++        rc = self._run([
++            "checkpoint", "--slug", self.slug, "--stage", "spec",
++            "--validation-only",
++        ])
++        self.assertEqual(rc, 2)
++
++
++class ValidationOnlyGuards(ValidationOnlyBase):
++    def test_pre_check_read_only_blocks_all_writes(self) -> None:
++        """One read-only review file → exit 2, other files not modified."""
++        # Make the middle review file read-only.
++        target = self.review_paths[1]
++        target.chmod(0o444)
++        original_mids = [p.read_text(encoding="utf-8") for p in self.review_paths]
++        try:
++            rc = self._run([
++                "checkpoint", "--slug", self.slug, "--stage", "spec",
++                "--validation-only",
++            ])
++            self.assertEqual(rc, 2)
++            # None of the files should have changed (pre-check blocked ALL writes).
++            for p, original in zip(self.review_paths, original_mids):
++                self.assertEqual(p.read_text(encoding="utf-8"), original)
++        finally:
++            target.chmod(0o644)
++
++    def test_mid_run_failure_leaves_partial_state(self) -> None:
++        """Gemini CRITICAL F-01 + LOW F-06 — mid-run os.replace failure: first
++        file updated, second + third retain old SHA. Annotation NOT appended."""
++        call_count = {"n": 0}
++        real_replace = os.replace
++
++        def flaky_replace(src, dst):
++            call_count["n"] += 1
++            if call_count["n"] == 2:
++                raise OSError("simulated replace failure on 2nd file")
++            return real_replace(src, dst)
++
++        with patch.object(CHECKPOINT.os, "replace", side_effect=flaky_replace):
++            rc = self._run([
++                "checkpoint", "--slug", self.slug, "--stage", "spec",
++                "--validation-only",
++            ])
++
++        self.assertEqual(rc, 2)
++        # File 0 was resealed (call 1 succeeded).
++        self.assertIn(
++            f'artifact_sha256: "{self.current_sha}"',
++            self.review_paths[0].read_text(encoding="utf-8"),
++        )
++        # File 1 retained old SHA (call 2 failed).
++        self.assertIn(
++            'artifact_sha256: "oldsha1234567890"',
++            self.review_paths[1].read_text(encoding="utf-8"),
++        )
++        # Annotation NOT appended.
++        state = json.loads(
++            FACTORY_STATE.factory_state_path(self.slug).read_text(encoding="utf-8")
++        )
++        annotations = state.get("stages", {}).get("spec", {}).get("annotations", [])
++        for ann in annotations:
++            self.assertNotEqual(ann.get("type"), "validation-only-reseal")
++
++
++class ValidationOnlyMutex(ValidationOnlyBase):
++    """FR-004: --validation-only mutex with --fallback, --address, --defer, --dismiss."""
++
++    def test_mutex_fallback(self) -> None:
++        rc = self._run([
++            "checkpoint", "--slug", self.slug, "--stage", "spec",
++            "--validation-only", "--fallback",
++        ])
++        self.assertNotEqual(rc, 0)
++
++    def test_mutex_address(self) -> None:
++        rc = self._run([
++            "checkpoint", "--slug", self.slug, "--stage", "spec",
++            "--validation-only", "--address", "abc123def456", "--evidence", "x",
++        ])
++        self.assertNotEqual(rc, 0)
++
++    def test_mutex_defer(self) -> None:
++        rc = self._run([
++            "checkpoint", "--slug", self.slug, "--stage", "spec",
++            "--validation-only", "--defer", "abc123def456", "--reason", "x",
++        ])
++        self.assertNotEqual(rc, 0)
++
++    def test_mutex_dismiss(self) -> None:
++        rc = self._run([
++            "checkpoint", "--slug", self.slug, "--stage", "spec",
++            "--validation-only", "--dismiss", "abc123def456", "--reason", "x",
++        ])
++        self.assertNotEqual(rc, 0)
++
++
++if __name__ == "__main__":
++    unittest.main()

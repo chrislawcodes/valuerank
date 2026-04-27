@@ -35,6 +35,7 @@ from factory_git import (  # noqa: E402
 from factory_stages import parse_parallel_task_groups  # noqa: E402
 
 from factory_emit import _emit_next_action  # noqa: E402
+from factory_mutating import mutates_state  # noqa: E402
 
 
 def _codex_prompt_path(slug: str, i: int) -> Path:
@@ -275,6 +276,7 @@ def _run_parallel(slug: str, group: dict, max_workers: int = 4) -> int:
             prompt_path.unlink(missing_ok=True)
 
 
+@mutates_state("implement")
 def command_implement(args: argparse.Namespace) -> int:
     status = subprocess.run(
         ["git", "-C", str(REPO_ROOT), "status", "--porcelain"],
@@ -311,6 +313,7 @@ def command_implement(args: argparse.Namespace) -> int:
     return 0
 
 
+@mutates_state("parallel")
 def command_parallel(args: argparse.Namespace) -> int:
     """Record whether the agent looked for parallel implementation opportunities.
 

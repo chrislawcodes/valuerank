@@ -11,6 +11,9 @@ import type {
   AnalyzeBasicJobData,
   ExpandScenariosJobData,
   ComputeTokenStatsJobData,
+  RunStateReconcileJobData,
+  RunStateAuditJobData,
+  AnalysisResultJanitorJobData,
   ProbeDeadLetterJobData,
   AggregateAnalysisJobData,
   RefreshDomainAnalysisSnapshotJobData,
@@ -21,6 +24,9 @@ import { createAnalyzeBasicHandler } from './analyze-basic.js';
 import { createExpandScenariosHandler } from './expand-scenarios.js';
 import { createComputeTokenStatsHandler } from './compute-token-stats.js';
 import { createProbeDeadLetterHandler } from './probe-dead-letter.js';
+import { createRunStateReconcileHandler } from './run-state-reconcile.js';
+import { createRunStateAuditHandler } from './run-state-audit.js';
+import { createAnalysisResultJanitorHandler } from './analysis-result-janitor.js';
 import { createAggregateAnalysisHandler } from './aggregate-analysis.js';
 import { createRefreshDomainAnalysisSnapshotHandler } from './refresh-domain-analysis-snapshot.js';
 
@@ -31,6 +37,9 @@ export type {
   AnalyzeBasicJobData,
   ExpandScenariosJobData,
   ComputeTokenStatsJobData,
+  RunStateReconcileJobData,
+  RunStateAuditJobData,
+  AnalysisResultJanitorJobData,
   ProbeDeadLetterJobData,
   AggregateAnalysisJobData,
   RefreshDomainAnalysisSnapshotJobData,
@@ -94,6 +103,36 @@ export const handlerRegistrations: HandlerRegistration[] = [
         'compute_token_stats',
         { batchSize },
         createComputeTokenStatsHandler()
+      );
+    },
+  },
+  {
+    name: 'run_state_reconcile',
+    register: async (boss, batchSize) => {
+      await boss.work<RunStateReconcileJobData>(
+        'run_state_reconcile',
+        { batchSize },
+        createRunStateReconcileHandler()
+      );
+    },
+  },
+  {
+    name: 'run_state_audit',
+    register: async (boss, batchSize) => {
+      await boss.work<RunStateAuditJobData>(
+        'run_state_audit',
+        { batchSize },
+        createRunStateAuditHandler()
+      );
+    },
+  },
+  {
+    name: 'analysis_result_janitor',
+    register: async (boss, batchSize) => {
+      await boss.work<AnalysisResultJanitorJobData>(
+        'analysis_result_janitor',
+        { batchSize },
+        createAnalysisResultJanitorHandler()
       );
     },
   },

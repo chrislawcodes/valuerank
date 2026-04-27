@@ -22,8 +22,10 @@ from factory_git import ensure_sync  # noqa: E402
 from factory_review import trim_detail  # noqa: E402
 
 from factory_emit import _emit_next_action  # noqa: E402
+from factory_mutating import mutates_state  # noqa: E402
 
 
+@mutates_state("discover")
 def command_discover(args: argparse.Namespace) -> int:
     ensure_sync()
     clear = getattr(args, "clear", False)
@@ -44,6 +46,8 @@ def command_discover(args: argparse.Namespace) -> int:
             getattr(args, "defer", None) is not None,
             getattr(args, "non_goal", None) is not None,
             getattr(args, "acceptance_criteria", None) is not None,
+            getattr(args, "clear_non_goals", False),
+            getattr(args, "clear_acceptance_criteria", False),
             getattr(args, "answer", None) is not None,
         ]
     ):
@@ -68,6 +72,8 @@ def command_discover(args: argparse.Namespace) -> int:
             getattr(args, "defer", None) is not None,
             getattr(args, "non_goal", None) is not None,
             getattr(args, "acceptance_criteria", None) is not None,
+            getattr(args, "clear_non_goals", False),
+            getattr(args, "clear_acceptance_criteria", False),
             getattr(args, "answer", None) is not None,
         ]
     ):
@@ -176,14 +182,28 @@ def command_discover(args: argparse.Namespace) -> int:
                 if u["item"] == defer_text:
                     u["deferred"] = True
                     break
-        if getattr(args, "non_goal", None) is not None:
+        # Feature B Slice 2 — append semantics + clear flags.
+        # --clear-non-goals runs BEFORE any --non-goal appends in the same invocation.
+        if getattr(args, "clear_non_goals", False):
+            discovery["non_goals"] = []
+        if getattr(args, "clear_acceptance_criteria", False):
+            discovery["acceptance_criteria"] = []
+        non_goals_in = getattr(args, "non_goal", None) or []
+        for raw in non_goals_in:
+            stripped = str(raw or "").strip()
+            if not stripped:
+                raise SystemExit("discover --non-goal cannot be empty or whitespace-only")
             ng = discovery.setdefault("non_goals", [])
-            if args.non_goal not in ng:
-                ng.append(args.non_goal)
-        if getattr(args, "acceptance_criteria", None) is not None:
+            if stripped not in ng:
+                ng.append(stripped)
+        acceptance_in = getattr(args, "acceptance_criteria", None) or []
+        for raw in acceptance_in:
+            stripped = str(raw or "").strip()
+            if not stripped:
+                raise SystemExit("discover --acceptance-criteria cannot be empty or whitespace-only")
             ac = discovery.setdefault("acceptance_criteria", [])
-            if args.acceptance_criteria not in ac:
-                ac.append(args.acceptance_criteria)
+            if stripped not in ac:
+                ac.append(stripped)
         blocking = blocking_unresolved_items(discovery)
         if args.complete:
             if blocking:

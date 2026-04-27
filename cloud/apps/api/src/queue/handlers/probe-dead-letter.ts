@@ -8,7 +8,7 @@
 import type * as PgBoss from 'pg-boss';
 import { createLogger } from '@valuerank/shared';
 import type { ProbeDeadLetterJobData } from '../types.js';
-import { incrementFailed } from '../../services/run/index.js';
+import { maybeAdvanceRunStatus } from '../../services/run/index.js';
 import { recordProbeFailure } from '../../services/probe-result/index.js';
 
 const log = createLogger('queue:probe-dead-letter');
@@ -46,11 +46,11 @@ export function createProbeDeadLetterHandler(): PgBoss.WorkHandler<ProbeDeadLett
           retryCount: 0,
         });
 
-        // Increment failed count for the run
-        const { progress, status } = await incrementFailed(runId);
+        // Advance run state using derived counts
+        const result = await maybeAdvanceRunStatus(runId);
 
         log.info(
-          { jobId, runId, scenarioId, modelId, sampleIndex, progress, status },
+          { jobId, runId, scenarioId, modelId, sampleIndex, result },
           'Dead letter job processed - run progress updated'
         );
       } catch (error) {

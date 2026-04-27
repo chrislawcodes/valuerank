@@ -13,7 +13,7 @@ export type ConsistencyParsedScenario = {
 export type ConsistencyParsedPairCondition = {
   scenarioId: string;
   netPressureRank: number;
-  winRate: number;
+  winRate: number | null;
   matches: number;
   trials: number;
 };
@@ -108,12 +108,12 @@ function parsePairConditions(raw: unknown): ConsistencyParsedPairCondition[] {
     const winRate = toNumberOrNull(value.winRate) ?? toNumberOrNull(value.p);
     const matches = toNumberOrNull(value.matches);
     const trials = toNumberOrNull(value.trials);
-    if (scenarioId === null || pressure === null || winRate === null) return null;
+    if (scenarioId === null || pressure === null) return null;
     return {
       scenarioId,
       netPressureRank: pressure,
       winRate,
-      matches: matches === null ? Math.round(clamp01(winRate) * 100) : Math.max(0, Math.round(matches)),
+      matches: matches === null ? (winRate !== null ? Math.round(clamp01(winRate) * 100) : 0) : Math.max(0, Math.round(matches)),
       trials: trials === null ? 100 : Math.max(0, Math.round(trials)),
     };
   }).filter((item): item is ConsistencyParsedPairCondition => item !== null);
@@ -129,8 +129,11 @@ function parsePair(value: unknown): ConsistencyParsedPair | null {
   const companionConditionIds = toStringArray(value.companionConditionIds);
   const perCondition = parsePairConditions(value.perCondition);
 
-  const coherence = perCondition.length >= 3
-    ? coherenceForPair(perCondition.map((condition) => ({
+  const determinateConditions = perCondition.filter(
+    (c): c is ConsistencyParsedPairCondition & { winRate: number } => c.winRate !== null,
+  );
+  const coherence = determinateConditions.length >= 3
+    ? coherenceForPair(determinateConditions.map((condition) => ({
         pressureRank: condition.netPressureRank,
         winRate: condition.winRate,
       })))

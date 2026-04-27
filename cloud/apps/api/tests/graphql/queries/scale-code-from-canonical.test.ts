@@ -129,6 +129,16 @@ describe('scaleCodeFromCanonical — orientation-invariant cases', () => {
     expect(scaleCodeFromCanonical(c, PAIR, false)).toBe('unknown');
     expect(scaleCodeFromCanonical(c, PAIR, true)).toBe('unknown');
   });
+
+  it('parse_failed → "unknown" (sentinel maps to same scale code as unknown)', () => {
+    const c = makeCanonical({
+      decisionState: 'parse_failed',
+      strength: 'unknown',
+      favoredValueKey: null,
+    });
+    expect(scaleCodeFromCanonical(c, PAIR, false)).toBe('unknown');
+    expect(scaleCodeFromCanonical(c, PAIR, true)).toBe('unknown');
+  });
 });
 
 describe('scaleCodeFromCanonical — malformed canonicals fall to unknown', () => {

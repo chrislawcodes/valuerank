@@ -1,0 +1,10 @@
+## Findings
+1. **Medium [UNVERIFIED] - State writes can race and lose data.** `dispatch-codex` and `advance` both do read-modify-write updates to the same state file, but the plan only mentions atomic file replacement. That prevents torn files, not lost updates; two commands can still read the same old state and overwrite each other, dropping a dispatch record or annotation with no error.
+
+2. **Medium [UNVERIFIED] - Freshness suppression is non-monotonic and timestamp-fragile.** Recomputing `lines_added_at_dispatch_time` against the current branch base means upstream movement alone can flip a dispatch from suppressing to not suppressing, even when the feature branch did not change. The highest-`ts` selection also assumes every entry has a well-formed timestamp; the plan never defines a fallback for missing or malformed `ts`, so partial or legacy records can mis-order the winner or crash the scan.
+
+3. **Medium [UNVERIFIED] - The return-shape migration is brittle because the compatibility scope is too narrow.** Slice 2 removes the boolean contract without a shim, but the pre-step audit only greps one scripts directory. If any caller lives elsewhere now or is added before the migration lands, the plan creates a runtime break instead of a controlled transition.
+
+## Residual Risks
+- I could not verify whether `factory_state.update_state` already serializes writers or performs optimistic conflict detection. If it does, the first finding is reduced.
+- The plan still depends on `codex` CLI behavior and `git merge-base --fork-point` working in the target clone shape. Those are operationally brittle even if the unit tests pass.

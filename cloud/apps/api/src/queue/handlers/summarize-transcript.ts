@@ -17,6 +17,7 @@ import { spawnPython, type SpawnPythonResult } from '../spawn.js';
 import { getSummarizerModel, type InfraModelConfig } from '../../services/infra-models.js';
 import { getMaxParallelSummarizations } from '../../services/summarization-parallelism/index.js';
 import { schedule as rateLimitSchedule, getLimiterStats, type ScheduleOptions } from '../../services/rate-limiter/index.js';
+import { maybeAdvanceRunStatus } from '../../services/run/index.js';
 import { resolveTranscriptDecisionModel } from '../../graphql/queries/domain/shared.js';
 import type { SummarizeTranscriptJobData } from '../types.js';
 import {
@@ -114,7 +115,7 @@ function getProviderNameFromModelId(modelId: string, fallbackProvider: string): 
 async function buildWinnerFirstSummaryCache(
   transcript: TranscriptRecord,
   summary: SuccessfulSummarizeWorkerSummary,
-): Promise<WinnerFirstSummaryCache | null> {
+): Promise<WinnerFirstSummaryCache> {
   const scenarioId = transcript.scenarioId;
   const scenario = scenarioId == null
     ? null
@@ -159,7 +160,17 @@ async function buildWinnerFirstSummaryCache(
   }
 
   if (canonical.favoredValueKey == null) {
-    return null;
+    // Explicit sentinel instead of returning null — makes parser failures
+    // visible in JSONB queries as decisionState='parse_failed' rather than
+    // a missing canonicalDecision key. Structurally identical to 'unknown';
+    // the distinct label flags that the resolver could not pin a value even
+    // though direction/strength were not themselves marked unknown.
+    return {
+      cacheVersion: 2,
+      decisionState: 'parse_failed',
+      favoredValueKey: null,
+      strength: 'unknown',
+    };
   }
 
   return {
@@ -193,7 +204,7 @@ async function resolveSummarizeJob(
     return { kind: 'missing' };
   }
 
-  const wasAlreadySummarized = transcript.summarizedAt !== null;
+  const isTerminal = transcript.summarizedAt !== null || transcript.summarizeFailedAt !== null;
   const responseSha256 = computeTranscriptResponseSha256(transcript.content);
   const transcriptDecisionMetadata = isPlainJsonObject(transcript.decisionMetadata)
     ? transcript.decisionMetadata
@@ -208,14 +219,14 @@ async function resolveSummarizeJob(
   if (!forceSummarize && summaryCache && isCacheRecordMatch(summaryCache, responseSha256, parserVersion, modelId)) {
     log.info({ jobId: job.id, transcriptId, modelId }, 'Transcript summary cache hit');
 
-    if (!wasAlreadySummarized) {
+    if (!isTerminal) {
       await persistCachedSummary(job, transcript, summaryCache, responseSha256, parserVersion, modelId);
     }
 
     return { kind: 'cache-hit' };
   }
 
-  if (!forceSummarize && !hasSummaryCacheField && wasAlreadySummarized) {
+  if (!forceSummarize && !hasSummaryCacheField && isTerminal) {
     log.info({ jobId: job.id, transcriptId }, 'Transcript already summarized, skipping');
     return { kind: 'skipped' };
   }
@@ -462,8 +473,10 @@ export function createSummarizeTranscriptHandler(): PgBoss.WorkHandler<Summarize
 
       if (resolved.kind === 'cache-hit') {
         cacheHitCount++;
+        await maybeAdvanceRunStatus(job.data.runId);
       } else if (resolved.kind === 'skipped') {
         skippedCount++;
+        await maybeAdvanceRunStatus(job.data.runId);
       }
     }
 

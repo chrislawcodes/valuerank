@@ -1,0 +1,108 @@
+Reading additional input from stdin...
+OpenAI Codex v0.125.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019dc167-e681-78f1-a9f5-abf1c8d2d94a
+--------
+user
+Review this plan artifact using a implementation-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: plan.md
+# Plan — FF Quality of Life
+
+## Architecture
+
+Four small, independent changes. No shared state.
+
+| Fix | File | Entry point |
+|---|---|---|
+| 1 — Char budget defaults | `run_factory.py` | checkpoint subparser argparse defaults |
+| 2 — `--validation-only` | `factory_cmd_checkpoint.py` + `run_factory.py` | new flag + new code path at top of `command_checkpoint` |
+| 3 — Restatement judge prompt | `judge-prompts/restatement.md` | prompt text edit |
+| 4 — Discover CLI append | `factory_cmd_discover.py` + `run_factory.py` | argparse `action="append"` + clear flags |
+
+## Implementation waves (slices)
+
+### Slice 1 — Trivial fixes (char budgets + restatement prompt) `[CHECKPOINT]`
+
+- Set `default=50000`, `default=60000`, `default=250000` on the 3 char-budget argparse args in `run_factory.py` checkpoint subparser.
+- Edit `judge-prompts/restatement.md`: add the quote-evidence requirement under the diminishing-returns rule. Preserve first-round-proceed-with-annotation and true-saturation rules.
+- Tests: verify argparse defaults resolve to the new values; textual test asserts restatement.md contains the quote-requirement phrase.
+
+Estimated diff: ~50 lines (3 defaults + 1 prompt block + 2 test cases).
+
+### Slice 2 — Discover CLI append semantics `[CHECKPOINT]`
+
+- Change `--non-goal` and `--acceptance-criteria` from `action="store"` to `action="append"` in `run_factory.py` discover subparser.
+- Add `--clear-non-goals` and `--clear-acceptance-criteria` flags.
+- In `factory_cmd_discover.py`, update the handler to: (a) if `clear_*` flag set, empty the corresponding list first; (b) for each value in the appended list, append to state if not already present (dedup by exact string match).
+- Update argparse help text per FR-014 to document clear-then-append order.
+- Tests: 5 US4 acceptance scenarios (append multiple in one call; preserve existing; clear; clear-then-append; same for acceptance-criteria). **Plus** edge cases per Gemini MEDIUM F-05: empty-string inputs (`--non-goal ""` rejected with exit 2); whitespace-only inputs (stripped or rejected); clear flag interleaved between appends in one invocation (documented behavior tested). All tests invoke via argparse CLI (per Gemini MEDIUM F-04).
+
+Estimated diff: ~100 lines.
+
+### Slice 3 — `--validation-only` flag `[CHECKPOINT]`
+
+- Add `--validation-only` (mutually exclusive with `--fallback`, `--address`, `--defer`, `--dismiss`) to the checkpoint subparser.
+- In `factory_cmd_checkpoint.command_checkpoint`, at the top (after args parse, before prereq checks), if `args.validation_only`:
+  - Load the stage's checkpoint manifest.
+  - Pre-check: every `required_reviews[].path` exists and is writable. Any failure → exit 2 with specific message.
+  - Compute current artifact SHA.
+  - Read each review's frontmatter `artifact_sha256`.
+  - If all match current SHA: print `manifest already matches`, exit 0.
+  - If any differ: use `atomic_write` for each review file — read YAML frontmatter, update `artifact_sha256`, write to temp file, `os.replace`. Append `{type: "validation-only-reseal", old_sha, new_sha, at: <epoch>}` to `stages[stage].annotations[]`. Exit 0.
+  - If manifest doesn't exist: exit 2.
+- Tests: 4 US2 acceptance scenarios (drift + reseal; no drift; no manifest; fallback mutex). Plus pre-check-failure test: make one review file read-only, assert no partial writes happen. **Plus** a mid-run failure test (per Gemini CRITICAL F-01): mock `os.replace` to raise on the 2nd of 3 files; assert all N files either all have the new SHA or all have the old SHA (rollback). **Plus** parametrized mutex test for all 4 flag combinations with `--validation-only` (per Gemini MEDIUM F-03): `--fallback`, `--address`, `--defer`, `--dismiss`. **Plus** exit-code and error-message assertions (per Gemini LOW F-06). All tests are **integration-level via CLI-argparse invocation** (per Gemini MEDIUM F-04), not module-internal — that way both the argparse wiring and the handler logic are exercised together.
+
+Estimated diff: ~250 lines.
+
+### Slice 4 — Closeout + docs `[CHECKPOINT]`
+
+- Write `closeout.md` + `postmortem.md`.
+
+## Testing approach
+
+Three new test files:
+
+1. `tests/test_char_budget_defaults.py` — argparse default resolution; Slice 1.
+2. `tests/test_restatement_prompt.py` — textual assertion on prompt file; Slice 1.
+3. `tests/test_discover_append.py` — 5 US4 scenarios; Slice 2.
+4. `tests/test_validation_only.py` — 4 US2 + pre-check-failure; Slice 3.
+
+Total target: ~205-210 tests (183 existing + ~22-27 new — corrected math per Gemini LOW F-07: 1 budget defaults + 1 prompt-text + 5 US4 + 3 US4 edge cases + 4 US2 + 1 mid-run-failure + 4 mutex + 2 exit-code). **Test level:** all tests are integration-level CLI-argparse invocations (per Gemini MEDIUM F-04) so argparse wiring + handler logic are exercised together.
+
+**Accepted limitation (Gemini HIGH F-02):** textual test for restatement prompt change can only verify the prompt contains the instruction phrase. Behavioral verification would require running a real LLM against staged inputs — which tests the LLM more than our change. Risk P4 stays documented; no schema-level enforcement in this feature.
+
+## Residual risks (with verification)
+
+- **Risk P1** — raised defaults + rate limits. Operators can override downward. Risk is reversible; verification is monitoring cost after deploy.
+- **Risk P2** — `--validation-only` misused as workflow bypass. Mitigated by mutex with concern-lifecycle flags; annotation trail.
+- **Risk P3** — atomic reseal pre-check misses a race where file becomes unwritable between check and write. Accepted — extremely narrow window; second run catches inconsistency.
+- **Risk P4** — restatement prompt change induces LLM non-compliance on legitimate rounds. Mitigated: quote-rule only applies when citing severity drop; other proceed paths unaffected.
+
+## Out of scope
+
+Same as spec — auto-register, completeness veto, GC intermediates (shipped in Feature A); embedding concern IDs, JSON reviewer output, rename cosmetic, --force-advance (deferred).
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+ERROR: You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Apr 28th, 2026 11:35 AM.
+ERROR: You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Apr 28th, 2026 11:35 AM.
+2026-04-24T21:31:47.238632Z ERROR codex_core::session: failed to record rollout items: thread 019dc167-e681-78f1-a9f5-abf1c8d2d94a not found

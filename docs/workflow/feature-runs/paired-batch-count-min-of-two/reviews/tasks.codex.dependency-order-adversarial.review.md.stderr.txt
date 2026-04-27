@@ -1,0 +1,949 @@
+Reading additional input from stdin...
+OpenAI Codex v0.125.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/busy-tesla-89e817
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019dc5d3-4e8a-7bb2-bbf9-0a6526c7ac04
+--------
+user
+Review this tasks artifact using a dependency-order-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: tasks.md
+# Tasks — `pairedBatchCount` as `min(A-first complete, B-first complete)`
+
+**Slug:** `paired-batch-count-min-of-two`
+**Spec:** [spec.md](spec.md) · **Plan:** [plan.md](plan.md)
+
+Two slices, each `[CHECKPOINT]`-bounded. Total expected diff: ~360 lines across 5 files. Slice 1 keeps the integration test wiring temporarily on the old codepath so its diff stays self-contained; Slice 2 swaps the wiring and updates tests.
+
+---
+
+## Slice 1 — Helper rewrite + helper-level tests
+
+**Estimated diff size:** ~150 lines (~80 in `domain-coverage-utils.ts` + ~70 in tests).
+
+**Files this slice writes to:**
+- `cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts`
+- `cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts` (helper-test additions only)
+
+### Tasks
+
+- [ ] **T1.1** Add `getCoverageDirection(runConfig: unknown): string | null` to `domain-coverage-utils.ts` with the body specified in plan §3.1. Export it from the same module.
+- [ ] **T1.2** Refactor `selectPrimaryDefinitionCounts` to the new signature in plan §3.1:
+  - Drop the optional `pairedBatchCountByDefinitionId`, `pairedBatchGroupIdsByDefinitionId`, `pairedBatchIncrementsByGroupId` parameters.
+  - Add the required `directionalGroupsByDefinitionId: ReadonlyMap<string, ReadonlyMap<string, ReadonlySet<string>>>` parameter.
+  - Add optional `log?: { warn: (obj: object, msg: string) => void }` and `cellKey?: string` parameters.
+  - Implement the three internal steps in plan §3.1: tie-break by `(batchCount desc, directionCount desc, defId asc)`; sum `batchCount`; merge per-direction Sets and apply the 0/1/2/>2 reduction.
+  - For `>2 directions`: log a warning if `log` provided, then return min of two largest counts.
+  - Keep the existing function exports (`deduplicateRunsByGroupId`, `getCoverageBatchGroupId`, `selectPrimaryDefinitionCount` singular, `getCoverageBatchIncrement`, `computePerModelTrialCounts`) untouched.
+- [ ] **T1.3** Add helper-level unit tests in `domain-coverage.test.ts`:
+  - `getCoverageDirection` block covering the 9 cases in plan §3.5 second table.
+  - `selectPrimaryDefinitionCounts` block: drop the existing tests at lines 132–207 (groupIds/increments-based), keep the empty-list and tie-break tests, add the 9 new cases in plan §3.5 first table.
+- [ ] **T1.4** Run `npx turbo build --filter=@valuerank/api` from `cloud/`. Expect type errors at the `selectPrimaryDefinitionCounts` call site in `domain-coverage.ts` because Slice 1 has not yet rewired the caller. **This is expected** — the build error confirms Slice 1's helper change is reaching the caller. Do **not** edit `domain-coverage.ts` in this slice.
+
+  Workaround for type-check during slice 1: temporarily mark the unused old-style call argument with a `// @ts-expect-error — fixed in Slice 2` directive at the call site IF the build error blocks T1.5 from running. Remove this directive in Slice 2. Track this as a "do not ship Slice 1 alone" marker.
+
+  Alternative (preferred if mechanically simple): land Slice 1 + Slice 2 in two consecutive commits within one PR; do not push Slice 1 until Slice 2 lands locally. Then both are in the same green tree at every preflight step.
+- [ ] **T1.5** Run `npx turbo test --filter=@valuerank/api -- domain-coverage` from `cloud/`. The new helper tests should pass. The integration test `domainValueCoverage` resolver tests will fail until Slice 2 — note them as expected failures.
+
+### `[CHECKPOINT]` — slice 1 boundary
+
+Diff review (per FF SKILL diff stage): `correctness` + `regression` (Codex) + `quality` (Gemini). Reviewers should verify:
+- The new helper's return shape matches the old one exactly.
+- The `getCoverageDirection` whitespace/null-coercion logic matches spec §5.2.
+- The `>2 directions` log call uses `log.warn` (not `log.error`) and includes the cell key.
+- The tie-break order is `(batchCount desc, directionCount desc, defId asc)`.
+
+---
+
+## Slice 2 — Wire `domain-coverage.ts` + integration tests + GQL desc + glossary
+
+**Estimated diff size:** ~210 lines (~50 in `domain-coverage.ts` + ~120 integration tests in `domain-coverage.test.ts` + ~10 in GQL types + ~30 in glossary).
+
+**Files this slice writes to:**
+- `cloud/apps/api/src/graphql/queries/domain-coverage.ts`
+- `cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts` (integration tests)
+- `cloud/apps/api/src/graphql/queries/domain-coverage-gql-types.ts`
+- `docs/canonical-glossary.md`
+
+### Tasks
+
+- [ ] **T2.1** In `domain-coverage.ts`, add `getCoverageDirection` to the import list from `./domain-coverage-utils.js`.
+- [ ] **T2.2** Replace the local maps `pairedBatchCountByDefinitionId`, `pairedBatchGroupIdsByDefinitionId`, `pairedBatchIncrementsByGroupId` (declared near `domain-coverage.ts:131–133`) with a single `directionalGroupsByDefinitionId: Map<string, Map<string, Set<string>>>`.
+- [ ] **T2.3** Replace the inner-loop `pairedBatchCount` block at `domain-coverage.ts:291–314` with the new direction-counting body from plan §3.2 (compute `direction`; if non-null, look up `groupKey = getCoverageBatchGroupId(...) ?? '__ungrouped__:' + run.id`; add to `defMap[direction]`).
+- [ ] **T2.4** Update the `selectPrimaryDefinitionCounts` call site (currently `domain-coverage.ts:370–376`) to pass `directionalGroupsByDefinitionId`, `ctx.log`, and `${valueA}::${valueB}` in place of the old group-id maps. Remove the now-unused old-map arguments.
+- [ ] **T2.5** Verify the trial-count path (`deduplicateRunsByGroupId(...)` block at `domain-coverage.ts:399`) is **unchanged** — it still feeds `computePerModelTrialCounts` exactly as today. Add an inline comment confirming this is intentional per spec §5.7.
+- [ ] **T2.6** [P: cloud/apps/api/src/graphql/queries/domain-coverage-gql-types.ts] Update `domain-coverage-gql-types.ts:83`: replace the `pairedBatchCount` field description with the new text in plan §3.3.
+- [ ] **T2.7** [P: docs/canonical-glossary.md] Update `docs/canonical-glossary.md`: replace the `Paired Batch` entry per spec §5.8; replace the `Incomplete Batch` entry's body per spec §5.8; append the two glossary notes ("Note on terminology overlap" and "Note on metric divergence within a cell") at the end of the `Paired Batch` entry.
+- [ ] **T2.8** [P: cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts] Add the 5 integration tests (I1–I5) from plan §3.5 to `domain-coverage.test.ts`. Each test uses the existing fixture pattern (or constructs minimal mock prisma responses). I5 mocks `ctx.log` with `vi.fn()` and asserts `log.warn` is called with the cell key + 3 direction tokens.
+- [ ] **T2.9** Remove the temporary `// @ts-expect-error` directive added in T1.4, if used. (If the alternative two-commit-one-PR approach was used, this step is N/A.)
+- [ ] **T2.10** Run from `cloud/`:
+  - `npx turbo lint --filter=@valuerank/api` — must pass.
+  - `npx turbo test --filter=@valuerank/api` — must pass with the new tests included. Record the new test count delta.
+  - `npx turbo build --filter=@valuerank/api` — must pass.
+- [ ] **T2.11** Run from `cloud/`:
+  - `npx turbo lint --filter=@valuerank/web` — must pass.
+  - `npx turbo test --filter=@valuerank/web` — must pass.
+  - `npx turbo build --filter=@valuerank/web` — must pass.
+- [ ] **T2.12** Manual verification: from `cloud/`, run `npm run dev --workspace @valuerank/api`. Issue a GraphQL query against `http://localhost:3031/graphql` for one known value pair on the seed/test DB. Confirm the response includes `pairedBatchCount` and the value matches the expected `min(A-first, B-first)` for the seeded fixtures. (If no seeded fixtures with paired runs exist, this step can be skipped — note in PR description.)
+
+### `[CHECKPOINT]` — slice 2 boundary (also the merge boundary)
+
+Diff review: `correctness` + `regression` (Codex) + `quality` (Gemini). Reviewers should verify:
+- All diffs match plan §3 exactly (no scope creep).
+- Spec §10 forbidden files list — confirm `git diff --stat origin/main..HEAD` shows only the 5 files in spec §10's edits list.
+- Glossary text is verbatim from spec §5.8.
+- GQL field description is verbatim from plan §3.3.
+- I2 integration test asserts BOTH `pairedBatchCount` and `minTrialCount` on the same fixture (the divergence assertion).
+
+---
+
+## Pre-merge checklist
+
+Before opening PR:
+
+- [ ] **PM1** `git diff --stat origin/main..HEAD` lists exactly these files: `domain-coverage.ts`, `domain-coverage-utils.ts`, `domain-coverage-gql-types.ts`, `domain-coverage.test.ts`, `canonical-glossary.md`. Anything else is scope creep.
+- [ ] **PM2** Run all 8 preflight steps from MEMORY.md (lint+test+build for `@valuerank/shared`, `@valuerank/db`, `@valuerank/api`, `@valuerank/web`). Skip the database-only ones if the changes don't touch DB. All must pass.
+- [ ] **PM3** Pre-deploy SQL spot-checks against prod (read-only, via Railway DB):
+  - **Q1** (R3 verification — guard against ad-hoc runs with valueFirst): `SELECT COUNT(*) FROM runs WHERE config->>'jobChoiceLaunchMode' != 'PAIRED_BATCH' AND config ? 'jobChoiceValueFirst' AND status='COMPLETED' AND deleted_at IS NULL;` Expected: 0.
+  - **Q2** (R5 verification — guard against >2 directions in any cell): `SELECT definition_id, COUNT(DISTINCT BTRIM(config->>'jobChoiceValueFirst')) AS dirs FROM runs WHERE status='COMPLETED' AND deleted_at IS NULL AND (config->>'isAggregate')::boolean IS NOT TRUE AND BTRIM(COALESCE(config->>'jobChoiceValueFirst',''))<>'' GROUP BY definition_id HAVING COUNT(DISTINCT BTRIM(config->>'jobChoiceValueFirst')) > 2;` Expected: 0 rows.
+  - **Q3** (Risk verification — guard against retry duplicates): `SELECT config->>'jobChoiceBatchGroupId' AS bgid, config->>'jobChoiceValueFirst' AS vf, COUNT(*) FROM runs WHERE status='COMPLETED' AND deleted_at IS NULL AND (config->>'isAggregate')::boolean IS NOT TRUE GROUP BY 1,2 HAVING COUNT(*) > 1;` Expected: 0 rows. If non-zero, those cells will see `pairedBatchCount` decrease.
+  - **Q4** (R2 verification — pre-record cells that will shift): pick at least 3 value pairs with non-trivial completed runs; for each, record current `pairedBatchCount` from the live Domain Overview, expected post-deploy value (per spec semantic), and category (clean / asymmetric / legacy-only). Save in PR description.
+- [ ] **PM4** PR description includes:
+  - Summary linking to spec/plan/closeout artifacts.
+  - "Validation" section listing exact preflight commands run with pass/fail.
+  - "Pre-deploy verification" section with results from PM3 Q1–Q4.
+  - "Post-deploy verification plan" copying spec §9 step list.
+- [ ] **PM5** PR opened against `chrislawcodes/valuerank` (per AGENTS.md). Not merged. Left for human review.
+
+---
+
+## Parallel analysis
+
+- T1.1 + T1.2 + T1.3 must be sequential (T1.3 imports the helper symbols from T1.1/T1.2).
+- T2.1 → T2.5 must be sequential (they all touch `domain-coverage.ts`).
+- T2.6 (GQL types) and T2.7 (glossary) **can run in parallel** with T2.8 (integration tests): they touch disjoint files. **[P: cloud/apps/api/src/graphql/queries/domain-coverage-gql-types.ts, docs/canonical-glossary.md]**
+
+No cross-slice parallelism within this small a refactor — T1 and T2 are tightly coupled through the helper signature change.
+
+---
+
+## Notes
+
+- **Diff size discipline:** Slice 1 ≤ 150 lines, Slice 2 ≤ 250 lines. Both well under the ~300-line `[CHECKPOINT]` cap. If implementation grows beyond these bounds (e.g. test fixtures balloon), split T2.8 (integration tests) into its own checkpoint between T2.6/2.7 and T2.9.
+- **Forbidden files** (spec §10, repeated for emphasis): do not touch `start.ts`, `lifecycle.ts`, `plan-slots.ts`, `execute-runs.ts`, `anomaly-detection.ts`, `aggregate/*`, `circumplex/*`, `types/run.ts`, any web file, `CLAUDE.md`, `AGENTS.md`, `MEMORY.md`. If implementation discovers a need to edit any of these, **stop** and re-open the spec.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m checking the task dependencies against the surrounding API surface so I can separate real ordering bugs from assumptions. I’ll keep the review scoped to the artifact and flag anything codebase-dependent as unverified.
+exec
+/bin/zsh -lc "sed -n '1,260p' tasks.md" in /Users/chrislaw/valuerank/.claude/worktrees/busy-tesla-89e817
+ exited 1 in 0ms:
+sed: tasks.md: No such file or directory
+
+exec
+/bin/zsh -lc 'rg -n "selectPrimaryDefinitionCounts|getCoverageDirection|pairedBatchCountByDefinitionId|pairedBatchGroupIdsByDefinitionId|pairedBatchIncrementsByGroupId" cloud/apps/api/src cloud/apps/api/tests' in /Users/chrislaw/valuerank/.claude/worktrees/busy-tesla-89e817
+ succeeded in 0ms:
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:7:  selectPrimaryDefinitionCounts,
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:89:describe('selectPrimaryDefinitionCounts', () => {
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:100:    expect(selectPrimaryDefinitionCounts(['def-a', 'def-b'], batchCounts, pairedCounts)).toEqual({
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:117:    expect(selectPrimaryDefinitionCounts(['def-a', 'def-b'], batchCounts, pairedCounts)).toEqual({
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:125:    expect(selectPrimaryDefinitionCounts([], new Map(), new Map())).toEqual({
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:148:    expect(selectPrimaryDefinitionCounts(
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:169:    expect(selectPrimaryDefinitionCounts(
+cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts:199:    expect(selectPrimaryDefinitionCounts(
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:18:  selectPrimaryDefinitionCounts,
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:131:      const pairedBatchCountByDefinitionId = new Map<string, number>();
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:132:      const pairedBatchGroupIdsByDefinitionId = new Map<string, Set<string>>();
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:133:      const pairedBatchIncrementsByGroupId = new Map<string, Map<string, number>>();
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:294:            pairedBatchCountByDefinitionId.set(
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:296:              (pairedBatchCountByDefinitionId.get(run.definitionId) ?? 0) + 1,
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:301:          const seenGroupIds = pairedBatchGroupIdsByDefinitionId.get(run.definitionId) ?? new Set<string>();
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:304:            pairedBatchGroupIdsByDefinitionId.set(run.definitionId, seenGroupIds);
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:305:            pairedBatchCountByDefinitionId.set(
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:307:              (pairedBatchCountByDefinitionId.get(run.definitionId) ?? 0) + 1,
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:311:            const defIncrements = pairedBatchIncrementsByGroupId.get(run.definitionId) ?? new Map<string, number>();
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:313:            pairedBatchIncrementsByGroupId.set(run.definitionId, defIncrements);
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:370:            const { primaryDefinitionId, batchCount, pairedBatchCount } = selectPrimaryDefinitionCounts(
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:373:              pairedBatchCountByDefinitionId,
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:374:              pairedBatchGroupIdsByDefinitionId,
+cloud/apps/api/src/graphql/queries/domain-coverage.ts:375:              pairedBatchIncrementsByGroupId,
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:32:export function selectPrimaryDefinitionCounts(
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:35:  pairedBatchCountByDefinitionId: ReadonlyMap<string, number>,
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:36:  pairedBatchGroupIdsByDefinitionId?: ReadonlyMap<string, ReadonlySet<string>>,
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:37:  pairedBatchIncrementsByGroupId?: ReadonlyMap<string, ReadonlyMap<string, number>>,
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:54:    const bestPairedCount = pairedBatchCountByDefinitionId.get(best) ?? 0;
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:55:    const thisPairedCount = pairedBatchCountByDefinitionId.get(defId) ?? 0;
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:75:  if (pairedBatchGroupIdsByDefinitionId != null && pairedBatchIncrementsByGroupId != null) {
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:81:      const defIncrements = pairedBatchIncrementsByGroupId.get(defId);
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:88:      const defPairedCount = pairedBatchCountByDefinitionId.get(defId) ?? 0;
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:95:  } else if (pairedBatchGroupIdsByDefinitionId != null) {
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:100:      const groupIds = pairedBatchGroupIdsByDefinitionId.get(defId);
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:106:      const defPairedCount = pairedBatchCountByDefinitionId.get(defId) ?? 0;
+cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:114:      (total, defId) => total + (pairedBatchCountByDefinitionId.get(defId) ?? 0),
+
+codex
+I found a likely dependency snag in the helper tests: the current test file still calls `selectPrimaryDefinitionCounts` with the old argument shape in several blocks, so I’m checking whether the slice plan actually rewrites all of them or only part of them.
+exec
+/bin/zsh -lc "sed -n '1,260p' cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts" in /Users/chrislaw/valuerank/.claude/worktrees/busy-tesla-89e817
+exec
+/bin/zsh -lc "sed -n '1,220p' cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts" in /Users/chrislaw/valuerank/.claude/worktrees/busy-tesla-89e817
+ succeeded in 0ms:
+import { describe, expect, it } from 'vitest';
+import {
+  extractValuePair,
+  getCoverageBatchGroupId,
+  getCoverageBatchIncrement,
+  selectPrimaryDefinitionCount,
+  selectPrimaryDefinitionCounts,
+  computePerModelTrialCounts,
+  deduplicateRunsByGroupId,
+} from '../../../src/graphql/queries/domain-coverage-utils.js';
+
+describe('extractValuePair', () => {
+  it('normalizes lowercase dimension names to canonical coverage keys', () => {
+    expect(
+      extractValuePair({
+        dimensions: [
+          { name: 'achievement' },
+          { name: 'benevolence_dependability' },
+        ],
+      }),
+    ).toEqual({
+      valueA: 'Achievement',
+      valueB: 'Benevolence_Dependability',
+    });
+  });
+
+  it('preserves already-canonical keys', () => {
+    expect(
+      extractValuePair({
+        dimensions: [
+          { name: 'Self_Direction_Action' },
+          { name: 'Universalism_Nature' },
+        ],
+      }),
+    ).toEqual({
+      valueA: 'Self_Direction_Action',
+      valueB: 'Universalism_Nature',
+    });
+  });
+
+  it('returns dimension order regardless of methodology', () => {
+    expect(
+      extractValuePair({
+        dimensions: [
+          { name: 'achievement' },
+          { name: 'benevolence_dependability' },
+        ],
+        methodology: {},
+      }),
+    ).toEqual({
+      valueA: 'Achievement',
+      valueB: 'Benevolence_Dependability',
+    });
+  });
+
+  it('rejects definitions that do not resolve to known coverage keys', () => {
+    expect(
+      extractValuePair({
+        dimensions: [
+          { name: 'achievement' },
+          { name: 'not_a_real_dimension' },
+        ],
+      }),
+    ).toBeNull();
+  });
+});
+
+describe('selectPrimaryDefinitionCount', () => {
+  it('uses the primary definition count without summing sibling definitions', () => {
+    const counts = new Map<string, number>([
+      ['def-a', 2],
+      ['def-b', 1],
+    ]);
+
+    expect(selectPrimaryDefinitionCount(['def-a', 'def-b'], counts)).toEqual({
+      primaryDefinitionId: 'def-a',
+      batchCount: 2,
+    });
+  });
+
+  it('returns zero for an empty definition list', () => {
+    expect(selectPrimaryDefinitionCount([], new Map())).toEqual({
+      primaryDefinitionId: null,
+      batchCount: 0,
+    });
+  });
+});
+
+describe('selectPrimaryDefinitionCounts', () => {
+  it('returns the total cell counts while choosing a stable primary definition', () => {
+    const batchCounts = new Map<string, number>([
+      ['def-a', 2],
+      ['def-b', 2],
+    ]);
+    const pairedCounts = new Map<string, number>([
+      ['def-a', 1],
+      ['def-b', 3],
+    ]);
+
+    expect(selectPrimaryDefinitionCounts(['def-a', 'def-b'], batchCounts, pairedCounts)).toEqual({
+      primaryDefinitionId: 'def-b',
+      batchCount: 4,
+      pairedBatchCount: 4,
+    });
+  });
+
+  it('prefers the higher paired count when batch counts tie', () => {
+    const batchCounts = new Map<string, number>([
+      ['def-a', 2],
+      ['def-b', 2],
+    ]);
+    const pairedCounts = new Map<string, number>([
+      ['def-a', 1],
+      ['def-b', 3],
+    ]);
+
+    expect(selectPrimaryDefinitionCounts(['def-a', 'def-b'], batchCounts, pairedCounts)).toEqual({
+      primaryDefinitionId: 'def-b',
+      batchCount: 4,
+      pairedBatchCount: 4,
+    });
+  });
+
+  it('returns zero for an empty definition list', () => {
+    expect(selectPrimaryDefinitionCounts([], new Map(), new Map())).toEqual({
+      primaryDefinitionId: null,
+      batchCount: 0,
+      pairedBatchCount: 0,
+    });
+  });
+
+  it('deduplicates shared group IDs across companion definitions', () => {
+    // A_first and B_first definitions share the same paired batch group IDs
+    const batchCounts = new Map<string, number>([
+      ['def-a-first', 5],
+      ['def-b-first', 5],
+    ]);
+    const pairedCounts = new Map<string, number>([
+      ['def-a-first', 3],
+      ['def-b-first', 3],
+    ]);
+    const groupIds = new Map<string, Set<string>>([
+      ['def-a-first', new Set(['group-1', 'group-2', 'group-3'])],
+      ['def-b-first', new Set(['group-1', 'group-2', 'group-3'])],
+    ]);
+
+    // Without dedup: 3 + 3 = 6. With dedup: 3 unique groups.
+    expect(selectPrimaryDefinitionCounts(
+      ['def-a-first', 'def-b-first'], batchCounts, pairedCounts, groupIds,
+    )).toEqual({
+      primaryDefinitionId: 'def-a-first',
+      batchCount: 10,
+      pairedBatchCount: 3,
+    });
+  });
+
+  it('counts ungrouped runs separately from grouped runs', () => {
+    const batchCounts = new Map<string, number>([
+      ['def-a', 3],
+    ]);
+    // pairedBatchCount = 2 grouped + 1 ungrouped = 3
+    const pairedCounts = new Map<string, number>([
+      ['def-a', 3],
+    ]);
+    const groupIds = new Map<string, Set<string>>([
+      ['def-a', new Set(['group-1', 'group-2'])],
+    ]);
+
+    expect(selectPrimaryDefinitionCounts(
+      ['def-a'], batchCounts, pairedCounts, groupIds,
+    )).toEqual({
+      primaryDefinitionId: 'def-a',
+      batchCount: 3,
+      pairedBatchCount: 3, // 2 grouped + 1 ungrouped
+    });
+  });
+
+  it('deduplicates with samplesPerScenario increments across companions', () => {
+    // 3 paired batch groups shared across A_first and B_first.
+    // Group 1: sps=1, Group 2: sps=1, Group 3: sps=3 -> total 5 batches per side.
+    const batchCounts = new Map<string, number>([
+      ['def-a-first', 10],
+      ['def-b-first', 10],
+    ]);
+    const pairedCounts = new Map<string, number>([
+      ['def-a-first', 5],
+      ['def-b-first', 5],
+    ]);
+    const groupIds = new Map<string, Set<string>>([
+      ['def-a-first', new Set(['group-1', 'group-2', 'group-3'])],
+      ['def-b-first', new Set(['group-1', 'group-2', 'group-3'])],
+    ]);
+    const increments = new Map<string, Map<string, number>>([
+      ['def-a-first', new Map([['group-1', 1], ['group-2', 1], ['group-3', 3]])],
+      ['def-b-first', new Map([['group-1', 1], ['group-2', 1], ['group-3', 3]])],
+    ]);
+
+    // Without dedup: 5 + 5 = 10. With dedup: 1+1+3 = 5 (max increment per group).
+    expect(selectPrimaryDefinitionCounts(
+      ['def-a-first', 'def-b-first'], batchCounts, pairedCounts, groupIds, increments,
+    )).toEqual({
+      primaryDefinitionId: 'def-a-first',
+      batchCount: 20,
+      pairedBatchCount: 5,
+    });
+  });
+});
+
+describe('getCoverageBatchIncrement', () => {
+
+  it('returns samplesPerScenario when it is a valid positive integer', () => {
+    expect(getCoverageBatchIncrement(5)).toBe(5);
+  });
+
+  it('returns 1 when samplesPerScenario is 1', () => {
+    expect(getCoverageBatchIncrement(1)).toBe(1);
+  });
+
+  it('falls back to 1 when config is null (entire config null)', () => {
+    const value = (null as { samplesPerScenario?: unknown } | null)?.samplesPerScenario;
+    expect(getCoverageBatchIncrement(value)).toBe(1);
+  });
+
+  it('falls back to 1 when samplesPerScenario is absent from config', () => {
+    expect(getCoverageBatchIncrement(undefined)).toBe(1);
+  });
+
+  it('falls back to 1 when samplesPerScenario is null', () => {
+    expect(getCoverageBatchIncrement(null)).toBe(1);
+  });
+
+  it('falls back to 1 when samplesPerScenario is a string', () => {
+    expect(getCoverageBatchIncrement('5')).toBe(1);
+  });
+
+  it('falls back to 1 when samplesPerScenario is a float', () => {
+    expect(getCoverageBatchIncrement(1.5)).toBe(1);
+  });
+
+  it('falls back to 1 when samplesPerScenario is 0', () => {
+    expect(getCoverageBatchIncrement(0)).toBe(1);
+  });
+
+  it('falls back to 1 when samplesPerScenario is negative', () => {
+    expect(getCoverageBatchIncrement(-10)).toBe(1);
+  });
+
+  it('falls back to 1 when samplesPerScenario is NaN', () => {
+    expect(getCoverageBatchIncrement(NaN)).toBe(1);
+  });
+
+  it('falls back to 1 when samplesPerScenario is Infinity', () => {
+    expect(getCoverageBatchIncrement(Infinity)).toBe(1);
+  });
+
+  it('falls back to 1 when samplesPerScenario is -Infinity', () => {
+    expect(getCoverageBatchIncrement(-Infinity)).toBe(1);
+  });
+
+  it('sums correctly across multiple runs for the same definition (5+5=10)', () => {
+
+ succeeded in 0ms:
+import { DOMAIN_ANALYSIS_VALUE_KEYS, extractValuePair, toPascalCaseKey, type DomainAnalysisValueKey } from './domain-analysis-values.js';
+
+export const COVERAGE_VALUE_KEYS = DOMAIN_ANALYSIS_VALUE_KEYS;
+export type CoverageValueKey = DomainAnalysisValueKey;
+export { extractValuePair, toPascalCaseKey };
+
+/**
+ * Extract the two canonical value dimension names from a definition's resolved content JSON.
+ * Returns null if the definition does not have exactly two recognized value dimensions.
+ */
+export function selectPrimaryDefinitionCount(
+  definitionIds: readonly string[],
+  batchCountByDefinitionId: ReadonlyMap<string, number>,
+): { primaryDefinitionId: string | null; batchCount: number } {
+  const uniqueDefinitionIds = Array.from(new Set(definitionIds));
+  if (uniqueDefinitionIds.length === 0) {
+    return { primaryDefinitionId: null, batchCount: 0 };
+  }
+
+  const primaryDefinitionId = uniqueDefinitionIds.reduce((best, defId) => {
+    const bestCount = batchCountByDefinitionId.get(best) ?? 0;
+    const thisCount = batchCountByDefinitionId.get(defId) ?? 0;
+    return thisCount > bestCount ? defId : best;
+  }, uniqueDefinitionIds[0] ?? '');
+
+  return {
+    primaryDefinitionId: primaryDefinitionId === '' ? null : primaryDefinitionId,
+    batchCount: primaryDefinitionId === '' ? 0 : (batchCountByDefinitionId.get(primaryDefinitionId) ?? 0),
+  };
+}
+
+export function selectPrimaryDefinitionCounts(
+  definitionIds: readonly string[],
+  batchCountByDefinitionId: ReadonlyMap<string, number>,
+  pairedBatchCountByDefinitionId: ReadonlyMap<string, number>,
+  pairedBatchGroupIdsByDefinitionId?: ReadonlyMap<string, ReadonlySet<string>>,
+  pairedBatchIncrementsByGroupId?: ReadonlyMap<string, ReadonlyMap<string, number>>,
+): { primaryDefinitionId: string | null; batchCount: number; pairedBatchCount: number } {
+  const uniqueDefinitionIds = Array.from(new Set(definitionIds));
+  if (uniqueDefinitionIds.length === 0) {
+    return { primaryDefinitionId: null, batchCount: 0, pairedBatchCount: 0 };
+  }
+
+  const primaryDefinitionId = uniqueDefinitionIds.reduce((best, defId) => {
+    const bestBatchCount = batchCountByDefinitionId.get(best) ?? 0;
+    const thisBatchCount = batchCountByDefinitionId.get(defId) ?? 0;
+    if (thisBatchCount > bestBatchCount) {
+      return defId;
+    }
+    if (thisBatchCount < bestBatchCount) {
+      return best;
+    }
+
+    const bestPairedCount = pairedBatchCountByDefinitionId.get(best) ?? 0;
+    const thisPairedCount = pairedBatchCountByDefinitionId.get(defId) ?? 0;
+    if (thisPairedCount > bestPairedCount) {
+      return defId;
+    }
+    if (thisPairedCount < bestPairedCount) {
+      return best;
+    }
+
+    return defId.localeCompare(best) < 0 ? defId : best;
+  }, uniqueDefinitionIds[0] ?? '');
+
+  const batchCount = uniqueDefinitionIds.reduce(
+    (total, defId) => total + (batchCountByDefinitionId.get(defId) ?? 0),
+    0,
+  );
+
+  // Deduplicate paired batch counts across companion definitions.
+  // A_first and B_first share the same group IDs, so we merge group→increment
+  // maps and take the max increment per group (not sum). Ungrouped runs are summed.
+  let pairedBatchCount: number;
+  if (pairedBatchGroupIdsByDefinitionId != null && pairedBatchIncrementsByGroupId != null) {
+    // Merge increments: for each group ID, take the max increment across definitions
+    // (companions have the same sps, so max === any, but max is safer)
+    const mergedIncrements = new Map<string, number>();
+    let ungroupedTotal = 0;
+    for (const defId of uniqueDefinitionIds) {
+      const defIncrements = pairedBatchIncrementsByGroupId.get(defId);
+      if (defIncrements != null) {
+        for (const [gid, inc] of defIncrements) {
+          mergedIncrements.set(gid, Math.max(mergedIncrements.get(gid) ?? 0, inc));
+        }
+      }
+      // Ungrouped portion: pairedBatchCount minus grouped total for this definition
+      const defPairedCount = pairedBatchCountByDefinitionId.get(defId) ?? 0;
+      const defGroupedTotal = defIncrements != null
+        ? Array.from(defIncrements.values()).reduce((sum, v) => sum + v, 0)
+        : 0;
+      ungroupedTotal += Math.max(0, defPairedCount - defGroupedTotal);
+    }
+    pairedBatchCount = Array.from(mergedIncrements.values()).reduce((sum, v) => sum + v, 0) + ungroupedTotal;
+  } else if (pairedBatchGroupIdsByDefinitionId != null) {
+    // Legacy path: group IDs available but no increment tracking — count unique groups
+    const mergedGroupIds = new Set<string>();
+    let ungroupedCount = 0;
+    for (const defId of uniqueDefinitionIds) {
+      const groupIds = pairedBatchGroupIdsByDefinitionId.get(defId);
+      if (groupIds != null) {
+        for (const gid of groupIds) {
+          mergedGroupIds.add(gid);
+        }
+      }
+      const defPairedCount = pairedBatchCountByDefinitionId.get(defId) ?? 0;
+      const defGroupedCount = groupIds?.size ?? 0;
+      ungroupedCount += Math.max(0, defPairedCount - defGroupedCount);
+    }
+    pairedBatchCount = mergedGroupIds.size + ungroupedCount;
+  } else {
+    // Fallback: sum per-definition counts
+    pairedBatchCount = uniqueDefinitionIds.reduce(
+      (total, defId) => total + (pairedBatchCountByDefinitionId.get(defId) ?? 0),
+      0,
+    );
+  }
+
+  return {
+    primaryDefinitionId: primaryDefinitionId === '' ? null : primaryDefinitionId,
+    batchCount,
+    pairedBatchCount,
+  };
+}
+
+export function getCoverageBatchIncrement(samplesPerScenario: unknown): number {
+  return Number.isInteger(samplesPerScenario) && (samplesPerScenario as number) >= 1
+    ? (samplesPerScenario as number)
+    : 1;
+}
+
+export type CoverageModelBreakdown = { modelId: string; label: string; trialCount: number };
+
+/**
+ * Deduplicate a list of runs by their paired-batch group ID.
+ *
+ * A-first and B-first companion definitions for the same value pair share the
+ * same `jobChoiceBatchGroupId` / `pairedBatchGroupId`. When runs are collected
+ * across both companion definitions and flattened into a single list, each paired
+ * batch appears twice. Call this before any aggregation (trial counts, model
+ * breakdowns, etc.) to ensure each batch is counted exactly once.
+ *
+ * Runs without a group ID (ungrouped / unpaired) are always kept.
+ *
+ * If `completenessOf` is provided, ties within a group are broken by preferring
+ * the complete companion. When both companions are complete (or both incomplete)
+ * the survivor is the one that appears first in input order. Callers that
+ * depend on deterministic survivor selection should pre-sort by `createdAt`
+ * (or another stable key) before calling.
+ */
+export function deduplicateRunsByGroupId<T extends { config: unknown }>(
+  runs: ReadonlyArray<T>,
+  completenessOf?: (run: T) => boolean,
+): T[] {
+  if (completenessOf == null) {
+    const seenGroupIds = new Set<string>();
+    return runs.filter((run) => {
+      const groupId = getCoverageBatchGroupId(run.config);
+      if (groupId === null) return true;
+      if (seenGroupIds.has(groupId)) return false;
+      seenGroupIds.add(groupId);
+      return true;
+    });
+  }
+
+  // Two-pass: first index every run by groupId, then pick the survivor with
+  // a "prefer complete" rule. Ungrouped runs pass through.
+  const groups = new Map<string, T[]>();
+  const ungrouped: T[] = [];
+  for (const run of runs) {
+    const groupId = getCoverageBatchGroupId(run.config);
+    if (groupId === null) {
+      ungrouped.push(run);
+      continue;
+    }
+    const existing = groups.get(groupId) ?? [];
+    existing.push(run);
+    groups.set(groupId, existing);
+  }
+
+  const survivors: T[] = [...ungrouped];
+  for (const [, members] of groups) {
+    if (members.length === 0) continue;
+    const complete = members.find((member) => completenessOf(member));
+    survivors.push(complete ?? members[0]!);
+  }
+  return survivors;
+}
+
+export function computePerModelTrialCounts(
+  runs: ReadonlyArray<{ config: unknown; transcripts: ReadonlyArray<{ modelId: string }> }>,
+  defaultModelIds: readonly string[],
+  modelLabelById: ReadonlyMap<string, string>,
+): { minTrialCount: number | null; maxTrialCount: number | null; modelBreakdown: CoverageModelBreakdown[] | null } {
+  if (defaultModelIds.length === 0) {
+    return { minTrialCount: null, maxTrialCount: null, modelBreakdown: null };
+  }
+
+  // Caller is responsible for deduplicating paired runs before passing them here.
+  // Use deduplicateRunsByGroupId() at the call site when collecting runs across
+  // companion definitions for the same value pair.
+  //
+  // We count actual transcript rows per model rather than the planned
+  // `samplesPerScenario × runs-where-model-present` value. This keeps the
+  // displayed trial count consistent with what the aggregate analysis pipeline
+  // actually consumes (every transcript becomes a sample, including any
+  // duplicates from worker retries or races -- see
+  // aggregate-preparation.ts:202). If we kept the planned value, runs with
+  // duplicate transcripts would silently have larger effective sample sizes
+  // in analysis than the UI advertised.
+  const trialCountByModel = new Map<string, number>(
+    defaultModelIds.map((modelId) => [modelId, 0]),
+  );
+
+  for (const run of runs) {
+    for (const transcript of run.transcripts) {
+      if (trialCountByModel.has(transcript.modelId)) {
+        trialCountByModel.set(transcript.modelId, (trialCountByModel.get(transcript.modelId) ?? 0) + 1);
+      }
+    }
+
+exec
+/bin/zsh -lc 'rg -n "domainValueCoverage|pairedBatchCount|minTrialCount|domain-coverage" cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts' in /Users/chrislaw/valuerank/.claude/worktrees/busy-tesla-89e817
+exec
+/bin/zsh -lc "sed -n '260,520p' cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts" in /Users/chrislaw/valuerank/.claude/worktrees/busy-tesla-89e817
+ succeeded in 0ms:
+10:} from '../../../src/graphql/queries/domain-coverage-utils.js';
+103:      pairedBatchCount: 4,
+120:      pairedBatchCount: 4,
+128:      pairedBatchCount: 0,
+153:      pairedBatchCount: 3,
+161:    // pairedBatchCount = 2 grouped + 1 ungrouped = 3
+174:      pairedBatchCount: 3, // 2 grouped + 1 ungrouped
+204:      pairedBatchCount: 5,
+321:    expect(result).toEqual({ minTrialCount: null, maxTrialCount: null, modelBreakdown: null });
+330:    expect(result.minTrialCount).toBe(1); // model-b only appeared in 1 run
+346:    expect(result.minTrialCount).toBe(2); // both counted - caller didn't dedup
+365:    expect(result.minTrialCount).toBe(5);
+379:    expect(result.minTrialCount).toBe(2);
+481:    expect(result.minTrialCount).toBe(10); // 2 groups x 5 transcripts each
+
+ succeeded in 0ms:
+  it('sums correctly across multiple runs for the same definition (5+5=10)', () => {
+    const batchCountByDefinitionId = new Map<string, number>();
+    const defId = 'def-1';
+    for (const samplesPerScenario of [5, 5]) {
+      const increment = getCoverageBatchIncrement(samplesPerScenario);
+      batchCountByDefinitionId.set(defId, (batchCountByDefinitionId.get(defId) ?? 0) + increment);
+    }
+    expect(batchCountByDefinitionId.get(defId)).toBe(10);
+  });
+
+  it('sums correctly when one run has samplesPerScenario=5 and one has null (5+1=6)', () => {
+    const batchCountByDefinitionId = new Map<string, number>();
+    const defId = 'def-2';
+    for (const samplesPerScenario of [5, null]) {
+      const increment = getCoverageBatchIncrement(samplesPerScenario);
+      batchCountByDefinitionId.set(defId, (batchCountByDefinitionId.get(defId) ?? 0) + increment);
+    }
+    expect(batchCountByDefinitionId.get(defId)).toBe(6);
+  });
+});
+
+describe('getCoverageBatchGroupId', () => {
+  it('prefers jobChoiceBatchGroupId when present', () => {
+    expect(
+      getCoverageBatchGroupId({
+        jobChoiceBatchGroupId: 'job-choice-group',
+        pairedBatchGroupId: 'paired-group',
+      }),
+    ).toBe('job-choice-group');
+  });
+
+  it('falls back to pairedBatchGroupId when jobChoiceBatchGroupId is absent', () => {
+    expect(
+      getCoverageBatchGroupId({
+        pairedBatchGroupId: 'paired-group',
+      }),
+    ).toBe('paired-group');
+  });
+
+  it('trims whitespace from the selected batch-group id', () => {
+    expect(
+      getCoverageBatchGroupId({
+        jobChoiceBatchGroupId: '  group-id  ',
+      }),
+    ).toBe('group-id');
+  });
+
+  it('returns null when both batch-group ids are missing or blank', () => {
+    expect(getCoverageBatchGroupId({})).toBeNull();
+    expect(getCoverageBatchGroupId({ jobChoiceBatchGroupId: '   ' })).toBeNull();
+  });
+});
+
+describe('computePerModelTrialCounts', () => {
+  const labels = new Map([
+    ['model-a', 'Model A'],
+    ['model-b', 'Model B'],
+  ]);
+
+  it('returns null breakdown when defaultModelIds is empty', () => {
+    const result = computePerModelTrialCounts([], [], labels);
+    expect(result).toEqual({ minTrialCount: null, maxTrialCount: null, modelBreakdown: null });
+  });
+
+  it('counts transcripts for each default model across ungrouped runs', () => {
+    const runs = [
+      { config: { samplesPerScenario: 1 }, transcripts: [{ modelId: 'model-a' }, { modelId: 'model-b' }] },
+      { config: { samplesPerScenario: 1 }, transcripts: [{ modelId: 'model-a' }] },
+    ];
+    const result = computePerModelTrialCounts(runs, ['model-a', 'model-b'], labels);
+    expect(result.minTrialCount).toBe(1); // model-b only appeared in 1 run
+    expect(result.maxTrialCount).toBe(2); // model-a appeared in 2 runs
+    expect(result.modelBreakdown).toEqual([
+      { modelId: 'model-a', label: 'Model A', trialCount: 2 },
+      { modelId: 'model-b', label: 'Model B', trialCount: 1 },
+    ]);
+  });
+
+  it('counts paired runs as-is - caller must dedup via deduplicateRunsByGroupId first', () => {
+    // computePerModelTrialCounts does NOT deduplicate. The call site is responsible.
+    // This test documents the contract: duplicate group IDs are counted twice here.
+    const runs = [
+      { config: { jobChoiceBatchGroupId: 'group-1', samplesPerScenario: 1 }, transcripts: [{ modelId: 'model-a' }] },
+      { config: { jobChoiceBatchGroupId: 'group-1', samplesPerScenario: 1 }, transcripts: [{ modelId: 'model-a' }] },
+    ];
+    const result = computePerModelTrialCounts(runs, ['model-a'], labels);
+    expect(result.minTrialCount).toBe(2); // both counted - caller didn't dedup
+  });
+
+  it('counts every transcript row, not the planned samplesPerScenario value', () => {
+    // Trial count reflects actual transcripts so the displayed number matches
+    // what the aggregate analysis pipeline consumes. samplesPerScenario is
+    // ignored at this layer -- it's only used by batchCount, which counts
+    // intent rather than reality.
+    const runs = [
+      {
+        config: { jobChoiceBatchGroupId: 'g1', samplesPerScenario: 5 },
+        // Five real transcripts -> five trials.
+        transcripts: [
+          { modelId: 'model-a' }, { modelId: 'model-a' }, { modelId: 'model-a' },
+          { modelId: 'model-a' }, { modelId: 'model-a' },
+        ],
+      },
+    ];
+    const result = computePerModelTrialCounts(runs, ['model-a'], labels);
+    expect(result.minTrialCount).toBe(5);
+  });
+
+  it('counts duplicate transcripts as separate trials (matches analysis pipeline)', () => {
+    // When the worker double-fires on the same (run, scenario, model, sample)
+    // slot, both transcripts land in the DB and the aggregate analysis treats
+    // them as independent samples. Trial count must reflect that.
+    const runs = [
+      {
+        config: { samplesPerScenario: 1 },
+        transcripts: [{ modelId: 'model-a' }, { modelId: 'model-a' }],
+      },
+    ];
+    const result = computePerModelTrialCounts(runs, ['model-a'], labels);
+    expect(result.minTrialCount).toBe(2);
+  });
+
+  it('ignores transcripts whose model is not in defaultModelIds', () => {
+    const runs = [
+      {
+        config: { samplesPerScenario: 1 },
+        transcripts: [
+          { modelId: 'model-a' },
+          { modelId: 'model-c' }, // not in defaults
+          { modelId: 'model-b' },
+        ],
+      },
+    ];
+    const result = computePerModelTrialCounts(runs, ['model-a', 'model-b'], labels);
+    expect(result.modelBreakdown).toEqual([
+      { modelId: 'model-a', label: 'Model A', trialCount: 1 },
+      { modelId: 'model-b', label: 'Model B', trialCount: 1 },
+    ]);
+  });
+});
+
+describe('deduplicateRunsByGroupId', () => {
+  it('removes duplicate paired runs sharing the same group ID', () => {
+    const runs = [
+      { config: { jobChoiceBatchGroupId: 'group-1' }, transcripts: [] },
+      { config: { jobChoiceBatchGroupId: 'group-1' }, transcripts: [] }, // duplicate
+      { config: { jobChoiceBatchGroupId: 'group-2' }, transcripts: [] },
+    ];
+    expect(deduplicateRunsByGroupId(runs)).toHaveLength(2);
+  });
+
+  it('keeps all ungrouped runs regardless', () => {
+    const runs = [
+      { config: {}, transcripts: [] },
+      { config: {}, transcripts: [] },
+      { config: { jobChoiceBatchGroupId: 'group-1' }, transcripts: [] },
+    ];
+    expect(deduplicateRunsByGroupId(runs)).toHaveLength(3);
+  });
+
+  it('handles mixed grouped and ungrouped runs', () => {
+    const runs = [
+      { config: { jobChoiceBatchGroupId: 'g1' }, transcripts: [] },
+      { config: { jobChoiceBatchGroupId: 'g1' }, transcripts: [] }, // duplicate
+      { config: {}, transcripts: [] }, // ungrouped - keep
+      { config: { jobChoiceBatchGroupId: 'g2' }, transcripts: [] },
+    ];
+    expect(deduplicateRunsByGroupId(runs)).toHaveLength(3);
+  });
+
+  it('returns empty array for empty input', () => {
+    expect(deduplicateRunsByGroupId([])).toHaveLength(0);
+  });
+
+  it('with completenessOf callback, prefers the complete companion within a group', () => {
+    const runs = [
+      { config: { jobChoiceBatchGroupId: 'group-1' }, transcripts: [], complete: false },
+      { config: { jobChoiceBatchGroupId: 'group-1' }, transcripts: [], complete: true },
+      { config: { jobChoiceBatchGroupId: 'group-2' }, transcripts: [], complete: false },
+      { config: { jobChoiceBatchGroupId: 'group-2' }, transcripts: [], complete: false },
+    ];
+    const survivors = deduplicateRunsByGroupId(runs, (run) => run.complete);
+    expect(survivors).toHaveLength(2);
+    // group-1 winner is the complete one; group-2 has no complete -- first-seen wins.
+    expect(survivors.find((r) => r.config.jobChoiceBatchGroupId === 'group-1')?.complete).toBe(true);
+  });
+
+  it('with completenessOf, both-incomplete groups keep first-seen survivor', () => {
+    const runs = [
+      { config: { jobChoiceBatchGroupId: 'g1' }, transcripts: [], tag: 'first' },
+      { config: { jobChoiceBatchGroupId: 'g1' }, transcripts: [], tag: 'second' },
+    ];
+    const survivors = deduplicateRunsByGroupId(runs, () => false);
+    expect(survivors).toHaveLength(1);
+    expect(survivors[0]?.tag).toBe('first');
+  });
+
+  it('with completenessOf, ungrouped runs always survive regardless of completeness', () => {
+    const runs = [
+      { config: {}, transcripts: [], complete: false },
+      { config: {}, transcripts: [], complete: false },
+      { config: { jobChoiceBatchGroupId: 'g1' }, transcripts: [], complete: true },
+    ];
+    const survivors = deduplicateRunsByGroupId(runs, (run) => run.complete);
+    expect(survivors).toHaveLength(3);
+  });
+
+  it('when combined with computePerModelTrialCounts, paired companions count once', () => {
+    const labels = new Map([['model-a', 'Model A']]);
+    // Simulate A-first and B-first companion runs for the same batch group.
+    // Each surviving (post-dedup) run contributes its actual transcript rows
+    // -- 5 here -- so two groups produce 10 trials total.
+    const fiveTranscripts = Array.from({ length: 5 }, () => ({ modelId: 'model-a' }));
+    const runs = [
+      { config: { jobChoiceBatchGroupId: 'group-1', samplesPerScenario: 5 }, transcripts: fiveTranscripts },
+      { config: { jobChoiceBatchGroupId: 'group-1', samplesPerScenario: 5 }, transcripts: fiveTranscripts },
+      { config: { jobChoiceBatchGroupId: 'group-2', samplesPerScenario: 5 }, transcripts: fiveTranscripts },
+      { config: { jobChoiceBatchGroupId: 'group-2', samplesPerScenario: 5 }, transcripts: fiveTranscripts },
+    ];
+    const deduped = deduplicateRunsByGroupId(runs);
+    const result = computePerModelTrialCounts(deduped, ['model-a'], labels);
+    expect(result.minTrialCount).toBe(10); // 2 groups x 5 transcripts each
+  });
+});
+
+codex
+## Findings
+- **High:** T1.3 is incomplete for the helper test file. It says to keep the “empty-list and tie-break” tests in [`cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts`](e.g. `selectPrimaryDefinitionCounts` block), but those preserved cases still call `selectPrimaryDefinitionCounts` with the old three-argument shape. After T1.2 changes the signature, Slice 1 will not typecheck, so T1.5 cannot run as written. The rewrite needs to update every retained call site, not just the groupId/increment block you drop.
+- **Medium:** T1.4 and T1.5 make Slice 1 a non-executable dependency boundary. The plan explicitly expects `@valuerank/api` build failures until Slice 2 rewires [`cloud/apps/api/src/graphql/queries/domain-coverage.ts`](https://example.invalid), then immediately asks for `turbo test` in the same slice. The only escape hatch is a temporary `// @ts-expect-error` in a file Slice 1 says not to edit. That means Slice 1 cannot be validated independently, which breaks the intended checkpoint order.
+
+## Residual Risks
+- [UNVERIFIED] The plan assumes `selectPrimaryDefinitionCounts` only has the callers shown in the current domain coverage path and the test file. If there is another consumer, the Slice 1 breakage will be broader than the artifact anticipates.
+- The final manual verification in T2.12 is optional if seed fixtures are missing, so the live GraphQL proof of the new `min(A-first, B-first)` behavior may never actually run.
+- The artifact still depends on the exact warning payload and direction-reduction semantics matching the plan text. Without code context, that remains unproven until implementation and test execution.
+2026-04-25T18:08:52.521187Z ERROR codex_core::session: failed to record rollout items: thread 019dc5d3-4e8a-7bb2-bbf9-0a6526c7ac04 not found
+tokens used
+23,838

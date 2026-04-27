@@ -1,6 +1,7 @@
 import { db } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 import { ACTIVE_PROBE_QUEUE_SQL } from '../queue/probe-queues.js';
+import { computeRunProgress } from './derived-progress.js';
 
 const log = createLogger('services:run:stall-detection');
 
@@ -22,6 +23,7 @@ export async function getLastSuccessfulCompletionByModel(runId: string): Promise
     SELECT model_id, MAX(completed_at) as last_completion
     FROM probe_results
     WHERE run_id = ${runId}
+      AND deleted_at IS NULL
       AND status = 'SUCCESS'
       AND completed_at IS NOT NULL
     GROUP BY model_id
@@ -72,6 +74,7 @@ export async function detectProgressStalls(
     SELECT model_id, COUNT(*) as cnt
     FROM transcripts
     WHERE run_id = ${runId}
+      AND deleted_at IS NULL
     GROUP BY model_id
   `;
 
@@ -111,7 +114,7 @@ export async function detectAndUpdateStalledRuns(): Promise<{
 }> {
   const runningRuns = await db.run.findMany({
     where: { status: 'RUNNING' },
-    select: { id: true, stalledModels: true, startedAt: true, progress: true, config: true },
+    select: { id: true, stalledModels: true, startedAt: true, config: true },
   });
 
   let newStalls = 0;
@@ -126,8 +129,8 @@ export async function detectAndUpdateStalledRuns(): Promise<{
     let stalled = await detectStalledModels(run.id, run.startedAt);
 
     // If no queue-level stalls, check for progress stalls (jobs vanished from queue)
-    if (stalled.length === 0 && run.progress != null) {
-      const progress = run.progress as { total: number; completed: number; failed: number };
+    if (stalled.length === 0) {
+      const progress = await computeRunProgress(run.id);
       const done = progress.completed + progress.failed;
       if (done < progress.total) {
         // Check that there are truly zero pending/active jobs

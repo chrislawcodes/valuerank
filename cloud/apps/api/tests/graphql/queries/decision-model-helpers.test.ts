@@ -178,6 +178,26 @@ describe('isCachedWinnerFirstDecision — cacheVersion 2 only', () => {
     expect(result).toBe(true);
   });
 
+  it('accepts cacheVersion 2 + parse_failed (sentinel for un-recoverable parses)', () => {
+    const result = isCachedWinnerFirstDecision({
+      cacheVersion: 2,
+      decisionState: 'parse_failed',
+      strength: 'unknown',
+      favoredValueKey: null,
+    });
+    expect(result).toBe(true);
+  });
+
+  it('rejects parse_failed with non-null favoredValueKey (must share unknown shape)', () => {
+    const result = isCachedWinnerFirstDecision({
+      cacheVersion: 2,
+      decisionState: 'parse_failed',
+      strength: 'unknown',
+      favoredValueKey: 'Self_Direction_Action',
+    });
+    expect(result).toBe(false);
+  });
+
   it('rejects cacheVersion 1 + refusal (legacy shape no longer accepted)', () => {
     const result = isCachedWinnerFirstDecision({
       cacheVersion: 1,

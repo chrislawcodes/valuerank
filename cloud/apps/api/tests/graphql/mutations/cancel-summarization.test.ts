@@ -95,6 +95,10 @@ describe('Summarization Control Mutations', () => {
           runId: run.id,
           scenarioId: scenario.id,
           modelId: 'openai:gpt-4',
+          // Each iteration is a distinct sample of the same (scenario, model)
+          // slot. Without unique sampleIndex values these would all collide
+          // on the (run, scenario, model, sampleIndex) unique index.
+          sampleIndex: i,
           content: { schema_version: 1, messages: [], model_response: 'test' },
           turnCount: 1,
           tokenCount: 100,

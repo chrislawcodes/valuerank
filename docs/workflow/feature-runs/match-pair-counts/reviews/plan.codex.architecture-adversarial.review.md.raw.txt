@@ -1,0 +1,13 @@
+## Findings
+1. **HIGH**: The plan does not define enough data to choose the correct launch vignette when a coverage cell aggregates multiple definitions. The resolver already stores multiple definition IDs per pair (`definitionsByPairKey`) and then collapses them to one `primaryDefinitionId` for the cell link target, so the proposed `computeLaggingDirection` cannot deterministically pick a `launchDefinitionId` from only aggregate `directionalCoverage` plus `contributingDefinitionIds`. That makes the Match Pair Counts action ambiguous or wrong for multi-definition cells. [CODE-CONFIRMED]  
+   Evidence: `[domain-coverage.ts](/Users/chrislaw/valuerank/.claude/worktrees/infallible-bassi-fafa71/cloud/apps/api/src/graphql/queries/domain-coverage.ts#L98)` and `[domain-coverage.ts](/Users/chrislaw/valuerank/.claude/worktrees/infallible-bassi-fafa71/cloud/apps/api/src/graphql/queries/domain-coverage.ts#L300)`
+
+2. **MEDIUM**: The plan uses `aggregateRunId === null` as if it were an aggregate-cell marker, but the current resolver uses `aggregateRunId` as a general “best analysis link” pointer that falls back to the latest matching non-aggregate run. That means non-aggregate cells often have a non-null `aggregateRunId`, so the proposed gating will misclassify cells and hide/show Match Pair Counts incorrectly. [CODE-CONFIRMED]  
+   Evidence: `[domain-coverage.ts](/Users/chrislaw/valuerank/.claude/worktrees/infallible-bassi-fafa71/cloud/apps/api/src/graphql/queries/domain-coverage.ts#L309)`
+
+3. **MEDIUM**: The top-up mode rollout is incomplete on the run list surface. `RunCard` marks any run with a `pairedBatchGroupId` as “Paired batch”, but the plan says top-up runs should be standalone production runs with a fresh batch group and no companion. Without updating this badge logic, top-up runs will still be shown as paired in list views even though the plan treats them as a separate launch shape. [CODE-CONFIRMED]  
+   Evidence: `[RunCard.tsx](/Users/chrislaw/valuerank/.claude/worktrees/infallible-bassi-fafa71/cloud/apps/web/src/components/runs/RunCard.tsx#L112)`
+
+## Residual Risks
+- The coverage resolver already scans all definitions and completed runs per domain. Adding transcript slot materialization will likely increase query cost on busy domains, so the plan still needs a before/after latency check on a large production cell.
+- Any code path that still infers paired-vs-standalone behavior from `pairedBatchGroupId` instead of `jobChoiceLaunchMode` will need an audit after top-up lands, or the UI will keep mixing the new mode into old paired-batch semantics.

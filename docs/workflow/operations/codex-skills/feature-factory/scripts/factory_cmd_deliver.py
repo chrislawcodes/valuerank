@@ -66,6 +66,8 @@ from factory_pr_body import (  # noqa: E402
 )
 
 from factory_emit import _emit_next_action  # noqa: E402
+from factory_mutating import mutates_state  # noqa: E402
+from factory_cmd_checkpoint import _nonblank  # noqa: E402
 
 
 def _base_pr_body(slug: str) -> str:
@@ -84,7 +86,7 @@ def _base_pr_body(slug: str) -> str:
 
 
 def _issue_pr_body(pr: dict | None, state: dict, slug: str) -> tuple[str, bool]:
-    rendered_block = render_judge_panel_block(state)
+    rendered_block = render_judge_panel_block(state, slug=slug)
     existing_body = str(pr.get("body", "")) if isinstance(pr, dict) else ""
     if not existing_body:
         body = _base_pr_body(slug)
@@ -116,7 +118,7 @@ def _edit_pr_body(body: str) -> None:
 def _record_override_if_needed(slug: str, reason: str) -> dict | None:
     recorded: dict | None = None
     with with_locked_state(slug) as state:
-        concerns, _, _ = collect_judge_panel_entries(state)
+        concerns, _, _, _ = collect_judge_panel_entries(state)
         if not concerns:
             return None
         recorded = {
@@ -231,13 +233,49 @@ def _resume_merge_wait_if_needed(slug: str, delivery: dict) -> int:
     return 0
 
 
+@mutates_state("deliver")
 def command_deliver(args: argparse.Namespace) -> int:
     ensure_sync()
     if not command_path("gh"):
         raise SystemExit("deliver requires the gh CLI to be installed")
-    if args.override_judges and not args.reason:
+    if args.override_judges and _nonblank(getattr(args, "reason", None)) is None:
         print("deliver --override-judges requires --reason", file=sys.stderr)
         raise SystemExit(2)
+
+    # PR #751 / FF Housekeeping Slice 3: implementation-rule WARN.
+    # Validate the override flag combo eagerly (so a bad invocation fails
+    # fast), but defer the state-mutating override write until deliver gates
+    # have all passed (per Codex diff-review regression MEDIUM #2 — don't
+    # mutate state on an aborted/dry-run deliver).
+    impl_rule_override_pending = False
+    if getattr(args, "override_implementation_rule", False):
+        impl_rule_override_reason = (getattr(args, "override_implementation_reason", None) or "").strip()
+        if len(impl_rule_override_reason) < 10:
+            print(
+                "deliver --override-implementation-rule requires "
+                "--override-implementation-reason of at least 10 characters",
+                file=sys.stderr,
+            )
+            raise SystemExit(2)
+        impl_rule_override_pending = True
+    else:
+        from factory_deliver import check_implementation_rule
+        status, message = check_implementation_rule(args.slug)
+        if status == "triggered":
+            if message:
+                # Per Codex diff-review regression MEDIUM #3: surface the
+                # message so the guardrail doesn't disappear silently.
+                print(message, file=sys.stderr)
+        elif status == "suppressed":
+            if message:
+                print(message, file=sys.stderr)
+        elif status == "skipped":
+            if message:
+                print(message, file=sys.stderr)
+        elif status == "ok":
+            pass
+        else:
+            raise RuntimeError(f"unexpected check_implementation_rule status: {status!r}")
 
     auth = subprocess.run(["gh", "auth", "status", "--active"], text=True, capture_output=True)
     if auth.returncode != 0:
@@ -264,13 +302,64 @@ def command_deliver(args: argparse.Namespace) -> int:
         if recorded_override:
             state = load_workflow_state(args.slug)
 
+    # PR #751 / FF Housekeeping Slice 3 — record the implementation-rule
+    # override AFTER the early-exit paths (resume_merge_wait, refresh) have
+    # been taken, so we don't mutate state on a no-op deliver.
+    if impl_rule_override_pending:
+        from factory_deliver import record_implementation_rule_override
+        record_implementation_rule_override(args.slug, impl_rule_override_reason)
+
+    # P1-1 (adversarial review finding): honor judge-advance verdicts at delivery
+    # the same way prerequisite_failure does, so an unhealthy manifest with an
+    # advance vote does not wall off delivery. Without this, every feature that
+    # hit the judge-panel cap has to hand-patch review SHAs to reach the PR.
+    stages_state = state.get("stages") or {}
     for stage in REQUIRED_PREDELIVERY_STAGES:
         manifest_path = checkpoint_manifest_path(args.slug, stage)
         if not manifest_path.exists():
             raise SystemExit(f"deliver requires completed {stage} checkpoint first")
         healthy, detail = verify_checkpoint_manifest(manifest_path)
         if not healthy:
+            stage_blob = stages_state.get(stage) or {}
+            if isinstance(stage_blob, dict) and stage_blob.get("judge_next_action") == "advance":
+                continue  # judge advance overrides manifest-drift-equals-unhealthy
             raise SystemExit(f"deliver requires a healthy {stage} checkpoint first: {trim_detail(detail)}")
+
+    # P1-2 (adversarial review finding): block delivery when any stage carries
+    # open judge concerns. Without this, 2-of-3 judge proceed votes can ship a
+    # feature with unresolved HIGH concerns that only surface in the PR body.
+    # Operators must explicitly resolve them (--address/--defer/--dismiss) or
+    # use deliver --override-judges --reason to accept the risk.
+    if not args.override_judges:
+        open_concerns_by_stage: dict[str, list[dict]] = {}
+        for stage_name in ("spec", "plan", "tasks", "diff", "closeout"):
+            stage_blob = stages_state.get(stage_name) or {}
+            if not isinstance(stage_blob, dict):
+                continue
+            for concern in stage_blob.get("unresolved_concerns") or []:
+                if not isinstance(concern, dict):
+                    continue
+                if (
+                    concern.get("addressed_at") is None
+                    and not concern.get("deferred_reason")
+                    and not concern.get("dismissed_reason")
+                ):
+                    open_concerns_by_stage.setdefault(stage_name, []).append(concern)
+        if open_concerns_by_stage:
+            lines = [
+                "deliver blocked: open judge concerns on these stages — resolve before PR or pass --override-judges --reason:",
+            ]
+            for stage_name, concerns in open_concerns_by_stage.items():
+                for concern in concerns:
+                    cid = concern.get("id", "?")
+                    snippet = trim_detail(str(concern.get("reasoning", "") or ""), limit=80)
+                    lines.append(f"  - [{stage_name}] {cid}: {snippet}")
+            lines.append("")
+            lines.append("options per concern:")
+            lines.append("  python3 run_factory.py checkpoint --slug <slug> --stage <stage> --address <id> --evidence '<text>'")
+            lines.append("  python3 run_factory.py checkpoint --slug <slug> --stage <stage> --defer   <id> --reason   '<text>'")
+            lines.append("  python3 run_factory.py checkpoint --slug <slug> --stage <stage> --dismiss <id> --reason   '<text>'")
+            raise SystemExit("\n".join(lines))
 
     recon_ok, recon_detail = reconciliation_state(args.slug)
     if not recon_ok:
@@ -288,7 +377,8 @@ def command_deliver(args: argparse.Namespace) -> int:
         raise SystemExit(
             f"deliver requires the current branch to match the reviewed diff HEAD; "
             f"diff artifact HEAD {recorded_head} does not match current HEAD {current_head}. "
-            "Rerun the diff checkpoint before delivering."
+            "Rerun reconcile first so the diff manifest can auto-reseal, or run "
+            f"checkpoint --slug {args.slug} --stage diff --validation-only before delivering."
         )
 
     pr = current_pr_payload()
@@ -470,6 +560,7 @@ def command_deliver(args: argparse.Namespace) -> int:
     return 0
 
 
+@mutates_state("closeout")
 def command_closeout(args: argparse.Namespace) -> int:
     from factory_cmd_checkpoint import command_checkpoint  # noqa: E402
     ensure_sync()

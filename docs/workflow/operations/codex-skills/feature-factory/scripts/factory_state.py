@@ -2,7 +2,8 @@
 """Path helpers, atomic I/O primitives, state constants, and workflow state
 management for the feature factory.
 
-No subprocess calls.  All I/O is file-based JSON read/write.
+All core I/O is file-based JSON read/write.  A small git ancestor helper is
+also exposed for implementation-rule freshness checks.
 Every public symbol is safe to import in tests without side effects.
 """
 import json
@@ -10,9 +11,17 @@ from contextlib import contextmanager
 import fcntl
 import errno
 import os
+import subprocess
 import tempfile
 import time
 from pathlib import Path
+import sys
+
+_SCRIPT_DIR = Path(__file__).resolve().parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
+
+from factory_io import atomic_write_text, read_text
 
 
 # ---------------------------------------------------------------------------
@@ -20,7 +29,15 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 REPO_ROOT: Path = Path(__file__).resolve().parents[6]
-FACTORY_RUNS_ROOT: Path = REPO_ROOT / "docs" / "workflow" / "feature-runs"
+# PR #751 / FF Housekeeping Slice 4: honor FF_FACTORY_RUNS_ROOT env var so
+# tests can redirect the workflow root via subprocess env without monkey-
+# patching module state. Production paths are unaffected when absent.
+_RUNS_ROOT_OVERRIDE = os.environ.get("FF_FACTORY_RUNS_ROOT")
+FACTORY_RUNS_ROOT: Path = (
+    Path(_RUNS_ROOT_OVERRIDE).resolve()
+    if _RUNS_ROOT_OVERRIDE
+    else REPO_ROOT / "docs" / "workflow" / "feature-runs"
+)
 
 # ---------------------------------------------------------------------------
 # String constants used as workflow-state dictionary keys
@@ -36,6 +53,8 @@ CHECKPOINT_FALLBACK_KEY = "checkpoint_fallback"
 CHECKPOINT_PROGRESS_KEY = "checkpoint_progress"
 PARALLEL_ANALYSIS_KEY = "parallel_analysis"
 INIT_HEAD_SHA_KEY = "init_head_sha"
+INVARIANT_WARNINGS_KEY = "invariant_warnings"
+_INVARIANT_WARNINGS_CAP = 100
 
 # ---------------------------------------------------------------------------
 # Atomic JSON I/O
@@ -46,15 +65,7 @@ def atomic_json_write(path: Path, data: dict) -> None:
     """Write *data* to *path* as JSON atomically via a temp file + os.replace()."""
     path.parent.mkdir(parents=True, exist_ok=True)
     text = json.dumps(data, indent=2)
-    fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=".tmp.", suffix=".json")
-    tmp_path = Path(tmp_name)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(text)
-        tmp_path.replace(path)
-    except Exception:
-        tmp_path.unlink(missing_ok=True)
-        raise
+    atomic_write_text(path, text)
 
 
 def read_json_file(path: Path) -> tuple[dict | None, str]:
@@ -62,7 +73,7 @@ def read_json_file(path: Path) -> tuple[dict | None, str]:
     if not path.exists():
         return None, ""
     try:
-        return json.loads(path.read_text(encoding="utf-8")), ""
+        return json.loads(read_text(path)), ""
     except Exception as exc:
         return None, str(exc)
 
@@ -104,6 +115,27 @@ def normalized_repo_path(raw: str, field_name: str) -> str:
     except ValueError as exc:
         raise SystemExit(f"Invalid {field_name}: {raw!r}") from exc
     return str(relative)
+
+
+def is_ancestor_of_head(sha: str | None) -> bool:
+    """True iff `sha` is an ancestor of HEAD via `git merge-base --is-ancestor`.
+
+    Returns False on any subprocess exception (malformed SHA, missing object,
+    git not on PATH, timeout, etc.) — never raises.
+    """
+    if not sha or not isinstance(sha, str):
+        return False
+    try:
+        result = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", sha, "HEAD"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            timeout=60,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired,
+            FileNotFoundError, OSError):
+        return False
+    return result.returncode == 0
 
 
 def workflow_dir(slug: str) -> Path:
@@ -185,9 +217,24 @@ def _default_workflow_state() -> dict:
         PARALLEL_ANALYSIS_KEY: default_parallel_analysis_state(),
         INIT_HEAD_SHA_KEY: "",
         "token_usage": [],
+        "command_telemetry": [],
+        "diff_review_budget": {
+            "recorded_head": "",
+            "last_review_only_advance_at": 0,
+        },
         "stages": {},
+        INVARIANT_WARNINGS_KEY: [],
         "schema_version": 1,
     }
+
+
+def _cap_command_telemetry(state: dict, max_records: int = 100) -> None:
+    records = state.get("command_telemetry", [])
+    if not isinstance(records, list):
+        state["command_telemetry"] = []
+        return
+    if len(records) > max_records:
+        state["command_telemetry"] = records[-max_records:]
 
 
 def _default_stage_state(state: dict | None = None, stage: str | None = None) -> dict:
@@ -332,7 +379,7 @@ def discovery_blockers_are_malformed(discovery: dict) -> bool:
 
 
 def parse_review_frontmatter(path: Path) -> tuple[dict[str, str], str]:
-    text = path.read_text(encoding="utf-8")
+    text = read_text(path)
     if not text.startswith("---\n"):
         raise ValueError(f"{path} is missing frontmatter")
     _, rest = text.split("---\n", 1)
@@ -350,7 +397,7 @@ def load_scope_manifest(slug: str) -> dict:
     path = scope_manifest_path(slug)
     if not path.exists():
         return {"paths": [], "allowed_dirty_paths": []}
-    return json.loads(path.read_text(encoding="utf-8"))
+    return json.loads(read_text(path))
 
 
 def save_scope_manifest(slug: str, paths: list[str]) -> Path:
@@ -375,7 +422,7 @@ def load_workflow_state(slug: str) -> dict:
     path = factory_state_path(slug)
     if not path.exists():
         return _default_workflow_state()
-    state = json.loads(path.read_text(encoding="utf-8"))
+    state = json.loads(read_text(path))
     defaults = _default_workflow_state()
     state.setdefault("review_policy", defaults["review_policy"])
     state.setdefault(BLOCKED_KEY, defaults[BLOCKED_KEY])
@@ -386,9 +433,64 @@ def load_workflow_state(slug: str) -> dict:
     state.setdefault(PARALLEL_ANALYSIS_KEY, default_parallel_analysis_state())
     state.setdefault(INIT_HEAD_SHA_KEY, "")
     state.setdefault("token_usage", [])
+    state.setdefault("command_telemetry", [])
+    state.setdefault("diff_review_budget", defaults["diff_review_budget"])
     state.setdefault("stages", {})
+    state.setdefault(INVARIANT_WARNINGS_KEY, [])
     state.setdefault("schema_version", 1)
+    _backfill_unresolved_concern_ids(state)
     return state
+
+
+def _concern_id_stable(stage: str, judge: str, round_raised: int, reasoning: str) -> str:
+    """Stable concern ID per FR-003. Mirrored in factory_cmd_judge._concern_id.
+
+    Defined here so state-load backfill (FR-011a) does not need to import the
+    judge module at load time.
+    """
+    import hashlib
+    normalized = "".join(reasoning.split())[:48]
+    key = f"{stage}|{judge}|{round_raised}|{normalized}"
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()[:12]
+
+
+def _backfill_unresolved_concern_ids(state: dict) -> None:
+    """FR-011a — backfill `id` on any legacy unresolved_concern without one.
+
+    Older runs (including the run-033 fixture) wrote concerns before FR-003
+    added the stable-id field. On read, synthesize the id so the new
+    checkpoint lifecycle works on in-flight runs without a migration script.
+    Also default-fills addressed_at / addressed_by / deferred_reason /
+    dismissed_reason to ``None``.
+    """
+    stages = state.get("stages")
+    if not isinstance(stages, dict):
+        return
+    for stage_name, stage_state in stages.items():
+        if not isinstance(stage_state, dict):
+            continue
+        concerns = stage_state.get("unresolved_concerns")
+        if not isinstance(concerns, list):
+            continue
+        for concern in concerns:
+            if not isinstance(concern, dict):
+                continue
+            if not concern.get("id"):
+                # Defensive coercion — diff round-1 finding: older/corrupt
+                # state.json may store round_raised as a non-numeric string.
+                # Never let load_workflow_state raise.
+                try:
+                    round_raised = int(concern.get("round_raised") or 0)
+                except (TypeError, ValueError):
+                    round_raised = 0
+                concern["id"] = _concern_id_stable(
+                    str(concern.get("stage") or stage_name),
+                    str(concern.get("judge") or ""),
+                    round_raised,
+                    str(concern.get("reasoning") or ""),
+                )
+            for field in ("addressed_at", "addressed_by", "deferred_reason", "dismissed_reason"):
+                concern.setdefault(field, None)
 
 
 def save_workflow_state(slug: str, state: dict) -> Path:
@@ -402,6 +504,11 @@ def update_workflow_state(slug: str, mutate) -> dict:
     with with_locked_state(slug) as state:
         mutate(state)
     return state
+
+
+# Slice 5 dispatch command uses the shorter legacy name expected by the task
+# notes. Keep it as a direct alias so both names share the same atomic helper.
+update_state = update_workflow_state
 
 
 def update_stage_state(slug: str, stage: str, updates: dict) -> dict:

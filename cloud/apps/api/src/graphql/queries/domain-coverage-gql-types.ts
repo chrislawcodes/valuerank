@@ -22,6 +22,13 @@ export type DomainValueCoverageCell = {
   valueB: string;
   batchCount: number;
   pairedBatchCount: number;
+  orphanedBatchCount: number;
+  aFirstBatchCount: number;
+  bFirstBatchCount: number;
+  pairedConditionCount: number;
+  orphanedConditionCount: number;
+  directionalCoverage: DirectionalCoverage[];
+  contributingDefinitionIds: string[];
   /** Number of non-aggregate runs whose transcript count is less than expected. */
   incompleteBatchCount: number;
   definitionId: string | null;
@@ -35,6 +42,14 @@ export type DomainValueCoverageCell = {
 export type CoverageModelOption = {
   modelId: string;
   label: string;
+};
+
+export type DirectionalCoverage = {
+  direction: string;
+  completeBatches: number;
+  filledSlots: number;
+  leftoverConditions: number;
+  definitionIds: string[];
 };
 
 export type DomainValueCoverageResult = {
@@ -65,15 +80,89 @@ const CoverageModelBreakdownRef = builder
     }),
   });
 
+const DirectionalCoverageRef = builder
+  .objectRef<DirectionalCoverage>('DirectionalCoverage')
+  .implement({
+    fields: (t) => ({
+      direction: t.exposeString('direction'),
+      completeBatches: t.exposeInt('completeBatches'),
+      filledSlots: t.exposeInt('filledSlots'),
+      leftoverConditions: t.exposeInt('leftoverConditions'),
+      definitionIds: t.exposeStringList('definitionIds'),
+    }),
+  });
+
 const DomainValueCoverageCellRef = builder
   .objectRef<DomainValueCoverageCell>('DomainValueCoverageCell')
   .implement({
     fields: (t) => ({
       valueA: t.exposeString('valueA'),
       valueB: t.exposeString('valueB'),
-      batchCount: t.exposeInt('batchCount'),
-      pairedBatchCount: t.exposeInt('pairedBatchCount'),
-      incompleteBatchCount: t.exposeInt('incompleteBatchCount'),
+      batchCount: t.exposeInt('batchCount', {
+        description:
+          'Count of fully-complete non-aggregate runs for this value pair. ' +
+          'A run is complete when every selected model has at least one ' +
+          'transcript at every (scenario × sampleIndex) slot. samplesPerScenario ' +
+          'does not multiply this count -- a complete run contributes 1 ' +
+          'regardless of how many samples per scenario were planned. ' +
+          'Aggregate runs are excluded.',
+      }),
+      pairedBatchCount: t.exposeInt('pairedBatchCount', {
+        description:
+          'Count of pairable analysis-ready batches for this value pair, ' +
+          'computed as min(complete A-first non-aggregate runs, ' +
+          'complete B-first non-aggregate runs) where direction is read from ' +
+          'config.jobChoiceValueFirst. A launch where only one direction completed ' +
+          'contributes 0 here (the surviving complete run still appears in batchCount). ' +
+          'Runs without a recognizable direction token are excluded from both sides. ' +
+          'See docs/canonical-glossary.md "Paired Batch" for full semantic.',
+      }),
+      orphanedBatchCount: t.exposeInt('orphanedBatchCount', {
+        description:
+          'Count of unmatched directional runs for this value pair, computed as ' +
+          'max(complete A-first runs, complete B-first runs) - ' +
+          'min(complete A-first runs, complete B-first runs). When both directions ' +
+          'are equal this is 0; when only one direction has runs this is the count ' +
+          'of that side. Runs without a recognizable direction token are excluded.',
+      }),
+      aFirstBatchCount: t.exposeInt('aFirstBatchCount', {
+        description:
+          'Count of complete A-first runs for this value pair after model-set filtering. ' +
+          'This is the filtered directional count for the first value in the pair.',
+      }),
+      bFirstBatchCount: t.exposeInt('bFirstBatchCount', {
+        description:
+          'Count of complete B-first runs for this value pair after model-set filtering. ' +
+          'This is the filtered directional count for the second value in the pair.',
+      }),
+      pairedConditionCount: t.exposeInt('pairedConditionCount', {
+        description:
+          'Count of matched condition slots across both directions, computed as the ' +
+          'size of the intersection of filled (scenarioId, modelId, sampleIndex) slots.',
+      }),
+      orphanedConditionCount: t.exposeInt('orphanedConditionCount', {
+        description:
+          'Count of unmatched condition slots across both directions, computed as the ' +
+          'size of the symmetric difference of filled (scenarioId, modelId, sampleIndex) slots.',
+      }),
+      directionalCoverage: t.field({
+        type: [DirectionalCoverageRef],
+        resolve: (parent) => parent.directionalCoverage,
+        description:
+          'Per-direction condition coverage for this value pair, including complete batches, ' +
+          'filled slots, leftover conditions from incomplete runs, and contributing definition IDs.',
+      }),
+      contributingDefinitionIds: t.exposeStringList('contributingDefinitionIds', {
+        description:
+          'Union of definition IDs that contribute data to this coverage cell, sorted alphabetically.',
+      }),
+      incompleteBatchCount: t.exposeInt('incompleteBatchCount', {
+        description:
+          'Count of non-aggregate runs that expect transcripts but are ' +
+          'missing one or more (model × scenario × sampleIndex) slots. ' +
+          'Per-run; samplesPerScenario does not multiply this count. ' +
+          'Aggregate runs and runs with zero expected slots are excluded.',
+      }),
       definitionId: t.exposeString('definitionId', { nullable: true }),
       definitionName: t.exposeString('definitionName', { nullable: true }),
       aggregateRunId: t.exposeString('aggregateRunId', { nullable: true }),

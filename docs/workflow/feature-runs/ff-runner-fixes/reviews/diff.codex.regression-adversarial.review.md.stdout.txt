@@ -1,0 +1,17 @@
+## Findings
+- Medium: [run_factory.py](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py#L438)  
+  The new post-run invariant sweep only executes after `args.func(args)` returns. If a state-mutating command writes partial state and then raises, `main()` exits before `_run_post_invariants()` runs, so the contradiction check never records the bad state. That leaves the new guard blind to the exact failure mode it is meant to catch.
+
+- Medium: [factory_invariants.py](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_invariants.py#L148)  
+  `set_json_mode()` advertises `FF_INVARIANT_EMIT=stderr|stdout`, but `_emit_target()` is hard-wired to `sys.stderr`. The stdout path is effectively dead, so any wrapper or test that expects the documented override to move warnings off stderr will not work.
+
+- Medium [UNVERIFIED]: [factory_state.py](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_state.py#L411)  
+  The new backfill path converts `round_raised` with `int(concern.get("round_raised") or 0)`. If any existing concern in a real run stores `round_raised` as a non-numeric string or other malformed value, simply loading the workflow state will now raise and block the run. This depends on existing data shape, so I am marking it unverified.
+
+- Low: [factory_pr_body.py](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_pr_body.py#L91)  
+  When only resolved concerns exist, `render_judge_panel_block()` still emits the `## ⚠ Unresolved Judge Concerns` heading before the new resolved section. That leaves an empty open-issues block in the PR body, which is confusing and can be misread as unresolved work still present.
+
+## Residual Risks
+- I did not validate the existing workflow-state corpus, so the backfill failure mode on malformed `round_raised` values remains a data-dependent risk.
+- I did not inspect every mutating command path to see whether any of them can raise after persisting state, so the missed-invariant-window risk may be broader than the one call site shown here.
+- The new review-regex expansion and judge-panel rendering changes may still have edge-case false positives or false negatives outside the cases covered in the diff.

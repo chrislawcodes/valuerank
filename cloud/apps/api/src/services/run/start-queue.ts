@@ -1,4 +1,4 @@
-import { AppError, createLogger } from '@valuerank/shared';
+import { AppError, NotFoundError, createLogger } from '@valuerank/shared';
 import type { PriorityLevel } from '../../queue/types.js';
 import { DEFAULT_JOB_OPTIONS, PRIORITY_VALUES } from '../../queue/types.js';
 import { getBoss } from '../../queue/boss.js';
@@ -9,6 +9,7 @@ import {
   type JobEntry,
   RETRY_ENQUEUE_CHUNK_SIZE,
 } from './start-helpers.js';
+import { maybeAdvanceRunStatus } from './progress.js';
 import type { RunJobPlanItem } from './start-plan.js';
 
 const log = createLogger('services:run:start');
@@ -30,6 +31,16 @@ export async function enqueueRunJobs(input: EnqueueRunJobsInput): Promise<string
     ...DEFAULT_JOB_OPTIONS['probe_scenario'],
     priority: priorityValue,
   };
+
+  try {
+    await maybeAdvanceRunStatus(runId);
+  } catch (error) {
+    if (error instanceof NotFoundError) {
+      log.warn({ runId, err: error }, 'Run missing during immediate status advance, skipping');
+    } else {
+      throw error;
+    }
+  }
 
   const jobs: JobEntry[] = [];
   const queueNameCache = new Map<string, string>();

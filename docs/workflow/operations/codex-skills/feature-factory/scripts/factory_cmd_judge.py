@@ -19,6 +19,7 @@ if str(_SCRIPT_DIR) not in sys.path:
 
 from factory_state import (  # noqa: E402
     REPO_ROOT,
+    INVARIANT_WARNINGS_KEY,
     atomic_json_write,
     default_artifact_path,
     load_workflow_state,
@@ -106,6 +107,44 @@ def _stage_int(stage_state: dict, key: str) -> int:
         return 0
 
 
+def _concern_is_open(concern: dict) -> bool:
+    return (
+        concern.get("addressed_at") is None
+        and not concern.get("deferred_reason")
+        and not concern.get("dismissed_reason")
+    )
+
+
+def _structured_high_ids(verdict: dict | None) -> list[str]:
+    if not isinstance(verdict, dict):
+        return []
+    raw_ids = verdict.get("unaddressed_high_finding_ids", [])
+    if not isinstance(raw_ids, list):
+        return []
+    ids: list[str] = []
+    for item in raw_ids:
+        if not isinstance(item, str):
+            continue
+        stripped = item.strip()
+        if stripped:
+            ids.append(stripped)
+    return ids
+
+
+def _open_concern_ids(stage_state: dict) -> set[str]:
+    unresolved = stage_state.get("unresolved_concerns", [])
+    if not isinstance(unresolved, list):
+        return set()
+    ids: set[str] = set()
+    for concern in unresolved:
+        if not isinstance(concern, dict):
+            continue
+        concern_id = str(concern.get("id", "") or "").strip()
+        if concern_id and _concern_is_open(concern):
+            ids.add(concern_id)
+    return ids
+
+
 def _record_migration_bypass_use(slug: str, stage: str) -> None:
     with with_locked_state(slug) as state:
         uses = state.get("migration_bypass_uses", [])
@@ -156,6 +195,20 @@ def _also_raised_in_round(current_reasoning: str, prior_rounds: list[list[dict]]
     return sorted(also_raised)
 
 
+def _concern_id(stage: str, judge: str, round_raised: int, reasoning: str) -> str:
+    """Derive a stable ID from the stage/judge/round and the reasoning prefix.
+
+    FR-003 — the ID must be stable under minor paraphrasing at the end of the
+    reasoning. We hash the first 48 non-whitespace characters of the reasoning
+    along with the fixed fields; this accepts drift at the tail but splits
+    heavily-reworded concerns into distinct IDs (see Risk R5 in the spec).
+    """
+    import hashlib
+    normalized = "".join(reasoning.split())[:48]
+    key = f"{stage}|{judge}|{round_raised}|{normalized}"
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()[:12]
+
+
 def _unresolved_concern_from_verdict(
     stage: str,
     verdict: dict,
@@ -163,14 +216,20 @@ def _unresolved_concern_from_verdict(
     prior_rounds: list[list[dict]],
 ) -> dict[str, object]:
     reasoning = str(verdict.get("reasoning", "")).strip()
+    judge = str(verdict.get("judge", ""))
     return {
+        "id": _concern_id(stage, judge, round_raised, reasoning),
         "stage": stage,
-        "judge": verdict.get("judge", ""),
+        "judge": judge,
         "model": verdict.get("model", ""),
         "confidence": verdict.get("confidence"),
         "reasoning": reasoning,
         "round_raised": round_raised,
         "also_raised_in_round": _also_raised_in_round(reasoning, prior_rounds),
+        "addressed_at": None,
+        "addressed_by": None,
+        "deferred_reason": None,
+        "dismissed_reason": None,
     }
 
 
@@ -416,6 +475,12 @@ def _validate_verdict(verdict: dict) -> str | None:
         return "confidence must be an integer in the range 0..5"
     if not isinstance(verdict["reasoning"], str) or len(verdict["reasoning"].strip()) < 10:
         return "reasoning must be a string of at least 10 characters"
+    if "unaddressed_high_finding_ids" in verdict:
+        if not isinstance(verdict["unaddressed_high_finding_ids"], list):
+            return "unaddressed_high_finding_ids must be a list"
+        for item in verdict["unaddressed_high_finding_ids"]:
+            if not isinstance(item, str) or not item.strip():
+                return "unaddressed_high_finding_ids items must be non-empty strings"
     if not isinstance(verdict["evidence"], list):
         return "evidence must be a list"
     for item in verdict["evidence"]:
@@ -434,7 +499,7 @@ def _validate_verdict(verdict: dict) -> str | None:
     IGNORABLE_METADATA_FIELDS = {"$schema", "$id", "$comment", "title", "description"}
     for meta_field in IGNORABLE_METADATA_FIELDS & set(verdict):
         verdict.pop(meta_field, None)
-    extra = set(verdict) - set(required)
+    extra = set(verdict) - set(required) - {"unaddressed_high_finding_ids"}
     if extra:
         return f"unexpected fields in verdict: {sorted(extra)}"
     return None
@@ -871,16 +936,56 @@ def _persist_state(
         stage_state["annotations"] = annotations
         block_verdicts = _block_verdicts(verdicts)
         blockers = _block_reasonings(block_verdicts)
+        completeness_verdict = next(
+            (verdict for verdict in verdicts if isinstance(verdict, dict) and verdict.get("judge") == "completeness"),
+            None,
+        )
+        structured_high_ids = _structured_high_ids(completeness_verdict)
+        open_concern_ids = _open_concern_ids(stage_state)
+        open_structured_high_ids = [concern_id for concern_id in structured_high_ids if concern_id in open_concern_ids]
 
-        if block_count >= 2 and judge_round < 3:
+        if (
+            isinstance(completeness_verdict, dict)
+            and completeness_verdict.get("verdict") == "block"
+            and not structured_high_ids
+            and open_concern_ids
+        ):
+            state.setdefault(INVARIANT_WARNINGS_KEY, []).append(
+                {
+                    "at": int(datetime.now(timezone.utc).timestamp()),
+                    "command": "judge",
+                    "stage": stage,
+                    "detail": "completeness judge blocked without structured HIGH ids while concerns remain — prompt may be malformed",
+                }
+            )
+
+        # FR-001a — write judge_next_action into stage_state BEFORE computing
+        # recommended_next_action so the decision tree (which reads
+        # stages[stage].judge_next_action) sees the freshly-voted advance on
+        # the same run. Without this reorder, factory_cmd_judge itself emits
+        # a stale repair_<stage>_checkpoint banner immediately after voting
+        # advance — the exact symptom observed in feature run 033.
+        if (
+            isinstance(completeness_verdict, dict)
+            and completeness_verdict.get("verdict") == "block"
+            and open_structured_high_ids
+            and proceed_count >= 2
+        ):
+            stage_state["judge_next_action"] = "edit_and_rerun_judge"
+            next_action = "edit_and_rerun_judge"
+            reason = (
+                "completeness judge veto: unaddressed HIGH concerns "
+                + "{"
+                + ",".join(open_structured_high_ids)
+                + "} — majority override"
+            )
+            outcome_value = "rejudge"
+        elif block_count >= 2 and judge_round < 3:
+            stage_state["judge_next_action"] = "edit_and_rerun_judge"
             next_action = "edit_and_rerun_judge"
             reason = f"block majority; {block_count} of {len(verdicts)} judges blocked"
             outcome_value = "rejudge"
-            stage_state["judge_next_action"] = next_action
         elif block_count >= 2 and judge_round >= 3:
-            next_action = recommended_next_action(slug, state, {name: stage_manifest_state(slug, name) for name in CHECKPOINT_STAGES}, True)
-            reason = "judge panel exhausted; advancing with unresolved concerns"
-            outcome_value = "advance"
             stage_state["judge_next_action"] = "advance"
             unresolved = stage_state.get("unresolved_concerns", [])
             if not isinstance(unresolved, list):
@@ -891,12 +996,15 @@ def _persist_state(
                 for verdict in block_verdicts
             )
             stage_state["unresolved_concerns"] = unresolved
+            next_action = recommended_next_action(slug, state, {name: stage_manifest_state(slug, name) for name in CHECKPOINT_STAGES}, True)
+            reason = "judge panel exhausted; advancing with unresolved concerns"
+            outcome_value = "advance"
             _LOGGER.warning("judge panel exhausted; advancing with unresolved concerns")
         else:
+            stage_state["judge_next_action"] = "advance"
             next_action = recommended_next_action(slug, state, {name: stage_manifest_state(slug, name) for name in CHECKPOINT_STAGES}, True)
             reason = f"{stage} judge panel completed: advance"
             outcome_value = "advance"
-            stage_state["judge_next_action"] = "advance"
 
         state["last_action_result"] = {
             **_payload_for_state(

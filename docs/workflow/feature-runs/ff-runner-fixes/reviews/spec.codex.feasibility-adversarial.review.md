@@ -1,0 +1,46 @@
+---
+reviewer: "codex"
+lens: "feasibility-adversarial"
+stage: "spec"
+artifact_path: "docs/workflow/feature-runs/ff-runner-fixes/spec.md"
+artifact_sha256: "102b8ce6a77244e43e05a3efddf9007ef8b1a547fb68030d98fe5288c928d5b6"
+repo_root: "."
+git_head_sha: "7b414cadc42e915c128f35f296d36dca61c9d85b"
+git_base_ref: "origin/claude/friendly-aryabhata-9efbf7"
+git_base_sha: "6f5ed232c83bbd0f51ac8419ac6fb9688b8b8fad"
+generation_method: "codex-runner"
+resolution_status: "accepted"
+resolution_note: "All findings addressed (see spec round-2 notes in plan.md reconciliation section)"
+raw_output_path: "docs/workflow/feature-runs/ff-runner-fixes/reviews/spec.codex.feasibility-adversarial.review.md.raw.txt"
+narrowed_artifact_path: ""
+narrowed_artifact_sha256: ""
+coverage_status: "full"
+coverage_note: ""
+---
+
+# Review: spec feasibility-adversarial
+
+## Findings
+
+- HIGH [CODE-CONFIRMED]: [`FR-003`](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/spec.md#L115) and [`FR-011a`](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/spec.md#L138) do not backfill `id` for existing `unresolved_concerns`. The required run-033 fixture already has open concerns without `id` in [`run-033-state-pre-fix.json`](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/fixtures/run-033-state-pre-fix.json#L1136), while new IDs are only created for freshly raised concerns in [`factory_cmd_judge.py`](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py#L159-L193). That means the regression input this spec explicitly requires cannot be addressed with `checkpoint --address/--defer/--dismiss`, so the new lifecycle is unusable on existing runs.
+
+- MEDIUM [CODE-CONFIRMED]: [`FR-009`](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/spec.md#L135) omits `discover` and `parallel`, but the runner already treats both as state-mutating commands in [`run_factory.py`](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py#L102-L118). The guardrail would still miss contradictions after those commands, so the spec does not actually cover every state mutation path the codebase uses.
+
+- MEDIUM [CODE-CONFIRMED]: [`US1` scenario 3](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/spec.md#L68-L71) says the next checkpoint can treat concerns as closed when they are “referenced as `addressed` in plan annotations,” but [`FR-004`](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/spec.md#L116-L118) says annotations are display-only and only `addressed_at`, `deferred_reason`, or `dismissed_reason` close a concern. The implementation in [`factory_pr_body.py`](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_pr_body.py#L32-L47) follows FR-004, so the spec is internally inconsistent and will force a choice later.
+
+- MEDIUM [CODE-CONFIRMED]: [`FR-006`](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/spec.md#L122-L129) and [`FR-007`](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/spec.md#L130-L131) overstate the false-positive protection from structural anchoring. The current regex still matches literal severity lines inside fenced code blocks, and the test suite explicitly preserves that behavior in [`test_factory_review_specs.py`](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_factory_review_specs.py#L177-L194). So a review that quotes a finding example in a code fence can still be auto-accepted.
+
+## Residual Risks
+
+- The invariant in [`FR-010`](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/spec.md#L136-L139) is still narrow. It only flags the same-stage `repair_<stage>_checkpoint` contradiction, so other bad next-action states can still slip through.
+
+- The ID scheme in [`FR-003`](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/feature-runs/ff-runner-fixes/spec.md#L115) remains paraphrase-sensitive by design. Even after backfilling old concerns, heavy rewording can still split one concern into multiple IDs.
+
+## Runner Stats
+- total_input=0
+- total_output=0
+- total_tokens=0
+
+## Resolution
+- status: accepted
+- note: All findings addressed (see spec round-2 notes in plan.md reconciliation section)

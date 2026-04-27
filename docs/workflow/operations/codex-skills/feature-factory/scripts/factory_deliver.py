@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """GitHub CLI interaction, delivery records, and closeout text generation."""
 import json
+import os
 import subprocess
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 import sys
+from typing import Literal
 
 _SCRIPT_DIR = Path(__file__).resolve().parent
 if str(_SCRIPT_DIR) not in sys.path:
@@ -14,6 +16,9 @@ if str(_SCRIPT_DIR) not in sys.path:
 from factory_state import (  # noqa: E402
     REPO_ROOT,
     load_checkpoint_manifest,
+    load_workflow_state,
+    is_ancestor_of_head,
+    update_workflow_state,
 )
 
 REVIEW_SCRIPTS = REPO_ROOT / "docs" / "workflow" / "operations" / "codex-skills" / "review-lens" / "scripts"
@@ -24,6 +29,214 @@ from workflow_utils import resolve_stored_path  # noqa: E402
 
 from factory_git import current_branch_name, command_path  # noqa: E402
 from factory_stages import VERIFY_ON_CLOSEOUT_STAGES  # noqa: E402
+
+
+# ---------------------------------------------------------------------------
+# Implementation rule check (PR #751 / FF Housekeeping Slice 3)
+# ---------------------------------------------------------------------------
+
+_IMPLEMENTATION_RULE_THRESHOLD = 200
+_IMPLEMENTATION_RULE_CODE_GLOBS = ("*.py", "*.ts", "*.tsx", "*.js", "*.jsx")
+_IMPLEMENTATION_RULE_TEST_EXCLUDES = (
+    ":!**/test_*",
+    ":!**/*_test.py",
+    ":!**/tests/**",
+)
+
+
+def _resolve_branch_base() -> str | None:
+    """Find a sane branch base.
+
+    Tries in order:
+      1. git merge-base origin/main HEAD
+      2. git merge-base --fork-point origin/main HEAD
+         (correct branch-point even on long-lived branches > 50 commits)
+      3. git merge-base main HEAD
+         (last resort; local main may have diverged from origin/main)
+      4. None — caller skips the implementation-rule check entirely
+         (per spec FR-021: honest skip beats silent under-report)
+    """
+    candidates: list[list[str]] = [
+        ["git", "merge-base", "origin/main", "HEAD"],
+        ["git", "merge-base", "--fork-point", "origin/main", "HEAD"],
+        ["git", "merge-base", "main", "HEAD"],
+    ]
+    for cmd in candidates:
+        try:
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=60
+            )
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired,
+                FileNotFoundError, OSError):
+            continue
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    return None
+
+
+def _added_code_lines(branch_base: str) -> int | None:
+    """Count added lines in code files (not tests, not docs) since branch_base."""
+    cmd = [
+        "git",
+        "diff",
+        "--numstat",
+        f"{branch_base}..HEAD",
+        "--",
+        *_IMPLEMENTATION_RULE_CODE_GLOBS,
+        *_IMPLEMENTATION_RULE_TEST_EXCLUDES,
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired,
+            FileNotFoundError, OSError):
+        return None
+    if result.returncode != 0:
+        return None
+    total_added = 0
+    for line in result.stdout.splitlines():
+        parts = line.split("\t")
+        if len(parts) < 2:
+            continue
+        added_str = parts[0]
+        if added_str == "-":
+            continue
+        try:
+            total_added += int(added_str)
+        except ValueError:
+            continue
+    return total_added
+
+
+def _recompute_lines_for_dispatch(
+    entry: dict, current_branch_base: str | None
+) -> int | None:
+    """Recompute lines_added for a dispatch entry against the current branch base.
+
+    Used when entry.branch_base_sha differs from current_branch_base, OR when
+    entry.lines_added_at_dispatch_time is None (recovery from a transient base
+    failure at dispatch time).
+
+    Returns None on any subprocess exception (malformed SHA, missing object,
+    git not on PATH, timeout) — never raises.
+    """
+    head_sha = entry.get("head_sha")
+    if not head_sha or not isinstance(head_sha, str) or not current_branch_base:
+        return None
+    cmd = [
+        "git", "diff", "--numstat",
+        f"{current_branch_base}..{head_sha}",
+        "--",
+        *_IMPLEMENTATION_RULE_CODE_GLOBS,
+        *_IMPLEMENTATION_RULE_TEST_EXCLUDES,
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired,
+            FileNotFoundError, OSError):
+        return None
+    if result.returncode != 0:
+        return None
+    total_added = 0
+    for line in result.stdout.splitlines():
+        parts = line.split("\t")
+        if len(parts) < 2:
+            continue
+        added_str = parts[0]
+        if added_str == "-":
+            continue
+        try:
+            total_added += int(added_str)
+        except ValueError:
+            continue
+    return total_added
+
+
+def check_implementation_rule(slug: str) -> tuple[Literal["triggered", "suppressed", "skipped", "ok"], str]:
+    """Return (status, message). See spec FR-012-016."""
+    branch_base = _resolve_branch_base()
+    if branch_base is None:
+        message = (
+            "implementation-rule check skipped — could not resolve branch base "
+            "(origin/main, fork-point, main all failed)"
+        )
+        print(message, file=sys.stderr)
+        return ("skipped", message)
+    added = _added_code_lines(branch_base)
+    if added is None:
+        message = "implementation-rule check skipped: git diff failed."
+        print(message, file=sys.stderr)
+        return ("skipped", message)
+    if added < _IMPLEMENTATION_RULE_THRESHOLD:
+        return ("ok", "")
+
+    state = load_workflow_state(slug)
+    dispatches = state.get("codex_dispatches") or []
+    fresh_entries: list[tuple[dict, int]] = []
+    for entry in dispatches:
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("exit_code") != 0:
+            continue
+        if not is_ancestor_of_head(entry.get("head_sha")):
+            continue
+        entry_base = entry.get("branch_base_sha")
+        entry_lines = entry.get("lines_added_at_dispatch_time")
+        if entry_base == branch_base and isinstance(entry_lines, int):
+            snapshot = entry_lines
+        else:
+            snapshot = _recompute_lines_for_dispatch(entry, branch_base)
+        if snapshot is None:
+            continue
+        if abs(added - snapshot) > 50:
+            continue
+        fresh_entries.append((entry, snapshot))
+
+    if fresh_entries:
+        best_entry, best_snapshot = max(
+            fresh_entries,
+            key=lambda pair: pair[0].get("ts") or "",
+        )
+        head_short = (best_entry.get("head_sha") or "")[:7]
+        note = (
+            f"implementation-rule check skipped — covered by codex dispatch "
+            f"{best_entry.get('ts')} (sha {head_short}, +{best_snapshot})"
+        )
+        return ("suppressed", note)
+
+    head_result = subprocess.run(
+        ["git", "rev-parse", "HEAD"], capture_output=True, text=True
+    )
+    head_sha = head_result.stdout.strip() if head_result.returncode == 0 else ""
+    override = state.get("implementation_rule_override") or {}
+    if isinstance(override, dict) and override.get("head_sha") == head_sha and head_sha:
+        return ("ok", "")
+
+    msg = (
+        f"⚠ implementation-rule: {added} non-test code lines added with no recorded "
+        f"Codex dispatch. The postmortem must explain why Claude implemented this PR. "
+        f"Suppress with --override-implementation-rule "
+        f"--override-implementation-reason \"<text>\" (>= 10 chars)."
+    )
+    return ("triggered", msg)
+
+
+def record_implementation_rule_override(slug: str, reason: str) -> None:
+    head_result = subprocess.run(
+        ["git", "rev-parse", "HEAD"], capture_output=True, text=True
+    )
+    head_sha = head_result.stdout.strip() if head_result.returncode == 0 else ""
+    operator = os.environ.get("USER") or "unknown"
+    override = {
+        "at": int(time.time()),
+        "reason": reason.strip(),
+        "operator": operator,
+        "head_sha": head_sha,
+    }
+
+    def _mutate(state: dict) -> None:
+        state["implementation_rule_override"] = override
+
+    update_workflow_state(slug, _mutate)
 
 
 # ---------------------------------------------------------------------------

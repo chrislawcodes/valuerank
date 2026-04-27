@@ -1,0 +1,9 @@
+## Findings
+- High: T15’s isolation CI job can be bypassed when the test suite fails. In GitHub Actions, the `python3 -m unittest discover ...` step will stop the job before the final `check_workflow_isolation.py --check` step runs. That means a suite that mutates `docs/workflow/feature-runs/` and then crashes will never be checked. The gate needs an `if: always()`-style guard, a shell `trap`, or a single wrapper that always runs the post-check and still returns the test exit code.
+- High: T05/T09/T18 compare only `git status --porcelain` line sets, so they miss changes to files that were already dirty. If a pre-existing dirty file is edited again and remains ` M path`, the baseline/check logic and the reconcile “dirty unchanged” check both see no difference even though the file contents changed. That lets the suite alter live workflow state without tripping the guard.
+- Medium: T08 is internally incomplete for auto-commit metadata and common git operations. The spec writes `deleted_paths: sorted(codex_deleted)` but never defines `codex_deleted`, so the required deletion audit cannot be produced as written. The status parsing also assumes every dirty entry is a plain path; rename/copy entries from `git status --porcelain` are not handled, so a common `git mv`-style change can be misparsed or fail during `git hash-object` or `git add`.
+
+## Residual Risks
+- Telemetry is still best-effort and may be sparse if the implementation falls back to only a subset of commands.
+- The review extractor still depends on simple frontmatter rules when `PyYAML` is unavailable.
+- Git-based guards will still have edge cases around exotic file names, symlinks, and submodules unless those are explicitly tested.

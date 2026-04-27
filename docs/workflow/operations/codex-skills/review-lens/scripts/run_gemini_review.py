@@ -289,6 +289,85 @@ def ensure_sections(response: str) -> tuple[str, str]:
     return findings, residual
 
 
+_QUOTA_PHRASE_PATTERNS = (
+    "you've hit your usage limit",
+    "usage_limit_exhausted",
+    "quota exceeded",
+    "monthly quota",
+)
+_CODEX_CONTEXT_MARKERS = ("openai.com", "chatgpt.com", "codex", "usage")
+_CODEX_USAGE_URL = "https://chatgpt.com/codex/settings/usage"
+
+
+def is_codex_quota_exhaustion(stderr: str, stdout: str) -> bool:
+    """Detect Codex quota / usage-limit exhaustion in subprocess output.
+
+    Returns True iff EITHER:
+      - one of the explicit phrase patterns matches case-insensitively, OR
+      - HTTP 402 or 429 appears AND a Codex/OpenAI context marker
+        (openai.com, chatgpt.com, codex, or usage) appears in the same blob.
+
+    Plain `rate limit` text is NOT enough on its own — a Gemini 429 or any
+    other 429 should NOT be classified as Codex quota exhaustion. Combined
+    so the classifier is canonical (one source of truth, not duplicated).
+    """
+    blob = f"{stderr}\n{stdout}".lower()
+    for phrase in _QUOTA_PHRASE_PATTERNS:
+        if phrase in blob:
+            return True
+    if ("402" in blob or "429" in blob) and any(
+        marker in blob for marker in _CODEX_CONTEXT_MARKERS
+    ):
+        return True
+    return False
+
+
+def write_quota_deferred(
+    output_path: Path,
+    metadata: dict[str, str],
+    stdout_path: Path | None = None,
+    stderr_path: Path | None = None,
+) -> None:
+    """Write a review marked as deferred due to Codex quota exhaustion.
+
+    Used when run_codex_review's subprocess fails AND
+    :func:`is_codex_quota_exhaustion` matches the output. Replaces the
+    `failed` outcome which would block checkpoint progression.
+    """
+    metadata = dict(metadata)
+    metadata["resolution_status"] = "deferred"
+    note = f"Codex quota exhausted — re-run after quota refresh. See {_CODEX_USAGE_URL}"
+    metadata["resolution_note"] = note
+    body_lines = [
+        f"# Review: {metadata['stage']} {metadata['lens']}",
+        "",
+        "## Findings",
+        "",
+        "Codex quota exhausted before this review completed. The checkpoint is "
+        "deferred (not failed) so the workflow can advance; re-run the checkpoint "
+        "after quota refresh.",
+        "",
+        "## Residual Risks",
+        "",
+        "- Review coverage is reduced for this round; re-run to backfill.",
+        "",
+        "## Quota Evidence",
+    ]
+    if stdout_path:
+        body_lines.append(f"- stdout: `{stdout_path}`")
+    if stderr_path:
+        body_lines.append(f"- stderr: `{stderr_path}`")
+    body_lines.extend(
+        [
+            "",
+            "## Resolution",
+            "- status: deferred",
+            f"- note: {note}",
+        ]
+    )
+    write_report(output_path, metadata, "\n".join(body_lines))
+
+
 def write_failure(
     output_path: Path,
     metadata: dict[str, str],

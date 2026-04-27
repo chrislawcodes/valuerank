@@ -1,0 +1,9 @@
+## Findings
+1. High: The completeness veto can be bypassed by omission. The plan makes `unaddressed_high_finding_ids` optional and only vetoes when at least one cited ID is still open. That means a judge that returns no IDs, or a parse path that drops the field, can still let an incomplete review pass on majority vote. The main safety net needs a hard failure when completeness is selected but no actionable IDs are supplied.
+2. Medium: The plan does not define how to handle stale, duplicate, or unknown cited IDs. Without explicit normalization, a typo or a citation to an already-closed finding can either cause a false block or silently skip the veto depending on how the lookup is implemented. That is an avoidable edge-case hole in the new control flow.
+3. Medium: GC is defined only as a top-of-`command_checkpoint` cleanup. If `command_checkpoint` creates review intermediates later in the same command, those files will survive until the next run. If the goal is workspace cleanliness after each checkpoint, the plan currently cleans only old debris, not same-run output.
+
+## Residual Risks
+- The new safety net still depends on the judge model complying with the prompt; prompt and schema changes reduce drift but do not make the model deterministic.
+- The registry auto-discovery approach is coupled to the current parser shape, so future CLI refactors may require test and helper updates.
+- The checkpoint cleanup is best-effort rather than transactional, so a crash during deletion can leave partial leftovers until the next checkpoint.

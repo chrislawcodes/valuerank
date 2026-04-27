@@ -1,575 +1,254 @@
-/**
- * Unit tests for progress service
- *
- * Tests atomic progress updates and status transitions.
- */
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { describe, it, expect, afterEach, vi } from 'vitest';
-import { db } from '@valuerank/db';
+const mockRunFindUnique = vi.hoisted(() => vi.fn());
+const mockTranscriptFindMany = vi.hoisted(() => vi.fn());
+const mockQueryRaw = vi.hoisted(() => vi.fn());
+const mockBossSend = vi.hoisted(() => vi.fn());
+const mockTriggerBasicAnalysis = vi.hoisted(() => vi.fn(async () => false));
+const mockQueueComputeTokenStats = vi.hoisted(() => vi.fn(async () => undefined));
+const mockDeductActualProviderBalancesForRun = vi.hoisted(() => vi.fn(async () => undefined));
+const mockLogDebug = vi.hoisted(() => vi.fn());
+const mockLogInfo = vi.hoisted(() => vi.fn());
+const mockLogWarn = vi.hoisted(() => vi.fn());
+const mockLogError = vi.hoisted(() => vi.fn());
 
-// Mock PgBoss for SUMMARIZING transition (which queues summarize jobs)
-const mockSend = vi.fn().mockResolvedValue('mock-job-id');
+type RunState = {
+  id: string;
+  status: 'PENDING' | 'RUNNING' | 'PAUSED' | 'SUMMARIZING' | 'COMPLETED';
+  progress: { total: number; completed: number; failed: number };
+  deletedAt: Date | null;
+  startedAt: Date | null;
+  completedAt: Date | null;
+  updatedAt: Date;
+};
+
+type TranscriptState = {
+  id: string;
+  summarizedAt: Date | null;
+  summarizeFailedAt: Date | null;
+  decisionMetadata: Record<string, unknown> | null;
+};
+
+const queuedSingletonJobs = new Map<string, { queueName: string; transcriptId: string }>();
+const transitionCounts = {
+  toSummarizing: 0,
+  toCompleted: 0,
+};
+
+let runState: RunState;
+let transcriptState: TranscriptState[];
+
+function resetFixture(): void {
+  const now = new Date('2026-04-24T10:00:00.000Z');
+  runState = {
+    id: 'run-1',
+    status: 'RUNNING',
+    progress: { total: 5, completed: 0, failed: 0 },
+    deletedAt: null,
+    startedAt: now,
+    completedAt: null,
+    updatedAt: now,
+  };
+
+  transcriptState = Array.from({ length: 5 }, (_, index) => ({
+    id: `transcript-${index + 1}`,
+    summarizedAt: null,
+    summarizeFailedAt: null,
+    decisionMetadata: { summary: true },
+  }));
+
+  queuedSingletonJobs.clear();
+  transitionCounts.toSummarizing = 0;
+  transitionCounts.toCompleted = 0;
+}
+
+vi.mock('@valuerank/db', () => ({
+  db: {
+    run: {
+      findUnique: mockRunFindUnique,
+    },
+    transcript: {
+      findMany: mockTranscriptFindMany,
+    },
+    $queryRaw: mockQueryRaw,
+  },
+}));
+
+vi.mock('@valuerank/shared', () => ({
+  createLogger: () => ({
+    debug: mockLogDebug,
+    info: mockLogInfo,
+    warn: mockLogWarn,
+    error: mockLogError,
+  }),
+}));
+
 vi.mock('../../../src/queue/boss.js', () => ({
   getBoss: vi.fn(() => ({
-    send: mockSend,
+    send: mockBossSend,
   })),
+  isBossRunning: vi.fn(() => true),
 }));
-import {
-  updateProgress,
-  incrementCompleted,
-  incrementFailed,
-  getProgress,
-  calculatePercentComplete,
-} from '../../../src/services/run/progress.js';
-import { NotFoundError } from '@valuerank/shared';
 
-describe('progress service', () => {
-  const createdDefinitionIds: string[] = [];
-  const createdRunIds: string[] = [];
+vi.mock('../../../src/services/analysis/index.js', () => ({
+  triggerBasicAnalysis: mockTriggerBasicAnalysis,
+}));
 
-  afterEach(async () => {
-    // Clean up transcripts, run selections, runs, scenarios, definitions (order matters for FK)
-    if (createdRunIds.length > 0) {
-      await db.transcript.deleteMany({
-        where: { runId: { in: createdRunIds } },
-      });
-      await db.runScenarioSelection.deleteMany({
-        where: { runId: { in: createdRunIds } },
-      });
-      await db.run.deleteMany({
-        where: { id: { in: createdRunIds } },
-      });
-      createdRunIds.length = 0;
-    }
+vi.mock('../../../src/queue/handlers/summarize-persistence.js', () => ({
+  queueComputeTokenStats: mockQueueComputeTokenStats,
+}));
 
-    if (createdScenarioIds.length > 0) {
-      await db.scenario.deleteMany({
-        where: { id: { in: createdScenarioIds } },
-      });
-      createdScenarioIds.length = 0;
-    }
+vi.mock('../../../src/services/budget/deduct.js', () => ({
+  deductActualProviderBalancesForRun: mockDeductActualProviderBalancesForRun,
+}));
 
-    if (createdDefinitionIds.length > 0) {
-      await db.definition.deleteMany({
-        where: { id: { in: createdDefinitionIds } },
-      });
-      createdDefinitionIds.length = 0;
-    }
-  });
+import { maybeAdvanceRunStatus, calculatePercentComplete } from '../../../src/services/run/progress.js';
 
-  const createdScenarioIds: string[] = [];
-
-  async function createTestRun(
-    progress: { total: number; completed: number; failed: number },
-    opts?: { transcriptCount?: number },
-  ) {
-    const definition = await db.definition.create({
-      data: {
-        name: 'Test Definition',
-        content: { schema_version: 1, preamble: 'Test' },
-      },
-    });
-    createdDefinitionIds.push(definition.id);
-
-    const run = await db.run.create({
-      data: {
-        definitionId: definition.id,
-        status: 'PENDING',
-        config: { models: ['gpt-4'] },
-        progress,
-      },
-    });
-    createdRunIds.push(run.id);
-
-    // Create transcripts if requested (needed for tests that trigger SUMMARIZING)
-    if (opts?.transcriptCount != null && opts.transcriptCount > 0) {
-      const scenario = await db.scenario.create({
-        data: {
-          definitionId: definition.id,
-          name: 'test-scenario-' + Date.now(),
-          content: { schema_version: 1, prompt: 'Test', dimension_values: { test: 'value' } },
-        },
-      });
-      createdScenarioIds.push(scenario.id);
-
-      for (let i = 0; i < opts.transcriptCount; i++) {
-        await db.transcript.create({
-          data: {
-            runId: run.id,
-            scenarioId: scenario.id,
-            modelId: 'openai:gpt-4',
-            content: { schema_version: 1, messages: [] },
-            turnCount: 1,
-            tokenCount: 100,
-            durationMs: 1000,
-          },
-        });
-      }
-    }
-
-    return run;
+mockRunFindUnique.mockImplementation(async ({ where }: { where: { id: string } }) => {
+  if (where.id !== runState.id) {
+    return null;
   }
 
-  describe('updateProgress', () => {
-    it('increments completed count atomically', async () => {
-      const run = await createTestRun({ total: 10, completed: 0, failed: 0 });
-
-      const result = await updateProgress(run.id, { incrementCompleted: 1 });
-
-      expect(result.progress.completed).toBe(1);
-      expect(result.progress.total).toBe(10);
-      expect(result.progress.failed).toBe(0);
-    });
-
-    it('increments failed count atomically', async () => {
-      const run = await createTestRun({ total: 10, completed: 5, failed: 0 });
-
-      const result = await updateProgress(run.id, { incrementFailed: 1 });
-
-      expect(result.progress.failed).toBe(1);
-      expect(result.progress.completed).toBe(5);
-    });
-
-    it('increments both completed and failed at once', async () => {
-      const run = await createTestRun({ total: 10, completed: 0, failed: 0 });
-
-      const result = await updateProgress(run.id, {
-        incrementCompleted: 3,
-        incrementFailed: 2,
-      });
-
-      expect(result.progress.completed).toBe(3);
-      expect(result.progress.failed).toBe(2);
-    });
-
-    it('throws NotFoundError for non-existent run', async () => {
-      await expect(
-        updateProgress('non-existent-run-id', { incrementCompleted: 1 })
-      ).rejects.toThrow(NotFoundError);
-    });
-
-    it('returns current state for no-op update', async () => {
-      const run = await createTestRun({ total: 10, completed: 5, failed: 2 });
-
-      const result = await updateProgress(run.id, {});
-
-      expect(result.progress.completed).toBe(5);
-      expect(result.progress.failed).toBe(2);
-      expect(result.status).toBe('PENDING');
-    });
-
-    it('applies FAILED to SUCCESS correction swaps in SUMMARIZING', async () => {
-      const run = await createTestRun({ total: 4, completed: 2, failed: 2 });
-      await db.run.update({
-        where: { id: run.id },
-        data: { status: 'SUMMARIZING' },
-      });
-
-      const result = await updateProgress(run.id, {
-        incrementCompleted: 1,
-        incrementFailed: -1,
-      });
-
-      expect(result.progress).toEqual({ total: 4, completed: 3, failed: 1 });
-      expect(result.status).toBe('SUMMARIZING');
-    });
-
-    it('applies SUCCESS to FAILED correction swaps in SUMMARIZING', async () => {
-      const run = await createTestRun({ total: 4, completed: 3, failed: 1 });
-      await db.run.update({
-        where: { id: run.id },
-        data: { status: 'SUMMARIZING' },
-      });
-
-      const result = await updateProgress(run.id, {
-        incrementCompleted: -1,
-        incrementFailed: 1,
-      });
-
-      expect(result.progress).toEqual({ total: 4, completed: 2, failed: 2 });
-      expect(result.status).toBe('SUMMARIZING');
-    });
-
-    it('blocks non-correction increments in SUMMARIZING', async () => {
-      const run = await createTestRun({ total: 4, completed: 2, failed: 2 });
-      await db.run.update({
-        where: { id: run.id },
-        data: { status: 'SUMMARIZING' },
-      });
-
-      const result = await updateProgress(run.id, {
-        incrementCompleted: 1,
-        incrementFailed: 0,
-      });
-
-      expect(result.progress).toEqual({ total: 4, completed: 2, failed: 2 });
-      expect(result.status).toBe('SUMMARIZING');
-    });
-
-    it('does not call boss.send for SUMMARIZING correction swaps', async () => {
-      const run = await createTestRun({ total: 4, completed: 2, failed: 2 });
-      await db.run.update({
-        where: { id: run.id },
-        data: { status: 'SUMMARIZING' },
-      });
-
-      mockSend.mockClear();
-
-      await updateProgress(run.id, {
-        incrementCompleted: 1,
-        incrementFailed: -1,
-      });
-
-      expect(mockSend).not.toHaveBeenCalled();
-    });
-
-    it('blocks non-correction increments in COMPLETED', async () => {
-      const run = await createTestRun({ total: 4, completed: 4, failed: 0 });
-      await db.run.update({
-        where: { id: run.id },
-        data: { status: 'COMPLETED', completedAt: new Date() },
-      });
-
-      const result = await updateProgress(run.id, {
-        incrementCompleted: 1,
-        incrementFailed: 0,
-      });
-
-      expect(result.progress).toEqual({ total: 4, completed: 4, failed: 0 });
-      expect(result.status).toBe('COMPLETED');
-    });
-
-    it('applies correction swaps in COMPLETED', async () => {
-      const run = await createTestRun({ total: 4, completed: 4, failed: 0 });
-      await db.run.update({
-        where: { id: run.id },
-        data: { status: 'COMPLETED', completedAt: new Date() },
-      });
-
-      const result = await updateProgress(run.id, {
-        incrementCompleted: -1,
-        incrementFailed: 1,
-      });
-
-      expect(result.progress).toEqual({ total: 4, completed: 3, failed: 1 });
-      expect(result.status).toBe('COMPLETED');
-    });
-  });
-
-  describe('status transitions', () => {
-    it('transitions PENDING to RUNNING when first job completes', async () => {
-      const run = await createTestRun({ total: 10, completed: 0, failed: 0 });
-
-      const result = await incrementCompleted(run.id);
-
-      expect(result.status).toBe('RUNNING');
-
-      // Verify startedAt was set
-      const dbRun = await db.run.findUnique({ where: { id: run.id } });
-      expect(dbRun?.startedAt).not.toBeNull();
-    });
-
-    it('transitions PENDING to RUNNING when first job fails', async () => {
-      const run = await createTestRun({ total: 10, completed: 0, failed: 0 });
-
-      const result = await incrementFailed(run.id);
-
-      expect(result.status).toBe('RUNNING');
-    });
-
-    it('transitions RUNNING to SUMMARIZING when all jobs done', async () => {
-      // Create 3 transcripts so waitForTranscriptSettle resolves immediately
-      const run = await createTestRun({ total: 3, completed: 2, failed: 0 }, { transcriptCount: 3 });
-      // Update to RUNNING first
-      await db.run.update({
-        where: { id: run.id },
-        data: { status: 'RUNNING', startedAt: new Date() },
-      });
-
-      const result = await incrementCompleted(run.id);
-
-      // Should transition to SUMMARIZING, not COMPLETED
-      expect(result.status).toBe('SUMMARIZING');
-      expect(result.progress.completed).toBe(3);
-    });
-
-    it('transitions to SUMMARIZING even with failures', async () => {
-      // Create 1 transcript matching completed count so settle resolves immediately
-      const run = await createTestRun({ total: 3, completed: 1, failed: 1 }, { transcriptCount: 1 });
-      await db.run.update({
-        where: { id: run.id },
-        data: { status: 'RUNNING', startedAt: new Date() },
-      });
-
-      const result = await incrementFailed(run.id);
-
-      // Should transition to SUMMARIZING, not COMPLETED
-      expect(result.status).toBe('SUMMARIZING');
-      expect(result.progress.completed).toBe(1);
-      expect(result.progress.failed).toBe(2);
-    });
-
-    it('does not change status if already COMPLETED', async () => {
-      const run = await createTestRun({ total: 3, completed: 3, failed: 0 });
-      await db.run.update({
-        where: { id: run.id },
-        data: { status: 'COMPLETED', completedAt: new Date() },
-      });
-
-      const result = await updateProgress(run.id, { incrementCompleted: 1 });
-
-      expect(result.status).toBe('COMPLETED');
-    });
-
-    it('does not change status if already CANCELLED', async () => {
-      const run = await createTestRun({ total: 10, completed: 5, failed: 0 });
-      await db.run.update({
-        where: { id: run.id },
-        data: { status: 'CANCELLED' },
-      });
-
-      const result = await incrementCompleted(run.id);
-
-      expect(result.status).toBe('CANCELLED');
-    });
-  });
-
-  describe('incrementCompleted', () => {
-    it('increments completed by 1', async () => {
-      const run = await createTestRun({ total: 10, completed: 5, failed: 0 });
-
-      const result = await incrementCompleted(run.id);
-
-      expect(result.progress.completed).toBe(6);
-    });
-  });
-
-  describe('incrementFailed', () => {
-    it('increments failed by 1', async () => {
-      const run = await createTestRun({ total: 10, completed: 5, failed: 1 });
-
-      const result = await incrementFailed(run.id);
-
-      expect(result.progress.failed).toBe(2);
-    });
-  });
-
-  describe('getProgress', () => {
-    it('returns progress for existing run', async () => {
-      const run = await createTestRun({ total: 10, completed: 5, failed: 2 });
-
-      const progress = await getProgress(run.id);
-
-      expect(progress).toEqual({ total: 10, completed: 5, failed: 2 });
-    });
-
-    it('returns null for non-existent run', async () => {
-      const progress = await getProgress('non-existent-run-id');
-
-      expect(progress).toBeNull();
-    });
-  });
-
-  describe('calculatePercentComplete', () => {
-    it('calculates correct percentage', () => {
-      expect(calculatePercentComplete({ total: 10, completed: 5, failed: 0 })).toBe(50);
-      expect(calculatePercentComplete({ total: 10, completed: 3, failed: 2 })).toBe(50);
-      expect(calculatePercentComplete({ total: 10, completed: 10, failed: 0 })).toBe(100);
-      expect(calculatePercentComplete({ total: 10, completed: 0, failed: 0 })).toBe(0);
-    });
-
-    it('returns 100 for zero total', () => {
-      expect(calculatePercentComplete({ total: 0, completed: 0, failed: 0 })).toBe(100);
-    });
-
-    it('rounds to nearest integer', () => {
-      expect(calculatePercentComplete({ total: 3, completed: 1, failed: 0 })).toBe(33);
-      expect(calculatePercentComplete({ total: 3, completed: 2, failed: 0 })).toBe(67);
-    });
-  });
-
-  describe('concurrent updates', () => {
-    it('handles multiple concurrent increments correctly', async () => {
-      const run = await createTestRun({ total: 100, completed: 0, failed: 0 });
-
-      // Simulate 10 concurrent updates
-      const promises = Array.from({ length: 10 }, () =>
-        incrementCompleted(run.id)
-      );
-
-      await Promise.all(promises);
-
-      // Verify final count
-      const progress = await getProgress(run.id);
-      expect(progress?.completed).toBe(10);
-    });
-
-    it('handles mixed concurrent completed/failed increments', async () => {
-      const run = await createTestRun({ total: 100, completed: 0, failed: 0 });
-
-      // 5 completed + 3 failed concurrently
-      const completedPromises = Array.from({ length: 5 }, () =>
-        incrementCompleted(run.id)
-      );
-      const failedPromises = Array.from({ length: 3 }, () =>
-        incrementFailed(run.id)
-      );
-
-      await Promise.all([...completedPromises, ...failedPromises]);
-
-      const progress = await getProgress(run.id);
-      expect(progress?.completed).toBe(5);
-      expect(progress?.failed).toBe(3);
-    });
-  });
-
-  describe('summarize job queueing (T014)', () => {
-    let testDefinitionId: string;
-    let testRunId: string;
-
-    afterEach(async () => {
-      mockSend.mockClear();
-      if (testRunId) {
-        await db.transcript.deleteMany({ where: { runId: testRunId } });
-        await db.runScenarioSelection.deleteMany({ where: { runId: testRunId } });
-        await db.run.deleteMany({ where: { id: testRunId } });
-      }
-      if (testDefinitionId) {
-        await db.definition.deleteMany({ where: { id: testDefinitionId } });
-      }
-    });
-
-    async function createRunWithTranscripts(transcriptCount: number) {
-      const definition = await db.definition.create({
-        data: {
-          name: 'Test Definition for Summarize',
-          content: { schema_version: 1, preamble: 'Test' },
-        },
-      });
-      testDefinitionId = definition.id;
-      createdDefinitionIds.push(definition.id);
-
-      const run = await db.run.create({
-        data: {
-          definitionId: definition.id,
-          status: 'RUNNING',
-          startedAt: new Date(),
-          config: { models: ['gpt-4'] },
-          progress: { total: transcriptCount, completed: transcriptCount, failed: 0 },
-        },
-      });
-      testRunId = run.id;
-      createdRunIds.push(run.id);
-
-      // Create mock scenario
-      const scenario = await db.scenario.create({
-        data: {
-          definitionId: definition.id,
-          name: 'test-scenario-' + Date.now(),
-          content: { schema_version: 1, prompt: 'Test scenario body', dimension_values: { test: 'value' } },
-        },
-      });
-
-      // Create transcripts
-      for (let i = 0; i < transcriptCount; i++) {
-        await db.transcript.create({
-          data: {
-            runId: run.id,
-            scenarioId: scenario.id,
-            modelId: 'openai:gpt-4',
-            modelVersion: 'gpt-4-0613',
-            content: { schema_version: 1, messages: [], model_response: 'test' },
-            turnCount: 1,
-            tokenCount: 100,
-            durationMs: 1000,
-          },
-        });
-      }
-
-      return run;
+  return {
+    status: runState.status,
+    progress: runState.progress,
+    deletedAt: runState.deletedAt,
+  };
+});
+
+mockTranscriptFindMany.mockImplementation(async ({ where }: { where: { runId: string; summarizedAt?: unknown; summarizeFailedAt?: unknown } }) => {
+  if (where.runId !== runState.id) {
+    return [];
+  }
+
+  if (where.summarizedAt === null && where.summarizeFailedAt === null) {
+    return transcriptState
+      .filter((transcript) => transcript.summarizedAt === null && transcript.summarizeFailedAt === null)
+      .map((transcript) => ({ id: transcript.id }));
+  }
+
+  if (typeof where.summarizedAt === 'object' && where.summarizedAt !== null && 'not' in where.summarizedAt) {
+    return transcriptState
+      .filter((transcript) => transcript.summarizedAt !== null && transcript.decisionMetadata !== null)
+      .map((transcript) => ({ id: transcript.id }));
+  }
+
+  return [];
+});
+
+mockQueryRaw.mockImplementation(async (strings: TemplateStringsArray) => {
+  const query = strings.join('');
+
+  if (query.includes(`SET "status" = 'SUMMARIZING'`)) {
+    if (runState.status === 'RUNNING' || runState.status === 'PAUSED') {
+      runState = {
+        ...runState,
+        status: 'SUMMARIZING',
+        updatedAt: new Date(),
+      };
+      transitionCounts.toSummarizing += 1;
+      return [{ id: runState.id }];
     }
 
-    it('queues individual summarize job per transcript', async () => {
-      const transcriptCount = 3;
-      const run = await createRunWithTranscripts(transcriptCount);
+    return [];
+  }
 
-      // Increment to trigger SUMMARIZING transition (all jobs done)
-      // We need to reduce completed by 1 so the increment causes the transition
-      await db.run.update({
-        where: { id: run.id },
-        data: {
-          progress: { total: transcriptCount, completed: transcriptCount - 1, failed: 0 },
-        },
-      });
+  if (query.includes(`SET "status" = 'COMPLETED'`) && query.includes(`AND "status" = 'SUMMARIZING'`)) {
+    const allSummarized = transcriptState.every(
+      (transcript) => transcript.summarizedAt !== null || transcript.summarizeFailedAt !== null
+    );
 
-      mockSend.mockClear(); // Clear any previous calls
-      await incrementCompleted(run.id);
+    if (runState.status === 'SUMMARIZING' && allSummarized) {
+      runState = {
+        ...runState,
+        status: 'COMPLETED',
+        completedAt: new Date(),
+        updatedAt: new Date(),
+      };
+      transitionCounts.toCompleted += 1;
+      return [{ id: runState.id }];
+    }
 
-      // Should have queued one job per transcript
-      expect(mockSend).toHaveBeenCalledTimes(transcriptCount);
+    return [];
+  }
+
+  if (query.includes(`SET "status" = 'COMPLETED'`) && query.includes(`COALESCE((progress->>'total')::int, 0) = 0`)) {
+    if (runState.status === 'PENDING' && runState.progress.total === 0) {
+      runState = {
+        ...runState,
+        status: 'COMPLETED',
+        completedAt: new Date(),
+        updatedAt: new Date(),
+      };
+      transitionCounts.toCompleted += 1;
+      return [{ id: runState.id }];
+    }
+  }
+
+  return [];
+});
+
+mockBossSend.mockImplementation(async (queueName: string, data: { transcriptId?: string }, options?: { singletonKey?: string }) => {
+  if (options?.singletonKey !== undefined) {
+    queuedSingletonJobs.set(options.singletonKey, {
+      queueName,
+      transcriptId: data.transcriptId ?? '',
     });
+  }
 
-    it('includes runId and transcriptId in job data', async () => {
-      const run = await createRunWithTranscripts(2);
-      await db.run.update({
-        where: { id: run.id },
-        data: { progress: { total: 2, completed: 1, failed: 0 } },
-      });
+  if (queueName === 'summarize_transcript' && typeof data.transcriptId === 'string') {
+    const transcript = transcriptState.find((entry) => entry.id === data.transcriptId);
+    if (transcript !== undefined && transcript.summarizedAt === null) {
+      transcript.summarizedAt = new Date('2026-04-24T10:05:00.000Z');
+    }
+  }
 
-      mockSend.mockClear();
-      await incrementCompleted(run.id);
+  return `job-${queueName}-${options?.singletonKey ?? 'no-key'}`;
+});
 
-      // Verify each call has correct queue name and data structure
-      for (const call of mockSend.mock.calls) {
-        const [queueName, jobData] = call;
-        expect(queueName).toBe('summarize_transcript');
-        expect(jobData).toHaveProperty('runId', run.id);
-        expect(jobData).toHaveProperty('transcriptId');
-        expect(typeof jobData.transcriptId).toBe('string');
-      }
-    });
+describe('calculatePercentComplete', () => {
+  it('calculates progress from completed and failed counts', () => {
+    expect(calculatePercentComplete({ total: 10, completed: 5, failed: 0 })).toBe(50);
+    expect(calculatePercentComplete({ total: 10, completed: 3, failed: 2 })).toBe(50);
+    expect(calculatePercentComplete({ total: 10, completed: 0, failed: 0 })).toBe(0);
+  });
 
-    it('uses retry configuration from DEFAULT_JOB_OPTIONS', async () => {
-      const run = await createRunWithTranscripts(1);
-      await db.run.update({
-        where: { id: run.id },
-        data: { progress: { total: 1, completed: 0, failed: 0 } },
-      });
+  it('returns 100 when total is zero', () => {
+    expect(calculatePercentComplete({ total: 0, completed: 0, failed: 0 })).toBe(100);
+  });
 
-      mockSend.mockClear();
-      await incrementCompleted(run.id);
+  it('rounds to the nearest integer', () => {
+    expect(calculatePercentComplete({ total: 3, completed: 1, failed: 0 })).toBe(33);
+    expect(calculatePercentComplete({ total: 3, completed: 2, failed: 0 })).toBe(67);
+  });
+});
 
-      // Verify job options were passed
-      expect(mockSend).toHaveBeenCalledTimes(1);
-      const [, , jobOptions] = mockSend.mock.calls[0];
+describe('maybeAdvanceRunStatus', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetFixture();
+    mockTriggerBasicAnalysis.mockResolvedValue(false);
+    mockQueueComputeTokenStats.mockResolvedValue(undefined);
+    mockDeductActualProviderBalancesForRun.mockResolvedValue(undefined);
+  });
 
-      // Retry configuration from DEFAULT_JOB_OPTIONS['summarize_transcript']
-      expect(jobOptions).toEqual({
-        retryLimit: 3,
-        retryDelay: 10,
-        retryBackoff: true,
-        expireInSeconds: 600,
-      });
-    });
+  it('handles 20 concurrent maybeAdvanceRunStatus calls without duplicate summarize-job enqueue', async () => {
+    const results = await Promise.all(
+      Array.from({ length: 20 }, () => maybeAdvanceRunStatus(runState.id))
+    );
 
-    it('initializes summarizeProgress when transitioning to SUMMARIZING', async () => {
-      const transcriptCount = 3;
-      const run = await createRunWithTranscripts(transcriptCount);
-      await db.run.update({
-        where: { id: run.id },
-        data: { progress: { total: transcriptCount, completed: transcriptCount - 1, failed: 0 } },
-      });
-
-      mockSend.mockClear();
-      await incrementCompleted(run.id);
-
-      // Check summarizeProgress was initialized
-      const updatedRun = await db.run.findUnique({ where: { id: run.id } });
-      expect(updatedRun?.summarizeProgress).toEqual({
-        total: transcriptCount,
-        completed: 0,
-        failed: 0,
-      });
-    });
+    expect(transitionCounts.toSummarizing).toBe(1);
+    expect(transitionCounts.toCompleted).toBe(1);
+    expect(results.filter((result) => result.enteredSummarizing)).toHaveLength(1);
+    expect(results.filter((result) => result.completed)).toHaveLength(1);
+    expect(mockBossSend).toHaveBeenCalledTimes(5);
+    expect(queuedSingletonJobs.size).toBe(5);
+    expect([...queuedSingletonJobs.keys()].sort()).toEqual([
+      'transcript-1',
+      'transcript-2',
+      'transcript-3',
+      'transcript-4',
+      'transcript-5',
+    ]);
   });
 });

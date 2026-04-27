@@ -7,6 +7,8 @@ factory_review.py to keep each module under the 400-line source limit.
 import re
 from pathlib import Path
 
+from factory_io import read_text
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -17,11 +19,84 @@ DEFAULT_CODEX_MODEL = "gpt-5.4-mini"
 SMALL_TASK_SET_THRESHOLD = 15
 _AUTO_ACCEPT_NOTE = "No actionable findings detected — auto-accepted"
 
+# Every pattern below is matched against text that has already been lowercased
+# by detect_actionable_findings(). All patterns anchor to start-of-line (after
+# optional whitespace) to avoid matching prose mentions of severity words inside
+# sentences. ACTIONABLE_FINDING_SHAPES documents the supported forms; when a
+# reviewer starts using a new shape, update this regex and add a test.
+#
+# Supported shapes (each example drawn from a real review):
+#   1. "- high: ..."                           bullet + severity + colon
+#   2. "- [tag] high: ..."                     bullet + bracket tag + severity
+#   3. "- HIGH [CODE-CONFIRMED]: ..."          bullet + bare severity + bracket tag
+#   4. "- **HIGH**: ..."                       bullet + bold severity + colon
+#   5. "| **HIGH** | ..."                      table cell with bold severity
+#   6. "1. **HIGH**: ..."                      numbered list + bold severity
+#   7. "### HIGH: ..."                         heading with severity word
+#   8. "### 1. Finding title"                  heading with rank prefix (matched via next line)
+#   9. "**HIGH**: ..."                         bold-prefix at paragraph start
+#  10. "**HIGH [CODE-CONFIRMED]**: ..."        bold-prefix with tag
+#  11. "**Severity**: HIGH"                    inline-field form (Gemini style)
+#  12. "Severity: HIGH"                        inline-field without bold
+ACTIONABLE_FINDING_SHAPES = (
+    "bullet-colon",
+    "bullet-bracket-tag-colon",
+    "bullet-bare-plus-bracket-tag",
+    "bullet-bold-severity",
+    "table-bold-severity",
+    "numbered-bold-severity",
+    "heading-severity",
+    "paragraph-bold-prefix",
+    "paragraph-bold-prefix-bracket",
+    "inline-severity-field-bold",
+    "inline-severity-field-plain",
+)
+
+_SEV = r"(?:critical|high|medium)"
+
 _ACTIONABLE_FINDING_RE = re.compile(
     r"(?:"
-    r"^\s*-\s+(?:\[[^\]]+\]\s+)?(high|medium):"  # bullet-list: "- high:" or "- [tag] high:"
+    # 1-2. Bullet + severity + colon: "- high:" or "- [tag] high:"
+    r"^\s*-\s+(?:\[[^\]]+\]\s+)?" + _SEV + r":"
     r"|"
-    r"^\|\s*\*\*(critical|high|medium)\*\*"  # table row: "| **HIGH** |" or "| **CRITICAL** |"
+    # 3. Bullet + bare severity + bracket tag: "- high [code-confirmed]:"
+    r"^\s*-\s+" + _SEV + r"\s+\[[^\]]+\]\s*:"
+    r"|"
+    # 4. Bullet + bold severity (with optional inner bracket tag):
+    # "- **high**:" or "- **high [code-confirmed]**:" or
+    # "- **HIGH [CODE-CONFIRMED]** rest-of-line" (no colon, as some lenses emit)
+    r"^\s*-\s+\*\*" + _SEV + r"(?:\s*\[[^\]]+\])?\*\*(?:\s*:|\s+)"
+    r"|"
+    # 5. Table cell with bold severity: "| **high** |"
+    r"^\|\s*\*\*" + _SEV + r"\*\*"
+    r"|"
+    # 6a. Numbered list + bold severity: "1. **high**:"
+    r"^\s*\d+\.\s+\*\*" + _SEV + r"\*\*\s*:"
+    r"|"
+    # 6b. Numbered list + plain severity + colon (no bold): "1. high:" or "1. HIGH [tag]:"
+    r"^\s*\d+\.\s+" + _SEV + r"(?:\s+\[[^\]]+\])?\s*:"
+    r"|"
+    # 7. Heading with severity word followed by colon or end-of-line.
+    # Must be `### HIGH:` or `### HIGH` on its own line — NOT `### HIGH availability
+    # target` (false-positive from section titles). Colon is the only delimiter
+    # allowed since `-` or `--` can appear in compound words like `MEDIUM-term`.
+    # Adversarial-review finding: allow non-word chars (emoji, bullet, etc.)
+    # between `#+ ` and the rank prefix / severity — `### 🚨 HIGH:` is common.
+    r"^#+\s+(?:\W+\s*)*(?:\d+\.\s+)?(?:\W+\s*)*" + _SEV + r"\s*(?::|$)"
+    r"|"
+    # 9-10. Paragraph start with bold prefix: "**high**:", "**high [code-confirmed]**:",
+    # or "**high** - something" (adversarial review: dash delimiter after closing **).
+    r"^\s*\*\*" + _SEV + r"(?:\s*\[[^\]]+\])?\*\*\s*(?::|-\s)"
+    r"|"
+    # 10b. Bracket-tag-first bold prefix: "**[HIGH SEVERITY]**:" — the severity
+    # word lives inside the brackets, not before them (adversarial-review find).
+    r"^\s*\*\*\[\s*" + _SEV + r"[^\]]*\]\*\*\s*:"
+    r"|"
+    # 11. Inline Severity field bold: "**severity**: high" or "**severity:** high"
+    r"^\s*\*\*severity(?:\*\*)?:\*?\*?\s*" + _SEV + r"\b"
+    r"|"
+    # 12. Inline Severity field plain: "severity: high"
+    r"^\s*severity:\s*" + _SEV + r"\b"
     r")",
     re.MULTILINE,
 )
@@ -39,7 +114,7 @@ def detect_actionable_findings(review_path: Path) -> bool:
     Returns False if the file cannot be read, treating unreadable files as non-blocking.
     """
     try:
-        text = review_path.read_text(encoding="utf-8").lower()
+        text = read_text(review_path).lower()
     except OSError:
         return False
     return bool(_ACTIONABLE_FINDING_RE.search(text))

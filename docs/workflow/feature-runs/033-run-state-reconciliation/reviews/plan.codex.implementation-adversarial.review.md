@@ -1,0 +1,43 @@
+---
+reviewer: "codex"
+lens: "implementation-adversarial"
+stage: "plan"
+artifact_path: "docs/workflow/feature-runs/033-run-state-reconciliation/plan.md"
+artifact_sha256: "6da747265f6061859ed54e5cd6a18050cfb411d95a83c6e84ebf1d2b021579ed"
+repo_root: "."
+git_head_sha: "424c0605a8158acfe0b3912840a6c5b2da057c84"
+git_base_ref: "origin/main"
+git_base_sha: "424c0605a8158acfe0b3912840a6c5b2da057c84"
+generation_method: "codex-runner"
+resolution_status: "open"
+resolution_note: ""
+raw_output_path: "docs/workflow/feature-runs/033-run-state-reconciliation/reviews/plan.codex.implementation-adversarial.review.md.raw.txt"
+narrowed_artifact_path: ""
+narrowed_artifact_sha256: ""
+coverage_status: "full"
+coverage_note: ""
+---
+
+# Review: plan implementation-adversarial
+
+## Findings
+
+- HIGH [CODE-CONFIRMED] The plan drops the existing missing-probe gate for run completion. `checkAllSummarized()` currently refuses to complete a run unless `findMissingProbes(runId)` returns empty ([`summarize-persistence.ts`]((/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/queue/handlers/summarize-persistence.ts#L93))). Wave 3/4 replaces completion with derived transcript counts and only mentions `summarizedAt` / `summarizeFailedAt`, so a run can be marked `COMPLETED` even when some expected probe tuples never produced transcripts.
+
+- HIGH [CODE-CONFIRMED] The plan does not preserve the current recovery step that reopens terminal runs before requeuing missing probes. `recoverOrphanedRun()` explicitly sets `status: 'RUNNING'` and clears `completedAt` before `requeueMissingProbes()` so `processProbeJob()` will not skip the requeued jobs as terminal ([`recovery.ts`]((/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/services/run/recovery.ts#L202)), [`handler.ts`]((/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/queue/handlers/probe-scenario/handler.ts#L57))). Wave 4/5 only mention completion-path cleanup and `summarizeFailedAt`, so recovered probe jobs on a terminal run would still be skipped by `isRunTerminal()`.
+
+- MEDIUM [CODE-CONFIRMED] The plan removes the current transcript-settle wait without replacing it. `queueSummarizeJobs()` waits up to 5 seconds for in-flight transcript commits before it counts and queues summaries ([`progress.ts`]((/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/services/run/progress.ts#L214))). The new CAS/reconcile flow does not mention an equivalent settle window, so the first sweep can miss just-committed transcripts and defer their summarization until a later pass.
+
+## Residual Risks
+
+- The plan still depends on helper behavior that is not shown here, especially `deductActualProviderBalancesForRun`, `findMissingProbes`, and the new `maybeAdvanceRunStatus` implementation. Those need direct tests because the plan describes intent, not the atomicity or filtering details.
+- The `30 days` activity window in the scheduler change is an arbitrary cutoff. It will keep very old incomplete runs from being auto-reconciled unless operators remember to use the manual trigger path.
+
+## Runner Stats
+- total_input=0
+- total_output=0
+- total_tokens=0
+
+## Resolution
+- status: open
+- note: 

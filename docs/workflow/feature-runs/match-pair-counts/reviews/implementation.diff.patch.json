@@ -1,0 +1,16 @@
+{
+  "repo_root": ".",
+  "git_head_sha": "146b1eef20cacdf5e9a336214d3f6f9b4dfe490f",
+  "git_base_ref": "origin/main",
+  "git_base_sha": "3878e844e43ff1bda98ddc0e810a7a7bbb2cf3d5",
+  "paths": [
+    "cloud/apps/api/src/graphql/queries",
+    "cloud/apps/api/tests/graphql/queries",
+    "cloud/apps/web/src/components/domains",
+    "cloud/apps/web/src/pages/DefinitionDetail"
+  ],
+  "allowed_dirty_paths": [],
+  "untracked_files_included": [],
+  "artifact_path": "docs/workflow/feature-runs/match-pair-counts/reviews/implementation.diff.patch",
+  "allow_empty_diff": false
+}

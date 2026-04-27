@@ -1,0 +1,42 @@
+---
+reviewer: "codex"
+lens: "dependency-order-adversarial"
+stage: "tasks"
+artifact_path: "docs/workflow/feature-runs/034-hygiene-follow-ups/tasks.md"
+artifact_sha256: "8e4669304a6ed6d6504ad2247bb3602be7294c849998f6dda556b8d7d8db3ff8"
+repo_root: "."
+git_head_sha: "42b7bb726d5992b7810c0346673e7f795365c4c9"
+git_base_ref: "origin/main"
+git_base_sha: "42b7bb726d5992b7810c0346673e7f795365c4c9"
+generation_method: "codex-runner"
+resolution_status: "open"
+resolution_note: ""
+raw_output_path: "docs/workflow/feature-runs/034-hygiene-follow-ups/reviews/tasks.codex.dependency-order-adversarial.review.md.raw.txt"
+narrowed_artifact_path: ""
+narrowed_artifact_sha256: ""
+coverage_status: "full"
+coverage_note: ""
+---
+
+# Review: tasks dependency-order-adversarial
+
+## Findings
+
+- Medium: T4-1/T4-2 mixes two incompatible instructions for the orphan-count query. It says to use a parameterized Prisma raw query, but the SQL example hard-codes `INTERVAL '<getReconcileWindowDays()> days'` and `INTERVAL '<ORPHAN_TRANSCRIPT_MIN_AGE_SECONDS> seconds'`. That invites string interpolation inside SQL, which defeats the parameterization requirement and is easy to get wrong. The task should specify numeric bind params plus interval arithmetic, or a safe helper that builds the interval.
+- Medium: T3-1 leaves the self-under-sampled case undefined. The guard only says to skip a sibling when both self and sibling meet `PAIR_ASYMMETRY_MIN_PROBES`, but it never says to short-circuit when the current run itself is below the minimum. That creates a false-positive path where one under-sampled run could still be compared against several well-sampled siblings, and it makes `skippedUnderSampledRunIds` ambiguous.
+- Medium [UNVERIFIED]: T1-1 memoizes the env-var read at module load, but T1-2 and T4-3 expect to vary `RUN_RECONCILE_WINDOW_DAYS` across tests. Without an explicit module reset or isolation step, those tests will be order-dependent and can silently read a cached value from a prior case.
+
+## Residual Risks
+
+- [UNVERIFIED] The artifact duplicates the orphan predicate in more than one place. If the SQL changes again, drift risk remains unless the shared predicate is factored out.
+- [UNVERIFIED] The `JSON.stringify(details).length < 4096` check in T3-2 is brittle if sibling IDs or payload fields grow, even when the detector is otherwise correct.
+- [UNVERIFIED] The new scheduler predicates and reconcile-job enqueue paths are only safe if the existing data model matches the assumed joins on `runs`, `transcripts`, and `probe_results`.
+
+## Runner Stats
+- total_input=0
+- total_output=0
+- total_tokens=0
+
+## Resolution
+- status: open
+- note: 

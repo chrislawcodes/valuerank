@@ -34,6 +34,7 @@ export type ScaleCode = '1' | '2' | '3' | '4' | '5' | 'refusal' | 'unknown';
  *
  *   decisionState === 'refusal'                 → 'refusal'
  *   decisionState === 'unknown'                 → 'unknown'
+ *   decisionState === 'parse_failed'            → 'unknown'
  *   decisionState === 'neutral'                 → '3'
  *   favoredValueKey = valueA, strong, !flipped  → '5'
  *   favoredValueKey = valueA, strong, flipped   → '1'
@@ -52,6 +53,7 @@ export function scaleCodeFromCanonical(
 ): ScaleCode {
   if (canonical.decisionState === 'refusal') return 'refusal';
   if (canonical.decisionState === 'unknown') return 'unknown';
+  if (canonical.decisionState === 'parse_failed') return 'unknown';
   if (canonical.decisionState === 'neutral') return '3';
 
   // decisionState === 'resolved' — need favored key + strength

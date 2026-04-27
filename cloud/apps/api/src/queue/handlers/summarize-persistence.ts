@@ -1,10 +1,10 @@
 import { db, Prisma, type SummaryCache } from '@valuerank/db';
-import { findMissingProbes } from '../../services/run/coverage-completeness.js';
 import { createLogger } from '@valuerank/shared';
 import { DEFAULT_JOB_OPTIONS } from '../types.js';
+import { findMissingProbes } from '../../services/run/coverage-completeness.js';
 import { triggerBasicAnalysis } from '../../services/analysis/index.js';
-import { incrementSummarizeCompleted, incrementSummarizeFailed } from '../../services/run/progress.js';
-import { deductActualProviderBalancesForRun } from '../../services/budget/deduct.js';
+import { maybeAdvanceRunStatus } from '../../services/run/index.js';
+import { deductSingleTranscriptBalance } from '../../services/budget/deduct.js';
 import {
   buildDecisionMetadataForPersist,
   isPlainJsonObject,
@@ -58,6 +58,29 @@ export function isCacheRecordMatch(
 }
 
 /**
+ * Returns true when a run has no live transcripts left and no missing probes.
+ *
+ * Failed summaries are terminal and must be excluded from the unsummarized count.
+ */
+export async function checkAllSummarized(runId: string): Promise<boolean> {
+  const unsummarizedCount = await db.transcript.count({
+    where: {
+      runId,
+      deletedAt: null,
+      summarizedAt: null,
+      summarizeFailedAt: null,
+    },
+  });
+
+  if (unsummarizedCount > 0) {
+    return false;
+  }
+
+  const missingProbes = await findMissingProbes(runId);
+  return missingProbes.length === 0;
+}
+
+/**
  * Queues a compute_token_stats job for cost prediction data.
  */
 export async function queueComputeTokenStats(runId: string): Promise<void> {
@@ -79,85 +102,42 @@ export async function queueComputeTokenStats(runId: string): Promise<void> {
   log.info({ runId }, 'Queued compute_token_stats job');
 }
 
-/**
- * Check if all transcripts for a run have been summarized AND all expected probes
- * have produced transcripts (or been accounted for).
- *
- * Returns false if:
- * - Any transcript is still unsummarized (existing behavior), OR
- * - Any expected (scenarioId × modelId × sampleIndex) tuple lacks a transcript
- *   (new guard: prevents premature completion when AUTH_ERROR probes are re-queued)
- *
- * Returns true only when both conditions are satisfied.
- */
-export async function checkAllSummarized(runId: string): Promise<boolean> {
-  const unsummarized = await db.transcript.count({
-    where: {
-      runId,
-      summarizedAt: null,
-    },
-  });
-  if (unsummarized > 0) {
-    return false;
+async function refreshPostSummarySideEffects(runId: string, transcriptId: string): Promise<void> {
+  const advanceResult = await maybeAdvanceRunStatus(runId);
+  if (advanceResult.completed) {
+    return;
   }
-  const missing = await findMissingProbes(runId);
-  return missing.length === 0;
-}
 
-/**
- * Update run status to COMPLETED if all transcripts are summarized.
- * Also triggers basic analysis, token statistics computation, and budget deduction.
- *
- * Uses an atomic status transition (SUMMARIZING → COMPLETED) to prevent
- * duplicate side effects when multiple summarization jobs finish concurrently.
- * Only the first caller that successfully transitions the status will run
- * the completion side effects (analysis, token stats, budget deduction).
- */
-export async function maybeCompleteRun(runId: string): Promise<void> {
-  const allDone = await checkAllSummarized(runId);
+  const run = await db.run.findUnique({
+    where: { id: runId },
+    select: { status: true },
+  });
 
-  if (allDone) {
-    // Atomic transition: only update if status is still SUMMARIZING.
-    // If another caller already moved it to COMPLETED, this returns 0 rows
-    // and we skip all side effects to avoid duplicates (e.g., double deductions).
-    const transitioned = await db.$executeRaw`
-      UPDATE "runs"
-      SET "status" = 'COMPLETED',
-          "completed_at" = NOW(),
-          "stalled_models" = '{}'::text[]
-      WHERE "id" = ${runId}
-        AND "status" = 'SUMMARIZING'
-    `;
+  if (run?.status !== 'COMPLETED') {
+    return;
+  }
 
-    if (transitioned === 0) {
-      log.debug({ runId }, 'Run already completed by another worker — skipping side effects');
-      return;
+  try {
+    const prompted = await triggerBasicAnalysis(runId);
+    if (prompted) {
+      log.info({ runId }, 'Analysis triggered successfully');
+    } else {
+      log.debug({ runId }, 'Analysis not triggered');
     }
+  } catch (error) {
+    log.error({ runId, err: error }, 'Failed to trigger basic analysis');
+  }
 
-    log.info({ runId }, 'Run completed - all transcripts summarized');
+  try {
+    await queueComputeTokenStats(runId);
+  } catch (error) {
+    log.error({ runId, err: error }, 'Failed to trigger token stats computation');
+  }
 
-    try {
-      const prompted = await triggerBasicAnalysis(runId);
-      if (prompted) {
-        log.info({ runId }, 'Analysis triggered successfully');
-      } else {
-        log.warn({ runId }, 'Analysis not triggered - no qualify transcripts?');
-      }
-    } catch (error) {
-      log.error({ runId, err: error }, 'Failed to trigger basic analysis');
-    }
-
-    try {
-      await queueComputeTokenStats(runId);
-    } catch (error) {
-      log.error({ runId, err: error }, 'Failed to trigger token stats computation');
-    }
-
-    try {
-      await deductActualProviderBalancesForRun(runId);
-    } catch (error) {
-      log.error({ runId, err: error }, 'Failed to deduct provider balances');
-    }
+  try {
+    await deductSingleTranscriptBalance(transcriptId);
+  } catch (error) {
+    log.error({ runId, transcriptId, err: error }, 'Failed to deduct transcript provider balance');
   }
 }
 
@@ -192,12 +172,12 @@ export async function persistCachedSummary(
         rawDecisionEvidence,
         persistedSummaryCache ?? undefined,
       ),
+      summarizeFailedAt: null,
       summarizedAt: new Date(),
     },
   });
 
-  await incrementSummarizeCompleted(job.data.runId);
-  await maybeCompleteRun(job.data.runId);
+  await refreshPostSummarySideEffects(job.data.runId, transcript.id);
 }
 
 export async function persistSuccessfulSummary(
@@ -231,14 +211,14 @@ export async function persistSuccessfulSummary(
         rawDecisionEvidence,
         freshSummaryCache ?? undefined,
       ),
+      summarizeFailedAt: null,
       summarizedAt: new Date(),
     },
   });
 
   log.info({ jobId: job.id, transcriptId: transcript.id }, 'Transcript summarized');
 
-  await incrementSummarizeCompleted(job.data.runId);
-  await maybeCompleteRun(job.data.runId);
+  await refreshPostSummarySideEffects(job.data.runId, transcript.id);
 }
 
 export async function persistSummarizeFailure(
@@ -267,11 +247,10 @@ export async function persistSummarizeFailure(
     data: {
       decisionText: failureText,
       decisionMetadata: Prisma.DbNull,
-      summarizedAt: new Date(),
+      summarizeFailedAt: new Date(),
     },
   });
 
-  await incrementSummarizeFailed(job.data.runId);
-  await maybeCompleteRun(job.data.runId);
+  await maybeAdvanceRunStatus(job.data.runId);
   return false;
 }

@@ -1,0 +1,57 @@
+{
+  "session_id": "2b033fe9-7a8b-4529-b910-ed7ffc11bc7c",
+  "response": "## Findings\n\n| Severity | Finding |\n| --- | --- |\n| **HIGH** | **Semantic Divergence Between Metrics Creates Misleading Data** |\n| **MEDIUM** | **[UNVERIFIED] Potential Regression for Legacy Paired Batches** |\n| **LOW** | **Data Corruption Heuristic May Obscure Problems** |\n\n---\n\n### **HIGH: Semantic Divergence Between Metrics Creates Misleading Data**\n\nThe refactor introduces a significant and potentially misleading divergence between two key cell metrics: `pairedBatchCount` and the trial counts derived for that cell.\n\n1.  The new `pairedBatchCount` is calculated as `min(count_A_first_runs, count_B_first_runs)`. This correctly reflects the number of complete pairs available for analysis.\n2.  However, the `computePerModelTrialCounts` path was intentionally left unchanged. It uses `deduplicateRunsByGroupId`, which selects only **one** surviving run per launch group.\n\nThe result is that for a perfectly healthy paired batch (one `A-first` and one `B-first` run in the same group `g1`), the API will report:\n*   `pairedBatchCount: 1` (Correct)\n*   `minTrialCount`: The trial count from *only one* of those two runs.\n\nThis is a data integrity issue from the consumer's perspective. If a consumer sees `pairedBatchCount: 1` and `minTrialCount: 5`, they will reasonably assume that the pair of runs generated 5 trials. In reality, the pair generated 10 trials, and the API is silently showing only half the data. This violates the principle of least surprise and could lead to incorrect analysis by users who are not aware of this hidden implementation detail.\n\nWhile this behavior is explicitly tested in `I2 \u2014 Metric divergence`, testing that the divergence exists does not make it correct. The explicit comment `// healthy paired batches do not double their displayed trial counts` frames this as a feature, but from an adversarial perspective, it's a bug: the trial count for a pair *should* reflect the work of both runs in the pair.\n\n### **MEDIUM: [UNVERIFIED] Potential Regression for Legacy Paired Batches**\n\nThe previous implementation for calculating `pairedBatchCount` contained fallback logic for runs that did not have a modern `jobChoiceBatchGroupId`. The old code in `domain-coverage.ts` included this block:\n\n```typescript\nif (pairedBatchGroupId === null) {\n  pairedBatchCountByDefinitionId.set(\n    run.definitionId,\n    (pairedBatchCountByDefinitionId.get(run.definitionId) ?? 0) + 1,\n  );\n  continue;\n}\n```\n\nThe new implementation has been completely rewritten to depend on `getCoverageDirection(run.config)`, which requires the `jobChoiceValueFirst` property. Runs without this property will return `null` and be completely excluded from the new `pairedBatchCount` calculation.\n\nThis constitutes a potential regression. If there are legacy runs that were previously considered \"paired\" (perhaps by virtue of being companions in the same launch) but lack the `jobChoiceValueFirst` config property, their contribution to `pairedBatchCount` will now be zeroed out. This could cause historical data on the coverage grid to change unexpectedly.\n\n### **LOW: Data Corruption Heuristic May Obscure Problems**\n\nIn the event that a single cell contains runs claiming more than two distinct `jobChoiceValueFirst` directions (e.g., `A-first`, `B-first`, and `C-first`), the new logic logs a server-side warning and then calculates `pairedBatchCount` based on the `min` of the two largest direction counts.\n\nWhile logging is good, this heuristic hides the data integrity problem from the end-user. The user will see a non-zero `pairedBatchCount` and be unaware that the underlying data for the cell is corrupted or misconfigured. A safer, less ambiguous approach would be to return `pairedBatchCount: 0` for any cell with >2 directions. This would make the data problem visible to the user in the UI (as a missing value) and force an investigation, rather than presenting a potentially invalid number.\n\n## Residual Risks\n\n*   **Incorrect User Analysis:** The primary residual risk is that users of the UI or API will draw incorrect conclusions based on the trial counts shown for paired-batch cells. Because the API knowingly and intentionally underreports trial counts for healthy pairs, any analysis that relies on this number is flawed.\n*   **Silent Data Invalidation:** If legacy data exists that relied on the old `pairedBatchCount` logic (as described in the MEDIUM severity finding), this change will silently invalidate that historical metric without any warning to the user or operator. The numbers on the grid will simply change.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 36616
+        },
+        "tokens": {
+          "input": 21357,
+          "prompt": 21357,
+          "candidates": 1028,
+          "total": 24657,
+          "cached": 0,
+          "thoughts": 2272,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 36616,
+            "tokens": {
+              "input": 21357,
+              "prompt": 21357,
+              "candidates": 1028,
+              "total": 24657,
+              "cached": 0,
+              "thoughts": 2272,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

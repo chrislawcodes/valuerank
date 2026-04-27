@@ -9,6 +9,10 @@
     "verdict": {"type": "string", "enum": ["proceed", "proceed-with-annotation", "block"]},
     "confidence": {"type": "integer", "minimum": 0, "maximum": 5},
     "reasoning": {"type": "string", "minLength": 10},
+    "unaddressed_high_finding_ids": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
     "evidence": {
       "type": "array",
       "items": {

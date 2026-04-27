@@ -378,6 +378,23 @@ describe('GraphQL Domain Query Registration', () => {
       },
     });
 
+    const deletedEvaluation = await db.domainEvaluation.create({
+      data: {
+        domainId: domain.id,
+        domainNameAtLaunch: domain.name,
+        scopeCategory: 'PRODUCTION',
+        status: 'PENDING',
+        configSnapshot: {
+          models: ['ghost-model'],
+          projectedCostUsd: 0,
+          startedRuns: 0,
+          skippedForBudget: 0,
+        },
+        createdByUserId: TEST_USER.id,
+        deletedAt: new Date(),
+      },
+    });
+
     await db.domainEvaluationRun.create({
       data: {
         domainEvaluationId: evaluation.id,
@@ -399,7 +416,7 @@ describe('GraphQL Domain Query Registration', () => {
     });
 
     const query = `
-      query DomainEvaluations($domainId: ID!, $evaluationId: ID!, $runIds: [ID!]!) {
+      query DomainEvaluations($domainId: ID!, $evaluationId: ID!, $deletedEvaluationId: ID!, $runIds: [ID!]!) {
         domainEvaluations(domainId: $domainId) {
           id
           domainId
@@ -426,12 +443,18 @@ describe('GraphQL Domain Query Registration', () => {
             runStatus
           }
         }
+        deletedEvaluation: domainEvaluation(id: $deletedEvaluationId) {
+          id
+        }
         domainEvaluationMembers(id: $evaluationId) {
           runId
           definitionIdAtLaunch
           definitionNameAtLaunch
           runStatus
           runCategory
+        }
+        deletedEvaluationMembers: domainEvaluationMembers(id: $deletedEvaluationId) {
+          runId
         }
         domainEvaluationStatus(id: $evaluationId) {
           id
@@ -442,6 +465,10 @@ describe('GraphQL Domain Query Registration', () => {
           completedRuns
           failedRuns
           cancelledRuns
+        }
+        deletedEvaluationStatus: domainEvaluationStatus(id: $deletedEvaluationId) {
+          id
+          status
         }
         domainTrialRunsStatus(runIds: $runIds) {
           runId
@@ -464,6 +491,7 @@ describe('GraphQL Domain Query Registration', () => {
         domainRunSummary(domainId: $domainId) {
           domainId
           totalEvaluations
+          pendingEvaluations
           runningEvaluations
           completedEvaluations
           totalMemberRuns
@@ -495,6 +523,7 @@ describe('GraphQL Domain Query Registration', () => {
         variables: {
           domainId: domain.id,
           evaluationId: evaluation.id,
+          deletedEvaluationId: deletedEvaluation.id,
           runIds: [liveRun.id, analyzedRun.id],
         },
       })
@@ -533,6 +562,8 @@ describe('GraphQL Domain Query Registration', () => {
         runCategory: 'PRODUCTION',
       }),
     ]);
+    expect(response.body.data.deletedEvaluation).toBeNull();
+    expect(response.body.data.deletedEvaluationMembers).toEqual([]);
 
     const status = response.body.data.domainEvaluationStatus as Record<string, unknown>;
     expect(status.id).toBe(evaluation.id);
@@ -543,10 +574,12 @@ describe('GraphQL Domain Query Registration', () => {
     expect(status.completedRuns).toBe(0);
     expect(status.failedRuns).toBe(0);
     expect(status.cancelledRuns).toBe(0);
+    expect(response.body.data.deletedEvaluationStatus).toBeNull();
 
     const summary = response.body.data.domainRunSummary as Record<string, unknown>;
     expect(summary.domainId).toBe(domain.id);
     expect(summary.totalEvaluations).toBe(2);
+    expect(summary.pendingEvaluations).toBe(0);
     expect(summary.runningEvaluations).toBe(1);
     expect(summary.completedEvaluations).toBe(1);
     expect(summary.totalMemberRuns).toBe(2);

@@ -7,6 +7,19 @@ query DomainValueCoverage($domainId: ID!, $modelIds: [String!], $signature: Stri
       valueB
       batchCount
       pairedBatchCount
+      orphanedBatchCount
+      aFirstBatchCount
+      bFirstBatchCount
+      pairedConditionCount
+      orphanedConditionCount
+      directionalCoverage {
+        direction
+        completeBatches
+        filledSlots
+        leftoverConditions
+        definitionIds
+      }
+      contributingDefinitionIds
       incompleteBatchCount
       definitionId
       definitionName
@@ -35,6 +48,19 @@ query DomainValueCoverageLegacy($domainId: ID!, $modelIds: [String!]) {
       valueB
       batchCount
       pairedBatchCount
+      orphanedBatchCount
+      aFirstBatchCount
+      bFirstBatchCount
+      pairedConditionCount
+      orphanedConditionCount
+      directionalCoverage {
+        direction
+        completeBatches
+        filledSlots
+        leftoverConditions
+        definitionIds
+      }
+      contributingDefinitionIds
       definitionId
       definitionName
       aggregateRunId

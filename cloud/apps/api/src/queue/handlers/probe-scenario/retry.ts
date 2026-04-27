@@ -3,8 +3,7 @@
  */
 
 import { createLogger } from '@valuerank/shared';
-import { db } from '@valuerank/db';
-import { updateProgress } from '../../../services/run/index.js';
+import { maybeAdvanceRunStatus } from '../../../services/run/index.js';
 import { recordProbeFailure } from '../../../services/probe-result/index.js';
 import { enqueueTopUpProbesSingleton } from '../top-up-probes.js';
 
@@ -82,26 +81,6 @@ export function formatWorkerErrorMessage(error: { message: string; details?: str
   return `${baseMessage} | ${details}`;
 }
 
-export function getProgressDelta(
-  previousStatus: ProbeStatus,
-  nextStatus: 'SUCCESS' | 'FAILED'
-): { incrementCompleted: number; incrementFailed: number } {
-  if (previousStatus === nextStatus) {
-    return { incrementCompleted: 0, incrementFailed: 0 };
-  }
-
-  if (previousStatus === null) {
-    return nextStatus === 'SUCCESS'
-      ? { incrementCompleted: 1, incrementFailed: 0 }
-      : { incrementCompleted: 0, incrementFailed: 1 };
-  }
-
-  // Transition between terminal states (rare but possible if recovered/overridden)
-  return nextStatus === 'SUCCESS'
-    ? { incrementCompleted: 1, incrementFailed: -1 }
-    : { incrementCompleted: -1, incrementFailed: 1 };
-}
-
 export function extractStoredTranscriptTokenUsage(
   content: unknown,
   fallbackTokenCount: number
@@ -144,20 +123,6 @@ export function extractStoredTranscriptTokenUsage(
   return { inputTokens: 0, outputTokens: fallbackTokenCount };
 }
 
-export async function applyProgressDelta(
-  runId: string,
-  previousStatus: ProbeStatus,
-  nextStatus: 'SUCCESS' | 'FAILED'
-): Promise<{ progress: { total: number; completed: number; failed: number } | null; status: string | null }> {
-  const delta = getProgressDelta(previousStatus, nextStatus);
-  if (delta.incrementCompleted === 0 && delta.incrementFailed === 0) {
-    return { progress: null, status: null };
-  }
-
-  const updated = await updateProgress(runId, delta);
-  return { progress: updated.progress, status: updated.status };
-}
-
 type ProbeResultKey = {
   runId_scenarioId_modelId_sampleIndex: {
     runId: string;
@@ -184,7 +149,7 @@ export async function handleJobError(
   sampleIndex: number,
   retryCount: number,
   retryLimit: number,
-  probeResultKey: ProbeResultKey
+  _probeResultKey: ProbeResultKey
 ): Promise<boolean> {
   const retryable = isRetryableError(error);
   const maxRetriesReached = retryCount >= retryLimit;
@@ -198,10 +163,6 @@ export async function handleJobError(
     try {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorCode = !retryable ? 'NON_RETRYABLE' : 'MAX_RETRIES_EXCEEDED';
-      const existingProbeResult = await db.probeResult.findUnique({
-        where: probeResultKey,
-        select: { status: true },
-      });
       await recordProbeFailure({
         runId,
         scenarioId,
@@ -211,14 +172,10 @@ export async function handleJobError(
         errorMessage,
         retryCount,
       });
-      const { progress, status } = await applyProgressDelta(
-        runId,
-        existingProbeResult?.status ?? null,
-        'FAILED'
-      );
+      const result = await maybeAdvanceRunStatus(runId);
       await enqueueTopUpProbesSingleton(runId);
       log.error(
-        { jobId, runId, scenarioId, modelId, progress, status, retryCount, err: error },
+        { jobId, runId, scenarioId, modelId, result, retryCount, err: error },
         'Probe job permanently failed'
       );
     } catch (progressError) {

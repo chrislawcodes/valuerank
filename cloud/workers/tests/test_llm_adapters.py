@@ -529,3 +529,185 @@ class TestMaxTokensConfig:
             payload = mock_post.call_args.kwargs.get("json") or mock_post.call_args[1].get("json")
             # Anthropic requires max_tokens, so we use 8192 as the default for "unlimited"
             assert payload["max_tokens"] == 8192
+
+
+# Mirrors the production failure shape from PR #N (data-quality scan 2026-04-25):
+# deepseek-reasoner billed 513 completion tokens but message.content was empty
+# because the model emitted everything as reasoning_content. The previous adapter
+# silently coerced the empty value to "" and probe_results was marked SUCCESS
+# with an unparseable transcript. After the fix the adapter raises INVALID_RESPONSE.
+def _openai_compat_response(content, completion_tokens, *, reasoning_tokens=None, finish_reason="stop"):
+    """Build a minimal OpenAI-compatible response body for testing empty-content paths."""
+    body = {
+        "id": "chatcmpl-empty",
+        "object": "chat.completion",
+        "created": 1,
+        "model": "test-model",
+        "choices": [
+            {
+                "index": 0,
+                "message": {"role": "assistant", "content": content},
+                "finish_reason": finish_reason,
+            }
+        ],
+        "usage": {
+            "prompt_tokens": 100,
+            "completion_tokens": completion_tokens,
+            "total_tokens": 100 + completion_tokens,
+        },
+    }
+    if reasoning_tokens is not None:
+        body["usage"]["completion_tokens_details"] = {"reasoning_tokens": reasoning_tokens}
+    return body
+
+
+class TestEmptyContentRaises:
+    """Adapters must raise LLMError(INVALID_RESPONSE) when the visible content is empty."""
+
+    def test_deepseek_reasoner_only_response_raises(self) -> None:
+        """Reproduces the production bug: completion_tokens=513, reasoning_tokens=510, content=''."""
+        adapter = DeepSeekAdapter(api_key="test-key")
+
+        with patch("requests.post") as mock_post:
+            mock_post.return_value = MockResponse(
+                _openai_compat_response("", completion_tokens=513, reasoning_tokens=510),
+                200,
+            )
+
+            with pytest.raises(LLMError) as exc_info:
+                adapter.generate("deepseek-reasoner", [{"role": "user", "content": "Hi"}])
+
+        assert exc_info.value.code == ErrorCode.INVALID_RESPONSE
+        assert "output_tokens=513" in exc_info.value.message
+        assert "deepseek" in exc_info.value.message
+
+    def test_deepseek_null_content_raises(self) -> None:
+        """null content (vs empty string) should also raise."""
+        adapter = DeepSeekAdapter(api_key="test-key")
+
+        with patch("requests.post") as mock_post:
+            mock_post.return_value = MockResponse(
+                _openai_compat_response(None, completion_tokens=400),
+                200,
+            )
+
+            with pytest.raises(LLMError) as exc_info:
+                adapter.generate("deepseek-reasoner", [{"role": "user", "content": "Hi"}])
+
+        assert exc_info.value.code == ErrorCode.INVALID_RESPONSE
+
+    def test_deepseek_whitespace_only_content_raises(self) -> None:
+        """Whitespace-only content cannot drive a canonical decision; should raise."""
+        adapter = DeepSeekAdapter(api_key="test-key")
+
+        with patch("requests.post") as mock_post:
+            mock_post.return_value = MockResponse(
+                _openai_compat_response("   \n\t  ", completion_tokens=200),
+                200,
+            )
+
+            with pytest.raises(LLMError) as exc_info:
+                adapter.generate("deepseek-chat", [{"role": "user", "content": "Hi"}])
+
+        assert exc_info.value.code == ErrorCode.INVALID_RESPONSE
+
+    def test_xai_zero_token_empty_response_raises(self) -> None:
+        """Reproduces the grok-4-0709 failure: completion_tokens=0, finish_reason=''."""
+        adapter = XAIAdapter(api_key="test-key")
+
+        with patch("requests.post") as mock_post:
+            mock_post.return_value = MockResponse(
+                _openai_compat_response("", completion_tokens=0, finish_reason=""),
+                200,
+            )
+
+            with pytest.raises(LLMError) as exc_info:
+                adapter.generate("grok-4-0709", [{"role": "user", "content": "Hi"}])
+
+        assert exc_info.value.code == ErrorCode.INVALID_RESPONSE
+        assert "output_tokens=0" in exc_info.value.message
+        assert "xai" in exc_info.value.message
+
+    def test_openai_empty_content_raises(self) -> None:
+        adapter = OpenAIAdapter(api_key="test-key")
+
+        with patch("requests.post") as mock_post:
+            mock_post.return_value = MockResponse(
+                _openai_compat_response("", completion_tokens=42),
+                200,
+            )
+
+            with pytest.raises(LLMError) as exc_info:
+                adapter.generate("gpt-4", [{"role": "user", "content": "Hi"}])
+
+        assert exc_info.value.code == ErrorCode.INVALID_RESPONSE
+
+    def test_mistral_empty_content_raises(self) -> None:
+        adapter = MistralAdapter(api_key="test-key")
+
+        with patch("requests.post") as mock_post:
+            mock_post.return_value = MockResponse(
+                _openai_compat_response("", completion_tokens=42),
+                200,
+            )
+
+            with pytest.raises(LLMError) as exc_info:
+                adapter.generate("mistral-large", [{"role": "user", "content": "Hi"}])
+
+        assert exc_info.value.code == ErrorCode.INVALID_RESPONSE
+
+    def test_anthropic_empty_content_raises(self) -> None:
+        """Anthropic returns a content array — empty text parts must also raise."""
+        adapter = AnthropicAdapter(api_key="test-key")
+
+        with patch("requests.post") as mock_post:
+            mock_post.return_value = MockResponse(
+                {
+                    "id": "msg-empty",
+                    "model": "claude-3-sonnet",
+                    "content": [{"type": "text", "text": ""}],
+                    "stop_reason": "end_turn",
+                    "usage": {"input_tokens": 10, "output_tokens": 50},
+                },
+                200,
+            )
+
+            with pytest.raises(LLMError) as exc_info:
+                adapter.generate("claude-3-sonnet", [{"role": "user", "content": "Hi"}])
+
+        assert exc_info.value.code == ErrorCode.INVALID_RESPONSE
+
+    def test_anthropic_no_text_parts_raises(self) -> None:
+        """Anthropic content array with no text-type parts must raise."""
+        adapter = AnthropicAdapter(api_key="test-key")
+
+        with patch("requests.post") as mock_post:
+            mock_post.return_value = MockResponse(
+                {
+                    "id": "msg-empty",
+                    "model": "claude-3-sonnet",
+                    "content": [],
+                    "stop_reason": "end_turn",
+                    "usage": {"input_tokens": 10, "output_tokens": 0},
+                },
+                200,
+            )
+
+            with pytest.raises(LLMError) as exc_info:
+                adapter.generate("claude-3-sonnet", [{"role": "user", "content": "Hi"}])
+
+        assert exc_info.value.code == ErrorCode.INVALID_RESPONSE
+
+    def test_non_empty_content_does_not_raise(self) -> None:
+        """Sanity: a normal response still succeeds."""
+        adapter = DeepSeekAdapter(api_key="test-key")
+
+        with patch("requests.post") as mock_post:
+            mock_post.return_value = MockResponse(
+                _openai_compat_response("Strongly support taking the job", completion_tokens=42),
+                200,
+            )
+
+            result = adapter.generate("deepseek-chat", [{"role": "user", "content": "Hi"}])
+
+        assert result.content == "Strongly support taking the job"

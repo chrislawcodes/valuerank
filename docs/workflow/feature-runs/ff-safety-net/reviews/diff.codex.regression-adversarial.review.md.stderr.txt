@@ -1,0 +1,1421 @@
+Reading additional input from stdin...
+OpenAI Codex v0.125.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019dc14c-64ad-74a0-8184-9dec78eef3ff
+--------
+user
+Review this diff artifact using a regression-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: implementation.diff.patch
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/judge-prompts/completeness.md b/docs/workflow/operations/codex-skills/feature-factory/judge-prompts/completeness.md
+index e9c03103..56334ee6 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/judge-prompts/completeness.md
++++ b/docs/workflow/operations/codex-skills/feature-factory/judge-prompts/completeness.md
+@@ -21,6 +21,11 @@ Blocking one round costs less than shipping an unaddressed HIGH.
+ 
+ Output JSON matching the schema. Reasoning must cite each HIGH
+ finding by its ID and state where (or whether) it is addressed.
++If you vote block because HIGH reviewer findings remain unaddressed,
++populate `unaddressed_high_finding_ids` with the concern ids copied
++verbatim from the review files. If you block for a different reason,
++emit `[]`. Self-validate before emitting: a block based on HIGH
++findings must include at least one id in that array.
+ 
+ # User Prompt Template
+ HIGH findings from adversarial rounds:
+@@ -41,3 +46,29 @@ For each HIGH finding, state:
+ 3. Whether that addressing is specific enough to implement
+ 
+ Then emit verdict JSON.
++
++Concrete examples:
++```json
++{{
++  "judge": "completeness",
++  "model": "gpt-5.4-mini",
++  "verdict": "block",
++  "confidence": 4,
++  "reasoning": "Unaddressed HIGH finding remains open.",
++  "unaddressed_high_finding_ids": ["0123456789ab"],
++  "evidence": [],
++  "timestamp": "2026-04-18T10:15:30Z"
++}}
++```
++```json
++{{
++  "judge": "completeness",
++  "model": "gpt-5.4-mini",
++  "verdict": "block",
++  "confidence": 4,
++  "reasoning": "Blocking for a different reason.",
++  "unaddressed_high_finding_ids": [],
++  "evidence": [],
++  "timestamp": "2026-04-18T10:15:30Z"
++}}
++```
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_block.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_block.py
+index 9a88c86e..c86c9509 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_block.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_block.py
+@@ -15,8 +15,10 @@ from factory_state import (  # noqa: E402
+ )
+ 
+ from factory_git import ensure_sync  # noqa: E402
++from factory_mutating import mutates_state  # noqa: E402
+ 
+ 
++@mutates_state("block")
+ def command_block(args: argparse.Namespace) -> int:
+     ensure_sync()
+     if not args.clear and not args.reason:
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py
+index a07179f6..3165d01a 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py
+@@ -80,6 +80,7 @@ from factory_emit import _emit_next_action  # noqa: E402
+ from factory_heartbeat import HeartbeatEmitter, set_activity as heartbeat_set_activity  # noqa: E402
+ from factory_next_action import recommended_next_action  # noqa: E402
+ from workflow_utils import normalized_artifact_hash  # noqa: E402
++from factory_mutating import mutates_state  # noqa: E402
+ 
+ 
+ def _ensure_stage_state_blob(state: dict, stage: str) -> dict:
+@@ -200,6 +201,24 @@ def _concern_reasoning_snippet(concern: dict, limit: int = 60) -> str:
+     return reasoning[:limit]
+ 
+ 
++def _gc_review_intermediates(slug: str, stage: str, keep: bool) -> list[Path]:
++    if keep:
++        return []
++    reviews = reviews_dir(slug)
++    deleted: list[Path] = []
++    for suffix in (
++        ".narrowed.txt",
++        ".narrowed.json",
++        ".raw.txt",
++        ".stdout.txt",
++        ".stderr.txt",
++    ):
++        for path in sorted(reviews.glob(f"{stage}.*{suffix}")):
++            path.unlink(missing_ok=True)
++            deleted.append(path)
++    return deleted
++
++
+ def _find_concerns_by_id(state: dict, concern_id: str) -> list[tuple[str, dict]]:
+     """Return ALL matches so callers can detect ambiguity (P2-3 adversarial finding).
+ 
+@@ -332,6 +351,7 @@ def _handle_concern_lifecycle(args: argparse.Namespace) -> int | None:
+     return 0
+ 
+ 
++@mutates_state("checkpoint")
+ def command_checkpoint(args: argparse.Namespace) -> int:
+     fast = getattr(args, "fast", False)
+     if fast and args.stage != "diff":
+@@ -345,6 +365,9 @@ def command_checkpoint(args: argparse.Namespace) -> int:
+     reviews = reviews_dir(args.slug)
+     root.mkdir(parents=True, exist_ok=True)
+     reviews.mkdir(parents=True, exist_ok=True)
++    keep_intermediates = getattr(args, "keep_intermediates", False)
++    with with_locked_state(args.slug):
++        _gc_review_intermediates(args.slug, args.stage, keep_intermediates)
+ 
+     if not fast:
+         prereq_error = prerequisite_failure(args.slug, args.stage)
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py
+index b96b66e9..78ee2f2e 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_deliver.py
+@@ -66,6 +66,8 @@ from factory_pr_body import (  # noqa: E402
+ )
+ 
+ from factory_emit import _emit_next_action  # noqa: E402
++from factory_mutating import mutates_state  # noqa: E402
++from factory_cmd_checkpoint import _nonblank  # noqa: E402
+ 
+ 
+ def _base_pr_body(slug: str) -> str:
+@@ -231,11 +233,12 @@ def _resume_merge_wait_if_needed(slug: str, delivery: dict) -> int:
+     return 0
+ 
+ 
++@mutates_state("deliver")
+ def command_deliver(args: argparse.Namespace) -> int:
+     ensure_sync()
+     if not command_path("gh"):
+         raise SystemExit("deliver requires the gh CLI to be installed")
+-    if args.override_judges and not args.reason:
++    if args.override_judges and _nonblank(getattr(args, "reason", None)) is None:
+         print("deliver --override-judges requires --reason", file=sys.stderr)
+         raise SystemExit(2)
+ 
+@@ -514,6 +517,7 @@ def command_deliver(args: argparse.Namespace) -> int:
+     return 0
+ 
+ 
++@mutates_state("closeout")
+ def command_closeout(args: argparse.Namespace) -> int:
+     from factory_cmd_checkpoint import command_checkpoint  # noqa: E402
+     ensure_sync()
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_discover.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_discover.py
+index 83ee2498..41db609e 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_discover.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_discover.py
+@@ -22,8 +22,10 @@ from factory_git import ensure_sync  # noqa: E402
+ from factory_review import trim_detail  # noqa: E402
+ 
+ from factory_emit import _emit_next_action  # noqa: E402
++from factory_mutating import mutates_state  # noqa: E402
+ 
+ 
++@mutates_state("discover")
+ def command_discover(args: argparse.Namespace) -> int:
+     ensure_sync()
+     clear = getattr(args, "clear", False)
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_implement.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_implement.py
+index 600ef9fe..c4ab5f42 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_implement.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_implement.py
+@@ -35,6 +35,7 @@ from factory_git import (  # noqa: E402
+ from factory_stages import parse_parallel_task_groups  # noqa: E402
+ 
+ from factory_emit import _emit_next_action  # noqa: E402
++from factory_mutating import mutates_state  # noqa: E402
+ 
+ 
+ def _codex_prompt_path(slug: str, i: int) -> Path:
+@@ -275,6 +276,7 @@ def _run_parallel(slug: str, group: dict, max_workers: int = 4) -> int:
+             prompt_path.unlink(missing_ok=True)
+ 
+ 
++@mutates_state("implement")
+ def command_implement(args: argparse.Namespace) -> int:
+     status = subprocess.run(
+         ["git", "-C", str(REPO_ROOT), "status", "--porcelain"],
+@@ -311,6 +313,7 @@ def command_implement(args: argparse.Namespace) -> int:
+     return 0
+ 
+ 
++@mutates_state("parallel")
+ def command_parallel(args: argparse.Namespace) -> int:
+     """Record whether the agent looked for parallel implementation opportunities.
+ 
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py
+index 6609e0f4..86a8e1af 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py
+@@ -19,6 +19,7 @@ if str(_SCRIPT_DIR) not in sys.path:
+ 
+ from factory_state import (  # noqa: E402
+     REPO_ROOT,
++    INVARIANT_WARNINGS_KEY,
+     atomic_json_write,
+     default_artifact_path,
+     load_workflow_state,
+@@ -106,6 +107,44 @@ def _stage_int(stage_state: dict, key: str) -> int:
+         return 0
+ 
+ 
++def _concern_is_open(concern: dict) -> bool:
++    return (
++        concern.get("addressed_at") is None
++        and not concern.get("deferred_reason")
++        and not concern.get("dismissed_reason")
++    )
++
++
++def _structured_high_ids(verdict: dict | None) -> list[str]:
++    if not isinstance(verdict, dict):
++        return []
++    raw_ids = verdict.get("unaddressed_high_finding_ids", [])
++    if not isinstance(raw_ids, list):
++        return []
++    ids: list[str] = []
++    for item in raw_ids:
++        if not isinstance(item, str):
++            continue
++        stripped = item.strip()
++        if stripped:
++            ids.append(stripped)
++    return ids
++
++
++def _open_concern_ids(stage_state: dict) -> set[str]:
++    unresolved = stage_state.get("unresolved_concerns", [])
++    if not isinstance(unresolved, list):
++        return set()
++    ids: set[str] = set()
++    for concern in unresolved:
++        if not isinstance(concern, dict):
++            continue
++        concern_id = str(concern.get("id", "") or "").strip()
++        if concern_id and _concern_is_open(concern):
++            ids.add(concern_id)
++    return ids
++
++
+ def _record_migration_bypass_use(slug: str, stage: str) -> None:
+     with with_locked_state(slug) as state:
+         uses = state.get("migration_bypass_uses", [])
+@@ -436,6 +475,12 @@ def _validate_verdict(verdict: dict) -> str | None:
+         return "confidence must be an integer in the range 0..5"
+     if not isinstance(verdict["reasoning"], str) or len(verdict["reasoning"].strip()) < 10:
+         return "reasoning must be a string of at least 10 characters"
++    if "unaddressed_high_finding_ids" in verdict:
++        if not isinstance(verdict["unaddressed_high_finding_ids"], list):
++            return "unaddressed_high_finding_ids must be a list"
++        for item in verdict["unaddressed_high_finding_ids"]:
++            if not isinstance(item, str) or not item.strip():
++                return "unaddressed_high_finding_ids items must be non-empty strings"
+     if not isinstance(verdict["evidence"], list):
+         return "evidence must be a list"
+     for item in verdict["evidence"]:
+@@ -454,7 +499,7 @@ def _validate_verdict(verdict: dict) -> str | None:
+     IGNORABLE_METADATA_FIELDS = {"$schema", "$id", "$comment", "title", "description"}
+     for meta_field in IGNORABLE_METADATA_FIELDS & set(verdict):
+         verdict.pop(meta_field, None)
+-    extra = set(verdict) - set(required)
++    extra = set(verdict) - set(required) - {"unaddressed_high_finding_ids"}
+     if extra:
+         return f"unexpected fields in verdict: {sorted(extra)}"
+     return None
+@@ -891,6 +936,28 @@ def _persist_state(
+         stage_state["annotations"] = annotations
+         block_verdicts = _block_verdicts(verdicts)
+         blockers = _block_reasonings(block_verdicts)
++        completeness_verdict = next(
++            (verdict for verdict in verdicts if isinstance(verdict, dict) and verdict.get("judge") == "completeness"),
++            None,
++        )
++        structured_high_ids = _structured_high_ids(completeness_verdict)
++        open_concern_ids = _open_concern_ids(stage_state)
++        open_structured_high_ids = [concern_id for concern_id in structured_high_ids if concern_id in open_concern_ids]
++
++        if (
++            isinstance(completeness_verdict, dict)
++            and completeness_verdict.get("verdict") == "block"
++            and not structured_high_ids
++            and open_concern_ids
++        ):
++            state.setdefault(INVARIANT_WARNINGS_KEY, []).append(
++                {
++                    "at": int(datetime.now(timezone.utc).timestamp()),
++                    "command": "judge",
++                    "stage": stage,
++                    "detail": "completeness judge blocked without structured HIGH ids while concerns remain — prompt may be malformed",
++                }
++            )
+ 
+         # FR-001a — write judge_next_action into stage_state BEFORE computing
+         # recommended_next_action so the decision tree (which reads
+@@ -898,7 +965,22 @@ def _persist_state(
+         # the same run. Without this reorder, factory_cmd_judge itself emits
+         # a stale repair_<stage>_checkpoint banner immediately after voting
+         # advance — the exact symptom observed in feature run 033.
+-        if block_count >= 2 and judge_round < 3:
++        if (
++            isinstance(completeness_verdict, dict)
++            and completeness_verdict.get("verdict") == "block"
++            and open_structured_high_ids
++            and proceed_count >= 2
++        ):
++            stage_state["judge_next_action"] = "edit_and_rerun_judge"
++            next_action = "edit_and_rerun_judge"
++            reason = (
++                "completeness judge veto: unaddressed HIGH concerns "
++                + "{"
++                + ",".join(open_structured_high_ids)
++                + "} — majority override"
++            )
++            outcome_value = "rejudge"
++        elif block_count >= 2 and judge_round < 3:
+             stage_state["judge_next_action"] = "edit_and_rerun_judge"
+             next_action = "edit_and_rerun_judge"
+             reason = f"block majority; {block_count} of {len(verdicts)} judges blocked"
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_status.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_status.py
+index efba6e6d..8facec79 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_status.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_status.py
+@@ -56,8 +56,10 @@ from factory_review import (  # noqa: E402
+ from factory_next_action import recommended_next_action  # noqa: E402
+ 
+ from factory_deliver import refresh_delivery_snapshot  # noqa: E402
++from factory_mutating import mutates_state, readonly_command  # noqa: E402
+ 
+ 
++@readonly_command("status")
+ def command_status(args: argparse.Namespace) -> int:
+     ensure_sync()
+     state = load_workflow_state(args.slug)
+@@ -235,6 +237,7 @@ def command_status(args: argparse.Namespace) -> int:
+     return 0
+ 
+ 
++@mutates_state("repair")
+ def command_repair(args: argparse.Namespace) -> int:
+     from factory_cmd_checkpoint import command_checkpoint  # noqa: E402
+     ensure_sync()
+@@ -320,6 +323,7 @@ def command_repair(args: argparse.Namespace) -> int:
+     return 0
+ 
+ 
++@readonly_command("doctor")
+ def command_doctor(args: argparse.Namespace) -> int:
+     from factory_git import git_output  # noqa: E402
+     checks: list[tuple[str, str, str]] = []
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_mutating.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_mutating.py
+new file mode 100644
+index 00000000..cd3d20c2
+--- /dev/null
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_mutating.py
+@@ -0,0 +1,90 @@
++#!/usr/bin/env python3
++"""Decorator helpers for classifying feature-factory command handlers."""
++from __future__ import annotations
++
++import argparse
++from collections.abc import Callable, Iterable, Iterator
++from functools import wraps
++from typing import Any
++
++
++def _attach_command_flag(func: Callable[..., Any], attr_name: str, command_name: str) -> Callable[..., Any]:
++    setattr(func, attr_name, command_name)
++    return func
++
++
++def mutates_state(command_name: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
++    """Mark a command handler as state mutating."""
++    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
++        @wraps(func)
++        def wrapped(*args: Any, **kwargs: Any) -> Any:
++            return func(*args, **kwargs)
++
++        return _attach_command_flag(wrapped, "__ff_mutates_state__", command_name)
++
++    return decorator
++
++
++def readonly_command(command_name: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
++    """Mark a command handler as read-only."""
++    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
++        @wraps(func)
++        def wrapped(*args: Any, **kwargs: Any) -> Any:
++            return func(*args, **kwargs)
++
++        return _attach_command_flag(wrapped, "__ff_readonly_command__", command_name)
++
++    return decorator
++
++
++def _canonical_name(handler: Callable[..., Any]) -> str:
++    mutating = getattr(handler, "__ff_mutates_state__", None)
++    if isinstance(mutating, str) and mutating:
++        return mutating
++    readonly = getattr(handler, "__ff_readonly_command__", None)
++    if isinstance(readonly, str) and readonly:
++        return readonly
++    name = getattr(handler, "__name__", "")
++    if isinstance(name, str) and name.startswith("command_"):
++        return name[len("command_") :].replace("_", "-")
++    return str(name)
++
++
++def collect_mutating_command_names(handlers: Iterable[Callable[..., Any]]) -> frozenset[str]:
++    """Return the canonical names for handlers tagged as mutating."""
++    names = {
++        str(getattr(handler, "__ff_mutates_state__", ""))
++        for handler in handlers
++        if isinstance(getattr(handler, "__ff_mutates_state__", None), str) and str(getattr(handler, "__ff_mutates_state__", "")).strip()
++    }
++    return frozenset(names)
++
++
++def all_classified_names(handlers: Iterable[Callable[..., Any]]) -> tuple[frozenset[str], frozenset[str], frozenset[str]]:
++    """Return mutating, readonly, and undecorated command-name sets."""
++    mutating: set[str] = set()
++    readonly: set[str] = set()
++    undecorated: set[str] = set()
++    for handler in handlers:
++        name = _canonical_name(handler)
++        has_mutating = isinstance(getattr(handler, "__ff_mutates_state__", None), str)
++        has_readonly = isinstance(getattr(handler, "__ff_readonly_command__", None), str)
++        if has_mutating:
++            mutating.add(name)
++        elif has_readonly:
++            readonly.add(name)
++        else:
++            undecorated.add(name)
++    return frozenset(mutating), frozenset(readonly), frozenset(undecorated)
++
++
++def enumerate_subparser_handlers(parser: argparse.ArgumentParser) -> Iterator[tuple[str, Callable[..., Any]]]:
++    """Yield (subcommand_name, handler) pairs from an argparse parser."""
++    for action in getattr(parser, "_actions", []):
++        if not isinstance(action, argparse._SubParsersAction):  # type: ignore[attr-defined]
++            continue
++        for name, subparser in action.choices.items():
++            handler = getattr(subparser, "_defaults", {}).get("func")
++            if callable(handler):
++                yield name, handler
++        break
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/judge_schema.json b/docs/workflow/operations/codex-skills/feature-factory/scripts/judge_schema.json
+index 24289a20..9f474fef 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/judge_schema.json
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/judge_schema.json
+@@ -9,6 +9,10 @@
+     "verdict": {"type": "string", "enum": ["proceed", "proceed-with-annotation", "block"]},
+     "confidence": {"type": "integer", "minimum": 0, "maximum": 5},
+     "reasoning": {"type": "string", "minLength": 10},
++    "unaddressed_high_finding_ids": {
++      "type": "array",
++      "items": {"type": "string"}
++    },
+     "evidence": {
+       "type": "array",
+       "items": {
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py
+index 28244cfc..0ff3bc4f 100644
+--- a/docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/run_factory.py
+@@ -95,28 +95,25 @@ from factory_cmd_judge import run_judge  # noqa: E402
+ from factory_cmd_implement import command_implement, command_parallel, _run_serial, _run_parallel  # noqa: E402
+ from factory_cmd_status import command_status, command_repair, command_doctor  # noqa: E402
+ from factory_invariants import run_invariant_checks, set_json_mode  # noqa: E402
++from factory_mutating import (  # noqa: E402
++    collect_mutating_command_names,
++    enumerate_subparser_handlers,
++    mutates_state,
++)
+ from factory_stages import stage_manifest_state  # noqa: E402  (re-imported for invariant check)
+ from workflow_utils import resolve_stored_path  # noqa: E402
+ 
+ 
+-# Commands that mutate workflow state — wrap them with the invariant post-check.
+-# `repair` and `closeout` both call into `command_checkpoint` and therefore
+-# mutate state; they were flagged missing by the spec round-2 edge-cases review.
+-_STATE_MUTATING_COMMANDS: frozenset[str] = frozenset(
+-    {
+-        "checkpoint",
+-        "judge",
+-        "reconcile",
+-        "auto-reconcile",
+-        "implement",
+-        "deliver",
+-        "block",
+-        "repair",
+-        "closeout",
+-        "discover",
+-        "parallel",
+-    }
+-)
++_MUTATING_CACHE: frozenset[str] | None = None
++
++
++def _get_mutating_commands() -> frozenset[str]:
++    global _MUTATING_CACHE
++    if _MUTATING_CACHE is None:
++        _MUTATING_CACHE = collect_mutating_command_names(
++            handler for _, handler in enumerate_subparser_handlers(build_parser())
++        )
++    return _MUTATING_CACHE
+ 
+ 
+ def _run_post_invariants(slug: str | None, command_name: str) -> None:
+@@ -142,6 +139,7 @@ def _run_post_invariants(slug: str | None, command_name: str) -> None:
+         return
+ 
+ 
++@mutates_state("init")
+ def command_init(args: argparse.Namespace) -> int:
+     if not args.path:
+         raise SystemExit(
+@@ -185,6 +183,7 @@ def command_init(args: argparse.Namespace) -> int:
+     return 0
+ 
+ 
++@mutates_state("reconcile")
+ def command_reconcile(args: argparse.Namespace) -> int:
+     ensure_sync()
+     plan_path = workflow_dir(args.slug) / "plan.md"
+@@ -199,6 +198,7 @@ def command_reconcile(args: argparse.Namespace) -> int:
+     return 0
+ 
+ 
++@mutates_state("auto-reconcile")
+ def command_auto_reconcile(args: argparse.Namespace) -> int:
+     """Auto-accept reviews with no HIGH or MEDIUM severity findings.
+ 
+@@ -268,6 +268,18 @@ def command_auto_reconcile(args: argparse.Namespace) -> int:
+     return 0
+ 
+ 
++@mutates_state("judge")
++def command_judge(args: argparse.Namespace) -> int:
++    return run_judge(
++        args.slug,
++        args.stage,
++        json_output=args.json,
++        prompt_override=args.prompt_override,
++        override_reason=args.override_reason,
++        migration_bypass=args.migration_bypass,
++    )
++
++
+ def build_parser() -> argparse.ArgumentParser:
+     parser = argparse.ArgumentParser()
+     subparsers = parser.add_subparsers(dest="command", required=True)
+@@ -318,6 +330,11 @@ def build_parser() -> argparse.ArgumentParser:
+     checkpoint_parser.add_argument("--allow-large-diff-rerun", action="store_true")
+     checkpoint_parser.add_argument("--fallback", action="store_true")
+     checkpoint_parser.add_argument("--json", action="store_true")
++    checkpoint_parser.add_argument(
++        "--keep-intermediates",
++        action="store_true",
++        help="Preserve review intermediate files for debugging instead of deleting them at checkpoint start",
++    )
+     checkpoint_parser.add_argument("--fast", action="store_true",
+         help="Fast path: skip prerequisites, run 1 Gemini + 1 Codex review. Requires --stage diff.")
+     checkpoint_parser.set_defaults(func=command_checkpoint)
+@@ -354,14 +371,7 @@ def build_parser() -> argparse.ArgumentParser:
+     judge_parser.add_argument("--prompt-override", type=Path)
+     judge_parser.add_argument("--override-reason")
+     judge_parser.add_argument("--migration-bypass", action="store_true")
+-    judge_parser.set_defaults(func=lambda args: run_judge(
+-        args.slug,
+-        args.stage,
+-        json_output=args.json,
+-        prompt_override=args.prompt_override,
+-        override_reason=args.override_reason,
+-        migration_bypass=args.migration_bypass,
+-    ))
++    judge_parser.set_defaults(func=command_judge)
+ 
+     discover_parser = subparsers.add_parser("discover")
+     discover_parser.add_argument("--slug", required=True)
+@@ -455,7 +465,7 @@ def main() -> int:
+         exit_code = args.func(args)
+         return exit_code
+     finally:
+-        if command_name in _STATE_MUTATING_COMMANDS:
++        if command_name in _get_mutating_commands():
+             _run_post_invariants(getattr(args, "slug", None), command_name)
+ 
+ 
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_completeness_veto.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_completeness_veto.py
+new file mode 100644
+index 00000000..48ab6d4d
+--- /dev/null
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_completeness_veto.py
+@@ -0,0 +1,401 @@
++import argparse
++import contextlib
++import importlib.util
++import io
++import json
++import subprocess
++import sys
++import tempfile
++import unittest
++from pathlib import Path
++from unittest.mock import patch
++
++
++SCRIPT_DIR = Path(__file__).resolve().parents[1]
++
++STATE_SPEC = importlib.util.spec_from_file_location("factory_state", SCRIPT_DIR / "factory_state.py")
++assert STATE_SPEC and STATE_SPEC.loader
++FACTORY_STATE = importlib.util.module_from_spec(STATE_SPEC)
++sys.modules[STATE_SPEC.name] = FACTORY_STATE
++STATE_SPEC.loader.exec_module(FACTORY_STATE)
++
++CHECKPOINT_SPEC = importlib.util.spec_from_file_location("factory_cmd_checkpoint", SCRIPT_DIR / "factory_cmd_checkpoint.py")
++assert CHECKPOINT_SPEC and CHECKPOINT_SPEC.loader
++CHECKPOINT = importlib.util.module_from_spec(CHECKPOINT_SPEC)
++sys.modules[CHECKPOINT_SPEC.name] = CHECKPOINT
++CHECKPOINT_SPEC.loader.exec_module(CHECKPOINT)
++
++DELIVER_SPEC = importlib.util.spec_from_file_location("factory_cmd_deliver", SCRIPT_DIR / "factory_cmd_deliver.py")
++assert DELIVER_SPEC and DELIVER_SPEC.loader
++DELIVER = importlib.util.module_from_spec(DELIVER_SPEC)
++sys.modules[DELIVER_SPEC.name] = DELIVER
++DELIVER_SPEC.loader.exec_module(DELIVER)
++
++JUDGE_SPEC = importlib.util.spec_from_file_location("factory_cmd_judge", SCRIPT_DIR / "factory_cmd_judge.py")
++assert JUDGE_SPEC and JUDGE_SPEC.loader
++JUDGE = importlib.util.module_from_spec(JUDGE_SPEC)
++sys.modules[JUDGE_SPEC.name] = JUDGE
++JUDGE_SPEC.loader.exec_module(JUDGE)
++
++JUDGE_PROMPTS_SPEC = importlib.util.spec_from_file_location("judge_prompts", SCRIPT_DIR / "judge_prompts.py")
++assert JUDGE_PROMPTS_SPEC and JUDGE_PROMPTS_SPEC.loader
++JUDGE_PROMPTS = importlib.util.module_from_spec(JUDGE_PROMPTS_SPEC)
++sys.modules[JUDGE_PROMPTS_SPEC.name] = JUDGE_PROMPTS
++JUDGE_PROMPTS_SPEC.loader.exec_module(JUDGE_PROMPTS)
++
++
++SLUG = "ff-completeness-veto"
++STAGE = "plan"
++_UNSET = object()
++
++
++def _base_state() -> dict:
++    state = FACTORY_STATE._default_workflow_state()
++    state["schema_version"] = 2
++    return state
++
++
++def _concern(concern_id: str, *, addressed: bool = False) -> dict:
++    return {
++        "id": concern_id,
++        "stage": STAGE,
++        "judge": "completeness",
++        "model": "gpt-5.4-mini",
++        "confidence": 4,
++        "reasoning": "Open HIGH concern for veto testing.",
++        "round_raised": 1,
++        "also_raised_in_round": [],
++        "addressed_at": 111 if addressed else None,
++        "addressed_by": "fixed" if addressed else None,
++        "deferred_reason": None,
++        "dismissed_reason": None,
++    }
++
++
++def _stage_state(*, concern: dict | None = None) -> dict:
++    concerns = [concern] if concern is not None else []
++    return {
++        "adversarial_rounds": 3,
++        "judge_rounds": 0,
++        "judge_verdicts": [],
++        "annotations": [],
++        "unresolved_concerns": concerns,
++        "adversarial_sha_history": ["sha-round-1", "sha-round-2", "sha-round-3"],
++        "initial_sha": "sha-round-1",
++    }
++
++
++def _write_state(tmpdir: str, stage_state: dict) -> None:
++    with patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", Path(tmpdir)):
++        root = FACTORY_STATE.workflow_dir(SLUG)
++        root.mkdir(parents=True, exist_ok=True)
++        (root / "plan.md").write_text("# Plan\n\nMeaningful content for veto tests.\n", encoding="utf-8")
++        (root / "spec.md").write_text("# Spec\n\nMeaningful content for veto tests.\n", encoding="utf-8")
++        (root / "tasks.md").write_text("# Tasks\n\nMeaningful content for veto tests.\n", encoding="utf-8")
++        reviews = FACTORY_STATE.reviews_dir(SLUG)
++        reviews.mkdir(parents=True, exist_ok=True)
++        state = _base_state()
++        state["stages"] = {STAGE: stage_state}
++        state[f"{STAGE}_adversarial_rounds"] = stage_state["adversarial_rounds"]
++        state[f"{STAGE}_judge_rounds"] = stage_state["judge_rounds"]
++        FACTORY_STATE.atomic_json_write(FACTORY_STATE.factory_state_path(SLUG), state)
++        for stage in ("spec", "plan", "tasks", "diff"):
++            manifest_path = FACTORY_STATE.checkpoint_manifest_path(SLUG, stage)
++            if not manifest_path.exists():
++                FACTORY_STATE.atomic_json_write(manifest_path, {"healthy": True})
++
++
++def _make_git_response(cmd: list[str]) -> subprocess.CompletedProcess:
++    if "rev-parse" in cmd and "HEAD" in cmd:
++        return subprocess.CompletedProcess(cmd, 0, stdout="head-sha\n", stderr="")
++    if "merge-base" in cmd:
++        return subprocess.CompletedProcess(cmd, 0, stdout="base-sha\n", stderr="")
++    if "diff" in cmd:
++        return subprocess.CompletedProcess(cmd, 0, stdout="diff --git a/plan.md b/plan.md\n", stderr="")
++    return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
++
++
++def _model_response(model: str, verdict: str, reasoning: str, ids: object = _UNSET) -> str:
++    payload = {
++        "judge": {
++            "gpt-5.4-mini": "completeness",
++            "gpt-5.4": "restatement",
++            "claude-sonnet-4-6": "implementation-risk",
++        }[model],
++        "model": model,
++        "verdict": verdict,
++        "confidence": 4,
++        "reasoning": reasoning,
++        "evidence": [
++            {"artifact": "plan.md", "section": "Findings", "quote": "supporting quote"},
++        ],
++        "timestamp": "2026-04-18T10:15:30Z",
++    }
++    if ids is not _UNSET:
++        payload["unaddressed_high_finding_ids"] = ids
++    return json.dumps(payload)
++
++
++def _run_judge(
++    tmpdir: str,
++    stage_state: dict | None,
++    responses: dict[str, tuple[str, str, object]],
++    *,
++    write_state: bool = True,
++) -> tuple[int, dict]:
++    if write_state:
++        assert stage_state is not None
++        _write_state(tmpdir, stage_state)
++    def side_effect(cmd, *args, **kwargs):
++        if cmd[0] == "git":
++            return _make_git_response(cmd)
++        if cmd[0] == "codex" or cmd[0] == "claude":
++            model = cmd[cmd.index("-m") + 1] if "-m" in cmd else cmd[cmd.index("--model") + 1]
++            verdict, reasoning, ids = responses[model]
++            return subprocess.CompletedProcess(cmd, 0, stdout=_model_response(model, verdict, reasoning, ids), stderr="")
++        raise AssertionError(f"unexpected command: {cmd}")
++
++    with patch.object(JUDGE.subprocess, "run", side_effect=side_effect), \
++        patch.object(JUDGE, "stage_manifest_state", side_effect=_fake_stage_manifest_state):
++        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
++            rc = JUDGE.run_judge(SLUG, STAGE)
++    state = json.loads(FACTORY_STATE.factory_state_path(SLUG).read_text(encoding="utf-8"))
++    return rc, state
++
++
++def _fake_stage_manifest_state(slug: str, stage: str) -> dict[str, object]:
++    return {
++        "artifact_path": FACTORY_STATE.workflow_dir(slug) / f"{stage}.md",
++        "artifact_exists": True,
++        "artifact_meaningful": True,
++        "manifest_path": FACTORY_STATE.reviews_dir(slug) / f"{stage}.checkpoint.json",
++        "manifest_exists": True,
++        "healthy": True,
++        "detail": "",
++    }
++
++
++class CompletenessVetoTests(unittest.TestCase):
++    def setUp(self) -> None:
++        self._tmpdir = tempfile.TemporaryDirectory()
++        self.addCleanup(self._tmpdir.cleanup)
++        self._root_patch = patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", Path(self._tmpdir.name))
++        self._root_patch.start()
++        self.addCleanup(self._root_patch.stop)
++
++    def test_prompt_and_schema_include_structured_high_ids(self) -> None:
++        system_prompt, user_prompt = JUDGE_PROMPTS.load_prompt("completeness")
++        self.assertIn("unaddressed_high_finding_ids", system_prompt)
++        self.assertIn("unaddressed_high_finding_ids", user_prompt)
++        schema = json.loads((SCRIPT_DIR / "judge_schema.json").read_text(encoding="utf-8"))
++        self.assertIn("unaddressed_high_finding_ids", schema["properties"])
++
++    def test_veto_overrides_majority_proceed_when_open_high_ids_are_structured(self) -> None:
++        concern = _concern("deadbeefcafe")
++        rc, state = _run_judge(
++            self._tmpdir.name,
++            _stage_state(concern=concern),
++            {
++                "gpt-5.4-mini": ("block", "completeness blocks unresolved HIGH", ["deadbeefcafe"]),
++                "gpt-5.4": ("proceed", "restatement ok", _UNSET),
++                "claude-sonnet-4-6": ("proceed", "implementation risk acceptable", _UNSET),
++            },
++        )
++        self.assertEqual(rc, 0)
++        self.assertEqual(state["stages"][STAGE]["judge_next_action"], "edit_and_rerun_judge")
++        self.assertEqual(state["last_action_result"]["next"], "edit_and_rerun_judge")
++        self.assertEqual(state["last_action_result"]["outcome"], "rejudge")
++
++    def test_veto_clears_after_concern_is_addressed(self) -> None:
++        concern = _concern("deadbeefcafe")
++        _write_state(self._tmpdir.name, _stage_state(concern=concern))
++        address_args = argparse.Namespace(
++            slug=SLUG,
++            stage=STAGE,
++            address="deadbeefcafe",
++            defer=None,
++            dismiss=None,
++            evidence="fixed in commit abc123",
++            reason=None,
++            artifact=None,
++            base_ref=None,
++            context=[],
++            path=[],
++            extra_gemini_lens=[],
++            sensitive=False,
++            large_structural=False,
++            performance_sensitive=False,
++            use_existing_artifact=False,
++            no_auto_context=True,
++            allow_dirty_path=[],
++            max_artifact_chars=50000,
++            max_context_chars=100000,
++            max_total_chars=180000,
++            gemini_timeout_seconds=120,
++            gemini_retries=1,
++            repair_timeout_seconds=300,
++            allow_large_diff_rerun=False,
++            fallback=False,
++            json=False,
++            fast=False,
++            keep_intermediates=False,
++        )
++        with patch.object(CHECKPOINT, "ensure_sync", return_value=None):
++            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
++                self.assertEqual(CHECKPOINT.command_checkpoint(address_args), 0)
++
++        rc, state = _run_judge(
++            self._tmpdir.name,
++            None,
++            {
++                "gpt-5.4-mini": ("block", "completeness blocked earlier concern", ["deadbeefcafe"]),
++                "gpt-5.4": ("proceed", "restatement ok", _UNSET),
++                "claude-sonnet-4-6": ("proceed", "implementation risk acceptable", _UNSET),
++            },
++            write_state=False,
++        )
++        self.assertEqual(rc, 0)
++        self.assertEqual(state["stages"][STAGE]["judge_next_action"], "advance")
++        self.assertEqual(state["last_action_result"]["outcome"], "advance")
++
++    def test_empty_structured_ids_with_no_open_concerns_falls_back_to_majority(self) -> None:
++        rc, state = _run_judge(
++            self._tmpdir.name,
++            _stage_state(),
++            {
++                "gpt-5.4-mini": ("block", "blocking for a different reason", []),
++                "gpt-5.4": ("proceed", "restatement ok", _UNSET),
++                "claude-sonnet-4-6": ("proceed", "implementation risk acceptable", _UNSET),
++            },
++        )
++        self.assertEqual(rc, 0)
++        self.assertEqual(state["stages"][STAGE]["judge_next_action"], "advance")
++        self.assertEqual(state["last_action_result"]["outcome"], "advance")
++
++    def test_fail_open_warns_when_ids_are_empty_and_concerns_remain(self) -> None:
++        concern = _concern("deadbeefcafe")
++        rc, state = _run_judge(
++            self._tmpdir.name,
++            _stage_state(concern=concern),
++            {
++                "gpt-5.4-mini": ("block", "blocked but forgot structured ids", []),
++                "gpt-5.4": ("proceed", "restatement ok", _UNSET),
++                "claude-sonnet-4-6": ("proceed", "implementation risk acceptable", _UNSET),
++            },
++        )
++        self.assertEqual(rc, 0)
++        warnings = state.get("invariant_warnings", [])
++        self.assertTrue(warnings)
++        self.assertEqual(warnings[-1]["command"], "judge")
++        self.assertEqual(warnings[-1]["stage"], STAGE)
++        self.assertIn("prompt may be malformed", warnings[-1]["detail"])
++        self.assertEqual(state["stages"][STAGE]["judge_next_action"], "advance")
++
++    def test_deliver_override_bypasses_veto(self) -> None:
++        concern = _concern("deadbeefcafe")
++        _write_state(self._tmpdir.name, _stage_state(concern=concern))
++
++        def gh_side_effect(cmd, *args, **kwargs):
++            if cmd[:3] == ["gh", "auth", "status"]:
++                return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
++            if cmd[:3] == ["gh", "pr", "edit"]:
++                return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
++            raise AssertionError(f"unexpected command: {cmd}")
++
++        args = argparse.Namespace(
++            slug=SLUG,
++            create_pr=False,
++            draft=False,
++            base=None,
++            title=None,
++            override_judges=True,
++            reason="ship with explicit operator review",
++            refresh=False,
++            resume_merge_wait=False,
++            watch_ci=False,
++            interval=10,
++            merge_when_green=False,
++            auto_merge=False,
++            dry_run=True,
++        )
++        with patch.object(DELIVER, "ensure_sync", return_value=None), \
++            patch.object(DELIVER, "command_path", return_value=True), \
++            patch.object(DELIVER, "verify_checkpoint_manifest", return_value=(True, "")), \
++            patch.object(DELIVER, "reconciliation_state", return_value=(True, "")), \
++            patch.object(DELIVER, "current_branch_name", return_value="feature/branch"), \
++            patch.object(DELIVER, "upstream_branch_name", return_value="origin/main"), \
++            patch.object(DELIVER, "git_output", return_value="head-sha"), \
++            patch.object(DELIVER, "commits_behind_upstream", return_value=0), \
++            patch.object(DELIVER, "current_pr_payload", return_value={
++                "number": 17,
++                "url": "https://example.test/pr/17",
++                "state": "OPEN",
++                "isDraft": False,
++                "headRefName": "feature/branch",
++                "headRefOid": "head-sha",
++                "baseRefName": "main",
++                "mergeable": "MERGEABLE",
++                "mergeStateStatus": "CLEAN",
++                "body": "",
++                "mergeCommit": None,
++                "mergedAt": "",
++            }), \
++            patch.object(DELIVER, "required_check_summary", return_value=("pass", [], "")), \
++            patch.object(DELIVER.subprocess, "run", side_effect=gh_side_effect), \
++            patch.dict(DELIVER.os.environ, {"USER": "test-operator"}, clear=False):
++            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
++                rc = DELIVER.command_deliver(args)
++
++        self.assertEqual(rc, 0)
++        state = json.loads(FACTORY_STATE.factory_state_path(SLUG).read_text(encoding="utf-8"))
++        self.assertIn("override", state)
++        self.assertEqual(state["override"]["reason"], "ship with explicit operator review")
++
++    def test_whitespace_override_reason_rejected_before_state_write(self) -> None:
++        concern = _concern("deadbeefcafe")
++        _write_state(self._tmpdir.name, _stage_state(concern=concern))
++        args = argparse.Namespace(
++            slug=SLUG,
++            create_pr=False,
++            draft=False,
++            base=None,
++            title=None,
++            override_judges=True,
++            reason="   ",
++            refresh=False,
++            resume_merge_wait=False,
++            watch_ci=False,
++            interval=10,
++            merge_when_green=False,
++            auto_merge=False,
++            dry_run=False,
++        )
++        with patch.object(DELIVER, "ensure_sync", return_value=None), \
++            patch.object(DELIVER, "command_path", return_value=True):
++            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()) as stderr:
++                with self.assertRaises(SystemExit) as ctx:
++                    DELIVER.command_deliver(args)
++
++        self.assertEqual(ctx.exception.code, 2)
++        self.assertIn("requires --reason", stderr.getvalue())
++        state = json.loads(FACTORY_STATE.factory_state_path(SLUG).read_text(encoding="utf-8"))
++        self.assertNotIn("override", state)
++
++    def test_legacy_missing_structured_ids_defaults_to_majority(self) -> None:
++        concern = _concern("deadbeefcafe", addressed=True)
++        rc, state = _run_judge(
++            self._tmpdir.name,
++            _stage_state(concern=concern),
++            {
++                "gpt-5.4-mini": ("block", "legacy block without structured ids", _UNSET),
++                "gpt-5.4": ("proceed", "restatement ok", _UNSET),
++                "claude-sonnet-4-6": ("proceed", "implementation risk acceptable", _UNSET),
++            },
++        )
++        self.assertEqual(rc, 0)
++        self.assertEqual(state["stages"][STAGE]["judge_next_action"], "advance")
++        self.assertEqual(state["last_action_result"]["outcome"], "advance")
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_mutating_registry.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_mutating_registry.py
+new file mode 100644
+index 00000000..c434f0e9
+--- /dev/null
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_mutating_registry.py
+@@ -0,0 +1,130 @@
++import argparse
++import importlib.util
++import sys
++import unittest
++from pathlib import Path
++
++
++SCRIPT_DIR = Path(__file__).resolve().parents[1]
++
++STATE_SPEC = importlib.util.spec_from_file_location("factory_state", SCRIPT_DIR / "factory_state.py")
++assert STATE_SPEC and STATE_SPEC.loader
++FACTORY_STATE = importlib.util.module_from_spec(STATE_SPEC)
++sys.modules[STATE_SPEC.name] = FACTORY_STATE
++STATE_SPEC.loader.exec_module(FACTORY_STATE)
++
++INVARIANTS_SPEC = importlib.util.spec_from_file_location("factory_invariants", SCRIPT_DIR / "factory_invariants.py")
++assert INVARIANTS_SPEC and INVARIANTS_SPEC.loader
++FACTORY_INVARIANTS = importlib.util.module_from_spec(INVARIANTS_SPEC)
++sys.modules[INVARIANTS_SPEC.name] = FACTORY_INVARIANTS
++INVARIANTS_SPEC.loader.exec_module(FACTORY_INVARIANTS)
++
++MUTATING_SPEC = importlib.util.spec_from_file_location("factory_mutating", SCRIPT_DIR / "factory_mutating.py")
++assert MUTATING_SPEC and MUTATING_SPEC.loader
++FACTORY_MUTATING = importlib.util.module_from_spec(MUTATING_SPEC)
++sys.modules[MUTATING_SPEC.name] = FACTORY_MUTATING
++MUTATING_SPEC.loader.exec_module(FACTORY_MUTATING)
++
++RUN_FACTORY_SPEC = importlib.util.spec_from_file_location("run_factory", SCRIPT_DIR / "run_factory.py")
++assert RUN_FACTORY_SPEC and RUN_FACTORY_SPEC.loader
++RUN_FACTORY = importlib.util.module_from_spec(RUN_FACTORY_SPEC)
++sys.modules[RUN_FACTORY_SPEC.name] = RUN_FACTORY
++RUN_FACTORY_SPEC.loader.exec_module(RUN_FACTORY)
++
++
++EXPECTED_SUBCOMMANDS = {
++    "init",
++    "doctor",
++    "status",
++    "repair",
++    "checkpoint",
++    "reconcile",
++    "auto-reconcile",
++    "block",
++    "judge",
++    "discover",
++    "parallel",
++    "implement",
++    "deliver",
++    "closeout",
++}
++
++EXPECTED_MUTATING = {
++    "init",
++    "checkpoint",
++    "judge",
++    "reconcile",
++    "auto-reconcile",
++    "implement",
++    "deliver",
++    "block",
++    "repair",
++    "closeout",
++    "discover",
++    "parallel",
++}
++
++EXPECTED_READONLY = {"status", "doctor"}
++
++
++def _assert_registry_is_classified(parser: argparse.ArgumentParser) -> None:
++    handlers = list(FACTORY_MUTATING.enumerate_subparser_handlers(parser))
++    handler_names = {name for name, _ in handlers}
++    assert handler_names == EXPECTED_SUBCOMMANDS, handler_names
++    for name, handler in handlers:
++        assert handler.__name__ != "<lambda>", f"{name} uses lambda handler"
++    mutating, readonly, undecorated = FACTORY_MUTATING.all_classified_names(handler for _, handler in handlers)
++    assert mutating == EXPECTED_MUTATING, mutating
++    assert readonly == EXPECTED_READONLY, readonly
++    assert undecorated == set(), undecorated
++
++
++class MutatingRegistryTests(unittest.TestCase):
++    def test_build_parser_handlers_are_decorated(self) -> None:
++        parser = RUN_FACTORY.build_parser()
++        _assert_registry_is_classified(parser)
++
++    def test_direct_decorator_attributes_are_present(self) -> None:
++        mutating_handlers = {
++            "init": RUN_FACTORY.command_init,
++            "checkpoint": RUN_FACTORY.command_checkpoint,
++            "judge": RUN_FACTORY.command_judge,
++            "reconcile": RUN_FACTORY.command_reconcile,
++            "auto-reconcile": RUN_FACTORY.command_auto_reconcile,
++            "implement": RUN_FACTORY.command_implement,
++            "deliver": RUN_FACTORY.command_deliver,
++            "block": RUN_FACTORY.command_block,
++            "repair": RUN_FACTORY.command_repair,
++            "closeout": RUN_FACTORY.command_closeout,
++            "discover": RUN_FACTORY.command_discover,
++            "parallel": RUN_FACTORY.command_parallel,
++        }
++        for name, handler in mutating_handlers.items():
++            self.assertEqual(getattr(handler, "__ff_mutates_state__"), name)
++
++        self.assertEqual(getattr(RUN_FACTORY.command_status, "__ff_readonly_command__"), "status")
++        self.assertEqual(getattr(RUN_FACTORY.command_doctor, "__ff_readonly_command__"), "doctor")
++
++    def test_fake_undecorated_handler_fails_with_subcommand_name(self) -> None:
++        parser = argparse.ArgumentParser()
++        subparsers = parser.add_subparsers(dest="command", required=True)
++        fake = subparsers.add_parser("fake")
++
++        def command_fake(args: argparse.Namespace) -> int:
++            return 0
++
++        fake.set_defaults(func=command_fake)
++
++        with self.assertRaises(AssertionError) as ctx:
++            _assert_registry_is_classified(parser)
++
++        self.assertIn("fake", str(ctx.exception))
++
++    def test_init_safety_does_not_flag_empty_stage_state(self) -> None:
++        state = FACTORY_STATE._default_workflow_state()
++        state["schema_version"] = 2
++        self.assertEqual(FACTORY_INVARIANTS.check_judge_advance_vs_recommended(state, "repair_spec_checkpoint"), [])
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_review_gc.py b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_review_gc.py
+new file mode 100644
+index 00000000..ee230201
+--- /dev/null
++++ b/docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_review_gc.py
+@@ -0,0 +1,234 @@
++import argparse
++import contextlib
++import importlib.util
++import io
++import json
++import subprocess
++import sys
++import tempfile
++import unittest
++from pathlib import Path
++from unittest.mock import patch
++
++
++SCRIPT_DIR = Path(__file__).resolve().parents[1]
++
++STATE_SPEC = importlib.util.spec_from_file_location("factory_state", SCRIPT_DIR / "factory_state.py")
++assert STATE_SPEC and STATE_SPEC.loader
++FACTORY_STATE = importlib.util.module_from_spec(STATE_SPEC)
++sys.modules[STATE_SPEC.name] = FACTORY_STATE
++STATE_SPEC.loader.exec_module(FACTORY_STATE)
++
++CHECKPOINT_SPEC = importlib.util.spec_from_file_location("factory_cmd_checkpoint", SCRIPT_DIR / "factory_cmd_checkpoint.py")
++assert CHECKPOINT_SPEC and CHECKPOINT_SPEC.loader
++CHECKPOINT = importlib.util.module_from_spec(CHECKPOINT_SPEC)
++sys.modules[CHECKPOINT_SPEC.name] = CHECKPOINT
++CHECKPOINT_SPEC.loader.exec_module(CHECKPOINT)
++
++
++SLUG = "ff-gc-checkpoint"
++
++
++def _base_state() -> dict:
++    state = FACTORY_STATE._default_workflow_state()
++    state["schema_version"] = 2
++    return state
++
++
++def _stage_state(adversarial_rounds: int = 2) -> dict:
++    return {
++        "adversarial_rounds": adversarial_rounds,
++        "judge_rounds": 0,
++        "judge_verdicts": [],
++        "annotations": [],
++        "unresolved_concerns": [],
++        "adversarial_sha_history": [],
++        "initial_sha": "",
++    }
++
++
++def _checkpoint_args(*, keep_intermediates: bool = False) -> argparse.Namespace:
++    return argparse.Namespace(
++        slug=SLUG,
++        stage="spec",
++        address=None,
++        defer=None,
++        dismiss=None,
++        evidence=None,
++        reason=None,
++        artifact=None,
++        base_ref=None,
++        context=[],
++        path=[],
++        extra_gemini_lens=[],
++        sensitive=False,
++        large_structural=False,
++        performance_sensitive=False,
++        use_existing_artifact=False,
++        no_auto_context=True,
++        allow_dirty_path=[],
++        max_artifact_chars=50000,
++        max_context_chars=100000,
++        max_total_chars=180000,
++        gemini_timeout_seconds=120,
++        gemini_retries=1,
++        repair_timeout_seconds=300,
++        allow_large_diff_rerun=False,
++        fallback=False,
++        json=False,
++        fast=False,
++        keep_intermediates=keep_intermediates,
++    )
++
++
++def _write_workflow(tmpdir: str, stage_state: dict, extra_files: dict[str, str] | None = None) -> Path:
++    with patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", Path(tmpdir)):
++        root = FACTORY_STATE.workflow_dir(SLUG)
++        reviews = FACTORY_STATE.reviews_dir(SLUG)
++        root.mkdir(parents=True, exist_ok=True)
++        reviews.mkdir(parents=True, exist_ok=True)
++        (root / "spec.md").write_text("# Spec\n\nMeaningful content for checkpoint GC tests.\n", encoding="utf-8")
++        state = _base_state()
++        state["stages"] = {"spec": stage_state}
++        state["spec_adversarial_rounds"] = stage_state["adversarial_rounds"]
++        state["spec_judge_rounds"] = stage_state["judge_rounds"]
++        FACTORY_STATE.atomic_json_write(FACTORY_STATE.factory_state_path(SLUG), state)
++        for relpath, contents in (extra_files or {}).items():
++            path = reviews / relpath
++            path.parent.mkdir(parents=True, exist_ok=True)
++            path.write_text(contents, encoding="utf-8")
++        return root
++
++
++def _make_stage_manifest_state(slug: str, stage: str) -> dict[str, object]:
++    return {
++        "artifact_path": FACTORY_STATE.workflow_dir(slug) / f"{stage}.md",
++        "artifact_exists": True,
++        "artifact_meaningful": True,
++        "manifest_path": FACTORY_STATE.reviews_dir(slug) / f"{stage}.checkpoint.json",
++        "manifest_exists": False,
++        "healthy": False,
++        "detail": "",
++    }
++
++
++class ReviewGcTests(unittest.TestCase):
++    def setUp(self) -> None:
++        self._tmpdir = tempfile.TemporaryDirectory()
++        self.addCleanup(self._tmpdir.cleanup)
++        self._root_patch = patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", Path(self._tmpdir.name))
++        self._root_patch.start()
++        self.addCleanup(self._root_patch.stop)
++
++    def _run_checkpoint(self, args: argparse.Namespace) -> tuple[int, str, str]:
++        fake_result = subprocess.CompletedProcess(args=["repair"], returncode=0, stdout="", stderr="")
++        with patch.object(CHECKPOINT, "ensure_sync", return_value=None), \
++            patch.object(CHECKPOINT, "prerequisite_failure", return_value=None), \
++            patch.object(CHECKPOINT, "revert_protected_files", return_value=[]), \
++            patch.object(CHECKPOINT, "stage_manifest_state", side_effect=_make_stage_manifest_state), \
++            patch.object(CHECKPOINT, "reconciliation_state", return_value=(True, "")), \
++            patch.object(CHECKPOINT, "_emit_next_action", return_value=None), \
++            patch.object(CHECKPOINT.subprocess, "run", return_value=fake_result):
++            stdout = io.StringIO()
++            stderr = io.StringIO()
++            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
++                rc = CHECKPOINT.command_checkpoint(args)
++        return rc, stdout.getvalue(), stderr.getvalue()
++
++    def test_gc_deletes_target_stage_intermediates_and_preserves_authoritative_files(self) -> None:
++        reviews = {
++            "spec.codex.feasibility-adversarial.review.md.narrowed.txt": "narrowed text",
++            "spec.codex.feasibility-adversarial.review.md.narrowed.json": "{}",
++            "spec.codex.feasibility-adversarial.review.md.raw.txt": "raw text",
++            "spec.codex.feasibility-adversarial.review.md.stdout.txt": "stdout",
++            "spec.codex.feasibility-adversarial.review.md.stderr.txt": "stderr",
++            "spec.codex.feasibility-adversarial.review.md": "# review",
++            "spec.checkpoint.json": "{}",
++        }
++        _write_workflow(self._tmpdir.name, _stage_state(), reviews)
++
++        rc, _, _ = self._run_checkpoint(_checkpoint_args())
++        self.assertEqual(rc, 0)
++
++        reviews_dir = FACTORY_STATE.reviews_dir(SLUG)
++        for relpath in (
++            "spec.codex.feasibility-adversarial.review.md.narrowed.txt",
++            "spec.codex.feasibility-adversarial.review.md.narrowed.json",
++            "spec.codex.feasibility-adversarial.review.md.raw.txt",
++            "spec.codex.feasibility-adversarial.review.md.stdout.txt",
++            "spec.codex.feasibility-adversarial.review.md.stderr.txt",
++        ):
++            self.assertFalse((reviews_dir / relpath).exists(), relpath)
++        self.assertTrue((reviews_dir / "spec.codex.feasibility-adversarial.review.md").exists())
++        self.assertTrue((reviews_dir / "spec.checkpoint.json").exists())
++
++    def test_keep_intermediates_suppresses_deletion(self) -> None:
++        reviews = {
++            "spec.codex.feasibility-adversarial.review.md.narrowed.txt": "narrowed text",
++            "spec.codex.feasibility-adversarial.review.md.raw.txt": "raw text",
++            "spec.codex.feasibility-adversarial.review.md.stdout.txt": "stdout",
++            "spec.codex.feasibility-adversarial.review.md.stderr.txt": "stderr",
++            "spec.codex.feasibility-adversarial.review.md.narrowed.json": "{}",
++        }
++        _write_workflow(self._tmpdir.name, _stage_state(), reviews)
++
++        rc, _, _ = self._run_checkpoint(_checkpoint_args(keep_intermediates=True))
++        self.assertEqual(rc, 0)
++
++        reviews_dir = FACTORY_STATE.reviews_dir(SLUG)
++        for relpath in reviews:
++            self.assertTrue((reviews_dir / relpath).exists(), relpath)
++
++    def test_gc_is_scoped_to_target_stage(self) -> None:
++        reviews = {
++            "spec.codex.feasibility-adversarial.review.md.raw.txt": "spec raw",
++            "diff.codex.feasibility-adversarial.review.md.raw.txt": "diff raw",
++            "diff.codex.feasibility-adversarial.review.md.stdout.txt": "diff stdout",
++        }
++        _write_workflow(self._tmpdir.name, _stage_state(), reviews)
++
++        rc, _, _ = self._run_checkpoint(_checkpoint_args())
++        self.assertEqual(rc, 0)
++
++        reviews_dir = FACTORY_STATE.reviews_dir(SLUG)
++        self.assertFalse((reviews_dir / "spec.codex.feasibility-adversarial.review.md.raw.txt").exists())
++        self.assertTrue((reviews_dir / "diff.codex.feasibility-adversarial.review.md.raw.txt").exists())
++        self.assertTrue((reviews_dir / "diff.codex.feasibility-adversarial.review.md.stdout.txt").exists())
++
++    def test_gc_runs_inside_state_lock(self) -> None:
++        _write_workflow(self._tmpdir.name, _stage_state(), {})
++        events: list[str] = []
++        original_with_locked_state = CHECKPOINT.with_locked_state
++
++        @contextlib.contextmanager
++        def traced_with_locked_state(slug: str):
++            events.append("enter")
++            with original_with_locked_state(slug) as state:
++                events.append("entered")
++                yield state
++            events.append("exit")
++
++        def gc_side_effect(slug: str, stage: str, keep: bool) -> list[Path]:
++            events.append("gc")
++            return []
++
++        fake_result = subprocess.CompletedProcess(args=["repair"], returncode=0, stdout="", stderr="")
++        with patch.object(CHECKPOINT, "ensure_sync", return_value=None), \
++            patch.object(CHECKPOINT, "prerequisite_failure", return_value=None), \
++            patch.object(CHECKPOINT, "revert_protected_files", return_value=[]), \
++            patch.object(CHECKPOINT, "stage_manifest_state", side_effect=_make_stage_manifest_state), \
++            patch.object(CHECKPOINT, "reconciliation_state", return_value=(True, "")), \
++            patch.object(CHECKPOINT, "_emit_next_action", return_value=None), \
++            patch.object(CHECKPOINT, "with_locked_state", side_effect=traced_with_locked_state), \
++            patch.object(CHECKPOINT, "_gc_review_intermediates", side_effect=gc_side_effect), \
++            patch.object(CHECKPOINT.subprocess, "run", return_value=fake_result):
++            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
++                rc = CHECKPOINT.command_checkpoint(_checkpoint_args())
++
++        self.assertEqual(rc, 0)
++        self.assertGreaterEqual(events.count("enter"), 2)
++        self.assertEqual(events[0:3], ["enter", "entered", "gc"])
++
++
++if __name__ == "__main__":
++    unittest.main()
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+## Findings
+- MEDIUM [UNVERIFIED]: The new completeness veto in [`factory_cmd_judge.py`](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py) is easy to bypass with a stale or mistyped HIGH ID. The override only fires when `unaddressed_high_finding_ids` exactly matches currently open concern IDs; any mismatch falls back to the normal majority path with only an invariant warning. That means the new gate fails open instead of failing closed when the model output is slightly wrong.
+- MEDIUM [UNVERIFIED]: The same path in [`factory_cmd_judge.py`](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_judge.py) does not filter open concerns by severity. It treats every unresolved concern as eligible for the new HIGH-finding veto, so if `unresolved_concerns` contains non-HIGH items, a completeness block that cites them can still force `edit_and_rerun_judge`. That broadens the new behavior beyond its stated scope and can stall runs for lower-severity issues.
+
+## Residual Risks
+- The new checkpoint GC in [`factory_cmd_checkpoint.py`](/Users/chrislaw/valuerank/.claude/worktrees/friendly-aryabhata-9efbf7/docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py) deletes intermediates before later checkpoint validation. If a checkpoint fails early, those debugging artifacts are still gone unless `--keep-intermediates` is set.
+- The GC only targets the specific suffixes added in this patch. If other intermediate filenames exist in practice, they will continue to accumulate.
+- The decorator-based mutating registry now depends on every state-changing command being tagged correctly. A future command added without the decorator will skip post-invariant checks until tests catch it.
+2026-04-24T21:02:56.996986Z ERROR codex_core::session: failed to record rollout items: thread 019dc14c-64ad-74a0-8184-9dec78eef3ff not found
+tokens used
+27,540

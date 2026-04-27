@@ -1,0 +1,6 @@
+## Findings
+- Medium [UNVERIFIED]: The new `pairedBatchCount` path trusts any completed run that has a non-empty `jobChoiceValueFirst` and a batch group key, but it does not verify that the run actually came from the paired-launch path. In [`cloud/apps/api/src/graphql/queries/domain-coverage.ts`](/Users/chrislaw/valuerank/.claude/worktrees/busy-tesla-89e817/cloud/apps/api/src/graphql/queries/domain-coverage.ts#L295) the resolver buckets runs purely from `run.config`; in [`cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts`](/Users/chrislaw/valuerank/.claude/worktrees/busy-tesla-89e817/cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts#L165) `getCoverageDirection()` accepts any trimmed string. If a future caller, backfill, or malformed run stamps those fields onto a non-paired launch, the cell will count it as pairable data and overstate `pairedBatchCount`.
+
+## Residual Risks
+- Legacy completed runs that predate `jobChoiceValueFirst` will still fall out of the new directional count. That can make older cells drop to `0` paired batches even while `batchCount` stays non-zero.
+- The `>2` direction-token fallback is still heuristic. It warns, but it does not fail the query, so corrupted data can still surface as a plausible-looking number instead of a hard error.

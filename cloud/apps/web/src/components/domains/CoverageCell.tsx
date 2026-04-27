@@ -4,6 +4,7 @@ import { ChevronRight, FileSearch } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/Popover';
 import { cn } from '../../lib/utils';
 import { VALUE_LABELS } from './domainAnalysisData';
+import { computeLaggingDirection } from '../../utils/coverageGap';
 
 type CoverageModelBreakdownItem = {
   modelId: string;
@@ -16,43 +17,88 @@ type CoverageCellProps = {
   valueB: string;
   batchCount: number;
   pairedBatchCount: number;
+  orphanedBatchCount: number;
+  aFirstBatchCount: number;
+  bFirstBatchCount: number;
+  pairedConditionCount: number;
+  orphanedConditionCount: number;
+  directionalCoverage: Array<{
+    direction: string;
+    completeBatches: number;
+    filledSlots: number;
+    leftoverConditions: number;
+    definitionIds: string[];
+  }>;
+  contributingDefinitionIds: string[];
   incompleteBatchCount?: number | null;
   definitionId: string | null;
   aggregateRunId: string | null;
-  minTrialCount?: number | null;
-  maxTrialCount?: number | null;
   modelBreakdown?: CoverageModelBreakdownItem[] | null;
 };
 
-export function CoverageCell({
-  valueA,
-  valueB,
-  batchCount,
-  pairedBatchCount,
-  incompleteBatchCount,
-  definitionId,
-  aggregateRunId,
-  minTrialCount,
-  maxTrialCount,
-  modelBreakdown,
-}: CoverageCellProps) {
+function formatDirectionLabel(direction: string): string {
+  const label = VALUE_LABELS[direction as keyof typeof VALUE_LABELS] ?? direction;
+  return `${label}-first`;
+}
+
+function formatCountWord(count: number, singular: string, plural = `${singular}s`): string {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+export function CoverageCell(props: CoverageCellProps) {
+  const {
+    valueA,
+    valueB,
+    batchCount,
+    pairedBatchCount,
+    orphanedBatchCount,
+    aFirstBatchCount,
+    bFirstBatchCount,
+    pairedConditionCount: _pairedConditionCount,
+    orphanedConditionCount,
+    directionalCoverage,
+    contributingDefinitionIds,
+    incompleteBatchCount,
+    definitionId,
+    aggregateRunId,
+    modelBreakdown,
+  } = props;
   const [isOpen, setIsOpen] = useState(false);
   const isDiagonal = valueA === valueB;
   const hasVignette = definitionId !== null;
   const hasIncompleteBatches = (incompleteBatchCount ?? 0) > 0;
-  const hasPerModelData = minTrialCount !== null && minTrialCount !== undefined;
-  const displayCount = hasPerModelData ? minTrialCount : (pairedBatchCount > 0 ? pairedBatchCount : batchCount);
-  const hasMismatch = hasPerModelData && maxTrialCount !== null && maxTrialCount !== undefined && minTrialCount < maxTrialCount;
+  const displayCount = pairedBatchCount > 0 ? pairedBatchCount : batchCount;
+  const coverageByDirection = new Map(
+    directionalCoverage.map((coverage) => [coverage.direction, coverage] as const),
+  );
+  const directionA = coverageByDirection.get(valueA);
+  const directionB = coverageByDirection.get(valueB);
+  const filledSlotsA = directionA?.filledSlots ?? 0;
+  const filledSlotsB = directionB?.filledSlots ?? 0;
+  const hasImbalance =
+    aFirstBatchCount !== bFirstBatchCount ||
+    filledSlotsA !== filledSlotsB ||
+    orphanedBatchCount > 0 ||
+    orphanedConditionCount > 0;
+  const laggingDirection = hasImbalance
+    ? computeLaggingDirection({
+        valueA,
+        valueB,
+        definitionId,
+        directionalCoverage,
+      })
+    : null;
+  const launchDefinitionId = laggingDirection?.definitionId ?? definitionId;
+  const directionALabel = formatDirectionLabel(valueA);
+  const directionBLabel = formatDirectionLabel(valueB);
   const visibleLabel = isDiagonal || !hasVignette ? '—' : displayCount.toLocaleString();
   const xLabel = VALUE_LABELS[valueB as keyof typeof VALUE_LABELS] ?? valueB;
   const yLabel = VALUE_LABELS[valueA as keyof typeof VALUE_LABELS] ?? valueA;
-  const batchLabel = hasPerModelData
-    ? (displayCount === 1 ? 'trial (min)' : 'trials (min)')
-    : (pairedBatchCount > 0
-      ? (displayCount === 1 ? 'paired batch' : 'paired batches')
-      : (displayCount === 1 ? 'batch' : 'batches'));
+  const batchLabel = pairedBatchCount > 0
+    ? (displayCount === 1 ? 'paired batch' : 'paired batches')
+    : (displayCount === 1 ? 'batch' : 'batches');
 
-  const countForColor = hasPerModelData ? minTrialCount : batchCount;
+  const countForColor = displayCount;
 
   let bgColorClass = 'bg-gray-50';
   if (isDiagonal) {
@@ -68,9 +114,24 @@ export function CoverageCell({
     bgColorClass = 'bg-emerald-500 hover:bg-emerald-600 transition-colors text-white';
   }
 
-  const tooltipBreakdown = modelBreakdown != null && modelBreakdown.length > 0
-    ? modelBreakdown.map((b) => `${b.label}: ${b.trialCount} trial${b.trialCount === 1 ? '' : 's'}`).join('\n')
-    : undefined;
+  let tooltipBreakdown: string | undefined;
+  if (hasImbalance) {
+    const directionLines = [
+      `${directionALabel}: ${formatCountWord(aFirstBatchCount, 'batch', 'batches')}, ${formatCountWord(filledSlotsA, 'condition', 'conditions')}`,
+      `${directionBLabel}: ${formatCountWord(bFirstBatchCount, 'batch', 'batches')}, ${formatCountWord(filledSlotsB, 'condition', 'conditions')}`,
+    ];
+    if (orphanedBatchCount > 0) {
+      directionLines.push(formatCountWord(orphanedBatchCount, 'unpaired directional batch', 'unpaired directional batches'));
+    }
+    if (orphanedConditionCount > 0) {
+      directionLines.push(formatCountWord(orphanedConditionCount, 'unpaired condition', 'unpaired conditions'));
+    }
+    tooltipBreakdown = directionLines.join('\n');
+  } else if (modelBreakdown != null && modelBreakdown.length > 0) {
+    tooltipBreakdown = modelBreakdown
+      .map((b) => `${b.label}: ${b.trialCount} trial${b.trialCount === 1 ? '' : 's'}`)
+      .join('\n');
+  }
 
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
@@ -85,11 +146,13 @@ export function CoverageCell({
               ? 'Not applicable'
               : !hasVignette
                 ? `${xLabel} versus ${yLabel}: no vignette`
-                : `${xLabel} versus ${yLabel}: ${displayCount} ${batchLabel}`
+                : hasImbalance
+                  ? `${xLabel} versus ${yLabel}: ${displayCount} ${batchLabel}; ${directionALabel} ${aFirstBatchCount} batches, ${filledSlotsA} conditions; ${directionBLabel} ${bFirstBatchCount} batches, ${filledSlotsB} conditions`
+                  : `${xLabel} versus ${yLabel}: ${displayCount} ${batchLabel}`
           }
           className={cn(
             'relative w-full h-full min-h-[48px] p-2 flex flex-col items-center justify-center text-sm font-medium border rounded-none focus:ring-0 focus:ring-offset-0',
-            hasMismatch ? 'border-orange-400 border-2' : 'border-gray-100',
+            hasImbalance ? 'border-orange-400 border-2' : 'border-gray-100',
             bgColorClass,
             isDiagonal && 'cursor-not-allowed text-transparent font-normal',
             !isDiagonal && !hasVignette && 'text-gray-500 cursor-pointer hover:bg-gray-100',
@@ -98,8 +161,11 @@ export function CoverageCell({
           )}
         >
           {visibleLabel}
-          {hasMismatch && (
-            <span className="text-[10px] text-orange-600 font-normal leading-none mt-0.5" aria-label="trial count mismatch across models">
+          {hasImbalance && (
+            <span
+              className="text-[10px] text-orange-600 font-normal leading-none mt-0.5"
+              aria-label="direction imbalance across batches"
+            >
               ⚠
             </span>
           )}
@@ -113,7 +179,7 @@ export function CoverageCell({
       </PopoverTrigger>
       {!isDiagonal && (
         <PopoverContent
-          className="w-64 p-0 shadow-lg border-gray-200"
+          className="w-72 p-0 shadow-lg border-gray-200"
           align="center"
           sideOffset={5}
         >
@@ -133,14 +199,41 @@ export function CoverageCell({
                   />
                   {displayCount} {batchLabel}
                 </div>
+                {hasImbalance && (
+                  <div className="mt-2 rounded border border-orange-200 bg-orange-50 px-2 py-1.5 text-xs text-orange-900">
+                    <div className="font-medium text-orange-800">Direction imbalance</div>
+                    <div className="mt-2 grid grid-cols-[1fr_auto_auto] gap-x-3 gap-y-1">
+                      <div />
+                      <div className="text-right font-medium text-orange-700">Batches</div>
+                      <div className="text-right font-medium text-orange-700">Conditions</div>
+                      <div className="font-medium text-orange-900">{directionALabel}</div>
+                      <div className="text-right font-medium">{aFirstBatchCount}</div>
+                      <div className="text-right font-medium">{filledSlotsA}</div>
+                      <div className="font-medium text-orange-900">{directionBLabel}</div>
+                      <div className="text-right font-medium">{bFirstBatchCount}</div>
+                      <div className="text-right font-medium">{filledSlotsB}</div>
+                    </div>
+                    {orphanedBatchCount > 0 && (
+                      <div className="mt-2 text-[11px] text-orange-700">
+                        {orphanedBatchCount} unpaired directional batch{orphanedBatchCount === 1 ? '' : 'es'}
+                      </div>
+                    )}
+                    {orphanedConditionCount > 0 && (
+                      <div className="mt-1 text-[11px] text-orange-700">
+                        {orphanedConditionCount} unpaired condition{orphanedConditionCount === 1 ? '' : 's'}
+                      </div>
+                    )}
+                  </div>
+                )}
                 {modelBreakdown != null && modelBreakdown.length > 0 && (
                   <div className="mt-2 space-y-0.5">
+                    <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-gray-500">
+                      Transcripts
+                    </div>
                     {modelBreakdown.map((b) => (
                       <div key={b.modelId} className="flex items-center justify-between text-xs text-gray-600">
                         <span className="truncate mr-2">{b.label}</span>
-                        <span className={cn('font-medium', hasMismatch && b.trialCount === minTrialCount ? 'text-orange-600' : '')}>
-                          {b.trialCount}
-                        </span>
+                        <span className="font-medium">{b.trialCount}</span>
                       </div>
                     ))}
                   </div>
@@ -167,6 +260,54 @@ export function CoverageCell({
                 <span className="flex items-center">
                   <FileSearch className="w-4 h-4 mr-2 text-gray-400" />
                   View Vignette Analysis
+                </span>
+                <ChevronRight className="w-4 h-4 text-gray-400" />
+              </Link>
+            )}
+
+            {/*
+              Match Pair Counts gate: `hasImbalance` already excludes cells whose
+              data is purely aggregate (aggregate runs do not contribute to
+              orphanedBatchCount or orphanedConditionCount per the resolver).
+              An earlier draft also gated on `aggregateRunId === null`, but the
+              resolver sets that field from `latestAggregateRunIdByDefinitionId
+              ?? latestMatchingRunIdByDefinitionId`, so it is non-null on every
+              cell that has any completed run — making the gate hide the CTA
+              on virtually every cell with real data. The gate is removed.
+            */}
+            {hasVignette && hasImbalance && launchDefinitionId !== null && (
+              <Link
+                to={`/definitions/${launchDefinitionId}/start-paired-batch`}
+                state={{
+                  returnLabel: 'Back to Value coverage',
+                  returnTo: `${window.location.pathname}${window.location.search}`,
+                  matchPairCounts: {
+                    pairKey: `${valueA.toLowerCase()}::${valueB.toLowerCase()}`,
+                    valueA,
+                    valueB,
+                    contributingDefinitionIds: contributingDefinitionIds.slice().sort((left, right) => left.localeCompare(right)),
+                    launchDefinitionId,
+                    laggingDirection: laggingDirection?.direction ?? (filledSlotsA <= filledSlotsB ? valueA : valueB),
+                    before: {
+                      directionA: {
+                        name: valueA,
+                        batches: aFirstBatchCount,
+                        conditions: filledSlotsA,
+                      },
+                      directionB: {
+                        name: valueB,
+                        batches: bFirstBatchCount,
+                        conditions: filledSlotsB,
+                      },
+                    },
+                  },
+                }}
+                className="flex items-center justify-between px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-sm w-full text-left"
+                onClick={() => setIsOpen(false)}
+              >
+                <span className="flex items-center">
+                  <PlayIcon className="w-4 h-4 mr-2 text-orange-600" />
+                  Match Pair Counts
                 </span>
                 <ChevronRight className="w-4 h-4 text-gray-400" />
               </Link>

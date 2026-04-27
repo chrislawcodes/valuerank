@@ -113,7 +113,7 @@ Avoid confusion:
 
 ### `Run`
 
-A run is a saved record of a model evaluation or launch. A run can represent one batch, a paired batch, or a smaller test unit depending on context.
+A run is a saved record of a model evaluation or launch. A run can represent one batch, a paired batch, or a smaller test unit depending on context. A run that is fully complete — every selected model has answered every planned condition at every sample index — is also a `Batch` (see below). A run that exists but is missing transcripts in any planned slot is an `Incomplete Batch`.
 
 Example:
 
@@ -160,20 +160,39 @@ Avoid confusion:
 
 ### `Batch`
 
-A batch is one complete pass where a model answers every planned condition for a vignette once.
+A batch is one complete run: every selected model has answered every planned condition for the vignette at every sample index. A run that is missing any expected transcript slot is an `Incomplete Batch` and does not contribute to batch counts.
 
 Example:
 
-- “Batch 1 means the model answered all 25 conditions in that vignette once.”
+- “Batch 1 means all 8 selected models answered every condition in that vignette.”
 
 Avoid confusion:
 
+- a batch is a whole run, not one model's pass through the run
 - a batch contains many trials
-- use `batch` for the full pass, not as another word for trial
+- `samplesPerScenario` controls how many trials each slot gets — it does not multiply the batch count
+- extra transcripts in a slot (worker retries, races) do not break completeness; only missing slots do
+
+### `Incomplete Batch`
+
+An incomplete batch is a run that expects transcripts but is missing one or more (model × scenario × sample-index) slots. Tracked separately as `incompleteBatchCount`. Does not contribute to `batchCount`.
+
+A broken pair (one direction complete, one incomplete) contributes one `Incomplete Batch` from its abandoned side.
+
+Example:
+
+- “This run shows up under Incomplete Batches because deepseek-reasoner failed on conditions 18 and 22.”
+
+Avoid confusion:
+
+- an incomplete batch is a real run with real (partial) data — not a launch failure
+- a run that has no expected transcripts (e.g., never started) is neither a batch nor an incomplete batch
 
 ### `Paired Batch`
 
-A paired batch is a set of two batches that use two vignettes in reverse order.
+A paired batch is counted whenever there is one complete A-first run and one complete B-first run that can be paired off. The Domain Overview shows `min(complete A-first, complete B-first)` for each value pair: when both directions have the same number of completed runs, that is the paired-batch count; when one direction has more, the surplus is unpaired and is **not** counted as a paired batch (the unpaired complete run still appears in `Batch` count).
+
+A paired launch where one companion finishes and the other does not is a **broken pair**: the complete companion contributes 1 to `Batch`, the incomplete companion contributes 1 to `Incomplete Batch`, and the launch contributes 0 to `Paired Batch`.
 
 Example:
 
@@ -183,6 +202,10 @@ Avoid confusion:
 
 - a paired batch is two batches together, not one batch
 - use `paired batch` when you mean the matched set, not either side by itself
+
+**Note on terminology overlap:** "paired batch" is also used in the launch path to describe two runs that share a `jobChoiceBatchGroupId` because they were launched together (e.g., the anomaly detector at `cloud/apps/api/src/services/run/anomaly-detection.ts` finds "sibling runs" by group ID). That is the *launch-time* concept of a paired batch — runs that were spun up as a co-launched pair. The display-time concept above counts pairable analysis-ready data and does not require runs to share a launch group. Both senses are valid in their own contexts; the launch-time grouping still drives anomaly detection while the display-time count drives the Domain Overview hub.
+
+**Note on metric divergence within a cell:** within a single Domain Overview cell, `Paired Batch` (display-time) and the per-model trial counts operate on different subsets of the underlying runs. The trial-count path picks one survivor per `jobChoiceBatchGroupId` (the launch-time concept), so for a healthy paired launch with both companions complete, only one companion's transcripts feed the trial counts. The paired-batch count picks both. The two metrics are correct in their own terms but are not directly comparable arithmetically (e.g., 1 paired batch does not imply 2× the trial-count of an unpaired complete run).
 
 ### `Transcript`
 
@@ -269,14 +292,16 @@ Avoid confusion:
 
 ### `winRate`
 
-`winRate` is the fraction of vignettes where a model prioritized a value out of all vignettes where a decision was recorded for that value. It uses `prioritized / (prioritized + deprioritized + neutral)` and returns `0.5` when there is no data at all. In code version `1.2.0`, this denominator includes neutrals.
+`winRate` is the fraction of decisions where a model prioritized a value, computed as `prioritized / (prioritized + deprioritized + neutral)`. When a value has zero decisions, `winRate` is `null` — meaning no data, not a neutral result. A value of `0.5` means the model genuinely split evenly across decisions. In code version `1.2.0`, the denominator includes neutrals.
 
 Example:
 
 - “The model’s `winRate` for Achievement was 0.73 after neutrals were included in the denominator.”
+- “A `winRate` of `null` means no trials recorded a decision for that value — it shows as `—` in the UI.”
 
 Avoid confusion:
 
+- `null` means no data; `0.5` means a genuinely even split — these are distinct states
 - `winRate` is not the same as the share of only decisive responses
 - it is a rate for one `(model, value)` pair, not a whole run or vignette
 

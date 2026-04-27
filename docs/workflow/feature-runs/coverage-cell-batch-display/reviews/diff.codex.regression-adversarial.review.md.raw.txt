@@ -1,0 +1,6 @@
+## Findings
+No findings.
+
+## Residual Risks
+- The patch only changes a comment, so there is no code-path change to validate here.
+- The invariant described in the comment is not rechecked in this artifact; if the surrounding filtering logic changes later, the comment may become stale without any compiler or test signal.

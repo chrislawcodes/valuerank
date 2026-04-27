@@ -1,0 +1,40 @@
+---
+reviewer: "codex"
+lens: "architecture-adversarial"
+stage: "plan"
+artifact_path: "docs/workflow/feature-runs/paired-batch-count-min-of-two/plan.md"
+artifact_sha256: "09ce9caf74c2be113ccf61d46315da4b3532678d99bb01b04ea17b8913833b56"
+repo_root: "."
+git_head_sha: "2cd6635c7bf0a0007e9f2c340a95e21779560a8b"
+git_base_ref: "origin/main"
+git_base_sha: "2cd6635c7bf0a0007e9f2c340a95e21779560a8b"
+generation_method: "codex-runner"
+resolution_status: "accepted"
+resolution_note: "No actionable findings detected — auto-accepted"
+raw_output_path: "docs/workflow/feature-runs/paired-batch-count-min-of-two/reviews/plan.codex.architecture-adversarial.review.md.raw.txt"
+narrowed_artifact_path: ""
+narrowed_artifact_sha256: ""
+coverage_status: "full"
+coverage_note: ""
+---
+
+# Review: plan architecture-adversarial
+
+## Findings
+
+- `MEDIUM` [CODE-CONFIRMED] The plan changes the meaning of `pairedBatchCount` on a public GraphQL field without any versioning or compatibility layer, while the web app already consumes that field in the coverage matrix and in analysis evidence text. That is a silent contract break for downstream readers, not just an internal refactor. Evidence: [domain-coverage-gql-types.ts](/Users/chrislaw/valuerank/.claude/worktrees/busy-tesla-89e817/cloud/apps/api/src/graphql/queries/domain-coverage-gql-types.ts#L83), [CoverageCell.tsx](/Users/chrislaw/valuerank/.claude/worktrees/busy-tesla-89e817/cloud/apps/web/src/components/domains/CoverageCell.tsx#L163), [useAnalysisState.ts](/Users/chrislaw/valuerank/.claude/worktrees/busy-tesla-89e817/cloud/apps/web/src/components/analysis/useAnalysisState.ts#L208).
+- `MEDIUM` [CODE-CONFIRMED] The new count would trust `config.jobChoiceValueFirst` as a free-form string, but `startRun` accepts arbitrary `configExtras` after only stripping `isFinalTrial`, so a non-paired or future caller can inject that field and contaminate coverage. The plan does not add a launch-mode or provenance gate, so the metric is no longer anchored to the paired-batch path. Evidence: [start.ts](/Users/chrislaw/valuerank/.claude/worktrees/busy-tesla-89e817/cloud/apps/api/src/services/run/start.ts#L213), [plan-slots.ts](/Users/chrislaw/valuerank/.claude/worktrees/busy-tesla-89e817/cloud/apps/api/src/graphql/mutations/domain/launch/plan-slots.ts#L126), [execute-runs.ts](/Users/chrislaw/valuerank/.claude/worktrees/busy-tesla-89e817/cloud/apps/api/src/graphql/mutations/domain/launch/execute-runs.ts#L140).
+
+## Residual Risks
+
+- Historical completed runs that do not have `jobChoiceValueFirst` will fall out of the new paired count entirely. The plan acknowledges this, but there is no backfill or migration step in the artifact.
+- External consumers outside this repo will not get a schema signal that `pairedBatchCount` changed meaning, so cached reports or third-party tooling can silently misread the new number even if the web app is updated.
+
+## Runner Stats
+- total_input=0
+- total_output=0
+- total_tokens=0
+
+## Resolution
+- status: accepted
+- note: No actionable findings detected — auto-accepted

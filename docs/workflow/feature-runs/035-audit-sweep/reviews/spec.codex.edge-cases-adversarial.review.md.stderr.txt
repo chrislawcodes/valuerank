@@ -1,0 +1,4237 @@
+Reading additional input from stdin...
+OpenAI Codex v0.124.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: medium
+reasoning summaries: none
+session id: 019dc007-cbdb-73a3-9cc2-00de92c2f1b1
+--------
+user
+Review this spec artifact using a edge-cases-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+Code context files are provided above. Before asserting any finding, check whether it is confirmed or refuted by the provided code. Each finding must include an evidence tag:
+  [CODE-CONFIRMED] — the code directly supports this finding
+  [CODE-REFUTED] — the code contradicts this finding (do not include as a finding)
+  [UNVERIFIED] — relevant code was not provided; treat as lower confidence
+Only assign HIGH severity to CODE-CONFIRMED findings.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Context: CLAUDE.md
+# Cloud ValueRank - Project Constitution
+
+This document defines the cloud-specific coding standards and push checks for ValueRank.
+
+Repo-wide agent behavior, delivery paths, terminology policy, and memory policy live in the repo-root `AGENTS.md`.
+
+## Push And PR Checks
+
+- Use Pull Requests for changes that will land on `main`.
+- Ask the human before running `git push`.
+- Run the Preflight Gate before any `git push` or PR creation.
+
+## Workflow State
+
+- For Feature Factory, use the repo-owned workflow docs and `docs/workflow/feature-runs/<slug>/state.json` as the source of truth.
+- Repo-root `MEMORY.md` is a persistent reference index. Keep it lean — no shipped feature history or long-term archives.
+
+### Pre-push Hook (Preferred)
+
+The pre-push hook automatically detects which workspaces changed and runs lint, test, and build only for those. Install once:
+
+```bash
+./scripts/hooks/install-hooks.sh
+```
+
+The hook compares your branch to `origin/main` and respects the dependency graph:
+- `shared` changes → checks shared, db, api, web
+- `db` changes → checks db, api
+- `api` changes → checks api only
+- `web` changes → checks web only
+- Root config changes (`turbo.json`, `package.json`, etc.) → checks everything
+
+### Manual Preflight (If Hook Not Installed)
+
+Run from `cloud/` for the workspaces you changed:
+
+```bash
+# Always run for the workspaces you touched:
+npx turbo lint --filter=@valuerank/<workspace>
+npx turbo test --filter=@valuerank/<workspace>
+npx turbo build --filter=@valuerank/<workspace>
+
+# If you touched db or api, also set up the test database first:
+npm run db:test:setup
+```
+
+**Hard rules:**
+- Do not push if any preflight command fails.
+- Do not use `git push --no-verify` except emergency hotfix with explicit human approval.
+- If unrelated local files break checks, validate in a clean worktree from `origin/main` before push.
+- Every PR must include a `Validation` section listing exact commands run and pass/fail results.
+
+---
+
+## Core Principles
+
+1. **Small, focused files** - Easy to read, test, and maintain
+2. **Type safety** - Catch errors at compile time, not runtime
+3. **Test coverage** - Confidence to refactor and deploy
+4. **Observable** - Debug issues in production without guessing
+
+---
+
+## File Structure
+
+Enforced mechanically — do not treat these as soft guidance.
+
+| Check | Enforced by | Thresholds |
+|-------|-------------|------------|
+| File size | `cloud/scripts/check-file-sizes.sh` (CI + pre-push), ESLint `max-lines` (editor) | prod: warn 400 / error 700 — tests: warn 800 / error 1200 |
+| Placeholder filenames | `cloud/scripts/check-filenames.sh` | bans `-helper(s).ts`, `-util(s).ts`, `-misc.ts`, `-types-detail.ts` |
+| Trivial re-export barrels | `cloud/scripts/check-barrels.sh` | rejects new `index.ts` < 15 lines that is export-only |
+| Known fragmented clusters | `cloud/scripts/check-tech-debt.sh` | informational reminders; see `docs/tech-debt/file-structure.md` |
+
+Grandfathered files live in the allowlists next to each script. See
+[`docs/tech-debt/file-structure.md`](../docs/tech-debt/file-structure.md)
+for what to collapse when touching the area.
+
+Guidance when the size warning fires: do not split just to silence it. Ask
+whether the file has one responsibility. If yes, keep it. If no, split by
+responsibility and give the new module a domain-meaningful name.
+
+---
+
+## TypeScript Standards
+
+### No `any` Types
+
+Never use `any`. Use the actual type, or `unknown` if the type is truly dynamic:
+
+```typescript
+function parseJson(input: string): unknown { ... }
+function handleError(err: unknown): void { ... }
+```
+
+### Strict Mode Required
+
+`tsconfig.json` must have `strict: true`, `noImplicitAny: true`, `strictNullChecks: true`, `noUncheckedIndexedAccess: true`.
+
+### Strict Boolean Checks
+
+Use explicit checks for `null` and `undefined` — do not rely on truthiness for numbers or strings (linting error):
+
+```typescript
+// Bad - fails strict-boolean-expressions
+if (!value) { ... }
+
+// Good
+if (value != null) { ... }
+if (value === 0) { ... }
+```
+
+### Types vs Interfaces
+
+Use `type` for data shapes; use `interface` for service contracts.
+
+---
+
+## Testing Requirements
+
+### Coverage Targets
+
+| Metric | Minimum | Target |
+|--------|---------|--------|
+| Line coverage | 80% | 90% |
+| Branch coverage | 75% | 85% |
+| Function coverage | 80% | 90% |
+
+### What to Test
+
+- **Always test**: Business logic, data transformations, edge cases
+- **Mock**: Database, external APIs, LLM providers
+- **Integration tests**: API routes with test database
+- **Skip**: Simple getters, direct ORM pass-through
+
+### Required Environment Variables for Tests
+
+```bash
+JWT_SECRET="test-secret-that-is-at-least-32-characters-long"
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank_test"
+```
+
+Setup test DB: `npm run db:test:setup` (from `cloud/`). Reset on data pollution: `npm run db:test:reset`.
+
+---
+
+## Logging Standards
+
+All logging goes through the centralized logger — never use `console.log` directly.
+
+```typescript
+import { createLogger } from '@valuerank/shared';
+const log = createLogger('runs');
+
+log.info({ runId: run.id }, 'Run created');
+log.error({ err, config }, 'Failed to create run');
+```
+
+Always use structured data (object + message), never string interpolation.
+
+### Log Levels
+
+| Level | Use For |
+|-------|---------|
+| `error` | Exceptions, failed operations that need attention |
+| `warn` | Recoverable issues, deprecations, retry attempts |
+| `info` | Key business events (run started, completed, user action) |
+| `debug` | Detailed flow info, useful for local debugging |
+
+---
+
+## Code Organization
+
+### Import Order
+
+1. Node built-ins (`fs`, `path`)
+2. External packages (`express`, `zod`)
+3. Internal packages (`@valuerank/shared`, `@valuerank/db`)
+4. Relative imports (`./validation`, `./types`)
+
+### Folder Structure
+
+```
+apps/api/src/
+├── auth/         # Authentication middleware and JWT handling
+├── cli/          # Admin scripts (create-user, normalize, shadow)
+├── config/       # Server configuration
+├── graphql/      # GraphQL schema, queries, mutations, types
+├── mcp/          # MCP server tools and OAuth
+├── middleware/    # Express middleware
+├── queue/        # PgBoss job handlers and queue orchestration
+├── routes/       # Express route handlers (REST, CSV, OData)
+├── services/     # Business logic
+└── utils/        # Pure utility functions
+
+apps/web/src/
+├── api/          # GraphQL operations and client setup
+├── components/   # React components
+├── hooks/        # Custom hooks
+├── lib/          # Shared libraries (statistics, formatting)
+├── pages/        # Route pages
+└── utils/        # Pure utility functions
+```
+
+---
+
+## Error Handling
+
+Use custom error classes (`AppError`, `NotFoundError`, `ValidationError`) from `packages/shared`. Always catch and forward to error middleware in routes — never swallow errors silently.
+
+---
+
+## Database Access
+
+### Use Prisma with Type Safety
+
+Use typed queries and `$transaction` for multi-step operations.
+
+### Soft Delete Pattern
+
+Entities use soft delete via `deletedAt` timestamp. **Never physically delete** — set `deletedAt` instead.
+
+**Tables with soft delete:** `definitions`, `definition_tags`, `scenarios`
+
+```typescript
+// ALWAYS filter out soft-deleted records
+const definitions = await prisma.definition.findMany({
+  where: { deletedAt: null },  // Required!
+});
+
+// When "deleting", set deletedAt
+await prisma.definition.update({
+  where: { id: definitionId },
+  data: { deletedAt: new Date() },
+});
+```
+
+`deletedAt` is **never exposed** in GraphQL schema. All resolvers must filter `deletedAt: null` automatically.
+
+---
+
+## Database Connections
+
+The project uses PostgreSQL with PgBouncer for connection pooling.
+
+**Application** (via PgBouncer): `DATABASE_URL` — include `?pgbouncer=true` to disable prepared statements.
+
+**Migrations** (direct): `DIRECT_URL` — Prisma Migrate requires a direct connection, not a pooler.
+
+```bash
+# .env
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:6432/valuerank?pgbouncer=true"
+DIRECT_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank"
+```
+
+Start local DB: `docker-compose up -d` from `cloud/`.
+
+---
+
+## Schema Changes (Migrations)
+
+**Always use Prisma Migrate — never `db push`.**
+
+```bash
+# Create and apply a migration
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank" \
+  npx prisma migrate dev --name add_feature_tables --schema packages/db/prisma/schema.prisma
+```
+
+Production deployments run `prisma migrate deploy` automatically on startup.
+
+---
+
+## Quick Reference
+
+```
+File size:      enforced by scripts (prod warn 400/err 700, tests warn 800/err 1200)
+any types:      NEVER (use unknown if truly unknown)
+Test coverage:  80% minimum
+Console.log:    NEVER (use logger)
+Error handling: Custom AppError classes
+Imports:        Node → External → Internal → Relative
+```
+
+---
+
+## Terminology
+
+Canonical source: `docs/canonical-glossary.md`
+
+- Follow the terminology policy in repo-root `AGENTS.md`.
+- In cloud code, older names like `definition`, `dimension`, and `scenario` may still appear in code, schema, or APIs. Map them to glossary terms instead of renaming them casually.
+
+
+Context: schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  // Direct connection for migrations (bypasses PgBouncer)
+  // Required because Prisma Migrate doesn't support connection pooling
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================================================
+// AUTHENTICATION
+// ============================================================================
+
+enum UserRole {
+  ADMIN
+  VISITOR
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  name         String?
+  role         UserRole  @default(ADMIN)
+  mustChangePassword Boolean @default(false) @map("must_change_password")
+  lastLoginAt  DateTime? @map("last_login_at")
+  passwordChangedAt DateTime? @map("password_changed_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  apiKeys ApiKey[]
+
+  // Audit relations
+  auditLogs          AuditLog[]
+  createdDefinitions Definition[] @relation("DefinitionCreator")
+  deletedDefinitions Definition[] @relation("DefinitionDeleter")
+  createdRuns        Run[]        @relation("RunCreator")
+  createdDomainEvaluations DomainEvaluation[] @relation("DomainEvaluationCreator")
+  deletedRuns        Run[]        @relation("RunDeleter")
+  createdTags        Tag[]        @relation("TagCreator")
+  createdLlmModels         LlmModel[]               @relation("LlmModelCreator")
+  createdBalanceSyncLogs   ProviderBalanceSyncLog[] @relation("ProviderBalanceSyncLogCreator")
+
+  @@map("users")
+}
+
+model ApiKey {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  name      String
+  keyHash   String    @unique @map("key_hash")
+  keyPrefix String    @map("key_prefix") @db.VarChar(12)
+  lastUsed  DateTime? @map("last_used")
+  expiresAt DateTime? @map("expires_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([keyPrefix])
+  @@index([userId])
+  @@map("api_keys")
+}
+
+// ============================================================================
+// OAUTH 2.1 (MCP Authentication)
+// ============================================================================
+
+model OAuthClient {
+  id                      String   @id @default(cuid())
+  clientId                String   @unique @map("client_id")
+  clientSecretHash        String   @map("client_secret_hash")
+  clientName              String?  @map("client_name")
+  redirectUris            String[] @map("redirect_uris")
+  tokenEndpointAuthMethod String   @default("client_secret_post") @map("token_endpoint_auth_method")
+  grantTypes              String[] @default(["authorization_code", "refresh_token"]) @map("grant_types")
+  responseTypes           String[] @default(["code"]) @map("response_types")
+  scope                   String   @default("mcp:read mcp:write")
+  createdAt               DateTime @default(now()) @map("created_at")
+
+  refreshTokens OAuthRefreshToken[]
+
+  @@map("oauth_clients")
+}
+
+model OAuthRefreshToken {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique @map("token_hash")
+  clientId  String   @map("client_id")
+  userId    String   @map("user_id")
+  scope     String
+  resource  String
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  client OAuthClient @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("oauth_refresh_tokens")
+}
+
+// ============================================================================
+// CORE DOMAIN
+// ============================================================================
+
+model Definition {
+  id                String    @id @default(cuid())
+  parentId          String?   @map("parent_id")
+  domainId          String?   @map("domain_id")
+  domainContextId   String?   @map("domain_context_id")
+  name              String
+  content           Json      @db.JsonB
+  expansionProgress Json?     @map("expansion_progress") @db.JsonB
+  expansionDebug    Json?     @map("expansion_debug") @db.JsonB
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  lastAccessedAt    DateTime? @map("last_accessed_at")
+  deletedAt         DateTime? @map("deleted_at")
+
+  // Audit fields
+  createdByUserId String? @map("created_by_user_id")
+  deletedByUserId String? @map("deleted_by_user_id")
+
+  parent   Definition?  @relation("DefinitionVersions", fields: [parentId], references: [id])
+  children Definition[] @relation("DefinitionVersions")
+  domain   Domain?      @relation(fields: [domainId], references: [id], onDelete: SetNull)
+  domainContext DomainContext? @relation(fields: [domainContextId], references: [id], onDelete: SetNull)
+
+  runs      Run[]
+  scenarios Scenario[]
+  tags      DefinitionTag[]
+  assumptionVignetteSelections AssumptionVignetteSelection[]
+
+  // Audit relations
+  createdBy User? @relation("DefinitionCreator", fields: [createdByUserId], references: [id])
+  deletedBy User? @relation("DefinitionDeleter", fields: [deletedByUserId], references: [id])
+
+  // Preamble integration
+  preambleVersionId String?          @map("preamble_version_id")
+  preambleVersion   PreambleVersion? @relation(fields: [preambleVersionId], references: [id])
+  version           Int              @default(1)
+
+  // Level preset integration
+  levelPresetVersionId String?             @map("level_preset_version_id")
+  levelPresetVersion   LevelPresetVersion? @relation(fields: [levelPresetVersionId], references: [id])
+
+  // Cost visibility - per-definition token statistics (P3)
+  tokenStatistics ModelTokenStatistics[]
+
+  @@index([parentId])
+  @@index([domainId])
+  @@index([domainContextId])
+  @@index([preambleVersionId])
+  @@index([levelPresetVersionId])
+  @@map("definitions")
+}
+
+model Domain {
+  id             String   @id @default(cuid())
+  name           String
+  normalizedName String   @unique @map("normalized_name")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  defaultLevelPresetVersionId String?             @map("default_level_preset_version_id")
+  defaultLevelPresetVersion   LevelPresetVersion? @relation(fields: [defaultLevelPresetVersionId], references: [id])
+
+  defaultPreambleVersionId String?          @map("default_preamble_version_id")
+  defaultPreambleVersion   PreambleVersion? @relation(fields: [defaultPreambleVersionId], references: [id])
+
+  defaultContextId String?        @map("default_context_id")
+  defaultContext   DomainContext? @relation("DomainDefaultContext", fields: [defaultContextId], references: [id])
+
+  defaultModelIds String[] @default([]) @map("default_model_ids")
+
+  sentencePrefix String? @map("sentence_prefix")
+  labelPrefix    String? @map("label_prefix")
+
+  definitions     Definition[]
+  contexts        DomainContext[] @relation("DomainContexts")
+  valueStatements ValueStatement[]
+  evaluations     DomainEvaluation[]
+  configSnapshots DomainConfigSnapshot[]
+
+  @@index([defaultLevelPresetVersionId])
+  @@index([defaultPreambleVersionId])
+  @@index([defaultContextId])
+  @@map("domains")
+}
+
+model DomainContext {
+  id        String   @id @default(cuid())
+  domainId  String   @map("domain_id")
+  text      String
+  version   Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  domain          Domain       @relation("DomainContexts", fields: [domainId], references: [id])
+  domainsAsDefault Domain[]    @relation("DomainDefaultContext")
+  definitions     Definition[]
+  domainConfigSnapshots DomainConfigSnapshot[]
+
+  @@map("domain_contexts")
+}
+
+model ValueStatement {
+  id        String   @id @default(cuid())
+  domainId  String   @map("domain_id")
+  token     String
+  body      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  domain   Domain                 @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  versions ValueStatementVersion[]
+
+  @@unique([domainId, token])
+  @@index([domainId])
+  @@map("value_statements")
+}
+
+model ValueStatementVersion {
+  id          String   @id @default(cuid())
+  statementId String   @map("statement_id")
+  content     String   @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  statement ValueStatement @relation(fields: [statementId], references: [id], onDelete: Cascade)
+
+  @@index([statementId, createdAt(sort: Desc)])
+  @@map("value_statement_versions")
+}
+
+model DomainConfigSnapshot {
+  id                       String   @id @default(cuid())
+  domainId                 String   @map("domain_id")
+  preambleVersionId        String?  @map("preamble_version_id")
+  levelPresetVersionId     String?  @map("level_preset_version_id")
+  contextId                String?  @map("context_id")
+  valueStatementVersionIds String[] @map("value_statement_version_ids")
+  fingerprint              String
+  createdAt                DateTime @default(now()) @map("created_at")
+
+  domain               Domain              @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  preambleVersion      PreambleVersion?    @relation(fields: [preambleVersionId], references: [id])
+  levelPresetVersion   LevelPresetVersion? @relation(fields: [levelPresetVersionId], references: [id])
+  context              DomainContext?      @relation(fields: [contextId], references: [id])
+  runs                 Run[]
+
+  @@unique([domainId, fingerprint])
+  @@index([domainId, createdAt(sort: Desc)])
+  @@map("domain_config_snapshots")
+}
+
+model Preamble {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  versions PreambleVersion[]
+
+  @@map("preambles")
+}
+
+model LevelPreset {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  versions LevelPresetVersion[]
+
+  @@map("level_presets")
+}
+
+model LevelPresetVersion {
+  id            String   @id @default(cuid())
+  levelPresetId String   @map("level_preset_id")
+  version       String
+  l1            String
+  l2            String
+  l3            String
+  l4            String
+  l5            String
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  levelPreset LevelPreset  @relation(fields: [levelPresetId], references: [id], onDelete: Cascade)
+  domains     Domain[]
+  definitions Definition[]
+  domainConfigSnapshots DomainConfigSnapshot[]
+
+  @@index([levelPresetId])
+  @@map("level_preset_versions")
+}
+
+model PreambleVersion {
+  id         String   @id @default(cuid())
+  preambleId String   @map("preamble_id")
+  version    String   // User-facing version label (e.g. "2024-02-01 12:00 PST")
+  content    String   @db.Text
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  preamble    Preamble     @relation(fields: [preambleId], references: [id], onDelete: Cascade)
+  definitions Definition[]
+  domains     Domain[]
+  domainConfigSnapshots DomainConfigSnapshot[]
+
+  @@index([preambleId])
+  @@map("preamble_versions")
+}
+
+model Tag {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Audit fields
+  createdByUserId String? @map("created_by_user_id")
+
+  definitions DefinitionTag[]
+  runs        RunTag[]
+
+  // Audit relations
+  createdBy User? @relation("TagCreator", fields: [createdByUserId], references: [id])
+
+  @@map("tags")
+}
+
+model DefinitionTag {
+  id           String    @id @default(cuid())
+  definitionId String    @map("definition_id")
+  tagId        String    @map("tag_id")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  definition Definition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  tag        Tag        @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([definitionId, tagId])
+  @@index([definitionId])
+  @@index([tagId])
+  @@map("definition_tags")
+}
+
+model RunTag {
+  id        String   @id @default(cuid())
+  runId     String   @map("run_id")
+  tagId     String   @map("tag_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  run Run @relation(fields: [runId], references: [id], onDelete: Cascade)
+  tag Tag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, tagId])
+  @@index([runId])
+  @@index([tagId])
+  @@map("run_tags")
+}
+
+model Run {
+  id                 String    @id @default(cuid())
+  name               String?   @map("name")
+  definitionId       String    @map("definition_id")
+  experimentId       String?   @map("experiment_id")
+  status             RunStatus @default(PENDING)
+  runCategory        RunCategory @default(UNKNOWN_LEGACY) @map("run_category")
+  config             Json      @db.JsonB
+  progress           Json?     @db.JsonB
+  summarizeProgress  Json?     @map("summarize_progress") @db.JsonB
+  stalledModels      String[]  @default([]) @map("stalled_models")
+  startedAt          DateTime? @map("started_at")
+  completedAt        DateTime? @map("completed_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  lastAccessedAt     DateTime? @map("last_accessed_at")
+  deletedAt          DateTime? @map("deleted_at")
+  // Retention settings (for future pruning)
+  retentionDays      Int?      @map("retention_days")
+  archivePermanently Boolean   @default(true) @map("archive_permanently")
+
+  // Audit fields
+  createdByUserId String? @map("created_by_user_id")
+  deletedByUserId String? @map("deleted_by_user_id")
+
+  definition Definition  @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  experiment Experiment? @relation(fields: [experimentId], references: [id])
+  tags       RunTag[]
+
+  // Domain config snapshot at run creation time
+  domainConfigSnapshotId String?              @map("domain_config_snapshot_id")
+  domainConfigSnapshot   DomainConfigSnapshot? @relation(fields: [domainConfigSnapshotId], references: [id])
+
+  transcripts     Transcript[]
+  analysisResults AnalysisResult[]
+  domainEvaluationMembership DomainEvaluationRun?
+  baselineFor     RunComparison[]  @relation("BaselineRun")
+  comparisonFor   RunComparison[]  @relation("ComparisonRun")
+  scenarioSelections RunScenarioSelection[]
+  probeResults    ProbeResult[]
+  anomalies       RunAnomaly[]
+
+  // Audit relations
+  createdBy User? @relation("RunCreator", fields: [createdByUserId], references: [id])
+  deletedBy User? @relation("RunDeleter", fields: [deletedByUserId], references: [id])
+
+  @@index([definitionId])
+  @@index([experimentId])
+  @@index([status])
+  @@index([runCategory])
+  @@index([domainConfigSnapshotId])
+  @@map("runs")
+}
+
+model DomainEvaluation {
+  id               String                        @id @default(cuid())
+  domainId         String                        @map("domain_id")
+  domainNameAtLaunch String                      @map("domain_name_at_launch")
+  scopeCategory    DomainEvaluationScopeCategory @map("scope_category")
+  status           DomainEvaluationStatus        @default(PENDING)
+  configSnapshot   Json                          @map("config_snapshot") @db.JsonB
+  createdAt        DateTime                      @default(now()) @map("created_at")
+  startedAt        DateTime?                     @map("started_at")
+  completedAt      DateTime?                     @map("completed_at")
+  createdByUserId  String?                       @map("created_by_user_id")
+  deletedAt        DateTime?                     @map("deleted_at")
+
+  domain    Domain               @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  createdBy User?                @relation("DomainEvaluationCreator", fields: [createdByUserId], references: [id])
+  members   DomainEvaluationRun[]
+
+  @@index([domainId])
+  @@index([scopeCategory])
+  @@index([status])
+  @@index([createdByUserId])
+  @@map("domain_evaluations")
+}
+
+model DomainEvaluationRun {
+  id                    String   @id @default(cuid())
+  domainEvaluationId    String   @map("domain_evaluation_id")
+  runId                 String   @unique @map("run_id")
+  definitionIdAtLaunch  String   @map("definition_id_at_launch")
+  definitionNameAtLaunch String  @map("definition_name_at_launch")
+  domainIdAtLaunch      String   @map("domain_id_at_launch")
+  createdAt             DateTime @default(now()) @map("created_at")
+  deletedAt             DateTime? @map("deleted_at")
+
+  domainEvaluation DomainEvaluation @relation(fields: [domainEvaluationId], references: [id], onDelete: Cascade)
+  run              Run              @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([domainEvaluationId])
+  @@index([definitionIdAtLaunch])
+  @@index([domainIdAtLaunch])
+  @@map("domain_evaluation_runs")
+}
+
+enum RunStatus {
+  PENDING
+  RUNNING
+  PAUSED
+  SUMMARIZING   // Probing complete, generating summaries
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum DomainEvaluationScopeCategory {
+  PILOT
+  PRODUCTION
+  REPLICATION
+  VALIDATION
+}
+
+enum DomainEvaluationStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum RunCategory {
+  PILOT
+  PRODUCTION
+  REPLICATION
+  VALIDATION
+  UNKNOWN_LEGACY
+}
+
+enum RunAnomalyType {
+  STRANDED_TRANSCRIPT
+  ORPHAN_TRANSCRIPT
+  PAIR_ASYMMETRY
+  SUMMARIZING_STALL
+  MODEL_TRANSCRIPT_SHORTFALL
+  SCHEDULED_COUNT_MISMATCH
+}
+
+model Transcript {
+  id                 String    @id @default(cuid())
+  runId              String    @map("run_id")
+  scenarioId         String?   @map("scenario_id")
+  // Model versioning (renamed from target_model for consistency)
+  modelId            String    @map("model_id")
+  modelVersion       String?   @map("model_version")
+  // Multi-sample support: index within sample set (0 to N-1)
+  sampleIndex        Int       @default(0) @map("sample_index")
+  // Definition snapshot (captures exact definition at run time)
+  definitionSnapshot Json?     @map("definition_snapshot") @db.JsonB
+  // Transcript content
+  content            Json      @db.JsonB
+  turnCount          Int       @map("turn_count")
+  tokenCount         Int       @map("token_count")
+  durationMs         Int       @map("duration_ms")
+  // Cost tracking (USD, computed from token counts and model pricing)
+  estimatedCost      Float?    @map("estimated_cost")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  lastAccessedAt     DateTime? @map("last_accessed_at")
+  // Retention (NULL = permanent, default)
+  contentExpiresAt   DateTime? @map("content_expires_at")
+  // Summary fields (populated after run completes).
+  // decision_code and decision_code_source columns were dropped after the
+  // remove-decisionCode PR migrated all transcripts to canonicalDecision as
+  // the single source of truth (PR #713, commit f86c2579).
+  decisionText       String?   @map("decision_text")     // LLM-generated summary
+  decisionMetadata   Json?     @map("decision_metadata") @db.JsonB
+  summarizedAt       DateTime? @map("summarized_at")     // When summary was generated
+  summarizeFailedAt  DateTime?  @map("summarize_failed_at")
+  costDebitedAt      DateTime?  @map("cost_debited_at")
+  // Soft delete
+  deletedAt          DateTime? @map("deleted_at")
+
+  run      Run       @relation(fields: [runId], references: [id], onDelete: Cascade)
+  scenario Scenario? @relation(fields: [scenarioId], references: [id])
+
+  @@index([runId])
+  @@index([scenarioId])
+  @@index([modelId])
+  @@index([deletedAt])
+  @@index([sampleIndex])
+  @@index([runId, summarizedAt])
+  @@map("transcripts")
+}
+
+model Scenario {
+  id           String    @id @default(cuid())
+  definitionId String    @map("definition_id")
+  name         String
+  content      Json      @db.JsonB
+  orientationFlipped Boolean @default(false) @map("orientation_flipped")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  definition Definition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  transcripts Transcript[]
+  runSelections RunScenarioSelection[]
+  probeResults ProbeResult[]
+  sourceAssumptionPairs AssumptionScenarioPair[] @relation("SourceAssumptionScenario")
+  variantAssumptionPairs AssumptionScenarioPair[] @relation("VariantAssumptionScenario")
+
+  @@index([definitionId])
+  @@map("scenarios")
+}
+
+model AssumptionVignetteSelection {
+  id           String   @id @default(cuid())
+  assumptionKey String  @map("assumption_key")
+  definitionId String   @map("definition_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  definition Definition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+
+  @@unique([assumptionKey, definitionId])
+  @@index([definitionId])
+  @@map("assumption_vignette_selections")
+}
+
+model AssumptionScenarioPair {
+  id                    String    @id @default(cuid())
+  assumptionKey         String    @map("assumption_key")
+  sourceScenarioId      String    @map("source_scenario_id")
+  variantScenarioId     String    @map("variant_scenario_id")
+  variantType           String    @map("variant_type")
+  equivalenceReviewStatus String? @map("equivalence_review_status")
+  equivalenceReviewedBy String?   @map("equivalence_reviewed_by")
+  equivalenceReviewedAt DateTime? @map("equivalence_reviewed_at")
+  equivalenceReviewNotes String?  @map("equivalence_review_notes") @db.Text
+  createdAt             DateTime  @default(now()) @map("created_at")
+
+  sourceScenario  Scenario @relation("SourceAssumptionScenario", fields: [sourceScenarioId], references: [id], onDelete: Cascade)
+  variantScenario Scenario @relation("VariantAssumptionScenario", fields: [variantScenarioId], references: [id], onDelete: Cascade)
+
+  @@unique([assumptionKey, sourceScenarioId, variantScenarioId])
+  @@index([assumptionKey])
+  @@index([sourceScenarioId])
+  @@index([variantScenarioId])
+  @@map("assumption_scenario_pairs")
+}
+
+// Join table to track which scenarios were sampled for a run
+model RunScenarioSelection {
+  id         String   @id @default(cuid())
+  runId      String   @map("run_id")
+  scenarioId String   @map("scenario_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  run      Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
+  scenario Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, scenarioId])
+  @@index([runId])
+  @@index([scenarioId])
+  @@map("run_scenario_selections")
+}
+
+// ============================================================================
+// JOB RESULTS (Probe outcome tracking)
+// ============================================================================
+
+model ProbeResult {
+  id          String            @id @default(cuid())
+  runId       String            @map("run_id")
+  scenarioId  String            @map("scenario_id")
+  modelId     String            @map("model_id")
+  // Multi-sample support: index within sample set (0 to N-1)
+  sampleIndex Int               @default(0) @map("sample_index")
+  status      ProbeResultStatus
+  // Success fields
+  transcriptId   String?        @map("transcript_id")
+  durationMs     Int?           @map("duration_ms")
+  inputTokens    Int?           @map("input_tokens")
+  outputTokens   Int?           @map("output_tokens")
+  // Failure fields
+  errorCode    String?          @map("error_code")
+  errorMessage String?          @map("error_message")
+  retryCount   Int              @default(0) @map("retry_count")
+  // Timestamps
+  createdAt    DateTime         @default(now()) @map("created_at")
+  completedAt  DateTime?        @map("completed_at")
+  deletedAt    DateTime?        @map("deleted_at")
+
+  run      Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
+  scenario Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+
+  // Updated unique constraint to include sampleIndex for multi-sample runs
+  @@unique([runId, scenarioId, modelId, sampleIndex])
+  @@index([runId])
+  @@index([runId, status])
+  @@index([scenarioId])
+  @@index([modelId])
+  @@index([status])
+  @@index([sampleIndex])
+  @@map("probe_results")
+}
+
+model RunAnomaly {
+  id                   String         @id @default(cuid())
+  runId                String         @map("run_id")
+  type                 RunAnomalyType
+  subject              String         @default("")
+  details              Json           @db.JsonB
+  firstSeenAt          DateTime       @default(now()) @map("first_seen_at")
+  lastSeenAt           DateTime       @default(now()) @map("last_seen_at")
+  resolvedAt           DateTime?      @map("resolved_at")
+  acknowledgedByUserId String?        @map("acknowledged_by_user_id")
+
+  run Run @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, type, subject])
+  @@index([runId])
+  @@index([type, resolvedAt])
+  @@map("run_anomalies")
+}
+
+enum ProbeResultStatus {
+  SUCCESS
+  FAILED
+}
+
+// ============================================================================
+// ANALYSIS & EXPERIMENTS
+// ============================================================================
+
+model Experiment {
+  id           String   @id @default(cuid())
+  name         String
+  hypothesis   String?
+  analysisPlan Json?    @map("analysis_plan") @db.JsonB
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  runs        Run[]
+  comparisons RunComparison[]
+
+  @@map("experiments")
+}
+
+model RunComparison {
+  id              String   @id @default(cuid())
+  experimentId    String?  @map("experiment_id")
+  baselineRunId   String   @map("baseline_run_id")
+  comparisonRunId String   @map("comparison_run_id")
+  deltaData       Json?    @map("delta_data") @db.JsonB
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  experiment    Experiment? @relation(fields: [experimentId], references: [id])
+  baselineRun   Run         @relation("BaselineRun", fields: [baselineRunId], references: [id])
+  comparisonRun Run         @relation("ComparisonRun", fields: [comparisonRunId], references: [id])
+
+  @@index([experimentId])
+  @@index([baselineRunId])
+  @@index([comparisonRunId])
+  @@map("run_comparisons")
+}
+
+model AnalysisResult {
+  id           String         @id @default(cuid())
+  runId        String         @map("run_id")
+  analysisType String         @map("analysis_type")
+  inputHash    String         @map("input_hash")
+  codeVersion  String         @map("code_version")
+  output       Json           @db.JsonB
+  status       AnalysisStatus @default(CURRENT)
+  createdAt    DateTime       @default(now()) @map("created_at")
+  // Soft delete
+  deletedAt    DateTime?      @map("deleted_at")
+
+  run Run @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+  @@index([analysisType])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("analysis_results")
+}
+
+enum AnalysisStatus {
+  CURRENT
+  SUPERSEDED
+}
+
+enum AssumptionAnalysisStatus {
+  CURRENT
+  SUPERSEDED
+}
+
+model AssumptionAnalysisSnapshot {
+  id            String                   @id @default(cuid())
+  assumptionKey String                   @map("assumption_key")
+  analysisType  String                   @map("analysis_type")
+  inputHash     String                   @map("input_hash")
+  codeVersion   String                   @map("code_version")
+  configSignature String                 @map("config_signature")
+  config        Json                     @db.JsonB
+  output        Json                     @db.JsonB
+  status        AssumptionAnalysisStatus @default(CURRENT)
+  createdAt     DateTime                 @default(now()) @map("created_at")
+  deletedAt     DateTime?                @map("deleted_at")
+
+  @@index([assumptionKey])
+  @@index([analysisType])
+  @@index([inputHash])
+  @@index([configSignature])
+  @@index([status])
+  @@index([deletedAt])
+  @@index([assumptionKey, analysisType, inputHash, status])
+  @@map("assumption_analysis_snapshots")
+}
+
+model Rubric {
+  id        String   @id @default(cuid())
+  version   Int      @unique
+  content   Json     @db.JsonB
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("rubrics")
+}
+
+// ============================================================================
+// COHORTS (for segment analysis)
+// ============================================================================
+
+model Cohort {
+  id        String   @id @default(cuid())
+  name      String
+  criteria  Json     @db.JsonB
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("cohorts")
+}
+
+// ============================================================================
+// LLM PROVIDERS & MODELS
+// ============================================================================
+
+model LlmProvider {
+  id                  String   @id @default(cuid())
+  name                String   @unique
+  displayName         String   @map("display_name")
+  maxParallelRequests Int      @default(1) @map("max_parallel_requests")
+  requestsPerMinute   Int      @default(60) @map("requests_per_minute")
+  isEnabled           Boolean  @default(true) @map("is_enabled")
+  balance             Decimal? @db.Decimal(10, 4)
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  models          LlmModel[]
+  balanceSyncLogs ProviderBalanceSyncLog[]
+
+  @@map("llm_providers")
+}
+
+model ProviderBalanceSyncLog {
+  id                  String   @id @default(cuid())
+  providerId          String   @map("provider_id")
+  systemBalanceAtSync Decimal  @map("system_balance_at_sync") @db.Decimal(10, 4)
+  enteredBalance      Decimal  @map("entered_balance") @db.Decimal(10, 4)
+  delta               Decimal  @db.Decimal(10, 4)
+  syncedAt            DateTime @default(now()) @map("synced_at")
+  createdByUserId     String?  @map("created_by_user_id")
+
+  provider  LlmProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  createdBy User?       @relation("ProviderBalanceSyncLogCreator", fields: [createdByUserId], references: [id])
+
+  @@index([providerId])
+  @@map("provider_balance_sync_logs")
+}
+
+model LlmModel {
+  id                   String         @id @default(cuid())
+  providerId           String         @map("provider_id")
+  modelId              String         @map("model_id")
+  displayName          String         @map("display_name")
+  costInputPerMillion  Decimal        @map("cost_input_per_million") @db.Decimal(10, 4)
+  costOutputPerMillion Decimal        @map("cost_output_per_million") @db.Decimal(10, 4)
+  status               LlmModelStatus @default(ACTIVE)
+  isDefault            Boolean        @default(false) @map("is_default")
+  apiConfig            Json?          @map("api_config") @db.JsonB
+  createdAt            DateTime       @default(now()) @map("created_at")
+  updatedAt            DateTime       @updatedAt @map("updated_at")
+
+  // Audit fields
+  createdByUserId String? @map("created_by_user_id")
+
+  provider LlmProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  // Audit relations
+  createdBy User? @relation("LlmModelCreator", fields: [createdByUserId], references: [id])
+
+  // Cost visibility - token statistics for cost prediction
+  tokenStatistics ModelTokenStatistics[]
+
+  @@unique([providerId, modelId])
+  @@index([providerId])
+  @@index([status])
+  @@map("llm_models")
+}
+
+enum LlmModelStatus {
+  ACTIVE
+  DEPRECATED
+}
+
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json     @db.JsonB
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("system_settings")
+}
+
+// ============================================================================
+// COST VISIBILITY - Token Statistics
+// ============================================================================
+
+model ModelTokenStatistics {
+  id              String     @id @default(cuid())
+  modelId         String     @map("model_id")
+  definitionId    String?    @map("definition_id")
+  avgInputTokens  Decimal    @default(100) @map("avg_input_tokens") @db.Decimal(10, 2)
+  avgOutputTokens Decimal    @default(900) @map("avg_output_tokens") @db.Decimal(10, 2)
+  sampleCount     Int        @default(0) @map("sample_count")
+  lastUpdatedAt   DateTime   @updatedAt @map("last_updated_at")
+  createdAt       DateTime   @default(now()) @map("created_at")
+
+  model      LlmModel    @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  definition Definition? @relation(fields: [definitionId], references: [id], onDelete: SetNull)
+
+  @@unique([modelId, definitionId])
+  @@index([modelId])
+  @@index([definitionId])
+  @@map("model_token_statistics")
+}
+
+// ============================================================================
+// AUDIT LOGGING
+// ============================================================================
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  action     String   // CREATE, UPDATE, DELETE, ACTION
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  userId     String?  @map("user_id")
+  metadata   Json?    @db.JsonB
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([createdAt])
+  @@index([action])
+  @@map("audit_logs")
+}
+
+
+Context: anomaly-detection.ts
+import { db, Prisma } from '@valuerank/db';
+import { createLogger } from '@valuerank/shared';
+import {
+  MODEL_SHORTFALL_ABSOLUTE_RATE,
+  MODEL_SHORTFALL_MIN_PROBES,
+  MODEL_SHORTFALL_PEER_RATE,
+  MODEL_SHORTFALL_RELATIVE_RATE,
+  ORPHAN_TRANSCRIPT_MIN_AGE_SECONDS,
+  PAIR_ASYMMETRY_MIN_PROBES,
+  PAIR_ASYMMETRY_THRESHOLD_PCT,
+  SUMMARIZING_STALL_MINUTES,
+} from './anomaly-thresholds.js';
+
+const log = createLogger('services:run:anomaly-detection');
+
+export type RunAnomalyType =
+  | 'STRANDED_TRANSCRIPT'
+  | 'ORPHAN_TRANSCRIPT'
+  | 'PAIR_ASYMMETRY'
+  | 'SUMMARIZING_STALL'
+  | 'MODEL_TRANSCRIPT_SHORTFALL'
+  | 'SCHEDULED_COUNT_MISMATCH';
+
+export type AnomalyDraft = {
+  type: RunAnomalyType;
+  subject: string;
+  details: Prisma.InputJsonValue;
+};
+
+type RunSnapshot = {
+  id: string;
+  status: string;
+  updatedAt: Date;
+  config: unknown;
+  progress: unknown;
+  deletedAt: Date | null;
+};
+
+type RunConfig = {
+  models?: string[];
+  samplesPerScenario?: number;
+  jobChoiceBatchGroupId?: string | null;
+};
+
+type SuccessCountRow = {
+  modelId: string;
+  _count: { _all: number };
+};
+
+type OrphanTranscriptRow = {
+  id: string;
+  scenarioId: string | null;
+  modelId: string;
+  sampleIndex: number;
+  createdAt: Date;
+  durationMs: number;
+  tokenCount: number;
+  content: unknown;
+};
+
+type PairAsymmetryCandidate = {
+  id: string;
+  config: unknown;
+};
+
+type PairAsymmetryMetrics = {
+  runId: string;
+  scheduled: number;
+  successCount: number;
+  successRate: number;
+};
+
+function parseRunConfig(config: unknown): RunConfig {
+  if (config === null || typeof config !== 'object') {
+    return {};
+  }
+
+  return config as RunConfig;
+}
+
+function getModelIds(config: unknown): string[] {
+  const models = parseRunConfig(config).models ?? [];
+  return models.filter((modelId) => typeof modelId === 'string' && modelId.length > 0);
+}
+
+function getSamplesPerScenario(config: unknown): number {
+  const samples = parseRunConfig(config).samplesPerScenario;
+  return typeof samples === 'number' && Number.isFinite(samples) && samples > 0 ? samples : 1;
+}
+
+function getGroupId(config: unknown): string | null {
+  const groupId = parseRunConfig(config).jobChoiceBatchGroupId;
+  return typeof groupId === 'string' && groupId.trim() !== '' ? groupId : null;
+}
+
+function getProgressTotal(progress: unknown): number {
+  if (progress === null || progress === undefined || typeof progress !== 'object') {
+    return 0;
+  }
+
+  const total = (progress as Record<string, unknown>).total;
+  return typeof total === 'number' && Number.isFinite(total) ? total : 0;
+}
+
+function toJsonValue(value: unknown): Prisma.InputJsonValue {
+  return value as Prisma.InputJsonValue;
+}
+
+function buildOrphanTranscriptFromClause(runId: string): Prisma.Sql {
+  const minAge = new Date(Date.now() - ORPHAN_TRANSCRIPT_MIN_AGE_SECONDS * 1000);
+  return Prisma.sql`
+    FROM transcripts t
+    LEFT JOIN probe_results p
+      ON p.run_id = t.run_id
+     AND p.scenario_id = t.scenario_id
+     AND p.model_id = t.model_id
+     AND p.sample_index = t.sample_index
+     AND p.deleted_at IS NULL
+    WHERE t.run_id = ${runId}
+      AND t.deleted_at IS NULL
+      AND t.created_at < ${minAge}
+      AND p.id IS NULL
+  `;
+}
+
+export async function detectStrandedTranscript(runId: string): Promise<AnomalyDraft | null> {
+  const transcripts = await db.transcript.findMany({
+    where: {
+      runId,
+      deletedAt: null,
+      summarizedAt: null,
+      summarizeFailedAt: null,
+    },
+    select: { id: true },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  if (transcripts.length === 0) {
+    return null;
+  }
+
+  return {
+    type: 'STRANDED_TRANSCRIPT',
+    subject: '',
+    details: toJsonValue({
+      transcriptIds: transcripts.map((transcript) => transcript.id),
+    }),
+  };
+}
+
+export async function findOrphanTranscripts(runId: string, limit?: number): Promise<OrphanTranscriptRow[]> {
+  const fromClause = buildOrphanTranscriptFromClause(runId);
+
+  if (limit !== undefined) {
+    return db.$queryRaw<OrphanTranscriptRow[]>`
+    SELECT
+      t.id,
+      t.scenario_id AS "scenarioId",
+      t.model_id AS "modelId",
+      t.sample_index AS "sampleIndex",
+      t.created_at AS "createdAt",
+      t.duration_ms AS "durationMs",
+      t.token_count AS "tokenCount",
+      t.content AS "content"
+    ${fromClause}
+    ORDER BY t.created_at ASC
+    LIMIT ${limit}
+  `;
+  }
+
+  return db.$queryRaw<OrphanTranscriptRow[]>`
+    SELECT
+      t.id,
+      t.scenario_id AS "scenarioId",
+      t.model_id AS "modelId",
+      t.sample_index AS "sampleIndex",
+      t.created_at AS "createdAt",
+      t.duration_ms AS "durationMs",
+      t.token_count AS "tokenCount",
+      t.content AS "content"
+    ${fromClause}
+    ORDER BY t.created_at ASC
+  `;
+}
+
+export async function countOrphanTranscripts(runId: string): Promise<number> {
+  const fromClause = buildOrphanTranscriptFromClause(runId);
+  const rows = await db.$queryRaw<Array<{ count: bigint }>>`
+    SELECT COUNT(*) AS count
+    ${fromClause}
+  `;
+
+  return Number(rows[0]?.count ?? 0);
+}
+
+export async function detectOrphanTranscript(runId: string): Promise<AnomalyDraft | null> {
+  const orphans = await findOrphanTranscripts(runId);
+  if (orphans.length === 0) {
+    return null;
+  }
+
+  return {
+    type: 'ORPHAN_TRANSCRIPT',
+    subject: '',
+    details: toJsonValue({
+      transcriptIds: orphans.map((transcript) => transcript.id),
+    }),
+  };
+}
+
+export async function detectPairAsymmetry(run: RunSnapshot): Promise<AnomalyDraft | null> {
+  const groupId = getGroupId(run.config);
+  if (groupId === null) {
+    return null;
+  }
+
+  const siblings = await db.run.findMany({
+    where: {
+      deletedAt: null,
+      id: { not: run.id },
+      config: {
+        path: ['jobChoiceBatchGroupId'],
+        equals: groupId,
+      },
+    },
+    select: {
+      id: true,
+      config: true,
+    },
+    orderBy: { updatedAt: 'asc' },
+  });
+
+  if (siblings.length === 0) {
+    return null;
+  }
+
+  const comparisonRuns: PairAsymmetryCandidate[] = [run, ...siblings];
+  const metrics = await Promise.all(
+    comparisonRuns.map(async (candidate): Promise<PairAsymmetryMetrics> => {
+      const modelCount = getModelIds(candidate.config).length;
+      const scenarioCount = await db.runScenarioSelection.count({ where: { runId: candidate.id } });
+      const samplesPerScenario = getSamplesPerScenario(candidate.config);
+      const scheduled = scenarioCount * modelCount * samplesPerScenario;
+      const successCount = await db.probeResult.count({
+        where: { runId: candidate.id, deletedAt: null, status: 'SUCCESS' },
+      });
+      return {
+        runId: candidate.id,
+        scheduled,
+        successCount,
+        successRate: scheduled === 0 ? 0 : successCount / scheduled,
+      };
+    })
+  );
+
+  const currentMetrics = metrics.find((candidate) => candidate.runId === run.id) ?? null;
+  if (currentMetrics === null) {
+    return null;
+  }
+
+  const skippedUnderSampledRunIds: string[] = [];
+  let maxDeltaPct = -1;
+  let maxDeltaSibling: PairAsymmetryMetrics | null = null;
+
+  for (const siblingMetrics of metrics) {
+    if (siblingMetrics.runId === run.id) {
+      continue;
+    }
+
+    if (currentMetrics.scheduled < PAIR_ASYMMETRY_MIN_PROBES || siblingMetrics.scheduled < PAIR_ASYMMETRY_MIN_PROBES) {
+      skippedUnderSampledRunIds.push(siblingMetrics.runId);
+      continue;
+    }
+
+    const deltaPct = Math.abs(currentMetrics.successRate - siblingMetrics.successRate) * 100;
+    if (deltaPct > maxDeltaPct) {
+      maxDeltaPct = deltaPct;
+      maxDeltaSibling = siblingMetrics;
+    }
+  }
+
+  if (maxDeltaSibling === null) {
+    return null;
+  }
+
+  // <= so identical rates (deltaPct === 0) don't fire when threshold is 0.
+  // At threshold=0 the detector fires on any measurable asymmetry.
+  if (maxDeltaPct <= PAIR_ASYMMETRY_THRESHOLD_PCT) {
+    return null;
+  }
+
+  return {
+    type: 'PAIR_ASYMMETRY',
+    subject: groupId,
+    details: toJsonValue({
+      runId: run.id,
+      siblingRunId: maxDeltaSibling.runId,
+      currentSuccessRate: currentMetrics.successRate,
+      siblingSuccessRate: maxDeltaSibling.successRate,
+      scheduled: currentMetrics.scheduled,
+      siblingScheduled: maxDeltaSibling.scheduled,
+      siblingRunIds: metrics.map((candidate) => candidate.runId),
+      siblingSuccessRates: metrics.map((candidate) => candidate.successRate),
+      maxDeltaPct,
+      skippedUnderSampledRunIds,
+    }),
+  };
+}
+
+export function detectSummarizingStall(run: RunSnapshot): AnomalyDraft | null {
+  if (run.status !== 'SUMMARIZING') {
+    return null;
+  }
+
+  const ageMinutes = Math.floor((Date.now() - run.updatedAt.getTime()) / 60000);
+  if (ageMinutes < SUMMARIZING_STALL_MINUTES) {
+    return null;
+  }
+
+  return {
+    type: 'SUMMARIZING_STALL',
+    subject: '',
+    details: toJsonValue({
+      updatedAt: run.updatedAt.toISOString(),
+      ageMinutes,
+    }),
+  };
+}
+
+export async function detectModelTranscriptShortfall(run: RunSnapshot): Promise<AnomalyDraft[]> {
+  const modelIds = getModelIds(run.config);
+  if (modelIds.length === 0) {
+    return [];
+  }
+
+  const scenarioCount = await db.runScenarioSelection.count({ where: { runId: run.id } });
+  const samplesPerScenario = getSamplesPerScenario(run.config);
+  const scheduledPerModel = scenarioCount * samplesPerScenario;
+
+  if (scheduledPerModel < MODEL_SHORTFALL_MIN_PROBES) {
+    return [];
+  }
+
+  const successRows = await db.probeResult.groupBy({
+    by: ['modelId'],
+    where: {
+      runId: run.id,
+      deletedAt: null,
+      status: 'SUCCESS',
+    },
+    _count: { _all: true },
+  });
+
+  const successesByModel = new Map<string, number>();
+  for (const row of successRows as SuccessCountRow[]) {
+    successesByModel.set(row.modelId, row._count._all);
+  }
+
+  const rates = modelIds.map((modelId) => {
+    const successes = successesByModel.get(modelId) ?? 0;
+    return {
+      modelId,
+      successes,
+      scheduled: scheduledPerModel,
+      rate: scheduledPerModel === 0 ? 0 : successes / scheduledPerModel,
+    };
+  });
+
+  const sorted = [...rates].map((rate) => rate.rate).sort((left, right) => left - right);
+  const peerMedianRate = sorted.length === 0
+    ? 0
+    : sorted.length % 2 === 0
+      ? ((sorted[sorted.length / 2 - 1] ?? 0) + (sorted[sorted.length / 2] ?? 0)) / 2
+      : sorted[Math.floor(sorted.length / 2)] ?? 0;
+
+  return rates
+    .filter((rate) => rate.rate < MODEL_SHORTFALL_ABSOLUTE_RATE || (
+      rate.rate < MODEL_SHORTFALL_RELATIVE_RATE && peerMedianRate > MODEL_SHORTFALL_PEER_RATE
+    ))
+    .map((rate) => ({
+      type: 'MODEL_TRANSCRIPT_SHORTFALL' as const,
+      subject: rate.modelId,
+      details: toJsonValue({
+        runId: run.id,
+        modelId: rate.modelId,
+        successes: rate.successes,
+        scheduled: rate.scheduled,
+        rate: rate.rate,
+        peerMedianRate,
+      }),
+    }));
+}
+
+export async function detectScheduledCountMismatch(
+  run: RunSnapshot,
+): Promise<{ draft: AnomalyDraft | null; canonicalTotal: number }> {
+  const modelCount = getModelIds(run.config).length;
+  const scenarioCount = await db.runScenarioSelection.count({ where: { runId: run.id } });
+  const samplesPerScenario = getSamplesPerScenario(run.config);
+  const canonicalTotal = modelCount * scenarioCount * samplesPerScenario;
+  const currentTotal = getProgressTotal(run.progress);
+
+  if (currentTotal === canonicalTotal) {
+    return { draft: null, canonicalTotal };
+  }
+
+  return {
+    draft: {
+      type: 'SCHEDULED_COUNT_MISMATCH',
+      subject: '',
+      details: toJsonValue({
+        runId: run.id,
+        canonicalTotal,
+        currentTotal,
+        modelCount,
+        scenarioCount,
+        samplesPerScenario,
+      }),
+    },
+    canonicalTotal,
+  };
+}
+
+export async function detectRunAnomalies(run: RunSnapshot): Promise<AnomalyDraft[]> {
+  const drafts: AnomalyDraft[] = [];
+
+  const stranded = await detectStrandedTranscript(run.id);
+  if (stranded !== null) drafts.push(stranded);
+
+  const orphan = await detectOrphanTranscript(run.id);
+  if (orphan !== null) drafts.push(orphan);
+
+  const pair = await detectPairAsymmetry(run);
+  if (pair !== null) drafts.push(pair);
+
+  const stall = detectSummarizingStall(run);
+  if (stall !== null) drafts.push(stall);
+
+  drafts.push(...await detectModelTranscriptShortfall(run));
+
+  const scheduled = await detectScheduledCountMismatch(run);
+  if (scheduled.draft !== null) drafts.push(scheduled.draft);
+
+  log.debug({ runId: run.id, anomalyCount: drafts.length }, 'Detected run anomalies');
+  return drafts;
+}
+
+export type { RunSnapshot };
+
+
+Context: anomaly-persistence.ts
+import { db } from '@valuerank/db';
+import { createLogger } from '@valuerank/shared';
+import type { AnomalyDraft, RunAnomalyType } from './anomaly-detection.js';
+
+const log = createLogger('services:run:anomaly-persistence');
+
+type RunProgress = {
+  total: number;
+  completed: number;
+  failed: number;
+};
+
+type RunAnomalyKey = {
+  runId: string;
+  type: RunAnomalyType;
+  subject: string;
+};
+
+function parseProgress(progress: unknown): RunProgress {
+  if (progress === null || progress === undefined || typeof progress !== 'object') {
+    return { total: 0, completed: 0, failed: 0 };
+  }
+
+  const record = progress as Record<string, unknown>;
+  const total = typeof record.total === 'number' && Number.isFinite(record.total) ? record.total : 0;
+  const completed = typeof record.completed === 'number' && Number.isFinite(record.completed) ? record.completed : 0;
+  const failed = typeof record.failed === 'number' && Number.isFinite(record.failed) ? record.failed : 0;
+  return { total, completed, failed };
+}
+
+export async function upsertAnomaly(runId: string, draft: AnomalyDraft): Promise<void> {
+  const now = new Date();
+  await db.runAnomaly.upsert({
+    where: {
+      runId_type_subject: {
+        runId,
+        type: draft.type,
+        subject: draft.subject,
+      },
+    },
+    create: {
+      runId,
+      type: draft.type,
+      subject: draft.subject,
+      details: draft.details,
+      firstSeenAt: now,
+      lastSeenAt: now,
+    },
+    update: {
+      details: draft.details,
+      lastSeenAt: now,
+      resolvedAt: null,
+    },
+  });
+}
+
+export async function persistAnomalyDrafts(runId: string, drafts: AnomalyDraft[]): Promise<void> {
+  for (const draft of drafts) {
+    await upsertAnomaly(runId, draft);
+  }
+}
+
+export async function resolveAnomaly(key: RunAnomalyKey): Promise<void> {
+  const now = new Date();
+  await db.runAnomaly.updateMany({
+    where: {
+      runId: key.runId,
+      type: key.type,
+      subject: key.subject,
+      resolvedAt: null,
+    },
+    data: {
+      resolvedAt: now,
+      lastSeenAt: now,
+    },
+  });
+}
+
+export async function repairScheduledCount(runId: string, canonicalTotal: number): Promise<boolean> {
+  const run = await db.run.findUnique({
+    where: { id: runId },
+    select: { progress: true },
+  });
+
+  if (run === null) {
+    return false;
+  }
+
+  const current = parseProgress(run.progress);
+  if (current.total === canonicalTotal) {
+    return false;
+  }
+
+  const updated: RunProgress = {
+    ...current,
+    total: canonicalTotal,
+  };
+
+  await db.run.update({
+    where: { id: runId },
+    data: { progress: updated },
+  });
+
+  log.info({ runId, currentTotal: current.total, canonicalTotal }, 'Repaired scheduled count');
+  return true;
+}
+
+
+Context: run-state-reconcile.ts
+import type * as PgBoss from 'pg-boss';
+import { db } from '@valuerank/db';
+import { createLogger } from '@valuerank/shared';
+import { DEFAULT_JOB_OPTIONS, type RunStateReconcileJobData } from '../types.js';
+import { maybeAdvanceRunStatus } from '../../services/run/index.js';
+import {
+  detectModelTranscriptShortfall,
+  detectPairAsymmetry,
+  detectScheduledCountMismatch,
+  detectStrandedTranscript,
+  detectSummarizingStall,
+  countOrphanTranscripts,
+  findOrphanTranscripts,
+  type AnomalyDraft,
+  type RunSnapshot,
+} from '../../services/run/anomaly-detection.js';
+import {
+  persistAnomalyDrafts,
+  repairScheduledCount,
+  resolveAnomaly,
+} from '../../services/run/anomaly-persistence.js';
+import { ORPHAN_RECONSTRUCTION_CAP_PER_TICK } from '../../services/run/anomaly-thresholds.js';
+import { recordProbeSuccess } from '../../services/probe-result/index.js';
+
+const log = createLogger('queue:run-state-reconcile');
+
+type TokenUsageResult =
+  | { kind: 'ok'; inputTokens: number; outputTokens: number }
+  | { kind: 'malformed'; reason: string };
+
+function extractTranscriptTokenUsage(content: unknown, fallbackTokenCount: number): TokenUsageResult {
+  if (content === null || content === undefined || typeof content !== 'object') {
+    return { kind: 'malformed', reason: 'content-not-object' };
+  }
+
+  const record = content as Record<string, unknown>;
+  const snapshot = record.costSnapshot;
+  if (snapshot !== null && snapshot !== undefined && typeof snapshot === 'object') {
+    const snap = snapshot as Record<string, unknown>;
+    if (typeof snap.inputTokens === 'number' && typeof snap.outputTokens === 'number') {
+      return { kind: 'ok', inputTokens: snap.inputTokens, outputTokens: snap.outputTokens };
+    }
+  }
+
+  const turns = Array.isArray(record.turns) ? record.turns : [];
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let foundInputTokens = false;
+  let foundOutputTokens = false;
+
+  for (const turn of turns) {
+    if (turn === null || typeof turn !== 'object') {
+      continue;
+    }
+
+    const turnRecord = turn as Record<string, unknown>;
+    if (typeof turnRecord.inputTokens === 'number') {
+      inputTokens += turnRecord.inputTokens;
+      foundInputTokens = true;
+    }
+    if (typeof turnRecord.outputTokens === 'number') {
+      outputTokens += turnRecord.outputTokens;
+      foundOutputTokens = true;
+    }
+  }
+
+  if (!foundInputTokens && !foundOutputTokens) {
+    return { kind: 'malformed', reason: 'no-cost-data' };
+  }
+
+  return {
+    kind: 'ok',
+    inputTokens: foundInputTokens ? inputTokens : fallbackTokenCount,
+    outputTokens: foundOutputTokens ? outputTokens : fallbackTokenCount,
+  };
+}
+
+async function enqueueSummarizeTranscriptJob(runId: string, transcriptId: string): Promise<void> {
+  const bossModule = await import('../boss.js');
+  if (!bossModule.isBossRunning()) {
+    log.warn({ runId, transcriptId }, 'Boss not running, skipping summarize enqueue');
+    return;
+  }
+  const boss = bossModule.getBoss();
+  await boss.send(
+    'summarize_transcript',
+    { runId, transcriptId },
+    {
+      ...DEFAULT_JOB_OPTIONS['summarize_transcript'],
+      singletonKey: transcriptId,
+    }
+  );
+}
+
+async function syncAnomalies(runId: string, type: AnomalyDraft['type'], drafts: AnomalyDraft[]): Promise<void> {
+  await persistAnomalyDrafts(runId, drafts);
+
+  const currentSubjects = new Set(drafts.map((draft) => draft.subject));
+  const existing = await db.runAnomaly.findMany({
+    where: { runId, type },
+    select: { subject: true },
+  });
+
+  for (const anomaly of existing) {
+    if (!currentSubjects.has(anomaly.subject)) {
+      await resolveAnomaly({ runId, type, subject: anomaly.subject });
+    }
+  }
+}
+
+async function reconstructOrphans(runId: string): Promise<{ orphanIds: string[]; failedIds: string[]; reconstructedCount: number }> {
+  const orphans = await findOrphanTranscripts(runId, ORPHAN_RECONSTRUCTION_CAP_PER_TICK);
+  const failedIds: string[] = [];
+  let reconstructedCount = 0;
+
+  for (const orphan of orphans) {
+    if (orphan.scenarioId === null) {
+      failedIds.push(orphan.id);
+      continue;
+    }
+
+    try {
+      const tokenUsage = extractTranscriptTokenUsage(orphan.content, orphan.tokenCount);
+      if (tokenUsage.kind === 'ok') {
+        await recordProbeSuccess({
+          runId,
+          scenarioId: orphan.scenarioId,
+          modelId: orphan.modelId,
+          sampleIndex: orphan.sampleIndex,
+          transcriptId: orphan.id,
+          durationMs: orphan.durationMs,
+          inputTokens: tokenUsage.inputTokens,
+          outputTokens: tokenUsage.outputTokens,
+        });
+        reconstructedCount++;
+      } else {
+        failedIds.push(orphan.id);
+        log.warn({ runId, transcriptId: orphan.id, reason: tokenUsage.reason }, 'Malformed orphan transcript content');
+      }
+    } catch (error) {
+      failedIds.push(orphan.id);
+      log.warn({ runId, transcriptId: orphan.id, err: error }, 'Failed to reconstruct orphan transcript');
+    }
+  }
+
+  if (orphans.length === ORPHAN_RECONSTRUCTION_CAP_PER_TICK) {
+    const total = await countOrphanTranscripts(runId);
+    if (total > ORPHAN_RECONSTRUCTION_CAP_PER_TICK) {
+      log.info(
+        {
+          runId,
+          total,
+          processing: ORPHAN_RECONSTRUCTION_CAP_PER_TICK,
+          overflow: total - ORPHAN_RECONSTRUCTION_CAP_PER_TICK,
+        },
+        'Orphan backlog exceeds per-tick cap'
+      );
+    }
+  }
+
+  return {
+    orphanIds: orphans.map((orphan) => orphan.id),
+    failedIds,
+    reconstructedCount,
+  };
+}
+
+async function getRunSnapshot(runId: string): Promise<RunSnapshot | null> {
+  return db.run.findUnique({
+    where: { id: runId },
+    select: {
+      id: true,
+      status: true,
+      updatedAt: true,
+      config: true,
+      progress: true,
+      deletedAt: true,
+    },
+  });
+}
+
+export function createRunStateReconcileHandler(): PgBoss.WorkHandler<RunStateReconcileJobData> {
+  return async (jobs: PgBoss.Job<RunStateReconcileJobData>[]) => {
+    if (jobs.length === 0) {
+      return;
+    }
+
+    await Promise.all(
+      jobs.map(async (job) => {
+        const runId = job.data.runId;
+        log.debug({ jobId: job.id, runId }, 'Reconciling run state');
+
+        let run = await getRunSnapshot(runId);
+        if (run === null || run.deletedAt !== null) {
+          log.debug({ runId }, 'Skipping reconcile for missing or deleted run');
+          return;
+        }
+
+        if (run.status === 'FAILED' || run.status === 'CANCELLED') {
+          log.debug({ runId, status: run.status }, 'Skipping reconcile for terminal run');
+          return;
+        }
+
+        // Reconstruct orphan transcripts FIRST so their ProbeResult rows exist
+        // before we compute derived progress (maybeAdvanceRunStatus) and before
+        // the stranded-transcript rescue fans out summarize jobs. Without this
+        // ordering, orphans reconstructed on COMPLETED runs would wait a full
+        // sweep cycle (5-10 min) before getting summarized.
+        try {
+          const orphanResult = await reconstructOrphans(runId);
+          if (orphanResult.failedIds.length > 0) {
+            await syncAnomalies(runId, 'ORPHAN_TRANSCRIPT', [{
+              type: 'ORPHAN_TRANSCRIPT',
+              subject: '',
+              details: {
+                transcriptIds: orphanResult.orphanIds,
+                malformedTranscriptIds: orphanResult.failedIds,
+              },
+            }]);
+          } else {
+            await syncAnomalies(runId, 'ORPHAN_TRANSCRIPT', []);
+          }
+        } catch (error) {
+          log.warn({ runId, err: error }, 'Orphan transcript reconciliation failed');
+        }
+
+        try {
+          const stranded = await detectStrandedTranscript(runId);
+          if (stranded !== null) {
+            const transcripts = await db.transcript.findMany({
+              where: {
+                runId,
+                deletedAt: null,
+                summarizedAt: null,
+                summarizeFailedAt: null,
+              },
+              select: { id: true },
+              orderBy: { createdAt: 'asc' },
+            });
+
+            for (const transcript of transcripts) {
+              await enqueueSummarizeTranscriptJob(runId, transcript.id);
+            }
+
+            await syncAnomalies(runId, stranded.type, [stranded]);
+          } else {
+            await syncAnomalies(runId, 'STRANDED_TRANSCRIPT', []);
+          }
+        } catch (error) {
+          log.warn({ runId, err: error }, 'Late transcript rescue failed');
+        }
+
+        if (run.status === 'RUNNING' || run.status === 'SUMMARIZING' || run.status === 'PAUSED') {
+          try {
+            const advanceResult = await maybeAdvanceRunStatus(runId);
+            log.debug({ runId, advanceResult }, 'Reconciled run state');
+            run = (await getRunSnapshot(runId)) ?? run;
+          } catch (error) {
+            log.warn({ runId, err: error }, 'Failed to advance run state during reconciliation');
+          }
+        }
+
+        if (run.status === 'COMPLETED') {
+          try {
+            const pair = await detectPairAsymmetry(run);
+            await syncAnomalies(runId, 'PAIR_ASYMMETRY', pair === null ? [] : [pair]);
+          } catch (error) {
+            log.warn({ runId, err: error }, 'Pair asymmetry detection failed');
+          }
+
+          try {
+            const shortfalls = await detectModelTranscriptShortfall(run);
+            await syncAnomalies(runId, 'MODEL_TRANSCRIPT_SHORTFALL', shortfalls);
+          } catch (error) {
+            log.warn({ runId, err: error }, 'Model shortfall detection failed');
+          }
+        } else {
+          try {
+            const pair = await detectPairAsymmetry(run);
+            await syncAnomalies(runId, 'PAIR_ASYMMETRY', pair === null ? [] : [pair]);
+          } catch (error) {
+            log.warn({ runId, err: error }, 'Pair asymmetry detection failed');
+          }
+
+          try {
+            const stall = detectSummarizingStall(run);
+            await syncAnomalies(runId, 'SUMMARIZING_STALL', stall === null ? [] : [stall]);
+          } catch (error) {
+            log.warn({ runId, err: error }, 'Summarizing stall detection failed');
+          }
+
+          try {
+            const scheduled = await detectScheduledCountMismatch(run);
+            await syncAnomalies(runId, 'SCHEDULED_COUNT_MISMATCH', scheduled.draft === null ? [] : [scheduled.draft]);
+            if (scheduled.draft !== null) {
+              await repairScheduledCount(runId, scheduled.canonicalTotal);
+            }
+          } catch (error) {
+            log.warn({ runId, err: error }, 'Scheduled count mismatch detection failed');
+          }
+
+          try {
+            const shortfalls = await detectModelTranscriptShortfall(run);
+            await syncAnomalies(runId, 'MODEL_TRANSCRIPT_SHORTFALL', shortfalls);
+          } catch (error) {
+            log.warn({ runId, err: error }, 'Model shortfall detection failed');
+          }
+        }
+
+        log.info({ runId }, 'Run reconciliation completed');
+      })
+    );
+  };
+}
+
+
+Context: index.ts
+/**
+ * Queue Handler Registration
+ *
+ * Exports handler registration function for all job types.
+ * Includes provider-specific queues for parallelism enforcement.
+ */
+
+import type { PgBoss } from 'pg-boss';
+import { createLogger } from '@valuerank/shared';
+import { queueConfig } from '../../config.js';
+import { createProbeScenarioHandler } from './probe-scenario/index.js';
+import { createTopUpProbesHandler } from './top-up-probes.js';
+import { createSummarizeTranscriptHandler } from './summarize-transcript.js';
+import {
+  PROBE_DEAD_LETTER_QUEUE,
+  handlerRegistrations,
+} from './handler-config.js';
+import type { ProbeScenarioJobData, SummarizeTranscriptJobData } from './handler-config.js';
+import type { TopUpProbesJobData } from '../types.js';
+import {
+  createProviderQueues,
+  getAllProviderQueues,
+} from '../../services/parallelism/index.js';
+
+export type {
+  ProbeScenarioJobData,
+  SummarizeTranscriptJobData,
+} from './handler-config.js';
+export type { TopUpProbesJobData } from '../types.js';
+
+const log = createLogger('queue:handlers');
+const TOP_UP_PROBES_QUEUE = 'top_up_probes';
+/**
+ * Registers provider-specific probe queue handlers.
+ * Each provider queue gets N workers where N = maxParallelRequests.
+ * Each worker fetches one job at a time to preserve per-job retry semantics.
+ */
+async function registerProviderProbeHandlers(boss: PgBoss): Promise<number> {
+  const providerQueues = await getAllProviderQueues();
+  const probeHandler = createProbeScenarioHandler();
+
+  let registeredCount = 0;
+
+  for (const [providerName, limits] of providerQueues) {
+    const queueName = limits.queueName;
+    const workerCount = limits.maxParallelRequests;
+
+    log.info(
+      { provider: providerName, queueName, workerCount, workerBatchSize: 1 },
+      'Registering provider probe handler'
+    );
+
+    // Register one worker per parallel slot.
+    // Using batchSize > 1 causes pg-boss to mark the whole batch failed when one job throws.
+    // That can retry already-successful jobs and create duplicate transcripts.
+    for (let i = 0; i < workerCount; i++) {
+      await boss.work<ProbeScenarioJobData>(queueName, { batchSize: 1 }, probeHandler);
+      registeredCount++;
+    }
+  }
+
+  return registeredCount;
+}
+
+/**
+ * Registers all job handlers with PgBoss.
+ * Creates queues first (required by PgBoss v10+), then registers workers.
+ * Includes provider-specific probe queues for parallelism enforcement.
+ */
+export async function registerHandlers(boss: PgBoss): Promise<void> {
+  // Import summarization parallelism service
+  const { getMaxParallelSummarizations } = await import(
+    '../../services/summarization-parallelism/index.js'
+  );
+
+  const defaultBatchSize = queueConfig.workerBatchSize;
+
+  log.info(
+    { defaultBatchSize, jobTypes: getJobTypes() },
+    'Starting handler registration'
+  );
+
+  // Create dead letter queue FIRST (required before queues that reference it)
+  log.info({ jobType: PROBE_DEAD_LETTER_QUEUE }, 'Creating dead letter queue');
+  await boss.createQueue(PROBE_DEAD_LETTER_QUEUE);
+
+  // Create standard queues (required by PgBoss v10+)
+  for (const registration of handlerRegistrations) {
+    // Skip dead letter queue - already created above
+    if (registration.name === 'probe_dead_letter') continue;
+
+    log.info({ jobType: registration.name }, 'Creating queue');
+    // Add dead letter queue for probe_scenario
+    if (registration.name === 'probe_scenario') {
+      await boss.createQueue(registration.name, { deadLetter: PROBE_DEAD_LETTER_QUEUE });
+    } else {
+      await boss.createQueue(registration.name);
+    }
+  }
+
+  // Create provider-specific probe queues with dead letter support
+  await createProviderQueues(boss, PROBE_DEAD_LETTER_QUEUE);
+
+  // Collect handler registration details for summary log
+  const handlerDetails: Array<{ jobType: string; batchSize: number }> = [];
+
+  // Register standard handlers with appropriate batchSize
+  for (const registration of handlerRegistrations) {
+    // Use dynamic batchSize for summarize_transcript
+    const batchSize = registration.name === 'summarize_transcript'
+      ? await getMaxParallelSummarizations()
+      : defaultBatchSize;
+
+    log.info(
+      {
+        jobType: registration.name,
+        batchSize,
+        isDynamic: registration.name === 'summarize_transcript',
+      },
+      'Registering handler with batchSize'
+    );
+
+    await registration.register(boss, batchSize);
+    handlerDetails.push({ jobType: registration.name, batchSize });
+  }
+
+  // Register provider-specific probe handlers with parallelism limits
+  const providerHandlerCount = await registerProviderProbeHandlers(boss);
+
+  log.info({ jobType: TOP_UP_PROBES_QUEUE }, 'Creating top-up queue');
+  await boss.createQueue(TOP_UP_PROBES_QUEUE);
+  log.info({ jobType: TOP_UP_PROBES_QUEUE, batchSize: 1 }, 'Registering top-up handler');
+  await boss.work<TopUpProbesJobData>(TOP_UP_PROBES_QUEUE, { batchSize: 1 }, createTopUpProbesHandler());
+
+  // Get current queue states for logging
+  let queueStates: Array<{ name: string; activeCount: number; queuedCount: number }> = [];
+  try {
+    const queues = await boss.getQueues();
+    queueStates = queues.map(q => ({
+      name: q.name,
+      activeCount: q.activeCount,
+      queuedCount: q.queuedCount,
+    }));
+  } catch {
+    // Ignore errors getting queue states
+  }
+
+  log.info(
+    {
+      standardHandlers: handlerRegistrations.length,
+      providerHandlers: providerHandlerCount,
+      topUpHandlers: 1,
+      handlerDetails,
+      queueStates,
+    },
+    'All handlers registered - PgBoss ready'
+  );
+}
+
+/**
+ * Gets list of registered job types.
+ */
+export function getJobTypes() {
+  return [...handlerRegistrations.map((h) => h.name), TOP_UP_PROBES_QUEUE];
+}
+
+/**
+ * Re-registers a single provider's probe queue handler with updated settings.
+ * Called when provider parallelism settings are changed via API.
+ *
+ * This function:
+ * 1. Unregisters the existing handler for the provider queue (allows in-flight jobs to complete)
+ * 2. Clears the parallelism cache to reload settings from DB
+ * 3. Registers N new handlers with batchSize=1 where N=maxParallelRequests
+ *
+ * Note: Jobs in the queue are NOT affected - they remain queued and will be processed
+ * by the new handler. In-flight jobs complete normally before the handler is replaced.
+ * PgBoss's offWork() is graceful and does not abort running jobs.
+ *
+ * @param providerName - The provider name (e.g., 'google', 'openai')
+ */
+export async function reregisterProviderHandler(
+  boss: PgBoss,
+  providerName: string
+): Promise<void> {
+  // Import here to avoid circular dependency
+  const { clearCache, getProviderQueueName, loadProviderLimits } = await import(
+    '../../services/parallelism/index.js'
+  );
+  const { reloadLimiters } = await import('../../services/rate-limiter/index.js');
+
+  const queueName = getProviderQueueName(providerName);
+
+  log.info({ provider: providerName, queueName }, 'Re-registering provider queue handler');
+
+  // 1. Get queue stats before unregistering (for logging)
+  let activeCount = 0;
+  let queuedCount = 0;
+  try {
+    const queues = await boss.getQueues();
+    const queueInfo = queues.find((q) => q.name === queueName);
+    if (queueInfo) {
+      activeCount = queueInfo.activeCount;
+      queuedCount = queueInfo.queuedCount;
+    }
+  } catch {
+    // Ignore errors getting stats
+  }
+
+  // 2. Unregister existing handler - this is GRACEFUL:
+  //    - Stops fetching NEW jobs from the queue
+  //    - In-flight jobs continue to completion
+  //    - Jobs in queue remain untouched
+  await boss.offWork(queueName);
+  log.info(
+    { provider: providerName, queueName, activeJobs: activeCount, queuedJobs: queuedCount },
+    'Unregistered existing handler (in-flight jobs will complete)'
+  );
+
+  // 3. Clear caches to force reload from database
+  clearCache();
+
+  // 4. Load fresh limits
+  const limits = await loadProviderLimits();
+  const providerLimits = limits.get(providerName);
+
+  if (!providerLimits) {
+    log.warn({ provider: providerName }, 'Provider not found after cache reload');
+    return;
+  }
+
+  // 5. Register new handlers with batchSize=1.
+  //    This preserves per-job retry semantics while keeping provider concurrency.
+  const workerCount = providerLimits.maxParallelRequests;
+  const probeHandler = createProbeScenarioHandler();
+
+  for (let i = 0; i < workerCount; i++) {
+    await boss.work<ProbeScenarioJobData>(queueName, { batchSize: 1 }, probeHandler);
+  }
+
+  log.info(
+    { provider: providerName, queueName, workerCount, workerBatchSize: 1 },
+    'Provider queue handler re-registered with new settings'
+  );
+
+  // 6. Reload rate limiters to pick up new settings
+  await reloadLimiters();
+  log.debug({ provider: providerName }, 'Rate limiters reloaded');
+}
+
+/**
+ * Re-registers the summarize_transcript queue handler with updated batchSize.
+ * Called when summarization parallelism settings are changed via MCP.
+ *
+ * This function:
+ * 1. Unregisters the existing handler (allows in-flight jobs to complete)
+ * 2. Clears the summarization parallelism cache to reload settings from DB
+ * 3. Registers a new handler with the updated batchSize
+ *
+ * Note: Jobs in the queue are NOT affected - they remain queued and will be processed
+ * by the new handler. In-flight jobs complete normally before the handler is replaced.
+ * PgBoss's offWork() is graceful and does not abort running jobs.
+ */
+export async function reregisterSummarizeHandler(boss: PgBoss): Promise<void> {
+  // Import here to avoid circular dependency
+  const { clearSummarizationCache, getMaxParallelSummarizations } = await import(
+    '../../services/summarization-parallelism/index.js'
+  );
+
+  const queueName = 'summarize_transcript';
+  const reregisterStartTime = Date.now();
+
+  log.info({ queueName }, 'Starting summarize handler re-registration');
+
+  // 1. Get queue stats before unregistering (for logging)
+  let activeCount = 0;
+  let queuedCount = 0;
+  try {
+    const queues = await boss.getQueues();
+    const queueInfo = queues.find((q) => q.name === queueName);
+    if (queueInfo) {
+      activeCount = queueInfo.activeCount;
+      queuedCount = queueInfo.queuedCount;
+    }
+  } catch {
+    // Ignore errors getting stats
+  }
+
+  // Get old batch size for comparison
+  const oldBatchSize = await getMaxParallelSummarizations();
+
+  // 2. Unregister existing handler - this is GRACEFUL:
+  //    - Stops fetching NEW jobs from the queue
+  //    - In-flight jobs continue to completion
+  //    - Jobs in queue remain untouched
+  await boss.offWork(queueName);
+  log.info(
+    { queueName, activeJobs: activeCount, queuedJobs: queuedCount, oldBatchSize },
+    'Unregistered existing handler (in-flight jobs will complete)'
+  );
+
+  // 3. Clear cache to force reload from database
+  clearSummarizationCache();
+
+  // 4. Clear summarize rate limiters so they're recreated with new settings
+  const { clearSummarizeLimiters } = await import('../../services/rate-limiter/index.js');
+  clearSummarizeLimiters();
+  log.debug('Summarize rate limiters cleared');
+
+  // 5. Load fresh parallelism setting
+  const newBatchSize = await getMaxParallelSummarizations();
+
+  // 6. Register new handler with updated batchSize
+  //    This immediately starts processing queued jobs with the new concurrency
+  const summarizeHandler = createSummarizeTranscriptHandler();
+
+  await boss.work<SummarizeTranscriptJobData>(queueName, { batchSize: newBatchSize }, summarizeHandler);
+
+  const durationMs = Date.now() - reregisterStartTime;
+
+  log.info(
+    {
+      queueName,
+      oldBatchSize,
+      newBatchSize,
+      batchSizeChanged: oldBatchSize !== newBatchSize,
+      queuedJobsWaiting: queuedCount,
+      durationMs,
+    },
+    'Summarize handler re-registered with new settings'
+  );
+}
+
+
+Context: types.ts
+/**
+ * Queue System Types
+ *
+ * Defines job types, data interfaces, and options for PgBoss queue.
+ */
+
+// Job type union
+export type JobType =
+  | 'probe_scenario'
+  | 'top_up_probes'
+  | 'summarize_transcript'
+  | 'analyze_basic'
+  | 'expand_scenarios'
+  | 'compute_token_stats'
+  | 'probe_dead_letter'
+  | 'run_state_reconcile'
+  | 'aggregate_analysis'
+  | 'refresh_domain_analysis_snapshot';
+
+// Job data interfaces
+export type ProbeScenarioJobData = {
+  runId: string;
+  scenarioId: string;
+  modelId: string;
+  modelVersion?: string;
+  sampleIndex: number; // Index within sample set (0 to N-1) for multi-sample runs
+  config: {
+    temperature?: number;
+    seed?: number;
+    maxTurns: number;
+  };
+};
+
+export type TopUpProbesJobData = {
+  runId: string;
+};
+
+export type SummarizeTranscriptJobData = {
+  runId: string;
+  transcriptId: string;
+  summaryModelId?: string; // Optional: defaults to configured summary model
+  forceSummarize?: boolean; // Optional: bypasses cache and summarization short-circuits
+};
+
+export type AnalyzeBasicJobData = {
+  runId: string;
+  transcriptIds?: string[]; // Optional: will be fetched from DB if not provided
+  force?: boolean; // Force recomputation even if cached
+};
+
+export type ExpandScenariosJobData = {
+  definitionId: string;
+  triggeredBy: 'create' | 'update' | 'fork';
+};
+
+export type ComputeTokenStatsJobData = {
+  runId: string;
+};
+
+export type RunStateReconcileJobData = {
+  runId: string;
+};
+
+export type AggregateAnalysisJobData = {
+  definitionId: string;
+  preambleVersionId: string | null;
+  // Optional for backward compatibility with already-queued legacy jobs.
+  definitionVersion?: number | null;
+  // Optional for backward compatibility with already-queued legacy jobs.
+  temperature?: number | null;
+};
+
+export type RefreshDomainAnalysisSnapshotJobData = {
+  scope: 'DOMAIN' | 'ALL_DOMAINS';
+  domainId: string;
+  signature: string | null;
+  reason: string;
+};
+
+// Dead letter job data - same as probe scenario but handled separately for failed/expired jobs
+export type ProbeDeadLetterJobData = ProbeScenarioJobData;
+
+// Job data union type (ProbeDeadLetterJobData is same as ProbeScenarioJobData, so not duplicated here)
+export type JobData =
+  | ProbeScenarioJobData
+  | TopUpProbesJobData
+  | SummarizeTranscriptJobData
+  | AnalyzeBasicJobData
+  | ExpandScenariosJobData
+  | ComputeTokenStatsJobData
+  | RunStateReconcileJobData
+  | AggregateAnalysisJobData
+  | RefreshDomainAnalysisSnapshotJobData;
+
+// Job options interface
+export type JobOptions = {
+  priority?: number;
+  retryLimit?: number;
+  retryDelay?: number;
+  retryBackoff?: boolean;
+  expireInSeconds?: number;
+  singletonKey?: string;
+};
+
+// Default job options per type
+export const DEFAULT_JOB_OPTIONS: Record<JobType, JobOptions> = {
+  'probe_scenario': {
+    retryLimit: 3,
+    retryDelay: 5,
+    retryBackoff: true,
+    expireInSeconds: 420, // 7 minutes - covers 5m timeout + buffer
+  },
+  'top_up_probes': {
+    retryLimit: 0,
+    expireInSeconds: 60,
+  },
+  'summarize_transcript': {
+    retryLimit: 3,
+    retryDelay: 10,
+    retryBackoff: true,
+    expireInSeconds: 600, // 10 minutes - covers 5m Python spawn timeout + buffer
+  },
+  'analyze_basic': {
+    retryLimit: 3,
+    retryDelay: 10,
+    retryBackoff: true,
+    expireInSeconds: 600, // 10 minutes
+  },
+  'expand_scenarios': {
+    retryLimit: 2,
+    retryDelay: 10,
+    retryBackoff: true,
+    expireInSeconds: 900, // 15 minutes
+    singletonKey: 'definition', // Only one expansion per definition at a time
+  },
+  'compute_token_stats': {
+    retryLimit: 2,
+    retryDelay: 10,
+    retryBackoff: true,
+    expireInSeconds: 120, // 2 minutes - stats computation is quick
+    singletonKey: 'run', // Only one stats computation per run at a time
+  },
+  'run_state_reconcile': {
+    retryLimit: 0,
+    expireInSeconds: 120,
+  },
+  'aggregate_analysis': {
+    retryLimit: 3,
+    retryDelay: 10,
+    retryBackoff: true,
+    expireInSeconds: 300, // 5 minutes
+    // singletonKey is set dynamically based on definitionId
+  },
+  'refresh_domain_analysis_snapshot': {
+    retryLimit: 2,
+    retryDelay: 10,
+    retryBackoff: true,
+    expireInSeconds: 300, // 5 minutes
+  },
+  'probe_dead_letter': {
+    retryLimit: 0, // Don't retry dead letter jobs - just log and record
+    expireInSeconds: 300,
+  },
+};
+
+// Run progress tracking
+export type RunProgress = {
+  total: number;
+  completed: number;
+  failed: number;
+  byModel?: Record<string, { completed: number; failed: number }>;
+};
+
+// Priority values mapping
+export const PRIORITY_VALUES = {
+  LOW: 0,
+  NORMAL: 5,
+  HIGH: 10,
+} as const;
+
+export type PriorityLevel = keyof typeof PRIORITY_VALUES;
+
+// Task result for GraphQL
+export type TaskResult = {
+  scenarioId: string;
+  modelId: string;
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+  error?: string;
+  completedAt?: Date;
+};
+
+// Job handler interface
+export type JobHandler<T extends JobData> = {
+  name: JobType;
+  handler: (data: T) => Promise<void>;
+  options: JobOptions;
+};
+
+
+Context: scheduler.ts
+/**
+ * Run Recovery Scheduler
+ *
+ * Manages the periodic recovery job that detects and recovers orphaned runs.
+ * Uses setInterval for simplicity - PgBoss schedule() is for distributed cron,
+ * but we only need one instance running recovery.
+ *
+ * Activity-based scheduling:
+ * - Recovery only runs for 1 hour after the last run was started
+ * - When a new run starts, the activity timeout is reset
+ * - This prevents wasting resources checking for orphaned runs when no runs are active
+ */
+
+import { db, Prisma } from '@valuerank/db';
+import { createLogger } from '@valuerank/shared';
+import {
+  recoverOrphanedRuns,
+  detectAndRecoverStuckJobs,
+  RECOVERY_INTERVAL_MS,
+  runStartupRecovery
+} from './recovery.js';
+import { detectAndUpdateStalledRuns } from './stall-detection.js';
+import {
+  ORPHAN_TRANSCRIPT_MIN_AGE_SECONDS,
+  RECENT_COMPLETED_RUN_WINDOW_DAYS,
+} from './anomaly-thresholds.js';
+import { PROBE_QUEUE_DEPTH_PER_PROVIDER } from './start-queue.js';
+import { enqueueTopUpProbesSingleton } from '../../queue/handlers/top-up-probes.js';
+import { DEFAULT_JOB_OPTIONS } from '../../queue/types.js';
+import { getBoss } from '../../queue/boss.js';
+import { getQueueNameForModel } from '../parallelism/index.js';
+
+const log = createLogger('services:run:scheduler');
+
+type RunConfig = {
+  models?: string[];
+};
+
+let recoveryInterval: NodeJS.Timeout | null = null;
+let activityTimeout: NodeJS.Timeout | null = null;
+let isRecovering = false;
+let reconcileWindowDaysCache: number | null = null;
+
+// How long to keep recovery running after the last run was started (1 hour)
+export const RECOVERY_ACTIVITY_WINDOW_MS = 60 * 60 * 1000;
+
+function parseRunConfig(config: unknown): RunConfig {
+  return config !== null && typeof config === 'object' ? (config as RunConfig) : {};
+}
+
+function resolveReconcileWindowDays(): number {
+  const rawValue = process.env.RUN_RECONCILE_WINDOW_DAYS;
+  if (rawValue === undefined) {
+    return RECENT_COMPLETED_RUN_WINDOW_DAYS;
+  }
+
+  const parsed = Number.parseInt(rawValue, 10);
+  if (Number.isNaN(parsed) || parsed < 0) {
+    log.warn(
+      { rawValue, fallbackDays: RECENT_COMPLETED_RUN_WINDOW_DAYS },
+      'Invalid RUN_RECONCILE_WINDOW_DAYS, falling back to default'
+    );
+    return RECENT_COMPLETED_RUN_WINDOW_DAYS;
+  }
+
+  return parsed;
+}
+
+// Read once at module load. Changing RUN_RECONCILE_WINDOW_DAYS requires a process restart.
+reconcileWindowDaysCache = resolveReconcileWindowDays();
+
+export function getReconcileWindowDays(): number {
+  return reconcileWindowDaysCache ?? RECENT_COMPLETED_RUN_WINDOW_DAYS;
+}
+
+function buildOrphanBacklogExistsClause(): Prisma.Sql {
+  return Prisma.sql`
+    EXISTS (
+      SELECT 1
+      FROM transcripts t
+      LEFT JOIN probe_results p
+        ON p.run_id = t.run_id
+       AND p.scenario_id = t.scenario_id
+       AND p.model_id = t.model_id
+       AND p.sample_index = t.sample_index
+       AND p.deleted_at IS NULL
+      WHERE t.run_id = r.id
+        AND t.deleted_at IS NULL
+        AND t.created_at < NOW() - (${ORPHAN_TRANSCRIPT_MIN_AGE_SECONDS} || ' seconds')::interval
+        AND p.id IS NULL
+      LIMIT 1
+    )
+  `;
+}
+
+async function getPendingJobsForQueue(runId: string, queueName: string): Promise<number> {
+  const rows = await db.$queryRaw<Array<{ count: bigint }>>`
+    SELECT COUNT(*) AS count
+    FROM pgboss.job
+    WHERE name = ${queueName}
+      AND data->>'runId' = ${runId}
+      AND state IN ('created', 'retry', 'active')
+  `;
+
+  return Number(rows[0]?.count ?? 0);
+}
+
+async function sweepRunForTopUp(run: { id: string; config: unknown }): Promise<boolean> {
+  const models = parseRunConfig(run.config).models ?? [];
+  if (models.length === 0) {
+    return false;
+  }
+
+  const queueNames = new Set<string>();
+  for (const modelId of models) {
+    queueNames.add(await getQueueNameForModel(modelId));
+  }
+
+  for (const queueName of queueNames) {
+    const pendingJobs = await getPendingJobsForQueue(run.id, queueName);
+    if (pendingJobs < PROBE_QUEUE_DEPTH_PER_PROVIDER / 2) {
+      await enqueueTopUpProbesSingleton(run.id);
+      log.debug({ runId: run.id, queueName, pendingJobs }, 'Queued recovery top-up sweep');
+      return true;
+    }
+  }
+
+  return false;
+}
+
+async function hasRecoveryActivity(): Promise<boolean> {
+  const windowDays = getReconcileWindowDays();
+  const activeRuns = await db.run.findFirst({
+    where: {
+      deletedAt: null,
+      status: { in: ['RUNNING', 'SUMMARIZING', 'PAUSED'] },
+    },
+    select: { id: true },
+  });
+
+  if (activeRuns !== null) {
+    return true;
+  }
+
+  const strandedTranscript = await db.transcript.findFirst({
+    where: {
+      deletedAt: null,
+      summarizedAt: null,
+      summarizeFailedAt: null,
+      run: {
+        deletedAt: null,
+        status: 'COMPLETED',
+        updatedAt: {
+          gt: new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000),
+        },
+      },
+    },
+    select: { id: true },
+  });
+
+  if (strandedTranscript !== null) {
+    return true;
+  }
+
+  const orphanBacklog = await db.$queryRaw<Array<{ run_id: string }>>`
+    SELECT r.id AS run_id
+    FROM runs r
+    WHERE r.deleted_at IS NULL
+      AND r.status = 'COMPLETED'
+      AND r.updated_at > NOW() - (${windowDays} || ' days')::interval
+      AND ${buildOrphanBacklogExistsClause()}
+    LIMIT 1
+  `;
+
+  return orphanBacklog.length > 0;
+}
+
+async function enqueueRunStateReconcileJobs(): Promise<number> {
+  const boss = getBoss();
+  const jobOptions = DEFAULT_JOB_OPTIONS['run_state_reconcile'];
+  const windowDays = getReconcileWindowDays();
+
+  const runs = await db.$queryRaw<Array<{ run_id: string }>>`
+    SELECT id AS run_id
+    FROM runs
+    WHERE deleted_at IS NULL
+      AND status IN ('RUNNING', 'SUMMARIZING', 'PAUSED')
+
+    UNION
+
+    SELECT DISTINCT r.id AS run_id
+    FROM runs r
+    WHERE r.deleted_at IS NULL
+      AND r.status = 'COMPLETED'
+      AND r.updated_at > NOW() - (${windowDays} || ' days')::interval
+      AND (
+        EXISTS (
+          SELECT 1
+          FROM transcripts stranded_t
+          WHERE stranded_t.run_id = r.id
+            AND stranded_t.deleted_at IS NULL
+            AND stranded_t.summarized_at IS NULL
+            AND stranded_t.summarize_failed_at IS NULL
+          LIMIT 1
+        )
+        OR ${buildOrphanBacklogExistsClause()}
+      )
+  `;
+
+  let queued = 0;
+  for (const run of runs) {
+    await boss.send(
+      'run_state_reconcile',
+      { runId: run.run_id },
+      {
+        ...jobOptions,
+        singletonKey: run.run_id,
+      }
+    );
+    queued++;
+  }
+
+  if (queued > 0) {
+    log.info({ queued }, 'Queued run_state_reconcile jobs');
+  }
+
+  return queued;
+}
+
+/**
+ * Runs the recovery job, preventing concurrent executions.
+ */
+async function runRecoveryJob(): Promise<void> {
+  if (isRecovering) {
+    log.debug('Recovery already in progress, skipping');
+    return;
+  }
+
+  isRecovering = true;
+  try {
+    const result = await recoverOrphanedRuns();
+    const zombieResult = await detectAndRecoverStuckJobs();
+    const stallResult = await detectAndUpdateStalledRuns();
+    const runningRuns = await db.run.findMany({
+      where: { status: 'RUNNING', deletedAt: null },
+      select: { id: true, config: true },
+    });
+
+    let topUpQueued = 0;
+    for (const run of runningRuns) {
+      if (await sweepRunForTopUp(run)) {
+        topUpQueued++;
+      }
+    }
+
+    const reconcileQueued = await enqueueRunStateReconcileJobs();
+
+    if (
+      result.detected.length > 0 ||
+      result.errors.length > 0 ||
+      zombieResult.recovered > 0 ||
+      topUpQueued > 0 ||
+      reconcileQueued > 0
+    ) {
+      log.info(
+        {
+          detected: result.detected.length,
+          recovered: result.recovered.length,
+          zombiesKilled: zombieResult.recovered,
+          errors: result.errors.length + zombieResult.errors,
+          recoveryTopUps: topUpQueued,
+          reconcileQueued,
+        },
+        'Recovery job completed'
+      );
+    }
+
+    if (await hasRecoveryActivity()) {
+      signalRunActivity();
+    }
+
+    if (stallResult.totalStalled > 0) {
+      // Keep scheduler alive while stalls persist (not just when new stalls appear)
+      signalRunActivity();
+    }
+  } catch (error) {
+    log.error({ error }, 'Recovery job failed');
+  } finally {
+    isRecovering = false;
+  }
+}
+
+/**
+ * Clears the activity timeout if set.
+ */
+function clearActivityTimeout(): void {
+  if (activityTimeout !== null) {
+    clearTimeout(activityTimeout);
+    activityTimeout = null;
+  }
+}
+
+/**
+ * Starts the activity timeout that will stop recovery after RECOVERY_ACTIVITY_WINDOW_MS.
+ */
+function startActivityTimeout(): void {
+  clearActivityTimeout();
+
+  activityTimeout = setTimeout(() => {
+    log.info(
+      { windowMs: RECOVERY_ACTIVITY_WINDOW_MS },
+      'Activity window expired, stopping recovery scheduler'
+    );
+    stopRecoveryInterval();
+  }, RECOVERY_ACTIVITY_WINDOW_MS);
+}
+
+/**
+ * Stops only the recovery interval (not the activity tracking).
+ */
+function stopRecoveryInterval(): void {
+  if (recoveryInterval !== null) {
+    clearInterval(recoveryInterval);
+    recoveryInterval = null;
+    log.info('Recovery interval stopped');
+  }
+}
+
+/**
+ * Starts the recovery interval if not already running.
+ */
+function startRecoveryInterval(): void {
+  if (recoveryInterval !== null) {
+    return; // Already running
+  }
+
+  recoveryInterval = setInterval(() => { void runRecoveryJob(); }, RECOVERY_INTERVAL_MS);
+  log.info({ intervalMs: RECOVERY_INTERVAL_MS }, 'Recovery interval started');
+}
+
+/**
+ * Signals that a run has been started.
+ * This resets the activity window and ensures recovery is running.
+ */
+export function signalRunActivity(): void {
+  log.debug('Run activity signaled, resetting activity window');
+
+  // Ensure recovery is running
+  startRecoveryInterval();
+
+  // Reset the activity timeout
+  startActivityTimeout();
+}
+
+/**
+ * Starts the recovery scheduler.
+ * Runs recovery immediately on startup, then schedules periodic recovery
+ * only if there are active runs (detected during startup recovery).
+ */
+export async function startRecoveryScheduler(): Promise<void> {
+  if (recoveryInterval !== null) {
+    log.warn('Recovery scheduler already running');
+    return;
+  }
+
+  log.info(
+    { intervalMs: RECOVERY_INTERVAL_MS, activityWindowMs: RECOVERY_ACTIVITY_WINDOW_MS },
+    'Starting recovery scheduler'
+  );
+
+  // Run startup recovery first
+  let hasActiveRuns = false;
+  try {
+    const startupResult = await runStartupRecovery();
+    if (startupResult.detected.length > 0) {
+      log.info(
+        {
+          detected: startupResult.detected.length,
+          recovered: startupResult.recovered.length,
+          errors: startupResult.errors.length,
+        },
+        'Startup recovery completed'
+      );
+      // If we found orphaned runs, keep recovery running
+      hasActiveRuns = true;
+    }
+    if (!hasActiveRuns) {
+      hasActiveRuns = await hasRecoveryActivity();
+    }
+  } catch (error) {
+    log.error({ error }, 'Startup recovery failed');
+    // Don't throw - we still want to proceed
+  }
+
+  // Only start the interval if we found active runs during startup
+  if (hasActiveRuns) {
+    startRecoveryInterval();
+    startActivityTimeout();
+    log.info('Recovery scheduler started (active runs detected)');
+  } else {
+    log.info('Recovery scheduler initialized but not running (no active runs)');
+  }
+}
+
+/**
+ * Stops the recovery scheduler completely (interval and activity timeout).
+ */
+export function stopRecoveryScheduler(): void {
+  stopRecoveryInterval();
+  clearActivityTimeout();
+  log.info('Recovery scheduler stopped');
+}
+
+/**
+ * Checks if the recovery scheduler is running.
+ */
+export function isRecoverySchedulerRunning(): boolean {
+  return recoveryInterval !== null;
+}
+
+/**
+ * Manually triggers a recovery run (for debugging/admin).
+ */
+export async function triggerRecovery(): Promise<{
+  detected: number;
+  recovered: number;
+  errors: number;
+}> {
+  const result = await recoverOrphanedRuns();
+  return {
+    detected: result.detected.length,
+    recovered: result.recovered.length,
+    errors: result.errors.length,
+  };
+}
+
+
+Context: run-anomaly.ts
+import { builder } from '../builder.js';
+import { RunAnomalyRef } from './refs.js';
+
+export const RunAnomalyTypeEnum: ReturnType<typeof builder.enumType<'RunAnomalyType', readonly ['STRANDED_TRANSCRIPT', 'ORPHAN_TRANSCRIPT', 'PAIR_ASYMMETRY', 'SUMMARIZING_STALL', 'MODEL_TRANSCRIPT_SHORTFALL', 'SCHEDULED_COUNT_MISMATCH']>> = builder.enumType('RunAnomalyType', {
+  values: [
+    'STRANDED_TRANSCRIPT',
+    'ORPHAN_TRANSCRIPT',
+    'PAIR_ASYMMETRY',
+    'SUMMARIZING_STALL',
+    'MODEL_TRANSCRIPT_SHORTFALL',
+    'SCHEDULED_COUNT_MISMATCH',
+  ] as const,
+  description: 'Structured anomaly type for run state reconciliation',
+});
+
+builder.objectType(RunAnomalyRef, {
+  description: 'Structured anomaly record for a run',
+  fields: (t) => ({
+    id: t.exposeID('id'),
+    runId: t.exposeString('runId'),
+    type: t.field({
+      type: RunAnomalyTypeEnum,
+      resolve: (anomaly) => anomaly.type,
+    }),
+    subject: t.exposeString('subject'),
+    details: t.field({
+      type: 'JSON',
+      resolve: (anomaly) => anomaly.details,
+    }),
+    firstSeenAt: t.expose('firstSeenAt', { type: 'DateTime' }),
+    lastSeenAt: t.expose('lastSeenAt', { type: 'DateTime' }),
+    resolvedAt: t.expose('resolvedAt', { type: 'DateTime', nullable: true }),
+    acknowledgedByUserId: t.exposeString('acknowledgedByUserId', { nullable: true }),
+  }),
+});
+
+
+Context: anomaly-persistence.test.ts
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const {
+  mockRunFindUnique,
+  mockRunUpdate,
+  mockAnomalyUpsert,
+  mockAnomalyUpdateMany,
+} = vi.hoisted(() => ({
+  mockRunFindUnique: vi.fn(),
+  mockRunUpdate: vi.fn(),
+  mockAnomalyUpsert: vi.fn(),
+  mockAnomalyUpdateMany: vi.fn(),
+}));
+
+vi.mock('@valuerank/db', () => ({
+  db: {
+    run: {
+      findUnique: mockRunFindUnique,
+      update: mockRunUpdate,
+    },
+    runAnomaly: {
+      upsert: mockAnomalyUpsert,
+      updateMany: mockAnomalyUpdateMany,
+    },
+  },
+  Prisma: {},
+}));
+
+import {
+  repairScheduledCount,
+  resolveAnomaly,
+  upsertAnomaly,
+} from '../../../src/services/run/anomaly-persistence.js';
+
+describe('run anomaly persistence helpers', () => {
+  beforeEach(() => {
+    mockRunFindUnique.mockReset();
+    mockRunUpdate.mockReset();
+    mockAnomalyUpsert.mockReset();
+    mockAnomalyUpdateMany.mockReset();
+  });
+
+  it('upserts anomaly rows with the current timestamps', async () => {
+    mockAnomalyUpsert.mockResolvedValue(undefined);
+
+    await upsertAnomaly('run_1', {
+      type: 'STRANDED_TRANSCRIPT',
+      subject: '',
+      details: { transcriptIds: ['t1'] },
+    });
+
+    expect(mockAnomalyUpsert).toHaveBeenCalledTimes(1);
+    const args = mockAnomalyUpsert.mock.calls[0]?.[0];
+    expect(args.where.runId_type_subject).toEqual({
+      runId: 'run_1',
+      type: 'STRANDED_TRANSCRIPT',
+      subject: '',
+    });
+    expect(args.create.runId).toBe('run_1');
+    expect(args.update.resolvedAt).toBeNull();
+  });
+
+  it('marks anomalies resolved when the condition clears', async () => {
+    mockAnomalyUpdateMany.mockResolvedValue({ count: 1 });
+
+    await resolveAnomaly({
+      runId: 'run_1',
+      type: 'PAIR_ASYMMETRY',
+      subject: 'group-1',
+    });
+
+    expect(mockAnomalyUpdateMany).toHaveBeenCalledTimes(1);
+    const args = mockAnomalyUpdateMany.mock.calls[0]?.[0];
+    expect(args.where).toEqual({
+      runId: 'run_1',
+      type: 'PAIR_ASYMMETRY',
+      subject: 'group-1',
+      resolvedAt: null,
+    });
+    expect(args.data.resolvedAt).toBeInstanceOf(Date);
+  });
+
+  it('repairs scheduled total only when it changes', async () => {
+    mockRunFindUnique.mockResolvedValue({
+      progress: { total: 4, completed: 2, failed: 1 },
+    });
+    mockRunUpdate.mockResolvedValue(undefined);
+
+    await expect(repairScheduledCount('run_1', 4)).resolves.toBe(false);
+    await expect(repairScheduledCount('run_1', 6)).resolves.toBe(true);
+
+    expect(mockRunUpdate).toHaveBeenCalledTimes(1);
+    expect(mockRunUpdate.mock.calls[0]?.[0].data.progress).toEqual({
+      total: 6,
+      completed: 2,
+      failed: 1,
+    });
+  });
+});
+
+
+Artifact: spec.md
+# Feature 035 — Audit Sweep
+
+**Branch**: feat/035-audit-sweep
+**Created**: 2026-04-24
+**Status**: Draft
+**Context**: STATUS.md follow-up #3 from PR #745 ([feature 033](../033-run-state-reconciliation/)). Companion to the hygiene fixes from [feature 034](../034-hygiene-follow-ups/).
+
+---
+
+## Background
+
+Feature 033 shipped the run-state reconciliation sweep with six anomaly detectors gated by thresholds (pair-asymmetry delta, model-shortfall rates, stall window, etc.). 034 tuned those thresholds down — but the question remains: **how do we know we haven't set them too high?** A run with a real problem at 25pp asymmetry would fall below the (currently 0pp) gate but a future operator might raise it to 15pp to cut noise. Without an independent signal, we won't notice if that tightening hides real problems.
+
+The audit sweep is that independent signal. It runs the same detectors on the same runs, but with all severity gates zeroed (keeping only statistical/in-flight filters that prevent nonsense). Operators can compare default-sweep anomalies to audit-sweep anomalies: if the audit sweep catches something the default missed on a production run that visibly went wrong, the default thresholds need to come down.
+
+This is a **data surface** feature. No UI is added. Anomalies are exposed via the existing `run.anomalies` GraphQL field with a new `source` discriminator.
+
+---
+
+## User Stories
+
+### US-1 (P0): `RunAnomaly` distinguishes default vs audit anomalies
+
+**As an** operator,
+**I want** each anomaly row to carry a `source` tag,
+**so that** I can separate the default-sweep findings from the audit-sweep findings when reviewing a run.
+
+**Acceptance criteria:**
+- New Prisma enum `RunAnomalySource` with values `default` and `audit`.
+- New column `RunAnomaly.source` of type `RunAnomalySource`, default `default`, NOT NULL.
+- Existing unique constraint `(runId, type, subject)` is extended to `(runId, type, subject, source)`.
+- Migration backfills `source = 'default'` on every existing row in a single `UPDATE`, idempotent.
+- `run.anomalies` GraphQL field exposes the new `source` enum.
+
+### US-2 (P0): Audit sweep job runs daily
+
+**As the** system,
+**I want** a separate PgBoss job `run_state_audit` that runs the anomaly detectors with zero severity thresholds,
+**so that** the audit finds every anomaly the detectors can detect, not just those above the tuned bar.
+
+**Acceptance criteria:**
+- New job type `run_state_audit` with handler at `cloud/apps/api/src/queue/handlers/run-state-audit.ts`.
+- The handler reuses the same detector functions as the default sweep but overrides all severity thresholds to 0 — `PAIR_ASYMMETRY_THRESHOLD_PCT`, `MODEL_SHORTFALL_ABSOLUTE_RATE`, `MODEL_SHORTFALL_RELATIVE_RATE`, `MODEL_SHORTFALL_PEER_RATE`.
+- Statistical/in-flight filters are PRESERVED (`MIN_PROBES`, `ORPHAN_TRANSCRIPT_MIN_AGE_SECONDS`, `SUMMARIZING_STALL_MINUTES`) — audit should flag real deviations, not in-flight races.
+- Anomalies persisted by the audit handler use `source='audit'`.
+- The audit handler does NOT reconstruct orphan transcripts or advance run state — it is read-only except for `RunAnomaly` writes.
+- Scheduled via PgBoss `schedule('run_state_audit', '0 9 * * *', ...)` — daily at 09:00 UTC (operator-visible morning).
+
+### US-3 (P0): Detectors accept threshold overrides
+
+**As the** detector functions (`detectPairAsymmetry`, `detectModelTranscriptShortfall`, etc.),
+**I want** to accept an optional `thresholds` parameter that overrides the constants-file defaults,
+**so that** the same detector code can be driven by either the default sweep (using constants) or the audit sweep (using zero-gate overrides) without code duplication.
+
+**Acceptance criteria:**
+- Each threshold-driven detector signature: `detectX(run, thresholds?: Partial<Thresholds>)`.
+- When `thresholds` is undefined, the existing constant imports are used (no behavior change for default sweep).
+- When a field is set in `thresholds`, that value overrides the constant for that call only.
+- Audit handler passes `{ pairAsymmetryThresholdPct: 0, modelShortfallAbsoluteRate: 0, modelShortfallRelativeRate: 0, modelShortfallPeerRate: 0 }`.
+- Statistical filters (`MIN_PROBES`, etc.) are NOT overridable — they protect from noise regardless of mode.
+
+### US-4 (P1): Anomaly persistence is scoped by source
+
+**As the** audit sweep,
+**I want** my anomaly upserts + resolutions to never touch default-source rows,
+**so that** an audit run doesn't accidentally resolve or overwrite a default anomaly that's actively tracking a real problem.
+
+**Acceptance criteria:**
+- `upsertAnomaly(draft)` extended: `draft` includes `source: 'default' | 'audit'`. Upsert key uses the 4-column unique constraint.
+- `resolveAnomaly({runId, type, subject, source})` — new `source` parameter required.
+- `syncAnomalies(runId, type, drafts, source)` — existing function extended with `source` parameter; the existing-anomalies read is filtered by source, so resolution only affects the same-source set.
+- Default sweep handler passes `source='default'` everywhere. Audit handler passes `source='audit'`.
+
+### US-5 (P1): Operators can query both sources via GraphQL
+
+**As an** operator inspecting a run,
+**I want** `run.anomalies` to return rows from both sources, each tagged with its source,
+**so that** I can compare default and audit findings side-by-side without running two queries.
+
+**Acceptance criteria:**
+- `RunAnomaly` GraphQL type exposes the new `source` enum field.
+- No filtering by source in the resolver — the client filters as needed.
+- Order preserved: `firstSeenAt DESC`.
+- Anomalies with the same `(runId, type, subject)` but different `source` are two separate rows in the result.
+
+---
+
+## What is NOT in scope
+
+- Any UI for comparing default vs audit anomalies. Operators can use GraphQL / MCP.
+- Auto-tuning default thresholds based on audit findings. Manual review stays for now.
+- Alerts or Slack notifications on audit findings.
+- STATUS.md follow-ups #2 (janitor) and #7 (load test).
+- Backfill audit rows for historical runs — audit sweep populates going forward only.
+- Any change to the default sweep's schedule, orphan reconstruction, or run-state advancement logic.
+- CLAUDE.md, AGENTS.md, cloud/CLAUDE.md, MEMORY.md, `.gitignore`.
+
+---
+
+## Design
+
+### Schema change
+
+```prisma
+enum RunAnomalySource {
+  default
+  audit
+}
+
+model RunAnomaly {
+  // ... existing fields ...
+  source RunAnomalySource @default(default)
+
+  @@unique([runId, type, subject, source])
+}
+```
+
+Migration steps (single file):
+1. `CREATE TYPE "RunAnomalySource" AS ENUM ('default', 'audit')`.
+2. `ALTER TABLE run_anomalies ADD COLUMN source "RunAnomalySource" NOT NULL DEFAULT 'default'`. Existing rows get `'default'` automatically via the DEFAULT clause.
+3. Drop the old 3-column unique constraint, create the new 4-column one.
+
+### Audit sweep handler
+
+```typescript
+// cloud/apps/api/src/queue/handlers/run-state-audit.ts
+const AUDIT_THRESHOLDS: ThresholdOverrides = {
+  pairAsymmetryThresholdPct: 0,
+  modelShortfallAbsoluteRate: 0,
+  modelShortfallRelativeRate: 0,
+  modelShortfallPeerRate: 0,
+  // MIN_PROBES, AGE, STALL kept at defaults
+};
+
+export function createRunStateAuditHandler() {
+  return async (jobs: Job<{}>[]) => {
+    // Find all non-terminal + recent-completed runs (same scope as default sweep)
+    const runs = await findRunsForReconciliation();
+    for (const run of runs) {
+      const anomalies = await collectAnomaliesWithThresholds(run, AUDIT_THRESHOLDS);
+      await persistAnomaliesWithSource(run.id, anomalies, 'audit');
+    }
+  };
+}
+```
+
+`collectAnomaliesWithThresholds` and `persistAnomaliesWithSource` are new helpers that share code with the default sweep's per-run loop.
+
+### Threshold override plumbing
+
+Each detector signature:
+```typescript
+export type AnomalyThresholds = {
+  pairAsymmetryThresholdPct?: number;
+  modelShortfallAbsoluteRate?: number;
+  modelShortfallRelativeRate?: number;
+  modelShortfallPeerRate?: number;
+};
+
+export async function detectPairAsymmetry(
+  run: RunSnapshot,
+  thresholds?: AnomalyThresholds,
+): Promise<AnomalyDraft | null> {
+  const pctThreshold = thresholds?.pairAsymmetryThresholdPct
+    ?? PAIR_ASYMMETRY_THRESHOLD_PCT;
+  // ... existing body, uses pctThreshold instead of the constant directly
+}
+```
+
+Detectors without threshold constants (`detectStrandedTranscript`, `detectOrphanTranscript`, `detectScheduledCountMismatch`) skip the parameter entirely — nothing to override.
+
+### Scheduling
+
+Two options:
+
+**Option A — PgBoss scheduled jobs**: `boss.schedule('run_state_audit', '0 9 * * *', {})`. Runs daily at 09:00 UTC. PgBoss handles the cron.
+
+**Option B — Scheduler tick**: extend `scheduler.ts` to enqueue an audit job once per day, checking last-audit timestamp in a small marker table or run config.
+
+Option A is simpler and standard PgBoss usage. Plan phase picks the winner.
+
+### Anomaly persistence
+
+`anomaly-persistence.ts` changes:
+
+```typescript
+export async function upsertAnomaly(draft: AnomalyDraft & { source: RunAnomalySource }) {
+  return db.runAnomaly.upsert({
+    where: {
+      runId_type_subject_source: {
+        runId: draft.runId,
+        type: draft.type,
+        subject: draft.subject,
+        source: draft.source,
+      },
+    },
+    create: { ...draft, firstSeenAt: new Date(), lastSeenAt: new Date() },
+    update: { lastSeenAt: new Date(), details: draft.details },
+  });
+}
+
+export async function resolveAnomaly(key: {
+  runId: string; type: RunAnomalyType; subject: string; source: RunAnomalySource;
+}) {
+  // ... unchanged logic, now also filters by source ...
+}
+
+export async function syncAnomalies(
+  runId: string,
+  type: RunAnomalyType,
+  drafts: AnomalyDraft[],
+  source: RunAnomalySource,
+) {
+  // existing rows fetched with source filter, so only same-source rows get resolved
+}
+```
+
+### GraphQL
+
+`RunAnomaly` GraphQL type gains `source: RunAnomalySource` (non-null). The enum is exposed as `RunAnomalySource` with `DEFAULT` and `AUDIT` values (Pothos convention — TS enums are uppercase in GraphQL by default). No filtering in the resolver.
+
+---
+
+## Files in Scope
+
+| File | Change |
+|---|---|
+| `cloud/packages/db/prisma/schema.prisma` | Add `RunAnomalySource` enum; add `source` column on `RunAnomaly` with default; extend unique constraint |
+| `cloud/packages/db/prisma/migrations/<timestamp>_run_anomaly_source/migration.sql` | Schema DDL + backfill note (DEFAULT clause handles it) |
+| `cloud/apps/api/src/services/run/anomaly-detection.ts` | Add `AnomalyThresholds` type; thread `thresholds?` through the 2 detectors that have override-able gates (`detectPairAsymmetry`, `detectModelTranscriptShortfall`) |
+| `cloud/apps/api/src/services/run/anomaly-persistence.ts` | Add `source` parameter to `upsertAnomaly`, `resolveAnomaly`, `syncAnomalies`; update queries |
+| `cloud/apps/api/src/queue/handlers/run-state-reconcile.ts` | Pass `source='default'` to all persistence calls; no behavior change otherwise |
+| `cloud/apps/api/src/queue/handlers/run-state-audit.ts` | **New** — audit sweep handler |
+| `cloud/apps/api/src/queue/handlers/index.ts` | Register `run_state_audit` handler |
+| `cloud/apps/api/src/queue/types.ts` | Add `run_state_audit` job type and `RunStateAuditJobData = {}` |
+| `cloud/apps/api/src/services/run/scheduler.ts` | Schedule the audit job via `boss.schedule` (Option A) at server startup |
+| `cloud/apps/api/src/graphql/types/run-anomaly.ts` | Add `source` field + `RunAnomalySource` enum |
+| `cloud/apps/api/tests/services/run/anomaly-persistence.test.ts` | Tests for source scoping |
+| `cloud/apps/api/tests/queue/handlers/run-state-audit.test.ts` | **New** — handler tests |
+| `cloud/apps/api/tests/graphql/run.test.ts` | Test `run.anomalies.source` field |
+| `STATUS.md` | Remove follow-up #3 |
+
+---
+
+## Acceptance Criteria
+
+| ID | Criterion |
+|---|---|
+| AC-1 | Migration applies cleanly on a fresh DB and on an existing DB with `RunAnomaly` rows — all existing rows end up with `source='default'` |
+| AC-2 | Unique key `(runId, type, subject, source)` enforced — an audit anomaly and a default anomaly with same first three values coexist |
+| AC-3 | `resolveAnomaly({source:'default'})` does not affect `source='audit'` rows, and vice versa |
+| AC-4 | `run_state_audit` job fires daily at 09:00 UTC (verified by PgBoss schedule inspection in test) |
+| AC-5 | Audit handler flags a run with 25pp pair asymmetry that the default sweep (at 0pp threshold after 034) also catches — both rows persisted, same first three key fields, different source |
+| AC-6 | Audit handler does NOT reconstruct orphan transcripts or advance run state |
+| AC-7 | `detectPairAsymmetry(run, { pairAsymmetryThresholdPct: 0 })` fires on any non-zero delta; same function without override behaves as before |
+| AC-8 | `run.anomalies` GraphQL field returns `source` on each anomaly |
+| AC-9 | Lint + build + full test suite pass |
+| AC-10 | No regression in default-sweep behavior (round-trip test: run default sweep before and after, get same set of default-source anomalies) |
+
+---
+
+## Edge Cases
+
+| Case | Behavior |
+|---|---|
+| First deploy — no audit rows yet | `run.anomalies` returns only `source='default'` rows; no error |
+| Audit sweep fires before default sweep on a fresh run | Audit writes `source='audit'` rows; default sweep later writes `source='default'` rows; they coexist |
+| Operator runs MCP `trigger_recovery` | Triggers default sweep only; no change in audit cadence |
+| Audit detectors find a new anomaly type that default sweep rejected | Audit row persisted; default row absent. Operator comparison surfaces the miss. |
+| Audit sweep crash mid-run | Per-run try/catch; one run's failure doesn't prevent others |
+| `boss.schedule` call fails at startup | Logged; next deploy re-attempts. Audit cadence falls behind until next successful startup. Documented risk. |
+| Run deleted (`deletedAt` set) between audit and default sweep | Both skip it via existing `deletedAt IS NULL` filter |
+
+---
+
+## Constitution Validation
+
+| Requirement | Status |
+|---|---|
+| Type safety — no `any` | PASS — enum, thresholds typed |
+| File size ≤ 400 lines prod | PASS — audit handler ~150 lines, detector edits small |
+| Test coverage ≥ 80% | PASS — new handler + persistence changes have paired tests |
+| Structured logging | PASS — audit handler uses `createLogger('queue:run-state-audit')` |
+| Prisma `migrate dev` (never `db push`) | PASS — one migration file |
+| Soft-delete filter | PASS — no change to existing filters |
+| Protected files untouched | PASS — CLAUDE.md / AGENTS.md / MEMORY.md / .gitignore off-limits; STATUS.md only the resolved-item cleanup |
+
+---
+
+## Residual Risks (each with `verification:`)
+
+- **Risk: `boss.schedule` is a one-shot registration at server start. If the process restarts frequently and the call is inside a startup race, the schedule may be registered twice or missed.**
+  verification: before merge, `boss.schedule` wrapped in a try/catch with an `info` log confirming registration; startup integration test asserts the schedule is visible in `boss.getSchedules()` after boot.
+
+- **Risk: audit sweep writes anomalies every day, so the `run_anomalies` table grows unboundedly across years.**
+  verification: for this PR, document the growth rate in STATUS.md as a known follow-up. A janitor for resolved anomalies older than N days is in scope for #2 of STATUS.md (separate effort). Audit-table growth is acceptable for now.
+
+- **Risk: threshold-override plumbing changes every call site of `detectPairAsymmetry` and `detectModelTranscriptShortfall`.**
+  verification: before merge, grep every call site and confirm each passes an explicit threshold argument (or omits it, keeping defaults).
+
+- **Risk: GraphQL enum names in Pothos are SCREAMING_CASE by default (`DEFAULT`, `AUDIT`) but Prisma enum values are lowercase (`default`, `audit`). Need to align or map between them.**
+  verification: before merge, confirm the Pothos enum declaration maps Prisma `default` → GraphQL `DEFAULT`. Test asserts a round-trip through the resolver preserves the source value.
+
+- **Risk: daily-at-09:00-UTC cadence means a US-east operator sees audit results at 04:00 their local time. Fine for review, but might surprise if operators expected morning-only.**
+  verification: acceptable; documentable in STATUS.md if we want configurable cadence later.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m checking the code paths that already touch `RunAnomaly` so I can separate real breakpoints from speculative gaps. Next I’m looking for any existing query or mutation that would still assume the old 3-field identity.
+exec
+/bin/zsh -lc "rg -n \"RunAnomaly|runAnomaly|resolveAnomaly|upsertAnomaly|syncAnomalies|acknowledgedByUserId\" /Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src /Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/packages -g '"'!**/dist/**'"'" in /Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e
+ succeeded in 0ms:
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/packages/db/src/index.ts:47:  RunAnomaly,
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/packages/db/src/index.ts:48:  RunAnomalyType,
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/services/run/anomaly-detection.ts:16:export type RunAnomalyType =
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/services/run/anomaly-detection.ts:25:  type: RunAnomalyType;
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/services/run/anomaly-persistence.ts:3:import type { AnomalyDraft, RunAnomalyType } from './anomaly-detection.js';
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/services/run/anomaly-persistence.ts:13:type RunAnomalyKey = {
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/services/run/anomaly-persistence.ts:15:  type: RunAnomalyType;
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/services/run/anomaly-persistence.ts:31:export async function upsertAnomaly(runId: string, draft: AnomalyDraft): Promise<void> {
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/services/run/anomaly-persistence.ts:33:  await db.runAnomaly.upsert({
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/services/run/anomaly-persistence.ts:59:    await upsertAnomaly(runId, draft);
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/services/run/anomaly-persistence.ts:63:export async function resolveAnomaly(key: RunAnomalyKey): Promise<void> {
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/services/run/anomaly-persistence.ts:65:  await db.runAnomaly.updateMany({
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/packages/db/prisma/schema.prisma:406:  anomalies       RunAnomaly[]
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/packages/db/prisma/schema.prisma:496:enum RunAnomalyType {
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/packages/db/prisma/schema.prisma:662:model RunAnomaly {
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/packages/db/prisma/schema.prisma:665:  type                 RunAnomalyType
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/packages/db/prisma/schema.prisma:671:  acknowledgedByUserId String?        @map("acknowledged_by_user_id")
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/queue/handlers/run-state-reconcile.ts:20:  resolveAnomaly,
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/queue/handlers/run-state-reconcile.ts:95:async function syncAnomalies(runId: string, type: AnomalyDraft['type'], drafts: AnomalyDraft[]): Promise<void> {
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/queue/handlers/run-state-reconcile.ts:99:  const existing = await db.runAnomaly.findMany({
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/queue/handlers/run-state-reconcile.ts:106:      await resolveAnomaly({ runId, type, subject: anomaly.subject });
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/queue/handlers/run-state-reconcile.ts:212:            await syncAnomalies(runId, 'ORPHAN_TRANSCRIPT', [{
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/queue/handlers/run-state-reconcile.ts:221:            await syncAnomalies(runId, 'ORPHAN_TRANSCRIPT', []);
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/queue/handlers/run-state-reconcile.ts:245:            await syncAnomalies(runId, stranded.type, [stranded]);
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/queue/handlers/run-state-reconcile.ts:247:            await syncAnomalies(runId, 'STRANDED_TRANSCRIPT', []);
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/queue/handlers/run-state-reconcile.ts:266:            await syncAnomalies(runId, 'PAIR_ASYMMETRY', pair === null ? [] : [pair]);
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/queue/handlers/run-state-reconcile.ts:273:            await syncAnomalies(runId, 'MODEL_TRANSCRIPT_SHORTFALL', shortfalls);
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/queue/handlers/run-state-reconcile.ts:280:            await syncAnomalies(runId, 'PAIR_ASYMMETRY', pair === null ? [] : [pair]);
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/queue/handlers/run-state-reconcile.ts:287:            await syncAnomalies(runId, 'SUMMARIZING_STALL', stall === null ? [] : [stall]);
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/queue/handlers/run-state-reconcile.ts:294:            await syncAnomalies(runId, 'SCHEDULED_COUNT_MISMATCH', scheduled.draft === null ? [] : [scheduled.draft]);
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/queue/handlers/run-state-reconcile.ts:304:            await syncAnomalies(runId, 'MODEL_TRANSCRIPT_SHORTFALL', shortfalls);
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/graphql/types/run.ts:13:import { RunAnomalyRef } from './refs.js';
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/graphql/types/run.ts:343:      type: [RunAnomalyRef],
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/graphql/types/run.ts:346:        return db.runAnomaly.findMany({
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/packages/db/prisma/migrations/20260423000000_run_state_reconciliation/migration.sql:2:CREATE TYPE "RunAnomalyType" AS ENUM (
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/packages/db/prisma/migrations/20260423000000_run_state_reconciliation/migration.sql:19:    "type" "RunAnomalyType" NOT NULL,
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/graphql/types/refs.ts:5:  RunAnomaly,
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/graphql/types/refs.ts:32:export const RunAnomalyRef = builder.objectRef<RunAnomaly>('RunAnomaly');
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/graphql/types/run-anomaly.ts:2:import { RunAnomalyRef } from './refs.js';
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/graphql/types/run-anomaly.ts:4:export const RunAnomalyTypeEnum: ReturnType<typeof builder.enumType<'RunAnomalyType', readonly ['STRANDED_TRANSCRIPT', 'ORPHAN_TRANSCRIPT', 'PAIR_ASYMMETRY', 'SUMMARIZING_STALL', 'MODEL_TRANSCRIPT_SHORTFALL', 'SCHEDULED_COUNT_MISMATCH']>> = builder.enumType('RunAnomalyType', {
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/graphql/types/run-anomaly.ts:16:builder.objectType(RunAnomalyRef, {
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/graphql/types/run-anomaly.ts:22:      type: RunAnomalyTypeEnum,
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/graphql/types/run-anomaly.ts:33:    acknowledgedByUserId: t.exposeString('acknowledgedByUserId', { nullable: true }),
+
+codex
+I found the main GraphQL entrypoint for anomalies. I’m opening that now because it’s the place most likely to break the spec’s “both sources, same field, same ordering” promise if the resolver still assumes one source.
+exec
+/bin/zsh -lc "sed -n '320,380p' /Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/graphql/types/run.ts" in /Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e
+ succeeded in 0ms:
+          failed: Number(row.failed),
+        }));
+
+        // Calculate totals dynamically from the actual transcript counts
+        // This avoids race conditions where the stored JSON progress drifts from reality (e.g., getting 7/6)
+        const dynamicCompleted = byModel.reduce((sum, m) => sum + m.completed, 0);
+        const dynamicFailed = byModel.reduce((sum, m) => sum + m.failed, 0);
+
+        return {
+          total: derived.summarizeTotal,
+          completed: dynamicCompleted,
+          failed: dynamicFailed,
+          percentComplete: calculatePercentComplete({
+            total: derived.summarizeTotal,
+            completed: dynamicCompleted,
+            failed: dynamicFailed,
+          }),
+          byModel: byModel.length > 0 ? byModel : undefined,
+        };
+      },
+    }),
+
+    anomalies: t.field({
+      type: [RunAnomalyRef],
+      description: 'Structured anomaly records for this run',
+      resolve: async (run) => {
+        return db.runAnomaly.findMany({
+          where: { runId: run.id },
+          orderBy: { firstSeenAt: 'desc' },
+        });
+      },
+    }),
+
+    // Recent completed/failed tasks from PgBoss
+    recentTasks: t.field({
+      type: [TaskResult],
+      args: {
+        limit: t.arg.int({
+          required: false,
+          defaultValue: 5,
+          description: 'Maximum number of recent tasks to return',
+        }),
+      },
+      description: 'Recent completed or failed tasks for this run',
+      resolve: async (run, args) => {
+        const limit = args.limit ?? 5;
+
+        try {
+          // Query completed/failed jobs from PgBoss job table
+          // Note: PgBoss v10+ no longer uses a separate archive table
+          const completedJobs = await db.$queryRaw<Array<{
+            id: string;
+            data: { runId: string; scenarioId: string; modelId: string };
+            state: string;
+            completed_on: Date | null;
+            output: unknown;
+          }>>`
+            SELECT id, data, state, completed_on, output
+            FROM pgboss.job
+            WHERE ${ACTIVE_PROBE_QUEUE_SQL}
+              AND data->>'runId' = ${run.id}
+
+codex
+I’m checking whether this repo already relies on PgBoss schedules anywhere else. If it does, that gives a concrete baseline for whether the new daily audit job would be a new pattern or just another instance of an existing one.
+exec
+/bin/zsh -lc "rg -n \"\\.schedule\\(\" /Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src /Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/packages -g '"'!**/dist/**'"'" in /Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e
+ succeeded in 0ms:
+/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/services/rate-limiter/index.ts:302:    const result = await limiter.schedule({ id: jobId }, wrappedFn);
+
+codex
+I’ve got two concrete edge cases now, both tied to detectors that are already in the code. I’m pulling line numbers so the findings are tied to the exact logic, not just the spec text.
+exec
+/bin/zsh -lc "nl -ba /Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/services/run/anomaly-detection.ts | sed -n '1,260p' && printf '\\n---\\n' && nl -ba /Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/queue/handlers/run-state-reconcile.ts | sed -n '250,320p' && printf '\\n---\\n' && nl -ba /Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/graphql/types/run.ts | sed -n '338,356p'" in /Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e
+ succeeded in 0ms:
+     1	import { db, Prisma } from '@valuerank/db';
+     2	import { createLogger } from '@valuerank/shared';
+     3	import {
+     4	  MODEL_SHORTFALL_ABSOLUTE_RATE,
+     5	  MODEL_SHORTFALL_MIN_PROBES,
+     6	  MODEL_SHORTFALL_PEER_RATE,
+     7	  MODEL_SHORTFALL_RELATIVE_RATE,
+     8	  ORPHAN_TRANSCRIPT_MIN_AGE_SECONDS,
+     9	  PAIR_ASYMMETRY_MIN_PROBES,
+    10	  PAIR_ASYMMETRY_THRESHOLD_PCT,
+    11	  SUMMARIZING_STALL_MINUTES,
+    12	} from './anomaly-thresholds.js';
+    13	
+    14	const log = createLogger('services:run:anomaly-detection');
+    15	
+    16	export type RunAnomalyType =
+    17	  | 'STRANDED_TRANSCRIPT'
+    18	  | 'ORPHAN_TRANSCRIPT'
+    19	  | 'PAIR_ASYMMETRY'
+    20	  | 'SUMMARIZING_STALL'
+    21	  | 'MODEL_TRANSCRIPT_SHORTFALL'
+    22	  | 'SCHEDULED_COUNT_MISMATCH';
+    23	
+    24	export type AnomalyDraft = {
+    25	  type: RunAnomalyType;
+    26	  subject: string;
+    27	  details: Prisma.InputJsonValue;
+    28	};
+    29	
+    30	type RunSnapshot = {
+    31	  id: string;
+    32	  status: string;
+    33	  updatedAt: Date;
+    34	  config: unknown;
+    35	  progress: unknown;
+    36	  deletedAt: Date | null;
+    37	};
+    38	
+    39	type RunConfig = {
+    40	  models?: string[];
+    41	  samplesPerScenario?: number;
+    42	  jobChoiceBatchGroupId?: string | null;
+    43	};
+    44	
+    45	type SuccessCountRow = {
+    46	  modelId: string;
+    47	  _count: { _all: number };
+    48	};
+    49	
+    50	type OrphanTranscriptRow = {
+    51	  id: string;
+    52	  scenarioId: string | null;
+    53	  modelId: string;
+    54	  sampleIndex: number;
+    55	  createdAt: Date;
+    56	  durationMs: number;
+    57	  tokenCount: number;
+    58	  content: unknown;
+    59	};
+    60	
+    61	type PairAsymmetryCandidate = {
+    62	  id: string;
+    63	  config: unknown;
+    64	};
+    65	
+    66	type PairAsymmetryMetrics = {
+    67	  runId: string;
+    68	  scheduled: number;
+    69	  successCount: number;
+    70	  successRate: number;
+    71	};
+    72	
+    73	function parseRunConfig(config: unknown): RunConfig {
+    74	  if (config === null || typeof config !== 'object') {
+    75	    return {};
+    76	  }
+    77	
+    78	  return config as RunConfig;
+    79	}
+    80	
+    81	function getModelIds(config: unknown): string[] {
+    82	  const models = parseRunConfig(config).models ?? [];
+    83	  return models.filter((modelId) => typeof modelId === 'string' && modelId.length > 0);
+    84	}
+    85	
+    86	function getSamplesPerScenario(config: unknown): number {
+    87	  const samples = parseRunConfig(config).samplesPerScenario;
+    88	  return typeof samples === 'number' && Number.isFinite(samples) && samples > 0 ? samples : 1;
+    89	}
+    90	
+    91	function getGroupId(config: unknown): string | null {
+    92	  const groupId = parseRunConfig(config).jobChoiceBatchGroupId;
+    93	  return typeof groupId === 'string' && groupId.trim() !== '' ? groupId : null;
+    94	}
+    95	
+    96	function getProgressTotal(progress: unknown): number {
+    97	  if (progress === null || progress === undefined || typeof progress !== 'object') {
+    98	    return 0;
+    99	  }
+   100	
+   101	  const total = (progress as Record<string, unknown>).total;
+   102	  return typeof total === 'number' && Number.isFinite(total) ? total : 0;
+   103	}
+   104	
+   105	function toJsonValue(value: unknown): Prisma.InputJsonValue {
+   106	  return value as Prisma.InputJsonValue;
+   107	}
+   108	
+   109	function buildOrphanTranscriptFromClause(runId: string): Prisma.Sql {
+   110	  const minAge = new Date(Date.now() - ORPHAN_TRANSCRIPT_MIN_AGE_SECONDS * 1000);
+   111	  return Prisma.sql`
+   112	    FROM transcripts t
+   113	    LEFT JOIN probe_results p
+   114	      ON p.run_id = t.run_id
+   115	     AND p.scenario_id = t.scenario_id
+   116	     AND p.model_id = t.model_id
+   117	     AND p.sample_index = t.sample_index
+   118	     AND p.deleted_at IS NULL
+   119	    WHERE t.run_id = ${runId}
+   120	      AND t.deleted_at IS NULL
+   121	      AND t.created_at < ${minAge}
+   122	      AND p.id IS NULL
+   123	  `;
+   124	}
+   125	
+   126	export async function detectStrandedTranscript(runId: string): Promise<AnomalyDraft | null> {
+   127	  const transcripts = await db.transcript.findMany({
+   128	    where: {
+   129	      runId,
+   130	      deletedAt: null,
+   131	      summarizedAt: null,
+   132	      summarizeFailedAt: null,
+   133	    },
+   134	    select: { id: true },
+   135	    orderBy: { createdAt: 'asc' },
+   136	  });
+   137	
+   138	  if (transcripts.length === 0) {
+   139	    return null;
+   140	  }
+   141	
+   142	  return {
+   143	    type: 'STRANDED_TRANSCRIPT',
+   144	    subject: '',
+   145	    details: toJsonValue({
+   146	      transcriptIds: transcripts.map((transcript) => transcript.id),
+   147	    }),
+   148	  };
+   149	}
+   150	
+   151	export async function findOrphanTranscripts(runId: string, limit?: number): Promise<OrphanTranscriptRow[]> {
+   152	  const fromClause = buildOrphanTranscriptFromClause(runId);
+   153	
+   154	  if (limit !== undefined) {
+   155	    return db.$queryRaw<OrphanTranscriptRow[]>`
+   156	    SELECT
+   157	      t.id,
+   158	      t.scenario_id AS "scenarioId",
+   159	      t.model_id AS "modelId",
+   160	      t.sample_index AS "sampleIndex",
+   161	      t.created_at AS "createdAt",
+   162	      t.duration_ms AS "durationMs",
+   163	      t.token_count AS "tokenCount",
+   164	      t.content AS "content"
+   165	    ${fromClause}
+   166	    ORDER BY t.created_at ASC
+   167	    LIMIT ${limit}
+   168	  `;
+   169	  }
+   170	
+   171	  return db.$queryRaw<OrphanTranscriptRow[]>`
+   172	    SELECT
+   173	      t.id,
+   174	      t.scenario_id AS "scenarioId",
+   175	      t.model_id AS "modelId",
+   176	      t.sample_index AS "sampleIndex",
+   177	      t.created_at AS "createdAt",
+   178	      t.duration_ms AS "durationMs",
+   179	      t.token_count AS "tokenCount",
+   180	      t.content AS "content"
+   181	    ${fromClause}
+   182	    ORDER BY t.created_at ASC
+   183	  `;
+   184	}
+   185	
+   186	export async function countOrphanTranscripts(runId: string): Promise<number> {
+   187	  const fromClause = buildOrphanTranscriptFromClause(runId);
+   188	  const rows = await db.$queryRaw<Array<{ count: bigint }>>`
+   189	    SELECT COUNT(*) AS count
+   190	    ${fromClause}
+   191	  `;
+   192	
+   193	  return Number(rows[0]?.count ?? 0);
+   194	}
+   195	
+   196	export async function detectOrphanTranscript(runId: string): Promise<AnomalyDraft | null> {
+   197	  const orphans = await findOrphanTranscripts(runId);
+   198	  if (orphans.length === 0) {
+   199	    return null;
+   200	  }
+   201	
+   202	  return {
+   203	    type: 'ORPHAN_TRANSCRIPT',
+   204	    subject: '',
+   205	    details: toJsonValue({
+   206	      transcriptIds: orphans.map((transcript) => transcript.id),
+   207	    }),
+   208	  };
+   209	}
+   210	
+   211	export async function detectPairAsymmetry(run: RunSnapshot): Promise<AnomalyDraft | null> {
+   212	  const groupId = getGroupId(run.config);
+   213	  if (groupId === null) {
+   214	    return null;
+   215	  }
+   216	
+   217	  const siblings = await db.run.findMany({
+   218	    where: {
+   219	      deletedAt: null,
+   220	      id: { not: run.id },
+   221	      config: {
+   222	        path: ['jobChoiceBatchGroupId'],
+   223	        equals: groupId,
+   224	      },
+   225	    },
+   226	    select: {
+   227	      id: true,
+   228	      config: true,
+   229	    },
+   230	    orderBy: { updatedAt: 'asc' },
+   231	  });
+   232	
+   233	  if (siblings.length === 0) {
+   234	    return null;
+   235	  }
+   236	
+   237	  const comparisonRuns: PairAsymmetryCandidate[] = [run, ...siblings];
+   238	  const metrics = await Promise.all(
+   239	    comparisonRuns.map(async (candidate): Promise<PairAsymmetryMetrics> => {
+   240	      const modelCount = getModelIds(candidate.config).length;
+   241	      const scenarioCount = await db.runScenarioSelection.count({ where: { runId: candidate.id } });
+   242	      const samplesPerScenario = getSamplesPerScenario(candidate.config);
+   243	      const scheduled = scenarioCount * modelCount * samplesPerScenario;
+   244	      const successCount = await db.probeResult.count({
+   245	        where: { runId: candidate.id, deletedAt: null, status: 'SUCCESS' },
+   246	      });
+   247	      return {
+   248	        runId: candidate.id,
+   249	        scheduled,
+   250	        successCount,
+   251	        successRate: scheduled === 0 ? 0 : successCount / scheduled,
+   252	      };
+   253	    })
+   254	  );
+   255	
+   256	  const currentMetrics = metrics.find((candidate) => candidate.runId === run.id) ?? null;
+   257	  if (currentMetrics === null) {
+   258	    return null;
+   259	  }
+   260	
+
+---
+   250	          log.warn({ runId, err: error }, 'Late transcript rescue failed');
+   251	        }
+   252	
+   253	        if (run.status === 'RUNNING' || run.status === 'SUMMARIZING' || run.status === 'PAUSED') {
+   254	          try {
+   255	            const advanceResult = await maybeAdvanceRunStatus(runId);
+   256	            log.debug({ runId, advanceResult }, 'Reconciled run state');
+   257	            run = (await getRunSnapshot(runId)) ?? run;
+   258	          } catch (error) {
+   259	            log.warn({ runId, err: error }, 'Failed to advance run state during reconciliation');
+   260	          }
+   261	        }
+   262	
+   263	        if (run.status === 'COMPLETED') {
+   264	          try {
+   265	            const pair = await detectPairAsymmetry(run);
+   266	            await syncAnomalies(runId, 'PAIR_ASYMMETRY', pair === null ? [] : [pair]);
+   267	          } catch (error) {
+   268	            log.warn({ runId, err: error }, 'Pair asymmetry detection failed');
+   269	          }
+   270	
+   271	          try {
+   272	            const shortfalls = await detectModelTranscriptShortfall(run);
+   273	            await syncAnomalies(runId, 'MODEL_TRANSCRIPT_SHORTFALL', shortfalls);
+   274	          } catch (error) {
+   275	            log.warn({ runId, err: error }, 'Model shortfall detection failed');
+   276	          }
+   277	        } else {
+   278	          try {
+   279	            const pair = await detectPairAsymmetry(run);
+   280	            await syncAnomalies(runId, 'PAIR_ASYMMETRY', pair === null ? [] : [pair]);
+   281	          } catch (error) {
+   282	            log.warn({ runId, err: error }, 'Pair asymmetry detection failed');
+   283	          }
+   284	
+   285	          try {
+   286	            const stall = detectSummarizingStall(run);
+   287	            await syncAnomalies(runId, 'SUMMARIZING_STALL', stall === null ? [] : [stall]);
+   288	          } catch (error) {
+   289	            log.warn({ runId, err: error }, 'Summarizing stall detection failed');
+   290	          }
+   291	
+   292	          try {
+   293	            const scheduled = await detectScheduledCountMismatch(run);
+   294	            await syncAnomalies(runId, 'SCHEDULED_COUNT_MISMATCH', scheduled.draft === null ? [] : [scheduled.draft]);
+   295	            if (scheduled.draft !== null) {
+   296	              await repairScheduledCount(runId, scheduled.canonicalTotal);
+   297	            }
+   298	          } catch (error) {
+   299	            log.warn({ runId, err: error }, 'Scheduled count mismatch detection failed');
+   300	          }
+   301	
+   302	          try {
+   303	            const shortfalls = await detectModelTranscriptShortfall(run);
+   304	            await syncAnomalies(runId, 'MODEL_TRANSCRIPT_SHORTFALL', shortfalls);
+   305	          } catch (error) {
+   306	            log.warn({ runId, err: error }, 'Model shortfall detection failed');
+   307	          }
+   308	        }
+   309	
+   310	        log.info({ runId }, 'Run reconciliation completed');
+   311	      })
+   312	    );
+   313	  };
+   314	}
+
+---
+   338	        };
+   339	      },
+   340	    }),
+   341	
+   342	    anomalies: t.field({
+   343	      type: [RunAnomalyRef],
+   344	      description: 'Structured anomaly records for this run',
+   345	      resolve: async (run) => {
+   346	        return db.runAnomaly.findMany({
+   347	          where: { runId: run.id },
+   348	          orderBy: { firstSeenAt: 'desc' },
+   349	        });
+   350	      },
+   351	    }),
+   352	
+   353	    // Recent completed/failed tasks from PgBoss
+   354	    recentTasks: t.field({
+   355	      type: [TaskResult],
+   356	      args: {
+
+exec
+/bin/zsh -lc "nl -ba /Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/services/run/anomaly-detection.ts | sed -n '260,380p'" in /Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e
+ succeeded in 0ms:
+   260	
+   261	  const skippedUnderSampledRunIds: string[] = [];
+   262	  let maxDeltaPct = -1;
+   263	  let maxDeltaSibling: PairAsymmetryMetrics | null = null;
+   264	
+   265	  for (const siblingMetrics of metrics) {
+   266	    if (siblingMetrics.runId === run.id) {
+   267	      continue;
+   268	    }
+   269	
+   270	    if (currentMetrics.scheduled < PAIR_ASYMMETRY_MIN_PROBES || siblingMetrics.scheduled < PAIR_ASYMMETRY_MIN_PROBES) {
+   271	      skippedUnderSampledRunIds.push(siblingMetrics.runId);
+   272	      continue;
+   273	    }
+   274	
+   275	    const deltaPct = Math.abs(currentMetrics.successRate - siblingMetrics.successRate) * 100;
+   276	    if (deltaPct > maxDeltaPct) {
+   277	      maxDeltaPct = deltaPct;
+   278	      maxDeltaSibling = siblingMetrics;
+   279	    }
+   280	  }
+   281	
+   282	  if (maxDeltaSibling === null) {
+   283	    return null;
+   284	  }
+   285	
+   286	  // <= so identical rates (deltaPct === 0) don't fire when threshold is 0.
+   287	  // At threshold=0 the detector fires on any measurable asymmetry.
+   288	  if (maxDeltaPct <= PAIR_ASYMMETRY_THRESHOLD_PCT) {
+   289	    return null;
+   290	  }
+   291	
+   292	  return {
+   293	    type: 'PAIR_ASYMMETRY',
+   294	    subject: groupId,
+   295	    details: toJsonValue({
+   296	      runId: run.id,
+   297	      siblingRunId: maxDeltaSibling.runId,
+   298	      currentSuccessRate: currentMetrics.successRate,
+   299	      siblingSuccessRate: maxDeltaSibling.successRate,
+   300	      scheduled: currentMetrics.scheduled,
+   301	      siblingScheduled: maxDeltaSibling.scheduled,
+   302	      siblingRunIds: metrics.map((candidate) => candidate.runId),
+   303	      siblingSuccessRates: metrics.map((candidate) => candidate.successRate),
+   304	      maxDeltaPct,
+   305	      skippedUnderSampledRunIds,
+   306	    }),
+   307	  };
+   308	}
+   309	
+   310	export function detectSummarizingStall(run: RunSnapshot): AnomalyDraft | null {
+   311	  if (run.status !== 'SUMMARIZING') {
+   312	    return null;
+   313	  }
+   314	
+   315	  const ageMinutes = Math.floor((Date.now() - run.updatedAt.getTime()) / 60000);
+   316	  if (ageMinutes < SUMMARIZING_STALL_MINUTES) {
+   317	    return null;
+   318	  }
+   319	
+   320	  return {
+   321	    type: 'SUMMARIZING_STALL',
+   322	    subject: '',
+   323	    details: toJsonValue({
+   324	      updatedAt: run.updatedAt.toISOString(),
+   325	      ageMinutes,
+   326	    }),
+   327	  };
+   328	}
+   329	
+   330	export async function detectModelTranscriptShortfall(run: RunSnapshot): Promise<AnomalyDraft[]> {
+   331	  const modelIds = getModelIds(run.config);
+   332	  if (modelIds.length === 0) {
+   333	    return [];
+   334	  }
+   335	
+   336	  const scenarioCount = await db.runScenarioSelection.count({ where: { runId: run.id } });
+   337	  const samplesPerScenario = getSamplesPerScenario(run.config);
+   338	  const scheduledPerModel = scenarioCount * samplesPerScenario;
+   339	
+   340	  if (scheduledPerModel < MODEL_SHORTFALL_MIN_PROBES) {
+   341	    return [];
+   342	  }
+   343	
+   344	  const successRows = await db.probeResult.groupBy({
+   345	    by: ['modelId'],
+   346	    where: {
+   347	      runId: run.id,
+   348	      deletedAt: null,
+   349	      status: 'SUCCESS',
+   350	    },
+   351	    _count: { _all: true },
+   352	  });
+   353	
+   354	  const successesByModel = new Map<string, number>();
+   355	  for (const row of successRows as SuccessCountRow[]) {
+   356	    successesByModel.set(row.modelId, row._count._all);
+   357	  }
+   358	
+   359	  const rates = modelIds.map((modelId) => {
+   360	    const successes = successesByModel.get(modelId) ?? 0;
+   361	    return {
+   362	      modelId,
+   363	      successes,
+   364	      scheduled: scheduledPerModel,
+   365	      rate: scheduledPerModel === 0 ? 0 : successes / scheduledPerModel,
+   366	    };
+   367	  });
+   368	
+   369	  const sorted = [...rates].map((rate) => rate.rate).sort((left, right) => left - right);
+   370	  const peerMedianRate = sorted.length === 0
+   371	    ? 0
+   372	    : sorted.length % 2 === 0
+   373	      ? ((sorted[sorted.length / 2 - 1] ?? 0) + (sorted[sorted.length / 2] ?? 0)) / 2
+   374	      : sorted[Math.floor(sorted.length / 2)] ?? 0;
+   375	
+   376	  return rates
+   377	    .filter((rate) => rate.rate < MODEL_SHORTFALL_ABSOLUTE_RATE || (
+   378	      rate.rate < MODEL_SHORTFALL_RELATIVE_RATE && peerMedianRate > MODEL_SHORTFALL_PEER_RATE
+   379	    ))
+   380	    .map((rate) => ({
+
+exec
+/bin/zsh -lc "nl -ba /Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/services/run/anomaly-detection.ts | sed -n '380,450p'" in /Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e
+ succeeded in 0ms:
+   380	    .map((rate) => ({
+   381	      type: 'MODEL_TRANSCRIPT_SHORTFALL' as const,
+   382	      subject: rate.modelId,
+   383	      details: toJsonValue({
+   384	        runId: run.id,
+   385	        modelId: rate.modelId,
+   386	        successes: rate.successes,
+   387	        scheduled: rate.scheduled,
+   388	        rate: rate.rate,
+   389	        peerMedianRate,
+   390	      }),
+   391	    }));
+   392	}
+   393	
+   394	export async function detectScheduledCountMismatch(
+   395	  run: RunSnapshot,
+   396	): Promise<{ draft: AnomalyDraft | null; canonicalTotal: number }> {
+   397	  const modelCount = getModelIds(run.config).length;
+   398	  const scenarioCount = await db.runScenarioSelection.count({ where: { runId: run.id } });
+   399	  const samplesPerScenario = getSamplesPerScenario(run.config);
+   400	  const canonicalTotal = modelCount * scenarioCount * samplesPerScenario;
+   401	  const currentTotal = getProgressTotal(run.progress);
+   402	
+   403	  if (currentTotal === canonicalTotal) {
+   404	    return { draft: null, canonicalTotal };
+   405	  }
+   406	
+   407	  return {
+   408	    draft: {
+   409	      type: 'SCHEDULED_COUNT_MISMATCH',
+   410	      subject: '',
+   411	      details: toJsonValue({
+   412	        runId: run.id,
+   413	        canonicalTotal,
+   414	        currentTotal,
+   415	        modelCount,
+   416	        scenarioCount,
+   417	        samplesPerScenario,
+   418	      }),
+   419	    },
+   420	    canonicalTotal,
+   421	  };
+   422	}
+   423	
+   424	export async function detectRunAnomalies(run: RunSnapshot): Promise<AnomalyDraft[]> {
+   425	  const drafts: AnomalyDraft[] = [];
+   426	
+   427	  const stranded = await detectStrandedTranscript(run.id);
+   428	  if (stranded !== null) drafts.push(stranded);
+   429	
+   430	  const orphan = await detectOrphanTranscript(run.id);
+   431	  if (orphan !== null) drafts.push(orphan);
+   432	
+   433	  const pair = await detectPairAsymmetry(run);
+   434	  if (pair !== null) drafts.push(pair);
+   435	
+   436	  const stall = detectSummarizingStall(run);
+   437	  if (stall !== null) drafts.push(stall);
+   438	
+   439	  drafts.push(...await detectModelTranscriptShortfall(run));
+   440	
+   441	  const scheduled = await detectScheduledCountMismatch(run);
+   442	  if (scheduled.draft !== null) drafts.push(scheduled.draft);
+   443	
+   444	  log.debug({ runId: run.id, anomalyCount: drafts.length }, 'Detected run anomalies');
+   445	  return drafts;
+   446	}
+   447	
+   448	export type { RunSnapshot };
+
+codex
+## Findings
+- HIGH: The audit sweep plan will misclassify normal in-flight work as anomalies if it reuses `detectStrandedTranscript()` on the same run scope as the default reconcile flow. That detector flags every transcript whose `summarizedAt` and `summarizeFailedAt` are still null, with no age gate or terminal-state check, and the current reconcile handler uses it specifically to rescue active runs by enqueueing summarize jobs, not as a diagnostic signal. A daily audit over active runs would therefore dump ordinary unfinished transcripts into `run_anomalies`, which defeats the feature’s purpose. [CODE-CONFIRMED] (`/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/services/run/anomaly-detection.ts:126`, `/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/queue/handlers/run-state-reconcile.ts:212`, `/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/queue/handlers/run-state-reconcile.ts:245`)
+
+- MEDIUM: The spec also leaves `detectScheduledCountMismatch()` unsafe for audit mode on active runs. In the current code it is a pure consistency check that compares `progress.total` to the canonical total and, in the default reconcile path, any mismatch is immediately repaired for non-terminal runs. If the audit job scans the same run set without excluding this detector, it will persist expected in-flight progress drift as a permanent anomaly instead of a useful audit signal. [CODE-CONFIRMED] (`/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/services/run/anomaly-detection.ts:394`, `/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/queue/handlers/run-state-reconcile.ts:277`, `/Users/chrislaw/valuerank/.claude/worktrees/distracted-noyce-64917e/cloud/apps/api/src/queue/handlers/run-state-reconcile.ts:292`)
+
+## Residual Risks
+- The spec depends on `boss.schedule()` behaving idempotently across process restarts, but the provided code has no existing schedule-registration pattern to confirm that. If PgBoss does not dedupe schedules the way the spec assumes, audit cadence could be duplicated or missed. [UNVERIFIED]
+
+- The spec only names `run.anomalies` as the consumer of the new `source` field. Any other downstream query or mutation that still keys anomalies by `(runId, type, subject)` will need source-aware changes too, but that code was not provided here. [UNVERIFIED]
+tokens used
+65,450
