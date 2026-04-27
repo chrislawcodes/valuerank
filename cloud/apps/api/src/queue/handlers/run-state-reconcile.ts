@@ -257,6 +257,16 @@ export function createRunStateReconcileHandler(): PgBoss.WorkHandler<RunStateRec
           } catch (error) {
             log.warn({ runId, err: error }, 'Model shortfall detection failed');
           }
+
+          // INVALID_RESPONSE_FAILURE detection runs in both branches because empty
+          // responses can arise during a run (forward path: post-PR #760 FAILED probes)
+          // AND can persist as historical empty transcripts on already-completed runs.
+          try {
+            const invalidResponseFailures = await detectInvalidResponseFailures(runId, 'default');
+            await syncAnomalies(runId, 'INVALID_RESPONSE_FAILURE', invalidResponseFailures, 'default');
+          } catch (error) {
+            log.warn({ runId, err: error }, 'Invalid response failure detection failed');
+          }
         } else {
           try {
             const pair = await detectPairAsymmetry(run);
