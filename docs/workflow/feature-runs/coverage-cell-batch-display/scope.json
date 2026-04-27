@@ -1,0 +1,15 @@
+{
+  "paths": [
+    "cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts",
+    "cloud/apps/api/src/graphql/queries/domain-coverage.ts",
+    "cloud/apps/web/src/components/domains/CoverageCell.tsx",
+    "cloud/apps/web/src/components/domains/CoverageMatrix.tsx"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts",
+    "cloud/apps/api/src/graphql/queries/domain-coverage.ts",
+    "cloud/apps/web/src/components/domains/CoverageCell.tsx",
+    "cloud/apps/web/src/components/domains/CoverageMatrix.tsx",
+    "docs/workflow/feature-runs/coverage-cell-batch-display"
+  ]
+}

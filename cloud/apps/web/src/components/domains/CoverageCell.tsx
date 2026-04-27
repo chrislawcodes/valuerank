@@ -16,11 +16,12 @@ type CoverageCellProps = {
   valueB: string;
   batchCount: number;
   pairedBatchCount: number;
+  orphanedBatchCount: number;
+  aFirstBatchCount: number;
+  bFirstBatchCount: number;
   incompleteBatchCount?: number | null;
   definitionId: string | null;
   aggregateRunId: string | null;
-  minTrialCount?: number | null;
-  maxTrialCount?: number | null;
   modelBreakdown?: CoverageModelBreakdownItem[] | null;
 };
 
@@ -29,30 +30,28 @@ export function CoverageCell({
   valueB,
   batchCount,
   pairedBatchCount,
+  orphanedBatchCount,
+  aFirstBatchCount,
+  bFirstBatchCount,
   incompleteBatchCount,
   definitionId,
   aggregateRunId,
-  minTrialCount,
-  maxTrialCount,
   modelBreakdown,
 }: CoverageCellProps) {
   const [isOpen, setIsOpen] = useState(false);
   const isDiagonal = valueA === valueB;
   const hasVignette = definitionId !== null;
   const hasIncompleteBatches = (incompleteBatchCount ?? 0) > 0;
-  const hasPerModelData = minTrialCount !== null && minTrialCount !== undefined;
-  const displayCount = hasPerModelData ? minTrialCount : (pairedBatchCount > 0 ? pairedBatchCount : batchCount);
-  const hasMismatch = hasPerModelData && maxTrialCount !== null && maxTrialCount !== undefined && minTrialCount < maxTrialCount;
+  const displayCount = pairedBatchCount > 0 ? pairedBatchCount : batchCount;
+  const hasMismatch = aFirstBatchCount !== bFirstBatchCount;
   const visibleLabel = isDiagonal || !hasVignette ? '—' : displayCount.toLocaleString();
   const xLabel = VALUE_LABELS[valueB as keyof typeof VALUE_LABELS] ?? valueB;
   const yLabel = VALUE_LABELS[valueA as keyof typeof VALUE_LABELS] ?? valueA;
-  const batchLabel = hasPerModelData
-    ? (displayCount === 1 ? 'trial (min)' : 'trials (min)')
-    : (pairedBatchCount > 0
-      ? (displayCount === 1 ? 'paired batch' : 'paired batches')
-      : (displayCount === 1 ? 'batch' : 'batches'));
+  const batchLabel = pairedBatchCount > 0
+    ? (displayCount === 1 ? 'paired batch' : 'paired batches')
+    : (displayCount === 1 ? 'batch' : 'batches');
 
-  const countForColor = hasPerModelData ? minTrialCount : batchCount;
+  const countForColor = displayCount;
 
   let bgColorClass = 'bg-gray-50';
   if (isDiagonal) {
@@ -68,9 +67,14 @@ export function CoverageCell({
     bgColorClass = 'bg-emerald-500 hover:bg-emerald-600 transition-colors text-white';
   }
 
-  const tooltipBreakdown = modelBreakdown != null && modelBreakdown.length > 0
-    ? modelBreakdown.map((b) => `${b.label}: ${b.trialCount} trial${b.trialCount === 1 ? '' : 's'}`).join('\n')
-    : undefined;
+  let tooltipBreakdown: string | undefined;
+  if (hasMismatch) {
+    tooltipBreakdown = `A-first: ${aFirstBatchCount} ${aFirstBatchCount === 1 ? 'batch' : 'batches'}\nB-first: ${bFirstBatchCount} ${bFirstBatchCount === 1 ? 'batch' : 'batches'}`;
+  } else if (modelBreakdown != null && modelBreakdown.length > 0) {
+    tooltipBreakdown = modelBreakdown
+      .map((b) => `${b.label}: ${b.trialCount} trial${b.trialCount === 1 ? '' : 's'}`)
+      .join('\n');
+  }
 
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
@@ -85,7 +89,9 @@ export function CoverageCell({
               ? 'Not applicable'
               : !hasVignette
                 ? `${xLabel} versus ${yLabel}: no vignette`
-                : `${xLabel} versus ${yLabel}: ${displayCount} ${batchLabel}`
+                : hasMismatch
+                  ? `${xLabel} versus ${yLabel}: ${displayCount} ${batchLabel}; A-first ${aFirstBatchCount}, B-first ${bFirstBatchCount}`
+                  : `${xLabel} versus ${yLabel}: ${displayCount} ${batchLabel}`
           }
           className={cn(
             'relative w-full h-full min-h-[48px] p-2 flex flex-col items-center justify-center text-sm font-medium border rounded-none focus:ring-0 focus:ring-offset-0',
@@ -99,7 +105,7 @@ export function CoverageCell({
         >
           {visibleLabel}
           {hasMismatch && (
-            <span className="text-[10px] text-orange-600 font-normal leading-none mt-0.5" aria-label="trial count mismatch across models">
+            <span className="text-[10px] text-orange-600 font-normal leading-none mt-0.5" aria-label="direction imbalance across batches">
               ⚠
             </span>
           )}
@@ -133,14 +139,30 @@ export function CoverageCell({
                   />
                   {displayCount} {batchLabel}
                 </div>
+                {hasMismatch && (
+                  <div className="mt-2 rounded border border-orange-200 bg-orange-50 px-2 py-1.5 text-xs text-orange-900">
+                    <div className="font-medium text-orange-800">Direction imbalance</div>
+                    <div className="mt-1 flex items-center justify-between gap-3">
+                      <span className="text-orange-700">A-first</span>
+                      <span className="font-medium">{aFirstBatchCount}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-orange-700">B-first</span>
+                      <span className="font-medium">{bFirstBatchCount}</span>
+                    </div>
+                    {orphanedBatchCount > 0 && (
+                      <div className="mt-1 text-[11px] text-orange-700">
+                        {orphanedBatchCount} unpaired directional batch{orphanedBatchCount === 1 ? '' : 'es'}
+                      </div>
+                    )}
+                  </div>
+                )}
                 {modelBreakdown != null && modelBreakdown.length > 0 && (
                   <div className="mt-2 space-y-0.5">
                     {modelBreakdown.map((b) => (
                       <div key={b.modelId} className="flex items-center justify-between text-xs text-gray-600">
                         <span className="truncate mr-2">{b.label}</span>
-                        <span className={cn('font-medium', hasMismatch && b.trialCount === minTrialCount ? 'text-orange-600' : '')}>
-                          {b.trialCount}
-                        </span>
+                        <span className="font-medium">{b.trialCount}</span>
                       </div>
                     ))}
                   </div>

@@ -26,6 +26,9 @@ export type DomainValueCoverageCell = {
   valueB: string;
   batchCount: number;
   pairedBatchCount: number;
+  orphanedBatchCount: number;
+  aFirstBatchCount: number;
+  bFirstBatchCount: number;
   incompleteBatchCount: number;
   definitionId: string | null;
   definitionName: string | null;

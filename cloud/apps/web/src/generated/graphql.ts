@@ -1137,6 +1137,8 @@ export type DomainValueCoverageCell = {
   aggregateRunId?: Maybe<Scalars['String']['output']>;
   /** Count of fully-complete non-aggregate runs for this value pair. A run is complete when every selected model has at least one transcript at every (scenario × sampleIndex) slot. samplesPerScenario does not multiply this count -- a complete run contributes 1 regardless of how many samples per scenario were planned. Aggregate runs are excluded. */
   batchCount: Scalars['Int']['output'];
+  /** Count of complete A-first runs for this value pair after model-set filtering. This is the filtered directional count for the first value in the pair. */
+  aFirstBatchCount: Scalars['Int']['output'];
   definitionId?: Maybe<Scalars['String']['output']>;
   definitionName?: Maybe<Scalars['String']['output']>;
   /** Count of non-aggregate runs that expect transcripts but are missing one or more (model × scenario × sampleIndex) slots. Per-run; samplesPerScenario does not multiply this count. Aggregate runs and runs with zero expected slots are excluded. */
@@ -1144,8 +1146,12 @@ export type DomainValueCoverageCell = {
   maxTrialCount?: Maybe<Scalars['Int']['output']>;
   minTrialCount?: Maybe<Scalars['Int']['output']>;
   modelBreakdown?: Maybe<Array<CoverageModelBreakdown>>;
+  /** Count of unmatched directional runs for this value pair, computed as max(complete A-first runs, complete B-first runs) - min(complete A-first runs, complete B-first runs). When both directions are equal this is 0; when only one direction has runs this is the count of that side. Runs without a recognizable direction token are excluded. */
+  orphanedBatchCount: Scalars['Int']['output'];
   /** Count of paired-batch groups where the surviving (complete) companion run is fully complete. When both companions are complete, the pair counts as 1. When only one is complete, that one is the survivor and the pair counts as 1. When both are incomplete, the pair counts as 0 here (and as 1 toward incompleteBatchCount). */
   pairedBatchCount: Scalars['Int']['output'];
+  /** Count of complete B-first runs for this value pair after model-set filtering. This is the filtered directional count for the second value in the pair. */
+  bFirstBatchCount: Scalars['Int']['output'];
   valueA: Scalars['String']['output'];
   valueB: Scalars['String']['output'];
 };
@@ -3991,7 +3997,7 @@ export type DomainValueCoverageQueryVariables = Exact<{
 }>;
 
 
-export type DomainValueCoverageQuery = { __typename?: 'Query', domainValueCoverage?: { __typename?: 'DomainValueCoverageResult', domainId: string, values: Array<string>, cells: Array<{ __typename?: 'DomainValueCoverageCell', valueA: string, valueB: string, batchCount: number, pairedBatchCount: number, incompleteBatchCount: number, definitionId?: string | null, definitionName?: string | null, aggregateRunId?: string | null, minTrialCount?: number | null, maxTrialCount?: number | null, modelBreakdown?: Array<{ __typename?: 'CoverageModelBreakdown', modelId: string, label: string, trialCount: number }> | null }>, availableModels: Array<{ __typename?: 'CoverageModelOption', modelId: string, label: string }> } | null };
+export type DomainValueCoverageQuery = { __typename?: 'Query', domainValueCoverage?: { __typename?: 'DomainValueCoverageResult', domainId: string, values: Array<string>, cells: Array<{ __typename?: 'DomainValueCoverageCell', valueA: string, valueB: string, batchCount: number, pairedBatchCount: number, orphanedBatchCount: number, aFirstBatchCount: number, bFirstBatchCount: number, incompleteBatchCount: number, definitionId?: string | null, definitionName?: string | null, aggregateRunId?: string | null, minTrialCount?: number | null, maxTrialCount?: number | null, modelBreakdown?: Array<{ __typename?: 'CoverageModelBreakdown', modelId: string, label: string, trialCount: number }> | null }>, availableModels: Array<{ __typename?: 'CoverageModelOption', modelId: string, label: string }> } | null };
 
 export type DomainValueCoverageLegacyQueryVariables = Exact<{
   domainId: Scalars['ID']['input'];
@@ -3999,7 +4005,7 @@ export type DomainValueCoverageLegacyQueryVariables = Exact<{
 }>;
 
 
-export type DomainValueCoverageLegacyQuery = { __typename?: 'Query', domainValueCoverage?: { __typename?: 'DomainValueCoverageResult', domainId: string, values: Array<string>, cells: Array<{ __typename?: 'DomainValueCoverageCell', valueA: string, valueB: string, batchCount: number, pairedBatchCount: number, definitionId?: string | null, definitionName?: string | null, aggregateRunId?: string | null }>, availableModels: Array<{ __typename?: 'CoverageModelOption', modelId: string, label: string }> } | null };
+export type DomainValueCoverageLegacyQuery = { __typename?: 'Query', domainValueCoverage?: { __typename?: 'DomainValueCoverageResult', domainId: string, values: Array<string>, cells: Array<{ __typename?: 'DomainValueCoverageCell', valueA: string, valueB: string, batchCount: number, pairedBatchCount: number, orphanedBatchCount: number, aFirstBatchCount: number, bFirstBatchCount: number, definitionId?: string | null, definitionName?: string | null, aggregateRunId?: string | null }>, availableModels: Array<{ __typename?: 'CoverageModelOption', modelId: string, label: string }> } | null };
 
 export type DomainsQueryVariables = Exact<{
   search?: InputMaybe<Scalars['String']['input']>;
@@ -5736,6 +5742,9 @@ export const DomainValueCoverageDocument = gql`
       valueB
       batchCount
       pairedBatchCount
+      orphanedBatchCount
+      aFirstBatchCount
+      bFirstBatchCount
       incompleteBatchCount
       definitionId
       definitionName
@@ -5769,6 +5778,9 @@ export const DomainValueCoverageLegacyDocument = gql`
       valueB
       batchCount
       pairedBatchCount
+      orphanedBatchCount
+      aFirstBatchCount
+      bFirstBatchCount
       definitionId
       definitionName
       aggregateRunId

@@ -1,0 +1,57 @@
+{
+  "feature_slug": "coverage-cell-batch-display",
+  "stage": "plan",
+  "artifact_path": "docs/workflow/feature-runs/coverage-cell-batch-display/plan.md",
+  "git_base_ref": "",
+  "allowed_dirty_paths": [],
+  "required_reviews": [
+    {
+      "reviewer": "codex",
+      "lens": "implementation-adversarial",
+      "stage": "plan",
+      "path": "docs/workflow/feature-runs/coverage-cell-batch-display/reviews/plan.codex.implementation-adversarial.review.md",
+      "context_paths": [
+        "cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts",
+        "cloud/apps/api/src/graphql/queries/domain-coverage-gql-types.ts",
+        "cloud/apps/api/src/graphql/queries/domain-coverage.ts",
+        "cloud/apps/web/src/api/operations/domainCoverage.ts",
+        "cloud/apps/web/src/components/domains/CoverageCell.tsx",
+        "cloud/apps/web/src/components/domains/CoverageMatrix.tsx"
+      ],
+      "model": "gpt-5.4-mini"
+    },
+    {
+      "reviewer": "codex",
+      "lens": "architecture-adversarial",
+      "stage": "plan",
+      "path": "docs/workflow/feature-runs/coverage-cell-batch-display/reviews/plan.codex.architecture-adversarial.review.md",
+      "context_paths": [
+        "cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts",
+        "cloud/apps/api/src/graphql/queries/domain-coverage-gql-types.ts",
+        "cloud/apps/api/src/graphql/queries/domain-coverage.ts",
+        "cloud/apps/web/src/api/operations/domainCoverage.ts",
+        "cloud/apps/web/src/components/domains/CoverageCell.tsx",
+        "cloud/apps/web/src/components/domains/CoverageMatrix.tsx"
+      ],
+      "model": "gpt-5.4-mini"
+    },
+    {
+      "reviewer": "gemini",
+      "lens": "testability-adversarial",
+      "stage": "plan",
+      "path": "docs/workflow/feature-runs/coverage-cell-batch-display/reviews/plan.gemini.testability-adversarial.review.md",
+      "context_paths": [
+        "cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts",
+        "cloud/apps/api/src/graphql/queries/domain-coverage-gql-types.ts",
+        "cloud/apps/api/src/graphql/queries/domain-coverage.ts",
+        "cloud/apps/web/src/api/operations/domainCoverage.ts",
+        "cloud/apps/web/src/components/domains/CoverageCell.tsx",
+        "cloud/apps/web/src/components/domains/CoverageMatrix.tsx"
+      ],
+      "model": "gemini-2.5-pro"
+    }
+  ],
+  "max_artifact_chars": 50000,
+  "max_context_chars": 60000,
+  "max_total_chars": 250000
+}

@@ -9,6 +9,7 @@ import {
   computePerModelTrialCounts,
   deduplicateRunsByGroupId,
 } from '../../../src/graphql/queries/domain-coverage-utils.js';
+import { isRunComplete } from '../../../src/services/run/coverage-completeness.js';
 
 describe('extractValuePair', () => {
   it('normalizes lowercase dimension names to canonical coverage keys', () => {
@@ -365,11 +366,13 @@ describe('deduplicateRunsByGroupId', () => {
 
 describe('getCoverageDirection', () => {
   it('returns the trimmed string for a normal direction token', () => {
-    expect(getCoverageDirection({ jobChoiceValueFirst: 'career' })).toBe('career');
+    // Normalizes to PascalCase_Underscore to match COVERAGE_VALUE_KEYS.
+    // Prod tokens are lowercase (e.g. "career"); keys are "Career".
+    expect(getCoverageDirection({ jobChoiceValueFirst: 'career' })).toBe('Career');
   });
 
   it('trims whitespace', () => {
-    expect(getCoverageDirection({ jobChoiceValueFirst: '  career  ' })).toBe('career');
+    expect(getCoverageDirection({ jobChoiceValueFirst: '  career  ' })).toBe('Career');
   });
 
   it('returns null for an empty string', () => {
@@ -402,11 +405,14 @@ describe('getCoverageDirection', () => {
     // and force a deliberate update.
     expect(
       getCoverageDirection({ jobChoiceLaunchMode: 'AD_HOC_BATCH', jobChoiceValueFirst: 'career' }),
-    ).toBe('career');
+    ).toBe('Career');
   });
 });
 
 describe('selectPrimaryDefinitionCounts', () => {
+  const valueA = 'vf-A';
+  const valueB = 'vf-B';
+
   function makeDirMap(
     entries: Array<[string, Map<string, Set<string>>]>,
   ): Map<string, Map<string, Set<string>>> {
@@ -414,11 +420,13 @@ describe('selectPrimaryDefinitionCounts', () => {
   }
 
   it('returns zero for an empty definition list', () => {
-    expect(selectPrimaryDefinitionCounts([], new Map(), new Map())).toEqual({
+    expect(selectPrimaryDefinitionCounts([], new Map(), new Map(), valueA, valueB)).toEqual({
       primaryDefinitionId: null,
       batchCount: 0,
       pairedBatchCount: 0,
       orphanedBatchCount: 0,
+      aFirstBatchCount: 0,
+      bFirstBatchCount: 0,
     });
   });
 
@@ -427,11 +435,13 @@ describe('selectPrimaryDefinitionCounts', () => {
     const dirs = makeDirMap([[
       'def-a', new Map([['vf-A', new Set(['g1'])]]),
     ]]);
-    expect(selectPrimaryDefinitionCounts(['def-a'], batches, dirs)).toEqual({
+    expect(selectPrimaryDefinitionCounts(['def-a'], batches, dirs, valueA, valueB)).toEqual({
       primaryDefinitionId: 'def-a',
       batchCount: 1,
       pairedBatchCount: 0,
       orphanedBatchCount: 1,
+      aFirstBatchCount: 1,
+      bFirstBatchCount: 0,
     });
   });
 
@@ -443,11 +453,13 @@ describe('selectPrimaryDefinitionCounts', () => {
         ['vf-B', new Set(['g1', 'g2'])],
       ]),
     ]]);
-    expect(selectPrimaryDefinitionCounts(['def-a'], batches, dirs)).toEqual({
+    expect(selectPrimaryDefinitionCounts(['def-a'], batches, dirs, valueA, valueB)).toEqual({
       primaryDefinitionId: 'def-a',
       batchCount: 4,
       pairedBatchCount: 2,
       orphanedBatchCount: 0,
+      aFirstBatchCount: 2,
+      bFirstBatchCount: 2,
     });
   });
 
@@ -459,11 +471,13 @@ describe('selectPrimaryDefinitionCounts', () => {
         ['vf-B', new Set(['g1', 'g2'])],
       ]),
     ]]);
-    expect(selectPrimaryDefinitionCounts(['def-a'], batches, dirs)).toEqual({
+    expect(selectPrimaryDefinitionCounts(['def-a'], batches, dirs, valueA, valueB)).toEqual({
       primaryDefinitionId: 'def-a',
       batchCount: 5,
       pairedBatchCount: 2,
       orphanedBatchCount: 1,
+      aFirstBatchCount: 3,
+      bFirstBatchCount: 2,
     });
   });
 
@@ -475,10 +489,12 @@ describe('selectPrimaryDefinitionCounts', () => {
       ['def-b', new Map([['vf-B', new Set(['g1', 'g2'])]])],
     ]);
     const result = selectPrimaryDefinitionCounts(
-      ['def-a', 'def-b'], batches, dirs,
+      ['def-a', 'def-b'], batches, dirs, valueA, valueB,
     );
     expect(result.batchCount).toBe(4);
     expect(result.pairedBatchCount).toBe(2);
+    expect(result.aFirstBatchCount).toBe(2);
+    expect(result.bFirstBatchCount).toBe(2);
     // Tie-break: both have batchCount=2; both have directionCount=1; localeCompare picks 'def-a'
     expect(result.primaryDefinitionId).toBe('def-a');
   });
@@ -491,11 +507,13 @@ describe('selectPrimaryDefinitionCounts', () => {
         ['vf-A', new Set(['g1'])], // Set already collapsed
       ]),
     ]]);
-    expect(selectPrimaryDefinitionCounts(['def-a'], batches, dirs)).toEqual({
+    expect(selectPrimaryDefinitionCounts(['def-a'], batches, dirs, valueA, valueB)).toEqual({
       primaryDefinitionId: 'def-a',
       batchCount: 2,
       pairedBatchCount: 0, // Only one direction
       orphanedBatchCount: 1, // single-direction Set has size 1
+      aFirstBatchCount: 1,
+      bFirstBatchCount: 0,
     });
   });
 
@@ -510,7 +528,7 @@ describe('selectPrimaryDefinitionCounts', () => {
     ]]);
     const log = { warn: vi.fn() };
     const result = selectPrimaryDefinitionCounts(
-      ['def-a'], batches, dirs, log, 'Achievement::Tradition',
+      ['def-a'], batches, dirs, valueA, valueB, log, 'Achievement::Tradition',
     );
     // Two largest counts: 3 and 1 -> min = 1
     expect(result.pairedBatchCount).toBe(1);
@@ -535,7 +553,7 @@ describe('selectPrimaryDefinitionCounts', () => {
       ])],
     ]);
     const result = selectPrimaryDefinitionCounts(
-      ['def-a', 'def-b'], batches, dirs,
+      ['def-a', 'def-b'], batches, dirs, valueA, valueB,
     );
     expect(result.primaryDefinitionId).toBe('def-b');
   });
@@ -547,7 +565,7 @@ describe('selectPrimaryDefinitionCounts', () => {
       ['def-a', new Map([['vf-A', new Set(['g3', 'g4'])]])],
     ]);
     const result = selectPrimaryDefinitionCounts(
-      ['def-z', 'def-a'], batches, dirs,
+      ['def-z', 'def-a'], batches, dirs, valueA, valueB,
     );
     expect(result.primaryDefinitionId).toBe('def-a');
   });
@@ -565,7 +583,33 @@ describe('selectPrimaryDefinitionCounts', () => {
         ['vf-B', new Set(['g1'])],
       ]),
     ]]);
-    expect(selectPrimaryDefinitionCounts(['def-a'], batches, dirs).pairedBatchCount).toBe(1);
+    expect(selectPrimaryDefinitionCounts(['def-a'], batches, dirs, valueA, valueB).pairedBatchCount).toBe(1);
+  });
+
+  it('maps A-first and B-first counts from the provided value names', () => {
+    const batches = new Map([['def-a', 3]]);
+    const dirs = makeDirMap([[
+      'def-a', new Map([
+        ['Achievement', new Set(['g1', 'g2'])],
+        ['Tradition', new Set(['g1'])],
+      ]),
+    ]]);
+    const result = selectPrimaryDefinitionCounts(
+      ['def-a'],
+      batches,
+      dirs,
+      'Achievement',
+      'Tradition',
+    );
+
+    expect(result).toEqual({
+      primaryDefinitionId: 'def-a',
+      batchCount: 3,
+      pairedBatchCount: 1,
+      orphanedBatchCount: 1,
+      aFirstBatchCount: 2,
+      bFirstBatchCount: 1,
+    });
   });
 
   it('does not warn when no log is provided in the >2 corruption case', () => {
@@ -579,7 +623,7 @@ describe('selectPrimaryDefinitionCounts', () => {
     ]]);
     // Should not throw without log, just compute the heuristic.
     expect(() =>
-      selectPrimaryDefinitionCounts(['def-a'], batches, dirs),
+      selectPrimaryDefinitionCounts(['def-a'], batches, dirs, valueA, valueB),
     ).not.toThrow();
   });
 
@@ -592,9 +636,11 @@ describe('selectPrimaryDefinitionCounts', () => {
           ['vf-B', new Set(['g1', 'g2', 'g3'])],
         ]),
       ]]);
-      const result = selectPrimaryDefinitionCounts(['def-a'], batches, dirs);
+      const result = selectPrimaryDefinitionCounts(['def-a'], batches, dirs, valueA, valueB);
       expect(result.pairedBatchCount).toBe(3);
       expect(result.orphanedBatchCount).toBe(0);
+      expect(result.aFirstBatchCount).toBe(3);
+      expect(result.bFirstBatchCount).toBe(3);
     });
 
     it('asymmetric pair (A=4, B=1) -> orphanedBatchCount = abs difference', () => {
@@ -605,9 +651,11 @@ describe('selectPrimaryDefinitionCounts', () => {
           ['vf-B', new Set(['g1'])],
         ]),
       ]]);
-      const result = selectPrimaryDefinitionCounts(['def-a'], batches, dirs);
+      const result = selectPrimaryDefinitionCounts(['def-a'], batches, dirs, valueA, valueB);
       expect(result.pairedBatchCount).toBe(1);
       expect(result.orphanedBatchCount).toBe(3); // 4 - 1
+      expect(result.aFirstBatchCount).toBe(4);
+      expect(result.bFirstBatchCount).toBe(1);
     });
 
     it('fully missing side (only A-first present) -> orphanedBatchCount = count of present side', () => {
@@ -617,17 +665,21 @@ describe('selectPrimaryDefinitionCounts', () => {
           ['vf-A', new Set(['g1', 'g2', 'g3'])],
         ]),
       ]]);
-      const result = selectPrimaryDefinitionCounts(['def-a'], batches, dirs);
+      const result = selectPrimaryDefinitionCounts(['def-a'], batches, dirs, valueA, valueB);
       expect(result.pairedBatchCount).toBe(0);
       expect(result.orphanedBatchCount).toBe(3);
+      expect(result.aFirstBatchCount).toBe(3);
+      expect(result.bFirstBatchCount).toBe(0);
     });
 
     it('no directions at all -> orphanedBatchCount = 0', () => {
       const batches = new Map([['def-a', 2]]);
       const dirs = makeDirMap([['def-a', new Map()]]);
-      const result = selectPrimaryDefinitionCounts(['def-a'], batches, dirs);
+      const result = selectPrimaryDefinitionCounts(['def-a'], batches, dirs, valueA, valueB);
       expect(result.pairedBatchCount).toBe(0);
       expect(result.orphanedBatchCount).toBe(0);
+      expect(result.aFirstBatchCount).toBe(0);
+      expect(result.bFirstBatchCount).toBe(0);
     });
 
     it('cross-definition asymmetric (def-a A-first only, def-b B-first only) -> orphanedBatchCount reflects merged sets', () => {
@@ -636,9 +688,11 @@ describe('selectPrimaryDefinitionCounts', () => {
         ['def-a', new Map([['vf-A', new Set(['g1', 'g2', 'g3'])]])],
         ['def-b', new Map([['vf-B', new Set(['g1'])]])],
       ]);
-      const result = selectPrimaryDefinitionCounts(['def-a', 'def-b'], batches, dirs);
+      const result = selectPrimaryDefinitionCounts(['def-a', 'def-b'], batches, dirs, valueA, valueB);
       expect(result.pairedBatchCount).toBe(1);
       expect(result.orphanedBatchCount).toBe(2); // 3 - 1
+      expect(result.aFirstBatchCount).toBe(3);
+      expect(result.bFirstBatchCount).toBe(1);
     });
 
     it('>2 directions corruption: orphanedBatchCount uses max - min of two largest counts', () => {
@@ -650,10 +704,12 @@ describe('selectPrimaryDefinitionCounts', () => {
           ['vf-X', new Set(['g4'])],              // 1
         ]),
       ]]);
-      const result = selectPrimaryDefinitionCounts(['def-a'], batches, dirs);
+      const result = selectPrimaryDefinitionCounts(['def-a'], batches, dirs, valueA, valueB);
       // Two largest: 3, 1 -> paired = min = 1, orphaned = 3 - 1 = 2
       expect(result.pairedBatchCount).toBe(1);
       expect(result.orphanedBatchCount).toBe(2);
+      expect(result.aFirstBatchCount).toBe(3);
+      expect(result.bFirstBatchCount).toBe(1);
     });
   });
 });
@@ -714,7 +770,7 @@ describe('domain-coverage integration scenarios', () => {
     ];
     const dirs = buildDirectionalMap(runs);
     const batches = buildBatchCounts(runs);
-    const result = selectPrimaryDefinitionCounts(['def-a', 'def-b'], batches, dirs);
+    const result = selectPrimaryDefinitionCounts(['def-a', 'def-b'], batches, dirs, 'vf-A', 'vf-B');
     expect(result.batchCount).toBe(3);
     expect(result.pairedBatchCount).toBe(1); // min(2, 1) = 1
   });
@@ -732,7 +788,7 @@ describe('domain-coverage integration scenarios', () => {
     const batches = buildBatchCounts(runs);
 
     // pairedBatchCount: 1 (both directions present, group g1 in each → min(1,1) = 1)
-    const cellResult = selectPrimaryDefinitionCounts(['def-a', 'def-b'], batches, dirs);
+    const cellResult = selectPrimaryDefinitionCounts(['def-a', 'def-b'], batches, dirs, 'vf-A', 'vf-B');
     expect(cellResult.pairedBatchCount).toBe(1);
     expect(cellResult.batchCount).toBe(2);
 
@@ -757,7 +813,7 @@ describe('domain-coverage integration scenarios', () => {
     ];
     const dirs = buildDirectionalMap(runs);
     const batches = buildBatchCounts(runs);
-    const result = selectPrimaryDefinitionCounts(['def-a'], batches, dirs);
+    const result = selectPrimaryDefinitionCounts(['def-a'], batches, dirs, 'vf-A', 'vf-B');
     expect(result.batchCount).toBe(2); // both runs count toward batchCount
     expect(result.pairedBatchCount).toBe(0); // only one direction has any classifiable run
   });
@@ -772,7 +828,7 @@ describe('domain-coverage integration scenarios', () => {
     ];
     const dirs = buildDirectionalMap(runs);
     const batches = buildBatchCounts(runs);
-    const result = selectPrimaryDefinitionCounts(['def-a', 'def-b'], batches, dirs);
+    const result = selectPrimaryDefinitionCounts(['def-a', 'def-b'], batches, dirs, 'vf-A', 'vf-B');
     expect(result.batchCount).toBe(3);
     // Set-of-groupIds collapses the two A-first runs into 1 → min(1, 1) = 1
     expect(result.pairedBatchCount).toBe(1);
@@ -789,16 +845,109 @@ describe('domain-coverage integration scenarios', () => {
     const dirs = buildDirectionalMap(runs);
     const batches = buildBatchCounts(runs);
     const log = { warn: vi.fn() };
-    const result = selectPrimaryDefinitionCounts(['def-a'], batches, dirs, log, 'Achievement::Tradition');
-    // Counts: career=3, family=1, leisure=1 → two largest = 3, 1 → min = 1
+    const result = selectPrimaryDefinitionCounts(['def-a'], batches, dirs, 'vf-A', 'vf-B', log, 'Achievement::Tradition');
+    // Counts: Career=3, Family=1, Leisure=1 → two largest = 3, 1 → min = 1
+    // Direction tokens normalized to PascalCase by getCoverageDirection.
     expect(result.pairedBatchCount).toBe(1);
     expect(log.warn).toHaveBeenCalledTimes(1);
     expect(log.warn).toHaveBeenCalledWith(
       expect.objectContaining({
         cellKey: 'Achievement::Tradition',
-        directions: expect.arrayContaining(['career', 'family', 'leisure']),
+        directions: expect.arrayContaining(['Career', 'Family', 'Leisure']),
       }),
       expect.stringContaining('>2 distinct'),
     );
+  });
+
+  it('filters out runs missing a current default model before batch, incomplete, and trial counts', () => {
+    const effectiveModelIds = ['model-a', 'model-b'];
+    const runs: RunFixture[] = [
+      {
+        id: 'kept',
+        definitionId: 'def-a',
+        config: {
+          jobChoiceValueFirst: 'career',
+          jobChoiceBatchGroupId: 'g1',
+          samplesPerScenario: 1,
+          models: ['model-a', 'model-b'],
+        },
+        transcripts: [
+          { modelId: 'model-a', scenarioId: 's1', sampleIndex: 0 },
+          { modelId: 'model-b', scenarioId: 's1', sampleIndex: 0 },
+        ],
+        scenarioIds: ['s1'],
+      },
+      {
+        id: 'filtered',
+        definitionId: 'def-a',
+        config: {
+          jobChoiceValueFirst: 'career',
+          jobChoiceBatchGroupId: 'g2',
+          samplesPerScenario: 1,
+          models: ['model-a', 'model-c'],
+        },
+        transcripts: [
+          { modelId: 'model-a', scenarioId: 's1', sampleIndex: 0 },
+        ],
+        scenarioIds: ['s1'],
+      },
+    ];
+
+    const batchCountByDefinitionId = new Map<string, number>();
+    const incompleteBatchCountByDefinitionId = new Map<string, number>();
+    const nonAggregateRunsByDefinitionId = new Map<string, Array<{
+      config: unknown;
+      transcripts: Array<{ modelId: string; scenarioId: string | null; sampleIndex: number }>;
+      scenarioIds: string[];
+    }>>();
+
+    for (const run of runs) {
+      const config = run.config;
+      const models = Array.isArray(config.models)
+        ? config.models.filter((m): m is string => typeof m === 'string' && m.length > 0)
+        : null;
+      const matchesEffectiveModelSet = effectiveModelIds.length === 0
+        || (models !== null && effectiveModelIds.every((id) => models.includes(id)));
+      if (!matchesEffectiveModelSet) {
+        continue;
+      }
+
+      const rawSamples = config.samplesPerScenario;
+      const samplesPerScenario = typeof rawSamples === 'number' ? rawSamples : null;
+      const existingTranscripts = run.transcripts.filter(
+        (t): t is { scenarioId: string; modelId: string; sampleIndex: number } => t.scenarioId !== null,
+      );
+      const complete = isRunComplete({
+        scenarioIds: run.scenarioIds,
+        models: models ?? [],
+        samplesPerScenario,
+        existingTranscripts,
+      });
+
+      if (!complete) {
+        incompleteBatchCountByDefinitionId.set(
+          run.definitionId,
+          (incompleteBatchCountByDefinitionId.get(run.definitionId) ?? 0) + 1,
+        );
+        continue;
+      }
+
+      batchCountByDefinitionId.set(
+        run.definitionId,
+        (batchCountByDefinitionId.get(run.definitionId) ?? 0) + 1,
+      );
+
+      const nonAggregateRuns = nonAggregateRunsByDefinitionId.get(run.definitionId) ?? [];
+      nonAggregateRuns.push({
+        config: run.config,
+        transcripts: run.transcripts,
+        scenarioIds: run.scenarioIds,
+      });
+      nonAggregateRunsByDefinitionId.set(run.definitionId, nonAggregateRuns);
+    }
+
+    expect(batchCountByDefinitionId.get('def-a')).toBe(1);
+    expect(incompleteBatchCountByDefinitionId.get('def-a')).toBeUndefined();
+    expect(nonAggregateRunsByDefinitionId.get('def-a')).toHaveLength(1);
   });
 });

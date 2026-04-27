@@ -1,0 +1,60 @@
+{
+  "judge": "restatement",
+  "model": "gpt-5",
+  "verdict": "proceed-with-annotation",
+  "confidence": 5,
+  "reasoning": "First-round case applies because the supplied history says \"No prior findings yet.\" With no earlier findings and no orchestrator responses, none of the latest items can be labeled RESTATEMENT. I classify every latest finding as NEW baseline signal for later rounds. plan.codex.architecture-adversarial.review#high-1 is NEW: it surfaces a new failure mode where the public `modelIds` filter would remain in the API but stop affecting the matrix because the existing `run.transcripts.some(...)` gate would be dropped. plan.codex.architecture-adversarial.review#medium-2 is NEW: it surfaces a new failure mode where raw `jobChoiceValueFirst` tokens are not normalized against `COVERAGE_VALUE_KEYS`, so directional counts can silently fall to zero on token drift or casing changes. plan.codex.architecture-adversarial.review#medium-3 is NEW: it surfaces a new failure mode where displayed filtered counts and the `aggregateRunId` link target can point at different cohorts. plan.codex.implementation-adversarial.review#high-1 is NEW: it surfaces a new failure mode where the plan edits a generated wrapper file instead of the real GraphQL source, so the query would not actually change. plan.codex.implementation-adversarial.review#medium-2 is NEW: it repeats the same underlying link/cohort mismatch failure mode as architecture medium-3, but because there are still no prior rounds it remains baseline NEW rather than a restatement across rounds. plan.codex.implementation-adversarial.review#low-3 is NEW: it repeats the same underlying token-normalization failure mode as architecture medium-2, but again there is no earlier round for restatement analysis. plan.gemini.testability-adversarial.review#high-1 is NEW only as a placeholder baseline because the supplied text gives no failure mode beyond \"Severity:** HIGH\". plan.gemini.testability-adversarial.review#medium-2 is NEW only as a placeholder baseline because the supplied text gives no failure mode beyond \"Severity:** MEDIUM\". Verdict is proceed-with-annotation, not block, because this judge cannot assess loop saturation on round one; these findings should be preserved as the comparison baseline for future restatement checks.",
+  "unaddressed_high_finding_ids": [
+    "plan.codex.architecture-adversarial.review#high-1",
+    "plan.codex.implementation-adversarial.review#high-1",
+    "plan.gemini.testability-adversarial.review#high-1"
+  ],
+  "evidence": [
+    {
+      "artifact": "user prompt",
+      "section": "Earlier rounds' findings",
+      "quote": "No prior findings yet."
+    },
+    {
+      "artifact": "plan.codex.architecture-adversarial.review.md",
+      "section": "high-1",
+      "quote": "The plan drops an existing public filter on `domainValueCoverage`. The resolver still accepts `modelIds` and currently applies `run.transcripts.some(...)` to honor it, but the plan only describes replacing that gate with the `effectiveModelIds.every(...)` check."
+    },
+    {
+      "artifact": "plan.codex.architecture-adversarial.review.md",
+      "section": "medium-2",
+      "quote": "The new `aFirstBatchCount` / `bFirstBatchCount` logic assumes `jobChoiceValueFirst` tokens can be used directly as matrix value keys, but `getCoverageDirection()` only trims an arbitrary string and never normalizes or validates it against `COVERAGE_VALUE_KEYS`."
+    },
+    {
+      "artifact": "plan.codex.architecture-adversarial.review.md",
+      "section": "medium-3",
+      "quote": "the cell can show filtered counts while the \u201cView Vignette Analysis\u201d link still opens an aggregate run that does not match the filtered cohort."
+    },
+    {
+      "artifact": "plan.codex.implementation-adversarial.review.md",
+      "section": "high-1",
+      "quote": "The plan tells you to edit `cloud/apps/web/src/api/operations/domainCoverage.ts` to add the new GraphQL fields, but that file is only a generated wrapper that re-exports `DomainValueCoverageDocument` and `DomainValueCoverageLegacyDocument`."
+    },
+    {
+      "artifact": "plan.codex.implementation-adversarial.review.md",
+      "section": "medium-2",
+      "quote": "the cell still picks `latestAggregateRunIdByDefinitionId` first and only then `latestMatchingRunIdByDefinitionId`, and both are maintained independently of the new cohort rule."
+    },
+    {
+      "artifact": "plan.codex.implementation-adversarial.review.md",
+      "section": "low-3",
+      "quote": "The plan assumes `jobChoiceValueFirst` is stored as the exact canonical value string used for `valueA`/`valueB`. The provided code only shows that it is read as a trimmed raw string; it does not prove that the stored token matches the coverage keys exactly."
+    },
+    {
+      "artifact": "plan.gemini.testability-adversarial.review.md",
+      "section": "high-1",
+      "quote": "Severity:** HIGH"
+    },
+    {
+      "artifact": "plan.gemini.testability-adversarial.review.md",
+      "section": "medium-2",
+      "quote": "Severity:** MEDIUM"
+    }
+  ],
+  "timestamp": "2026-04-26T00:00:00-07:00"
+}

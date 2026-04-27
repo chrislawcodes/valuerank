@@ -292,11 +292,12 @@ export const CoverageMatrix = forwardRef<HTMLDivElement, { domainId: string }>(
                             valueB={colVal}
                             batchCount={cell?.batchCount ?? 0}
                             pairedBatchCount={cell?.pairedBatchCount ?? 0}
+                            orphanedBatchCount={cell?.orphanedBatchCount ?? 0}
+                            aFirstBatchCount={cell?.aFirstBatchCount ?? 0}
+                            bFirstBatchCount={cell?.bFirstBatchCount ?? 0}
                             incompleteBatchCount={cell?.incompleteBatchCount ?? 0}
                             definitionId={cell?.definitionId ?? null}
                             aggregateRunId={cell?.aggregateRunId ?? null}
-                            minTrialCount={cell?.minTrialCount ?? null}
-                            maxTrialCount={cell?.maxTrialCount ?? null}
                             modelBreakdown={cell?.modelBreakdown ?? null}
                           />
                         </td>

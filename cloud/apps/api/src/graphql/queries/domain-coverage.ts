@@ -202,7 +202,6 @@ builder.queryField('domainValueCoverage', (t) =>
             models?: unknown;
             samplesPerScenario?: unknown;
           };
-
           const scenarioIds = run.scenarioSelections.map((s) => s.scenarioId);
           const runWithScenarios = {
             id: run.id,
@@ -223,18 +222,19 @@ builder.queryField('domainValueCoverage', (t) =>
             continue;
           }
 
-          // Track non-aggregate runs for per-model trial count computation.
-          if (effectiveModelIds.length > 0) {
-            const nonAggregateRuns = nonAggregateRunsByDefinitionId.get(run.definitionId) ?? [];
-            nonAggregateRuns.push({ config: run.config, transcripts: run.transcripts, scenarioIds });
-            nonAggregateRunsByDefinitionId.set(run.definitionId, nonAggregateRuns);
+          const models = Array.isArray(config.models)
+            ? config.models.filter((m): m is string => typeof m === 'string' && m.length > 0)
+            : null;
+          const matchesEffectiveModelSet = effectiveModelIds.length === 0
+            || (models !== null && effectiveModelIds.every((id) => models.includes(id)));
+          if (!matchesEffectiveModelSet) {
+            continue;
           }
 
-          // Apply the model filter symmetrically: a run that doesn't match the
-          // requested model filter contributes to neither bucket. Without this
-          // the `incompleteBatchCount` view of a filtered query would mention
-          // runs that `batchCount` cannot, breaking the "exactly one bucket"
-          // invariant.
+          // Apply the explicit model-ID filter symmetrically: a run that doesn't
+          // match contributes to neither bucket. Without this, incompleteBatchCount
+          // would mention runs that batchCount cannot, breaking the "exactly one
+          // bucket" invariant.
           const matchesModelFilter = filterModelIds.length === 0
             || run.transcripts.some((transcript) => filterModelIds.includes(transcript.modelId));
           if (!matchesModelFilter) continue;
@@ -243,11 +243,16 @@ builder.queryField('domainValueCoverage', (t) =>
             latestMatchingRunIdByDefinitionId.set(run.definitionId, run.id);
           }
 
+          // Track non-aggregate runs for per-model trial count computation.
+          const nonAggregateRuns = nonAggregateRunsByDefinitionId.get(run.definitionId) ?? [];
+          nonAggregateRuns.push({ config: run.config, transcripts: run.transcripts, scenarioIds });
+          nonAggregateRunsByDefinitionId.set(run.definitionId, nonAggregateRuns);
+
           // Determine completeness using the existing helper. A run is complete
           // iff every (scenarioId × modelId × sampleIndex) slot has at least
           // one transcript. Extra transcripts in a slot do NOT break
           // completeness; only missing slots do.
-          if (!Array.isArray(config.models)) {
+          if (models === null) {
             throw new AppError(
               `Run ${run.id} config has no models array; cannot compute coverage`,
               'RUN_CONFIG_INVALID',
@@ -255,9 +260,6 @@ builder.queryField('domainValueCoverage', (t) =>
               { runId: run.id },
             );
           }
-          const models = config.models.filter(
-            (m): m is string => typeof m === 'string' && m.length > 0,
-          );
           if (models.length === 0) {
             throw new AppError(
               `Run ${run.id} has empty or invalid models array`,
@@ -354,6 +356,8 @@ builder.queryField('domainValueCoverage', (t) =>
               batchCount: 0,
               pairedBatchCount: 0,
               orphanedBatchCount: 0,
+              aFirstBatchCount: 0,
+              bFirstBatchCount: 0,
               incompleteBatchCount: 0,
               definitionId: null,
               definitionName: null,
@@ -365,10 +369,19 @@ builder.queryField('domainValueCoverage', (t) =>
           } else {
             // Use the total counts across all definitions for the visible cell, but
             // still choose one stable definition for the analysis link target.
-            const { primaryDefinitionId, batchCount, pairedBatchCount, orphanedBatchCount } = selectPrimaryDefinitionCounts(
+            const {
+              primaryDefinitionId,
+              batchCount,
+              pairedBatchCount,
+              orphanedBatchCount,
+              aFirstBatchCount,
+              bFirstBatchCount,
+            } = selectPrimaryDefinitionCounts(
               defIdsForPair,
               batchCountByDefinitionId,
               directionalGroupsByDefinitionId,
+              valueA,
+              valueB,
               ctx.log,
               `${valueA}::${valueB}`,
             );
@@ -429,6 +442,8 @@ builder.queryField('domainValueCoverage', (t) =>
               batchCount,
               pairedBatchCount,
               orphanedBatchCount,
+              aFirstBatchCount,
+              bFirstBatchCount,
               incompleteBatchCount,
               definitionId: primaryDefId !== '' ? primaryDefId : null,
               definitionName: primaryPair?.name ?? null,
