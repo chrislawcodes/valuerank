@@ -34,13 +34,68 @@ vi.mock('../../src/components/runs/RunForm', () => ({
     copyMode,
     onSubmit,
     onCancel,
+    defaultLaunchMode,
+    launchModeLocked,
+    onStateChange,
   }: {
     copyMode?: string;
     onSubmit: (input: Record<string, unknown>) => Promise<void>;
     onCancel?: () => void;
+    defaultLaunchMode?: string;
+    launchModeLocked?: boolean;
+    onStateChange?: (state: {
+      formState: {
+        selectedModels: string[];
+        samplePercentage: number;
+        samplesPerScenario: number;
+        temperatureInput: string;
+        launchMode: string;
+      };
+      isSpecificConditionTrial: boolean;
+      selectedConditionScenarioIds: string[];
+      estimatedScenarios: number | null;
+    }) => void;
   }) => (
-    <div>
-      <div>RunForm Stub: {copyMode}</div>
+    <div data-testid="run-form-stub">
+      <div>RunForm Stub: {copyMode} / {defaultLaunchMode} / {launchModeLocked ? 'locked' : 'open'}</div>
+      <button
+        type="button"
+        onClick={() =>
+          onStateChange?.({
+            formState: {
+              selectedModels: ['gpt-4'],
+              samplePercentage: 100,
+              samplesPerScenario: 1,
+              temperatureInput: '',
+              launchMode: defaultLaunchMode ?? 'PAIRED_BATCH',
+            },
+            isSpecificConditionTrial: false,
+            selectedConditionScenarioIds: [],
+            estimatedScenarios: 8,
+          })
+        }
+      >
+        Emit Snapshot
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          onStateChange?.({
+            formState: {
+              selectedModels: ['gpt-4', 'claude-3'],
+              samplePercentage: 100,
+              samplesPerScenario: 1,
+              temperatureInput: '',
+              launchMode: defaultLaunchMode ?? 'PAIRED_BATCH',
+            },
+            isSpecificConditionTrial: false,
+            selectedConditionScenarioIds: [],
+            estimatedScenarios: 8,
+          })
+        }
+      >
+        Emit Snapshot 2
+      </button>
       <button
         type="button"
         onClick={() =>
@@ -94,7 +149,7 @@ function createDefinition(overrides: Partial<Record<string, unknown>> = {}) {
 function renderPage(
   initialEntry:
     | string
-    | { pathname: string; state?: { returnLabel?: string; returnTo?: string } } = '/definitions/def-1/start-paired-batch'
+    | { pathname: string; state?: { returnLabel?: string; returnTo?: string; matchPairCounts?: Record<string, unknown> } } = '/definitions/def-1/start-paired-batch'
 ) {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
@@ -133,6 +188,19 @@ describe('StartPairedBatchPage', () => {
     });
   });
 
+  const matchPairCounts = {
+    pairKey: 'achievement::power_dominance',
+    valueA: 'Achievement',
+    valueB: 'Power_Dominance',
+    contributingDefinitionIds: ['def-a', 'def-b'],
+    launchDefinitionId: 'def-1',
+    laggingDirection: 'Achievement',
+    before: {
+      directionA: { name: 'Achievement', batches: 2, conditions: 8 },
+      directionB: { name: 'Power_Dominance', batches: 2, conditions: 10 },
+    },
+  };
+
   it('renders the paired batch copy and passes the paired-batch form mode', () => {
     renderPage();
 
@@ -140,7 +208,9 @@ describe('StartPairedBatchPage', () => {
     expect(
       screen.getByText('Configure and start a paired batch for "Test Definition"')
     ).toBeInTheDocument();
-    expect(screen.getByText('RunForm Stub: paired-batch')).toBeInTheDocument();
+    expect(
+      screen.getByTestId('run-form-stub')
+    ).toHaveTextContent('RunForm Stub: paired-batch / PAIRED_BATCH / open');
   });
 
   it('returns to the source page when launched from coverage', async () => {
@@ -191,7 +261,9 @@ describe('StartPairedBatchPage', () => {
     await waitFor(() => {
       expect(screen.getByText('Launch failed')).toBeInTheDocument();
     });
-    expect(screen.getByText('RunForm Stub: paired-batch')).toBeInTheDocument();
+    expect(
+      screen.getByTestId('run-form-stub')
+    ).toHaveTextContent('RunForm Stub: paired-batch / PAIRED_BATCH / open');
   });
 
   it('returns to the vignette on cancel', async () => {
@@ -202,5 +274,70 @@ describe('StartPairedBatchPage', () => {
     await user.click(screen.getByRole('button', { name: 'Cancel Launch' }));
 
     expect(mockNavigate).toHaveBeenCalledWith('/definitions/def-1');
+  });
+
+  it('renders the match pair counts summary card when route state is present', async () => {
+    const user = userEvent.setup();
+
+    renderPage({
+      pathname: '/definitions/def-1/start-paired-batch',
+      state: {
+        returnLabel: 'Back to Value coverage',
+        returnTo: '/domains?domainId=domain-a',
+        matchPairCounts,
+      },
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Emit Snapshot' }));
+
+    expect(screen.getByText('Match Pair Counts')).toBeInTheDocument();
+    expect(screen.getByText('Achievement vs Power')).toBeInTheDocument();
+    const achievementRow = screen.getByText('Achievement-first').closest('tr');
+    expect(achievementRow).not.toBeNull();
+    expect(achievementRow).toHaveTextContent('2 → 3');
+    expect(achievementRow).toHaveTextContent('8 → 16');
+    expect(screen.getByText('Adds 1 batch and 8 trials.')).toBeInTheDocument();
+  });
+
+  it('updates the preview card when the form snapshot changes', async () => {
+    const user = userEvent.setup();
+
+    renderPage({
+      pathname: '/definitions/def-1/start-paired-batch',
+      state: {
+        matchPairCounts,
+      },
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Emit Snapshot' }));
+    const achievementRow = screen.getByText('Achievement-first').closest('tr');
+    expect(achievementRow).not.toBeNull();
+    expect(achievementRow).toHaveTextContent('8 → 16');
+
+    await user.click(screen.getByRole('button', { name: 'Emit Snapshot 2' }));
+    expect(achievementRow).toHaveTextContent('8 → 24');
+  });
+
+  it('submits top-up launches with the lagging direction pinned', async () => {
+    const user = userEvent.setup();
+
+    renderPage({
+      pathname: '/definitions/def-1/start-paired-batch',
+      state: {
+        matchPairCounts,
+      },
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Emit Snapshot' }));
+    await user.click(screen.getByRole('button', { name: 'Start Launch' }));
+
+    await waitFor(() => {
+      expect(mockStartRun).toHaveBeenCalled();
+    });
+
+    expect(mockStartRun).toHaveBeenCalledWith(expect.objectContaining({
+      launchMode: 'PAIRED_BATCH_TOPUP',
+      topUpDirection: 'Achievement',
+    }));
   });
 });

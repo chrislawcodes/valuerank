@@ -13,6 +13,7 @@ import { AppError } from '@valuerank/shared';
 import {
   COVERAGE_VALUE_KEYS,
   type CoverageValueKey,
+  computeConditionCounts,
   extractValuePair,
   getCoverageBatchGroupId,
   getCoverageDirection,
@@ -135,6 +136,10 @@ builder.queryField('domainValueCoverage', (t) =>
       // counts once. Drives the new pairedBatchCount = min(A-first, B-first).
       const directionalGroupsByDefinitionId =
         new Map<string, Map<string, Set<string>>>();
+      const directionalSlotsByDefinitionId =
+        new Map<string, Map<string, Set<string>>>();
+      const directionalLeftoverSlotsByDefinitionId =
+        new Map<string, Map<string, Set<string>>>();
       const latestMatchingRunIdByDefinitionId = new Map<string, string>();
       const latestAggregateRunIdByDefinitionId = new Map<string, string>();
       const incompleteBatchCountByDefinitionId = new Map<string, number>();
@@ -239,6 +244,26 @@ builder.queryField('domainValueCoverage', (t) =>
             || run.transcripts.some((transcript) => filterModelIds.includes(transcript.modelId));
           if (!matchesModelFilter) continue;
 
+          const matchingTranscripts = run.transcripts.filter((transcript): transcript is {
+            modelId: string;
+            scenarioId: string;
+            sampleIndex: number;
+          } => transcript.scenarioId !== null
+            && transcript.sampleIndex !== null
+            && (filterModelIds.length === 0 || filterModelIds.includes(transcript.modelId)));
+
+          const direction = getCoverageDirection(run.config);
+          if (direction !== null && matchingTranscripts.length > 0) {
+            const defMap = directionalSlotsByDefinitionId.get(run.definitionId)
+              ?? new Map<string, Set<string>>();
+            const slotSet = defMap.get(direction) ?? new Set<string>();
+            for (const transcript of matchingTranscripts) {
+              slotSet.add(`${transcript.scenarioId}|${transcript.modelId}|${transcript.sampleIndex}`);
+            }
+            defMap.set(direction, slotSet);
+            directionalSlotsByDefinitionId.set(run.definitionId, defMap);
+          }
+
           if (!latestMatchingRunIdByDefinitionId.has(run.definitionId)) {
             latestMatchingRunIdByDefinitionId.set(run.definitionId, run.id);
           }
@@ -271,7 +296,7 @@ builder.queryField('domainValueCoverage', (t) =>
           const rawSamples = config.samplesPerScenario;
           const samplesPerScenario = typeof rawSamples === 'number' ? rawSamples : null;
           const existingTranscripts = run.transcripts
-            .filter((t): t is { scenarioId: string; modelId: string; sampleIndex: number } => t.scenarioId !== null);
+            .filter((t): t is { scenarioId: string; modelId: string; sampleIndex: number } => t.scenarioId !== null && t.sampleIndex !== null);
           const complete = isRunComplete({
             scenarioIds,
             models,
@@ -284,6 +309,17 @@ builder.queryField('domainValueCoverage', (t) =>
               run.definitionId,
               (incompleteBatchCountByDefinitionId.get(run.definitionId) ?? 0) + 1,
             );
+
+            if (direction !== null && matchingTranscripts.length > 0) {
+              const defMap = directionalLeftoverSlotsByDefinitionId.get(run.definitionId)
+                ?? new Map<string, Set<string>>();
+              const slotSet = defMap.get(direction) ?? new Set<string>();
+              for (const transcript of matchingTranscripts) {
+                slotSet.add(`${transcript.scenarioId}|${transcript.modelId}|${transcript.sampleIndex}`);
+              }
+              defMap.set(direction, slotSet);
+              directionalLeftoverSlotsByDefinitionId.set(run.definitionId, defMap);
+            }
             continue;
           }
 
@@ -300,7 +336,6 @@ builder.queryField('domainValueCoverage', (t) =>
           // launch group; ungrouped runs use a unique sentinel so they each
           // count once. Runs with no recognizable direction token are skipped
           // here (they still count toward batchCount above).
-          const direction = getCoverageDirection(run.config);
           if (direction !== null) {
             const launchGroupId = getCoverageBatchGroupId(run.config);
             const groupKey = launchGroupId ?? `__ungrouped__:${run.id}`;
@@ -358,6 +393,10 @@ builder.queryField('domainValueCoverage', (t) =>
               orphanedBatchCount: 0,
               aFirstBatchCount: 0,
               bFirstBatchCount: 0,
+              pairedConditionCount: 0,
+              orphanedConditionCount: 0,
+              directionalCoverage: [],
+              contributingDefinitionIds: [],
               incompleteBatchCount: 0,
               definitionId: null,
               definitionName: null,
@@ -385,6 +424,7 @@ builder.queryField('domainValueCoverage', (t) =>
               ctx.log,
               `${valueA}::${valueB}`,
             );
+            const conditionCounts = computeConditionCounts(defIdsForPair, directionalSlotsByDefinitionId);
             const primaryDefId = primaryDefinitionId ?? '';
             const primaryPair = pairByDefinitionId.get(primaryDefId);
             const aggregateRunId = primaryDefId === ''
@@ -436,6 +476,45 @@ builder.queryField('domainValueCoverage', (t) =>
               defaultModelLabelById,
             );
 
+            const mergedDirectionalGroups = new Map<string, Set<string>>();
+            const mergedDirectionalLeftovers = new Map<string, Set<string>>();
+            for (const defId of new Set(defIdsForPair)) {
+              const defMap = directionalGroupsByDefinitionId.get(defId);
+              if (defMap == null) continue;
+              for (const [direction, groupKeys] of defMap) {
+                const existing = mergedDirectionalGroups.get(direction) ?? new Set<string>();
+                for (const groupKey of groupKeys) {
+                  existing.add(groupKey);
+                }
+                mergedDirectionalGroups.set(direction, existing);
+              }
+
+              const leftoverMap = directionalLeftoverSlotsByDefinitionId.get(defId);
+              if (leftoverMap == null) continue;
+              for (const [direction, slotKeys] of leftoverMap) {
+                const existing = mergedDirectionalLeftovers.get(direction) ?? new Set<string>();
+                for (const slotKey of slotKeys) {
+                  existing.add(slotKey);
+                }
+                mergedDirectionalLeftovers.set(direction, existing);
+              }
+            }
+
+            const orderedDirections = [
+              valueA,
+              valueB,
+              ...Array.from(conditionCounts.perDirection.keys())
+                .filter((direction) => direction !== valueA && direction !== valueB)
+                .sort((left, right) => left.localeCompare(right)),
+            ].filter((direction, index, array) => array.indexOf(direction) === index);
+            const directionalCoverage = orderedDirections.map((direction) => ({
+              direction,
+              completeBatches: mergedDirectionalGroups.get(direction)?.size ?? 0,
+              filledSlots: conditionCounts.perDirection.get(direction)?.filledSlots ?? 0,
+              leftoverConditions: mergedDirectionalLeftovers.get(direction)?.size ?? 0,
+              definitionIds: conditionCounts.perDirection.get(direction)?.definitionIds ?? [],
+            }));
+
             cells.push({
               valueA,
               valueB,
@@ -444,6 +523,10 @@ builder.queryField('domainValueCoverage', (t) =>
               orphanedBatchCount,
               aFirstBatchCount,
               bFirstBatchCount,
+              pairedConditionCount: conditionCounts.pairedConditionCount,
+              orphanedConditionCount: conditionCounts.orphanedConditionCount,
+              directionalCoverage,
+              contributingDefinitionIds: Array.from(new Set(defIdsForPair)).sort((left, right) => left.localeCompare(right)),
               incompleteBatchCount,
               definitionId: primaryDefId !== '' ? primaryDefId : null,
               definitionName: primaryPair?.name ?? null,

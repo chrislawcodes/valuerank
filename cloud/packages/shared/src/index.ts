@@ -32,6 +32,7 @@ export {
   parseVnewTemperature,
 } from './trial-signature.js';
 export { preferDefaultSignature, type AvailableSignature } from './signature-preference.js';
+export { computeLaunchTrialCount, type LaunchTrialCountInput } from './launch-trial-count.js';
 export { SCHWARTZ_CIRCULAR_ORDER, circularDistance, theoreticalAngleDeg, type ValueKey as SchwartzValueKey } from './schwartz.js';
 export * from './assemble-template.js';
 export * from './job-choice-value-statements.js';

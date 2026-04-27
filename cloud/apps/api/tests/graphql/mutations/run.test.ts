@@ -692,6 +692,238 @@ describe('GraphQL Run Mutations', () => {
       expect((bRun?.config as Record<string, unknown>).models).toEqual(['gpt-4']);
     });
 
+    it('starts a single top-up run with the lagging direction pinned', async () => {
+      const definition = await db.definition.create({
+        data: {
+          name: 'Top Up Definition',
+          content: {
+            schema_version: 1,
+            dimensions: [
+              { name: 'achievement' },
+              { name: 'power_dominance' },
+            ],
+          },
+        },
+      });
+      createdDefinitionIds.push(definition.id);
+
+      await db.scenario.create({
+        data: {
+          definitionId: definition.id,
+          name: 'Scenario 1',
+          content: { test: 1 },
+        },
+      });
+
+      const mutation = `
+        mutation StartRun($input: StartRunInput!) {
+          startRun(input: $input) {
+            run {
+              id
+              runCategory
+              companionRunId
+              config
+              definition {
+                id
+              }
+            }
+            jobCount
+            pairedRunIds
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({
+          query: mutation,
+          variables: {
+            input: {
+              definitionId: definition.id,
+              models: ['gpt-4'],
+              launchMode: 'PAIRED_BATCH_TOPUP',
+              topUpDirection: 'Achievement',
+            },
+          },
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.errors).toBeUndefined();
+
+      const result = response.body.data.startRun;
+      createdRunIds.push(result.run.id);
+
+      expect(result.run.definition.id).toBe(definition.id);
+      expect(result.run.runCategory).toBe('PRODUCTION');
+      expect(result.run.companionRunId).toBeNull();
+      expect(result.pairedRunIds).toBeNull();
+      expect(result.jobCount).toBe(1);
+      expect((result.run.config as Record<string, unknown>).jobChoiceLaunchMode).toBe('PAIRED_BATCH_TOPUP');
+      expect((result.run.config as Record<string, unknown>).jobChoiceValueFirst).toBe('Achievement');
+      expect((result.run.config as Record<string, unknown>).jobChoiceBatchGroupId).toEqual(expect.any(String));
+      expect((result.run.config as Record<string, unknown>).methodologySafe).toBe(true);
+    });
+
+    it('rejects top-up launches without a direction', async () => {
+      const definition = await db.definition.create({
+        data: {
+          name: 'Top Up Missing Direction',
+          content: {
+            schema_version: 1,
+            dimensions: [
+              { name: 'achievement' },
+              { name: 'power_dominance' },
+            ],
+          },
+        },
+      });
+      createdDefinitionIds.push(definition.id);
+
+      await db.scenario.create({
+        data: {
+          definitionId: definition.id,
+          name: 'Scenario 1',
+          content: { test: 1 },
+        },
+      });
+
+      const mutation = `
+        mutation StartRun($input: StartRunInput!) {
+          startRun(input: $input) {
+            run {
+              id
+            }
+            jobCount
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({
+          query: mutation,
+          variables: {
+            input: {
+              definitionId: definition.id,
+              models: ['gpt-4'],
+              launchMode: 'PAIRED_BATCH_TOPUP',
+            },
+          },
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.errors?.[0]?.message).toContain('topUpDirection is required');
+    });
+
+    it('rejects top-up launches for a direction not in the pair', async () => {
+      const definition = await db.definition.create({
+        data: {
+          name: 'Top Up Wrong Direction',
+          content: {
+            schema_version: 1,
+            dimensions: [
+              { name: 'achievement' },
+              { name: 'power_dominance' },
+            ],
+          },
+        },
+      });
+      createdDefinitionIds.push(definition.id);
+
+      await db.scenario.create({
+        data: {
+          definitionId: definition.id,
+          name: 'Scenario 1',
+          content: { test: 1 },
+        },
+      });
+
+      const mutation = `
+        mutation StartRun($input: StartRunInput!) {
+          startRun(input: $input) {
+            run {
+              id
+            }
+            jobCount
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({
+          query: mutation,
+          variables: {
+            input: {
+              definitionId: definition.id,
+              models: ['gpt-4'],
+              launchMode: 'PAIRED_BATCH_TOPUP',
+              topUpDirection: 'Tradition',
+            },
+          },
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.errors?.[0]?.message).toContain('must be one of');
+    });
+
+    it('rejects runCategory overrides on top-up launches', async () => {
+      const definition = await db.definition.create({
+        data: {
+          name: 'Top Up RunCategory Override',
+          content: {
+            schema_version: 1,
+            dimensions: [
+              { name: 'achievement' },
+              { name: 'power_dominance' },
+            ],
+          },
+        },
+      });
+      createdDefinitionIds.push(definition.id);
+
+      await db.scenario.create({
+        data: {
+          definitionId: definition.id,
+          name: 'Scenario 1',
+          content: { test: 1 },
+        },
+      });
+
+      const mutation = `
+        mutation StartRun($input: StartRunInput!) {
+          startRun(input: $input) {
+            run {
+              id
+            }
+            jobCount
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({
+          query: mutation,
+          variables: {
+            input: {
+              definitionId: definition.id,
+              models: ['gpt-4'],
+              launchMode: 'PAIRED_BATCH_TOPUP',
+              topUpDirection: 'Achievement',
+              runCategory: 'PILOT',
+            },
+          },
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.errors?.[0]?.message).toContain('runCategory PRODUCTION');
+    });
+
     it('rejects overwriting an existing companion link with a different run', async () => {
       const definition = await db.definition.create({
         data: {

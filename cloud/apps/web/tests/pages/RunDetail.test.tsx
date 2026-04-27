@@ -200,6 +200,37 @@ describe('RunDetail', () => {
     expect(definitionElements.length).toBeGreaterThan(0);
   });
 
+  it('renders a label for paired-batch top-up runs', () => {
+    const run = createMockRun({
+      config: {
+        models: ['gpt-4', 'claude-3'],
+        samplePercentage: 100,
+        jobChoiceLaunchMode: 'PAIRED_BATCH_TOPUP',
+      },
+      definition: {
+        id: 'def-1',
+        name: 'Test Definition',
+        version: 1,
+        tags: [],
+        content: {
+          methodology: {
+            pair_key: 'test-pair',
+          },
+        },
+      },
+    });
+    vi.mocked(useRun).mockReturnValue({
+      run,
+      loading: false,
+      error: null,
+      refetch: mockRefetch,
+    });
+
+    renderWithRouter();
+
+    expect(screen.getByText('Paired batch top-up')).toBeInTheDocument();
+  });
+
   it('shows pause button for running runs', () => {
     const run = createMockRun({ status: 'RUNNING' });
     vi.mocked(useRun).mockReturnValue({

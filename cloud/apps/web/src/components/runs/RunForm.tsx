@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Play, AlertCircle } from 'lucide-react';
 import { useQuery } from 'urql';
 import { Button } from '../ui/Button';
@@ -16,6 +16,14 @@ import { LLM_PROVIDERS_QUERY } from '../../api/operations/llm';
 import type { LlmProvidersQueryResult } from '../../api/operations/llm';
 import { getDefinitionMethodology } from '../../utils/methodology';
 import type { CostEstimate } from '../../api/operations/costs';
+import type { RunFormState } from './useRunForm';
+
+export type RunFormStateSnapshot = {
+  formState: RunFormState;
+  isSpecificConditionTrial: boolean;
+  selectedConditionScenarioIds: string[];
+  estimatedScenarios: number | null;
+};
 
 /**
  * Check if a run's cost estimate would overdraw any provider's budget.
@@ -58,6 +66,9 @@ type RunFormProps = {
   scenarioCount?: number;
   initialTemperature?: number | null;
   copyMode?: 'trial' | 'paired-batch';
+  defaultLaunchMode?: 'PAIRED_BATCH' | 'PAIRED_BATCH_TOPUP' | 'AD_HOC_BATCH';
+  launchModeLocked?: boolean;
+  onStateChange?: (state: RunFormStateSnapshot) => void;
   onSubmit: (input: StartRunInput) => Promise<void>;
   onCancel?: () => void;
   isSubmitting?: boolean;
@@ -69,6 +80,9 @@ export function RunForm({
   scenarioCount,
   initialTemperature = null,
   copyMode = 'trial',
+  defaultLaunchMode = 'PAIRED_BATCH',
+  launchModeLocked = false,
+  onStateChange,
   onSubmit,
   onCancel,
   isSubmitting = false,
@@ -111,7 +125,7 @@ export function RunForm({
     definitionId,
     scenarioCount,
     initialTemperature,
-    defaultLaunchMode: 'PAIRED_BATCH',
+    defaultLaunchMode,
     onSubmit: async (input) => {
       await onSubmit({
         ...input,
@@ -121,6 +135,15 @@ export function RunForm({
     models,
     loadingModels,
   });
+
+  useEffect(() => {
+    onStateChange?.({
+      formState,
+      isSpecificConditionTrial,
+      selectedConditionScenarioIds,
+      estimatedScenarios,
+    });
+  }, [estimatedScenarios, formState, isSpecificConditionTrial, onStateChange, selectedConditionScenarioIds]);
 
   const {
     grid: conditionGrid,
@@ -223,7 +246,7 @@ export function RunForm({
         )}
       </div>
 
-      {isPairedDefinition && (
+      {isPairedDefinition && !launchModeLocked && (
         <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -264,6 +287,16 @@ export function RunForm({
                 );
               })}
             </div>
+          </div>
+        </div>
+      )}
+      {isPairedDefinition && launchModeLocked && (
+        <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Batch Type
+          </label>
+          <div className="rounded-lg border border-dashed border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            Pinned to Paired batch top-up
           </div>
         </div>
       )}
@@ -339,7 +372,9 @@ export function RunForm({
             isPairedDefinition
               ? formState.launchMode === 'PAIRED_BATCH'
                 ? 'Starting Paired Batch...'
-                : 'Starting Ad Hoc Batch...'
+                : formState.launchMode === 'PAIRED_BATCH_TOPUP'
+                  ? 'Starting Paired batch top-up...'
+                  : 'Starting Ad Hoc Batch...'
               : 'Starting Trial...'
           ) : (
             <>
@@ -347,7 +382,9 @@ export function RunForm({
               {isPairedDefinition
                 ? formState.launchMode === 'PAIRED_BATCH'
                   ? 'Start Paired Batch'
-                  : 'Start Ad Hoc Batch'
+                  : formState.launchMode === 'PAIRED_BATCH_TOPUP'
+                    ? 'Start Paired batch top-up'
+                    : 'Start Ad Hoc Batch'
                 : 'Start Trial'}
             </>
           )}
