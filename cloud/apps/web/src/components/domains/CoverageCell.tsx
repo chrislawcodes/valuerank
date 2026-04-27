@@ -54,7 +54,7 @@ export function CoverageCell(props: CoverageCellProps) {
     orphanedBatchCount,
     aFirstBatchCount,
     bFirstBatchCount,
-    pairedConditionCount,
+    pairedConditionCount: _pairedConditionCount,
     orphanedConditionCount,
     directionalCoverage,
     contributingDefinitionIds,

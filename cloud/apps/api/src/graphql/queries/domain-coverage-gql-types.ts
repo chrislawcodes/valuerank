@@ -147,6 +147,7 @@ const DomainValueCoverageCellRef = builder
       }),
       directionalCoverage: t.field({
         type: [DirectionalCoverageRef],
+        resolve: (parent) => parent.directionalCoverage,
         description:
           'Per-direction condition coverage for this value pair, including complete batches, ' +
           'filled slots, leftover conditions from incomplete runs, and contributing definition IDs.',

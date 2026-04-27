@@ -66,10 +66,8 @@ function formatLaunchModeLabel(launchMode: string | null | undefined): string | 
     case null:
     case undefined:
       return null;
-    default: {
-      const _exhaustiveCheck: never = launchMode;
-      return _exhaustiveCheck;
-    }
+    default:
+      return null;
   }
 }
 
