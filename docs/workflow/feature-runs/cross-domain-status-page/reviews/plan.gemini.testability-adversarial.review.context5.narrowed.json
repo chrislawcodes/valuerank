@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/apps/web/src/App.tsx",
+  "source_artifact_sha256": "800c69419319e7b2bde67f9107458683df242b759178b0394c2e889e2c95b02b",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/cross-domain-status-page/reviews/plan.gemini.testability-adversarial.review.context5.narrowed.txt",
+  "narrowed_artifact_sha256": "861177bef8d9fc113d092d17147afd0dfa6da015354021e2f4d5274234556fc4",
+  "strategy": "head-tail-numbered-lines"
+}

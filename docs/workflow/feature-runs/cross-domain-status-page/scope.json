@@ -1,0 +1,23 @@
+{
+  "paths": [
+    "cloud/apps/api/src/graphql/mutations",
+    "cloud/apps/api/src/graphql/queries",
+    "cloud/apps/api/src/graphql/types/run-anomaly.ts",
+    "cloud/apps/api/src/queue/handlers/probe-scenario",
+    "cloud/apps/api/src/services/run",
+    "cloud/apps/web/src/App.tsx",
+    "cloud/apps/web/src/pages",
+    "cloud/packages/db/prisma/schema.prisma"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/api/src/graphql/mutations",
+    "cloud/apps/api/src/graphql/queries",
+    "cloud/apps/api/src/graphql/types/run-anomaly.ts",
+    "cloud/apps/api/src/queue/handlers/probe-scenario",
+    "cloud/apps/api/src/services/run",
+    "cloud/apps/web/src/App.tsx",
+    "cloud/apps/web/src/pages",
+    "cloud/packages/db/prisma/schema.prisma",
+    "docs/workflow/feature-runs/cross-domain-status-page"
+  ]
+}

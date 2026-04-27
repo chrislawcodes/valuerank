@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/apps/web/src/pages/DomainStatus.tsx",
+  "source_artifact_sha256": "297beaa8337a37b3c74abf7337c4e7ed1a826b83ba0cb1c83861c3dfd794f241",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/cross-domain-status-page/reviews/plan.codex.implementation-adversarial.review.context8.narrowed.txt",
+  "narrowed_artifact_sha256": "3c3c95003fc718b186bbdc1b53e92d30c4d258ae5d4065652676e516c11cf3bd",
+  "strategy": "head-tail-numbered-lines"
+}

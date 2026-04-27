@@ -1,0 +1,194 @@
+00001: import { useEffect, useMemo, useState } from 'react';
+00002: import { Link, useParams, useSearchParams } from 'react-router-dom';
+00003: import { useQuery } from 'urql';
+00004: import { Plus } from 'lucide-react';
+00005: import { Badge } from '../components/ui/Badge';
+00006: import { DomainSwitcher } from '../components/domains/DomainSwitcher';
+00007: import { ErrorMessage } from '../components/ui/ErrorMessage';
+00008: import { DomainEvaluationStatusPanel } from '../components/domains/domainTrials/DomainEvaluationStatusPanel';
+00009: import { DomainEvaluationStatusDrawer } from '../components/domains/domainTrials/DomainEvaluationStatusDrawer';
+00010: import { getBatchRuntimeState } from '../components/domains/domainTrials/launch-state';
+00011: import {
+00012:   DOMAIN_EVALUATION_QUERY,
+00013:   DOMAIN_EVALUATION_STATUS_QUERY,
+00014:   DOMAIN_EVALUATIONS_QUERY,
+00015:   DOMAIN_TRIAL_RUNS_STATUS_QUERY,
+00016:   type DomainEvaluationQueryResult,
+00017:   type DomainEvaluationQueryVariables,
+00018:   type DomainEvaluationStatusQueryResult,
+00019:   type DomainEvaluationStatusQueryVariables,
+00020:   type DomainEvaluationsQueryResult,
+00021:   type DomainEvaluationsQueryVariables,
+00022:   type DomainTrialRunsStatusQueryResult,
+00023:   type DomainTrialRunsStatusQueryVariables,
+00024: } from '../api/operations/domains';
+00025: import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/llm';
+00026: 
+00027: const POLL_MS = 5000;
+00028: 
+00029: export function DomainStatus() {
+00030:   const { domainId } = useParams<{ domainId: string }>();
+00031:   const [searchParams, setSearchParams] = useSearchParams();
+00032: 
+00033:   const [definitionRunIds, setDefinitionRunIds] = useState<Record<string, string>>({});
+00034:   const [currentEvaluationId, setCurrentEvaluationId] = useState<string | null>(searchParams.get('evaluationId'));
+00035:   const [lastStatusUpdatedAt, setLastStatusUpdatedAt] = useState<number | null>(null);
+00036:   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+00037:   const [statusNoContentRetries, setStatusNoContentRetries] = useState(0);
+00038: 
+00039:   // --- Queries ---
+00040: 
+00041:   const [launchesResult] = useQuery<DomainEvaluationsQueryResult, DomainEvaluationsQueryVariables>({
+00042:     query: DOMAIN_EVALUATIONS_QUERY,
+00043:     variables: { domainId: domainId ?? '', limit: 1 },
+00044:     pause: !domainId,
+00045:     requestPolicy: 'cache-and-network',
+00046:   });
+00047: 
+00048:   const [currentEvaluationResult, refetchCurrentEvaluation] = useQuery<DomainEvaluationQueryResult, DomainEvaluationQueryVariables>({
+00049:     query: DOMAIN_EVALUATION_QUERY,
+00050:     variables: { id: currentEvaluationId ?? '' },
+00051:     pause: !currentEvaluationId,
+00052:     requestPolicy: 'cache-and-network',
+00053:   });
+00054: 
+00055:   const [currentEvaluationStatusResult, refetchCurrentEvaluationStatus] = useQuery<
+00056:     DomainEvaluationStatusQueryResult,
+00057:     DomainEvaluationStatusQueryVariables
+00058:   >({
+00059:     query: DOMAIN_EVALUATION_STATUS_QUERY,
+00060:     variables: { id: currentEvaluationId ?? '' },
+00061:     pause: !currentEvaluationId,
+00062:     requestPolicy: 'network-only',
+00063:   });
+00064: 
+00065:   const [statusResult, refetchStatus] = useQuery<DomainTrialRunsStatusQueryResult, DomainTrialRunsStatusQueryVariables>({
+00066:     query: DOMAIN_TRIAL_RUNS_STATUS_QUERY,
+00067:     variables: { runIds: Array.from(new Set(Object.values(definitionRunIds))) },
+00068:     pause: Object.keys(definitionRunIds).length === 0,
+00069:     requestPolicy: 'network-only',
+00070:   });
+00071: 
+00072:   const [llmModelsResult] = useQuery<LlmModelsQueryResult, { providerId?: string; status?: string }>({
+00073:     query: LLM_MODELS_QUERY,
+00074:     variables: { status: 'ACTIVE' },
+00075:     pause: !domainId,
+00076:     requestPolicy: 'cache-and-network',
+00077:   });
+00078: 
+00079:   // --- Derived state ---
+00080: 
+00081:   const launches = launchesResult.data?.domainEvaluations ?? [];
+00082:   const latestLaunch = launches[0] ?? null;
+00083:   const currentEvaluation = currentEvaluationResult.data?.domainEvaluation ?? null;
+00084:   const currentEvaluationStatus = currentEvaluationStatusResult.data?.domainEvaluationStatus ?? null;
+00085:   const runStatuses = useMemo(() => statusResult.data?.domainTrialRunsStatus ?? [], [statusResult.data?.domainTrialRunsStatus]);
+00086:   const domainName = currentEvaluation?.domainNameAtLaunch ?? latestLaunch?.domainNameAtLaunch ?? 'selected domain';
+00087:   const hasLiveRows = runStatuses.some((status) => getBatchRuntimeState(status) === 'LIVE');
+00088:   const modelCatalog = useMemo(() => llmModelsResult.data?.llmModels ?? [], [llmModelsResult.data?.llmModels]);
+00089:   const activeModelCatalogById = useMemo(
+00090:     () => new Map(modelCatalog.map((model) => [model.modelId, model])),
+00091:     [modelCatalog],
+00092:   );
+00093: 
+00094:   const hasLaunchSnapshot = currentEvaluation
+
+... [narrowed review slice: middle omitted] ...
+
+uation]);
+00165: 
+00166:   useEffect(() => {
+00167:     if (!selectedRunId) return;
+00168:     if (!runStatuses.some((status) => status.runId === selectedRunId)) {
+00169:       setSelectedRunId(null);
+00170:     }
+00171:   }, [runStatuses, selectedRunId]);
+00172: 
+00173:   useEffect(() => {
+00174:     const message = statusResult.error?.message ?? '';
+00175:     if (!message.includes('No Content') || statusNoContentRetries >= 2) return;
+00176:     const timer = window.setTimeout(() => {
+00177:       setStatusNoContentRetries((prev) => prev + 1);
+00178:       refetchStatus({ requestPolicy: 'network-only' });
+00179:     }, 800);
+00180:     return () => window.clearTimeout(timer);
+00181:   }, [refetchStatus, statusNoContentRetries, statusResult.error?.message]);
+00182: 
+00183:   useEffect(() => {
+00184:     if (!currentEvaluationId || runStatuses.length === 0 || !hasLiveRows) return;
+00185:     const interval = window.setInterval(() => {
+00186:       refetchStatus({ requestPolicy: 'network-only' });
+00187:       refetchCurrentEvaluationStatus({ requestPolicy: 'network-only' });
+00188:       refetchCurrentEvaluation({ requestPolicy: 'network-only' });
+00189:       setLastStatusUpdatedAt(Date.now());
+00190:     }, POLL_MS);
+00191:     return () => window.clearInterval(interval);
+00192:   }, [currentEvaluationId, hasLiveRows, refetchCurrentEvaluation, refetchCurrentEvaluationStatus, refetchStatus, runStatuses.length]);
+00193: 
+00194:   // --- Render ---
+00195: 
+00196:   if (!domainId) return <ErrorMessage message="Missing domain id." />;
+00197: 
+00198:   const suppressStatusNoContentError = (statusResult.error?.message ?? '').includes('No Content') && statusNoContentRetries < 2;
+00199:   const displayError = (currentEvaluationId != null ? currentEvaluationResult.error ?? currentEvaluationStatusResult.error ?? undefined : undefined)
+00200:     ?? (suppressStatusNoContentError ? undefined : statusResult.error);
+00201: 
+00202:   return (
+00203:     <div className="space-y-6">
+00204:       <div className="flex items-start justify-between gap-3">
+00205:         <div className="space-y-2">
+00206:           <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Domain Status</div>
+00207:           <div className="flex flex-wrap items-center gap-2">
+00208:             <DomainSwitcher currentDomainId={domainId} basePath="/domains/status" />
+00209:             {statusHeader != null && (
+00210:               <Badge variant={hasLiveRows ? 'warning' : 'success'} size="count">
+00211:                 {statusHeader}
+00212:               </Badge>
+00213:             )}
+00214:           </div>
+00215:         </div>
+00216:         <Link
+00217:           to={`/domains/start/${domainId}`}
+00218:           className="inline-flex items-center gap-1.5 rounded-md bg-gray-900 px-3 py-2 text-sm font-medium text-white hover:bg-gray-800"
+00219:         >
+00220:           <Plus className="h-4 w-4" />
+00221:           Start new batch
+00222:         </Link>
+00223:       </div>
+00224: 
+00225:       {displayError != null && <ErrorMessage message={`Failed to load status: ${displayError.message ?? 'Unknown error'}`} />}
+00226: 
+00227:       {modelGaps.length > 0 && currentEvaluation != null && (
+00228:         <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2">
+00229:           <div className="text-sm font-medium text-amber-900">Models with incomplete coverage</div>
+00230:           <div className="flex flex-wrap gap-2">
+00231:             {modelGaps.map((gap) => (
+00232:               <Link
+00233:                 key={gap.modelId}
+00234:                 to={`/domains/start/${domainId}?evaluationId=${currentEvaluation.id}&models=${encodeURIComponent(gap.modelId)}&depth=${currentEvaluation.targetBatchCount ?? 1}`}
+00235:                 className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-white px-2.5 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100"
+00236:               >
+00237:                 {gap.modelName}: {gap.missing} missing
+00238:                 <span aria-hidden="true">&rarr;</span>
+00239:               </Link>
+00240:             ))}
+00241:           </div>
+00242:         </div>
+00243:       )}
+00244: 
+00245:       <DomainEvaluationStatusPanel
+00246:         domainName={domainName}
+00247:         evaluation={currentEvaluation}
+00248:         evaluationStatus={currentEvaluationStatus}
+00249:         runStatuses={runStatuses}
+00250:         fetching={statusResult.fetching || currentEvaluationStatusResult.fetching || currentEvaluationResult.fetching}
+00251:         lastUpdatedAt={lastStatusUpdatedAt}
+00252:         selectedRunId={selectedRunId}
+00253:         onSelectRun={(runId) => setSelectedRunId(runId)}
+00254:       />
+00255: 
+00256:       <DomainEvaluationStatusDrawer
+00257:         runId={selectedRunId}
+00258:         open={selectedRunId != null}
+00259:         onClose={() => setSelectedRunId(null)}
+0026

@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "docs/workflow/feature-runs/cross-domain-status-page/spec.md",
+  "source_artifact_sha256": "d4b8c700653ba3f3758969f2325021f48034bfb085c83644ef5e68586961a1ab",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/cross-domain-status-page/reviews/plan.codex.implementation-adversarial.review.context0.narrowed.txt",
+  "narrowed_artifact_sha256": "bf8244909b7921e26359ab2b521dd9ae80544e5ed6e471eef290ee3b83d1bb7d",
+  "strategy": "head-tail-numbered-lines"
+}
