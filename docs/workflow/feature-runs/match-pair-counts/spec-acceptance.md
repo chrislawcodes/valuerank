@@ -1,5 +1,67 @@
 # Spec — Compact (acceptance criteria only)
 
+## Coexistence with PR #764 (already on main)
+
+PR #764 (commit `1dace33f`, "Fix coverage matrix cells to show model-set-filtered batch counts") landed on main during this feature's planning. It changed `CoverageCell.tsx` and the resolver in ways that overlap with this feature. Implementation MUST integrate with #764, NOT undo it.
+
+### What PR #764 already shipped
+
+In `cloud/apps/web/src/components/domains/CoverageCell.tsx`:
+- New props: `orphanedBatchCount: number`, `aFirstBatchCount: number`, `bFirstBatchCount: number`
+- Removed props: `minTrialCount`, `maxTrialCount`
+- New "Direction imbalance" orange box rendered when `aFirstBatchCount !== bFirstBatchCount` (the `hasMismatch` flag), showing per-direction batch counts and unpaired count
+- New tooltip behaviour: when `hasMismatch`, the cell's `title` attribute shows the direction breakdown
+- Display label simplified — no longer shows "trial (min)"; always shows pairedBatchCount or batchCount
+- Border becomes `border-orange-400 border-2` when `hasMismatch`
+- Small ⚠ glyph appears under the count when `hasMismatch`
+
+In `cloud/apps/api/src/graphql/queries/domain-coverage.ts` and friends:
+- The resolver now applies a "model-set" filter (a different filter from `filterModelIds`) — the new condition counts MUST respect both filters consistently
+- Aggregate run tracking happens BEFORE the model-set filter (PR #764 fix)
+
+### Integration rules for this feature
+
+**Rule 1 — additive, not subtractive.** Do NOT remove `aFirstBatchCount`, `bFirstBatchCount`, `orphanedBatchCount`, or any of #764's props. Add the new fields and props alongside them.
+
+**Rule 2 — popover layout: Option A (table).** Replace #764's existing 3-row "Direction imbalance" orange box with a column-header table that shows BOTH batch and condition counts per direction. The new layout (when shown):
+
+```
+┌─ Direction imbalance ───────────┐
+│             Batches  Conditions │
+│  A-first      <a-b>     <a-c>   │
+│  B-first      <b-b>     <b-c>   │
+│                                 │
+│  <N> unpaired directional batches  (only when N > 0)
+│  <M> unpaired conditions          (only when M > 0)
+└─────────────────────────────────┘
+```
+
+Where `<a-b>` is `aFirstBatchCount`, `<a-c>` is `directionalCoverage[direction='A'].filledSlots` (or 0 if absent), etc. Use `directionalCoverage` keyed by direction name (the value name like "achievement"), not by A/B labels — display the actual value names where the spec example says A-first / B-first. (`A-first` / `B-first` shorthand used in the box header is fine; the per-row labels can show "Achievement-first" using `VALUE_LABELS`.)
+
+**Rule 3 — orange-box gating.** Show the orange box when ANY of these conditions is true (broader than #764's `aFirstBatchCount !== bFirstBatchCount`):
+- `aFirstBatchCount !== bFirstBatchCount` (existing #764 signal), OR
+- `directionalCoverage[A].filledSlots !== directionalCoverage[B].filledSlots` (new condition-level signal), OR
+- `orphanedBatchCount > 0`, OR
+- `orphanedConditionCount > 0`
+
+This means cells with ONLY a trial-level imbalance (same batch counts, different condition counts) now also surface the orange box. Update the box title text if helpful — "Direction imbalance" still works.
+
+**Rule 4 — Match Pair Counts gating.** Match Pair Counts link is visible whenever the orange box is visible AND `aggregateRunId === null` (don't offer top-up on aggregate cells). Same expanded gating as Rule 3 — wherever the user SEES imbalance, they can act on it.
+
+**Rule 5 — incomplete-batch warning copy: keep #764's text.** Do NOT change PR #764's existing wording ("X incomplete batches — not all transcripts generated") to a no-count form. The shipped count-quoting behaviour stays. The earlier spec draft proposed a "no-count" warning out of caution about double-counting; that worry is overridden by the shipped behaviour working in practice.
+
+**Rule 6 — Transcripts header on per-model breakdown.** Add a "Transcripts" column header above the existing per-model rows (when at least one model row shows). PR #764 didn't add this; we still want it for clarity.
+
+**Rule 7 — preserve #764's tooltip behaviour.** The cell button's `title` attribute should continue to show direction breakdown when `hasMismatch`, falling back to model breakdown otherwise. This feature can extend the title to optionally include condition counts when condition-only imbalance triggers the box, but must NOT remove the existing direction-breakdown tooltip.
+
+**Rule 8 — `hasMismatch` flag in #764 must be replaced/expanded.** PR #764 uses `hasMismatch = aFirstBatchCount !== bFirstBatchCount` for the border, the ⚠ glyph, and the orange box. This feature must extend that flag to cover the broader signal in Rule 3 (so a cell with only a condition-level imbalance still gets the orange border and ⚠). Rename the flag to something like `hasImbalance` and update all four use sites consistently.
+
+### What stays the same as the original spec
+
+Everything else: counting invariants, schema additions (`pairedConditionCount`, `orphanedConditionCount`, `directionalCoverage`, `contributingDefinitionIds`), `PAIRED_BATCH_TOPUP` launch mode, lagging-direction tie-breaker, route state contract, summary card on Start Paired Batch page, shared trial-count helper. The only changes from the integration with #764 are the popover layout (Rule 2), the gating expansion (Rules 3 + 4), the warning copy decision (Rule 5), and the `hasMismatch` rename (Rule 8).
+
+---
+
 ## Feature
 
 Add condition-level (per-trial) coverage detection to `domainValueCoverage`, surface it in the cell popover, and add a "Match Pair Counts" action that opens the existing Start Paired Batch page pre-configured to top up the lagging direction. Includes a new backend launch mode `PAIRED_BATCH_TOPUP` for single-direction launches.
