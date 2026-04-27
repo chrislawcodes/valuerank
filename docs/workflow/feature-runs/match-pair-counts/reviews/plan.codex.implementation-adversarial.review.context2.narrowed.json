@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/apps/web/src/generated/graphql.ts",
+  "source_artifact_sha256": "cf0bcfc4a72c237f06da716aadb090d696687ca621df492f6b39793bd12ef44c",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/match-pair-counts/reviews/plan.codex.implementation-adversarial.review.context2.narrowed.txt",
+  "narrowed_artifact_sha256": "d18b8fe3b3c07eab11d7ad6aa3beb7d3942e3def560432c42d33faec7b1ffbd9",
+  "strategy": "head-tail-numbered-lines"
+}

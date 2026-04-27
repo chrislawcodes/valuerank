@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/apps/api/src/graphql/queries/domain-coverage.ts",
+  "source_artifact_sha256": "b71f20298cbc4271662756e93060c1db82f4c64a18f115645f5b00c6a0f93a5c",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/match-pair-counts/reviews/spec.gemini.requirements-adversarial.review.context2.narrowed.txt",
+  "narrowed_artifact_sha256": "3784755ee3cc0319500184204e51b41bc30a1bb7a7e4ba0a3ff229718a0b286a",
+  "strategy": "head-tail-numbered-lines"
+}

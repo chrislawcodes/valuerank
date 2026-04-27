@@ -1,0 +1,215 @@
+00001: /**
+00002:  * Domain Coverage Query
+00003:  *
+00004:  * Returns a value-pair coverage matrix for a domain: how many completed
+00005:  * trial batches (runs) exist for each Schwartz value pair vignette.
+00006:  * Scoped to the same 10-value set used in domain analysis.
+00007:  */
+00008: 
+00009: import { builder } from '../builder.js';
+00010: import { db, resolveDefinitionContent } from '@valuerank/db';
+00011: 
+00012: import {
+00013:   COVERAGE_VALUE_KEYS,
+00014:   type CoverageValueKey,
+00015:   extractValuePair,
+00016:   getCoverageBatchGroupId,
+00017:   getCoverageBatchIncrement,
+00018:   selectPrimaryDefinitionCounts,
+00019:   computePerModelTrialCounts,
+00020:   deduplicateRunsByGroupId,
+00021: } from './domain-coverage-utils.js';
+00022: import { resolveEffectiveDefaultModelIds } from './domain/shared.js';
+00023: import {
+00024:   DomainValueCoverageResultRef,
+00025:   type DomainValueCoverageCell,
+00026:   type CoverageModelOption,
+00027:   runMatchesSignature,
+00028: } from './domain-coverage-gql-types.js';
+00029: 
+00030: const VALUE_PAIR_RESOLVE_CHUNK_SIZE = 20;
+00031: 
+00032: builder.queryField('domainValueCoverage', (t) =>
+00033:   t.field({
+00034:     type: DomainValueCoverageResultRef,
+00035:     nullable: true,
+00036:     description: `
+00037:       Returns a Schwartz value-pair coverage matrix for a domain.
+00038: 
+00039:       Each cell shows how many completed trial batches (runs) exist for the vignette
+00040:       that tests that pair of values in conflict. Optionally filtered to count only
+00041:       runs that included the specified model IDs.
+00042: 
+00043:       The matrix is symmetric: each unique value pair appears once, with the cell key
+00044:       sorted alphabetically (valueA < valueB). Diagonal cells are omitted.
+00045:     `,
+00046:     args: {
+00047:       domainId: t.arg.id({
+00048:         required: true,
+00049:         description: 'Domain to compute coverage for',
+00050:       }),
+00051:       modelIds: t.arg.stringList({
+00052:         required: false,
+00053:         description: 'If provided, only count runs that included at least one of these model IDs',
+00054:       }),
+00055:       signature: t.arg.string({
+00056:         required: false,
+00057:         description: 'If provided, only count completed runs matching this trial signature',
+00058:       }),
+00059:     },
+00060:     resolve: async (_root, args, ctx) => {
+00061:       const domainId = String(args.domainId);
+00062:       const filterModelIds = args.modelIds?.map(String) ?? [];
+00063:       const selectedSignature = typeof args.signature === 'string' && args.signature.trim() !== ''
+00064:         ? args.signature.trim()
+00065:         : null;
+00066: 
+00067:       ctx.log.debug({ domainId, filterModelIds, selectedSignature }, 'Computing domain value coverage');
+00068: 
+00069:       const domain = await db.domain.findUnique({ where: { id: domainId }, select: { id: true, defaultModelIds: true } });
+00070:       if (!domain) return null;
+00071: 
+00072:       // Resolve effective model IDs: use domain-specific list if set, otherwise fall back
+00073:       // to globally defaulted models (isDefault=true, ACTIVE) from the Models settings page.
+00074:       const effectiveModelIds = await resolveEffectiveDefaultModelIds(domain.defaultModelIds);
+00075: 
+00076:       // Pre-fetch labels for effective models so we can populate model breakdown
+00077:       const defaultModelLabelById = new Map<string, string>();
+00078:       if (effectiveModelIds.length > 0) {
+00079:         const defaultModelRows = await db.llmModel.findMany({
+00080:           where: { modelId: { in: effectiveModelIds } },
+00081:           select: { modelId: true, displayName: true },
+00082:         });
+00083:         for (const row of defaultModelRows) {
+00084:           defaultModelLabelById.set(row.modelId, row.displayName);
+00085:         }
+00086:       }
+00087: 
+00088:       // Fetch all non-deleted definitions (need IDs to resolve content)
+00089:       const definitions = await db.definition.findMany({
+00090:         where: { domainId, deletedAt: null },
+00091:         select: { id: true, name: true },
+00092:         orderBy: { createdAt: 'asc' },
+00093:       });
+00094: 
+00095:       // Map definition ID -> value pair (only those with recognized canonical pair)
+00096:       type DefValuePair = { valueA: CoverageValueKey; valueB: CoverageValueKey; name: string };
+00097:       const pairByDefinitionId = new Map<string, DefValuePair>();
+00098:       // Map directional pair key -> definition IDs (to detect multi-vignette cells)
+00099:       const definitionsByPairKey = new Map<string, string[]>();
+00100: 
+00101:       // Resolve definition contents in chunks to handle inheritance
+00102:       for (let offset = 0; offset < definitions.length; offset += VALUE_PAIR_RESOLVE_CHUNK_SIZE) {
+00103:         const batch = definitions.slice(offset, offset + VALUE_PAIR_RESOLVE_CHUNK_SIZE);
+00104:         const settled = await Promise.allSettled(
+00105:
+
+... [narrowed review slice: middle omitted] ...
+
+}
+00247: 
+00248:       const availableModelIds = new Set<string>();
+00249:       for (const runs of signatureScopedRunsByDefinitionId.values()) {
+00250:         for (const run of runs) {
+00251:           for (const transcript of run.transcripts) {
+00252:             availableModelIds.add(transcript.modelId);
+00253:           }
+00254:         }
+00255:       }
+00256: 
+00257:       const modelDetailRows =
+00258:         availableModelIds.size > 0
+00259:           ? await db.llmModel.findMany({
+00260:             where: { modelId: { in: Array.from(availableModelIds) } },
+00261:             select: { modelId: true, displayName: true },
+00262:             orderBy: { displayName: 'asc' },
+00263:           })
+00264:           : [];
+00265: 
+00266:       const availableModels: CoverageModelOption[] = modelDetailRows.map((m) => ({
+00267:         modelId: m.modelId,
+00268:         label: m.displayName,
+00269:       }));
+00270: 
+00271:       // Build the symmetric 45-cell matrix (one cell per unique sorted pair)
+00272:       const values = [...COVERAGE_VALUE_KEYS] as string[];
+00273:       const cells: DomainValueCoverageCell[] = [];
+00274: 
+00275:       for (const valueA of COVERAGE_VALUE_KEYS) {
+00276:         for (const valueB of COVERAGE_VALUE_KEYS) {
+00277:           // Only emit sorted pairs: skip diagonal and reversed pairs
+00278:           if (valueA.localeCompare(valueB) >= 0) continue;
+00279: 
+00280:           const key = `${valueA}::${valueB}`;
+00281:           const defIdsForPair = definitionsByPairKey.get(key) ?? [];
+00282: 
+00283:           if (defIdsForPair.length === 0) {
+00284:             cells.push({
+00285:               valueA,
+00286:               valueB,
+00287:               batchCount: 0,
+00288:               pairedBatchCount: 0,
+00289:               incompleteBatchCount: 0,
+00290:               definitionId: null,
+00291:               definitionName: null,
+00292:               aggregateRunId: null,
+00293:               minTrialCount: null,
+00294:               maxTrialCount: null,
+00295:               modelBreakdown: null,
+00296:             });
+00297:           } else {
+00298:             // Use the total counts across all definitions for the visible cell, but
+00299:             // still choose one stable definition for the analysis link target.
+00300:             const { primaryDefinitionId, batchCount, pairedBatchCount } = selectPrimaryDefinitionCounts(
+00301:               defIdsForPair,
+00302:               batchCountByDefinitionId,
+00303:               pairedBatchCountByDefinitionId,
+00304:               pairedBatchGroupIdsByDefinitionId,
+00305:               pairedBatchIncrementsByGroupId,
+00306:             );
+00307:             const primaryDefId = primaryDefinitionId ?? '';
+00308:             const primaryPair = pairByDefinitionId.get(primaryDefId);
+00309:             const aggregateRunId = primaryDefId === ''
+00310:               ? null
+00311:               : (latestAggregateRunIdByDefinitionId.get(primaryDefId)
+00312:                 ?? latestMatchingRunIdByDefinitionId.get(primaryDefId)
+00313:                 ?? null);
+00314: 
+00315:             // Sum incompleteBatchCount across all definitions for this pair
+00316:             const incompleteBatchCount = defIdsForPair.reduce(
+00317:               (sum, defId) => sum + (incompleteBatchCountByDefinitionId.get(defId) ?? 0),
+00318:               0,
+00319:             );
+00320: 
+00321:             // Compute per-model trial counts across all definitions for this pair.
+00322:             // Deduplicate by group ID first: A-first and B-first companion definitions
+00323:             // share the same jobChoiceBatchGroupId, so flatMapping across both would
+00324:             // double-count each paired batch.
+00325:             const allNonAggregateRunsForPair = deduplicateRunsByGroupId(
+00326:               defIdsForPair.flatMap((defId) => nonAggregateRunsByDefinitionId.get(defId) ?? []),
+00327:             );
+00328:             const { minTrialCount, maxTrialCount, modelBreakdown } = computePerModelTrialCounts(
+00329:               allNonAggregateRunsForPair,
+00330:               effectiveModelIds,
+00331:               defaultModelLabelById,
+00332:             );
+00333: 
+00334:             cells.push({
+00335:               valueA,
+00336:               valueB,
+00337:               batchCount,
+00338:               pairedBatchCount,
+00339:               incompleteBatchCount,
+00340:               definitionId: primaryDefId !== '' ? primaryDefId : null,
+00341:               definitionName: primaryPair?.name ?? null,
+00342:               aggregateRunId,
+00343:               minTrialCount,
+00344:               maxTrialCount,
+00345:               modelBreakdown,
+00346:             });
+00347:           }
+00348:         }
+00349:       }
+00350: 
+00351:       ctx.log.debug({ domainId, cellCount: cells.length }, 'Domain value coverage computed');
+00352:       return { domainId, values, cells, availableMo

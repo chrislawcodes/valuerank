@@ -1,0 +1,15 @@
+{
+  "paths": [
+    "cloud/apps/api/src/graphql/queries",
+    "cloud/apps/api/tests/graphql/queries",
+    "cloud/apps/web/src/components/domains",
+    "cloud/apps/web/src/pages/DefinitionDetail"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/api/src/graphql/queries",
+    "cloud/apps/api/tests/graphql/queries",
+    "cloud/apps/web/src/components/domains",
+    "cloud/apps/web/src/pages/DefinitionDetail",
+    "docs/workflow/feature-runs/match-pair-counts"
+  ]
+}
