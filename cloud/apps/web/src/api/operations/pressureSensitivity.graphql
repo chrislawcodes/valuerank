@@ -1,0 +1,86 @@
+query PressureSensitivity(
+  $domainId: ID
+  $providerId: ID
+  $signature: String!
+) {
+  pressureSensitivity(
+    domainId: $domainId
+    providerId: $providerId
+    signature: $signature
+  ) {
+    models {
+      modelId
+      label
+      providerName
+      unscoredCount
+      aggregateSensitivity {
+        value
+        valuePairsMeasured
+        valuePairsExcluded
+      }
+      valuePairs {
+        pairKey
+        ownToken
+        opponentToken
+        n
+        unscoredCount
+        definitionsMeasured
+        definitionsExcluded
+        directionDelta {
+          value
+          lowBandMean
+          highBandMean
+        }
+        convictionDelta {
+          value
+          lowBandMean
+          highBandMean
+        }
+        netScoreDelta {
+          value
+          lowBandMean
+          highBandMean
+        }
+        baselineWinRate {
+          value
+          ceilingFloorFlag
+        }
+        grid {
+          ownLevel
+          opponentLevel
+          n
+          unscoredCount
+          winRate
+          conviction
+          netScore
+          lowData
+        }
+      }
+    }
+    insufficient {
+      modelId
+      label
+      providerName
+      reason
+    }
+    excludedDefinitions {
+      definitionId
+      name
+      reason
+    }
+    excludedScenariosCount
+    directionalSanityCheck {
+      positivePct
+      flatPct
+      negativePct
+      measuredCount
+      unmeasurableCount
+      breakdown {
+        modelId
+        pairKey
+        directionDelta
+        classification
+      }
+    }
+  }
+}

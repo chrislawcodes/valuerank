@@ -26,6 +26,7 @@ const navItems: NavItem[] = [
       { name: 'Matrix', path: '/models', icon: Cpu, match: 'exact' },
       { name: 'Domain Shifts', path: '/models/domain-shifts', icon: BarChart2 },
       { name: 'Consistency', path: '/models/consistency', icon: BarChart2 },
+      { name: 'Pressure Sensitivity', path: '/models/pressure-sensitivity', icon: BarChart2 },
       { name: 'Circumplex', path: '/models/circumplex', icon: BarChart2 },
     ],
   },

@@ -1,7 +1,3 @@
-
-> @valuerank/api@0.1.0 emit-schema
-> LOG_LEVEL=silent DATABASE_URL=postgresql://x:***@localhost/x JWT_SECRET=placeholder-for-schema-emit-xxxxxxxxx npx tsx src/scripts/emit-schema.ts
-
 """Actual cost summary for a completed run"""
 type ActualCost {
   """Per-model actual cost breakdown"""
@@ -760,6 +756,14 @@ type DeprecateModelResult {
   newDefault: LlmModel
 }
 
+type DirectionalCoverage {
+  completeBatches: Int!
+  definitionIds: [String!]!
+  direction: String!
+  filledSlots: Int!
+  leftoverConditions: Int!
+}
+
 type DirectionalSanityCheck {
   breakdown: [DirectionalSanityCheckEntry!]!
   flatPct: Float!
@@ -1203,14 +1207,6 @@ type DomainTrialRunStatus {
   updatedAt: DateTime!
 }
 
-type DirectionalCoverage {
-  completeBatches: Int!
-  definitionIds: [ID!]!
-  direction: String!
-  filledSlots: Int!
-  leftoverConditions: Int!
-}
-
 type DomainValueCoverageCell {
   """
   Count of complete A-first runs for this value pair after model-set filtering. This is the filtered directional count for the first value in the pair.
@@ -1227,23 +1223,26 @@ type DomainValueCoverageCell {
   Count of fully-complete non-aggregate runs for this value pair. A run is complete when every selected model has at least one transcript at every (scenario × sampleIndex) slot. samplesPerScenario does not multiply this count -- a complete run contributes 1 regardless of how many samples per scenario were planned. Aggregate runs are excluded.
   """
   batchCount: Int!
+
+  """
+  Union of definition IDs that contribute data to this coverage cell, sorted alphabetically.
+  """
+  contributingDefinitionIds: [String!]!
   definitionId: String
   definitionName: String
+
+  """
+  Per-direction condition coverage for this value pair, including complete batches, filled slots, leftover conditions from incomplete runs, and contributing definition IDs.
+  """
+  directionalCoverage: [DirectionalCoverage!]!
 
   """
   Count of non-aggregate runs that expect transcripts but are missing one or more (model × scenario × sampleIndex) slots. Per-run; samplesPerScenario does not multiply this count. Aggregate runs and runs with zero expected slots are excluded.
   """
   incompleteBatchCount: Int!
-  pairedConditionCount: Int!
-  orphanedBatchCount: Int!
-  orphanedConditionCount: Int!
-  contributingDefinitionIds: [ID!]!
-  directionalCoverage: [DirectionalCoverage!]!
   maxTrialCount: Int
   minTrialCount: Int
   modelBreakdown: [CoverageModelBreakdown!]
-  aFirstBatchCount: Int!
-  bFirstBatchCount: Int!
 
   """
   Count of unmatched directional runs for this value pair, computed as max(complete A-first runs, complete B-first runs) - min(complete A-first runs, complete B-first runs). When both directions are equal this is 0; when only one direction has runs this is the count of that side. Runs without a recognizable direction token are excluded.
@@ -1251,9 +1250,19 @@ type DomainValueCoverageCell {
   orphanedBatchCount: Int!
 
   """
+  Count of unmatched condition slots across both directions, computed as the size of the symmetric difference of filled (scenarioId, modelId, sampleIndex) slots.
+  """
+  orphanedConditionCount: Int!
+
+  """
   Count of pairable analysis-ready batches for this value pair, computed as min(complete A-first non-aggregate runs, complete B-first non-aggregate runs) where direction is read from config.jobChoiceValueFirst. A launch where only one direction completed contributes 0 here (the surviving complete run still appears in batchCount). Runs without a recognizable direction token are excluded from both sides. See docs/canonical-glossary.md "Paired Batch" for full semantic.
   """
   pairedBatchCount: Int!
+
+  """
+  Count of matched condition slots across both directions, computed as the size of the intersection of filled (scenarioId, modelId, sampleIndex) slots.
+  """
+  pairedConditionCount: Int!
   valueA: String!
   valueB: String!
 }
@@ -3030,6 +3039,7 @@ enum RunAnomalySource {
 
 """Structured anomaly type for run state reconciliation"""
 enum RunAnomalyType {
+  INVALID_RESPONSE_FAILURE
   MODEL_TRANSCRIPT_SHORTFALL
   ORPHAN_TRANSCRIPT
   PAIR_ASYMMETRY
@@ -3126,7 +3136,9 @@ input StartRunInput {
   """Optional experiment to associate this run with"""
   experimentId: ID
 
-  """Launch mode hint: STANDARD, PAIRED_BATCH, PAIRED_BATCH_TOPUP, or AD_HOC_BATCH"""
+  """
+  Launch mode hint: STANDARD, PAIRED_BATCH, PAIRED_BATCH_TOPUP, or AD_HOC_BATCH
+  """
   launchMode: String
 
   """List of model IDs to evaluate (e.g., ["gpt-4", "claude-3"])"""
@@ -3154,13 +3166,13 @@ input StartRunInput {
   """Optional explicit scenario IDs to run instead of percentage sampling"""
   scenarioIds: [ID!]
 
-  """Direction to top up for paired-batch top-up launches"""
-  topUpDirection: String
-
   """
   Optional sampling temperature (0-2). If omitted, provider default is used.
   """
   temperature: Float
+
+  """Direction to top up for paired-batch top-up launches"""
+  topUpDirection: String
 }
 
 """Result of starting a new run"""

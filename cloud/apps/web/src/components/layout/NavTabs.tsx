@@ -39,6 +39,7 @@ const modelsMenuItems: MenuItem[] = [
   { name: 'Matrix', path: '/models', match: 'exact' },
   { name: 'Domain Shifts', path: '/models/domain-shifts' },
   { name: 'Consistency', path: '/models/consistency' },
+  { name: 'Pressure Sensitivity', path: '/models/pressure-sensitivity' },
   { name: 'Circumplex', path: '/models/circumplex' },
 ];
 
