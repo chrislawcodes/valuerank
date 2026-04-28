@@ -104,6 +104,18 @@ function strengthFromCanonical(strength: 'strong' | 'lean' | 'neutral' | 'unknow
   return null;
 }
 
+/**
+ * Aggregate-tagged runs are pooling views over a set of source runs; transcripts live on
+ * the source runs, not the aggregate run itself. Pull the source-run IDs out of the aggregate
+ * run's config (`config.sourceRunIds`) so we can fetch transcripts from the right place.
+ */
+function extractSourceRunIds(config: unknown): string[] {
+  if (config === null || typeof config !== 'object') return [];
+  const sourceRunIds = (config as { sourceRunIds?: unknown }).sourceRunIds;
+  if (!Array.isArray(sourceRunIds)) return [];
+  return sourceRunIds.filter((id): id is string => typeof id === 'string' && id.length > 0);
+}
+
 builder.queryField('pressureSensitivity', (t) =>
   t.field({
     type: PressureSensitivityResultRef,
@@ -233,24 +245,34 @@ builder.queryField('pressureSensitivity', (t) =>
         });
       }
 
-      // 5. Stream transcripts
-      const eligibleRunIds = eligibleRuns
-        .filter((r) => definitionMeta.has(r.definition?.id ?? r.definitionId))
-        .map((r) => r.id);
+      // 5. Stream transcripts from the SOURCE runs of each Aggregate-tagged run.
+      // Aggregate runs are pooling views — they own metadata (perScenario summaries) but
+      // the raw transcripts live on the runs listed in `config.sourceRunIds`. Fetching
+      // transcripts WHERE runId IN aggregateRunIds returns 0 rows; the production smoke
+      // test on PR #770 caught this.
+      const sourceRunToDefId = new Map<string, string>();
+      for (const r of eligibleRuns) {
+        const defId = r.definition?.id ?? r.definitionId;
+        if (!definitionMeta.has(defId)) continue;
+        for (const sourceRunId of extractSourceRunIds(r.config)) {
+          sourceRunToDefId.set(sourceRunId, defId);
+        }
+      }
+      const sourceRunIds = [...sourceRunToDefId.keys()];
       const rosterModelIds = models.map((m) => m.modelId);
       let excludedScenariosCount = 0;
 
       // Defensive cap: pressure-sensitivity reads raw transcripts (no pooling per FR-022)
-      // bounded by signature-filtered Aggregate-tagged runs. At current scale (~270
-      // definitions × ~8 models × few transcripts each) the volume is comfortable, but the
-      // cap prevents an unrelated runaway dataset from OOMing the API. Adjust upward
-      // intentionally if real coverage grows past this threshold; do not silently raise.
+      // bounded by signature-filtered Aggregate-tagged runs' source runs. At current scale
+      // (~270 definitions × ~8 models × few transcripts each) the volume is comfortable,
+      // but the cap prevents an unrelated runaway dataset from OOMing the API. Adjust
+      // upward intentionally if real coverage grows past this threshold.
       const TRANSCRIPT_FETCH_LIMIT = 200_000;
-      const transcripts = eligibleRunIds.length === 0 || rosterModelIds.length === 0
+      const transcripts = sourceRunIds.length === 0 || rosterModelIds.length === 0
         ? []
         : ((await db.transcript.findMany({
           where: {
-            runId: { in: eligibleRunIds },
+            runId: { in: sourceRunIds },
             modelId: { in: rosterModelIds },
             deletedAt: null,
           },
@@ -266,15 +288,12 @@ builder.queryField('pressureSensitivity', (t) =>
           take: TRANSCRIPT_FETCH_LIMIT,
         })) as TranscriptRow[]);
 
-      // 6-8. Bucket transcripts
-      const runDefMap = new Map<string, string>();
-      for (const r of eligibleRuns) runDefMap.set(r.id, r.definition?.id ?? r.definitionId);
-
+      // 6-8. Bucket transcripts via the sourceRun → definitionId map built above.
       const perModel = new Map<string, Map<string, PairAccumulator>>();
       for (const m of models) perModel.set(m.modelId, new Map());
 
       for (const tx of transcripts) {
-        const defId = runDefMap.get(tx.runId);
+        const defId = sourceRunToDefId.get(tx.runId);
         if (defId == null) continue;
         const meta = definitionMeta.get(defId);
         if (!meta) continue;
