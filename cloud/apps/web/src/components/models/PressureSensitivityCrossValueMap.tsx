@@ -5,11 +5,15 @@ type Props = {
   models: PressureSensitivityModel[];
 };
 
-function colorFor(value: number | null | undefined): string {
-  if (value == null) return '#f3f4f6';
-  // |netScoreDelta| ranges 0..2; saturate at 1.0 for visual range
+function colorFor(value: number | null | undefined): { bg: string; text: string } {
+  if (value == null) return { bg: '#f3f4f6', text: '#374151' };
+  // |netScoreDelta| ranges 0..2; saturate at 1.0 for visual range. Switch to
+  // light-on-dark text once lightness drops below ~70% to keep WCAG-acceptable
+  // contrast across the ramp.
   const intensity = Math.max(0, Math.min(1, Math.abs(value)));
-  return `hsl(218, 70%, ${100 - intensity * 35}%)`;
+  const lightness = 100 - intensity * 35;
+  const text = lightness < 75 ? '#ffffff' : '#1f2937';
+  return { bg: `hsl(218, 70%, ${lightness}%)`, text };
 }
 
 export function PressureSensitivityCrossValueMap({ models }: Props) {
@@ -96,11 +100,12 @@ export function PressureSensitivityCrossValueMap({ models }: Props) {
                         </td>
                       );
                     }
+                    const { bg, text } = colorFor(entry.value);
                     return (
                       <td
                         key={key}
-                        className="h-9 w-14 border border-white text-center text-[11px] font-mono text-gray-900"
-                        style={{ backgroundColor: colorFor(entry.value) }}
+                        className="h-9 w-14 border border-white text-center text-[11px] font-mono"
+                        style={{ backgroundColor: bg, color: text }}
                         title={`${model.label} ${key}: |netScore Δ| = ${entry.value?.toFixed(3)}`}
                       >
                         {entry.value != null ? entry.value.toFixed(2) : '—'}

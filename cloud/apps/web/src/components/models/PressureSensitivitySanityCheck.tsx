@@ -92,8 +92,8 @@ export function PressureSensitivitySanityCheck({ data }: Props) {
               <tbody>
                 {[...data.breakdown]
                   .sort((a, b) => Math.abs(b.directionDelta) - Math.abs(a.directionDelta))
-                  .map((entry, idx) => (
-                    <tr key={`${entry.modelId}-${entry.pairKey}-${idx}`} className="border-t border-gray-100">
+                  .map((entry) => (
+                    <tr key={`${entry.modelId}::${entry.pairKey}`} className="border-t border-gray-100">
                       <td className="px-2 py-1 font-mono">{entry.modelId}</td>
                       <td className="px-2 py-1 font-mono">{entry.pairKey}</td>
                       <td className="px-2 py-1 font-mono">
