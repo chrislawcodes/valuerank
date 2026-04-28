@@ -14,15 +14,20 @@ import {
   type PressureSensitivityQueryVariables,
   type PressureSensitivityModel,
 } from '../api/operations/pressureSensitivity';
+import { PressureSensitivitySummary } from '../components/models/PressureSensitivitySummary';
+import { PressureSensitivityDetail } from '../components/models/PressureSensitivityDetail';
 
 const DEFAULT_SIGNATURE = 'vnewtd';
 
 export function PressureSensitivity() {
   const { domains, queryLoading: domainsLoading, error: domainsError } = useDomains();
   const [searchParams, setSearchParams] = useSearchParams();
-  const domainParam = searchParams.get('domainId');
+  const rawDomainParam = searchParams.get('domainId');
+  // Treat empty-string ?domainId= as missing rather than firing a query with an invalid ID
+  // (per Gemini Slice B review MEDIUM).
+  const domainParam = rawDomainParam === '' ? null : rawDomainParam;
   const signatureParam = searchParams.get('signature');
-  const hasDomainParam = searchParams.has('domainId');
+  const hasDomainParam = domainParam != null;
   const domainFilter = domainParam === 'all' ? null : domainParam;
   // setProviderId is wired in Slice D (Filters component); declared here so the query
   // already accepts the variable.
@@ -177,23 +182,13 @@ export function PressureSensitivity() {
         </section>
       ) : (
         <>
-          {/* Cross-model summary — populated in Slice C */}
-          <section className="rounded-md border border-dashed border-gray-300 bg-gray-50 p-3 text-xs text-gray-500">
-            Cross-model summary (Slice C): {models.length} model{models.length === 1 ? '' : 's'} measured.
-          </section>
+          <PressureSensitivitySummary
+            models={models}
+            selectedModelId={selectedModel?.modelId ?? null}
+            onSelectModel={setSelectedModelId}
+          />
 
-          {/* Per-model detail — populated in Slice C */}
-          {selectedModel && (
-            <section className="rounded-md border border-dashed border-gray-300 bg-gray-50 p-3 text-xs text-gray-500">
-              Per-model detail (Slice C): {selectedModel.label} — {selectedModel.valuePairs.length}{' '}
-              pair{selectedModel.valuePairs.length === 1 ? '' : 's'} measured. Aggregate sensitivity
-              ={' '}
-              {selectedModel.aggregateSensitivity.value != null
-                ? selectedModel.aggregateSensitivity.value.toFixed(3)
-                : '—'}
-              .
-            </section>
-          )}
+          {selectedModel && <PressureSensitivityDetail model={selectedModel} />}
 
           {/* Cross-value heat map — populated in Slice D */}
           <section className="rounded-md border border-dashed border-gray-300 bg-gray-50 p-3 text-xs text-gray-500">
