@@ -11,12 +11,17 @@
 import { resolveDefinitionContent, type DefinitionContent } from '@valuerank/db';
 import { buildSafeLevelLookup, type DefinitionDimension } from '../../graphql/queries/scenarios-utils.js';
 
+/**
+ * Exclusion reason codes for the pressure-sensitivity report. Names match spec FR-018
+ * categories (a-h). Descriptive strings are surfaced through the GraphQL API so clients
+ * can render reasons without a reverse-mapping table.
+ */
 export type PressureSensitivityExclusionReason =
-  | 'a' // legacy single-dimension content (values[] only, no dimensions[].levels[])
-  | 'b' // missing or empty levels[]
-  | 'c' // out-of-range or non-integer scores
-  | 'e' // map collision detected by buildSafeLevelLookup
-  | 'g'; // missing or self-referential value-pair tokens
+  | 'legacy-single-dimension'        // (a) values[] only, no dimensions[].levels[]
+  | 'missing-or-empty-levels'        // (b) dimensions[] present but no usable levels[]
+  | 'score-out-of-range'             // (c) non-integer or outside 1..5
+  | 'normalization-collision'        // (e) buildSafeLevelLookup detected a collision
+  | 'missing-or-self-pair-tokens';   // (g) value_first/second token missing/equal
 
 export type ValidationResult =
   | { status: 'eligible'; resolvedContent: DefinitionContent }
@@ -45,7 +50,7 @@ export async function validateDefinitionForPressureSensitivity(
   // (g) — value-pair tokens missing or self-referential. Checked first so we don't
   // burn time on dimension validation for unusable Definitions.
   if (!checkValuePairTokens(content)) {
-    return { status: 'excluded', reason: 'g' };
+    return { status: 'excluded', reason: 'missing-or-self-pair-tokens' };
   }
 
   const dimensions = Array.isArray(content.dimensions) ? content.dimensions : [];
@@ -60,17 +65,17 @@ export async function validateDefinitionForPressureSensitivity(
     (d) => Array.isArray(d.values) && d.values.length > 0,
   );
   if (allMissingLevels && anyHasLegacyValues) {
-    return { status: 'excluded', reason: 'a' };
+    return { status: 'excluded', reason: 'legacy-single-dimension' };
   }
 
   // (b) — missing or empty levels[] on any dimension that doesn't fall under (a).
   // We require every dimension to carry usable `levels[]` for two-pressure aggregation.
   if (dimensions.length === 0 || allMissingLevels) {
-    return { status: 'excluded', reason: 'b' };
+    return { status: 'excluded', reason: 'missing-or-empty-levels' };
   }
   for (const dim of dimensions) {
     if (!Array.isArray(dim.levels) || dim.levels.length === 0) {
-      return { status: 'excluded', reason: 'b' };
+      return { status: 'excluded', reason: 'missing-or-empty-levels' };
     }
   }
 
@@ -78,18 +83,18 @@ export async function validateDefinitionForPressureSensitivity(
   for (const dim of dimensions) {
     const lookup = buildSafeLevelLookup(dim as DefinitionDimension);
     if (lookup.exclusionReason === 'out-of-range') {
-      return { status: 'excluded', reason: 'c' };
+      return { status: 'excluded', reason: 'score-out-of-range' };
     }
     if (lookup.exclusionReason === 'collision') {
-      return { status: 'excluded', reason: 'e' };
+      return { status: 'excluded', reason: 'normalization-collision' };
     }
     if (lookup.exclusionReason === 'legacy-values-only') {
       // A single legacy-values-only dimension is enough to disqualify the Definition;
       // map to (a) since it indicates legacy content shape on that dimension.
-      return { status: 'excluded', reason: 'a' };
+      return { status: 'excluded', reason: 'legacy-single-dimension' };
     }
     if (lookup.exclusionReason === 'empty-levels') {
-      return { status: 'excluded', reason: 'b' };
+      return { status: 'excluded', reason: 'missing-or-empty-levels' };
     }
   }
 

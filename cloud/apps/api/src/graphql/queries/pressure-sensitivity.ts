@@ -180,12 +180,12 @@ builder.queryField('pressureSensitivity', (t) =>
         const content = validation.resolvedContent;
         const components = content.components;
         if (!components) {
-          excludedDefinitions.push({ definitionId: defId, name: defNames.get(defId) ?? defId, reason: 'g' });
+          excludedDefinitions.push({ definitionId: defId, name: defNames.get(defId) ?? defId, reason: 'missing-or-self-pair-tokens' });
           continue;
         }
         const pairKey = canonicalValuePairKey(components.value_first.token, components.value_second.token);
         if (pairKey === null) {
-          excludedDefinitions.push({ definitionId: defId, name: defNames.get(defId) ?? defId, reason: 'g' });
+          excludedDefinitions.push({ definitionId: defId, name: defNames.get(defId) ?? defId, reason: 'missing-or-self-pair-tokens' });
           continue;
         }
         const [ownToken, opponentToken] = canonicalOwnOpponent(
@@ -202,7 +202,7 @@ builder.queryField('pressureSensitivity', (t) =>
         const ownDim = dimensions.find((d) => typeof d.name === 'string' && d.name.trim() === ownToken);
         const opponentDim = dimensions.find((d) => typeof d.name === 'string' && d.name.trim() === opponentToken);
         if (!ownDim || !opponentDim) {
-          excludedDefinitions.push({ definitionId: defId, name: defNames.get(defId) ?? defId, reason: 'b' });
+          excludedDefinitions.push({ definitionId: defId, name: defNames.get(defId) ?? defId, reason: 'missing-or-empty-levels' });
           continue;
         }
 
@@ -210,7 +210,11 @@ builder.queryField('pressureSensitivity', (t) =>
         const opponentLookupResult = buildSafeLevelLookup(opponentDim);
         if (ownLookupResult.exclusionReason !== null || opponentLookupResult.exclusionReason !== null) {
           const reason = ownLookupResult.exclusionReason ?? opponentLookupResult.exclusionReason;
-          const mapped = reason === 'collision' ? 'e' : reason === 'out-of-range' ? 'c' : reason === 'legacy-values-only' ? 'a' : 'b';
+          const mapped =
+            reason === 'collision' ? 'normalization-collision'
+            : reason === 'out-of-range' ? 'score-out-of-range'
+            : reason === 'legacy-values-only' ? 'legacy-single-dimension'
+            : 'missing-or-empty-levels';
           excludedDefinitions.push({ definitionId: defId, name: defNames.get(defId) ?? defId, reason: mapped });
           continue;
         }
@@ -236,6 +240,12 @@ builder.queryField('pressureSensitivity', (t) =>
       const rosterModelIds = models.map((m) => m.modelId);
       let excludedScenariosCount = 0;
 
+      // Defensive cap: pressure-sensitivity reads raw transcripts (no pooling per FR-022)
+      // bounded by signature-filtered Aggregate-tagged runs. At current scale (~270
+      // definitions × ~8 models × few transcripts each) the volume is comfortable, but the
+      // cap prevents an unrelated runaway dataset from OOMing the API. Adjust upward
+      // intentionally if real coverage grows past this threshold; do not silently raise.
+      const TRANSCRIPT_FETCH_LIMIT = 200_000;
       const transcripts = eligibleRunIds.length === 0 || rosterModelIds.length === 0
         ? []
         : ((await db.transcript.findMany({
@@ -253,6 +263,7 @@ builder.queryField('pressureSensitivity', (t) =>
             definitionSnapshot: true,
             scenario: { select: { content: true, orientationFlipped: true } },
           },
+          take: TRANSCRIPT_FETCH_LIMIT,
         })) as TranscriptRow[]);
 
       // 6-8. Bucket transcripts
