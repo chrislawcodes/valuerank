@@ -3,12 +3,12 @@ import { Modal } from '../ui/Modal';
 
 type ReprobeConfirmModalProps = {
   isOpen: boolean;
-  estimatedCost: number | null;
+  estimatedCost: number | null | undefined;
   onCancel: () => void;
   onConfirm: () => void;
 };
 
-function formatEstimatedCost(estimatedCost: number | null): string {
+function formatEstimatedCost(estimatedCost: number | null | undefined): string {
   if (estimatedCost == null) {
     return 'unknown';
   }

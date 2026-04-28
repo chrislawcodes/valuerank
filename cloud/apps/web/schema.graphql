@@ -1849,6 +1849,16 @@ type Mutation {
   ): Definition!
   renameDomain(id: ID!, name: String!): Domain!
 
+  """
+  Re-probe the slot associated with an INVALID_RESPONSE_FAILURE anomaly. Soft-deletes any existing transcript at the slot, hard-deletes the corresponding probe_results row, increments the anomaly's reprobeAttempts counter inside a transaction, then enqueues a new probe_scenario job (post-commit) with a slot-tuple singletonKey for queue-layer deduplication. Returns the updated anomaly. Errors: NOT_FOUND, ANOMALY_NOT_OPEN, ANOMALY_NOT_REPROBABLE, RUN_NOT_REPROBABLE, REPROBE_LIMIT_EXCEEDED, REPROBE_ALREADY_IN_FLIGHT, REPROBE_SCENARIO_REQUIRED.
+  """
+  reprobeAnomalySlot(anomalyId: ID!): RunAnomaly!
+
+  """
+  Manually mark an open run anomaly as resolved. Idempotent: resolving an already-resolved anomaly is a no-op success and returns the row unchanged. If the underlying condition is still detected on the next reconciliation pass, a fresh anomaly will be created (the unique constraint allows recreation because resolvedAt is non-null on the prior row).
+  """
+  resolveRunAnomaly(id: ID!): RunAnomaly!
+
   "\n      Restart summarization for a run.\n\n      Only works when run is in a terminal state (COMPLETED/FAILED/CANCELLED).\n      By default, only re-queues transcripts without summaries or with errors.\n      With force=true, re-queues all transcripts.\n\n      Requires authentication.\n    "
   restartSummarization(
     """If true, re-summarize all transcripts (not just failed/missing)"""
@@ -2208,6 +2218,11 @@ type ProviderHealthStatus {
 
 type Query {
   """
+  List DomainEvaluations that have at least one member run currently in RUNNING or SUMMARIZING status. Optional domainId filter scopes to one domain. Used by the cross-domain /status page.
+  """
+  activeEvaluations(domainId: ID): [DomainEvaluation!]!
+
+  """
   Get the average token statistics across all models. Used as fallback when model-specific stats are unavailable.
   """
   allModelTokenAverage: ModelTokenStats
@@ -2538,6 +2553,11 @@ type Query {
     signature: String
   ): ModelsAnalysisResult!
   modelsConsistency(domainId: ID, minScenarios: Int, providerId: ID, signature: String!): ModelsConsistencyResult!
+
+  """
+  List anomalies that are currently open (resolvedAt IS NULL) across all runs. Optional filters: domainId scopes to anomalies whose run belongs to a definition in that domain; type scopes to a single RunAnomalyType.
+  """
+  openRunAnomalies(domainId: ID, type: RunAnomalyType): [RunAnomaly!]!
 
   """Get a specific preamble by ID"""
   preamble(id: ID!): Preamble
@@ -3018,10 +3038,48 @@ type Run {
 type RunAnomaly {
   acknowledgedByUserId: String
   details: JSON!
+
+  """
+  Human-friendly anomaly type label. For unknown future enum values, returns the raw enum string.
+  """
+  displayLabel: String!
+
+  """
+  Human-friendly subject label. Type-aware: slot-keyed types render as "model X · sample N", transcript-keyed types render as "transcript <short>", others return the raw subject.
+  """
+  displaySubject: String!
+
+  """
+  The domain this anomaly belongs to (via run.definition.domain). Null if the definition is not associated with a domain.
+  """
+  domain: Domain
+
+  """
+  Best-effort cost estimate for the next re-probe attempt, computed as the average estimatedCost of the last 10 successful (non-deleted, summarized) transcripts for the same modelId across all runs. Returns null when the anomaly is not reprobable, no modelId is available, or no recent transcripts have cost data.
+  """
+  estimatedCost: Float
   firstSeenAt: DateTime!
   id: ID!
   lastSeenAt: DateTime!
+
+  """
+  Number of re-probe attempts already made for this anomaly. Reads details.reprobeAttempts; 0 for non-slot-keyed types.
+  """
+  reprobeCount: Int!
+
+  """
+  Whether the [Re-probe] action is offered for this anomaly type. v1: only INVALID_RESPONSE_FAILURE is reprobable; other slot-keyed types may be added later.
+  """
+  reprobeEligible: Boolean!
+
+  """
+  True when reprobeCount has reached the circuit-breaker limit (3). UI should disable the [Re-probe] button.
+  """
+  reprobeLimitReached: Boolean!
   resolvedAt: DateTime
+
+  """The run this anomaly belongs to"""
+  run: Run!
   runId: String!
   source: RunAnomalySource!
   subject: String!

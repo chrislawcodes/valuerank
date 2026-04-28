@@ -1,113 +1,42 @@
-import { gql } from 'urql';
 import type {
-  RunAnomaly,
-  RunAnomalyType,
+  OpenRunAnomaliesQuery as GeneratedOpenRunAnomaliesQuery,
+  OpenRunAnomaliesQueryVariables as GeneratedOpenRunAnomaliesQueryVariables,
+  ReprobeAnomalySlotMutation as GeneratedReprobeAnomalySlotMutation,
+  ReprobeAnomalySlotMutationVariables as GeneratedReprobeAnomalySlotMutationVariables,
+  ResolveRunAnomalyMutation as GeneratedResolveRunAnomalyMutation,
+  ResolveRunAnomalyMutationVariables as GeneratedResolveRunAnomalyMutationVariables,
 } from '../../generated/graphql';
+
+// ============================================================================
+// TYPES
+// ============================================================================
 
 export type { RunAnomalyType } from '../../generated/graphql';
 
-type OpenRunAnomalyBase = Pick<
-  RunAnomaly,
-  'id' | 'runId' | 'type' | 'subject' | 'source' | 'details' | 'firstSeenAt' | 'lastSeenAt'
->;
+export type OpenRunAnomaly = GeneratedOpenRunAnomaliesQuery['openRunAnomalies'][number];
 
-export type OpenRunAnomaly = OpenRunAnomalyBase & {
-  displayLabel: string;
-  displaySubject: string;
-  reprobeEligible: boolean;
-  reprobeCount: number;
-  reprobeLimitReached: boolean;
-  estimatedCost: number | null;
-  run: {
-    id: string;
-    name: string | null;
-    status: string;
-  };
-  domain: {
-    id: string;
-    name: string;
-  } | null;
-};
+// ============================================================================
+// QUERIES
+// ============================================================================
 
-export type OpenRunAnomaliesQueryResult = {
-  openRunAnomalies: OpenRunAnomaly[];
-};
+export { OpenRunAnomaliesDocument as OPEN_RUN_ANOMALIES_QUERY } from '../../generated/graphql';
 
-export type OpenRunAnomaliesQueryVariables = {
-  domainId?: string | null;
-  type?: RunAnomalyType | null;
-};
+// ============================================================================
+// MUTATIONS
+// ============================================================================
 
-export type ReprobeAnomalySlotMutationResult = {
-  reprobeAnomalySlot: {
-    id: string;
-    lastSeenAt: string;
-    reprobeCount: number;
-    reprobeLimitReached: boolean;
-  };
-};
+export { ReprobeAnomalySlotDocument as REPROBE_ANOMALY_SLOT_MUTATION } from '../../generated/graphql';
+export { ResolveRunAnomalyDocument as RESOLVE_RUN_ANOMALY_MUTATION } from '../../generated/graphql';
 
-export type ReprobeAnomalySlotMutationVariables = {
-  anomalyId: string;
-};
+// ============================================================================
+// RESULT / VARIABLE TYPES
+// ============================================================================
 
-export type ResolveRunAnomalyMutationResult = {
-  resolveRunAnomaly: {
-    id: string;
-    resolvedAt: string | null;
-  };
-};
+export type OpenRunAnomaliesQueryResult = GeneratedOpenRunAnomaliesQuery;
+export type OpenRunAnomaliesQueryVariables = GeneratedOpenRunAnomaliesQueryVariables;
 
-export type ResolveRunAnomalyMutationVariables = {
-  id: string;
-};
+export type ReprobeAnomalySlotMutationResult = GeneratedReprobeAnomalySlotMutation;
+export type ReprobeAnomalySlotMutationVariables = GeneratedReprobeAnomalySlotMutationVariables;
 
-export const OPEN_RUN_ANOMALIES_QUERY = gql`
-  query OpenRunAnomalies($domainId: ID, $type: RunAnomalyType) {
-    openRunAnomalies(domainId: $domainId, type: $type) {
-      id
-      runId
-      type
-      subject
-      source
-      details
-      firstSeenAt
-      lastSeenAt
-      displayLabel
-      displaySubject
-      reprobeEligible
-      reprobeCount
-      reprobeLimitReached
-      estimatedCost
-      run {
-        id
-        name
-        status
-      }
-      domain {
-        id
-        name
-      }
-    }
-  }
-`;
-
-export const REPROBE_ANOMALY_SLOT_MUTATION = gql`
-  mutation ReprobeAnomalySlot($anomalyId: ID!) {
-    reprobeAnomalySlot(anomalyId: $anomalyId) {
-      id
-      lastSeenAt
-      reprobeCount
-      reprobeLimitReached
-    }
-  }
-`;
-
-export const RESOLVE_RUN_ANOMALY_MUTATION = gql`
-  mutation ResolveRunAnomaly($id: ID!) {
-    resolveRunAnomaly(id: $id) {
-      id
-      resolvedAt
-    }
-  }
-`;
+export type ResolveRunAnomalyMutationResult = GeneratedResolveRunAnomalyMutation;
+export type ResolveRunAnomalyMutationVariables = GeneratedResolveRunAnomalyMutationVariables;

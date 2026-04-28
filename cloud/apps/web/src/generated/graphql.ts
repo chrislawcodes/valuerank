@@ -1713,6 +1713,10 @@ export type Mutation = {
   /** Remove a tag from a definition. No-op if tag was not assigned. */
   removeTagFromDefinition: Definition;
   renameDomain: Domain;
+  /** Re-probe the slot associated with an INVALID_RESPONSE_FAILURE anomaly. Soft-deletes any existing transcript at the slot, hard-deletes the corresponding probe_results row, increments the anomaly's reprobeAttempts counter inside a transaction, then enqueues a new probe_scenario job (post-commit) with a slot-tuple singletonKey for queue-layer deduplication. Returns the updated anomaly. Errors: NOT_FOUND, ANOMALY_NOT_OPEN, ANOMALY_NOT_REPROBABLE, RUN_NOT_REPROBABLE, REPROBE_LIMIT_EXCEEDED, REPROBE_ALREADY_IN_FLIGHT, REPROBE_SCENARIO_REQUIRED. */
+  reprobeAnomalySlot: RunAnomaly;
+  /** Manually mark an open run anomaly as resolved. Idempotent: resolving an already-resolved anomaly is a no-op success and returns the row unchanged. If the underlying condition is still detected on the next reconciliation pass, a fresh anomaly will be created (the unique constraint allows recreation because resolvedAt is non-null on the prior row). */
+  resolveRunAnomaly: RunAnomaly;
   /**
    *
    *       Restart summarization for a run.
@@ -2087,6 +2091,16 @@ export type MutationRenameDomainArgs = {
 };
 
 
+export type MutationReprobeAnomalySlotArgs = {
+  anomalyId: Scalars['ID']['input'];
+};
+
+
+export type MutationResolveRunAnomalyArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
 export type MutationRestartSummarizationArgs = {
   force?: InputMaybe<Scalars['Boolean']['input']>;
   runId: Scalars['ID']['input'];
@@ -2457,6 +2471,8 @@ export type ProviderHealthStatus = {
 
 export type Query = {
   __typename?: 'Query';
+  /** List DomainEvaluations that have at least one member run currently in RUNNING or SUMMARIZING status. Optional domainId filter scopes to one domain. Used by the cross-domain /status page. */
+  activeEvaluations: Array<DomainEvaluation>;
   /** Get the average token statistics across all models. Used as fallback when model-specific stats are unavailable. */
   allModelTokenAverage?: Maybe<ModelTokenStats>;
   /** Fetch the latest analysis result for multiple runs. Useful for aggregation. */
@@ -2582,6 +2598,8 @@ export type Query = {
   modelTokenStats: Array<ModelTokenStats>;
   modelsAnalysis: ModelsAnalysisResult;
   modelsConsistency: ModelsConsistencyResult;
+  /** List anomalies that are currently open (resolvedAt IS NULL) across all runs. Optional filters: domainId scopes to anomalies whose run belongs to a definition in that domain; type scopes to a single RunAnomalyType. */
+  openRunAnomalies: Array<RunAnomaly>;
   /** Get a specific preamble by ID */
   preamble?: Maybe<Preamble>;
   /** List all preambles */
@@ -2679,6 +2697,11 @@ export type Query = {
    *
    */
   workerHealth: WorkerHealth;
+};
+
+
+export type QueryActiveEvaluationsArgs = {
+  domainId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -2988,6 +3011,12 @@ export type QueryModelsConsistencyArgs = {
   minScenarios?: InputMaybe<Scalars['Int']['input']>;
   providerId?: InputMaybe<Scalars['ID']['input']>;
   signature: Scalars['String']['input'];
+};
+
+
+export type QueryOpenRunAnomaliesArgs = {
+  domainId?: InputMaybe<Scalars['ID']['input']>;
+  type?: InputMaybe<RunAnomalyType>;
 };
 
 
@@ -3355,10 +3384,26 @@ export type RunAnomaly = {
   __typename?: 'RunAnomaly';
   acknowledgedByUserId?: Maybe<Scalars['String']['output']>;
   details: Scalars['JSON']['output'];
+  /** Human-friendly anomaly type label. For unknown future enum values, returns the raw enum string. */
+  displayLabel: Scalars['String']['output'];
+  /** Human-friendly subject label. Type-aware: slot-keyed types render as "model X · sample N", transcript-keyed types render as "transcript <short>", others return the raw subject. */
+  displaySubject: Scalars['String']['output'];
+  /** The domain this anomaly belongs to (via run.definition.domain). Null if the definition is not associated with a domain. */
+  domain?: Maybe<Domain>;
+  /** Best-effort cost estimate for the next re-probe attempt, computed as the average estimatedCost of the last 10 successful (non-deleted, summarized) transcripts for the same modelId across all runs. Returns null when the anomaly is not reprobable, no modelId is available, or no recent transcripts have cost data. */
+  estimatedCost?: Maybe<Scalars['Float']['output']>;
   firstSeenAt: Scalars['DateTime']['output'];
   id: Scalars['ID']['output'];
   lastSeenAt: Scalars['DateTime']['output'];
+  /** Number of re-probe attempts already made for this anomaly. Reads details.reprobeAttempts; 0 for non-slot-keyed types. */
+  reprobeCount: Scalars['Int']['output'];
+  /** Whether the [Re-probe] action is offered for this anomaly type. v1: only INVALID_RESPONSE_FAILURE is reprobable; other slot-keyed types may be added later. */
+  reprobeEligible: Scalars['Boolean']['output'];
+  /** True when reprobeCount has reached the circuit-breaker limit (3). UI should disable the [Re-probe] button. */
+  reprobeLimitReached: Scalars['Boolean']['output'];
   resolvedAt?: Maybe<Scalars['DateTime']['output']>;
+  /** The run this anomaly belongs to */
+  run: Run;
   runId: Scalars['String']['output'];
   source: RunAnomalySource;
   subject: Scalars['String']['output'];
@@ -4490,6 +4535,28 @@ export type PressureSensitivityQueryVariables = Exact<{
 
 
 export type PressureSensitivityQuery = { __typename?: 'Query', pressureSensitivity: { __typename?: 'PressureSensitivityResult', excludedScenariosCount: number, models: Array<{ __typename?: 'PressureSensitivityModel', modelId: string, label: string, providerName: string, unscoredCount: number, aggregateSensitivity: { __typename?: 'AggregateSensitivity', value?: number | null, valuePairsMeasured: number, valuePairsExcluded: number }, valuePairs: Array<{ __typename?: 'PressureSensitivityValuePair', pairKey: string, ownToken: string, opponentToken: string, n: number, unscoredCount: number, definitionsMeasured: number, definitionsExcluded: number, directionDelta: { __typename?: 'BandStat', value?: number | null, lowBandMean?: number | null, highBandMean?: number | null }, convictionDelta: { __typename?: 'BandStat', value?: number | null, lowBandMean?: number | null, highBandMean?: number | null }, netScoreDelta: { __typename?: 'BandStat', value?: number | null, lowBandMean?: number | null, highBandMean?: number | null }, baselineWinRate: { __typename?: 'BaselineWinRate', value?: number | null, ceilingFloorFlag?: string | null }, grid: Array<{ __typename?: 'SensitivityCell', ownLevel: number, opponentLevel: number, n: number, unscoredCount: number, winRate?: number | null, conviction?: number | null, netScore?: number | null, lowData: boolean }> }> }>, insufficient: Array<{ __typename?: 'InsufficientPressureSensitivityModel', modelId: string, label: string, providerName: string, reason: string }>, excludedDefinitions: Array<{ __typename?: 'ExcludedDefinition', definitionId: string, name: string, reason: string }>, directionalSanityCheck: { __typename?: 'DirectionalSanityCheck', positivePct: number, flatPct: number, negativePct: number, measuredCount: number, unmeasurableCount: number, breakdown: Array<{ __typename?: 'DirectionalSanityCheckEntry', modelId: string, pairKey: string, directionDelta: number, classification: string }> } } };
+
+export type OpenRunAnomaliesQueryVariables = Exact<{
+  domainId?: InputMaybe<Scalars['ID']['input']>;
+  type?: InputMaybe<RunAnomalyType>;
+}>;
+
+
+export type OpenRunAnomaliesQuery = { __typename?: 'Query', openRunAnomalies: Array<{ __typename?: 'RunAnomaly', id: string, runId: string, type: RunAnomalyType, subject: string, source: RunAnomalySource, details: unknown, firstSeenAt: string, lastSeenAt: string, displayLabel: string, displaySubject: string, reprobeEligible: boolean, reprobeCount: number, reprobeLimitReached: boolean, estimatedCost?: number | null, run: { __typename?: 'Run', id: string, name?: string | null, status: string }, domain?: { __typename?: 'Domain', id: string, name: string } | null }> };
+
+export type ReprobeAnomalySlotMutationVariables = Exact<{
+  anomalyId: Scalars['ID']['input'];
+}>;
+
+
+export type ReprobeAnomalySlotMutation = { __typename?: 'Mutation', reprobeAnomalySlot: { __typename?: 'RunAnomaly', id: string, lastSeenAt: string, reprobeCount: number, reprobeLimitReached: boolean } };
+
+export type ResolveRunAnomalyMutationVariables = Exact<{
+  id: Scalars['ID']['input'];
+}>;
+
+
+export type ResolveRunAnomalyMutation = { __typename?: 'Mutation', resolveRunAnomaly: { __typename?: 'RunAnomaly', id: string, resolvedAt?: string | null } };
 
 export type RunFieldsFragment = { __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: unknown, stalledModels: Array<string>, companionRunId?: string | null, isAggregate: boolean, pairedBatchGroupId?: string | null, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, updatedAt: string, lastAccessedAt?: string | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: unknown | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, unresolvableTranscriptCount?: { __typename?: 'UnresolvableCount', total: number, byModel: Array<{ __typename?: 'UnresolvableByModel', modelId: string, count: number }> } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: unknown, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null };
 
@@ -6967,6 +7034,65 @@ export const PressureSensitivityDocument = gql`
 
 export function usePressureSensitivityQuery(options: Omit<Urql.UseQueryArgs<PressureSensitivityQueryVariables>, 'query'>) {
   return Urql.useQuery<PressureSensitivityQuery, PressureSensitivityQueryVariables>({ query: PressureSensitivityDocument, ...options });
+};
+export const OpenRunAnomaliesDocument = gql`
+    query OpenRunAnomalies($domainId: ID, $type: RunAnomalyType) {
+  openRunAnomalies(domainId: $domainId, type: $type) {
+    id
+    runId
+    type
+    subject
+    source
+    details
+    firstSeenAt
+    lastSeenAt
+    displayLabel
+    displaySubject
+    reprobeEligible
+    reprobeCount
+    reprobeLimitReached
+    estimatedCost
+    run {
+      id
+      name
+      status
+    }
+    domain {
+      id
+      name
+    }
+  }
+}
+    `;
+
+export function useOpenRunAnomaliesQuery(options?: Omit<Urql.UseQueryArgs<OpenRunAnomaliesQueryVariables>, 'query'>) {
+  return Urql.useQuery<OpenRunAnomaliesQuery, OpenRunAnomaliesQueryVariables>({ query: OpenRunAnomaliesDocument, ...options });
+};
+export const ReprobeAnomalySlotDocument = gql`
+    mutation ReprobeAnomalySlot($anomalyId: ID!) {
+  reprobeAnomalySlot(anomalyId: $anomalyId) {
+    id
+    lastSeenAt
+    reprobeCount
+    reprobeLimitReached
+  }
+}
+    `;
+
+export function useReprobeAnomalySlotMutation() {
+  return Urql.useMutation<ReprobeAnomalySlotMutation, ReprobeAnomalySlotMutationVariables>(ReprobeAnomalySlotDocument);
+};
+export const ResolveRunAnomalyDocument = gql`
+    mutation ResolveRunAnomaly($id: ID!) {
+  resolveRunAnomaly(id: $id) {
+    id
+    resolvedAt
+  }
+}
+    `;
+
+export function useResolveRunAnomalyMutation() {
+  return Urql.useMutation<ResolveRunAnomalyMutation, ResolveRunAnomalyMutationVariables>(ResolveRunAnomalyDocument);
 };
 export const RunsDocument = gql`
     query Runs($definitionId: String, $experimentId: String, $status: String, $runCategory: String, $hasAnalysis: Boolean, $analysisStatus: String, $runType: String, $limit: Int, $offset: Int) {

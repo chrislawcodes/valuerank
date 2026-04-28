@@ -1,0 +1,43 @@
+query OpenRunAnomalies($domainId: ID, $type: RunAnomalyType) {
+  openRunAnomalies(domainId: $domainId, type: $type) {
+    id
+    runId
+    type
+    subject
+    source
+    details
+    firstSeenAt
+    lastSeenAt
+    displayLabel
+    displaySubject
+    reprobeEligible
+    reprobeCount
+    reprobeLimitReached
+    estimatedCost
+    run {
+      id
+      name
+      status
+    }
+    domain {
+      id
+      name
+    }
+  }
+}
+
+mutation ReprobeAnomalySlot($anomalyId: ID!) {
+  reprobeAnomalySlot(anomalyId: $anomalyId) {
+    id
+    lastSeenAt
+    reprobeCount
+    reprobeLimitReached
+  }
+}
+
+mutation ResolveRunAnomaly($id: ID!) {
+  resolveRunAnomaly(id: $id) {
+    id
+    resolvedAt
+  }
+}
