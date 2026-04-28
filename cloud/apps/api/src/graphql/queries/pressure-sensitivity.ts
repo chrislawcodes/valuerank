@@ -34,6 +34,10 @@ import {
   canonicalValuePairKey,
   type CanonicalDirection,
 } from '../../services/pressure-sensitivity/value-pair.js';
+import {
+  buildPressureSensitivityDecisionSnapshot,
+  type PressureSensitivityDecisionSnapshot,
+} from '../../services/pressure-sensitivity/decision-snapshot.js';
 
 const MIN_N = 3;
 const FLAT_DELTA_THRESHOLD = 0.02;
@@ -79,6 +83,7 @@ type DefinitionMetadata = {
   /** Alphabetical canonical opponent (sortedTokens[1]). */
   opponentToken: string;
   pairKey: string;
+  decisionSnapshot: PressureSensitivityDecisionSnapshot;
   ownLookup: (raw: unknown) => number | null;
   opponentLookup: (raw: unknown) => number | null;
   dimensions: ReadonlyArray<DefinitionDimension>;
@@ -236,6 +241,12 @@ builder.queryField('pressureSensitivity', (t) =>
           continue;
         }
 
+        const decisionSnapshot = buildPressureSensitivityDecisionSnapshot(content);
+        if (decisionSnapshot === null) {
+          excludedDefinitions.push({ definitionId: defId, name: defNames.get(defId) ?? defId, reason: 'missing-or-self-pair-tokens' });
+          continue;
+        }
+
         definitionMeta.set(defId, {
           id: defId,
           name: defNames.get(defId) ?? defId,
@@ -244,6 +255,7 @@ builder.queryField('pressureSensitivity', (t) =>
           ownToken,
           opponentToken,
           pairKey,
+          decisionSnapshot,
           ownLookup: ownLookupResult.lookup,
           opponentLookup: opponentLookupResult.lookup,
           dimensions,
@@ -322,19 +334,6 @@ builder.queryField('pressureSensitivity', (t) =>
       const perModel = new Map<string, Map<string, PairAccumulator>>();
       for (const m of models) perModel.set(m.modelId, new Map());
 
-      // Cache synthetic snapshots per definition so we don't rebuild for every transcript.
-      // The snapshot only needs `components` for `extractValueStatementsFromSnapshot`; the
-      // other extractors (template/labelPrefix) tolerate missing fields by returning undefined.
-      const syntheticSnapshotByDefId = new Map<string, { components: { value_first: { token: string; body: string }; value_second: { token: string; body: string } } }>();
-      for (const [defId, meta] of definitionMeta) {
-        syntheticSnapshotByDefId.set(defId, {
-          components: {
-            value_first: { token: meta.valueFirstToken, body: '' },
-            value_second: { token: meta.valueSecondToken, body: '' },
-          },
-        });
-      }
-
       for (const tx of transcripts) {
         const defId = sourceRunToDefId.get(tx.runId);
         if (defId == null) continue;
@@ -344,7 +343,7 @@ builder.queryField('pressureSensitivity', (t) =>
 
         const decision = resolveTranscriptDecisionModel({
           decisionMetadata: tx.decisionMetadata,
-          definitionSnapshot: syntheticSnapshotByDefId.get(defId),
+          definitionSnapshot: meta.decisionSnapshot,
           orientationFlipped: scenario?.orientationFlipped ?? null,
         });
         const direction = decision.canonical.direction as CanonicalDirection;
