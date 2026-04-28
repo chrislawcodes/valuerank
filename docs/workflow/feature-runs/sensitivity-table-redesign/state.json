@@ -1,0 +1,77 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": true,
+    "complete": true,
+    "question_count": 0,
+    "asked_count": 0,
+    "questions": [],
+    "assumptions": [
+      "Drop all conviction/firmness columns from both tables. Conviction data still flows through the resolver (free), but is not exposed in headline tables. Optional separate 'Model Voice' report can be built later.",
+      "Rename Direction \u0394 \u2192 Win rate \u0394 everywhere. Matches existing ValueRank vocabulary (ConditionMatrix, Models tab).",
+      "Cross-model report: 4 columns under 'Win Rate' group header \u2014 Model | Low pressure | High pressure | Win rate \u0394 \u00b1 CI. Drop Provider, Aggregate sensitivity, Pairs measured, Spread sparkline.",
+      "Per-pair report: 5 columns under 'Win Rate' group header \u2014 Value Pair | Low pressure | High pressure | Win rate \u0394 \u00b1 CI | Trials. Drop Defs and Baseline (redundant with Low pressure win rate).",
+      "CI computation: Wilson-propagated trial-level CI for per-pair \u0394; t-based across-pairs CI for cross-model summary mean \u0394 (df = pairsMeasured - 1).",
+      "Display rules: Low/High pressure shown as percent (e.g. '30%'). Win rate \u0394 shown as percentage points (e.g. '+40 pp \u00b1 7 pp'). Negative \u0394 rendered in red. Ceiling/floor flag inline as small badge on Low pressure cell. \u0394 shows '\u2014' when band-coverage rule fails.",
+      "Tooltips: \u24d8 icon on every column header with approved copy from conversation. Group header 'Win Rate' also gets a tooltip explaining what the metric is.",
+      "Backend: extend resolver to include per-pair direction \u0394 CI fields and a new directionDeltaSummary on each model. Deprecate aggregateSensitivity field but keep on schema for one release."
+    ],
+    "summary": "Discovery complete via prior conversation. Drop conviction from this report; refocus on win-rate sensitivity only.",
+    "updated_at": 1777418844,
+    "answers": {},
+    "non_goals": [
+      "Conviction/firmness column display in either table.",
+      "Model Voice / Conviction report (deferred \u2014 could be a separate page later).",
+      "2D pressure grid changes (stays as-is, may still expose conviction in cell drilldowns).",
+      "Cross-value heat map, sanity check panel, limitations panel changes (separate PRs).",
+      "Statistical machinery beyond 95% CI (no hypothesis testing, no multiple-comparison correction)."
+    ],
+    "acceptance_criteria": [
+      "Cross-model summary table renders with the new 4-column layout under a 'Win Rate' group header.",
+      "Per-pair detail table renders with the new 5-column layout under a 'Win Rate' group header.",
+      "Every column header has a \u24d8 icon that surfaces the approved tooltip copy on hover/focus.",
+      "Win rate \u0394 cells display as '+X pp \u00b1 Y pp' with negative values rendered in red.",
+      "Ceiling/floor flag appears as a small badge inline on the Low pressure cell when baseline win rate is at extremes.",
+      "Cells with insufficient band coverage (band-coverage rule fails) display '\u2014' with a hover explainer.",
+      "Web build clean (lint + tsc); existing tests pass; new aggregation tests pass for the CI math.",
+      "Smoke test against prod via MCP returns at least one model with measurable Win rate \u0394 values for the canonical signature 'vnewtd'."
+    ],
+    "unresolved": []
+  },
+  "delivery": {},
+  "dirty_overrides": {},
+  "checkpoint_fallback": {},
+  "parallel_analysis": {
+    "reviewed": false,
+    "found": false,
+    "note": "",
+    "updated_at": 0
+  },
+  "init_head_sha": "7df4f371cbea3c1be97fa5cb12926b39bd516f99",
+  "token_usage": [],
+  "command_telemetry": [],
+  "last_successful_checkpoint_flags": {},
+  "diff_review_budget": {
+    "recorded_head": "",
+    "last_review_only_advance_at": 0
+  },
+  "stages": {},
+  "invariant_warnings": [],
+  "schema_version": 1,
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  }
+}
