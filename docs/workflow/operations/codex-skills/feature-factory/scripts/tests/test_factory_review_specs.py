@@ -167,11 +167,10 @@ class ActionableFindingRegexNegativeTests(unittest.TestCase):
     def test_empty_review(self) -> None:
         self.assertFalse(FRS.detect_actionable_findings(_review("")))
 
-    def test_low_severity_not_actionable(self) -> None:
-        """LOW findings are not actionable — auto-accept is fine."""
-        self.assertFalse(FRS.detect_actionable_findings(_review("- low: minor typo\n")))
-        self.assertFalse(FRS.detect_actionable_findings(_review("### LOW: minor typo\n")))
-        self.assertFalse(FRS.detect_actionable_findings(_review("**LOW**: typo\n")))
+    def test_low_severity_is_actionable(self) -> None:
+        self.assertTrue(FRS.detect_actionable_findings(_review("- low: minor typo\n")))
+        self.assertTrue(FRS.detect_actionable_findings(_review("### LOW: minor typo\n")))
+        self.assertTrue(FRS.detect_actionable_findings(_review("**LOW**: typo\n")))
 
     def test_word_higher_not_match(self) -> None:
         self.assertFalse(
@@ -205,13 +204,7 @@ class ActionableFindingRegexNegativeTests(unittest.TestCase):
             FRS.detect_actionable_findings(_review("## MEDIUM-term plan\n"))
         )
 
-    def test_fenced_code_block_with_literal_severity_line_is_documented_limitation(self) -> None:
-        """Known limitation: lines inside fenced code blocks are NOT excluded.
-
-        A review that quotes a literal ``- HIGH:`` example inside a code fence
-        will match. This is called out in spec residual risks; the test pins
-        the current behavior so a future fix can intentionally flip it.
-        """
+    def test_fenced_code_block_with_literal_severity_line_is_ignored(self) -> None:
         body = (
             "Here is an example of the pattern:\n"
             "```\n"
@@ -219,9 +212,22 @@ class ActionableFindingRegexNegativeTests(unittest.TestCase):
             "```\n"
             "This review itself has no real findings.\n"
         )
-        # Current behavior: matches. If this test starts failing, someone has
-        # tightened the regex to exclude code fences — delete this test and
-        # add a negative one asserting False.
+        self.assertFalse(FRS.detect_actionable_findings(_review(body)))
+
+    def test_blockquote_and_inline_code_severity_are_ignored(self) -> None:
+        body = "> - CRITICAL: quoted example\n\nInline `- HIGH: example` only.\n"
+        self.assertFalse(FRS.detect_actionable_findings(_review(body)))
+
+    def test_links_and_image_alt_text_are_ignored(self) -> None:
+        body = "[CRITICAL: old note](https://example.com)\n![LOW: alt](image.png)\n"
+        self.assertFalse(FRS.detect_actionable_findings(_review(body)))
+
+    def test_auto_accept_note_does_not_self_trigger(self) -> None:
+        body = "## Resolution\n- status: accepted\n- note: No HIGH/MEDIUM/LOW/CRITICAL findings detected — auto-accepted\n"
+        self.assertFalse(FRS.detect_actionable_findings(_review(body)))
+
+    def test_duplicate_findings_sections_scan_past_first(self) -> None:
+        body = "## Findings\n\nNo issues.\n\n## Findings\n\n- CRITICAL: hidden later issue\n"
         self.assertTrue(FRS.detect_actionable_findings(_review(body)))
 
 

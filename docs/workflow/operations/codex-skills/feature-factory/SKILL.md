@@ -243,9 +243,18 @@ At each checkpoint:
 
 1. create or update the artifact
 2. run the checkpoint
-3. run `auto-reconcile --slug <slug> --stage <stage>` — auto-accepts reviews with no HIGH or MEDIUM findings and prints which reviews still need attention
+3. run `auto-reconcile --slug <slug> --stage <stage>` — auto-accepts reviews with no HIGH, MEDIUM, LOW, or CRITICAL findings and prints which reviews still need attention
 4. read and reconcile only the reviews listed under `needs-review` in the auto-reconcile output
 5. only then move forward
+
+### Auto-Context Defaults
+
+Checkpoint auto-context is enabled by default for `spec` and `tasks` stages.
+It is disabled by default for `plan` and `diff` stages because those artifacts
+are already the review source of truth and extra inferred context often pushes
+review payloads over character limits. Use `--auto-context` to force inferred
+context back on for plan or diff. Use `--no-auto-context` to force it off for
+any stage.
 
 ### Progress Heartbeat
 

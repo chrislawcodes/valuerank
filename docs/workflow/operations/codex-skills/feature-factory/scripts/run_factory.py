@@ -220,13 +220,25 @@ def command_auto_reconcile(args: argparse.Namespace) -> int:
             needs_review.append(f"{spec['path']} (unreadable)")
             continue
 
-        status = data.get("resolution_status", "open")
-        if status != "open":
-            # Already reconciled — skip.
-            continue
-
         if detect_actionable_findings(review_path):
+            reopen_note = "Actionable HIGH/MEDIUM/LOW/CRITICAL finding detected — review required"
+            run([
+                sys.executable, str(UPDATE_REVIEW),
+                "--review", str(review_path),
+                "--status", "open",
+                "--note", reopen_note,
+            ])
+            run([
+                sys.executable, str(APPEND_RECONCILIATION),
+                "--plan", str(plan_path),
+                "--review", str(review_path),
+                "--status", "open",
+                "--note", reopen_note,
+            ])
             needs_review.append(spec["path"])
+        elif data.get("resolution_status", "open") != "open":
+            # Already reconciled and still clean — skip.
+            continue
         else:
             # Auto-accept: write resolution into file and append to plan reconciliation table.
             run([
@@ -313,8 +325,10 @@ def build_parser() -> argparse.ArgumentParser:
     checkpoint_parser.add_argument("--large-structural", action="store_true")
     checkpoint_parser.add_argument("--performance-sensitive", action="store_true")
     checkpoint_parser.add_argument("--use-existing-artifact", action="store_true")
+    checkpoint_parser.add_argument("--auto-context", action="store_true",
+                                   help="Enable automatic context file extraction. Defaults on for spec/tasks and off for plan/diff.")
     checkpoint_parser.add_argument("--no-auto-context", action="store_true",
-                                   help="Disable automatic context file extraction from the artifact")
+                                   help="Disable automatic context file extraction from the artifact. Defaults off for plan/diff.")
     checkpoint_parser.add_argument("--allow-dirty-path", action="append", default=[])
     checkpoint_parser.add_argument("--max-artifact-chars", type=int, default=50000)
     checkpoint_parser.add_argument("--max-context-chars", type=int, default=60000)
@@ -346,7 +360,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     auto_reconcile_parser = subparsers.add_parser(
         "auto-reconcile",
-        help="Auto-accept reviews with no HIGH or MEDIUM findings; list remaining ones for human review",
+        help="Auto-accept reviews with no HIGH, MEDIUM, LOW, or CRITICAL findings; list remaining ones for human review",
     )
     auto_reconcile_parser.add_argument("--slug", required=True)
     auto_reconcile_parser.add_argument(

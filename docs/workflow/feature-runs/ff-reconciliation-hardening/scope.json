@@ -1,0 +1,15 @@
+{
+  "paths": [
+    "docs/workflow/operations/codex-skills/feature-factory/SKILL.md",
+    "docs/workflow/operations/codex-skills/feature-factory/scripts",
+    "docs/workflow/operations/codex-skills/review-lens/scripts",
+    "docs/workflow/operations/codex-skills/review-lens/test_verify_reconciliation.py"
+  ],
+  "allowed_dirty_paths": [
+    "docs/workflow/feature-runs/ff-reconciliation-hardening",
+    "docs/workflow/operations/codex-skills/feature-factory/SKILL.md",
+    "docs/workflow/operations/codex-skills/feature-factory/scripts",
+    "docs/workflow/operations/codex-skills/review-lens/scripts",
+    "docs/workflow/operations/codex-skills/review-lens/test_verify_reconciliation.py"
+  ]
+}

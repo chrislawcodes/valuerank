@@ -1,0 +1,57 @@
+{
+  "session_id": "bd569ea0-876c-411b-8727-108a193f65c3",
+  "response": "## Findings\n\n### CRITICAL: Potential Regression in Artifact Hashing May Cause Infinite Loops\n**Severity: CRITICAL**\n\nThe update significantly changes how artifact hashes are calculated, in a way that is likely to reintroduce a severe bug.\n\nIn `docs/workflow/operations/codex-skills/review-lens/scripts/workflow_utils.py`, the `normalized_artifact_text` function is modified to only strip the `## Review Reconciliation` section for the `plan` stage. Previously, this section was stripped for all artifact stages (`spec`, `plan`, `tasks`, `closeout`).\n\nThe original code included a comment explaining that this was critical for all stages to prevent an infinite loop, where reconciling a review would modify the artifact, thereby invalidating the review itself.\n\nBy restricting this logic to `plan`-only, the same infinite loop is now likely to occur for `spec`, `tasks`, and `closeout` artifacts. Any automated or manual reconciliation recorded in these files will change their hash and mark all existing reviews as stale, preventing the review process from ever completing. While the tests in `test_workflow_utils.py` were updated to reflect this new behavior, it appears to be a regression to a previously fixed critical issue.\n\n**Files:**\n- `docs/workflow/operations/codex-skills/review-lens/scripts/workflow_utils.py`\n- `docs/workflow/operations/codex-skills/feature-factory/scripts/tests/test_workflow_utils.py`\n\n### LOW: Misleading Conditional Logic for Auto-Context\n**Severity: LOW**\n\nIn `docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py`, the condition to activate automatic context extraction is `if args.stage in (\"spec\", \"plan\") and auto_context_enabled:`.\n\nThis is confusing because the documentation (`SKILL.md`) and the implementation of `_effective_auto_context` explicitly state that auto-context is disabled by default for the `plan` stage. While the code works correctly because `auto_context_enabled` will be `False` for `plan` by default, the conditional `args.stage in (\"spec\", \"plan\")` incorrectly implies that `plan` is a standard case for auto-context.\n\nThis makes the code harder to understand and maintain. A clearer implementation would be `if auto_context_enabled:`, making `_effective_auto_context` the single source of truth for the logic.\n\n**File:**\n- `docs/workflow/operations/codex-skills/feature-factory/scripts/factory_cmd_checkpoint.py`\n\n## Residual Risks\n\n### MEDIUM: Incomplete Migration to New Hashing Logic\n**Severity: MEDIUM [UNVERIFIED]**\n\nThe change introduces a new compatibility function, `artifact_hash_matches`, to allow old reviews using a full `plan.md` hash to be considered valid once. This is a complex change. It's possible that other parts of the codebase consume the `artifact_sha256` value from review frontmatter without using this new compatibility function. Any such un-updated tool would incorrectly flag valid legacy reviews for the `plan` stage as stale, potentially disrupting workflows. As the full codebase is not available for review, this remains an unverified risk.\n\n### LOW: Finding Detection Regex May Be Brittle\n**Severity: LOW**\n\nThe new `_strip_non_finding_markdown` function in `factory_review_specs.py` is a significant improvement for preventing false positives in finding detection. However, it relies on regular expressions to strip Markdown syntax, not a full parser. Obscure or complex Markdown, such as reference-style link definitions (`[ref]: - HIGH: issue`), might not be correctly stripped, leading to either false positives or negatives. This represents a low-level risk that the finding detection heuristic could be bypassed.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 49807
+        },
+        "tokens": {
+          "input": 24337,
+          "prompt": 24337,
+          "candidates": 829,
+          "total": 29995,
+          "cached": 0,
+          "thoughts": 4829,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 49807,
+            "tokens": {
+              "input": 24337,
+              "prompt": 24337,
+              "candidates": 829,
+              "total": 29995,
+              "cached": 0,
+              "thoughts": 4829,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

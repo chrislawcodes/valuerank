@@ -19,12 +19,7 @@ WORKFLOW_UTILS_SPEC.loader.exec_module(WORKFLOW_UTILS)
 
 
 class NormalizedArtifactTextTests(unittest.TestCase):
-    """The Review Reconciliation section is orchestrator-added metadata. Its
-    content must not participate in artifact hashes — otherwise every
-    reconciliation edit invalidates the reviews and creates an infinite loop.
-    Regression tests cover every stage that authors can add a reconciliation
-    section to.
-    """
+    """Plan reconciliation is metadata and should not stale plan reviews."""
 
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
@@ -64,17 +59,14 @@ class NormalizedArtifactTextTests(unittest.TestCase):
     def test_plan_reconciliation_stripped(self) -> None:
         self._assert_reconciliation_stripped("plan")
 
-    def test_spec_reconciliation_stripped(self) -> None:
-        """Regression: prior implementation only stripped Reconciliation for
-        the plan stage, which caused spec adversarial reviews to be marked
-        stale every time the orchestrator recorded a reconciliation."""
-        self._assert_reconciliation_stripped("spec")
-
-    def test_tasks_reconciliation_stripped(self) -> None:
-        self._assert_reconciliation_stripped("tasks")
-
-    def test_closeout_reconciliation_stripped(self) -> None:
-        self._assert_reconciliation_stripped("closeout")
+    def test_non_plan_reconciliation_not_stripped(self) -> None:
+        body = "# Spec\n\nBody.\n\n## Review Reconciliation\n\n- review: a\n"
+        path = self._write("spec.md", body)
+        import hashlib
+        self.assertEqual(
+            WORKFLOW_UTILS.normalized_artifact_hash("spec", path),
+            hashlib.sha256(body.encode("utf-8")).hexdigest(),
+        )
 
     def test_body_without_reconciliation_unchanged(self) -> None:
         body = "# Artifact\n\nNo reconciliation section here.\n"
@@ -97,12 +89,65 @@ class NormalizedArtifactTextTests(unittest.TestCase):
         body_b = "# Artifact\n\nBody B.\n\n## Review Reconciliation\n\n- review: a\n"
         path_a = self._write("a.md", body_a)
         path_b = self._write("b.md", body_b)
-        for stage in ("spec", "plan", "tasks", "closeout"):
+        for stage in ("plan",):
             self.assertNotEqual(
                 WORKFLOW_UTILS.normalized_artifact_hash(stage, path_a),
                 WORKFLOW_UTILS.normalized_artifact_hash(stage, path_b),
                 f"stage={stage}: substantive body differences must change hash",
             )
+
+    def test_duplicate_reconciliation_heading_falls_back_to_full_hash(self) -> None:
+        body = "# Plan\n\nBody.\n\n## Review Reconciliation\n\nA\n\n## Review Reconciliation\n\nB\n"
+        path = self._write("dup.md", body)
+        import hashlib
+        self.assertEqual(
+            WORKFLOW_UTILS.normalized_artifact_hash("plan", path),
+            hashlib.sha256(body.encode("utf-8")).hexdigest(),
+        )
+
+    def test_heading_spacing_is_allowed(self) -> None:
+        body_without = "# Plan\n\nBody.\n\n## Next\n\nMore.\n"
+        path = self._write(
+            "spaced.md",
+            "# Plan\n\nBody.\n\n##   Review Reconciliation   \n\n- review: a\n\n## Next\n\nMore.\n",
+        )
+        self.assertEqual(
+            WORKFLOW_UTILS.normalized_artifact_hash("plan", self._write("plain2.md", body_without)),
+            WORKFLOW_UTILS.normalized_artifact_hash("plan", path),
+        )
+
+    def test_plan_artifact_hash_matches_current_normalized_hash(self) -> None:
+        path = self._write(
+            "plan-current.md",
+            "# Plan\n\nBody.\n\n## Review Reconciliation\n\n- review: a\n",
+        )
+        data = {
+            "artifact_sha256": WORKFLOW_UTILS.normalized_artifact_hash("plan", path),
+            "narrowed_artifact_sha256": "",
+        }
+        self.assertTrue(WORKFLOW_UTILS.artifact_hash_matches("plan", path, data))
+
+    def test_plan_artifact_hash_matches_legacy_full_hash_without_narrowed_hash(self) -> None:
+        path = self._write(
+            "plan-legacy.md",
+            "# Plan\n\nBody.\n\n## Review Reconciliation\n\n- review: a\n",
+        )
+        data = {
+            "artifact_sha256": WORKFLOW_UTILS.full_artifact_hash(path),
+            "narrowed_artifact_sha256": "",
+        }
+        self.assertTrue(WORKFLOW_UTILS.artifact_hash_matches("plan", path, data))
+
+    def test_plan_artifact_hash_rejects_legacy_full_hash_after_narrowed_hash_exists(self) -> None:
+        path = self._write(
+            "plan-new.md",
+            "# Plan\n\nBody.\n\n## Review Reconciliation\n\n- review: a\n",
+        )
+        data = {
+            "artifact_sha256": WORKFLOW_UTILS.full_artifact_hash(path),
+            "narrowed_artifact_sha256": "present",
+        }
+        self.assertFalse(WORKFLOW_UTILS.artifact_hash_matches("plan", path, data))
 
 
 if __name__ == "__main__":
