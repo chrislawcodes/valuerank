@@ -107,7 +107,7 @@ export function PressureGrid({ pair }: Props) {
             <tr>
               <th className="px-2 py-1 text-[11px] text-gray-500" />
               {LEVELS.map((opp) => (
-                <th key={opp} className="px-3 py-1 text-[11px] text-gray-500">
+                <th key={opp} scope="col" className="px-3 py-1 text-[11px] text-gray-500">
                   Opp {opp}
                 </th>
               ))}
@@ -116,7 +116,7 @@ export function PressureGrid({ pair }: Props) {
           <tbody>
             {LEVELS.map((own) => (
               <tr key={own}>
-                <th className="px-2 py-1 text-[11px] text-gray-500">Own {own}</th>
+                <th scope="row" className="px-2 py-1 text-[11px] text-gray-500">Own {own}</th>
                 {LEVELS.map((opp) => {
                   const cell = cellLookup.get(`${own}::${opp}`);
                   if (cell == null) {
@@ -136,7 +136,6 @@ export function PressureGrid({ pair }: Props) {
                       style={{ backgroundColor: colorFor(metric, cell) }}
                       onMouseEnter={() => setHoveredCell(cell)}
                       onMouseLeave={() => setHoveredCell((cur) => (cur === cell ? null : cur))}
-                      title={`Own ${cell.ownLevel} × Opp ${cell.opponentLevel}\nN=${cell.n}${cell.unscoredCount > 0 ? ` (+${cell.unscoredCount} unscored)` : ''}\nwin=${cell.winRate?.toFixed(2) ?? '—'}\nconviction=${cell.conviction?.toFixed(2) ?? '—'}\nnetScore=${cell.netScore?.toFixed(2) ?? '—'}`}
                     >
                       {formatCellLabel(metric, cell)}
                     </td>

@@ -16,6 +16,11 @@ import {
 } from '../api/operations/pressureSensitivity';
 import { PressureSensitivitySummary } from '../components/models/PressureSensitivitySummary';
 import { PressureSensitivityDetail } from '../components/models/PressureSensitivityDetail';
+import { PressureSensitivityCrossValueMap } from '../components/models/PressureSensitivityCrossValueMap';
+import { PressureSensitivitySanityCheck } from '../components/models/PressureSensitivitySanityCheck';
+import { PressureSensitivityLimitations } from '../components/models/PressureSensitivityLimitations';
+import { PressureSensitivityFilters } from '../components/models/PressureSensitivityFilters';
+import { formatSignatureOptionLabel } from '../utils/domainAnalysisUtils';
 
 const DEFAULT_SIGNATURE = 'vnewtd';
 
@@ -29,9 +34,7 @@ export function PressureSensitivity() {
   const signatureParam = searchParams.get('signature');
   const hasDomainParam = domainParam != null;
   const domainFilter = domainParam === 'all' ? null : domainParam;
-  // setProviderId is wired in Slice D (Filters component); declared here so the query
-  // already accepts the variable.
-  const [providerId] = useState<string | null>(null);
+  const [providerId, setProviderId] = useState<string | null>(null);
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
 
   const defaultDomainId = domains[0]?.id ?? null;
@@ -127,6 +130,36 @@ export function PressureSensitivity() {
   const emptyState = models.length === 0 && insufficient.length === 0;
   const allInsufficient = models.length === 0 && insufficient.length > 0;
 
+  const domainOptions = useMemo(() => domains.map((d) => ({ value: d.id, label: d.name })), [domains]);
+  const signatureOptions = useMemo(
+    () => availableSignatures.map((option) => ({ value: option.signature, label: formatSignatureOptionLabel(option) })),
+    [availableSignatures],
+  );
+  const providerOptions = useMemo(() => {
+    const unique = new Map<string, string>();
+    for (const m of models) unique.set(m.providerName, m.providerName);
+    for (const i of insufficient) unique.set(i.providerName, i.providerName);
+    return [...unique.values()].map((value) => ({ value, label: value }));
+  }, [models, insufficient]);
+
+  const handleDomainChange = (value: string | null) => {
+    const next = new URLSearchParams(searchParams);
+    if (value == null) {
+      next.set('domainId', 'all');
+      next.set('signature', signatureParam ?? selectedSignature);
+    } else {
+      next.set('domainId', value);
+      next.delete('signature');
+    }
+    setSearchParams(next, { replace: true });
+  };
+
+  const handleSignatureChange = (value: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set('signature', value);
+    setSearchParams(next, { replace: true });
+  };
+
   if (domainsError != null || error != null) {
     return (
       <ErrorMessage
@@ -157,10 +190,17 @@ export function PressureSensitivity() {
         </p>
       </div>
 
-      {/* Filters placeholder — populated in Slice D */}
-      <div className="rounded-md border border-dashed border-gray-300 bg-gray-50 p-3 text-xs text-gray-500">
-        Filters (Slice D): Domain, Provider — currently using URL params (domainId={String(urlDomainId)}, signature={selectedSignature})
-      </div>
+      <PressureSensitivityFilters
+        domainId={urlDomainId}
+        providerId={providerId}
+        signature={selectedSignature}
+        domainOptions={domainOptions}
+        providerOptions={providerOptions}
+        signatureOptions={signatureOptions}
+        onDomainChange={handleDomainChange}
+        onProviderChange={setProviderId}
+        onSignatureChange={handleSignatureChange}
+      />
 
       {emptyState ? (
         <section className="rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-600">
@@ -190,26 +230,11 @@ export function PressureSensitivity() {
 
           {selectedModel && <PressureSensitivityDetail model={selectedModel} />}
 
-          {/* Cross-value heat map — populated in Slice D */}
-          <section className="rounded-md border border-dashed border-gray-300 bg-gray-50 p-3 text-xs text-gray-500">
-            Cross-value heat map (Slice D)
-          </section>
+          <PressureSensitivityCrossValueMap models={models} />
 
-          {/* Directional sanity check — populated in Slice D */}
-          {directionalSanityCheck && (
-            <section className="rounded-md border border-dashed border-gray-300 bg-gray-50 p-3 text-xs text-gray-500">
-              Directional sanity check (Slice D): {directionalSanityCheck.measuredCount} measured;{' '}
-              {directionalSanityCheck.positivePct.toFixed(0)}% positive,{' '}
-              {directionalSanityCheck.flatPct.toFixed(0)}% flat,{' '}
-              {directionalSanityCheck.negativePct.toFixed(0)}% negative;{' '}
-              {directionalSanityCheck.unmeasurableCount} unmeasurable.
-            </section>
-          )}
+          {directionalSanityCheck && <PressureSensitivitySanityCheck data={directionalSanityCheck} />}
 
-          {/* Limitations — populated in Slice D */}
-          <section className="rounded-md border border-dashed border-gray-300 bg-gray-50 p-3 text-xs text-gray-500">
-            Limitations panel (Slice D)
-          </section>
+          <PressureSensitivityLimitations />
         </>
       )}
 

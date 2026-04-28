@@ -39,19 +39,33 @@ function CeilingFloorBadge({ flag }: { flag: string | null | undefined }) {
   return null;
 }
 
-function tooltipFor(label: string, lowMean: number | null | undefined, highMean: number | null | undefined): string {
-  return `${label}: high band mean ${formatPercent(highMean)} − low band mean ${formatPercent(lowMean)}`;
+function formatNumber(value: number | null | undefined, fractionDigits: number): string {
+  if (value == null) return '—';
+  return value.toFixed(fractionDigits);
+}
+
+function tooltipForDirection(lowMean: number | null | undefined, highMean: number | null | undefined): string {
+  return `Direction: high band mean ${formatPercent(highMean)} − low band mean ${formatPercent(lowMean)}`;
+}
+
+function tooltipForConviction(lowMean: number | null | undefined, highMean: number | null | undefined): string {
+  return `Conviction (1=lean, 2=strong): high band mean ${formatNumber(highMean, 2)} − low band mean ${formatNumber(lowMean, 2)}`;
+}
+
+function tooltipForNetScore(lowMean: number | null | undefined, highMean: number | null | undefined): string {
+  return `netScore (−2..+2): high band mean ${formatNumber(highMean, 2)} − low band mean ${formatNumber(lowMean, 2)}`;
 }
 
 export function PressureSensitivityDetail({ model }: Props) {
   const [selectedPairKey, setSelectedPairKey] = useState<string | null>(null);
 
   const sortedPairs = useMemo(() => {
-    return [...model.valuePairs].sort((a, b) => {
-      const av = a.netScoreDelta.value ?? -Infinity;
-      const bv = b.netScoreDelta.value ?? -Infinity;
-      return Math.abs(bv) - Math.abs(av);
-    });
+    // Defined Δ pairs first (descending |Δ|), then null Δ pairs (alphabetical by pair).
+    const measured = model.valuePairs.filter((p) => p.netScoreDelta.value != null);
+    const unmeasured = model.valuePairs.filter((p) => p.netScoreDelta.value == null);
+    measured.sort((a, b) => Math.abs(b.netScoreDelta.value!) - Math.abs(a.netScoreDelta.value!));
+    unmeasured.sort((a, b) => a.pairKey.localeCompare(b.pairKey));
+    return [...measured, ...unmeasured];
   }, [model.valuePairs]);
 
   const selectedPair: PressureSensitivityValuePair | null = useMemo(() => {
@@ -114,19 +128,19 @@ export function PressureSensitivityDetail({ model }: Props) {
                 </TableCell>
                 <TableCell
                   className="text-sm font-mono"
-                  title={tooltipFor('Direction Δ', pair.directionDelta.lowBandMean, pair.directionDelta.highBandMean)}
+                  title={tooltipForDirection(pair.directionDelta.lowBandMean, pair.directionDelta.highBandMean)}
                 >
                   {formatDelta(pair.directionDelta.value)}
                 </TableCell>
                 <TableCell
                   className="text-sm font-mono"
-                  title={tooltipFor('Conviction Δ', pair.convictionDelta.lowBandMean, pair.convictionDelta.highBandMean)}
+                  title={tooltipForConviction(pair.convictionDelta.lowBandMean, pair.convictionDelta.highBandMean)}
                 >
                   {formatDelta(pair.convictionDelta.value)}
                 </TableCell>
                 <TableCell
                   className="text-sm font-mono"
-                  title={tooltipFor('netScore Δ', pair.netScoreDelta.lowBandMean, pair.netScoreDelta.highBandMean)}
+                  title={tooltipForNetScore(pair.netScoreDelta.lowBandMean, pair.netScoreDelta.highBandMean)}
                 >
                   {formatDelta(pair.netScoreDelta.value)}
                 </TableCell>
