@@ -58,8 +58,13 @@ type TranscriptRow = {
   runId: string;
   scenarioId: string | null;
   decisionMetadata: unknown;
-  definitionSnapshot: unknown;
-  scenario: { content: unknown; orientationFlipped: boolean } | null;
+};
+
+type ScenarioRow = {
+  id: string;
+  definitionId: string;
+  content: unknown;
+  orientationFlipped: boolean;
 };
 
 type DefinitionMetadata = {
@@ -262,46 +267,85 @@ builder.queryField('pressureSensitivity', (t) =>
       const rosterModelIds = models.map((m) => m.modelId);
       let excludedScenariosCount = 0;
 
-      // Defensive cap: pressure-sensitivity reads raw transcripts (no pooling per FR-022)
-      // bounded by signature-filtered Aggregate-tagged runs' source runs. At current scale
-      // (~270 definitions × ~8 models × few transcripts each) the volume is comfortable,
-      // but the cap prevents an unrelated runaway dataset from OOMing the API. Adjust
-      // upward intentionally if real coverage grows past this threshold.
-      const TRANSCRIPT_FETCH_LIMIT = 200_000;
-      const transcripts = sourceRunIds.length === 0 || rosterModelIds.length === 0
+      // Pre-fetch the scenarios for eligible Definitions ONCE into a map. Each scenario's
+      // content + orientationFlipped is the same across thousands of transcripts, so joining
+      // on transcript blew up the response payload past Prisma's napi String limit. With ~89
+      // definitions × 25 scenarios = ~2225 unique scenarios per domain, this is bounded.
+      const eligibleDefIds = [...definitionMeta.keys()];
+      const scenarioRows = eligibleDefIds.length === 0
         ? []
-        : ((await db.transcript.findMany({
-          where: {
-            runId: { in: sourceRunIds },
-            modelId: { in: rosterModelIds },
-            deletedAt: null,
-          },
-          select: {
-            id: true,
-            modelId: true,
-            runId: true,
-            scenarioId: true,
-            decisionMetadata: true,
-            definitionSnapshot: true,
-            scenario: { select: { content: true, orientationFlipped: true } },
-          },
-          take: TRANSCRIPT_FETCH_LIMIT,
-        })) as TranscriptRow[]);
+        : ((await db.scenario.findMany({
+          where: { definitionId: { in: eligibleDefIds }, deletedAt: null },
+          select: { id: true, definitionId: true, content: true, orientationFlipped: true },
+        })) as ScenarioRow[]);
+      const scenarioById = new Map<string, ScenarioRow>();
+      for (const s of scenarioRows) scenarioById.set(s.id, s);
+
+      // Defensive cap on per-page fetch + paginate via cursor so a domain with hundreds of
+      // thousands of transcripts stays under napi's String conversion limit (~1 GB). The
+      // production smoke test on PR #772 hit this with one big findMany — paginating in
+      // 5,000-row pages keeps each page response under ~25 MB.
+      const TRANSCRIPT_PAGE_SIZE = 5_000;
+      const TRANSCRIPT_FETCH_LIMIT = 500_000;
+      const transcripts: TranscriptRow[] = [];
+      if (sourceRunIds.length > 0 && rosterModelIds.length > 0) {
+        let cursor: { id: string } | undefined = undefined;
+        while (transcripts.length < TRANSCRIPT_FETCH_LIMIT) {
+          const page = (await db.transcript.findMany({
+            where: {
+              runId: { in: sourceRunIds },
+              modelId: { in: rosterModelIds },
+              deletedAt: null,
+            },
+            select: {
+              id: true,
+              modelId: true,
+              runId: true,
+              scenarioId: true,
+              // decisionMetadata holds the LLM response and parser evidence; resolveTranscriptDecisionModel
+              // needs it. definitionSnapshot is intentionally OMITTED — we pass a synthetic snapshot
+              // built from the eligible Definition's resolvedContent below.
+              decisionMetadata: true,
+            },
+            orderBy: { id: 'asc' },
+            take: TRANSCRIPT_PAGE_SIZE,
+            ...(cursor ? { skip: 1, cursor } : {}),
+          })) as TranscriptRow[];
+          if (page.length === 0) break;
+          for (const row of page) transcripts.push(row);
+          if (page.length < TRANSCRIPT_PAGE_SIZE) break;
+          cursor = { id: page[page.length - 1]!.id };
+        }
+      }
 
       // 6-8. Bucket transcripts via the sourceRun → definitionId map built above.
       const perModel = new Map<string, Map<string, PairAccumulator>>();
       for (const m of models) perModel.set(m.modelId, new Map());
+
+      // Cache synthetic snapshots per definition so we don't rebuild for every transcript.
+      // The snapshot only needs `components` for `extractValueStatementsFromSnapshot`; the
+      // other extractors (template/labelPrefix) tolerate missing fields by returning undefined.
+      const syntheticSnapshotByDefId = new Map<string, { components: { value_first: { token: string; body: string }; value_second: { token: string; body: string } } }>();
+      for (const [defId, meta] of definitionMeta) {
+        syntheticSnapshotByDefId.set(defId, {
+          components: {
+            value_first: { token: meta.valueFirstToken, body: '' },
+            value_second: { token: meta.valueSecondToken, body: '' },
+          },
+        });
+      }
 
       for (const tx of transcripts) {
         const defId = sourceRunToDefId.get(tx.runId);
         if (defId == null) continue;
         const meta = definitionMeta.get(defId);
         if (!meta) continue;
+        const scenario = tx.scenarioId != null ? scenarioById.get(tx.scenarioId) ?? null : null;
 
         const decision = resolveTranscriptDecisionModel({
           decisionMetadata: tx.decisionMetadata,
-          definitionSnapshot: tx.definitionSnapshot,
-          orientationFlipped: tx.scenario?.orientationFlipped ?? null,
+          definitionSnapshot: syntheticSnapshotByDefId.get(defId),
+          orientationFlipped: scenario?.orientationFlipped ?? null,
         });
         const direction = decision.canonical.direction as CanonicalDirection;
 
@@ -326,8 +370,8 @@ builder.queryField('pressureSensitivity', (t) =>
           continue;
         }
 
-        if (tx.scenario == null) continue;
-        const normalized = normalizeScenarioAnalysisMetadata(tx.scenario.content);
+        if (scenario == null) continue;
+        const normalized = normalizeScenarioAnalysisMetadata(scenario.content);
         if (normalized === null) {
           excludedScenariosCount += 1;
           continue;
