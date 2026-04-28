@@ -1,0 +1,57 @@
+{
+  "feature_slug": "pressure-sensitivity-report",
+  "stage": "spec",
+  "artifact_path": "docs/workflow/feature-runs/pressure-sensitivity-report/spec.md",
+  "git_base_ref": "",
+  "allowed_dirty_paths": [],
+  "required_reviews": [
+    {
+      "reviewer": "codex",
+      "lens": "feasibility-adversarial",
+      "stage": "spec",
+      "path": "docs/workflow/feature-runs/pressure-sensitivity-report/reviews/spec.codex.feasibility-adversarial.review.md",
+      "context_paths": [
+        "cloud/apps/api/src/graphql/queries/scenarios-utils.ts",
+        "cloud/apps/api/src/services/analysis/scenario-metadata.ts",
+        "cloud/apps/api/src/services/analysis/aggregate/aggregate-helpers.ts",
+        "cloud/apps/api/src/graphql/queries/models-consistency.ts",
+        "cloud/apps/web/src/utils/canonicalConditionSummary.ts",
+        "cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx"
+      ],
+      "model": "gpt-5.4-mini"
+    },
+    {
+      "reviewer": "codex",
+      "lens": "edge-cases-adversarial",
+      "stage": "spec",
+      "path": "docs/workflow/feature-runs/pressure-sensitivity-report/reviews/spec.codex.edge-cases-adversarial.review.md",
+      "context_paths": [
+        "cloud/apps/api/src/graphql/queries/scenarios-utils.ts",
+        "cloud/apps/api/src/services/analysis/scenario-metadata.ts",
+        "cloud/apps/api/src/services/analysis/aggregate/aggregate-helpers.ts",
+        "cloud/apps/api/src/graphql/queries/models-consistency.ts",
+        "cloud/apps/web/src/utils/canonicalConditionSummary.ts",
+        "cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx"
+      ],
+      "model": "gpt-5.4-mini"
+    },
+    {
+      "reviewer": "gemini",
+      "lens": "requirements-adversarial",
+      "stage": "spec",
+      "path": "docs/workflow/feature-runs/pressure-sensitivity-report/reviews/spec.gemini.requirements-adversarial.review.md",
+      "context_paths": [
+        "cloud/apps/api/src/graphql/queries/scenarios-utils.ts",
+        "cloud/apps/api/src/services/analysis/scenario-metadata.ts",
+        "cloud/apps/api/src/services/analysis/aggregate/aggregate-helpers.ts",
+        "cloud/apps/api/src/graphql/queries/models-consistency.ts",
+        "cloud/apps/web/src/utils/canonicalConditionSummary.ts",
+        "cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx"
+      ],
+      "model": "gemini-2.5-pro"
+    }
+  ],
+  "max_artifact_chars": 50000,
+  "max_context_chars": 60000,
+  "max_total_chars": 250000
+}

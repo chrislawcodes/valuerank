@@ -1,3 +1,7 @@
+
+> @valuerank/api@0.1.0 emit-schema
+> LOG_LEVEL=silent DATABASE_URL=postgresql://x:***@localhost/x JWT_SECRET=placeholder-for-schema-emit-xxxxxxxxx npx tsx src/scripts/emit-schema.ts
+
 """Actual cost summary for a completed run"""
 type ActualCost {
   """Per-model actual cost breakdown"""
@@ -42,6 +46,12 @@ type AggregateMetadata {
   perModelRepeatCoverage: JSON!
   sourceRunCount: Int!
   sourceRunIds: [String!]!
+}
+
+type AggregateSensitivity {
+  value: Float
+  valuePairsExcluded: Int!
+  valuePairsMeasured: Int!
 }
 
 type AnalysisFolderCounts {
@@ -243,6 +253,17 @@ type AvailableSignature {
   signature: String!
 }
 
+type BandStat {
+  highBandMean: Float
+  lowBandMean: Float
+  value: Float
+}
+
+type BaselineWinRate {
+  ceilingFloorFlag: String
+  value: Float
+}
+
 """Progress breakdown for a specific model"""
 type ByModelProgress {
   completed: Int!
@@ -374,7 +395,7 @@ type ConsistencyPerCondition {
   netPressureRank: Int!
   scenarioId: String!
   trials: Int!
-  winRate: Float!
+  winRate: Float
 }
 
 type ConsistencyPerDomain {
@@ -737,6 +758,22 @@ type DeprecateModelResult {
 
   """The new default model (if previous default was deprecated)"""
   newDefault: LlmModel
+}
+
+type DirectionalSanityCheck {
+  breakdown: [DirectionalSanityCheckEntry!]!
+  flatPct: Float!
+  measuredCount: Int!
+  negativePct: Float!
+  positivePct: Float!
+  unmeasurableCount: Int!
+}
+
+type DirectionalSanityCheckEntry {
+  classification: String!
+  directionDelta: Float!
+  modelId: String!
+  pairKey: String!
 }
 
 """A single domain used to group vignettes"""
@@ -1175,7 +1212,16 @@ type DirectionalCoverage {
 }
 
 type DomainValueCoverageCell {
+  """
+  Count of complete A-first runs for this value pair after model-set filtering. This is the filtered directional count for the first value in the pair.
+  """
+  aFirstBatchCount: Int!
   aggregateRunId: String
+
+  """
+  Count of complete B-first runs for this value pair after model-set filtering. This is the filtered directional count for the second value in the pair.
+  """
+  bFirstBatchCount: Int!
 
   """
   Count of fully-complete non-aggregate runs for this value pair. A run is complete when every selected model has at least one transcript at every (scenario × sampleIndex) slot. samplesPerScenario does not multiply this count -- a complete run contributes 1 regardless of how many samples per scenario were planned. Aggregate runs are excluded.
@@ -1200,7 +1246,12 @@ type DomainValueCoverageCell {
   bFirstBatchCount: Int!
 
   """
-  Count of paired-batch groups where the surviving (complete) companion run is fully complete. When both companions are complete, the pair counts as 1. When only one is complete, that one is the survivor and the pair counts as 1. When both are incomplete, the pair counts as 0 here (and as 1 toward incompleteBatchCount).
+  Count of unmatched directional runs for this value pair, computed as max(complete A-first runs, complete B-first runs) - min(complete A-first runs, complete B-first runs). When both directions are equal this is 0; when only one direction has runs this is the count of that side. Runs without a recognizable direction token are excluded.
+  """
+  orphanedBatchCount: Int!
+
+  """
+  Count of pairable analysis-ready batches for this value pair, computed as min(complete A-first non-aggregate runs, complete B-first non-aggregate runs) where direction is read from config.jobChoiceValueFirst. A launch where only one direction completed contributes 0 here (the surviving complete run still appears in batchCount). Runs without a recognizable direction token are excluded from both sides. See docs/canonical-glossary.md "Paired Batch" for full semantic.
   """
   pairedBatchCount: Int!
   valueA: String!
@@ -1224,6 +1275,12 @@ type EnsureDomainVignettePairResult {
   definitionAId: String
   definitionBId: String
   status: VignettePairStatus!
+}
+
+type ExcludedDefinition {
+  definitionId: String!
+  name: String!
+  reason: String!
 }
 
 """Real-time execution metrics for monitoring parallel processing"""
@@ -1356,6 +1413,13 @@ input ForkDefinitionInput {
 }
 
 type InsufficientModel {
+  label: String!
+  modelId: String!
+  providerName: String!
+  reason: String!
+}
+
+type InsufficientPressureSensitivityModel {
   label: String!
   modelId: String!
   providerName: String!
@@ -1971,6 +2035,38 @@ type PreferenceSummary {
   perModel: JSON!
 }
 
+type PressureSensitivityModel {
+  aggregateSensitivity: AggregateSensitivity!
+  label: String!
+  modelId: String!
+  providerName: String!
+  unscoredCount: Int!
+  valuePairs: [PressureSensitivityValuePair!]!
+}
+
+type PressureSensitivityResult {
+  directionalSanityCheck: DirectionalSanityCheck!
+  excludedDefinitions: [ExcludedDefinition!]!
+  excludedScenariosCount: Int!
+  insufficient: [InsufficientPressureSensitivityModel!]!
+  models: [PressureSensitivityModel!]!
+}
+
+type PressureSensitivityValuePair {
+  baselineWinRate: BaselineWinRate!
+  convictionDelta: BandStat!
+  definitionsExcluded: Int!
+  definitionsMeasured: Int!
+  directionDelta: BandStat!
+  grid: [SensitivityCell!]!
+  n: Int!
+  netScoreDelta: BandStat!
+  opponentToken: String!
+  ownToken: String!
+  pairKey: String!
+  unscoredCount: Int!
+}
+
 """Result of a probe job execution"""
 type ProbeResult {
   completedAt: DateTime
@@ -2439,6 +2535,7 @@ type Query {
 
   """List all preambles"""
   preambles: [Preamble!]!
+  pressureSensitivity(domainId: ID, providerId: ID, signature: String!): PressureSensitivityResult!
 
   "\n      Get health status for all LLM providers.\n\n      Checks connectivity to each provider's API.\n      Results are cached for 5 minutes.\n\n      Use the `refresh` argument to force a fresh check.\n    "
   providerHealth(
@@ -2999,6 +3096,17 @@ type Scenario {
   definitionId: String!
   id: ID!
   name: String!
+}
+
+type SensitivityCell {
+  conviction: Float
+  lowData: Boolean!
+  n: Int!
+  netScore: Float
+  opponentLevel: Int!
+  ownLevel: Int!
+  unscoredCount: Int!
+  winRate: Float
 }
 
 """Result of setting a default model"""

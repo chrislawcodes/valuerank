@@ -1,0 +1,9 @@
+## Findings
+- HIGH: The spec assumes a reusable normalization pipeline will trim and numeric-normalize scenario-side dimension values before lookup, but the provided helpers do not do that. `normalizeScenarioAnalysisMetadata` only preserves raw string/number entries, and `getLevelNormalizationMap` does exact-string matching on labels. As written, values like `" moderate"` or `"01"` will miss their buckets unless new canonicalization code is added. [CODE-CONFIRMED]
+- MEDIUM: The spec mixes `transcripts`, `scenarios`, and pooled `vignettes` as counting units, but the existing Models UI already treats pooled observations as distinct vignettes, not raw runs. `ModelValueDetailDrawer.tsx` explicitly says repeated runs are pooled before counting. If this report counts raw transcripts for `N` or `unscored_count`, its denominators and coverage badges will disagree with existing Models-tab semantics. [CODE-CONFIRMED]
+- LOW: FR-018 and FR-024 define incompatible exclusion taxonomies. FR-018 presents a closed mutually exclusive list `(a-f)`, then FR-024 adds a new reason `(g)` for missing value-pair tokens. That leaves the excluded-footer accounting model ambiguous unless the spec is revised to make the reason set truly canonical. [UNVERIFIED]
+- LOW: The spec does not say what to do if `value_first.token === value_second.token`. After canonical sorting, that collapses to a single token pair and makes own/opponent assignment ambiguous. This should be explicitly rejected or ruled out. [UNVERIFIED]
+
+## Residual Risks
+- I could not verify the final report data shape for per-cell `unscored_count`, per-definition exclusion reasons, or the exact storage of low-data markers because the pressure-sensitivity implementation is not provided.
+- The spec still leaves cross-vignette level calibration as an acknowledged limitation. Even if implemented correctly, cross-value comparisons remain only descriptive, not validated.

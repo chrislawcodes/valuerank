@@ -1,0 +1,13 @@
+{
+  "paths": [
+    "cloud/apps/api/src/graphql/queries/domain",
+    "cloud/apps/web/src/api/operations",
+    "cloud/apps/web/src/pages"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/api/src/graphql/queries/domain",
+    "cloud/apps/web/src/api/operations",
+    "cloud/apps/web/src/pages",
+    "docs/workflow/feature-runs/pressure-sensitivity-report"
+  ]
+}

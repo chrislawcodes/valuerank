@@ -32,7 +32,17 @@ function toRawDimensionRecord(value: unknown): Record<string, number | string> |
   return Object.keys(sanitized).length > 0 ? sanitized : null;
 }
 
-function toComparableNumber(value: number | string): number | null {
+/**
+ * Coerces a dimension value (string or number) to a canonical number for label normalization.
+ *
+ * Use only for scenario-dimension lookup and Definition-level label normalization (e.g. mapping
+ * "1.0" or " 1 " to the integer 1 when matching scenario dimension values to a Definition's
+ * `levels[]` map). Not a general-purpose number parser — semantics are intentionally narrow:
+ * trims, converts via `Number()`, and returns null for non-finite results or empty strings.
+ *
+ * Exported for the pressure-sensitivity report's `buildSafeLevelLookup` adapter (FR-002b).
+ */
+export function toComparableNumber(value: number | string): number | null {
   if (typeof value === 'number') {
     return Number.isFinite(value) ? value : null;
   }
