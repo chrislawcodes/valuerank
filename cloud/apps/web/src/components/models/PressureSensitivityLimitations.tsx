@@ -9,41 +9,26 @@ export function PressureSensitivityLimitations() {
       <h3 className="text-base font-semibold text-gray-900">What this report can and can&apos;t tell you</h3>
       <ul className="mt-3 space-y-2 text-sm text-gray-700">
         <li>
-          <strong className="font-medium text-gray-900">Pressure levels are not calibrated across vignettes.</strong>{' '}
-          &quot;Pressure level 4&quot; in one vignette may not be the same intensity as &quot;level 4&quot; in another.
-          Comparing sensitivity scores across different value pairs is suspect for that reason. Use the per-pair
-          grid (above) to read individual stories rather than ranking pairs against each other.
+          <strong className="font-medium text-gray-900">The 1-to-5 scale is consistent inside each pair, but the <em>story</em> differs across pairs.</strong>{' '}
+          Within one value pair, level 4 always means the same thing as level 4 in another vignette of that same pair: one step bigger than level 3, one step smaller than level 5. That&apos;s solid.
+          {' '}Across different pairs, the level number is the same but the surrounding situation isn&apos;t. We test &quot;Power vs Tradition&quot; inside a job-choice story (someone picking a career). We test &quot;Power vs Universalism&quot; inside a national-priorities story (a government picking a policy). Both vignettes use the same five labels. But level-4 pressure on a career choice is asking the model about a different kind of situation than level-4 pressure on national policy. Same number, different test.
+          {' '}So if Model A has |Δ| = 0.8 on a job-choice pair and Model B has |Δ| = 0.6 on a national-priorities pair, you can&apos;t say A is &quot;more sensitive&quot; than B without that asterisk. Compare rankings inside a domain; treat cross-domain comparisons as a hint, not a measurement.
         </li>
         <li>
-          <strong className="font-medium text-gray-900">Conviction is the model&apos;s self-report, not a calibrated confidence scale.</strong>{' '}
-          Sycophantic models can increase stated conviction without any change in their actual decision logic — this
-          report would surface that as a bigger Conviction Δ even though the underlying reasoning didn&apos;t change.
+          <strong className="font-medium text-gray-900">Pressure sensitivity is what this report measures, full stop.</strong>{' '}
+          A model that moves under pressure is moving — whether that&apos;s moral reasoning, sycophancy, instruction-following, or something else, we don&apos;t try to tell you. We just show the movement. Don&apos;t read sensitivity as virtue: responsive isn&apos;t automatically better than anchored, or vice versa.
         </li>
         <li>
-          <strong className="font-medium text-gray-900">Sycophancy and instruction-following can mimic sensitivity.</strong>{' '}
-          A model that mirrors prompt emphasis without reasoning about the values will look pressure-sensitive here.
-          We don&apos;t try to detect that; the directional sanity check is the closest thing to a control.
+          <strong className="font-medium text-gray-900">We only show numbers we trust, and we count what we drop.</strong>{' '}
+          Each cell of the grid needs at least 3 trials before we report a number — thin cells show as &quot;—&quot; or grey. A pair also needs at least one qualifying cell in each pressure band before we compute a Δ; otherwise the Δ is &quot;—&quot; too. Separately, vignettes that fail validation (missing tokens, scores outside 1–5, etc.) get dropped and counted in the footer. If that count is high, the rest of the report is reading thin data.
         </li>
         <li>
-          <strong className="font-medium text-gray-900">Cells with N &lt; 3 trials are excluded.</strong>{' '}
-          A pair&apos;s Δ values need at least one cell in each pressure band (own ≤ 2 and own ≥ 4) at N ≥ 3 — otherwise
-          they&apos;re reported as &quot;—&quot;. Coverage gaps are visible in the per-pair grid as dotted cells.
+          <strong className="font-medium text-gray-900">Each Δ is a 1D summary of a 2D pattern.</strong>{' '}
+          Direction / Conviction / netScore Δ each collapse the 5×5 grid (own × opponent pressure) into one number. That hides interesting patterns — like a model that becomes more firm specifically when opponent pressure is high. The 2D heat map below the table is where you can see the full picture.
         </li>
         <li>
-          <strong className="font-medium text-gray-900">Excluded vignettes are counted, not silenced.</strong>{' '}
-          Definitions that fail validation (collisions, out-of-range scores, missing levels, self-pairs, etc.)
-          appear in the coverage notes section so you can tell whether the report is reading thin data.
-        </li>
-        <li>
-          <strong className="font-medium text-gray-900">Banding averages across opponent pressure.</strong>{' '}
-          Direction / Conviction / netScore Δ collapse the 2D grid to a 1D summary by averaging within each band.
-          Models that become more (or less) firm specifically when opponent pressure is high won&apos;t show that pattern
-          in the Δ numbers — only in the per-pair 2D grid.
-        </li>
-        <li>
-          <strong className="font-medium text-gray-900">Aggregate sensitivity is unweighted by coverage.</strong>{' '}
-          A model measured on three highly elastic pairs can rank higher than a model measured on twelve
-          modestly elastic pairs. The pair count in the cross-model summary is the right correction for this.
+          <strong className="font-medium text-gray-900">How we weight things shapes the rankings.</strong>{' '}
+          Two weighting choices to keep in mind: (1) netScore weights strong picks twice as much as lean picks (the existing 2:1 convention), so a model that picks emphatically moves the netScore Δ more than one that hedges. (2) The aggregate sensitivity number is a plain mean across a model&apos;s pairs — it doesn&apos;t weight by trial count. A model with 3 elastic pairs can rank above a model with 12 modest pairs. The pair count next to each row tells you how thin the data is.
         </li>
       </ul>
     </section>
