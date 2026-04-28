@@ -86,8 +86,11 @@ export function AnomalyRow({ anomaly, tone, onViewTranscript }: AnomalyRowProps)
   const [isReprobing, setIsReprobing] = useState(false);
   const [isResolving, setIsResolving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const reprobeTimerRef = useRef<number | null>(null);
-  const resolveTimerRef = useRef<number | null>(null);
+  // Captures anomaly.reprobeCount at the moment a re-probe mutation fires. The
+  // "Re-probing…" UI clears when polling shows reprobeCount has incremented past
+  // this baseline — i.e. the backend has actually persisted the new attempt — so
+  // the row never re-enables prematurely on slow queues or throttled tabs.
+  const reprobeBaselineRef = useRef<number | null>(null);
   const isMountedRef = useRef(true);
 
   const [, reprobeAnomalySlot] = useMutation<
@@ -113,14 +116,23 @@ export function AnomalyRow({ anomaly, tone, onViewTranscript }: AnomalyRowProps)
   useEffect(() => {
     return () => {
       isMountedRef.current = false;
-      if (reprobeTimerRef.current != null) {
-        window.clearTimeout(reprobeTimerRef.current);
-      }
-      if (resolveTimerRef.current != null) {
-        window.clearTimeout(resolveTimerRef.current);
-      }
     };
   }, []);
+
+  // When the next poll lands and the backend's reprobeCount has incremented past
+  // the baseline captured at mutation time, clear the "Re-probing…" state. This
+  // keeps the row disabled until the server has actually persisted the new attempt
+  // (whereas a fixed timeout would re-enable the button even on backed-up queues).
+  useEffect(() => {
+    if (
+      isReprobing
+      && reprobeBaselineRef.current != null
+      && anomaly.reprobeCount > reprobeBaselineRef.current
+    ) {
+      setIsReprobing(false);
+      reprobeBaselineRef.current = null;
+    }
+  }, [anomaly.reprobeCount, isReprobing]);
 
   const handleOpenReprobeModal = () => {
     setErrorMessage(null);
@@ -130,6 +142,9 @@ export function AnomalyRow({ anomaly, tone, onViewTranscript }: AnomalyRowProps)
   const handleConfirmReprobe = async () => {
     setIsReprobeModalOpen(false);
     setErrorMessage(null);
+    // Capture the current count BEFORE firing the mutation so the post-poll effect
+    // can detect when the backend's count has incremented past this baseline.
+    reprobeBaselineRef.current = anomaly.reprobeCount;
     setIsReprobing(true);
 
     try {
@@ -138,19 +153,14 @@ export function AnomalyRow({ anomaly, tone, onViewTranscript }: AnomalyRowProps)
         return;
       }
       if (result.error) {
+        reprobeBaselineRef.current = null;
         setIsReprobing(false);
         setErrorMessage(result.error.message);
-        return;
       }
-
-      if (reprobeTimerRef.current != null) {
-        window.clearTimeout(reprobeTimerRef.current);
-      }
-      reprobeTimerRef.current = window.setTimeout(() => {
-        setIsReprobing(false);
-        reprobeTimerRef.current = null;
-      }, 5000);
+      // On success, the row stays "Re-probing…" until the next poll updates
+      // anomaly.reprobeCount past the baseline (handled by the watch effect above).
     } catch (error) {
+      reprobeBaselineRef.current = null;
       setIsReprobing(false);
       setErrorMessage(error instanceof Error ? error.message : 'Failed to re-probe anomaly slot');
     }
@@ -170,14 +180,9 @@ export function AnomalyRow({ anomaly, tone, onViewTranscript }: AnomalyRowProps)
         setErrorMessage(result.error.message);
         return;
       }
-
-      if (resolveTimerRef.current != null) {
-        window.clearTimeout(resolveTimerRef.current);
-      }
-      resolveTimerRef.current = window.setTimeout(() => {
-        setIsResolving(false);
-        resolveTimerRef.current = null;
-      }, 5000);
+      // Successfully resolved: the row will drop out of openRunAnomalies on the
+      // next poll (filter is resolvedAt IS NULL), at which point this component
+      // unmounts and clears its own state. No timer needed.
     } catch (error) {
       setIsResolving(false);
       setErrorMessage(error instanceof Error ? error.message : 'Failed to resolve anomaly');
@@ -239,18 +244,31 @@ export function AnomalyRow({ anomaly, tone, onViewTranscript }: AnomalyRowProps)
         const title = anomaly.reprobeLimitReached
           ? 'This slot has been re-probed 3 times. Use [Resolve] to close manually; if the underlying issue persists, the next sweep will re-create the anomaly.'
           : (!anomaly.reprobeEligible ? 'This slot cannot be re-probed.' : undefined);
+        const limitReachedDescriptionId = `reprobe-limit-${anomaly.id}`;
 
         return (
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={handleOpenReprobeModal}
-            disabled={disabled}
-            title={title}
-          >
-            {isReprobing ? 'Re-probing…' : 'Re-probe'}
-          </Button>
+          <div className="flex items-center gap-2">
+            {anomaly.reprobeLimitReached && (
+              <span
+                id={limitReachedDescriptionId}
+                role="note"
+                className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900"
+              >
+                Limit reached
+              </span>
+            )}
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={handleOpenReprobeModal}
+              disabled={disabled}
+              title={title}
+              aria-describedby={anomaly.reprobeLimitReached ? limitReachedDescriptionId : undefined}
+            >
+              {isReprobing ? 'Re-probing…' : 'Re-probe'}
+            </Button>
+          </div>
         );
       }
       case 'PAIR_ASYMMETRY':
