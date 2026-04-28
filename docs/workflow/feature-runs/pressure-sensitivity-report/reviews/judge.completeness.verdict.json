@@ -1,0 +1,9 @@
+{
+  "judge": "completeness",
+  "model": "gpt-5.4-mini",
+  "verdict": "block",
+  "confidence": 0,
+  "reasoning": "schema_violation: maximum recursion depth exceeded",
+  "evidence": [],
+  "timestamp": "2026-04-27T23:26:31.532961Z"
+}

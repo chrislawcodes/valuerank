@@ -20,6 +20,7 @@ import { DomainAnalysisValueDetail } from './pages/DomainAnalysisValueDetail';
 import { Models } from './pages/Models';
 import { DomainValueShiftHeatmap } from './pages/DomainValueShiftHeatmap';
 import { ModelsConsistency } from './pages/ModelsConsistency';
+import { PressureSensitivity } from './pages/PressureSensitivity';
 import { ModelsCircumplex } from './pages/ModelsCircumplex';
 import { DefinitionDetail } from './pages/DefinitionDetail';
 import { StartPairedBatchPage } from './pages/DefinitionDetail/StartPairedBatchPage';
@@ -195,6 +196,14 @@ function App() {
               element={
                 <ProtectedLayout>
                   <ModelsConsistency />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/models/pressure-sensitivity"
+              element={
+                <ProtectedLayout>
+                  <PressureSensitivity />
                 </ProtectedLayout>
               }
             />

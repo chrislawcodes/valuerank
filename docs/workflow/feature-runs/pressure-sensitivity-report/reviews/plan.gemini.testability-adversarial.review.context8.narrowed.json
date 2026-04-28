@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/apps/web/src/generated/graphql.ts",
+  "source_artifact_sha256": "9253a23010e5230d3b7a928c9f5f5f669389342f670348993c320b82374c7a71",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/pressure-sensitivity-report/reviews/plan.gemini.testability-adversarial.review.context8.narrowed.txt",
+  "narrowed_artifact_sha256": "62b787be302ce8753aec77f4df5dc02187d9a5cb4c2749a40c91279bb1b020d1",
+  "strategy": "head-tail-numbered-lines"
+}

@@ -1,0 +1,1542 @@
+00001: import gql from 'graphql-tag';
+00002: import * as Urql from 'urql';
+00003: export type Maybe<T> = T | null;
+00004: export type InputMaybe<T> = Maybe<T>;
+00005: export type Exact<T extends { [key: string]: unknown }> = { [K in keyof T]: T[K] };
+00006: export type MakeOptional<T, K extends keyof T> = Omit<T, K> & { [SubKey in K]?: Maybe<T[SubKey]> };
+00007: export type MakeMaybe<T, K extends keyof T> = Omit<T, K> & { [SubKey in K]: Maybe<T[SubKey]> };
+00008: export type MakeEmpty<T extends { [key: string]: unknown }, K extends keyof T> = { [_ in K]?: never };
+00009: export type Incremental<T> = T | { [P in keyof T]?: P extends ' $fragmentName' | '__typename' ? T[P] : never };
+00010: export type Omit<T, K extends keyof T> = Pick<T, Exclude<keyof T, K>>;
+00011: /** All built-in and custom scalars, mapped to their actual values */
+00012: export type Scalars = {
+00013:   ID: { input: string; output: string; }
+00014:   String: { input: string; output: string; }
+00015:   Boolean: { input: boolean; output: boolean; }
+00016:   Int: { input: number; output: number; }
+00017:   Float: { input: number; output: number; }
+00018:   DateTime: { input: string; output: string; }
+00019:   JSON: { input: unknown; output: unknown; }
+00020: };
+00021: 
+00022: /** Actual cost summary for a completed run */
+00023: export type ActualCost = {
+00024:   __typename?: 'ActualCost';
+00025:   /** Per-model actual cost breakdown */
+00026:   perModel: Array<ActualModelCost>;
+00027:   /** Total actual cost in USD */
+00028:   total: Scalars['Float']['output'];
+00029: };
+00030: 
+00031: /** Actual cost for a single model from a completed run */
+00032: export type ActualModelCost = {
+00033:   __typename?: 'ActualModelCost';
+00034:   /** Actual cost in USD */
+00035:   cost: Scalars['Float']['output'];
+00036:   /** Total input tokens used */
+00037:   inputTokens: Scalars['Int']['output'];
+00038:   /** Model identifier */
+00039:   modelId: Scalars['ID']['output'];
+00040:   /** Total output tokens used */
+00041:   outputTokens: Scalars['Int']['output'];
+00042:   /** Number of probes completed */
+00043:   probeCount: Scalars['Int']['output'];
+00044: };
+00045: 
+00046: /** Eligibility and coverage metadata for same-signature aggregate analysis support */
+00047: export type AggregateMetadata = {
+00048:   __typename?: 'AggregateMetadata';
+00049:   aggregateEligibility: Scalars['String']['output'];
+00050:   aggregateIneligibilityReason?: Maybe<Scalars['String']['output']>;
+00051:   /** Coverage of the planned baseline condition set */
+00052:   conditionCoverage: Scalars['JSON']['output'];
+00053:   /** Per-model pooled cross-run drift metadata */
+00054:   perModelDrift: Scalars['JSON']['output'];
+00055:   /** Per-model pooled repeat coverage metadata */
+00056:   perModelRepeatCoverage: Scalars['JSON']['output'];
+00057:   sourceRunCount: Scalars['Int']['output'];
+00058:   sourceRunIds: Array<Scalars['String']['output']>;
+00059: };
+00060: 
+00061: export type AnalysisFolderCounts = {
+00062:   __typename?: 'AnalysisFolderCounts';
+00063:   aggregateCount: Scalars['Int']['output'];
+00064:   aggregateTagCounts: Array<AnalysisFolderTagCount>;
+00065:   aggregateUntaggedCount: Scalars['Int']['output'];
+00066:   tagCounts: Array<AnalysisFolderTagCount>;
+00067:   untaggedCount: Scalars['Int']['output'];
+00068: };
+00069: 
+00070: export type AnalysisFolderTagCount = {
+00071:   __typename?: 'AnalysisFolderTagCount';
+00072:   count: Scalars['Int']['output'];
+00073:   name: Scalars['String']['output'];
+00074:   tagId: Scalars['String']['output'];
+00075: };
+00076: 
+00077: /** Analysis results for a run */
+00078: export type AnalysisResult = {
+00079:   __typename?: 'AnalysisResult';
+00080:   /** Actual cost computed from completed transcripts for this run */
+00081:   actualCost?: Maybe<ActualCost>;
+00082:   /** Eligibility and repeat-coverage metadata for aggregate analysis rows */
+00083:   aggregateMetadata?: Maybe<AggregateMetadata>;
+00084:   analysisType: Scalars['String']['output'];
+00085:   codeVersion: Scalars['String']['output'];
+00086:   computedAt?: Maybe<Scalars['DateTime']['output']>;
+00087:   createdAt: Scalars['DateTime']['output'];
+00088:   /** Dimension impact analysis showing which variables drive variance */
+00089:   dimensionAnalysis?: Maybe<Scalars['JSON']['output']>;
+00090:   durationMs?: Maybe<Scalars['Int']['output']>;
+00091:   id: Scalars['ID']['output'];
+00092:   inputHash: Scalars['String']['output'];
+00093:   /** Statistical methods and parameters used in analysis */
+00094:   methodsUsed: Scalars['JSON']['output'];
+00095:   /** Model agreement matrix with pairwise correlations */
+00096:   modelAgreement: Scalars['JSON']['output'];
+00097:   /** Scenarios with highest disagreement across models */
+00098:   mostContestedScenarios: Array<ContestedScenario>;
+00099:   /** Per-model statistics with win rates and confidence intervals */
+00100:   perModel: Scalars['JSON']['output'];
+00101:   /** Explicit preference direction and strength summary */
+00102:   preferenceSummary?: Maybe<PreferenceSummary>;
+00103:   /** Explicit baseline noise and reliability summary */
+00104:   reliabilitySummary?: Maybe<ReliabilitySummary>;
+00105:   runId: Scalars['String']['output'];
+00106:   /** Status of the analysis result (CURRENT or SUPERSEDED) */
+00107:   status: Scalars['String']['output'];
+00108:   /** Variance analysis from multi-sample runs (when samplesPerScenario > 1) */
+00109:   varianceAnalysis?: Maybe<Scalars['JSON']['output']>;
+00110:   /** Data for frontend visualizations (decision distribution, model-scenario matrix) */
+00111:   visualizationData?: Maybe<Scalars['JSON']['output']>;
+00112:   /** Warnings about statistical assumptions or data quality */
+00113:   warnings: Array<AnalysisWarning>;
+00114: };
+00115: 
+00116: /** Status of an analysis result */
+00117: export type AnalysisStatus =
+00118:   | 'CURRENT'
+00119:   | 'SUPERSEDED';
+00120: 
+00121: /** Warning about statistical assumptions or data quality */
+00122: export type AnalysisWarning = {
+00123:   __typename?: 'AnalysisWarning';
+00124:   code: Scalars['String']['output'];
+00125:   message: Scalars['String']['output'];
+00126:   recommendation: Scalars['String']['output'];
+00127: };
+00128: 
+00129: /** API key for programmatic/MCP access. The full key is only returned once at creation time. */
+00130: export type ApiKey = {
+00131:   __typename?: 'ApiKey';
+00132:   /** When this key was created */
+00133:   createdAt: Scalars['DateTime']['output'];
+00134:   /** When this key expires (null = never expires) */
+00135:   expiresAt?: Maybe<Scalars['DateTime']['output']>;
+00136:   /** Unique API key identifier */
+00137:   id: Scalars['ID']['output'];
+00138:   /** Key prefix for identification (e.g., "vr_abc123") */
+00139:   keyPrefix: Scalars['String']['output'];
+00140:   /** When this key was last used for authentication */
+00141:   lastUsedAt?: Maybe<Scalars['DateTime']['output']>;
+00142:   /** User-provided name for this key */
+00143:   name: Scalars['String']['output'];
+00144: };
+00145: 
+00146: /** Type of action that was audited */
+00147: export type AuditAction =
+00148:   | 'ACTION'
+00149:   | 'CREATE'
+00150:   | 'DELETE'
+00151:   | 'UPDATE';
+00152: 
+00153: /** An audit log entry recording a mutation */
+00154: export type AuditLog = {
+00155:   __typename?: 'AuditLog';
+00156:   /** Type of action performed (CREATE, UPDATE, DELETE, ACTION) */
+00157:   action: Scalars['String']['output'];
+00158:   /** When the action occurred */
+00159:   createdAt: Scalars['DateTime']['output'];
+00160:   /** ID of the affected entity */
+00161:   entityId: Scalars['String']['output'];
+00162:   /** Type of entity affected (e.g., Definition, Run) */
+00163:   entityType: Scalars['String']['output'];
+00164:   /** Unique identifier */
+00165:   id: Scalars['ID']['output'];
+00166:   /** Additional context about the action */
+00167:   metadata?: Maybe<Scalars['JSON']['output']>;
+00168:   /** User who performed the action (null for system actions) */
+00169:   user?: Maybe<User>;
+00170: };
+00171: 
+00172: /** Paginated list of audit log entries */
+00173: export type AuditLogConnection = {
+00174:   __typename?: 'AuditLogConnection';
+00175:   /** Cursor for the last item in the current page (for pagination) */
+00176:   endCursor?: Maybe<Scalars['String']['output']>;
+00177:   /** Whether there are more results after the current page */
+00178:   hasNextPage: Scalars['Boolean']['output'];
+00179:   /** List of audit log entries */
+00180:   nodes: Array<AuditLog>;
+00181:   /** Total number of matching audit log entries */
+00182:   totalCount: Scalars['Int']['output'];
+00183: };
+00184: 
+00185: /** Filters for querying audit logs */
+00186: export type AuditLogFilterInput = {
+00187:   /** Filter by action type (CREATE, UPDATE, DELETE, ACTION) */
+00188:   action?: InputMaybe<Scalars['String']['input']>;
+00189:   /** Filter by specific entity ID */
+00190:   entityId?: InputMaybe<Scalars['String']['input']>;
+00191:   /** Filter by entity type (e.g., "Definition", "Run") */
+00192:   entityType?: InputMaybe<Scalars['String']['input']>;
+00193:   /** Filter logs from this date/time (inclusive) */
+00194:   from?: InputMaybe<Scalars['DateTime']['input']>;
+00195:   /** Filter logs until this date/time (inclusive) */
+00196:   to?: InputMaybe<Scalars['DateTime']['input']>;
+00197:   /** Filter by user who performed the action */
+00198:   userId?: InputMaybe<Scalars['String']['input']>;
+00199: };
+00200: 
+00201: /** An LLM model available for evaluation runs */
+00202: export type AvailableModel = {
+00203:   __typename?: 'AvailableModel';
+00204:   /** Default version to use if none specified */
+00205:   defaultVersion?: Maybe<Scalars['String']['output']>;
+00206:   /** Human-readable model name (e.g., "GPT-4o") */
+00207:   displayName: Scalars['String']['output'];
+00208:   /** Model identifier (e.g., "gpt-4o") */
+00209:   id: Scalars['String']['output'];
+00210:   /** Whether the model is available (API key configured) */
+00211:   isAvailable: Scalars['Boolean']['output'];
+00212:   /** Whether this is the default model for its provider */
+00213:   isDefault: Scalars['Boolean']['output'];
+00214:   /** Provider identifier (e.g., "openai") */
+00215:   providerId: Scalars['String']['output'];
+00216:   /** Available model versions */
+00217:   versions: Array<Scalars['String']['output']>;
+00218: };
+00219: 
+00220: export type AvailableSignature = {
+00221:   __typename?: 'AvailableSignature';
+00222:   mostRecentRunAt?: Maybe<Scalars['DateTime']['output']>;
+00223:   signature: Scalars['String']['output'];
+00224: };
+00225: 
+00226: /** Progress breakdown for a specific model */
+00227: export type ByModelProgress = {
+00228:   __typename?: 'ByModelProgress';
+00229:   completed: Scalars['Int']['output'];
+00230:   failed: Scalars['Int']['output'];
+00231:   modelId: Scalars['String']['output'];
+00232: };
+00233: 
+00234: /** Result of cancelling scenario expansion */
+00235: export type CancelExpansionResult = {
+00236:   __typename?: 'CancelExpansionResult';
+00237:   /** Whether an active job was cancelled */
+00238:   cancelled: Scalars['Boolean']['output'];
+00239:   /** ID of the definition */
+00240:   definitionId: Scalars['String']['output'];
+00241:   /** ID of the cancelled job (null if no active job) */
+00242:   jobId?: Maybe<Scalars['String']['output']>;
+00243:   /** Status message */
+00244:   message: Scalars['String']['output'];
+00245: };
+00246: 
+00247: /** Result of cancelling summarization for a run */
+00248: export type CancelSummarizationPayload = {
+00249:   __typename?: 'CancelSummarizationPayload';
+00250:   /** Number of pending summarization jobs cancelled */
+00251:   cancelledCount: Scalars['Int']['output'];
+00252:   /** The updated run */
+00253:   run: Run;
+00254: };
+00255: 
+00256: export type CircumplexAnalysisResult = {
+00257:   __typename?: 'CircumplexAnalysisResult';
+00258:   eligibilityThreshold: Scalars['Int']['output'];
+00259:   insufficient: Array<CircumplexInsufficientModel>;
+00260:   models: Array<CircumplexResult>;
+00261:   signature: Scalars['String']['output'];
+00262: };
+00263: 
+00264: export type CircumplexInsufficientModel = {
+00265:   __typename?: 'CircumplexInsufficientModel';
+00266:   modelId: Scalars['String']['output'];
+00267:   modelLabel: Scalars['String']['output'];
+00268:   providerName: Scalars['String']['output'];
+00269:   reason: Scalars['String']['output'];
+00270:   trialsPerValue: Array<CircumplexPerValue>;
+00271: };
+00272: 
+00273: export type CircumplexMdsCoord = {
+00274:   __typename?: 'CircumplexMdsCoord';
+00275:   theoreticalAngleDeg: Scalars['Float']['output'];
+00276:   valueKey: Scalars['String']['output'];
+00277:   x: Scalars['Float']['output'];
+00278:   y: Scalars['Float']['output'];
+00279: };
+00280: 
+00281: export type CircumplexPerValue = {
+00282:   __typename?: 'CircumplexPerValue';
+00283:   trials: Scalars['Int']['output'];
+00284:   valueKey: Scalars['String']['output'];
+00285: };
+00286: 
+00287: export type CircumplexResult = {
+00288:   __typename?: 'CircumplexResult';
+00289:   excludedValues: Array<Scalars['String']['output']>;
+00290:   mds2d: Array<CircumplexMdsCoord>;
+00291:   mdsStress: Scalars['Float']['output'];
+00292:   mdsWarning?: Maybe<Scalars['String']['output']>;
+00293:   modelId: Scalars['String']['output'];
+00294:   modelLabel: Scalars['String']['output'];
+00295:   pairTrialCounts: Array<Array<Scalars['Int']['output']>>;
+00296:   profileCorrelationMatrix: Array<Array<Maybe<Scalars['Float']['output']>>>;
+00297:   providerName: Scalars['String']['output'];
+00298:   signature: Scalars['String']['output'];
+00299:   spearmanP?: Maybe<Scalars['Float']['output']>;
+00300:   spearmanRho?: Maybe<Scalars['Float']['output']>;
+00301:   trialsPerValue: Array<CircumplexPerValue>;
+00302:   valueOrder: Array<Scalars['String']['output']>;
+00303:   verdictBand: Scalars['String']['output'];
+00304: };
+00305: 
+00306: export type ClusterAnalysis = {
+00307:   __typename?: 'ClusterAnalysis';
+00308:   clusters: Array<DomainCluster>;
+00309:   defaultPair?: Maybe<Array<Scalars['String']['output']>>;
+00310:   faultLinesByPair: Scalars['JSON']['output'];
+00311:   skipReason?: Maybe<Scalars['String']['output']>;
+00312:   skipped: Scalars['Boolean']['output'];
+00313: };
+00314: 
+00315: export type ClusterMember = {
+00316:   __typename?: 'ClusterMember';
+00317:   distancesToNearestClusters?: Maybe<Array<Scalars['Float']['output']>>;
+00318:   isOutlier: Scalars['Boolean']['output'];
+00319:   label: Scalars['String']['output'];
+00320:   model: Scalars['String']['output'];
+00321:   nearestClusterIds?: Maybe<Array<Scalars['String']['output']>>;
+00322:   silhouetteScore: Scalars['Float']['output'];
+00323: };
+00324: 
+00325: export type ClusterPairFaultLines = {
+00326:   __typename?: 'ClusterPairFaultLines';
+00327:   clusterAId: Scalars['String']['output'];
+00328:   clusterBId: Scalars['String']['output'];
+00329:   distance: Scalars['Float']['output'];
+00330:   faultLines: Array<ValueFaultLine>;
+00331: };
+00332: 
+00333: export type Coherence = {
+00334:   __typename?: 'Coherence';
+00335:   coherentPairs: Scalars['Int']['output'];
+00336:   determinatePairs: Scalars['Int']['output'];
+00337:   indeterminatePairs: Scalars['Int']['output'];
+00338:   perPair: Array<ConsistencyPerPair>;
+00339:   value: Scalars['Float']['output'];
+00340: };
+00341: 
+00342: /** A recent job completion event */
+00343: export type CompletionEvent = {
+00344:   __typename?: 'CompletionEvent';
+00345:   /** When the probe completed */
+00346:   completedAt: Scalars['DateTime']['output'];
+00347:   /** How long the probe took in milliseconds */
+00348:   durationMs: Scalars['Int']['output'];
+00349:   /** The model that was probed */
+00350:   modelId: Scalars['String']['output'];
+00351:   /** The scenario that was evaluated */
+00352:   scenarioId: Scalars['String']['output'];
+00353:   /** Whether the probe succeeded */
+00354:   success: Scalars['Boolean']['output'];
+00355: };
+00356: 
+00357: export type ConsistencyPerCondition = {
+00358:   __typename?: 'ConsistencyPerCondition';
+00359:   matches: Scalars['Int']['output'];
+00360:   netPressureRank: Scalars['Int']['output'];
+00361:   scenarioId: Scalars['String']['output'];
+00362:   trials: Scalars['Int']['output'];
+00363:   winRate?: Maybe<Scalars['Float']['output']>;
+00364: };
+00365: 
+00366: export type ConsistencyPerDomain = {
+00367:   __typename?: 'ConsistencyPerDomain';
+00368:   ciHigh: Scalars['Float']['output'];
+00369:   ciLow: Scalars['Float']['output'];
+00370:   domainId: Scalars['String']['output'];
+00371:   domainName: Scalars['String']['output'];
+00372:   scenariosMeasured: Scalars['Int']['output'];
+00373:   value: Scalars['Float']['output'];
+00374: };
+00375: 
+00376: export type ConsistencyPerPair = {
+00377:   __typename?: 'ConsistencyPerPair';
+00378:   coherent: Scalars['Boolean']['output'];
+00379:   companionConditionIds: Array<Scalars['String']['output']>;
+00380:   determinate: Scalars['Boolean']['output'];
+00381:   domainId: Scalars['String']['output'];
+00382:   pValue?: Maybe<Scalars['Float']['output']>;
+00383:   perCondition: Array<ConsistencyPerCondition>;
+00384:   primaryConditionIds: Array<Scalars['String']['output']>;
+00385:   rho?: Maybe<Scalars['Float']['output']>;
+00386:   targetAnalysisRunId?: Maybe<Scalars['String']['output']>;
+00387:   targetCompanionRunId?: Maybe<Scalars['String']['output']>;
+00388:   valueKey: Scalars['String']['output'];
+00389: };
+00390: 
+00391: export type ConsistencyPerScenario = {
+00392:   __typename?: 'ConsistencyPerScenario';
+00393:   ciHigh: Scalars['Float']['output'];
+00394:   ciLow: Scalars['Float']['output'];
+00395:   matches: Scalars['Int']['output'];
+00396:   p: Scalars['Float']['output'];
+00397:   scenarioId: Scalars['String']['output'];
+00398:   trials: Scalars['Int']['output'];
+00399: };
+00400: 
+00401: /** A scenario with high disagreement across models */
+00402: export type ContestedScenario = {
+00403:   __typename?: 'ContestedScenario';
+00404:   modelScores: Scalars['JSON']['output'];
+00405:   scenarioId: Scalars['String']['output'];
+00406:   scenarioName: Scalars['String']['output'];
+00407:   variance: Scalars['Float']['output'];
+00408: };
+00409: 
+00410: /** Complete cost estimate for a run before execution */
+00411: export type CostEstimate = {
+00412:   __typename?: 'CostEstimate';
+00413:   /** Minimum sample count across all models (indicates estimate quality) */
+00414:   basedOnSampleCount: Scalars['Int']['output'];
+00415:   /** Explanation of fallback usage if applicable */
+00416:   fallbackReason?: Maybe<Scalars['String']['output']>;
+00417:   /** True if any model is using fallback estimates */
+00418:   isUsingFallback: Scalars['Boolean']['output'];
+00419:   /** Per-model cost breakdown */
+00420:   perModel: Array<ModelCostEstimate>;
+00421:   /** Total number of scenarios to be run */
+00422:   scenarioCount: Scalars['Int']['output'];
+00423:   /** Total estimated cost in USD across all models */
+00424:   total: Scalars['Float']['output'];
+00425: };
+00426: 
+00427: export type CoverageModelBreakdown = {
+00428:   __typename?: 'CoverageModelBreakdown';
+00429:   label: Scalars['String']['output'];
+00430:   modelId: Scalars['String']['output'];
+00431:   trialCount: Scalars['Int']['output'];
+00432: };
+00433: 
+00434: export type CoverageModelOption = {
+00435:   __typename?: 'CoverageModelOption';
+00436:   label: Scalars['String']['output'];
+00437:   modelId: Scalars['String']['output'];
+00438: };
+00439: 
+00440: export type CreateApiKeyInput = {
+00441:   /** Human-readable name for the key (e.g., "Claude Desktop", "Cursor IDE") */
+00442:   name: Scalars['String']['input'];
+00443: };
+00444: 
+00445: /** Result of creating a new API key. The full key is only available in this response. */
+00446: export type CreateApiKeyResult = {
+00447:   __typename?: 'CreateApiKeyResult';
+00448:   /** The created API key metadata */
+00449:   apiKey: ApiKey;
+00450:   /** The full API key value. IMPORTANT: This is the only time the full key will be shown. */
+00451:   key: Scalars['String']['output'];
+00452: };
+00453: 
+00454: export type CreateDefinitionInput = {
+00455:   /** JSONB content for the definition */
+00456:   content: Scalars['JSON']['input'];
+00457:   /** Name of the definition */
+00458:   name: Scalars['String']['input'];
+00459:   /** Optional parent definition ID for forking */
+00460:   parentId?: InputMaybe<Scalars['String']['input']>;
+00461:   /** ID of the preamble version to use */
+00462:   preambleVersionId?: InputMaybe<Scalars['String']['input']>;
+00463: };
+00464: 
+00465: export type CreateDomainContextInput = {
+00466:   domainId: Scalars['String']['input'];
+00467:   text: Scalars['String']['input'];
+00468: };
+00469: 
+00470: export type CreateLevelPresetInput = {
+00471:   l1: Scalars['String']['input'];
+00472:   l2: Scalars['String']['input'];
+00473:   l3: Scalars['String']['input'];
+00474:   l4: Scalars['String']['input'];
+00475:   l5: Scalars['String']['input'];
+00476:   name: Scalars['String']['input'];
+00477: };
+00478: 
+00479: /** Input for creating a new LLM model */
+00480: export type CreateLlmModelInput = {
+00481:   /** Cost per 1M input tokens in USD */
+00482:   costInputPerMillion: Scalars['Float']['input'];
+00483:   /** Cost per 1M output tokens in USD */
+00484:   costOutputPerMillion: Scalars['Float']['input'];
+00485:   /** Human-readable display name */
+00486:   displayName: Scalars['String']['input'];
+00487:   /** API model identifier (e.g., "gpt-4o-mini") */
+00488:   modelId: Scalars['String']['input'];
+00489:   /** Provider ID this model belongs to */
+00490:   providerId: Scalars['String']['input'];
+00491:   /** Set as default for this provider */
+00492:   setAsDefault?: InputMaybe<Scalars['Boolean']['input']>;
+00493: };
+00494: 
+00495: export type CreatePairedVignetteInput = {
+00496:   contextId: Scalars['ID']['input'];
+00497:   domainId: Scalars['ID']['input'];
+00498:   levelPresetVersionId?: InputMaybe<Scalars['ID']['input']>;
+00499:   name: Scalars['String']['input'];
+00500:   preambleVersionId?: InputMaybe<Scalars['ID']['input']>;
+00501:   valueFirstId: Scalars['ID']['input'];
+00502:   valueSecondId: Scalars['ID']['input'];
+00503: };
+00504: 
+00505: export type CreatePairedVignetteResult = {
+00506:   __typename?: 'CreatePairedVignetteResult';
+00507:   definitionA: Definition;
+00508:   definitionB: Definition;
+00509: };
+00510: 
+00511: export type CreatePreambleInput = {
+00512:   content: Scalars['String']['input'];
+00513:   name: Scalars['String']['input'];
+00514: };
+00515: 
+00516: export type CreateSurveyInput = {
+00517:   description?: InputMaybe<Scalars['String']['input']>;
+00518:   instructions?: InputMaybe<Scalars['String']['input']>;
+00519:   name: Scalars['String']['input'];
+00520:   questions: Array<SurveyQuestionInput>;
+00521:   responseOptions: Array<SurveyResponseOptionInput>;
+00522: };
+00523: 
+00524: export type CreateUserInput = {
+00525:   email: Scalars['String']['input'];
+00526:   name: Scalars['String']['input'];
+00527:   password: Scalars['String']['input'];
+00528:   role: UserRole;
+00529: };
+00530: 
+00531: export type CreateValueStatementInput = {
+00532:   body: Scalars['String']['input'];
+00533:   domainId: Scalars['String']['input'];
+00534:   token: Scalars['String']['input'];
+00535: };
+00536: 
+00537: /** A scenario definition that can be versioned through parent-child relationships */
+00538: export type Definition = {
+00539:   __typename?: 'Definition';
+00540:   /** All tags including both local and inherited (deduplicated) */
+00541:   allTags: Array<Tag>;
+00542:   /** Full ancestry chain from this definition to root (oldest first) */
+00543:   ancestors: Array<Definition>;
+00544:   /** Child definitions forked from this one */
+00545:   children: Array<Definition>;
+00546:   /** JSONB content with scenario configuration */
+00547:   content: Scalars['JSON']['output'];
+00548:   /** When this definition was created */
+00549:   createdAt: Scalars['DateTime']['output'];
+00550:   /** User who created this definition */
+00551:   createdBy?: Maybe<User>;
+00552:   /** User who deleted this definition (only populated for soft-deleted records) */
+00553:   deletedBy?: Maybe<User>;
+00554:   /** All descendants forked from this definition (newest first) */
+00555:   descendants: Array<Definition>;
+00556:   /** Domain assigned to this definition */
+00557:   domain?: Maybe<Domain>;
+00558:   /** ID of the domain context attached to this definition */
+00559:   domainContextId?: Maybe<Scalars['ID']['output']>;
+00560:   /** ID of assigned domain (null means None) */
+00561:   domainId?: Maybe<Scalars['ID']['output']>;
+00562:   /** Debug info from last scenario expansion, including raw LLM response and parse errors */
+00563:   expansionDebug?: Maybe<Scalars['JSON']['output']>;
+00564:   /** Status of scenario expansion job for this definition */
+00565:   expansionStatus: ExpansionStatus;
+00566:   /** Unique identifier */
+00567:   id: Scalars['ID']['output'];
+00568:   /** Tags inherited from all ancestor definitions (union of ancestor tags) */
+00569:   inheritedTags: Array<Tag>;
+00570:   /** Whether this definition is a fork (has a parent) */
+00571:   isForked: Scalars['Boolean']['output'];
+00572:   /** When this definition was last accessed (for retention) */
+00573:   lastAccessedAt?: Maybe<Scalars['DateTime']['output']>;
+00574:   /** The level preset version used when this vignette was created */
+00575:   levelPresetVersion?: Maybe<LevelPresetVersion>;
+00576:   /** ID of the level preset version used when this vignette was created */
+00577:   levelPresetVersionId?: Maybe<Scalars['String']['output']>;
+00578:   /** Raw stored content. For forked definitions, only locally overridden fields are present. */
+00579:   localContent: Scalars['JSON']['output'];
+00580:   /** Human-readable name */
+00581:   name: Scalars['String']['output'];
+00582:   /** Indicates which content fields are locally defined vs inherited from parent */
+00583:   overrides: DefinitionOverrides;
+00584:   /** Parent definition in version tree */
+00585:   parent?: Maybe<Definition>;
+00586:   /** ID of parent definition (null for root definitions) */
+00587:   parentId?: Maybe<Scalars['ID']['output']>;
+00588:   /** The specific version of the preamble used */
+00589:   preambleVersion?: Maybe<PreambleVersion>;
+00590:   /** ID of the specific preamble version used */
+00591:   preambleVersionId?: Maybe<Scalars['String']['output']>;
+00592:   /** Fully resolved content after walking ancestor chain. All fields are guaranteed present. */
+00593:   resolvedContent: Scalars['JSON']['output'];
+00594:   /** Number of runs using this definition */
+00595:   runCount: Scalars['Int']['output'];
+00596:   /** Runs executed with this definition */
+00597:   runs: Array<Run>;
+00598:   /** Number of scenarios generated from this definition */
+00599:   scenarioCount: Scalars['Int']['output'];
+00600:   /** Scenarios generated from this definition */
+00601:   scenarios: Array<Scenario>;
+00602:   /** Tags assigned to this definition */
+00603:   tags: Array<Tag>;
+00604:   /** Version and temperature consistency across trials for this definition */
+00605:   trialConfig: TrialConfigSummary;
+00606:   /** Number of prompt/response trials (transcripts) for this definition */
+00607:   trialCount: Scalars['Int']['output'];
+00608:   /** When this definition was last updated */
+00609:   updatedAt: Scalars['DateTime']['output'];
+00610:   /** Version counter (increments on every update) */
+00611:   version: Scalars['Int']['output'];
+00612: };
+00613: 
+00614: 
+00615: /** A scenario definition that can be versioned through parent-child relationships */
+00616: export type DefinitionRunsArgs = {
+00617:   limit?: InputMaybe<Scalars['Int']['input']>;
+00618:   offset?: InputMaybe<Scalars['Int']['input']>;
+00619: };
+00620: 
+00621: 
+00622: /** A scenario definition that can be versioned through parent-child relationships */
+00623: export type DefinitionScenariosArgs = {
+00624:   limit?: InputMaybe<Scalars['Int']['input']>;
+00625:   offset?: InputMaybe<Scalars['Int']['input']>;
+00626: };
+00627: 
+00628: /** Indicates which content fields are locally overridden vs inherited from parent */
+00629: export type DefinitionOverrides = {
+00630:   __typename?: 'DefinitionOverrides';
+00631:   /** True if dimensions are locally defined, false if inherited */
+00632:   dimensions: Scalars['Boolean']['output'];
+00633:   /** True if matching rules are locally defined, false if inherited */
+00634:   matchingRules: Scalars['Boolean']['output'];
+00635:   /** True if template is locally defined, false if inherited */
+00636:   template: Scalars['Boolean']['output'];
+00637: };
+00638: 
+00639: /** Result of deleting a definition */
+00640: export type DeleteDefinitionResult = {
+00641:   __typename?: 'DeleteDefinitionResult';
+00642:   /** Total number of definitions deleted */
+00643:   count: Scalars['Int']['output'];
+00644:   /** IDs of all definitions that were deleted (includes descendants) */
+00645:   deletedIds: Array<Scalars['String']['output']>;
+00646: };
+00647: 
+00648: export type DeleteLevelPresetResult = {
+00649:   __typename?: 'DeleteLevelPresetResult';
+00650:   id: Scalars['ID']['output'];
+00651: };
+00652: 
+00653: /** Result type for tag deletion */
+00654: export type DeleteTagResult = {
+00655:   __typename?: 'DeleteTagResult';
+00656:   /** Number of definitions the tag was removed from */
+00657:   affectedDefinitions: Scalars['Int']['output'];
+00658:   /** Whether deletion was successful */
+00659:   success: Scalars['Boolean']['output'];
+00660: };
+00661: 
+00662: /** Result of deprecating a model */
+00663: export type DeprecateModelResult = {
+00664:   __typename?: 'DeprecateModelResult';
+00665:   /** The deprecated model */
+00666:   model: LlmModel;
+00667:   /** The new default model (if previous default was deprecated) */
+00668:   newDefault?: Maybe<LlmModel>;
+00669: };
+00670: 
+00671: /** A single domain used to group vignettes */
+00672: export type Domain = {
+00673:   __typename?: 'Domain';
+00674:   createdAt: Scalars['DateTime']['output'];
+00675:   defaultContext?: Maybe<DomainCo
+
+... [narrowed review slice: middle omitted] ...
+
+ent = gql`
+06377:     mutation UpdateLevelPreset($id: ID!, $l1: String!, $l2: String!, $l3: String!, $l4: String!, $l5: String!) {
+06378:   updateLevelPreset(id: $id, l1: $l1, l2: $l2, l3: $l3, l4: $l4, l5: $l5) {
+06379:     id
+06380:     name
+06381:     updatedAt
+06382:     latestVersion {
+06383:       id
+06384:       version
+06385:       l1
+06386:       l2
+06387:       l3
+06388:       l4
+06389:       l5
+06390:     }
+06391:   }
+06392: }
+06393:     `;
+06394: 
+06395: export function useUpdateLevelPresetMutation() {
+06396:   return Urql.useMutation<UpdateLevelPresetMutation, UpdateLevelPresetMutationVariables>(UpdateLevelPresetDocument);
+06397: };
+06398: export const DeleteLevelPresetDocument = gql`
+06399:     mutation DeleteLevelPreset($id: ID!) {
+06400:   deleteLevelPreset(id: $id) {
+06401:     id
+06402:   }
+06403: }
+06404:     `;
+06405: 
+06406: export function useDeleteLevelPresetMutation() {
+06407:   return Urql.useMutation<DeleteLevelPresetMutation, DeleteLevelPresetMutationVariables>(DeleteLevelPresetDocument);
+06408: };
+06409: export const LlmProvidersDocument = gql`
+06410:     query LlmProviders {
+06411:   llmProviders {
+06412:     ...LlmProviderFields
+06413:     models {
+06414:       ...LlmModelFields
+06415:     }
+06416:   }
+06417: }
+06418:     ${LlmProviderFieldsFragmentDoc}
+06419: ${LlmModelFieldsFragmentDoc}`;
+06420: 
+06421: export function useLlmProvidersQuery(options?: Omit<Urql.UseQueryArgs<LlmProvidersQueryVariables>, 'query'>) {
+06422:   return Urql.useQuery<LlmProvidersQuery, LlmProvidersQueryVariables>({ query: LlmProvidersDocument, ...options });
+06423: };
+06424: export const LlmModelsDocument = gql`
+06425:     query LlmModels($providerId: String, $status: String) {
+06426:   llmModels(providerId: $providerId, status: $status) {
+06427:     ...LlmModelFields
+06428:     provider {
+06429:       ...LlmProviderFields
+06430:     }
+06431:   }
+06432: }
+06433:     ${LlmModelFieldsFragmentDoc}
+06434: ${LlmProviderFieldsFragmentDoc}`;
+06435: 
+06436: export function useLlmModelsQuery(options?: Omit<Urql.UseQueryArgs<LlmModelsQueryVariables>, 'query'>) {
+06437:   return Urql.useQuery<LlmModelsQuery, LlmModelsQueryVariables>({ query: LlmModelsDocument, ...options });
+06438: };
+06439: export const InfraModelDocument = gql`
+06440:     query InfraModel($purpose: String!) {
+06441:   infraModel(purpose: $purpose) {
+06442:     ...LlmModelFields
+06443:     provider {
+06444:       ...LlmProviderFields
+06445:     }
+06446:   }
+06447: }
+06448:     ${LlmModelFieldsFragmentDoc}
+06449: ${LlmProviderFieldsFragmentDoc}`;
+06450: 
+06451: export function useInfraModelQuery(options: Omit<Urql.UseQueryArgs<InfraModelQueryVariables>, 'query'>) {
+06452:   return Urql.useQuery<InfraModelQuery, InfraModelQueryVariables>({ query: InfraModelDocument, ...options });
+06453: };
+06454: export const CreateLlmModelDocument = gql`
+06455:     mutation CreateLlmModel($input: CreateLlmModelInput!) {
+06456:   createLlmModel(input: $input) {
+06457:     ...LlmModelFields
+06458:   }
+06459: }
+06460:     ${LlmModelFieldsFragmentDoc}`;
+06461: 
+06462: export function useCreateLlmModelMutation() {
+06463:   return Urql.useMutation<CreateLlmModelMutation, CreateLlmModelMutationVariables>(CreateLlmModelDocument);
+06464: };
+06465: export const UpdateLlmModelDocument = gql`
+06466:     mutation UpdateLlmModel($id: String!, $input: UpdateLlmModelInput!) {
+06467:   updateLlmModel(id: $id, input: $input) {
+06468:     ...LlmModelFields
+06469:   }
+06470: }
+06471:     ${LlmModelFieldsFragmentDoc}`;
+06472: 
+06473: export function useUpdateLlmModelMutation() {
+06474:   return Urql.useMutation<UpdateLlmModelMutation, UpdateLlmModelMutationVariables>(UpdateLlmModelDocument);
+06475: };
+06476: export const DeprecateLlmModelDocument = gql`
+06477:     mutation DeprecateLlmModel($id: String!) {
+06478:   deprecateLlmModel(id: $id) {
+06479:     model {
+06480:       ...LlmModelFields
+06481:     }
+06482:     newDefault {
+06483:       ...LlmModelFields
+06484:     }
+06485:   }
+06486: }
+06487:     ${LlmModelFieldsFragmentDoc}`;
+06488: 
+06489: export function useDeprecateLlmModelMutation() {
+06490:   return Urql.useMutation<DeprecateLlmModelMutation, DeprecateLlmModelMutationVariables>(DeprecateLlmModelDocument);
+06491: };
+06492: export const ReactivateLlmModelDocument = gql`
+06493:     mutation ReactivateLlmModel($id: String!) {
+06494:   reactivateLlmModel(id: $id) {
+06495:     ...LlmModelFields
+06496:   }
+06497: }
+06498:     ${LlmModelFieldsFragmentDoc}`;
+06499: 
+06500: export function useReactivateLlmModelMutation() {
+06501:   return Urql.useMutation<ReactivateLlmModelMutation, ReactivateLlmModelMutationVariables>(ReactivateLlmModelDocument);
+06502: };
+06503: export const SetDefaultLlmModelDocument = gql`
+06504:     mutation SetDefaultLlmModel($id: String!) {
+06505:   setDefaultLlmModel(id: $id) {
+06506:     model {
+06507:       ...LlmModelFields
+06508:     }
+06509:     previousDefault {
+06510:       ...LlmModelFields
+06511:     }
+06512:   }
+06513: }
+06514:     ${LlmModelFieldsFragmentDoc}`;
+06515: 
+06516: export function useSetDefaultLlmModelMutation() {
+06517:   return Urql.useMutation<SetDefaultLlmModelMutation, SetDefaultLlmModelMutationVariables>(SetDefaultLlmModelDocument);
+06518: };
+06519: export const UnsetDefaultLlmModelDocument = gql`
+06520:     mutation UnsetDefaultLlmModel($id: String!) {
+06521:   unsetDefaultLlmModel(id: $id) {
+06522:     ...LlmModelFields
+06523:   }
+06524: }
+06525:     ${LlmModelFieldsFragmentDoc}`;
+06526: 
+06527: export function useUnsetDefaultLlmModelMutation() {
+06528:   return Urql.useMutation<UnsetDefaultLlmModelMutation, UnsetDefaultLlmModelMutationVariables>(UnsetDefaultLlmModelDocument);
+06529: };
+06530: export const UpdateLlmProviderDocument = gql`
+06531:     mutation UpdateLlmProvider($id: String!, $input: UpdateLlmProviderInput!) {
+06532:   updateLlmProvider(id: $id, input: $input) {
+06533:     ...LlmProviderFields
+06534:   }
+06535: }
+06536:     ${LlmProviderFieldsFragmentDoc}`;
+06537: 
+06538: export function useUpdateLlmProviderMutation() {
+06539:   return Urql.useMutation<UpdateLlmProviderMutation, UpdateLlmProviderMutationVariables>(UpdateLlmProviderDocument);
+06540: };
+06541: export const UpdateSystemSettingDocument = gql`
+06542:     mutation UpdateSystemSetting($input: UpdateSystemSettingInput!) {
+06543:   updateSystemSetting(input: $input) {
+06544:     id
+06545:     key
+06546:     value
+06547:     updatedAt
+06548:   }
+06549: }
+06550:     `;
+06551: 
+06552: export function useUpdateSystemSettingMutation() {
+06553:   return Urql.useMutation<UpdateSystemSettingMutation, UpdateSystemSettingMutationVariables>(UpdateSystemSettingDocument);
+06554: };
+06555: export const SetProviderBalanceDocument = gql`
+06556:     mutation SetProviderBalance($providerId: String!, $balance: Float) {
+06557:   setProviderBalance(providerId: $providerId, balance: $balance) {
+06558:     ...LlmProviderFields
+06559:   }
+06560: }
+06561:     ${LlmProviderFieldsFragmentDoc}`;
+06562: 
+06563: export function useSetProviderBalanceMutation() {
+06564:   return Urql.useMutation<SetProviderBalanceMutation, SetProviderBalanceMutationVariables>(SetProviderBalanceDocument);
+06565: };
+06566: export const AvailableModelsDocument = gql`
+06567:     query AvailableModels {
+06568:   availableModels {
+06569:     id
+06570:     providerId
+06571:     displayName
+06572:     versions
+06573:     defaultVersion
+06574:     isAvailable
+06575:     isDefault
+06576:   }
+06577: }
+06578:     `;
+06579: 
+06580: export function useAvailableModelsQuery(options?: Omit<Urql.UseQueryArgs<AvailableModelsQueryVariables>, 'query'>) {
+06581:   return Urql.useQuery<AvailableModelsQuery, AvailableModelsQueryVariables>({ query: AvailableModelsDocument, ...options });
+06582: };
+06583: export const ModelsAnalysisDocument = gql`
+06584:     query ModelsAnalysis($domainId: ID, $signature: String) {
+06585:   modelsAnalysis(domainId: $domainId, signature: $signature) {
+06586:     models {
+06587:       modelId
+06588:       label
+06589:       values {
+06590:         valueKey
+06591:         pooledWinRate
+06592:         stabilityScore
+06593:         eligibleDomainCount
+06594:         domains {
+06595:           domainId
+06596:           domainName
+06597:           winRate
+06598:           evidenceWeight
+06599:         }
+06600:       }
+06601:     }
+06602:   }
+06603: }
+06604:     `;
+06605: 
+06606: export function useModelsAnalysisQuery(options?: Omit<Urql.UseQueryArgs<ModelsAnalysisQueryVariables>, 'query'>) {
+06607:   return Urql.useQuery<ModelsAnalysisQuery, ModelsAnalysisQueryVariables>({ query: ModelsAnalysisDocument, ...options });
+06608: };
+06609: export const ModelsConsistencyDocument = gql`
+06610:     query ModelsConsistency($domainId: ID, $providerId: ID, $minScenarios: Int, $signature: String!) {
+06611:   modelsConsistency(
+06612:     domainId: $domainId
+06613:     providerId: $providerId
+06614:     minScenarios: $minScenarios
+06615:     signature: $signature
+06616:   ) {
+06617:     models {
+06618:       modelId
+06619:       label
+06620:       providerName
+06621:       repeatability {
+06622:         value
+06623:         ciLow
+06624:         ciHigh
+06625:         withinScenarioSd
+06626:         betweenScenarioSd
+06627:         scenariosMeasured
+06628:         perDomain {
+06629:           domainId
+06630:           domainName
+06631:           value
+06632:           ciLow
+06633:           ciHigh
+06634:           scenariosMeasured
+06635:         }
+06636:         perScenario {
+06637:           scenarioId
+06638:           matches
+06639:           trials
+06640:           p
+06641:           ciLow
+06642:           ciHigh
+06643:         }
+06644:       }
+06645:       coherence {
+06646:         value
+06647:         coherentPairs
+06648:         determinatePairs
+06649:         indeterminatePairs
+06650:         perPair {
+06651:           domainId
+06652:           valueKey
+06653:           rho
+06654:           pValue
+06655:           coherent
+06656:           determinate
+06657:           targetAnalysisRunId
+06658:           targetCompanionRunId
+06659:           primaryConditionIds
+06660:           companionConditionIds
+06661:           perCondition {
+06662:             scenarioId
+06663:             netPressureRank
+06664:             winRate
+06665:             matches
+06666:             trials
+06667:           }
+06668:         }
+06669:       }
+06670:       orderEffect {
+06671:         samePct
+06672:         flippedPct
+06673:         noisyPct
+06674:         notApplicable
+06675:       }
+06676:     }
+06677:     insufficient {
+06678:       modelId
+06679:       label
+06680:       providerName
+06681:       reason
+06682:     }
+06683:   }
+06684: }
+06685:     `;
+06686: 
+06687: export function useModelsConsistencyQuery(options: Omit<Urql.UseQueryArgs<ModelsConsistencyQueryVariables>, 'query'>) {
+06688:   return Urql.useQuery<ModelsConsistencyQuery, ModelsConsistencyQueryVariables>({ query: ModelsConsistencyDocument, ...options });
+06689: };
+06690: export const CreatePairedVignetteDocument = gql`
+06691:     mutation CreatePairedVignette($input: CreatePairedVignetteInput!) {
+06692:   createPairedVignette(input: $input) {
+06693:     definitionA {
+06694:       id
+06695:       name
+06696:     }
+06697:     definitionB {
+06698:       id
+06699:       name
+06700:     }
+06701:   }
+06702: }
+06703:     `;
+06704: 
+06705: export function useCreatePairedVignetteMutation() {
+06706:   return Urql.useMutation<CreatePairedVignetteMutation, CreatePairedVignetteMutationVariables>(CreatePairedVignetteDocument);
+06707: };
+06708: export const UpdatePairedVignetteDocument = gql`
+06709:     mutation UpdatePairedVignette($input: UpdatePairedVignetteInput!) {
+06710:   updatePairedVignette(input: $input) {
+06711:     definitionA {
+06712:       id
+06713:       name
+06714:     }
+06715:     definitionB {
+06716:       id
+06717:       name
+06718:     }
+06719:   }
+06720: }
+06721:     `;
+06722: 
+06723: export function useUpdatePairedVignetteMutation() {
+06724:   return Urql.useMutation<UpdatePairedVignetteMutation, UpdatePairedVignetteMutationVariables>(UpdatePairedVignetteDocument);
+06725: };
+06726: export const RunsDocument = gql`
+06727:     query Runs($definitionId: String, $experimentId: String, $status: String, $runCategory: String, $hasAnalysis: Boolean, $analysisStatus: String, $runType: String, $limit: Int, $offset: Int) {
+06728:   runs(
+06729:     definitionId: $definitionId
+06730:     experimentId: $experimentId
+06731:     status: $status
+06732:     runCategory: $runCategory
+06733:     hasAnalysis: $hasAnalysis
+06734:     analysisStatus: $analysisStatus
+06735:     runType: $runType
+06736:     limit: $limit
+06737:     offset: $offset
+06738:   ) {
+06739:     ...RunFields
+06740:   }
+06741: }
+06742:     ${RunFieldsFragmentDoc}`;
+06743: 
+06744: export function useRunsQuery(options?: Omit<Urql.UseQueryArgs<RunsQueryVariables>, 'query'>) {
+06745:   return Urql.useQuery<RunsQuery, RunsQueryVariables>({ query: RunsDocument, ...options });
+06746: };
+06747: export const RunCountDocument = gql`
+06748:     query RunCount($definitionId: String, $experimentId: String, $status: String, $runCategory: String, $hasAnalysis: Boolean, $analysisStatus: String, $runType: String) {
+06749:   runCount(
+06750:     definitionId: $definitionId
+06751:     experimentId: $experimentId
+06752:     status: $status
+06753:     runCategory: $runCategory
+06754:     hasAnalysis: $hasAnalysis
+06755:     analysisStatus: $analysisStatus
+06756:     runType: $runType
+06757:   )
+06758: }
+06759:     `;
+06760: 
+06761: export function useRunCountQuery(options?: Omit<Urql.UseQueryArgs<RunCountQueryVariables>, 'query'>) {
+06762:   return Urql.useQuery<RunCountQuery, RunCountQueryVariables>({ query: RunCountDocument, ...options });
+06763: };
+06764: export const AnalysisFolderCountsDocument = gql`
+06765:     query AnalysisFolderCounts($definitionId: String, $definitionTagIds: [ID!], $experimentId: String, $status: String, $runCategory: String, $analysisStatus: String, $runType: String) {
+06766:   analysisFolderCounts(
+06767:     definitionId: $definitionId
+06768:     definitionTagIds: $definitionTagIds
+06769:     experimentId: $experimentId
+06770:     status: $status
+06771:     runCategory: $runCategory
+06772:     analysisStatus: $analysisStatus
+06773:     runType: $runType
+06774:   ) {
+06775:     aggregateCount
+06776:     untaggedCount
+06777:     aggregateUntaggedCount
+06778:     tagCounts {
+06779:       tagId
+06780:       name
+06781:       count
+06782:     }
+06783:     aggregateTagCounts {
+06784:       tagId
+06785:       name
+06786:       count
+06787:     }
+06788:   }
+06789: }
+06790:     `;
+06791: 
+06792: export function useAnalysisFolderCountsQuery(options?: Omit<Urql.UseQueryArgs<AnalysisFolderCountsQueryVariables>, 'query'>) {
+06793:   return Urql.useQuery<AnalysisFolderCountsQuery, AnalysisFolderCountsQueryVariables>({ query: AnalysisFolderCountsDocument, ...options });
+06794: };
+06795: export const RunDocument = gql`
+06796:     query Run($id: ID!) {
+06797:   run(id: $id) {
+06798:     ...RunWithTranscriptsFields
+06799:   }
+06800: }
+06801:     ${RunWithTranscriptsFieldsFragmentDoc}`;
+06802: 
+06803: export function useRunQuery(options: Omit<Urql.UseQueryArgs<RunQueryVariables>, 'query'>) {
+06804:   return Urql.useQuery<RunQuery, RunQueryVariables>({ query: RunDocument, ...options });
+06805: };
+06806: export const StartRunDocument = gql`
+06807:     mutation StartRun($input: StartRunInput!) {
+06808:   startRun(input: $input) {
+06809:     run {
+06810:       ...RunFields
+06811:     }
+06812:     jobCount
+06813:     pairedRunIds
+06814:   }
+06815: }
+06816:     ${RunFieldsFragmentDoc}`;
+06817: 
+06818: export function useStartRunMutation() {
+06819:   return Urql.useMutation<StartRunMutation, StartRunMutationVariables>(StartRunDocument);
+06820: };
+06821: export const PauseRunDocument = gql`
+06822:     mutation PauseRun($runId: ID!) {
+06823:   pauseRun(runId: $runId) {
+06824:     ...RunFields
+06825:   }
+06826: }
+06827:     ${RunFieldsFragmentDoc}`;
+06828: 
+06829: export function usePauseRunMutation() {
+06830:   return Urql.useMutation<PauseRunMutation, PauseRunMutationVariables>(PauseRunDocument);
+06831: };
+06832: export const ResumeRunDocument = gql`
+06833:     mutation ResumeRun($runId: ID!) {
+06834:   resumeRun(runId: $runId) {
+06835:     ...RunFields
+06836:   }
+06837: }
+06838:     ${RunFieldsFragmentDoc}`;
+06839: 
+06840: export function useResumeRunMutation() {
+06841:   return Urql.useMutation<ResumeRunMutation, ResumeRunMutationVariables>(ResumeRunDocument);
+06842: };
+06843: export const CancelRunDocument = gql`
+06844:     mutation CancelRun($runId: ID!) {
+06845:   cancelRun(runId: $runId) {
+06846:     ...RunFields
+06847:   }
+06848: }
+06849:     ${RunFieldsFragmentDoc}`;
+06850: 
+06851: export function useCancelRunMutation() {
+06852:   return Urql.useMutation<CancelRunMutation, CancelRunMutationVariables>(CancelRunDocument);
+06853: };
+06854: export const DeleteRunDocument = gql`
+06855:     mutation DeleteRun($runId: ID!) {
+06856:   deleteRun(runId: $runId)
+06857: }
+06858:     `;
+06859: 
+06860: export function useDeleteRunMutation() {
+06861:   return Urql.useMutation<DeleteRunMutation, DeleteRunMutationVariables>(DeleteRunDocument);
+06862: };
+06863: export const UpdateRunDocument = gql`
+06864:     mutation UpdateRun($runId: ID!, $input: UpdateRunInput!) {
+06865:   updateRun(runId: $runId, input: $input) {
+06866:     ...RunFields
+06867:   }
+06868: }
+06869:     ${RunFieldsFragmentDoc}`;
+06870: 
+06871: export function useUpdateRunMutation() {
+06872:   return Urql.useMutation<UpdateRunMutation, UpdateRunMutationVariables>(UpdateRunDocument);
+06873: };
+06874: export const CancelSummarizationDocument = gql`
+06875:     mutation CancelSummarization($runId: ID!) {
+06876:   cancelSummarization(runId: $runId) {
+06877:     run {
+06878:       ...RunFields
+06879:     }
+06880:     cancelledCount
+06881:   }
+06882: }
+06883:     ${RunFieldsFragmentDoc}`;
+06884: 
+06885: export function useCancelSummarizationMutation() {
+06886:   return Urql.useMutation<CancelSummarizationMutation, CancelSummarizationMutationVariables>(CancelSummarizationDocument);
+06887: };
+06888: export const RestartSummarizationDocument = gql`
+06889:     mutation RestartSummarization($runId: ID!, $force: Boolean) {
+06890:   restartSummarization(runId: $runId, force: $force) {
+06891:     run {
+06892:       ...RunFields
+06893:     }
+06894:     queuedCount
+06895:   }
+06896: }
+06897:     ${RunFieldsFragmentDoc}`;
+06898: 
+06899: export function useRestartSummarizationMutation() {
+06900:   return Urql.useMutation<RestartSummarizationMutation, RestartSummarizationMutationVariables>(RestartSummarizationDocument);
+06901: };
+06902: export const UpdateTranscriptDecisionDocument = gql`
+06903:     mutation UpdateTranscriptDecision($transcriptId: ID!, $decisionState: String!, $favoredValueKey: String, $strength: String) {
+06904:   updateTranscriptDecision(
+06905:     transcriptId: $transcriptId
+06906:     decisionState: $decisionState
+06907:     favoredValueKey: $favoredValueKey
+06908:     strength: $strength
+06909:   ) {
+06910:     id
+06911:     runId
+06912:     scenarioId
+06913:     modelId
+06914:     modelVersion
+06915:     content
+06916:     decisionMetadata
+06917:     turnCount
+06918:     tokenCount
+06919:     durationMs
+06920:     estimatedCost
+06921:     createdAt
+06922:     lastAccessedAt
+06923:   }
+06924: }
+06925:     `;
+06926: 
+06927: export function useUpdateTranscriptDecisionMutation() {
+06928:   return Urql.useMutation<UpdateTranscriptDecisionMutation, UpdateTranscriptDecisionMutationVariables>(UpdateTranscriptDecisionDocument);
+06929: };
+06930: export const ScenariosDocument = gql`
+06931:     query Scenarios($definitionId: ID!, $limit: Int, $offset: Int) {
+06932:   scenarios(definitionId: $definitionId, limit: $limit, offset: $offset) {
+06933:     id
+06934:     definitionId
+06935:     name
+06936:     content
+06937:     createdAt
+06938:   }
+06939: }
+06940:     `;
+06941: 
+06942: export function useScenariosQuery(options: Omit<Urql.UseQueryArgs<ScenariosQueryVariables>, 'query'>) {
+06943:   return Urql.useQuery<ScenariosQuery, ScenariosQueryVariables>({ query: ScenariosDocument, ...options });
+06944: };
+06945: export const ScenarioCountDocument = gql`
+06946:     query ScenarioCount($definitionId: ID!) {
+06947:   scenarioCount(definitionId: $definitionId)
+06948: }
+06949:     `;
+06950: 
+06951: export function useScenarioCountQuery(options: Omit<Urql.UseQueryArgs<ScenarioCountQueryVariables>, 'query'>) {
+06952:   return Urql.useQuery<ScenarioCountQuery, ScenarioCountQueryVariables>({ query: ScenarioCountDocument, ...options });
+06953: };
+06954: export const RunConditionGridDocument = gql`
+06955:     query RunConditionGrid($definitionId: ID!) {
+06956:   runConditionGrid(definitionId: $definitionId) {
+06957:     attributeA
+06958:     attributeB
+06959:     rowLevels
+06960:     colLevels
+06961:     cells {
+06962:       rowLevel
+06963:       colLevel
+06964:       trialCount
+06965:       scenarioCount
+06966:       scenarioIds
+06967:     }
+06968:   }
+06969: }
+06970:     `;
+06971: 
+06972: export function useRunConditionGridQuery(options: Omit<Urql.UseQueryArgs<RunConditionGridQueryVariables>, 'query'>) {
+06973:   return Urql.useQuery<RunConditionGridQuery, RunConditionGridQueryVariables>({ query: RunConditionGridDocument, ...options });
+06974: };
+06975: export const SurveysDocument = gql`
+06976:     query Surveys($search: String) {
+06977:   surveys(search: $search) {
+06978:     id
+06979:     name
+06980:     hypothesis
+06981:     analysisPlan
+06982:     createdAt
+06983:     updatedAt
+06984:     runCount
+06985:   }
+06986: }
+06987:     `;
+06988: 
+06989: export function useSurveysQuery(options?: Omit<Urql.UseQueryArgs<SurveysQueryVariables>, 'query'>) {
+06990:   return Urql.useQuery<SurveysQuery, SurveysQueryVariables>({ query: SurveysDocument, ...options });
+06991: };
+06992: export const CreateSurveyDocument = gql`
+06993:     mutation CreateSurvey($input: CreateSurveyInput!) {
+06994:   createSurvey(input: $input) {
+06995:     id
+06996:     name
+06997:     hypothesis
+06998:     analysisPlan
+06999:     createdAt
+07000:     updatedAt
+07001:     runCount
+07002:   }
+07003: }
+07004:     `;
+07005: 
+07006: export function useCreateSurveyMutation() {
+07007:   return Urql.useMutation<CreateSurveyMutation, CreateSurveyMutationVariables>(CreateSurveyDocument);
+07008: };
+07009: export const UpdateSurveyDocument = gql`
+07010:     mutation UpdateSurvey($id: ID!, $input: UpdateSurveyInput!) {
+07011:   updateSurvey(id: $id, input: $input) {
+07012:     id
+07013:     name
+07014:     hypothesis
+07015:     analysisPlan
+07016:     createdAt
+07017:     updatedAt
+07018:     runCount
+07019:   }
+07020: }
+07021:     `;
+07022: 
+07023: export function useUpdateSurveyMutation() {
+07024:   return Urql.useMutation<UpdateSurveyMutation, UpdateSurveyMutationVariables>(UpdateSurveyDocument);
+07025: };
+07026: export const DeleteSurveyDocument = gql`
+07027:     mutation DeleteSurvey($id: ID!) {
+07028:   deleteSurvey(id: $id)
+07029: }
+07030:     `;
+07031: 
+07032: export function useDeleteSurveyMutation() {
+07033:   return Urql.useMutation<DeleteSurveyMutation, DeleteSurveyMutationVariables>(DeleteSurveyDocument);
+07034: };
+07035: export const DuplicateSurveyDocument = gql`
+07036:     mutation DuplicateSurvey($id: ID!, $name: String) {
+07037:   duplicateSurvey(id: $id, name: $name) {
+07038:     id
+07039:     name
+07040:     hypothesis
+07041:     analysisPlan
+07042:     createdAt
+07043:     updatedAt
+07044:     runCount
+07045:   }
+07046: }
+07047:     `;
+07048: 
+07049: export function useDuplicateSurveyMutation() {
+07050:   return Urql.useMutation<DuplicateSurveyMutation, DuplicateSurveyMutationVariables>(DuplicateSurveyDocument);
+07051: };
+07052: export const TagsDocument = gql`
+07053:     query Tags($search: String, $limit: Int) {
+07054:   tags(search: $search, limit: $limit) {
+07055:     id
+07056:     name
+07057:     createdAt
+07058:     definitionCount
+07059:   }
+07060: }
+07061:     `;
+07062: 
+07063: export function useTagsQuery(options?: Omit<Urql.UseQueryArgs<TagsQueryVariables>, 'query'>) {
+07064:   return Urql.useQuery<TagsQuery, TagsQueryVariables>({ query: TagsDocument, ...options });
+07065: };
+07066: export const CreateTagDocument = gql`
+07067:     mutation CreateTag($name: String!) {
+07068:   createTag(name: $name) {
+07069:     id
+07070:     name
+07071:     createdAt
+07072:   }
+07073: }
+07074:     `;
+07075: 
+07076: export function useCreateTagMutation() {
+07077:   return Urql.useMutation<CreateTagMutation, CreateTagMutationVariables>(CreateTagDocument);
+07078: };
+07079: export const DeleteTagDocument = gql`
+07080:     mutation DeleteTag($id: String!) {
+07081:   deleteTag(id: $id) {
+07082:     success
+07083:     affectedDefinitions
+07084:   }
+07085: }
+07086:     `;
+07087: 
+07088: export function useDeleteTagMutation() {
+07089:   return Urql.useMutation<DeleteTagMutation, DeleteTagMutationVariables>(DeleteTagDocument);
+07090: };
+07091: export const AddTagToDefinitionDocument = gql`
+07092:     mutation AddTagToDefinition($definitionId: String!, $tagId: String!) {
+07093:   addTagToDefinition(definitionId: $definitionId, tagId: $tagId) {
+07094:     id
+07095:     tags {
+07096:       id
+07097:       name
+07098:     }
+07099:   }
+07100: }
+07101:     `;
+07102: 
+07103: export function useAddTagToDefinitionMutation() {
+07104:   return Urql.useMutation<AddTagToDefinitionMutation, AddTagToDefinitionMutationVariables>(AddTagToDefinitionDocument);
+07105: };
+07106: export const RemoveTagFromDefinitionDocument = gql`
+07107:     mutation RemoveTagFromDefinition($definitionId: String!, $tagId: String!) {
+07108:   removeTagFromDefinition(definitionId: $definitionId, tagId: $tagId) {
+07109:     id
+07110:     tags {
+07111:       id
+07112:       name
+07113:     }
+07114:   }
+07115: }
+07116:     `;
+07117: 
+07118: export function useRemoveTagFromDefinitionMutation() {
+07119:   return Urql.useMutation<RemoveTagFromDefinitionMutation, RemoveTagFromDefinitionMutationVariables>(RemoveTagFromDefinitionDocument);
+07120: };
+07121: export const CreateAndAssignTagDocument = gql`
+07122:     mutation CreateAndAssignTag($definitionId: String!, $tagName: String!) {
+07123:   createAndAssignTag(definitionId: $definitionId, tagName: $tagName) {
+07124:     id
+07125:     tags {
+07126:       id
+07127:       name
+07128:     }
+07129:   }
+07130: }
+07131:     `;
+07132: 
+07133: export function useCreateAndAssignTagMutation() {
+07134:   return Urql.useMutation<CreateAndAssignTagMutation, CreateAndAssignTagMutationVariables>(CreateAndAssignTagDocument);
+07135: };
+07136: export const ListUsersDocument = gql`
+07137:     query ListUsers {
+07138:   listUsers {
+07139:     id
+07140:     email
+07141:     name
+07142:     role
+07143:     mustChangePassword
+07144:     lastLoginAt
+07145:     createdAt
+07146:   }
+07147: }
+07148:     `;
+07149: 
+07150: export function useListUsersQuery(options?: Omit<Urql.UseQueryArgs<ListUsersQueryVariables>, 'query'>) {
+07151:   return Urql.useQuery<ListUsersQuery, ListUsersQueryVariables>({ query: ListUsersDocument, ...options });
+07152: };
+07153: export const CreateUserDocument = gql`
+07154:     mutation CreateUser($input: CreateUserInput!) {
+07155:   createUser(input: $input) {
+07156:     id
+07157:     email
+07158:     name
+07159:     role
+07160:     mustChangePassword
+07161:     lastLoginAt
+07162:     createdAt
+07163:   }
+07164: }
+07165:     `;
+07166: 
+07167: export function useCreateUserMutation() {
+07168:   return Urql.useMutation<CreateUserMutation, CreateUserMutationVariables>(CreateUserDocument);
+07169: };
+07170: export const UpdateUserRoleDocument = gql`
+07171:     mutation UpdateUserRole($input: UpdateUserRoleInput!) {
+07172:   updateUserRole(input: $input) {
+07173:     id
+07174:     email
+07175:     name
+07176:     role
+07177:     mustChangePassword
+07178:     lastLoginAt
+07179:     createdAt
+07180:   }
+07181: }
+07182:     `;
+07183: 
+07184: export function useUpdateUserRoleMutation() {
+07185:   return Urql.useMutation<UpdateUserRoleMutation, UpdateUserRoleMutationVariables>(UpdateUserRoleDocument);
+07186: };
+07187: export const ValueStatementsDocument = gql`
+07188:     query ValueStatements($domainId: ID!) {
+07189:   valueStatements(domainId: $domainId) {
+07190:     id
+07191:     domainId
+07192:     token
+07193:     body
+07194:     updatedAt
+07195:   }
+07196: }
+07197:     `;
+07198: 
+07199: export function useValueStatementsQuery(options: Omit<Urql.UseQueryArgs<ValueStatementsQueryVariables>, 'query'>) {
+07200:   return Urql.useQuery<ValueStatementsQuery, ValueStatementsQueryVariables>({ query: ValueStatementsDocument, ...options });
+07201: };
+07202: export const CreateValueStatementDocument = gql`
+07203:     mutation CreateValueStatement($input: CreateValueStatementInput!) {
+07204:   createValueStatement(input: $input) {
+07205:     id
+07206:     domainId
+07207:     token
+07208:     body
+07209:     updatedAt
+07210:   }
+07211: }
+07212:     `;
+07213: 
+07214: export function useCreateValueStatementMutation() {
+07215:   return Urql.useMutation<CreateValueStatementMutation, CreateValueStatementMutationVariables>(CreateValueStatementDocument);
+07216: };
+07217: export const UpdateValueStatementDocument = gql`
+07218:     mutation UpdateValueStatement($id: ID!, $input: UpdateValueStatementInput!) {
+07219:   updateValueStatement(id: $id, input: $input) {
+07220:     id
+07221:     domainId
+07222:     token
+07223:     body
+07224:     updatedAt
+07225:   }
+07226: }
+07227:     `;
+07228: 
+07229: export function useUpdateValueStatementMutation() {
+07230:   return Urql.useMutation<UpdateValueStatementMutation, UpdateValueStatementMutationVariables>(UpdateValueStatementDocument);
+07231: };
+07232: export const DeleteValueStatementDocument = gql`
+07233:     mutation DeleteValueStatement($id: ID!) {
+07234:   deleteValueStatement(id: $id)
+07235: }
+07236:     `;
+07237: 
+07238: export function useDeleteValueStatementMutation() {
+07239:   return Urql.useMutation<DeleteValueStatementMutation, DeleteValueStatementMutation

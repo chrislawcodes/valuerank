@@ -58,6 +58,13 @@ export type AggregateMetadata = {
   sourceRunIds: Array<Scalars['String']['output']>;
 };
 
+export type AggregateSensitivity = {
+  __typename?: 'AggregateSensitivity';
+  value?: Maybe<Scalars['Float']['output']>;
+  valuePairsExcluded: Scalars['Int']['output'];
+  valuePairsMeasured: Scalars['Int']['output'];
+};
+
 export type AnalysisFolderCounts = {
   __typename?: 'AnalysisFolderCounts';
   aggregateCount: Scalars['Int']['output'];
@@ -223,6 +230,19 @@ export type AvailableSignature = {
   signature: Scalars['String']['output'];
 };
 
+export type BandStat = {
+  __typename?: 'BandStat';
+  highBandMean?: Maybe<Scalars['Float']['output']>;
+  lowBandMean?: Maybe<Scalars['Float']['output']>;
+  value?: Maybe<Scalars['Float']['output']>;
+};
+
+export type BaselineWinRate = {
+  __typename?: 'BaselineWinRate';
+  ceilingFloorFlag?: Maybe<Scalars['String']['output']>;
+  value?: Maybe<Scalars['Float']['output']>;
+};
+
 /** Progress breakdown for a specific model */
 export type ByModelProgress = {
   __typename?: 'ByModelProgress';
@@ -360,7 +380,7 @@ export type ConsistencyPerCondition = {
   netPressureRank: Scalars['Int']['output'];
   scenarioId: Scalars['String']['output'];
   trials: Scalars['Int']['output'];
-  winRate: Scalars['Float']['output'];
+  winRate?: Maybe<Scalars['Float']['output']>;
 };
 
 export type ConsistencyPerDomain = {
@@ -671,10 +691,28 @@ export type DeprecateModelResult = {
 export type DirectionalCoverage = {
   __typename?: 'DirectionalCoverage';
   completeBatches: Scalars['Int']['output'];
-  definitionIds: Array<Scalars['ID']['output']>;
+  definitionIds: Array<Scalars['String']['output']>;
   direction: Scalars['String']['output'];
   filledSlots: Scalars['Int']['output'];
   leftoverConditions: Scalars['Int']['output'];
+};
+
+export type DirectionalSanityCheck = {
+  __typename?: 'DirectionalSanityCheck';
+  breakdown: Array<DirectionalSanityCheckEntry>;
+  flatPct: Scalars['Float']['output'];
+  measuredCount: Scalars['Int']['output'];
+  negativePct: Scalars['Float']['output'];
+  positivePct: Scalars['Float']['output'];
+  unmeasurableCount: Scalars['Int']['output'];
+};
+
+export type DirectionalSanityCheckEntry = {
+  __typename?: 'DirectionalSanityCheckEntry';
+  classification: Scalars['String']['output'];
+  directionDelta: Scalars['Float']['output'];
+  modelId: Scalars['String']['output'];
+  pairKey: Scalars['String']['output'];
 };
 
 /** A single domain used to group vignettes */
@@ -1143,24 +1181,31 @@ export type DomainTrialRunStatus = {
 
 export type DomainValueCoverageCell = {
   __typename?: 'DomainValueCoverageCell';
+  /** Count of complete A-first runs for this value pair after model-set filtering. This is the filtered directional count for the first value in the pair. */
   aFirstBatchCount: Scalars['Int']['output'];
   aggregateRunId?: Maybe<Scalars['String']['output']>;
+  /** Count of complete B-first runs for this value pair after model-set filtering. This is the filtered directional count for the second value in the pair. */
   bFirstBatchCount: Scalars['Int']['output'];
   /** Count of fully-complete non-aggregate runs for this value pair. A run is complete when every selected model has at least one transcript at every (scenario × sampleIndex) slot. samplesPerScenario does not multiply this count -- a complete run contributes 1 regardless of how many samples per scenario were planned. Aggregate runs are excluded. */
   batchCount: Scalars['Int']['output'];
-  contributingDefinitionIds: Array<Scalars['ID']['output']>;
+  /** Union of definition IDs that contribute data to this coverage cell, sorted alphabetically. */
+  contributingDefinitionIds: Array<Scalars['String']['output']>;
   definitionId?: Maybe<Scalars['String']['output']>;
   definitionName?: Maybe<Scalars['String']['output']>;
+  /** Per-direction condition coverage for this value pair, including complete batches, filled slots, leftover conditions from incomplete runs, and contributing definition IDs. */
   directionalCoverage: Array<DirectionalCoverage>;
   /** Count of non-aggregate runs that expect transcripts but are missing one or more (model × scenario × sampleIndex) slots. Per-run; samplesPerScenario does not multiply this count. Aggregate runs and runs with zero expected slots are excluded. */
   incompleteBatchCount: Scalars['Int']['output'];
   maxTrialCount?: Maybe<Scalars['Int']['output']>;
   minTrialCount?: Maybe<Scalars['Int']['output']>;
   modelBreakdown?: Maybe<Array<CoverageModelBreakdown>>;
+  /** Count of unmatched directional runs for this value pair, computed as max(complete A-first runs, complete B-first runs) - min(complete A-first runs, complete B-first runs). When both directions are equal this is 0; when only one direction has runs this is the count of that side. Runs without a recognizable direction token are excluded. */
   orphanedBatchCount: Scalars['Int']['output'];
+  /** Count of unmatched condition slots across both directions, computed as the size of the symmetric difference of filled (scenarioId, modelId, sampleIndex) slots. */
   orphanedConditionCount: Scalars['Int']['output'];
-  /** Count of paired-batch groups where the surviving (complete) companion run is fully complete. When both companions are complete, the pair counts as 1. When only one is complete, that one is the survivor and the pair counts as 1. When both are incomplete, the pair counts as 0 here (and as 1 toward incompleteBatchCount). */
+  /** Count of pairable analysis-ready batches for this value pair, computed as min(complete A-first non-aggregate runs, complete B-first non-aggregate runs) where direction is read from config.jobChoiceValueFirst. A launch where only one direction completed contributes 0 here (the surviving complete run still appears in batchCount). Runs without a recognizable direction token are excluded from both sides. See docs/canonical-glossary.md "Paired Batch" for full semantic. */
   pairedBatchCount: Scalars['Int']['output'];
+  /** Count of matched condition slots across both directions, computed as the size of the intersection of filled (scenarioId, modelId, sampleIndex) slots. */
   pairedConditionCount: Scalars['Int']['output'];
   valueA: Scalars['String']['output'];
   valueB: Scalars['String']['output'];
@@ -1185,6 +1230,13 @@ export type EnsureDomainVignettePairResult = {
   definitionAId?: Maybe<Scalars['String']['output']>;
   definitionBId?: Maybe<Scalars['String']['output']>;
   status: VignettePairStatus;
+};
+
+export type ExcludedDefinition = {
+  __typename?: 'ExcludedDefinition';
+  definitionId: Scalars['String']['output'];
+  name: Scalars['String']['output'];
+  reason: Scalars['String']['output'];
 };
 
 /** Real-time execution metrics for monitoring parallel processing */
@@ -1292,6 +1344,14 @@ export type ForkDefinitionInput = {
 
 export type InsufficientModel = {
   __typename?: 'InsufficientModel';
+  label: Scalars['String']['output'];
+  modelId: Scalars['String']['output'];
+  providerName: Scalars['String']['output'];
+  reason: Scalars['String']['output'];
+};
+
+export type InsufficientPressureSensitivityModel = {
+  __typename?: 'InsufficientPressureSensitivityModel';
   label: Scalars['String']['output'];
   modelId: Scalars['String']['output'];
   providerName: Scalars['String']['output'];
@@ -2257,6 +2317,41 @@ export type PreferenceSummary = {
   perModel: Scalars['JSON']['output'];
 };
 
+export type PressureSensitivityModel = {
+  __typename?: 'PressureSensitivityModel';
+  aggregateSensitivity: AggregateSensitivity;
+  label: Scalars['String']['output'];
+  modelId: Scalars['String']['output'];
+  providerName: Scalars['String']['output'];
+  unscoredCount: Scalars['Int']['output'];
+  valuePairs: Array<PressureSensitivityValuePair>;
+};
+
+export type PressureSensitivityResult = {
+  __typename?: 'PressureSensitivityResult';
+  directionalSanityCheck: DirectionalSanityCheck;
+  excludedDefinitions: Array<ExcludedDefinition>;
+  excludedScenariosCount: Scalars['Int']['output'];
+  insufficient: Array<InsufficientPressureSensitivityModel>;
+  models: Array<PressureSensitivityModel>;
+};
+
+export type PressureSensitivityValuePair = {
+  __typename?: 'PressureSensitivityValuePair';
+  baselineWinRate: BaselineWinRate;
+  convictionDelta: BandStat;
+  definitionsExcluded: Scalars['Int']['output'];
+  definitionsMeasured: Scalars['Int']['output'];
+  directionDelta: BandStat;
+  grid: Array<SensitivityCell>;
+  n: Scalars['Int']['output'];
+  netScoreDelta: BandStat;
+  opponentToken: Scalars['String']['output'];
+  ownToken: Scalars['String']['output'];
+  pairKey: Scalars['String']['output'];
+  unscoredCount: Scalars['Int']['output'];
+};
+
 /** Result of a probe job execution */
 export type ProbeResult = {
   __typename?: 'ProbeResult';
@@ -2491,6 +2586,7 @@ export type Query = {
   preamble?: Maybe<Preamble>;
   /** List all preambles */
   preambles: Array<Preamble>;
+  pressureSensitivity: PressureSensitivityResult;
   /**
    *
    *       Get health status for all LLM providers.
@@ -2900,6 +2996,13 @@ export type QueryPreambleArgs = {
 };
 
 
+export type QueryPressureSensitivityArgs = {
+  domainId?: InputMaybe<Scalars['ID']['input']>;
+  providerId?: InputMaybe<Scalars['ID']['input']>;
+  signature: Scalars['String']['input'];
+};
+
+
 export type QueryProviderHealthArgs = {
   refresh?: InputMaybe<Scalars['Boolean']['input']>;
 };
@@ -3271,6 +3374,7 @@ export type RunAnomalySource =
 
 /** Structured anomaly type for run state reconciliation */
 export type RunAnomalyType =
+  | 'INVALID_RESPONSE_FAILURE'
   | 'MODEL_TRANSCRIPT_SHORTFALL'
   | 'ORPHAN_TRANSCRIPT'
   | 'PAIR_ASYMMETRY'
@@ -3334,6 +3438,18 @@ export type Scenario = {
   definitionId: Scalars['String']['output'];
   id: Scalars['ID']['output'];
   name: Scalars['String']['output'];
+};
+
+export type SensitivityCell = {
+  __typename?: 'SensitivityCell';
+  conviction?: Maybe<Scalars['Float']['output']>;
+  lowData: Scalars['Boolean']['output'];
+  n: Scalars['Int']['output'];
+  netScore?: Maybe<Scalars['Float']['output']>;
+  opponentLevel: Scalars['Int']['output'];
+  ownLevel: Scalars['Int']['output'];
+  unscoredCount: Scalars['Int']['output'];
+  winRate?: Maybe<Scalars['Float']['output']>;
 };
 
 /** Result of setting a default model */
@@ -4350,7 +4466,7 @@ export type ModelsConsistencyQueryVariables = Exact<{
 }>;
 
 
-export type ModelsConsistencyQuery = { __typename?: 'Query', modelsConsistency: { __typename?: 'ModelsConsistencyResult', models: Array<{ __typename?: 'ModelConsistency', modelId: string, label: string, providerName: string, repeatability: { __typename?: 'Repeatability', value: number, ciLow: number, ciHigh: number, withinScenarioSd: number, betweenScenarioSd: number, scenariosMeasured: number, perDomain: Array<{ __typename?: 'ConsistencyPerDomain', domainId: string, domainName: string, value: number, ciLow: number, ciHigh: number, scenariosMeasured: number }>, perScenario: Array<{ __typename?: 'ConsistencyPerScenario', scenarioId: string, matches: number, trials: number, p: number, ciLow: number, ciHigh: number }> }, coherence: { __typename?: 'Coherence', value: number, coherentPairs: number, determinatePairs: number, indeterminatePairs: number, perPair: Array<{ __typename?: 'ConsistencyPerPair', domainId: string, valueKey: string, rho?: number | null, pValue?: number | null, coherent: boolean, determinate: boolean, targetAnalysisRunId?: string | null, targetCompanionRunId?: string | null, primaryConditionIds: Array<string>, companionConditionIds: Array<string>, perCondition: Array<{ __typename?: 'ConsistencyPerCondition', scenarioId: string, netPressureRank: number, winRate: number, matches: number, trials: number }> }> }, orderEffect: { __typename?: 'OrderEffect', samePct: number, flippedPct: number, noisyPct: number, notApplicable: boolean } }>, insufficient: Array<{ __typename?: 'InsufficientModel', modelId: string, label: string, providerName: string, reason: string }> } };
+export type ModelsConsistencyQuery = { __typename?: 'Query', modelsConsistency: { __typename?: 'ModelsConsistencyResult', models: Array<{ __typename?: 'ModelConsistency', modelId: string, label: string, providerName: string, repeatability: { __typename?: 'Repeatability', value: number, ciLow: number, ciHigh: number, withinScenarioSd: number, betweenScenarioSd: number, scenariosMeasured: number, perDomain: Array<{ __typename?: 'ConsistencyPerDomain', domainId: string, domainName: string, value: number, ciLow: number, ciHigh: number, scenariosMeasured: number }>, perScenario: Array<{ __typename?: 'ConsistencyPerScenario', scenarioId: string, matches: number, trials: number, p: number, ciLow: number, ciHigh: number }> }, coherence: { __typename?: 'Coherence', value: number, coherentPairs: number, determinatePairs: number, indeterminatePairs: number, perPair: Array<{ __typename?: 'ConsistencyPerPair', domainId: string, valueKey: string, rho?: number | null, pValue?: number | null, coherent: boolean, determinate: boolean, targetAnalysisRunId?: string | null, targetCompanionRunId?: string | null, primaryConditionIds: Array<string>, companionConditionIds: Array<string>, perCondition: Array<{ __typename?: 'ConsistencyPerCondition', scenarioId: string, netPressureRank: number, winRate?: number | null, matches: number, trials: number }> }> }, orderEffect: { __typename?: 'OrderEffect', samePct: number, flippedPct: number, noisyPct: number, notApplicable: boolean } }>, insufficient: Array<{ __typename?: 'InsufficientModel', modelId: string, label: string, providerName: string, reason: string }> } };
 
 export type CreatePairedVignetteMutationVariables = Exact<{
   input: CreatePairedVignetteInput;
@@ -4365,6 +4481,15 @@ export type UpdatePairedVignetteMutationVariables = Exact<{
 
 
 export type UpdatePairedVignetteMutation = { __typename?: 'Mutation', updatePairedVignette: { __typename?: 'CreatePairedVignetteResult', definitionA: { __typename?: 'Definition', id: string, name: string }, definitionB: { __typename?: 'Definition', id: string, name: string } } };
+
+export type PressureSensitivityQueryVariables = Exact<{
+  domainId?: InputMaybe<Scalars['ID']['input']>;
+  providerId?: InputMaybe<Scalars['ID']['input']>;
+  signature: Scalars['String']['input'];
+}>;
+
+
+export type PressureSensitivityQuery = { __typename?: 'Query', pressureSensitivity: { __typename?: 'PressureSensitivityResult', excludedScenariosCount: number, models: Array<{ __typename?: 'PressureSensitivityModel', modelId: string, label: string, providerName: string, unscoredCount: number, aggregateSensitivity: { __typename?: 'AggregateSensitivity', value?: number | null, valuePairsMeasured: number, valuePairsExcluded: number }, valuePairs: Array<{ __typename?: 'PressureSensitivityValuePair', pairKey: string, ownToken: string, opponentToken: string, n: number, unscoredCount: number, definitionsMeasured: number, definitionsExcluded: number, directionDelta: { __typename?: 'BandStat', value?: number | null, lowBandMean?: number | null, highBandMean?: number | null }, convictionDelta: { __typename?: 'BandStat', value?: number | null, lowBandMean?: number | null, highBandMean?: number | null }, netScoreDelta: { __typename?: 'BandStat', value?: number | null, lowBandMean?: number | null, highBandMean?: number | null }, baselineWinRate: { __typename?: 'BaselineWinRate', value?: number | null, ceilingFloorFlag?: string | null }, grid: Array<{ __typename?: 'SensitivityCell', ownLevel: number, opponentLevel: number, n: number, unscoredCount: number, winRate?: number | null, conviction?: number | null, netScore?: number | null, lowData: boolean }> }> }>, insufficient: Array<{ __typename?: 'InsufficientPressureSensitivityModel', modelId: string, label: string, providerName: string, reason: string }>, excludedDefinitions: Array<{ __typename?: 'ExcludedDefinition', definitionId: string, name: string, reason: string }>, directionalSanityCheck: { __typename?: 'DirectionalSanityCheck', positivePct: number, flatPct: number, negativePct: number, measuredCount: number, unmeasurableCount: number, breakdown: Array<{ __typename?: 'DirectionalSanityCheckEntry', modelId: string, pairKey: string, directionDelta: number, classification: string }> } } };
 
 export type RunFieldsFragment = { __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: unknown, stalledModels: Array<string>, companionRunId?: string | null, isAggregate: boolean, pairedBatchGroupId?: string | null, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, updatedAt: string, lastAccessedAt?: string | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: unknown | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, unresolvableTranscriptCount?: { __typename?: 'UnresolvableCount', total: number, byModel: Array<{ __typename?: 'UnresolvableByModel', modelId: string, count: number }> } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: unknown, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null };
 
@@ -6754,6 +6879,94 @@ export const UpdatePairedVignetteDocument = gql`
 
 export function useUpdatePairedVignetteMutation() {
   return Urql.useMutation<UpdatePairedVignetteMutation, UpdatePairedVignetteMutationVariables>(UpdatePairedVignetteDocument);
+};
+export const PressureSensitivityDocument = gql`
+    query PressureSensitivity($domainId: ID, $providerId: ID, $signature: String!) {
+  pressureSensitivity(
+    domainId: $domainId
+    providerId: $providerId
+    signature: $signature
+  ) {
+    models {
+      modelId
+      label
+      providerName
+      unscoredCount
+      aggregateSensitivity {
+        value
+        valuePairsMeasured
+        valuePairsExcluded
+      }
+      valuePairs {
+        pairKey
+        ownToken
+        opponentToken
+        n
+        unscoredCount
+        definitionsMeasured
+        definitionsExcluded
+        directionDelta {
+          value
+          lowBandMean
+          highBandMean
+        }
+        convictionDelta {
+          value
+          lowBandMean
+          highBandMean
+        }
+        netScoreDelta {
+          value
+          lowBandMean
+          highBandMean
+        }
+        baselineWinRate {
+          value
+          ceilingFloorFlag
+        }
+        grid {
+          ownLevel
+          opponentLevel
+          n
+          unscoredCount
+          winRate
+          conviction
+          netScore
+          lowData
+        }
+      }
+    }
+    insufficient {
+      modelId
+      label
+      providerName
+      reason
+    }
+    excludedDefinitions {
+      definitionId
+      name
+      reason
+    }
+    excludedScenariosCount
+    directionalSanityCheck {
+      positivePct
+      flatPct
+      negativePct
+      measuredCount
+      unmeasurableCount
+      breakdown {
+        modelId
+        pairKey
+        directionDelta
+        classification
+      }
+    }
+  }
+}
+    `;
+
+export function usePressureSensitivityQuery(options: Omit<Urql.UseQueryArgs<PressureSensitivityQueryVariables>, 'query'>) {
+  return Urql.useQuery<PressureSensitivityQuery, PressureSensitivityQueryVariables>({ query: PressureSensitivityDocument, ...options });
 };
 export const RunsDocument = gql`
     query Runs($definitionId: String, $experimentId: String, $status: String, $runCategory: String, $hasAnalysis: Boolean, $analysisStatus: String, $runType: String, $limit: Int, $offset: Int) {

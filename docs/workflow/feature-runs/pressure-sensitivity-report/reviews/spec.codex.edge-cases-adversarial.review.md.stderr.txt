@@ -1,0 +1,1538 @@
+Reading additional input from stdin...
+OpenAI Codex v0.125.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019dd108-5dcf-7080-bc40-b052cd8cd4d7
+--------
+user
+Review this spec artifact using a edge-cases-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+Code context files are provided above. Before asserting any finding, check whether it is confirmed or refuted by the provided code. Each finding must include an evidence tag:
+  [CODE-CONFIRMED] — the code directly supports this finding
+  [CODE-REFUTED] — the code contradicts this finding (do not include as a finding)
+  [UNVERIFIED] — relevant code was not provided; treat as lower confidence
+Only assign HIGH severity to CODE-CONFIRMED findings.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Context: scenarios-utils.ts
+export type DefinitionDimension = {
+  name?: unknown;
+  levels?: unknown;
+  values?: unknown;
+};
+
+export function getDimensionLevelsFromDefinition(definitionDimension: DefinitionDimension | undefined): string[] {
+  if (!definitionDimension) {
+    return [];
+  }
+
+  if (Array.isArray(definitionDimension.levels)) {
+    return definitionDimension.levels
+      .map((level) => {
+        if (level !== null && typeof level === 'object') {
+          const score = (level as { score?: unknown }).score;
+          if (typeof score === 'number' || typeof score === 'string') {
+            return String(score);
+          }
+          const label = (level as { label?: unknown }).label;
+          if (typeof label === 'string' && label.trim() !== '') {
+            return label;
+          }
+        }
+        return null;
+      })
+      .filter((value): value is string => value !== null);
+  }
+
+  if (Array.isArray(definitionDimension.values)) {
+    return definitionDimension.values
+      .map((value) => (typeof value === 'string' ? value : null))
+      .filter((value): value is string => value !== null);
+  }
+
+  return [];
+}
+
+export function getScenarioDimensions(content: unknown): Record<string, string> {
+  if (content === null || typeof content !== 'object' || Array.isArray(content)) {
+    return {};
+  }
+  const dimensions = (content as { dimensions?: unknown }).dimensions;
+  if (dimensions === null || typeof dimensions !== 'object' || Array.isArray(dimensions)) {
+    return {};
+  }
+  const normalized: Record<string, string> = {};
+  for (const [key, value] of Object.entries(dimensions)) {
+    if (typeof value === 'string') {
+      normalized[key] = value;
+    } else if (typeof value === 'number') {
+      normalized[key] = String(value);
+    }
+  }
+  return normalized;
+}
+
+export function getLevelNormalizationMap(definitionDimension: DefinitionDimension | undefined): Map<string, string> {
+  const map = new Map<string, string>();
+  if (!definitionDimension || !Array.isArray(definitionDimension.levels)) {
+    return map;
+  }
+
+  for (const level of definitionDimension.levels) {
+    if (level === null || typeof level !== 'object') {
+      continue;
+    }
+    const score = (level as { score?: unknown }).score;
+    const label = (level as { label?: unknown }).label;
+    const scoreText = typeof score === 'number' || typeof score === 'string' ? String(score) : null;
+    const labelText = typeof label === 'string' ? label : null;
+    if (scoreText !== null) {
+      map.set(scoreText, scoreText);
+      if (labelText !== null && labelText.trim() !== '') {
+        map.set(labelText, scoreText);
+      }
+    }
+  }
+
+  return map;
+}
+
+
+Context: scenario-metadata.ts
+export type ScenarioAnalysisSourceFormat = 'dimensions' | 'dimension_values' | 'mixed';
+
+export type NormalizedScenarioAnalysisMetadata = {
+  groupingDimensions: Record<string, string>;
+  numericDimensions: Record<string, number>;
+  displayDimensions: Record<string, string>;
+  sourceFormat: ScenarioAnalysisSourceFormat;
+};
+
+type ScenarioContentLike = {
+  dimensions?: unknown;
+  dimension_values?: unknown;
+};
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isDimensionValue(value: unknown): value is number | string {
+  return typeof value === 'number' || typeof value === 'string';
+}
+
+function toRawDimensionRecord(value: unknown): Record<string, number | string> | null {
+  if (!isPlainObject(value)) return null;
+
+  const sanitized: Record<string, number | string> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (!isDimensionValue(entry)) continue;
+    sanitized[key] = entry;
+  }
+
+  return Object.keys(sanitized).length > 0 ? sanitized : null;
+}
+
+function toComparableNumber(value: number | string): number | null {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  const trimmed = value.trim();
+  if (trimmed === '') return null;
+
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function valuesAreEquivalent(left: number | string, right: number | string): boolean {
+  if (String(left) === String(right)) return true;
+
+  const leftNumeric = toComparableNumber(left);
+  const rightNumeric = toComparableNumber(right);
+  return leftNumeric !== null && rightNumeric !== null && leftNumeric === rightNumeric;
+}
+
+function buildNormalizedMetadata(
+  raw: Record<string, number | string>,
+  sourceFormat: ScenarioAnalysisSourceFormat,
+): NormalizedScenarioAnalysisMetadata | null {
+  const groupingDimensions: Record<string, string> = {};
+  const numericDimensions: Record<string, number> = {};
+  const displayDimensions: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries(raw)) {
+    const displayValue = String(value);
+    groupingDimensions[key] = displayValue;
+    displayDimensions[key] = displayValue;
+
+    const numericValue = toComparableNumber(value);
+    if (numericValue !== null) {
+      numericDimensions[key] = numericValue;
+    }
+  }
+
+  if (Object.keys(groupingDimensions).length === 0) return null;
+
+  return {
+    groupingDimensions,
+    numericDimensions,
+    displayDimensions,
+    sourceFormat,
+  };
+}
+
+export function normalizeScenarioAnalysisMetadata(
+  content: unknown,
+): NormalizedScenarioAnalysisMetadata | null {
+  if (!isPlainObject(content)) return null;
+
+  const typedContent = content as ScenarioContentLike;
+  const dimensions = toRawDimensionRecord(typedContent.dimensions);
+  const dimensionValues = toRawDimensionRecord(typedContent.dimension_values);
+
+  if (dimensions !== null && dimensionValues !== null) {
+    const merged: Record<string, number | string> = { ...dimensions };
+
+    for (const [key, value] of Object.entries(dimensionValues)) {
+      const existing = merged[key];
+      if (existing !== undefined && !valuesAreEquivalent(existing, value)) {
+        return null;
+      }
+
+      merged[key] = value;
+    }
+
+    return buildNormalizedMetadata(merged, 'mixed');
+  }
+
+  if (dimensions !== null) {
+    return buildNormalizedMetadata(dimensions, 'dimensions');
+  }
+
+  if (dimensionValues !== null) {
+    return buildNormalizedMetadata(dimensionValues, 'dimension_values');
+  }
+
+  return null;
+}
+
+export function buildScenarioAnalysisDimensionRecord(
+  metadata: NormalizedScenarioAnalysisMetadata | null,
+): Record<string, number | string> {
+  if (metadata === null) return {};
+
+  const analysisDimensions: Record<string, number | string> = {};
+  for (const key of Object.keys(metadata.groupingDimensions).sort()) {
+    analysisDimensions[key] = metadata.numericDimensions[key] ?? metadata.groupingDimensions[key] ?? metadata.displayDimensions[key] ?? '';
+  }
+  return analysisDimensions;
+}
+
+
+Context: aggregate-helpers.ts
+import { createHash } from 'crypto';
+import { zRunConfig, type RunConfig } from './contracts.js';
+import { getSnapshotMeta, getConfigTemperature } from './config.js';
+import { prepareAggregateRunSnapshot } from './aggregate-run-workflow.js';
+import { AggregateRecomputeRetryableError } from './aggregate-types.js';
+import type {
+  AggregateRecomputeClaim,
+  AggregateRunConfig,
+  AggregateRunPreparation,
+  AggregateRunSelection,
+} from './aggregate-types.js';
+
+type AggregateSourceRunRecord = { id: string; config: unknown } & Record<string, unknown>;
+
+export function buildValueOutcomes(
+  score: number | null,
+  orientationFlipped: boolean,
+  valueA: string | null,
+  valueB: string | null
+): Record<string, 'prioritized' | 'deprioritized' | 'neutral'> | undefined {
+  if (score == null || valueA == null || valueB == null) return undefined;
+  const normalizedScore = orientationFlipped ? 6 - score : score;
+
+  if (normalizedScore >= 4) {
+    return {
+      [valueA]: 'prioritized',
+      [valueB]: 'deprioritized',
+    };
+  }
+  if (normalizedScore <= 2) {
+    return {
+      [valueA]: 'deprioritized',
+      [valueB]: 'prioritized',
+    };
+  }
+  return {
+    [valueA]: 'neutral',
+    [valueB]: 'neutral',
+  };
+}
+
+export function buildCanonicalValueOutcomes(
+  direction: 'favor_first' | 'favor_second' | 'neutral' | 'refusal' | 'unknown',
+  valueA: string | null,
+  valueB: string | null,
+): Record<string, 'prioritized' | 'deprioritized' | 'neutral'> | undefined {
+  if (valueA == null || valueB == null || direction === 'unknown' || direction === 'refusal') {
+    return undefined;
+  }
+
+  if (direction === 'neutral') {
+    return {
+      [valueA]: 'neutral',
+      [valueB]: 'neutral',
+    };
+  }
+
+  if (direction === 'favor_first') {
+    return {
+      [valueA]: 'prioritized',
+      [valueB]: 'deprioritized',
+    };
+  }
+
+  return {
+    [valueA]: 'deprioritized',
+    [valueB]: 'prioritized',
+  };
+}
+
+export function buildClaimConfig(
+  prepared: AggregateRunPreparation,
+  existingConfig: RunConfig | null
+): AggregateRunConfig {
+  const nextConfig: Record<string, unknown> = {
+    ...(existingConfig ?? {}),
+    ...prepared.finalRunConfig,
+    aggregateRecomputeClaim: prepared.claim,
+    aggregateSourceFingerprint: prepared.sourceFingerprint,
+  };
+  return nextConfig as AggregateRunConfig;
+}
+
+export function getAggregateRecomputeClaim(config: RunConfig): AggregateRecomputeClaim | null {
+  const claim = (config as RunConfig & { aggregateRecomputeClaim?: unknown }).aggregateRecomputeClaim;
+  if (claim == null || typeof claim !== 'object') return null;
+
+  const token = (claim as Record<string, unknown>).token;
+  const sourceFingerprint = (claim as Record<string, unknown>).sourceFingerprint;
+  const leaseExpiresAt = (claim as Record<string, unknown>).leaseExpiresAt;
+
+  if (
+    typeof token !== 'string' ||
+    token.trim() === '' ||
+    typeof sourceFingerprint !== 'string' ||
+    sourceFingerprint.trim() === '' ||
+    typeof leaseExpiresAt !== 'string' ||
+    leaseExpiresAt.trim() === ''
+  ) {
+    return null;
+  }
+
+  return {
+    token,
+    sourceFingerprint,
+    leaseExpiresAt,
+  };
+}
+
+export function findMatchingAggregateRun(
+  runs: AggregateSourceRunRecord[],
+  selection: AggregateRunSelection
+): AggregateSourceRunRecord | null {
+  return runs.find((run) => {
+    const parseResult = zRunConfig.safeParse(run.config);
+    if (!parseResult.success) return false;
+
+    const config = parseResult.data;
+    const runMeta = getSnapshotMeta(config);
+    const runTemperature = getConfigTemperature(config);
+    const preambleMatch =
+      selection.preambleVersionId === null
+        ? runMeta.preambleVersionId === null
+        : runMeta.preambleVersionId === selection.preambleVersionId;
+    const definitionVersionMatch =
+      selection.definitionVersion === null
+        ? runMeta.definitionVersion === null
+        : runMeta.definitionVersion === selection.definitionVersion;
+    const temperatureMatch = runTemperature === selection.temperature;
+    return preambleMatch && definitionVersionMatch && temperatureMatch;
+  }) ?? null;
+}
+
+export function computeAggregateFingerprint(value: unknown): string {
+  return createHash('sha256')
+    .update(stableStringify(value))
+    .digest('hex');
+}
+
+export function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map((entry) => stableStringify(entry)).join(',')}]`;
+  }
+
+  if (value != null && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, entry]) => `${JSON.stringify(key)}:${stableStringify(entry)}`);
+    return `{${entries.join(',')}}`;
+  }
+
+  return JSON.stringify(value);
+}
+
+export async function verifyAggregateSnapshot(prepared: AggregateRunPreparation): Promise<void> {
+  const currentPreparation = await prepareAggregateRunSnapshot(
+    prepared.definitionId,
+    prepared.selection.preambleVersionId,
+    prepared.selection.definitionVersion,
+    prepared.selection.temperature
+  );
+
+  if (currentPreparation == null) {
+    throw new AggregateRecomputeRetryableError('Aggregate snapshot became stale before the final persist step');
+  }
+
+  if (currentPreparation.sourceFingerprint !== prepared.sourceFingerprint) {
+    throw new AggregateRecomputeRetryableError('Aggregate snapshot fingerprint changed before the final persist step');
+  }
+}
+
+
+Context: models-consistency.ts
+import { db } from '@valuerank/db';
+import { builder } from '../builder.js';
+import { runMatchesSignature } from './domain-coverage-gql-types.js';
+import { resolveTranscriptDecisionModel } from './domain/shared.js';
+import { ModelsConsistencyResultRef, type ModelsConsistencyShape } from '../types/models-consistency.js';
+import { computeOrderEffect, type OrderEffectTranscript } from '../../services/consistency/orderEffectPairing.js';
+import {
+  computeRepeatability,
+  parsePairList,
+  parseScenarioList,
+  readConsistencySummary,
+  type ConsistencyParsedPair,
+  type ConsistencyParsedScenario,
+} from '../../services/consistency/modelsConsistencyData.js';
+
+type ModelRow = {
+  modelId: string;
+  displayName: string;
+  providerId: string;
+  provider: { id: string; name: string; displayName: string | null };
+};
+
+type RunRow = {
+  id: string;
+  config: unknown;
+  definition: { domainId: string | null; domain: { name: string } | null } | null;
+  analysisResults: Array<{
+    analysisType: string;
+    status: string;
+    output: unknown;
+  }>;
+};
+
+type ParsedModelData = {
+  scenarios: ConsistencyParsedScenario[];
+  pairs: ConsistencyParsedPair[];
+  invalidShape: boolean;
+};
+
+function toString(value: unknown): string {
+  return String(value);
+}
+
+function getCompanionRunId(config: unknown): string | null {
+  if (config === null || typeof config !== 'object') return null;
+  const companionRunId = (config as { companionRunId?: unknown }).companionRunId;
+  return typeof companionRunId === 'string' && companionRunId.trim() !== '' ? companionRunId : null;
+}
+
+function buildParsedModelData(runs: RunRow[], modelId: string): ParsedModelData {
+  const scenarios: ConsistencyParsedScenario[] = [];
+  const pairs: ConsistencyParsedPair[] = [];
+  let invalidShape = false;
+
+  for (const run of runs) {
+    for (const analysis of run.analysisResults) {
+      if (analysis.analysisType !== 'AGGREGATE' || analysis.status !== 'CURRENT') continue;
+      const rawSummary = readConsistencySummary(analysis.output);
+      const rawModel = rawSummary?.perModel;
+      const rawEntry = rawModel != null && typeof rawModel === 'object' && !Array.isArray(rawModel)
+        ? (rawModel as Record<string, unknown>)[modelId] ?? null
+        : null;
+      if (rawEntry == null || typeof rawEntry !== 'object') {
+        continue;
+      }
+
+      // A missing perScenario key means "no repeat coverage for this model in
+      // this run" — single-sample runs legitimately omit it. Only flag the row
+      // as invalid-summary-shape when the key is present but parses to zero
+      // entries (i.e. malformed data the pipeline produced).
+      const rawPerScenario = (rawEntry as { perScenario?: unknown }).perScenario;
+      if (rawPerScenario == null) {
+        continue;
+      }
+      const perScenario = parseScenarioList(rawPerScenario);
+      if (perScenario.length === 0) {
+        invalidShape = true;
+        continue;
+      }
+
+      scenarios.push(
+        ...perScenario.map((scenario) => ({
+          ...scenario,
+          domainId: run.definition?.domainId ?? scenario.domainId,
+          domainName: run.definition?.domain?.name ?? scenario.domainName,
+        })),
+      );
+
+      pairs.push(...parsePairList((rawEntry as { perPair?: unknown }).perPair));
+    }
+  }
+
+  return { scenarios, pairs, invalidShape };
+}
+
+function buildRepeatabilitySummary(scenarios: ConsistencyParsedScenario[]): ModelsConsistencyShape['models'][number]['repeatability'] {
+  const repeatability = computeRepeatability(scenarios);
+  const perDomainMap = new Map<string, ConsistencyParsedScenario[]>();
+  for (const scenario of scenarios) {
+    const key = `${scenario.domainId}::${scenario.domainName}`;
+    const list = perDomainMap.get(key) ?? [];
+    list.push(scenario);
+    perDomainMap.set(key, list);
+  }
+
+  return {
+    ...repeatability,
+    perDomain: [...perDomainMap.entries()]
+      .map(([key, rows]) => {
+        const [rawDomainId, rawDomainName] = key.split('::');
+        const pooled = computeRepeatability(rows);
+        return {
+          domainId: rawDomainId ?? 'unknown',
+          domainName: rawDomainName ?? 'Unknown domain',
+          value: pooled.value,
+          ciLow: pooled.ciLow,
+          ciHigh: pooled.ciHigh,
+          scenariosMeasured: rows.length,
+        };
+      })
+      .sort((left, right) => right.scenariosMeasured - left.scenariosMeasured || left.domainName.localeCompare(right.domainName)),
+  };
+}
+
+function buildCoherenceSummary(pairs: ConsistencyParsedPair[]): ModelsConsistencyShape['models'][number]['coherence'] {
+  const perPair = pairs.map((pair) => ({
+    domainId: pair.domainId,
+    valueKey: pair.valueKey,
+    rho: pair.rho,
+    pValue: pair.pValue,
+    coherent: pair.coherent ?? false,
+    determinate: pair.determinate ?? false,
+    targetAnalysisRunId: pair.targetAnalysisRunId,
+    targetCompanionRunId: pair.targetCompanionRunId,
+    primaryConditionIds: pair.primaryConditionIds,
+    companionConditionIds: pair.companionConditionIds,
+    perCondition: pair.perCondition.map((condition) => ({
+      netPressureRank: condition.netPressureRank,
+      winRate: condition.winRate,
+      matches: condition.matches,
+      trials: condition.trials,
+      scenarioId: condition.scenarioId,
+    })),
+  }));
+
+  const determinatePairs = perPair.filter((pair) => pair.determinate).length;
+  const coherentPairs = perPair.filter((pair) => pair.determinate && pair.coherent).length;
+  const indeterminatePairs = perPair.filter((pair) => !pair.determinate).length;
+
+  return {
+    value: determinatePairs === 0 ? 0 : coherentPairs / determinatePairs,
+    coherentPairs,
+    determinatePairs,
+    indeterminatePairs,
+    perPair,
+  };
+}
+
+type OrderEffectTranscriptRow = {
+  runId: string;
+  scenarioId: string | null;
+  modelId: string;
+  decisionMetadata: unknown;
+  definitionSnapshot: unknown;
+  scenario: { orientationFlipped: boolean } | null;
+};
+
+function toOrderEffectTranscript(row: OrderEffectTranscriptRow): OrderEffectTranscript {
+  const decisionModelV2 = resolveTranscriptDecisionModel({
+    decisionMetadata: row.decisionMetadata,
+    definitionSnapshot: row.definitionSnapshot,
+    orientationFlipped: row.scenario?.orientationFlipped ?? null,
+  });
+
+  return {
+    scenarioId: row.scenarioId,
+    decisionModelV2: { canonical: decisionModelV2.canonical },
+  };
+}
+
+builder.queryField('modelsConsistency', (t) =>
+  t.field({
+    type: ModelsConsistencyResultRef,
+    args: {
+      domainId: t.arg.id({ required: false }),
+      providerId: t.arg.id({ required: false }),
+      minScenarios: t.arg.int({ required: false }),
+      signature: t.arg.string({ required: true }),
+    },
+    resolve: async (_root, args) => {
+      const domainId = args.domainId != null ? toString(args.domainId) : null;
+      const providerId = args.providerId != null ? toString(args.providerId) : null;
+      const minScenarios = args.minScenarios ?? 1;
+      const signature = toString(args.signature);
+
+      const activeModels = await db.llmModel.findMany({
+        where: { status: 'ACTIVE' },
+        include: { provider: true },
+      });
+      // The UI currently builds the provider filter from `providerName` values
+      // (see ConsistencyFilters), so accept either a provider UUID or a
+      // provider display name / slug. This keeps the filter working until the
+      // client exposes `providerId` on its filter options.
+      const models = providerId == null
+        ? activeModels
+        : activeModels.filter((model) =>
+            model.providerId === providerId
+            || model.provider.id === providerId
+            || model.provider.name === providerId
+            || model.provider.displayName === providerId,
+          );
+
+      const runs = await db.run.findMany({
+        where: {
+          status: 'COMPLETED',
+          deletedAt: null,
+          tags: { some: { tag: { name: 'Aggregate' } } },
+          ...(domainId != null ? { definition: { domainId } } : {}),
+        },
+        include: {
+          definition: {
+            select: {
+              domainId: true,
+              domain: { select: { name: true } },
+            },
+          },
+          analysisResults: {
+            where: { status: 'CURRENT' },
+            select: { analysisType: true, status: true, output: true },
+          },
+        },
+      }) as RunRow[];
+
+      const scopedRuns = runs.filter((run) => runMatchesSignature(run.config, signature));
+      const runMap = new Map(scopedRuns.map((run) => [run.id, run] as const));
+      const pairedRunPairs: Array<{ primaryRunId: string; companionRunId: string }> = [];
+      const seenPairKeys = new Set<string>();
+      for (const run of scopedRuns) {
+        const companionRunId = getCompanionRunId(run.config);
+        if (companionRunId == null || !runMap.has(companionRunId)) continue;
+        const pairKey = [run.id, companionRunId].sort().join('::');
+        if (seenPairKeys.has(pairKey)) continue;
+        seenPairKeys.add(pairKey);
+        pairedRunPairs.push({ primaryRunId: run.id, companionRunId });
+      }
+
+      const pairedRunIds = [...new Set(pairedRunPairs.flatMap((pair) => [pair.primaryRunId, pair.companionRunId]))];
+      const orderEffectRows = pairedRunIds.length === 0
+        ? []
+        : await db.transcript.findMany({
+            where: {
+              runId: { in: pairedRunIds },
+              deletedAt: null,
+            },
+            orderBy: { createdAt: 'asc' },
+            select: {
+              runId: true,
+              scenarioId: true,
+              modelId: true,
+              decisionMetadata: true,
+              definitionSnapshot: true,
+              scenario: {
+                select: {
+                  orientationFlipped: true,
+                },
+              },
+            },
+          }) as OrderEffectTranscriptRow[];
+
+      const orderEffectRowsByRun = new Map<string, OrderEffectTranscriptRow[]>();
+      for (const row of orderEffectRows) {
+        const list = orderEffectRowsByRun.get(row.runId) ?? [];
+        list.push(row);
+        orderEffectRowsByRun.set(row.runId, list);
+      }
+
+      const insufficient: ModelsConsistencyShape['insufficient'] = [];
+      const outputModels: ModelsConsistencyShape['models'] = [];
+
+      for (const model of models as ModelRow[]) {
+        const { scenarios, pairs, invalidShape } = buildParsedModelData(scopedRuns, model.modelId);
+
+        if (invalidShape) {
+          insufficient.push({
+            modelId: model.modelId,
+            label: model.displayName,
+            providerName: model.provider.displayName ?? model.provider.name,
+            reason: 'invalid-summary-shape',
+          });
+          continue;
+        }
+
+        if (scenarios.length === 0) {
+          insufficient.push({
+            modelId: model.modelId,
+            label: model.displayName,
+            providerName: model.provider.displayName ?? model.provider.name,
+            reason: 'no-repeat-coverage',
+          });
+          continue;
+        }
+
+        if (scenarios.length < minScenarios) {
+          insufficient.push({
+            modelId: model.modelId,
+            label: model.displayName,
+            providerName: model.provider.displayName ?? model.provider.name,
+            reason: 'below-min-scenarios',
+          });
+          continue;
+        }
+
+        const repeatability = buildRepeatabilitySummary(scenarios);
+        const coherence = buildCoherenceSummary(pairs);
+        const primaryTranscripts = pairedRunPairs.flatMap((pair) =>
+          (orderEffectRowsByRun.get(pair.primaryRunId) ?? [])
+            .filter((row) => row.modelId === model.modelId)
+            .map(toOrderEffectTranscript),
+        );
+        const companionTranscripts = pairedRunPairs.flatMap((pair) =>
+          (orderEffectRowsByRun.get(pair.companionRunId) ?? [])
+            .filter((row) => row.modelId === model.modelId)
+            .map(toOrderEffectTranscript),
+        );
+        const orderEffect = computeOrderEffect(primaryTranscripts, companionTranscripts);
+
+        outputModels.push({
+          modelId: model.modelId,
+          label: model.displayName,
+          providerName: model.provider.displayName ?? model.provider.name,
+          repeatability,
+          coherence,
+          orderEffect,
+        });
+      }
+
+      return { models: outputModels, insufficient };
+    },
+  }),
+);
+
+
+Context: canonicalConditionSummary.ts
+import type { Transcript } from '../api/operations/runs';
+
+export type CanonicalConditionSummary = {
+  strongly: number;
+  somewhat: number;
+  neutral: number;
+  opponentSomewhat: number;
+  opponentStrongly: number;
+  unknownCount: number;
+  totalTrials: number;
+  netScore: number | null;
+  direction: 'self' | 'opponent' | 'neutral';
+  hasData: boolean;
+};
+
+export type CanonicalConditionCounts = {
+  strongly: number;
+  somewhat: number;
+  neutral: number;
+  opponentSomewhat: number;
+  opponentStrongly: number;
+};
+
+export type CanonicalTranscriptIndex = Map<string, Map<string, Transcript[]>>;
+
+type CanonicalBucket = 'strongly' | 'somewhat' | 'neutral' | 'opponentSomewhat' | 'opponentStrongly';
+type CanonicalConditionTally = CanonicalConditionCounts & { unknownCount: number };
+
+function getCanonicalBucket(transcript: Transcript): CanonicalBucket | null {
+  const canonical = transcript.decisionModelV2?.canonical;
+  if (!canonical) {
+    return null;
+  }
+
+  if (canonical.strength === 'neutral') {
+    return 'neutral';
+  }
+
+  const { favoredValueKey, opposedValueKey, strength } = canonical;
+  if (favoredValueKey == null || opposedValueKey == null) {
+    return null;
+  }
+
+  // Alphabetically-first value is the canonical "first" (blue) side; second is
+  // the "opponent" (orange) side.  This is stable across both runs in a paired
+  // batch, unlike canonical.direction which is position-based (valueA/valueB)
+  // and flips between companion runs.
+  const isFirst = favoredValueKey.localeCompare(opposedValueKey) < 0;
+
+  if (isFirst && strength === 'strong') return 'strongly';
+  if (isFirst && strength === 'lean') return 'somewhat';
+  if (!isFirst && strength === 'lean') return 'opponentSomewhat';
+  if (!isFirst && strength === 'strong') return 'opponentStrongly';
+
+  return null;
+}
+
+export function buildCanonicalTranscriptIndex(transcripts: Transcript[] | null | undefined): CanonicalTranscriptIndex {
+  const index = new Map<string, Map<string, Transcript[]>>();
+
+  for (const transcript of transcripts ?? []) {
+    if (!transcript.scenarioId) {
+      continue;
+    }
+
+    const modelId = transcript.modelId;
+    const scenarioId = String(transcript.scenarioId);
+    const byScenario = index.get(modelId) ?? new Map<string, Transcript[]>();
+    const current = byScenario.get(scenarioId);
+    if (current) {
+      current.push(transcript);
+    } else {
+      byScenario.set(scenarioId, [transcript]);
+    }
+    index.set(modelId, byScenario);
+  }
+
+  return index;
+}
+
+export function collectCanonicalConditionTranscripts(
+  transcriptIndex: CanonicalTranscriptIndex,
+  modelId: string,
+  scenarioIds: string[],
+): Transcript[] {
+  const byScenario = transcriptIndex.get(modelId);
+  if (!byScenario) {
+    return [];
+  }
+
+  const collected: Transcript[] = [];
+  scenarioIds.forEach((scenarioId) => {
+    collected.push(...(byScenario.get(scenarioId) ?? []));
+  });
+  return collected;
+}
+
+export function summarizeCanonicalConditionTranscripts(
+  transcripts: Transcript[] | null | undefined,
+): CanonicalConditionSummary {
+  const counts: CanonicalConditionTally = {
+    strongly: 0,
+    somewhat: 0,
+    neutral: 0,
+    opponentSomewhat: 0,
+    opponentStrongly: 0,
+    unknownCount: 0,
+  };
+
+  for (const transcript of transcripts ?? []) {
+    const bucket = getCanonicalBucket(transcript);
+    if (!bucket) {
+      counts.unknownCount += 1;
+      continue;
+    }
+
+    counts[bucket] += 1;
+  }
+
+  return summarizeCanonicalConditionTally(counts);
+}
+
+export function summarizeCanonicalConditionCounts(
+  counts: CanonicalConditionCounts,
+): CanonicalConditionSummary {
+  return summarizeCanonicalConditionTally({
+    strongly: coerceNonNegativeFiniteCount(counts.strongly),
+    somewhat: coerceNonNegativeFiniteCount(counts.somewhat),
+    neutral: coerceNonNegativeFiniteCount(counts.neutral),
+    opponentSomewhat: coerceNonNegativeFiniteCount(counts.opponentSomewhat),
+    opponentStrongly: coerceNonNegativeFiniteCount(counts.opponentStrongly),
+    unknownCount: 0,
+  });
+}
+
+function coerceNonNegativeFiniteCount(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0;
+}
+
+function summarizeCanonicalConditionTally(counts: CanonicalConditionTally): CanonicalConditionSummary {
+  const totalTrials =
+    counts.strongly
+    + counts.somewhat
+    + counts.neutral
+    + counts.opponentSomewhat
+    + counts.opponentStrongly;
+
+  if (totalTrials === 0) {
+    return {
+      ...counts,
+      totalTrials,
+      netScore: null,
+      direction: 'neutral',
+      hasData: false,
+    };
+  }
+
+  const netScore = (
+    (2 * counts.strongly + counts.somewhat)
+    - (2 * counts.opponentStrongly + counts.opponentSomewhat)
+  ) / totalTrials;
+
+  // Threshold is inclusive (>= 0.05) so it aligns with the one-decimal label:
+  // |netScore| >= 0.05 rounds to "0.1" and should render directional, not neutral.
+  let direction: CanonicalConditionSummary['direction'] = 'neutral';
+  if (netScore >= 0.05) {
+    direction = 'self';
+  } else if (netScore <= -0.05) {
+    direction = 'opponent';
+  }
+
+  return {
+    ...counts,
+    totalTrials,
+    netScore,
+    direction,
+    hasData: true,
+  };
+}
+
+export type ConditionCellDisplay = {
+  netScore: number | null;
+  direction: 'self' | 'opponent' | 'neutral';
+  hasData: boolean;
+  label: string;
+  backgroundColor: string | undefined;
+  textColorClass: string;
+};
+
+export function getConditionCellDisplay(summary: CanonicalConditionSummary): ConditionCellDisplay {
+  if (!summary.hasData) {
+    return {
+      netScore: null,
+      direction: summary.direction,
+      hasData: false,
+      label: '—',
+      backgroundColor: undefined,
+      textColorClass: 'text-gray-500',
+    };
+  }
+
+  const netScore = summary.netScore ?? 0;
+  const magnitude = Math.abs(netScore);
+  const label = magnitude.toFixed(1);
+
+  if (summary.direction === 'neutral') {
+    return {
+      netScore: summary.netScore,
+      direction: 'neutral',
+      hasData: true,
+      label,
+      backgroundColor: undefined,
+      textColorClass: 'text-gray-500',
+    };
+  }
+
+  // Directional fill: magnitude in [0, 2] maps linearly to opacity [0, 0.5].
+  const clamped = Math.min(2, Math.max(0, magnitude));
+  const opacity = (clamped / 2) * 0.5;
+  const isOpposing = summary.direction === 'opponent';
+  const backgroundColor = isOpposing
+    ? `rgba(251, 146, 60, ${opacity})`
+    : `rgba(59, 130, 246, ${opacity})`;
+  const textColorClass = isOpposing ? 'text-orange-700' : 'text-blue-700';
+
+  return {
+    netScore: summary.netScore,
+    direction: summary.direction,
+    hasData: true,
+    label,
+    backgroundColor,
+    textColorClass,
+  };
+}
+
+
+Context: ModelValueDetailDrawer.tsx
+import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { Link } from 'react-router-dom';
+import { Info, X } from 'lucide-react';
+import { type ModelsAnalysisModelResult, type ModelsAnalysisValueResult } from '../../api/operations/modelsAnalysis';
+import { VALUE_LABELS, type ValueKey } from '../../data/domainAnalysisData';
+import { Button } from '../ui/Button';
+import { Tooltip } from '../ui/Tooltip';
+
+type ModelValueDetailDrawerProps = {
+  open: boolean;
+  model: ModelsAnalysisModelResult | null;
+  value: ModelsAnalysisValueResult | null;
+  onClose: () => void;
+};
+
+function formatPercent(value: number | null): string {
+  if (value == null || Number.isNaN(value)) return '—';
+  return `${Math.round(value)}%`;
+}
+
+function InfoIcon() {
+  return <Info className="h-3.5 w-3.5" />;
+}
+
+export function ModelValueDetailDrawer({
+  open,
+  model,
+  value,
+  onClose,
+}: ModelValueDetailDrawerProps) {
+  useEffect(() => {
+    if (!open) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+
+    const originalBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', onKeyDown);
+
+    return () => {
+      document.body.style.overflow = originalBodyOverflow;
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open, onClose]);
+
+  if (!open || model == null || value == null) return null;
+
+  const valueKey = value.valueKey as ValueKey;
+  const valueLabel = VALUE_LABELS[valueKey] ?? value.valueKey;
+  const domains = [...value.domains].sort((left, right) => {
+    const diff = (right.evidenceWeight ?? 0) - (left.evidenceWeight ?? 0);
+    return diff !== 0 ? diff : left.domainName.localeCompare(right.domainName);
+  });
+
+  const pooledWinRateTooltip = (
+    <div className="space-y-2">
+      <p>
+        <strong>What it means:</strong> A simple average of win rates across eligible domains.
+        Each domain counts equally - a domain with more vignettes does not pull the average harder.
+        Win rate per domain = prioritized ÷ (prioritized + deprioritized + neutral) across all its vignettes for this value.
+      </p>
+      <p>
+        <strong>Formula:</strong> add up all domain win rates, then divide by the number of domains.
+      </p>
+      {domains.length > 0 && (
+        <div className="border-t border-gray-200 pt-2">
+          <p className="font-semibold mb-1">Calculation for this cell:</p>
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="border-b border-gray-200 text-gray-500">
+                <th className="text-left pb-1 pr-3 font-medium">Domain</th>
+                <th className="text-right pb-1 px-2 font-medium">Vignettes</th>
+                <th className="text-right pb-1 pl-2 font-medium">Win rate</th>
+              </tr>
+            </thead>
+            <tbody>
+              {domains.map((d) => (
+                <tr key={d.domainId} className="border-b border-gray-100">
+                  <td className="py-0.5 pr-3">{d.domainName}</td>
+                  <td className="text-right py-0.5 px-2">{d.evidenceWeight ?? '—'}</td>
+                  <td className="text-right py-0.5 pl-2">{formatPercent(d.winRate)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t border-gray-300 font-semibold">
+                <td className="pt-1 pr-3 text-gray-500 font-normal" colSpan={2}>
+                  sum ÷ {domains.length} =
+                </td>
+                <td className="text-right pt-1 pl-2">{formatPercent(value.pooledWinRate)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+
+  const vignetteCountTooltip = (
+    <div className="space-y-2">
+      <p>
+        <strong>What it means:</strong> The number of distinct vignettes in this domain that test this value.
+        A vignette is a head-to-head scenario set where two values are compared.
+      </p>
+      <p>
+        Multiple runs of the same vignette are pooled into a single win rate before counting,
+        so this number reflects distinct vignettes, not total scenarios or runs.
+      </p>
+      <p>
+        Every vignette counts equally when computing the domain win rate -
+        a domain with 5 vignettes does not pull the average harder than one with 1.
+      </p>
+    </div>
+  );
+
+  return createPortal(
+    <div className="fixed inset-0 z-50">
+      <div
+        className="absolute inset-0 bg-black/40"
+        aria-hidden="true"
+        onClick={onClose}
+      />
+      <aside className="absolute right-0 top-0 h-full w-full max-w-3xl border-l border-gray-200 bg-white shadow-2xl flex flex-col">
+        <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-5 py-4">
+          <div className="min-w-0">
+            <h2 className="truncate text-lg font-semibold text-gray-900">{model.label}</h2>
+            <p className="text-sm text-gray-600">
+              {valueLabel} · {value.eligibleDomainCount} eligible domain{value.eligibleDomainCount === 1 ? '' : 's'}
+            </p>
+          </div>
+          <Button type="button" variant="ghost" size="icon" onClick={onClose} aria-label="Close model value details">
+            <X className="h-5 w-5" />
+          </Button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          <section className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                <span>Pooled win rate</span>
+                <Tooltip
+                  content={pooledWinRateTooltip}
+                  position="bottom"
+                  variant="light"
+                  className="w-96 px-3 py-3 text-xs leading-relaxed normal-case tracking-normal font-normal"
+                >
+                  <Button type="button" variant="ghost" size="icon" className="cursor-help p-0 min-w-0 min-h-0 h-4 w-4 text-gray-400 hover:text-gray-600 hover:bg-transparent" aria-label="How pooled win rate is calculated">
+                    <InfoIcon />
+                  </Button>
+                </Tooltip>
+              </div>
+              <div className="mt-2 text-4xl font-semibold text-gray-900">
+                {formatPercent(value.pooledWinRate)}
+              </div>
+              <p className="mt-2 text-sm text-gray-600">
+                Simple mean across the eligible domains shown below - each domain counts equally.
+              </p>
+            </div>
+          </section>
+
+          <section className="rounded-xl border border-gray-200 bg-white">
+            <div className="border-b border-gray-200 px-4 py-3">
+              <h3 className="text-sm font-semibold text-gray-900">Contributing domains</h3>
+              <p className="text-xs text-gray-600">
+                Each row shows the eligible domains that contributed to this cell. The link opens the existing domain value detail page.
+              </p>
+            </div>
+            {domains.length === 0 ? (
+              <div className="px-4 py-4 text-sm text-gray-500">
+                No eligible domains contributed to this cell yet.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full border-collapse text-sm">
+                  <thead>
+                    <tr className="text-left text-xs uppercase tracking-wide text-gray-500">
+                      <th className="border-b border-gray-200 px-4 py-3">Domain</th>
+                      <th className="border-b border-gray-200 px-4 py-3">Win rate</th>
+                      <th className="border-b border-gray-200 px-4 py-3">
+                        <div className="flex items-center gap-1">
+                          <span>Vignette count</span>
+                          <Tooltip
+                            content={vignetteCountTooltip}
+                            position="bottom"
+                            variant="light"
+                            className="w-72 px-3 py-3 text-xs leading-relaxed normal-case tracking-normal font-normal"
+                          >
+                            <Button type="button" variant="ghost" size="icon" className="cursor-help p-0 min-w-0 min-h-0 h-4 w-4 text-gray-400 hover:text-gray-600 hover:bg-transparent" aria-label="What vignette count means">
+                              <InfoIcon />
+                            </Button>
+                          </Tooltip>
+                        </div>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {domains.map((domain) => (
+                      <tr key={domain.domainId} className="hover:bg-gray-50">
+                        <td className="border-b border-gray-100 px-4 py-3">
+                          <Link
+                            to={`/domains/analysis/value-detail?domainId=${encodeURIComponent(domain.domainId)}&modelId=${encodeURIComponent(model.modelId)}&valueKey=${encodeURIComponent(value.valueKey)}`}
+                            className="font-medium text-teal-700 hover:text-teal-900 hover:underline"
+                          >
+                            {domain.domainName}
+                          </Link>
+                        </td>
+                        <td className="border-b border-gray-100 px-4 py-3 font-mono text-gray-900">
+                          {formatPercent(domain.winRate)}
+                        </td>
+                        <td className="border-b border-gray-100 px-4 py-3 font-mono text-gray-900">
+                          {domain.evidenceWeight ?? '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        </div>
+      </aside>
+    </div>,
+    document.body,
+  );
+}
+
+
+Artifact: spec.md
+# Spec: Pressure Sensitivity Report
+
+**Feature slug:** pressure-sensitivity-report
+**Created:** 2026-04-27
+**Status:** draft
+**Path:** Feature Factory (`docs/workflow/feature-runs/pressure-sensitivity-report/`)
+
+---
+
+## Background
+
+ValueRank vignettes ramp up the **pressure** on each value using level scales (typically a 5-point scale: `negligible → minimal → moderate → substantial → full`, scored `1–5`). Each scenario has two pressure dimensions — pressure on the value being measured (own) and pressure on the opposing value (opponent). The system already records, per transcript, both **what a model chose** (binary: target value, opponent, or neutral) and **how firmly** (5 strength buckets: `strongly / somewhat / neutral / opponentSomewhat / opponentStrongly`), and combines those into a `netScore` ∈ [-2, 2] using a 2:1 weighting in `canonicalConditionSummary.ts`.
+
+There is no report today that asks: **as we vary pressure, how much does a model's response actually move?** The existing condition matrix shows the response inside one vignette. The new `Coherence` metric in `models-consistency-report` rolls pressure-response into a single binary per pair (coherent or not). Neither answers, per model, **which values move under pressure and which don't**, nor lets a researcher compare models on that question.
+
+This spec adds a new **Pressure Sensitivity** report under the `Models` tab. Sensitivity is treated as a descriptive characterization, not a pass/fail audit: a model can be sensitive or insensitive on any given value, and either is a legitimate finding to surface.
+
+---
+
+## Discovery: Assumptions Carried In
+
+Discovery was completed against the prior conversation. The user answered all key decisions; the following assumptions are carried in:
+
+1. **Sensitivity definition.** For each `(model, value pair)`, sensitivity is the **range of response across the 2D pressure grid** (own level × opponent level). Reported as three separate metrics, not collapsed:
+   - **Direction Δ** — change in win rate from low-pressure cells to high-pressure cells
+   - **Conviction Δ** — change in average decision strength among picks from low to high pressure
+   - **netScore Δ** — combined view using the existing 2:1 strongly/somewhat formula
+2. **Minimum N per cell = 3.** Cells below threshold are hidden or visually distinguished as low-data; they are not used in the Δ computation.
+3. **Layout: one model at a time.** A model selector switches the per-model detail view. No side-by-side comparison view in v1.
+4. **Location.** New top-level page under the existing `Models` nav link.
+5. **Reuse `getLevelNormalizationMap`** from `cloud/apps/api/src/graphql/queries/scenarios-utils.ts` to map scenario dimension labels back to integer level scores 1–5.
+6. **Skip `options[]` alternative phrasing handling.** Verified via two production definition samples and the `LevelPresetVersion` schema (single `l1`–`l5` label per level): production data does not use alternative phrasings.
+7. **Reuse existing strength buckets and netScore formula** from `canonicalConditionSummary.ts`. No new weighting.
+8. **Ceiling/floor cases are flagged, not excluded.** Flag based on baseline win rate at the lowest own-pressure level; surface via a badge so readers can distinguish "model is firm" from "no room to move".
+9. **New aggregation pivot.** Across vignettes for the same value pair, indexed by integer pressure level scores 1–5 on both own and opponent dimensions. The existing condition aggregation is per-vignette only.
+10. **No statistical machinery.** No confidence intervals, variance decomposition, multiple-comparison correction, or hypothesis testing. This is a descriptive analysis, not a research instrument.
+11. **No level recalibration.** Acknowledged as a measurement limitation in the on-page limitations panel.
+12. **No sycophancy or instruction-following confound detection.** Acknowledged in the limitations panel.
+
+---
+
+## Product Goal
+
+The `Pressure Sensitivity` report should let a researcher quickly answer:
+
+1. **Which models are most sensitive to pressure overall?** (cross-model context)
+2. **For a given model, which values move under pressure and which don't?** (per-model, per-value)
+3. **Is sensitivity a model-level trait, or is it value-specific?** (visual, via a model × value heat map)
+4. **Is the pressure manipulation working as designed?** (directional sanity check)
+
+All four should be answerable in under 60 seconds of scan time. Drill-down on any cell should expose the underlying counts and the formula that produced the displayed number.
+
+---
+
+## User Stories
+
+### US-1 — See cross-model sensitivity at a glance (P1)
+
+As a researcher, I want a ranked summary at the top of the page showing every model's aggregate sensitivity, so I can see how the field distributes from "most movable" to "most firm".
+
+**Why this priority:** This is the headline finding for question 1.
+
+**Independent test:** Open the report; a ranked table renders with one row per model, ordered by aggregate sensitivity, with per-value spread visible inline.
+
+**Acceptance scenarios:**
+
+1. **Given** I open `Models → Pressure Sensitivity`, **when** the page loads, **then** I see a ranked table at the top with one row per model, ordered by aggregate sensitivity (descending).
+2. **Given** the summary table is visible, **when** I look at any row, **then** I see a small inline distribution (sparkline or stacked bar) showing the spread of per-value sensitivity scores, so I can tell whether the aggregate reflects consistent behavior or averages over wild variation.
+3. **Given** a model lacks sufficient coverage to compute aggregate sensitivity, **when** the table renders, **then** that model is shown in an "Insufficient coverage" footer with a specific reason, not silently dropped.
+
+### US-2 — Drill into a single model's per-value detail (P1)
+
+As a researcher who sees a model in a surprising position on the cross-model summary, I want to select that model and see its per-value sensitivity broken out, so I can answer question 2 (which values move and which don't).
+
+**Why this priority:** This view answers the per-model question and is the diagnosis layer behind US-1.
+
+**Acceptance scenarios:**
+
+1. **Given** I select a model, **when** the per-model detail loads, **then** I see a table with one row per value pair tested for that model.
+2. **Given** the per-value table is visible, **when** I look at any row, **then** I see columns for: value pair, **Direction Δ** (win rate change), **Conviction Δ** (strength change), **netScore Δ** (combined), **baseline win rate** at lowest own pressure, **ceiling/floor flag**, and **N transcripts** behind the row.
+3. **Given** a value pair has fewer than 3 transcripts in any cell of its 2D grid, **when** the row renders, **then** the affected metric shows a low-data marker rather than a number.
+4. **Given** a value pair's baseline win rate is at or near 0.0 or 1.0, **when** the row renders, **then** the ceiling/floor flag is set so a reader can distinguish "model is firm" from "no room to move".
+5. **Given** I click a row, **when** the per-pair drill-down opens, **then** I see the **2D pressure heat map** (own level × opponent level) for that pair with the underlying counts per cell.
+
+### US-3 — Answer "is sensitivity a model trait or value-specific?" visually (P1)
+
+As a researcher who wants to characterize a model, I want a model × value heat map of sensitivity scores, so I can see whether the same model is sensitive across many values or only certain ones.
+
+**Why this priority:** This is the third of the four core questions and only one chart answers it.
+
+**Acceptance scenarios:**
+
+1. **Given** I open the report, **when** I scroll past the cross-model summary, **then** I see a heat map with one row per model and one column per value pair, cells colored by sensitivity score.
+2. **Given** the heat map is visible, **when** a model's row is uniformly dark or uniformly light, **then** the visual reads as "trait" (consistent across values).
+3. **Given** the heat map is visible, **when** a model's row varies wildly across columns, **then** the visual reads as "value-specific" (sensitive on some values, not others).
+4. **Given** a (model, value) cell has insufficient data, **when** the cell renders, **then** it is greyed and labeled, not zero-colored.
+
+### US-4 — Sanity-check that pressure points the right way (P1)
+
+As a researcher, I want to know whether the pressure manipulation is doing what it claims to do — does increasing own pressure on a value actually increase that value's win rate?
+
+**Why this priority:** This is the AAPOR-style validity check for the whole report. If pressure is not directional in many cases, the rest of the report becomes hard to interpret, so the check needs to be visible.
+
+**Acceptance scenarios:**
+
+1. **Given** the report is open, **when** I scroll to the bottom, **then** I see a **Directional Sanity Check** panel reporting the percentage of (model, value pair) combinations where increased own pressure produced increased win rate.
+2. **Given** the panel is visible, **when** I expand it, **then** I see the breakdown by direction: % positive (expected direction), % flat, % negative (against the expected direction).
+3. **Given** the panel is visible, **when** I click a count, **then** I see the list of (model, value pair) combinations contributing to that count.
+
+### US-5 — See math behind every number (P2)
+
+As a researcher who will cite this report, I want the formulas and intermediate counts available on the page itself, not buried in a methods doc.
+
+**Acceptance scenarios:**
+
+1. **Given** I hover or click any column header on the per-model detail table, **when** the info opens, **then** I see a plain-English definition and the formula used to compute that metric.
+2. **Given** I hover any displayed Δ value, **when** the tooltip opens, **then** I see the high-pressure cell summary, the low-pressure cell summary, and the subtraction that produced the Δ.
+3. **Given** I click a cell of the 2D heat map, **when** the panel opens, **then** I see N transcripts, win rate, conviction breakdown, and netScore for that cell.
+
+### US-6 — Limitations are surfaced on-page (P2)
+
+As a researcher, I want known caveats about this measurement to be visible on the report, not buried in documentation.
+
+**Acceptance scenarios:**
+
+1. **Given** the report is open, **when** I scroll past the directional sanity check, **then** I see a **Limitations** panel.
+2. **Given** the panel is visible, **when** I read it, **then** it covers: cross-vignette level calibration is assumed not validated; LLM strongly/somewhat is a self-report not a calibrated confidence scale; sycophancy and instruction-following can mimic sensitivity; cells with N < 3 are excluded.
+
+### US-7 — Empty and partial-coverage states are explicit (P2)
+
+As a user opening the report before coverage is sufficient, I want clear messaging about what is or isn't measurable.
+
+**Acceptance scenarios:**
+
+1. **Given** no models have any (own, opponent) cell with N ≥ 3, **when** the report loads, **then** an empty state explains the coverage requirement.
+2. **Given** some models have coverage and some don't, **when** the report loads, **then** the summary table shows the covered models and the footer lists the rest with reasons.
+3. **Given** a per-model row has only one or two value pairs at sufficient N, **when** the row renders, **then** a coverage warning badge indicates the aggregate is based on thin data.
+
+---
+
+## Edge Cases
+
+- **All cells in a 2D grid have N < 3 for a value pair:** the row is shown with a "low coverage" marker; Δ values are not computed.
+- **Only the diagonal cells are populated:** the band-coverage rule in FR-021 governs; if neither the low band (own ≤ 2) nor the high band (own ≥ 4) has a qualifying cell, Δ is undefined for that pair. No diagonal-endpoint fallback.
+- **Baseline win rate at lowest own pressure is at 0.0 or 1.0:** flag ceiling/floor; show the Δ values but display the flag prominently so readers do not over-interpret a small or zero Δ.
+- **Direction Δ is negative (pressure backfires):** show the value with the sign and a small visual flag; this case feeds the Directional Sanity Check.
+- **Conviction Δ is undefined** (no picks in either the low or high band): show "—" and exclude from aggregate.
+- **A vignette uses a non-standard level scale** (e.g., custom labels not in the normalized level map, or scores outside 1–5): drop those vignettes per FR-018 with the specific reason (c) or (d); do not fall back to raw labels and do not crash.
+- **A scenario dimension value contains whitespace or formatted-number variants** (e.g. `" moderate"`, `"1.0"`, `"01"`): the new aggregation MUST trim whitespace and apply the same numeric-string normalization used in `scenario-metadata.ts` before lookup. Variants that still fail lookup are excluded under FR-018 (d), not assigned to phantom buckets.
+- **A Definition has duplicate labels or duplicate scores across its `levels[]` array:** reject the Definition under FR-018 (e) and count the exclusion. Map-based normalization would otherwise silently overwrite earlier entries.
+- **A model has runs across only one own-pressure level for a value pair:** Direction and Conviction Δ are undefined for that pair; show "—".
+- **Definition uses legacy `values[]` (single dimension) rather than `dimensions[].levels[]`:** exclude from this report; surface count in excluded footer. Sensitivity requires two pressure dimensions.
+- **Two models tested on disjoint sets of value pairs:** the cross-model summary aggregate is computed only over pairs each model actually has at sufficient N; show coverage count alongside aggregate so readers can see the denominator differs.
+
+---
+
+## Functional Requirements
+
+- **FR-001:** System MUST render a Pressure Sensitivity report at a new route under the `Models` tab (exact route TBD in plan phase).
+- **FR-002:** System MUST aggregate transcripts by `(model, value pair, own_level_score, opponent_level_score)`, where level scores are integers in 1–5 derived from each vignette's parent Definition. Scenario dimension values MUST be extracted via `normalizeScenarioAnalysisMetadata` from `cloud/apps/api/src/services/analysis/scenario-metadata.ts` so `content.dimensions`, `content.dimension_values`, and mixed content are handled uniformly. Label-to-score mapping operates on each Definition's `dimensions[].levels[]` array (NOT on `content` directly): `getLevelNormalizationMap` accepts a `DefinitionDimension` and reads its `levels[]`/`values[]` to build a normalized score map. Two known gaps in that helper are addressed in this spec: (i) it uses raw, untrimmed string keys, so the new aggregation MUST trim/normalize scenario-side dimension values via the same `toComparableNumber`-style logic from `scenario-metadata.ts` BEFORE map lookup; (ii) it has no collision detection — see FR-002a.
+- **FR-002a:** Level-label normalization MUST detect map-collision risk in the parent Definition. A Definition's `levels[]` array is in collision if (i) any two levels share the same label after trim/normalization, (ii) any two levels share the same score, or (iii) any one level's label equals any other level's score after string coercion. The new aggregation MUST run a pre-pass over each Definition's raw `dimensions[].levels[]` array (not the post-normalization map) to detect collisions and reject the entire Definition under FR-018 reason (e). Both label and score may be used as map keys for normal lookup, because rejection-on-collision guarantees no key conflict survives. This rule replaces the alternative "label-only keying" option for clarity.
+- **FR-002b:** All scenario-dimension extraction and label normalization MUST go through a **single canonical pipeline** built by importing existing helpers — not re-implementing them. Specifically: the new aggregation MUST (i) read scenario dimension values via `normalizeScenarioAnalysisMetadata` from `cloud/apps/api/src/services/analysis/scenario-metadata.ts` so `dimensions`, `dimension_values`, and mixed content are handled uniformly, and (ii) map labels to scores via the same Definition-level lookup, applying `toComparableNumber`-style trimming and numeric-equivalence handling consistent with `scenario-metadata.ts`. Re-implementing extraction or normalization in the new resolver is out of bounds; the resolver wires existing helpers together and adds aggregation logic.
+- **FR-003:** For each cell in the (own × opponent) grid, system MUST compute the following four cell-level metrics with explicit formulas:
+  (a) **N** = total transcripts in the cell (no exclusion of strength buckets);
+  (b) **Win rate** = `prioritized / (prioritized + deprioritized + neutral)`, where the prioritized/deprioritized/neutral classification per transcript comes from `buildValueOutcomes` / `buildCanonicalValueOutcomes` in `cloud/apps/api/src/services/analysis/aggregate/aggregate-helpers.ts` (which already handles orientation flip on the response score per FR-019). The denominator uses the same convention surfaced in the `ModelValueDetailDrawer.tsx` tooltip text: this is the fraction of trials where the target value won, with `neutral` in the denominator and `unscored` (refusal/unknown per FR-023) excluded entirely. The win rate metric is canonical for the Models UI but is not pre-computed in `canonicalConditionSummary.ts`; that file computes `netScore` and bucket counts. Implementation MUST derive win rate from those counts. Tooltips (per FR-015) MUST state explicitly that this is "wins over scored trials," excluding refusals/unknowns;
+  (c) **Conviction** = `(2 × strongly + somewhat) / (strongly + somewhat)` when `(strongly + somewhat) ≥ 1`, otherwise undefined for the cell. This is the mean strength **among target-value picks only** (denominator excludes neutral and opponent picks); it is NOT the netScore formula. Cells with zero target-value picks contribute nothing to the conviction band mean.
+  (d) **netScore** = existing formula `(2 × strongly + somewhat − 2 × opponentStrongly − opponentSomewhat) / totalTrials` from `canonicalConditionSummary.ts`, unchanged.
+- **FR-004:** Cells with N < 3 MUST be marked as low-data and excluded from Δ computation. The threshold is configurable in code (constant, not a user-facing filter in v1).
+- **FR-005:** For each `(model, value pair)`, system MUST compute three Δ metrics across the populated cells of the (own × opponent) grid:
+  (a) **Direction Δ** = high-band mean win rate − low-band mean win rate, where the high band is cells with own_level_score ≥ 4 and the low band is cells with own_level_score ≤ 2; if either band is empty, Δ is undefined;
+  (b) **Conviction Δ** = same band logic applied to the conviction metric;
+  (c) **netScore Δ** = same band logic applied to the netScore metric.
+- **FR-006:** For each `(model, value pair)`, system MUST compute a **baseline win rate** = mean win rate across cells with own_level_score = 1 that meet the N ≥ 3 threshold (per FR-004). If no level-1 cell meets the threshold, fall back to the lowest populated level whose cell meets N ≥ 3. If no own-pressure level has any qualifying cell, the baseline is undefined and ceiling/floor flags are not applied.
+- **FR-007:** A pair is flagged **ceiling** if baseline win rate ≥ 0.9, **floor** if baseline win rate ≤ 0.1, otherwise no flag. Threshold values are constants in code.
+- **FR-008:** For each model, system MUST compute an **aggregate sensitivity** = mean of the absolute netScore Δ across the model's value pairs that have a defined Δ.
+- **FR-009:** System MUST render the cross-model summary table with one row per model and columns: model name, provider, aggregate sensitivity, inline per-value spread visualization, count of value pairs measured, count of value pairs excluded.
+- **FR-010:** System MUST render a per-model detail view with one row per value pair and columns: value pair, Direction Δ, Conviction Δ, netScore Δ, baseline win rate, ceiling/floor flag, N transcripts.
+- **FR-011:** System MUST render a 2D pressure heat map (own × opponent) per value pair on demand (e.g., row click), showing the chosen metric per cell with the underlying N visible on hover.
+- **FR-012:** System MUST render a model × value heat map at the page level showing aggregate sensitivity per (model, value pair) cell, with low-coverage cells visually distinguished.
+- **FR-013:** System MUST render a **Directional Sanity Check** panel at the bottom of the page reporting the percentage of (model, value pair) combinations where Direction Δ is positive (expected), zero/flat (|Δ| < 0.02), or negative (against expectation). The denominator is the count of (model, value pair) combinations with a **defined** Direction Δ — pairs with undefined Δ (insufficient band coverage per FR-021) are reported as a separate "unmeasurable" count next to the panel, not in the percentage. Click-through MUST surface the underlying list filtered by direction or unmeasurable.
+- **FR-014:** System MUST render a **Limitations** panel that surfaces, prominently and on the page itself (not in tooltips):
+  (a) **Cross-vignette level calibration is not validated** — comparing sensitivity scores across different value pairs is suspect because "pressure level 4" in one vignette may not represent the same intensity as "pressure level 4" in another. This caveat applies directly to the cross-model summary (US-1) and the model × value heat map (US-3); both views should display the limitation badge inline near their headers.
+  (b) **Conviction is a model self-report**, not a calibrated confidence scale. Sycophantic models can increase stated conviction without changing decision logic, which would inflate this report's Conviction Δ.
+  (c) **Sycophancy and instruction-following can mimic sensitivity** — a model that mirrors prompt emphasis without actual value reasoning will look pressure-sensitive to this report.
+  (d) **Cells with N < 3 are excluded** — see FR-004, FR-006, FR-021.
+  (e) **Excluded vignettes are counted, not silenced** — see FR-018.
+  (f) **Banding intentionally averages across opponent pressure** — Direction Δ, Conviction Δ, and netScore Δ collapse the 2D grid to a 1D summary by mean-aggregating each band over opponent levels. This can mask interactions where a model becomes more (or less) firm specifically when opponent pressure is high. The per-pair 2D heat map (FR-011) is the only place these interactions remain visible; the panel MUST link to it.
+  (g) **Aggregate sensitivity is unweighted by coverage** — `mean(|netScore Δ|)` across pairs treats a model measured on three highly elastic pairs as more sensitive than a model measured on twelve modestly elastic pairs. The cross-model summary (FR-009) shows the pair count alongside the aggregate; the limitations panel MUST also state this explicitly so readers do not over-rank thin-coverage models.
+- **FR-015:** System MUST surface every displayed metric's plain-English definition and formula on the page (tooltip or inline expander acceptable). Every Δ MUST be traceable on hover or click to the band means and counts that produced it.
+- **FR-016:** System MUST handle the empty and partial-coverage states described in US-7: pipeline-pending empty state, per-model insufficient-coverage footer, per-row low-coverage warning badge.
+- **FR-017:** System MUST NOT modify the existing condition analysis resolvers, `ConditionMatrix`, or the `Coherence` metric introduced by `models-consistency-report`. The new aggregation is additive.
+- **FR-017a:** **Run-scope filter.** The new aggregation MUST follow the same run-scope boundary used by `models-consistency.ts`: include only runs with `status = 'COMPLETED'`, `deletedAt IS NULL`, and the `AGGREGATE` analysis tag (or the equivalent canonical filter the consistency report uses). Any other run state MUST be excluded silently from the aggregation; no transcripts from other runs may enter the (own × opponent) grid.
+- **FR-018:** System MUST exclude vignettes that cannot be aggregated and account for the exclusion reason via a **raw-definition validation pass** that runs against each Definition's raw `content` BEFORE label normalization erases the signal. The pass produces a per-Definition `exclusion_reason` value drawn from this enumeration (mutually exclusive; first match wins, evaluated top-to-bottom):
+  (a) **legacy single-dimension content** — definition uses `values[]` with no `dimensions[].levels[]` structure (sensitivity requires two pressure dimensions);
+  (b) **missing or empty `levels[]`** — definition has `dimensions[]` but no usable level scores;
+  (c) **out-of-range or non-integer scores** — definition has scores outside 1–5 or non-integer scores (e.g. 0, 6, 1.5);
+  (d) **unrecognized scenario labels** — scenario dimension value does not exact-match any known label/score in the parent definition's normalized level map (no fallback to raw label; phantom buckets are not allowed);
+  (e) **map collision** — see FR-002a;
+  (f) **insufficient cell coverage** — every (own × opponent) cell has N < 3 (this reason is decided after aggregation, not in the raw-definition pass; the pass marks the Definition as eligible and the aggregator decides (f) post-bucket).
+  Distinguishing (a) from (b) requires inspecting both `dimensions` and `values` content paths; using only `getLevelNormalizationMap`'s empty-map signal is not sufficient. The validation pass MUST persist the per-Definition exclusion reason alongside the aggregated counts so the "excluded" footer can later cite it without re-deriving from sanitized records.
+- **FR-019:** System MUST handle `scenario.orientationFlipped = true` correctly. The `6 - score` rule in `cloud/apps/api/src/services/analysis/aggregate/aggregate-helpers.ts` operates on the model's **response score** (the 1-5 response scale that maps to prioritized/deprioritized/neutral via `buildValueOutcomes`), NOT on input pressure level scores. The new aggregation MUST therefore:
+  (a) Use the existing `buildValueOutcomes` helper (or its canonical equivalent) so the prioritized/deprioritized/neutral classification is computed correctly for flipped scenarios — never re-implement this logic with raw response scores;
+  (b) Determine the dimension-to-value mapping from `Definition.content.components.value_first.token` / `value_second.token`, which is stable across flipped and non-flipped scenarios. In other words: `orientationFlipped` does NOT affect which scenario dimension corresponds to which value's pressure level. It only affects how the response score is interpreted as a vote.
+  (c) Apply NO transformation (`6 - score` or otherwise) to pressure level scores derived from scenario dimension values. Pressure level scores enter the (own × opponent) grid as-is once mapped via FR-002b.
+- **FR-020:** System MUST validate that level scores from each Definition are integers in 1–5 before using them. Vignettes whose Definition declares scores outside this range MUST be excluded under FR-018 reason (c). The validation MUST run once per Definition during aggregation, not per transcript.
+- **FR-021:** Direction Δ, Conviction Δ, and netScore Δ MUST require **at least one populated cell in each band** (low band: own_level_score ≤ 2, qualifying per N ≥ 3; high band: own_level_score ≥ 4, qualifying per N ≥ 3). If either band has zero qualifying cells, Δ is undefined; do not fall back to diagonal endpoints or impute. The "diagonal-only populated grid" edge case is resolved by this rule: if a band has no qualifying cell, Δ is undefined regardless of what the other cells contain.
+- **FR-022:** **Pooling rule.** Each transcript contributes to N exactly once via the same pooling boundary used by the rest of the Models tab (per `ModelValueDetailDrawer.tsx`): observations are pooled at the `(model, scenario)` level after the AGGREGATE analysis stage, so that re-running the same scenario for the same model does not inflate N. The new aggregation MUST therefore source its inputs from the AGGREGATE analysis records (filtered per FR-017a) rather than raw transcript rows; if a needed value is not exposed in AGGREGATE, the resolver MUST pool at `(model, scenario)` before counting toward N. Pooling MUST be applied before the N ≥ 3 threshold is evaluated.
+- **FR-023:** **Refusal and unknown direction handling.** Transcripts whose canonical direction is `refusal` or `unknown` (per `aggregate-helpers.ts` `buildCanonicalValueOutcomes` and `canonicalConditionSummary.ts` `unknownCount`) MUST be excluded from N, win rate, conviction, and netScore for the cell — they are not "neutral". The aggregation MUST track an `unscored_count` per cell (refusals + unknowns) and surface the total per `(model, value pair)` in the per-model detail view (a small inline indicator next to N), so a high refusal rate is not silently treated as low coverage.
+- **FR-024:** **Value pair canonicalization.** Value pair identity is the canonical key `[token_a, token_b].sort().join('::')` derived from `Definition.content.components.value_first.token` and `value_second.token`. Mirrored definitions (e.g., `Power -> Achievement` and `Achievement -> Power`) collapse to the same value pair bucket. Within a value pair, "own" is the user-selected analysis target; "opponent" is the other token. The own/opponent dimension lookup is then resolved per FR-002b — for each scenario the resolver consults the Definition to determine which `dimensions[]` entry corresponds to the user-selected own value, regardless of whether the Definition lists own first or second. Value pairs that cannot be canonicalized (missing or non-string tokens) are excluded under FR-018 with a new reason category (g) **missing value-pair tokens**.
+
+---
+
+## Success Criteria
+
+- **SC-001:** A researcher reading the report for the first time can answer the four product-goal questions in under 60 seconds of scan time.
+- **SC-002:** Every numeric value on the page is traceable to a formula and to raw counts in three or fewer interactions.
+- **SC-003:** No existing Models-tab test passes become failures; the existing `cross-domain Stability` and `Consistency` views are unchanged.
+- **SC-004:** The report renders in under 2 seconds with the full current model roster once analysis data is in cache.
+- **SC-005:** A user opening the report before coverage exists sees the empty state, not a broken chart or a chart of zeroes.
+- **SC-006:** On-page copy for every metric reads at high-school level (Flesch-Kincaid grade 10 or below) and the exact formula appears on the page.
+- **SC-007:** The Directional Sanity Check reports a number; if it shows < 70% positive direction, the report still renders without misleading the reader (limitations panel and on-page note explain).
+
+---
+
+## Non-Goals
+
+- Adding or changing models, vignettes, value pairs, or domains.
+- Statistical machinery: confidence intervals, variance decomposition, multiple-comparison correction, formal hypothesis testing.
+- Recalibrating level labels across vignettes.
+- Detecting or mitigating sycophancy or instruction-following confounds.
+- Handling `options[]` alternative phrasings on `DimensionLevel` (unused in production data).
+- Curve fitting, slope regression, or any analysis that assumes monotonic response to pressure.
+- Multi-model side-by-side comparison view (deferred).
+- Re-implementing or replacing the `Coherence` metric from `models-consistency-report`. The two reports are additive: `Coherence` is a single binary per pair; this report decomposes the response.
+- Modifying or embedding `ConditionMatrix` or `PairedStabilityView`. Optional links to those existing pages are acceptable, not embedding.
+
+---
+
+## Open Questions
+
+*(Do not block spec checkpoint; resolved in plan phase.)*
+
+1. **Exact route** — `Models → Pressure Sensitivity` as a tab inside Models, or a top-level child route. To be decided alongside the existing Models nav structure.
+2. **Aggregate sensitivity formula** — current spec uses `mean(|netScore Δ|)` across pairs. Alternatives: median (less sensitive to one outlier pair), or a weighted mean by N. Plan phase to confirm.
+3. ~~High/low band thresholds~~ — **decided**: own_level_score ≥ 4 (high band), ≤ 2 (low band), level 3 intentionally excluded from the band split to compare extremes. FR-005 is canonical; this open question is closed.
+4. **2D heat map: which metric drives the cell color by default?** — netScore Δ is the headline, but per-cell display may default to win rate. Plan phase to confirm the default and any toggle.
+5. **Inline per-value spread visualization** — sparkline, mini stacked bar, or bullet chart. Plan phase to choose based on the components already in the codebase.
+
+---
+
+## Dependencies
+
+- **`scenario-metadata.ts`** in `cloud/apps/api/src/services/analysis/` continues to be the canonical extractor for scenario dimension values across `dimensions`, `dimension_values`, and mixed content paths. The new aggregation reuses this rather than re-implementing extraction.
+- **`getLevelNormalizationMap`** in `cloud/apps/api/src/graphql/queries/scenarios-utils.ts` is consulted for label-to-score mapping per Definition. Known gaps documented in this spec: it only reads `content.dimensions`, uses exact-match keys, and does not guard against label-vs-score collisions or out-of-range scores. The new aggregation MUST work around these gaps per FR-002, FR-002a, FR-018, FR-020.
+- **Orientation flip** convention in `cloud/apps/api/src/services/analysis/aggregate/aggregate-helpers.ts` (`6 - score` rule when `orientationFlipped = true`) and the threading pattern in `cloud/apps/api/src/graphql/queries/models-consistency.ts` are reused per FR-019.
+- **Decision strength buckets** (`strongly`, `somewhat`, `neutral`, `opponentSomewhat`, `opponentStrongly`) and the `netScore` formula in `canonicalConditionSummary.ts` are reused as the canonical decision representation. Win-rate denominator follows the same canonical formula (`prioritized / total` including neutral).
+- **Definition content schema** continues to expose `dimensions[].levels[].score` for vignettes that follow the current pattern. Legacy `values[]` and `dimension_values` paths are recognized for exclusion accounting (FR-018) but do not contribute to the aggregation in v1.
+- **GraphQL schema** for transcripts/scenarios continues to expose decision strength, scenario dimension values, and `scenario.orientationFlipped`.
+
+---
+
+## Code Reuse Notes (canonical references for plan phase)
+
+| Need | Existing helper / reference |
+|---|---|
+| Extract scenario dimension values across `dimensions` / `dimension_values` paths | `cloud/apps/api/src/services/analysis/scenario-metadata.ts` |
+| Map label → score | `getLevelNormalizationMap` in `cloud/apps/api/src/graphql/queries/scenarios-utils.ts` (known gaps; see FR-002a, FR-018) |
+| Orientation flip (`6 - score`) | `cloud/apps/api/src/services/analysis/aggregate/aggregate-helpers.ts`; threaded through `models-consistency.ts` |
+| Decision strength buckets + netScore | `cloud/apps/web/src/utils/canonicalConditionSummary.ts` |
+| Win rate canonical denominator | `cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx` (uses `prioritized / total`) |
+| Pattern for analogous Models-tab report (Coherence) | `cloud/apps/api/src/graphql/queries/models-consistency.ts` and the prior feature run at `docs/workflow/feature-runs/models-consistency-report/` |
+
+---
+
+## Glossary (canonical terms reused)
+
+| Term | Meaning | Source |
+|---|---|---|
+| Level / pressure level | Integer score 1–5 on a value's intensity dimension within a vignette | `DimensionLevel.score` in Definition content |
+| Own pressure | Pressure level on the value being measured | this spec |
+| Opponent pressure | Pressure level on the opposing value in the pair | this spec |
+| Win rate | `prioritized / (prioritized + deprioritized + neutral)` per cell | `ModelValueDetailDrawer.tsx` |
+| Conviction | Mean decision strength among picks, using existing 2:1 strongly/somewhat weighting | derived from `canonicalConditionSummary.ts` |
+| netScore | Existing combined metric: `(2×strongly + somewhat − 2×opponentStrongly − opponentSomewhat) / total` | `canonicalConditionSummary.ts` |
+| Direction Δ | High-band mean win rate − low-band mean win rate | this spec, FR-005 |
+| Conviction Δ | High-band mean conviction − low-band mean conviction | this spec, FR-005 |
+| netScore Δ | High-band mean netScore − low-band mean netScore | this spec, FR-005 |
+| Baseline win rate | Mean win rate at the lowest populated own-pressure level | this spec, FR-006 |
+| Aggregate sensitivity | `mean(|netScore Δ|)` across a model's defined value pairs | this spec, FR-008 |
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m checking the spec against the provided helpers first so I only flag things that are actually grounded in the code, not just theoretical concerns.
+codex
+## Findings
+- HIGH: The spec assumes a reusable normalization pipeline will trim and numeric-normalize scenario-side dimension values before lookup, but the provided helpers do not do that. `normalizeScenarioAnalysisMetadata` only preserves raw string/number entries, and `getLevelNormalizationMap` does exact-string matching on labels. As written, values like `" moderate"` or `"01"` will miss their buckets unless new canonicalization code is added. [CODE-CONFIRMED]
+- MEDIUM: The spec mixes `transcripts`, `scenarios`, and pooled `vignettes` as counting units, but the existing Models UI already treats pooled observations as distinct vignettes, not raw runs. `ModelValueDetailDrawer.tsx` explicitly says repeated runs are pooled before counting. If this report counts raw transcripts for `N` or `unscored_count`, its denominators and coverage badges will disagree with existing Models-tab semantics. [CODE-CONFIRMED]
+- LOW: FR-018 and FR-024 define incompatible exclusion taxonomies. FR-018 presents a closed mutually exclusive list `(a-f)`, then FR-024 adds a new reason `(g)` for missing value-pair tokens. That leaves the excluded-footer accounting model ambiguous unless the spec is revised to make the reason set truly canonical. [UNVERIFIED]
+- LOW: The spec does not say what to do if `value_first.token === value_second.token`. After canonical sorting, that collapses to a single token pair and makes own/opponent assignment ambiguous. This should be explicitly rejected or ruled out. [UNVERIFIED]
+
+## Residual Risks
+- I could not verify the final report data shape for per-cell `unscored_count`, per-definition exclusion reasons, or the exact storage of low-data markers because the pressure-sensitivity implementation is not provided.
+- The spec still leaves cross-vignette level calibration as an acknowledged limitation. Even if implemented correctly, cross-value comparisons remain only descriptive, not validated.
+2026-04-27T22:22:18.333474Z ERROR codex_core::session: failed to record rollout items: thread 019dd108-5dcf-7080-bc40-b052cd8cd4d7 not found
+tokens used
+28,773

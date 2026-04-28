@@ -44,6 +44,12 @@ type AggregateMetadata {
   sourceRunIds: [String!]!
 }
 
+type AggregateSensitivity {
+  value: Float
+  valuePairsExcluded: Int!
+  valuePairsMeasured: Int!
+}
+
 type AnalysisFolderCounts {
   aggregateCount: Int!
   aggregateTagCounts: [AnalysisFolderTagCount!]!
@@ -243,6 +249,17 @@ type AvailableSignature {
   signature: String!
 }
 
+type BandStat {
+  highBandMean: Float
+  lowBandMean: Float
+  value: Float
+}
+
+type BaselineWinRate {
+  ceilingFloorFlag: String
+  value: Float
+}
+
 """Progress breakdown for a specific model"""
 type ByModelProgress {
   completed: Int!
@@ -374,7 +391,7 @@ type ConsistencyPerCondition {
   netPressureRank: Int!
   scenarioId: String!
   trials: Int!
-  winRate: Float!
+  winRate: Float
 }
 
 type ConsistencyPerDomain {
@@ -737,6 +754,30 @@ type DeprecateModelResult {
 
   """The new default model (if previous default was deprecated)"""
   newDefault: LlmModel
+}
+
+type DirectionalCoverage {
+  completeBatches: Int!
+  definitionIds: [String!]!
+  direction: String!
+  filledSlots: Int!
+  leftoverConditions: Int!
+}
+
+type DirectionalSanityCheck {
+  breakdown: [DirectionalSanityCheckEntry!]!
+  flatPct: Float!
+  measuredCount: Int!
+  negativePct: Float!
+  positivePct: Float!
+  unmeasurableCount: Int!
+}
+
+type DirectionalSanityCheckEntry {
+  classification: String!
+  directionDelta: Float!
+  modelId: String!
+  pairKey: String!
 }
 
 """A single domain used to group vignettes"""
@@ -1166,43 +1207,62 @@ type DomainTrialRunStatus {
   updatedAt: DateTime!
 }
 
-type DirectionalCoverage {
-  completeBatches: Int!
-  definitionIds: [ID!]!
-  direction: String!
-  filledSlots: Int!
-  leftoverConditions: Int!
-}
-
 type DomainValueCoverageCell {
+  """
+  Count of complete A-first runs for this value pair after model-set filtering. This is the filtered directional count for the first value in the pair.
+  """
+  aFirstBatchCount: Int!
   aggregateRunId: String
+
+  """
+  Count of complete B-first runs for this value pair after model-set filtering. This is the filtered directional count for the second value in the pair.
+  """
+  bFirstBatchCount: Int!
 
   """
   Count of fully-complete non-aggregate runs for this value pair. A run is complete when every selected model has at least one transcript at every (scenario × sampleIndex) slot. samplesPerScenario does not multiply this count -- a complete run contributes 1 regardless of how many samples per scenario were planned. Aggregate runs are excluded.
   """
   batchCount: Int!
+
+  """
+  Union of definition IDs that contribute data to this coverage cell, sorted alphabetically.
+  """
+  contributingDefinitionIds: [String!]!
   definitionId: String
   definitionName: String
+
+  """
+  Per-direction condition coverage for this value pair, including complete batches, filled slots, leftover conditions from incomplete runs, and contributing definition IDs.
+  """
+  directionalCoverage: [DirectionalCoverage!]!
 
   """
   Count of non-aggregate runs that expect transcripts but are missing one or more (model × scenario × sampleIndex) slots. Per-run; samplesPerScenario does not multiply this count. Aggregate runs and runs with zero expected slots are excluded.
   """
   incompleteBatchCount: Int!
-  pairedConditionCount: Int!
-  orphanedBatchCount: Int!
-  orphanedConditionCount: Int!
-  contributingDefinitionIds: [ID!]!
-  directionalCoverage: [DirectionalCoverage!]!
   maxTrialCount: Int
   minTrialCount: Int
   modelBreakdown: [CoverageModelBreakdown!]
-  aFirstBatchCount: Int!
-  bFirstBatchCount: Int!
 
   """
-  Count of paired-batch groups where the surviving (complete) companion run is fully complete. When both companions are complete, the pair counts as 1. When only one is complete, that one is the survivor and the pair counts as 1. When both are incomplete, the pair counts as 0 here (and as 1 toward incompleteBatchCount).
+  Count of unmatched directional runs for this value pair, computed as max(complete A-first runs, complete B-first runs) - min(complete A-first runs, complete B-first runs). When both directions are equal this is 0; when only one direction has runs this is the count of that side. Runs without a recognizable direction token are excluded.
+  """
+  orphanedBatchCount: Int!
+
+  """
+  Count of unmatched condition slots across both directions, computed as the size of the symmetric difference of filled (scenarioId, modelId, sampleIndex) slots.
+  """
+  orphanedConditionCount: Int!
+
+  """
+  Count of pairable analysis-ready batches for this value pair, computed as min(complete A-first non-aggregate runs, complete B-first non-aggregate runs) where direction is read from config.jobChoiceValueFirst. A launch where only one direction completed contributes 0 here (the surviving complete run still appears in batchCount). Runs without a recognizable direction token are excluded from both sides. See docs/canonical-glossary.md "Paired Batch" for full semantic.
   """
   pairedBatchCount: Int!
+
+  """
+  Count of matched condition slots across both directions, computed as the size of the intersection of filled (scenarioId, modelId, sampleIndex) slots.
+  """
+  pairedConditionCount: Int!
   valueA: String!
   valueB: String!
 }
@@ -1224,6 +1284,12 @@ type EnsureDomainVignettePairResult {
   definitionAId: String
   definitionBId: String
   status: VignettePairStatus!
+}
+
+type ExcludedDefinition {
+  definitionId: String!
+  name: String!
+  reason: String!
 }
 
 """Real-time execution metrics for monitoring parallel processing"""
@@ -1356,6 +1422,13 @@ input ForkDefinitionInput {
 }
 
 type InsufficientModel {
+  label: String!
+  modelId: String!
+  providerName: String!
+  reason: String!
+}
+
+type InsufficientPressureSensitivityModel {
   label: String!
   modelId: String!
   providerName: String!
@@ -1971,6 +2044,38 @@ type PreferenceSummary {
   perModel: JSON!
 }
 
+type PressureSensitivityModel {
+  aggregateSensitivity: AggregateSensitivity!
+  label: String!
+  modelId: String!
+  providerName: String!
+  unscoredCount: Int!
+  valuePairs: [PressureSensitivityValuePair!]!
+}
+
+type PressureSensitivityResult {
+  directionalSanityCheck: DirectionalSanityCheck!
+  excludedDefinitions: [ExcludedDefinition!]!
+  excludedScenariosCount: Int!
+  insufficient: [InsufficientPressureSensitivityModel!]!
+  models: [PressureSensitivityModel!]!
+}
+
+type PressureSensitivityValuePair {
+  baselineWinRate: BaselineWinRate!
+  convictionDelta: BandStat!
+  definitionsExcluded: Int!
+  definitionsMeasured: Int!
+  directionDelta: BandStat!
+  grid: [SensitivityCell!]!
+  n: Int!
+  netScoreDelta: BandStat!
+  opponentToken: String!
+  ownToken: String!
+  pairKey: String!
+  unscoredCount: Int!
+}
+
 """Result of a probe job execution"""
 type ProbeResult {
   completedAt: DateTime
@@ -2439,6 +2544,7 @@ type Query {
 
   """List all preambles"""
   preambles: [Preamble!]!
+  pressureSensitivity(domainId: ID, providerId: ID, signature: String!): PressureSensitivityResult!
 
   "\n      Get health status for all LLM providers.\n\n      Checks connectivity to each provider's API.\n      Results are cached for 5 minutes.\n\n      Use the `refresh` argument to force a fresh check.\n    "
   providerHealth(
@@ -2933,6 +3039,7 @@ enum RunAnomalySource {
 
 """Structured anomaly type for run state reconciliation"""
 enum RunAnomalyType {
+  INVALID_RESPONSE_FAILURE
   MODEL_TRANSCRIPT_SHORTFALL
   ORPHAN_TRANSCRIPT
   PAIR_ASYMMETRY
@@ -3001,6 +3108,17 @@ type Scenario {
   name: String!
 }
 
+type SensitivityCell {
+  conviction: Float
+  lowData: Boolean!
+  n: Int!
+  netScore: Float
+  opponentLevel: Int!
+  ownLevel: Int!
+  unscoredCount: Int!
+  winRate: Float
+}
+
 """Result of setting a default model"""
 type SetDefaultModelResult {
   """The new default model"""
@@ -3018,7 +3136,9 @@ input StartRunInput {
   """Optional experiment to associate this run with"""
   experimentId: ID
 
-  """Launch mode hint: STANDARD, PAIRED_BATCH, PAIRED_BATCH_TOPUP, or AD_HOC_BATCH"""
+  """
+  Launch mode hint: STANDARD, PAIRED_BATCH, PAIRED_BATCH_TOPUP, or AD_HOC_BATCH
+  """
   launchMode: String
 
   """List of model IDs to evaluate (e.g., ["gpt-4", "claude-3"])"""
@@ -3046,13 +3166,13 @@ input StartRunInput {
   """Optional explicit scenario IDs to run instead of percentage sampling"""
   scenarioIds: [ID!]
 
-  """Direction to top up for paired-batch top-up launches"""
-  topUpDirection: String
-
   """
   Optional sampling temperature (0-2). If omitted, provider default is used.
   """
   temperature: Float
+
+  """Direction to top up for paired-batch top-up launches"""
+  topUpDirection: String
 }
 
 """Result of starting a new run"""
