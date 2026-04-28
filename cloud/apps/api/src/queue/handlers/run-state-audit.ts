@@ -12,6 +12,7 @@ import {
   type AnomalyDraft,
   type RunSnapshot,
 } from '../../services/run/anomaly-detection.js';
+import { detectInvalidResponseFailures } from '../../services/run/anomaly-invalid-response-detection.js';
 import { syncAnomalies } from '../../services/run/anomaly-persistence.js';
 import type { RunStateAuditJobData } from '../types.js';
 
@@ -78,10 +79,20 @@ async function inspectRun(run: RunAuditSnapshot): Promise<void> {
     log.warn({ runId: run.id, err: error }, 'Audit model shortfall detection failed');
   }
 
+  try {
+    const invalidResponseFailures = await detectInvalidResponseFailures(run.id, 'audit');
+    for (const draft of invalidResponseFailures) {
+      addDraft(draft);
+    }
+  } catch (error) {
+    log.warn({ runId: run.id, err: error }, 'Audit invalid response failure detection failed');
+  }
+
   const scannedTypes: AnomalyDraft['type'][] = [
     'ORPHAN_TRANSCRIPT',
     'PAIR_ASYMMETRY',
     'MODEL_TRANSCRIPT_SHORTFALL',
+    'INVALID_RESPONSE_FAILURE',
   ];
 
   if (run.status === 'COMPLETED') {

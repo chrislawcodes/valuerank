@@ -1,0 +1,73 @@
+00001: # Spec: Cross-Domain Status Page + Empty-Response Anomalies
+00002: 
+00003: **Slug:** cross-domain-status-page
+00004: **Created:** 2026-04-27
+00005: **Status:** draft
+00006: **Input:** Replace the per-domain `/domains/status/:domainId` page with a cross-domain `/status` page that surfaces open RunAnomalies (with type-aware actions including single-slot re-probe) and active evaluations across all domains using an enhanced per-model panel. Add a new `EMPTY_TARGET_RESPONSE` anomaly type detected via the existing run-completion reconciliation hook. Stall detection (binary `stalledModels[]`) stays unchanged for this feature.
+00007: 
+00008: ---
+00009: 
+00010: ## Background
+00011: 
+00012: Today's `Status` top-nav link is a redirect to `/domains/status/:domainId`, a per-domain evaluation health page that requires the user to pick one domain to view. That made sense when researchers worked inside a single domain at a time, but it surfaces nothing about *anomalies* (the existing `RunAnomaly` table has shipped detection + storage but no UI surface) and forces the user to switch domains to find runs that need attention.
+00013: 
+00014: Separately, `deepseek-reasoner` and similar reasoning models occasionally emit zero visible response tokens — the model burns its budget on internal reasoning and surfaces an empty answer. The summarizer correctly tags these as `parseClass: "ambiguous"` and skips writing a `summaryCache`, but there is no visibility into "this slot needs to be re-probed to get a real answer." A 2026-04-27 prod investigation found 1/1,250 transcripts in run `cmmzamyy6039ikdtm5nszgsr9` matching this pattern, and the question — *should we re-probe this?* — required a manual SQL dive to even ask.
+00015: 
+00016: This feature solves both problems with the same surface:
+00017: 
+00018: 1. `/status` becomes a cross-domain page that surfaces open anomalies (any type, any domain) at the top, with type-aware actions including single-slot re-probe.
+00019: 2. A new `EMPTY_TARGET_RESPONSE` anomaly type fires when a transcript has `summarizedAt IS NOT NULL` and zero visible response text. Detection happens at run-completion reconciliation (the same hook that already drives `STRANDED_TRANSCRIPT` reconciliation in commit #753) and via the existing audit sweep for backfill.
+00020: 3. A new single-slot re-probe mutation lets a human resolve an anomaly by spending a fresh LLM call on the affected slot. The auto-resolve path (`syncAnomalies()` re-running on completion) closes the anomaly when the new transcript has non-empty content.
+00021: 4. The active-evaluation panel is enhanced with per-model ETA, throughput, status flag, and cost (spent/projected) so a user can tell at a glance whether a long-running batch is healthy, slow, or stalled.
+00022: 
+00023: The per-domain `/domains/status/:domainId` route is removed entirely — no redirect — to force any URL-generation site (post-launch redirects, Slack pastes, bookmarks) to be tracked down and updated. With 6 users (5 admin) on the platform, this is a Slack message and a `git grep`.
+00024: 
+00025: ---
+00026: 
+00027: ## Assumptions
+00028: 
+00029: 1. **Authorization.** The new `/status` page requires authentication but NOT admin role. This matches today's `/status` accessibility for researchers.
+00030: 2. **Active Evaluations scope.** The Active Evaluations section includes runs in `RUNNING` or `SUMMARIZING` status. `PENDING`, `PAUSED`, `FAILED`, `CANCELLED`, and `COMPLETED` are excluded from the live panel.
+00031: 3. **Re-probe confirmation.** Clicking the `[Re-probe]` button on an anomaly row opens a confirmation modal noting that the existing transcript will be soft-deleted and a new LLM call will be made. The manual `[Resolve]` button does NOT show a confirmation (it is idempotent — the detector can re-fire if the underlying condition is still present).
+00032: 4. **Filter UX.** The domain filter is a single-select dropdown with "All Domains" as the default. The type filter is a single-select dropdown with "All Types" as the default. Filter state persists in URL query params (`?domain=`, `?type=`) only. No `localStorage`.
+00033: 5. **Per-model ETA.** ETA per model = `(remaining transcripts) / (rolling 5-minute throughput for that model)`. If the model has fewer than 3 recent completions, fall back to the overall run rate.
+00034: 6. **Run-level ETA.** ETA at run level = the worst-model ETA across in-progress models (the honest "when can I move on" answer).
+00035: 7. **Per-model cost.** Cost spent per model = `SUM(transcript.estimatedCost)` for completed transcripts. Cost projected = `current avg cost per transcript × remaining transcripts`. Cost is shown per model only — there is no run-level cost rollup.
+00036: 8. **Status flag column.** Per-model status flag supports `rate-limited`, `erroring`, `stalled` (sourced from existing `Run.stalledModels[]`), and `done`. Flag is best-effort: surfaced only when underlying data exists; absence is an empty cell, not "unknown."
+00037
+
+... [narrowed review slice: middle omitted] ...
+
+e accessible to all authenticated users. It MUST NOT require admin role.
+00262: - **FR-023:** The system MUST keep the existing `Run.stalledModels[]` data and `StalledModelsBanner` rendering on the run-detail page unchanged for this feature.
+00263: 
+00264: ---
+00265: 
+00266: ## Success Criteria
+00267: 
+00268: - **SC-001:** A researcher can identify every open anomaly across all domains in under 10 seconds by navigating to `/status` and reading the Open Anomalies section.
+00269: - **SC-002:** A researcher can re-probe a single empty-response transcript in under 30 seconds end-to-end (open `/status` → click `[Re-probe]` → confirm modal), without writing any SQL.
+00270: - **SC-003:** An empty-response transcript created during a run is flagged as `EMPTY_TARGET_RESPONSE` in the anomaly table within one polling tick (5 seconds) of `maybeCompleteRun()` finishing.
+00271: - **SC-004:** After re-probing an `EMPTY_TARGET_RESPONSE` anomaly with a successful follow-up probe, the anomaly is auto-resolved and disappears from the open list on the next polling tick.
+00272: - **SC-005:** Across the existing 4 prod domains, the cross-domain anomaly query returns within 500ms at p95 for the current cardinality.
+00273: - **SC-006:** After deploy, zero production-code paths in `cloud/apps/web/` reference `/domains/status/`.
+00274: - **SC-007:** A researcher watching an active evaluation can identify the bottleneck model (highest ETA, with status flag if applicable) at a glance without reading every row.
+00275: 
+00276: ---
+00277: 
+00278: ## Key Entities
+00279: 
+00280: - **`RunAnomaly`** — existing Prisma model. New enum value `EMPTY_TARGET_RESPONSE` is added to `RunAnomalyType`. No schema migration beyond the enum extension.
+00281: - **`RunAnomalyType` enum** — gains `EMPTY_TARGET_RESPONSE` (ordered last to avoid renumbering existing values).
+00282: - **No new database tables.** All new functionality is layered on existing schemas (`run_anomalies`, `transcripts`, `probe_results`, `runs`, `domains`, `definitions`, `domain_evaluations`).
+00283: 
+00284: ---
+00285: 
+00286: ## Residual Risks
+00287: 
+00288: - **Re-probe deletes the soft-delete fence on `probe_results`.** Today no production code path deletes `probe_results` rows; the re-probe mutation is the first. **verification:** Add a dev/preview test that runs the re-probe mutation on a fixture run, then verifies the new probe job successfully completes and a fresh transcript is created at the same slot. Run before merge.
+00289: - **`computeTranscriptResponseSha256(content)` returning null is a proxy for "empty response" but may also fire if content shape changes in the future.** A future schema change to `transcript.content` could silently disable the EMPTY_TARGET_RESPONSE detector. **verification:** Add a unit test that exercises the detector against known-empty and known-non-empty fixtures based on the current `transcript.content` shape; assert that detector output matches expectations. The test will fail loudly if the content shape changes.
+00290: - **Auto-resolve relies on `syncAnomalies()` running after a successful re-probe.** If a re-probe completes but `maybeCompleteRun()` is not invoked (e.g., the run was already in COMPLETED state and the new transcript bypasses summarization), the anomaly will not auto-resolve. **verification:** Add a test that re-probes an anomaly on a COMPLETED run and verifies that either (a) the run re-enters SUMMARIZING and the detector re-runs, or (b) the manual `[Resolve]` action remains available as the user-visible escape hatch. Document whichever behavior is in fact correct.
+00291: - **The 5-second poll could become expensive as anomaly volume grows.** Today's volume (2 open anomalies in prod) is trivial; at 1000+ open anomalies the cross-domain query will need pagination. **verification:** Add a performance budget assertion to the GraphQL query: if `openRunAnomalies` exceeds 1s p95 in synthetic load tests at 1000 open rows, the test fails and we add pagination before merge.
+00292: - **Removing `/domains/status/:domainId` may break post-launch redirects in code we haven't yet found.** Sweep is the mitigation but a missed call site will surface as a broken nav. **verification:** Run `git grep '/domains/status' cloud/` after the change is staged; confirm zero production-code matches. Run an end-to-end click-through of "launch evaluation → confirm we land on a working status page" before merge.
+00293: - **`Run.stalledModels[]` is binary today and produces false positives for Mistral/reasoning models.** The new panel surfaces the same eager flag. Users may see the `stalled` status flag on rows that are merely slow. **verification:** This is documented as a known limitation deferred to the "stall detection rework" follow-up. The status flag column treats data as best-effort and renders no flag when underlying signal is weak; users with concerns can drill into the run detail page for the existing 

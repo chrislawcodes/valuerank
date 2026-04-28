@@ -19,7 +19,8 @@ export type RunAnomalyType =
   | 'PAIR_ASYMMETRY'
   | 'SUMMARIZING_STALL'
   | 'MODEL_TRANSCRIPT_SHORTFALL'
-  | 'SCHEDULED_COUNT_MISMATCH';
+  | 'SCHEDULED_COUNT_MISMATCH'
+  | 'INVALID_RESPONSE_FAILURE';
 
 export type AnomalyDraft = {
   type: RunAnomalyType;
@@ -116,7 +117,7 @@ function getProgressTotal(progress: unknown): number {
   return typeof total === 'number' && Number.isFinite(total) ? total : 0;
 }
 
-function toJsonValue(value: unknown): Prisma.InputJsonValue {
+export function toJsonValue(value: unknown): Prisma.InputJsonValue {
   return value as Prisma.InputJsonValue;
 }
 

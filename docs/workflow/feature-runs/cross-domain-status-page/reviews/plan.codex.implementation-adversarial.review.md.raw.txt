@@ -1,0 +1,10 @@
+## Findings
+- High: `EMPTY_TARGET_RESPONSE` will be duplicated for the same logical slot because W1 adds it to both the per-run reconciliation path and the audit sweep, while the uniqueness key is `(runId, type, subject, source)`. That means the same empty slot can produce both `source='default'` and `source='audit'` rows, so `/status` can show duplicate anomalies and duplicate actions unless one source is explicitly excluded or deduped.
+- High: `reprobeAnomalySlot` can enqueue duplicate probe jobs under concurrency. The plan locks the anomaly row, but the pending-job check and the `boss.send()` enqueue are not part of one atomic operation. A second request can pass the pending-job check after the first transaction commits but before its job is inserted, then schedule a second probe anyway.
+- Medium: the UI contract is incomplete for the new re-probe flow. W3 says the row should disable `[Re-probe]` and show a `Limit reached` chip at 3 prior re-probes, and the confirm modal should show an estimated cost. But W2 never adds a re-probe count field or any cost field to `RunAnomaly` or `openRunAnomalies`, so the page cannot implement those affordances as written.
+- Medium [UNVERIFIED]: `resolveRunAnomaly` only sets `resolvedAt`, but the plan does not say the detector or `syncAnomalies()` will suppress a manually resolved slot. If the existing reconciliation logic re-upserts any still-empty slot, the anomaly will come back on the next sweep and the Resolve button will only be temporary.
+
+## Residual Risks
+- The empty-response detector still depends on the exact transcript payload shape. If the “target response is empty” signal is not stable in the current data model, the detector will need a schema-aware rule or a migration.
+- `openRunAnomalies` is unpaginated and the page polls every 5 seconds. That is probably fine at current volume, but it will be the first place to hurt if anomaly count grows.
+- The route cutover intentionally breaks `/domains/status` links and bookmarks. That is an accepted tradeoff here, but it should be communicated before release.

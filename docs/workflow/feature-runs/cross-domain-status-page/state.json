@@ -1,0 +1,210 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": true,
+    "complete": true,
+    "question_count": 0,
+    "asked_count": 0,
+    "questions": [],
+    "assumptions": [
+      "Authorization: page requires authentication but NOT admin role; matches today /status accessibility for researchers.",
+      "Active Evaluations section includes runs with status RUNNING or SUMMARIZING. PENDING, PAUSED, FAILED, CANCELLED, COMPLETED are excluded from the live panel.",
+      "Re-probe button shows a confirmation modal noting the existing transcript will be soft-deleted and a new LLM call will be made. Manual Resolve button does NOT show a confirmation (idempotent, detector can re-fire).",
+      "Domain filter is a single-select dropdown with All Domains default. Type filter is a single-select dropdown with All Types default. State persists in URL query params (?domain=, ?type=) only; no localStorage.",
+      "ETA at run level = worst-model ETA across in-progress models. ETA per model = remaining transcripts / rolling 5-min throughput. If a model has fewer than 3 recent completions, fall back to overall run-rate.",
+      "Cost spent per model = SUM(transcript.estimatedCost) for completed transcripts. Cost projected = current avg cost per transcript times remaining transcripts. Cost is shown only at per-model row, not at run level.",
+      "Status flag column on per-model row supports rate-limited, erroring, stalled (from existing stalledModels array), and done. Best-effort: surfaced only when data exists; absence is empty cell, not unknown.",
+      "Re-probe mutation: soft-deletes existing transcript (sets deletedAt), deletes the corresponding probe_results row to clear the SUCCESS+transcriptId idempotency guard at probe-scenario/handler.ts:82-92, then enqueues a new probe_scenario job. Re-uses the same (runId, scenarioId, modelId, sampleIndex) slot.",
+      "EMPTY_TARGET_RESPONSE detector criterion: transcript has summarizedAt IS NOT NULL AND no targetResponse text in any turn (computeTranscriptResponseSha256 returns null). Detector hooks into maybeCompleteRun() in summarize-persistence.ts via syncAnomalies() pattern. Audit sweep adds the type to the existing audit job for backfill.",
+      "/domains/status/:domainId route is removed entirely (no redirect). StatusRedirect.tsx, DomainStatus.tsx, DOMAIN_TRIAL_RUNS_STATUS_QUERY (if no other consumers), and the navigation logic are deleted. URL generation sites are swept and updated.",
+      "Reuses DomainEvaluationStatusPanel and DomainEvaluationStatusDrawer components as-is, augmented with new per-model fields (ETA, throughput, status flag, cost). LLM models reference panel from current DomainStatus is dropped (it is config, not status).",
+      "Polling: 5-second interval matching existing DomainStatus. Drawer state in URL: ?runId=."
+    ],
+    "summary": "Replace per-domain /domains/status/:domainId with a cross-domain /status page that surfaces open RunAnomalies (with type-aware actions including single-slot re-probe), and active evaluations across all domains using an enhanced per-model panel. Adds new EMPTY_TARGET_RESPONSE anomaly type detected via the existing run-completion reconciliation hook. Stall detection unchanged for this feature.",
+    "updated_at": 1777316180,
+    "answers": {},
+    "non_goals": [
+      "Stall detection improvements (binary stalledModels[] stays unchanged)",
+      "slow tier in UI between healthy and stalled",
+      "Per-model stall thresholds",
+      "probe_attempts log for transient error retention",
+      "Investigation of empty error_code column in probe_results",
+      "Anomaly trend charts or time-series views",
+      "Bulk-resolve UI for anomalies",
+      "Recent activity / completed runs feed on /status",
+      "Per-scenario or per-condition heatmaps",
+      "Cost-per-model time-series sparkline"
+    ],
+    "acceptance_criteria": [
+      "/status renders Open Anomalies section across all domains with type-aware row actions",
+      "/status renders Active Evaluations section grouped by domain using enhanced per-model panel",
+      "Domain filter and type filter persist in URL query params",
+      "/domains/status/:domainId returns 404; route is removed; StatusRedirect.tsx and DomainStatus.tsx are deleted",
+      "EMPTY_TARGET_RESPONSE detector runs at run-completion reconciliation and during audit sweep",
+      "Single-slot re-probe mutation soft-deletes existing transcript and probe_result, then enqueues a fresh probe_scenario job",
+      "Manual resolveRunAnomaly mutation closes an open anomaly",
+      "Re-probe of EMPTY_TARGET_RESPONSE auto-resolves the anomaly when the new transcript has non-empty content (via syncAnomalies pattern)",
+      "Page polls every 5 seconds while open"
+    ],
+    "unresolved": []
+  },
+  "delivery": {},
+  "dirty_overrides": {},
+  "checkpoint_fallback": {},
+  "parallel_analysis": {
+    "reviewed": false,
+    "found": false,
+    "note": "",
+    "updated_at": 0
+  },
+  "init_head_sha": "728da7d111003c5b052de4afad7f33501fbe10ba",
+  "token_usage": [
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T19:04:48.624561Z",
+      "started_at": "2026-04-27T19:03:45.004919Z",
+      "ended_at": "2026-04-27T19:04:48.624561Z",
+      "duration_seconds": 63.6177,
+      "agent_id": null,
+      "artifact_sha_at_time": "d4b8c700653ba3f3758969f2325021f48034bfb085c83644ef5e68586961a1ab",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T19:05:51.136653Z",
+      "started_at": "2026-04-27T19:04:48.756517Z",
+      "ended_at": "2026-04-27T19:05:51.136653Z",
+      "duration_seconds": 62.379252,
+      "agent_id": null,
+      "artifact_sha_at_time": "d4b8c700653ba3f3758969f2325021f48034bfb085c83644ef5e68586961a1ab",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T19:06:55.729882Z",
+      "started_at": "2026-04-27T19:05:51.309442Z",
+      "ended_at": "2026-04-27T19:06:55.729882Z",
+      "duration_seconds": 64.419897,
+      "agent_id": null,
+      "artifact_sha_at_time": "d4b8c700653ba3f3758969f2325021f48034bfb085c83644ef5e68586961a1ab",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T19:16:21.150992Z",
+      "started_at": "2026-04-27T19:15:15.370925Z",
+      "ended_at": "2026-04-27T19:16:21.150992Z",
+      "duration_seconds": 65.779498,
+      "agent_id": null,
+      "artifact_sha_at_time": "c6498f3337805161ea29c2569ac6051f688313f2b13dc5f06d73ccf00f8dbb05",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T19:17:06.108263Z",
+      "started_at": "2026-04-27T19:16:21.299540Z",
+      "ended_at": "2026-04-27T19:17:06.108263Z",
+      "duration_seconds": 44.808323,
+      "agent_id": null,
+      "artifact_sha_at_time": "c6498f3337805161ea29c2569ac6051f688313f2b13dc5f06d73ccf00f8dbb05",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-27T19:17:56.270663Z",
+      "started_at": "2026-04-27T19:17:06.277413Z",
+      "ended_at": "2026-04-27T19:17:56.270663Z",
+      "duration_seconds": 49.992806,
+      "agent_id": null,
+      "artifact_sha_at_time": "c6498f3337805161ea29c2569ac6051f688313f2b13dc5f06d73ccf00f8dbb05",
+      "parse_error": "no Gemini token stats found in stdout"
+    }
+  ],
+  "stages": {
+    "spec": {
+      "adversarial_rounds": 1,
+      "judge_rounds": 0,
+      "judge_verdicts": [],
+      "annotations": [],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [
+        "d4b8c700653ba3f3758969f2325021f48034bfb085c83644ef5e68586961a1ab"
+      ],
+      "initial_sha": "d4b8c700653ba3f3758969f2325021f48034bfb085c83644ef5e68586961a1ab"
+    },
+    "plan": {
+      "adversarial_rounds": 1,
+      "judge_rounds": 0,
+      "judge_verdicts": [],
+      "annotations": [],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [
+        "c6498f3337805161ea29c2569ac6051f688313f2b13dc5f06d73ccf00f8dbb05",
+        "c6498f3337805161ea29c2569ac6051f688313f2b13dc5f06d73ccf00f8dbb05",
+        "c6498f3337805161ea29c2569ac6051f688313f2b13dc5f06d73ccf00f8dbb05",
+        "3f29306bb1126b9a6d01e9b8630e2a761d9fce4cef16f6619eac020833fbc533"
+      ],
+      "initial_sha": "c6498f3337805161ea29c2569ac6051f688313f2b13dc5f06d73ccf00f8dbb05"
+    }
+  },
+  "schema_version": 2,
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  },
+  "spec_adversarial_rounds": 1,
+  "last_action_result": {
+    "next": "author_tasks",
+    "reason": "plan checkpoint completed",
+    "blockers": []
+  },
+  "plan_adversarial_rounds": 1
+}

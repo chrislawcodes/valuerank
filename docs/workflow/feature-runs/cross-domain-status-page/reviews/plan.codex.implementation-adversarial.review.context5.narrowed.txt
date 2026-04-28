@@ -1,0 +1,242 @@
+00001: // NOTE: The term "Vignette" is used throughout the UI for user-friendliness.
+00002: // However, the underlying codebase, API, and database still use the term "Definition".
+00003: import type { ReactNode } from 'react';
+00004: import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+00005: import { Provider } from 'urql';
+00006: import { AuthProvider } from './auth/context';
+00007: import { ProtectedRoute } from './components/ProtectedRoute';
+00008: import { Layout } from './components/layout/Layout';
+00009: import { Login } from './pages/Login';
+00010: import { Dashboard } from './pages/Dashboard';
+00011: import { ArchiveHome } from './pages/ArchiveHome';
+00012: import { Definitions } from './pages/Definitions';
+00013: import { Domains } from './pages/Domains';
+00014: import { DomainsManage } from './pages/DomainsManage';
+00015: import { DomainStartBatches } from './pages/DomainStartBatches';
+00016: import { DomainStatus } from './pages/DomainStatus';
+00017: import { DomainAnalysis } from './pages/DomainAnalysis';
+00018: import { DomainCoverage } from './pages/DomainCoverage';
+00019: import { DomainAnalysisValueDetail } from './pages/DomainAnalysisValueDetail';
+00020: import { Models } from './pages/Models';
+00021: import { DomainValueShiftHeatmap } from './pages/DomainValueShiftHeatmap';
+00022: import { ModelsConsistency } from './pages/ModelsConsistency';
+00023: import { ModelsCircumplex } from './pages/ModelsCircumplex';
+00024: import { DefinitionDetail } from './pages/DefinitionDetail';
+00025: import { StartPairedBatchPage } from './pages/DefinitionDetail/StartPairedBatchPage';
+00026: import { Runs } from './pages/Runs';
+00027: import { RunDetail } from './pages/RunDetail';
+00028: import { Analysis } from './pages/Analysis';
+00029: import { AnalysisDetail } from './pages/AnalysisDetail';
+00030: import { AnalysisConditionDetail } from './pages/AnalysisConditionDetail';
+00031: import { AnalysisTranscripts } from './pages/AnalysisTranscripts';
+00032: import { Survey } from './pages/Survey';
+00033: import { SurveyResults } from './pages/SurveyResults';
+00034: import { SettingsAccount } from './pages/SettingsAccount';
+00035: import { SettingsSystemHealth } from './pages/SettingsSystemHealth';
+00036: import { SettingsModels } from './pages/SettingsModels';
+00037: import { SettingsInfrastructure } from './pages/SettingsInfrastructure';
+00038: import { SettingsApiKeys } from './pages/SettingsApiKeys';
+00039: import { SettingsUsers } from './pages/SettingsUsers';
+00040: import { Preambles } from './pages/Preambles';
+00041: import { LevelPresets } from './pages/LevelPresets';
+00042: import { DomainContexts } from './pages/DomainContexts';
+00043: import { ValueStatements } from './pages/ValueStatements';
+00044: import { PairedVignetteNew } from './pages/PairedVignetteNew';
+00045: import { StartRedirect } from './pages/StartRedirect';
+00046: import { StatusRedirect } from './pages/StatusRedirect';
+00047: import { NotFound } from './pages/NotFound';
+00048: import { client } from './api/client';
+00049: import { useHorizontalScrollOnWheel } from './hooks/useHorizontalScrollOnWheel';
+00050: 
+00051: // Protected layout wrapper
+00052: function ProtectedLayout({
+00053:   children,
+00054:   fullWidth = false,
+00055:   requiredRole,
+00056: }: {
+00057:   children: ReactNode;
+00058:   fullWidth?: boolean;
+00059:   requiredRole?: 'ADMIN';
+00060: }) {
+00061:   return (
+00062:     <ProtectedRoute requiredRole={requiredRole}>
+00063:       <Layout fullWidth={fullWidth}>{children}</Layout>
+00064:     </ProtectedRoute>
+00065:   );
+00066: }
+00067: 
+00068: 
+00069: function App() {
+00070:   useHorizontalScrollOnWheel();
+00071: 
+00072:   return (
+00073:     <BrowserRouter>
+00074:       <Provider value={client}>
+00075:         <AuthProvider>
+00076:           <Routes>
+00077:             {/* Public routes */}
+00078:             <Route path="/login" element={<Login />} />
+00079: 
+00080:             {/* Protected routes with layout */}
+00081:             <Route
+00082:               path="/"
+00083:               element={
+00084:                 <ProtectedLayout>
+00085:                   <Dashboard />
+00086:                 </ProtectedLayout>
+00087:               }
+00088:             />
+00089:             <Route
+00090:               path="/status"
+00091:               element={
+00092:                 <ProtectedLayout>
+00093:                   <StatusRedirect />
+00094:                 </ProtectedLayout>
+00095:               }
+00096:             />
+00097:             <Route
+00098:               path="/definitions"
+00099:               element={
+00100:                 <ProtectedLayout>
+00101:                   <Definitions />
+00102:                 </ProtectedLayout>
+00103:               }
+00104:             />
+00105:             <Route
+00106:               path="/domains"
+00107:               element={
+00108:                 <ProtectedLayout>
+00109:                   <Domains />
+00110:                 </ProtectedLayout>
+
+... [narrowed review slice: middle omitted] ...
+
+ysis/:id"
+00259:               element={
+00260:                 <ProtectedLayout>
+00261:                   <AnalysisDetail />
+00262:                 </ProtectedLayout>
+00263:               }
+00264:             />
+00265:             <Route
+00266:               path="/analysis/:id/transcripts"
+00267:               element={
+00268:                 <ProtectedLayout fullWidth>
+00269:                   <AnalysisTranscripts />
+00270:                 </ProtectedLayout>
+00271:               }
+00272:             />
+00273:             <Route
+00274:               path="/analysis/:id/conditions/:conditionKey"
+00275:               element={
+00276:                 <ProtectedLayout fullWidth>
+00277:                   <AnalysisConditionDetail />
+00278:                 </ProtectedLayout>
+00279:               }
+00280:             />
+00281:             <Route
+00282:               path="/archive/surveys"
+00283:               element={
+00284:                 <ProtectedLayout requiredRole="ADMIN">
+00285:                   <Survey />
+00286:                 </ProtectedLayout>
+00287:               }
+00288:             />
+00289:             <Route
+00290:               path="/archive/survey-results"
+00291:               element={
+00292:                 <ProtectedLayout requiredRole="ADMIN">
+00293:                   <SurveyResults />
+00294:                 </ProtectedLayout>
+00295:               }
+00296:             />
+00297:             <Route path="/settings" element={<Navigate to="/settings/account" replace />} />
+00298:             <Route
+00299:               path="/settings/account"
+00300:               element={
+00301:                 <ProtectedLayout>
+00302:                   <SettingsAccount />
+00303:                 </ProtectedLayout>
+00304:               }
+00305:             />
+00306:             <Route
+00307:               path="/settings/system-health"
+00308:               element={
+00309:                 <ProtectedLayout requiredRole="ADMIN">
+00310:                   <SettingsSystemHealth />
+00311:                 </ProtectedLayout>
+00312:               }
+00313:             />
+00314:             <Route
+00315:               path="/settings/models"
+00316:               element={
+00317:                 <ProtectedLayout requiredRole="ADMIN">
+00318:                   <SettingsModels />
+00319:                 </ProtectedLayout>
+00320:               }
+00321:             />
+00322:             <Route
+00323:               path="/settings/infrastructure"
+00324:               element={
+00325:                 <ProtectedLayout requiredRole="ADMIN">
+00326:                   <SettingsInfrastructure />
+00327:                 </ProtectedLayout>
+00328:               }
+00329:             />
+00330:             <Route
+00331:               path="/settings/api-keys"
+00332:               element={
+00333:                 <ProtectedLayout requiredRole="ADMIN">
+00334:                   <SettingsApiKeys />
+00335:                 </ProtectedLayout>
+00336:               }
+00337:             />
+00338:             <Route
+00339:               path="/settings/users"
+00340:               element={
+00341:                 <ProtectedLayout requiredRole="ADMIN">
+00342:                   <SettingsUsers />
+00343:                 </ProtectedLayout>
+00344:               }
+00345:             />
+00346:             <Route
+00347:               path="/preambles"
+00348:               element={
+00349:                 <ProtectedLayout requiredRole="ADMIN">
+00350:                   <Preambles />
+00351:                 </ProtectedLayout>
+00352:               }
+00353:             />
+00354:             <Route
+00355:               path="/level-presets"
+00356:               element={
+00357:                 <ProtectedLayout requiredRole="ADMIN">
+00358:                   <LevelPresets />
+00359:                 </ProtectedLayout>
+00360:               }
+00361:             />
+00362:             <Route
+00363:               path="/domain-contexts"
+00364:               element={
+00365:                 <ProtectedLayout requiredRole="ADMIN">
+00366:                   <DomainContexts />
+00367:                 </ProtectedLayout>
+00368:               }
+00369:             />
+00370:             <Route
+00371:               path="/value-statements"
+00372:               element={
+00373:                 <ProtectedLayout requiredRole="ADMIN">
+00374:                   <ValueStatements />
+00375:                 </ProtectedLayout>
+00376:               }
+00377:             />
+00378:             {['/paired/new', '/paired/:id/edit', '/definitions/:id/start-paired-batch'].map((path) => (
+00379:               <Route key={path} path={path} element={<ProtectedLayout requiredRole="ADMIN"><PairedVignetteNew /></ProtectedLayout>} />
+00380:             ))}
+00381:             <Route path="*" element={<ProtectedLayout><NotFound /></ProtectedLayout>} />
+00382:           </Routes>
+00383:         </AuthProvider>
+00384:       </Provider>
+00385:     </BrowserRouter>
+0038

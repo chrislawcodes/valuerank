@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/packages/db/prisma/schema.prisma",
+  "source_artifact_sha256": "0134d3e48a12f2508af2918bc839e82f7eb526c679ce346f459c8461d793b984",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/cross-domain-status-page/reviews/plan.gemini.testability-adversarial.review.context1.narrowed.txt",
+  "narrowed_artifact_sha256": "3fc695589dedd71094c6919b42dee28b05bfdf27292d258b323e4219a1cdec1f",
+  "strategy": "head-tail-numbered-lines"
+}

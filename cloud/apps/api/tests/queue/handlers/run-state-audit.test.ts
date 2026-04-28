@@ -7,6 +7,7 @@ const mockDetectModelTranscriptShortfall = vi.hoisted(() => vi.fn());
 const mockDetectStrandedTranscript = vi.hoisted(() => vi.fn());
 const mockDetectSummarizingStall = vi.hoisted(() => vi.fn());
 const mockDetectScheduledCountMismatch = vi.hoisted(() => vi.fn());
+const mockDetectInvalidResponseFailures = vi.hoisted(() => vi.fn());
 const mockSyncAnomalies = vi.hoisted(() => vi.fn());
 
 vi.mock('@valuerank/db', () => ({
@@ -43,6 +44,10 @@ vi.mock('../../../src/services/run/anomaly-persistence.js', () => ({
   syncAnomalies: mockSyncAnomalies,
 }));
 
+vi.mock('../../../src/services/run/anomaly-invalid-response-detection.js', () => ({
+  detectInvalidResponseFailures: mockDetectInvalidResponseFailures,
+}));
+
 import { createRunStateAuditHandler } from '../../../src/queue/handlers/run-state-audit.js';
 
 describe('createRunStateAuditHandler', () => {
@@ -64,6 +69,7 @@ describe('createRunStateAuditHandler', () => {
     mockDetectStrandedTranscript.mockResolvedValue(null);
     mockDetectSummarizingStall.mockReturnValue(null);
     mockDetectScheduledCountMismatch.mockResolvedValue({ draft: null, canonicalTotal: 1 });
+    mockDetectInvalidResponseFailures.mockResolvedValue([]);
     mockSyncAnomalies.mockResolvedValue(undefined);
   });
 
@@ -95,6 +101,7 @@ describe('createRunStateAuditHandler', () => {
     expect(mockDetectStrandedTranscript).toHaveBeenCalledWith('run-1');
     expect(mockDetectSummarizingStall).toHaveBeenCalledTimes(1);
     expect(mockDetectScheduledCountMismatch).toHaveBeenCalledTimes(1);
+    expect(mockDetectInvalidResponseFailures).toHaveBeenCalledWith('run-1', 'audit');
     expect(mockSyncAnomalies).toHaveBeenCalledWith(
       'run-1',
       'PAIR_ASYMMETRY',
@@ -125,6 +132,12 @@ describe('createRunStateAuditHandler', () => {
           type: 'SCHEDULED_COUNT_MISMATCH',
         }),
       ],
+      'audit'
+    );
+    expect(mockSyncAnomalies).toHaveBeenCalledWith(
+      'run-1',
+      'INVALID_RESPONSE_FAILURE',
+      [],
       'audit'
     );
   });
