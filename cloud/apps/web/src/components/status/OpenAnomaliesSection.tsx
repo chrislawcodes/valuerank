@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from 'urql';
 import { CheckCircle, RefreshCw } from 'lucide-react';
 import { Button } from '../ui/Button';
@@ -49,12 +49,6 @@ function formatRunAnomalyCount(count: number): string {
   return count === 1 ? 'Open Anomalies (1)' : `Open Anomalies (${count})`;
 }
 
-function sortOpenAnomalies(anomalies: OpenRunAnomaly[]): OpenRunAnomaly[] {
-  return [...anomalies].sort(
-    (left, right) => new Date(right.lastSeenAt).getTime() - new Date(left.lastSeenAt).getTime()
-  );
-}
-
 function formatQueryError(message: string): string {
   return `Failed to load open anomalies: ${message}`;
 }
@@ -85,8 +79,11 @@ export function OpenAnomaliesSection({
     requestPolicy: 'cache-and-network',
   });
 
-  const openAnomalies = useMemo(
-    () => sortOpenAnomalies(result.data?.openRunAnomalies ?? []),
+  // The backend returns openRunAnomalies ordered by firstSeenAt DESC. Preserve that
+  // order — re-sorting client-side (e.g. by lastSeenAt) makes rows jump around as
+  // the detector refreshes lastSeenAt on every reconciliation tick.
+  const openAnomalies: OpenRunAnomaly[] = useMemo(
+    () => result.data?.openRunAnomalies ?? [],
     [result.data?.openRunAnomalies]
   );
 
@@ -102,8 +99,21 @@ export function OpenAnomaliesSection({
   const isInitialLoading = result.fetching && result.data == null;
   const isRefreshing = result.fetching && result.data != null;
 
+  // Track in-flight state via a ref so the interval callback always sees the latest
+  // value without restarting on every render. This prevents overlapping fetches if
+  // the network is slow enough that one request hasn't returned by the next tick.
+  const isFetchingRef = useRef(result.fetching);
+  useEffect(() => {
+    isFetchingRef.current = result.fetching;
+  }, [result.fetching]);
+
   useEffect(() => {
     const interval = window.setInterval(() => {
+      if (isFetchingRef.current) {
+        // Skip this tick — a previous request is still in flight. The next interval
+        // will retry once it returns. Keeps requests from piling up under load.
+        return;
+      }
       reexecuteQuery({ requestPolicy: 'network-only' });
     }, pollIntervalMs);
 
