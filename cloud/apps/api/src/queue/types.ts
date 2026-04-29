@@ -31,6 +31,9 @@ export type ProbeScenarioJobData = {
     seed?: number;
     maxTurns: number;
   };
+  // Only set by the reprobeAnomalySlot mutation. Bypasses the isRunTerminal guard
+  // so manual re-probes can execute on completed runs.
+  manualReprobe?: boolean;
 };
 
 export type TopUpProbesJobData = {

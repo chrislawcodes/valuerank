@@ -546,6 +546,59 @@ describe('probe-scenario integration', () => {
 
       expect(spawnPython).not.toHaveBeenCalled();
     });
+
+    it('bypasses terminal guard and creates transcript when manualReprobe=true on completed run', async () => {
+      await db.run.update({
+        where: { id: TEST_IDS.run },
+        data: { status: 'COMPLETED' },
+      });
+
+      const handler = createProbeScenarioHandler();
+      await handler([createMockJob({ manualReprobe: true })]);
+
+      // Python probe worker should have been called
+      expect(spawnPython).toHaveBeenCalled();
+
+      // Transcript should be created
+      const transcript = await db.transcript.findFirst({
+        where: { runId: TEST_IDS.run },
+      });
+      expect(transcript).not.toBeNull();
+
+      // Run should still be COMPLETED — manual re-probe must not change run status
+      const run = await db.run.findUnique({ where: { id: TEST_IDS.run } });
+      expect(run?.status).toBe('COMPLETED');
+    });
+
+    it('still skips job when run is completed and manualReprobe is not set', async () => {
+      await db.run.update({
+        where: { id: TEST_IDS.run },
+        data: { status: 'COMPLETED' },
+      });
+
+      const handler = createProbeScenarioHandler();
+      await handler([createMockJob()]);
+
+      expect(spawnPython).not.toHaveBeenCalled();
+
+      const transcript = await db.transcript.findFirst({
+        where: { runId: TEST_IDS.run },
+      });
+      expect(transcript).toBeNull();
+    });
+
+    it('still defers manualReprobe job when run is paused', async () => {
+      await db.run.update({
+        where: { id: TEST_IDS.run },
+        data: { status: 'PAUSED' },
+      });
+
+      const handler = createProbeScenarioHandler();
+
+      await expect(handler([createMockJob({ manualReprobe: true })])).rejects.toThrow('RUN_PAUSED');
+
+      expect(spawnPython).not.toHaveBeenCalled();
+    });
   });
 
   describe('multi-provider support', () => {
