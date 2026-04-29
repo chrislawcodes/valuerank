@@ -90,7 +90,7 @@ Once the above are resolved:
 - [x] Domain Shifts by Value heatmap implemented at `/models/domain-shifts`; focused tests and web preflight pass.
 - [x] Domain Shifts readability controls added locally: cells can toggle between shift and raw win rate, and table columns are sortable.
 - [x] Domain Shifts model picker now groups default models first and separates non-default models with `---` before alphabetical non-default options.
-- [x] Model Value Preference overview report updated at `/models`; screenshot capture is available, the title now matches the report, and model rows no longer repeat the model ID line.
+- [x] Model Value Preference overview report updated at `/models`; screenshot capture is available, the title now matches the report, the all-domains value priorities table now includes stability circles, and the comparison table stays below it.
 
 ---
 
