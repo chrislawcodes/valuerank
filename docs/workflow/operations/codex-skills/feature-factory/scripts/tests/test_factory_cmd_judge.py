@@ -747,5 +747,79 @@ class StripMarkdownJsonFencesTests(unittest.TestCase):
         self.assertEqual(stripped, '{"verdict":"proceed"}')
 
 
+class ParseJsonRecursionRetryTests(unittest.TestCase):
+    """Regression tests for _parse_json_with_recursion_retry.
+
+    Codex hit `schema_violation: maximum recursion depth exceeded` repeatedly
+    on the ff-reconciliation-hardening run because Python's `json.loads`
+    is implemented recursively. A judge model that emits deeply-nested
+    JSON (e.g., echoes the schema wrapped in many layers) trips the
+    default ~1000 recursion limit and the FF runner cannot make progress.
+    """
+
+    def test_normal_json_parses(self) -> None:
+        text = '{"verdict": "proceed", "confidence": 3}'
+        parsed, error = JUDGE._parse_json_with_recursion_retry(text)
+        self.assertIsNone(error)
+        self.assertEqual(parsed["verdict"], "proceed")
+
+    def test_invalid_json_returns_error_string(self) -> None:
+        parsed, error = JUDGE._parse_json_with_recursion_retry("{not json}")
+        self.assertIsNone(parsed)
+        self.assertIsNotNone(error)
+        # Existing behavior: non-recursion errors flow through unchanged.
+        self.assertNotIn("maximum recursion depth", error)
+
+    def test_deeply_nested_json_parses_after_retry(self) -> None:
+        # Build JSON nested ~1500 levels — well past Python's default
+        # recursion limit (~1000) but within the elevated retry cap (5000).
+        depth = 1500
+        nested = "[" * depth + "1" + "]" * depth
+        parsed, error = JUDGE._parse_json_with_recursion_retry(nested)
+        self.assertIsNone(error)
+        # Verify the structure parsed correctly.
+        cursor = parsed
+        for _ in range(depth - 1):
+            self.assertIsInstance(cursor, list)
+            cursor = cursor[0]
+        self.assertEqual(cursor, [1])
+
+    def test_pathological_nesting_fails_cleanly(self) -> None:
+        # If json.loads raises RecursionError EVEN at the elevated retry
+        # limit, the helper must return a clear error message that names
+        # the cap — NOT crash the process.
+        with patch("json.loads", side_effect=RecursionError("test forced")):
+            parsed, error = JUDGE._parse_json_with_recursion_retry("[]")
+        self.assertIsNone(parsed)
+        self.assertIsNotNone(error)
+        self.assertIn("5000", error)
+        self.assertIn("pathologically nested", error)
+
+    def test_recursion_limit_restored_after_retry(self) -> None:
+        # Whether the parse succeeds or not, sys.getrecursionlimit must
+        # be the same after the call as before. Critical because elevated
+        # limits leaking risk a real stack overflow on later code paths.
+        limit_before = sys.getrecursionlimit()
+        # Force the success-after-retry path.
+        call_count = {"n": 0}
+        original_loads = json.loads
+
+        def first_recurse_then_succeed(text):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                raise RecursionError("test forced first call")
+            return original_loads(text)
+
+        with patch("json.loads", side_effect=first_recurse_then_succeed):
+            parsed, error = JUDGE._parse_json_with_recursion_retry('{"x": 1}')
+        self.assertIsNone(error)
+        self.assertEqual(parsed, {"x": 1})
+        self.assertEqual(sys.getrecursionlimit(), limit_before)
+        # Also verify restore on the persistent-failure path.
+        with patch("json.loads", side_effect=RecursionError("test forced")):
+            JUDGE._parse_json_with_recursion_retry("[]")
+        self.assertEqual(sys.getrecursionlimit(), limit_before)
+
+
 if __name__ == "__main__":
     unittest.main()

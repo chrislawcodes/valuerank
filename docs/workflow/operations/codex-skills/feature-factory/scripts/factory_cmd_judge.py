@@ -505,6 +505,53 @@ def _validate_verdict(verdict: dict) -> str | None:
     return None
 
 
+_JSON_RECURSION_RETRY_LIMIT = 5000
+
+
+def _parse_json_with_recursion_retry(text: str) -> tuple[object, str | None]:
+    """Parse JSON, retrying once with an elevated recursion limit.
+
+    Python's `json` module is implemented recursively; deeply-nested model
+    output (e.g., a judge that echoes the schema wrapped in many layers)
+    can trip the default recursion limit (~1000) and produce
+    "maximum recursion depth exceeded" errors that prevent the judge
+    panel from making any progress across rounds.
+
+    Strategy:
+      1. Parse at the operator's current recursion limit.
+      2. On `RecursionError`, temporarily raise the limit to
+         `_JSON_RECURSION_RETRY_LIMIT` (5000) and retry exactly once.
+      3. Always restore the original limit in `finally`.
+      4. On any other exception, return the error string for the caller
+         to surface (existing behavior).
+
+    The 5000 cap is bounded so a truly pathological response still fails
+    cleanly rather than risking a C-level stack overflow.
+
+    Returns (parsed_value_or_None, error_string_or_None).
+    """
+    try:
+        return json.loads(text), None
+    except RecursionError:
+        original_limit = sys.getrecursionlimit()
+        try:
+            sys.setrecursionlimit(_JSON_RECURSION_RETRY_LIMIT)
+            return json.loads(text), None
+        except RecursionError as exc:
+            return None, (
+                f"maximum recursion depth exceeded even at "
+                f"{_JSON_RECURSION_RETRY_LIMIT} (judge response is "
+                f"pathologically nested; consider switching judge model "
+                f"or shortening the prompt): {exc}"
+            )
+        except Exception as exc:
+            return None, str(exc)
+        finally:
+            sys.setrecursionlimit(original_limit)
+    except Exception as exc:
+        return None, str(exc)
+
+
 def _strip_markdown_json_fences(raw: str) -> str:
     """Strip a leading ```json / ``` code fence + trailing ``` if present.
 
@@ -596,10 +643,9 @@ def _attempt_model_call(
     if result.returncode != 0:
         return None, stdout, stderr or f"non-zero exit status {result.returncode}"
     cleaned = _strip_markdown_json_fences(stdout)
-    try:
-        verdict = json.loads(cleaned)
-    except Exception as exc:
-        return None, stdout, str(exc)
+    verdict, parse_error = _parse_json_with_recursion_retry(cleaned)
+    if parse_error is not None:
+        return None, stdout, parse_error
     if not isinstance(verdict, dict):
         return None, stdout, "response was not a JSON object"
     validation_error = _validate_verdict(verdict)
