@@ -120,6 +120,8 @@ def _run_serial(slug: str, tasks: list[str]) -> int:
                 ["codex", "exec", "-m", "gpt-5.4-mini", "-s", "workspace-write", prompt_text],
                 REPO_ROOT,
             ),
+            prompt_chars=len(prompt_text),
+            prompt_cap=None,
         )
         rc = result.returncode
         if rc == 124:
@@ -189,13 +191,16 @@ def _run_parallel(slug: str, group: dict, max_workers: int = 4) -> int:
                     )
                 futures[
                     executor.submit(
-                        record_ai_call,
-                        slug,
-                        "tasks",
-                        round_number,
-                        "implementation",
-                        "gpt-5.4-mini",
-                        _call,
+                        lambda _call=_call, prompt_text=prompt_text: record_ai_call(
+                            slug,
+                            "tasks",
+                            round_number,
+                            "implementation",
+                            "gpt-5.4-mini",
+                            _call,
+                            prompt_chars=len(prompt_text),
+                            prompt_cap=None,
+                        ),
                     )
                 ] = i
             except Exception as exc:

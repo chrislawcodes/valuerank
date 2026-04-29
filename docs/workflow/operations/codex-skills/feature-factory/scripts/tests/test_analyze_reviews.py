@@ -91,6 +91,11 @@ class AnalyzeReviewsTests(unittest.TestCase):
             encoding="utf-8",
         )
 
+    def _write_artifact(self, slug: str, relative_path: str, text: str) -> None:
+        artifact_path = self.runs_root / slug / relative_path
+        artifact_path.parent.mkdir(parents=True, exist_ok=True)
+        artifact_path.write_text(text, encoding="utf-8")
+
     def _record(
         self,
         *,
@@ -104,6 +109,8 @@ class AnalyzeReviewsTests(unittest.TestCase):
         parse_error: str | None = None,
         timestamp: str = "2026-04-25T12:00:00Z",
         cost_usd_estimate: float = 0.5,
+        prompt_chars: int | None = None,
+        prompt_cap: int | None = None,
     ) -> dict:
         record = {
             "stage": stage,
@@ -118,6 +125,10 @@ class AnalyzeReviewsTests(unittest.TestCase):
         }
         if parse_error is not None:
             record["parse_error"] = parse_error
+        if prompt_chars is not None:
+            record["prompt_chars"] = prompt_chars
+        if prompt_cap is not None:
+            record["prompt_cap"] = prompt_cap
         return record
 
     def _run(self, *, out: Path | None = None, top_n: int = 20) -> tuple[int, str, str, str]:
@@ -225,6 +236,82 @@ class AnalyzeReviewsTests(unittest.TestCase):
 
         _, _, _, report = self._run()
         self.assertIn("| schema violation at path very/long/path/that/keeps/going and going and still... | 3 | gpt-5.4, gpt-5.4-mini | delta |", report)
+
+    def test_artifact_size_section_reports_fixture_distribution(self) -> None:
+        self._write_state("alpha", [])
+        self._write_state("beta", [])
+        self._write_artifact("alpha", "spec.md", "a" * 10)
+        self._write_artifact("alpha", "plan.md", "b" * 20)
+        self._write_artifact("alpha", "tasks.md", "c" * 30)
+        self._write_artifact("alpha", "reviews/implementation.diff.patch", "d" * 40)
+        self._write_artifact("beta", "spec.md", "e" * 50)
+        self._write_artifact("beta", "plan.md", "f" * 60)
+        self._write_artifact("beta", "tasks.md", "g" * 70)
+        self._write_artifact("beta", "reviews/implementation.diff.patch", "h" * 80)
+
+        _, _, _, report = self._run()
+
+        self.assertIn("## 8. Artifact Sizes", report)
+        self.assertIn("| spec | 2 | 30 | 48 | 50 | 0 | 0 |", report)
+        self.assertIn("| plan | 2 | 40 | 58 | 60 | 0 | 0 |", report)
+        self.assertIn("| tasks | 2 | 50 | 68 | 70 | 0 | 0 |", report)
+        self.assertIn("| diff | 2 | 60 | 78 | 80 | 0 | 0 |", report)
+        self.assertIn("| beta | diff | 80 |", report)
+        self.assertIn("| beta | tasks | 70 |", report)
+
+    def test_prompt_cap_pressure_section_reports_rollup(self) -> None:
+        self._write_state(
+            "epsilon",
+            [
+                self._record(
+                    stage="spec",
+                    round_number=1,
+                    activity_type="adversarial_review",
+                    model="gpt-5.4-mini",
+                    duration_seconds=10.0,
+                    prompt_chars=900,
+                    prompt_cap=1000,
+                ),
+                self._record(
+                    stage="plan",
+                    round_number=1,
+                    activity_type="adversarial_review",
+                    model="gpt-5.4-mini",
+                    duration_seconds=20.0,
+                    prompt_chars=600,
+                    prompt_cap=1000,
+                ),
+                self._record(
+                    stage="tasks",
+                    round_number=1,
+                    activity_type="judge_panel",
+                    model="gpt-5.4",
+                    duration_seconds=30.0,
+                    prompt_chars=1100,
+                    prompt_cap=1000,
+                ),
+                self._record(
+                    stage="diff",
+                    round_number=1,
+                    activity_type="adversarial_review",
+                    model="gemini-2.5-pro",
+                    duration_seconds=40.0,
+                ),
+            ],
+        )
+
+        _, _, _, report = self._run()
+
+        self.assertIn("## 9. Prompt-Cap Pressure", report)
+        self.assertIn(
+            "| gpt-5.4-mini | adversarial_review | 2 | 75% | 88% | 1 | 0 |",
+            report,
+        )
+        self.assertIn(
+            "| gpt-5.4 | judge_panel | 1 | 110% | 110% | 1 | 1 |",
+            report,
+        )
+        self.assertNotIn("No prompt-size data available yet", report)
 
 
 if __name__ == "__main__":

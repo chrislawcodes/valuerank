@@ -43,7 +43,9 @@ from factory_git import _git_head_sha  # noqa: E402
 VERIFY_CHECKPOINT = REVIEW_SCRIPTS / "verify_review_checkpoint.py"
 VERIFY_RECONCILIATION = REVIEW_SCRIPTS / "verify_reconciliation.py"
 
-HARD_DIFF_ARTIFACT_MAX_CHARS = 150000
+# Raised per PR #789's analyzer report plus PR #791's perf fixes.
+# Operators can still override per-call on checkpoint commands.
+HARD_DIFF_ARTIFACT_MAX_CHARS = 300000
 LARGE_DIFF_RERUN_WARN_CHARS = 80000
 
 NEXT_ACTION_LABELS: dict[str, str] = {

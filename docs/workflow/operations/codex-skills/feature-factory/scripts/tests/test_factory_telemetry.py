@@ -101,6 +101,35 @@ class FactoryTelemetryTests(unittest.TestCase):
         usage = self._usage(slug)
         self.assertEqual(usage[-1]["lens"], "feasibility-adversarial")
 
+    def test_record_ai_call_records_prompt_size_fields_and_defaults(self) -> None:
+        slug = "telemetry-prompt-size"
+        completed = _completed_process(stderr='{"totalTokens": {"prompt": 100, "candidates": 50}}\n')
+
+        FACTORY_TELEMETRY.record_ai_call(
+            slug,
+            "spec",
+            1,
+            "adversarial_review",
+            "gpt-5.4-mini",
+            lambda: completed,
+            prompt_chars=1234,
+            prompt_cap=2000,
+        )
+        FACTORY_TELEMETRY.record_ai_call(
+            slug,
+            "plan",
+            2,
+            "adversarial_review",
+            "gpt-5.4-mini",
+            lambda: completed,
+        )
+
+        usage = self._usage(slug)
+        self.assertEqual(usage[0]["prompt_chars"], 1234)
+        self.assertEqual(usage[0]["prompt_cap"], 2000)
+        self.assertIsNone(usage[1]["prompt_chars"])
+        self.assertIsNone(usage[1]["prompt_cap"])
+
     def test_record_ai_call_invalid_activity_type_raises(self) -> None:
         with self.assertRaises(ValueError):
             FACTORY_TELEMETRY.record_ai_call(

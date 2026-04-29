@@ -142,6 +142,10 @@ def _format_percent(numerator: int, denominator: int) -> str:
     return f"{(100.0 * numerator / denominator):.1f}%"
 
 
+def _format_pct_of_cap(value: float) -> str:
+    return f"{value:.0f}%"
+
+
 def _escape_cell(value: object) -> str:
     text = "" if value is None else str(value)
     return text.replace("|", "\\|").replace("\n", " ")
@@ -330,6 +334,8 @@ def _load_records(top_n: int) -> tuple[list[dict[str, object]], dict[str, object
 
             input_tokens = _coerce_int(raw_record.get("input_tokens"))
             output_tokens = _coerce_int(raw_record.get("output_tokens"))
+            prompt_chars = _coerce_int(raw_record.get("prompt_chars"))
+            prompt_cap = _coerce_int(raw_record.get("prompt_cap"))
             cost_usd = _coerce_float(raw_record.get("cost_usd_estimate")) or 0.0
             parse_error = _normalize_text(raw_record.get("parse_error"))
 
@@ -364,6 +370,8 @@ def _load_records(top_n: int) -> tuple[list[dict[str, object]], dict[str, object
                 "timestamp_text": timestamp_text,
                 "timestamp": timestamp,
                 "parse_error": parse_error,
+                "prompt_chars": prompt_chars,
+                "prompt_cap": prompt_cap,
                 "judge_cap_count": judge_cap_count,
                 "is_deferred_round": bool(round_number is not None and (stage, round_number, activity_name) in deferred_keys),
                 "lens": lens,
@@ -518,6 +526,106 @@ def _slug_rows(records: list[dict[str, object]]) -> list[list[object]]:
     return rows[:20]
 
 
+def _artifact_size_records() -> list[dict[str, object]]:
+    records: list[dict[str, object]] = []
+    stage_files = {
+        "spec": "spec.md",
+        "plan": "plan.md",
+        "tasks": "tasks.md",
+        "diff": "reviews/implementation.diff.patch",
+    }
+    runs_root = factory_state.FACTORY_RUNS_ROOT
+    if not runs_root.exists():
+        return records
+    for slug_dir in sorted(path for path in runs_root.iterdir() if path.is_dir()):
+        for stage, relative_path in stage_files.items():
+            artifact_path = slug_dir / relative_path
+            if not artifact_path.exists():
+                continue
+            records.append(
+                {
+                    "slug": slug_dir.name,
+                    "stage": stage,
+                    "char_count": len(artifact_path.read_text(encoding="utf-8")),
+                }
+            )
+    return records
+
+
+def _artifact_distribution_rows(artifact_records: list[dict[str, object]]) -> list[list[object]]:
+    grouped: dict[str, list[int]] = defaultdict(list)
+    for record in artifact_records:
+        grouped[str(record["stage"])].append(int(record["char_count"]))
+
+    rows: list[list[object]] = []
+    for stage in ("spec", "plan", "tasks", "diff"):
+        counts = grouped.get(stage, [])
+        if not counts:
+            continue
+        rows.append(
+            [
+                stage,
+                len(counts),
+                int(round(_percentile([float(value) for value in counts], 50))),
+                int(round(_percentile([float(value) for value in counts], 95))),
+                max(counts),
+                sum(1 for value in counts if value > 50000),
+                sum(1 for value in counts if value > 100000),
+            ]
+        )
+    return rows
+
+
+def _largest_artifact_rows(artifact_records: list[dict[str, object]]) -> list[list[object]]:
+    ordered = sorted(
+        artifact_records,
+        key=lambda item: int(item["char_count"]),
+        reverse=True,
+    )[:10]
+    return [[item["slug"], item["stage"], item["char_count"]] for item in ordered]
+
+
+def _cap_pressure_rows(records: list[dict[str, object]]) -> list[list[object]]:
+    grouped: dict[tuple[str, str], list[dict[str, object]]] = defaultdict(list)
+    for record in records:
+        prompt_chars = _coerce_int(record.get("prompt_chars"))
+        prompt_cap = _coerce_int(record.get("prompt_cap"))
+        if prompt_chars is None or prompt_cap is None or prompt_cap <= 0:
+            continue
+        normalized = dict(record)
+        normalized["prompt_chars"] = prompt_chars
+        normalized["prompt_cap"] = prompt_cap
+        grouped[(str(record["model"]), str(record["activity_type"]))].append(normalized)
+
+    rows: list[list[object]] = []
+    for (model, activity_type), items in grouped.items():
+        pct_values = [
+            (100.0 * int(item["prompt_chars"])) / int(item["prompt_cap"])
+            for item in items
+        ]
+        rows.append(
+            [
+                model,
+                activity_type,
+                len(items),
+                _format_pct_of_cap(_percentile(pct_values, 50)),
+                _format_pct_of_cap(_percentile(pct_values, 95)),
+                sum(
+                    1
+                    for item in items
+                    if int(item["prompt_chars"]) >= (0.9 * int(item["prompt_cap"]))
+                ),
+                sum(
+                    1
+                    for item in items
+                    if int(item["prompt_chars"]) > int(item["prompt_cap"])
+                ),
+            ]
+        )
+    rows.sort(key=lambda row: (str(row[0]), str(row[1])))
+    return rows
+
+
 def _lens_rows(records: list[dict[str, object]]) -> list[list[object]]:
     grouped: dict[tuple[str, str], list[dict[str, object]]] = defaultdict(list)
     for record in records:
@@ -548,6 +656,7 @@ def _render_report(records: list[dict[str, object]], data_quality: dict[str, obj
     total_duration = sum(float(record["duration_seconds"]) for record in records)
     total_cost = sum(float(record["cost_usd_estimate"]) for record in records)
     total_parse_errors = sum(1 for record in records if record.get("parse_error"))
+    artifact_records = _artifact_size_records()
     timestamps = [record["timestamp"] for record in records if isinstance(record.get("timestamp"), datetime)]
     date_range = "unknown"
     if timestamps:
@@ -690,6 +799,56 @@ def _render_report(records: list[dict[str, object]], data_quality: dict[str, obj
     else:
         lines.append("No relevant records found.")
 
+    artifact_distribution_rows = _artifact_distribution_rows(artifact_records)
+    largest_artifact_rows = _largest_artifact_rows(artifact_records)
+    lines.extend(["", "## 8. Artifact Sizes", ""])
+    if artifact_distribution_rows:
+        lines.extend(["### Table 8a — Per-stage artifact-size distribution", ""])
+        lines.extend(
+            _markdown_table(
+                [
+                    "stage",
+                    "count",
+                    "p50_chars",
+                    "p95_chars",
+                    "max_chars",
+                    "over_50k_count",
+                    "over_100k_count",
+                ],
+                artifact_distribution_rows,
+            )
+        )
+        lines.extend(["", "### Table 8b — Top 10 largest artifacts", ""])
+        lines.extend(
+            _markdown_table(
+                ["slug", "stage", "char_count"],
+                largest_artifact_rows,
+            )
+        )
+    else:
+        lines.append("No workflow artifacts found.")
+
+    cap_pressure_rows = _cap_pressure_rows(records)
+    lines.extend(["", "## 9. Prompt-Cap Pressure", ""])
+    if cap_pressure_rows:
+        lines.extend(["### Table 9a — Cap-pressure summary", ""])
+        lines.extend(
+            _markdown_table(
+                [
+                    "model",
+                    "activity_type",
+                    "count_with_size_data",
+                    "p50_pct_of_cap",
+                    "p95_pct_of_cap",
+                    "within_90pct_cap",
+                    "over_cap",
+                ],
+                cap_pressure_rows,
+            )
+        )
+    else:
+        lines.append("No prompt-size data available yet — re-run after the next 2-3 feature runs.")
+
     dropped_fields = data_quality["dropped_fields"]
     partial_fields = data_quality["partial_fields"]
     skipped_slugs = data_quality["skipped_slugs"]
@@ -702,7 +861,7 @@ def _render_report(records: list[dict[str, object]], data_quality: dict[str, obj
     lines.extend(
         [
             "",
-            "## 8. Data Quality",
+            "## 10. Data Quality",
             "",
             f"- Dropped records: {int(data_quality['dropped_records'])}",
             f"- Dropped-record field breakdown: {', '.join(f'{field}={count}' for field, count in sorted(dropped_fields.items())) or 'none'}",
