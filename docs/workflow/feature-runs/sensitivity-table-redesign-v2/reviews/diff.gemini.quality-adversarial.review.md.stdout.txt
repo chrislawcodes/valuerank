@@ -1,0 +1,57 @@
+MCP issues detected. Run /mcp list for status.{
+  "session_id": "7904a111-f4fb-4505-a969-5581c3fcf135",
+  "response": "## Findings\n\n| Severity | Finding | Evidence |\n| --- | --- | --- |\n| HIGH | **Critical exclusion-accounting logic is untested.** The spec adds a new, fine-grained exclusion counting system (`pressureConditionExcludedCount` and `pressureConditionExclusionBreakdown` per `FR-031c`). This is a core part of the feature's auditability. The `tasks.md` and `spec.md` (`SC-008`, `SC-010`) explicitly require tests for every exclusion bucket, the precedence of overlapping exclusion reasons, and ensuring unscored/refusal outcomes are not double-counted. The implementation in `pressure-sensitivity.ts` adds the logic, but the corresponding tests are entirely missing from `pressure-sensitivity.test.ts` in the provided diff. This introduces significant risk that data is being silently dropped or miscategorized. | [CODE-CONFIRMED] |\n| MEDIUM | **Core metric logic for canonical coordinate transformation is untested.** The spec (`FR-009a`) and plan (`Decision 1`) require that vignettes with a reversed value order are transformed into a canonical `first/second` coordinate system before pooling. This is fundamental to the correctness of the new `Pressure response` metric. `tasks.md` explicitly calls for a test case covering \"reverse-ordered vignette canonicalization\". The diff modifies the logic in `value-pair.ts` but does not add the required test to verify that the transformation works as expected within the resolver. An error here would invalidate the metric for any affected value pairs. | [CODE-CONFIRMED] |\n\n## Residual Risks\n\n| Severity | Risk Description |\n| --- | --- |\n| HIGH | **Untested logic may cause runtime failures or incorrect data.** The two findings above confirm that complex, business-critical logic for data accounting and metric calculation is entering the codebase without any automated test coverage. This creates a high risk of post-deployment incidents where data is either calculated incorrectly or silently lost, which would not be caught by CI. |\n| MEDIUM | **Implicit data ordering assumptions may exist elsewhere.** The change in `pressure-sensitivity.ts` to explicitly sort `eligibleRuns` before processing suggests the order of records from the database was not guaranteed. While this was fixed for source-run collisions (`FR-031b`), it implies that other parts of the codebase could be making similar unsafe assumptions about data ordering that are not covered by tests, creating a risk of non-deterministic behavior. |\n| LOW | **Atomic schema deployment remains a key operational risk.** The spec correctly identifies the deployment risk of an atomic schema cutover (`Residual Risk #9`). The implementation correctly removes the v1 fields as required (`FR-033`). However, this tight coupling between the API and web app means any desynchronization during deployment will break the Pressure Sensitivity page. The mitigation relies entirely on process (pre-flight checks, CI), as called out in the plan. |\n| LOW | **The headline metric may be sensitive to noise in sparse pairs.** The spec and plan acknowledge that the cross-model mean is an equal-weight average of per-pair responses (`FR-005`, `Residual Risk #10`). Pairs with few trials can therefore have an outsized impact on the model's final ranking. While this is an intentional methodological choice, it remains a risk that model ranks near zero may appear more stable than they are. |",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 7,
+          "totalErrors": 6,
+          "totalLatencyMs": 55458
+        },
+        "tokens": {
+          "input": 36985,
+          "prompt": 36985,
+          "candidates": 719,
+          "total": 40988,
+          "cached": 0,
+          "thoughts": 3284,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 7,
+            "totalErrors": 6,
+            "totalLatencyMs": 55458,
+            "tokens": {
+              "input": 36985,
+              "prompt": 36985,
+              "candidates": 719,
+              "total": 40988,
+              "cached": 0,
+              "thoughts": 3284,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

@@ -20,10 +20,13 @@ import { useDomains } from '../hooks/useDomains';
 const mockedUseQuery = vi.mocked(useQuery);
 const mockedUseDomains = vi.mocked(useDomains);
 
-function createPressureData(transcriptCapHit: boolean): PressureSensitivityQueryResult {
+function createPressureData(
+  transcriptCapHit: boolean,
+  pressureConditionExcludedCount = 0,
+): PressureSensitivityQueryResult {
   return {
     pressureSensitivity: {
-      excludedScenariosCount: 0,
+      pressureConditionExcludedCount,
       transcriptCapHit,
       models: [
         {
@@ -31,29 +34,28 @@ function createPressureData(transcriptCapHit: boolean): PressureSensitivityQuery
           label: 'Model A',
           providerName: 'Provider',
           unscoredCount: 0,
-          winRateDeltaSummary: {
+          pressureResponseSummary: {
             mean: 0.1,
-            ciLow: 0.05,
-            ciHigh: 0.15,
-            lowBandMean: 0.52,
-            highBandMean: 0.62,
+            rangeMin: 0.05,
+            rangeMax: 0.15,
             pairsMeasured: 1,
-            pairsPositive: 1,
           },
           valuePairs: [
             {
               pairKey: 'alpha::beta',
-              ownToken: 'Alpha',
-              opponentToken: 'Beta',
+              firstValueToken: 'alpha',
+              firstValueLabel: 'Alpha',
+              secondValueToken: 'beta',
+              secondValueLabel: 'Beta',
               n: 12,
               unscoredCount: 0,
               definitionsMeasured: 1,
-              definitionsExcluded: 0,
-              qualifyingTrials: 12,
-              winRateDelta: {
+              pressureResponse: {
                 value: 0.4,
-                lowBandMean: 0.45,
-                highBandMean: 0.85,
+                baselineRate: 0.5,
+                pushTowardFirstRate: 0.7,
+                pushTowardSecondRate: 0.3,
+                qualifyingTrials: 12,
                 ciLow: 0.1,
                 ciHigh: 0.7,
                 reason: null,
@@ -65,6 +67,13 @@ function createPressureData(transcriptCapHit: boolean): PressureSensitivityQuery
       ],
       insufficient: [],
       excludedDefinitions: [],
+      pressureConditionExclusionBreakdown: {
+        sourceRunMapping: 0,
+        definitionMetadata: 0,
+        missingScenario: 0,
+        invalidMetadata: 0,
+        levelAssignment: 0,
+      },
       directionalSanityCheck: {
         positivePct: 80,
         flatPct: 10,
@@ -75,6 +84,28 @@ function createPressureData(transcriptCapHit: boolean): PressureSensitivityQuery
       },
     },
   };
+}
+
+function mockDomainsOnce() {
+  mockedUseDomains.mockReturnValue({
+    domains: [{ id: 'domain-a', name: 'Domain A' }],
+    loading: false,
+    queryLoading: false,
+    creating: false,
+    renaming: false,
+    deleting: false,
+    assigningByIds: false,
+    assigningByFilter: false,
+    runningDomainTrials: false,
+    error: null,
+    refetch: vi.fn(),
+    createDomain: vi.fn(),
+    renameDomain: vi.fn(),
+    deleteDomain: vi.fn(),
+    assignDomainToDefinitions: vi.fn(),
+    assignDomainToDefinitionsByFilter: vi.fn(),
+    runTrialsForDomain: vi.fn(),
+  } as unknown as ReturnType<typeof useDomains>);
 }
 
 function mockQuery(data: PressureSensitivityQueryResult) {
@@ -119,25 +150,7 @@ afterEach(() => {
 
 describe('PressureSensitivity page', () => {
   it('renders the transcript cap banner when the backend flags it', () => {
-    mockedUseDomains.mockReturnValue({
-      domains: [{ id: 'domain-a', name: 'Domain A' }],
-      loading: false,
-      queryLoading: false,
-      creating: false,
-      renaming: false,
-      deleting: false,
-      assigningByIds: false,
-      assigningByFilter: false,
-      runningDomainTrials: false,
-      error: null,
-      refetch: vi.fn(),
-      createDomain: vi.fn(),
-      renameDomain: vi.fn(),
-      deleteDomain: vi.fn(),
-      assignDomainToDefinitions: vi.fn(),
-      assignDomainToDefinitionsByFilter: vi.fn(),
-      runTrialsForDomain: vi.fn(),
-    } as unknown as ReturnType<typeof useDomains>);
+    mockDomainsOnce();
     mockQuery(createPressureData(true));
 
     render(
@@ -150,25 +163,7 @@ describe('PressureSensitivity page', () => {
   });
 
   it('hides the transcript cap banner when the backend does not flag it', () => {
-    mockedUseDomains.mockReturnValue({
-      domains: [{ id: 'domain-a', name: 'Domain A' }],
-      loading: false,
-      queryLoading: false,
-      creating: false,
-      renaming: false,
-      deleting: false,
-      assigningByIds: false,
-      assigningByFilter: false,
-      runningDomainTrials: false,
-      error: null,
-      refetch: vi.fn(),
-      createDomain: vi.fn(),
-      renameDomain: vi.fn(),
-      deleteDomain: vi.fn(),
-      assignDomainToDefinitions: vi.fn(),
-      assignDomainToDefinitionsByFilter: vi.fn(),
-      runTrialsForDomain: vi.fn(),
-    } as unknown as ReturnType<typeof useDomains>);
+    mockDomainsOnce();
     mockQuery(createPressureData(false));
 
     render(
@@ -178,5 +173,31 @@ describe('PressureSensitivity page', () => {
     );
 
     expect(screen.queryByText(/Coverage warning: this report scanned the maximum 500,000 transcripts/)).toBeNull();
+  });
+
+  it('renders the exclusion warning when pressureConditionExcludedCount is nonzero', () => {
+    mockDomainsOnce();
+    mockQuery(createPressureData(false, 42));
+
+    render(
+      <MemoryRouter initialEntries={['/models/pressure-sensitivity?domainId=domain-a&signature=vnewtd']}>
+        <PressureSensitivity />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText(/42 pressure conditions were excluded/)).toBeDefined();
+  });
+
+  it('appends lower-bound sentence when both transcript cap and exclusions are present', () => {
+    mockDomainsOnce();
+    mockQuery(createPressureData(true, 10));
+
+    render(
+      <MemoryRouter initialEntries={['/models/pressure-sensitivity?domainId=domain-a&signature=vnewtd']}>
+        <PressureSensitivity />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText(/lower bound on pressure sensitivity/)).toBeDefined();
   });
 });

@@ -14,13 +14,13 @@ export function PressureSensitivitySanityCheck({ data }: Props) {
   if (data.measuredCount === 0) {
     return (
       <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5 text-sm text-gray-600">
-        <h3 className="text-base font-semibold text-gray-900">Win rate sanity check</h3>
+        <h3 className="text-base font-semibold text-gray-900">Pressure response sanity check</h3>
         <p className="mt-1">
-          No (model, value pair) combinations have a measurable Win rate Δ yet. The sanity check requires at least one pair with both pressure bands populated to N ≥ 3.
+          No (model, value pair) combinations have a measurable pressure response yet. The sanity check requires at least one pair with qualifying cells in both direction pools.
         </p>
         {data.unmeasurableCount > 0 ? (
           <p className="mt-1 text-xs text-gray-500">
-            {data.unmeasurableCount} pair{data.unmeasurableCount === 1 ? '' : 's'} unmeasurable due to insufficient band coverage.
+            {data.unmeasurableCount} pair{data.unmeasurableCount === 1 ? '' : 's'} unmeasurable due to insufficient pool coverage.
           </p>
         ) : null}
       </section>
@@ -34,13 +34,13 @@ export function PressureSensitivitySanityCheck({ data }: Props) {
       className={`rounded-xl border p-4 md:p-5 ${flagWarning ? 'border-amber-300 bg-amber-50' : 'border-gray-200 bg-white'}`}
     >
       <div className="flex items-baseline justify-between">
-        <h3 className="text-base font-semibold text-gray-900">Win rate sanity check</h3>
+        <h3 className="text-base font-semibold text-gray-900">Pressure response sanity check</h3>
         <span className="text-xs text-gray-500">
           {data.measuredCount} measured · {data.unmeasurableCount} unmeasurable
         </span>
       </div>
       <p className="mt-1 text-sm text-gray-600">
-        Of (model, value pair) combinations with measurable Win rate Δ, what share moved up as pressure increased (higher own pressure → higher own win rate)?
+        Of (model, value pair) combinations with a measurable pressure response, what share had a positive response (own pressure increased own win rate)?
       </p>
 
       <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
@@ -80,20 +80,20 @@ export function PressureSensitivitySanityCheck({ data }: Props) {
                 <tr className="text-left text-[11px] uppercase tracking-wide text-gray-500">
                   <th className="px-2 py-1">Model</th>
                   <th className="px-2 py-1">Pair</th>
-                  <th className="px-2 py-1">Win rate Δ</th>
+                  <th className="px-2 py-1">Pressure response</th>
                   <th className="px-2 py-1">Class</th>
                 </tr>
               </thead>
               <tbody>
                 {[...data.breakdown]
-                  .sort((a, b) => Math.abs(b.winRateDelta) - Math.abs(a.winRateDelta))
+                  .sort((a, b) => Math.abs(b.pressureResponse) - Math.abs(a.pressureResponse))
                   .map((entry) => (
                     <tr key={`${entry.modelId}::${entry.pairKey}`} className="border-t border-gray-100">
                       <td className="px-2 py-1 font-mono">{entry.modelId}</td>
                       <td className="px-2 py-1 font-mono">{entry.pairKey}</td>
                       <td className="px-2 py-1 font-mono">
-                        {entry.winRateDelta > 0 ? '+' : ''}
-                        {entry.winRateDelta.toFixed(3)}
+                        {entry.pressureResponse > 0 ? '+' : ''}
+                        {entry.pressureResponse.toFixed(3)}
                       </td>
                       <td
                         className={`px-2 py-1 ${

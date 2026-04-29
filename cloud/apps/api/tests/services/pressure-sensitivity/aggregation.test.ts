@@ -4,8 +4,8 @@ import {
   type Observation,
   buildCellMetrics,
   diffProportionCI,
-  pooledBandReduction,
-  summarizeWinRateDeltas,
+  pooledDirectionalReduction,
+  summarizePressureResponse,
   tBasedMeanCI,
   wilsonInterval,
 } from '../../../src/services/pressure-sensitivity/aggregation.js';
@@ -165,64 +165,68 @@ describe('tBasedMeanCI', () => {
   });
 });
 
-describe('pooledBandReduction', () => {
-  it('uses pooled binomial rates for both bands', () => {
+describe('pooledDirectionalReduction', () => {
+  it('uses pooled binomial rates for directional, mirror, and baseline pools', () => {
     const grid: Cell[] = [
-      cell({ ownLevel: 1, opponentLevel: 1, n: 10, successes: 3, lowData: false }),
-      cell({ ownLevel: 2, opponentLevel: 1, n: 20, successes: 4, lowData: false }),
-      cell({ ownLevel: 2, opponentLevel: 2, n: 30, successes: 5, lowData: false }),
       cell({ ownLevel: 4, opponentLevel: 1, n: 10, successes: 7, lowData: false }),
-      cell({ ownLevel: 5, opponentLevel: 1, n: 10, successes: 8, lowData: false }),
+      cell({ ownLevel: 5, opponentLevel: 3, n: 20, successes: 10, lowData: false }),
+      cell({ ownLevel: 1, opponentLevel: 4, n: 30, successes: 6, lowData: false }),
+      cell({ ownLevel: 3, opponentLevel: 5, n: 10, successes: 1, lowData: false }),
+      cell({ ownLevel: 2, opponentLevel: 2, n: 8, successes: 3, lowData: false }),
+      cell({ ownLevel: 5, opponentLevel: 5, n: 2, successes: 2, lowData: true }),
     ];
 
-    const result = pooledBandReduction(grid, 3);
+    const result = pooledDirectionalReduction(grid, 3);
 
     expect(result.reason).toBeNull();
-    expect(result.lowBandMean).toBeCloseTo(12 / 60, 10);
-    expect(result.highBandMean).toBeCloseTo(15 / 20, 10);
-    expect(result.value).toBeCloseTo(0.55, 10);
-    expect(result.qualifyingTrials).toBe(80);
+    expect(result.pushTowardFirstRate).toBeCloseTo(17 / 30, 10);
+    expect(result.pushTowardSecondRate).toBeCloseTo(7 / 40, 10);
+    expect(result.baselineRate).toBeCloseTo(3 / 8, 10);
+    expect(result.value).toBeCloseTo(17 / 30 - 7 / 40, 10);
+    expect(result.qualifyingTrials).toBe(78);
   });
 
-  it('marks the low band as thin when no low-band cell meets the threshold', () => {
+  it('marks the directional pool as thin but still returns the surviving mirror rate', () => {
     const grid: Cell[] = [
-      cell({ ownLevel: 1, opponentLevel: 1, n: 1, successes: 0, lowData: true }),
+      cell({ ownLevel: 4, opponentLevel: 1, n: 1, successes: 0, lowData: true }),
+      cell({ ownLevel: 1, opponentLevel: 4, n: 5, successes: 2, lowData: false }),
+    ];
+
+    const result = pooledDirectionalReduction(grid, 3);
+
+    expect(result).toMatchObject({
+      value: null,
+      ciLow: null,
+      ciHigh: null,
+      baselineRate: null,
+      pushTowardFirstRate: null,
+      pushTowardSecondRate: 2 / 5,
+      reason: 'directional-thin',
+      qualifyingTrials: 5,
+    });
+  });
+
+  it('marks the mirror pool as thin but still returns the surviving directional rate', () => {
+    const grid: Cell[] = [
       cell({ ownLevel: 4, opponentLevel: 1, n: 5, successes: 4, lowData: false }),
     ];
 
-    const result = pooledBandReduction(grid, 3);
+    const result = pooledDirectionalReduction(grid, 3);
 
     expect(result).toMatchObject({
       value: null,
       ciLow: null,
       ciHigh: null,
-      lowBandMean: null,
-      highBandMean: null,
-      reason: 'low-band-thin',
+      baselineRate: null,
+      pushTowardFirstRate: 4 / 5,
+      pushTowardSecondRate: null,
+      reason: 'inverted-thin',
       qualifyingTrials: 5,
     });
   });
 
-  it('marks the high band as thin when no high-band cell meets the threshold', () => {
-    const grid: Cell[] = [
-      cell({ ownLevel: 1, opponentLevel: 1, n: 5, successes: 2, lowData: false }),
-    ];
-
-    const result = pooledBandReduction(grid, 3);
-
-    expect(result).toMatchObject({
-      value: null,
-      ciLow: null,
-      ciHigh: null,
-      lowBandMean: null,
-      highBandMean: null,
-      reason: 'high-band-thin',
-      qualifyingTrials: 5,
-    });
-  });
-
-  it('marks both bands thin when neither side qualifies', () => {
-    const result = pooledBandReduction(
+  it('marks both directional pools thin when neither side qualifies', () => {
+    const result = pooledDirectionalReduction(
       [cell({ ownLevel: 3, opponentLevel: 3, n: 2, successes: 1, lowData: true })],
       3,
     );
@@ -231,19 +235,46 @@ describe('pooledBandReduction', () => {
       value: null,
       ciLow: null,
       ciHigh: null,
-      lowBandMean: null,
-      highBandMean: null,
-      reason: 'both-bands-thin',
+      baselineRate: null,
+      pushTowardFirstRate: null,
+      pushTowardSecondRate: null,
+      reason: 'directional-and-inverted-thin',
       qualifyingTrials: 0,
     });
   });
+
+  it('keeps response defined when only the baseline pool is thin', () => {
+    const result = pooledDirectionalReduction(
+      [
+        cell({ ownLevel: 4, opponentLevel: 1, n: 5, successes: 4, lowData: false }),
+        cell({ ownLevel: 1, opponentLevel: 4, n: 5, successes: 1, lowData: false }),
+      ],
+      3,
+    );
+
+    expect(result.value).toBeCloseTo(0.6, 10);
+    expect(result.baselineRate).toBeNull();
+    expect(result.reason).toBe('baseline-thin');
+    expect(result.qualifyingTrials).toBe(10);
+  });
 });
 
-describe('summarizeWinRateDeltas', () => {
-  it('counts pairs above the flat-delta threshold', () => {
-    const summary = summarizeWinRateDeltas([0.019, 0.021, 0.05], [0.2, 0.3, 0.4], [0.4, 0.5, 0.6]);
+describe('summarizePressureResponse', () => {
+  it('computes an equal-weight mean and range across measured pairs', () => {
+    const summary = summarizePressureResponse([0.019, 0.021, 0.05]);
 
     expect(summary.pairsMeasured).toBe(3);
-    expect(summary.pairsPositive).toBe(2);
+    expect(summary.mean).toBeCloseTo(0.03, 10);
+    expect(summary.rangeMin).toBe(0.019);
+    expect(summary.rangeMax).toBe(0.05);
+  });
+
+  it('returns null summary fields when no pairs are measured', () => {
+    expect(summarizePressureResponse([])).toEqual({
+      mean: null,
+      rangeMin: null,
+      rangeMax: null,
+      pairsMeasured: 0,
+    });
   });
 });

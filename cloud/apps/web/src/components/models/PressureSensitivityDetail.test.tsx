@@ -5,11 +5,12 @@ import type { PressureSensitivityModel, PressureSensitivityValuePair } from '../
 
 function createPair(
   pairKey: string,
-  ownToken: string,
-  opponentToken: string,
+  firstValueLabel: string,
+  secondValueLabel: string,
   value: number | null,
-  lowBandMean: number | null,
-  highBandMean: number | null,
+  baselineRate: number | null,
+  pushTowardFirstRate: number | null,
+  pushTowardSecondRate: number | null,
   ciLow: number | null,
   ciHigh: number | null,
   reason: string | null,
@@ -17,17 +18,19 @@ function createPair(
 ): PressureSensitivityValuePair {
   return {
     pairKey,
-    ownToken,
-    opponentToken,
+    firstValueToken: firstValueLabel.toLowerCase(),
+    firstValueLabel,
+    secondValueToken: secondValueLabel.toLowerCase(),
+    secondValueLabel,
     n: qualifyingTrials,
     unscoredCount: 0,
     definitionsMeasured: 1,
-    definitionsExcluded: 0,
-    qualifyingTrials,
-    winRateDelta: {
+    pressureResponse: {
       value,
-      lowBandMean,
-      highBandMean,
+      baselineRate,
+      pushTowardFirstRate,
+      pushTowardSecondRate,
+      qualifyingTrials,
       ciLow,
       ciHigh,
       reason,
@@ -42,15 +45,7 @@ function createModel(valuePairs: PressureSensitivityValuePair[]): PressureSensit
     label: 'Model A',
     providerName: 'Provider',
     unscoredCount: 0,
-    winRateDeltaSummary: {
-      mean: 0.1,
-      ciLow: 0.05,
-      ciHigh: 0.15,
-      lowBandMean: 0.52,
-      highBandMean: 0.62,
-      pairsMeasured: 2,
-      pairsPositive: 1,
-    },
+    pressureResponseSummary: { mean: 0.1, rangeMin: 0.05, rangeMax: 0.15, pairsMeasured: 2 },
     valuePairs,
   };
 }
@@ -70,62 +65,68 @@ afterEach(() => {
 });
 
 describe('PressureSensitivityDetail', () => {
-  it('renders the new five-column layout and sorts ties alphabetically', () => {
+  it('renders the six-column layout and sorts ties alphabetically', () => {
     renderDetail(
       createModel([
-        createPair('beta::gamma', 'Beta', 'Gamma', -0.12, 0.48, 0.60, -0.16, -0.08, null, 14),
-        createPair('alpha::delta', 'Alpha', 'Delta', 0.12, 0.48, 0.60, 0.08, 0.16, null, 17),
+        createPair('beta::gamma', 'Beta', 'Gamma', -0.12, 0.48, 0.36, 0.60, -0.16, -0.08, null, 14),
+        createPair('alpha::delta', 'Alpha', 'Delta', 0.12, 0.48, 0.60, 0.36, 0.08, 0.16, null, 17),
       ]),
     );
 
     expect(screen.getByText('Value Pair')).toBeDefined();
-    expect(screen.getByText('Win Rate')).toBeDefined();
+    expect(screen.getByText('Baseline')).toBeDefined();
+    expect(screen.getByText('Push toward first')).toBeDefined();
+    expect(screen.getByText('Push toward other')).toBeDefined();
+    expect(screen.getByText('Pressure response')).toBeDefined();
     expect(screen.getByText('Trials')).toBeDefined();
-    expect(screen.queryByText('Defs')).toBeNull();
-    expect(screen.queryByText('Baseline')).toBeNull();
-    expect(screen.queryByText('Conviction Δ')).toBeNull();
-    expect(screen.queryByText('netScore Δ')).toBeNull();
+    expect(screen.queryByText('Win Rate')).toBeNull();
+    expect(screen.queryByText('Low pressure')).toBeNull();
+    expect(screen.queryByText('High pressure')).toBeNull();
 
     const rows = screen.getAllByRole('row');
-    expect(rows[2]?.textContent ?? '').toContain('Alpha ↔ Delta');
-    expect(rows[3]?.textContent ?? '').toContain('Beta ↔ Gamma');
+    expect(rows[1]?.textContent ?? '').toContain('Alpha ↔ Delta');
+    expect(rows[2]?.textContent ?? '').toContain('Beta ↔ Gamma');
   });
 
-  it('shows the thin-band reason on the dash delta cell', () => {
+  it('shows the thin-pool reason on the dash pressure-response cell', () => {
     vi.useFakeTimers();
+    // directional-thin: pushTowardFirstRate null, pushTowardSecondRate/baselineRate available
     renderDetail(
       createModel([
-        createPair('alpha::delta', 'Alpha', 'Delta', null, null, 0.60, null, null, 'low-band-thin', 17),
+        createPair('alpha::delta', 'Alpha', 'Delta', null, 0.5, null, 0.6, null, null, 'directional-thin', 17),
       ]),
     );
 
     const row = getRow('Alpha ↔ Delta');
-    const deltaCell = within(row).getAllByText('—')[0];
-    if (!deltaCell) throw new Error('Expected at least one — cell in the row');
-    fireEvent.mouseEnter(deltaCell);
+    // Pressure response is column index 4 (Value Pair=0, Baseline=1, Push1=2, Push2=3, Response=4, Trials=5)
+    const cells = within(row).getAllByRole('cell');
+    const responseCell = cells[4];
+    if (!responseCell) throw new Error('Expected pressure response cell at index 4');
+    const dashSpan = within(responseCell).getByText('—');
+    fireEvent.mouseEnter(dashSpan);
     act(() => {
       vi.advanceTimersByTime(200);
     });
 
-    expect(screen.getByRole('tooltip').textContent ?? '').toContain('Low pressure band has no cells with N ≥ 3 trials.');
+    expect(screen.getByRole('tooltip').textContent ?? '').toContain('push-toward-first pool has no qualifying cells');
   });
 
-  it('shows no badge when the low pressure cell is thin', () => {
+  it('shows — in rate cells when rates are null', () => {
     renderDetail(
       createModel([
-        createPair('alpha::delta', 'Alpha', 'Delta', null, null, 0.60, null, null, 'low-band-thin', 17),
+        createPair('alpha::delta', 'Alpha', 'Delta', null, null, null, null, null, null, 'directional-thin', 17),
       ]),
     );
 
     const row = getRow('Alpha ↔ Delta');
-    expect(within(row).queryByText('ceiling')).toBeNull();
-    expect(within(row).queryByText('floor')).toBeNull();
+    const dashes = within(row).getAllByText('—');
+    expect(dashes.length).toBeGreaterThanOrEqual(3);
   });
 
   it('shows qualifyingTrials in the Trials column', () => {
     renderDetail(
       createModel([
-        createPair('alpha::delta', 'Alpha', 'Delta', 0.12, 0.48, 0.60, 0.08, 0.16, null, 17),
+        createPair('alpha::delta', 'Alpha', 'Delta', 0.12, 0.48, 0.60, 0.36, 0.08, 0.16, null, 17),
       ]),
     );
 
@@ -133,16 +134,16 @@ describe('PressureSensitivityDetail', () => {
     expect(within(row).getByText('17')).toBeDefined();
   });
 
-  it('shows the Win rate Δ tooltip copy on the header', () => {
+  it('shows the Pressure response tooltip copy on the header', () => {
     renderDetail(
       createModel([
-        createPair('alpha::delta', 'Alpha', 'Delta', 0.12, 0.48, 0.60, 0.08, 0.16, null, 17),
+        createPair('alpha::delta', 'Alpha', 'Delta', 0.12, 0.48, 0.60, 0.36, 0.08, 0.16, null, 17),
       ]),
     );
 
-    const trigger = screen.getByRole('button', { name: /show win rate Δ ± ci help/i });
+    const trigger = screen.getByRole('button', { name: /show pressure response help/i });
     fireEvent.focus(trigger);
 
-    expect(screen.getByRole('tooltip').textContent ?? '').toContain('trial-level uncertainty within the pair');
+    expect(screen.getByRole('tooltip').textContent ?? '').toContain('Newcombe');
   });
 });

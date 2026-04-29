@@ -13,28 +13,27 @@ query PressureSensitivity(
       label
       providerName
       unscoredCount
-      winRateDeltaSummary {
+      pressureResponseSummary {
         mean
-        ciLow
-        ciHigh
-        lowBandMean
-        highBandMean
+        rangeMin
+        rangeMax
         pairsMeasured
-        pairsPositive
       }
       valuePairs {
         pairKey
-        ownToken
-        opponentToken
+        firstValueToken
+        firstValueLabel
+        secondValueToken
+        secondValueLabel
         n
         unscoredCount
         definitionsMeasured
-        definitionsExcluded
-        qualifyingTrials
-        winRateDelta {
+        pressureResponse {
           value
-          lowBandMean
-          highBandMean
+          baselineRate
+          pushTowardFirstRate
+          pushTowardSecondRate
+          qualifyingTrials
           ciLow
           ciHigh
           reason
@@ -62,7 +61,14 @@ query PressureSensitivity(
       name
       reason
     }
-    excludedScenariosCount
+    pressureConditionExcludedCount
+    pressureConditionExclusionBreakdown {
+      sourceRunMapping
+      definitionMetadata
+      missingScenario
+      invalidMetadata
+      levelAssignment
+    }
     transcriptCapHit
     directionalSanityCheck {
       positivePct
@@ -73,7 +79,7 @@ query PressureSensitivity(
       breakdown {
         modelId
         pairKey
-        winRateDelta
+        pressureResponse
         classification
       }
     }

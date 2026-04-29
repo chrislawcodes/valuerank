@@ -5,6 +5,10 @@
 
 # Production components / pages over 700
 cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx
+# Pressure sensitivity resolver: inline helper fns (buildSourceRunToDefIdMap,
+# fetchTranscriptsFromSourceRuns, buildEmptyResult) exported for tests.
+# Split into resolver-helpers.ts when convenient.
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts
 
 # Large test files over 1200
 cloud/apps/api/tests/services/run/start.test.ts

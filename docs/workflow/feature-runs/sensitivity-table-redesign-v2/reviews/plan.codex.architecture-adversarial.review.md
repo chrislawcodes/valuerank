@@ -1,0 +1,44 @@
+---
+reviewer: "codex"
+lens: "architecture-adversarial"
+stage: "plan"
+artifact_path: "docs/workflow/feature-runs/sensitivity-table-redesign-v2/plan.md"
+artifact_sha256: "868c60fe157993b426dd8e2c77a017931f979d257df5fa87eab6c0d3d2b92b22"
+repo_root: "."
+git_head_sha: "4e5839c03cf40e17c19de8b044e840b7447457b0"
+git_base_ref: "origin/main"
+git_base_sha: "4e5839c03cf40e17c19de8b044e840b7447457b0"
+generation_method: "codex-runner"
+resolution_status: "accepted"
+resolution_note: "Accepted into final plan and tasks. The contradictory legacy-field compatibility path was removed; v2 pressure-sensitivity SDL now explicitly removes legacy sensitivity, audit, and orientation fields."
+raw_output_path: "docs/workflow/feature-runs/sensitivity-table-redesign-v2/reviews/plan.codex.architecture-adversarial.review.md.raw.txt"
+narrowed_artifact_path: ""
+narrowed_artifact_sha256: ""
+coverage_status: "full"
+coverage_note: ""
+---
+
+# Review: plan architecture-adversarial
+
+## Findings
+
+- HIGH [CODE-CONFIRMED] The plan does not actually define a baseline-inclusive `pressureResponse.qualifyingTrials` computation, even though the new Trials copy says the count includes Baseline, Push toward first, and Push toward other. The current reducer in [`cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts`](/Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59/cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts) only sums the directional bands (`lowBandTrials + highBandTrials`) and ignores baseline cells entirely, so a literal rename/reuse of the current path will undercount support and make the Trials column inconsistent with the new tooltip and audit copy. That is a user-facing sample-size error, not just a naming issue.
+
+- MEDIUM [CODE-CONFIRMED] The repo-wide zero-match grep gate for `ownToken` / `opponentToken` is not realistic. Those symbols still exist in the current resolver internals and web layer, including [`cloud/apps/api/src/services/pressure-sensitivity/value-pair.ts`](/Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59/cloud/apps/api/src/services/pressure-sensitivity/value-pair.ts), [`cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts`](/Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59/cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts), [`cloud/apps/web/src/components/models/PressureGrid.tsx`](/Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59/cloud/apps/web/src/components/models/PressureGrid.tsx), and the current tests. As written, the plan’s final verification would fail even if the feature is implemented correctly, or it would force a broad internal rename unrelated to the schema cutover.
+
+## Residual Risks
+
+- The plan still depends on the existing transcript cap and source-run collision behavior. If those paths trigger, the report can only be treated as partial, even if the new pressure-condition exclusion count is present.
+
+- The model headline remains an equal-weight mean across measured pairs. Sparse pairs can still move a model’s rank more than their trial counts would suggest.
+
+- The plan keeps the no-multiple-comparisons approach. Pair-level CIs will still produce some sharp-looking effects by chance, so the UI has to keep discouraging binary reading of the results.
+
+## Runner Stats
+- total_input=0
+- total_output=0
+- total_tokens=0
+
+## Resolution
+- status: accepted
+- note: Accepted into final plan and tasks. The contradictory legacy-field compatibility path was removed; v2 pressure-sensitivity SDL now explicitly removes legacy sensitivity, audit, and orientation fields.

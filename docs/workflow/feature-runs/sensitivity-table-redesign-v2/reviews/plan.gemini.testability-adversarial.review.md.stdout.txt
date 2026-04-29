@@ -1,0 +1,57 @@
+MCP issues detected. Run /mcp list for status.{
+  "session_id": "5118ca7b-df60-4a3f-9fc4-ef467fa836bf",
+  "response": "## Findings\n\n| Severity | Finding | Evidence |\n| --- | --- | --- |\n| **MEDIUM** | **Incomplete test plan for canonical representation** | [UNVERIFIED] |\n| | The plan's verification for `Decision 1` is to test that a reverse-ordered vignette is transformed correctly. This is necessary but insufficient. It does not verify that the canonical key generation (`canonicalValuePairKey` from `FR-009`) is itself stable and correct. For example, a test could pass if it only uses one pair, but the canonicalization logic could have a bug that swaps the order for a different pair, which would corrupt the directional pools for that pair. The test plan should include verification of the canonicalization logic itself, not just its application to a reversed vignette. | |\n| **MEDIUM** | **Critical business logic is not explicitly unit tested** | [UNVERIFIED] |\n| | The plan introduces a \"Formatting rule\" for rendering percentage points, including rules for sign, decimal places, and exact-zero handling. This logic will likely be centralized in a utility like `pressureSensitivityFormatting.ts`. The plan does not specify unit tests for this utility. Relying solely on component-level tests (Slice C) creates a risk that edge cases (e.g., rounding, floating point inaccuracies near zero, `null`, `undefined`) are missed, which could violate `FR-022a` or other display requirements. | |\n| **MEDIUM** | **Incomplete verification for null-reason copy** | [UNVERIFIED] |\n| | `FR-020` requires specific hover text for four different null reasons, with copy specified in `reason-copy.md`. The plan's verification for Slice C only mentions testing the `baseline-thin` case. This leaves the implementation and testing of the other three required reason messages (`directional-thin`, `inverted-thin`, `directional-and-inverted-thin`) as an unstated assumption. A test plan should verify all specified reason-to-copy mappings. | |\n| **MEDIUM** | **Boundary condition for trial inclusion is not explicitly tested** | [UNVERIFIED] |\n| | `FR-014` specifies that a cell only qualifies for a pool if it has `n >= 3` trials. The plan's verification for backend math (Slice A) relies on a broad `npm run test` command without explicitly requiring a test case for this specific boundary condition. This creates a risk that the threshold is implemented incorrectly (e.g., as `n > 3`) or not tested at all, leading to incorrect pool composition and flawed metrics. A robust test plan would require fixtures that test this `n=3` boundary directly. | |\n| **LOW** | **P1 user story for tooltips lacks a verification step** | [UNVERIFIED] |\n| | `US-3` is a P1 user story requiring tooltips to explain each column header. The plan includes an \"Approved Tooltip Copy\" section with the exact text. However, the verification tasks for Slice C do not include any steps to confirm these tooltips are implemented correctly with the specified copy. This is a gap that could lead to a P1 user story not being fully met or verified. | |\n| **LOW** | **Component-level data contract verification is underspecified** | [UNVERIFIED] |\n| | `FR-009b` requires replacing `ownToken`/`opponentToken` with `firstValueToken`/`secondValueToken`. The plan's work for Slice C includes updating the `PressureGrid` component. However, its verification does not explicitly require a test to assert that the component uses the new `firstValue...` fields. The final `grep` is a good backstop, but a targeted component test would more robustly prevent regressions where the component might accidentally use a stale property that happens to exist on a test fixture. | |\n\n## Residual Risks\n\nThe implementation plan correctly identifies key residual risks. However, the verification strategy as written contains gaps that weaken the planned mitigations. The findings above highlight specific test cases and verification steps that are missing from the plan. Without addressing these gaps, there is an increased likelihood that some of the documented residual risks could manifest as bugs. Specifically:\n\n*   **Baseline-missing rows can be misread:** The plan's incomplete testing of null-reason copy makes this risk higher. If the tooltip for a `directional-thin` case is wrong, the user will be misinformed.\n*   **Atomic schema cutover can break if partial:** The plan's verification relies heavily on `grep` commands. While useful, they are not a substitute for dedicated tests. The lack of explicit unit tests for formatting logic and component-level contract tests means that a subtle bug could pass the `grep` check but still break the UI, increasing the deployment risk.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 10,
+          "totalErrors": 9,
+          "totalLatencyMs": 58303
+        },
+        "tokens": {
+          "input": 21399,
+          "prompt": 21399,
+          "candidates": 1030,
+          "total": 25357,
+          "cached": 0,
+          "thoughts": 2928,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 10,
+            "totalErrors": 9,
+            "totalLatencyMs": 58303,
+            "tokens": {
+              "input": 21399,
+              "prompt": 21399,
+              "candidates": 1030,
+              "total": 25357,
+              "cached": 0,
+              "thoughts": 2928,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

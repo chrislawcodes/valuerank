@@ -1,0 +1,21 @@
+{
+  "paths": [
+    "cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts",
+    "cloud/apps/api/src/graphql/types/pressure-sensitivity.ts",
+    "cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts",
+    "cloud/apps/api/src/services/pressure-sensitivity/value-pair.ts",
+    "cloud/apps/api/tests/graphql/queries/pressure-sensitivity.test.ts",
+    "cloud/apps/api/tests/services/pressure-sensitivity/aggregation.test.ts",
+    "cloud/apps/web/schema.graphql"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts",
+    "cloud/apps/api/src/graphql/types/pressure-sensitivity.ts",
+    "cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts",
+    "cloud/apps/api/src/services/pressure-sensitivity/value-pair.ts",
+    "cloud/apps/api/tests/graphql/queries/pressure-sensitivity.test.ts",
+    "cloud/apps/api/tests/services/pressure-sensitivity/aggregation.test.ts",
+    "cloud/apps/web/schema.graphql",
+    "docs/workflow/feature-runs/sensitivity-table-redesign-v2"
+  ]
+}

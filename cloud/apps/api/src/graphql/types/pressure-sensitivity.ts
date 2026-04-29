@@ -12,43 +12,47 @@ export type SensitivityCellShape = {
   lowData: boolean;
 };
 
-export type WinRateDeltaShape = {
+export type PressureResponseShape = {
   value: number | null;
   ciLow: number | null;
   ciHigh: number | null;
-  lowBandMean: number | null;
-  highBandMean: number | null;
-  reason: 'low-band-thin' | 'high-band-thin' | 'both-bands-thin' | null;
+  baselineRate: number | null;
+  pushTowardFirstRate: number | null;
+  pushTowardSecondRate: number | null;
+  qualifyingTrials: number;
+  reason:
+    | 'directional-thin'
+    | 'inverted-thin'
+    | 'baseline-thin'
+    | 'directional-and-inverted-thin'
+    | null;
 };
 
-export type WinRateDeltaSummaryShape = {
+export type PressureResponseSummaryShape = {
   mean: number | null;
-  ciLow: number | null;
-  ciHigh: number | null;
-  lowBandMean: number | null;
-  highBandMean: number | null;
+  rangeMin: number | null;
+  rangeMax: number | null;
   pairsMeasured: number;
-  pairsPositive: number;
 };
 
 export type PressureSensitivityValuePairShape = {
   pairKey: string;
-  ownToken: string;
-  opponentToken: string;
-  winRateDelta: WinRateDeltaShape;
-  qualifyingTrials: number;
+  firstValueToken: string;
+  firstValueLabel: string;
+  secondValueToken: string;
+  secondValueLabel: string;
+  pressureResponse: PressureResponseShape;
   n: number;
   unscoredCount: number;
   grid: SensitivityCellShape[];
   definitionsMeasured: number;
-  definitionsExcluded: number;
 };
 
 export type PressureSensitivityModelShape = {
   modelId: string;
   label: string;
   providerName: string;
-  winRateDeltaSummary: WinRateDeltaSummaryShape;
+  pressureResponseSummary: PressureResponseSummaryShape;
   valuePairs: PressureSensitivityValuePairShape[];
   unscoredCount: number;
 };
@@ -69,7 +73,7 @@ export type ExcludedDefinitionShape = {
 export type DirectionalSanityCheckEntryShape = {
   modelId: string;
   pairKey: string;
-  winRateDelta: number;
+  pressureResponse: number;
   classification: 'positive' | 'flat' | 'negative';
 };
 
@@ -86,14 +90,25 @@ export type PressureSensitivityResultShape = {
   models: PressureSensitivityModelShape[];
   insufficient: InsufficientPressureSensitivityModelShape[];
   excludedDefinitions: ExcludedDefinitionShape[];
-  excludedScenariosCount: number;
+  pressureConditionExcludedCount: number;
+  pressureConditionExclusionBreakdown: PressureConditionExclusionBreakdownShape;
   directionalSanityCheck: DirectionalSanityCheckShape;
   transcriptCapHit: boolean;
 };
 
+export type PressureConditionExclusionBreakdownShape = {
+  sourceRunMapping: number;
+  definitionMetadata: number;
+  missingScenario: number;
+  invalidMetadata: number;
+  levelAssignment: number;
+};
+
 const SensitivityCellRef = builder.objectRef<SensitivityCellShape>('SensitivityCell');
-const WinRateDeltaRef = builder.objectRef<WinRateDeltaShape>('WinRateDelta');
-const WinRateDeltaSummaryRef = builder.objectRef<WinRateDeltaSummaryShape>('WinRateDeltaSummary');
+const PressureResponseRef = builder.objectRef<PressureResponseShape>('PressureResponse');
+const PressureResponseSummaryRef = builder.objectRef<PressureResponseSummaryShape>(
+  'PressureResponseSummary',
+);
 const PressureSensitivityValuePairRef = builder.objectRef<PressureSensitivityValuePairShape>(
   'PressureSensitivityValuePair',
 );
@@ -110,6 +125,9 @@ const DirectionalSanityCheckEntryRef = builder.objectRef<DirectionalSanityCheckE
 const DirectionalSanityCheckRef = builder.objectRef<DirectionalSanityCheckShape>(
   'DirectionalSanityCheck',
 );
+const PressureConditionExclusionBreakdownRef = builder.objectRef<
+  PressureConditionExclusionBreakdownShape
+>('PressureConditionExclusionBreakdown');
 
 export const PressureSensitivityResultRef = builder.objectRef<PressureSensitivityResultShape>(
   'PressureSensitivityResult',
@@ -129,41 +147,40 @@ builder.objectType(SensitivityCellRef, {
   }),
 });
 
-builder.objectType(WinRateDeltaRef, {
+builder.objectType(PressureResponseRef, {
   fields: (t) => ({
     value: t.exposeFloat('value', { nullable: true }),
     ciLow: t.exposeFloat('ciLow', { nullable: true }),
     ciHigh: t.exposeFloat('ciHigh', { nullable: true }),
-    lowBandMean: t.exposeFloat('lowBandMean', { nullable: true }),
-    highBandMean: t.exposeFloat('highBandMean', { nullable: true }),
+    baselineRate: t.exposeFloat('baselineRate', { nullable: true }),
+    pushTowardFirstRate: t.exposeFloat('pushTowardFirstRate', { nullable: true }),
+    pushTowardSecondRate: t.exposeFloat('pushTowardSecondRate', { nullable: true }),
+    qualifyingTrials: t.exposeInt('qualifyingTrials'),
     reason: t.exposeString('reason', { nullable: true }),
   }),
 });
 
-builder.objectType(WinRateDeltaSummaryRef, {
+builder.objectType(PressureResponseSummaryRef, {
   fields: (t) => ({
     mean: t.exposeFloat('mean', { nullable: true }),
-    ciLow: t.exposeFloat('ciLow', { nullable: true }),
-    ciHigh: t.exposeFloat('ciHigh', { nullable: true }),
-    lowBandMean: t.exposeFloat('lowBandMean', { nullable: true }),
-    highBandMean: t.exposeFloat('highBandMean', { nullable: true }),
+    rangeMin: t.exposeFloat('rangeMin', { nullable: true }),
+    rangeMax: t.exposeFloat('rangeMax', { nullable: true }),
     pairsMeasured: t.exposeInt('pairsMeasured'),
-    pairsPositive: t.exposeInt('pairsPositive'),
   }),
 });
 
 builder.objectType(PressureSensitivityValuePairRef, {
   fields: (t) => ({
     pairKey: t.exposeString('pairKey'),
-    ownToken: t.exposeString('ownToken'),
-    opponentToken: t.exposeString('opponentToken'),
-    winRateDelta: t.expose('winRateDelta', { type: WinRateDeltaRef }),
-    qualifyingTrials: t.exposeInt('qualifyingTrials'),
+    firstValueToken: t.exposeString('firstValueToken'),
+    firstValueLabel: t.exposeString('firstValueLabel'),
+    secondValueToken: t.exposeString('secondValueToken'),
+    secondValueLabel: t.exposeString('secondValueLabel'),
+    pressureResponse: t.expose('pressureResponse', { type: PressureResponseRef }),
     n: t.exposeInt('n'),
     unscoredCount: t.exposeInt('unscoredCount'),
     grid: t.expose('grid', { type: [SensitivityCellRef] }),
     definitionsMeasured: t.exposeInt('definitionsMeasured'),
-    definitionsExcluded: t.exposeInt('definitionsExcluded'),
   }),
 });
 
@@ -172,7 +189,9 @@ builder.objectType(PressureSensitivityModelRef, {
     modelId: t.exposeString('modelId'),
     label: t.exposeString('label'),
     providerName: t.exposeString('providerName'),
-    winRateDeltaSummary: t.expose('winRateDeltaSummary', { type: WinRateDeltaSummaryRef }),
+    pressureResponseSummary: t.expose('pressureResponseSummary', {
+      type: PressureResponseSummaryRef,
+    }),
     valuePairs: t.expose('valuePairs', { type: [PressureSensitivityValuePairRef] }),
     unscoredCount: t.exposeInt('unscoredCount'),
   }),
@@ -199,7 +218,7 @@ builder.objectType(DirectionalSanityCheckEntryRef, {
   fields: (t) => ({
     modelId: t.exposeString('modelId'),
     pairKey: t.exposeString('pairKey'),
-    winRateDelta: t.exposeFloat('winRateDelta'),
+    pressureResponse: t.exposeFloat('pressureResponse'),
     classification: t.exposeString('classification'),
   }),
 });
@@ -215,12 +234,25 @@ builder.objectType(DirectionalSanityCheckRef, {
   }),
 });
 
+builder.objectType(PressureConditionExclusionBreakdownRef, {
+  fields: (t) => ({
+    sourceRunMapping: t.exposeInt('sourceRunMapping'),
+    definitionMetadata: t.exposeInt('definitionMetadata'),
+    missingScenario: t.exposeInt('missingScenario'),
+    invalidMetadata: t.exposeInt('invalidMetadata'),
+    levelAssignment: t.exposeInt('levelAssignment'),
+  }),
+});
+
 builder.objectType(PressureSensitivityResultRef, {
   fields: (t) => ({
     models: t.expose('models', { type: [PressureSensitivityModelRef] }),
     insufficient: t.expose('insufficient', { type: [InsufficientPressureSensitivityModelRef] }),
     excludedDefinitions: t.expose('excludedDefinitions', { type: [ExcludedDefinitionRef] }),
-    excludedScenariosCount: t.exposeInt('excludedScenariosCount'),
+    pressureConditionExcludedCount: t.exposeInt('pressureConditionExcludedCount'),
+    pressureConditionExclusionBreakdown: t.expose('pressureConditionExclusionBreakdown', {
+      type: PressureConditionExclusionBreakdownRef,
+    }),
     directionalSanityCheck: t.expose('directionalSanityCheck', { type: DirectionalSanityCheckRef }),
     transcriptCapHit: t.exposeBoolean('transcriptCapHit'),
   }),

@@ -34,6 +34,15 @@ describe('canonicalOwnOpponent', () => {
     expect(canonicalOwnOpponent('power', 'achievement')).toEqual(['achievement', 'power']);
     expect(canonicalOwnOpponent('achievement', 'power')).toEqual(['achievement', 'power']);
   });
+
+  it('FR-009a: reverse-ordered vignette produces same canonical coordinates as forward-ordered', () => {
+    const [first, second] = canonicalOwnOpponent('power', 'achievement');
+    const [firstReversed, secondReversed] = canonicalOwnOpponent('achievement', 'power');
+    expect(first).toBe(firstReversed);
+    expect(second).toBe(secondReversed);
+    expect(first).toBe('achievement');
+    expect(second).toBe('power');
+  });
 });
 
 describe('assignOwnOpponent', () => {

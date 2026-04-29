@@ -59,6 +59,43 @@ describe('pressure-sensitivity resolver helpers', () => {
     );
   });
 
+  it('normalizes source-run collision precedence by aggregate run id', async () => {
+    const { buildSourceRunToDefIdMap } = await loadModule();
+    const warn = vi.fn();
+
+    const map = buildSourceRunToDefIdMap(
+      [
+        {
+          id: 'run-b',
+          config: { sourceRunIds: ['source-1'] },
+          definitionId: 'def-b',
+          definition: { id: 'def-b', name: 'Def B', domainId: 'domain-1' },
+        },
+        {
+          id: 'run-a',
+          config: { sourceRunIds: ['source-1'] },
+          definitionId: 'def-a',
+          definition: { id: 'def-a', name: 'Def A', domainId: 'domain-1' },
+        },
+      ],
+      new Map([
+        ['def-a', { id: 'def-a' } as never],
+        ['def-b', { id: 'def-b' } as never],
+      ]),
+      { warn },
+    );
+
+    expect(map.get('source-1')).toBe('def-b');
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        existingDefinitionId: 'def-a',
+        newDefinitionId: 'def-b',
+        code: 'source_run_collision',
+      }),
+      'sourceRunId mapped to multiple definitions; last write wins',
+    );
+  });
+
   it('flags transcript cap hits and logs a structured warning', async () => {
     const { fetchTranscriptsFromSourceRuns } = await loadModule();
     const warn = vi.fn();
@@ -118,5 +155,56 @@ describe('pressure-sensitivity resolver helpers', () => {
     expect(result.transcriptCapHit).toBe(false);
     expect(result.models).toEqual([]);
     expect(result.insufficient).toHaveLength(1);
+  });
+});
+
+describe('pressure-condition exclusion breakdown (SC-010)', () => {
+  it('emptyPressureConditionExclusionBreakdownForTest returns all-zero buckets summing to zero', async () => {
+    const { emptyPressureConditionExclusionBreakdownForTest } = await loadModule();
+    const breakdown = emptyPressureConditionExclusionBreakdownForTest();
+
+    expect(breakdown.sourceRunMapping).toBe(0);
+    expect(breakdown.definitionMetadata).toBe(0);
+    expect(breakdown.missingScenario).toBe(0);
+    expect(breakdown.invalidMetadata).toBe(0);
+    expect(breakdown.levelAssignment).toBe(0);
+    const total = Object.values(breakdown).reduce((sum, v) => sum + v, 0);
+    expect(total).toBe(0);
+  });
+
+  it('buildSourceRunToDefIdMap omits runs whose definition is not in definitionMeta (SC-010 sourceRunMapping path)', async () => {
+    const { buildSourceRunToDefIdMap } = await loadModule();
+    const warn = vi.fn();
+
+    const map = buildSourceRunToDefIdMap(
+      [
+        {
+          id: 'run-known',
+          config: { sourceRunIds: ['source-known'] },
+          definitionId: 'def-known',
+          definition: { id: 'def-known', name: 'Known', domainId: 'd1' },
+        },
+        {
+          id: 'run-unknown',
+          config: { sourceRunIds: ['source-unknown'] },
+          definitionId: 'def-missing',
+          definition: { id: 'def-missing', name: 'Missing', domainId: 'd1' },
+        },
+      ],
+      new Map([['def-known', { id: 'def-known' } as never]]),
+      { warn },
+    );
+
+    expect(map.has('source-known')).toBe(true);
+    expect(map.has('source-unknown')).toBe(false);
+  });
+
+  it('buildEmptyResult pressureConditionExcludedCount equals sum of all breakdown buckets', async () => {
+    const { buildEmptyResult } = await loadModule();
+    const result = buildEmptyResult([] as never);
+    const { pressureConditionExcludedCount: total, pressureConditionExclusionBreakdown: bd } = result;
+    const sum = bd.sourceRunMapping + bd.definitionMetadata + bd.missingScenario + bd.invalidMetadata + bd.levelAssignment;
+    expect(total).toBe(sum);
+    expect(total).toBe(0);
   });
 });

@@ -18,8 +18,8 @@ import { buildSafeLevelLookup, type DefinitionDimension } from './scenarios-util
 import { normalizeScenarioAnalysisMetadata } from '../../services/analysis/scenario-metadata.js';
 import {
   buildCellMetrics,
-  pooledBandReduction,
-  summarizeWinRateDeltas,
+  pooledDirectionalReduction,
+  summarizePressureResponse,
   FLAT_DELTA_THRESHOLD,
   type Observation,
 } from '../../services/pressure-sensitivity/aggregation.js';
@@ -80,10 +80,10 @@ type DefinitionMetadata = {
   valueFirstToken: string;
   /** Definition's stored value_second.token (used to remap canonical direction). */
   valueSecondToken: string;
-  /** Alphabetical canonical own (sortedTokens[0]). */
-  ownToken: string;
-  /** Alphabetical canonical opponent (sortedTokens[1]). */
-  opponentToken: string;
+  /** Alphabetical canonical first value (sortedTokens[0]). */
+  firstValueToken: string;
+  /** Alphabetical canonical second value (sortedTokens[1]). */
+  secondValueToken: string;
   pairKey: string;
   decisionSnapshot: PressureSensitivityDecisionSnapshot;
   ownLookup: (raw: unknown) => number | null;
@@ -99,11 +99,18 @@ type CellAccumulator = {
 
 type PairAccumulator = {
   pairKey: string;
-  ownToken: string;
-  opponentToken: string;
+  firstValueToken: string;
+  secondValueToken: string;
   cells: Map<string, CellAccumulator>;
   definitionsMeasured: Set<string>;
-  definitionsExcluded: Set<string>;
+};
+
+type PressureConditionExclusionBreakdown = {
+  sourceRunMapping: number;
+  definitionMetadata: number;
+  missingScenario: number;
+  invalidMetadata: number;
+  levelAssignment: number;
 };
 
 function cellKey(ownLevel: number, opponentLevel: number): string {
@@ -145,7 +152,8 @@ export function buildSourceRunToDefIdMap(
   warningLogger: WarningLogger,
 ): Map<string, string> {
   const map = new Map<string, string>();
-  for (const run of eligibleRuns) {
+  const orderedRuns = [...eligibleRuns].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  for (const run of orderedRuns) {
     const defId = run.definition?.id ?? run.definitionId;
     if (!definitionMeta.has(defId)) continue;
     for (const sourceRunId of extractSourceRunIds(run.config)) {
@@ -165,6 +173,37 @@ export function buildSourceRunToDefIdMap(
     }
   }
   return map;
+}
+
+function formatValueLabel(token: string): string {
+  return token.replaceAll('_', ' ').trim();
+}
+
+function emptyPressureConditionExclusionBreakdown(): PressureConditionExclusionBreakdown {
+  return {
+    sourceRunMapping: 0,
+    definitionMetadata: 0,
+    missingScenario: 0,
+    invalidMetadata: 0,
+    levelAssignment: 0,
+  };
+}
+
+function totalPressureConditionExclusions(
+  breakdown: PressureConditionExclusionBreakdown,
+): number {
+  return (
+    breakdown.sourceRunMapping
+    + breakdown.definitionMetadata
+    + breakdown.missingScenario
+    + breakdown.invalidMetadata
+    + breakdown.levelAssignment
+  );
+}
+
+/** Exported for testing the defense-in-depth exclusion paths (SC-010). */
+export function emptyPressureConditionExclusionBreakdownForTest(): PressureConditionExclusionBreakdown {
+  return emptyPressureConditionExclusionBreakdown();
 }
 
 export async function fetchTranscriptsFromSourceRuns(
@@ -306,7 +345,7 @@ builder.queryField('pressureSensitivity', (t) =>
           excludedDefinitions.push({ definitionId: defId, name: defNames.get(defId) ?? defId, reason: 'missing-or-self-pair-tokens' });
           continue;
         }
-        const [ownToken, opponentToken] = canonicalOwnOpponent(
+        const [firstValueToken, secondValueToken] = canonicalOwnOpponent(
           components.value_first.token,
           components.value_second.token,
         );
@@ -317,8 +356,12 @@ builder.queryField('pressureSensitivity', (t) =>
           values: d.values,
         }));
 
-        const ownDim = dimensions.find((d) => typeof d.name === 'string' && d.name.trim() === ownToken);
-        const opponentDim = dimensions.find((d) => typeof d.name === 'string' && d.name.trim() === opponentToken);
+        const ownDim = dimensions.find(
+          (d) => typeof d.name === 'string' && d.name.trim() === firstValueToken,
+        );
+        const opponentDim = dimensions.find(
+          (d) => typeof d.name === 'string' && d.name.trim() === secondValueToken,
+        );
         if (!ownDim || !opponentDim) {
           excludedDefinitions.push({ definitionId: defId, name: defNames.get(defId) ?? defId, reason: 'missing-or-empty-levels' });
           continue;
@@ -348,8 +391,8 @@ builder.queryField('pressureSensitivity', (t) =>
           name: defNames.get(defId) ?? defId,
           valueFirstToken: components.value_first.token,
           valueSecondToken: components.value_second.token,
-          ownToken,
-          opponentToken,
+          firstValueToken,
+          secondValueToken,
           pairKey,
           decisionSnapshot,
           ownLookup: ownLookupResult.lookup,
@@ -366,7 +409,7 @@ builder.queryField('pressureSensitivity', (t) =>
       const sourceRunToDefId = buildSourceRunToDefIdMap(eligibleRuns, definitionMeta, log);
       const sourceRunIds = [...sourceRunToDefId.keys()];
       const rosterModelIds = models.map((m) => m.modelId);
-      let excludedScenariosCount = 0;
+      const pressureConditionExclusionBreakdown = emptyPressureConditionExclusionBreakdown();
 
       // Pre-fetch the scenarios for eligible Definitions ONCE into a map. Each scenario's
       // content + orientationFlipped is the same across thousands of transcripts, so joining
@@ -416,9 +459,15 @@ builder.queryField('pressureSensitivity', (t) =>
 
       for (const tx of transcripts) {
         const defId = sourceRunToDefId.get(tx.runId);
-        if (defId == null) continue;
+        if (defId == null) {
+          pressureConditionExclusionBreakdown.sourceRunMapping += 1;
+          continue;
+        }
         const meta = definitionMeta.get(defId);
-        if (!meta) continue;
+        if (!meta) {
+          pressureConditionExclusionBreakdown.definitionMetadata += 1;
+          continue;
+        }
         const scenario = tx.scenarioId != null ? scenarioById.get(tx.scenarioId) ?? null : null;
 
         const decision = resolveTranscriptDecisionModel({
@@ -445,10 +494,13 @@ builder.queryField('pressureSensitivity', (t) =>
           continue;
         }
 
-        if (scenario == null) continue;
+        if (scenario == null) {
+          pressureConditionExclusionBreakdown.missingScenario += 1;
+          continue;
+        }
         const normalized = normalizeScenarioAnalysisMetadata(scenario.content);
         if (normalized === null) {
-          excludedScenariosCount += 1;
+          pressureConditionExclusionBreakdown.invalidMetadata += 1;
           continue;
         }
 
@@ -457,10 +509,13 @@ builder.queryField('pressureSensitivity', (t) =>
           normalized.groupingDimensions,
           meta.ownLookup,
           meta.opponentLookup,
-          meta.ownToken,
-          meta.opponentToken,
+          meta.firstValueToken,
+          meta.secondValueToken,
         );
-        if (levels === null) continue;
+        if (levels === null) {
+          pressureConditionExclusionBreakdown.levelAssignment += 1;
+          continue;
+        }
 
         const key = cellKey(levels.ownLevel, levels.opponentLevel);
         let cell = pairAcc.cells.get(key);
@@ -484,9 +539,7 @@ builder.queryField('pressureSensitivity', (t) =>
         const pairs = perModel.get(model.modelId) ?? new Map<string, PairAccumulator>();
         const valuePairs: PressureSensitivityValuePairShape[] = [];
         let modelUnscored = 0;
-        const perPairWinRateDeltas: number[] = [];
-        const perPairLowBandRates: number[] = [];
-        const perPairHighBandRates: number[] = [];
+        const perPairPressureResponses: number[] = [];
 
         for (const acc of pairs.values()) {
           const grid: SensitivityCellShape[] = [];
@@ -510,36 +563,36 @@ builder.queryField('pressureSensitivity', (t) =>
           }
           modelUnscored += pairUnscored;
 
-          const winRateDelta = pooledBandReduction(grid, MIN_N);
+          const pressureResponse = pooledDirectionalReduction(grid, MIN_N);
           valuePairs.push({
             pairKey: acc.pairKey,
-            ownToken: acc.ownToken,
-            opponentToken: acc.opponentToken,
-            winRateDelta: {
-              value: winRateDelta.value,
-              ciLow: winRateDelta.ciLow,
-              ciHigh: winRateDelta.ciHigh,
-              lowBandMean: winRateDelta.lowBandMean,
-              highBandMean: winRateDelta.highBandMean,
-              reason: winRateDelta.reason,
+            firstValueToken: acc.firstValueToken,
+            firstValueLabel: formatValueLabel(acc.firstValueToken),
+            secondValueToken: acc.secondValueToken,
+            secondValueLabel: formatValueLabel(acc.secondValueToken),
+            pressureResponse: {
+              value: pressureResponse.value,
+              ciLow: pressureResponse.ciLow,
+              ciHigh: pressureResponse.ciHigh,
+              baselineRate: pressureResponse.baselineRate,
+              pushTowardFirstRate: pressureResponse.pushTowardFirstRate,
+              pushTowardSecondRate: pressureResponse.pushTowardSecondRate,
+              qualifyingTrials: pressureResponse.qualifyingTrials,
+              reason: pressureResponse.reason,
             },
-            qualifyingTrials: winRateDelta.qualifyingTrials,
             n: pairN,
             unscoredCount: pairUnscored,
             grid,
             definitionsMeasured: acc.definitionsMeasured.size,
-            definitionsExcluded: acc.definitionsExcluded.size,
           });
 
-          if (winRateDelta.value !== null && winRateDelta.lowBandMean !== null && winRateDelta.highBandMean !== null) {
-            perPairWinRateDeltas.push(winRateDelta.value);
-            perPairLowBandRates.push(winRateDelta.lowBandMean);
-            perPairHighBandRates.push(winRateDelta.highBandMean);
+          if (pressureResponse.value !== null) {
+            perPairPressureResponses.push(pressureResponse.value);
 
             const classification: 'positive' | 'flat' | 'negative' =
-              Math.abs(winRateDelta.value) < FLAT_DELTA_THRESHOLD
+              Math.abs(pressureResponse.value) < FLAT_DELTA_THRESHOLD
                 ? 'flat'
-                : winRateDelta.value > 0
+                : pressureResponse.value > 0
                   ? 'positive'
                   : 'negative';
             if (classification === 'positive') sanityPositive += 1;
@@ -548,7 +601,7 @@ builder.queryField('pressureSensitivity', (t) =>
             sanityBreakdown.push({
               modelId: model.modelId,
               pairKey: acc.pairKey,
-              winRateDelta: winRateDelta.value,
+              pressureResponse: pressureResponse.value,
               classification,
             });
           } else {
@@ -556,13 +609,9 @@ builder.queryField('pressureSensitivity', (t) =>
           }
         }
 
-        const winRateDeltaSummary = summarizeWinRateDeltas(
-          perPairWinRateDeltas,
-          perPairLowBandRates,
-          perPairHighBandRates,
-        );
+        const pressureResponseSummary = summarizePressureResponse(perPairPressureResponses);
 
-        if (valuePairs.length === 0 || winRateDeltaSummary.pairsMeasured === 0) {
+        if (valuePairs.length === 0 || pressureResponseSummary.pairsMeasured === 0) {
           insufficient.push({
             modelId: model.modelId,
             label: model.displayName,
@@ -576,7 +625,7 @@ builder.queryField('pressureSensitivity', (t) =>
           modelId: model.modelId,
           label: model.displayName,
           providerName: model.provider.displayName ?? model.provider.name,
-          winRateDeltaSummary,
+          pressureResponseSummary,
           valuePairs: valuePairs.sort((a, b) => a.pairKey.localeCompare(b.pairKey)),
           unscoredCount: modelUnscored,
         });
@@ -594,8 +643,8 @@ builder.queryField('pressureSensitivity', (t) =>
 
       return {
         models: outputModels.sort((a, b) => {
-          const aMean = a.winRateDeltaSummary.mean;
-          const bMean = b.winRateDeltaSummary.mean;
+          const aMean = a.pressureResponseSummary.mean;
+          const bMean = b.pressureResponseSummary.mean;
           if (aMean === null && bMean === null) {
             return a.label.localeCompare(b.label);
           }
@@ -606,7 +655,10 @@ builder.queryField('pressureSensitivity', (t) =>
         }),
         insufficient,
         excludedDefinitions,
-        excludedScenariosCount,
+        pressureConditionExcludedCount: totalPressureConditionExclusions(
+          pressureConditionExclusionBreakdown,
+        ),
+        pressureConditionExclusionBreakdown,
         directionalSanityCheck,
         transcriptCapHit,
       };
@@ -628,11 +680,10 @@ function ensurePairAccumulator(
   if (!acc) {
     acc = {
       pairKey: meta.pairKey,
-      ownToken: meta.ownToken,
-      opponentToken: meta.opponentToken,
+      firstValueToken: meta.firstValueToken,
+      secondValueToken: meta.secondValueToken,
       cells: new Map(),
       definitionsMeasured: new Set(),
-      definitionsExcluded: new Set(),
     };
     pairs.set(meta.pairKey, acc);
   }
@@ -664,7 +715,8 @@ export function buildEmptyResult(
       reason: 'no-coverage',
     })),
     excludedDefinitions: [],
-    excludedScenariosCount: 0,
+    pressureConditionExcludedCount: 0,
+    pressureConditionExclusionBreakdown: emptyPressureConditionExclusionBreakdown(),
     directionalSanityCheck: {
       positivePct: 0,
       flatPct: 0,
