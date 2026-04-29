@@ -78,6 +78,28 @@ class FactoryTelemetryTests(unittest.TestCase):
         self.assertGreaterEqual(record["duration_seconds"], 0)
         self.assertIsNone(record["agent_id"])
         self.assertIsNone(record["artifact_sha_at_time"])
+        # PR #790: lens defaults to None for back-compat callers
+        self.assertIn("lens", record)
+        self.assertIsNone(record["lens"])
+
+    def test_record_ai_call_records_lens(self) -> None:
+        # PR #790 — callers pass lens explicitly; the analyzer needs it
+        # to disambiguate per-lens performance.
+        slug = "telemetry-lens"
+        completed = _completed_process(
+            stderr='{"totalTokens": {"prompt": 100, "candidates": 50}}\n'
+        )
+        FACTORY_TELEMETRY.record_ai_call(
+            slug,
+            "spec",
+            1,
+            "adversarial_review",
+            "gpt-5.4-mini",
+            lambda: completed,
+            lens="feasibility-adversarial",
+        )
+        usage = self._usage(slug)
+        self.assertEqual(usage[-1]["lens"], "feasibility-adversarial")
 
     def test_record_ai_call_invalid_activity_type_raises(self) -> None:
         with self.assertRaises(ValueError):
@@ -125,6 +147,82 @@ class FactoryTelemetryTests(unittest.TestCase):
 
     def test_parse_tokens_codex_missing_returns_none(self) -> None:
         self.assertIsNone(FACTORY_TELEMETRY.parse_tokens_codex(_completed_process(stderr="nothing here")))
+
+    def test_parse_tokens_codex_v0_124_total_format(self) -> None:
+        # PR #790 — Codex v0.124+ emits a single total instead of the legacy
+        # JSON block. Format: literal "tokens used\n<N>" at end of stderr.
+        # No input/output split available; record total in input_tokens.
+        result = _completed_process(
+            stderr="some warning lines\nmore output\ntokens used\n6,062\n"
+        )
+        self.assertEqual(
+            FACTORY_TELEMETRY.parse_tokens_codex(result),
+            {"input_tokens": 6062, "output_tokens": 0},
+        )
+
+    def test_parse_tokens_codex_v0_124_total_format_no_commas(self) -> None:
+        result = _completed_process(stderr="tokens used\n123\n")
+        self.assertEqual(
+            FACTORY_TELEMETRY.parse_tokens_codex(result),
+            {"input_tokens": 123, "output_tokens": 0},
+        )
+
+    def test_parse_tokens_codex_legacy_json_takes_precedence(self) -> None:
+        # If both formats are present, the legacy JSON wins (it has both
+        # input AND output split, which is more useful).
+        result = _completed_process(
+            stderr=(
+                '{"totalTokens": {"prompt": 100, "candidates": 50}}\n'
+                "tokens used\n999\n"
+            )
+        )
+        self.assertEqual(
+            FACTORY_TELEMETRY.parse_tokens_codex(result),
+            {"input_tokens": 100, "output_tokens": 50},
+        )
+
+    def test_parse_tokens_gemini_real_world_shape(self) -> None:
+        # PR #790: real Gemini stdout has "tokens" key (not "tokenStats")
+        # nested inside a stats object. The parser walks the JSON tree to
+        # find any of (tokens, tokenStats, totalTokens).
+        result = _completed_process(
+            stdout=json.dumps(
+                {
+                    "response": "review body",
+                    "stats": {
+                        "models": {
+                            "gemini-2.5-pro": {
+                                "tokens": {
+                                    "input": 2440,
+                                    "prompt": 13996,
+                                    "candidates": 807,
+                                    "total": 16603,
+                                }
+                            }
+                        }
+                    },
+                }
+            )
+        )
+        self.assertEqual(
+            FACTORY_TELEMETRY.parse_tokens_gemini(result),
+            {"input_tokens": 2440, "output_tokens": 807},
+        )
+
+    def test_parse_tokens_gemini_prose_then_json(self) -> None:
+        # Real Gemini stdout often has prose before the JSON stats block.
+        # Parser locates the embedded JSON object and parses from there.
+        result = _completed_process(
+            stdout=(
+                "Some review prose here.\n"
+                "More text.\n"
+                + json.dumps({"tokens": {"input": 50, "candidates": 25}})
+            )
+        )
+        self.assertEqual(
+            FACTORY_TELEMETRY.parse_tokens_gemini(result),
+            {"input_tokens": 50, "output_tokens": 25},
+        )
 
     def test_parse_tokens_gemini_happy_path(self) -> None:
         result = _completed_process(

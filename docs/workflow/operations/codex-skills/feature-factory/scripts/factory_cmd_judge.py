@@ -47,13 +47,17 @@ from judge_prompts import VALID_LENSES, load_prompt, substitute  # noqa: E402
 JUDGE_MODEL_BY_LENS: dict[str, str] = {
     "completeness": "gpt-5.4-mini",
     "restatement": "gpt-5.4",
-    "implementation-risk": "claude-sonnet-4-6",
+    # Switched from claude-sonnet-4-6 -> gpt-5.4 based on PR #789 analysis:
+    # claude-sonnet-4-6 hit the 180s judge timeout regularly (p95 = 158s,
+    # p99 = 180s); gpt-5.4 finishes implementation-risk-class judges in
+    # ~40s p95 with comparable quality. Saves ~2 hours cumulative wall clock.
+    "implementation-risk": "gpt-5.4",
 }
 
 JUDGE_COMMAND_BY_LENS: dict[str, list[str]] = {
     "completeness": ["codex", "exec", "-m", "gpt-5.4-mini"],
     "restatement": ["codex", "exec", "-m", "gpt-5.4"],
-    "implementation-risk": ["claude", "-p", "--model", "claude-sonnet-4-6", "--output-format", "text"],
+    "implementation-risk": ["codex", "exec", "-m", "gpt-5.4"],
 }
 
 JUDGE_LENS_ORDER = ["completeness", "restatement", "implementation-risk"]
@@ -634,7 +638,10 @@ def _attempt_model_call(
                         stdout=exc.stdout or "",
                         stderr=exc.stderr or "",
                     )
-        result = record_ai_call(slug, stage, round_number, "judge_panel", model, _call)
+        result = record_ai_call(
+            slug, stage, round_number, "judge_panel", model, _call,
+            lens=f"{lens}-judge",
+        )
     except Exception as exc:
         return None, "", str(exc)
 
