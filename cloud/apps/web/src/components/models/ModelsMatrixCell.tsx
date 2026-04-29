@@ -37,7 +37,6 @@ function Dots({ score, muted, className }: DotsProps) {
               className="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0"
               style={{
                 background: 'linear-gradient(to right, currentColor 50%, transparent 50%)',
-                boxShadow: '0 0 0 1px currentColor',
               }}
             />
           );

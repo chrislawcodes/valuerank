@@ -81,6 +81,7 @@ Once the above are resolved:
 - [x] Domain Shifts by Value heatmap implemented at `/models/domain-shifts`; focused tests and web preflight pass.
 - [x] Domain Shifts readability controls added locally: cells can toggle between shift and raw win rate, and table columns are sortable.
 - [x] Domain Shifts model picker now groups default models first and separates non-default models with `---` before alphabetical non-default options.
+- [x] Model Value Preference overview report updated at `/models`; screenshot capture is available, the title now matches the report, and model rows no longer repeat the model ID line.
 
 ---
 
@@ -172,6 +173,7 @@ Once the above are resolved:
 
 | Feature | Branch | Status | Notes |
 |---------|--------|--------|-------|
+| **production-transcript-anomalies-doc** | `—` | 🟢 Done | Added a canonicalized production anomaly note at [`docs/production-transcript-anomalies.md`](docs/production-transcript-anomalies.md) with batch/transcript wording, legacy-unavailable counts, and the duplicate-row nuance. |
 | **domain-coverage-paired-batch-action** | `claude/parallel-reviews-validated-v2` | 🟢 Done | PR #476 merged 2026-03-31 — tightened the domain coverage layout, removed the workspace card, and restored the paired-batch launch/back-link flow. |
 | **provider-budget-tracking** | `factory/provider-budget` | 🟢 Merged (migration pending) | PR #483 squash-merged 2026-03-31 — per-provider balance, auto-deduct on completion, manual sync with drift log, soft pre-run warning gate. Migration must be applied to prod. |
 
