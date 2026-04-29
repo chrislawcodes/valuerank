@@ -1648,6 +1648,29 @@ type ModelsAnalysisValueResult {
   valueKey: String!
 }
 
+"""Confidence stats for a model across all values"""
+type ModelsConfidenceModelResult {
+  label: String!
+  modelId: String!
+  overallConfidence: Float
+  overallLeanCount: Int!
+  overallStrongCount: Int!
+  values: [ModelsConfidenceValueResult!]!
+}
+
+"""Cross-model confidence heatmap: strong% per model per value"""
+type ModelsConfidenceResult {
+  models: [ModelsConfidenceModelResult!]!
+}
+
+"""Confidence stats for a model/value pair"""
+type ModelsConfidenceValueResult {
+  confidence: Float
+  leanCount: Int!
+  strongCount: Int!
+  valueKey: String!
+}
+
 type ModelsConsistencyResult {
   insufficient: [InsufficientModel!]!
   models: [ModelConsistency!]!
@@ -2534,6 +2557,7 @@ type Query {
     """Optional batch signature to filter snapshots (e.g. vnewtd, vnewt0)"""
     signature: String
   ): ModelsAnalysisResult!
+  modelsConfidence(signature: String): ModelsConfidenceResult!
   modelsConsistency(domainId: ID, minScenarios: Int, providerId: ID, signature: String!): ModelsConsistencyResult!
 
   """

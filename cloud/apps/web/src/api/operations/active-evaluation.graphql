@@ -1,0 +1,41 @@
+query ActiveEvaluations($domainId: ID) {
+  activeEvaluations(domainId: $domainId) {
+    id
+    domainId
+    domainNameAtLaunch
+    scopeCategory
+    status
+    createdAt
+    startedAt
+    completedAt
+    startedRuns
+    failedDefinitions
+    skippedForBudget
+    projectedCostUsd
+    models
+    temperature
+    maxBudgetUsd
+    memberCount
+    launchableDefinitionIds
+    samplePercentage
+    samplesPerScenario
+    targetBatchCount
+    launchableDefinitions {
+      definitionId
+      definitionName
+      pairKey
+    }
+    members {
+      runId
+      definitionIdAtLaunch
+      definitionNameAtLaunch
+      domainIdAtLaunch
+      modelIds
+      createdAt
+      runStatus
+      runCategory
+      runStartedAt
+      runCompletedAt
+    }
+  }
+}

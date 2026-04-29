@@ -41,6 +41,7 @@ const modelsMenuItems: MenuItem[] = [
   { name: 'Consistency', path: '/models/consistency' },
   { name: 'Pressure Sensitivity', path: '/models/pressure-sensitivity' },
   { name: 'Circumplex', path: '/models/circumplex' },
+  { name: 'Confidence', path: '/models/confidence' },
 ];
 
 const archiveMenuItems: MenuItem[] = [
