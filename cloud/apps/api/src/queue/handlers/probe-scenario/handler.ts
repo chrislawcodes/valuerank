@@ -75,8 +75,10 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
   );
 
   try {
-    // Check if run is in a terminal state (completed/cancelled) - skip processing
-    if (await isRunTerminal(runId)) {
+    // Check if run is in a terminal state (completed/cancelled) - skip processing.
+    // manualReprobe bypasses this guard: the reprobeAnomalySlot mutation explicitly
+    // targets completed runs whose anomalies predate the adapter guards.
+    if (job.data.manualReprobe !== true && await isRunTerminal(runId)) {
       log.info({ jobId, runId }, 'Skipping job - run is in terminal state');
       return;
     }
@@ -107,7 +109,9 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
         { jobId, runId, scenarioId, modelId, sampleIndex, transcriptId: existingProbeResult.transcriptId },
         'Skipping probe job - result already succeeded'
       );
-      await enqueueTopUpProbesSingleton(runId);
+      if (job.data.manualReprobe !== true) {
+        await enqueueTopUpProbesSingleton(runId);
+      }
       await maybeAdvanceRunStatus(runId);
       return;
     }
@@ -123,7 +127,9 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
         { jobId, runId, scenarioId, modelId, sampleIndex, currentRetryCount },
         'Skipping probe job - already terminal failed'
       );
-      await enqueueTopUpProbesSingleton(runId);
+      if (job.data.manualReprobe !== true) {
+        await enqueueTopUpProbesSingleton(runId);
+      }
       await maybeAdvanceRunStatus(runId);
       return;
     }
@@ -319,7 +325,9 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
       where: { id: runId },
       select: { status: true },
     });
-    await enqueueTopUpProbesSingleton(runId);
+    if (job.data.manualReprobe !== true) {
+      await enqueueTopUpProbesSingleton(runId);
+    }
 
     // If the run is already summarizing, queue the just-created transcript.
     // When we just entered SUMMARIZING in this call, queueSummarizeJobs already handled it.

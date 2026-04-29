@@ -203,6 +203,7 @@ builder.mutationField('reprobeAnomalySlot', (t) =>
             modelId: slot.modelId,
             sampleIndex: slot.sampleIndex,
             config: { maxTurns: 10 },
+            manualReprobe: true,
           },
           { ...jobOptions, singletonKey },
         );
