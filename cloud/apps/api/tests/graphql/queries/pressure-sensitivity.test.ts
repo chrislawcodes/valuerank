@@ -59,6 +59,43 @@ describe('pressure-sensitivity resolver helpers', () => {
     );
   });
 
+  it('normalizes source-run collision precedence by aggregate run id', async () => {
+    const { buildSourceRunToDefIdMap } = await loadModule();
+    const warn = vi.fn();
+
+    const map = buildSourceRunToDefIdMap(
+      [
+        {
+          id: 'run-b',
+          config: { sourceRunIds: ['source-1'] },
+          definitionId: 'def-b',
+          definition: { id: 'def-b', name: 'Def B', domainId: 'domain-1' },
+        },
+        {
+          id: 'run-a',
+          config: { sourceRunIds: ['source-1'] },
+          definitionId: 'def-a',
+          definition: { id: 'def-a', name: 'Def A', domainId: 'domain-1' },
+        },
+      ],
+      new Map([
+        ['def-a', { id: 'def-a' } as never],
+        ['def-b', { id: 'def-b' } as never],
+      ]),
+      { warn },
+    );
+
+    expect(map.get('source-1')).toBe('def-b');
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        existingDefinitionId: 'def-a',
+        newDefinitionId: 'def-b',
+        code: 'source_run_collision',
+      }),
+      'sourceRunId mapped to multiple definitions; last write wins',
+    );
+  });
+
   it('flags transcript cap hits and logs a structured warning', async () => {
     const { fetchTranscriptsFromSourceRuns } = await loadModule();
     const warn = vi.fn();

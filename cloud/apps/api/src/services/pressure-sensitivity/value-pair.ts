@@ -3,7 +3,7 @@
  *
  * Per spec FR-024:
  *  - Pair identity is the alphabetically sorted tuple of value tokens, joined by `::`.
- *  - "Own" and "opponent" within a pair are assigned alphabetically (sorted[0] / sorted[1]).
+ *  - The canonical first/second coordinates are assigned alphabetically (sorted[0] / sorted[1]).
  *  - When a Definition's stored `value_first` order disagrees with canonical own, the
  *    transcript-emitted `favor_first` / `favor_second` direction is remapped before bucketing.
  *
@@ -36,9 +36,8 @@ export function canonicalValuePairKey(tokenA: unknown, tokenB: unknown): string 
 }
 
 /**
- * Returns `[ownToken, opponentToken]` for the canonical assignment. Inputs are assumed to
- * already pass `canonicalValuePairKey`'s validation. Use this to look up which dimension
- * corresponds to "own" when extracting pressure-level scores from a scenario.
+ * Returns `[firstValueToken, secondValueToken]` for the canonical assignment. Inputs are
+ * assumed to already pass `canonicalValuePairKey`'s validation.
  */
 export function canonicalOwnOpponent(tokenA: string, tokenB: string): [string, string] {
   const sorted = [tokenA.trim(), tokenB.trim()].sort();
@@ -62,14 +61,14 @@ export function assignOwnOpponent(
   if (canonicalDirection === 'refusal' || canonicalDirection === 'unknown') return 'unscored';
   if (canonicalDirection === 'neutral') return 'neutral';
 
-  const [ownToken] = canonicalOwnOpponent(valueFirstToken, valueSecondToken);
-  const valueFirstIsOwn = valueFirstToken.trim() === ownToken;
+  const [firstValueToken] = canonicalOwnOpponent(valueFirstToken, valueSecondToken);
+  const valueFirstIsFirst = valueFirstToken.trim() === firstValueToken;
 
   if (canonicalDirection === 'favor_first') {
-    return valueFirstIsOwn ? 'own_picked' : 'opponent_picked';
+    return valueFirstIsFirst ? 'own_picked' : 'opponent_picked';
   }
   // favor_second
-  return valueFirstIsOwn ? 'opponent_picked' : 'own_picked';
+  return valueFirstIsFirst ? 'opponent_picked' : 'own_picked';
 }
 
 type DefinitionDimensionLite = {
@@ -88,11 +87,11 @@ export function assignOwnOpponentLevels(
   scenarioDimensionValues: Record<string, unknown>,
   ownLookup: (rawLabel: unknown) => number | null,
   opponentLookup: (rawLabel: unknown) => number | null,
-  ownToken: string,
-  opponentToken: string,
+  firstValueToken: string,
+  secondValueToken: string,
 ): { ownLevel: number; opponentLevel: number } | null {
-  const ownTrimmed = ownToken.trim();
-  const opponentTrimmed = opponentToken.trim();
+  const ownTrimmed = firstValueToken.trim();
+  const opponentTrimmed = secondValueToken.trim();
 
   const ownDim = definitionDimensions.find(
     (d) => typeof d.name === 'string' && d.name.trim() === ownTrimmed,

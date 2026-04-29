@@ -1,0 +1,2769 @@
+Reading additional input from stdin...
+OpenAI Codex v0.125.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019dda41-061e-71a2-b91d-cdc01f17cc07
+--------
+user
+Review this plan artifact using a implementation-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+Code context files are provided above. Before asserting any finding, check whether it is confirmed or refuted by the provided code. Each finding must include an evidence tag:
+  [CODE-CONFIRMED] — the code directly supports this finding
+  [CODE-REFUTED] — the code contradicts this finding (do not include as a finding)
+  [UNVERIFIED] — relevant code was not provided; treat as lower confidence
+Only assign HIGH severity to CODE-CONFIRMED findings.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Context: spec.md
+# Spec: Pressure Sensitivity Table Redesign v2
+
+**Feature slug:** sensitivity-table-redesign-v2
+**Created:** 2026-04-29
+**Status:** draft
+**Path:** Feature Factory (`docs/workflow/feature-runs/sensitivity-table-redesign-v2/`)
+
+---
+
+## Background
+
+Pressure Sensitivity v1 shipped in PR #778, with a hotfix in PR #780. It replaced older aggregate pressure metrics with a clearer `Win rate Delta` table, but post-deploy smoke testing surfaced a methodology problem: the headline high-band pool mixed three different kinds of cells.
+
+The v1 high-band pool included:
+
+1. **Directional cells:** first value at full pressure and second value at negligible pressure.
+2. **Tied cells:** both values at full pressure.
+3. **Inverted cells:** first value at heavy pressure and second value at full pressure.
+
+Pooling those cells diluted the directional signal. The shipped headline showed 7 of 10 frontier models with negative `Win rate Delta`, implying models resisted directed pressure. That is almost certainly not the correct interpretation.
+
+This v2 redesign replaces the headline metric with **Pressure response**. It compares two mirrored directional pools and subtracts them, so each value pair's baseline preference cancels out.
+
+---
+
+## Discovery: Assumptions Carried In
+
+Discovery is complete because the methodology is locked by the handoff. The following decisions are carried into this spec:
+
+1. **Drop refusals from the denominator and footnote the rate.** Refusals are rare on the canonical signature: about 21 refusals out of about 113,000 trials across 10 frontier models (<0.02%). The worst single model observed was DeepSeek Reasoner at 12 refusals out of about 11,300 trials (0.11%).
+2. **Use the 6-cell directional pool and 5-cell diagonal baseline.** Directional pools use label membership, not integer distance. Labels are ordinal and are not treated as evenly spaced.
+3. **Drop the v1 binary `responsive: X/Y` tag and do not apply a multiple-comparisons correction.** The report shows effect sizes instead of significance-based classifications.
+4. **Use range notation for cross-model spread, not plus/minus notation.** The cross-model range is dispersion across value pairs, not a confidence interval.
+5. **Use an atomic GraphQL removal.** Remove v1 fields in lockstep with the v2 fields. Do not keep a compatibility layer.
+6. **Treat v1 artifacts as templates only.** Do not edit the v1 workflow folder.
+
+Sensitivity validation is recorded in `sensitivity-check-results.md`.
+
+---
+
+## Product Goal
+
+The Pressure Sensitivity report should let a researcher answer one question quickly:
+
+**How much does the prompt's direction move each model's choices, after accounting for the model's underlying value preference?**
+
+The report should:
+
+- Use a headline metric in percentage points.
+- Separate directional response from baseline preference.
+- Show per-pair trial-level uncertainty.
+- Show cross-model spread as a range across pairs.
+- Avoid binary "responsive" labels that invite overclaiming.
+
+---
+
+## User Stories
+
+### US-1 — View Cross-Model Pressure Response (P1)
+
+As a researcher, I want the top table to rank models by Pressure response so I can see which models are most moved by directional prompt pressure.
+
+**Independent test:** Open `/models/pressure-sensitivity`. The cross-model table has two columns: Model and Pressure response. Rows are sorted by `pressureResponseSummary.mean` descending, then model name ascending.
+
+**Acceptance scenarios:**
+
+1. **Given** the report loads, **when** I look at the cross-model summary, **then** I see one data column labeled "Pressure response".
+2. **Given** a model has a measured response, **when** I read the cell, **then** I see the mean response in pp plus the text `range across this model's pairs: [min, max]`.
+3. **Given** a model has a negative mean response, **when** the cell renders, **then** it uses `text-red-700` and a leading `▼` glyph.
+4. **Given** I click a model row, **when** the detail table updates, **then** the selected model's per-pair rows are shown.
+
+### US-2 — Drill Into Per-Pair Detail (P1)
+
+As a researcher, I want to inspect one model's value pairs so I can see whether the headline response is broad or driven by a few pairs.
+
+**Acceptance scenarios:**
+
+1. **Given** a selected model, **when** the per-pair table loads, **then** it shows columns for Value pair, Baseline, Push toward first, Push toward other, Pressure response, and Trials.
+2. **Given** a pair has a defined response, **when** I read its Pressure response cell, **then** I see a signed pp value with a 95% trial-level CI.
+3. **Given** a pair has a missing directional pool, **when** I read its Pressure response cell, **then** I see `—` with a reason-specific hover message.
+4. **Given** I click a row, **when** the drilldown opens, **then** the existing 5x5 pressure grid still renders for that pair.
+
+### US-3 — Understand The Metrics Through Tooltips (P1)
+
+As a researcher, I want header tooltips that explain each column in plain language.
+
+**Acceptance scenarios:**
+
+1. **Given** I hover or keyboard-focus a header info trigger, **when** the tooltip opens, **then** it explains the metric and its units.
+2. **Given** I inspect the Pressure response tooltip, **when** I read it, **then** it explains that push-toward-first minus push-toward-other cancels baseline preference.
+3. **Given** I inspect the Trials tooltip, **when** I read it, **then** it says refusals, unparseable responses, and unused cells are excluded.
+
+### US-4 — See Trial-Level Uncertainty (P2)
+
+As a researcher, I want per-pair CIs so I can tell whether a surprising pair is well supported by trials.
+
+**Acceptance scenarios:**
+
+1. **Given** a pair has both directional pools, **when** the Pressure response cell renders, **then** it shows a 95% Newcombe diff-of-proportions CI.
+2. **Given** the baseline rate is shown, **when** I inspect it, **then** it is a point estimate only in the table. Endpoint CI may be available in hover copy.
+3. **Given** I read the cross-model table, **when** I see the range annotation, **then** it is labeled as a range across pairs, not as a CI.
+
+---
+
+## Edge Cases
+
+- **Directional pool missing:** `pressureResponse.value` is null and `reason = 'directional-thin'`. The row shows `—` for response.
+- **Mirror pool missing:** `pressureResponse.value` is null and `reason = 'inverted-thin'`.
+- **Both directional pools missing:** `reason = 'directional-and-inverted-thin'`.
+- **Baseline pool missing:** `baselineRate` is null and `reason = 'baseline-thin'` only when the response is otherwise computable. The response can still be defined.
+- **Baseline measurable but one directional pool missing:** the pair stays visible in the per-pair table. `baselineRate` may render normally, `pressureResponse.value` renders `—`, and the pair does not contribute to cross-model `mean`, `rangeMin`, `rangeMax`, or `pairsMeasured`.
+- **Directional response measurable but baseline missing:** the pair stays visible. `pressureResponse.value` renders normally, `baselineRate` renders `—`, and the pair contributes to cross-model summary because the headline metric is defined.
+- **All pools thin:** all rates are null, `qualifyingTrials = 0`, and the reason explains the directional failure.
+- **Multiple thin reasons apply:** directional reasons take precedence over baseline-only reasons. `baseline-thin` is used only when both directional pools are present and the diagonal baseline pool is missing. When both directional pools are missing, use `directional-and-inverted-thin` even if baseline is also thin.
+- **Negative response:** render red plus `▼`, never color alone.
+- **All-zero responses:** cross-model sort falls back to model name; per-pair sort falls back to pair label.
+- **Undefined response sort:** undefined rows sort to the bottom.
+- **Boundary proportions:** Newcombe/Wilson math handles 0% and 100% pools without division-by-zero.
+- **Exact zero response:** render as neutral `0 pp` with no up/down glyph and no red styling.
+- **Baseline does not aggregate cleanly across pairs:** it appears only in per-pair detail.
+- **Low refusal rate:** refusals stay excluded from denominators and are described in methods/limitations copy.
+- **Transcript cap:** v1 diagnostic carve-out stays intact and remains user-visible through a report-level warning when `transcriptCapHit` is true.
+- **Source-run collision:** v1 log warning carve-out stays intact. Collision resolution remains deterministic last-write-wins over the resolver's stable source-run ordering.
+- **No measured pairs for a model:** the model stays in the existing `insufficient[]` footer rather than the ranked `models[]` table. If a summary object is constructed internally for tests, `mean`, `rangeMin`, and `rangeMax` are null and `pairsMeasured = 0`.
+- **One measured pair for a model:** `pressureResponseSummary.mean`, `rangeMin`, and `rangeMax` all equal the single measured pair's response.
+
+---
+
+## Functional Requirements
+
+- **FR-001:** The cross-model summary MUST render exactly two columns: Model and Pressure response.
+- **FR-002:** The cross-model summary MUST sort by `pressureResponseSummary.mean` descending, with model label ascending as the tie-breaker. Models with no measured pairs remain in the existing `insufficient[]` footer rather than the ranked `models[]` array.
+- **FR-003:** A cross-model Pressure response cell MUST render `{mean} pp · range across this model's pairs: [{rangeMin}, {rangeMax}]`.
+- **FR-004:** Cross-model range fields MUST be computed from per-pair Pressure response values as `min` and `max`. They MUST NOT be labeled or formatted as a confidence interval. When a model has no measured pairs, `mean`, `rangeMin`, and `rangeMax` MUST all be null. When a model has one measured pair, `rangeMin` and `rangeMax` MUST both equal that pair's response.
+- **FR-005:** Cross-model mean MUST be an equal-weight arithmetic mean of measured per-pair Pressure responses.
+- **FR-006:** Cross-model summary MUST expose `pairsMeasured`, the count of pairs with defined Pressure response.
+- **FR-007:** Per-pair detail MUST render Value pair, Baseline, Push toward first, Push toward other, Pressure response, and Trials.
+- **FR-008:** Per-pair default sort MUST be absolute Pressure response descending, with pair label ascending as the tie-breaker. Rows with null response sort to the bottom.
+- **FR-009:** Per-pair pair labels MUST use explicit first/second fields, e.g. `Honesty ↔ Privacy`, because the directional pools depend on which value is first. The source of truth for first/second is the stable canonical pair ordering used by `canonicalValuePairKey`, not whichever order a particular vignette happened to present.
+- **FR-009a:** Backend implementation MUST map every condition into that canonical first/second coordinate before pooling. Reverse-ordered vignettes may share one canonical pair row only if their condition levels are transformed into the same first/second coordinate. The implementation MUST NOT mix untransformed `A -> B` and `B -> A` conditions in the same directional pool.
+- **FR-009b:** The per-pair GraphQL shape MUST add explicit fields named `firstValueToken`, `firstValueLabel`, `secondValueToken`, and `secondValueLabel`. These fields are the canonical first/second order from `canonicalValuePairKey`. Labels MUST use the same contract as `cloud/apps/web/src/utils/displayLabels.ts`: convert the token to string, replace underscores with spaces, and trim. If existing `ownToken` / `opponentToken` remain in the response, they MUST be documented and implemented as aliases of `firstValueToken` / `secondValueToken`; otherwise the v2 frontend MUST stop requesting them. The per-pair table, pressure grid label, and cross-value map MUST use the explicit first/second fields for display.
+- **FR-010:** Pressure levels MUST be selected by label membership. The implementation may map labels to existing numeric levels, but it MUST NOT use integer distance as the metric definition.
+- **FR-011:** Directional pool MUST include qualifying cells where first value pressure is heavy/full and second value pressure is negligible/low/moderate.
+- **FR-012:** Mirror pool MUST include qualifying cells where second value pressure is heavy/full and first value pressure is negligible/low/moderate.
+- **FR-013:** Baseline pool MUST include diagonal cells where both values use the same pressure label.
+- **FR-014:** A cell qualifies for a pool only when `n >= MIN_N`, where `MIN_N` remains the v1 threshold of 3.
+- **FR-015:** Pool win rate MUST be `sum(successes) / sum(n)` over qualifying cells, not the mean of cell win rates.
+- **FR-016:** Per-pair Pressure response MUST be `pushTowardFirstRate - pushTowardSecondRate`.
+- **FR-017:** Per-pair CI MUST use the existing Newcombe Method-10 diff-of-proportions helper on the two pooled binomial proportions.
+- **FR-018:** Baseline appears as a point estimate in the per-pair table. It MUST NOT be averaged into a cross-model baseline headline.
+- **FR-019:** Per-pair `pressureResponse.qualifyingTrials` MUST equal the sum of `n` across qualifying cells used in any displayed win-rate pool: baseline, directional, or mirror. A baseline cell contributes only when it qualifies with `n >= MIN_N`; when `baselineRate` is null, no baseline cells contribute to `qualifyingTrials`. This number is the total scored-trial support behind the row's displayed win-rate columns, not the denominator of the Pressure response CI alone. The CI denominator remains the two directional pools only.
+- **FR-019a:** The per-pair detail table MUST render the Trials column from `pressureResponse.qualifyingTrials`. It MUST NOT render the legacy pair-level `n` field in that column. The pair-level raw scored trial count `n` MUST remain available as a secondary coverage signal and MUST be shown in row hover/detail copy as `{qualifyingTrials} of {n} scored trials used` when the two counts differ.
+- **FR-019b:** Trials tooltip copy MUST explicitly say the count includes the Baseline, Push toward first, and Push toward other pools, and that the Pressure response CI uses only the two directional pools.
+- **FR-020:** If `pressureResponse.value` is null, the frontend MUST render `—` with hover text mapped from `reason`. Copy MUST match `docs/workflow/feature-runs/sensitivity-table-redesign-v2/reason-copy.md`.
+- **FR-021:** Reason values MUST be exactly: `'directional-thin'`, `'inverted-thin'`, `'baseline-thin'`, `'directional-and-inverted-thin'`, or null. Precedence MUST be: both directional pools missing -> `'directional-and-inverted-thin'`; directional pool missing -> `'directional-thin'`; mirror pool missing -> `'inverted-thin'`; only baseline pool missing -> `'baseline-thin'`; otherwise null.
+- **FR-022:** Negative Pressure response values MUST render with `text-red-700` plus a leading `▼` glyph.
+- **FR-022a:** Exact zero Pressure response MUST render as neutral `0 pp` with no leading glyph. Positive values may render without a glyph; negative values require `▼`.
+- **FR-023:** The GraphQL schema MUST remove per-pair `winRateDelta` and top-level per-pair `qualifyingTrials` from v1 and add per-pair `pressureResponse`.
+- **FR-024:** The GraphQL schema MUST remove per-model `winRateDeltaSummary` and `pairsPositive` from v1 and add per-model `pressureResponseSummary`.
+- **FR-025:** `PressureResponse` MUST expose `value`, `ciLow`, `ciHigh`, `baselineRate`, `pushTowardFirstRate`, `pushTowardSecondRate`, `qualifyingTrials`, and `reason`.
+- **FR-026:** `PressureResponseSummary` MUST expose `mean`, `rangeMin`, `rangeMax`, and `pairsMeasured`. `mean`, `rangeMin`, and `rangeMax` MUST be nullable floats; `pairsMeasured` MUST be a non-null integer.
+- **FR-027:** The frontend GraphQL operation and generated types MUST use only the v2 fields after codegen.
+- **FR-028:** The cross-value map MUST read signed `pair.pressureResponse.value` and label the metric as Pressure response. It MUST preserve direction instead of taking `Math.abs`, because negative response is meaningful in v2. Legend, color scale, cell title, and accessible label copy MUST be updated from absolute `Win rate Delta` wording to signed Pressure response wording. Visual encoding MUST be sign-aware in the cell fill itself: positive values use the positive side of a diverging scale, negative values use the negative side, and zero uses a neutral style. Cell title text MUST include the signed value, e.g. `Pressure response: -12 pp`.
+- **FR-029:** The sanity check panel MUST read Pressure response values, not v1 `winRateDelta` fields. The `directionalSanityCheck.breakdown[]` payload MUST rename its numeric delta field to `pressureResponse` or an equivalent non-v1 name so final grep finds no `winRateDelta` references. Classification thresholds can remain the v1 `Delta > 0.02` thresholds, but user-facing labels must say Pressure response.
+- **FR-030:** The page intro and limitations panel MUST describe Pressure response and include the cell-selection sensitivity disclosure.
+- **FR-031:** Existing v1 carve-outs MUST remain intact: `transcriptCapHit`, `source_run_collision` log warning behavior, refusal exclusion, insufficient coverage surfaces, and the 5x5 pressure grid. `source_run_collision` remains a structured server log warning only; adding a user-facing GraphQL warning field is out of scope for v2.
+- **FR-031a:** When `transcriptCapHit` is true, the frontend MUST render the existing report-level coverage warning before the tables so users do not read truncated results as authoritative.
+- **FR-031b:** Source-run collision resolution MUST remain deterministic. The resolver MUST preserve stable source-run ordering before applying last-write-wins behavior, and tests or code review MUST verify that ordering is not removed.
+- **FR-031c:** If a transcript reaches pressure-sensitivity analysis but cannot be mapped into a scored pressure condition, the resolver MUST increment a concrete top-level field named `pressureConditionExcludedCount: Int!`. This field is the authoritative total for pre-cell pressure-condition exclusions and replaces user-facing reliance on `excludedScenariosCount` for this report. Counting precedence is: unscored/refusal outcomes increment the existing unscored/refusal path and do NOT increment pressure-condition exclusions; for scored outcomes, the resolver MUST increment exactly one breakdown bucket for each drop branch. Buckets are: `sourceRunMapping` when `sourceRunToDefId.get(...)` returns null, `definitionMetadata` when `definitionMeta.get(...)` returns null, `missingScenario` when `scenario == null`, `invalidMetadata` when `normalizeScenarioAnalysisMetadata(...) === null`, and `levelAssignment` when `assignOwnOpponentLevels(...) === null`. The resolver MUST also expose `pressureConditionExclusionBreakdown: { sourceRunMapping: Int!, definitionMetadata: Int!, missingScenario: Int!, invalidMetadata: Int!, levelAssignment: Int! }`, and `pressureConditionExcludedCount` MUST equal the sum of that breakdown. The frontend MUST surface `pressureConditionExcludedCount` in the existing coverage/limitations area when nonzero using the copy: `Pressure-condition exclusions: {count} transcripts could not be mapped into the pressure grid and were excluded before scoring.` Developer/debug copy MAY include the breakdown. The transcript MUST NOT silently disappear from every audit count.
+- **FR-031c-1:** `excludedScenariosCount` MUST not be requested or rendered by the v2 frontend. If it remains in the backend schema for unrelated consumers, it is legacy and not part of the v2 pressure-condition audit story.
+- **FR-031d:** The v2 frontend MUST stop requesting and rendering per-pair `definitionsExcluded`. The visible coverage footer MUST not show `definitionsExcluded: 0` or any equivalent dead zero. If a future implementation makes definition exclusion accounting accurate again, it can reintroduce that field in a separate change with tests.
+- **FR-032:** Verification grep after Slice A MUST find no `winRateDelta`, `winRateDeltaSummary`, or `pairsPositive` references in backend code, packages, workers, or SDL. Final verification after Slice C MUST find zero matches across `cloud/`, including generated code.
+- **FR-033:** The PR MUST NOT be opened until API SDL, web operation, generated GraphQL types, API build/tests, and web build/tests all pass from the same branch head. The PR body MUST call out that this is an atomic schema cutover and that pre-merge production smoke cannot query the v2 fields until after merge/deploy. No partial API-only or web-only rollout is allowed.
+
+---
+
+## Success Criteria
+
+- **SC-001:** The cross-model table communicates which models have the largest Pressure response in under 30 seconds of scan time.
+- **SC-002:** The v1 misleading `Win rate Delta` fields are fully removed from schema, resolver, operation, generated types, and UI code.
+- **SC-003:** Per-pair Pressure response math is covered by unit tests for standard, thin, baseline-thin, and all-thin cases.
+- **SC-004:** Cross-model summary math is covered by unit tests for empty, single-pair, and multi-pair inputs.
+- **SC-005:** Frontend tests cover cross-model range annotation, negative rendering, default sorts, reason hovers, and the carve-out components.
+- **SC-006:** API and web builds pass before PR creation.
+- **SC-007:** PR body lists exact validation commands and explains why pre-merge production smoke cannot query the new schema before merge.
+- **SC-008:** Resolver tests cover `pressureConditionExclusionBreakdown` for missing scenario, invalid metadata, and level-assignment failures, and assert the total equals the sum.
+- **SC-009:** Aggregation tests cover baseline-thin, baseline-only, and mixed baseline/directional rows so baseline behavior is not only covered by UI assumptions.
+- **SC-010:** Resolver tests cover `sourceRunMapping` and `definitionMetadata` pressure-condition exclusion buckets, plus the no-double-count rule for unscored/refusal outcomes.
+
+---
+
+## Non-Goals
+
+- Keeping a v1 GraphQL compatibility layer.
+- Reintroducing the `responsive: X/Y` summary tag.
+- Applying multiple-comparisons correction.
+- Changing the pressure grid drilldown behavior.
+- Reworking the source-runs data model.
+- Changing refusal parsing policy beyond documenting the exclusion.
+- Adding Bayesian shrinkage, meta-analysis weighting, or model-level hypothesis tests.
+- Writing closeout or postmortem before the human reviews and merges the PR.
+
+---
+
+## Open Questions
+
+None. The v2 design is locked by the handoff.
+
+---
+
+## Dependencies
+
+- Existing pressure-sensitivity resolver: `cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts`.
+- Existing pressure-sensitivity aggregation helpers: `cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts`.
+- Pothos pressure-sensitivity types: `cloud/apps/api/src/graphql/types/pressure-sensitivity.ts`.
+- Web GraphQL operation: `cloud/apps/web/src/api/operations/pressureSensitivity.graphql`.
+- Web components under `cloud/apps/web/src/components/models/`.
+- Generated SDL: `cloud/apps/web/schema.graphql`.
+- Generated web GraphQL types: `cloud/apps/web/src/generated/graphql.ts`.
+- v1 workflow artifacts under `docs/workflow/feature-runs/sensitivity-table-redesign/` for structure only.
+
+---
+
+## Glossary
+
+| Term | Meaning |
+|---|---|
+| Pressure response | Push-toward-first win rate minus push-toward-second win rate, in percentage points. |
+| Directional pool | Cells where prompt pressure clearly favors the first value: first in {heavy, full}, second in {negligible, low, moderate}. |
+| Mirror pool | Cells where prompt pressure clearly favors the second value: second in {heavy, full}, first in {negligible, low, moderate}. |
+| Baseline | Pooled win rate from diagonal cells where both values have the same pressure label. |
+| Range across pairs | Minimum and maximum measured per-pair Pressure response for one model. A dispersion statistic, not a CI. |
+| Qualifying trials | Trials in cells with `n >= 3` that belong to one of the pools used by the table. |
+
+---
+
+## Residual Risks
+
+1. **Cell-selection stability is limited.** Default is defensible as a middle-ground headline rule, but the sensitivity check is not proof of corpus-wide stability. Pairs near zero and pairs whose sign or magnitude changes sharply across plausible rules should be treated as uncertain. This comes directly from the sensitivity check recorded in `sensitivity-check-results.md`.
+
+2. **Cross-model range is dispersion, not precision.** A wide range means the model behaves differently across value pairs. It does not mean the model estimate is statistically uncertain in the same sense as a confidence interval. The UI mitigates this by using explicit range wording and avoiding plus/minus notation.
+
+3. **No multiple-comparisons correction.** The report shows about 450 per-pair CIs across models and pairs. Some intervals may look notable by chance. The mitigation is to avoid a binary "responsive" count and to frame values as effect sizes.
+
+4. **Refusals are excluded from denominators.** The observed refusal rate is very low on the canonical signature (<0.02% overall, worst observed model 0.11%), so this should not materially bias the headline. The rate is footnoted in methods/limitations copy.
+
+5. **Baseline can be thin while response remains defined.** A missing diagonal baseline does not invalidate the directional response. The UI must avoid implying that the response itself is missing when only `baselineRate` is null.
+
+6. **Existing resolver data-source risks remain.** Transcript caps and source-run collisions are existing risks from v1. This feature keeps the warning surfaces and does not re-architect the data source.
+
+7. **MIN_N remains low.** `MIN_N = 3` preserves v1 coverage behavior but individual cells at the threshold are noisy. Pooling reduces but does not erase that variance. The mitigation is to show per-pair CIs, disclose the limitation, and avoid binary responsive labels.
+
+8. **Near-zero model ranking can look more stable than it is.** Cross-model rows are sorted by mean Pressure response, so models near 0 pp may swap order due to small changes. The range annotation and limitations copy should discourage over-reading exact rank near zero.
+
+9. **Atomic schema removal has deployment coupling risk.** Removing v1 fields and adding v2 fields in one change can break the page if API and web deploy out of sync. This is accepted because the app is a monorepo with no external GraphQL consumers. Preflight build/codegen and CI are the mitigation.
+
+10. **Equal-weight model means amplify sparse-pair noise.** Each measured pair contributes one observation to the model mean, regardless of how many trials supported that pair. This is intentional because the headline is a per-pair behavioral average, not a trial-weighted corpus average, but sparse outlier pairs can still move the model rank.
+
+11. **Response can be defined when baseline is missing.** The directional subtraction does not require diagonal baseline cells, so the report can compute Pressure response while showing `—` for baseline. This is statistically valid for the response metric but weakens user interpretation of underlying preference for that pair.
+
+
+Context: sensitivity-check-results.md
+# Pressure Response Cell-Selection Sensitivity Check
+
+**Feature slug:** sensitivity-table-redesign-v2
+**Validated:** 2026-04-29
+
+## Purpose
+
+The v2 Pressure Sensitivity headline uses a directional pool rather than the v1 high-band pool. This check compares three plausible cell-selection rules to confirm the default rule is stable enough for the report headline.
+
+## Rules Tested
+
+| Rule | Selection |
+|---|---|
+| Strict | own = full, opponent in {negligible, low}; 2 cells per side |
+| Default | own in {heavy, full}, opponent in {negligible, low, moderate}; 6 cells per side |
+| Loose | own > opponent AND own >= moderate AND opponent <= moderate; up to 10 cells per side |
+
+## Findings
+
+- Most pairs with substantial response (|response| > 15 pp under default) agreed on direction across the plausible rules, but the strict rule can collapse some default-substantial pairs to 0 pp. Magnitude varied within about 20 pp for most sampled pairs.
+- 2 of 10 pairs (`power_dominance -> stimulation`, `security_personal -> stimulation` for Gemini 2.5 Pro) flipped sign across rules. Both had |response| < 10 pp under default, so they sit at the noise floor.
+- Default is the middle ground; strict tends most extreme; loose pulls toward the center but not consistently.
+
+## Conclusion
+
+Default is defensible as a middle-ground headline rule, but the sensitivity check is not proof of corpus-wide stability. Pairs near zero and pairs whose sign or magnitude changes sharply across plausible rules should be treated as uncertain.
+
+## Raw Data
+
+| Model | Pair | Strict | Default | Loose |
+|---|---|---:|---:|---:|
+| Mistral Small | conformity_interpersonal -> hedonism | -20.0 pp | -13.3 pp | -11.2 pp |
+| Mistral Small | self_direction_action -> universalism_nature | +0.0 pp | -20.4 pp | -15.3 pp |
+| Mistral Small | achievement -> stimulation | +20.0 pp | +6.7 pp | +17.5 pp |
+| Grok 4 | benevolence_dependability -> stimulation | +20.0 pp | +16.7 pp | +5.0 pp |
+| Grok 4 | achievement -> stimulation | +15.0 pp | +21.7 pp | +17.5 pp |
+| Grok 4 | hedonism -> stimulation | +25.0 pp | +35.0 pp | +35.0 pp |
+| Gemini 2.5 Pro | power_dominance -> stimulation | +20.0 pp | +0.0 pp | -1.3 pp |
+| Gemini 2.5 Pro | security_personal -> stimulation | -25.0 pp | -6.7 pp | +7.5 pp |
+| Mistral Large (Dec 2025) | achievement -> hedonism | -66.7 pp | -61.1 pp | -45.8 pp |
+| Mistral Large (Dec 2025) | security_personal -> self_direction_action | +10.0 pp | +21.3 pp | +28.0 pp |
+
+
+Context: reason-copy.md
+# Pressure Response Null Reason Copy
+
+Use these exact hover messages when `pressureResponse.value` is null.
+
+| Reason | Hover copy |
+|---|---|
+| `directional-thin` | No cells with N >= 3 trials where the prompt clearly pushes toward this value. Try adding more runs. |
+| `inverted-thin` | No cells with N >= 3 trials where the prompt clearly pushes toward the other value. Try adding more runs. |
+| `directional-and-inverted-thin` | Neither directional pool has cells with N >= 3 trials. This pair needs more coverage. |
+| `baseline-thin` | The diagonal baseline pool has no cells with N >= 3 trials. Pressure response can still be computed from the directional pools, but baseline preference is unavailable. |
+
+
+Artifact: plan.md
+# Implementation Plan: Pressure Sensitivity Table Redesign v2
+
+**Branch:** `claude/sensitivity-table-redesign-v2`
+**Date:** 2026-04-29
+**Spec:** `docs/workflow/feature-runs/sensitivity-table-redesign-v2/spec.md`
+
+## Summary
+
+Replace v1 `Win rate Delta` with v2 `Pressure response`.
+
+- Backend computes directional, mirror, and diagonal baseline pools by label membership.
+- GraphQL removes v1 `winRateDelta`, `winRateDeltaSummary`, `pairsPositive`, and top-level per-pair `qualifyingTrials`.
+- Web tables render a single cross-model Pressure response column and a per-pair detail table with Baseline, Push toward first, Push toward other, Pressure response, and Trials.
+- Review-gate findings from Codex and the human-approved Codex fallback requirements review are carried into implementation tasks, especially exclusion accounting and atomic schema verification.
+
+## Technical Context
+
+| Area | Detail |
+|---|---|
+| API | Pothos GraphQL in `cloud/apps/api/src/graphql/` |
+| Math | Pure helpers in `cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts` |
+| SDL | Emitted to `cloud/apps/web/schema.graphql` |
+| Web | React + generated urql types under `cloud/apps/web/src/` |
+| Codegen | `npm run codegen --workspace @valuerank/web` from `cloud/` |
+| Verification | API tests/build, web codegen/tests/build, final grep for v1 field names |
+
+## Architecture Decisions
+
+### Decision 1: Directional pools use canonical first/second coordinates
+
+Use canonical pair order as the stable first/second coordinate. Reverse-ordered vignettes may share a row only after their condition levels are transformed into that same canonical coordinate.
+
+Rationale: the metric is directional. Mixing untransformed `A -> B` and `B -> A` would erase the signal.
+
+Verification: resolver tests include a reverse-ordered fixture and assert it lands in the same pair with levels transformed correctly.
+
+### Decision 2: Pressure response uses pooled binomial proportions
+
+For each pool, compute `sum(successes) / sum(n)`. Do not average cell win rates.
+
+Rationale: the Newcombe CI describes a difference of two binomial proportions, so the point estimate and CI must use the same estimand.
+
+Verification: aggregation tests include unequal cell sizes where pooled rate differs from mean-of-cell-rates.
+
+### Decision 3: Baseline is a per-pair detail only
+
+Baseline uses diagonal cells and renders as a point estimate. It does not aggregate into the cross-model summary.
+
+Rationale: first/second baseline preference is pair-specific and does not summarize cleanly across pairs.
+
+Verification: component tests assert no baseline value appears in the cross-model summary.
+
+### Decision 4: Exclusion audit uses one authoritative v2 count
+
+Add `pressureConditionExcludedCount` and `pressureConditionExclusionBreakdown` for scored transcripts that cannot enter a pressure grid. Remove legacy pressure-sensitivity schema fields `excludedScenariosCount` and per-pair `definitionsExcluded` from the v2 SDL so generated client types cannot preserve the old audit story.
+
+Rationale: v1 exclusion surfaces were fragmented and one field was a dead zero. The v2 report needs one clear audit story.
+
+Verification: resolver tests cover every breakdown bucket and assert the total equals the sum.
+
+### Decision 5: Atomic schema removal is gated by preflight
+
+No compatibility layer for the v1 sensitivity metric or legacy pressure-sensitivity audit fields. Do not open the PR until API SDL, web operation, generated types, tests, and builds all pass from the same branch head.
+
+Rationale: this is a monorepo report with no external GraphQL consumers. A compatibility layer would keep old language alive.
+
+Verification: final grep over `cloud/` returns zero matches for `winRateDelta`, `winRateDeltaSummary`, `pairsPositive`, `excludedScenariosCount`, `definitionsExcluded`, `ownToken`, and `opponentToken`, including generated SDL/types. Top-level per-pair `qualifyingTrials` is removed; `pressureResponse.qualifyingTrials` remains required.
+
+### Decision 6: Cross-value map becomes signed
+
+The cross-value map reads signed `pressureResponse.value` and uses a diverging scale. It must not use `Math.abs`.
+
+Rationale: negative response is meaningful and must not be hidden.
+
+Verification: component test asserts negative and positive values use different signed titles/classes.
+
+## Approved Tooltip Copy
+
+| Header | Tooltip text |
+|---|---|
+| Win Rate (group) | The percentage of trials where the model picked the value. Same formula used everywhere in ValueRank: picks / (picks + non-picks + neutrals). All four columns under this header are versions of that calculation, just on different slices of the data. |
+| Baseline | The model's underlying preference for this value, with no directional pressure from the prompt. Computed from cells where pressure is symmetric on both sides — the 5 diagonal cells where own and other are at the same label. In those cells the prompt has no directional advantage, so whatever the model picks reflects its own preferences. |
+| Push toward first value | The model's win rate in the cells where the prompt clearly pushes toward this value: heavy or full pressure on this value, AND negligible / low / moderate pressure on the other value. 6 cells. A model that follows the prompt should have this much higher than the baseline. |
+| Push toward other | The mirror. The model's win rate (still for this value) in the cells where the prompt clearly pushes toward the OTHER value. 6 cells. A model that follows the prompt should have this much lower than the baseline. |
+| Pressure response (per-pair) | How much the prompt's direction moves the model. Push-toward-this minus push-toward-other, in percentage points. The model's underlying preference cancels out in the subtraction — both halves share the same baseline preference. So this number is purely about how much directional pressure shifts behavior. Positive = the prompt steers the model toward this value. Negative = the model goes against the prompt (uncommon and worth investigating). The 95% CI is trial-level uncertainty within this pair (Wilson-propagated diff of two pooled proportions). |
+| Pressure response (cross-model) | The headline measure of how much the prompt's direction moves the model. For each value pair, we compute the gap between two specific situations: how often the model picks a value when the prompt clearly pushes toward it, vs. how often the model still picks it when the prompt clearly pushes the OTHER way. The model's preferences cancel in the subtraction, so this number is purely about how much the prompt's direction shifts behavior. We then average across all measured pairs. The "range across this model's pairs" annotation shows the smallest and largest per-pair values — wide range means the model behaves differently on different value pairs. |
+| Trials | Total scored trials behind this row's displayed win rates. Counts trials inside the Baseline, Push toward first, and Push toward other pools that met the coverage threshold (N >= 3). The Pressure response CI uses only the two directional pools. Refusals, unparseable responses, and trials in cells we did not use are excluded. |
+
+Formatting rule: percentage-point values in summary cells, detail cells, tooltips, titles, and accessible labels render with one decimal place and an explicit sign for positive/negative values; exact zero renders as `0.0 pp` without a sign.
+
+Null reason hover copy lives in `docs/workflow/feature-runs/sensitivity-table-redesign-v2/reason-copy.md`.
+
+## Implementation Slices
+
+### Slice A — Backend math + resolver + types + SDL [CHECKPOINT]
+
+Files:
+
+- `cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts`
+- `cloud/apps/api/tests/services/pressure-sensitivity/aggregation.test.ts`
+- `cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts`
+- `cloud/apps/api/src/graphql/types/pressure-sensitivity.ts`
+- `cloud/apps/api/tests/graphql/queries/pressure-sensitivity.test.ts`
+- `cloud/apps/web/schema.graphql`
+
+Work:
+
+- Add `pooledDirectionalReduction(grid, minN)`.
+- Add `summarizePressureResponse(values)`.
+- Remove obsolete v1 reducers and summary helpers.
+- Add `PressureResponse` and `PressureResponseSummary` Pothos types.
+- Add first/second token+label fields.
+- Remove per-pair `winRateDelta` and top-level per-pair `qualifyingTrials`; `qualifyingTrials` lives only under `pressureResponse`.
+- Rename `directionalSanityCheck.breakdown[].winRateDelta` to a non-v1 field such as `pressureResponse`, and update the sanity-check resolver/tests to use that name.
+- Remove `ownToken` / `opponentToken` from the v2 pair shape; `firstValueToken` / `secondValueToken` are the only orientation fields.
+- Add `pressureConditionExcludedCount` and breakdown fields.
+- Remove existing `excludedScenariosCount` and per-pair `definitionsExcluded` from the pressure-sensitivity schema.
+- Preserve `transcriptCapHit` and `source_run_collision` warning behavior.
+- Keep source-run collision resolution deterministic by preserving the resolver's current run precedence: eligible runs are ordered by database `id asc`, `buildSourceRunToDefIdMap` applies last-write-wins in that run order, and source-run IDs inside a single run keep their existing config order. Add a test that shuffled eligible-run input is normalized to the same `id asc` winner and warning.
+- Add a resolver test for overlapping pressure-condition exclusion branches: one scored transcript fixture must be capable of matching more than one drop path, then assert exactly one bucket increments, the bucket follows documented precedence, and `pressureConditionExcludedCount` increases by exactly 1.
+- Regenerate SDL.
+
+Verification:
+
+```bash
+cd cloud
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank_test?pgbouncer=true" JWT_SECRET="test-secret-that-is-at-least-32-characters-long" npm run test --workspace @valuerank/api -- pressure-sensitivity
+npx turbo build --filter=@valuerank/api
+grep -RE "winRateDelta|winRateDeltaSummary|pairsPositive|excludedScenariosCount|definitionsExcluded|ownToken|opponentToken|WinRateDelta|WinRateDeltaSummary" apps/api packages workers apps/web/schema.graphql --include='*.ts' --include='*.graphql'
+```
+
+The grep must return zero matches.
+
+API GraphQL tests must execute the updated pressure-sensitivity selection against the resolver shape so SDL/codegen/build success cannot hide a runtime nullability or field-name mismatch.
+
+### Slice B — Web operation + codegen + derived types [CHECKPOINT]
+
+Files:
+
+- `cloud/apps/web/src/api/operations/pressureSensitivity.graphql`
+- `cloud/apps/web/src/api/operations/pressureSensitivity.ts`
+- `cloud/apps/web/src/generated/graphql.ts`
+
+Work:
+
+- Query `pressureResponse` and `pressureResponseSummary`.
+- Query first/second fields and pressure-condition exclusion fields.
+- Stop querying v1 `winRateDelta`, `winRateDeltaSummary`, `pairsPositive`, top-level per-pair `qualifyingTrials`, `ownToken`, `opponentToken`, `excludedScenariosCount`, and per-pair `definitionsExcluded`.
+- Regenerate web GraphQL types.
+
+Verification:
+
+```bash
+cd cloud
+npm run codegen --workspace @valuerank/web
+npx turbo build --filter=@valuerank/api
+grep -RE "winRateDelta|winRateDeltaSummary|pairsPositive|excludedScenariosCount|definitionsExcluded|ownToken|opponentToken|WinRateDelta|WinRateDeltaSummary" apps/web/src/api/operations apps/web/src/generated --include='*.ts' --include='*.graphql'
+```
+
+The grep must return zero matches so the operation and generated types cannot keep stale v1 sensitivity, orientation, or exclusion fields. Add a targeted generated-type or operation assertion for top-level per-pair `qualifyingTrials`, because `pressureResponse.qualifyingTrials` is still required.
+
+### Slice C — Web components + tests [CHECKPOINT]
+
+Files:
+
+- `cloud/apps/web/src/components/models/PressureSensitivitySummary.tsx`
+- `cloud/apps/web/src/components/models/PressureSensitivityDetail.tsx`
+- `cloud/apps/web/src/components/models/PressureSensitivityCrossValueMap.tsx`
+- `cloud/apps/web/src/components/models/PressureGrid.tsx`
+- `cloud/apps/web/src/components/models/PressureSensitivitySanityCheck.tsx`
+- `cloud/apps/web/src/components/models/PressureSensitivityLimitations.tsx`
+- `cloud/apps/web/src/components/models/pressureSensitivityFormatting.ts`
+- `cloud/apps/web/src/pages/PressureSensitivity.tsx`
+- Related component tests.
+
+Work:
+
+- Rebuild cross-model table as Model + Pressure response.
+- Cross-model response cell format is exactly `{mean} pp · range across this model's pairs: [{rangeMin}, {rangeMax}]`; do not use CI or plus/minus notation.
+- Replace legacy visible metric labels, including `Win rate Delta`, `Win rate Δ ± CI`, `Low pressure`, and `High pressure`, with the v2 labels `Pressure response`, `Baseline`, `Push toward first`, and `Push toward other`.
+- Remove the existing summary sort toggle and header click handler; model rows stay sorted by Pressure response descending.
+- Rebuild per-pair table with Baseline, Push toward first, Push toward other, Pressure response, Trials.
+- Render Trials from `pressureResponse.qualifyingTrials`, not the legacy pair-level `n`.
+- When `pressureResponse.qualifyingTrials !== n`, show the secondary audit copy `{qualifyingTrials} of {n} scored trials used` in row hover/detail copy.
+- Keep the Trials tooltip aligned with the approved copy: it names Baseline, Push toward first, and Push toward other as included pools, and says the Pressure response CI uses only the two directional pools.
+- Preserve row click drilldown into the existing 5x5 `PressureGrid`, and update the grid display contract to use canonical first/second labels instead of stale own/opponent display assumptions.
+- Add negative red+`▼` rendering and neutral exact-zero rendering.
+- Assert exact-zero summary and detail cells use neutral styling and render as `0.0 pp`, not positive or negative.
+- Update signed cross-value map.
+- Update sanity-check field reads and labels to use the renamed Pressure response payload, not `winRateDelta`.
+- Update intro and limitations copy.
+- Render pressure-condition exclusion warning when nonzero.
+- Render transcript-cap warning above the report tables when `transcriptCapHit` is true.
+- Render pressure-condition exclusion copy in the existing coverage/limitations area exactly as specified in the spec. If `transcriptCapHit` is true, append: `This count is a lower bound because the transcript scan was capped.`
+- Preserve the no-measured-pairs footer path: models with no defined `pressureResponse` values stay in `insufficient[]`, not the ranked table, with null summary fields and `pairsMeasured = 0`.
+- Update tests.
+
+Verification:
+
+```bash
+cd cloud
+npm run test --workspace @valuerank/web -- PressureSensitivity
+npx turbo build --filter=@valuerank/web
+grep -RE "winRateDelta|winRateDeltaSummary|pairsPositive|excludedScenariosCount|definitionsExcluded|ownToken|opponentToken|WinRateDelta|WinRateDeltaSummary" . --include='*.ts' --include='*.tsx' --include='*.graphql'
+```
+
+The legacy field grep must return zero matches across `cloud/`, including generated code.
+
+Component tests must include a mixed-count row where `qualifyingTrials < n` and assert both the visible Trials value and `{qualifyingTrials} of {n} scored trials used` audit copy. Page-level tests must render both `transcriptCapHit` and `pressureConditionExcludedCount` and assert the exclusion warning includes the lower-bound sentence. Summary tests must assert row order is fixed descending by Pressure response and cannot be reversed by clicking the header. Aggregation or page tests must include a no-measured-pairs model and assert it renders in `insufficient[]`, not the ranked table, with null summary fields and `pairsMeasured = 0`. Cross-value map and detail-table tests must assert signed title and accessible-label text for positive, zero, and negative Pressure response values.
+
+## Residual Risks
+
+- **Small sensitivity sample.** The sensitivity check covers 10 sampled model/pair cases, not the full corpus.  
+  **verification:** keep `sensitivity-check-results.md` in the PR and ensure limitations copy says default is a middle-ground rule, not proof of stability.
+
+- **Sparse pairs can move equal-weight means.** Each measured pair has equal model-level weight.  
+  **verification:** component tests assert the range annotation renders, and limitations copy warns that wide range means pair-to-pair variation.
+
+- **Atomic schema cutover can break if partial.** API and web must land together.  
+  **verification:** run API build, web codegen, web build, and final grep before push; list all commands in PR body.
+
+- **Exclusion counts may double count if branch precedence is wrong.** New breakdown spans several resolver exits.  
+  **verification:** resolver tests cover each bucket and an unscored/refusal case that must not increment pressure-condition exclusions.
+
+- **Exclusion counts become lower bounds on capped scans.** When `transcriptCapHit` is true, any count derived from scanned transcripts is incomplete.  
+  **verification:** page-level test renders both `transcriptCapHit` and `pressureConditionExcludedCount` and asserts the warning says the exclusion count is a lower bound.
+
+- **Baseline-missing rows can be misread.** Response can be defined without baseline.  
+  **verification:** detail tests assert `baselineRate = null` renders `—` while response still renders, and tooltip copy uses `baseline-thin` text from `reason-copy.md`.
+
+- **Dropping `pairsPositive` removes sign-mix summary.** This is intentional per locked methodology because the binary classification count was removed.  
+  **verification:** summary tests assert no `pairsPositive` or legacy sign-mix summary text appears; per-pair detail and range remain available for sign-mix inspection.
+
+## Rollout
+
+- No migration.
+- No production smoke before merge because production schema is v1.
+- PR body must state that post-deploy smoke is required after Railway deploys `main`.
+
+## Open Items
+
+None. All spec decisions are locked; remaining work is implementation and verification.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+2026-04-29T17:19:48.171206Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: prompt must be at most 128 characters path=/Users/chrislaw/.codex/.tmp/plugins/plugins/build-ios-apps/.codex-plugin/plugin.json
+2026-04-29T17:19:48.171512Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: maximum of 3 prompts is supported path=/Users/chrislaw/.codex/.tmp/plugins/plugins/plugin-eval/.codex-plugin/plugin.json
+2026-04-29T17:19:48.255235Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: prompt must be at most 128 characters path=/Users/chrislaw/.codex/.tmp/plugins/plugins/build-ios-apps/.codex-plugin/plugin.json
+2026-04-29T17:19:48.255496Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: maximum of 3 prompts is supported path=/Users/chrislaw/.codex/.tmp/plugins/plugins/plugin-eval/.codex-plugin/plugin.json
+2026-04-29T17:19:49.153593Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: prompt must be at most 128 characters path=/Users/chrislaw/.codex/.tmp/plugins/plugins/build-ios-apps/.codex-plugin/plugin.json
+2026-04-29T17:19:49.153829Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: maximum of 3 prompts is supported path=/Users/chrislaw/.codex/.tmp/plugins/plugins/plugin-eval/.codex-plugin/plugin.json
+codex
+I’m checking the current API and web shapes against the plan so I can separate real risks from assumptions. Then I’ll give only findings that are backed by the provided artifacts or local code.
+exec
+/bin/zsh -lc "sed -n '1,260p' cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts" in /Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59
+ succeeded in 0ms:
+/**
+ * Pure aggregation primitives for the pressure-sensitivity report.
+ *
+ * Per spec FR-003 / FR-005 / FR-006 / FR-007 / FR-008 / FR-021. Each function is pure: no
+ * logger imports, no I/O, no globals. Designed to be called from the resolver after
+ * transcripts have been canonicalized via `resolveTranscriptDecisionModel` and bucketed
+ * into (own × opponent) cells via the value-pair helpers.
+ */
+
+import type { AssignedOutcome } from './value-pair.js';
+
+export type DecisionStrength = 'strong' | 'lean' | null;
+
+export const FLAT_DELTA_THRESHOLD = 0.02;
+
+export type Observation = {
+  outcome: AssignedOutcome;
+  strength: DecisionStrength;
+};
+
+export type CellMetrics = {
+  n: number;
+  unscoredCount: number;
+  successes: number;
+  winRate: number | null;
+  conviction: number | null;
+  netScore: number | null;
+};
+
+export type Cell = CellMetrics & {
+  ownLevel: number;
+  opponentLevel: number;
+  lowData: boolean;
+};
+
+export type WinRateDeltaResult = {
+  value: number | null;
+  ciLow: number | null;
+  ciHigh: number | null;
+  lowBandMean: number | null;
+  highBandMean: number | null;
+  reason: 'low-band-thin' | 'high-band-thin' | 'both-bands-thin' | null;
+  qualifyingTrials: number;
+};
+
+export type WinRateDeltaSummary = {
+  mean: number | null;
+  ciLow: number | null;
+  ciHigh: number | null;
+  lowBandMean: number | null;
+  highBandMean: number | null;
+  pairsMeasured: number;
+  pairsPositive: number;
+};
+
+const Z_95 = 1.96;
+const STUDENT_T_975 = [
+  12.706204736174694,
+  4.302652729749462,
+  3.182446305283708,
+  2.776445105197793,
+  2.570581835636315,
+  2.446911851144979,
+  2.364624251592784,
+  2.306004135204166,
+  2.262157162798205,
+  2.228138851986274,
+  2.200985160091638,
+  2.178812829667228,
+  2.160368656462791,
+  2.144786687917804,
+  2.131449545559776,
+  2.119905299221255,
+  2.109815577833316,
+  2.100922040241038,
+  2.093024054408309,
+  2.085963447265864,
+  2.07961384472768,
+  2.073873067904025,
+  2.068657610419049,
+  2.063898561628024,
+  2.059538552753298,
+  2.055529438642874,
+  2.051830516480285,
+  2.048407141795245,
+  2.045229642132704,
+  2.042272456301238,
+  2.039513446396408,
+  2.036933343460102,
+  2.034515297449338,
+  2.032244509317719,
+  2.030107928250342,
+  2.02809400098045,
+  2.026192463029109,
+  2.024394163911969,
+  2.022690920036761,
+  2.021075390306273,
+  2.019540970441376,
+  2.018081702818444,
+  2.016692199227824,
+  2.015367574443764,
+  2.014103388880846,
+  2.012895598919429,
+  2.011740513729765,
+  2.010634757624232,
+  2.009575237129239,
+  2.008559112100761,
+] as const;
+
+/**
+ * Compute per-cell metrics from a list of observations.
+ *
+ * - N = count of scored observations (own_picked / opponent_picked / neutral).
+ * - unscoredCount = count of refusals + unknowns (per FR-023).
+ * - winRate = `prioritized / (prioritized + deprioritized + neutral)` where prioritized = own_picked
+ *   (per FR-003b; matches `ModelValueDetailDrawer.tsx` denominator convention).
+ * - conviction = `(2*strongly + somewhat) / (strongly + somewhat)` over own_picked observations only;
+ *   undefined when there are no own_picked observations.
+ * - netScore = `(2*ownStrong + ownLean − 2*opponentStrong − opponentLean) / N`
+ *   (canonical formula from `canonicalConditionSummary.ts`).
+ *
+ * All metrics return null when undefined (e.g., N = 0).
+ */
+export function buildCellMetrics(observations: ReadonlyArray<Observation>): CellMetrics {
+  let unscoredCount = 0;
+  let ownPicked = 0;
+  let opponentPicked = 0;
+  let neutral = 0;
+  let ownStrong = 0;
+  let ownLean = 0;
+  let opponentStrong = 0;
+  let opponentLean = 0;
+
+  for (const obs of observations) {
+    if (obs.outcome === 'unscored') {
+      unscoredCount += 1;
+      continue;
+    }
+    if (obs.outcome === 'neutral') {
+      neutral += 1;
+      continue;
+    }
+    if (obs.outcome === 'own_picked') {
+      ownPicked += 1;
+      if (obs.strength === 'strong') ownStrong += 1;
+      else if (obs.strength === 'lean') ownLean += 1;
+    } else if (obs.outcome === 'opponent_picked') {
+      opponentPicked += 1;
+      if (obs.strength === 'strong') opponentStrong += 1;
+      else if (obs.strength === 'lean') opponentLean += 1;
+    }
+  }
+
+  const n = ownPicked + opponentPicked + neutral;
+
+  if (n === 0) {
+    return { n: 0, unscoredCount, successes: 0, winRate: null, conviction: null, netScore: null };
+  }
+
+  const winRate = ownPicked / n;
+  const ownPicksWithStrength = ownStrong + ownLean;
+  const conviction =
+    ownPicksWithStrength === 0 ? null : (2 * ownStrong + ownLean) / ownPicksWithStrength;
+  const netScore = (2 * ownStrong + ownLean - 2 * opponentStrong - opponentLean) / n;
+
+  return { n, unscoredCount, successes: ownPicked, winRate, conviction, netScore };
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function clamp01(value: number): number {
+  if (value < 0) return 0;
+  if (value > 1) return 1;
+  return value;
+}
+
+function sumNumbers(values: ReadonlyArray<number>): number {
+  let sum = 0;
+  for (const v of values) sum += v;
+  return sum;
+}
+
+function sampleStandardDeviation(values: ReadonlyArray<number>, mean: number): number {
+  if (values.length < 2) return 0;
+  let sumSquared = 0;
+  for (const value of values) {
+    const delta = value - mean;
+    sumSquared += delta * delta;
+  }
+  return Math.sqrt(sumSquared / (values.length - 1));
+}
+
+function normalQuantile(p: number): number {
+  if (!(p > 0 && p < 1)) return Number.NaN;
+
+  const a = [
+    -39.69683028665376,
+    220.9460984245205,
+    -275.9285104469687,
+    138.357751867269,
+    -30.66479806614716,
+    2.506628277459239,
+  ] as const;
+  const b = [
+    -54.47609879822406,
+    161.5858368580409,
+    -155.6989798598866,
+    66.80131188771972,
+    -13.28068155288572,
+  ] as const;
+  const c = [
+    -0.007784894002430293,
+    -0.3223964580411365,
+    -2.400758277161838,
+    -2.549732539343734,
+    4.374664141464968,
+    2.938163982698783,
+  ] as const;
+  const d = [
+    0.007784695709041462,
+    0.3224671290700398,
+    2.445134137142996,
+    3.754408661907416,
+  ] as const;
+  const plow = 0.02425;
+  const phigh = 1 - plow;
+
+  if (p < plow) {
+    const q = Math.sqrt(-2 * Math.log(p));
+    return (
+      (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5])
+      / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1)
+    );
+  }
+  if (p > phigh) {
+    const q = Math.sqrt(-2 * Math.log(1 - p));
+    return -(
+      (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5])
+      / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1)
+    );
+  }
+
+  const q = p - 0.5;
+  const r = q * q;
+  return (
+    (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q
+  ) / (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1);
+}
+
+function studentTQuantile(p: number, df: number): number {
+  if (!Number.isFinite(p) || !Number.isInteger(df) || df <= 0) return Number.NaN;
+  if (Math.abs(p - 0.975) < 1e-12 && df >= 1 && df <= STUDENT_T_975.length) {
+    return STUDENT_T_975[df - 1]!;
+  }
+
+  const z = normalQuantile(p);
+  if (!Number.isFinite(z)) return Number.NaN;
+  const v = df;
+
+exec
+/bin/zsh -lc "sed -n '1,260p' cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts" in /Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59
+ succeeded in 0ms:
+import { createLogger } from '@valuerank/shared';
+import { db } from '@valuerank/db';
+import { builder } from '../builder.js';
+import { runMatchesSignature } from './domain-coverage-gql-types.js';
+import { resolveTranscriptDecisionModel } from './domain/shared.js';
+import {
+  PressureSensitivityResultRef,
+  type DirectionalSanityCheckEntryShape,
+  type DirectionalSanityCheckShape,
+  type ExcludedDefinitionShape,
+  type InsufficientPressureSensitivityModelShape,
+  type PressureSensitivityModelShape,
+  type PressureSensitivityResultShape,
+  type PressureSensitivityValuePairShape,
+  type SensitivityCellShape,
+} from '../types/pressure-sensitivity.js';
+import { buildSafeLevelLookup, type DefinitionDimension } from './scenarios-utils.js';
+import { normalizeScenarioAnalysisMetadata } from '../../services/analysis/scenario-metadata.js';
+import {
+  buildCellMetrics,
+  pooledBandReduction,
+  summarizeWinRateDeltas,
+  FLAT_DELTA_THRESHOLD,
+  type Observation,
+} from '../../services/pressure-sensitivity/aggregation.js';
+import {
+  validateDefinitionForPressureSensitivity,
+  type ValidationResult,
+} from '../../services/pressure-sensitivity/definition-validation.js';
+import {
+  assignOwnOpponent,
+  assignOwnOpponentLevels,
+  canonicalOwnOpponent,
+  canonicalValuePairKey,
+  type CanonicalDirection,
+} from '../../services/pressure-sensitivity/value-pair.js';
+import {
+  buildPressureSensitivityDecisionSnapshot,
+  type PressureSensitivityDecisionSnapshot,
+} from '../../services/pressure-sensitivity/decision-snapshot.js';
+
+const log = createLogger('pressure-sensitivity');
+const MIN_N = 3;
+const TRANSCRIPT_PAGE_SIZE = 5_000;
+const TRANSCRIPT_FETCH_LIMIT = 500_000;
+
+type ModelRow = {
+  modelId: string;
+  displayName: string;
+  providerId: string;
+  provider: { id: string; name: string; displayName: string | null };
+};
+
+type RunRow = {
+  id: string;
+  config: unknown;
+  definitionId: string;
+  definition: { id: string; name: string; domainId: string | null } | null;
+};
+
+type TranscriptRow = {
+  id: string;
+  modelId: string;
+  runId: string;
+  scenarioId: string | null;
+  decisionMetadata: unknown;
+};
+
+type ScenarioRow = {
+  id: string;
+  definitionId: string;
+  content: unknown;
+  orientationFlipped: boolean;
+};
+
+type DefinitionMetadata = {
+  id: string;
+  name: string;
+  /** Definition's stored value_first.token (used to remap canonical direction). */
+  valueFirstToken: string;
+  /** Definition's stored value_second.token (used to remap canonical direction). */
+  valueSecondToken: string;
+  /** Alphabetical canonical own (sortedTokens[0]). */
+  ownToken: string;
+  /** Alphabetical canonical opponent (sortedTokens[1]). */
+  opponentToken: string;
+  pairKey: string;
+  decisionSnapshot: PressureSensitivityDecisionSnapshot;
+  ownLookup: (raw: unknown) => number | null;
+  opponentLookup: (raw: unknown) => number | null;
+  dimensions: ReadonlyArray<DefinitionDimension>;
+};
+
+type CellAccumulator = {
+  ownLevel: number;
+  opponentLevel: number;
+  observations: Observation[];
+};
+
+type PairAccumulator = {
+  pairKey: string;
+  ownToken: string;
+  opponentToken: string;
+  cells: Map<string, CellAccumulator>;
+  definitionsMeasured: Set<string>;
+  definitionsExcluded: Set<string>;
+};
+
+function cellKey(ownLevel: number, opponentLevel: number): string {
+  return `${ownLevel}::${opponentLevel}`;
+}
+
+function strengthFromCanonical(strength: 'strong' | 'lean' | 'neutral' | 'unknown'): 'strong' | 'lean' | null {
+  if (strength === 'strong') return 'strong';
+  if (strength === 'lean') return 'lean';
+  return null;
+}
+
+/**
+ * Aggregate-tagged runs are pooling views over a set of source runs; transcripts live on
+ * the source runs, not the aggregate run itself. Pull the source-run IDs out of the aggregate
+ * run's config (`config.sourceRunIds`) so we can fetch transcripts from the right place.
+ */
+function extractSourceRunIds(config: unknown): string[] {
+  if (config === null || typeof config !== 'object') return [];
+  const sourceRunIds = (config as { sourceRunIds?: unknown }).sourceRunIds;
+  if (!Array.isArray(sourceRunIds)) return [];
+  return sourceRunIds.filter((id): id is string => typeof id === 'string' && id.length > 0);
+}
+
+type WarningLogger = {
+  warn: (data: Record<string, unknown>, message: string) => void;
+};
+
+type TranscriptPage = {
+  rows: TranscriptRow[];
+  hasMore: boolean;
+};
+
+type TranscriptPageFetcher = (cursor: { id: string } | undefined) => Promise<TranscriptPage>;
+
+export function buildSourceRunToDefIdMap(
+  eligibleRuns: ReadonlyArray<RunRow>,
+  definitionMeta: ReadonlyMap<string, DefinitionMetadata>,
+  warningLogger: WarningLogger,
+): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const run of eligibleRuns) {
+    const defId = run.definition?.id ?? run.definitionId;
+    if (!definitionMeta.has(defId)) continue;
+    for (const sourceRunId of extractSourceRunIds(run.config)) {
+      const existingDefinitionId = map.get(sourceRunId);
+      if (existingDefinitionId !== undefined && existingDefinitionId !== defId) {
+        warningLogger.warn(
+          {
+            sourceRunId,
+            existingDefinitionId,
+            newDefinitionId: defId,
+            code: 'source_run_collision',
+          },
+          'sourceRunId mapped to multiple definitions; last write wins',
+        );
+      }
+      map.set(sourceRunId, defId);
+    }
+  }
+  return map;
+}
+
+export async function fetchTranscriptsFromSourceRuns(
+  sourceRunIds: ReadonlyArray<string>,
+  rosterModelIds: ReadonlyArray<string>,
+  fetchPage: TranscriptPageFetcher,
+  warningLogger: WarningLogger,
+  limit = TRANSCRIPT_FETCH_LIMIT,
+): Promise<{ transcripts: TranscriptRow[]; transcriptCapHit: boolean }> {
+  const transcripts: TranscriptRow[] = [];
+  let cursor: { id: string } | undefined;
+  let transcriptCapHit = false;
+
+  if (sourceRunIds.length === 0 || rosterModelIds.length === 0) {
+    return { transcripts, transcriptCapHit: false };
+  }
+
+  while (transcripts.length < limit) {
+    const page = await fetchPage(cursor);
+    if (page.rows.length === 0) break;
+
+    const remaining = limit - transcripts.length;
+    if (page.rows.length > remaining) {
+      transcripts.push(...page.rows.slice(0, remaining));
+      transcriptCapHit = true;
+      break;
+    }
+
+    transcripts.push(...page.rows);
+    if (page.hasMore && transcripts.length >= limit) {
+      transcriptCapHit = true;
+      break;
+    }
+    if (!page.hasMore) break;
+
+    cursor = { id: page.rows[page.rows.length - 1]!.id };
+  }
+
+  if (transcriptCapHit) {
+    warningLogger.warn(
+      {
+        sourceRunIds: [...sourceRunIds],
+        scanned: transcripts.length,
+        limit,
+        code: 'transcript_cap_hit',
+      },
+      'Transcript fetch hit cap; results may be biased',
+    );
+  }
+
+  return { transcripts, transcriptCapHit };
+}
+
+builder.queryField('pressureSensitivity', (t) =>
+  t.field({
+    type: PressureSensitivityResultRef,
+    args: {
+      domainId: t.arg.id({ required: false }),
+      providerId: t.arg.id({ required: false }),
+      signature: t.arg.string({ required: true }),
+    },
+    resolve: async (_root, args): Promise<PressureSensitivityResultShape> => {
+      const domainId = args.domainId != null ? String(args.domainId) : null;
+      const providerId = args.providerId != null ? String(args.providerId) : null;
+      const signature = String(args.signature);
+
+      // 1. Roster
+      const activeModels = (await db.llmModel.findMany({
+        where: { status: 'ACTIVE' },
+        include: { provider: true },
+      })) as ModelRow[];
+
+      const models = providerId == null
+        ? activeModels
+        : activeModels.filter((m) =>
+          m.providerId === providerId
+          || m.provider.id === providerId
+          || m.provider.name === providerId
+          || m.provider.displayName === providerId,
+        );
+
+      // 2. Aggregate runs
+      // orderBy id:asc makes sourceRunToDefId Map.set "last write wins" deterministic
+      // across queries; without it the collision warning would point to a different
+      // winner each run (Slice A diff review finding).
+      const runs = (await db.run.findMany({
+        where: {
+          status: 'COMPLETED',
+          deletedAt: null,
+          tags: { some: { tag: { name: 'Aggregate' } } },
+          ...(domainId != null ? { definition: { domainId } } : {}),
+        },
+        include: {
+
+exec
+/bin/zsh -lc "rg -n \"winRateDelta|winRateDeltaSummary|pairsPositive|excludedScenariosCount|definitionsExcluded|ownToken|opponentToken|pressureConditionExcludedCount|pressureResponse\" cloud/apps/api cloud/apps/web --glob '"'!**/node_modules/**'"'" in /Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59
+ succeeded in 0ms:
+cloud/apps/web/schema.graphql:763:  winRateDelta: Float!
+cloud/apps/web/schema.graphql:2069:  winRateDeltaSummary: WinRateDeltaSummary!
+cloud/apps/web/schema.graphql:2075:  excludedScenariosCount: Int!
+cloud/apps/web/schema.graphql:2082:  definitionsExcluded: Int!
+cloud/apps/web/schema.graphql:2086:  opponentToken: String!
+cloud/apps/web/schema.graphql:2087:  ownToken: String!
+cloud/apps/web/schema.graphql:2091:  winRateDelta: WinRateDelta!
+cloud/apps/web/schema.graphql:3644:  pairsPositive: Int!
+cloud/apps/web/src/generated/graphql.ts:695:  winRateDelta: Scalars['Float']['output'];
+cloud/apps/web/src/generated/graphql.ts:2347:  winRateDeltaSummary: WinRateDeltaSummary;
+cloud/apps/web/src/generated/graphql.ts:2354:  excludedScenariosCount: Scalars['Int']['output'];
+cloud/apps/web/src/generated/graphql.ts:2362:  definitionsExcluded: Scalars['Int']['output'];
+cloud/apps/web/src/generated/graphql.ts:2366:  opponentToken: Scalars['String']['output'];
+cloud/apps/web/src/generated/graphql.ts:2367:  ownToken: Scalars['String']['output'];
+cloud/apps/web/src/generated/graphql.ts:2371:  winRateDelta: WinRateDelta;
+cloud/apps/web/src/generated/graphql.ts:3900:  pairsPositive: Scalars['Int']['output'];
+cloud/apps/web/src/generated/graphql.ts:4584:export type PressureSensitivityQuery = { __typename?: 'Query', pressureSensitivity: { __typename?: 'PressureSensitivityResult', excludedScenariosCount: number, transcriptCapHit: boolean, models: Array<{ __typename?: 'PressureSensitivityModel', modelId: string, label: string, providerName: string, unscoredCount: number, winRateDeltaSummary: { __typename?: 'WinRateDeltaSummary', mean?: number | null, ciLow?: number | null, ciHigh?: number | null, lowBandMean?: number | null, highBandMean?: number | null, pairsMeasured: number, pairsPositive: number }, valuePairs: Array<{ __typename?: 'PressureSensitivityValuePair', pairKey: string, ownToken: string, opponentToken: string, n: number, unscoredCount: number, definitionsMeasured: number, definitionsExcluded: number, qualifyingTrials: number, winRateDelta: { __typename?: 'WinRateDelta', value?: number | null, lowBandMean?: number | null, highBandMean?: number | null, ciLow?: number | null, ciHigh?: number | null, reason?: string | null }, grid: Array<{ __typename?: 'SensitivityCell', ownLevel: number, opponentLevel: number, n: number, unscoredCount: number, winRate?: number | null, conviction?: number | null, netScore?: number | null, lowData: boolean }> }> }>, insufficient: Array<{ __typename?: 'InsufficientPressureSensitivityModel', modelId: string, label: string, providerName: string, reason: string }>, excludedDefinitions: Array<{ __typename?: 'ExcludedDefinition', definitionId: string, name: string, reason: string }>, directionalSanityCheck: { __typename?: 'DirectionalSanityCheck', positivePct: number, flatPct: number, negativePct: number, measuredCount: number, unmeasurableCount: number, breakdown: Array<{ __typename?: 'DirectionalSanityCheckEntry', modelId: string, pairKey: string, winRateDelta: number, classification: string }> } } };
+cloud/apps/web/src/generated/graphql.ts:7080:      winRateDeltaSummary {
+cloud/apps/web/src/generated/graphql.ts:7087:        pairsPositive
+cloud/apps/web/src/generated/graphql.ts:7091:        ownToken
+cloud/apps/web/src/generated/graphql.ts:7092:        opponentToken
+cloud/apps/web/src/generated/graphql.ts:7096:        definitionsExcluded
+cloud/apps/web/src/generated/graphql.ts:7098:        winRateDelta {
+cloud/apps/web/src/generated/graphql.ts:7129:    excludedScenariosCount
+cloud/apps/web/src/generated/graphql.ts:7140:        winRateDelta
+cloud/apps/web/src/pages/PressureSensitivity.test.tsx:26:      excludedScenariosCount: 0,
+cloud/apps/web/src/pages/PressureSensitivity.test.tsx:34:          winRateDeltaSummary: {
+cloud/apps/web/src/pages/PressureSensitivity.test.tsx:41:            pairsPositive: 1,
+cloud/apps/web/src/pages/PressureSensitivity.test.tsx:46:              ownToken: 'Alpha',
+cloud/apps/web/src/pages/PressureSensitivity.test.tsx:47:              opponentToken: 'Beta',
+cloud/apps/web/src/pages/PressureSensitivity.test.tsx:51:              definitionsExcluded: 0,
+cloud/apps/web/src/pages/PressureSensitivity.test.tsx:53:              winRateDelta: {
+cloud/apps/web/src/components/models/PressureSensitivitySanityCheck.tsx:89:                  .sort((a, b) => Math.abs(b.winRateDelta) - Math.abs(a.winRateDelta))
+cloud/apps/web/src/components/models/PressureSensitivitySanityCheck.tsx:95:                        {entry.winRateDelta > 0 ? '+' : ''}
+cloud/apps/web/src/components/models/PressureSensitivitySanityCheck.tsx:96:                        {entry.winRateDelta.toFixed(3)}
+cloud/apps/web/src/components/models/PressureSensitivitySummary.test.tsx:15:  pairsPositive: number,
+cloud/apps/web/src/components/models/PressureSensitivitySummary.test.tsx:23:    winRateDeltaSummary: {
+cloud/apps/web/src/components/models/PressureSensitivitySummary.test.tsx:30:      pairsPositive,
+cloud/apps/web/src/components/models/PressureSensitivityDetail.test.tsx:8:  ownToken: string,
+cloud/apps/web/src/components/models/PressureSensitivityDetail.test.tsx:9:  opponentToken: string,
+cloud/apps/web/src/components/models/PressureSensitivityDetail.test.tsx:20:    ownToken,
+cloud/apps/web/src/components/models/PressureSensitivityDetail.test.tsx:21:    opponentToken,
+cloud/apps/web/src/components/models/PressureSensitivityDetail.test.tsx:25:    definitionsExcluded: 0,
+cloud/apps/web/src/components/models/PressureSensitivityDetail.test.tsx:27:    winRateDelta: {
+cloud/apps/web/src/components/models/PressureSensitivityDetail.test.tsx:45:    winRateDeltaSummary: {
+cloud/apps/web/src/components/models/PressureSensitivityDetail.test.tsx:52:      pairsPositive: 1,
+cloud/apps/web/src/components/models/PressureGrid.tsx:85:          Rows: <span className="font-medium">{pair.ownToken}</span> pressure (1=minimal,
+cloud/apps/web/src/components/models/PressureGrid.tsx:86:          5=full). Columns: <span className="font-medium">{pair.opponentToken}</span> pressure.
+cloud/apps/web/src/components/models/PressureSensitivityCrossValueMap.tsx:28:        const value = pair.winRateDelta.value ?? null;
+cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts:53:  pairsPositive: number;
+cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts:482:    pairsPositive: perPairWinRateDeltas.filter((delta) => delta > FLAT_DELTA_THRESHOLD).length,
+cloud/apps/web/src/components/models/PressureSensitivitySanityCheck.test.tsx:17:        winRateDelta: 0.031,
+cloud/apps/web/src/components/models/PressureSensitivitySummary.tsx:46:  const { mean, ciLow, ciHigh, pairsMeasured, pairsPositive } = summary;
+cloud/apps/web/src/components/models/PressureSensitivitySummary.tsx:66:      {glyph} {signed} ± {halfWidth.toFixed(0)} pp <span className="text-xs text-gray-500">· {pairsPositive}/{pairsMeasured} moved up</span>
+cloud/apps/web/src/components/models/PressureSensitivitySummary.tsx:76:      const aMean = a.winRateDeltaSummary.mean;
+cloud/apps/web/src/components/models/PressureSensitivitySummary.tsx:77:      const bMean = b.winRateDeltaSummary.mean;
+cloud/apps/web/src/components/models/PressureSensitivitySummary.tsx:136:            const summary = model.winRateDeltaSummary;
+cloud/apps/api/src/services/pressure-sensitivity/value-pair.ts:39: * Returns `[ownToken, opponentToken]` for the canonical assignment. Inputs are assumed to
+cloud/apps/api/src/services/pressure-sensitivity/value-pair.ts:65:  const [ownToken] = canonicalOwnOpponent(valueFirstToken, valueSecondToken);
+cloud/apps/api/src/services/pressure-sensitivity/value-pair.ts:66:  const valueFirstIsOwn = valueFirstToken.trim() === ownToken;
+cloud/apps/api/src/services/pressure-sensitivity/value-pair.ts:91:  ownToken: string,
+cloud/apps/api/src/services/pressure-sensitivity/value-pair.ts:92:  opponentToken: string,
+cloud/apps/api/src/services/pressure-sensitivity/value-pair.ts:94:  const ownTrimmed = ownToken.trim();
+cloud/apps/api/src/services/pressure-sensitivity/value-pair.ts:95:  const opponentTrimmed = opponentToken.trim();
+cloud/apps/web/src/components/models/PressureSensitivityCrossValueMap.test.tsx:12:    winRateDeltaSummary: {
+cloud/apps/web/src/components/models/PressureSensitivityCrossValueMap.test.tsx:19:      pairsPositive: 1,
+cloud/apps/web/src/components/models/PressureSensitivityCrossValueMap.test.tsx:24:        ownToken: 'Alpha',
+cloud/apps/web/src/components/models/PressureSensitivityCrossValueMap.test.tsx:25:        opponentToken: 'Beta',
+cloud/apps/web/src/components/models/PressureSensitivityCrossValueMap.test.tsx:29:        definitionsExcluded: 0,
+cloud/apps/web/src/components/models/PressureSensitivityCrossValueMap.test.tsx:31:        winRateDelta: {
+cloud/apps/web/src/components/models/PressureSensitivityCrossValueMap.test.tsx:46:  it('uses winRateDelta for the cell title and label', () => {
+cloud/apps/web/src/components/models/PressureSensitivityDetail.tsx:33:  return `${pair.ownToken} ↔ ${pair.opponentToken}`;
+cloud/apps/web/src/components/models/PressureSensitivityDetail.tsx:65:  const { value, ciLow, ciHigh, reason } = pair.winRateDelta;
+cloud/apps/web/src/components/models/PressureSensitivityDetail.tsx:92:      const aValue = a.winRateDelta.value;
+cloud/apps/web/src/components/models/PressureSensitivityDetail.tsx:93:      const bValue = b.winRateDelta.value;
+cloud/apps/web/src/components/models/PressureSensitivityDetail.tsx:159:            const { lowBandMean, highBandMean, reason } = pair.winRateDelta;
+cloud/apps/api/tests/services/pressure-sensitivity/aggregation.test.ts:247:    expect(summary.pairsPositive).toBe(2);
+cloud/apps/web/src/api/operations/pressureSensitivity.ts:27:export type PressureSensitivityWinRateDelta = NonNullable<PressureSensitivityValuePair['winRateDelta']>;
+cloud/apps/web/src/api/operations/pressureSensitivity.ts:29:  NonNullable<PressureSensitivityModel['winRateDeltaSummary']>;
+cloud/apps/web/src/api/operations/pressureSensitivity.graphql:16:      winRateDeltaSummary {
+cloud/apps/web/src/api/operations/pressureSensitivity.graphql:23:        pairsPositive
+cloud/apps/web/src/api/operations/pressureSensitivity.graphql:27:        ownToken
+cloud/apps/web/src/api/operations/pressureSensitivity.graphql:28:        opponentToken
+cloud/apps/web/src/api/operations/pressureSensitivity.graphql:32:        definitionsExcluded
+cloud/apps/web/src/api/operations/pressureSensitivity.graphql:34:        winRateDelta {
+cloud/apps/web/src/api/operations/pressureSensitivity.graphql:65:    excludedScenariosCount
+cloud/apps/web/src/api/operations/pressureSensitivity.graphql:76:        winRateDelta
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:84:  ownToken: string;
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:86:  opponentToken: string;
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:102:  ownToken: string;
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:103:  opponentToken: string;
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:106:  definitionsExcluded: Set<string>;
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:309:        const [ownToken, opponentToken] = canonicalOwnOpponent(
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:320:        const ownDim = dimensions.find((d) => typeof d.name === 'string' && d.name.trim() === ownToken);
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:321:        const opponentDim = dimensions.find((d) => typeof d.name === 'string' && d.name.trim() === opponentToken);
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:351:          ownToken,
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:352:          opponentToken,
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:369:      let excludedScenariosCount = 0;
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:451:          excludedScenariosCount += 1;
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:460:          meta.ownToken,
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:461:          meta.opponentToken,
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:513:          const winRateDelta = pooledBandReduction(grid, MIN_N);
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:516:            ownToken: acc.ownToken,
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:517:            opponentToken: acc.opponentToken,
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:518:            winRateDelta: {
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:519:              value: winRateDelta.value,
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:520:              ciLow: winRateDelta.ciLow,
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:521:              ciHigh: winRateDelta.ciHigh,
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:522:              lowBandMean: winRateDelta.lowBandMean,
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:523:              highBandMean: winRateDelta.highBandMean,
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:524:              reason: winRateDelta.reason,
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:526:            qualifyingTrials: winRateDelta.qualifyingTrials,
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:531:            definitionsExcluded: acc.definitionsExcluded.size,
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:534:          if (winRateDelta.value !== null && winRateDelta.lowBandMean !== null && winRateDelta.highBandMean !== null) {
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:535:            perPairWinRateDeltas.push(winRateDelta.value);
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:536:            perPairLowBandRates.push(winRateDelta.lowBandMean);
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:537:            perPairHighBandRates.push(winRateDelta.highBandMean);
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:540:              Math.abs(winRateDelta.value) < FLAT_DELTA_THRESHOLD
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:542:                : winRateDelta.value > 0
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:551:              winRateDelta: winRateDelta.value,
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:559:        const winRateDeltaSummary = summarizeWinRateDeltas(
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:565:        if (valuePairs.length === 0 || winRateDeltaSummary.pairsMeasured === 0) {
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:579:          winRateDeltaSummary,
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:597:          const aMean = a.winRateDeltaSummary.mean;
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:598:          const bMean = b.winRateDeltaSummary.mean;
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:609:        excludedScenariosCount,
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:631:      ownToken: meta.ownToken,
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:632:      opponentToken: meta.opponentToken,
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:635:      definitionsExcluded: new Set(),
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:667:    excludedScenariosCount: 0,
+cloud/apps/api/src/graphql/types/pressure-sensitivity.ts:31:  pairsPositive: number;
+cloud/apps/api/src/graphql/types/pressure-sensitivity.ts:36:  ownToken: string;
+cloud/apps/api/src/graphql/types/pressure-sensitivity.ts:37:  opponentToken: string;
+cloud/apps/api/src/graphql/types/pressure-sensitivity.ts:38:  winRateDelta: WinRateDeltaShape;
+cloud/apps/api/src/graphql/types/pressure-sensitivity.ts:44:  definitionsExcluded: number;
+cloud/apps/api/src/graphql/types/pressure-sensitivity.ts:51:  winRateDeltaSummary: WinRateDeltaSummaryShape;
+cloud/apps/api/src/graphql/types/pressure-sensitivity.ts:72:  winRateDelta: number;
+cloud/apps/api/src/graphql/types/pressure-sensitivity.ts:89:  excludedScenariosCount: number;
+cloud/apps/api/src/graphql/types/pressure-sensitivity.ts:151:    pairsPositive: t.exposeInt('pairsPositive'),
+cloud/apps/api/src/graphql/types/pressure-sensitivity.ts:158:    ownToken: t.exposeString('ownToken'),
+cloud/apps/api/src/graphql/types/pressure-sensitivity.ts:159:    opponentToken: t.exposeString('opponentToken'),
+cloud/apps/api/src/graphql/types/pressure-sensitivity.ts:160:    winRateDelta: t.expose('winRateDelta', { type: WinRateDeltaRef }),
+cloud/apps/api/src/graphql/types/pressure-sensitivity.ts:166:    definitionsExcluded: t.exposeInt('definitionsExcluded'),
+cloud/apps/api/src/graphql/types/pressure-sensitivity.ts:175:    winRateDeltaSummary: t.expose('winRateDeltaSummary', { type: WinRateDeltaSummaryRef }),
+cloud/apps/api/src/graphql/types/pressure-sensitivity.ts:202:    winRateDelta: t.exposeFloat('winRateDelta'),
+cloud/apps/api/src/graphql/types/pressure-sensitivity.ts:223:    excludedScenariosCount: t.exposeInt('excludedScenariosCount'),
+
+2026-04-29T17:19:53.403776Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: prompt must be at most 128 characters path=/Users/chrislaw/.codex/.tmp/plugins/plugins/build-ios-apps/.codex-plugin/plugin.json
+2026-04-29T17:19:53.404004Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: maximum of 3 prompts is supported path=/Users/chrislaw/.codex/.tmp/plugins/plugins/plugin-eval/.codex-plugin/plugin.json
+codex
+I have the current v1 schema and resolver shape in view now. I’m checking for places where the plan’s verification or scope would force unnecessary renames or miss a required edge case.
+exec
+/bin/zsh -lc "sed -n '1,280p' cloud/apps/api/src/graphql/types/pressure-sensitivity.ts" in /Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59
+ succeeded in 0ms:
+import { builder } from '../builder.js';
+
+export type SensitivityCellShape = {
+  ownLevel: number;
+  opponentLevel: number;
+  n: number;
+  successes: number;
+  unscoredCount: number;
+  winRate: number | null;
+  conviction: number | null;
+  netScore: number | null;
+  lowData: boolean;
+};
+
+export type WinRateDeltaShape = {
+  value: number | null;
+  ciLow: number | null;
+  ciHigh: number | null;
+  lowBandMean: number | null;
+  highBandMean: number | null;
+  reason: 'low-band-thin' | 'high-band-thin' | 'both-bands-thin' | null;
+};
+
+export type WinRateDeltaSummaryShape = {
+  mean: number | null;
+  ciLow: number | null;
+  ciHigh: number | null;
+  lowBandMean: number | null;
+  highBandMean: number | null;
+  pairsMeasured: number;
+  pairsPositive: number;
+};
+
+export type PressureSensitivityValuePairShape = {
+  pairKey: string;
+  ownToken: string;
+  opponentToken: string;
+  winRateDelta: WinRateDeltaShape;
+  qualifyingTrials: number;
+  n: number;
+  unscoredCount: number;
+  grid: SensitivityCellShape[];
+  definitionsMeasured: number;
+  definitionsExcluded: number;
+};
+
+export type PressureSensitivityModelShape = {
+  modelId: string;
+  label: string;
+  providerName: string;
+  winRateDeltaSummary: WinRateDeltaSummaryShape;
+  valuePairs: PressureSensitivityValuePairShape[];
+  unscoredCount: number;
+};
+
+export type InsufficientPressureSensitivityModelShape = {
+  modelId: string;
+  label: string;
+  providerName: string;
+  reason: 'no-coverage';
+};
+
+export type ExcludedDefinitionShape = {
+  definitionId: string;
+  name: string;
+  reason: string;
+};
+
+export type DirectionalSanityCheckEntryShape = {
+  modelId: string;
+  pairKey: string;
+  winRateDelta: number;
+  classification: 'positive' | 'flat' | 'negative';
+};
+
+export type DirectionalSanityCheckShape = {
+  positivePct: number;
+  flatPct: number;
+  negativePct: number;
+  measuredCount: number;
+  unmeasurableCount: number;
+  breakdown: DirectionalSanityCheckEntryShape[];
+};
+
+export type PressureSensitivityResultShape = {
+  models: PressureSensitivityModelShape[];
+  insufficient: InsufficientPressureSensitivityModelShape[];
+  excludedDefinitions: ExcludedDefinitionShape[];
+  excludedScenariosCount: number;
+  directionalSanityCheck: DirectionalSanityCheckShape;
+  transcriptCapHit: boolean;
+};
+
+const SensitivityCellRef = builder.objectRef<SensitivityCellShape>('SensitivityCell');
+const WinRateDeltaRef = builder.objectRef<WinRateDeltaShape>('WinRateDelta');
+const WinRateDeltaSummaryRef = builder.objectRef<WinRateDeltaSummaryShape>('WinRateDeltaSummary');
+const PressureSensitivityValuePairRef = builder.objectRef<PressureSensitivityValuePairShape>(
+  'PressureSensitivityValuePair',
+);
+const PressureSensitivityModelRef = builder.objectRef<PressureSensitivityModelShape>(
+  'PressureSensitivityModel',
+);
+const InsufficientPressureSensitivityModelRef = builder.objectRef<
+  InsufficientPressureSensitivityModelShape
+>('InsufficientPressureSensitivityModel');
+const ExcludedDefinitionRef = builder.objectRef<ExcludedDefinitionShape>('ExcludedDefinition');
+const DirectionalSanityCheckEntryRef = builder.objectRef<DirectionalSanityCheckEntryShape>(
+  'DirectionalSanityCheckEntry',
+);
+const DirectionalSanityCheckRef = builder.objectRef<DirectionalSanityCheckShape>(
+  'DirectionalSanityCheck',
+);
+
+export const PressureSensitivityResultRef = builder.objectRef<PressureSensitivityResultShape>(
+  'PressureSensitivityResult',
+);
+
+builder.objectType(SensitivityCellRef, {
+  fields: (t) => ({
+    ownLevel: t.exposeInt('ownLevel'),
+    opponentLevel: t.exposeInt('opponentLevel'),
+    n: t.exposeInt('n'),
+    successes: t.exposeInt('successes'),
+    unscoredCount: t.exposeInt('unscoredCount'),
+    winRate: t.exposeFloat('winRate', { nullable: true }),
+    conviction: t.exposeFloat('conviction', { nullable: true }),
+    netScore: t.exposeFloat('netScore', { nullable: true }),
+    lowData: t.exposeBoolean('lowData'),
+  }),
+});
+
+builder.objectType(WinRateDeltaRef, {
+  fields: (t) => ({
+    value: t.exposeFloat('value', { nullable: true }),
+    ciLow: t.exposeFloat('ciLow', { nullable: true }),
+    ciHigh: t.exposeFloat('ciHigh', { nullable: true }),
+    lowBandMean: t.exposeFloat('lowBandMean', { nullable: true }),
+    highBandMean: t.exposeFloat('highBandMean', { nullable: true }),
+    reason: t.exposeString('reason', { nullable: true }),
+  }),
+});
+
+builder.objectType(WinRateDeltaSummaryRef, {
+  fields: (t) => ({
+    mean: t.exposeFloat('mean', { nullable: true }),
+    ciLow: t.exposeFloat('ciLow', { nullable: true }),
+    ciHigh: t.exposeFloat('ciHigh', { nullable: true }),
+    lowBandMean: t.exposeFloat('lowBandMean', { nullable: true }),
+    highBandMean: t.exposeFloat('highBandMean', { nullable: true }),
+    pairsMeasured: t.exposeInt('pairsMeasured'),
+    pairsPositive: t.exposeInt('pairsPositive'),
+  }),
+});
+
+builder.objectType(PressureSensitivityValuePairRef, {
+  fields: (t) => ({
+    pairKey: t.exposeString('pairKey'),
+    ownToken: t.exposeString('ownToken'),
+    opponentToken: t.exposeString('opponentToken'),
+    winRateDelta: t.expose('winRateDelta', { type: WinRateDeltaRef }),
+    qualifyingTrials: t.exposeInt('qualifyingTrials'),
+    n: t.exposeInt('n'),
+    unscoredCount: t.exposeInt('unscoredCount'),
+    grid: t.expose('grid', { type: [SensitivityCellRef] }),
+    definitionsMeasured: t.exposeInt('definitionsMeasured'),
+    definitionsExcluded: t.exposeInt('definitionsExcluded'),
+  }),
+});
+
+builder.objectType(PressureSensitivityModelRef, {
+  fields: (t) => ({
+    modelId: t.exposeString('modelId'),
+    label: t.exposeString('label'),
+    providerName: t.exposeString('providerName'),
+    winRateDeltaSummary: t.expose('winRateDeltaSummary', { type: WinRateDeltaSummaryRef }),
+    valuePairs: t.expose('valuePairs', { type: [PressureSensitivityValuePairRef] }),
+    unscoredCount: t.exposeInt('unscoredCount'),
+  }),
+});
+
+builder.objectType(InsufficientPressureSensitivityModelRef, {
+  fields: (t) => ({
+    modelId: t.exposeString('modelId'),
+    label: t.exposeString('label'),
+    providerName: t.exposeString('providerName'),
+    reason: t.exposeString('reason'),
+  }),
+});
+
+builder.objectType(ExcludedDefinitionRef, {
+  fields: (t) => ({
+    definitionId: t.exposeString('definitionId'),
+    name: t.exposeString('name'),
+    reason: t.exposeString('reason'),
+  }),
+});
+
+builder.objectType(DirectionalSanityCheckEntryRef, {
+  fields: (t) => ({
+    modelId: t.exposeString('modelId'),
+    pairKey: t.exposeString('pairKey'),
+    winRateDelta: t.exposeFloat('winRateDelta'),
+    classification: t.exposeString('classification'),
+  }),
+});
+
+builder.objectType(DirectionalSanityCheckRef, {
+  fields: (t) => ({
+    positivePct: t.exposeFloat('positivePct'),
+    flatPct: t.exposeFloat('flatPct'),
+    negativePct: t.exposeFloat('negativePct'),
+    measuredCount: t.exposeInt('measuredCount'),
+    unmeasurableCount: t.exposeInt('unmeasurableCount'),
+    breakdown: t.expose('breakdown', { type: [DirectionalSanityCheckEntryRef] }),
+  }),
+});
+
+builder.objectType(PressureSensitivityResultRef, {
+  fields: (t) => ({
+    models: t.expose('models', { type: [PressureSensitivityModelRef] }),
+    insufficient: t.expose('insufficient', { type: [InsufficientPressureSensitivityModelRef] }),
+    excludedDefinitions: t.expose('excludedDefinitions', { type: [ExcludedDefinitionRef] }),
+    excludedScenariosCount: t.exposeInt('excludedScenariosCount'),
+    directionalSanityCheck: t.expose('directionalSanityCheck', { type: DirectionalSanityCheckRef }),
+    transcriptCapHit: t.exposeBoolean('transcriptCapHit'),
+  }),
+});
+
+exec
+/bin/zsh -lc "sed -n '260,720p' cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts" in /Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59
+ succeeded in 0ms:
+        include: {
+          definition: { select: { id: true, name: true, domainId: true } },
+        },
+        orderBy: { id: 'asc' },
+      })) as RunRow[];
+
+      // 3. Signature filter
+      const eligibleRuns = runs.filter((r) => runMatchesSignature(r.config, signature));
+      if (eligibleRuns.length === 0) {
+        return buildEmptyResult(models);
+      }
+
+      // 4. Distinct definitions → validation
+      const distinctDefIds = new Set<string>();
+      const defNames = new Map<string, string>();
+      for (const r of eligibleRuns) {
+        if (r.definition?.id != null) {
+          distinctDefIds.add(r.definition.id);
+          defNames.set(r.definition.id, r.definition.name);
+        } else {
+          distinctDefIds.add(r.definitionId);
+        }
+      }
+
+      const definitionMeta = new Map<string, DefinitionMetadata>();
+      const excludedDefinitions: ExcludedDefinitionShape[] = [];
+
+      for (const defId of distinctDefIds) {
+        const validation: ValidationResult = await validateDefinitionForPressureSensitivity(defId);
+        if (validation.status === 'excluded') {
+          excludedDefinitions.push({
+            definitionId: defId,
+            name: defNames.get(defId) ?? defId,
+            reason: validation.reason,
+          });
+          continue;
+        }
+
+        const content = validation.resolvedContent;
+        const components = content.components;
+        if (!components) {
+          excludedDefinitions.push({ definitionId: defId, name: defNames.get(defId) ?? defId, reason: 'missing-or-self-pair-tokens' });
+          continue;
+        }
+        const pairKey = canonicalValuePairKey(components.value_first.token, components.value_second.token);
+        if (pairKey === null) {
+          excludedDefinitions.push({ definitionId: defId, name: defNames.get(defId) ?? defId, reason: 'missing-or-self-pair-tokens' });
+          continue;
+        }
+        const [ownToken, opponentToken] = canonicalOwnOpponent(
+          components.value_first.token,
+          components.value_second.token,
+        );
+
+        const dimensions: DefinitionDimension[] = (content.dimensions ?? []).map((d) => ({
+          name: d.name,
+          levels: d.levels,
+          values: d.values,
+        }));
+
+        const ownDim = dimensions.find((d) => typeof d.name === 'string' && d.name.trim() === ownToken);
+        const opponentDim = dimensions.find((d) => typeof d.name === 'string' && d.name.trim() === opponentToken);
+        if (!ownDim || !opponentDim) {
+          excludedDefinitions.push({ definitionId: defId, name: defNames.get(defId) ?? defId, reason: 'missing-or-empty-levels' });
+          continue;
+        }
+
+        const ownLookupResult = buildSafeLevelLookup(ownDim);
+        const opponentLookupResult = buildSafeLevelLookup(opponentDim);
+        if (ownLookupResult.exclusionReason !== null || opponentLookupResult.exclusionReason !== null) {
+          const reason = ownLookupResult.exclusionReason ?? opponentLookupResult.exclusionReason;
+          const mapped =
+            reason === 'collision' ? 'normalization-collision'
+            : reason === 'out-of-range' ? 'score-out-of-range'
+            : reason === 'legacy-values-only' ? 'legacy-single-dimension'
+            : 'missing-or-empty-levels';
+          excludedDefinitions.push({ definitionId: defId, name: defNames.get(defId) ?? defId, reason: mapped });
+          continue;
+        }
+
+        const decisionSnapshot = buildPressureSensitivityDecisionSnapshot(content);
+        if (decisionSnapshot === null) {
+          excludedDefinitions.push({ definitionId: defId, name: defNames.get(defId) ?? defId, reason: 'missing-or-self-pair-tokens' });
+          continue;
+        }
+
+        definitionMeta.set(defId, {
+          id: defId,
+          name: defNames.get(defId) ?? defId,
+          valueFirstToken: components.value_first.token,
+          valueSecondToken: components.value_second.token,
+          ownToken,
+          opponentToken,
+          pairKey,
+          decisionSnapshot,
+          ownLookup: ownLookupResult.lookup,
+          opponentLookup: opponentLookupResult.lookup,
+          dimensions,
+        });
+      }
+
+      // 5. Stream transcripts from the SOURCE runs of each Aggregate-tagged run.
+      // Aggregate runs are pooling views — they own metadata (perScenario summaries) but
+      // the raw transcripts live on the runs listed in `config.sourceRunIds`. Fetching
+      // transcripts WHERE runId IN aggregateRunIds returns 0 rows; the production smoke
+      // test on PR #770 caught this.
+      const sourceRunToDefId = buildSourceRunToDefIdMap(eligibleRuns, definitionMeta, log);
+      const sourceRunIds = [...sourceRunToDefId.keys()];
+      const rosterModelIds = models.map((m) => m.modelId);
+      let excludedScenariosCount = 0;
+
+      // Pre-fetch the scenarios for eligible Definitions ONCE into a map. Each scenario's
+      // content + orientationFlipped is the same across thousands of transcripts, so joining
+      // on transcript blew up the response payload past Prisma's napi String limit.
+      const eligibleDefIds = [...definitionMeta.keys()];
+      const scenarioRows = eligibleDefIds.length === 0
+        ? []
+        : ((await db.scenario.findMany({
+          where: { definitionId: { in: eligibleDefIds }, deletedAt: null },
+          select: { id: true, definitionId: true, content: true, orientationFlipped: true },
+        })) as ScenarioRow[]);
+      const scenarioById = new Map<string, ScenarioRow>();
+      for (const s of scenarioRows) scenarioById.set(s.id, s);
+
+      const { transcripts, transcriptCapHit } = await fetchTranscriptsFromSourceRuns(
+        sourceRunIds,
+        rosterModelIds,
+        async (cursor) => {
+          const page = (await db.transcript.findMany({
+            where: {
+              runId: { in: sourceRunIds },
+              modelId: { in: rosterModelIds },
+              deletedAt: null,
+            },
+            select: {
+              id: true,
+              modelId: true,
+              runId: true,
+              scenarioId: true,
+              decisionMetadata: true,
+            },
+            orderBy: { id: 'asc' },
+            take: TRANSCRIPT_PAGE_SIZE + 1,
+            ...(cursor ? { skip: 1, cursor } : {}),
+          })) as TranscriptRow[];
+          // Fetch one extra row to detect "more available" without false-positives
+          // on exact-multiple page boundaries (Slice A diff review finding).
+          const hasMore = page.length > TRANSCRIPT_PAGE_SIZE;
+          return { rows: hasMore ? page.slice(0, TRANSCRIPT_PAGE_SIZE) : page, hasMore };
+        },
+        log,
+      );
+
+      // 6-8. Bucket transcripts via the sourceRun → definitionId map built above.
+      const perModel = new Map<string, Map<string, PairAccumulator>>();
+      for (const m of models) perModel.set(m.modelId, new Map());
+
+      for (const tx of transcripts) {
+        const defId = sourceRunToDefId.get(tx.runId);
+        if (defId == null) continue;
+        const meta = definitionMeta.get(defId);
+        if (!meta) continue;
+        const scenario = tx.scenarioId != null ? scenarioById.get(tx.scenarioId) ?? null : null;
+
+        const decision = resolveTranscriptDecisionModel({
+          decisionMetadata: tx.decisionMetadata,
+          definitionSnapshot: meta.decisionSnapshot,
+          orientationFlipped: scenario?.orientationFlipped ?? null,
+        });
+        const direction = decision.canonical.direction as CanonicalDirection;
+
+        const outcome = assignOwnOpponent(
+          meta.valueFirstToken,
+          meta.valueSecondToken,
+          direction,
+        );
+
+        const strength = strengthFromCanonical(decision.canonical.strength);
+
+        const pairAcc = ensurePairAccumulator(perModel, tx.modelId, meta);
+        pairAcc.definitionsMeasured.add(defId);
+
+        if (outcome === 'unscored') {
+          const unscoredCell = ensureUnscoredCell(pairAcc);
+          unscoredCell.observations.push({ outcome, strength });
+          continue;
+        }
+
+        if (scenario == null) continue;
+        const normalized = normalizeScenarioAnalysisMetadata(scenario.content);
+        if (normalized === null) {
+          excludedScenariosCount += 1;
+          continue;
+        }
+
+        const levels = assignOwnOpponentLevels(
+          meta.dimensions,
+          normalized.groupingDimensions,
+          meta.ownLookup,
+          meta.opponentLookup,
+          meta.ownToken,
+          meta.opponentToken,
+        );
+        if (levels === null) continue;
+
+        const key = cellKey(levels.ownLevel, levels.opponentLevel);
+        let cell = pairAcc.cells.get(key);
+        if (!cell) {
+          cell = { ownLevel: levels.ownLevel, opponentLevel: levels.opponentLevel, observations: [] };
+          pairAcc.cells.set(key, cell);
+        }
+        cell.observations.push({ outcome, strength });
+      }
+
+      // 9-13. Build per-model output.
+      const outputModels: PressureSensitivityModelShape[] = [];
+      const insufficient: InsufficientPressureSensitivityModelShape[] = [];
+      const sanityBreakdown: DirectionalSanityCheckEntryShape[] = [];
+      let sanityPositive = 0;
+      let sanityFlat = 0;
+      let sanityNegative = 0;
+      let sanityUnmeasurable = 0;
+
+      for (const model of models) {
+        const pairs = perModel.get(model.modelId) ?? new Map<string, PairAccumulator>();
+        const valuePairs: PressureSensitivityValuePairShape[] = [];
+        let modelUnscored = 0;
+        const perPairWinRateDeltas: number[] = [];
+        const perPairLowBandRates: number[] = [];
+        const perPairHighBandRates: number[] = [];
+
+        for (const acc of pairs.values()) {
+          const grid: SensitivityCellShape[] = [];
+          let pairN = 0;
+          let pairUnscored = 0;
+          for (const [, cellAcc] of acc.cells) {
+            const metrics = buildCellMetrics(cellAcc.observations);
+            pairN += metrics.n;
+            pairUnscored += metrics.unscoredCount;
+            grid.push({
+              ownLevel: cellAcc.ownLevel,
+              opponentLevel: cellAcc.opponentLevel,
+              n: metrics.n,
+              successes: metrics.successes,
+              unscoredCount: metrics.unscoredCount,
+              winRate: metrics.winRate,
+              conviction: metrics.conviction,
+              netScore: metrics.netScore,
+              lowData: metrics.n < MIN_N,
+            });
+          }
+          modelUnscored += pairUnscored;
+
+          const winRateDelta = pooledBandReduction(grid, MIN_N);
+          valuePairs.push({
+            pairKey: acc.pairKey,
+            ownToken: acc.ownToken,
+            opponentToken: acc.opponentToken,
+            winRateDelta: {
+              value: winRateDelta.value,
+              ciLow: winRateDelta.ciLow,
+              ciHigh: winRateDelta.ciHigh,
+              lowBandMean: winRateDelta.lowBandMean,
+              highBandMean: winRateDelta.highBandMean,
+              reason: winRateDelta.reason,
+            },
+            qualifyingTrials: winRateDelta.qualifyingTrials,
+            n: pairN,
+            unscoredCount: pairUnscored,
+            grid,
+            definitionsMeasured: acc.definitionsMeasured.size,
+            definitionsExcluded: acc.definitionsExcluded.size,
+          });
+
+          if (winRateDelta.value !== null && winRateDelta.lowBandMean !== null && winRateDelta.highBandMean !== null) {
+            perPairWinRateDeltas.push(winRateDelta.value);
+            perPairLowBandRates.push(winRateDelta.lowBandMean);
+            perPairHighBandRates.push(winRateDelta.highBandMean);
+
+            const classification: 'positive' | 'flat' | 'negative' =
+              Math.abs(winRateDelta.value) < FLAT_DELTA_THRESHOLD
+                ? 'flat'
+                : winRateDelta.value > 0
+                  ? 'positive'
+                  : 'negative';
+            if (classification === 'positive') sanityPositive += 1;
+            else if (classification === 'flat') sanityFlat += 1;
+            else sanityNegative += 1;
+            sanityBreakdown.push({
+              modelId: model.modelId,
+              pairKey: acc.pairKey,
+              winRateDelta: winRateDelta.value,
+              classification,
+            });
+          } else {
+            sanityUnmeasurable += 1;
+          }
+        }
+
+        const winRateDeltaSummary = summarizeWinRateDeltas(
+          perPairWinRateDeltas,
+          perPairLowBandRates,
+          perPairHighBandRates,
+        );
+
+        if (valuePairs.length === 0 || winRateDeltaSummary.pairsMeasured === 0) {
+          insufficient.push({
+            modelId: model.modelId,
+            label: model.displayName,
+            providerName: model.provider.displayName ?? model.provider.name,
+            reason: 'no-coverage',
+          });
+          continue;
+        }
+
+        outputModels.push({
+          modelId: model.modelId,
+          label: model.displayName,
+          providerName: model.provider.displayName ?? model.provider.name,
+          winRateDeltaSummary,
+          valuePairs: valuePairs.sort((a, b) => a.pairKey.localeCompare(b.pairKey)),
+          unscoredCount: modelUnscored,
+        });
+      }
+
+      const measuredCount = sanityPositive + sanityFlat + sanityNegative;
+      const directionalSanityCheck: DirectionalSanityCheckShape = {
+        positivePct: measuredCount === 0 ? 0 : (sanityPositive / measuredCount) * 100,
+        flatPct: measuredCount === 0 ? 0 : (sanityFlat / measuredCount) * 100,
+        negativePct: measuredCount === 0 ? 0 : (sanityNegative / measuredCount) * 100,
+        measuredCount,
+        unmeasurableCount: sanityUnmeasurable,
+        breakdown: sanityBreakdown,
+      };
+
+      return {
+        models: outputModels.sort((a, b) => {
+          const aMean = a.winRateDeltaSummary.mean;
+          const bMean = b.winRateDeltaSummary.mean;
+          if (aMean === null && bMean === null) {
+            return a.label.localeCompare(b.label);
+          }
+          if (aMean === null) return 1;
+          if (bMean === null) return -1;
+          if (bMean !== aMean) return bMean - aMean;
+          return a.label.localeCompare(b.label);
+        }),
+        insufficient,
+        excludedDefinitions,
+        excludedScenariosCount,
+        directionalSanityCheck,
+        transcriptCapHit,
+      };
+    },
+  }),
+);
+
+function ensurePairAccumulator(
+  perModel: Map<string, Map<string, PairAccumulator>>,
+  modelId: string,
+  meta: DefinitionMetadata,
+): PairAccumulator {
+  let pairs = perModel.get(modelId);
+  if (!pairs) {
+    pairs = new Map();
+    perModel.set(modelId, pairs);
+  }
+  let acc = pairs.get(meta.pairKey);
+  if (!acc) {
+    acc = {
+      pairKey: meta.pairKey,
+      ownToken: meta.ownToken,
+      opponentToken: meta.opponentToken,
+      cells: new Map(),
+      definitionsMeasured: new Set(),
+      definitionsExcluded: new Set(),
+    };
+    pairs.set(meta.pairKey, acc);
+  }
+  return acc;
+}
+
+function ensureUnscoredCell(pairAcc: PairAccumulator): CellAccumulator {
+  // Unscored observations don't have a meaningful (ownLevel, opponentLevel); we use level 0/0
+  // which is outside the 1..5 range and is filtered out of band reduction and baseline.
+  const key = cellKey(0, 0);
+  let cell = pairAcc.cells.get(key);
+  if (!cell) {
+    cell = { ownLevel: 0, opponentLevel: 0, observations: [] };
+    pairAcc.cells.set(key, cell);
+  }
+  return cell;
+}
+
+export function buildEmptyResult(
+  models: ModelRow[],
+  transcriptCapHit = false,
+): PressureSensitivityResultShape {
+  return {
+    models: [],
+    insufficient: models.map((m) => ({
+      modelId: m.modelId,
+      label: m.displayName,
+      providerName: m.provider.displayName ?? m.provider.name,
+      reason: 'no-coverage',
+    })),
+    excludedDefinitions: [],
+    excludedScenariosCount: 0,
+    directionalSanityCheck: {
+      positivePct: 0,
+      flatPct: 0,
+      negativePct: 0,
+      measuredCount: 0,
+      unmeasurableCount: 0,
+      breakdown: [],
+    },
+    transcriptCapHit,
+  };
+}
+
+exec
+/bin/zsh -lc "sed -n '1,260p' cloud/apps/web/src/api/operations/pressureSensitivity.graphql" in /Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59
+ succeeded in 0ms:
+query PressureSensitivity(
+  $domainId: ID
+  $providerId: ID
+  $signature: String!
+) {
+  pressureSensitivity(
+    domainId: $domainId
+    providerId: $providerId
+    signature: $signature
+  ) {
+    models {
+      modelId
+      label
+      providerName
+      unscoredCount
+      winRateDeltaSummary {
+        mean
+        ciLow
+        ciHigh
+        lowBandMean
+        highBandMean
+        pairsMeasured
+        pairsPositive
+      }
+      valuePairs {
+        pairKey
+        ownToken
+        opponentToken
+        n
+        unscoredCount
+        definitionsMeasured
+        definitionsExcluded
+        qualifyingTrials
+        winRateDelta {
+          value
+          lowBandMean
+          highBandMean
+          ciLow
+          ciHigh
+          reason
+        }
+        grid {
+          ownLevel
+          opponentLevel
+          n
+          unscoredCount
+          winRate
+          conviction
+          netScore
+          lowData
+        }
+      }
+    }
+    insufficient {
+      modelId
+      label
+      providerName
+      reason
+    }
+    excludedDefinitions {
+      definitionId
+      name
+      reason
+    }
+    excludedScenariosCount
+    transcriptCapHit
+    directionalSanityCheck {
+      positivePct
+      flatPct
+      negativePct
+      measuredCount
+      unmeasurableCount
+      breakdown {
+        modelId
+        pairKey
+        winRateDelta
+        classification
+      }
+    }
+  }
+}
+
+2026-04-29T17:20:14.817872Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: prompt must be at most 128 characters path=/Users/chrislaw/.codex/.tmp/plugins/plugins/build-ios-apps/.codex-plugin/plugin.json
+2026-04-29T17:20:14.818233Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: maximum of 3 prompts is supported path=/Users/chrislaw/.codex/.tmp/plugins/plugins/plugin-eval/.codex-plugin/plugin.json
+codex
+I’ve got two concrete issues already. I’m pulling exact line numbers now so the review can point to the precise code that contradicts the plan.
+exec
+/bin/zsh -lc "nl -ba cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts | sed -n '500,620p'" in /Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59
+exec
+/bin/zsh -lc "nl -ba cloud/apps/api/src/services/pressure-sensitivity/value-pair.ts | sed -n '1,140p'" in /Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59
+ succeeded in 0ms:
+   500	              ownLevel: cellAcc.ownLevel,
+   501	              opponentLevel: cellAcc.opponentLevel,
+   502	              n: metrics.n,
+   503	              successes: metrics.successes,
+   504	              unscoredCount: metrics.unscoredCount,
+   505	              winRate: metrics.winRate,
+   506	              conviction: metrics.conviction,
+   507	              netScore: metrics.netScore,
+   508	              lowData: metrics.n < MIN_N,
+   509	            });
+   510	          }
+   511	          modelUnscored += pairUnscored;
+   512	
+   513	          const winRateDelta = pooledBandReduction(grid, MIN_N);
+   514	          valuePairs.push({
+   515	            pairKey: acc.pairKey,
+   516	            ownToken: acc.ownToken,
+   517	            opponentToken: acc.opponentToken,
+   518	            winRateDelta: {
+   519	              value: winRateDelta.value,
+   520	              ciLow: winRateDelta.ciLow,
+   521	              ciHigh: winRateDelta.ciHigh,
+   522	              lowBandMean: winRateDelta.lowBandMean,
+   523	              highBandMean: winRateDelta.highBandMean,
+   524	              reason: winRateDelta.reason,
+   525	            },
+   526	            qualifyingTrials: winRateDelta.qualifyingTrials,
+   527	            n: pairN,
+   528	            unscoredCount: pairUnscored,
+   529	            grid,
+   530	            definitionsMeasured: acc.definitionsMeasured.size,
+   531	            definitionsExcluded: acc.definitionsExcluded.size,
+   532	          });
+   533	
+   534	          if (winRateDelta.value !== null && winRateDelta.lowBandMean !== null && winRateDelta.highBandMean !== null) {
+   535	            perPairWinRateDeltas.push(winRateDelta.value);
+   536	            perPairLowBandRates.push(winRateDelta.lowBandMean);
+   537	            perPairHighBandRates.push(winRateDelta.highBandMean);
+   538	
+   539	            const classification: 'positive' | 'flat' | 'negative' =
+   540	              Math.abs(winRateDelta.value) < FLAT_DELTA_THRESHOLD
+   541	                ? 'flat'
+   542	                : winRateDelta.value > 0
+   543	                  ? 'positive'
+   544	                  : 'negative';
+   545	            if (classification === 'positive') sanityPositive += 1;
+   546	            else if (classification === 'flat') sanityFlat += 1;
+   547	            else sanityNegative += 1;
+   548	            sanityBreakdown.push({
+   549	              modelId: model.modelId,
+   550	              pairKey: acc.pairKey,
+   551	              winRateDelta: winRateDelta.value,
+   552	              classification,
+   553	            });
+   554	          } else {
+   555	            sanityUnmeasurable += 1;
+   556	          }
+   557	        }
+   558	
+   559	        const winRateDeltaSummary = summarizeWinRateDeltas(
+   560	          perPairWinRateDeltas,
+   561	          perPairLowBandRates,
+   562	          perPairHighBandRates,
+   563	        );
+   564	
+   565	        if (valuePairs.length === 0 || winRateDeltaSummary.pairsMeasured === 0) {
+   566	          insufficient.push({
+   567	            modelId: model.modelId,
+   568	            label: model.displayName,
+   569	            providerName: model.provider.displayName ?? model.provider.name,
+   570	            reason: 'no-coverage',
+   571	          });
+   572	          continue;
+   573	        }
+   574	
+   575	        outputModels.push({
+   576	          modelId: model.modelId,
+   577	          label: model.displayName,
+   578	          providerName: model.provider.displayName ?? model.provider.name,
+   579	          winRateDeltaSummary,
+   580	          valuePairs: valuePairs.sort((a, b) => a.pairKey.localeCompare(b.pairKey)),
+   581	          unscoredCount: modelUnscored,
+   582	        });
+   583	      }
+   584	
+   585	      const measuredCount = sanityPositive + sanityFlat + sanityNegative;
+   586	      const directionalSanityCheck: DirectionalSanityCheckShape = {
+   587	        positivePct: measuredCount === 0 ? 0 : (sanityPositive / measuredCount) * 100,
+   588	        flatPct: measuredCount === 0 ? 0 : (sanityFlat / measuredCount) * 100,
+   589	        negativePct: measuredCount === 0 ? 0 : (sanityNegative / measuredCount) * 100,
+   590	        measuredCount,
+   591	        unmeasurableCount: sanityUnmeasurable,
+   592	        breakdown: sanityBreakdown,
+   593	      };
+   594	
+   595	      return {
+   596	        models: outputModels.sort((a, b) => {
+   597	          const aMean = a.winRateDeltaSummary.mean;
+   598	          const bMean = b.winRateDeltaSummary.mean;
+   599	          if (aMean === null && bMean === null) {
+   600	            return a.label.localeCompare(b.label);
+   601	          }
+   602	          if (aMean === null) return 1;
+   603	          if (bMean === null) return -1;
+   604	          if (bMean !== aMean) return bMean - aMean;
+   605	          return a.label.localeCompare(b.label);
+   606	        }),
+   607	        insufficient,
+   608	        excludedDefinitions,
+   609	        excludedScenariosCount,
+   610	        directionalSanityCheck,
+   611	        transcriptCapHit,
+   612	      };
+   613	    },
+   614	  }),
+   615	);
+   616	
+   617	function ensurePairAccumulator(
+   618	  perModel: Map<string, Map<string, PairAccumulator>>,
+   619	  modelId: string,
+   620	  meta: DefinitionMetadata,
+
+ succeeded in 0ms:
+     1	/**
+     2	 * Value-pair canonicalization for the pressure-sensitivity report.
+     3	 *
+     4	 * Per spec FR-024:
+     5	 *  - Pair identity is the alphabetically sorted tuple of value tokens, joined by `::`.
+     6	 *  - "Own" and "opponent" within a pair are assigned alphabetically (sorted[0] / sorted[1]).
+     7	 *  - When a Definition's stored `value_first` order disagrees with canonical own, the
+     8	 *    transcript-emitted `favor_first` / `favor_second` direction is remapped before bucketing.
+     9	 *
+    10	 * Self-pairs and missing tokens collapse to null (excluded under FR-018(g) by callers).
+    11	 */
+    12	
+    13	export type CanonicalDirection =
+    14	  | 'favor_first'
+    15	  | 'favor_second'
+    16	  | 'neutral'
+    17	  | 'refusal'
+    18	  | 'unknown';
+    19	
+    20	export type AssignedOutcome = 'own_picked' | 'opponent_picked' | 'neutral' | 'unscored';
+    21	
+    22	function isNonEmptyString(value: unknown): value is string {
+    23	  return typeof value === 'string' && value.trim().length > 0;
+    24	}
+    25	
+    26	/**
+    27	 * Returns the canonical pair key (alphabetically sorted tokens joined by `::`) for a value pair.
+    28	 * Returns null for missing tokens, non-string tokens, or self-pairs.
+    29	 */
+    30	export function canonicalValuePairKey(tokenA: unknown, tokenB: unknown): string | null {
+    31	  if (!isNonEmptyString(tokenA) || !isNonEmptyString(tokenB)) return null;
+    32	  const a = tokenA.trim();
+    33	  const b = tokenB.trim();
+    34	  if (a === b) return null;
+    35	  return [a, b].sort().join('::');
+    36	}
+    37	
+    38	/**
+    39	 * Returns `[ownToken, opponentToken]` for the canonical assignment. Inputs are assumed to
+    40	 * already pass `canonicalValuePairKey`'s validation. Use this to look up which dimension
+    41	 * corresponds to "own" when extracting pressure-level scores from a scenario.
+    42	 */
+    43	export function canonicalOwnOpponent(tokenA: string, tokenB: string): [string, string] {
+    44	  const sorted = [tokenA.trim(), tokenB.trim()].sort();
+    45	  return [sorted[0]!, sorted[1]!];
+    46	}
+    47	
+    48	/**
+    49	 * Maps a transcript's canonical decision direction (which is relative to the Definition's
+    50	 * stored `value_first` / `value_second` order) to `own_picked` / `opponent_picked` / `neutral`
+    51	 * / `unscored` in canonical (alphabetical) own/opponent terms.
+    52	 *
+    53	 * If the Definition's `value_first` token is NOT the canonical own, `favor_first` and
+    54	 * `favor_second` are swapped — this is the round-4 remap fix that prevents inverted Δ
+    55	 * values for mirrored Definitions.
+    56	 */
+    57	export function assignOwnOpponent(
+    58	  valueFirstToken: string,
+    59	  valueSecondToken: string,
+    60	  canonicalDirection: CanonicalDirection,
+    61	): AssignedOutcome {
+    62	  if (canonicalDirection === 'refusal' || canonicalDirection === 'unknown') return 'unscored';
+    63	  if (canonicalDirection === 'neutral') return 'neutral';
+    64	
+    65	  const [ownToken] = canonicalOwnOpponent(valueFirstToken, valueSecondToken);
+    66	  const valueFirstIsOwn = valueFirstToken.trim() === ownToken;
+    67	
+    68	  if (canonicalDirection === 'favor_first') {
+    69	    return valueFirstIsOwn ? 'own_picked' : 'opponent_picked';
+    70	  }
+    71	  // favor_second
+    72	  return valueFirstIsOwn ? 'opponent_picked' : 'own_picked';
+    73	}
+    74	
+    75	type DefinitionDimensionLite = {
+    76	  name?: unknown;
+    77	  levels?: unknown;
+    78	};
+    79	
+    80	/**
+    81	 * Looks up the (own, opponent) pressure level pair for a scenario against its parent Definition's
+    82	 * dimensions. Matches dimensions to value tokens by `name`, regardless of `value_first`/`value_second`
+    83	 * order in the Definition. Returns null if either dimension is missing or its scenario-side value
+    84	 * cannot be resolved by the lookup.
+    85	 */
+    86	export function assignOwnOpponentLevels(
+    87	  definitionDimensions: ReadonlyArray<DefinitionDimensionLite>,
+    88	  scenarioDimensionValues: Record<string, unknown>,
+    89	  ownLookup: (rawLabel: unknown) => number | null,
+    90	  opponentLookup: (rawLabel: unknown) => number | null,
+    91	  ownToken: string,
+    92	  opponentToken: string,
+    93	): { ownLevel: number; opponentLevel: number } | null {
+    94	  const ownTrimmed = ownToken.trim();
+    95	  const opponentTrimmed = opponentToken.trim();
+    96	
+    97	  const ownDim = definitionDimensions.find(
+    98	    (d) => typeof d.name === 'string' && d.name.trim() === ownTrimmed,
+    99	  );
+   100	  const opponentDim = definitionDimensions.find(
+   101	    (d) => typeof d.name === 'string' && d.name.trim() === opponentTrimmed,
+   102	  );
+   103	  if (!ownDim || !opponentDim) return null;
+   104	
+   105	  const ownRaw = scenarioDimensionValues[ownTrimmed];
+   106	  const opponentRaw = scenarioDimensionValues[opponentTrimmed];
+   107	  if (ownRaw === undefined || opponentRaw === undefined) return null;
+   108	
+   109	  const ownLevel = ownLookup(ownRaw);
+   110	  const opponentLevel = opponentLookup(opponentRaw);
+   111	  if (ownLevel === null || opponentLevel === null) return null;
+   112	
+   113	  return { ownLevel, opponentLevel };
+   114	}
+
+exec
+/bin/zsh -lc "nl -ba docs/workflow/feature-runs/sensitivity-table-redesign-v2/spec.md | sed -n '120,260p'" in /Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59
+ succeeded in 0ms:
+   120	- **Baseline does not aggregate cleanly across pairs:** it appears only in per-pair detail.
+   121	- **Low refusal rate:** refusals stay excluded from denominators and are described in methods/limitations copy.
+   122	- **Transcript cap:** v1 diagnostic carve-out stays intact and remains user-visible through a report-level warning when `transcriptCapHit` is true.
+   123	- **Source-run collision:** v1 log warning carve-out stays intact. Collision resolution remains deterministic last-write-wins over the resolver's stable source-run ordering.
+   124	- **No measured pairs for a model:** the model stays in the existing `insufficient[]` footer rather than the ranked `models[]` table. If a summary object is constructed internally for tests, `mean`, `rangeMin`, and `rangeMax` are null and `pairsMeasured = 0`.
+   125	- **One measured pair for a model:** `pressureResponseSummary.mean`, `rangeMin`, and `rangeMax` all equal the single measured pair's response.
+   126	
+   127	---
+   128	
+   129	## Functional Requirements
+   130	
+   131	- **FR-001:** The cross-model summary MUST render exactly two columns: Model and Pressure response.
+   132	- **FR-002:** The cross-model summary MUST sort by `pressureResponseSummary.mean` descending, with model label ascending as the tie-breaker. Models with no measured pairs remain in the existing `insufficient[]` footer rather than the ranked `models[]` array.
+   133	- **FR-003:** A cross-model Pressure response cell MUST render `{mean} pp · range across this model's pairs: [{rangeMin}, {rangeMax}]`.
+   134	- **FR-004:** Cross-model range fields MUST be computed from per-pair Pressure response values as `min` and `max`. They MUST NOT be labeled or formatted as a confidence interval. When a model has no measured pairs, `mean`, `rangeMin`, and `rangeMax` MUST all be null. When a model has one measured pair, `rangeMin` and `rangeMax` MUST both equal that pair's response.
+   135	- **FR-005:** Cross-model mean MUST be an equal-weight arithmetic mean of measured per-pair Pressure responses.
+   136	- **FR-006:** Cross-model summary MUST expose `pairsMeasured`, the count of pairs with defined Pressure response.
+   137	- **FR-007:** Per-pair detail MUST render Value pair, Baseline, Push toward first, Push toward other, Pressure response, and Trials.
+   138	- **FR-008:** Per-pair default sort MUST be absolute Pressure response descending, with pair label ascending as the tie-breaker. Rows with null response sort to the bottom.
+   139	- **FR-009:** Per-pair pair labels MUST use explicit first/second fields, e.g. `Honesty ↔ Privacy`, because the directional pools depend on which value is first. The source of truth for first/second is the stable canonical pair ordering used by `canonicalValuePairKey`, not whichever order a particular vignette happened to present.
+   140	- **FR-009a:** Backend implementation MUST map every condition into that canonical first/second coordinate before pooling. Reverse-ordered vignettes may share one canonical pair row only if their condition levels are transformed into the same first/second coordinate. The implementation MUST NOT mix untransformed `A -> B` and `B -> A` conditions in the same directional pool.
+   141	- **FR-009b:** The per-pair GraphQL shape MUST add explicit fields named `firstValueToken`, `firstValueLabel`, `secondValueToken`, and `secondValueLabel`. These fields are the canonical first/second order from `canonicalValuePairKey`. Labels MUST use the same contract as `cloud/apps/web/src/utils/displayLabels.ts`: convert the token to string, replace underscores with spaces, and trim. If existing `ownToken` / `opponentToken` remain in the response, they MUST be documented and implemented as aliases of `firstValueToken` / `secondValueToken`; otherwise the v2 frontend MUST stop requesting them. The per-pair table, pressure grid label, and cross-value map MUST use the explicit first/second fields for display.
+   142	- **FR-010:** Pressure levels MUST be selected by label membership. The implementation may map labels to existing numeric levels, but it MUST NOT use integer distance as the metric definition.
+   143	- **FR-011:** Directional pool MUST include qualifying cells where first value pressure is heavy/full and second value pressure is negligible/low/moderate.
+   144	- **FR-012:** Mirror pool MUST include qualifying cells where second value pressure is heavy/full and first value pressure is negligible/low/moderate.
+   145	- **FR-013:** Baseline pool MUST include diagonal cells where both values use the same pressure label.
+   146	- **FR-014:** A cell qualifies for a pool only when `n >= MIN_N`, where `MIN_N` remains the v1 threshold of 3.
+   147	- **FR-015:** Pool win rate MUST be `sum(successes) / sum(n)` over qualifying cells, not the mean of cell win rates.
+   148	- **FR-016:** Per-pair Pressure response MUST be `pushTowardFirstRate - pushTowardSecondRate`.
+   149	- **FR-017:** Per-pair CI MUST use the existing Newcombe Method-10 diff-of-proportions helper on the two pooled binomial proportions.
+   150	- **FR-018:** Baseline appears as a point estimate in the per-pair table. It MUST NOT be averaged into a cross-model baseline headline.
+   151	- **FR-019:** Per-pair `pressureResponse.qualifyingTrials` MUST equal the sum of `n` across qualifying cells used in any displayed win-rate pool: baseline, directional, or mirror. A baseline cell contributes only when it qualifies with `n >= MIN_N`; when `baselineRate` is null, no baseline cells contribute to `qualifyingTrials`. This number is the total scored-trial support behind the row's displayed win-rate columns, not the denominator of the Pressure response CI alone. The CI denominator remains the two directional pools only.
+   152	- **FR-019a:** The per-pair detail table MUST render the Trials column from `pressureResponse.qualifyingTrials`. It MUST NOT render the legacy pair-level `n` field in that column. The pair-level raw scored trial count `n` MUST remain available as a secondary coverage signal and MUST be shown in row hover/detail copy as `{qualifyingTrials} of {n} scored trials used` when the two counts differ.
+   153	- **FR-019b:** Trials tooltip copy MUST explicitly say the count includes the Baseline, Push toward first, and Push toward other pools, and that the Pressure response CI uses only the two directional pools.
+   154	- **FR-020:** If `pressureResponse.value` is null, the frontend MUST render `—` with hover text mapped from `reason`. Copy MUST match `docs/workflow/feature-runs/sensitivity-table-redesign-v2/reason-copy.md`.
+   155	- **FR-021:** Reason values MUST be exactly: `'directional-thin'`, `'inverted-thin'`, `'baseline-thin'`, `'directional-and-inverted-thin'`, or null. Precedence MUST be: both directional pools missing -> `'directional-and-inverted-thin'`; directional pool missing -> `'directional-thin'`; mirror pool missing -> `'inverted-thin'`; only baseline pool missing -> `'baseline-thin'`; otherwise null.
+   156	- **FR-022:** Negative Pressure response values MUST render with `text-red-700` plus a leading `▼` glyph.
+   157	- **FR-022a:** Exact zero Pressure response MUST render as neutral `0 pp` with no leading glyph. Positive values may render without a glyph; negative values require `▼`.
+   158	- **FR-023:** The GraphQL schema MUST remove per-pair `winRateDelta` and top-level per-pair `qualifyingTrials` from v1 and add per-pair `pressureResponse`.
+   159	- **FR-024:** The GraphQL schema MUST remove per-model `winRateDeltaSummary` and `pairsPositive` from v1 and add per-model `pressureResponseSummary`.
+   160	- **FR-025:** `PressureResponse` MUST expose `value`, `ciLow`, `ciHigh`, `baselineRate`, `pushTowardFirstRate`, `pushTowardSecondRate`, `qualifyingTrials`, and `reason`.
+   161	- **FR-026:** `PressureResponseSummary` MUST expose `mean`, `rangeMin`, `rangeMax`, and `pairsMeasured`. `mean`, `rangeMin`, and `rangeMax` MUST be nullable floats; `pairsMeasured` MUST be a non-null integer.
+   162	- **FR-027:** The frontend GraphQL operation and generated types MUST use only the v2 fields after codegen.
+   163	- **FR-028:** The cross-value map MUST read signed `pair.pressureResponse.value` and label the metric as Pressure response. It MUST preserve direction instead of taking `Math.abs`, because negative response is meaningful in v2. Legend, color scale, cell title, and accessible label copy MUST be updated from absolute `Win rate Delta` wording to signed Pressure response wording. Visual encoding MUST be sign-aware in the cell fill itself: positive values use the positive side of a diverging scale, negative values use the negative side, and zero uses a neutral style. Cell title text MUST include the signed value, e.g. `Pressure response: -12 pp`.
+   164	- **FR-029:** The sanity check panel MUST read Pressure response values, not v1 `winRateDelta` fields. The `directionalSanityCheck.breakdown[]` payload MUST rename its numeric delta field to `pressureResponse` or an equivalent non-v1 name so final grep finds no `winRateDelta` references. Classification thresholds can remain the v1 `Delta > 0.02` thresholds, but user-facing labels must say Pressure response.
+   165	- **FR-030:** The page intro and limitations panel MUST describe Pressure response and include the cell-selection sensitivity disclosure.
+   166	- **FR-031:** Existing v1 carve-outs MUST remain intact: `transcriptCapHit`, `source_run_collision` log warning behavior, refusal exclusion, insufficient coverage surfaces, and the 5x5 pressure grid. `source_run_collision` remains a structured server log warning only; adding a user-facing GraphQL warning field is out of scope for v2.
+   167	- **FR-031a:** When `transcriptCapHit` is true, the frontend MUST render the existing report-level coverage warning before the tables so users do not read truncated results as authoritative.
+   168	- **FR-031b:** Source-run collision resolution MUST remain deterministic. The resolver MUST preserve stable source-run ordering before applying last-write-wins behavior, and tests or code review MUST verify that ordering is not removed.
+   169	- **FR-031c:** If a transcript reaches pressure-sensitivity analysis but cannot be mapped into a scored pressure condition, the resolver MUST increment a concrete top-level field named `pressureConditionExcludedCount: Int!`. This field is the authoritative total for pre-cell pressure-condition exclusions and replaces user-facing reliance on `excludedScenariosCount` for this report. Counting precedence is: unscored/refusal outcomes increment the existing unscored/refusal path and do NOT increment pressure-condition exclusions; for scored outcomes, the resolver MUST increment exactly one breakdown bucket for each drop branch. Buckets are: `sourceRunMapping` when `sourceRunToDefId.get(...)` returns null, `definitionMetadata` when `definitionMeta.get(...)` returns null, `missingScenario` when `scenario == null`, `invalidMetadata` when `normalizeScenarioAnalysisMetadata(...) === null`, and `levelAssignment` when `assignOwnOpponentLevels(...) === null`. The resolver MUST also expose `pressureConditionExclusionBreakdown: { sourceRunMapping: Int!, definitionMetadata: Int!, missingScenario: Int!, invalidMetadata: Int!, levelAssignment: Int! }`, and `pressureConditionExcludedCount` MUST equal the sum of that breakdown. The frontend MUST surface `pressureConditionExcludedCount` in the existing coverage/limitations area when nonzero using the copy: `Pressure-condition exclusions: {count} transcripts could not be mapped into the pressure grid and were excluded before scoring.` Developer/debug copy MAY include the breakdown. The transcript MUST NOT silently disappear from every audit count.
+   170	- **FR-031c-1:** `excludedScenariosCount` MUST not be requested or rendered by the v2 frontend. If it remains in the backend schema for unrelated consumers, it is legacy and not part of the v2 pressure-condition audit story.
+   171	- **FR-031d:** The v2 frontend MUST stop requesting and rendering per-pair `definitionsExcluded`. The visible coverage footer MUST not show `definitionsExcluded: 0` or any equivalent dead zero. If a future implementation makes definition exclusion accounting accurate again, it can reintroduce that field in a separate change with tests.
+   172	- **FR-032:** Verification grep after Slice A MUST find no `winRateDelta`, `winRateDeltaSummary`, or `pairsPositive` references in backend code, packages, workers, or SDL. Final verification after Slice C MUST find zero matches across `cloud/`, including generated code.
+   173	- **FR-033:** The PR MUST NOT be opened until API SDL, web operation, generated GraphQL types, API build/tests, and web build/tests all pass from the same branch head. The PR body MUST call out that this is an atomic schema cutover and that pre-merge production smoke cannot query the v2 fields until after merge/deploy. No partial API-only or web-only rollout is allowed.
+   174	
+   175	---
+   176	
+   177	## Success Criteria
+   178	
+   179	- **SC-001:** The cross-model table communicates which models have the largest Pressure response in under 30 seconds of scan time.
+   180	- **SC-002:** The v1 misleading `Win rate Delta` fields are fully removed from schema, resolver, operation, generated types, and UI code.
+   181	- **SC-003:** Per-pair Pressure response math is covered by unit tests for standard, thin, baseline-thin, and all-thin cases.
+   182	- **SC-004:** Cross-model summary math is covered by unit tests for empty, single-pair, and multi-pair inputs.
+   183	- **SC-005:** Frontend tests cover cross-model range annotation, negative rendering, default sorts, reason hovers, and the carve-out components.
+   184	- **SC-006:** API and web builds pass before PR creation.
+   185	- **SC-007:** PR body lists exact validation commands and explains why pre-merge production smoke cannot query the new schema before merge.
+   186	- **SC-008:** Resolver tests cover `pressureConditionExclusionBreakdown` for missing scenario, invalid metadata, and level-assignment failures, and assert the total equals the sum.
+   187	- **SC-009:** Aggregation tests cover baseline-thin, baseline-only, and mixed baseline/directional rows so baseline behavior is not only covered by UI assumptions.
+   188	- **SC-010:** Resolver tests cover `sourceRunMapping` and `definitionMetadata` pressure-condition exclusion buckets, plus the no-double-count rule for unscored/refusal outcomes.
+   189	
+   190	---
+   191	
+   192	## Non-Goals
+   193	
+   194	- Keeping a v1 GraphQL compatibility layer.
+   195	- Reintroducing the `responsive: X/Y` summary tag.
+   196	- Applying multiple-comparisons correction.
+   197	- Changing the pressure grid drilldown behavior.
+   198	- Reworking the source-runs data model.
+   199	- Changing refusal parsing policy beyond documenting the exclusion.
+   200	- Adding Bayesian shrinkage, meta-analysis weighting, or model-level hypothesis tests.
+   201	- Writing closeout or postmortem before the human reviews and merges the PR.
+   202	
+   203	---
+   204	
+   205	## Open Questions
+   206	
+   207	None. The v2 design is locked by the handoff.
+   208	
+   209	---
+   210	
+   211	## Dependencies
+   212	
+   213	- Existing pressure-sensitivity resolver: `cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts`.
+   214	- Existing pressure-sensitivity aggregation helpers: `cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts`.
+   215	- Pothos pressure-sensitivity types: `cloud/apps/api/src/graphql/types/pressure-sensitivity.ts`.
+   216	- Web GraphQL operation: `cloud/apps/web/src/api/operations/pressureSensitivity.graphql`.
+   217	- Web components under `cloud/apps/web/src/components/models/`.
+   218	- Generated SDL: `cloud/apps/web/schema.graphql`.
+   219	- Generated web GraphQL types: `cloud/apps/web/src/generated/graphql.ts`.
+   220	- v1 workflow artifacts under `docs/workflow/feature-runs/sensitivity-table-redesign/` for structure only.
+   221	
+   222	---
+   223	
+   224	## Glossary
+   225	
+   226	| Term | Meaning |
+   227	|---|---|
+   228	| Pressure response | Push-toward-first win rate minus push-toward-second win rate, in percentage points. |
+   229	| Directional pool | Cells where prompt pressure clearly favors the first value: first in {heavy, full}, second in {negligible, low, moderate}. |
+   230	| Mirror pool | Cells where prompt pressure clearly favors the second value: second in {heavy, full}, first in {negligible, low, moderate}. |
+   231	| Baseline | Pooled win rate from diagonal cells where both values have the same pressure label. |
+   232	| Range across pairs | Minimum and maximum measured per-pair Pressure response for one model. A dispersion statistic, not a CI. |
+   233	| Qualifying trials | Trials in cells with `n >= 3` that belong to one of the pools used by the table. |
+   234	
+   235	---
+   236	
+   237	## Residual Risks
+   238	
+   239	1. **Cell-selection stability is limited.** Default is defensible as a middle-ground headline rule, but the sensitivity check is not proof of corpus-wide stability. Pairs near zero and pairs whose sign or magnitude changes sharply across plausible rules should be treated as uncertain. This comes directly from the sensitivity check recorded in `sensitivity-check-results.md`.
+   240	
+   241	2. **Cross-model range is dispersion, not precision.** A wide range means the model behaves differently across value pairs. It does not mean the model estimate is statistically uncertain in the same sense as a confidence interval. The UI mitigates this by using explicit range wording and avoiding plus/minus notation.
+   242	
+   243	3. **No multiple-comparisons correction.** The report shows about 450 per-pair CIs across models and pairs. Some intervals may look notable by chance. The mitigation is to avoid a binary "responsive" count and to frame values as effect sizes.
+   244	
+   245	4. **Refusals are excluded from denominators.** The observed refusal rate is very low on the canonical signature (<0.02% overall, worst observed model 0.11%), so this should not materially bias the headline. The rate is footnoted in methods/limitations copy.
+   246	
+   247	5. **Baseline can be thin while response remains defined.** A missing diagonal baseline does not invalidate the directional response. The UI must avoid implying that the response itself is missing when only `baselineRate` is null.
+   248	
+   249	6. **Existing resolver data-source risks remain.** Transcript caps and source-run collisions are existing risks from v1. This feature keeps the warning surfaces and does not re-architect the data source.
+   250	
+   251	7. **MIN_N remains low.** `MIN_N = 3` preserves v1 coverage behavior but individual cells at the threshold are noisy. Pooling reduces but does not erase that variance. The mitigation is to show per-pair CIs, disclose the limitation, and avoid binary responsive labels.
+   252	
+   253	8. **Near-zero model ranking can look more stable than it is.** Cross-model rows are sorted by mean Pressure response, so models near 0 pp may swap order due to small changes. The range annotation and limitations copy should discourage over-reading exact rank near zero.
+   254	
+   255	9. **Atomic schema removal has deployment coupling risk.** Removing v1 fields and adding v2 fields in one change can break the page if API and web deploy out of sync. This is accepted because the app is a monorepo with no external GraphQL consumers. Preflight build/codegen and CI are the mitigation.
+   256	
+   257	10. **Equal-weight model means amplify sparse-pair noise.** Each measured pair contributes one observation to the model mean, regardless of how many trials supported that pair. This is intentional because the headline is a per-pair behavioral average, not a trial-weighted corpus average, but sparse outlier pairs can still move the model rank.
+   258	
+   259	11. **Response can be defined when baseline is missing.** The directional subtraction does not require diagonal baseline cells, so the report can compute Pressure response while showing `—` for baseline. This is statistically valid for the response metric but weakens user interpretation of underlying preference for that pair.
+
+2026-04-29T17:21:21.186962Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: prompt must be at most 128 characters path=/Users/chrislaw/.codex/.tmp/plugins/plugins/build-ios-apps/.codex-plugin/plugin.json
+2026-04-29T17:21:21.188365Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: maximum of 3 prompts is supported path=/Users/chrislaw/.codex/.tmp/plugins/plugins/plugin-eval/.codex-plugin/plugin.json
+exec
+/bin/zsh -lc "nl -ba docs/workflow/feature-runs/sensitivity-table-redesign-v2/plan.md | sed -n '1,260p'" in /Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59
+ succeeded in 0ms:
+     1	# Implementation Plan: Pressure Sensitivity Table Redesign v2
+     2	
+     3	**Branch:** `claude/sensitivity-table-redesign-v2`
+     4	**Date:** 2026-04-29
+     5	**Spec:** `docs/workflow/feature-runs/sensitivity-table-redesign-v2/spec.md`
+     6	
+     7	## Summary
+     8	
+     9	Replace v1 `Win rate Delta` with v2 `Pressure response`.
+    10	
+    11	- Backend computes directional, mirror, and diagonal baseline pools by label membership.
+    12	- GraphQL removes v1 `winRateDelta`, `winRateDeltaSummary`, `pairsPositive`, and top-level per-pair `qualifyingTrials`.
+    13	- Web tables render a single cross-model Pressure response column and a per-pair detail table with Baseline, Push toward first, Push toward other, Pressure response, and Trials.
+    14	- Review-gate findings from Codex and the human-approved Codex fallback requirements review are carried into implementation tasks, especially exclusion accounting and atomic schema verification.
+    15	
+    16	## Review Reconciliation
+    17	
+    18	- review: reviews/spec.codex.feasibility-adversarial.review.md | status: accepted | note: Accepted into plan/tasks. Findings describe migration blast radius, reducer rewrite, and exclusion-audit implementation obligations now explicitly covered by FR-031c/FR-033 and success criteria; no further product-spec change needed.
+    19	- review: reviews/spec.codex.edge-cases-adversarial.review.md | status: accepted | note: Accepted into plan/tasks. Legacy exclusion fields must be removed from v2 frontend reads, source-run collision determinism must be verified, and no-coverage partial evidence remains an accepted insufficient-footer behavior.
+    20	- review: reviews/spec.gemini.requirements-adversarial.review.md | status: accepted | note: Human-approved Codex 5.4 Mini fallback requirements review found no HIGH/MEDIUM blockers; residual risks carried into plan.
+    21	
+    22	## Technical Context
+    23	
+    24	| Area | Detail |
+    25	|---|---|
+    26	| API | Pothos GraphQL in `cloud/apps/api/src/graphql/` |
+    27	| Math | Pure helpers in `cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts` |
+    28	| SDL | Emitted to `cloud/apps/web/schema.graphql` |
+    29	| Web | React + generated urql types under `cloud/apps/web/src/` |
+    30	| Codegen | `npm run codegen --workspace @valuerank/web` from `cloud/` |
+    31	| Verification | API tests/build, web codegen/tests/build, final grep for v1 field names |
+    32	
+    33	## Architecture Decisions
+    34	
+    35	### Decision 1: Directional pools use canonical first/second coordinates
+    36	
+    37	Use canonical pair order as the stable first/second coordinate. Reverse-ordered vignettes may share a row only after their condition levels are transformed into that same canonical coordinate.
+    38	
+    39	Rationale: the metric is directional. Mixing untransformed `A -> B` and `B -> A` would erase the signal.
+    40	
+    41	Verification: resolver tests include a reverse-ordered fixture and assert it lands in the same pair with levels transformed correctly.
+    42	
+    43	### Decision 2: Pressure response uses pooled binomial proportions
+    44	
+    45	For each pool, compute `sum(successes) / sum(n)`. Do not average cell win rates.
+    46	
+    47	Rationale: the Newcombe CI describes a difference of two binomial proportions, so the point estimate and CI must use the same estimand.
+    48	
+    49	Verification: aggregation tests include unequal cell sizes where pooled rate differs from mean-of-cell-rates.
+    50	
+    51	### Decision 3: Baseline is a per-pair detail only
+    52	
+    53	Baseline uses diagonal cells and renders as a point estimate. It does not aggregate into the cross-model summary.
+    54	
+    55	Rationale: first/second baseline preference is pair-specific and does not summarize cleanly across pairs.
+    56	
+    57	Verification: component tests assert no baseline value appears in the cross-model summary.
+    58	
+    59	### Decision 4: Exclusion audit uses one authoritative v2 count
+    60	
+    61	Add `pressureConditionExcludedCount` and `pressureConditionExclusionBreakdown` for scored transcripts that cannot enter a pressure grid. Remove legacy pressure-sensitivity schema fields `excludedScenariosCount` and per-pair `definitionsExcluded` from the v2 SDL so generated client types cannot preserve the old audit story.
+    62	
+    63	Rationale: v1 exclusion surfaces were fragmented and one field was a dead zero. The v2 report needs one clear audit story.
+    64	
+    65	Verification: resolver tests cover every breakdown bucket and assert the total equals the sum.
+    66	
+    67	### Decision 5: Atomic schema removal is gated by preflight
+    68	
+    69	No compatibility layer for the v1 sensitivity metric or legacy pressure-sensitivity audit fields. Do not open the PR until API SDL, web operation, generated types, tests, and builds all pass from the same branch head.
+    70	
+    71	Rationale: this is a monorepo report with no external GraphQL consumers. A compatibility layer would keep old language alive.
+    72	
+    73	Verification: final grep over `cloud/` returns zero matches for `winRateDelta`, `winRateDeltaSummary`, `pairsPositive`, `excludedScenariosCount`, `definitionsExcluded`, `ownToken`, and `opponentToken`, including generated SDL/types. Top-level per-pair `qualifyingTrials` is removed; `pressureResponse.qualifyingTrials` remains required.
+    74	
+    75	### Decision 6: Cross-value map becomes signed
+    76	
+    77	The cross-value map reads signed `pressureResponse.value` and uses a diverging scale. It must not use `Math.abs`.
+    78	
+    79	Rationale: negative response is meaningful and must not be hidden.
+    80	
+    81	Verification: component test asserts negative and positive values use different signed titles/classes.
+    82	
+    83	## Approved Tooltip Copy
+    84	
+    85	| Header | Tooltip text |
+    86	|---|---|
+    87	| Win Rate (group) | The percentage of trials where the model picked the value. Same formula used everywhere in ValueRank: picks / (picks + non-picks + neutrals). All four columns under this header are versions of that calculation, just on different slices of the data. |
+    88	| Baseline | The model's underlying preference for this value, with no directional pressure from the prompt. Computed from cells where pressure is symmetric on both sides — the 5 diagonal cells where own and other are at the same label. In those cells the prompt has no directional advantage, so whatever the model picks reflects its own preferences. |
+    89	| Push toward first value | The model's win rate in the cells where the prompt clearly pushes toward this value: heavy or full pressure on this value, AND negligible / low / moderate pressure on the other value. 6 cells. A model that follows the prompt should have this much higher than the baseline. |
+    90	| Push toward other | The mirror. The model's win rate (still for this value) in the cells where the prompt clearly pushes toward the OTHER value. 6 cells. A model that follows the prompt should have this much lower than the baseline. |
+    91	| Pressure response (per-pair) | How much the prompt's direction moves the model. Push-toward-this minus push-toward-other, in percentage points. The model's underlying preference cancels out in the subtraction — both halves share the same baseline preference. So this number is purely about how much directional pressure shifts behavior. Positive = the prompt steers the model toward this value. Negative = the model goes against the prompt (uncommon and worth investigating). The 95% CI is trial-level uncertainty within this pair (Wilson-propagated diff of two pooled proportions). |
+    92	| Pressure response (cross-model) | The headline measure of how much the prompt's direction moves the model. For each value pair, we compute the gap between two specific situations: how often the model picks a value when the prompt clearly pushes toward it, vs. how often the model still picks it when the prompt clearly pushes the OTHER way. The model's preferences cancel in the subtraction, so this number is purely about how much the prompt's direction shifts behavior. We then average across all measured pairs. The "range across this model's pairs" annotation shows the smallest and largest per-pair values — wide range means the model behaves differently on different value pairs. |
+    93	| Trials | Total scored trials behind this row's displayed win rates. Counts trials inside the Baseline, Push toward first, and Push toward other pools that met the coverage threshold (N >= 3). The Pressure response CI uses only the two directional pools. Refusals, unparseable responses, and trials in cells we did not use are excluded. |
+    94	
+    95	Formatting rule: percentage-point values in summary cells, detail cells, tooltips, titles, and accessible labels render with one decimal place and an explicit sign for positive/negative values; exact zero renders as `0.0 pp` without a sign.
+    96	
+    97	Null reason hover copy lives in `docs/workflow/feature-runs/sensitivity-table-redesign-v2/reason-copy.md`.
+    98	
+    99	## Implementation Slices
+   100	
+   101	### Slice A — Backend math + resolver + types + SDL [CHECKPOINT]
+   102	
+   103	Files:
+   104	
+   105	- `cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts`
+   106	- `cloud/apps/api/tests/services/pressure-sensitivity/aggregation.test.ts`
+   107	- `cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts`
+   108	- `cloud/apps/api/src/graphql/types/pressure-sensitivity.ts`
+   109	- `cloud/apps/api/tests/graphql/queries/pressure-sensitivity.test.ts`
+   110	- `cloud/apps/web/schema.graphql`
+   111	
+   112	Work:
+   113	
+   114	- Add `pooledDirectionalReduction(grid, minN)`.
+   115	- Add `summarizePressureResponse(values)`.
+   116	- Remove obsolete v1 reducers and summary helpers.
+   117	- Add `PressureResponse` and `PressureResponseSummary` Pothos types.
+   118	- Add first/second token+label fields.
+   119	- Remove per-pair `winRateDelta` and top-level per-pair `qualifyingTrials`; `qualifyingTrials` lives only under `pressureResponse`.
+   120	- Rename `directionalSanityCheck.breakdown[].winRateDelta` to a non-v1 field such as `pressureResponse`, and update the sanity-check resolver/tests to use that name.
+   121	- Remove `ownToken` / `opponentToken` from the v2 pair shape; `firstValueToken` / `secondValueToken` are the only orientation fields.
+   122	- Add `pressureConditionExcludedCount` and breakdown fields.
+   123	- Remove existing `excludedScenariosCount` and per-pair `definitionsExcluded` from the pressure-sensitivity schema.
+   124	- Preserve `transcriptCapHit` and `source_run_collision` warning behavior.
+   125	- Keep source-run collision resolution deterministic by preserving the resolver's current run precedence: eligible runs are ordered by database `id asc`, `buildSourceRunToDefIdMap` applies last-write-wins in that run order, and source-run IDs inside a single run keep their existing config order. Add a test that shuffled eligible-run input is normalized to the same `id asc` winner and warning.
+   126	- Add a resolver test for overlapping pressure-condition exclusion branches: one scored transcript fixture must be capable of matching more than one drop path, then assert exactly one bucket increments, the bucket follows documented precedence, and `pressureConditionExcludedCount` increases by exactly 1.
+   127	- Regenerate SDL.
+   128	
+   129	Verification:
+   130	
+   131	```bash
+   132	cd cloud
+   133	DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank_test?pgbouncer=true" JWT_SECRET="test-secret-that-is-at-least-32-characters-long" npm run test --workspace @valuerank/api -- pressure-sensitivity
+   134	npx turbo build --filter=@valuerank/api
+   135	grep -RE "winRateDelta|winRateDeltaSummary|pairsPositive|excludedScenariosCount|definitionsExcluded|ownToken|opponentToken|WinRateDelta|WinRateDeltaSummary" apps/api packages workers apps/web/schema.graphql --include='*.ts' --include='*.graphql'
+   136	```
+   137	
+   138	The grep must return zero matches.
+   139	
+   140	API GraphQL tests must execute the updated pressure-sensitivity selection against the resolver shape so SDL/codegen/build success cannot hide a runtime nullability or field-name mismatch.
+   141	
+   142	### Slice B — Web operation + codegen + derived types [CHECKPOINT]
+   143	
+   144	Files:
+   145	
+   146	- `cloud/apps/web/src/api/operations/pressureSensitivity.graphql`
+   147	- `cloud/apps/web/src/api/operations/pressureSensitivity.ts`
+   148	- `cloud/apps/web/src/generated/graphql.ts`
+   149	
+   150	Work:
+   151	
+   152	- Query `pressureResponse` and `pressureResponseSummary`.
+   153	- Query first/second fields and pressure-condition exclusion fields.
+   154	- Stop querying v1 `winRateDelta`, `winRateDeltaSummary`, `pairsPositive`, top-level per-pair `qualifyingTrials`, `ownToken`, `opponentToken`, `excludedScenariosCount`, and per-pair `definitionsExcluded`.
+   155	- Regenerate web GraphQL types.
+   156	
+   157	Verification:
+   158	
+   159	```bash
+   160	cd cloud
+   161	npm run codegen --workspace @valuerank/web
+   162	npx turbo build --filter=@valuerank/api
+   163	grep -RE "winRateDelta|winRateDeltaSummary|pairsPositive|excludedScenariosCount|definitionsExcluded|ownToken|opponentToken|WinRateDelta|WinRateDeltaSummary" apps/web/src/api/operations apps/web/src/generated --include='*.ts' --include='*.graphql'
+   164	```
+   165	
+   166	The grep must return zero matches so the operation and generated types cannot keep stale v1 sensitivity, orientation, or exclusion fields. Add a targeted generated-type or operation assertion for top-level per-pair `qualifyingTrials`, because `pressureResponse.qualifyingTrials` is still required.
+   167	
+   168	### Slice C — Web components + tests [CHECKPOINT]
+   169	
+   170	Files:
+   171	
+   172	- `cloud/apps/web/src/components/models/PressureSensitivitySummary.tsx`
+   173	- `cloud/apps/web/src/components/models/PressureSensitivityDetail.tsx`
+   174	- `cloud/apps/web/src/components/models/PressureSensitivityCrossValueMap.tsx`
+   175	- `cloud/apps/web/src/components/models/PressureGrid.tsx`
+   176	- `cloud/apps/web/src/components/models/PressureSensitivitySanityCheck.tsx`
+   177	- `cloud/apps/web/src/components/models/PressureSensitivityLimitations.tsx`
+   178	- `cloud/apps/web/src/components/models/pressureSensitivityFormatting.ts`
+   179	- `cloud/apps/web/src/pages/PressureSensitivity.tsx`
+   180	- Related component tests.
+   181	
+   182	Work:
+   183	
+   184	- Rebuild cross-model table as Model + Pressure response.
+   185	- Cross-model response cell format is exactly `{mean} pp · range across this model's pairs: [{rangeMin}, {rangeMax}]`; do not use CI or plus/minus notation.
+   186	- Replace legacy visible metric labels, including `Win rate Delta`, `Win rate Δ ± CI`, `Low pressure`, and `High pressure`, with the v2 labels `Pressure response`, `Baseline`, `Push toward first`, and `Push toward other`.
+   187	- Remove the existing summary sort toggle and header click handler; model rows stay sorted by Pressure response descending.
+   188	- Rebuild per-pair table with Baseline, Push toward first, Push toward other, Pressure response, Trials.
+   189	- Render Trials from `pressureResponse.qualifyingTrials`, not the legacy pair-level `n`.
+   190	- When `pressureResponse.qualifyingTrials !== n`, show the secondary audit copy `{qualifyingTrials} of {n} scored trials used` in row hover/detail copy.
+   191	- Keep the Trials tooltip aligned with the approved copy: it names Baseline, Push toward first, and Push toward other as included pools, and says the Pressure response CI uses only the two directional pools.
+   192	- Preserve row click drilldown into the existing 5x5 `PressureGrid`, and update the grid display contract to use canonical first/second labels instead of stale own/opponent display assumptions.
+   193	- Add negative red+`▼` rendering and neutral exact-zero rendering.
+   194	- Assert exact-zero summary and detail cells use neutral styling and render as `0.0 pp`, not positive or negative.
+   195	- Update signed cross-value map.
+   196	- Update sanity-check field reads and labels to use the renamed Pressure response payload, not `winRateDelta`.
+   197	- Update intro and limitations copy.
+   198	- Render pressure-condition exclusion warning when nonzero.
+   199	- Render transcript-cap warning above the report tables when `transcriptCapHit` is true.
+   200	- Render pressure-condition exclusion copy in the existing coverage/limitations area exactly as specified in the spec. If `transcriptCapHit` is true, append: `This count is a lower bound because the transcript scan was capped.`
+   201	- Preserve the no-measured-pairs footer path: models with no defined `pressureResponse` values stay in `insufficient[]`, not the ranked table, with null summary fields and `pairsMeasured = 0`.
+   202	- Update tests.
+   203	
+   204	Verification:
+   205	
+   206	```bash
+   207	cd cloud
+   208	npm run test --workspace @valuerank/web -- PressureSensitivity
+   209	npx turbo build --filter=@valuerank/web
+   210	grep -RE "winRateDelta|winRateDeltaSummary|pairsPositive|excludedScenariosCount|definitionsExcluded|ownToken|opponentToken|WinRateDelta|WinRateDeltaSummary" . --include='*.ts' --include='*.tsx' --include='*.graphql'
+   211	```
+   212	
+   213	The legacy field grep must return zero matches across `cloud/`, including generated code.
+   214	
+   215	Component tests must include a mixed-count row where `qualifyingTrials < n` and assert both the visible Trials value and `{qualifyingTrials} of {n} scored trials used` audit copy. Page-level tests must render both `transcriptCapHit` and `pressureConditionExcludedCount` and assert the exclusion warning includes the lower-bound sentence. Summary tests must assert row order is fixed descending by Pressure response and cannot be reversed by clicking the header. Aggregation or page tests must include a no-measured-pairs model and assert it renders in `insufficient[]`, not the ranked table, with null summary fields and `pairsMeasured = 0`. Cross-value map and detail-table tests must assert signed title and accessible-label text for positive, zero, and negative Pressure response values.
+   216	
+   217	## Residual Risks
+   218	
+   219	- **Small sensitivity sample.** The sensitivity check covers 10 sampled model/pair cases, not the full corpus.  
+   220	  **verification:** keep `sensitivity-check-results.md` in the PR and ensure limitations copy says default is a middle-ground rule, not proof of stability.
+   221	
+   222	- **Sparse pairs can move equal-weight means.** Each measured pair has equal model-level weight.  
+   223	  **verification:** component tests assert the range annotation renders, and limitations copy warns that wide range means pair-to-pair variation.
+   224	
+   225	- **Atomic schema cutover can break if partial.** API and web must land together.  
+   226	  **verification:** run API build, web codegen, web build, and final grep before push; list all commands in PR body.
+   227	
+   228	- **Exclusion counts may double count if branch precedence is wrong.** New breakdown spans several resolver exits.  
+   229	  **verification:** resolver tests cover each bucket and an unscored/refusal case that must not increment pressure-condition exclusions.
+   230	
+   231	- **Exclusion counts become lower bounds on capped scans.** When `transcriptCapHit` is true, any count derived from scanned transcripts is incomplete.  
+   232	  **verification:** page-level test renders both `transcriptCapHit` and `pressureConditionExcludedCount` and asserts the warning says the exclusion count is a lower bound.
+   233	
+   234	- **Baseline-missing rows can be misread.** Response can be defined without baseline.  
+   235	  **verification:** detail tests assert `baselineRate = null` renders `—` while response still renders, and tooltip copy uses `baseline-thin` text from `reason-copy.md`.
+   236	
+   237	- **Dropping `pairsPositive` removes sign-mix summary.** This is intentional per locked methodology because the binary classification count was removed.  
+   238	  **verification:** summary tests assert no `pairsPositive` or legacy sign-mix summary text appears; per-pair detail and range remain available for sign-mix inspection.
+   239	
+   240	## Rollout
+   241	
+   242	- No migration.
+   243	- No production smoke before merge because production schema is v1.
+   244	- PR body must state that post-deploy smoke is required after Railway deploys `main`.
+   245	
+   246	## Open Items
+   247	
+   248	None. All spec decisions are locked; remaining work is implementation and verification.
+
+exec
+/bin/zsh -lc "nl -ba cloud/apps/web/src/api/operations/pressureSensitivity.graphql | sed -n '1,120p'" in /Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59
+ succeeded in 0ms:
+     1	query PressureSensitivity(
+     2	  $domainId: ID
+     3	  $providerId: ID
+     4	  $signature: String!
+     5	) {
+     6	  pressureSensitivity(
+     7	    domainId: $domainId
+     8	    providerId: $providerId
+     9	    signature: $signature
+    10	  ) {
+    11	    models {
+    12	      modelId
+    13	      label
+    14	      providerName
+    15	      unscoredCount
+    16	      winRateDeltaSummary {
+    17	        mean
+    18	        ciLow
+    19	        ciHigh
+    20	        lowBandMean
+    21	        highBandMean
+    22	        pairsMeasured
+    23	        pairsPositive
+    24	      }
+    25	      valuePairs {
+    26	        pairKey
+    27	        ownToken
+    28	        opponentToken
+    29	        n
+    30	        unscoredCount
+    31	        definitionsMeasured
+    32	        definitionsExcluded
+    33	        qualifyingTrials
+    34	        winRateDelta {
+    35	          value
+    36	          lowBandMean
+    37	          highBandMean
+    38	          ciLow
+    39	          ciHigh
+    40	          reason
+    41	        }
+    42	        grid {
+    43	          ownLevel
+    44	          opponentLevel
+    45	          n
+    46	          unscoredCount
+    47	          winRate
+    48	          conviction
+    49	          netScore
+    50	          lowData
+    51	        }
+    52	      }
+    53	    }
+    54	    insufficient {
+    55	      modelId
+    56	      label
+    57	      providerName
+    58	      reason
+    59	    }
+    60	    excludedDefinitions {
+    61	      definitionId
+    62	      name
+    63	      reason
+    64	    }
+    65	    excludedScenariosCount
+    66	    transcriptCapHit
+    67	    directionalSanityCheck {
+    68	      positivePct
+    69	      flatPct
+    70	      negativePct
+    71	      measuredCount
+    72	      unmeasurableCount
+    73	      breakdown {
+    74	        modelId
+    75	        pairKey
+    76	        winRateDelta
+    77	        classification
+    78	      }
+    79	    }
+    80	  }
+    81	}
+
+2026-04-29T17:21:23.681861Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: prompt must be at most 128 characters path=/Users/chrislaw/.codex/.tmp/plugins/plugins/build-ios-apps/.codex-plugin/plugin.json
+2026-04-29T17:21:23.682088Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: maximum of 3 prompts is supported path=/Users/chrislaw/.codex/.tmp/plugins/plugins/plugin-eval/.codex-plugin/plugin.json
+codex
+## Findings
+- [HIGH][CODE-CONFIRMED] The plan never changes the per-pair sort rule. Slice C removes the summary header toggle, but the resolver still sorts `valuePairs` by `pairKey` ([`plan.md`](file:///Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59/docs/workflow/feature-runs/sensitivity-table-redesign-v2/plan.md#L187), [`pressure-sensitivity.ts`](file:///Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59/cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts#L580)). FR-008 requires absolute `Pressure response` descending with nulls at the bottom, so the detail table will keep the wrong order unless this is added explicitly.
+- [MEDIUM][CODE-CONFIRMED] The full-tree grep gate for `ownToken`/`opponentToken` is too broad. Those names are still used in non-GraphQL helper code and resolver internals ([`plan.md`](file:///Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59/docs/workflow/feature-runs/sensitivity-table-redesign-v2/plan.md#L73), [`value-pair.ts`](file:///Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59/cloud/apps/api/src/services/pressure-sensitivity/value-pair.ts#L39), [`pressure-sensitivity.ts`](file:///Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59/cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts#L516)). As written, the verification step will fail even if the v2 schema is correct, or it will force a repo-wide rename the spec does not require.
+- [LOW][UNVERIFIED] The plan’s zero-value formatting rule says exact zero should render as `0.0 pp` ([`plan.md`](file:///Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59/docs/workflow/feature-runs/sensitivity-table-redesign-v2/plan.md#L95), [`plan.md`](file:///Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59/docs/workflow/feature-runs/sensitivity-table-redesign-v2/plan.md#L194)), but the spec says `0 pp` with no glyph ([`spec.md`](file:///Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59/docs/workflow/feature-runs/sensitivity-table-redesign-v2/spec.md#L157)). I cannot confirm the final UI copy from code because the formatting implementation was not provided, but the artifacts conflict and need reconciliation.
+
+## Residual Risks
+- The new exclusion audit still depends on explicit coverage for `sourceRunMapping`, `definitionMetadata`, and the unscored/refusal no-double-count rule. If those cases are not tested directly, `pressureConditionExcludedCount` can drift without obvious failures.
+- The sensitivity check only samples 10 cases, so near-zero pairs and sign-flip pairs can still move around under plausible cell-selection rules even after the redesign.
+2026-04-29T17:21:53.021117Z ERROR codex_core::session: failed to record rollout items: thread 019dda41-061e-71a2-b91d-cdc01f17cc07 not found
+2026-04-29T17:21:53.034335Z  WARN codex_rmcp_client::stdio_server_launcher: Failed to terminate MCP process group 70849: No such process (os error 3)
+tokens used
+58,539

@@ -1,0 +1,2670 @@
+Reading additional input from stdin...
+OpenAI Codex v0.125.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019dda19-dd6a-7372-9c13-ee9a4f57f746
+--------
+user
+Review this spec artifact using a edge-cases-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+Code context files are provided above. Before asserting any finding, check whether it is confirmed or refuted by the provided code. Each finding must include an evidence tag:
+  [CODE-CONFIRMED] — the code directly supports this finding
+  [CODE-REFUTED] — the code contradicts this finding (do not include as a finding)
+  [UNVERIFIED] — relevant code was not provided; treat as lower confidence
+Only assign HIGH severity to CODE-CONFIRMED findings.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Context: sensitivity-check-results.md
+# Pressure Response Cell-Selection Sensitivity Check
+
+**Feature slug:** sensitivity-table-redesign-v2
+**Validated:** 2026-04-29
+
+## Purpose
+
+The v2 Pressure Sensitivity headline uses a directional pool rather than the v1 high-band pool. This check compares three plausible cell-selection rules to confirm the default rule is stable enough for the report headline.
+
+## Rules Tested
+
+| Rule | Selection |
+|---|---|
+| Strict | own = full, opponent in {negligible, low}; 2 cells per side |
+| Default | own in {heavy, full}, opponent in {negligible, low, moderate}; 6 cells per side |
+| Loose | own > opponent AND own >= moderate AND opponent <= moderate; up to 10 cells per side |
+
+## Findings
+
+- Most pairs with substantial response (|response| > 15 pp under default) agreed on direction across the plausible rules, but the strict rule can collapse some default-substantial pairs to 0 pp. Magnitude varied within about 20 pp for most sampled pairs.
+- 2 of 10 pairs (`power_dominance -> stimulation`, `security_personal -> stimulation` for Gemini 2.5 Pro) flipped sign across rules. Both had |response| < 10 pp under default, so they sit at the noise floor.
+- Default is the middle ground; strict tends most extreme; loose pulls toward the center but not consistently.
+
+## Conclusion
+
+Default is defensible as a middle-ground headline rule, but the sensitivity check is not proof of corpus-wide stability. Pairs near zero and pairs whose sign or magnitude changes sharply across plausible rules should be treated as uncertain.
+
+## Raw Data
+
+| Model | Pair | Strict | Default | Loose |
+|---|---|---:|---:|---:|
+| Mistral Small | conformity_interpersonal -> hedonism | -20.0 pp | -13.3 pp | -11.2 pp |
+| Mistral Small | self_direction_action -> universalism_nature | +0.0 pp | -20.4 pp | -15.3 pp |
+| Mistral Small | achievement -> stimulation | +20.0 pp | +6.7 pp | +17.5 pp |
+| Grok 4 | benevolence_dependability -> stimulation | +20.0 pp | +16.7 pp | +5.0 pp |
+| Grok 4 | achievement -> stimulation | +15.0 pp | +21.7 pp | +17.5 pp |
+| Grok 4 | hedonism -> stimulation | +25.0 pp | +35.0 pp | +35.0 pp |
+| Gemini 2.5 Pro | power_dominance -> stimulation | +20.0 pp | +0.0 pp | -1.3 pp |
+| Gemini 2.5 Pro | security_personal -> stimulation | -25.0 pp | -6.7 pp | +7.5 pp |
+| Mistral Large (Dec 2025) | achievement -> hedonism | -66.7 pp | -61.1 pp | -45.8 pp |
+| Mistral Large (Dec 2025) | security_personal -> self_direction_action | +10.0 pp | +21.3 pp | +28.0 pp |
+
+
+Context: aggregation.ts
+/**
+ * Pure aggregation primitives for the pressure-sensitivity report.
+ *
+ * Per spec FR-003 / FR-005 / FR-006 / FR-007 / FR-008 / FR-021. Each function is pure: no
+ * logger imports, no I/O, no globals. Designed to be called from the resolver after
+ * transcripts have been canonicalized via `resolveTranscriptDecisionModel` and bucketed
+ * into (own × opponent) cells via the value-pair helpers.
+ */
+
+import type { AssignedOutcome } from './value-pair.js';
+
+export type DecisionStrength = 'strong' | 'lean' | null;
+
+export const FLAT_DELTA_THRESHOLD = 0.02;
+
+export type Observation = {
+  outcome: AssignedOutcome;
+  strength: DecisionStrength;
+};
+
+export type CellMetrics = {
+  n: number;
+  unscoredCount: number;
+  successes: number;
+  winRate: number | null;
+  conviction: number | null;
+  netScore: number | null;
+};
+
+export type Cell = CellMetrics & {
+  ownLevel: number;
+  opponentLevel: number;
+  lowData: boolean;
+};
+
+export type WinRateDeltaResult = {
+  value: number | null;
+  ciLow: number | null;
+  ciHigh: number | null;
+  lowBandMean: number | null;
+  highBandMean: number | null;
+  reason: 'low-band-thin' | 'high-band-thin' | 'both-bands-thin' | null;
+  qualifyingTrials: number;
+};
+
+export type WinRateDeltaSummary = {
+  mean: number | null;
+  ciLow: number | null;
+  ciHigh: number | null;
+  lowBandMean: number | null;
+  highBandMean: number | null;
+  pairsMeasured: number;
+  pairsPositive: number;
+};
+
+const Z_95 = 1.96;
+const STUDENT_T_975 = [
+  12.706204736174694,
+  4.302652729749462,
+  3.182446305283708,
+  2.776445105197793,
+  2.570581835636315,
+  2.446911851144979,
+  2.364624251592784,
+  2.306004135204166,
+  2.262157162798205,
+  2.228138851986274,
+  2.200985160091638,
+  2.178812829667228,
+  2.160368656462791,
+  2.144786687917804,
+  2.131449545559776,
+  2.119905299221255,
+  2.109815577833316,
+  2.100922040241038,
+  2.093024054408309,
+  2.085963447265864,
+  2.07961384472768,
+  2.073873067904025,
+  2.068657610419049,
+  2.063898561628024,
+  2.059538552753298,
+  2.055529438642874,
+  2.051830516480285,
+  2.048407141795245,
+  2.045229642132704,
+  2.042272456301238,
+  2.039513446396408,
+  2.036933343460102,
+  2.034515297449338,
+  2.032244509317719,
+  2.030107928250342,
+  2.02809400098045,
+  2.026192463029109,
+  2.024394163911969,
+  2.022690920036761,
+  2.021075390306273,
+  2.019540970441376,
+  2.018081702818444,
+  2.016692199227824,
+  2.015367574443764,
+  2.014103388880846,
+  2.012895598919429,
+  2.011740513729765,
+  2.010634757624232,
+  2.009575237129239,
+  2.008559112100761,
+] as const;
+
+/**
+ * Compute per-cell metrics from a list of observations.
+ *
+ * - N = count of scored observations (own_picked / opponent_picked / neutral).
+ * - unscoredCount = count of refusals + unknowns (per FR-023).
+ * - winRate = `prioritized / (prioritized + deprioritized + neutral)` where prioritized = own_picked
+ *   (per FR-003b; matches `ModelValueDetailDrawer.tsx` denominator convention).
+ * - conviction = `(2*strongly + somewhat) / (strongly + somewhat)` over own_picked observations only;
+ *   undefined when there are no own_picked observations.
+ * - netScore = `(2*ownStrong + ownLean − 2*opponentStrong − opponentLean) / N`
+ *   (canonical formula from `canonicalConditionSummary.ts`).
+ *
+ * All metrics return null when undefined (e.g., N = 0).
+ */
+export function buildCellMetrics(observations: ReadonlyArray<Observation>): CellMetrics {
+  let unscoredCount = 0;
+  let ownPicked = 0;
+  let opponentPicked = 0;
+  let neutral = 0;
+  let ownStrong = 0;
+  let ownLean = 0;
+  let opponentStrong = 0;
+  let opponentLean = 0;
+
+  for (const obs of observations) {
+    if (obs.outcome === 'unscored') {
+      unscoredCount += 1;
+      continue;
+    }
+    if (obs.outcome === 'neutral') {
+      neutral += 1;
+      continue;
+    }
+    if (obs.outcome === 'own_picked') {
+      ownPicked += 1;
+      if (obs.strength === 'strong') ownStrong += 1;
+      else if (obs.strength === 'lean') ownLean += 1;
+    } else if (obs.outcome === 'opponent_picked') {
+      opponentPicked += 1;
+      if (obs.strength === 'strong') opponentStrong += 1;
+      else if (obs.strength === 'lean') opponentLean += 1;
+    }
+  }
+
+  const n = ownPicked + opponentPicked + neutral;
+
+  if (n === 0) {
+    return { n: 0, unscoredCount, successes: 0, winRate: null, conviction: null, netScore: null };
+  }
+
+  const winRate = ownPicked / n;
+  const ownPicksWithStrength = ownStrong + ownLean;
+  const conviction =
+    ownPicksWithStrength === 0 ? null : (2 * ownStrong + ownLean) / ownPicksWithStrength;
+  const netScore = (2 * ownStrong + ownLean - 2 * opponentStrong - opponentLean) / n;
+
+  return { n, unscoredCount, successes: ownPicked, winRate, conviction, netScore };
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function clamp01(value: number): number {
+  if (value < 0) return 0;
+  if (value > 1) return 1;
+  return value;
+}
+
+function sumNumbers(values: ReadonlyArray<number>): number {
+  let sum = 0;
+  for (const v of values) sum += v;
+  return sum;
+}
+
+function sampleStandardDeviation(values: ReadonlyArray<number>, mean: number): number {
+  if (values.length < 2) return 0;
+  let sumSquared = 0;
+  for (const value of values) {
+    const delta = value - mean;
+    sumSquared += delta * delta;
+  }
+  return Math.sqrt(sumSquared / (values.length - 1));
+}
+
+function normalQuantile(p: number): number {
+  if (!(p > 0 && p < 1)) return Number.NaN;
+
+  const a = [
+    -39.69683028665376,
+    220.9460984245205,
+    -275.9285104469687,
+    138.357751867269,
+    -30.66479806614716,
+    2.506628277459239,
+  ] as const;
+  const b = [
+    -54.47609879822406,
+    161.5858368580409,
+    -155.6989798598866,
+    66.80131188771972,
+    -13.28068155288572,
+  ] as const;
+  const c = [
+    -0.007784894002430293,
+    -0.3223964580411365,
+    -2.400758277161838,
+    -2.549732539343734,
+    4.374664141464968,
+    2.938163982698783,
+  ] as const;
+  const d = [
+    0.007784695709041462,
+    0.3224671290700398,
+    2.445134137142996,
+    3.754408661907416,
+  ] as const;
+  const plow = 0.02425;
+  const phigh = 1 - plow;
+
+  if (p < plow) {
+    const q = Math.sqrt(-2 * Math.log(p));
+    return (
+      (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5])
+      / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1)
+    );
+  }
+  if (p > phigh) {
+    const q = Math.sqrt(-2 * Math.log(1 - p));
+    return -(
+      (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5])
+      / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1)
+    );
+  }
+
+  const q = p - 0.5;
+  const r = q * q;
+  return (
+    (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q
+  ) / (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1);
+}
+
+function studentTQuantile(p: number, df: number): number {
+  if (!Number.isFinite(p) || !Number.isInteger(df) || df <= 0) return Number.NaN;
+  if (Math.abs(p - 0.975) < 1e-12 && df >= 1 && df <= STUDENT_T_975.length) {
+    return STUDENT_T_975[df - 1]!;
+  }
+
+  const z = normalQuantile(p);
+  if (!Number.isFinite(z)) return Number.NaN;
+  const v = df;
+  const z2 = z * z;
+  const z3 = z2 * z;
+  const z5 = z3 * z2;
+  const z7 = z5 * z2;
+  return z
+    + (z3 + z) / (4 * v)
+    + (5 * z5 + 16 * z3 + 3 * z) / (96 * v * v)
+    + (3 * z7 + 19 * z5 + 17 * z3 - 15 * z) / (384 * v * v * v);
+}
+
+function wilsonIntervalFromProportion(
+  proportion: number,
+  trials: number,
+  z: number,
+): { p: number; low: number; high: number } | null {
+  if (!Number.isFinite(proportion) || !Number.isFinite(trials) || !Number.isFinite(z)) return null;
+  if (trials <= 0 || proportion < 0 || proportion > 1 || z <= 0) return null;
+
+  const p = proportion;
+  const zSquared = z * z;
+  const denominator = 1 + zSquared / trials;
+  const center = (p + zSquared / (2 * trials)) / denominator;
+  const margin = (
+    z
+    * Math.sqrt((p * (1 - p) + zSquared / (4 * trials)) / trials)
+  ) / denominator;
+
+  return {
+    p,
+    low: clamp01(center - margin),
+    high: clamp01(center + margin),
+  };
+}
+
+export function wilsonInterval(
+  matches: number,
+  trials: number,
+  z = Z_95,
+): { p: number; low: number; high: number } | null {
+  if (
+    !Number.isFinite(matches)
+    || !Number.isFinite(trials)
+    || !Number.isFinite(z)
+    || !Number.isInteger(matches)
+    || !Number.isInteger(trials)
+    || matches < 0
+    || trials <= 0
+    || matches > trials
+  ) {
+    return null;
+  }
+
+  const result = wilsonIntervalFromProportion(matches / trials, trials, z);
+  if (result === null) return null;
+  if (matches === 0) result.low = 0;
+  if (matches === trials) result.high = 1;
+  return result;
+}
+
+/**
+ * Compute Newcombe Method-10 confidence interval on the difference of two proportions.
+ *
+ * pHigh - pLow is the point estimate convention used by the pressure-sensitivity report.
+ */
+export function diffProportionCI(
+  pLow: number,
+  nLow: number,
+  pHigh: number,
+  nHigh: number,
+  z = Z_95,
+): { ciLow: number; ciHigh: number } | null {
+  if (
+    !Number.isFinite(pLow)
+    || !Number.isFinite(nLow)
+    || !Number.isFinite(pHigh)
+    || !Number.isFinite(nHigh)
+    || !Number.isFinite(z)
+    || pLow < 0
+    || pLow > 1
+    || pHigh < 0
+    || pHigh > 1
+    || nLow <= 0
+    || nHigh <= 0
+    || z <= 0
+  ) {
+    return null;
+  }
+
+  const lowWilson = wilsonIntervalFromProportion(pLow, nLow, z);
+  const highWilson = wilsonIntervalFromProportion(pHigh, nHigh, z);
+  if (lowWilson === null || highWilson === null) return null;
+
+  const delta = pHigh - pLow;
+  const lowerRadius = Math.sqrt(
+    Math.max(0, (pHigh - highWilson.low) ** 2 + (lowWilson.high - pLow) ** 2),
+  );
+  const upperRadius = Math.sqrt(
+    Math.max(0, (highWilson.high - pHigh) ** 2 + (pLow - lowWilson.low) ** 2),
+  );
+
+  return {
+    ciLow: delta - lowerRadius,
+    ciHigh: delta + upperRadius,
+  };
+}
+
+/**
+ * Compute a t-based CI over per-pair deltas.
+ */
+export function tBasedMeanCI(
+  values: ReadonlyArray<number>,
+  alpha = 0.05,
+): { mean: number | null; ciLow: number | null; ciHigh: number | null; n: number } {
+  const usable = values.filter(isFiniteNumber);
+  const n = usable.length;
+  if (n === 0) {
+    return { mean: null, ciLow: null, ciHigh: null, n: 0 };
+  }
+
+  const mean = sumNumbers(usable) / n;
+  if (n < 2) {
+    return { mean, ciLow: null, ciHigh: null, n };
+  }
+
+  if (!Number.isFinite(alpha) || alpha <= 0 || alpha >= 1) {
+    return { mean, ciLow: null, ciHigh: null, n };
+  }
+
+  const sd = sampleStandardDeviation(usable, mean);
+  const t = studentTQuantile(1 - alpha / 2, n - 1);
+  if (!Number.isFinite(t)) {
+    return { mean, ciLow: null, ciHigh: null, n };
+  }
+
+  const margin = t * sd / Math.sqrt(n);
+  return {
+    mean,
+    ciLow: mean - margin,
+    ciHigh: mean + margin,
+    n,
+  };
+}
+
+/**
+ * Reduce a (own × opponent) grid to a pooled win-rate delta per pair.
+ */
+export function pooledBandReduction(grid: ReadonlyArray<Cell>, minN: number): WinRateDeltaResult {
+  const lowBandCells = grid.filter((cell) => cell.ownLevel <= 2 && cell.n >= minN);
+  const highBandCells = grid.filter((cell) => cell.ownLevel >= 4 && cell.n >= minN);
+  const lowBandTrials = sumNumbers(lowBandCells.map((cell) => cell.n));
+  const highBandTrials = sumNumbers(highBandCells.map((cell) => cell.n));
+
+  if (lowBandCells.length === 0 && highBandCells.length === 0) {
+    return {
+      value: null,
+      ciLow: null,
+      ciHigh: null,
+      lowBandMean: null,
+      highBandMean: null,
+      reason: 'both-bands-thin',
+      qualifyingTrials: 0,
+    };
+  }
+
+  if (lowBandCells.length === 0) {
+    return {
+      value: null,
+      ciLow: null,
+      ciHigh: null,
+      lowBandMean: null,
+      highBandMean: null,
+      reason: 'low-band-thin',
+      qualifyingTrials: highBandTrials,
+    };
+  }
+
+  if (highBandCells.length === 0) {
+    return {
+      value: null,
+      ciLow: null,
+      ciHigh: null,
+      lowBandMean: null,
+      highBandMean: null,
+      reason: 'high-band-thin',
+      qualifyingTrials: lowBandTrials,
+    };
+  }
+
+  const lowBandSuccesses = sumNumbers(lowBandCells.map((cell) => cell.successes));
+  const highBandSuccesses = sumNumbers(highBandCells.map((cell) => cell.successes));
+  const lowBandMean = lowBandSuccesses / lowBandTrials;
+  const highBandMean = highBandSuccesses / highBandTrials;
+  const ci = diffProportionCI(lowBandMean, lowBandTrials, highBandMean, highBandTrials);
+
+  return {
+    value: highBandMean - lowBandMean,
+    ciLow: ci?.ciLow ?? null,
+    ciHigh: ci?.ciHigh ?? null,
+    lowBandMean,
+    highBandMean,
+    reason: null,
+    qualifyingTrials: lowBandTrials + highBandTrials,
+  };
+}
+
+export function summarizeWinRateDeltas(
+  perPairWinRateDeltas: ReadonlyArray<number>,
+  perPairLowBandRates: ReadonlyArray<number>,
+  perPairHighBandRates: ReadonlyArray<number>,
+): WinRateDeltaSummary {
+  const deltaStats = tBasedMeanCI(perPairWinRateDeltas);
+  const lowStats = tBasedMeanCI(perPairLowBandRates);
+  const highStats = tBasedMeanCI(perPairHighBandRates);
+
+  return {
+    mean: deltaStats.mean,
+    ciLow: deltaStats.ciLow,
+    ciHigh: deltaStats.ciHigh,
+    lowBandMean: lowStats.mean,
+    highBandMean: highStats.mean,
+    pairsMeasured: deltaStats.n,
+    pairsPositive: perPairWinRateDeltas.filter((delta) => delta > FLAT_DELTA_THRESHOLD).length,
+  };
+}
+
+
+Context: pressure-sensitivity.ts
+import { createLogger } from '@valuerank/shared';
+import { db } from '@valuerank/db';
+import { builder } from '../builder.js';
+import { runMatchesSignature } from './domain-coverage-gql-types.js';
+import { resolveTranscriptDecisionModel } from './domain/shared.js';
+import {
+  PressureSensitivityResultRef,
+  type DirectionalSanityCheckEntryShape,
+  type DirectionalSanityCheckShape,
+  type ExcludedDefinitionShape,
+  type InsufficientPressureSensitivityModelShape,
+  type PressureSensitivityModelShape,
+  type PressureSensitivityResultShape,
+  type PressureSensitivityValuePairShape,
+  type SensitivityCellShape,
+} from '../types/pressure-sensitivity.js';
+import { buildSafeLevelLookup, type DefinitionDimension } from './scenarios-utils.js';
+import { normalizeScenarioAnalysisMetadata } from '../../services/analysis/scenario-metadata.js';
+import {
+  buildCellMetrics,
+  pooledBandReduction,
+  summarizeWinRateDeltas,
+  FLAT_DELTA_THRESHOLD,
+  type Observation,
+} from '../../services/pressure-sensitivity/aggregation.js';
+import {
+  validateDefinitionForPressureSensitivity,
+  type ValidationResult,
+} from '../../services/pressure-sensitivity/definition-validation.js';
+import {
+  assignOwnOpponent,
+  assignOwnOpponentLevels,
+  canonicalOwnOpponent,
+  canonicalValuePairKey,
+  type CanonicalDirection,
+} from '../../services/pressure-sensitivity/value-pair.js';
+import {
+  buildPressureSensitivityDecisionSnapshot,
+  type PressureSensitivityDecisionSnapshot,
+} from '../../services/pressure-sensitivity/decision-snapshot.js';
+
+const log = createLogger('pressure-sensitivity');
+const MIN_N = 3;
+const TRANSCRIPT_PAGE_SIZE = 5_000;
+const TRANSCRIPT_FETCH_LIMIT = 500_000;
+
+type ModelRow = {
+  modelId: string;
+  displayName: string;
+  providerId: string;
+  provider: { id: string; name: string; displayName: string | null };
+};
+
+type RunRow = {
+  id: string;
+  config: unknown;
+  definitionId: string;
+  definition: { id: string; name: string; domainId: string | null } | null;
+};
+
+type TranscriptRow = {
+  id: string;
+  modelId: string;
+  runId: string;
+  scenarioId: string | null;
+  decisionMetadata: unknown;
+};
+
+type ScenarioRow = {
+  id: string;
+  definitionId: string;
+  content: unknown;
+  orientationFlipped: boolean;
+};
+
+type DefinitionMetadata = {
+  id: string;
+  name: string;
+  /** Definition's stored value_first.token (used to remap canonical direction). */
+  valueFirstToken: string;
+  /** Definition's stored value_second.token (used to remap canonical direction). */
+  valueSecondToken: string;
+  /** Alphabetical canonical own (sortedTokens[0]). */
+  ownToken: string;
+  /** Alphabetical canonical opponent (sortedTokens[1]). */
+  opponentToken: string;
+  pairKey: string;
+  decisionSnapshot: PressureSensitivityDecisionSnapshot;
+  ownLookup: (raw: unknown) => number | null;
+  opponentLookup: (raw: unknown) => number | null;
+  dimensions: ReadonlyArray<DefinitionDimension>;
+};
+
+type CellAccumulator = {
+  ownLevel: number;
+  opponentLevel: number;
+  observations: Observation[];
+};
+
+type PairAccumulator = {
+  pairKey: string;
+  ownToken: string;
+  opponentToken: string;
+  cells: Map<string, CellAccumulator>;
+  definitionsMeasured: Set<string>;
+  definitionsExcluded: Set<string>;
+};
+
+function cellKey(ownLevel: number, opponentLevel: number): string {
+  return `${ownLevel}::${opponentLevel}`;
+}
+
+function strengthFromCanonical(strength: 'strong' | 'lean' | 'neutral' | 'unknown'): 'strong' | 'lean' | null {
+  if (strength === 'strong') return 'strong';
+  if (strength === 'lean') return 'lean';
+  return null;
+}
+
+/**
+ * Aggregate-tagged runs are pooling views over a set of source runs; transcripts live on
+ * the source runs, not the aggregate run itself. Pull the source-run IDs out of the aggregate
+ * run's config (`config.sourceRunIds`) so we can fetch transcripts from the right place.
+ */
+function extractSourceRunIds(config: unknown): string[] {
+  if (config === null || typeof config !== 'object') return [];
+  const sourceRunIds = (config as { sourceRunIds?: unknown }).sourceRunIds;
+  if (!Array.isArray(sourceRunIds)) return [];
+  return sourceRunIds.filter((id): id is string => typeof id === 'string' && id.length > 0);
+}
+
+type WarningLogger = {
+  warn: (data: Record<string, unknown>, message: string) => void;
+};
+
+type TranscriptPage = {
+  rows: TranscriptRow[];
+  hasMore: boolean;
+};
+
+type TranscriptPageFetcher = (cursor: { id: string } | undefined) => Promise<TranscriptPage>;
+
+export function buildSourceRunToDefIdMap(
+  eligibleRuns: ReadonlyArray<RunRow>,
+  definitionMeta: ReadonlyMap<string, DefinitionMetadata>,
+  warningLogger: WarningLogger,
+): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const run of eligibleRuns) {
+    const defId = run.definition?.id ?? run.definitionId;
+    if (!definitionMeta.has(defId)) continue;
+    for (const sourceRunId of extractSourceRunIds(run.config)) {
+      const existingDefinitionId = map.get(sourceRunId);
+      if (existingDefinitionId !== undefined && existingDefinitionId !== defId) {
+        warningLogger.warn(
+          {
+            sourceRunId,
+            existingDefinitionId,
+            newDefinitionId: defId,
+            code: 'source_run_collision',
+          },
+          'sourceRunId mapped to multiple definitions; last write wins',
+        );
+      }
+      map.set(sourceRunId, defId);
+    }
+  }
+  return map;
+}
+
+export async function fetchTranscriptsFromSourceRuns(
+  sourceRunIds: ReadonlyArray<string>,
+  rosterModelIds: ReadonlyArray<string>,
+  fetchPage: TranscriptPageFetcher,
+  warningLogger: WarningLogger,
+  limit = TRANSCRIPT_FETCH_LIMIT,
+): Promise<{ transcripts: TranscriptRow[]; transcriptCapHit: boolean }> {
+  const transcripts: TranscriptRow[] = [];
+  let cursor: { id: string } | undefined;
+  let transcriptCapHit = false;
+
+  if (sourceRunIds.length === 0 || rosterModelIds.length === 0) {
+    return { transcripts, transcriptCapHit: false };
+  }
+
+  while (transcripts.length < limit) {
+    const page = await fetchPage(cursor);
+    if (page.rows.length === 0) break;
+
+    const remaining = limit - transcripts.length;
+    if (page.rows.length > remaining) {
+      transcripts.push(...page.rows.slice(0, remaining));
+      transcriptCapHit = true;
+      break;
+    }
+
+    transcripts.push(...page.rows);
+    if (page.hasMore && transcripts.length >= limit) {
+      transcriptCapHit = true;
+      break;
+    }
+    if (!page.hasMore) break;
+
+    cursor = { id: page.rows[page.rows.length - 1]!.id };
+  }
+
+  if (transcriptCapHit) {
+    warningLogger.warn(
+      {
+        sourceRunIds: [...sourceRunIds],
+        scanned: transcripts.length,
+        limit,
+        code: 'transcript_cap_hit',
+      },
+      'Transcript fetch hit cap; results may be biased',
+    );
+  }
+
+  return { transcripts, transcriptCapHit };
+}
+
+builder.queryField('pressureSensitivity', (t) =>
+  t.field({
+    type: PressureSensitivityResultRef,
+    args: {
+      domainId: t.arg.id({ required: false }),
+      providerId: t.arg.id({ required: false }),
+      signature: t.arg.string({ required: true }),
+    },
+    resolve: async (_root, args): Promise<PressureSensitivityResultShape> => {
+      const domainId = args.domainId != null ? String(args.domainId) : null;
+      const providerId = args.providerId != null ? String(args.providerId) : null;
+      const signature = String(args.signature);
+
+      // 1. Roster
+      const activeModels = (await db.llmModel.findMany({
+        where: { status: 'ACTIVE' },
+        include: { provider: true },
+      })) as ModelRow[];
+
+      const models = providerId == null
+        ? activeModels
+        : activeModels.filter((m) =>
+          m.providerId === providerId
+          || m.provider.id === providerId
+          || m.provider.name === providerId
+          || m.provider.displayName === providerId,
+        );
+
+      // 2. Aggregate runs
+      // orderBy id:asc makes sourceRunToDefId Map.set "last write wins" deterministic
+      // across queries; without it the collision warning would point to a different
+      // winner each run (Slice A diff review finding).
+      const runs = (await db.run.findMany({
+        where: {
+          status: 'COMPLETED',
+          deletedAt: null,
+          tags: { some: { tag: { name: 'Aggregate' } } },
+          ...(domainId != null ? { definition: { domainId } } : {}),
+        },
+        include: {
+          definition: { select: { id: true, name: true, domainId: true } },
+        },
+        orderBy: { id: 'asc' },
+      })) as RunRow[];
+
+      // 3. Signature filter
+      const eligibleRuns = runs.filter((r) => runMatchesSignature(r.config, signature));
+      if (eligibleRuns.length === 0) {
+        return buildEmptyResult(models);
+      }
+
+      // 4. Distinct definitions → validation
+      const distinctDefIds = new Set<string>();
+      const defNames = new Map<string, string>();
+      for (const r of eligibleRuns) {
+        if (r.definition?.id != null) {
+          distinctDefIds.add(r.definition.id);
+          defNames.set(r.definition.id, r.definition.name);
+        } else {
+          distinctDefIds.add(r.definitionId);
+        }
+      }
+
+      const definitionMeta = new Map<string, DefinitionMetadata>();
+      const excludedDefinitions: ExcludedDefinitionShape[] = [];
+
+      for (const defId of distinctDefIds) {
+        const validation: ValidationResult = await validateDefinitionForPressureSensitivity(defId);
+        if (validation.status === 'excluded') {
+          excludedDefinitions.push({
+            definitionId: defId,
+            name: defNames.get(defId) ?? defId,
+            reason: validation.reason,
+          });
+          continue;
+        }
+
+        const content = validation.resolvedContent;
+        const components = content.components;
+        if (!components) {
+          excludedDefinitions.push({ definitionId: defId, name: defNames.get(defId) ?? defId, reason: 'missing-or-self-pair-tokens' });
+          continue;
+        }
+        const pairKey = canonicalValuePairKey(components.value_first.token, components.value_second.token);
+        if (pairKey === null) {
+          excludedDefinitions.push({ definitionId: defId, name: defNames.get(defId) ?? defId, reason: 'missing-or-self-pair-tokens' });
+          continue;
+        }
+        const [ownToken, opponentToken] = canonicalOwnOpponent(
+          components.value_first.token,
+          components.value_second.token,
+        );
+
+        const dimensions: DefinitionDimension[] = (content.dimensions ?? []).map((d) => ({
+          name: d.name,
+          levels: d.levels,
+          values: d.values,
+        }));
+
+        const ownDim = dimensions.find((d) => typeof d.name === 'string' && d.name.trim() === ownToken);
+        const opponentDim = dimensions.find((d) => typeof d.name === 'string' && d.name.trim() === opponentToken);
+        if (!ownDim || !opponentDim) {
+          excludedDefinitions.push({ definitionId: defId, name: defNames.get(defId) ?? defId, reason: 'missing-or-empty-levels' });
+          continue;
+        }
+
+        const ownLookupResult = buildSafeLevelLookup(ownDim);
+        const opponentLookupResult = buildSafeLevelLookup(opponentDim);
+        if (ownLookupResult.exclusionReason !== null || opponentLookupResult.exclusionReason !== null) {
+          const reason = ownLookupResult.exclusionReason ?? opponentLookupResult.exclusionReason;
+          const mapped =
+            reason === 'collision' ? 'normalization-collision'
+            : reason === 'out-of-range' ? 'score-out-of-range'
+            : reason === 'legacy-values-only' ? 'legacy-single-dimension'
+            : 'missing-or-empty-levels';
+          excludedDefinitions.push({ definitionId: defId, name: defNames.get(defId) ?? defId, reason: mapped });
+          continue;
+        }
+
+        const decisionSnapshot = buildPressureSensitivityDecisionSnapshot(content);
+        if (decisionSnapshot === null) {
+          excludedDefinitions.push({ definitionId: defId, name: defNames.get(defId) ?? defId, reason: 'missing-or-self-pair-tokens' });
+          continue;
+        }
+
+        definitionMeta.set(defId, {
+          id: defId,
+          name: defNames.get(defId) ?? defId,
+          valueFirstToken: components.value_first.token,
+          valueSecondToken: components.value_second.token,
+          ownToken,
+          opponentToken,
+          pairKey,
+          decisionSnapshot,
+          ownLookup: ownLookupResult.lookup,
+          opponentLookup: opponentLookupResult.lookup,
+          dimensions,
+        });
+      }
+
+      // 5. Stream transcripts from the SOURCE runs of each Aggregate-tagged run.
+      // Aggregate runs are pooling views — they own metadata (perScenario summaries) but
+      // the raw transcripts live on the runs listed in `config.sourceRunIds`. Fetching
+      // transcripts WHERE runId IN aggregateRunIds returns 0 rows; the production smoke
+      // test on PR #770 caught this.
+      const sourceRunToDefId = buildSourceRunToDefIdMap(eligibleRuns, definitionMeta, log);
+      const sourceRunIds = [...sourceRunToDefId.keys()];
+      const rosterModelIds = models.map((m) => m.modelId);
+      let excludedScenariosCount = 0;
+
+      // Pre-fetch the scenarios for eligible Definitions ONCE into a map. Each scenario's
+      // content + orientationFlipped is the same across thousands of transcripts, so joining
+      // on transcript blew up the response payload past Prisma's napi String limit.
+      const eligibleDefIds = [...definitionMeta.keys()];
+      const scenarioRows = eligibleDefIds.length === 0
+        ? []
+        : ((await db.scenario.findMany({
+          where: { definitionId: { in: eligibleDefIds }, deletedAt: null },
+          select: { id: true, definitionId: true, content: true, orientationFlipped: true },
+        })) as ScenarioRow[]);
+      const scenarioById = new Map<string, ScenarioRow>();
+      for (const s of scenarioRows) scenarioById.set(s.id, s);
+
+      const { transcripts, transcriptCapHit } = await fetchTranscriptsFromSourceRuns(
+        sourceRunIds,
+        rosterModelIds,
+        async (cursor) => {
+          const page = (await db.transcript.findMany({
+            where: {
+              runId: { in: sourceRunIds },
+              modelId: { in: rosterModelIds },
+              deletedAt: null,
+            },
+            select: {
+              id: true,
+              modelId: true,
+              runId: true,
+              scenarioId: true,
+              decisionMetadata: true,
+            },
+            orderBy: { id: 'asc' },
+            take: TRANSCRIPT_PAGE_SIZE + 1,
+            ...(cursor ? { skip: 1, cursor } : {}),
+          })) as TranscriptRow[];
+          // Fetch one extra row to detect "more available" without false-positives
+          // on exact-multiple page boundaries (Slice A diff review finding).
+          const hasMore = page.length > TRANSCRIPT_PAGE_SIZE;
+          return { rows: hasMore ? page.slice(0, TRANSCRIPT_PAGE_SIZE) : page, hasMore };
+        },
+        log,
+      );
+
+      // 6-8. Bucket transcripts via the sourceRun → definitionId map built above.
+      const perModel = new Map<string, Map<string, PairAccumulator>>();
+      for (const m of models) perModel.set(m.modelId, new Map());
+
+      for (const tx of transcripts) {
+        const defId = sourceRunToDefId.get(tx.runId);
+        if (defId == null) continue;
+        const meta = definitionMeta.get(defId);
+        if (!meta) continue;
+        const scenario = tx.scenarioId != null ? scenarioById.get(tx.scenarioId) ?? null : null;
+
+        const decision = resolveTranscriptDecisionModel({
+          decisionMetadata: tx.decisionMetadata,
+          definitionSnapshot: meta.decisionSnapshot,
+          orientationFlipped: scenario?.orientationFlipped ?? null,
+        });
+        const direction = decision.canonical.direction as CanonicalDirection;
+
+        const outcome = assignOwnOpponent(
+          meta.valueFirstToken,
+          meta.valueSecondToken,
+          direction,
+        );
+
+        const strength = strengthFromCanonical(decision.canonical.strength);
+
+        const pairAcc = ensurePairAccumulator(perModel, tx.modelId, meta);
+        pairAcc.definitionsMeasured.add(defId);
+
+        if (outcome === 'unscored') {
+          const unscoredCell = ensureUnscoredCell(pairAcc);
+          unscoredCell.observations.push({ outcome, strength });
+          continue;
+        }
+
+        if (scenario == null) continue;
+        const normalized = normalizeScenarioAnalysisMetadata(scenario.content);
+        if (normalized === null) {
+          excludedScenariosCount += 1;
+          continue;
+        }
+
+        const levels = assignOwnOpponentLevels(
+          meta.dimensions,
+          normalized.groupingDimensions,
+          meta.ownLookup,
+          meta.opponentLookup,
+          meta.ownToken,
+          meta.opponentToken,
+        );
+        if (levels === null) continue;
+
+        const key = cellKey(levels.ownLevel, levels.opponentLevel);
+        let cell = pairAcc.cells.get(key);
+        if (!cell) {
+          cell = { ownLevel: levels.ownLevel, opponentLevel: levels.opponentLevel, observations: [] };
+          pairAcc.cells.set(key, cell);
+        }
+        cell.observations.push({ outcome, strength });
+      }
+
+      // 9-13. Build per-model output.
+      const outputModels: PressureSensitivityModelShape[] = [];
+      const insufficient: InsufficientPressureSensitivityModelShape[] = [];
+      const sanityBreakdown: DirectionalSanityCheckEntryShape[] = [];
+      let sanityPositive = 0;
+      let sanityFlat = 0;
+      let sanityNegative = 0;
+      let sanityUnmeasurable = 0;
+
+      for (const model of models) {
+        const pairs = perModel.get(model.modelId) ?? new Map<string, PairAccumulator>();
+        const valuePairs: PressureSensitivityValuePairShape[] = [];
+        let modelUnscored = 0;
+        const perPairWinRateDeltas: number[] = [];
+        const perPairLowBandRates: number[] = [];
+        const perPairHighBandRates: number[] = [];
+
+        for (const acc of pairs.values()) {
+          const grid: SensitivityCellShape[] = [];
+          let pairN = 0;
+          let pairUnscored = 0;
+          for (const [, cellAcc] of acc.cells) {
+            const metrics = buildCellMetrics(cellAcc.observations);
+            pairN += metrics.n;
+            pairUnscored += metrics.unscoredCount;
+            grid.push({
+              ownLevel: cellAcc.ownLevel,
+              opponentLevel: cellAcc.opponentLevel,
+              n: metrics.n,
+              successes: metrics.successes,
+              unscoredCount: metrics.unscoredCount,
+              winRate: metrics.winRate,
+              conviction: metrics.conviction,
+              netScore: metrics.netScore,
+              lowData: metrics.n < MIN_N,
+            });
+          }
+          modelUnscored += pairUnscored;
+
+          const winRateDelta = pooledBandReduction(grid, MIN_N);
+          valuePairs.push({
+            pairKey: acc.pairKey,
+            ownToken: acc.ownToken,
+            opponentToken: acc.opponentToken,
+            winRateDelta: {
+              value: winRateDelta.value,
+              ciLow: winRateDelta.ciLow,
+              ciHigh: winRateDelta.ciHigh,
+              lowBandMean: winRateDelta.lowBandMean,
+              highBandMean: winRateDelta.highBandMean,
+              reason: winRateDelta.reason,
+            },
+            qualifyingTrials: winRateDelta.qualifyingTrials,
+            n: pairN,
+            unscoredCount: pairUnscored,
+            grid,
+            definitionsMeasured: acc.definitionsMeasured.size,
+            definitionsExcluded: acc.definitionsExcluded.size,
+          });
+
+          if (winRateDelta.value !== null && winRateDelta.lowBandMean !== null && winRateDelta.highBandMean !== null) {
+            perPairWinRateDeltas.push(winRateDelta.value);
+            perPairLowBandRates.push(winRateDelta.lowBandMean);
+            perPairHighBandRates.push(winRateDelta.highBandMean);
+
+            const classification: 'positive' | 'flat' | 'negative' =
+              Math.abs(winRateDelta.value) < FLAT_DELTA_THRESHOLD
+                ? 'flat'
+                : winRateDelta.value > 0
+                  ? 'positive'
+                  : 'negative';
+            if (classification === 'positive') sanityPositive += 1;
+            else if (classification === 'flat') sanityFlat += 1;
+            else sanityNegative += 1;
+            sanityBreakdown.push({
+              modelId: model.modelId,
+              pairKey: acc.pairKey,
+              winRateDelta: winRateDelta.value,
+              classification,
+            });
+          } else {
+            sanityUnmeasurable += 1;
+          }
+        }
+
+        const winRateDeltaSummary = summarizeWinRateDeltas(
+          perPairWinRateDeltas,
+          perPairLowBandRates,
+          perPairHighBandRates,
+        );
+
+        if (valuePairs.length === 0 || winRateDeltaSummary.pairsMeasured === 0) {
+          insufficient.push({
+            modelId: model.modelId,
+            label: model.displayName,
+            providerName: model.provider.displayName ?? model.provider.name,
+            reason: 'no-coverage',
+          });
+          continue;
+        }
+
+        outputModels.push({
+          modelId: model.modelId,
+          label: model.displayName,
+          providerName: model.provider.displayName ?? model.provider.name,
+          winRateDeltaSummary,
+          valuePairs: valuePairs.sort((a, b) => a.pairKey.localeCompare(b.pairKey)),
+          unscoredCount: modelUnscored,
+        });
+      }
+
+      const measuredCount = sanityPositive + sanityFlat + sanityNegative;
+      const directionalSanityCheck: DirectionalSanityCheckShape = {
+        positivePct: measuredCount === 0 ? 0 : (sanityPositive / measuredCount) * 100,
+        flatPct: measuredCount === 0 ? 0 : (sanityFlat / measuredCount) * 100,
+        negativePct: measuredCount === 0 ? 0 : (sanityNegative / measuredCount) * 100,
+        measuredCount,
+        unmeasurableCount: sanityUnmeasurable,
+        breakdown: sanityBreakdown,
+      };
+
+      return {
+        models: outputModels.sort((a, b) => {
+          const aMean = a.winRateDeltaSummary.mean;
+          const bMean = b.winRateDeltaSummary.mean;
+          if (aMean === null && bMean === null) {
+            return a.label.localeCompare(b.label);
+          }
+          if (aMean === null) return 1;
+          if (bMean === null) return -1;
+          if (bMean !== aMean) return bMean - aMean;
+          return a.label.localeCompare(b.label);
+        }),
+        insufficient,
+        excludedDefinitions,
+        excludedScenariosCount,
+        directionalSanityCheck,
+        transcriptCapHit,
+      };
+    },
+  }),
+);
+
+function ensurePairAccumulator(
+  perModel: Map<string, Map<string, PairAccumulator>>,
+  modelId: string,
+  meta: DefinitionMetadata,
+): PairAccumulator {
+  let pairs = perModel.get(modelId);
+  if (!pairs) {
+    pairs = new Map();
+    perModel.set(modelId, pairs);
+  }
+  let acc = pairs.get(meta.pairKey);
+  if (!acc) {
+    acc = {
+      pairKey: meta.pairKey,
+      ownToken: meta.ownToken,
+      opponentToken: meta.opponentToken,
+      cells: new Map(),
+      definitionsMeasured: new Set(),
+      definitionsExcluded: new Set(),
+    };
+    pairs.set(meta.pairKey, acc);
+  }
+  return acc;
+}
+
+function ensureUnscoredCell(pairAcc: PairAccumulator): CellAccumulator {
+  // Unscored observations don't have a meaningful (ownLevel, opponentLevel); we use level 0/0
+  // which is outside the 1..5 range and is filtered out of band reduction and baseline.
+  const key = cellKey(0, 0);
+  let cell = pairAcc.cells.get(key);
+  if (!cell) {
+    cell = { ownLevel: 0, opponentLevel: 0, observations: [] };
+    pairAcc.cells.set(key, cell);
+  }
+  return cell;
+}
+
+export function buildEmptyResult(
+  models: ModelRow[],
+  transcriptCapHit = false,
+): PressureSensitivityResultShape {
+  return {
+    models: [],
+    insufficient: models.map((m) => ({
+      modelId: m.modelId,
+      label: m.displayName,
+      providerName: m.provider.displayName ?? m.provider.name,
+      reason: 'no-coverage',
+    })),
+    excludedDefinitions: [],
+    excludedScenariosCount: 0,
+    directionalSanityCheck: {
+      positivePct: 0,
+      flatPct: 0,
+      negativePct: 0,
+      measuredCount: 0,
+      unmeasurableCount: 0,
+      breakdown: [],
+    },
+    transcriptCapHit,
+  };
+}
+
+
+Context: pressure-sensitivity.ts
+import { builder } from '../builder.js';
+
+export type SensitivityCellShape = {
+  ownLevel: number;
+  opponentLevel: number;
+  n: number;
+  successes: number;
+  unscoredCount: number;
+  winRate: number | null;
+  conviction: number | null;
+  netScore: number | null;
+  lowData: boolean;
+};
+
+export type WinRateDeltaShape = {
+  value: number | null;
+  ciLow: number | null;
+  ciHigh: number | null;
+  lowBandMean: number | null;
+  highBandMean: number | null;
+  reason: 'low-band-thin' | 'high-band-thin' | 'both-bands-thin' | null;
+};
+
+export type WinRateDeltaSummaryShape = {
+  mean: number | null;
+  ciLow: number | null;
+  ciHigh: number | null;
+  lowBandMean: number | null;
+  highBandMean: number | null;
+  pairsMeasured: number;
+  pairsPositive: number;
+};
+
+export type PressureSensitivityValuePairShape = {
+  pairKey: string;
+  ownToken: string;
+  opponentToken: string;
+  winRateDelta: WinRateDeltaShape;
+  qualifyingTrials: number;
+  n: number;
+  unscoredCount: number;
+  grid: SensitivityCellShape[];
+  definitionsMeasured: number;
+  definitionsExcluded: number;
+};
+
+export type PressureSensitivityModelShape = {
+  modelId: string;
+  label: string;
+  providerName: string;
+  winRateDeltaSummary: WinRateDeltaSummaryShape;
+  valuePairs: PressureSensitivityValuePairShape[];
+  unscoredCount: number;
+};
+
+export type InsufficientPressureSensitivityModelShape = {
+  modelId: string;
+  label: string;
+  providerName: string;
+  reason: 'no-coverage';
+};
+
+export type ExcludedDefinitionShape = {
+  definitionId: string;
+  name: string;
+  reason: string;
+};
+
+export type DirectionalSanityCheckEntryShape = {
+  modelId: string;
+  pairKey: string;
+  winRateDelta: number;
+  classification: 'positive' | 'flat' | 'negative';
+};
+
+export type DirectionalSanityCheckShape = {
+  positivePct: number;
+  flatPct: number;
+  negativePct: number;
+  measuredCount: number;
+  unmeasurableCount: number;
+  breakdown: DirectionalSanityCheckEntryShape[];
+};
+
+export type PressureSensitivityResultShape = {
+  models: PressureSensitivityModelShape[];
+  insufficient: InsufficientPressureSensitivityModelShape[];
+  excludedDefinitions: ExcludedDefinitionShape[];
+  excludedScenariosCount: number;
+  directionalSanityCheck: DirectionalSanityCheckShape;
+  transcriptCapHit: boolean;
+};
+
+const SensitivityCellRef = builder.objectRef<SensitivityCellShape>('SensitivityCell');
+const WinRateDeltaRef = builder.objectRef<WinRateDeltaShape>('WinRateDelta');
+const WinRateDeltaSummaryRef = builder.objectRef<WinRateDeltaSummaryShape>('WinRateDeltaSummary');
+const PressureSensitivityValuePairRef = builder.objectRef<PressureSensitivityValuePairShape>(
+  'PressureSensitivityValuePair',
+);
+const PressureSensitivityModelRef = builder.objectRef<PressureSensitivityModelShape>(
+  'PressureSensitivityModel',
+);
+const InsufficientPressureSensitivityModelRef = builder.objectRef<
+  InsufficientPressureSensitivityModelShape
+>('InsufficientPressureSensitivityModel');
+const ExcludedDefinitionRef = builder.objectRef<ExcludedDefinitionShape>('ExcludedDefinition');
+const DirectionalSanityCheckEntryRef = builder.objectRef<DirectionalSanityCheckEntryShape>(
+  'DirectionalSanityCheckEntry',
+);
+const DirectionalSanityCheckRef = builder.objectRef<DirectionalSanityCheckShape>(
+  'DirectionalSanityCheck',
+);
+
+export const PressureSensitivityResultRef = builder.objectRef<PressureSensitivityResultShape>(
+  'PressureSensitivityResult',
+);
+
+builder.objectType(SensitivityCellRef, {
+  fields: (t) => ({
+    ownLevel: t.exposeInt('ownLevel'),
+    opponentLevel: t.exposeInt('opponentLevel'),
+    n: t.exposeInt('n'),
+    successes: t.exposeInt('successes'),
+    unscoredCount: t.exposeInt('unscoredCount'),
+    winRate: t.exposeFloat('winRate', { nullable: true }),
+    conviction: t.exposeFloat('conviction', { nullable: true }),
+    netScore: t.exposeFloat('netScore', { nullable: true }),
+    lowData: t.exposeBoolean('lowData'),
+  }),
+});
+
+builder.objectType(WinRateDeltaRef, {
+  fields: (t) => ({
+    value: t.exposeFloat('value', { nullable: true }),
+    ciLow: t.exposeFloat('ciLow', { nullable: true }),
+    ciHigh: t.exposeFloat('ciHigh', { nullable: true }),
+    lowBandMean: t.exposeFloat('lowBandMean', { nullable: true }),
+    highBandMean: t.exposeFloat('highBandMean', { nullable: true }),
+    reason: t.exposeString('reason', { nullable: true }),
+  }),
+});
+
+builder.objectType(WinRateDeltaSummaryRef, {
+  fields: (t) => ({
+    mean: t.exposeFloat('mean', { nullable: true }),
+    ciLow: t.exposeFloat('ciLow', { nullable: true }),
+    ciHigh: t.exposeFloat('ciHigh', { nullable: true }),
+    lowBandMean: t.exposeFloat('lowBandMean', { nullable: true }),
+    highBandMean: t.exposeFloat('highBandMean', { nullable: true }),
+    pairsMeasured: t.exposeInt('pairsMeasured'),
+    pairsPositive: t.exposeInt('pairsPositive'),
+  }),
+});
+
+builder.objectType(PressureSensitivityValuePairRef, {
+  fields: (t) => ({
+    pairKey: t.exposeString('pairKey'),
+    ownToken: t.exposeString('ownToken'),
+    opponentToken: t.exposeString('opponentToken'),
+    winRateDelta: t.expose('winRateDelta', { type: WinRateDeltaRef }),
+    qualifyingTrials: t.exposeInt('qualifyingTrials'),
+    n: t.exposeInt('n'),
+    unscoredCount: t.exposeInt('unscoredCount'),
+    grid: t.expose('grid', { type: [SensitivityCellRef] }),
+    definitionsMeasured: t.exposeInt('definitionsMeasured'),
+    definitionsExcluded: t.exposeInt('definitionsExcluded'),
+  }),
+});
+
+builder.objectType(PressureSensitivityModelRef, {
+  fields: (t) => ({
+    modelId: t.exposeString('modelId'),
+    label: t.exposeString('label'),
+    providerName: t.exposeString('providerName'),
+    winRateDeltaSummary: t.expose('winRateDeltaSummary', { type: WinRateDeltaSummaryRef }),
+    valuePairs: t.expose('valuePairs', { type: [PressureSensitivityValuePairRef] }),
+    unscoredCount: t.exposeInt('unscoredCount'),
+  }),
+});
+
+builder.objectType(InsufficientPressureSensitivityModelRef, {
+  fields: (t) => ({
+    modelId: t.exposeString('modelId'),
+    label: t.exposeString('label'),
+    providerName: t.exposeString('providerName'),
+    reason: t.exposeString('reason'),
+  }),
+});
+
+builder.objectType(ExcludedDefinitionRef, {
+  fields: (t) => ({
+    definitionId: t.exposeString('definitionId'),
+    name: t.exposeString('name'),
+    reason: t.exposeString('reason'),
+  }),
+});
+
+builder.objectType(DirectionalSanityCheckEntryRef, {
+  fields: (t) => ({
+    modelId: t.exposeString('modelId'),
+    pairKey: t.exposeString('pairKey'),
+    winRateDelta: t.exposeFloat('winRateDelta'),
+    classification: t.exposeString('classification'),
+  }),
+});
+
+builder.objectType(DirectionalSanityCheckRef, {
+  fields: (t) => ({
+    positivePct: t.exposeFloat('positivePct'),
+    flatPct: t.exposeFloat('flatPct'),
+    negativePct: t.exposeFloat('negativePct'),
+    measuredCount: t.exposeInt('measuredCount'),
+    unmeasurableCount: t.exposeInt('unmeasurableCount'),
+    breakdown: t.expose('breakdown', { type: [DirectionalSanityCheckEntryRef] }),
+  }),
+});
+
+builder.objectType(PressureSensitivityResultRef, {
+  fields: (t) => ({
+    models: t.expose('models', { type: [PressureSensitivityModelRef] }),
+    insufficient: t.expose('insufficient', { type: [InsufficientPressureSensitivityModelRef] }),
+    excludedDefinitions: t.expose('excludedDefinitions', { type: [ExcludedDefinitionRef] }),
+    excludedScenariosCount: t.exposeInt('excludedScenariosCount'),
+    directionalSanityCheck: t.expose('directionalSanityCheck', { type: DirectionalSanityCheckRef }),
+    transcriptCapHit: t.exposeBoolean('transcriptCapHit'),
+  }),
+});
+
+
+Context: pressureSensitivity.graphql
+query PressureSensitivity(
+  $domainId: ID
+  $providerId: ID
+  $signature: String!
+) {
+  pressureSensitivity(
+    domainId: $domainId
+    providerId: $providerId
+    signature: $signature
+  ) {
+    models {
+      modelId
+      label
+      providerName
+      unscoredCount
+      winRateDeltaSummary {
+        mean
+        ciLow
+        ciHigh
+        lowBandMean
+        highBandMean
+        pairsMeasured
+        pairsPositive
+      }
+      valuePairs {
+        pairKey
+        ownToken
+        opponentToken
+        n
+        unscoredCount
+        definitionsMeasured
+        definitionsExcluded
+        qualifyingTrials
+        winRateDelta {
+          value
+          lowBandMean
+          highBandMean
+          ciLow
+          ciHigh
+          reason
+        }
+        grid {
+          ownLevel
+          opponentLevel
+          n
+          unscoredCount
+          winRate
+          conviction
+          netScore
+          lowData
+        }
+      }
+    }
+    insufficient {
+      modelId
+      label
+      providerName
+      reason
+    }
+    excludedDefinitions {
+      definitionId
+      name
+      reason
+    }
+    excludedScenariosCount
+    transcriptCapHit
+    directionalSanityCheck {
+      positivePct
+      flatPct
+      negativePct
+      measuredCount
+      unmeasurableCount
+      breakdown {
+        modelId
+        pairKey
+        winRateDelta
+        classification
+      }
+    }
+  }
+}
+
+
+Artifact: spec.md
+# Spec: Pressure Sensitivity Table Redesign v2
+
+**Feature slug:** sensitivity-table-redesign-v2
+**Created:** 2026-04-29
+**Status:** draft
+**Path:** Feature Factory (`docs/workflow/feature-runs/sensitivity-table-redesign-v2/`)
+
+---
+
+## Background
+
+Pressure Sensitivity v1 shipped in PR #778, with a hotfix in PR #780. It replaced older aggregate pressure metrics with a clearer `Win rate Delta` table, but post-deploy smoke testing surfaced a methodology problem: the headline high-band pool mixed three different kinds of cells.
+
+The v1 high-band pool included:
+
+1. **Directional cells:** first value at full pressure and second value at negligible pressure.
+2. **Tied cells:** both values at full pressure.
+3. **Inverted cells:** first value at heavy pressure and second value at full pressure.
+
+Pooling those cells diluted the directional signal. The shipped headline showed 7 of 10 frontier models with negative `Win rate Delta`, implying models resisted directed pressure. That is almost certainly not the correct interpretation.
+
+This v2 redesign replaces the headline metric with **Pressure response**. It compares two mirrored directional pools and subtracts them, so each value pair's baseline preference cancels out.
+
+---
+
+## Discovery: Assumptions Carried In
+
+Discovery is complete because the methodology is locked by the handoff. The following decisions are carried into this spec:
+
+1. **Drop refusals from the denominator and footnote the rate.** Refusals are rare on the canonical signature: about 21 refusals out of about 113,000 trials across 10 frontier models (<0.02%). The worst single model observed was DeepSeek Reasoner at 12 refusals out of about 11,300 trials (0.11%).
+2. **Use the 6-cell directional pool and 5-cell diagonal baseline.** Directional pools use label membership, not integer distance. Labels are ordinal and are not treated as evenly spaced.
+3. **Drop the v1 binary `responsive: X/Y` tag and do not apply a multiple-comparisons correction.** The report shows effect sizes instead of significance-based classifications.
+4. **Use range notation for cross-model spread, not plus/minus notation.** The cross-model range is dispersion across value pairs, not a confidence interval.
+5. **Use an atomic GraphQL removal.** Remove v1 fields in lockstep with the v2 fields. Do not keep a compatibility layer.
+6. **Treat v1 artifacts as templates only.** Do not edit the v1 workflow folder.
+
+Sensitivity validation is recorded in `sensitivity-check-results.md`.
+
+---
+
+## Product Goal
+
+The Pressure Sensitivity report should let a researcher answer one question quickly:
+
+**How much does the prompt's direction move each model's choices, after accounting for the model's underlying value preference?**
+
+The report should:
+
+- Use a headline metric in percentage points.
+- Separate directional response from baseline preference.
+- Show per-pair trial-level uncertainty.
+- Show cross-model spread as a range across pairs.
+- Avoid binary "responsive" labels that invite overclaiming.
+
+---
+
+## User Stories
+
+### US-1 — View Cross-Model Pressure Response (P1)
+
+As a researcher, I want the top table to rank models by Pressure response so I can see which models are most moved by directional prompt pressure.
+
+**Independent test:** Open `/models/pressure-sensitivity`. The cross-model table has two columns: Model and Pressure response. Rows are sorted by `pressureResponseSummary.mean` descending, then model name ascending.
+
+**Acceptance scenarios:**
+
+1. **Given** the report loads, **when** I look at the cross-model summary, **then** I see one data column labeled "Pressure response".
+2. **Given** a model has a measured response, **when** I read the cell, **then** I see the mean response in pp plus the text `range across this model's pairs: [min, max]`.
+3. **Given** a model has a negative mean response, **when** the cell renders, **then** it uses `text-red-700` and a leading `▼` glyph.
+4. **Given** I click a model row, **when** the detail table updates, **then** the selected model's per-pair rows are shown.
+
+### US-2 — Drill Into Per-Pair Detail (P1)
+
+As a researcher, I want to inspect one model's value pairs so I can see whether the headline response is broad or driven by a few pairs.
+
+**Acceptance scenarios:**
+
+1. **Given** a selected model, **when** the per-pair table loads, **then** it shows columns for Value pair, Baseline, Push toward first, Push toward other, Pressure response, and Trials.
+2. **Given** a pair has a defined response, **when** I read its Pressure response cell, **then** I see a signed pp value with a 95% trial-level CI.
+3. **Given** a pair has a missing directional pool, **when** I read its Pressure response cell, **then** I see `—` with a reason-specific hover message.
+4. **Given** I click a row, **when** the drilldown opens, **then** the existing 5x5 pressure grid still renders for that pair.
+
+### US-3 — Understand The Metrics Through Tooltips (P1)
+
+As a researcher, I want header tooltips that explain each column in plain language.
+
+**Acceptance scenarios:**
+
+1. **Given** I hover or keyboard-focus a header info trigger, **when** the tooltip opens, **then** it explains the metric and its units.
+2. **Given** I inspect the Pressure response tooltip, **when** I read it, **then** it explains that push-toward-first minus push-toward-other cancels baseline preference.
+3. **Given** I inspect the Trials tooltip, **when** I read it, **then** it says refusals, unparseable responses, and unused cells are excluded.
+
+### US-4 — See Trial-Level Uncertainty (P2)
+
+As a researcher, I want per-pair CIs so I can tell whether a surprising pair is well supported by trials.
+
+**Acceptance scenarios:**
+
+1. **Given** a pair has both directional pools, **when** the Pressure response cell renders, **then** it shows a 95% Newcombe diff-of-proportions CI.
+2. **Given** the baseline rate is shown, **when** I inspect it, **then** it is a point estimate only in the table. Endpoint CI may be available in hover copy.
+3. **Given** I read the cross-model table, **when** I see the range annotation, **then** it is labeled as a range across pairs, not as a CI.
+
+---
+
+## Edge Cases
+
+- **Directional pool missing:** `pressureResponse.value` is null and `reason = 'directional-thin'`. The row shows `—` for response.
+- **Mirror pool missing:** `pressureResponse.value` is null and `reason = 'inverted-thin'`.
+- **Both directional pools missing:** `reason = 'directional-and-inverted-thin'`.
+- **Baseline pool missing:** `baselineRate` is null and `reason = 'baseline-thin'` only when the response is otherwise computable. The response can still be defined.
+- **Baseline measurable but one directional pool missing:** the pair stays visible in the per-pair table. `baselineRate` may render normally, `pressureResponse.value` renders `—`, and the pair does not contribute to cross-model `mean`, `rangeMin`, `rangeMax`, or `pairsMeasured`.
+- **Directional response measurable but baseline missing:** the pair stays visible. `pressureResponse.value` renders normally, `baselineRate` renders `—`, and the pair contributes to cross-model summary because the headline metric is defined.
+- **All pools thin:** all rates are null, `qualifyingTrials = 0`, and the reason explains the directional failure.
+- **Multiple thin reasons apply:** directional reasons take precedence over baseline-only reasons. `baseline-thin` is used only when both directional pools are present and the diagonal baseline pool is missing. When both directional pools are missing, use `directional-and-inverted-thin` even if baseline is also thin.
+- **Negative response:** render red plus `▼`, never color alone.
+- **All-zero responses:** cross-model sort falls back to model name; per-pair sort falls back to pair label.
+- **Undefined response sort:** undefined rows sort to the bottom.
+- **Boundary proportions:** Newcombe/Wilson math handles 0% and 100% pools without division-by-zero.
+- **Exact zero response:** render as neutral `0 pp` with no up/down glyph and no red styling.
+- **Baseline does not aggregate cleanly across pairs:** it appears only in per-pair detail.
+- **Low refusal rate:** refusals stay excluded from denominators and are described in methods/limitations copy.
+- **Transcript cap:** v1 diagnostic carve-out stays intact and remains user-visible through a report-level warning when `transcriptCapHit` is true.
+- **Source-run collision:** v1 log warning carve-out stays intact. Collision resolution remains deterministic last-write-wins over the resolver's stable source-run ordering.
+- **No measured pairs for a model:** the model stays in the existing `insufficient[]` footer rather than the ranked `models[]` table. If a summary object is constructed internally for tests, `mean`, `rangeMin`, and `rangeMax` are null and `pairsMeasured = 0`.
+- **One measured pair for a model:** `pressureResponseSummary.mean`, `rangeMin`, and `rangeMax` all equal the single measured pair's response.
+
+---
+
+## Functional Requirements
+
+- **FR-001:** The cross-model summary MUST render exactly two columns: Model and Pressure response.
+- **FR-002:** The cross-model summary MUST sort by `pressureResponseSummary.mean` descending, with model label ascending as the tie-breaker. Models with no measured pairs remain in the existing `insufficient[]` footer rather than the ranked `models[]` array.
+- **FR-003:** A cross-model Pressure response cell MUST render `{mean} pp · range across this model's pairs: [{rangeMin}, {rangeMax}]`.
+- **FR-004:** Cross-model range fields MUST be computed from per-pair Pressure response values as `min` and `max`. They MUST NOT be labeled or formatted as a confidence interval. When a model has no measured pairs, `mean`, `rangeMin`, and `rangeMax` MUST all be null. When a model has one measured pair, `rangeMin` and `rangeMax` MUST both equal that pair's response.
+- **FR-005:** Cross-model mean MUST be an equal-weight arithmetic mean of measured per-pair Pressure responses.
+- **FR-006:** Cross-model summary MUST expose `pairsMeasured`, the count of pairs with defined Pressure response.
+- **FR-007:** Per-pair detail MUST render Value pair, Baseline, Push toward first, Push toward other, Pressure response, and Trials.
+- **FR-008:** Per-pair default sort MUST be absolute Pressure response descending, with pair label ascending as the tie-breaker. Rows with null response sort to the bottom.
+- **FR-009:** Per-pair pair labels MUST use explicit first/second fields, e.g. `Honesty ↔ Privacy`, because the directional pools depend on which value is first. The source of truth for first/second is the stable canonical pair ordering used by `canonicalValuePairKey`, not whichever order a particular vignette happened to present.
+- **FR-009a:** Backend implementation MUST map every condition into that canonical first/second coordinate before pooling. Reverse-ordered vignettes may share one canonical pair row only if their condition levels are transformed into the same first/second coordinate. The implementation MUST NOT mix untransformed `A -> B` and `B -> A` conditions in the same directional pool.
+- **FR-009b:** The per-pair GraphQL shape MUST add explicit fields named `firstValueToken`, `firstValueLabel`, `secondValueToken`, and `secondValueLabel`. These fields are the canonical first/second order from `canonicalValuePairKey`. Labels MUST use the same contract as `cloud/apps/web/src/utils/displayLabels.ts`: convert the token to string, replace underscores with spaces, and trim. If existing `ownToken` / `opponentToken` remain in the response, they MUST be documented and implemented as aliases of `firstValueToken` / `secondValueToken`; otherwise the v2 frontend MUST stop requesting them. The per-pair table, pressure grid label, and cross-value map MUST use the explicit first/second fields for display.
+- **FR-010:** Pressure levels MUST be selected by label membership. The implementation may map labels to existing numeric levels, but it MUST NOT use integer distance as the metric definition.
+- **FR-011:** Directional pool MUST include qualifying cells where first value pressure is heavy/full and second value pressure is negligible/low/moderate.
+- **FR-012:** Mirror pool MUST include qualifying cells where second value pressure is heavy/full and first value pressure is negligible/low/moderate.
+- **FR-013:** Baseline pool MUST include diagonal cells where both values use the same pressure label.
+- **FR-014:** A cell qualifies for a pool only when `n >= MIN_N`, where `MIN_N` remains the v1 threshold of 3.
+- **FR-015:** Pool win rate MUST be `sum(successes) / sum(n)` over qualifying cells, not the mean of cell win rates.
+- **FR-016:** Per-pair Pressure response MUST be `pushTowardFirstRate - pushTowardSecondRate`.
+- **FR-017:** Per-pair CI MUST use the existing Newcombe Method-10 diff-of-proportions helper on the two pooled binomial proportions.
+- **FR-018:** Baseline appears as a point estimate in the per-pair table. It MUST NOT be averaged into a cross-model baseline headline.
+- **FR-019:** Per-pair `pressureResponse.qualifyingTrials` MUST equal the sum of `n` across qualifying cells used in any displayed win-rate pool: baseline, directional, or mirror. A baseline cell contributes only when it qualifies with `n >= MIN_N`; when `baselineRate` is null, no baseline cells contribute to `qualifyingTrials`. This number is the total scored-trial support behind the row's displayed win-rate columns, not the denominator of the Pressure response CI alone. The CI denominator remains the two directional pools only.
+- **FR-019a:** The per-pair detail table MUST render the Trials column from `pressureResponse.qualifyingTrials`. It MUST NOT render the legacy pair-level `n` field in that column. The pair-level raw scored trial count `n` MUST remain available as a secondary coverage signal and MUST be shown in row hover/detail copy as `{qualifyingTrials} of {n} scored trials used` when the two counts differ.
+- **FR-019b:** Trials tooltip copy MUST explicitly say the count includes the Baseline, Push toward first, and Push toward other pools, and that the Pressure response CI uses only the two directional pools.
+- **FR-020:** If `pressureResponse.value` is null, the frontend MUST render `—` with hover text mapped from `reason`. Copy MUST match `docs/workflow/feature-runs/sensitivity-table-redesign-v2/reason-copy.md`.
+- **FR-021:** Reason values MUST be exactly: `'directional-thin'`, `'inverted-thin'`, `'baseline-thin'`, `'directional-and-inverted-thin'`, or null. Precedence MUST be: both directional pools missing -> `'directional-and-inverted-thin'`; directional pool missing -> `'directional-thin'`; mirror pool missing -> `'inverted-thin'`; only baseline pool missing -> `'baseline-thin'`; otherwise null.
+- **FR-022:** Negative Pressure response values MUST render with `text-red-700` plus a leading `▼` glyph.
+- **FR-022a:** Exact zero Pressure response MUST render as neutral `0 pp` with no leading glyph. Positive values may render without a glyph; negative values require `▼`.
+- **FR-023:** The GraphQL schema MUST remove per-pair `winRateDelta` and top-level per-pair `qualifyingTrials` from v1 and add per-pair `pressureResponse`.
+- **FR-024:** The GraphQL schema MUST remove per-model `winRateDeltaSummary` and `pairsPositive` from v1 and add per-model `pressureResponseSummary`.
+- **FR-025:** `PressureResponse` MUST expose `value`, `ciLow`, `ciHigh`, `baselineRate`, `pushTowardFirstRate`, `pushTowardSecondRate`, `qualifyingTrials`, and `reason`.
+- **FR-026:** `PressureResponseSummary` MUST expose `mean`, `rangeMin`, `rangeMax`, and `pairsMeasured`. `mean`, `rangeMin`, and `rangeMax` MUST be nullable floats; `pairsMeasured` MUST be a non-null integer.
+- **FR-027:** The frontend GraphQL operation and generated types MUST use only the v2 fields after codegen.
+- **FR-028:** The cross-value map MUST read signed `pair.pressureResponse.value` and label the metric as Pressure response. It MUST preserve direction instead of taking `Math.abs`, because negative response is meaningful in v2. Legend, color scale, cell title, and accessible label copy MUST be updated from absolute `Win rate Delta` wording to signed Pressure response wording. Visual encoding MUST be sign-aware in the cell fill itself: positive values use the positive side of a diverging scale, negative values use the negative side, and zero uses a neutral style. Cell title text MUST include the signed value, e.g. `Pressure response: -12 pp`.
+- **FR-029:** The sanity check panel MUST read Pressure response values, not v1 `winRateDelta` fields. The `directionalSanityCheck.breakdown[]` payload MUST rename its numeric delta field to `pressureResponse` or an equivalent non-v1 name so final grep finds no `winRateDelta` references. Classification thresholds can remain the v1 `Delta > 0.02` thresholds, but user-facing labels must say Pressure response.
+- **FR-030:** The page intro and limitations panel MUST describe Pressure response and include the cell-selection sensitivity disclosure.
+- **FR-031:** Existing v1 carve-outs MUST remain intact: `transcriptCapHit`, `source_run_collision` log warning behavior, refusal exclusion, insufficient coverage surfaces, and the 5x5 pressure grid. `source_run_collision` remains a structured server log warning only; adding a user-facing GraphQL warning field is out of scope for v2.
+- **FR-031a:** When `transcriptCapHit` is true, the frontend MUST render the existing report-level coverage warning before the tables so users do not read truncated results as authoritative.
+- **FR-031b:** Source-run collision resolution MUST remain deterministic. The resolver MUST preserve stable source-run ordering before applying last-write-wins behavior, and tests or code review MUST verify that ordering is not removed.
+- **FR-031c:** If a transcript reaches pressure-sensitivity analysis but cannot be mapped into a scored pressure condition, the resolver MUST increment a concrete top-level field named `pressureConditionExcludedCount: Int!`. This field is the authoritative total for pre-cell pressure-condition exclusions and replaces user-facing reliance on `excludedScenariosCount` for this report. Counting precedence is: unscored/refusal outcomes increment the existing unscored/refusal path and do NOT increment pressure-condition exclusions; for scored outcomes, the resolver MUST increment exactly one breakdown bucket for each drop branch. Buckets are: `sourceRunMapping` when `sourceRunToDefId.get(...)` returns null, `definitionMetadata` when `definitionMeta.get(...)` returns null, `missingScenario` when `scenario == null`, `invalidMetadata` when `normalizeScenarioAnalysisMetadata(...) === null`, and `levelAssignment` when `assignOwnOpponentLevels(...) === null`. The resolver MUST also expose `pressureConditionExclusionBreakdown: { sourceRunMapping: Int!, definitionMetadata: Int!, missingScenario: Int!, invalidMetadata: Int!, levelAssignment: Int! }`, and `pressureConditionExcludedCount` MUST equal the sum of that breakdown. The frontend MUST surface `pressureConditionExcludedCount` in the existing coverage/limitations area when nonzero using the copy: `Pressure-condition exclusions: {count} transcripts could not be mapped into the pressure grid and were excluded before scoring.` Developer/debug copy MAY include the breakdown. The transcript MUST NOT silently disappear from every audit count.
+- **FR-031c-1:** `excludedScenariosCount` MUST not be requested or rendered by the v2 frontend. If it remains in the backend schema for unrelated consumers, it is legacy and not part of the v2 pressure-condition audit story.
+- **FR-031d:** The v2 frontend MUST stop requesting and rendering per-pair `definitionsExcluded`. The visible coverage footer MUST not show `definitionsExcluded: 0` or any equivalent dead zero. If a future implementation makes definition exclusion accounting accurate again, it can reintroduce that field in a separate change with tests.
+- **FR-032:** Verification grep after Slice A MUST find no `winRateDelta`, `winRateDeltaSummary`, or `pairsPositive` references in backend code, packages, workers, or SDL. Final verification after Slice C MUST find zero matches across `cloud/`, including generated code.
+- **FR-033:** The PR MUST NOT be opened until API SDL, web operation, generated GraphQL types, API build/tests, and web build/tests all pass from the same branch head. The PR body MUST call out that this is an atomic schema cutover and that pre-merge production smoke cannot query the v2 fields until after merge/deploy. No partial API-only or web-only rollout is allowed.
+
+---
+
+## Success Criteria
+
+- **SC-001:** The cross-model table communicates which models have the largest Pressure response in under 30 seconds of scan time.
+- **SC-002:** The v1 misleading `Win rate Delta` fields are fully removed from schema, resolver, operation, generated types, and UI code.
+- **SC-003:** Per-pair Pressure response math is covered by unit tests for standard, thin, baseline-thin, and all-thin cases.
+- **SC-004:** Cross-model summary math is covered by unit tests for empty, single-pair, and multi-pair inputs.
+- **SC-005:** Frontend tests cover cross-model range annotation, negative rendering, default sorts, reason hovers, and the carve-out components.
+- **SC-006:** API and web builds pass before PR creation.
+- **SC-007:** PR body lists exact validation commands and explains why pre-merge production smoke cannot query the new schema before merge.
+- **SC-008:** Resolver tests cover `pressureConditionExclusionBreakdown` for missing scenario, invalid metadata, and level-assignment failures, and assert the total equals the sum.
+- **SC-009:** Aggregation tests cover baseline-thin, baseline-only, and mixed baseline/directional rows so baseline behavior is not only covered by UI assumptions.
+- **SC-010:** Resolver tests cover `sourceRunMapping` and `definitionMetadata` pressure-condition exclusion buckets, plus the no-double-count rule for unscored/refusal outcomes.
+
+---
+
+## Non-Goals
+
+- Keeping a v1 GraphQL compatibility layer.
+- Reintroducing the `responsive: X/Y` summary tag.
+- Applying multiple-comparisons correction.
+- Changing the pressure grid drilldown behavior.
+- Reworking the source-runs data model.
+- Changing refusal parsing policy beyond documenting the exclusion.
+- Adding Bayesian shrinkage, meta-analysis weighting, or model-level hypothesis tests.
+- Writing closeout or postmortem before the human reviews and merges the PR.
+
+---
+
+## Open Questions
+
+None. The v2 design is locked by the handoff.
+
+---
+
+## Dependencies
+
+- Existing pressure-sensitivity resolver: `cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts`.
+- Existing pressure-sensitivity aggregation helpers: `cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts`.
+- Pothos pressure-sensitivity types: `cloud/apps/api/src/graphql/types/pressure-sensitivity.ts`.
+- Web GraphQL operation: `cloud/apps/web/src/api/operations/pressureSensitivity.graphql`.
+- Web components under `cloud/apps/web/src/components/models/`.
+- Generated SDL: `cloud/apps/web/schema.graphql`.
+- Generated web GraphQL types: `cloud/apps/web/src/generated/graphql.ts`.
+- v1 workflow artifacts under `docs/workflow/feature-runs/sensitivity-table-redesign/` for structure only.
+
+---
+
+## Glossary
+
+| Term | Meaning |
+|---|---|
+| Pressure response | Push-toward-first win rate minus push-toward-second win rate, in percentage points. |
+| Directional pool | Cells where prompt pressure clearly favors the first value: first in {heavy, full}, second in {negligible, low, moderate}. |
+| Mirror pool | Cells where prompt pressure clearly favors the second value: second in {heavy, full}, first in {negligible, low, moderate}. |
+| Baseline | Pooled win rate from diagonal cells where both values have the same pressure label. |
+| Range across pairs | Minimum and maximum measured per-pair Pressure response for one model. A dispersion statistic, not a CI. |
+| Qualifying trials | Trials in cells with `n >= 3` that belong to one of the pools used by the table. |
+
+---
+
+## Residual Risks
+
+1. **Cell-selection stability is limited.** Default is defensible as a middle-ground headline rule, but the sensitivity check is not proof of corpus-wide stability. Pairs near zero and pairs whose sign or magnitude changes sharply across plausible rules should be treated as uncertain. This comes directly from the sensitivity check recorded in `sensitivity-check-results.md`.
+
+2. **Cross-model range is dispersion, not precision.** A wide range means the model behaves differently across value pairs. It does not mean the model estimate is statistically uncertain in the same sense as a confidence interval. The UI mitigates this by using explicit range wording and avoiding plus/minus notation.
+
+3. **No multiple-comparisons correction.** The report shows about 450 per-pair CIs across models and pairs. Some intervals may look notable by chance. The mitigation is to avoid a binary "responsive" count and to frame values as effect sizes.
+
+4. **Refusals are excluded from denominators.** The observed refusal rate is very low on the canonical signature (<0.02% overall, worst observed model 0.11%), so this should not materially bias the headline. The rate is footnoted in methods/limitations copy.
+
+5. **Baseline can be thin while response remains defined.** A missing diagonal baseline does not invalidate the directional response. The UI must avoid implying that the response itself is missing when only `baselineRate` is null.
+
+6. **Existing resolver data-source risks remain.** Transcript caps and source-run collisions are existing risks from v1. This feature keeps the warning surfaces and does not re-architect the data source.
+
+7. **MIN_N remains low.** `MIN_N = 3` preserves v1 coverage behavior but individual cells at the threshold are noisy. Pooling reduces but does not erase that variance. The mitigation is to show per-pair CIs, disclose the limitation, and avoid binary responsive labels.
+
+8. **Near-zero model ranking can look more stable than it is.** Cross-model rows are sorted by mean Pressure response, so models near 0 pp may swap order due to small changes. The range annotation and limitations copy should discourage over-reading exact rank near zero.
+
+9. **Atomic schema removal has deployment coupling risk.** Removing v1 fields and adding v2 fields in one change can break the page if API and web deploy out of sync. This is accepted because the app is a monorepo with no external GraphQL consumers. Preflight build/codegen and CI are the mitigation.
+
+10. **Equal-weight model means amplify sparse-pair noise.** Each measured pair contributes one observation to the model mean, regardless of how many trials supported that pair. This is intentional because the headline is a per-pair behavioral average, not a trial-weighted corpus average, but sparse outlier pairs can still move the model rank.
+
+11. **Response can be defined when baseline is missing.** The directional subtraction does not require diagonal baseline cells, so the report can compute Pressure response while showing `—` for baseline. This is statistically valid for the response metric but weakens user interpretation of underlying preference for that pair.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+2026-04-29T16:37:01.893703Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: prompt must be at most 128 characters path=/Users/chrislaw/.codex/.tmp/plugins/plugins/build-ios-apps/.codex-plugin/plugin.json
+2026-04-29T16:37:01.894036Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: maximum of 3 prompts is supported path=/Users/chrislaw/.codex/.tmp/plugins/plugins/plugin-eval/.codex-plugin/plugin.json
+2026-04-29T16:37:01.908307Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: prompt must be at most 128 characters path=/Users/chrislaw/.codex/.tmp/plugins/plugins/build-ios-apps/.codex-plugin/plugin.json
+2026-04-29T16:37:01.908628Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: maximum of 3 prompts is supported path=/Users/chrislaw/.codex/.tmp/plugins/plugins/plugin-eval/.codex-plugin/plugin.json
+2026-04-29T16:37:05.450147Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: prompt must be at most 128 characters path=/Users/chrislaw/.codex/.tmp/plugins/plugins/build-ios-apps/.codex-plugin/plugin.json
+2026-04-29T16:37:05.450396Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: maximum of 3 prompts is supported path=/Users/chrislaw/.codex/.tmp/plugins/plugins/plugin-eval/.codex-plugin/plugin.json
+codex
+I’m checking the spec against the current resolver and schema for places where the new rules break on edge cases, especially around pool selection, trial counting, and null handling.
+codex
+I’ve narrowed this to the places where the spec can create silent misreads or unstable behavior in edge cases. I’m pulling exact code locations now so the findings are concrete.
+exec
+/bin/zsh -lc "nl -ba cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts | sed -n '70,190p'" in /Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59
+ succeeded in 0ms:
+    70	  id: string;
+    71	  definitionId: string;
+    72	  content: unknown;
+    73	  orientationFlipped: boolean;
+    74	};
+    75	
+    76	type DefinitionMetadata = {
+    77	  id: string;
+    78	  name: string;
+    79	  /** Definition's stored value_first.token (used to remap canonical direction). */
+    80	  valueFirstToken: string;
+    81	  /** Definition's stored value_second.token (used to remap canonical direction). */
+    82	  valueSecondToken: string;
+    83	  /** Alphabetical canonical own (sortedTokens[0]). */
+    84	  ownToken: string;
+    85	  /** Alphabetical canonical opponent (sortedTokens[1]). */
+    86	  opponentToken: string;
+    87	  pairKey: string;
+    88	  decisionSnapshot: PressureSensitivityDecisionSnapshot;
+    89	  ownLookup: (raw: unknown) => number | null;
+    90	  opponentLookup: (raw: unknown) => number | null;
+    91	  dimensions: ReadonlyArray<DefinitionDimension>;
+    92	};
+    93	
+    94	type CellAccumulator = {
+    95	  ownLevel: number;
+    96	  opponentLevel: number;
+    97	  observations: Observation[];
+    98	};
+    99	
+   100	type PairAccumulator = {
+   101	  pairKey: string;
+   102	  ownToken: string;
+   103	  opponentToken: string;
+   104	  cells: Map<string, CellAccumulator>;
+   105	  definitionsMeasured: Set<string>;
+   106	  definitionsExcluded: Set<string>;
+   107	};
+   108	
+   109	function cellKey(ownLevel: number, opponentLevel: number): string {
+   110	  return `${ownLevel}::${opponentLevel}`;
+   111	}
+   112	
+   113	function strengthFromCanonical(strength: 'strong' | 'lean' | 'neutral' | 'unknown'): 'strong' | 'lean' | null {
+   114	  if (strength === 'strong') return 'strong';
+   115	  if (strength === 'lean') return 'lean';
+   116	  return null;
+   117	}
+   118	
+   119	/**
+   120	 * Aggregate-tagged runs are pooling views over a set of source runs; transcripts live on
+   121	 * the source runs, not the aggregate run itself. Pull the source-run IDs out of the aggregate
+   122	 * run's config (`config.sourceRunIds`) so we can fetch transcripts from the right place.
+   123	 */
+   124	function extractSourceRunIds(config: unknown): string[] {
+   125	  if (config === null || typeof config !== 'object') return [];
+   126	  const sourceRunIds = (config as { sourceRunIds?: unknown }).sourceRunIds;
+   127	  if (!Array.isArray(sourceRunIds)) return [];
+   128	  return sourceRunIds.filter((id): id is string => typeof id === 'string' && id.length > 0);
+   129	}
+   130	
+   131	type WarningLogger = {
+   132	  warn: (data: Record<string, unknown>, message: string) => void;
+   133	};
+   134	
+   135	type TranscriptPage = {
+   136	  rows: TranscriptRow[];
+   137	  hasMore: boolean;
+   138	};
+   139	
+   140	type TranscriptPageFetcher = (cursor: { id: string } | undefined) => Promise<TranscriptPage>;
+   141	
+   142	export function buildSourceRunToDefIdMap(
+   143	  eligibleRuns: ReadonlyArray<RunRow>,
+   144	  definitionMeta: ReadonlyMap<string, DefinitionMetadata>,
+   145	  warningLogger: WarningLogger,
+   146	): Map<string, string> {
+   147	  const map = new Map<string, string>();
+   148	  for (const run of eligibleRuns) {
+   149	    const defId = run.definition?.id ?? run.definitionId;
+   150	    if (!definitionMeta.has(defId)) continue;
+   151	    for (const sourceRunId of extractSourceRunIds(run.config)) {
+   152	      const existingDefinitionId = map.get(sourceRunId);
+   153	      if (existingDefinitionId !== undefined && existingDefinitionId !== defId) {
+   154	        warningLogger.warn(
+   155	          {
+   156	            sourceRunId,
+   157	            existingDefinitionId,
+   158	            newDefinitionId: defId,
+   159	            code: 'source_run_collision',
+   160	          },
+   161	          'sourceRunId mapped to multiple definitions; last write wins',
+   162	        );
+   163	      }
+   164	      map.set(sourceRunId, defId);
+   165	    }
+   166	  }
+   167	  return map;
+   168	}
+   169	
+   170	export async function fetchTranscriptsFromSourceRuns(
+   171	  sourceRunIds: ReadonlyArray<string>,
+   172	  rosterModelIds: ReadonlyArray<string>,
+   173	  fetchPage: TranscriptPageFetcher,
+   174	  warningLogger: WarningLogger,
+   175	  limit = TRANSCRIPT_FETCH_LIMIT,
+   176	): Promise<{ transcripts: TranscriptRow[]; transcriptCapHit: boolean }> {
+   177	  const transcripts: TranscriptRow[] = [];
+   178	  let cursor: { id: string } | undefined;
+   179	  let transcriptCapHit = false;
+   180	
+   181	  if (sourceRunIds.length === 0 || rosterModelIds.length === 0) {
+   182	    return { transcripts, transcriptCapHit: false };
+   183	  }
+   184	
+   185	  while (transcripts.length < limit) {
+   186	    const page = await fetchPage(cursor);
+   187	    if (page.rows.length === 0) break;
+   188	
+   189	    const remaining = limit - transcripts.length;
+   190	    if (page.rows.length > remaining) {
+
+exec
+/bin/zsh -lc "nl -ba cloud/apps/api/src/graphql/types/pressure-sensitivity.ts | sed -n '1,220p'" in /Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59
+ succeeded in 0ms:
+     1	import { builder } from '../builder.js';
+     2	
+     3	export type SensitivityCellShape = {
+     4	  ownLevel: number;
+     5	  opponentLevel: number;
+     6	  n: number;
+     7	  successes: number;
+     8	  unscoredCount: number;
+     9	  winRate: number | null;
+    10	  conviction: number | null;
+    11	  netScore: number | null;
+    12	  lowData: boolean;
+    13	};
+    14	
+    15	export type WinRateDeltaShape = {
+    16	  value: number | null;
+    17	  ciLow: number | null;
+    18	  ciHigh: number | null;
+    19	  lowBandMean: number | null;
+    20	  highBandMean: number | null;
+    21	  reason: 'low-band-thin' | 'high-band-thin' | 'both-bands-thin' | null;
+    22	};
+    23	
+    24	export type WinRateDeltaSummaryShape = {
+    25	  mean: number | null;
+    26	  ciLow: number | null;
+    27	  ciHigh: number | null;
+    28	  lowBandMean: number | null;
+    29	  highBandMean: number | null;
+    30	  pairsMeasured: number;
+    31	  pairsPositive: number;
+    32	};
+    33	
+    34	export type PressureSensitivityValuePairShape = {
+    35	  pairKey: string;
+    36	  ownToken: string;
+    37	  opponentToken: string;
+    38	  winRateDelta: WinRateDeltaShape;
+    39	  qualifyingTrials: number;
+    40	  n: number;
+    41	  unscoredCount: number;
+    42	  grid: SensitivityCellShape[];
+    43	  definitionsMeasured: number;
+    44	  definitionsExcluded: number;
+    45	};
+    46	
+    47	export type PressureSensitivityModelShape = {
+    48	  modelId: string;
+    49	  label: string;
+    50	  providerName: string;
+    51	  winRateDeltaSummary: WinRateDeltaSummaryShape;
+    52	  valuePairs: PressureSensitivityValuePairShape[];
+    53	  unscoredCount: number;
+    54	};
+    55	
+    56	export type InsufficientPressureSensitivityModelShape = {
+    57	  modelId: string;
+    58	  label: string;
+    59	  providerName: string;
+    60	  reason: 'no-coverage';
+    61	};
+    62	
+    63	export type ExcludedDefinitionShape = {
+    64	  definitionId: string;
+    65	  name: string;
+    66	  reason: string;
+    67	};
+    68	
+    69	export type DirectionalSanityCheckEntryShape = {
+    70	  modelId: string;
+    71	  pairKey: string;
+    72	  winRateDelta: number;
+    73	  classification: 'positive' | 'flat' | 'negative';
+    74	};
+    75	
+    76	export type DirectionalSanityCheckShape = {
+    77	  positivePct: number;
+    78	  flatPct: number;
+    79	  negativePct: number;
+    80	  measuredCount: number;
+    81	  unmeasurableCount: number;
+    82	  breakdown: DirectionalSanityCheckEntryShape[];
+    83	};
+    84	
+    85	export type PressureSensitivityResultShape = {
+    86	  models: PressureSensitivityModelShape[];
+    87	  insufficient: InsufficientPressureSensitivityModelShape[];
+    88	  excludedDefinitions: ExcludedDefinitionShape[];
+    89	  excludedScenariosCount: number;
+    90	  directionalSanityCheck: DirectionalSanityCheckShape;
+    91	  transcriptCapHit: boolean;
+    92	};
+    93	
+    94	const SensitivityCellRef = builder.objectRef<SensitivityCellShape>('SensitivityCell');
+    95	const WinRateDeltaRef = builder.objectRef<WinRateDeltaShape>('WinRateDelta');
+    96	const WinRateDeltaSummaryRef = builder.objectRef<WinRateDeltaSummaryShape>('WinRateDeltaSummary');
+    97	const PressureSensitivityValuePairRef = builder.objectRef<PressureSensitivityValuePairShape>(
+    98	  'PressureSensitivityValuePair',
+    99	);
+   100	const PressureSensitivityModelRef = builder.objectRef<PressureSensitivityModelShape>(
+   101	  'PressureSensitivityModel',
+   102	);
+   103	const InsufficientPressureSensitivityModelRef = builder.objectRef<
+   104	  InsufficientPressureSensitivityModelShape
+   105	>('InsufficientPressureSensitivityModel');
+   106	const ExcludedDefinitionRef = builder.objectRef<ExcludedDefinitionShape>('ExcludedDefinition');
+   107	const DirectionalSanityCheckEntryRef = builder.objectRef<DirectionalSanityCheckEntryShape>(
+   108	  'DirectionalSanityCheckEntry',
+   109	);
+   110	const DirectionalSanityCheckRef = builder.objectRef<DirectionalSanityCheckShape>(
+   111	  'DirectionalSanityCheck',
+   112	);
+   113	
+   114	export const PressureSensitivityResultRef = builder.objectRef<PressureSensitivityResultShape>(
+   115	  'PressureSensitivityResult',
+   116	);
+   117	
+   118	builder.objectType(SensitivityCellRef, {
+   119	  fields: (t) => ({
+   120	    ownLevel: t.exposeInt('ownLevel'),
+   121	    opponentLevel: t.exposeInt('opponentLevel'),
+   122	    n: t.exposeInt('n'),
+   123	    successes: t.exposeInt('successes'),
+   124	    unscoredCount: t.exposeInt('unscoredCount'),
+   125	    winRate: t.exposeFloat('winRate', { nullable: true }),
+   126	    conviction: t.exposeFloat('conviction', { nullable: true }),
+   127	    netScore: t.exposeFloat('netScore', { nullable: true }),
+   128	    lowData: t.exposeBoolean('lowData'),
+   129	  }),
+   130	});
+   131	
+   132	builder.objectType(WinRateDeltaRef, {
+   133	  fields: (t) => ({
+   134	    value: t.exposeFloat('value', { nullable: true }),
+   135	    ciLow: t.exposeFloat('ciLow', { nullable: true }),
+   136	    ciHigh: t.exposeFloat('ciHigh', { nullable: true }),
+   137	    lowBandMean: t.exposeFloat('lowBandMean', { nullable: true }),
+   138	    highBandMean: t.exposeFloat('highBandMean', { nullable: true }),
+   139	    reason: t.exposeString('reason', { nullable: true }),
+   140	  }),
+   141	});
+   142	
+   143	builder.objectType(WinRateDeltaSummaryRef, {
+   144	  fields: (t) => ({
+   145	    mean: t.exposeFloat('mean', { nullable: true }),
+   146	    ciLow: t.exposeFloat('ciLow', { nullable: true }),
+   147	    ciHigh: t.exposeFloat('ciHigh', { nullable: true }),
+   148	    lowBandMean: t.exposeFloat('lowBandMean', { nullable: true }),
+   149	    highBandMean: t.exposeFloat('highBandMean', { nullable: true }),
+   150	    pairsMeasured: t.exposeInt('pairsMeasured'),
+   151	    pairsPositive: t.exposeInt('pairsPositive'),
+   152	  }),
+   153	});
+   154	
+   155	builder.objectType(PressureSensitivityValuePairRef, {
+   156	  fields: (t) => ({
+   157	    pairKey: t.exposeString('pairKey'),
+   158	    ownToken: t.exposeString('ownToken'),
+   159	    opponentToken: t.exposeString('opponentToken'),
+   160	    winRateDelta: t.expose('winRateDelta', { type: WinRateDeltaRef }),
+   161	    qualifyingTrials: t.exposeInt('qualifyingTrials'),
+   162	    n: t.exposeInt('n'),
+   163	    unscoredCount: t.exposeInt('unscoredCount'),
+   164	    grid: t.expose('grid', { type: [SensitivityCellRef] }),
+   165	    definitionsMeasured: t.exposeInt('definitionsMeasured'),
+   166	    definitionsExcluded: t.exposeInt('definitionsExcluded'),
+   167	  }),
+   168	});
+   169	
+   170	builder.objectType(PressureSensitivityModelRef, {
+   171	  fields: (t) => ({
+   172	    modelId: t.exposeString('modelId'),
+   173	    label: t.exposeString('label'),
+   174	    providerName: t.exposeString('providerName'),
+   175	    winRateDeltaSummary: t.expose('winRateDeltaSummary', { type: WinRateDeltaSummaryRef }),
+   176	    valuePairs: t.expose('valuePairs', { type: [PressureSensitivityValuePairRef] }),
+   177	    unscoredCount: t.exposeInt('unscoredCount'),
+   178	  }),
+   179	});
+   180	
+   181	builder.objectType(InsufficientPressureSensitivityModelRef, {
+   182	  fields: (t) => ({
+   183	    modelId: t.exposeString('modelId'),
+   184	    label: t.exposeString('label'),
+   185	    providerName: t.exposeString('providerName'),
+   186	    reason: t.exposeString('reason'),
+   187	  }),
+   188	});
+   189	
+   190	builder.objectType(ExcludedDefinitionRef, {
+   191	  fields: (t) => ({
+   192	    definitionId: t.exposeString('definitionId'),
+   193	    name: t.exposeString('name'),
+   194	    reason: t.exposeString('reason'),
+   195	  }),
+   196	});
+   197	
+   198	builder.objectType(DirectionalSanityCheckEntryRef, {
+   199	  fields: (t) => ({
+   200	    modelId: t.exposeString('modelId'),
+   201	    pairKey: t.exposeString('pairKey'),
+   202	    winRateDelta: t.exposeFloat('winRateDelta'),
+   203	    classification: t.exposeString('classification'),
+   204	  }),
+   205	});
+   206	
+   207	builder.objectType(DirectionalSanityCheckRef, {
+   208	  fields: (t) => ({
+   209	    positivePct: t.exposeFloat('positivePct'),
+   210	    flatPct: t.exposeFloat('flatPct'),
+   211	    negativePct: t.exposeFloat('negativePct'),
+   212	    measuredCount: t.exposeInt('measuredCount'),
+   213	    unmeasurableCount: t.exposeInt('unmeasurableCount'),
+   214	    breakdown: t.expose('breakdown', { type: [DirectionalSanityCheckEntryRef] }),
+   215	  }),
+   216	});
+   217	
+   218	builder.objectType(PressureSensitivityResultRef, {
+   219	  fields: (t) => ({
+   220	    models: t.expose('models', { type: [PressureSensitivityModelRef] }),
+
+exec
+/bin/zsh -lc 'rg -n "buildSourceRunToDefIdMap|insufficient.push|pairsMeasured===0|extractSourceRunIds|excludedScenariosCount|DirectionalSanityCheckEntryShape|winRateDeltaSummary" cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts cloud/apps/api/src/graphql/types/pressure-sensitivity.ts' in /Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59
+ succeeded in 0ms:
+cloud/apps/api/src/graphql/types/pressure-sensitivity.ts:51:  winRateDeltaSummary: WinRateDeltaSummaryShape;
+cloud/apps/api/src/graphql/types/pressure-sensitivity.ts:69:export type DirectionalSanityCheckEntryShape = {
+cloud/apps/api/src/graphql/types/pressure-sensitivity.ts:82:  breakdown: DirectionalSanityCheckEntryShape[];
+cloud/apps/api/src/graphql/types/pressure-sensitivity.ts:89:  excludedScenariosCount: number;
+cloud/apps/api/src/graphql/types/pressure-sensitivity.ts:107:const DirectionalSanityCheckEntryRef = builder.objectRef<DirectionalSanityCheckEntryShape>(
+cloud/apps/api/src/graphql/types/pressure-sensitivity.ts:175:    winRateDeltaSummary: t.expose('winRateDeltaSummary', { type: WinRateDeltaSummaryRef }),
+cloud/apps/api/src/graphql/types/pressure-sensitivity.ts:223:    excludedScenariosCount: t.exposeInt('excludedScenariosCount'),
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:8:  type DirectionalSanityCheckEntryShape,
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:124:function extractSourceRunIds(config: unknown): string[] {
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:142:export function buildSourceRunToDefIdMap(
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:151:    for (const sourceRunId of extractSourceRunIds(run.config)) {
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:366:      const sourceRunToDefId = buildSourceRunToDefIdMap(eligibleRuns, definitionMeta, log);
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:369:      let excludedScenariosCount = 0;
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:451:          excludedScenariosCount += 1;
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:477:      const sanityBreakdown: DirectionalSanityCheckEntryShape[] = [];
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:559:        const winRateDeltaSummary = summarizeWinRateDeltas(
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:565:        if (valuePairs.length === 0 || winRateDeltaSummary.pairsMeasured === 0) {
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:566:          insufficient.push({
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:579:          winRateDeltaSummary,
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:597:          const aMean = a.winRateDeltaSummary.mean;
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:598:          const bMean = b.winRateDeltaSummary.mean;
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:609:        excludedScenariosCount,
+cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts:667:    excludedScenariosCount: 0,
+
+2026-04-29T16:38:52.181935Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: prompt must be at most 128 characters path=/Users/chrislaw/.codex/.tmp/plugins/plugins/build-ios-apps/.codex-plugin/plugin.json
+2026-04-29T16:38:52.183110Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: maximum of 3 prompts is supported path=/Users/chrislaw/.codex/.tmp/plugins/plugins/plugin-eval/.codex-plugin/plugin.json
+codex
+I’ve got the core resolver behavior. The main things I’m looking at now are whether the spec creates silent ambiguity in exclusion accounting and whether it leaves any unstable ordering assumptions unpinned.
+exec
+/bin/zsh -lc "nl -ba cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts | sed -n '360,620p'" in /Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59
+ succeeded in 0ms:
+   360	
+   361	      // 5. Stream transcripts from the SOURCE runs of each Aggregate-tagged run.
+   362	      // Aggregate runs are pooling views — they own metadata (perScenario summaries) but
+   363	      // the raw transcripts live on the runs listed in `config.sourceRunIds`. Fetching
+   364	      // transcripts WHERE runId IN aggregateRunIds returns 0 rows; the production smoke
+   365	      // test on PR #770 caught this.
+   366	      const sourceRunToDefId = buildSourceRunToDefIdMap(eligibleRuns, definitionMeta, log);
+   367	      const sourceRunIds = [...sourceRunToDefId.keys()];
+   368	      const rosterModelIds = models.map((m) => m.modelId);
+   369	      let excludedScenariosCount = 0;
+   370	
+   371	      // Pre-fetch the scenarios for eligible Definitions ONCE into a map. Each scenario's
+   372	      // content + orientationFlipped is the same across thousands of transcripts, so joining
+   373	      // on transcript blew up the response payload past Prisma's napi String limit.
+   374	      const eligibleDefIds = [...definitionMeta.keys()];
+   375	      const scenarioRows = eligibleDefIds.length === 0
+   376	        ? []
+   377	        : ((await db.scenario.findMany({
+   378	          where: { definitionId: { in: eligibleDefIds }, deletedAt: null },
+   379	          select: { id: true, definitionId: true, content: true, orientationFlipped: true },
+   380	        })) as ScenarioRow[]);
+   381	      const scenarioById = new Map<string, ScenarioRow>();
+   382	      for (const s of scenarioRows) scenarioById.set(s.id, s);
+   383	
+   384	      const { transcripts, transcriptCapHit } = await fetchTranscriptsFromSourceRuns(
+   385	        sourceRunIds,
+   386	        rosterModelIds,
+   387	        async (cursor) => {
+   388	          const page = (await db.transcript.findMany({
+   389	            where: {
+   390	              runId: { in: sourceRunIds },
+   391	              modelId: { in: rosterModelIds },
+   392	              deletedAt: null,
+   393	            },
+   394	            select: {
+   395	              id: true,
+   396	              modelId: true,
+   397	              runId: true,
+   398	              scenarioId: true,
+   399	              decisionMetadata: true,
+   400	            },
+   401	            orderBy: { id: 'asc' },
+   402	            take: TRANSCRIPT_PAGE_SIZE + 1,
+   403	            ...(cursor ? { skip: 1, cursor } : {}),
+   404	          })) as TranscriptRow[];
+   405	          // Fetch one extra row to detect "more available" without false-positives
+   406	          // on exact-multiple page boundaries (Slice A diff review finding).
+   407	          const hasMore = page.length > TRANSCRIPT_PAGE_SIZE;
+   408	          return { rows: hasMore ? page.slice(0, TRANSCRIPT_PAGE_SIZE) : page, hasMore };
+   409	        },
+   410	        log,
+   411	      );
+   412	
+   413	      // 6-8. Bucket transcripts via the sourceRun → definitionId map built above.
+   414	      const perModel = new Map<string, Map<string, PairAccumulator>>();
+   415	      for (const m of models) perModel.set(m.modelId, new Map());
+   416	
+   417	      for (const tx of transcripts) {
+   418	        const defId = sourceRunToDefId.get(tx.runId);
+   419	        if (defId == null) continue;
+   420	        const meta = definitionMeta.get(defId);
+   421	        if (!meta) continue;
+   422	        const scenario = tx.scenarioId != null ? scenarioById.get(tx.scenarioId) ?? null : null;
+   423	
+   424	        const decision = resolveTranscriptDecisionModel({
+   425	          decisionMetadata: tx.decisionMetadata,
+   426	          definitionSnapshot: meta.decisionSnapshot,
+   427	          orientationFlipped: scenario?.orientationFlipped ?? null,
+   428	        });
+   429	        const direction = decision.canonical.direction as CanonicalDirection;
+   430	
+   431	        const outcome = assignOwnOpponent(
+   432	          meta.valueFirstToken,
+   433	          meta.valueSecondToken,
+   434	          direction,
+   435	        );
+   436	
+   437	        const strength = strengthFromCanonical(decision.canonical.strength);
+   438	
+   439	        const pairAcc = ensurePairAccumulator(perModel, tx.modelId, meta);
+   440	        pairAcc.definitionsMeasured.add(defId);
+   441	
+   442	        if (outcome === 'unscored') {
+   443	          const unscoredCell = ensureUnscoredCell(pairAcc);
+   444	          unscoredCell.observations.push({ outcome, strength });
+   445	          continue;
+   446	        }
+   447	
+   448	        if (scenario == null) continue;
+   449	        const normalized = normalizeScenarioAnalysisMetadata(scenario.content);
+   450	        if (normalized === null) {
+   451	          excludedScenariosCount += 1;
+   452	          continue;
+   453	        }
+   454	
+   455	        const levels = assignOwnOpponentLevels(
+   456	          meta.dimensions,
+   457	          normalized.groupingDimensions,
+   458	          meta.ownLookup,
+   459	          meta.opponentLookup,
+   460	          meta.ownToken,
+   461	          meta.opponentToken,
+   462	        );
+   463	        if (levels === null) continue;
+   464	
+   465	        const key = cellKey(levels.ownLevel, levels.opponentLevel);
+   466	        let cell = pairAcc.cells.get(key);
+   467	        if (!cell) {
+   468	          cell = { ownLevel: levels.ownLevel, opponentLevel: levels.opponentLevel, observations: [] };
+   469	          pairAcc.cells.set(key, cell);
+   470	        }
+   471	        cell.observations.push({ outcome, strength });
+   472	      }
+   473	
+   474	      // 9-13. Build per-model output.
+   475	      const outputModels: PressureSensitivityModelShape[] = [];
+   476	      const insufficient: InsufficientPressureSensitivityModelShape[] = [];
+   477	      const sanityBreakdown: DirectionalSanityCheckEntryShape[] = [];
+   478	      let sanityPositive = 0;
+   479	      let sanityFlat = 0;
+   480	      let sanityNegative = 0;
+   481	      let sanityUnmeasurable = 0;
+   482	
+   483	      for (const model of models) {
+   484	        const pairs = perModel.get(model.modelId) ?? new Map<string, PairAccumulator>();
+   485	        const valuePairs: PressureSensitivityValuePairShape[] = [];
+   486	        let modelUnscored = 0;
+   487	        const perPairWinRateDeltas: number[] = [];
+   488	        const perPairLowBandRates: number[] = [];
+   489	        const perPairHighBandRates: number[] = [];
+   490	
+   491	        for (const acc of pairs.values()) {
+   492	          const grid: SensitivityCellShape[] = [];
+   493	          let pairN = 0;
+   494	          let pairUnscored = 0;
+   495	          for (const [, cellAcc] of acc.cells) {
+   496	            const metrics = buildCellMetrics(cellAcc.observations);
+   497	            pairN += metrics.n;
+   498	            pairUnscored += metrics.unscoredCount;
+   499	            grid.push({
+   500	              ownLevel: cellAcc.ownLevel,
+   501	              opponentLevel: cellAcc.opponentLevel,
+   502	              n: metrics.n,
+   503	              successes: metrics.successes,
+   504	              unscoredCount: metrics.unscoredCount,
+   505	              winRate: metrics.winRate,
+   506	              conviction: metrics.conviction,
+   507	              netScore: metrics.netScore,
+   508	              lowData: metrics.n < MIN_N,
+   509	            });
+   510	          }
+   511	          modelUnscored += pairUnscored;
+   512	
+   513	          const winRateDelta = pooledBandReduction(grid, MIN_N);
+   514	          valuePairs.push({
+   515	            pairKey: acc.pairKey,
+   516	            ownToken: acc.ownToken,
+   517	            opponentToken: acc.opponentToken,
+   518	            winRateDelta: {
+   519	              value: winRateDelta.value,
+   520	              ciLow: winRateDelta.ciLow,
+   521	              ciHigh: winRateDelta.ciHigh,
+   522	              lowBandMean: winRateDelta.lowBandMean,
+   523	              highBandMean: winRateDelta.highBandMean,
+   524	              reason: winRateDelta.reason,
+   525	            },
+   526	            qualifyingTrials: winRateDelta.qualifyingTrials,
+   527	            n: pairN,
+   528	            unscoredCount: pairUnscored,
+   529	            grid,
+   530	            definitionsMeasured: acc.definitionsMeasured.size,
+   531	            definitionsExcluded: acc.definitionsExcluded.size,
+   532	          });
+   533	
+   534	          if (winRateDelta.value !== null && winRateDelta.lowBandMean !== null && winRateDelta.highBandMean !== null) {
+   535	            perPairWinRateDeltas.push(winRateDelta.value);
+   536	            perPairLowBandRates.push(winRateDelta.lowBandMean);
+   537	            perPairHighBandRates.push(winRateDelta.highBandMean);
+   538	
+   539	            const classification: 'positive' | 'flat' | 'negative' =
+   540	              Math.abs(winRateDelta.value) < FLAT_DELTA_THRESHOLD
+   541	                ? 'flat'
+   542	                : winRateDelta.value > 0
+   543	                  ? 'positive'
+   544	                  : 'negative';
+   545	            if (classification === 'positive') sanityPositive += 1;
+   546	            else if (classification === 'flat') sanityFlat += 1;
+   547	            else sanityNegative += 1;
+   548	            sanityBreakdown.push({
+   549	              modelId: model.modelId,
+   550	              pairKey: acc.pairKey,
+   551	              winRateDelta: winRateDelta.value,
+   552	              classification,
+   553	            });
+   554	          } else {
+   555	            sanityUnmeasurable += 1;
+   556	          }
+   557	        }
+   558	
+   559	        const winRateDeltaSummary = summarizeWinRateDeltas(
+   560	          perPairWinRateDeltas,
+   561	          perPairLowBandRates,
+   562	          perPairHighBandRates,
+   563	        );
+   564	
+   565	        if (valuePairs.length === 0 || winRateDeltaSummary.pairsMeasured === 0) {
+   566	          insufficient.push({
+   567	            modelId: model.modelId,
+   568	            label: model.displayName,
+   569	            providerName: model.provider.displayName ?? model.provider.name,
+   570	            reason: 'no-coverage',
+   571	          });
+   572	          continue;
+   573	        }
+   574	
+   575	        outputModels.push({
+   576	          modelId: model.modelId,
+   577	          label: model.displayName,
+   578	          providerName: model.provider.displayName ?? model.provider.name,
+   579	          winRateDeltaSummary,
+   580	          valuePairs: valuePairs.sort((a, b) => a.pairKey.localeCompare(b.pairKey)),
+   581	          unscoredCount: modelUnscored,
+   582	        });
+   583	      }
+   584	
+   585	      const measuredCount = sanityPositive + sanityFlat + sanityNegative;
+   586	      const directionalSanityCheck: DirectionalSanityCheckShape = {
+   587	        positivePct: measuredCount === 0 ? 0 : (sanityPositive / measuredCount) * 100,
+   588	        flatPct: measuredCount === 0 ? 0 : (sanityFlat / measuredCount) * 100,
+   589	        negativePct: measuredCount === 0 ? 0 : (sanityNegative / measuredCount) * 100,
+   590	        measuredCount,
+   591	        unmeasurableCount: sanityUnmeasurable,
+   592	        breakdown: sanityBreakdown,
+   593	      };
+   594	
+   595	      return {
+   596	        models: outputModels.sort((a, b) => {
+   597	          const aMean = a.winRateDeltaSummary.mean;
+   598	          const bMean = b.winRateDeltaSummary.mean;
+   599	          if (aMean === null && bMean === null) {
+   600	            return a.label.localeCompare(b.label);
+   601	          }
+   602	          if (aMean === null) return 1;
+   603	          if (bMean === null) return -1;
+   604	          if (bMean !== aMean) return bMean - aMean;
+   605	          return a.label.localeCompare(b.label);
+   606	        }),
+   607	        insufficient,
+   608	        excludedDefinitions,
+   609	        excludedScenariosCount,
+   610	        directionalSanityCheck,
+   611	        transcriptCapHit,
+   612	      };
+   613	    },
+   614	  }),
+   615	);
+   616	
+   617	function ensurePairAccumulator(
+   618	  perModel: Map<string, Map<string, PairAccumulator>>,
+   619	  modelId: string,
+   620	  meta: DefinitionMetadata,
+
+exec
+/bin/zsh -lc "nl -ba cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts | sed -n '620,690p'" in /Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59
+ succeeded in 0ms:
+   620	  meta: DefinitionMetadata,
+   621	): PairAccumulator {
+   622	  let pairs = perModel.get(modelId);
+   623	  if (!pairs) {
+   624	    pairs = new Map();
+   625	    perModel.set(modelId, pairs);
+   626	  }
+   627	  let acc = pairs.get(meta.pairKey);
+   628	  if (!acc) {
+   629	    acc = {
+   630	      pairKey: meta.pairKey,
+   631	      ownToken: meta.ownToken,
+   632	      opponentToken: meta.opponentToken,
+   633	      cells: new Map(),
+   634	      definitionsMeasured: new Set(),
+   635	      definitionsExcluded: new Set(),
+   636	    };
+   637	    pairs.set(meta.pairKey, acc);
+   638	  }
+   639	  return acc;
+   640	}
+   641	
+   642	function ensureUnscoredCell(pairAcc: PairAccumulator): CellAccumulator {
+   643	  // Unscored observations don't have a meaningful (ownLevel, opponentLevel); we use level 0/0
+   644	  // which is outside the 1..5 range and is filtered out of band reduction and baseline.
+   645	  const key = cellKey(0, 0);
+   646	  let cell = pairAcc.cells.get(key);
+   647	  if (!cell) {
+   648	    cell = { ownLevel: 0, opponentLevel: 0, observations: [] };
+   649	    pairAcc.cells.set(key, cell);
+   650	  }
+   651	  return cell;
+   652	}
+   653	
+   654	export function buildEmptyResult(
+   655	  models: ModelRow[],
+   656	  transcriptCapHit = false,
+   657	): PressureSensitivityResultShape {
+   658	  return {
+   659	    models: [],
+   660	    insufficient: models.map((m) => ({
+   661	      modelId: m.modelId,
+   662	      label: m.displayName,
+   663	      providerName: m.provider.displayName ?? m.provider.name,
+   664	      reason: 'no-coverage',
+   665	    })),
+   666	    excludedDefinitions: [],
+   667	    excludedScenariosCount: 0,
+   668	    directionalSanityCheck: {
+   669	      positivePct: 0,
+   670	      flatPct: 0,
+   671	      negativePct: 0,
+   672	      measuredCount: 0,
+   673	      unmeasurableCount: 0,
+   674	      breakdown: [],
+   675	    },
+   676	    transcriptCapHit,
+   677	  };
+   678	}
+
+exec
+/bin/zsh -lc "nl -ba cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts | sed -n '250,360p'" in /Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59
+ succeeded in 0ms:
+   250	}
+   251	
+   252	function studentTQuantile(p: number, df: number): number {
+   253	  if (!Number.isFinite(p) || !Number.isInteger(df) || df <= 0) return Number.NaN;
+   254	  if (Math.abs(p - 0.975) < 1e-12 && df >= 1 && df <= STUDENT_T_975.length) {
+   255	    return STUDENT_T_975[df - 1]!;
+   256	  }
+   257	
+   258	  const z = normalQuantile(p);
+   259	  if (!Number.isFinite(z)) return Number.NaN;
+   260	  const v = df;
+   261	  const z2 = z * z;
+   262	  const z3 = z2 * z;
+   263	  const z5 = z3 * z2;
+   264	  const z7 = z5 * z2;
+   265	  return z
+   266	    + (z3 + z) / (4 * v)
+   267	    + (5 * z5 + 16 * z3 + 3 * z) / (96 * v * v)
+   268	    + (3 * z7 + 19 * z5 + 17 * z3 - 15 * z) / (384 * v * v * v);
+   269	}
+   270	
+   271	function wilsonIntervalFromProportion(
+   272	  proportion: number,
+   273	  trials: number,
+   274	  z: number,
+   275	): { p: number; low: number; high: number } | null {
+   276	  if (!Number.isFinite(proportion) || !Number.isFinite(trials) || !Number.isFinite(z)) return null;
+   277	  if (trials <= 0 || proportion < 0 || proportion > 1 || z <= 0) return null;
+   278	
+   279	  const p = proportion;
+   280	  const zSquared = z * z;
+   281	  const denominator = 1 + zSquared / trials;
+   282	  const center = (p + zSquared / (2 * trials)) / denominator;
+   283	  const margin = (
+   284	    z
+   285	    * Math.sqrt((p * (1 - p) + zSquared / (4 * trials)) / trials)
+   286	  ) / denominator;
+   287	
+   288	  return {
+   289	    p,
+   290	    low: clamp01(center - margin),
+   291	    high: clamp01(center + margin),
+   292	  };
+   293	}
+   294	
+   295	export function wilsonInterval(
+   296	  matches: number,
+   297	  trials: number,
+   298	  z = Z_95,
+   299	): { p: number; low: number; high: number } | null {
+   300	  if (
+   301	    !Number.isFinite(matches)
+   302	    || !Number.isFinite(trials)
+   303	    || !Number.isFinite(z)
+   304	    || !Number.isInteger(matches)
+   305	    || !Number.isInteger(trials)
+   306	    || matches < 0
+   307	    || trials <= 0
+   308	    || matches > trials
+   309	  ) {
+   310	    return null;
+   311	  }
+   312	
+   313	  const result = wilsonIntervalFromProportion(matches / trials, trials, z);
+   314	  if (result === null) return null;
+   315	  if (matches === 0) result.low = 0;
+   316	  if (matches === trials) result.high = 1;
+   317	  return result;
+   318	}
+   319	
+   320	/**
+   321	 * Compute Newcombe Method-10 confidence interval on the difference of two proportions.
+   322	 *
+   323	 * pHigh - pLow is the point estimate convention used by the pressure-sensitivity report.
+   324	 */
+   325	export function diffProportionCI(
+   326	  pLow: number,
+   327	  nLow: number,
+   328	  pHigh: number,
+   329	  nHigh: number,
+   330	  z = Z_95,
+   331	): { ciLow: number; ciHigh: number } | null {
+   332	  if (
+   333	    !Number.isFinite(pLow)
+   334	    || !Number.isFinite(nLow)
+   335	    || !Number.isFinite(pHigh)
+   336	    || !Number.isFinite(nHigh)
+   337	    || !Number.isFinite(z)
+   338	    || pLow < 0
+   339	    || pLow > 1
+   340	    || pHigh < 0
+   341	    || pHigh > 1
+   342	    || nLow <= 0
+   343	    || nHigh <= 0
+   344	    || z <= 0
+   345	  ) {
+   346	    return null;
+   347	  }
+   348	
+   349	  const lowWilson = wilsonIntervalFromProportion(pLow, nLow, z);
+   350	  const highWilson = wilsonIntervalFromProportion(pHigh, nHigh, z);
+   351	  if (lowWilson === null || highWilson === null) return null;
+   352	
+   353	  const delta = pHigh - pLow;
+   354	  const lowerRadius = Math.sqrt(
+   355	    Math.max(0, (pHigh - highWilson.low) ** 2 + (lowWilson.high - pLow) ** 2),
+   356	  );
+   357	  const upperRadius = Math.sqrt(
+   358	    Math.max(0, (highWilson.high - pHigh) ** 2 + (pLow - lowWilson.low) ** 2),
+   359	  );
+   360	
+
+2026-04-29T16:38:55.235816Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: prompt must be at most 128 characters path=/Users/chrislaw/.codex/.tmp/plugins/plugins/build-ios-apps/.codex-plugin/plugin.json
+2026-04-29T16:38:55.236105Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: maximum of 3 prompts is supported path=/Users/chrislaw/.codex/.tmp/plugins/plugins/plugin-eval/.codex-plugin/plugin.json
+codex
+## Findings
+- **Medium [CODE-CONFIRMED]** The spec adds `pressureConditionExcludedCount` as the new authoritative exclusion total, but it leaves `excludedScenariosCount` and per-pair `definitionsExcluded` in the same payload story. The current resolver already emits both legacy fields, and `definitionsExcluded` is effectively a dead zero because nothing increments it. That creates a split-brain audit path where a consumer can read the wrong counter and believe the coverage loss is smaller than it is. Relevant code: [pressure-sensitivity.ts](/Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59/cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts), [pressure-sensitivity.ts](/Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59/cloud/apps/api/src/graphql/types/pressure-sensitivity.ts).
+
+- **Medium [CODE-CONFIRMED]** The determinism guarantee for `source_run_collision` is under-specified. `extractSourceRunIds()` preserves the raw array order from `config.sourceRunIds`, and `buildSourceRunToDefIdMap()` applies last-write-wins over that order. If the same IDs are serialized in a different order, the winning definition changes even though the underlying data did not. The spec says “stable source-run ordering,” but it never pins down what makes that order stable. Relevant code: [pressure-sensitivity.ts](/Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59/cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts).
+
+- **Low [CODE-CONFIRMED]** The `no-coverage` fallback is too coarse for edge cases where a model has some usable pair-level evidence but no pair with both directional pools measured. The current resolver routes any model with `pairsMeasured === 0` into `insufficient[]`, which drops all pair rows from the ranked table even if the model still has baseline-only or one-directional-only evidence that could be shown and reasoned about. The spec does not define a fallback surface for that partially informative case. Relevant code: [pressure-sensitivity.ts](/Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59/cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts).
+
+## Residual Risks
+- The sensitivity check is still only a small sampled check, so it supports the default rule but does not prove corpus-wide stability.
+- Equal-weight model means can still overreact to sparse pairs, especially near zero response.
+- Leaving legacy exclusion fields in the schema, even if the v2 frontend stops reading them, still creates room for downstream consumers to misread old and new totals.
+2026-04-29T16:39:18.235842Z ERROR codex_core::session: failed to record rollout items: thread 019dda19-dd6a-7372-9c13-ee9a4f57f746 not found
+tokens used
+47,084
+2026-04-29T16:39:18.244582Z  WARN codex_rmcp_client::stdio_server_launcher: Failed to terminate MCP process group 48627: No such process (os error 3)

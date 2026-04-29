@@ -33,24 +33,29 @@ export type Cell = CellMetrics & {
   lowData: boolean;
 };
 
-export type WinRateDeltaResult = {
+export type PressureResponseReason =
+  | 'directional-thin'
+  | 'inverted-thin'
+  | 'baseline-thin'
+  | 'directional-and-inverted-thin'
+  | null;
+
+export type PressureResponseResult = {
   value: number | null;
   ciLow: number | null;
   ciHigh: number | null;
-  lowBandMean: number | null;
-  highBandMean: number | null;
-  reason: 'low-band-thin' | 'high-band-thin' | 'both-bands-thin' | null;
+  baselineRate: number | null;
+  pushTowardFirstRate: number | null;
+  pushTowardSecondRate: number | null;
+  reason: PressureResponseReason;
   qualifyingTrials: number;
 };
 
-export type WinRateDeltaSummary = {
+export type PressureResponseSummary = {
   mean: number | null;
-  ciLow: number | null;
-  ciHigh: number | null;
-  lowBandMean: number | null;
-  highBandMean: number | null;
+  rangeMin: number | null;
+  rangeMax: number | null;
   pairsMeasured: number;
-  pairsPositive: number;
 };
 
 const Z_95 = 1.96;
@@ -402,83 +407,84 @@ export function tBasedMeanCI(
 }
 
 /**
- * Reduce a (own × opponent) grid to a pooled win-rate delta per pair.
+ * Reduce a canonical first × second grid to a pooled Pressure response per pair.
  */
-export function pooledBandReduction(grid: ReadonlyArray<Cell>, minN: number): WinRateDeltaResult {
-  const lowBandCells = grid.filter((cell) => cell.ownLevel <= 2 && cell.n >= minN);
-  const highBandCells = grid.filter((cell) => cell.ownLevel >= 4 && cell.n >= minN);
-  const lowBandTrials = sumNumbers(lowBandCells.map((cell) => cell.n));
-  const highBandTrials = sumNumbers(highBandCells.map((cell) => cell.n));
+export function pooledDirectionalReduction(
+  grid: ReadonlyArray<Cell>,
+  minN: number,
+): PressureResponseResult {
+  const directionalCells = grid.filter(
+    (cell) => cell.ownLevel >= 4 && cell.opponentLevel <= 3 && cell.n >= minN,
+  );
+  const mirrorCells = grid.filter(
+    (cell) => cell.opponentLevel >= 4 && cell.ownLevel <= 3 && cell.n >= minN,
+  );
+  const baselineCells = grid.filter(
+    (cell) => cell.ownLevel === cell.opponentLevel && cell.n >= minN,
+  );
 
-  if (lowBandCells.length === 0 && highBandCells.length === 0) {
+  const directionalTrials = sumNumbers(directionalCells.map((cell) => cell.n));
+  const mirrorTrials = sumNumbers(mirrorCells.map((cell) => cell.n));
+  const baselineTrials = sumNumbers(baselineCells.map((cell) => cell.n));
+  const qualifyingTrials = directionalTrials + mirrorTrials + baselineTrials;
+  const baselineSuccesses = sumNumbers(baselineCells.map((cell) => cell.successes));
+  const baselineRate = baselineTrials === 0 ? null : baselineSuccesses / baselineTrials;
+
+  const thin = directionalCells.length === 0 || mirrorCells.length === 0;
+  if (thin) {
+    const reason: PressureResponseReason =
+      directionalCells.length === 0 && mirrorCells.length === 0
+        ? 'directional-and-inverted-thin'
+        : directionalCells.length === 0
+          ? 'directional-thin'
+          : 'inverted-thin';
     return {
       value: null,
       ciLow: null,
       ciHigh: null,
-      lowBandMean: null,
-      highBandMean: null,
-      reason: 'both-bands-thin',
-      qualifyingTrials: 0,
+      baselineRate,
+      pushTowardFirstRate: null,
+      pushTowardSecondRate: null,
+      reason,
+      qualifyingTrials,
     };
   }
 
-  if (lowBandCells.length === 0) {
-    return {
-      value: null,
-      ciLow: null,
-      ciHigh: null,
-      lowBandMean: null,
-      highBandMean: null,
-      reason: 'low-band-thin',
-      qualifyingTrials: highBandTrials,
-    };
-  }
-
-  if (highBandCells.length === 0) {
-    return {
-      value: null,
-      ciLow: null,
-      ciHigh: null,
-      lowBandMean: null,
-      highBandMean: null,
-      reason: 'high-band-thin',
-      qualifyingTrials: lowBandTrials,
-    };
-  }
-
-  const lowBandSuccesses = sumNumbers(lowBandCells.map((cell) => cell.successes));
-  const highBandSuccesses = sumNumbers(highBandCells.map((cell) => cell.successes));
-  const lowBandMean = lowBandSuccesses / lowBandTrials;
-  const highBandMean = highBandSuccesses / highBandTrials;
-  const ci = diffProportionCI(lowBandMean, lowBandTrials, highBandMean, highBandTrials);
+  const directionalSuccesses = sumNumbers(directionalCells.map((cell) => cell.successes));
+  const mirrorSuccesses = sumNumbers(mirrorCells.map((cell) => cell.successes));
+  const pushTowardFirstRate = directionalSuccesses / directionalTrials;
+  const pushTowardSecondRate = mirrorSuccesses / mirrorTrials;
+  const ci = diffProportionCI(
+    pushTowardSecondRate,
+    mirrorTrials,
+    pushTowardFirstRate,
+    directionalTrials,
+  );
 
   return {
-    value: highBandMean - lowBandMean,
+    value: pushTowardFirstRate - pushTowardSecondRate,
     ciLow: ci?.ciLow ?? null,
     ciHigh: ci?.ciHigh ?? null,
-    lowBandMean,
-    highBandMean,
-    reason: null,
-    qualifyingTrials: lowBandTrials + highBandTrials,
+    baselineRate,
+    pushTowardFirstRate,
+    pushTowardSecondRate,
+    reason: baselineRate === null ? 'baseline-thin' : null,
+    qualifyingTrials,
   };
 }
 
-export function summarizeWinRateDeltas(
-  perPairWinRateDeltas: ReadonlyArray<number>,
-  perPairLowBandRates: ReadonlyArray<number>,
-  perPairHighBandRates: ReadonlyArray<number>,
-): WinRateDeltaSummary {
-  const deltaStats = tBasedMeanCI(perPairWinRateDeltas);
-  const lowStats = tBasedMeanCI(perPairLowBandRates);
-  const highStats = tBasedMeanCI(perPairHighBandRates);
+export function summarizePressureResponse(
+  perPairPressureResponses: ReadonlyArray<number>,
+): PressureResponseSummary {
+  const usable = perPairPressureResponses.filter(isFiniteNumber);
+  if (usable.length === 0) {
+    return { mean: null, rangeMin: null, rangeMax: null, pairsMeasured: 0 };
+  }
 
   return {
-    mean: deltaStats.mean,
-    ciLow: deltaStats.ciLow,
-    ciHigh: deltaStats.ciHigh,
-    lowBandMean: lowStats.mean,
-    highBandMean: highStats.mean,
-    pairsMeasured: deltaStats.n,
-    pairsPositive: perPairWinRateDeltas.filter((delta) => delta > FLAT_DELTA_THRESHOLD).length,
+    mean: sumNumbers(usable) / usable.length,
+    rangeMin: Math.min(...usable),
+    rangeMax: Math.max(...usable),
+    pairsMeasured: usable.length,
   };
 }

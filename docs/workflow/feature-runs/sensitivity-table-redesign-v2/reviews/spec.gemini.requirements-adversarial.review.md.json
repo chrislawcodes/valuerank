@@ -1,0 +1,6 @@
+{
+  "fallback_reviewer": "codex",
+  "fallback_model": "gpt-5.4-mini",
+  "reason": "Gemini 2.5 Pro capacity exhausted; human approved Codex 5.4 Mini fallback sub-agent.",
+  "response": "## Findings\nNo HIGH or MEDIUM blockers remain after this patch.\n\n## Residual Risks\n- The sensitivity check still covers a small sampled set, so it does not prove corpus-wide stability.\n- Equal-weight per-pair averaging can still let a sparse noisy pair move a model's rank.\n- The cross-model range is still a dispersion statistic, not a confidence interval.\n- The implementation still needs coordinated schema, codegen, and frontend updates to land cleanly.\n"
+}

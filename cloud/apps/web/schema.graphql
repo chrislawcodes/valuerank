@@ -760,7 +760,7 @@ type DirectionalSanityCheckEntry {
   classification: String!
   modelId: String!
   pairKey: String!
-  winRateDelta: Float!
+  pressureResponse: Float!
 }
 
 """A single domain used to group vignettes"""
@@ -2060,35 +2060,62 @@ type PreferenceSummary {
   perModel: JSON!
 }
 
+type PressureConditionExclusionBreakdown {
+  definitionMetadata: Int!
+  invalidMetadata: Int!
+  levelAssignment: Int!
+  missingScenario: Int!
+  sourceRunMapping: Int!
+}
+
+type PressureResponse {
+  baselineRate: Float
+  ciHigh: Float
+  ciLow: Float
+  pushTowardFirstRate: Float
+  pushTowardSecondRate: Float
+  qualifyingTrials: Int!
+  reason: String
+  value: Float
+}
+
+type PressureResponseSummary {
+  mean: Float
+  pairsMeasured: Int!
+  rangeMax: Float
+  rangeMin: Float
+}
+
 type PressureSensitivityModel {
   label: String!
   modelId: String!
+  pressureResponseSummary: PressureResponseSummary!
   providerName: String!
   unscoredCount: Int!
   valuePairs: [PressureSensitivityValuePair!]!
-  winRateDeltaSummary: WinRateDeltaSummary!
 }
 
 type PressureSensitivityResult {
   directionalSanityCheck: DirectionalSanityCheck!
   excludedDefinitions: [ExcludedDefinition!]!
-  excludedScenariosCount: Int!
   insufficient: [InsufficientPressureSensitivityModel!]!
   models: [PressureSensitivityModel!]!
+  pressureConditionExcludedCount: Int!
+  pressureConditionExclusionBreakdown: PressureConditionExclusionBreakdown!
   transcriptCapHit: Boolean!
 }
 
 type PressureSensitivityValuePair {
-  definitionsExcluded: Int!
   definitionsMeasured: Int!
+  firstValueLabel: String!
+  firstValueToken: String!
   grid: [SensitivityCell!]!
   n: Int!
-  opponentToken: String!
-  ownToken: String!
   pairKey: String!
-  qualifyingTrials: Int!
+  pressureResponse: PressureResponse!
+  secondValueLabel: String!
+  secondValueToken: String!
   unscoredCount: Int!
-  winRateDelta: WinRateDelta!
 }
 
 """Result of a probe job execution"""
@@ -3623,25 +3650,6 @@ enum VignettePairStatus {
   SKIPPED
   SKIPPED_HAS_RUNS
   UPDATED
-}
-
-type WinRateDelta {
-  ciHigh: Float
-  ciLow: Float
-  highBandMean: Float
-  lowBandMean: Float
-  reason: String
-  value: Float
-}
-
-type WinRateDeltaSummary {
-  ciHigh: Float
-  ciLow: Float
-  highBandMean: Float
-  lowBandMean: Float
-  mean: Float
-  pairsMeasured: Int!
-  pairsPositive: Int!
 }
 
 """Health status for Python workers"""

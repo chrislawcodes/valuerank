@@ -1,0 +1,25 @@
+{
+  "feature_slug": "sensitivity-table-redesign-v2",
+  "stage": "tasks",
+  "artifact_path": "docs/workflow/feature-runs/sensitivity-table-redesign-v2/tasks.md",
+  "git_base_ref": "",
+  "allowed_dirty_paths": [],
+  "required_reviews": [
+    {
+      "reviewer": "codex",
+      "lens": "execution-adversarial",
+      "stage": "tasks",
+      "path": "docs/workflow/feature-runs/sensitivity-table-redesign-v2/reviews/tasks.codex.execution-adversarial.review.md",
+      "context_paths": [
+        "docs/workflow/feature-runs/sensitivity-table-redesign-v2/spec.md",
+        "docs/workflow/feature-runs/sensitivity-table-redesign-v2/plan.md",
+        "docs/workflow/feature-runs/sensitivity-table-redesign-v2/sensitivity-check-results.md",
+        "docs/workflow/feature-runs/sensitivity-table-redesign-v2/reason-copy.md"
+      ],
+      "model": "gpt-5.4-mini"
+    }
+  ],
+  "max_artifact_chars": 160000,
+  "max_context_chars": 160000,
+  "max_total_chars": 500000
+}
