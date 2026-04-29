@@ -1,0 +1,37 @@
+{
+  "paths": [
+    "cloud/apps/api/src/cli/backfill-condition-weighted.ts",
+    "cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts",
+    "cloud/apps/api/src/services/analysis/aggregate/contracts.ts",
+    "cloud/apps/api/src/services/analysis/domain-analysis-cache-types.ts",
+    "cloud/apps/api/tests/cli/backfill-condition-weighted.test.ts",
+    "cloud/apps/api/tests/services/analysis/aggregate.test.ts",
+    "cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts",
+    "cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts",
+    "cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx",
+    "cloud/apps/web/tests/components/analysis-v2/analysisSemantics.test.ts",
+    "cloud/apps/web/tests/components/analysis/PairedRunComparisonCard.test.tsx",
+    "cloud/workers/analyze_basic_aggregation.py",
+    "cloud/workers/stats/basic_stats.py",
+    "cloud/workers/stats/tests/test_basic_stats.py",
+    "cloud/workers/tests/test_analyze_basic.py"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/api/src/cli/backfill-condition-weighted.ts",
+    "cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts",
+    "cloud/apps/api/src/services/analysis/aggregate/contracts.ts",
+    "cloud/apps/api/src/services/analysis/domain-analysis-cache-types.ts",
+    "cloud/apps/api/tests/cli/backfill-condition-weighted.test.ts",
+    "cloud/apps/api/tests/services/analysis/aggregate.test.ts",
+    "cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts",
+    "cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts",
+    "cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx",
+    "cloud/apps/web/tests/components/analysis-v2/analysisSemantics.test.ts",
+    "cloud/apps/web/tests/components/analysis/PairedRunComparisonCard.test.tsx",
+    "cloud/workers/analyze_basic_aggregation.py",
+    "cloud/workers/stats/basic_stats.py",
+    "cloud/workers/stats/tests/test_basic_stats.py",
+    "cloud/workers/tests/test_analyze_basic.py",
+    "docs/workflow/feature-runs/condition-weighted-winrate"
+  ]
+}

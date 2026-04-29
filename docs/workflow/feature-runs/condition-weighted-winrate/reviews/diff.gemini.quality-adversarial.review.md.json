@@ -1,0 +1,57 @@
+{
+  "session_id": "f3d8c645-01e2-4bbf-b1d4-5068f7ef0401",
+  "response": "## Findings\n\n### CRITICAL\n- No findings at this level.\n\n### HIGH\n- **Severity**: HIGH\n- **Finding**: The core aggregation logic has been fundamentally changed from **sample-weighting** to **condition-weighting**. In `cloud/workers/stats/basic_stats.py`, calculations are no longer based on the total number of trial transcripts. Instead, metrics are calculated per *condition* (`scenarioId`) and then averaged, giving each condition equal weight regardless of the number of trials it contains. This correctly makes the analysis robust to uneven trial counts but is a major methodological shift. The `count` fields for values are now floats representing the sum of proportions, not integers.\n- **File**: `cloud/workers/stats/basic_stats.py`, `cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts`\n\n- **Severity**: HIGH\n- **Finding**: The logic for aggregating multiple analysis runs (meta-aggregation) has been changed to use **equal-run weighting** instead of sample-size weighting. In `cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts` and the corresponding frontend logic, each constituent analysis run now contributes equally to the pooled mean and variance, regardless of its `sampleSize`. This means a small, exploratory run has the same statistical influence as a large, comprehensive one, which could skew results if the runs are not of comparable quality or scope.\n- **Files**: `cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts`, `cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts`\n\n### MEDIUM\n- **Severity**: MEDIUM\n- **Finding**: The `PairedRunComparisonCard` component has been significantly simplified, removing the \"Order Detail\" toggle and the ability to view statistics for each value ordering (`A first` vs. `B first`) separately. While this streamlines the UI, it removes functionality that may be important for diagnosing order effects. Users can no longer inspect the raw preference counts for each side of a paired run. This is a functional regression.\n- **Files**: `cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx`, `cloud/apps/web/tests/components/analysis/PairedRunComparisonCard.test.tsx`\n\n- **Severity**: MEDIUM\n- **Finding**: **[UNVERIFIED]** The new backfill script in `backfill-condition-weighted.ts` processes results in batches but does not appear to be transactional across the entire operation. If the script fails midway through a large dataset, the database could be left in an inconsistent state where some `AnalysisResult` records are updated with the new condition-weighted schema and others are not. The script logs failed IDs but does not provide a mechanism for rollback or easy resumption from the point of failure.\n- **File**: `cloud/apps/api/src/cli/backfill-condition-weighted.ts`\n\n- **Severity**: MEDIUM\n- **Finding**: **[UNVERIFIED]** The logic in the backfill script for parsing run configurations (`parseSelection`) is complex, attempting to gracefully handle multiple possible historical formats for `definitionVersion` (number, string) and `preambleVersionId`. While it includes checks, it's possible that untested legacy `config` shapes exist in the database that could cause `parseSelection` to return `null`, leading to that row being marked as failed during the backfill.\n- **File**: `cloud/apps/api/src/cli/backfill-condition-weighted.ts`\n\n### LOW\n- **Severity**: LOW\n- **Finding**: Warnings for small (`<10`) and moderate (`<30`) sample sizes have been removed from the Python analysis worker (`analyze_basic_aggregation.py`). While the new condition-weighting makes raw sample size less important than condition count, removing these warnings entirely means users are no longer notified if an analysis is based on a very small number of total trials, which could still be a useful signal for data sparsity.\n- **File**: `cloud/workers/analyze_basic_aggregation.py`\n\n## Residual Risks\n- **Inconsistent Analysis States**: If the `backfill-condition-weighted.ts` script is run and fails partway through, the system will be in a mixed state. Analyses performed on a combination of old and new `AnalysisResult` documents may yield incorrect or unpredictable results until the backfill is fully completed.\n- **Misinterpretation of Aggregated Runs**: The shift to equal-run weighting for meta-aggregates is a significant statistical choice. Users creating aggregate analyses that combine runs of vastly different scopes (e.g., a small 2-condition test run and a large 100-condition validation run) may not realize they now have equal influence, potentially leading to misinterpretation of the combined results.\n- **Loss of Diagnostic Capability**: The removal of the \"Order Detail\" view in paired comparisons simplifies the UI at the cost of diagnostic power. Users trying to understand or debug potential value ordering effects will no longer have the tools to do so within the UI, forcing them to rely on other methods or accept the blended summary as the only view.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 46062
+        },
+        "tokens": {
+          "input": 34258,
+          "prompt": 34258,
+          "candidates": 1117,
+          "total": 39088,
+          "cached": 0,
+          "thoughts": 3713,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 46062,
+            "tokens": {
+              "input": 34258,
+              "prompt": 34258,
+              "candidates": 1117,
+              "total": 39088,
+              "cached": 0,
+              "thoughts": 3713,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

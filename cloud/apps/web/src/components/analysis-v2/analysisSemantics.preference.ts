@@ -231,17 +231,17 @@ export function buildMergedPreferenceModel(
   const overallSignedCenter = averageWeighted(
     parsedModels
       .filter(({ parsed }) => parsed.preferenceDirection.overallSignedCenter !== null)
-      .map(({ analysis, parsed }) => ({
+      .map(({ parsed }) => ({
         value: parsed.preferenceDirection.overallSignedCenter ?? 0,
-        weight: analysis.perModel[modelId]?.sampleSize ?? 0,
+        weight: 1,
       })),
   );
   const preferenceStrength = averageWeighted(
     parsedModels
       .filter(({ parsed }) => parsed.preferenceStrength !== null)
-      .map(({ analysis, parsed }) => ({
+      .map(({ parsed }) => ({
         value: parsed.preferenceStrength ?? 0,
-        weight: analysis.perModel[modelId]?.sampleSize ?? 0,
+        weight: 1,
       })),
   );
   const valueLists = deriveValueLists(mergedByValue, 0.5);

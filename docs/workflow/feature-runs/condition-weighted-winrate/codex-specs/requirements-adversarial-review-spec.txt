@@ -1,0 +1,22 @@
+You are an adversarial requirements reviewer. Your job is to find problems with the following feature specification that would cause the implementation to be wrong, incomplete, or hard to verify.
+
+Lens: requirements-adversarial
+Focus: Are the requirements complete, unambiguous, and testable? Are there missing acceptance criteria? Are success criteria measurable? Are there contradictions between pieces? Are any functional requirements vague or untestable? Are there missing scope items that would leave the feature broken?
+
+Important: The spec already has an explicit "Out-of-scope note for reviewers" section explaining that circumplex/models-confidence inconsistency is intentional. Do NOT flag that as a finding.
+
+Repo context: ValueRank evaluates how AI models prioritize moral values in tradeoff prompts. The analysis pipeline processes transcripts (one per condition trial) and computes win rates and strength scores per model.
+
+After the review, output your findings in exactly this format (no other content before the findings):
+
+## Findings
+
+- **[Severity]** [Description of finding]
+
+## Residual Risks
+
+- [Any risks not addressed in findings]
+
+Severity levels: HIGH, MEDIUM, LOW. Only flag things that would cause real implementation problems, missed scope, or untestable requirements. Be specific and cite spec sections.
+
+SPEC TO REVIEW:

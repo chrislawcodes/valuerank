@@ -8,7 +8,10 @@ import {
   spawnAggregateWorker,
 } from '../../../src/services/analysis/aggregate/aggregate-run-workflow.js';
 import { aggregateAnalysesLogic } from '../../../src/services/analysis/aggregate/aggregate-logic.js';
-import type { AnalysisOutput } from '../../../src/services/analysis/aggregate/contracts.js';
+import type {
+  AggregateTranscriptInput,
+  AnalysisOutput,
+} from '../../../src/services/analysis/aggregate/contracts.js';
 
 const { spawnPython } = vi.hoisted(() => ({
   spawnPython: vi.fn(),
@@ -37,6 +40,7 @@ function buildAnalysisOutput(
       modelId,
       {
         sampleSize: modelScenarioMap[modelId]?.length ?? 0,
+        conditionCount: new Set(modelScenarioMap[modelId] ?? []).size,
         values: {},
         overall: { mean: 3, stdDev: 0.5, min: 1, max: 5 },
       },
@@ -937,14 +941,15 @@ describe('updateAggregateRun same-signature aggregate eligibility', () => {
     expect(result.perModel['gpt-4']?.values.Achievement?.winRate).toBeCloseTo(0.2, 6);
   });
 
-  it('computes pooled overall stats from multiple source runs', () => {
+  it('computes pooled overall stats with equal run weights', () => {
     const analyses: AnalysisOutput[] = [
       {
         perModel: {
           'gpt-4': {
             sampleSize: 10,
+            conditionCount: 25,
             values: {},
-            overall: { mean: 2, stdDev: 0.5, min: 1, max: 3 },
+            overall: { mean: 1, stdDev: 0.5, min: 1, max: 3 },
           },
         },
         modelAgreement: {},
@@ -952,9 +957,10 @@ describe('updateAggregateRun same-signature aggregate eligibility', () => {
       {
         perModel: {
           'gpt-4': {
-            sampleSize: 20,
+            sampleSize: 1,
+            conditionCount: 25,
             values: {},
-            overall: { mean: 4, stdDev: 0.8, min: 2, max: 5 },
+            overall: { mean: 5, stdDev: 0.5, min: 5, max: 5 },
           },
         },
         modelAgreement: {},
@@ -962,25 +968,29 @@ describe('updateAggregateRun same-signature aggregate eligibility', () => {
     ];
 
     const scenarios = [{ id: 's1', name: 'S1', content: { name: 'S1' } }];
+    const transcripts: AggregateTranscriptInput[] = Array.from({ length: 25 }, (_, index) => ({
+      modelId: 'gpt-4',
+      scenarioId: `condition-${index}`,
+      scenario: { orientationFlipped: false },
+    }));
 
-    const result = aggregateAnalysesLogic(analyses, [], scenarios);
+    const result = aggregateAnalysesLogic(analyses, transcripts, scenarios);
     const overall = result.perModel['gpt-4']?.overall;
 
     expect(overall).toBeDefined();
-    // Weighted mean: (2*10 + 4*20) / 30 = 100/30 ≈ 3.333
-    expect(overall!.mean).toBeCloseTo(3.333, 2);
+    // Equal-run mean: (1 + 5) / 2 = 3.
+    expect(overall!.mean).toBeCloseTo(3, 6);
     // min/max across sources
     expect(overall!.min).toBe(1);
     expect(overall!.max).toBe(5);
     // stdDev should be positive and incorporate both within-run and between-run variance
     expect(overall!.stdDev).toBeGreaterThan(0);
-    // Pooled variance = w1*(σ1² + (μ1-μ̄)²) + w2*(σ2² + (μ2-μ̄)²)
-    // = (10/30)*(0.25 + 1.778) + (20/30)*(0.64 + 0.444)
-    // = 0.333*2.028 + 0.667*1.084 ≈ 0.676 + 0.723 = 1.399
-    // stdDev = √1.399 ≈ 1.183
-    expect(overall!.stdDev).toBeCloseTo(1.183, 2);
+    // Pooled variance = 0.5*(0.25 + 4) + 0.5*(0.25 + 4) = 4.25.
+    // stdDev = √4.25 ≈ 2.062.
+    expect(overall!.stdDev).toBeCloseTo(2.062, 3);
     // Total sample size
-    expect(result.perModel['gpt-4']?.sampleSize).toBe(30);
+    expect(result.perModel['gpt-4']?.sampleSize).toBe(11);
+    expect(result.perModel['gpt-4']?.conditionCount).toBe(25);
   });
 
   it('handles single source run overall stats correctly', () => {

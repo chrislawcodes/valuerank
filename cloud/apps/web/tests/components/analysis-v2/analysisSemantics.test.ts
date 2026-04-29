@@ -550,7 +550,7 @@ describe('buildPairedAnalysisSemanticsView', () => {
       topPrioritizedValues: [{ name: 'Care', winRate: 0.6 }],
       topDeprioritizedValues: [],
       neutralValues: [{ name: 'Achievement', winRate: 0.5 }],
-      overallLean: 'B',
+      overallLean: 'A',
     });
     expect(semantics.reliability.byModel['claude-3']).toMatchObject({
       coverageCount: 10,
@@ -676,6 +676,26 @@ describe('buildPairedAnalysisSemanticsView', () => {
 });
 
 describe('parseRawPreferenceValueStats — null winRate from no-data analysis', () => {
+  it('accepts fractional non-negative count values', () => {
+    const result = parseRawPreferenceValueStats({
+      winRate: 0.5,
+      count: {
+        prioritized: 0.25,
+        deprioritized: 0.5,
+        neutral: 0.25,
+      },
+    });
+
+    expect(result).toEqual({
+      winRate: 0.5,
+      count: {
+        prioritized: 0.25,
+        deprioritized: 0.5,
+        neutral: 0.25,
+      },
+    });
+  });
+
   it('returns null when winRate is null, treating the value as no-data', () => {
     const result = parseRawPreferenceValueStats({ winRate: null, count: { prioritized: 0, deprioritized: 0, neutral: 0 } });
     expect(result).toBeNull();

@@ -5,7 +5,7 @@ Computes win rates, means, standard deviations, and other
 descriptive statistics per model and value.
 """
 
-from typing import Any, TypedDict
+from typing import Any, NotRequired, TypedDict
 
 import numpy as np
 
@@ -15,9 +15,9 @@ from stats.decision_model import SIGNED_TO_BUCKET, resolve_transcript_signed_dis
 class ValueCounts(TypedDict):
     """Count of value prioritization outcomes."""
 
-    prioritized: int
-    deprioritized: int
-    neutral: int
+    prioritized: float
+    deprioritized: float
+    neutral: float
 
 
 class ValueStats(TypedDict):
@@ -40,11 +40,12 @@ class ModelStats(TypedDict):
     """Complete statistics for a model."""
 
     sampleSize: int
+    conditionCount: NotRequired[int]
     values: dict[str, ValueStats]
     overall: ModelSummary
 
 
-def compute_win_rate(prioritized: int, deprioritized: int, neutral: int = 0) -> float:
+def compute_win_rate(prioritized: float, deprioritized: float, neutral: float = 0) -> float:
     """
     Compute win rate from prioritized/deprioritized/neutral counts.
 
@@ -70,9 +71,9 @@ def compute_win_rate(prioritized: int, deprioritized: int, neutral: int = 0) -> 
 
 
 def compute_value_stats(
-    prioritized: int,
-    deprioritized: int,
-    neutral: int = 0,
+    prioritized: float,
+    deprioritized: float,
+    neutral: float = 0,
 ) -> ValueStats:
     """
     Compute complete statistics for a single value.
@@ -90,9 +91,9 @@ def compute_value_stats(
     return ValueStats(
         winRate=round(win_rate, 6),
         count=ValueCounts(
-            prioritized=prioritized,
-            deprioritized=deprioritized,
-            neutral=neutral,
+            prioritized=round(prioritized, 6),
+            deprioritized=round(deprioritized, 6),
+            neutral=round(neutral, 6),
         ),
     )
 
@@ -209,38 +210,74 @@ def aggregate_transcripts_by_model(
     result: dict[str, ModelStats] = {}
 
     for model_id, model_transcripts in by_model.items():
-        # Count value outcomes across all transcripts
-        value_counts: dict[str, ValueCounts] = {}
-        scores: list[float] = []
+        by_condition: dict[str, list[dict[str, Any]]] = {}
+        for transcript in model_transcripts:
+            scenario_id = transcript.get("scenarioId", "unknown")
+            if scenario_id not in by_condition:
+                by_condition[scenario_id] = []
+            by_condition[scenario_id].append(transcript)
 
-        for t in model_transcripts:
-            summary = t.get("summary", {})
-            values_data = summary.get("values", {})
+        accumulated_counts: dict[str, ValueCounts] = {}
+        condition_means: list[float] = []
 
-            for value_id, status in values_data.items():
-                if value_id not in value_counts:
-                    value_counts[value_id] = ValueCounts(
-                        prioritized=0,
-                        deprioritized=0,
-                        neutral=0,
+        for condition_transcripts in by_condition.values():
+            condition_value_counts: dict[str, ValueCounts] = {}
+            condition_scores: list[float] = []
+
+            for transcript in condition_transcripts:
+                summary = transcript.get("summary", {})
+                values_data = summary.get("values", {})
+
+                for value_id, status in values_data.items():
+                    if value_id not in condition_value_counts:
+                        condition_value_counts[value_id] = ValueCounts(
+                            prioritized=0.0,
+                            deprioritized=0.0,
+                            neutral=0.0,
+                        )
+
+                    if status == "prioritized":
+                        condition_value_counts[value_id]["prioritized"] += 1.0
+                    elif status == "deprioritized":
+                        condition_value_counts[value_id]["deprioritized"] += 1.0
+                    else:
+                        condition_value_counts[value_id]["neutral"] += 1.0
+
+                score = resolve_transcript_signed_distance(transcript)
+                if score is not None:
+                    condition_scores.append(float(score))
+
+            for value_id, counts in condition_value_counts.items():
+                total = counts["prioritized"] + counts["deprioritized"] + counts["neutral"]
+                if total <= 0:
+                    continue
+
+                if value_id not in accumulated_counts:
+                    accumulated_counts[value_id] = ValueCounts(
+                        prioritized=0.0,
+                        deprioritized=0.0,
+                        neutral=0.0,
                     )
 
-                if status == "prioritized":
-                    value_counts[value_id]["prioritized"] += 1
-                elif status == "deprioritized":
-                    value_counts[value_id]["deprioritized"] += 1
-                else:
-                    value_counts[value_id]["neutral"] += 1
+                accumulated_counts[value_id]["prioritized"] = round(
+                    accumulated_counts[value_id]["prioritized"] + counts["prioritized"] / total,
+                    6,
+                )
+                accumulated_counts[value_id]["deprioritized"] = round(
+                    accumulated_counts[value_id]["deprioritized"] + counts["deprioritized"] / total,
+                    6,
+                )
+                accumulated_counts[value_id]["neutral"] = round(
+                    accumulated_counts[value_id]["neutral"] + counts["neutral"] / total,
+                    6,
+                )
 
-            # Collect signed distance if canonical decision is present
-            score = resolve_transcript_signed_distance(t)
-            if score is None:
-                continue
-            scores.append(float(score))
+            if condition_scores:
+                condition_means.append(float(np.mean(condition_scores)))
 
         # Compute value stats
         values: dict[str, ValueStats] = {}
-        for value_id, counts in value_counts.items():
+        for value_id, counts in accumulated_counts.items():
             values[value_id] = compute_value_stats(
                 counts["prioritized"],
                 counts["deprioritized"],
@@ -249,8 +286,9 @@ def aggregate_transcripts_by_model(
 
         result[model_id] = ModelStats(
             sampleSize=len(model_transcripts),
+            conditionCount=len(by_condition),
             values=values,
-            overall=compute_model_summary(scores),
+            overall=compute_model_summary(condition_means),
         )
 
     return result

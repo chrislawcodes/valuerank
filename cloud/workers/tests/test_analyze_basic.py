@@ -146,7 +146,7 @@ class TestAnalyzeBasicIntegration:
         assert contested[0]["variance"] > 0
 
     def test_warnings_for_small_samples(self):
-        """Test that warnings are generated for small samples."""
+        """Small sample runs should not emit sample-size warnings anymore."""
         input_data = {
             "runId": "test-run-4",
             "transcripts": [
@@ -158,9 +158,10 @@ class TestAnalyzeBasicIntegration:
 
         assert result["success"] is True
         warnings = result["analysis"]["warnings"]
-        # Should have small sample warning
         warning_codes = [w["code"] for w in warnings]
-        assert "SMALL_SAMPLE" in warning_codes
+        assert "SMALL_SAMPLE" not in warning_codes
+        assert "MODERATE_SAMPLE" not in warning_codes
+        assert "NO_DIMENSIONS" in warning_codes
 
     def test_string_dimensions_do_not_trigger_no_dimensions_warning(self):
         """String-valued dimensions should count as valid scenario metadata."""
