@@ -49,7 +49,12 @@ def main() -> int:
     parser.add_argument("--model", default="gpt-5.4-mini")
     parser.add_argument("--workspace-dir")
     parser.add_argument("--git-base-ref")
-    parser.add_argument("--timeout-seconds", type=int, default=180)
+    # Default tightened from 180s -> 120s based on review-performance analysis
+    # (PR #789): every slow Codex call hits the timeout ceiling and produces no
+    # useful output. Healthy reviews complete in <90s (p50 ≈ 50-90s); the tail
+    # past 120s never returns a parseable verdict. Saves ~5+ hours of cumulative
+    # wall clock across feature runs. Operators can still override per-call.
+    parser.add_argument("--timeout-seconds", type=int, default=120)
     parser.add_argument("--max-artifact-chars", type=int, default=50000)
     parser.add_argument("--max-context-chars", type=int, default=10000)
     parser.add_argument("--max-total-chars", type=int, default=70000)
@@ -227,6 +232,7 @@ def main() -> int:
         "adversarial_review",
         args.model,
         _call,
+        lens=args.lens,
     )
 
     stdout_path.write_text(result.stdout, encoding="utf-8")

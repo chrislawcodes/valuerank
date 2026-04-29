@@ -140,12 +140,35 @@ def _make_git_response(cmd: list[str], root: Path) -> subprocess.CompletedProces
     return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
 
-def _model_response(model: str, verdict: str, reasoning: str) -> str:
-    judge = {
-        "gpt-5.4-mini": "completeness",
-        "gpt-5.4": "restatement",
-        "claude-sonnet-4-6": "implementation-risk",
-    }[model]
+def _detect_lens_from_prompt(prompt: str) -> str:
+    """Identify the judge lens by distinctive phrasing in the system prompt.
+
+    Multiple lenses can share a model (e.g., restatement + implementation-risk
+    both use gpt-5.4 after PR #790), so model alone is no longer a unique
+    discriminator. Use prompt content instead.
+    """
+    if "completeness auditor" in prompt:
+        return "completeness"
+    if "review-loop auditor" in prompt:
+        return "restatement"
+    if "implementation-risk assessor" in prompt:
+        return "implementation-risk"
+    raise AssertionError(f"unknown judge prompt: {prompt[:200]!r}")
+
+
+def _model_response(model: str, verdict: str, reasoning: str, judge: str | None = None) -> str:
+    """Build a fake JSON verdict for the given model.
+
+    `judge` may be passed explicitly to disambiguate when multiple lenses
+    share a model (PR #790). If omitted, falls back to the legacy
+    model-only mapping for back-compat.
+    """
+    if judge is None:
+        judge = {
+            "gpt-5.4-mini": "completeness",
+            "gpt-5.4": "restatement",
+            "claude-sonnet-4-6": "implementation-risk",
+        }[model]
     payload = {
         "judge": judge,
         "model": model,
@@ -278,7 +301,7 @@ class FactoryJudgeTests(unittest.TestCase):
             ("plan.codex.edge-cases-adversarial.review.md", "sha-round-1", ["- LOW: Older finding."]),
         ]
         barrier = threading.Barrier(3)
-        prompts: dict[str, str] = {}
+        prompts: dict[str, str] = {}  # keyed by lens (PR #790: lenses can share a model)
 
         def side_effect(cmd, *args, **kwargs):
             if cmd[0] == "git":
@@ -287,8 +310,13 @@ class FactoryJudgeTests(unittest.TestCase):
                 barrier.wait(timeout=5)
                 model = cmd[cmd.index("-m") + 1] if "-m" in cmd else cmd[cmd.index("--model") + 1]
                 prompt = kwargs.get("input") if cmd[0] == "codex" else cmd[-1]
-                prompts[model] = prompt
-                return subprocess.CompletedProcess(cmd, 0, stdout=_model_response(model, "proceed", f"{model} ok"), stderr="")
+                lens = _detect_lens_from_prompt(prompt)
+                prompts[lens] = prompt
+                return subprocess.CompletedProcess(
+                    cmd, 0,
+                    stdout=_model_response(model, "proceed", f"{lens} ok", judge=lens),
+                    stderr="",
+                )
             raise AssertionError(f"unexpected command: {cmd}")
 
         rc, stdout, state = self._run_judge(stage_state, review_specs, side_effect)
@@ -321,14 +349,16 @@ class FactoryJudgeTests(unittest.TestCase):
         )
         self.assertEqual(verify.returncode, 0, verify.stdout + verify.stderr)
 
-        self.assertIn("gpt-5.4-mini", prompts)
-        self.assertIn("gpt-5.4", prompts)
-        self.assertIn("claude-sonnet-4-6", prompts)
-        self.assertIn("High finding from round 2", prompts["gpt-5.4-mini"])
-        self.assertIn("Spec content.", prompts["gpt-5.4-mini"])
-        self.assertIn("Latest finding from round 3", prompts["gpt-5.4"])
-        self.assertIn("Older finding.", prompts["gpt-5.4"])
-        self.assertIn("diff --git a/plan.md b/plan.md", prompts["claude-sonnet-4-6"])
+        # PR #790: assertions key by LENS, not model — restatement and
+        # implementation-risk both use gpt-5.4, so model alone is ambiguous.
+        self.assertIn("completeness", prompts)
+        self.assertIn("restatement", prompts)
+        self.assertIn("implementation-risk", prompts)
+        self.assertIn("High finding from round 2", prompts["completeness"])
+        self.assertIn("Spec content.", prompts["completeness"])
+        self.assertIn("Latest finding from round 3", prompts["restatement"])
+        self.assertIn("Older finding.", prompts["restatement"])
+        self.assertIn("diff --git a/plan.md b/plan.md", prompts["implementation-risk"])
         self.assertEqual(state["stages"][STAGE]["judge_rounds"], 1)
         self.assertEqual(state["stages"][STAGE]["judge_verdicts"][0][0]["verdict"], "proceed")
         self.assertEqual(state["last_action_result"]["outcome"], "advance")
@@ -493,8 +523,9 @@ class FactoryJudgeTests(unittest.TestCase):
                 return _make_git_response(cmd, Path(self._tmpdir.name))
             if cmd[0] == "codex" or cmd[0] == "claude":
                 model = cmd[cmd.index("-m") + 1] if "-m" in cmd else cmd[cmd.index("--model") + 1]
-                verdict = "block" if model != "claude-sonnet-4-6" else "proceed"
-                return subprocess.CompletedProcess(cmd, 0, stdout=_model_response(model, verdict, f"{model} round 2 {verdict}"), stderr="")
+                lens_detected = _detect_lens_from_prompt(kwargs.get("input") or cmd[-1])
+                verdict = "block" if lens_detected != "implementation-risk" else "proceed"
+                return subprocess.CompletedProcess(cmd, 0, stdout=_model_response(model, verdict, f"{lens_detected} round 2 {verdict}", judge=lens_detected), stderr="")
             raise AssertionError(f"unexpected command: {cmd}")
 
         _write_workflow(self._tmpdir.name, stage_state, review_specs)
@@ -550,8 +581,9 @@ class FactoryJudgeTests(unittest.TestCase):
                 return _make_git_response(cmd, Path(self._tmpdir.name))
             if cmd[0] == "codex" or cmd[0] == "claude":
                 model = cmd[cmd.index("-m") + 1] if "-m" in cmd else cmd[cmd.index("--model") + 1]
-                verdict = "block" if model != "claude-sonnet-4-6" else "proceed"
-                return subprocess.CompletedProcess(cmd, 0, stdout=_model_response(model, verdict, f"{model} round 3 {verdict}"), stderr="")
+                lens_detected = _detect_lens_from_prompt(kwargs.get("input") or cmd[-1])
+                verdict = "block" if lens_detected != "implementation-risk" else "proceed"
+                return subprocess.CompletedProcess(cmd, 0, stdout=_model_response(model, verdict, f"{lens_detected} round 3 {verdict}", judge=lens_detected), stderr="")
             raise AssertionError(f"unexpected command: {cmd}")
 
         _write_workflow(self._tmpdir.name, stage_state, review_specs)
@@ -600,8 +632,9 @@ class FactoryJudgeTests(unittest.TestCase):
                 return _make_git_response(cmd, Path(self._tmpdir.name))
             if cmd[0] == "codex" or cmd[0] == "claude":
                 model = cmd[cmd.index("-m") + 1] if "-m" in cmd else cmd[cmd.index("--model") + 1]
-                verdict = "block" if model != "claude-sonnet-4-6" else "proceed"
-                return subprocess.CompletedProcess(cmd, 0, stdout=_model_response(model, verdict, f"{model} round 3 {verdict}"), stderr="")
+                lens_detected = _detect_lens_from_prompt(kwargs.get("input") or cmd[-1])
+                verdict = "block" if lens_detected != "implementation-risk" else "proceed"
+                return subprocess.CompletedProcess(cmd, 0, stdout=_model_response(model, verdict, f"{lens_detected} round 3 {verdict}", judge=lens_detected), stderr="")
             raise AssertionError(f"unexpected command: {cmd}")
 
         _write_workflow(self._tmpdir.name, stage_state, review_specs)

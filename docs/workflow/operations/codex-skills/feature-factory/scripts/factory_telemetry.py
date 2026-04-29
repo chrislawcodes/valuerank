@@ -35,10 +35,27 @@ VALID_ACTIVITY_TYPES = frozenset(
 
 _PRICING_PATH = Path(__file__).resolve().parents[1] / "pricing.json"
 _PRICING_CACHE: dict[str, object] | None = None
-_CODEX_TOKEN_RE = re.compile(
+# Legacy JSON format (Codex < 0.120). Kept for back-compat against any
+# captures that pre-date the format change.
+_CODEX_TOKEN_JSON_RE = re.compile(
     r'"totalTokens":\s*\{.*?"prompt":\s*(\d+).*?"candidates":\s*(\d+)',
     re.DOTALL,
 )
+# Current Codex (v0.124+): emits a single trailing block on stderr like:
+#     tokens used
+#     6,062
+# We capture the total. Per PR #789 analysis, the CLI no longer exposes
+# input/output split, so we record total in input_tokens and 0 in
+# output_tokens. Cost estimation still works; the input/output ratio
+# becomes unknowable from CLI output alone.
+_CODEX_TOKEN_TOTAL_RE = re.compile(
+    r"^\s*tokens used\s*\n\s*([\d,]+)\s*$",
+    re.MULTILINE,
+)
+# Claude --output-format text doesn't emit JSON token counts on stderr.
+# Claude --output-format json (which we should switch to for telemetry)
+# emits a final JSON object with usage.input_tokens and usage.output_tokens.
+# Match either the older `"input_tokens": N` literal or the `usage` block.
 _CLAUDE_INPUT_RE = re.compile(r'"input_tokens":\s*(\d+)')
 _CLAUDE_OUTPUT_RE = re.compile(r'"output_tokens":\s*(\d+)')
 
@@ -114,17 +131,40 @@ def _estimate_cost_usd(input_tokens: int, output_tokens: int, pricing: dict[str,
 
 
 def parse_tokens_codex(result: subprocess.CompletedProcess) -> Optional[dict]:
+    """Extract token counts from Codex CLI stderr.
+
+    Tries the legacy JSON format first (Codex < 0.120, kept for
+    back-compat); falls back to the current `tokens used\\n<N>` trailing
+    block (v0.124+).  The current CLI does not expose input/output split,
+    so we record the total in `input_tokens` and 0 in `output_tokens`.
+    Cost estimation still works (treats 0 output as $0 output cost), but
+    callers that care about the ratio will see it as collapsed.
+    """
     stderr = _text(getattr(result, "stderr", ""))
-    matches = list(_CODEX_TOKEN_RE.finditer(stderr))
-    if not matches:
-        return None
-    prompt, candidates = matches[-1].groups()
-    return {"input_tokens": int(prompt), "output_tokens": int(candidates)}
+    json_matches = list(_CODEX_TOKEN_JSON_RE.finditer(stderr))
+    if json_matches:
+        prompt, candidates = json_matches[-1].groups()
+        return {"input_tokens": int(prompt), "output_tokens": int(candidates)}
+    total_matches = list(_CODEX_TOKEN_TOTAL_RE.finditer(stderr))
+    if total_matches:
+        # Strip thousands separators from `6,062` -> 6062.
+        total_str = total_matches[-1].group(1).replace(",", "")
+        return {"input_tokens": int(total_str), "output_tokens": 0}
+    return None
 
 
 def _find_gemini_token_payload(value: object) -> dict[str, object] | None:
+    """Walk a parsed Gemini JSON payload looking for the token block.
+
+    The Gemini CLI emits a stats JSON at end of stdout; the token block
+    can live under several keys depending on version:
+      - `tokens` (current — verified PR #790 against captured stdout)
+      - `tokenStats` (older)
+      - `totalTokens` (older)
+    Walks recursively into dicts/lists. Returns the first match.
+    """
     if isinstance(value, dict):
-        for key in ("tokenStats", "totalTokens"):
+        for key in ("tokens", "tokenStats", "totalTokens"):
             candidate = value.get(key)
             if isinstance(candidate, dict):
                 return candidate
@@ -141,16 +181,43 @@ def _find_gemini_token_payload(value: object) -> dict[str, object] | None:
 
 
 def parse_tokens_gemini(result: subprocess.CompletedProcess) -> Optional[dict]:
+    """Extract token counts from Gemini CLI stdout.
+
+    Gemini stdout is mixed: free-form prose followed by a JSON stats
+    block at the end. Locate the first `{` that opens a balanced JSON
+    object, attempt to parse from there. If that fails, scan for any
+    embedded JSON object with `"tokens": {...}`.
+    """
     stdout = _text(getattr(result, "stdout", ""))
+    payload = None
+    # Try parsing the whole stdout (works if stdout is pure JSON).
     try:
         payload = json.loads(stdout)
     except Exception:
+        # Stdout has prose before the JSON block; find the last opening
+        # brace at column 0 (or a JSON object that contains "tokens").
+        for start in range(len(stdout)):
+            if stdout[start] != "{":
+                continue
+            try:
+                payload, _ = json.JSONDecoder().raw_decode(stdout, start)
+                break
+            except Exception:
+                continue
+    if payload is None:
         return None
     token_payload = _find_gemini_token_payload(payload)
     if not isinstance(token_payload, dict):
         return None
-    prompt = token_payload.get("prompt", token_payload.get("input"))
-    candidates = token_payload.get("candidates", token_payload.get("output"))
+    # Current Gemini schema: tokens.input, tokens.candidates (output),
+    # tokens.total. Earlier schemas used tokens.prompt for the same value
+    # as input. Try multiple keys for robustness.
+    prompt = token_payload.get("input")
+    if not isinstance(prompt, int):
+        prompt = token_payload.get("prompt")
+    candidates = token_payload.get("candidates")
+    if not isinstance(candidates, int):
+        candidates = token_payload.get("output")
     if not isinstance(prompt, int) or not isinstance(candidates, int):
         return None
     return {"input_tokens": prompt, "output_tokens": candidates}
@@ -195,7 +262,15 @@ def record_ai_call(
     activity_type: str,
     model: str,
     callable_fn: Callable[[], subprocess.CompletedProcess],
+    lens: Optional[str] = None,
 ) -> subprocess.CompletedProcess:
+    """Record an AI subprocess call into state.token_usage.
+
+    `lens` (e.g., 'feasibility-adversarial', 'completeness-judge') was
+    added in PR #790: the analyzer (PR #789) showed 1186 of 1446 records
+    had no unambiguous lens attribution. Callers SHOULD pass it; older
+    callers that don't will record `lens: null` (back-compatible).
+    """
     if activity_type not in VALID_ACTIVITY_TYPES:
         raise ValueError(f"Unknown activity type: {activity_type}")
 
@@ -224,6 +299,7 @@ def record_ai_call(
         "round": int(round),
         "activity_type": activity_type,
         "model": model,
+        "lens": lens,
         "input_tokens": parsed["input_tokens"] if parsed else None,
         "output_tokens": parsed["output_tokens"] if parsed else None,
         "cost_usd_estimate": cost_usd_estimate,

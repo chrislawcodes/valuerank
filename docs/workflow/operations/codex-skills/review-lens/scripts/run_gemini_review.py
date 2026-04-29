@@ -737,6 +737,7 @@ def main() -> int:
                         "adversarial_review",
                         args.model,
                         lambda tmpdir=tmpdir: _call(tmpdir),
+                        lens=args.lens,
                     )
             else:
                 result = record_ai_call(
@@ -746,6 +747,7 @@ def main() -> int:
                     "adversarial_review",
                     args.model,
                     lambda: _call(str(run_cwd)),
+                    lens=args.lens,
                 )
             if result.returncode == 0:
                 break
