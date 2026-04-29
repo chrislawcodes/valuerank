@@ -1,0 +1,17 @@
+query ModelsConfidence($signature: String) {
+  modelsConfidence(signature: $signature) {
+    models {
+      modelId
+      label
+      overallConfidence
+      overallStrongCount
+      overallLeanCount
+      values {
+        valueKey
+        confidence
+        strongCount
+        leanCount
+      }
+    }
+  }
+}

@@ -79,13 +79,13 @@ export function ConfidenceHeatmap({ models }: { models: ModelsConfidenceModelRes
                   );
                 })}
                 <td
-                  title={`Avg: ${formatConfidence(model.overallConfidence)} · Strong: ${model.overallStrongCount} · Lean: ${model.overallLeanCount}`}
+                  title={`Avg: ${formatConfidence(model.overallConfidence ?? null)} · Strong: ${model.overallStrongCount} · Lean: ${model.overallLeanCount}`}
                   className={cn(
                     'px-2 py-2 text-center font-semibold border-l border-l-gray-200 border-b border-b-gray-100 tabular-nums',
-                    getConfidenceTone(model.overallConfidence),
+                    getConfidenceTone(model.overallConfidence ?? null),
                   )}
                 >
-                  {formatConfidence(model.overallConfidence)}
+                  {formatConfidence(model.overallConfidence ?? null)}
                 </td>
               </tr>
             );

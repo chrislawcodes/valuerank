@@ -1532,6 +1532,32 @@ export type ModelsAnalysisValueResult = {
   valueKey: Scalars['String']['output'];
 };
 
+/** Confidence stats for a model across all values */
+export type ModelsConfidenceModelResult = {
+  __typename?: 'ModelsConfidenceModelResult';
+  label: Scalars['String']['output'];
+  modelId: Scalars['String']['output'];
+  overallConfidence?: Maybe<Scalars['Float']['output']>;
+  overallLeanCount: Scalars['Int']['output'];
+  overallStrongCount: Scalars['Int']['output'];
+  values: Array<ModelsConfidenceValueResult>;
+};
+
+/** Cross-model confidence heatmap: strong% per model per value */
+export type ModelsConfidenceResult = {
+  __typename?: 'ModelsConfidenceResult';
+  models: Array<ModelsConfidenceModelResult>;
+};
+
+/** Confidence stats for a model/value pair */
+export type ModelsConfidenceValueResult = {
+  __typename?: 'ModelsConfidenceValueResult';
+  confidence?: Maybe<Scalars['Float']['output']>;
+  leanCount: Scalars['Int']['output'];
+  strongCount: Scalars['Int']['output'];
+  valueKey: Scalars['String']['output'];
+};
+
 export type ModelsConsistencyResult = {
   __typename?: 'ModelsConsistencyResult';
   insufficient: Array<InsufficientModel>;
@@ -2576,6 +2602,7 @@ export type Query = {
   /** Get token statistics for specific models. Useful for understanding prediction quality. */
   modelTokenStats: Array<ModelTokenStats>;
   modelsAnalysis: ModelsAnalysisResult;
+  modelsConfidence: ModelsConfidenceResult;
   modelsConsistency: ModelsConsistencyResult;
   /** List anomalies that are currently open (resolvedAt IS NULL) across all runs. Optional filters: domainId scopes to anomalies whose run belongs to a definition in that domain; type scopes to a single RunAnomalyType. */
   openRunAnomalies: Array<RunAnomaly>;
@@ -2981,6 +3008,11 @@ export type QueryModelTokenStatsArgs = {
 
 export type QueryModelsAnalysisArgs = {
   domainId?: InputMaybe<Scalars['ID']['input']>;
+  signature?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type QueryModelsConfidenceArgs = {
   signature?: InputMaybe<Scalars['String']['input']>;
 };
 
@@ -4503,6 +4535,13 @@ export type ModelsAnalysisQueryVariables = Exact<{
 
 
 export type ModelsAnalysisQuery = { __typename?: 'Query', modelsAnalysis: { __typename?: 'ModelsAnalysisResult', models: Array<{ __typename?: 'ModelsAnalysisModelResult', modelId: string, label: string, values: Array<{ __typename?: 'ModelsAnalysisValueResult', valueKey: string, pooledWinRate?: number | null, stabilityScore?: number | null, eligibleDomainCount: number, domains: Array<{ __typename?: 'ModelsAnalysisDomainBreakdown', domainId: string, domainName: string, winRate: number, evidenceWeight?: number | null }> }> }> } };
+
+export type ModelsConfidenceQueryVariables = Exact<{
+  signature?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type ModelsConfidenceQuery = { __typename?: 'Query', modelsConfidence: { __typename?: 'ModelsConfidenceResult', models: Array<{ __typename?: 'ModelsConfidenceModelResult', modelId: string, label: string, overallConfidence?: number | null, overallStrongCount: number, overallLeanCount: number, values: Array<{ __typename?: 'ModelsConfidenceValueResult', valueKey: string, confidence?: number | null, strongCount: number, leanCount: number }> }> } };
 
 export type ModelsConsistencyQueryVariables = Exact<{
   domainId?: InputMaybe<Scalars['ID']['input']>;
@@ -6830,6 +6869,29 @@ export const ModelsAnalysisDocument = gql`
 
 export function useModelsAnalysisQuery(options?: Omit<Urql.UseQueryArgs<ModelsAnalysisQueryVariables>, 'query'>) {
   return Urql.useQuery<ModelsAnalysisQuery, ModelsAnalysisQueryVariables>({ query: ModelsAnalysisDocument, ...options });
+};
+export const ModelsConfidenceDocument = gql`
+    query ModelsConfidence($signature: String) {
+  modelsConfidence(signature: $signature) {
+    models {
+      modelId
+      label
+      overallConfidence
+      overallStrongCount
+      overallLeanCount
+      values {
+        valueKey
+        confidence
+        strongCount
+        leanCount
+      }
+    }
+  }
+}
+    `;
+
+export function useModelsConfidenceQuery(options?: Omit<Urql.UseQueryArgs<ModelsConfidenceQueryVariables>, 'query'>) {
+  return Urql.useQuery<ModelsConfidenceQuery, ModelsConfidenceQueryVariables>({ query: ModelsConfidenceDocument, ...options });
 };
 export const ModelsConsistencyDocument = gql`
     query ModelsConsistency($domainId: ID, $providerId: ID, $minScenarios: Int, $signature: String!) {

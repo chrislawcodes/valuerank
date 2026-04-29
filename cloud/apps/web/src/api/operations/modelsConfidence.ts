@@ -1,47 +1,12 @@
-import { gql } from 'urql';
+import type {
+  ModelsConfidenceQuery as GeneratedModelsConfidenceQuery,
+  ModelsConfidenceQueryVariables as GeneratedModelsConfidenceQueryVariables,
+} from '../../generated/graphql';
 
-export type ModelsConfidenceValueResult = {
-  valueKey: string;
-  confidence: number | null;
-  strongCount: number;
-  leanCount: number;
-};
+export { ModelsConfidenceDocument as MODELS_CONFIDENCE_QUERY } from '../../generated/graphql';
 
-export type ModelsConfidenceModelResult = {
-  modelId: string;
-  label: string;
-  overallConfidence: number | null;
-  overallStrongCount: number;
-  overallLeanCount: number;
-  values: ModelsConfidenceValueResult[];
-};
+export type ModelsConfidenceQueryResult = GeneratedModelsConfidenceQuery;
+export type ModelsConfidenceQueryVariables = GeneratedModelsConfidenceQueryVariables;
 
-export type ModelsConfidenceQueryResult = {
-  modelsConfidence: {
-    models: ModelsConfidenceModelResult[];
-  };
-};
-
-export type ModelsConfidenceQueryVariables = {
-  signature?: string | null;
-};
-
-export const MODELS_CONFIDENCE_QUERY = gql`
-  query ModelsConfidence($signature: String) {
-    modelsConfidence(signature: $signature) {
-      models {
-        modelId
-        label
-        overallConfidence
-        overallStrongCount
-        overallLeanCount
-        values {
-          valueKey
-          confidence
-          strongCount
-          leanCount
-        }
-      }
-    }
-  }
-`;
+export type ModelsConfidenceModelResult = GeneratedModelsConfidenceQuery['modelsConfidence']['models'][number];
+export type ModelsConfidenceValueResult = ModelsConfidenceModelResult['values'][number];
