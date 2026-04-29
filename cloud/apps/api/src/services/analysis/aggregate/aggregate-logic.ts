@@ -72,6 +72,22 @@ export function aggregateAnalysesLogic(
   const aggregatedPerModel: Record<string, ModelStats> = {};
   const decisionStats: Record<string, CanonicalDecisionStats> = {};
   const valueAggregateStats: Record<string, ValueAggregateStats> = {};
+  const conditionIdsByModel: Record<string, Set<string>> = {};
+
+  transcripts.forEach((rawTranscript) => {
+    const transcript = rawTranscript as DecisionAwareAggregateTranscript;
+    if (
+      transcript.modelId == null ||
+      transcript.modelId === '' ||
+      transcript.scenarioId == null ||
+      transcript.scenarioId === ''
+    ) {
+      return;
+    }
+
+    const conditionIds = conditionIdsByModel[transcript.modelId] ??= new Set<string>();
+    conditionIds.add(transcript.scenarioId);
+  });
 
   modelIds.forEach((modelId) => {
     const validAnalyses = analyses.filter((analysis) => Boolean(analysis.perModel[modelId]));
@@ -173,7 +189,7 @@ export function aggregateAnalysesLogic(
       };
     });
 
-    // Aggregate overall stats from source runs using sample-weighted pooling
+    // Aggregate overall stats from source runs using equal-run pooling.
     const overallMeans: number[] = [];
     const overallWeights: number[] = [];
     let overallMin = Infinity;
@@ -186,7 +202,7 @@ export function aggregateAnalysesLogic(
       if (n <= 0) return;
       if (!Number.isFinite(stats.overall.mean) || !Number.isFinite(stats.overall.stdDev)) return;
       overallMeans.push(stats.overall.mean);
-      overallWeights.push(n);
+      overallWeights.push(1);
       if (Number.isFinite(stats.overall.min) && stats.overall.min < overallMin) overallMin = stats.overall.min;
       if (Number.isFinite(stats.overall.max) && stats.overall.max > overallMax) overallMax = stats.overall.max;
     });
@@ -194,9 +210,10 @@ export function aggregateAnalysesLogic(
     let pooledMean = 0;
     let pooledStdDev = 0;
     const totalWeight = overallWeights.reduce((s, w) => s + w, 0);
+    const conditionCount = conditionIdsByModel[modelId]?.size;
 
     if (totalWeight > 0 && overallMeans.length > 0) {
-      // Sample-weighted mean
+      // Equal-weight mean across source runs.
       pooledMean = overallMeans.reduce((s, m, i) => s + m * overallWeights[i]!, 0) / totalWeight;
 
       // Pooled stdDev: combine within-run variance + between-run variance of means
@@ -207,7 +224,7 @@ export function aggregateAnalysesLogic(
         const n = stats.sampleSize ?? 0;
         if (n <= 0) return;
         if (!Number.isFinite(stats.overall.mean) || !Number.isFinite(stats.overall.stdDev)) return;
-        const w = n / totalWeight;
+        const w = 1 / overallMeans.length;
         // Within-run variance contribution
         pooledVariance += w * (stats.overall.stdDev * stats.overall.stdDev);
         // Between-run mean deviation contribution
@@ -218,6 +235,7 @@ export function aggregateAnalysesLogic(
 
     aggregatedPerModel[modelId] = {
       sampleSize: totalModelSamples,
+      ...(conditionCount != null ? { conditionCount } : {}),
       values: aggregatedValues,
       overall: {
         mean: pooledMean,

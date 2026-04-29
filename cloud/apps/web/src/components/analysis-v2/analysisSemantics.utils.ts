@@ -150,9 +150,9 @@ export function parseRawPreferenceValueStats(value: unknown): RawPreferenceValue
       return null;
     }
     if (
-      !isNonNegativeInteger(count.prioritized)
-      || !isNonNegativeInteger(count.deprioritized)
-      || !isNonNegativeInteger(count.neutral)
+      !isNonNegativeNumber(count.prioritized)
+      || !isNonNegativeNumber(count.deprioritized)
+      || !isNonNegativeNumber(count.neutral)
     ) {
       return null;
     }

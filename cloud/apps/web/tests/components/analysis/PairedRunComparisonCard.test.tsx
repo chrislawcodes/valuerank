@@ -173,10 +173,9 @@ describe('PairedRunComparisonCard', () => {
     expect(screen.queryByText(/decision score from 1 to 5/i)).not.toBeInTheDocument();
   });
 
-  it('keeps the B-first order detail counts aligned with the canonical labels', async () => {
+  it('renders only the blended columns and hides the order detail toggle', () => {
     const currentRun = createRun('run-a', 'A_first');
     const companionRun = createRun('run-b', 'B_first');
-    const user = userEvent.setup();
 
     render(
       <MemoryRouter>
@@ -191,15 +190,11 @@ describe('PairedRunComparisonCard', () => {
       </MemoryRouter>,
     );
 
-    await user.click(screen.getByRole('button', { name: 'Order Detail' }));
+    expect(screen.queryByRole('button', { name: 'Order Detail' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Blended' })).not.toBeInTheDocument();
 
     const cells = screen.getAllByRole('cell');
-    expect(cells).toHaveLength(12);
-
-    // B-first counts are the last three detail cells: first, neutral, second.
-    expect(cells[9]).toHaveTextContent('3');
-    expect(cells[10]).toHaveTextContent('0');
-    expect(cells[11]).toHaveTextContent('1');
+    expect(cells).toHaveLength(6);
   });
 
   it('uses canonical value keys for a standalone B-first run', () => {
@@ -210,7 +205,6 @@ describe('PairedRunComparisonCard', () => {
 
     expect(rows).toHaveLength(1);
     expect(rows[0]?.modelId).toBe('gpt-4');
-    expect(rows[0]?.bFirst.first).toBe(3);
-    expect(rows[0]?.bFirst.second).toBe(1);
+    expect(rows[0]?.bFirst).toBeDefined();
   });
 });

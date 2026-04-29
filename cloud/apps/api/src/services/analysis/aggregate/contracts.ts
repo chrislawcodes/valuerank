@@ -31,6 +31,7 @@ export const zValueStats = z.object({
 
 export const zModelStats = z.object({
   sampleSize: z.number().optional(),
+  conditionCount: z.number().int().nonnegative().optional(),
   values: z.record(zValueStats).optional(),
   overall: z.object({
     mean: z.number(),

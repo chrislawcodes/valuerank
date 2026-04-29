@@ -165,22 +165,6 @@ def generate_warnings(
     """Generate warnings for statistical assumption violations."""
     warnings: list[dict[str, str]] = []
 
-    # Check sample sizes
-    for model_id, stats in per_model.items():
-        sample_size = stats.get("sampleSize", 0)
-        if sample_size < 10:
-            warnings.append({
-                "code": "SMALL_SAMPLE",
-                "message": f"Model {model_id} has only {sample_size} samples",
-                "recommendation": "Results may have wide confidence intervals",
-            })
-        elif sample_size < 30:
-            warnings.append({
-                "code": "MODERATE_SAMPLE",
-                "message": f"Model {model_id} has {sample_size} samples",
-                "recommendation": "Consider using bootstrap confidence intervals",
-            })
-
     transcripts_with_dimensions = sum(
         1
         for t in transcripts

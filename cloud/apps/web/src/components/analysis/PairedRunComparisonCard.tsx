@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef } from 'react';
 import { Info } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { AnalysisResult } from '../../api/operations/analysis';
@@ -68,46 +68,6 @@ function getDefinitionPairKey(run: Run): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value : null;
 }
 
-function getPriorityCount(
-  analysis: AnalysisResult | null,
-  modelId: string,
-  valueKey: string,
-): number | null {
-  const perModel = analysis?.preferenceSummary?.perModel;
-  if (!isRecord(perModel)) return null;
-  const model = perModel[modelId];
-  if (!isRecord(model)) return null;
-  const direction = model.preferenceDirection;
-  if (!isRecord(direction)) return null;
-  const byValue = direction.byValue;
-  if (!isRecord(byValue)) return null;
-  const stats = byValue[valueKey];
-  if (!isRecord(stats)) return null;
-  const count = stats.count;
-  if (!isRecord(count)) return null;
-  return typeof count.prioritized === 'number' ? count.prioritized : null;
-}
-
-function getNeutralCount(
-  analysis: AnalysisResult | null,
-  modelId: string,
-  valueKey: string,
-): number | null {
-  const perModel = analysis?.preferenceSummary?.perModel;
-  if (!isRecord(perModel)) return null;
-  const model = perModel[modelId];
-  if (!isRecord(model)) return null;
-  const direction = model.preferenceDirection;
-  if (!isRecord(direction)) return null;
-  const byValue = direction.byValue;
-  if (!isRecord(byValue)) return null;
-  const stats = byValue[valueKey];
-  if (!isRecord(stats)) return null;
-  const count = stats.count;
-  if (!isRecord(count)) return null;
-  return typeof count.neutral === 'number' ? count.neutral : null;
-}
-
 function buildValueCounts(
   analysis: AnalysisResult | null,
   run: Run | null,
@@ -144,9 +104,34 @@ function buildValueCounts(
     return { first: null, neutral: null, second: null, total: null };
   }
 
-  const first = getPriorityCount(analysis, modelId, firstValueKey);
-  const second = getPriorityCount(analysis, modelId, secondValueKey);
-  const neutral = getNeutralCount(analysis, modelId, firstValueKey);
+  const perModel = analysis?.preferenceSummary?.perModel;
+  if (!isRecord(perModel)) {
+    return { first: null, neutral: null, second: null, total: null };
+  }
+  const model = perModel[modelId];
+  if (!isRecord(model)) {
+    return { first: null, neutral: null, second: null, total: null };
+  }
+  const direction = model.preferenceDirection;
+  if (!isRecord(direction)) {
+    return { first: null, neutral: null, second: null, total: null };
+  }
+  const byValue = direction.byValue;
+  if (!isRecord(byValue)) {
+    return { first: null, neutral: null, second: null, total: null };
+  }
+
+  const firstStats = isRecord(byValue[firstValueKey])
+    ? (byValue[firstValueKey] as Record<string, unknown>)
+    : null;
+  const secondStats = isRecord(byValue[secondValueKey])
+    ? (byValue[secondValueKey] as Record<string, unknown>)
+    : null;
+  const firstCount = isRecord(firstStats?.count) ? firstStats.count : null;
+  const secondCount = isRecord(secondStats?.count) ? secondStats.count : null;
+  const first = firstCount && typeof firstCount.prioritized === 'number' ? firstCount.prioritized : null;
+  const second = secondCount && typeof secondCount.prioritized === 'number' ? secondCount.prioritized : null;
+  const neutral = firstCount && typeof firstCount.neutral === 'number' ? firstCount.neutral : null;
   const total = first != null && second != null
     ? first + second + (neutral ?? 0)
     : null;
@@ -251,10 +236,6 @@ function formatPercent(value: number | null, total: number | null): string {
   const percent = (value / total) * 100;
   const rounded = Math.round(percent * 10) / 10;
   return Number.isInteger(rounded) ? `${rounded.toFixed(0)}%` : `${rounded.toFixed(1)}%`;
-}
-
-function formatCount(value: number | null): string {
-  return value == null ? '—' : String(value);
 }
 
 function formatSensitivity(value: number | null): string {
@@ -469,12 +450,7 @@ export function PairedRunComparisonCard({
   );
   const firstValueLabel = labels.canonicalValues?.[0] ?? 'First value';
   const secondValueLabel = labels.canonicalValues?.[1] ?? 'Second value';
-  const aFirstGroupLabel = aFirstRun?.definition.name ?? labels.canonical ?? 'First order';
-  const bFirstGroupLabel = bFirstRun?.definition.name ?? labels.flipped ?? 'Second order';
   const comparisonRows = buildComparisonRows(aFirstRun, aFirstAnalysis, bFirstRun, bFirstAnalysis);
-  const canonicalOrientationBucket = 'canonical';
-  const flippedOrientationBucket = 'flipped';
-  const [showOrderDetail, setShowOrderDetail] = useState(false);
   const containerClass = embedded
     ? 'space-y-4 rounded-lg border border-teal-200 bg-teal-50/40 p-4'
     : 'space-y-4 rounded-xl border border-teal-200 bg-teal-50/60 p-4';
@@ -485,7 +461,7 @@ export function PairedRunComparisonCard({
         <div className="space-y-1">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-teal-900">Paired Run Comparison</h2>
           <p className="text-sm text-teal-900/80">
-            Paired mode keeps the blended summary first and lets you open the two value orders underneath when you want to compare them directly.
+            Paired mode keeps the blended summary first so you can compare both runs in one table.
           </p>
         </div>
         <CopyVisualButton targetRef={comparisonRef} label="paired run comparison" />
@@ -536,138 +512,38 @@ export function PairedRunComparisonCard({
         </div>
       ) : (
         <div className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-teal-900/80">
-              Start with the blended summary, then turn on order detail if you want to inspect each vignette order separately.
-            </p>
-            <div className="inline-flex rounded-lg border border-teal-200 bg-white p-1">
-              <Button
-                type="button"
-                variant={showOrderDetail ? 'ghost' : 'secondary'}
-                size="sm"
-                className={showOrderDetail
-                  ? 'rounded-md border-0'
-                  : 'rounded-md border-0 bg-teal-600 text-white hover:bg-teal-700 focus:ring-teal-500'}
-                aria-pressed={!showOrderDetail}
-                onClick={() => setShowOrderDetail(false)}
-              >
-                Blended
-              </Button>
-              <Button
-                type="button"
-                variant={showOrderDetail ? 'secondary' : 'ghost'}
-                size="sm"
-                className={showOrderDetail
-                  ? 'rounded-md border-0 bg-teal-600 text-white hover:bg-teal-700 focus:ring-teal-500'
-                  : 'rounded-md border-0'}
-                aria-pressed={showOrderDetail}
-                onClick={() => setShowOrderDetail(true)}
-              >
-                Order Detail
-              </Button>
-            </div>
-          </div>
+          <p className="text-sm text-teal-900/80">
+            The table shows the blended summary for each model.
+          </p>
           <div className="overflow-x-auto">
             <table className="min-w-full border-collapse">
               <thead>
-                {showOrderDetail ? (
-                  <>
-                    <tr>
-                      <th
-                        rowSpan={2}
-                        className="border border-teal-200 bg-white px-3 py-2 text-left text-xs font-semibold uppercase text-teal-700"
-                      >
-                        Model
-                      </th>
-                      <th
-                        colSpan={5}
-                        className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700"
-                      >
-                        Blended
-                      </th>
-                      <th
-                        colSpan={3}
-                        className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700"
-                      >
-                        {aFirstGroupLabel}
-                      </th>
-                      <th
-                        colSpan={3}
-                        className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700"
-                      >
-                        {bFirstGroupLabel}
-                      </th>
-                    </tr>
-                    <tr>
-                      <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
-                        {firstValueLabel}
-                      </th>
-                      <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
-                        Neutral
-                      </th>
-                      <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
-                        {secondValueLabel}
-                      </th>
-                      <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
-                        <SensitivityHeader
-                          label={`${firstValueLabel} Sensitivity`}
-                          valueLabel={firstValueLabel}
-                        />
-                      </th>
-                      <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
-                        <SensitivityHeader
-                          label={`${secondValueLabel} Sensitivity`}
-                          valueLabel={secondValueLabel}
-                        />
-                      </th>
-                      <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
-                        {firstValueLabel}
-                      </th>
-                      <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
-                        Neutral
-                      </th>
-                      <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
-                        {secondValueLabel}
-                      </th>
-                      <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
-                        {firstValueLabel}
-                      </th>
-                      <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
-                        Neutral
-                      </th>
-                      <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
-                        {secondValueLabel}
-                      </th>
-                    </tr>
-                  </>
-                ) : (
-                  <tr>
-                    <th className="border border-teal-200 bg-white px-3 py-2 text-left text-xs font-semibold uppercase text-teal-700">
-                      Model
-                    </th>
-                    <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
-                      {firstValueLabel}
-                    </th>
-                    <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
-                      Neutral
-                    </th>
-                    <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
-                      {secondValueLabel}
-                    </th>
-                    <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
-                      <SensitivityHeader
-                        label={`${firstValueLabel} Sensitivity`}
-                        valueLabel={firstValueLabel}
-                      />
-                    </th>
-                    <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
-                      <SensitivityHeader
-                        label={`${secondValueLabel} Sensitivity`}
-                        valueLabel={secondValueLabel}
-                      />
-                    </th>
-                  </tr>
-                )}
+                <tr>
+                  <th className="border border-teal-200 bg-white px-3 py-2 text-left text-xs font-semibold uppercase text-teal-700">
+                    Model
+                  </th>
+                  <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
+                    {firstValueLabel}
+                  </th>
+                  <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
+                    Neutral
+                  </th>
+                  <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
+                    {secondValueLabel}
+                  </th>
+                  <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
+                    <SensitivityHeader
+                      label={`${firstValueLabel} Sensitivity`}
+                      valueLabel={firstValueLabel}
+                    />
+                  </th>
+                  <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
+                    <SensitivityHeader
+                      label={`${secondValueLabel} Sensitivity`}
+                      valueLabel={secondValueLabel}
+                    />
+                  </th>
+                </tr>
               </thead>
               <tbody>
                 {comparisonRows.map((row) => (
@@ -754,132 +630,12 @@ export function PairedRunComparisonCard({
                     <td className="border border-teal-200 bg-white px-3 py-2 text-center text-sm text-gray-800">
                       {formatSensitivity(row.blendedSecondSensitivity)}
                     </td>
-                    {showOrderDetail ? (
-                      <>
-                        <td className="border border-teal-200 bg-white px-3 py-2 text-center text-sm text-gray-800">
-                          {aFirstRun ? (
-                            <Link
-                              className="font-medium text-teal-700 hover:text-teal-900"
-                              to={buildTranscriptHref(
-                                analysisBasePath,
-                                aFirstRun,
-                                row.modelId,
-                                firstValueLabel,
-                                analysisSearch,
-                                { orientationBucket: canonicalOrientationBucket },
-                              ) ?? '#'}
-                            >
-                              {formatCount(row.aFirst.first)}
-                            </Link>
-                          ) : (
-                            formatCount(row.aFirst.first)
-                          )}
-                        </td>
-                        <td className="border border-teal-200 bg-white px-3 py-2 text-center text-sm text-gray-800">
-                          {aFirstRun ? (
-                            <Link
-                              className="font-medium text-teal-700 hover:text-teal-900"
-                              to={buildTranscriptHref(
-                                analysisBasePath,
-                                aFirstRun,
-                                row.modelId,
-                                'Neutral',
-                                analysisSearch,
-                                { orientationBucket: canonicalOrientationBucket },
-                                'neutral',
-                              ) ?? '#'}
-                            >
-                              {formatCount(row.aFirst.neutral)}
-                            </Link>
-                          ) : (
-                            formatCount(row.aFirst.neutral)
-                          )}
-                        </td>
-                        <td className="border border-teal-200 bg-white px-3 py-2 text-center text-sm text-gray-800">
-                          {aFirstRun ? (
-                            <Link
-                              className="font-medium text-teal-700 hover:text-teal-900"
-                              to={buildTranscriptHref(
-                                analysisBasePath,
-                                aFirstRun,
-                                row.modelId,
-                                secondValueLabel,
-                                analysisSearch,
-                                { orientationBucket: canonicalOrientationBucket },
-                              ) ?? '#'}
-                            >
-                              {formatCount(row.aFirst.second)}
-                            </Link>
-                          ) : (
-                            formatCount(row.aFirst.second)
-                          )}
-                        </td>
-                        <td className="border border-teal-200 bg-white px-3 py-2 text-center text-sm text-gray-800">
-                          {bFirstRun ? (
-                            <Link
-                              className="font-medium text-teal-700 hover:text-teal-900"
-                              to={buildTranscriptHref(
-                                analysisBasePath,
-                                bFirstRun,
-                                row.modelId,
-                                firstValueLabel,
-                                analysisSearch,
-                                { orientationBucket: flippedOrientationBucket },
-                              ) ?? '#'}
-                            >
-                              {formatCount(row.bFirst.first)}
-                            </Link>
-                          ) : (
-                            formatCount(row.bFirst.first)
-                          )}
-                        </td>
-                        <td className="border border-teal-200 bg-white px-3 py-2 text-center text-sm text-gray-800">
-                          {bFirstRun ? (
-                            <Link
-                              className="font-medium text-teal-700 hover:text-teal-900"
-                              to={buildTranscriptHref(
-                                analysisBasePath,
-                                bFirstRun,
-                                row.modelId,
-                                'Neutral',
-                                analysisSearch,
-                                { orientationBucket: flippedOrientationBucket },
-                                'neutral',
-                              ) ?? '#'}
-                            >
-                              {formatCount(row.bFirst.neutral)}
-                            </Link>
-                          ) : (
-                            formatCount(row.bFirst.neutral)
-                          )}
-                        </td>
-                        <td className="border border-teal-200 bg-white px-3 py-2 text-center text-sm text-gray-800">
-                          {bFirstRun ? (
-                            <Link
-                              className="font-medium text-teal-700 hover:text-teal-900"
-                              to={buildTranscriptHref(
-                                analysisBasePath,
-                                bFirstRun,
-                                row.modelId,
-                                secondValueLabel,
-                                analysisSearch,
-                                { orientationBucket: flippedOrientationBucket },
-                              ) ?? '#'}
-                            >
-                              {formatCount(row.bFirst.second)}
-                            </Link>
-                          ) : (
-                            formatCount(row.bFirst.second)
-                          )}
-                        </td>
-                      </>
-                    ) : null}
                   </tr>
                 ))}
               </tbody>
             </table>
             <p className="mt-2 text-xs text-gray-600">
-              Percentages show the share of condition cells that landed on each outcome. Click any value or neutral cell to inspect the matching transcripts.
+              Percentages show the share of condition cells that landed on each outcome. Click any percentage to inspect the matching transcripts.
             </p>
           </div>
         </div>
