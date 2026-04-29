@@ -108,6 +108,7 @@ export function PressureSensitivity() {
   const insufficient = data?.pressureSensitivity.insufficient ?? [];
   const excludedDefinitions = data?.pressureSensitivity.excludedDefinitions ?? [];
   const directionalSanityCheck = data?.pressureSensitivity.directionalSanityCheck;
+  const transcriptCapHit = data?.pressureSensitivity.transcriptCapHit ?? false;
 
   useEffect(() => {
     if (selectedModelId == null && models.length > 0) {
@@ -185,8 +186,7 @@ export function PressureSensitivity() {
       <div className="space-y-2">
         <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Models / Pressure Sensitivity</h1>
         <p className="text-sm text-gray-600">
-          How much do models move when pressure on a value changes? Three Δ metrics
-          across the (own × opponent) pressure grid.
+          This report shows how each model&apos;s win rate shifts when pressure on a value gets light or heavy. The cross-model table ranks models by Win rate Δ, the detail table breaks that out by value pair, and the heat map plus sanity check show whether the pattern is consistent across the grid.
         </p>
       </div>
 
@@ -201,6 +201,12 @@ export function PressureSensitivity() {
         onProviderChange={setProviderId}
         onSignatureChange={handleSignatureChange}
       />
+
+      {transcriptCapHit && (
+        <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          Coverage warning: this report scanned the maximum 500,000 transcripts and stopped before reaching the end of the data. Win rates and CIs may be biased toward earlier transcripts in the corpus.
+        </section>
+      )}
 
       {emptyState ? (
         <section className="rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-600">

@@ -1,10 +1,10 @@
+import { createLogger } from '@valuerank/shared';
 import { db } from '@valuerank/db';
 import { builder } from '../builder.js';
 import { runMatchesSignature } from './domain-coverage-gql-types.js';
 import { resolveTranscriptDecisionModel } from './domain/shared.js';
 import {
   PressureSensitivityResultRef,
-  type BandStatShape,
   type DirectionalSanityCheckEntryShape,
   type DirectionalSanityCheckShape,
   type ExcludedDefinitionShape,
@@ -17,10 +17,10 @@ import {
 import { buildSafeLevelLookup, type DefinitionDimension } from './scenarios-utils.js';
 import { normalizeScenarioAnalysisMetadata } from '../../services/analysis/scenario-metadata.js';
 import {
-  aggregateSensitivity,
-  applyBandReduction,
   buildCellMetrics,
-  computeBaselineWinRate,
+  pooledBandReduction,
+  summarizeWinRateDeltas,
+  FLAT_DELTA_THRESHOLD,
   type Observation,
 } from '../../services/pressure-sensitivity/aggregation.js';
 import {
@@ -39,8 +39,10 @@ import {
   type PressureSensitivityDecisionSnapshot,
 } from '../../services/pressure-sensitivity/decision-snapshot.js';
 
+const log = createLogger('pressure-sensitivity');
 const MIN_N = 3;
-const FLAT_DELTA_THRESHOLD = 0.02;
+const TRANSCRIPT_PAGE_SIZE = 5_000;
+const TRANSCRIPT_FETCH_LIMIT = 500_000;
 
 type ModelRow = {
   modelId: string;
@@ -126,6 +128,96 @@ function extractSourceRunIds(config: unknown): string[] {
   return sourceRunIds.filter((id): id is string => typeof id === 'string' && id.length > 0);
 }
 
+type WarningLogger = {
+  warn: (data: Record<string, unknown>, message: string) => void;
+};
+
+type TranscriptPage = {
+  rows: TranscriptRow[];
+  hasMore: boolean;
+};
+
+type TranscriptPageFetcher = (cursor: { id: string } | undefined) => Promise<TranscriptPage>;
+
+export function buildSourceRunToDefIdMap(
+  eligibleRuns: ReadonlyArray<RunRow>,
+  definitionMeta: ReadonlyMap<string, DefinitionMetadata>,
+  warningLogger: WarningLogger,
+): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const run of eligibleRuns) {
+    const defId = run.definition?.id ?? run.definitionId;
+    if (!definitionMeta.has(defId)) continue;
+    for (const sourceRunId of extractSourceRunIds(run.config)) {
+      const existingDefinitionId = map.get(sourceRunId);
+      if (existingDefinitionId !== undefined && existingDefinitionId !== defId) {
+        warningLogger.warn(
+          {
+            sourceRunId,
+            existingDefinitionId,
+            newDefinitionId: defId,
+            code: 'source_run_collision',
+          },
+          'sourceRunId mapped to multiple definitions; last write wins',
+        );
+      }
+      map.set(sourceRunId, defId);
+    }
+  }
+  return map;
+}
+
+export async function fetchTranscriptsFromSourceRuns(
+  sourceRunIds: ReadonlyArray<string>,
+  rosterModelIds: ReadonlyArray<string>,
+  fetchPage: TranscriptPageFetcher,
+  warningLogger: WarningLogger,
+  limit = TRANSCRIPT_FETCH_LIMIT,
+): Promise<{ transcripts: TranscriptRow[]; transcriptCapHit: boolean }> {
+  const transcripts: TranscriptRow[] = [];
+  let cursor: { id: string } | undefined;
+  let transcriptCapHit = false;
+
+  if (sourceRunIds.length === 0 || rosterModelIds.length === 0) {
+    return { transcripts, transcriptCapHit: false };
+  }
+
+  while (transcripts.length < limit) {
+    const page = await fetchPage(cursor);
+    if (page.rows.length === 0) break;
+
+    const remaining = limit - transcripts.length;
+    if (page.rows.length > remaining) {
+      transcripts.push(...page.rows.slice(0, remaining));
+      transcriptCapHit = true;
+      break;
+    }
+
+    transcripts.push(...page.rows);
+    if (page.hasMore && transcripts.length >= limit) {
+      transcriptCapHit = true;
+      break;
+    }
+    if (!page.hasMore) break;
+
+    cursor = { id: page.rows[page.rows.length - 1]!.id };
+  }
+
+  if (transcriptCapHit) {
+    warningLogger.warn(
+      {
+        sourceRunIds: [...sourceRunIds],
+        scanned: transcripts.length,
+        limit,
+        code: 'transcript_cap_hit',
+      },
+      'Transcript fetch hit cap; results may be biased',
+    );
+  }
+
+  return { transcripts, transcriptCapHit };
+}
+
 builder.queryField('pressureSensitivity', (t) =>
   t.field({
     type: PressureSensitivityResultRef,
@@ -155,6 +247,9 @@ builder.queryField('pressureSensitivity', (t) =>
         );
 
       // 2. Aggregate runs
+      // orderBy id:asc makes sourceRunToDefId Map.set "last write wins" deterministic
+      // across queries; without it the collision warning would point to a different
+      // winner each run (Slice A diff review finding).
       const runs = (await db.run.findMany({
         where: {
           status: 'COMPLETED',
@@ -165,6 +260,7 @@ builder.queryField('pressureSensitivity', (t) =>
         include: {
           definition: { select: { id: true, name: true, domainId: true } },
         },
+        orderBy: { id: 'asc' },
       })) as RunRow[];
 
       // 3. Signature filter
@@ -267,22 +363,14 @@ builder.queryField('pressureSensitivity', (t) =>
       // the raw transcripts live on the runs listed in `config.sourceRunIds`. Fetching
       // transcripts WHERE runId IN aggregateRunIds returns 0 rows; the production smoke
       // test on PR #770 caught this.
-      const sourceRunToDefId = new Map<string, string>();
-      for (const r of eligibleRuns) {
-        const defId = r.definition?.id ?? r.definitionId;
-        if (!definitionMeta.has(defId)) continue;
-        for (const sourceRunId of extractSourceRunIds(r.config)) {
-          sourceRunToDefId.set(sourceRunId, defId);
-        }
-      }
+      const sourceRunToDefId = buildSourceRunToDefIdMap(eligibleRuns, definitionMeta, log);
       const sourceRunIds = [...sourceRunToDefId.keys()];
       const rosterModelIds = models.map((m) => m.modelId);
       let excludedScenariosCount = 0;
 
       // Pre-fetch the scenarios for eligible Definitions ONCE into a map. Each scenario's
       // content + orientationFlipped is the same across thousands of transcripts, so joining
-      // on transcript blew up the response payload past Prisma's napi String limit. With ~89
-      // definitions × 25 scenarios = ~2225 unique scenarios per domain, this is bounded.
+      // on transcript blew up the response payload past Prisma's napi String limit.
       const eligibleDefIds = [...definitionMeta.keys()];
       const scenarioRows = eligibleDefIds.length === 0
         ? []
@@ -293,16 +381,10 @@ builder.queryField('pressureSensitivity', (t) =>
       const scenarioById = new Map<string, ScenarioRow>();
       for (const s of scenarioRows) scenarioById.set(s.id, s);
 
-      // Defensive cap on per-page fetch + paginate via cursor so a domain with hundreds of
-      // thousands of transcripts stays under napi's String conversion limit (~1 GB). The
-      // production smoke test on PR #772 hit this with one big findMany — paginating in
-      // 5,000-row pages keeps each page response under ~25 MB.
-      const TRANSCRIPT_PAGE_SIZE = 5_000;
-      const TRANSCRIPT_FETCH_LIMIT = 500_000;
-      const transcripts: TranscriptRow[] = [];
-      if (sourceRunIds.length > 0 && rosterModelIds.length > 0) {
-        let cursor: { id: string } | undefined = undefined;
-        while (transcripts.length < TRANSCRIPT_FETCH_LIMIT) {
+      const { transcripts, transcriptCapHit } = await fetchTranscriptsFromSourceRuns(
+        sourceRunIds,
+        rosterModelIds,
+        async (cursor) => {
           const page = (await db.transcript.findMany({
             where: {
               runId: { in: sourceRunIds },
@@ -314,21 +396,19 @@ builder.queryField('pressureSensitivity', (t) =>
               modelId: true,
               runId: true,
               scenarioId: true,
-              // decisionMetadata holds the LLM response and parser evidence; resolveTranscriptDecisionModel
-              // needs it. definitionSnapshot is intentionally OMITTED — we pass a synthetic snapshot
-              // built from the eligible Definition's resolvedContent below.
               decisionMetadata: true,
             },
             orderBy: { id: 'asc' },
-            take: TRANSCRIPT_PAGE_SIZE,
+            take: TRANSCRIPT_PAGE_SIZE + 1,
             ...(cursor ? { skip: 1, cursor } : {}),
           })) as TranscriptRow[];
-          if (page.length === 0) break;
-          for (const row of page) transcripts.push(row);
-          if (page.length < TRANSCRIPT_PAGE_SIZE) break;
-          cursor = { id: page[page.length - 1]!.id };
-        }
-      }
+          // Fetch one extra row to detect "more available" without false-positives
+          // on exact-multiple page boundaries (Slice A diff review finding).
+          const hasMore = page.length > TRANSCRIPT_PAGE_SIZE;
+          return { rows: hasMore ? page.slice(0, TRANSCRIPT_PAGE_SIZE) : page, hasMore };
+        },
+        log,
+      );
 
       // 6-8. Bucket transcripts via the sourceRun → definitionId map built above.
       const perModel = new Map<string, Map<string, PairAccumulator>>();
@@ -348,9 +428,6 @@ builder.queryField('pressureSensitivity', (t) =>
         });
         const direction = decision.canonical.direction as CanonicalDirection;
 
-        // The transcript's canonical direction is relative to the Definition's stored
-        // value_first / value_second order. assignOwnOpponent remaps it to canonical
-        // (alphabetical) own/opponent so mirrored Definitions don't end up with inverted Δ.
         const outcome = assignOwnOpponent(
           meta.valueFirstToken,
           meta.valueSecondToken,
@@ -363,7 +440,6 @@ builder.queryField('pressureSensitivity', (t) =>
         pairAcc.definitionsMeasured.add(defId);
 
         if (outcome === 'unscored') {
-          // unscored doesn't go into a cell (no level resolution needed)
           const unscoredCell = ensureUnscoredCell(pairAcc);
           unscoredCell.observations.push({ outcome, strength });
           continue;
@@ -395,7 +471,7 @@ builder.queryField('pressureSensitivity', (t) =>
         cell.observations.push({ outcome, strength });
       }
 
-      // 9-13. Build per-model output
+      // 9-13. Build per-model output.
       const outputModels: PressureSensitivityModelShape[] = [];
       const insufficient: InsufficientPressureSensitivityModelShape[] = [];
       const sanityBreakdown: DirectionalSanityCheckEntryShape[] = [];
@@ -408,6 +484,9 @@ builder.queryField('pressureSensitivity', (t) =>
         const pairs = perModel.get(model.modelId) ?? new Map<string, PairAccumulator>();
         const valuePairs: PressureSensitivityValuePairShape[] = [];
         let modelUnscored = 0;
+        const perPairWinRateDeltas: number[] = [];
+        const perPairLowBandRates: number[] = [];
+        const perPairHighBandRates: number[] = [];
 
         for (const acc of pairs.values()) {
           const grid: SensitivityCellShape[] = [];
@@ -421,6 +500,7 @@ builder.queryField('pressureSensitivity', (t) =>
               ownLevel: cellAcc.ownLevel,
               opponentLevel: cellAcc.opponentLevel,
               n: metrics.n,
+              successes: metrics.successes,
               unscoredCount: metrics.unscoredCount,
               winRate: metrics.winRate,
               conviction: metrics.conviction,
@@ -430,33 +510,20 @@ builder.queryField('pressureSensitivity', (t) =>
           }
           modelUnscored += pairUnscored;
 
-          const reduction = applyBandReduction(grid, MIN_N);
-          const baseline = computeBaselineWinRate(grid, MIN_N);
-
-          const directionDelta: BandStatShape = {
-            value: reduction.directionDelta,
-            lowBandMean: reduction.lowBandWinRate,
-            highBandMean: reduction.highBandWinRate,
-          };
-          const convictionDelta: BandStatShape = {
-            value: reduction.convictionDelta,
-            lowBandMean: reduction.lowBandConviction,
-            highBandMean: reduction.highBandConviction,
-          };
-          const netScoreDelta: BandStatShape = {
-            value: reduction.netScoreDelta,
-            lowBandMean: reduction.lowBandNetScore,
-            highBandMean: reduction.highBandNetScore,
-          };
-
+          const winRateDelta = pooledBandReduction(grid, MIN_N);
           valuePairs.push({
             pairKey: acc.pairKey,
             ownToken: acc.ownToken,
             opponentToken: acc.opponentToken,
-            directionDelta,
-            convictionDelta,
-            netScoreDelta,
-            baselineWinRate: baseline,
+            winRateDelta: {
+              value: winRateDelta.value,
+              ciLow: winRateDelta.ciLow,
+              ciHigh: winRateDelta.ciHigh,
+              lowBandMean: winRateDelta.lowBandMean,
+              highBandMean: winRateDelta.highBandMean,
+              reason: winRateDelta.reason,
+            },
+            qualifyingTrials: winRateDelta.qualifyingTrials,
             n: pairN,
             unscoredCount: pairUnscored,
             grid,
@@ -464,17 +531,24 @@ builder.queryField('pressureSensitivity', (t) =>
             definitionsExcluded: acc.definitionsExcluded.size,
           });
 
-          if (reduction.directionDelta !== null) {
-            const delta = reduction.directionDelta;
+          if (winRateDelta.value !== null && winRateDelta.lowBandMean !== null && winRateDelta.highBandMean !== null) {
+            perPairWinRateDeltas.push(winRateDelta.value);
+            perPairLowBandRates.push(winRateDelta.lowBandMean);
+            perPairHighBandRates.push(winRateDelta.highBandMean);
+
             const classification: 'positive' | 'flat' | 'negative' =
-              Math.abs(delta) < FLAT_DELTA_THRESHOLD ? 'flat' : delta > 0 ? 'positive' : 'negative';
+              Math.abs(winRateDelta.value) < FLAT_DELTA_THRESHOLD
+                ? 'flat'
+                : winRateDelta.value > 0
+                  ? 'positive'
+                  : 'negative';
             if (classification === 'positive') sanityPositive += 1;
             else if (classification === 'flat') sanityFlat += 1;
             else sanityNegative += 1;
             sanityBreakdown.push({
               modelId: model.modelId,
               pairKey: acc.pairKey,
-              directionDelta: delta,
+              winRateDelta: winRateDelta.value,
               classification,
             });
           } else {
@@ -482,10 +556,13 @@ builder.queryField('pressureSensitivity', (t) =>
           }
         }
 
-        const aggregate = aggregateSensitivity(valuePairs.map((vp) => ({ netScoreDelta: vp.netScoreDelta.value })));
-        const valuePairsExcluded = valuePairs.filter((vp) => vp.netScoreDelta.value === null).length;
+        const winRateDeltaSummary = summarizeWinRateDeltas(
+          perPairWinRateDeltas,
+          perPairLowBandRates,
+          perPairHighBandRates,
+        );
 
-        if (valuePairs.length === 0 || aggregate.valuePairsMeasured === 0) {
+        if (valuePairs.length === 0 || winRateDeltaSummary.pairsMeasured === 0) {
           insufficient.push({
             modelId: model.modelId,
             label: model.displayName,
@@ -499,7 +576,7 @@ builder.queryField('pressureSensitivity', (t) =>
           modelId: model.modelId,
           label: model.displayName,
           providerName: model.provider.displayName ?? model.provider.name,
-          aggregateSensitivity: { ...aggregate, valuePairsExcluded },
+          winRateDeltaSummary,
           valuePairs: valuePairs.sort((a, b) => a.pairKey.localeCompare(b.pairKey)),
           unscoredCount: modelUnscored,
         });
@@ -516,13 +593,22 @@ builder.queryField('pressureSensitivity', (t) =>
       };
 
       return {
-        models: outputModels.sort((a, b) =>
-          (b.aggregateSensitivity.value ?? -1) - (a.aggregateSensitivity.value ?? -1),
-        ),
+        models: outputModels.sort((a, b) => {
+          const aMean = a.winRateDeltaSummary.mean;
+          const bMean = b.winRateDeltaSummary.mean;
+          if (aMean === null && bMean === null) {
+            return a.label.localeCompare(b.label);
+          }
+          if (aMean === null) return 1;
+          if (bMean === null) return -1;
+          if (bMean !== aMean) return bMean - aMean;
+          return a.label.localeCompare(b.label);
+        }),
         insufficient,
         excludedDefinitions,
         excludedScenariosCount,
         directionalSanityCheck,
+        transcriptCapHit,
       };
     },
   }),
@@ -565,7 +651,10 @@ function ensureUnscoredCell(pairAcc: PairAccumulator): CellAccumulator {
   return cell;
 }
 
-function buildEmptyResult(models: ModelRow[]): PressureSensitivityResultShape {
+export function buildEmptyResult(
+  models: ModelRow[],
+  transcriptCapHit = false,
+): PressureSensitivityResultShape {
   return {
     models: [],
     insufficient: models.map((m) => ({
@@ -584,5 +673,6 @@ function buildEmptyResult(models: ModelRow[]): PressureSensitivityResultShape {
       unmeasurableCount: 0,
       breakdown: [],
     },
+    transcriptCapHit,
   };
 }

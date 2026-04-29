@@ -24,9 +24,9 @@ export type PressureSensitivityExcludedDefinition =
 
 export type PressureSensitivityValuePair = PressureSensitivityModel['valuePairs'][number];
 export type PressureSensitivityCell = PressureSensitivityValuePair['grid'][number];
-export type PressureSensitivityBandStat = PressureSensitivityValuePair['directionDelta'];
-export type PressureSensitivityBaseline = PressureSensitivityValuePair['baselineWinRate'];
-export type PressureSensitivityAggregate = PressureSensitivityModel['aggregateSensitivity'];
+export type PressureSensitivityWinRateDelta = NonNullable<PressureSensitivityValuePair['winRateDelta']>;
+export type PressureSensitivityWinRateDeltaSummary =
+  NonNullable<PressureSensitivityModel['winRateDeltaSummary']>;
 
 export type DirectionalSanityCheck = PressureSensitivityResult['directionalSanityCheck'];
 export type DirectionalSanityCheckEntry = DirectionalSanityCheck['breakdown'][number];

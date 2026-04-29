@@ -14,10 +14,9 @@ export function PressureSensitivitySanityCheck({ data }: Props) {
   if (data.measuredCount === 0) {
     return (
       <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5 text-sm text-gray-600">
-        <h3 className="text-base font-semibold text-gray-900">Directional sanity check</h3>
+        <h3 className="text-base font-semibold text-gray-900">Win rate sanity check</h3>
         <p className="mt-1">
-          No (model, value pair) combinations have a measurable Direction Δ yet. The sanity check
-          requires at least one pair with both pressure bands populated to N ≥ 3.
+          No (model, value pair) combinations have a measurable Win rate Δ yet. The sanity check requires at least one pair with both pressure bands populated to N ≥ 3.
         </p>
         {data.unmeasurableCount > 0 ? (
           <p className="mt-1 text-xs text-gray-500">
@@ -32,19 +31,16 @@ export function PressureSensitivitySanityCheck({ data }: Props) {
 
   return (
     <section
-      className={`rounded-xl border p-4 md:p-5 ${
-        flagWarning ? 'border-amber-300 bg-amber-50' : 'border-gray-200 bg-white'
-      }`}
+      className={`rounded-xl border p-4 md:p-5 ${flagWarning ? 'border-amber-300 bg-amber-50' : 'border-gray-200 bg-white'}`}
     >
       <div className="flex items-baseline justify-between">
-        <h3 className="text-base font-semibold text-gray-900">Directional sanity check</h3>
+        <h3 className="text-base font-semibold text-gray-900">Win rate sanity check</h3>
         <span className="text-xs text-gray-500">
           {data.measuredCount} measured · {data.unmeasurableCount} unmeasurable
         </span>
       </div>
       <p className="mt-1 text-sm text-gray-600">
-        Of (model, value pair) combinations with measurable Direction Δ, what share went in the
-        expected direction (higher own pressure → higher own win rate)?
+        Of (model, value pair) combinations with measurable Win rate Δ, what share moved up as pressure increased (higher own pressure → higher own win rate)?
       </p>
 
       <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
@@ -64,8 +60,7 @@ export function PressureSensitivitySanityCheck({ data }: Props) {
 
       {flagWarning && (
         <p className="mt-3 rounded-md border border-amber-200 bg-amber-100 p-2 text-xs text-amber-900">
-          Below 70% positive direction — interpret the rest of this report cautiously. Pressure
-          may not be moving the model as the vignette design intended for many pairs.
+          Below 70% positive movement — interpret the rest of this report cautiously. Pressure may not be moving the model as the vignette design intended for many pairs.
         </p>
       )}
 
@@ -73,7 +68,7 @@ export function PressureSensitivitySanityCheck({ data }: Props) {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => setExpanded((v) => !v)}
+          onClick={() => setExpanded((value) => !value)}
           className="!min-h-0 !px-1 !py-0 !text-xs"
         >
           {expanded ? 'Hide breakdown' : 'Show breakdown'}
@@ -85,20 +80,20 @@ export function PressureSensitivitySanityCheck({ data }: Props) {
                 <tr className="text-left text-[11px] uppercase tracking-wide text-gray-500">
                   <th className="px-2 py-1">Model</th>
                   <th className="px-2 py-1">Pair</th>
-                  <th className="px-2 py-1">Direction Δ</th>
+                  <th className="px-2 py-1">Win rate Δ</th>
                   <th className="px-2 py-1">Class</th>
                 </tr>
               </thead>
               <tbody>
                 {[...data.breakdown]
-                  .sort((a, b) => Math.abs(b.directionDelta) - Math.abs(a.directionDelta))
+                  .sort((a, b) => Math.abs(b.winRateDelta) - Math.abs(a.winRateDelta))
                   .map((entry) => (
                     <tr key={`${entry.modelId}::${entry.pairKey}`} className="border-t border-gray-100">
                       <td className="px-2 py-1 font-mono">{entry.modelId}</td>
                       <td className="px-2 py-1 font-mono">{entry.pairKey}</td>
                       <td className="px-2 py-1 font-mono">
-                        {entry.directionDelta > 0 ? '+' : ''}
-                        {entry.directionDelta.toFixed(3)}
+                        {entry.winRateDelta > 0 ? '+' : ''}
+                        {entry.winRateDelta.toFixed(3)}
                       </td>
                       <td
                         className={`px-2 py-1 ${

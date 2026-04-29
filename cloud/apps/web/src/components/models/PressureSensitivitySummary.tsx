@@ -1,8 +1,19 @@
 import { useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/Table';
-import type { PressureSensitivityModel } from '../../api/operations/pressureSensitivity';
-
-type SortKey = 'model' | 'provider' | 'aggregate' | 'measured' | 'excluded';
+import { HeaderTooltip } from '../ui/HeaderTooltip';
+import { Tooltip } from '../ui/Tooltip';
+import { CeilingFloorBadge } from './CeilingFloorBadge';
+import type { PressureSensitivityModel, PressureSensitivityWinRateDeltaSummary } from '../../api/operations/pressureSensitivity';
+import {
+  GROUP_TOOLTIP,
+  LOW_TOOLTIP as LOW_TOOLTIP_BASE,
+  HIGH_TOOLTIP as HIGH_TOOLTIP_BASE,
+  SUMMARY_DELTA_TOOLTIP as DELTA_TOOLTIP,
+  formatPercent,
+  formatPoints,
+  getBadgeFlag,
+} from './pressureSensitivityFormatting';
 
 type Props = {
   models: PressureSensitivityModel[];
@@ -10,89 +21,77 @@ type Props = {
   onSelectModel: (modelId: string) => void;
 };
 
-function formatScore(value: number | null | undefined): string {
-  if (value == null) return '—';
-  return value.toFixed(3);
-}
+type SortDirection = 'asc' | 'desc';
 
-function Sparkline({ values, width = 80, height = 18 }: { values: number[]; width?: number; height?: number }) {
-  if (values.length === 0) {
-    return <span className="text-xs text-gray-400">—</span>;
+const MODEL_TOOLTIP = 'The model in this row.';
+const LOW_TOOLTIP = `${LOW_TOOLTIP_BASE} Averaged across this model's measured value pairs.`;
+const HIGH_TOOLTIP = `${HIGH_TOOLTIP_BASE} Averaged across this model's measured value pairs.`;
+
+function renderBandCell(value: number | null | undefined, tooltip: ReactNode, badgeFlag: 'ceiling' | 'floor' | null) {
+  if (value == null) {
+    return <span className="font-mono text-gray-500">—</span>;
   }
-  const max = Math.max(...values, 0.001);
-  const step = values.length === 1 ? width / 2 : width / (values.length - 1);
-  const points = values
-    .map((value, index) => {
-      const x = values.length === 1 ? width / 2 : index * step;
-      const y = height - (value / max) * height;
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(' ');
+
   return (
-    <svg
-      role="img"
-      aria-label={`Per-pair sensitivity sparkline (${values.length} values)`}
-      width={width}
-      height={height}
-      className="inline-block align-middle text-blue-500"
-    >
-      <polyline
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={1.4}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        points={points}
-      />
-    </svg>
+    <Tooltip content={<div className="max-w-[280px] whitespace-normal text-xs leading-5">{tooltip}</div>} position="top" variant="light">
+      <div className="inline-flex items-center gap-1">
+        <span className="font-mono text-gray-900">{formatPercent(value)}</span>
+        <CeilingFloorBadge flag={badgeFlag} />
+      </div>
+    </Tooltip>
   );
 }
 
-function sortValue(model: PressureSensitivityModel, key: SortKey): number | string {
-  switch (key) {
-    case 'provider':
-      return model.providerName;
-    case 'aggregate':
-      return model.aggregateSensitivity.value ?? -1;
-    case 'measured':
-      return model.aggregateSensitivity.valuePairsMeasured;
-    case 'excluded':
-      return model.aggregateSensitivity.valuePairsExcluded;
-    case 'model':
-    default:
-      return model.label;
+function renderDeltaCell(summary: PressureSensitivityWinRateDeltaSummary): ReactNode {
+  const { mean, ciLow, ciHigh, pairsMeasured, pairsPositive } = summary;
+  if (mean == null) {
+    return <span className="font-mono text-gray-500">—</span>;
   }
+
+  const textClass = mean < 0 ? 'text-red-700' : 'text-gray-900';
+  const glyph = mean < 0 ? '▼' : '▲';
+  const signed = `${mean < 0 ? '−' : '+'}${formatPoints(mean)}`;
+
+  if (pairsMeasured < 2 || ciLow == null || ciHigh == null) {
+    return (
+      <span className={`font-mono ${textClass}`}>
+        {glyph} {signed} <span className="text-xs text-gray-500">(thin)</span>
+      </span>
+    );
+  }
+
+  const halfWidth = Math.abs((ciHigh - ciLow) * 50);
+  return (
+    <span className={`font-mono ${textClass}`}>
+      {glyph} {signed} ± {halfWidth.toFixed(0)} pp <span className="text-xs text-gray-500">· {pairsPositive}/{pairsMeasured} moved up</span>
+    </span>
+  );
 }
 
 export function PressureSensitivitySummary({ models, selectedModelId, onSelectModel }: Props) {
-  const [sortKey, setSortKey] = useState<SortKey>('aggregate');
-  const [direction, setDirection] = useState<'asc' | 'desc'>('desc');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
-  const sorted = useMemo(() => {
+  const sortedModels = useMemo(() => {
     return [...models].sort((a, b) => {
-      const av = sortValue(a, sortKey);
-      const bv = sortValue(b, sortKey);
-      const delta = typeof av === 'number' && typeof bv === 'number' ? av - bv : String(av).localeCompare(String(bv));
-      return direction === 'asc' ? delta : -delta;
+      const aMean = a.winRateDeltaSummary.mean;
+      const bMean = b.winRateDeltaSummary.mean;
+      if (aMean == null && bMean == null) return a.label.localeCompare(b.label);
+      if (aMean == null) return 1;
+      if (bMean == null) return -1;
+      if (aMean !== bMean) {
+        return sortDirection === 'asc' ? aMean - bMean : bMean - aMean;
+      }
+      return a.label.localeCompare(b.label);
     });
-  }, [models, sortKey, direction]);
-
-  const toggle = (next: SortKey) => {
-    if (next === sortKey) {
-      setDirection((cur) => (cur === 'asc' ? 'desc' : 'asc'));
-      return;
-    }
-    setSortKey(next);
-    setDirection(next === 'model' || next === 'provider' ? 'asc' : 'desc');
-  };
+  }, [models, sortDirection]);
 
   return (
     <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">Cross-model sensitivity</h2>
+          <h2 className="text-lg font-semibold text-gray-900">Cross-model win rate sensitivity</h2>
           <p className="text-sm text-gray-600">
-            Aggregate sensitivity is the mean of |netScore Δ| across measured value pairs. Click a row to select a model.
+            This table ranks models by how much pressure moves their win rate, with light and heavy pressure shown beside the Win rate Δ.
           </p>
         </div>
       </div>
@@ -104,37 +103,42 @@ export function PressureSensitivitySummary({ models, selectedModelId, onSelectMo
       <Table variant="bordered">
         <TableHeader variant="bordered">
           <TableRow>
-            {[
-              ['model', 'Model'],
-              ['provider', 'Provider'],
-              ['aggregate', 'Aggregate sensitivity'],
-              ['measured', 'Pairs measured'],
-              ['excluded', 'Pairs excluded'],
-            ].map(([key, label]) => (
-              <TableHead
-                key={key}
-                className="cursor-pointer select-none"
-                onClick={() => toggle(key as SortKey)}
-              >
-                <span className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                  {label}
-                  {sortKey === key ? (direction === 'asc' ? ' ▲' : ' ▼') : ''}
+            <TableHead rowSpan={2} className="align-middle text-xs uppercase tracking-wide text-gray-500">
+              <HeaderTooltip label="Model" content={MODEL_TOOLTIP} />
+            </TableHead>
+            <TableHead colSpan={3} className="text-center text-xs uppercase tracking-wide text-gray-500">
+              <HeaderTooltip label="Win Rate" content={GROUP_TOOLTIP} />
+            </TableHead>
+          </TableRow>
+          <TableRow>
+            <TableHead className="text-xs uppercase tracking-wide text-gray-500">
+              <HeaderTooltip label="Low pressure" content={LOW_TOOLTIP} />
+            </TableHead>
+            <TableHead className="text-xs uppercase tracking-wide text-gray-500">
+              <HeaderTooltip label="High pressure" content={HIGH_TOOLTIP} />
+            </TableHead>
+            <TableHead
+              className="cursor-pointer select-none text-xs uppercase tracking-wide text-gray-500"
+              onClick={() => setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))}
+              aria-sort={sortDirection === 'asc' ? 'ascending' : 'descending'}
+            >
+              <div className="inline-flex items-center gap-1">
+                <HeaderTooltip label="Win rate Δ ± CI" content={DELTA_TOOLTIP} />
+                <span aria-hidden="true" className="text-[11px] leading-none">
+                  {sortDirection === 'asc' ? '▲' : '▼'}
                 </span>
-              </TableHead>
-            ))}
-            <TableHead>
-              <span className="text-xs font-medium uppercase tracking-wide text-gray-500">Per-pair spread</span>
+              </div>
             </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {sorted.map((model) => {
+          {sortedModels.map((model) => {
+            const summary = model.winRateDeltaSummary;
             const isSelected = model.modelId === selectedModelId;
-            const spread = model.valuePairs
-              .map((p) => p.netScoreDelta.value)
-              .filter((v): v is number => v != null)
-              .map((v) => Math.abs(v))
-              .sort((a, b) => b - a);
+            const lowBadge = summary.lowBandMean == null ? null : getBadgeFlag(summary.lowBandMean);
+            const lowTooltip = summary.lowBandMean == null ? 'No pooled low-pressure win rate is available.' : LOW_TOOLTIP;
+            const highTooltip = summary.highBandMean == null ? 'No pooled high-pressure win rate is available.' : HIGH_TOOLTIP;
+
             return (
               <TableRow
                 key={model.modelId}
@@ -142,19 +146,13 @@ export function PressureSensitivitySummary({ models, selectedModelId, onSelectMo
                 onClick={() => onSelectModel(model.modelId)}
               >
                 <TableCell className="font-medium text-gray-900">{model.label}</TableCell>
-                <TableCell className="text-sm text-gray-700">{model.providerName}</TableCell>
-                <TableCell className="text-sm font-mono text-gray-900">
-                  {formatScore(model.aggregateSensitivity.value)}
+                <TableCell className="text-sm text-gray-700">
+                  {renderBandCell(summary.lowBandMean, lowTooltip, lowBadge)}
                 </TableCell>
                 <TableCell className="text-sm text-gray-700">
-                  {model.aggregateSensitivity.valuePairsMeasured}
+                  {renderBandCell(summary.highBandMean, highTooltip, null)}
                 </TableCell>
-                <TableCell className="text-sm text-gray-500">
-                  {model.aggregateSensitivity.valuePairsExcluded}
-                </TableCell>
-                <TableCell>
-                  <Sparkline values={spread} />
-                </TableCell>
+                <TableCell className="text-sm text-gray-900">{renderDeltaCell(summary)}</TableCell>
               </TableRow>
             );
           })}

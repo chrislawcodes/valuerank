@@ -1,0 +1,15 @@
+## Findings
+- [UNVERIFIED] Medium: The plan never defines a single estimator for the cross-model summary row’s `Low pressure` and `High pressure` cells. It only defines the delta as a pair-weighted mean over per-pair deltas with a t-based interval. If the low/high columns are computed with a different weighting scheme than the delta, the row will be internally inconsistent: the displayed components will no longer describe the same statistic. That is an architectural ambiguity, not just a presentation detail.
+
+- [UNVERIFIED] Medium: `HeaderTooltip` is specified as a `button` inside table headers, but the plan does not pin down the composition strategy for sortable headers. If the header itself is also interactive, this creates nested-control or event-handling conflicts that can break keyboard navigation and screen-reader behavior. The plan only addresses click bubbling, not the underlying semantics.
+
+- [UNVERIFIED] Medium: The source-run collision case is intentionally left as “last write wins” with only a warning. That means the resolver can still silently overwrite one definition’s data and ship a biased report even when the collision is known. Logging is useful, but it is not a correctness fix, so this remains a real data-integrity risk.
+
+## Residual Risks
+- The transcript-cap banner warns users about bias, but it does not remove the bias. Any consumer outside the page UI, or any user who misses the banner, can still treat truncated results as complete.
+
+- The statistical choices are opinionated and may still confuse readers. In particular, the cross-model “CI” is really a spread measure, not a precision interval, and the plan relies heavily on tooltip copy to keep that distinction clear.
+
+- Sparse-data edge cases still look fragile even with the proposed guards. Rows with one measured pair, zero qualifying cells, or boundary win rates can still produce output that is technically valid but easy to misread.
+
+- The removal of legacy GraphQL fields is done atomically, which is clean but brittle. Any stale fixtures, snapshots, or out-of-band references outside the grep checkpoint can still break the build after schema regeneration.

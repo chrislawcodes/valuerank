@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   type Cell,
   type Observation,
-  aggregateSensitivity,
-  applyBandReduction,
   buildCellMetrics,
-  computeBaselineWinRate,
+  diffProportionCI,
+  pooledBandReduction,
+  summarizeWinRateDeltas,
+  tBasedMeanCI,
+  wilsonInterval,
 } from '../../../src/services/pressure-sensitivity/aggregation.js';
 
 function cell(partial: Partial<Cell> & { ownLevel: number; opponentLevel: number; n: number }): Cell {
@@ -14,6 +16,7 @@ function cell(partial: Partial<Cell> & { ownLevel: number; opponentLevel: number
     opponentLevel: partial.opponentLevel,
     n: partial.n,
     unscoredCount: partial.unscoredCount ?? 0,
+    successes: partial.successes ?? 0,
     winRate: partial.winRate ?? null,
     conviction: partial.conviction ?? null,
     netScore: partial.netScore ?? null,
@@ -22,19 +25,20 @@ function cell(partial: Partial<Cell> & { ownLevel: number; opponentLevel: number
 }
 
 describe('buildCellMetrics', () => {
-  it('computes win rate, conviction, and netScore for a typical mix', () => {
+  it('computes win rate, conviction, netScore, and successes for a typical mix', () => {
     const observations: Observation[] = [
       { outcome: 'own_picked', strength: 'strong' },
-      { outcome: 'own_picked', strength: 'strong' },
+      { outcome: 'own_picked', strength: 'lean' },
       { outcome: 'neutral', strength: null },
     ];
 
     expect(buildCellMetrics(observations)).toEqual({
       n: 3,
       unscoredCount: 0,
+      successes: 2,
       winRate: 2 / 3,
-      conviction: 2,
-      netScore: (2 * 2 + 0 - 0 - 0) / 3,
+      conviction: 1.5,
+      netScore: (2 * 1 + 1 - 0 - 0) / 3,
     });
   });
 
@@ -47,6 +51,7 @@ describe('buildCellMetrics', () => {
     ).toEqual({
       n: 0,
       unscoredCount: 2,
+      successes: 0,
       winRate: null,
       conviction: null,
       netScore: null,
@@ -60,6 +65,7 @@ describe('buildCellMetrics', () => {
     ]);
 
     expect(result.n).toBe(2);
+    expect(result.successes).toBe(0);
     expect(result.winRate).toBe(0);
     expect(result.conviction).toBeNull();
     expect(result.netScore).toBe((0 - 2 * 2) / 2);
@@ -72,117 +78,172 @@ describe('buildCellMetrics', () => {
       { outcome: 'opponent_picked', strength: 'lean' },
     ]);
 
-    // (2*1 + 1) - (2*0 + 1) = 3 - 1 = 2; /3 = 0.666…
     expect(result.netScore).toBeCloseTo(2 / 3, 10);
-    // conviction: (2*1 + 1) / (1 + 1) = 1.5
     expect(result.conviction).toBe(1.5);
   });
 });
 
-describe('applyBandReduction', () => {
-  it('returns expected deltas on a standard grid', () => {
-    const grid: Cell[] = [
-      cell({ ownLevel: 1, opponentLevel: 1, n: 5, winRate: 0.2, conviction: 1, netScore: -0.5 }),
-      cell({ ownLevel: 2, opponentLevel: 1, n: 5, winRate: 0.4, conviction: 1.2, netScore: -0.2 }),
-      cell({ ownLevel: 4, opponentLevel: 1, n: 5, winRate: 0.7, conviction: 1.7, netScore: 0.6 }),
-      cell({ ownLevel: 5, opponentLevel: 1, n: 5, winRate: 0.9, conviction: 1.9, netScore: 1.2 }),
-    ];
+describe('wilsonInterval', () => {
+  it('matches the textbook value for 20/25', () => {
+    const interval = wilsonInterval(20, 25);
 
-    const result = applyBandReduction(grid, 3);
-
-    expect(result.directionDelta).toBeCloseTo(0.8 - 0.3, 10);
-    expect(result.convictionDelta).toBeCloseTo(1.8 - 1.1, 10);
-    expect(result.netScoreDelta).toBeCloseTo(0.9 - -0.35, 10);
+    expect(interval).not.toBeNull();
+    expect(interval?.p).toBeCloseTo(0.8, 10);
+    expect(interval?.low).toBeCloseTo(0.6087, 3);
+    expect(interval?.high).toBeCloseTo(0.9114, 3);
   });
 
-  it('returns null deltas when the low band has no cell meeting minN', () => {
-    const grid: Cell[] = [
-      cell({ ownLevel: 1, opponentLevel: 1, n: 1, winRate: 0.2, conviction: 1, netScore: -0.5 }),
-      cell({ ownLevel: 4, opponentLevel: 1, n: 5, winRate: 0.8, conviction: 1.8, netScore: 0.9 }),
-    ];
+  it('clamps the lower bound to 0 when matches is 0', () => {
+    const interval = wilsonInterval(0, 10);
 
-    const result = applyBandReduction(grid, 3);
-
-    expect(result.directionDelta).toBeNull();
-    expect(result.convictionDelta).toBeNull();
-    expect(result.netScoreDelta).toBeNull();
+    expect(interval).not.toBeNull();
+    expect(interval?.low).toBe(0);
+    expect(interval?.high).toBeGreaterThan(0);
   });
 
-  it('returns null deltas when the high band is empty', () => {
-    const grid: Cell[] = [
-      cell({ ownLevel: 1, opponentLevel: 1, n: 5, winRate: 0.2, conviction: 1, netScore: -0.5 }),
-    ];
+  it('clamps the upper bound to 1 when matches equals trials', () => {
+    const interval = wilsonInterval(10, 10);
 
-    expect(applyBandReduction(grid, 3).directionDelta).toBeNull();
+    expect(interval).not.toBeNull();
+    expect(interval?.low).toBeLessThan(1);
+    expect(interval?.high).toBe(1);
   });
 
-  it('drops nullable conviction values from the band mean', () => {
-    const grid: Cell[] = [
-      cell({ ownLevel: 1, opponentLevel: 1, n: 5, winRate: 0.2, conviction: null, netScore: -0.5 }),
-      cell({ ownLevel: 5, opponentLevel: 1, n: 5, winRate: 0.8, conviction: 1.8, netScore: 0.9 }),
-    ];
-
-    const result = applyBandReduction(grid, 3);
-
-    // direction is defined: 0.8 - 0.2
-    expect(result.directionDelta).toBeCloseTo(0.6, 10);
-    // conviction is undefined because low band has no defined conviction
-    expect(result.convictionDelta).toBeNull();
+  it('returns null for invalid inputs', () => {
+    expect(wilsonInterval(Number.NaN, 10)).toBeNull();
+    expect(wilsonInterval(5, 0)).toBeNull();
   });
 });
 
-describe('computeBaselineWinRate', () => {
-  it('uses level 1 when populated and meets minN', () => {
-    const grid: Cell[] = [
-      cell({ ownLevel: 1, opponentLevel: 1, n: 5, winRate: 0.95 }),
-      cell({ ownLevel: 1, opponentLevel: 5, n: 5, winRate: 0.95 }),
-      cell({ ownLevel: 5, opponentLevel: 1, n: 5, winRate: 0.95 }),
-    ];
+describe('diffProportionCI', () => {
+  it('returns a Newcombe Method-10 interval for a balanced pair of proportions', () => {
+    const interval = diffProportionCI(0.3, 100, 0.7, 100);
 
-    expect(computeBaselineWinRate(grid, 3)).toEqual({ value: 0.95, ceilingFloorFlag: 'ceiling' });
+    expect(interval).not.toBeNull();
+    expect(interval?.ciLow).toBeCloseTo(0.2644, 4);
+    expect(interval?.ciHigh).toBeCloseTo(0.5146, 4);
   });
 
-  it('falls back to the next level when level 1 is empty', () => {
-    const grid: Cell[] = [
-      cell({ ownLevel: 2, opponentLevel: 1, n: 5, winRate: 0.5 }),
-    ];
-
-    expect(computeBaselineWinRate(grid, 3)).toEqual({ value: 0.5, ceilingFloorFlag: null });
-  });
-
-  it('flags floor when baseline <= 0.1', () => {
-    const grid: Cell[] = [
-      cell({ ownLevel: 1, opponentLevel: 1, n: 5, winRate: 0.05 }),
-    ];
-
-    expect(computeBaselineWinRate(grid, 3)).toEqual({ value: 0.05, ceilingFloorFlag: 'floor' });
-  });
-
-  it('returns null when no level meets minN', () => {
-    const grid: Cell[] = [
-      cell({ ownLevel: 1, opponentLevel: 1, n: 1, winRate: 0.5 }),
-    ];
-
-    expect(computeBaselineWinRate(grid, 3)).toEqual({ value: null, ceilingFloorFlag: null });
+  it('returns null when either trial count is zero', () => {
+    expect(diffProportionCI(0.5, 0, 0.5, 10)).toBeNull();
   });
 });
 
-describe('aggregateSensitivity', () => {
-  it('returns the mean of |netScoreDelta| over defined pairs', () => {
-    expect(
-      aggregateSensitivity([
-        { netScoreDelta: 0.3 },
-        { netScoreDelta: null },
-        { netScoreDelta: -0.5 },
-        { netScoreDelta: 0.1 },
-      ]),
-    ).toEqual({ value: (0.3 + 0.5 + 0.1) / 3, valuePairsMeasured: 3 });
+describe('tBasedMeanCI', () => {
+  it('matches the expected t-based half-width for a four-value sample', () => {
+    const interval = tBasedMeanCI([0.3, 0.5, 0.4, 0.45]);
+
+    expect(interval.mean).toBeCloseTo(0.4125, 10);
+    expect(interval.ciLow).toBeCloseTo(0.2766234558, 10);
+    expect(interval.ciHigh).toBeCloseTo(0.5483765442, 10);
+    expect(interval.n).toBe(4);
   });
 
-  it('returns null + 0 when no pairs have a defined Δ', () => {
-    expect(aggregateSensitivity([{ netScoreDelta: null }])).toEqual({
-      value: null,
-      valuePairsMeasured: 0,
+  it('returns null CIs for a single value', () => {
+    expect(tBasedMeanCI([0.3])).toEqual({
+      mean: 0.3,
+      ciLow: null,
+      ciHigh: null,
+      n: 1,
     });
+  });
+
+  it('returns null CIs for an empty sample', () => {
+    expect(tBasedMeanCI([])).toEqual({
+      mean: null,
+      ciLow: null,
+      ciHigh: null,
+      n: 0,
+    });
+  });
+
+  it('filters non-finite values before computing the mean', () => {
+    const interval = tBasedMeanCI([0.3, Number.NaN, 0.4]);
+
+    expect(interval.mean).toBeCloseTo(0.35, 10);
+    expect(interval.n).toBe(2);
+  });
+});
+
+describe('pooledBandReduction', () => {
+  it('uses pooled binomial rates for both bands', () => {
+    const grid: Cell[] = [
+      cell({ ownLevel: 1, opponentLevel: 1, n: 10, successes: 3, lowData: false }),
+      cell({ ownLevel: 2, opponentLevel: 1, n: 20, successes: 4, lowData: false }),
+      cell({ ownLevel: 2, opponentLevel: 2, n: 30, successes: 5, lowData: false }),
+      cell({ ownLevel: 4, opponentLevel: 1, n: 10, successes: 7, lowData: false }),
+      cell({ ownLevel: 5, opponentLevel: 1, n: 10, successes: 8, lowData: false }),
+    ];
+
+    const result = pooledBandReduction(grid, 3);
+
+    expect(result.reason).toBeNull();
+    expect(result.lowBandMean).toBeCloseTo(12 / 60, 10);
+    expect(result.highBandMean).toBeCloseTo(15 / 20, 10);
+    expect(result.value).toBeCloseTo(0.55, 10);
+    expect(result.qualifyingTrials).toBe(80);
+  });
+
+  it('marks the low band as thin when no low-band cell meets the threshold', () => {
+    const grid: Cell[] = [
+      cell({ ownLevel: 1, opponentLevel: 1, n: 1, successes: 0, lowData: true }),
+      cell({ ownLevel: 4, opponentLevel: 1, n: 5, successes: 4, lowData: false }),
+    ];
+
+    const result = pooledBandReduction(grid, 3);
+
+    expect(result).toMatchObject({
+      value: null,
+      ciLow: null,
+      ciHigh: null,
+      lowBandMean: null,
+      highBandMean: null,
+      reason: 'low-band-thin',
+      qualifyingTrials: 5,
+    });
+  });
+
+  it('marks the high band as thin when no high-band cell meets the threshold', () => {
+    const grid: Cell[] = [
+      cell({ ownLevel: 1, opponentLevel: 1, n: 5, successes: 2, lowData: false }),
+    ];
+
+    const result = pooledBandReduction(grid, 3);
+
+    expect(result).toMatchObject({
+      value: null,
+      ciLow: null,
+      ciHigh: null,
+      lowBandMean: null,
+      highBandMean: null,
+      reason: 'high-band-thin',
+      qualifyingTrials: 5,
+    });
+  });
+
+  it('marks both bands thin when neither side qualifies', () => {
+    const result = pooledBandReduction(
+      [cell({ ownLevel: 3, opponentLevel: 3, n: 2, successes: 1, lowData: true })],
+      3,
+    );
+
+    expect(result).toEqual({
+      value: null,
+      ciLow: null,
+      ciHigh: null,
+      lowBandMean: null,
+      highBandMean: null,
+      reason: 'both-bands-thin',
+      qualifyingTrials: 0,
+    });
+  });
+});
+
+describe('summarizeWinRateDeltas', () => {
+  it('counts pairs above the flat-delta threshold', () => {
+    const summary = summarizeWinRateDeltas([0.019, 0.021, 0.05], [0.2, 0.3, 0.4], [0.4, 0.5, 0.6]);
+
+    expect(summary.pairsMeasured).toBe(3);
+    expect(summary.pairsPositive).toBe(2);
   });
 });

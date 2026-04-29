@@ -1,0 +1,57 @@
+MCP issues detected. Run /mcp list for status.{
+  "session_id": "05dca7c3-54c6-4e22-bc66-f7ec04076b83",
+  "response": "## Findings\n\n| Severity | Finding |\n| --- | --- |\n| **MEDIUM** | **[UNVERIFIED] Risk of Integration Failure Due to Unverified API Contract Changes** |\n| **MEDIUM** | **Code Duplication Between Summary and Detail Components** |\n| **LOW** | **Sort Functionality on Delta Column May Be Unintuitive** |\n| **LOW** | **Potentially Useful Information Has Been Removed** |\n\n### **MEDIUM: [UNVERIFIED] Risk of Integration Failure Due to Unverified API Contract Changes**\n\nThe components `PressureSensitivityDetail.tsx` and `PressureSensitivitySummary.tsx` have been completely refactored to consume a new data structure. The previous implementation relied on properties like `netScoreDelta`, `directionDelta`, and `aggregateSensitivity`. The new implementation expects `winRateDelta`, `winRateDeltaSummary`, and `qualifyingTrials` on the `PressureSensitivityModel` and `PressureSensitivityValuePair` types. Additionally, the parent `PressureSensitivity.tsx` page now expects a `transcriptCapHit` boolean in the API response.\n\nThis represents a major change to the data contract with the backend. If the API has not been updated to provide these new fields and structures, these components will fail to render or will crash at runtime. This finding is marked `[UNVERIFIED]` as the API implementation was not provided for review.\n\n**File:** `cloud/apps/web/src/components/models/PressureSensitivityDetail.tsx`, `cloud/apps/web/src/components/models/PressureSensitivitySummary.tsx`, `cloud/apps/web/src/pages/PressureSensitivity.tsx`\n\n### **MEDIUM: Code Duplication Between Summary and Detail Components**\n\nSeveral helper functions, constants, and JSX rendering functions are duplicated across `PressureSensitivitySummary.tsx` and `PressureSensitivityDetail.tsx`. This includes:\n*   Tooltip content strings (`GROUP_TOOLTIP`, `LOW_TOOLTIP`, `HIGH_TOOLTIP`, `DELTA_TOOLTIP`)\n*   Formatting functions (`formatPercent`, `formatPoints`)\n*   Business logic (`getBadgeFlag`)\n*   A rendering function (`renderBandCell` is defined locally in both files with nearly identical implementations)\n\nThis duplication increases the maintenance burden, as any future changes to this logic or copy will need to be applied in multiple places, creating a risk of inconsistency. These shared utilities should be extracted to a common location.\n\n**Files:** `cloud/apps/web/src/components/models/PressureSensitivitySummary.tsx`, `cloud/apps/web/src/components/models/PressureSensitivityDetail.tsx`\n\n### **LOW: Sort Functionality on Delta Column May Be Unintuitive**\n\nIn `PressureSensitivityDetail.tsx`, the \"Win rate Δ\" column is sortable. The implementation sorts pairs based on the *absolute value* of the delta (`Math.abs(a.winRateDelta.value)`). This allows users to see pairs with the highest and lowest *magnitude* of change.\n\nHowever, the UI uses standard ascending (`▲`) and descending (`▼`) icons. Users often associate these with a directional sort (e.g., from most positive to most negative). A user who wants to find the value pairs that are most suppressed by heavy pressure (i.e., the most negative delta) cannot sort for this directly and must instead scan the list visually. The functionality is not flawed, but the UI may create an incorrect expectation.\n\n**File:** `cloud/apps/web/src/components/models/PressureSensitivityDetail.tsx`\n\n### **LOW: Potentially Useful Information Has Been Removed**\n\nThe previous implementation of the summary and detail tables has been replaced with a more focused view on win-rate sensitivity. In the process, several pieces of information have been removed:\n*   **Summary Table:** The \"Provider\" column and the \"Per-pair spread\" sparkline visualization are gone.\n*   **Detail Table:** The `Direction Δ`, `Conviction Δ`, and `netScore Δ` metrics are gone.\n\nWhile the new design is arguably cleaner and easier to understand, this is a removal of functionality. The sparkline, in particular, provided a quick visual summary of the distribution of sensitivity across all pairs for a given model. This is likely an intentional design tradeoff, but it's a \"silent\" removal of features that users may have found valuable.\n\n**Files:** `cloud/apps/web/src/components/models/PressureSensitivitySummary.tsx`, `cloud/apps/web/src/components/models/PressureSensitivityDetail.tsx`\n\n## Residual Risks\n\n*   **Deployment Coordination:** The most significant risk is the dependency on the unverified API contract changes. The frontend and backend changes must be deployed atomically. If the frontend is deployed before the backend, the Pressure Sensitivity page will be broken.\n*   **User Adaptation:** The UI has changed significantly, removing several metrics and visualizations. There is a risk that existing users who relied on the removed information (e.g., `netScore Δ`, the provider column for quick filtering, the sparkline) will find the new report less useful for their workflow.\n*   **Data Completeness Assumption:** The new `transcriptCapHit` warning is an excellent addition for transparency. However, its effectiveness depends on the cap being set at a reasonable level and the backend reliably flagging when it's hit. An incorrect implementation of this flag could lead to users either being needlessly alarmed or falsely confident in the data's completeness.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 44097
+        },
+        "tokens": {
+          "input": 20968,
+          "prompt": 20968,
+          "candidates": 1152,
+          "total": 25189,
+          "cached": 0,
+          "thoughts": 3069,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 44097,
+            "tokens": {
+              "input": 20968,
+              "prompt": 20968,
+              "candidates": 1152,
+              "total": 25189,
+              "cached": 0,
+              "thoughts": 3069,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

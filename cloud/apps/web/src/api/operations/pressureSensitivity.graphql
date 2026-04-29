@@ -13,10 +13,14 @@ query PressureSensitivity(
       label
       providerName
       unscoredCount
-      aggregateSensitivity {
-        value
-        valuePairsMeasured
-        valuePairsExcluded
+      winRateDeltaSummary {
+        mean
+        ciLow
+        ciHigh
+        lowBandMean
+        highBandMean
+        pairsMeasured
+        pairsPositive
       }
       valuePairs {
         pairKey
@@ -26,24 +30,14 @@ query PressureSensitivity(
         unscoredCount
         definitionsMeasured
         definitionsExcluded
-        directionDelta {
+        qualifyingTrials
+        winRateDelta {
           value
           lowBandMean
           highBandMean
-        }
-        convictionDelta {
-          value
-          lowBandMean
-          highBandMean
-        }
-        netScoreDelta {
-          value
-          lowBandMean
-          highBandMean
-        }
-        baselineWinRate {
-          value
-          ceilingFloorFlag
+          ciLow
+          ciHigh
+          reason
         }
         grid {
           ownLevel
@@ -69,6 +63,7 @@ query PressureSensitivity(
       reason
     }
     excludedScenariosCount
+    transcriptCapHit
     directionalSanityCheck {
       positivePct
       flatPct
@@ -78,7 +73,7 @@ query PressureSensitivity(
       breakdown {
         modelId
         pairKey
-        directionDelta
+        winRateDelta
         classification
       }
     }

@@ -23,6 +23,8 @@ export type { AvatarProps } from './Avatar';
 export { Tooltip, tooltipVariants } from './Tooltip';
 export type { TooltipProps } from './Tooltip';
 
+export { HeaderTooltip } from './HeaderTooltip';
+
 export { Input, inputVariants } from './Input';
 export type { InputProps } from './Input';
 

@@ -1,0 +1,621 @@
+diff --git a/cloud/apps/web/src/components/models/PressureSensitivityDetail.tsx b/cloud/apps/web/src/components/models/PressureSensitivityDetail.tsx
+index de34caa9..32378210 100644
+--- a/cloud/apps/web/src/components/models/PressureSensitivityDetail.tsx
++++ b/cloud/apps/web/src/components/models/PressureSensitivityDetail.tsx
+@@ -1,173 +1,204 @@
+ import { useMemo, useState } from 'react';
++import type { ReactNode } from 'react';
+ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/Table';
+-import type {
+-  PressureSensitivityModel,
+-  PressureSensitivityValuePair,
+-} from '../../api/operations/pressureSensitivity';
++import { HeaderTooltip } from '../ui/HeaderTooltip';
++import { Tooltip } from '../ui/Tooltip';
++import { CeilingFloorBadge } from './CeilingFloorBadge';
+ import { PressureGrid } from './PressureGrid';
++import type { PressureSensitivityModel, PressureSensitivityValuePair } from '../../api/operations/pressureSensitivity';
+ 
+ type Props = {
+   model: PressureSensitivityModel;
+ };
+ 
+-function formatDelta(value: number | null | undefined): string {
+-  if (value == null) return '—';
+-  const sign = value > 0 ? '+' : '';
+-  return `${sign}${value.toFixed(3)}`;
++type SortDirection = 'asc' | 'desc';
++
++const GROUP_TOOLTIP =
++  'The percentage of trials where the model picked the value. Same formula as the win rate shown elsewhere in ValueRank: picks / (picks + non-picks + neutrals). Higher = the model picks it more often.';
++const VALUE_PAIR_TOOLTIP = 'The value pair shown in this row.';
++const TRIALS_TOOLTIP =
++  'Total scored trials that contributed to this row\'s win rates. Counts only trials inside cells that met the coverage threshold (N ≥ 3) in the light or heavy pressure band. Refusals, unparseable responses, and trials in cells we skipped (low-data cells, level 3) are excluded.';
++const LOW_TOOLTIP =
++  "The model's win rate when pressure on this value is light (levels 1 or 2 out of 5). Per-pair: for this pair specifically.";
++const HIGH_TOOLTIP =
++  "The model's win rate when pressure on this value is heavy (levels 4 or 5 out of 5). Per-pair: for this pair specifically.";
++const DELTA_TOOLTIP =
++  'How much the win rate changes from light pressure to heavy pressure, in percentage points. Light pressure = own pressure level 1 or 2 on this value. Heavy pressure = level 4 or 5. Level 3 is excluded so the Δ reflects the biggest contrast in the data. Example: +40 pp means the model picks the value 40 percentage points more often at heavy pressure than at light. Negative means the model picks it less under heavy pressure. The CI is the spread of per-pair Δs across this model\'s measured value pairs.';
++
++const THIN_REASON_COPY: Record<string, string> = {
++  'low-band-thin': 'Low pressure band has no cells with N ≥ 3 trials. Try adding more low-pressure runs.',
++  'high-band-thin': 'High pressure band has no cells with N ≥ 3 trials. Try adding more high-pressure runs.',
++  'both-bands-thin': 'Neither pressure band has cells with N ≥ 3 trials. This pair needs more coverage to compute a Δ.',
++};
++
++function pairLabel(pair: PressureSensitivityValuePair): string {
++  return `${pair.ownToken} ↔ ${pair.opponentToken}`;
+ }
+ 
+-function formatPercent(value: number | null | undefined): string {
+-  if (value == null) return '—';
+-  return `${(value * 100).toFixed(1)}%`;
++function formatPercent(value: number): string {
++  return `${(value * 100).toFixed(0)}%`;
+ }
+ 
+-function CeilingFloorBadge({ flag }: { flag: string | null | undefined }) {
+-  if (flag === 'ceiling') {
+-    return (
+-      <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+-        ceiling
+-      </span>
+-    );
++function formatPoints(value: number): string {
++  return `${Math.abs(value * 100).toFixed(0)} pp`;
++}
++
++function getBadgeFlag(value: number): 'ceiling' | 'floor' | null {
++  if (value >= 0.9) return 'ceiling';
++  if (value <= 0.1) return 'floor';
++  return null;
++}
++
++function bandTooltip(kind: 'low' | 'high', value: number | null | undefined, reason: string | null | undefined): string {
++  if (value == null) {
++    if (reason === 'low-band-thin' || reason === 'high-band-thin' || reason === 'both-bands-thin') {
++      return THIN_REASON_COPY[reason] ?? 'No pooled win rate is available.';
++    }
++    return 'No pooled win rate is available.';
+   }
+-  if (flag === 'floor') {
++  return kind === 'low'
++    ? LOW_TOOLTIP
++    : HIGH_TOOLTIP;
++}
++
++function renderBandCell(kind: 'low' | 'high', value: number | null | undefined, reason: string | null | undefined) {
++  if (value == null) {
+     return (
+-      <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+-        floor
+-      </span>
++      <Tooltip content={<div className="max-w-[280px] whitespace-normal text-xs leading-5">{bandTooltip(kind, value, reason)}</div>} position="top" variant="light">
++        <span className="font-mono text-gray-500">—</span>
++      </Tooltip>
+     );
+   }
+-  return null;
+-}
+ 
+-function formatNumber(value: number | null | undefined, fractionDigits: number): string {
+-  if (value == null) return '—';
+-  return value.toFixed(fractionDigits);
++  const badgeFlag = kind === 'low' ? getBadgeFlag(value) : null;
++  return (
++    <Tooltip content={<div className="max-w-[280px] whitespace-normal text-xs leading-5">{bandTooltip(kind, value, reason)}</div>} position="top" variant="light">
++      <div className="inline-flex items-center gap-1">
++        <span className="font-mono text-gray-900">{formatPercent(value)}</span>
++        <CeilingFloorBadge flag={badgeFlag} />
++      </div>
++    </Tooltip>
++  );
+ }
+ 
+-function tooltipForDirection(lowMean: number | null | undefined, highMean: number | null | undefined): string {
+-  return `Direction: high band mean ${formatPercent(highMean)} − low band mean ${formatPercent(lowMean)}`;
+-}
++function renderDeltaCell(pair: PressureSensitivityValuePair): ReactNode {
++  const { value, ciLow, ciHigh, reason } = pair.winRateDelta;
++  if (value == null) {
++    return (
++      <Tooltip content={<div className="max-w-[280px] whitespace-normal text-xs leading-5">{bandTooltip('low', value, reason)}</div>} position="top" variant="light">
++        <span className="font-mono text-gray-500">—</span>
++      </Tooltip>
++    );
++  }
+ 
+-function tooltipForConviction(lowMean: number | null | undefined, highMean: number | null | undefined): string {
+-  return `Conviction (1=lean, 2=strong): high band mean ${formatNumber(highMean, 2)} − low band mean ${formatNumber(lowMean, 2)}`;
+-}
++  const textClass = value < 0 ? 'text-red-700' : 'text-gray-900';
++  const glyph = value < 0 ? '▼' : '▲';
++  const signed = `${value < 0 ? '−' : '+'}${formatPoints(value)}`;
+ 
+-function tooltipForNetScore(lowMean: number | null | undefined, highMean: number | null | undefined): string {
+-  return `netScore (−2..+2): high band mean ${formatNumber(highMean, 2)} − low band mean ${formatNumber(lowMean, 2)}`;
++  if (ciLow == null || ciHigh == null) {
++    return <span className={`font-mono ${textClass}`}>{glyph} {signed}</span>;
++  }
++
++  const halfWidth = Math.abs((ciHigh - ciLow) * 50);
++  return <span className={`font-mono ${textClass}`}>{glyph} {signed} ± {halfWidth.toFixed(0)} pp</span>;
+ }
+ 
+ export function PressureSensitivityDetail({ model }: Props) {
++  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+   const [selectedPairKey, setSelectedPairKey] = useState<string | null>(null);
+ 
+   const sortedPairs = useMemo(() => {
+-    // Defined Δ pairs first (descending |Δ|), then null Δ pairs (alphabetical by pair).
+-    const measured = model.valuePairs.filter((p) => p.netScoreDelta.value != null);
+-    const unmeasured = model.valuePairs.filter((p) => p.netScoreDelta.value == null);
+-    measured.sort((a, b) => Math.abs(b.netScoreDelta.value!) - Math.abs(a.netScoreDelta.value!));
+-    unmeasured.sort((a, b) => a.pairKey.localeCompare(b.pairKey));
+-    return [...measured, ...unmeasured];
+-  }, [model.valuePairs]);
+-
+-  const selectedPair: PressureSensitivityValuePair | null = useMemo(() => {
+-    if (selectedPairKey == null) return sortedPairs[0] ?? null;
+-    return sortedPairs.find((p) => p.pairKey === selectedPairKey) ?? sortedPairs[0] ?? null;
++    return [...model.valuePairs].sort((a, b) => {
++      const aValue = a.winRateDelta.value;
++      const bValue = b.winRateDelta.value;
++      const aAbs = aValue == null ? null : Math.abs(aValue);
++      const bAbs = bValue == null ? null : Math.abs(bValue);
++      if (aAbs == null && bAbs == null) return pairLabel(a).localeCompare(pairLabel(b));
++      if (aAbs == null) return 1;
++      if (bAbs == null) return -1;
++      if (aAbs !== bAbs) {
++        return sortDirection === 'asc' ? aAbs - bAbs : bAbs - aAbs;
++      }
++      return pairLabel(a).localeCompare(pairLabel(b));
++    });
++  }, [model.valuePairs, sortDirection]);
++
++  const selectedPair = useMemo(() => {
++    if (selectedPairKey != null) {
++      return sortedPairs.find((pair) => pair.pairKey === selectedPairKey) ?? sortedPairs[0] ?? null;
++    }
++    return sortedPairs[0] ?? null;
+   }, [selectedPairKey, sortedPairs]);
+ 
+   return (
+     <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
+       <div className="mb-3">
+-        <h2 className="text-lg font-semibold text-gray-900">{model.label} — per-pair sensitivity</h2>
++        <h2 className="text-lg font-semibold text-gray-900">{model.label} — per-pair win rate sensitivity</h2>
+         <p className="text-sm text-gray-600">
+-          Direction Δ is win-rate change between low- and high-pressure bands. Conviction Δ is mean
+-          decision strength among picks (model self-report; not a calibrated confidence scale).
+-          netScore Δ combines both via the existing 2:1 weighting.
++          This table shows how light and heavy pressure change the selected model&apos;s win rate for each value pair. The Δ column is the change in percentage points, and the Trials column counts only the scored trials that met the coverage rule.
+         </p>
+       </div>
+ 
+       <Table variant="bordered">
+         <TableHeader variant="bordered">
+           <TableRow>
+-            <TableHead>
+-              <span className="text-xs font-medium uppercase tracking-wide text-gray-500">Value pair</span>
+-            </TableHead>
+-            <TableHead>
+-              <span className="text-xs font-medium uppercase tracking-wide text-gray-500">
+-                Direction Δ
+-              </span>
++            <TableHead rowSpan={2} className="align-middle text-xs uppercase tracking-wide text-gray-500">
++              <HeaderTooltip label="Value Pair" content={VALUE_PAIR_TOOLTIP} />
+             </TableHead>
+-            <TableHead>
+-              <span className="text-xs font-medium uppercase tracking-wide text-gray-500" title="Self-report; not a calibrated confidence scale">
+-                Conviction Δ
+-              </span>
++            <TableHead colSpan={3} className="text-center text-xs uppercase tracking-wide text-gray-500">
++              <HeaderTooltip label="Win Rate" content={GROUP_TOOLTIP} />
+             </TableHead>
+-            <TableHead>
+-              <span className="text-xs font-medium uppercase tracking-wide text-gray-500">netScore Δ</span>
++            <TableHead rowSpan={2} className="align-middle text-xs uppercase tracking-wide text-gray-500">
++              <HeaderTooltip label="Trials" content={TRIALS_TOOLTIP} />
+             </TableHead>
+-            <TableHead>
+-              <span className="text-xs font-medium uppercase tracking-wide text-gray-500">Baseline</span>
++          </TableRow>
++          <TableRow>
++            <TableHead className="text-xs uppercase tracking-wide text-gray-500">
++              <HeaderTooltip label="Low pressure" content={LOW_TOOLTIP} />
+             </TableHead>
+-            <TableHead>
+-              <span className="text-xs font-medium uppercase tracking-wide text-gray-500">N</span>
++            <TableHead className="text-xs uppercase tracking-wide text-gray-500">
++              <HeaderTooltip label="High pressure" content={HIGH_TOOLTIP} />
+             </TableHead>
+-            <TableHead>
+-              <span className="text-xs font-medium uppercase tracking-wide text-gray-500">Defs</span>
++            <TableHead
++              className="cursor-pointer select-none text-xs uppercase tracking-wide text-gray-500"
++              onClick={() => setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))}
++              aria-sort={sortDirection === 'asc' ? 'ascending' : 'descending'}
++            >
++              <div className="inline-flex items-center gap-1">
++                <HeaderTooltip label="Win rate Δ ± CI" content={DELTA_TOOLTIP} />
++                <span aria-hidden="true" className="text-[11px] leading-none">
++                  {sortDirection === 'asc' ? '▲' : '▼'}
++                </span>
++              </div>
+             </TableHead>
+           </TableRow>
+         </TableHeader>
+         <TableBody>
+           {sortedPairs.map((pair) => {
+             const isSelected = selectedPair?.pairKey === pair.pairKey;
++            const { lowBandMean, highBandMean, reason } = pair.winRateDelta;
++
+             return (
+               <TableRow
+                 key={pair.pairKey}
+                 className={`cursor-pointer ${isSelected ? 'bg-blue-50' : ''}`}
+                 onClick={() => setSelectedPairKey(pair.pairKey)}
+               >
+-                <TableCell className="font-medium text-gray-900">
+-                  {pair.ownToken} ↔ {pair.opponentToken}
+-                </TableCell>
+-                <TableCell
+-                  className="text-sm font-mono"
+-                  title={tooltipForDirection(pair.directionDelta.lowBandMean, pair.directionDelta.highBandMean)}
+-                >
+-                  {formatDelta(pair.directionDelta.value)}
+-                </TableCell>
+-                <TableCell
+-                  className="text-sm font-mono"
+-                  title={tooltipForConviction(pair.convictionDelta.lowBandMean, pair.convictionDelta.highBandMean)}
+-                >
+-                  {formatDelta(pair.convictionDelta.value)}
+-                </TableCell>
+-                <TableCell
+-                  className="text-sm font-mono"
+-                  title={tooltipForNetScore(pair.netScoreDelta.lowBandMean, pair.netScoreDelta.highBandMean)}
+-                >
+-                  {formatDelta(pair.netScoreDelta.value)}
+-                </TableCell>
+-                <TableCell className="text-sm">
+-                  <span className="font-mono mr-2">{formatPercent(pair.baselineWinRate.value)}</span>
+-                  <CeilingFloorBadge flag={pair.baselineWinRate.ceilingFloorFlag} />
+-                </TableCell>
+-                <TableCell className="text-sm text-gray-700">
+-                  {pair.n}
+-                  {pair.unscoredCount > 0 ? (
+-                    <span className="ml-1 text-xs text-amber-700">({pair.unscoredCount} unscored)</span>
+-                  ) : null}
+-                </TableCell>
+-                <TableCell className="text-sm text-gray-500">
+-                  {pair.definitionsMeasured}
+-                  {pair.definitionsExcluded > 0 ? ` / ${pair.definitionsMeasured + pair.definitionsExcluded}` : ''}
+-                </TableCell>
++                <TableCell className="font-medium text-gray-900">{pairLabel(pair)}</TableCell>
++                <TableCell className="text-sm text-gray-700">{renderBandCell('low', lowBandMean, reason)}</TableCell>
++                <TableCell className="text-sm text-gray-700">{renderBandCell('high', highBandMean, reason)}</TableCell>
++                <TableCell className="text-sm text-gray-900">{renderDeltaCell(pair)}</TableCell>
++                <TableCell className="text-sm text-gray-700">{pair.qualifyingTrials}</TableCell>
+               </TableRow>
+             );
+           })}
+         </TableBody>
+       </Table>
+ 
+-      {selectedPair && (
++      {selectedPair != null && (
+         <div className="mt-5">
+           <h3 className="mb-2 text-sm font-semibold text-gray-900">
+-            {selectedPair.ownToken} ↔ {selectedPair.opponentToken} — pressure grid
++            {pairLabel(selectedPair)} — pressure grid
+           </h3>
+           <PressureGrid pair={selectedPair} />
+         </div>
+diff --git a/cloud/apps/web/src/components/models/PressureSensitivitySummary.tsx b/cloud/apps/web/src/components/models/PressureSensitivitySummary.tsx
+index ab762ef5..b3ccd70a 100644
+--- a/cloud/apps/web/src/components/models/PressureSensitivitySummary.tsx
++++ b/cloud/apps/web/src/components/models/PressureSensitivitySummary.tsx
+@@ -1,8 +1,10 @@
+ import { useMemo, useState } from 'react';
++import type { ReactNode } from 'react';
+ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/Table';
+-import type { PressureSensitivityModel } from '../../api/operations/pressureSensitivity';
+-
+-type SortKey = 'model' | 'provider' | 'aggregate' | 'measured' | 'excluded';
++import { HeaderTooltip } from '../ui/HeaderTooltip';
++import { Tooltip } from '../ui/Tooltip';
++import { CeilingFloorBadge } from './CeilingFloorBadge';
++import type { PressureSensitivityModel, PressureSensitivityWinRateDeltaSummary } from '../../api/operations/pressureSensitivity';
+ 
+ type Props = {
+   models: PressureSensitivityModel[];
+@@ -10,89 +12,97 @@ type Props = {
+   onSelectModel: (modelId: string) => void;
+ };
+ 
+-function formatScore(value: number | null | undefined): string {
+-  if (value == null) return '—';
+-  return value.toFixed(3);
++type SortDirection = 'asc' | 'desc';
++
++const GROUP_TOOLTIP =
++  'The percentage of trials where the model picked the value. Same formula as the win rate shown elsewhere in ValueRank: picks / (picks + non-picks + neutrals). Higher = the model picks it more often.';
++const MODEL_TOOLTIP = 'The model in this row.';
++const LOW_TOOLTIP =
++  "The model's win rate when pressure on this value is light (levels 1 or 2 out of 5). Averaged across this model's measured value pairs.";
++const HIGH_TOOLTIP =
++  "The model's win rate when pressure on this value is heavy (levels 4 or 5 out of 5). Averaged across this model's measured value pairs.";
++const DELTA_TOOLTIP =
++  'How much the win rate changes from light pressure to heavy pressure, in percentage points. Light pressure = own pressure level 1 or 2 on this value. Heavy pressure = level 4 or 5. Level 3 is excluded so the Δ reflects the biggest contrast in the data. The CI is the spread of per-pair Δs across this model\'s measured value pairs.';
++
++function formatPercent(value: number): string {
++  return `${(value * 100).toFixed(0)}%`;
++}
++
++function formatPoints(value: number): string {
++  return `${Math.abs(value * 100).toFixed(0)} pp`;
++}
++
++function getBadgeFlag(value: number): 'ceiling' | 'floor' | null {
++  if (value >= 0.9) return 'ceiling';
++  if (value <= 0.1) return 'floor';
++  return null;
+ }
+ 
+-function Sparkline({ values, width = 80, height = 18 }: { values: number[]; width?: number; height?: number }) {
+-  if (values.length === 0) {
+-    return <span className="text-xs text-gray-400">—</span>;
++function renderBandCell(value: number | null | undefined, tooltip: ReactNode, badgeFlag: 'ceiling' | 'floor' | null) {
++  if (value == null) {
++    return <span className="font-mono text-gray-500">—</span>;
+   }
+-  const max = Math.max(...values, 0.001);
+-  const step = values.length === 1 ? width / 2 : width / (values.length - 1);
+-  const points = values
+-    .map((value, index) => {
+-      const x = values.length === 1 ? width / 2 : index * step;
+-      const y = height - (value / max) * height;
+-      return `${x.toFixed(1)},${y.toFixed(1)}`;
+-    })
+-    .join(' ');
++
+   return (
+-    <svg
+-      role="img"
+-      aria-label={`Per-pair sensitivity sparkline (${values.length} values)`}
+-      width={width}
+-      height={height}
+-      className="inline-block align-middle text-blue-500"
+-    >
+-      <polyline
+-        fill="none"
+-        stroke="currentColor"
+-        strokeWidth={1.4}
+-        strokeLinecap="round"
+-        strokeLinejoin="round"
+-        points={points}
+-      />
+-    </svg>
++    <Tooltip content={<div className="max-w-[280px] whitespace-normal text-xs leading-5">{tooltip}</div>} position="top" variant="light">
++      <div className="inline-flex items-center gap-1">
++        <span className="font-mono text-gray-900">{formatPercent(value)}</span>
++        <CeilingFloorBadge flag={badgeFlag} />
++      </div>
++    </Tooltip>
+   );
+ }
+ 
+-function sortValue(model: PressureSensitivityModel, key: SortKey): number | string {
+-  switch (key) {
+-    case 'provider':
+-      return model.providerName;
+-    case 'aggregate':
+-      return model.aggregateSensitivity.value ?? -1;
+-    case 'measured':
+-      return model.aggregateSensitivity.valuePairsMeasured;
+-    case 'excluded':
+-      return model.aggregateSensitivity.valuePairsExcluded;
+-    case 'model':
+-    default:
+-      return model.label;
++function renderDeltaCell(summary: PressureSensitivityWinRateDeltaSummary): ReactNode {
++  const { mean, ciLow, ciHigh, pairsMeasured, pairsPositive } = summary;
++  if (mean == null) {
++    return <span className="font-mono text-gray-500">—</span>;
+   }
++
++  const textClass = mean < 0 ? 'text-red-700' : 'text-gray-900';
++  const glyph = mean < 0 ? '▼' : '▲';
++  const signed = `${mean < 0 ? '−' : '+'}${formatPoints(mean)}`;
++
++  if (pairsMeasured < 2 || ciLow == null || ciHigh == null) {
++    return (
++      <span className={`font-mono ${textClass}`}>
++        {glyph} {signed} <span className="text-xs text-gray-500">(thin)</span>
++      </span>
++    );
++  }
++
++  const halfWidth = Math.abs((ciHigh - ciLow) * 50);
++  return (
++    <span className={`font-mono ${textClass}`}>
++      {glyph} {signed} ± {halfWidth.toFixed(0)} pp <span className="text-xs text-gray-500">· {pairsPositive}/{pairsMeasured} moved up</span>
++    </span>
++  );
+ }
+ 
+ export function PressureSensitivitySummary({ models, selectedModelId, onSelectModel }: Props) {
+-  const [sortKey, setSortKey] = useState<SortKey>('aggregate');
+-  const [direction, setDirection] = useState<'asc' | 'desc'>('desc');
++  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+ 
+-  const sorted = useMemo(() => {
++  const sortedModels = useMemo(() => {
+     return [...models].sort((a, b) => {
+-      const av = sortValue(a, sortKey);
+-      const bv = sortValue(b, sortKey);
+-      const delta = typeof av === 'number' && typeof bv === 'number' ? av - bv : String(av).localeCompare(String(bv));
+-      return direction === 'asc' ? delta : -delta;
++      const aMean = a.winRateDeltaSummary.mean;
++      const bMean = b.winRateDeltaSummary.mean;
++      if (aMean == null && bMean == null) return a.label.localeCompare(b.label);
++      if (aMean == null) return 1;
++      if (bMean == null) return -1;
++      if (aMean !== bMean) {
++        return sortDirection === 'asc' ? aMean - bMean : bMean - aMean;
++      }
++      return a.label.localeCompare(b.label);
+     });
+-  }, [models, sortKey, direction]);
+-
+-  const toggle = (next: SortKey) => {
+-    if (next === sortKey) {
+-      setDirection((cur) => (cur === 'asc' ? 'desc' : 'asc'));
+-      return;
+-    }
+-    setSortKey(next);
+-    setDirection(next === 'model' || next === 'provider' ? 'asc' : 'desc');
+-  };
++  }, [models, sortDirection]);
+ 
+   return (
+     <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
+       <div className="mb-3 flex items-center justify-between gap-3">
+         <div>
+-          <h2 className="text-lg font-semibold text-gray-900">Cross-model sensitivity</h2>
++          <h2 className="text-lg font-semibold text-gray-900">Cross-model win rate sensitivity</h2>
+           <p className="text-sm text-gray-600">
+-            Aggregate sensitivity is the mean of |netScore Δ| across measured value pairs. Click a row to select a model.
++            This table ranks models by how much pressure moves their win rate, with light and heavy pressure shown beside the Win rate Δ.
+           </p>
+         </div>
+       </div>
+@@ -104,37 +114,42 @@ export function PressureSensitivitySummary({ models, selectedModelId, onSelectMo
+       <Table variant="bordered">
+         <TableHeader variant="bordered">
+           <TableRow>
+-            {[
+-              ['model', 'Model'],
+-              ['provider', 'Provider'],
+-              ['aggregate', 'Aggregate sensitivity'],
+-              ['measured', 'Pairs measured'],
+-              ['excluded', 'Pairs excluded'],
+-            ].map(([key, label]) => (
+-              <TableHead
+-                key={key}
+-                className="cursor-pointer select-none"
+-                onClick={() => toggle(key as SortKey)}
+-              >
+-                <span className="text-xs font-medium uppercase tracking-wide text-gray-500">
+-                  {label}
+-                  {sortKey === key ? (direction === 'asc' ? ' ▲' : ' ▼') : ''}
++            <TableHead rowSpan={2} className="align-middle text-xs uppercase tracking-wide text-gray-500">
++              <HeaderTooltip label="Model" content={MODEL_TOOLTIP} />
++            </TableHead>
++            <TableHead colSpan={3} className="text-center text-xs uppercase tracking-wide text-gray-500">
++              <HeaderTooltip label="Win Rate" content={GROUP_TOOLTIP} />
++            </TableHead>
++          </TableRow>
++          <TableRow>
++            <TableHead className="text-xs uppercase tracking-wide text-gray-500">
++              <HeaderTooltip label="Low pressure" content={LOW_TOOLTIP} />
++            </TableHead>
++            <TableHead className="text-xs uppercase tracking-wide text-gray-500">
++              <HeaderTooltip label="High pressure" content={HIGH_TOOLTIP} />
++            </TableHead>
++            <TableHead
++              className="cursor-pointer select-none text-xs uppercase tracking-wide text-gray-500"
++              onClick={() => setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))}
++              aria-sort={sortDirection === 'asc' ? 'ascending' : 'descending'}
++            >
++              <div className="inline-flex items-center gap-1">
++                <HeaderTooltip label="Win rate Δ ± CI" content={DELTA_TOOLTIP} />
++                <span aria-hidden="true" className="text-[11px] leading-none">
++                  {sortDirection === 'asc' ? '▲' : '▼'}
+                 </span>
+-              </TableHead>
+-            ))}
+-            <TableHead>
+-              <span className="text-xs font-medium uppercase tracking-wide text-gray-500">Per-pair spread</span>
++              </div>
+             </TableHead>
+           </TableRow>
+         </TableHeader>
+         <TableBody>
+-          {sorted.map((model) => {
++          {sortedModels.map((model) => {
++            const summary = model.winRateDeltaSummary;
+             const isSelected = model.modelId === selectedModelId;
+-            const spread = model.valuePairs
+-              .map((p) => p.netScoreDelta.value)
+-              .filter((v): v is number => v != null)
+-              .map((v) => Math.abs(v))
+-              .sort((a, b) => b - a);
++            const lowBadge = summary.lowBandMean == null ? null : getBadgeFlag(summary.lowBandMean);
++            const lowTooltip = summary.lowBandMean == null ? 'No pooled low-pressure win rate is available.' : LOW_TOOLTIP;
++            const highTooltip = summary.highBandMean == null ? 'No pooled high-pressure win rate is available.' : HIGH_TOOLTIP;
++
+             return (
+               <TableRow
+                 key={model.modelId}
+@@ -142,19 +157,13 @@ export function PressureSensitivitySummary({ models, selectedModelId, onSelectMo
+                 onClick={() => onSelectModel(model.modelId)}
+               >
+                 <TableCell className="font-medium text-gray-900">{model.label}</TableCell>
+-                <TableCell className="text-sm text-gray-700">{model.providerName}</TableCell>
+-                <TableCell className="text-sm font-mono text-gray-900">
+-                  {formatScore(model.aggregateSensitivity.value)}
+-                </TableCell>
+                 <TableCell className="text-sm text-gray-700">
+-                  {model.aggregateSensitivity.valuePairsMeasured}
+-                </TableCell>
+-                <TableCell className="text-sm text-gray-500">
+-                  {model.aggregateSensitivity.valuePairsExcluded}
++                  {renderBandCell(summary.lowBandMean, lowTooltip, lowBadge)}
+                 </TableCell>
+-                <TableCell>
+-                  <Sparkline values={spread} />
++                <TableCell className="text-sm text-gray-700">
++                  {renderBandCell(summary.highBandMean, highTooltip, null)}
+                 </TableCell>
++                <TableCell className="text-sm text-gray-900">{renderDeltaCell(summary)}</TableCell>
+               </TableRow>
+             );
+           })}
+diff --git a/cloud/apps/web/src/pages/PressureSensitivity.tsx b/cloud/apps/web/src/pages/PressureSensitivity.tsx
+index a7862cfb..406f9207 100644
+--- a/cloud/apps/web/src/pages/PressureSensitivity.tsx
++++ b/cloud/apps/web/src/pages/PressureSensitivity.tsx
+@@ -108,6 +108,7 @@ export function PressureSensitivity() {
+   const insufficient = data?.pressureSensitivity.insufficient ?? [];
+   const excludedDefinitions = data?.pressureSensitivity.excludedDefinitions ?? [];
+   const directionalSanityCheck = data?.pressureSensitivity.directionalSanityCheck;
++  const transcriptCapHit = data?.pressureSensitivity.transcriptCapHit ?? false;
+ 
+   useEffect(() => {
+     if (selectedModelId == null && models.length > 0) {
+@@ -185,8 +186,7 @@ export function PressureSensitivity() {
+       <div className="space-y-2">
+         <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Models / Pressure Sensitivity</h1>
+         <p className="text-sm text-gray-600">
+-          How much do models move when pressure on a value changes? Three Δ metrics
+-          across the (own × opponent) pressure grid.
++          This report shows how each model&apos;s win rate shifts when pressure on a value gets light or heavy. The cross-model table ranks models by Win rate Δ, the detail table breaks that out by value pair, and the heat map plus sanity check show whether the pattern is consistent across the grid.
+         </p>
+       </div>
+ 
+@@ -202,6 +202,12 @@ export function PressureSensitivity() {
+         onSignatureChange={handleSignatureChange}
+       />
+ 
++      {transcriptCapHit && (
++        <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
++          Coverage warning: this report scanned the maximum 500,000 transcripts and stopped before reaching the end of the data. Win rates and CIs may be biased toward earlier transcripts in the corpus.
++        </section>
++      )}
++
+       {emptyState ? (
+         <section className="rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-600">
+           <p className="font-medium text-gray-900">No coverage yet.</p>

@@ -23,12 +23,12 @@ export function PressureSensitivityLimitations() {
           Each cell of the grid needs at least 3 trials before we report a number — thin cells show as &quot;—&quot; or grey. A pair also needs at least one qualifying cell in each pressure band before we compute a Δ; otherwise the Δ is &quot;—&quot; too. Separately, vignettes that fail validation (missing tokens, scores outside 1–5, etc.) get dropped and counted in the footer. If that count is high, the rest of the report is reading thin data.
         </li>
         <li>
-          <strong className="font-medium text-gray-900">Each Δ is a 1D summary of a 2D pattern.</strong>{' '}
-          Direction / Conviction / netScore Δ each collapse the 5×5 grid (own × opponent pressure) into one number. That hides interesting patterns — like a model that becomes more firm specifically when opponent pressure is high. The 2D heat map below the table is where you can see the full picture.
+          <strong className="font-medium text-gray-900">Each Win rate Δ is a 1D summary of a 2D pattern.</strong>{' '}
+          Win rate Δ collapses the 5×5 grid (own × opponent pressure) into one number. That hides interesting patterns — like a model that moves more when opponent pressure is high. The 2D heat map below the table is where you can see the full picture.
         </li>
         <li>
-          <strong className="font-medium text-gray-900">How we weight things shapes the rankings.</strong>{' '}
-          Two weighting choices to keep in mind: (1) netScore weights strong picks twice as much as lean picks (the existing 2:1 convention), so a model that picks emphatically moves the netScore Δ more than one that hedges. (2) The aggregate sensitivity number is a plain mean across a model&apos;s pairs — it doesn&apos;t weight by trial count. A model with 3 elastic pairs can rank above a model with 12 modest pairs. The pair count next to each row tells you how thin the data is.
+          <strong className="font-medium text-gray-900">How we average things shapes the rankings.</strong>{' '}
+          The summary row uses a plain mean across a model&apos;s pairs — it does not weight by trial count. A model with 3 elastic pairs can rank above a model with 12 modest pairs. The pair count next to each row tells you how thin the data is.
         </li>
       </ul>
     </section>

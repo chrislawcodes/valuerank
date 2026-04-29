@@ -44,12 +44,6 @@ type AggregateMetadata {
   sourceRunIds: [String!]!
 }
 
-type AggregateSensitivity {
-  value: Float
-  valuePairsExcluded: Int!
-  valuePairsMeasured: Int!
-}
-
 type AnalysisFolderCounts {
   aggregateCount: Int!
   aggregateTagCounts: [AnalysisFolderTagCount!]!
@@ -247,17 +241,6 @@ type AvailableModel {
 type AvailableSignature {
   mostRecentRunAt: DateTime
   signature: String!
-}
-
-type BandStat {
-  highBandMean: Float
-  lowBandMean: Float
-  value: Float
-}
-
-type BaselineWinRate {
-  ceilingFloorFlag: String
-  value: Float
 }
 
 """Progress breakdown for a specific model"""
@@ -775,9 +758,9 @@ type DirectionalSanityCheck {
 
 type DirectionalSanityCheckEntry {
   classification: String!
-  directionDelta: Float!
   modelId: String!
   pairKey: String!
+  winRateDelta: Float!
 }
 
 """A single domain used to group vignettes"""
@@ -2055,12 +2038,12 @@ type PreferenceSummary {
 }
 
 type PressureSensitivityModel {
-  aggregateSensitivity: AggregateSensitivity!
   label: String!
   modelId: String!
   providerName: String!
   unscoredCount: Int!
   valuePairs: [PressureSensitivityValuePair!]!
+  winRateDeltaSummary: WinRateDeltaSummary!
 }
 
 type PressureSensitivityResult {
@@ -2069,21 +2052,20 @@ type PressureSensitivityResult {
   excludedScenariosCount: Int!
   insufficient: [InsufficientPressureSensitivityModel!]!
   models: [PressureSensitivityModel!]!
+  transcriptCapHit: Boolean!
 }
 
 type PressureSensitivityValuePair {
-  baselineWinRate: BaselineWinRate!
-  convictionDelta: BandStat!
   definitionsExcluded: Int!
   definitionsMeasured: Int!
-  directionDelta: BandStat!
   grid: [SensitivityCell!]!
   n: Int!
-  netScoreDelta: BandStat!
   opponentToken: String!
   ownToken: String!
   pairKey: String!
+  qualifyingTrials: Int!
   unscoredCount: Int!
+  winRateDelta: WinRateDelta!
 }
 
 """Result of a probe job execution"""
@@ -3173,6 +3155,7 @@ type SensitivityCell {
   netScore: Float
   opponentLevel: Int!
   ownLevel: Int!
+  successes: Int!
   unscoredCount: Int!
   winRate: Float
 }
@@ -3616,6 +3599,25 @@ enum VignettePairStatus {
   SKIPPED
   SKIPPED_HAS_RUNS
   UPDATED
+}
+
+type WinRateDelta {
+  ciHigh: Float
+  ciLow: Float
+  highBandMean: Float
+  lowBandMean: Float
+  reason: String
+  value: Float
+}
+
+type WinRateDeltaSummary {
+  ciHigh: Float
+  ciLow: Float
+  highBandMean: Float
+  lowBandMean: Float
+  mean: Float
+  pairsMeasured: Int!
+  pairsPositive: Int!
 }
 
 """Health status for Python workers"""

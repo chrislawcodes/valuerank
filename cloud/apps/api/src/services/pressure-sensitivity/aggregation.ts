@@ -11,6 +11,8 @@ import type { AssignedOutcome } from './value-pair.js';
 
 export type DecisionStrength = 'strong' | 'lean' | null;
 
+export const FLAT_DELTA_THRESHOLD = 0.02;
+
 export type Observation = {
   outcome: AssignedOutcome;
   strength: DecisionStrength;
@@ -19,6 +21,7 @@ export type Observation = {
 export type CellMetrics = {
   n: number;
   unscoredCount: number;
+  successes: number;
   winRate: number | null;
   conviction: number | null;
   netScore: number | null;
@@ -30,30 +33,79 @@ export type Cell = CellMetrics & {
   lowData: boolean;
 };
 
-export type DeltaTriplet = {
-  directionDelta: number | null;
-  convictionDelta: number | null;
-  netScoreDelta: number | null;
-  lowBandWinRate: number | null;
-  highBandWinRate: number | null;
-  lowBandConviction: number | null;
-  highBandConviction: number | null;
-  lowBandNetScore: number | null;
-  highBandNetScore: number | null;
-};
-
-export type BaselineWinRate = {
+export type WinRateDeltaResult = {
   value: number | null;
-  ceilingFloorFlag: 'ceiling' | 'floor' | null;
+  ciLow: number | null;
+  ciHigh: number | null;
+  lowBandMean: number | null;
+  highBandMean: number | null;
+  reason: 'low-band-thin' | 'high-band-thin' | 'both-bands-thin' | null;
+  qualifyingTrials: number;
 };
 
-export type AggregateSensitivity = {
-  value: number | null;
-  valuePairsMeasured: number;
+export type WinRateDeltaSummary = {
+  mean: number | null;
+  ciLow: number | null;
+  ciHigh: number | null;
+  lowBandMean: number | null;
+  highBandMean: number | null;
+  pairsMeasured: number;
+  pairsPositive: number;
 };
 
-const CEILING_THRESHOLD = 0.9;
-const FLOOR_THRESHOLD = 0.1;
+const Z_95 = 1.96;
+const STUDENT_T_975 = [
+  12.706204736174694,
+  4.302652729749462,
+  3.182446305283708,
+  2.776445105197793,
+  2.570581835636315,
+  2.446911851144979,
+  2.364624251592784,
+  2.306004135204166,
+  2.262157162798205,
+  2.228138851986274,
+  2.200985160091638,
+  2.178812829667228,
+  2.160368656462791,
+  2.144786687917804,
+  2.131449545559776,
+  2.119905299221255,
+  2.109815577833316,
+  2.100922040241038,
+  2.093024054408309,
+  2.085963447265864,
+  2.07961384472768,
+  2.073873067904025,
+  2.068657610419049,
+  2.063898561628024,
+  2.059538552753298,
+  2.055529438642874,
+  2.051830516480285,
+  2.048407141795245,
+  2.045229642132704,
+  2.042272456301238,
+  2.039513446396408,
+  2.036933343460102,
+  2.034515297449338,
+  2.032244509317719,
+  2.030107928250342,
+  2.02809400098045,
+  2.026192463029109,
+  2.024394163911969,
+  2.022690920036761,
+  2.021075390306273,
+  2.019540970441376,
+  2.018081702818444,
+  2.016692199227824,
+  2.015367574443764,
+  2.014103388880846,
+  2.012895598919429,
+  2.011740513729765,
+  2.010634757624232,
+  2.009575237129239,
+  2.008559112100761,
+] as const;
 
 /**
  * Compute per-cell metrics from a list of observations.
@@ -102,7 +154,7 @@ export function buildCellMetrics(observations: ReadonlyArray<Observation>): Cell
   const n = ownPicked + opponentPicked + neutral;
 
   if (n === 0) {
-    return { n: 0, unscoredCount, winRate: null, conviction: null, netScore: null };
+    return { n: 0, unscoredCount, successes: 0, winRate: null, conviction: null, netScore: null };
   }
 
   const winRate = ownPicked / n;
@@ -111,109 +163,322 @@ export function buildCellMetrics(observations: ReadonlyArray<Observation>): Cell
     ownPicksWithStrength === 0 ? null : (2 * ownStrong + ownLean) / ownPicksWithStrength;
   const netScore = (2 * ownStrong + ownLean - 2 * opponentStrong - opponentLean) / n;
 
-  return { n, unscoredCount, winRate, conviction, netScore };
+  return { n, unscoredCount, successes: ownPicked, winRate, conviction, netScore };
 }
 
-function meanOrNull(values: ReadonlyArray<number>): number | null {
-  if (values.length === 0) return null;
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function clamp01(value: number): number {
+  if (value < 0) return 0;
+  if (value > 1) return 1;
+  return value;
+}
+
+function sumNumbers(values: ReadonlyArray<number>): number {
   let sum = 0;
   for (const v of values) sum += v;
-  return sum / values.length;
+  return sum;
 }
 
-function nullableMean(values: ReadonlyArray<number | null>): number | null {
-  const filtered: number[] = [];
-  for (const v of values) {
-    if (v !== null) filtered.push(v);
+function sampleStandardDeviation(values: ReadonlyArray<number>, mean: number): number {
+  if (values.length < 2) return 0;
+  let sumSquared = 0;
+  for (const value of values) {
+    const delta = value - mean;
+    sumSquared += delta * delta;
   }
-  return meanOrNull(filtered);
+  return Math.sqrt(sumSquared / (values.length - 1));
 }
 
-/**
- * Reduce a (own × opponent) grid to three Δ values per FR-005.
- *
- * Low band: cells with `ownLevel <= 2`. High band: cells with `ownLevel >= 4`. Both bands must
- * include at least one cell that meets the N >= minN threshold (FR-021); otherwise that band's
- * mean — and therefore the Δ — is undefined.
- *
- * Direction Δ uses winRate; Conviction Δ uses conviction; netScore Δ uses netScore.
- */
-export function applyBandReduction(grid: ReadonlyArray<Cell>, minN: number): DeltaTriplet {
-  const lowBandCells = grid.filter((c) => c.ownLevel <= 2 && c.n >= minN);
-  const highBandCells = grid.filter((c) => c.ownLevel >= 4 && c.n >= minN);
+function normalQuantile(p: number): number {
+  if (!(p > 0 && p < 1)) return Number.NaN;
 
-  const result: DeltaTriplet = {
-    directionDelta: null,
-    convictionDelta: null,
-    netScoreDelta: null,
-    lowBandWinRate: null,
-    highBandWinRate: null,
-    lowBandConviction: null,
-    highBandConviction: null,
-    lowBandNetScore: null,
-    highBandNetScore: null,
+  const a = [
+    -39.69683028665376,
+    220.9460984245205,
+    -275.9285104469687,
+    138.357751867269,
+    -30.66479806614716,
+    2.506628277459239,
+  ] as const;
+  const b = [
+    -54.47609879822406,
+    161.5858368580409,
+    -155.6989798598866,
+    66.80131188771972,
+    -13.28068155288572,
+  ] as const;
+  const c = [
+    -0.007784894002430293,
+    -0.3223964580411365,
+    -2.400758277161838,
+    -2.549732539343734,
+    4.374664141464968,
+    2.938163982698783,
+  ] as const;
+  const d = [
+    0.007784695709041462,
+    0.3224671290700398,
+    2.445134137142996,
+    3.754408661907416,
+  ] as const;
+  const plow = 0.02425;
+  const phigh = 1 - plow;
+
+  if (p < plow) {
+    const q = Math.sqrt(-2 * Math.log(p));
+    return (
+      (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5])
+      / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1)
+    );
+  }
+  if (p > phigh) {
+    const q = Math.sqrt(-2 * Math.log(1 - p));
+    return -(
+      (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5])
+      / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1)
+    );
+  }
+
+  const q = p - 0.5;
+  const r = q * q;
+  return (
+    (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q
+  ) / (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1);
+}
+
+function studentTQuantile(p: number, df: number): number {
+  if (!Number.isFinite(p) || !Number.isInteger(df) || df <= 0) return Number.NaN;
+  if (Math.abs(p - 0.975) < 1e-12 && df >= 1 && df <= STUDENT_T_975.length) {
+    return STUDENT_T_975[df - 1]!;
+  }
+
+  const z = normalQuantile(p);
+  if (!Number.isFinite(z)) return Number.NaN;
+  const v = df;
+  const z2 = z * z;
+  const z3 = z2 * z;
+  const z5 = z3 * z2;
+  const z7 = z5 * z2;
+  return z
+    + (z3 + z) / (4 * v)
+    + (5 * z5 + 16 * z3 + 3 * z) / (96 * v * v)
+    + (3 * z7 + 19 * z5 + 17 * z3 - 15 * z) / (384 * v * v * v);
+}
+
+function wilsonIntervalFromProportion(
+  proportion: number,
+  trials: number,
+  z: number,
+): { p: number; low: number; high: number } | null {
+  if (!Number.isFinite(proportion) || !Number.isFinite(trials) || !Number.isFinite(z)) return null;
+  if (trials <= 0 || proportion < 0 || proportion > 1 || z <= 0) return null;
+
+  const p = proportion;
+  const zSquared = z * z;
+  const denominator = 1 + zSquared / trials;
+  const center = (p + zSquared / (2 * trials)) / denominator;
+  const margin = (
+    z
+    * Math.sqrt((p * (1 - p) + zSquared / (4 * trials)) / trials)
+  ) / denominator;
+
+  return {
+    p,
+    low: clamp01(center - margin),
+    high: clamp01(center + margin),
   };
+}
 
-  if (lowBandCells.length === 0 || highBandCells.length === 0) {
-    return result;
+export function wilsonInterval(
+  matches: number,
+  trials: number,
+  z = Z_95,
+): { p: number; low: number; high: number } | null {
+  if (
+    !Number.isFinite(matches)
+    || !Number.isFinite(trials)
+    || !Number.isFinite(z)
+    || !Number.isInteger(matches)
+    || !Number.isInteger(trials)
+    || matches < 0
+    || trials <= 0
+    || matches > trials
+  ) {
+    return null;
   }
 
-  result.lowBandWinRate = nullableMean(lowBandCells.map((c) => c.winRate));
-  result.highBandWinRate = nullableMean(highBandCells.map((c) => c.winRate));
-  result.lowBandConviction = nullableMean(lowBandCells.map((c) => c.conviction));
-  result.highBandConviction = nullableMean(highBandCells.map((c) => c.conviction));
-  result.lowBandNetScore = nullableMean(lowBandCells.map((c) => c.netScore));
-  result.highBandNetScore = nullableMean(highBandCells.map((c) => c.netScore));
-
-  if (result.lowBandWinRate !== null && result.highBandWinRate !== null) {
-    result.directionDelta = result.highBandWinRate - result.lowBandWinRate;
-  }
-  if (result.lowBandConviction !== null && result.highBandConviction !== null) {
-    result.convictionDelta = result.highBandConviction - result.lowBandConviction;
-  }
-  if (result.lowBandNetScore !== null && result.highBandNetScore !== null) {
-    result.netScoreDelta = result.highBandNetScore - result.lowBandNetScore;
-  }
-
+  const result = wilsonIntervalFromProportion(matches / trials, trials, z);
+  if (result === null) return null;
+  if (matches === 0) result.low = 0;
+  if (matches === trials) result.high = 1;
   return result;
 }
 
 /**
- * Compute the baseline win rate at the lowest populated own-pressure level that meets minN
- * (FR-006). Sets a ceiling flag if baseline >= 0.9, floor flag if <= 0.1 (FR-007).
+ * Compute Newcombe Method-10 confidence interval on the difference of two proportions.
+ *
+ * pHigh - pLow is the point estimate convention used by the pressure-sensitivity report.
  */
-export function computeBaselineWinRate(grid: ReadonlyArray<Cell>, minN: number): BaselineWinRate {
-  for (let level = 1; level <= 5; level += 1) {
-    const cells = grid.filter((c) => c.ownLevel === level && c.n >= minN);
-    if (cells.length === 0) continue;
-    const mean = nullableMean(cells.map((c) => c.winRate));
-    if (mean === null) continue;
-
-    let flag: BaselineWinRate['ceilingFloorFlag'] = null;
-    if (mean >= CEILING_THRESHOLD) flag = 'ceiling';
-    else if (mean <= FLOOR_THRESHOLD) flag = 'floor';
-
-    return { value: mean, ceilingFloorFlag: flag };
+export function diffProportionCI(
+  pLow: number,
+  nLow: number,
+  pHigh: number,
+  nHigh: number,
+  z = Z_95,
+): { ciLow: number; ciHigh: number } | null {
+  if (
+    !Number.isFinite(pLow)
+    || !Number.isFinite(nLow)
+    || !Number.isFinite(pHigh)
+    || !Number.isFinite(nHigh)
+    || !Number.isFinite(z)
+    || pLow < 0
+    || pLow > 1
+    || pHigh < 0
+    || pHigh > 1
+    || nLow <= 0
+    || nHigh <= 0
+    || z <= 0
+  ) {
+    return null;
   }
 
-  return { value: null, ceilingFloorFlag: null };
+  const lowWilson = wilsonIntervalFromProportion(pLow, nLow, z);
+  const highWilson = wilsonIntervalFromProportion(pHigh, nHigh, z);
+  if (lowWilson === null || highWilson === null) return null;
+
+  const delta = pHigh - pLow;
+  const lowerRadius = Math.sqrt(
+    Math.max(0, (pHigh - highWilson.low) ** 2 + (lowWilson.high - pLow) ** 2),
+  );
+  const upperRadius = Math.sqrt(
+    Math.max(0, (highWilson.high - pHigh) ** 2 + (pLow - lowWilson.low) ** 2),
+  );
+
+  return {
+    ciLow: delta - lowerRadius,
+    ciHigh: delta + upperRadius,
+  };
 }
 
 /**
- * Aggregate sensitivity per model = mean of |netScoreDelta| across pairs with a defined Δ
- * (FR-008). Pairs with null Δ are excluded from both numerator and denominator.
+ * Compute a t-based CI over per-pair deltas.
  */
-export function aggregateSensitivity(
-  perPair: ReadonlyArray<{ netScoreDelta: number | null }>,
-): AggregateSensitivity {
-  const measured: number[] = [];
-  for (const p of perPair) {
-    if (p.netScoreDelta !== null) measured.push(Math.abs(p.netScoreDelta));
+export function tBasedMeanCI(
+  values: ReadonlyArray<number>,
+  alpha = 0.05,
+): { mean: number | null; ciLow: number | null; ciHigh: number | null; n: number } {
+  const usable = values.filter(isFiniteNumber);
+  const n = usable.length;
+  if (n === 0) {
+    return { mean: null, ciLow: null, ciHigh: null, n: 0 };
   }
-  if (measured.length === 0) {
-    return { value: null, valuePairsMeasured: 0 };
+
+  const mean = sumNumbers(usable) / n;
+  if (n < 2) {
+    return { mean, ciLow: null, ciHigh: null, n };
   }
-  let sum = 0;
-  for (const v of measured) sum += v;
-  return { value: sum / measured.length, valuePairsMeasured: measured.length };
+
+  if (!Number.isFinite(alpha) || alpha <= 0 || alpha >= 1) {
+    return { mean, ciLow: null, ciHigh: null, n };
+  }
+
+  const sd = sampleStandardDeviation(usable, mean);
+  const t = studentTQuantile(1 - alpha / 2, n - 1);
+  if (!Number.isFinite(t)) {
+    return { mean, ciLow: null, ciHigh: null, n };
+  }
+
+  const margin = t * sd / Math.sqrt(n);
+  return {
+    mean,
+    ciLow: mean - margin,
+    ciHigh: mean + margin,
+    n,
+  };
+}
+
+/**
+ * Reduce a (own × opponent) grid to a pooled win-rate delta per pair.
+ */
+export function pooledBandReduction(grid: ReadonlyArray<Cell>, minN: number): WinRateDeltaResult {
+  const lowBandCells = grid.filter((cell) => cell.ownLevel <= 2 && cell.n >= minN);
+  const highBandCells = grid.filter((cell) => cell.ownLevel >= 4 && cell.n >= minN);
+  const lowBandTrials = sumNumbers(lowBandCells.map((cell) => cell.n));
+  const highBandTrials = sumNumbers(highBandCells.map((cell) => cell.n));
+
+  if (lowBandCells.length === 0 && highBandCells.length === 0) {
+    return {
+      value: null,
+      ciLow: null,
+      ciHigh: null,
+      lowBandMean: null,
+      highBandMean: null,
+      reason: 'both-bands-thin',
+      qualifyingTrials: 0,
+    };
+  }
+
+  if (lowBandCells.length === 0) {
+    return {
+      value: null,
+      ciLow: null,
+      ciHigh: null,
+      lowBandMean: null,
+      highBandMean: null,
+      reason: 'low-band-thin',
+      qualifyingTrials: highBandTrials,
+    };
+  }
+
+  if (highBandCells.length === 0) {
+    return {
+      value: null,
+      ciLow: null,
+      ciHigh: null,
+      lowBandMean: null,
+      highBandMean: null,
+      reason: 'high-band-thin',
+      qualifyingTrials: lowBandTrials,
+    };
+  }
+
+  const lowBandSuccesses = sumNumbers(lowBandCells.map((cell) => cell.successes));
+  const highBandSuccesses = sumNumbers(highBandCells.map((cell) => cell.successes));
+  const lowBandMean = lowBandSuccesses / lowBandTrials;
+  const highBandMean = highBandSuccesses / highBandTrials;
+  const ci = diffProportionCI(lowBandMean, lowBandTrials, highBandMean, highBandTrials);
+
+  return {
+    value: highBandMean - lowBandMean,
+    ciLow: ci?.ciLow ?? null,
+    ciHigh: ci?.ciHigh ?? null,
+    lowBandMean,
+    highBandMean,
+    reason: null,
+    qualifyingTrials: lowBandTrials + highBandTrials,
+  };
+}
+
+export function summarizeWinRateDeltas(
+  perPairWinRateDeltas: ReadonlyArray<number>,
+  perPairLowBandRates: ReadonlyArray<number>,
+  perPairHighBandRates: ReadonlyArray<number>,
+): WinRateDeltaSummary {
+  const deltaStats = tBasedMeanCI(perPairWinRateDeltas);
+  const lowStats = tBasedMeanCI(perPairLowBandRates);
+  const highStats = tBasedMeanCI(perPairHighBandRates);
+
+  return {
+    mean: deltaStats.mean,
+    ciLow: deltaStats.ciLow,
+    ciHigh: deltaStats.ciHigh,
+    lowBandMean: lowStats.mean,
+    highBandMean: highStats.mean,
+    pairsMeasured: deltaStats.n,
+    pairsPositive: perPairWinRateDeltas.filter((delta) => delta > FLAT_DELTA_THRESHOLD).length,
+  };
 }
