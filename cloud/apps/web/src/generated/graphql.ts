@@ -58,13 +58,6 @@ export type AggregateMetadata = {
   sourceRunIds: Array<Scalars['String']['output']>;
 };
 
-export type AggregateSensitivity = {
-  __typename?: 'AggregateSensitivity';
-  value?: Maybe<Scalars['Float']['output']>;
-  valuePairsExcluded: Scalars['Int']['output'];
-  valuePairsMeasured: Scalars['Int']['output'];
-};
-
 export type AnalysisFolderCounts = {
   __typename?: 'AnalysisFolderCounts';
   aggregateCount: Scalars['Int']['output'];
@@ -228,19 +221,6 @@ export type AvailableSignature = {
   __typename?: 'AvailableSignature';
   mostRecentRunAt?: Maybe<Scalars['DateTime']['output']>;
   signature: Scalars['String']['output'];
-};
-
-export type BandStat = {
-  __typename?: 'BandStat';
-  highBandMean?: Maybe<Scalars['Float']['output']>;
-  lowBandMean?: Maybe<Scalars['Float']['output']>;
-  value?: Maybe<Scalars['Float']['output']>;
-};
-
-export type BaselineWinRate = {
-  __typename?: 'BaselineWinRate';
-  ceilingFloorFlag?: Maybe<Scalars['String']['output']>;
-  value?: Maybe<Scalars['Float']['output']>;
 };
 
 /** Progress breakdown for a specific model */
@@ -710,9 +690,9 @@ export type DirectionalSanityCheck = {
 export type DirectionalSanityCheckEntry = {
   __typename?: 'DirectionalSanityCheckEntry';
   classification: Scalars['String']['output'];
-  directionDelta: Scalars['Float']['output'];
   modelId: Scalars['String']['output'];
   pairKey: Scalars['String']['output'];
+  winRateDelta: Scalars['Float']['output'];
 };
 
 /** A single domain used to group vignettes */
@@ -2333,12 +2313,12 @@ export type PreferenceSummary = {
 
 export type PressureSensitivityModel = {
   __typename?: 'PressureSensitivityModel';
-  aggregateSensitivity: AggregateSensitivity;
   label: Scalars['String']['output'];
   modelId: Scalars['String']['output'];
   providerName: Scalars['String']['output'];
   unscoredCount: Scalars['Int']['output'];
   valuePairs: Array<PressureSensitivityValuePair>;
+  winRateDeltaSummary: WinRateDeltaSummary;
 };
 
 export type PressureSensitivityResult = {
@@ -2348,22 +2328,21 @@ export type PressureSensitivityResult = {
   excludedScenariosCount: Scalars['Int']['output'];
   insufficient: Array<InsufficientPressureSensitivityModel>;
   models: Array<PressureSensitivityModel>;
+  transcriptCapHit: Scalars['Boolean']['output'];
 };
 
 export type PressureSensitivityValuePair = {
   __typename?: 'PressureSensitivityValuePair';
-  baselineWinRate: BaselineWinRate;
-  convictionDelta: BandStat;
   definitionsExcluded: Scalars['Int']['output'];
   definitionsMeasured: Scalars['Int']['output'];
-  directionDelta: BandStat;
   grid: Array<SensitivityCell>;
   n: Scalars['Int']['output'];
-  netScoreDelta: BandStat;
   opponentToken: Scalars['String']['output'];
   ownToken: Scalars['String']['output'];
   pairKey: Scalars['String']['output'];
+  qualifyingTrials: Scalars['Int']['output'];
   unscoredCount: Scalars['Int']['output'];
+  winRateDelta: WinRateDelta;
 };
 
 /** Result of a probe job execution */
@@ -3493,6 +3472,7 @@ export type SensitivityCell = {
   netScore?: Maybe<Scalars['Float']['output']>;
   opponentLevel: Scalars['Int']['output'];
   ownLevel: Scalars['Int']['output'];
+  successes: Scalars['Int']['output'];
   unscoredCount: Scalars['Int']['output'];
   winRate?: Maybe<Scalars['Float']['output']>;
 };
@@ -3866,6 +3846,27 @@ export type VignettePairStatus =
   | 'SKIPPED'
   | 'SKIPPED_HAS_RUNS'
   | 'UPDATED';
+
+export type WinRateDelta = {
+  __typename?: 'WinRateDelta';
+  ciHigh?: Maybe<Scalars['Float']['output']>;
+  ciLow?: Maybe<Scalars['Float']['output']>;
+  highBandMean?: Maybe<Scalars['Float']['output']>;
+  lowBandMean?: Maybe<Scalars['Float']['output']>;
+  reason?: Maybe<Scalars['String']['output']>;
+  value?: Maybe<Scalars['Float']['output']>;
+};
+
+export type WinRateDeltaSummary = {
+  __typename?: 'WinRateDeltaSummary';
+  ciHigh?: Maybe<Scalars['Float']['output']>;
+  ciLow?: Maybe<Scalars['Float']['output']>;
+  highBandMean?: Maybe<Scalars['Float']['output']>;
+  lowBandMean?: Maybe<Scalars['Float']['output']>;
+  mean?: Maybe<Scalars['Float']['output']>;
+  pairsMeasured: Scalars['Int']['output'];
+  pairsPositive: Scalars['Int']['output'];
+};
 
 /** Health status for Python workers */
 export type WorkerHealth = {
@@ -4534,7 +4535,7 @@ export type PressureSensitivityQueryVariables = Exact<{
 }>;
 
 
-export type PressureSensitivityQuery = { __typename?: 'Query', pressureSensitivity: { __typename?: 'PressureSensitivityResult', excludedScenariosCount: number, models: Array<{ __typename?: 'PressureSensitivityModel', modelId: string, label: string, providerName: string, unscoredCount: number, aggregateSensitivity: { __typename?: 'AggregateSensitivity', value?: number | null, valuePairsMeasured: number, valuePairsExcluded: number }, valuePairs: Array<{ __typename?: 'PressureSensitivityValuePair', pairKey: string, ownToken: string, opponentToken: string, n: number, unscoredCount: number, definitionsMeasured: number, definitionsExcluded: number, directionDelta: { __typename?: 'BandStat', value?: number | null, lowBandMean?: number | null, highBandMean?: number | null }, convictionDelta: { __typename?: 'BandStat', value?: number | null, lowBandMean?: number | null, highBandMean?: number | null }, netScoreDelta: { __typename?: 'BandStat', value?: number | null, lowBandMean?: number | null, highBandMean?: number | null }, baselineWinRate: { __typename?: 'BaselineWinRate', value?: number | null, ceilingFloorFlag?: string | null }, grid: Array<{ __typename?: 'SensitivityCell', ownLevel: number, opponentLevel: number, n: number, unscoredCount: number, winRate?: number | null, conviction?: number | null, netScore?: number | null, lowData: boolean }> }> }>, insufficient: Array<{ __typename?: 'InsufficientPressureSensitivityModel', modelId: string, label: string, providerName: string, reason: string }>, excludedDefinitions: Array<{ __typename?: 'ExcludedDefinition', definitionId: string, name: string, reason: string }>, directionalSanityCheck: { __typename?: 'DirectionalSanityCheck', positivePct: number, flatPct: number, negativePct: number, measuredCount: number, unmeasurableCount: number, breakdown: Array<{ __typename?: 'DirectionalSanityCheckEntry', modelId: string, pairKey: string, directionDelta: number, classification: string }> } } };
+export type PressureSensitivityQuery = { __typename?: 'Query', pressureSensitivity: { __typename?: 'PressureSensitivityResult', excludedScenariosCount: number, transcriptCapHit: boolean, models: Array<{ __typename?: 'PressureSensitivityModel', modelId: string, label: string, providerName: string, unscoredCount: number, winRateDeltaSummary: { __typename?: 'WinRateDeltaSummary', mean?: number | null, ciLow?: number | null, ciHigh?: number | null, lowBandMean?: number | null, highBandMean?: number | null, pairsMeasured: number, pairsPositive: number }, valuePairs: Array<{ __typename?: 'PressureSensitivityValuePair', pairKey: string, ownToken: string, opponentToken: string, n: number, unscoredCount: number, definitionsMeasured: number, definitionsExcluded: number, qualifyingTrials: number, winRateDelta: { __typename?: 'WinRateDelta', value?: number | null, lowBandMean?: number | null, highBandMean?: number | null, ciLow?: number | null, ciHigh?: number | null, reason?: string | null }, grid: Array<{ __typename?: 'SensitivityCell', ownLevel: number, opponentLevel: number, n: number, unscoredCount: number, winRate?: number | null, conviction?: number | null, netScore?: number | null, lowData: boolean }> }> }>, insufficient: Array<{ __typename?: 'InsufficientPressureSensitivityModel', modelId: string, label: string, providerName: string, reason: string }>, excludedDefinitions: Array<{ __typename?: 'ExcludedDefinition', definitionId: string, name: string, reason: string }>, directionalSanityCheck: { __typename?: 'DirectionalSanityCheck', positivePct: number, flatPct: number, negativePct: number, measuredCount: number, unmeasurableCount: number, breakdown: Array<{ __typename?: 'DirectionalSanityCheckEntry', modelId: string, pairKey: string, winRateDelta: number, classification: string }> } } };
 
 export type OpenRunAnomaliesQueryVariables = Exact<{
   domainId?: InputMaybe<Scalars['ID']['input']>;
@@ -6959,10 +6960,14 @@ export const PressureSensitivityDocument = gql`
       label
       providerName
       unscoredCount
-      aggregateSensitivity {
-        value
-        valuePairsMeasured
-        valuePairsExcluded
+      winRateDeltaSummary {
+        mean
+        ciLow
+        ciHigh
+        lowBandMean
+        highBandMean
+        pairsMeasured
+        pairsPositive
       }
       valuePairs {
         pairKey
@@ -6972,24 +6977,14 @@ export const PressureSensitivityDocument = gql`
         unscoredCount
         definitionsMeasured
         definitionsExcluded
-        directionDelta {
+        qualifyingTrials
+        winRateDelta {
           value
           lowBandMean
           highBandMean
-        }
-        convictionDelta {
-          value
-          lowBandMean
-          highBandMean
-        }
-        netScoreDelta {
-          value
-          lowBandMean
-          highBandMean
-        }
-        baselineWinRate {
-          value
-          ceilingFloorFlag
+          ciLow
+          ciHigh
+          reason
         }
         grid {
           ownLevel
@@ -7015,6 +7010,7 @@ export const PressureSensitivityDocument = gql`
       reason
     }
     excludedScenariosCount
+    transcriptCapHit
     directionalSanityCheck {
       positivePct
       flatPct
@@ -7024,7 +7020,7 @@ export const PressureSensitivityDocument = gql`
       breakdown {
         modelId
         pairKey
-        directionDelta
+        winRateDelta
         classification
       }
     }
