@@ -1,35 +1,35 @@
 {
-  "session_id": "bcf60dba-7e1d-4393-90f8-dc5e61072dc8",
-  "response": "## Findings\n\n| Severity | Finding |\n| :--- | :--- |\n| **MEDIUM** | **[UNVERIFIED] Arbitrary Determinism May Obscure Data Integrity Issues** |\n| **LOW** | **[UNVERIFIED] Client May Not Gracefully Handle Null Delta Calculations** |\n\n### **MEDIUM: [UNVERIFIED] Arbitrary Determinism May Obscure Data Integrity Issues**\n**File:** `cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts`\n\nThe addition of `orderBy: { id: 'asc' }` to the `run` query is intended to make a \"last write wins\" scenario deterministic when multiple runs collide for the same source. While this prevents inconsistent query results, it feels like a patch on a deeper symptom.\n\n- **Weak Assumption:** It assumes the highest `id` always represents the most \"correct\" or \"final\" run. This may not be true if data is backfilled, re-imported, or if parallel processes create runs out of order.\n- **Hidden Flaw:** Instead of resolving *why* collisions are happening, this change simply picks a winner based on an arbitrary implementation detail (the auto-incrementing primary key). This could mask underlying bugs or race conditions in the run creation logic, leading to the system silently using potentially incorrect source data. A more robust solution would be to address the source of the collisions.\n\n### **LOW: [UNVERIFIED] Client May Not Gracefully Handle Null Delta Calculations**\n**Files:** `cloud/apps/web/src/api/operations/pressureSensitivity.graphql`, `cloud/apps/web/src/api/operations/pressureSensitivity.ts`\n\nThe new `winRateDelta` field on `valuePairs` is nullable. This is confirmed by the use of `NonNullable` in the web app's TypeScript types. While the `reason` field inside the `winRateDelta` object can explain *why a valid calculation might be invalid*, there appears to be no explicit handling for the case where the entire object is `null`.\n\n- **Omitted Case:** If the backend returns `null` (e.g., due to having zero `qualifyingTrials`), the client-side logic must be prepared to handle this. Without seeing the UI code, it's possible this could lead to a crash (e.g., trying to access a property on `null`) or a confusing empty state. The UI should explicitly check for null and render a state that communicates \"Not enough data to compute.\"\n\n## Residual Risks\n\n- **Breaking API Change**: The GraphQL schema has undergone significant renaming and restructuring (e.g., `aggregateSensitivity` -> `winRateDeltaSummary`, `directionDelta` -> `winRateDelta`). While the web client is updated within this artifact, any other consumer of this API (e.g., data analysis scripts, other internal tools) will break upon deployment. This introduces a risk of service disruption for consumers not accounted for in this change.\n- **Loss of Granularity**: The previous implementation exposed `directionDelta`, `convictionDelta`, and `netScoreDelta`. The new implementation consolidates these into a single `winRateDelta`. While this may be an intentional simplification, it represents a loss of data granularity in the API. If clients relied on `conviction` or `netScore` for specific insights, that functionality is now lost. This could be a regression unless it was an explicitly planned removal of those concepts.",
+  "session_id": "05dca7c3-54c6-4e22-bc66-f7ec04076b83",
+  "response": "## Findings\n\n| Severity | Finding |\n| --- | --- |\n| **MEDIUM** | **[UNVERIFIED] Risk of Integration Failure Due to Unverified API Contract Changes** |\n| **MEDIUM** | **Code Duplication Between Summary and Detail Components** |\n| **LOW** | **Sort Functionality on Delta Column May Be Unintuitive** |\n| **LOW** | **Potentially Useful Information Has Been Removed** |\n\n### **MEDIUM: [UNVERIFIED] Risk of Integration Failure Due to Unverified API Contract Changes**\n\nThe components `PressureSensitivityDetail.tsx` and `PressureSensitivitySummary.tsx` have been completely refactored to consume a new data structure. The previous implementation relied on properties like `netScoreDelta`, `directionDelta`, and `aggregateSensitivity`. The new implementation expects `winRateDelta`, `winRateDeltaSummary`, and `qualifyingTrials` on the `PressureSensitivityModel` and `PressureSensitivityValuePair` types. Additionally, the parent `PressureSensitivity.tsx` page now expects a `transcriptCapHit` boolean in the API response.\n\nThis represents a major change to the data contract with the backend. If the API has not been updated to provide these new fields and structures, these components will fail to render or will crash at runtime. This finding is marked `[UNVERIFIED]` as the API implementation was not provided for review.\n\n**File:** `cloud/apps/web/src/components/models/PressureSensitivityDetail.tsx`, `cloud/apps/web/src/components/models/PressureSensitivitySummary.tsx`, `cloud/apps/web/src/pages/PressureSensitivity.tsx`\n\n### **MEDIUM: Code Duplication Between Summary and Detail Components**\n\nSeveral helper functions, constants, and JSX rendering functions are duplicated across `PressureSensitivitySummary.tsx` and `PressureSensitivityDetail.tsx`. This includes:\n*   Tooltip content strings (`GROUP_TOOLTIP`, `LOW_TOOLTIP`, `HIGH_TOOLTIP`, `DELTA_TOOLTIP`)\n*   Formatting functions (`formatPercent`, `formatPoints`)\n*   Business logic (`getBadgeFlag`)\n*   A rendering function (`renderBandCell` is defined locally in both files with nearly identical implementations)\n\nThis duplication increases the maintenance burden, as any future changes to this logic or copy will need to be applied in multiple places, creating a risk of inconsistency. These shared utilities should be extracted to a common location.\n\n**Files:** `cloud/apps/web/src/components/models/PressureSensitivitySummary.tsx`, `cloud/apps/web/src/components/models/PressureSensitivityDetail.tsx`\n\n### **LOW: Sort Functionality on Delta Column May Be Unintuitive**\n\nIn `PressureSensitivityDetail.tsx`, the \"Win rate \u0394\" column is sortable. The implementation sorts pairs based on the *absolute value* of the delta (`Math.abs(a.winRateDelta.value)`). This allows users to see pairs with the highest and lowest *magnitude* of change.\n\nHowever, the UI uses standard ascending (`\u25b2`) and descending (`\u25bc`) icons. Users often associate these with a directional sort (e.g., from most positive to most negative). A user who wants to find the value pairs that are most suppressed by heavy pressure (i.e., the most negative delta) cannot sort for this directly and must instead scan the list visually. The functionality is not flawed, but the UI may create an incorrect expectation.\n\n**File:** `cloud/apps/web/src/components/models/PressureSensitivityDetail.tsx`\n\n### **LOW: Potentially Useful Information Has Been Removed**\n\nThe previous implementation of the summary and detail tables has been replaced with a more focused view on win-rate sensitivity. In the process, several pieces of information have been removed:\n*   **Summary Table:** The \"Provider\" column and the \"Per-pair spread\" sparkline visualization are gone.\n*   **Detail Table:** The `Direction \u0394`, `Conviction \u0394`, and `netScore \u0394` metrics are gone.\n\nWhile the new design is arguably cleaner and easier to understand, this is a removal of functionality. The sparkline, in particular, provided a quick visual summary of the distribution of sensitivity across all pairs for a given model. This is likely an intentional design tradeoff, but it's a \"silent\" removal of features that users may have found valuable.\n\n**Files:** `cloud/apps/web/src/components/models/PressureSensitivitySummary.tsx`, `cloud/apps/web/src/components/models/PressureSensitivityDetail.tsx`\n\n## Residual Risks\n\n*   **Deployment Coordination:** The most significant risk is the dependency on the unverified API contract changes. The frontend and backend changes must be deployed atomically. If the frontend is deployed before the backend, the Pressure Sensitivity page will be broken.\n*   **User Adaptation:** The UI has changed significantly, removing several metrics and visualizations. There is a risk that existing users who relied on the removed information (e.g., `netScore \u0394`, the provider column for quick filtering, the sparkline) will find the new report less useful for their workflow.\n*   **Data Completeness Assumption:** The new `transcriptCapHit` warning is an excellent addition for transparency. However, its effectiveness depends on the cap being set at a reasonable level and the backend reliably flagging when it's hit. An incorrect implementation of this flag could lead to users either being needlessly alarmed or falsely confident in the data's completeness.",
   "stats": {
     "models": {
       "gemini-2.5-pro": {
         "api": {
           "totalRequests": 1,
           "totalErrors": 0,
-          "totalLatencyMs": 28153
+          "totalLatencyMs": 44097
         },
         "tokens": {
-          "input": 13291,
-          "prompt": 13291,
-          "candidates": 727,
-          "total": 16011,
+          "input": 20968,
+          "prompt": 20968,
+          "candidates": 1152,
+          "total": 25189,
           "cached": 0,
-          "thoughts": 1993,
+          "thoughts": 3069,
           "tool": 0
         },
         "roles": {
           "main": {
             "totalRequests": 1,
             "totalErrors": 0,
-            "totalLatencyMs": 28153,
+            "totalLatencyMs": 44097,
             "tokens": {
-              "input": 13291,
-              "prompt": 13291,
-              "candidates": 727,
-              "total": 16011,
+              "input": 20968,
+              "prompt": 20968,
+              "candidates": 1152,
+              "total": 25189,
               "cached": 0,
-              "thoughts": 1993,
+              "thoughts": 3069,
               "tool": 0
             }
           }

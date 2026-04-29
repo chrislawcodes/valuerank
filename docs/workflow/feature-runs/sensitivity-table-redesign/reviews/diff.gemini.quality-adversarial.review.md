@@ -3,14 +3,14 @@ reviewer: "gemini"
 lens: "quality-adversarial"
 stage: "diff"
 artifact_path: "docs/workflow/feature-runs/sensitivity-table-redesign/reviews/implementation.diff.patch"
-artifact_sha256: "d54fe983caa2329cfe0bfd339ae00da2fca89d42d57cf2ec7b0702bff9f23bc8"
+artifact_sha256: "1c4d0b910b8c1688de90c8d90df436e30fade9a25ea109be04be4318566d515e"
 repo_root: "."
-git_head_sha: "6f68da8676f6cefa892631008e0a91c8bf9c8b79"
-git_base_ref: "3565133420c716ceba3bc46c0cb784ce7151b8ed"
-git_base_sha: "3565133420c716ceba3bc46c0cb784ce7151b8ed"
+git_head_sha: "c62155cb1218b80dde70aa567057450bc4ac732b"
+git_base_ref: "6f68da8676f6cefa892631008e0a91c8bf9c8b79"
+git_base_sha: "6f68da8676f6cefa892631008e0a91c8bf9c8b79"
 generation_method: "gemini-cli"
 resolution_status: "accepted"
-resolution_note: "MEDIUM (orderBy patch on deeper symptom) ACKNOWLEDGED. Collision root-cause fix is out of scope per Residual Risk; orderBy makes the symptom reproducible while we wait for telemetry from the new warning. LOW (client null handling for winRateDelta) DEFERRED to Slice C which renders the dash and reason hover per FR-008. This slice (B) only updates the operation shape."
+resolution_note: "MEDIUM (API contract) VERIFIED. MEDIUM (code duplication) RESOLVED via shared pressureSensitivityFormatting.ts in commit 2fbb44ad. LOW (sort icons) ACCEPTED per spec. LOW (info removal) INTENTIONAL per spec."
 raw_output_path: "docs/workflow/feature-runs/sensitivity-table-redesign/reviews/diff.gemini.quality-adversarial.review.md.json"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -23,37 +23,63 @@ coverage_note: ""
 ## Findings
 
 | Severity | Finding |
-| :--- | :--- |
-| **MEDIUM** | **[UNVERIFIED] Arbitrary Determinism May Obscure Data Integrity Issues** |
-| **LOW** | **[UNVERIFIED] Client May Not Gracefully Handle Null Delta Calculations** |
+| --- | --- |
+| **MEDIUM** | **[UNVERIFIED] Risk of Integration Failure Due to Unverified API Contract Changes** |
+| **MEDIUM** | **Code Duplication Between Summary and Detail Components** |
+| **LOW** | **Sort Functionality on Delta Column May Be Unintuitive** |
+| **LOW** | **Potentially Useful Information Has Been Removed** |
 
-### **MEDIUM: [UNVERIFIED] Arbitrary Determinism May Obscure Data Integrity Issues**
-**File:** `cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts`
+### **MEDIUM: [UNVERIFIED] Risk of Integration Failure Due to Unverified API Contract Changes**
 
-The addition of `orderBy: { id: 'asc' }` to the `run` query is intended to make a "last write wins" scenario deterministic when multiple runs collide for the same source. While this prevents inconsistent query results, it feels like a patch on a deeper symptom.
+The components `PressureSensitivityDetail.tsx` and `PressureSensitivitySummary.tsx` have been completely refactored to consume a new data structure. The previous implementation relied on properties like `netScoreDelta`, `directionDelta`, and `aggregateSensitivity`. The new implementation expects `winRateDelta`, `winRateDeltaSummary`, and `qualifyingTrials` on the `PressureSensitivityModel` and `PressureSensitivityValuePair` types. Additionally, the parent `PressureSensitivity.tsx` page now expects a `transcriptCapHit` boolean in the API response.
 
-- **Weak Assumption:** It assumes the highest `id` always represents the most "correct" or "final" run. This may not be true if data is backfilled, re-imported, or if parallel processes create runs out of order.
-- **Hidden Flaw:** Instead of resolving *why* collisions are happening, this change simply picks a winner based on an arbitrary implementation detail (the auto-incrementing primary key). This could mask underlying bugs or race conditions in the run creation logic, leading to the system silently using potentially incorrect source data. A more robust solution would be to address the source of the collisions.
+This represents a major change to the data contract with the backend. If the API has not been updated to provide these new fields and structures, these components will fail to render or will crash at runtime. This finding is marked `[UNVERIFIED]` as the API implementation was not provided for review.
 
-### **LOW: [UNVERIFIED] Client May Not Gracefully Handle Null Delta Calculations**
-**Files:** `cloud/apps/web/src/api/operations/pressureSensitivity.graphql`, `cloud/apps/web/src/api/operations/pressureSensitivity.ts`
+**File:** `cloud/apps/web/src/components/models/PressureSensitivityDetail.tsx`, `cloud/apps/web/src/components/models/PressureSensitivitySummary.tsx`, `cloud/apps/web/src/pages/PressureSensitivity.tsx`
 
-The new `winRateDelta` field on `valuePairs` is nullable. This is confirmed by the use of `NonNullable` in the web app's TypeScript types. While the `reason` field inside the `winRateDelta` object can explain *why a valid calculation might be invalid*, there appears to be no explicit handling for the case where the entire object is `null`.
+### **MEDIUM: Code Duplication Between Summary and Detail Components**
 
-- **Omitted Case:** If the backend returns `null` (e.g., due to having zero `qualifyingTrials`), the client-side logic must be prepared to handle this. Without seeing the UI code, it's possible this could lead to a crash (e.g., trying to access a property on `null`) or a confusing empty state. The UI should explicitly check for null and render a state that communicates "Not enough data to compute."
+Several helper functions, constants, and JSX rendering functions are duplicated across `PressureSensitivitySummary.tsx` and `PressureSensitivityDetail.tsx`. This includes:
+*   Tooltip content strings (`GROUP_TOOLTIP`, `LOW_TOOLTIP`, `HIGH_TOOLTIP`, `DELTA_TOOLTIP`)
+*   Formatting functions (`formatPercent`, `formatPoints`)
+*   Business logic (`getBadgeFlag`)
+*   A rendering function (`renderBandCell` is defined locally in both files with nearly identical implementations)
+
+This duplication increases the maintenance burden, as any future changes to this logic or copy will need to be applied in multiple places, creating a risk of inconsistency. These shared utilities should be extracted to a common location.
+
+**Files:** `cloud/apps/web/src/components/models/PressureSensitivitySummary.tsx`, `cloud/apps/web/src/components/models/PressureSensitivityDetail.tsx`
+
+### **LOW: Sort Functionality on Delta Column May Be Unintuitive**
+
+In `PressureSensitivityDetail.tsx`, the "Win rate Δ" column is sortable. The implementation sorts pairs based on the *absolute value* of the delta (`Math.abs(a.winRateDelta.value)`). This allows users to see pairs with the highest and lowest *magnitude* of change.
+
+However, the UI uses standard ascending (`▲`) and descending (`▼`) icons. Users often associate these with a directional sort (e.g., from most positive to most negative). A user who wants to find the value pairs that are most suppressed by heavy pressure (i.e., the most negative delta) cannot sort for this directly and must instead scan the list visually. The functionality is not flawed, but the UI may create an incorrect expectation.
+
+**File:** `cloud/apps/web/src/components/models/PressureSensitivityDetail.tsx`
+
+### **LOW: Potentially Useful Information Has Been Removed**
+
+The previous implementation of the summary and detail tables has been replaced with a more focused view on win-rate sensitivity. In the process, several pieces of information have been removed:
+*   **Summary Table:** The "Provider" column and the "Per-pair spread" sparkline visualization are gone.
+*   **Detail Table:** The `Direction Δ`, `Conviction Δ`, and `netScore Δ` metrics are gone.
+
+While the new design is arguably cleaner and easier to understand, this is a removal of functionality. The sparkline, in particular, provided a quick visual summary of the distribution of sensitivity across all pairs for a given model. This is likely an intentional design tradeoff, but it's a "silent" removal of features that users may have found valuable.
+
+**Files:** `cloud/apps/web/src/components/models/PressureSensitivitySummary.tsx`, `cloud/apps/web/src/components/models/PressureSensitivityDetail.tsx`
 
 ## Residual Risks
 
-- **Breaking API Change**: The GraphQL schema has undergone significant renaming and restructuring (e.g., `aggregateSensitivity` -> `winRateDeltaSummary`, `directionDelta` -> `winRateDelta`). While the web client is updated within this artifact, any other consumer of this API (e.g., data analysis scripts, other internal tools) will break upon deployment. This introduces a risk of service disruption for consumers not accounted for in this change.
-- **Loss of Granularity**: The previous implementation exposed `directionDelta`, `convictionDelta`, and `netScoreDelta`. The new implementation consolidates these into a single `winRateDelta`. While this may be an intentional simplification, it represents a loss of data granularity in the API. If clients relied on `conviction` or `netScore` for specific insights, that functionality is now lost. This could be a regression unless it was an explicitly planned removal of those concepts.
+*   **Deployment Coordination:** The most significant risk is the dependency on the unverified API contract changes. The frontend and backend changes must be deployed atomically. If the frontend is deployed before the backend, the Pressure Sensitivity page will be broken.
+*   **User Adaptation:** The UI has changed significantly, removing several metrics and visualizations. There is a risk that existing users who relied on the removed information (e.g., `netScore Δ`, the provider column for quick filtering, the sparkline) will find the new report less useful for their workflow.
+*   **Data Completeness Assumption:** The new `transcriptCapHit` warning is an excellent addition for transparency. However, its effectiveness depends on the cap being set at a reasonable level and the backend reliably flagging when it's hit. An incorrect implementation of this flag could lead to users either being needlessly alarmed or falsely confident in the data's completeness.
 
 ## Token Stats
 
-- total_input=13291
-- total_output=727
-- total_tokens=16011
-- `gemini-2.5-pro`: input=13291, output=727, total=16011
+- total_input=20968
+- total_output=1152
+- total_tokens=25189
+- `gemini-2.5-pro`: input=20968, output=1152, total=25189
 
 ## Resolution
 - status: accepted
-- note: MEDIUM (orderBy patch on deeper symptom) ACKNOWLEDGED. Collision root-cause fix is out of scope per Residual Risk; orderBy makes the symptom reproducible while we wait for telemetry from the new warning. LOW (client null handling for winRateDelta) DEFERRED to Slice C which renders the dash and reason hover per FR-008. This slice (B) only updates the operation shape.
+- note: MEDIUM (API contract) VERIFIED. MEDIUM (code duplication) RESOLVED via shared pressureSensitivityFormatting.ts in commit 2fbb44ad. LOW (sort icons) ACCEPTED per spec. LOW (info removal) INTENTIONAL per spec.

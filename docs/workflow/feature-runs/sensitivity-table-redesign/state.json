@@ -682,6 +682,54 @@
       "agent_id": null,
       "artifact_sha_at_time": "d54fe983caa2329cfe0bfd339ae00da2fca89d42d57cf2ec7b0702bff9f23bc8",
       "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "diff",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-29T02:25:04.324331Z",
+      "started_at": "2026-04-29T02:23:56.491321Z",
+      "ended_at": "2026-04-29T02:25:04.324331Z",
+      "duration_seconds": 67.832442,
+      "agent_id": null,
+      "artifact_sha_at_time": "1c4d0b910b8c1688de90c8d90df436e30fade9a25ea109be04be4318566d515e",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-29T02:26:19.570948Z",
+      "started_at": "2026-04-29T02:25:04.479314Z",
+      "ended_at": "2026-04-29T02:26:19.570948Z",
+      "duration_seconds": 75.091006,
+      "agent_id": null,
+      "artifact_sha_at_time": "1c4d0b910b8c1688de90c8d90df436e30fade9a25ea109be04be4318566d515e",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-29T02:27:10.132645Z",
+      "started_at": "2026-04-29T02:26:19.714821Z",
+      "ended_at": "2026-04-29T02:27:10.132645Z",
+      "duration_seconds": 50.417399,
+      "agent_id": null,
+      "artifact_sha_at_time": "1c4d0b910b8c1688de90c8d90df436e30fade9a25ea109be04be4318566d515e",
+      "parse_error": "no Gemini token stats found in stdout"
     }
   ],
   "command_telemetry": [
@@ -1344,6 +1392,66 @@
       "files_written": 0,
       "subprocess_invocations": 34,
       "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "diff",
+      "ts": "2026-04-29T02:27:11Z",
+      "wall_seconds": 194.909,
+      "input_bytes_read": 990166,
+      "output_bytes_written": 342118,
+      "files_read": 34,
+      "files_written": 7,
+      "subprocess_invocations": 52,
+      "ttl_crossed": false
+    },
+    {
+      "command": "reconcile",
+      "stage": null,
+      "ts": "2026-04-29T02:30:30Z",
+      "wall_seconds": 0.548,
+      "input_bytes_read": 165726,
+      "output_bytes_written": 0,
+      "files_read": 8,
+      "files_written": 0,
+      "subprocess_invocations": 34,
+      "ttl_crossed": false
+    },
+    {
+      "command": "reconcile",
+      "stage": null,
+      "ts": "2026-04-29T02:30:31Z",
+      "wall_seconds": 0.546,
+      "input_bytes_read": 166360,
+      "output_bytes_written": 0,
+      "files_read": 8,
+      "files_written": 0,
+      "subprocess_invocations": 34,
+      "ttl_crossed": false
+    },
+    {
+      "command": "reconcile",
+      "stage": null,
+      "ts": "2026-04-29T02:30:32Z",
+      "wall_seconds": 0.166,
+      "input_bytes_read": 0,
+      "output_bytes_written": 0,
+      "files_read": 0,
+      "files_written": 0,
+      "subprocess_invocations": 12,
+      "ttl_crossed": false
+    },
+    {
+      "command": "reconcile",
+      "stage": null,
+      "ts": "2026-04-29T02:30:37Z",
+      "wall_seconds": 0.549,
+      "input_bytes_read": 166810,
+      "output_bytes_written": 0,
+      "files_read": 8,
+      "files_written": 0,
+      "subprocess_invocations": 34,
+      "ttl_crossed": false
     }
   ],
   "last_successful_checkpoint_flags": {
@@ -1381,7 +1489,7 @@
       "schema_version": 1,
       "stage": "diff",
       "artifact_path": "/Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59/docs/workflow/feature-runs/sensitivity-table-redesign/reviews/implementation.diff.patch",
-      "artifact_sha256": "d54fe983caa2329cfe0bfd339ae00da2fca89d42d57cf2ec7b0702bff9f23bc8",
+      "artifact_sha256": "1c4d0b910b8c1688de90c8d90df436e30fade9a25ea109be04be4318566d515e",
       "no_auto_context": true,
       "max_artifact_chars": 80000,
       "max_context_chars": 80000,
@@ -1503,14 +1611,15 @@
       "judge_next_action": "advance"
     },
     "diff": {
-      "adversarial_rounds": 2,
+      "adversarial_rounds": 3,
       "judge_rounds": 0,
       "judge_verdicts": [],
       "annotations": [],
       "unresolved_concerns": [],
       "adversarial_sha_history": [
         "d6921ddf0431336acadb5fc3f9aa6a39ef9139ac754d6ac02103d6f89a887fb9",
-        "d54fe983caa2329cfe0bfd339ae00da2fca89d42d57cf2ec7b0702bff9f23bc8"
+        "d54fe983caa2329cfe0bfd339ae00da2fca89d42d57cf2ec7b0702bff9f23bc8",
+        "1c4d0b910b8c1688de90c8d90df436e30fade9a25ea109be04be4318566d515e"
       ],
       "initial_sha": "d6921ddf0431336acadb5fc3f9aa6a39ef9139ac754d6ac02103d6f89a887fb9",
       "judge_next_action": "advance"
@@ -1569,10 +1678,16 @@
       "ts": "20260429T020726_690689Z",
       "reason": "Slice B diff review: 3 reviewers, 5 findings, all reconciled. Two were repeated concerns from Slice A diff (breaking API change intentional; orderBy id:asc reproducibility). One was new but small (client null handling) and is Slice C territory. Slice B build clean. Codegen regenerated. Surface grep on operations + generated zero matches. Advancing to Slice C.",
       "head_sha": "6f68da8676f6cefa892631008e0a91c8bf9c8b79"
+    },
+    {
+      "stage": "diff",
+      "ts": "20260429T023044_299821Z",
+      "reason": "Slice C diff review: 3 reviewers, 7 findings. Two real fixes landed in commit 2fbb44ad (formatPoints 1-decimal for sub-1pp effects, shared pressureSensitivityFormatting.ts module). Other findings are intentional per spec FR-007/FR-011 or already-verified API contract changes. Web build clean, 22 web pressure tests pass, final cross-tree grep zero matches. Advancing to delivery.",
+      "head_sha": "2fbb44ad97b45e7c97fdba9a65a931fd0cdfbf69"
     }
   ],
   "plan_adversarial_rounds": 3,
   "tasks_adversarial_rounds": 0,
-  "diff_adversarial_rounds": 2,
+  "diff_adversarial_rounds": 3,
   "dirty_overrides": {}
 }

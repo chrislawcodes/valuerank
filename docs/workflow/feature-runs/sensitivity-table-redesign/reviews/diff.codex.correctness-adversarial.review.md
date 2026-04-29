@@ -3,14 +3,14 @@ reviewer: "codex"
 lens: "correctness-adversarial"
 stage: "diff"
 artifact_path: "docs/workflow/feature-runs/sensitivity-table-redesign/reviews/implementation.diff.patch"
-artifact_sha256: "d54fe983caa2329cfe0bfd339ae00da2fca89d42d57cf2ec7b0702bff9f23bc8"
+artifact_sha256: "1c4d0b910b8c1688de90c8d90df436e30fade9a25ea109be04be4318566d515e"
 repo_root: "."
-git_head_sha: "6f68da8676f6cefa892631008e0a91c8bf9c8b79"
-git_base_ref: "3565133420c716ceba3bc46c0cb784ce7151b8ed"
-git_base_sha: "3565133420c716ceba3bc46c0cb784ce7151b8ed"
+git_head_sha: "c62155cb1218b80dde70aa567057450bc4ac732b"
+git_base_ref: "6f68da8676f6cefa892631008e0a91c8bf9c8b79"
+git_base_sha: "6f68da8676f6cefa892631008e0a91c8bf9c8b79"
 generation_method: "codex-runner"
 resolution_status: "accepted"
-resolution_note: "MEDIUM 1 (orderBy id:asc assumes id ordering matches recency) ACCEPTED. Run.id is cuid which is time-sortable in Prisma+Postgres so id:asc gives chronological order. The orderBy was added to make last-write-wins reproducible across queries, not to fix the underlying collision issue (which is documented in Residual Risks and deferred). MEDIUM 2 (breaking API change without compatibility layer) INTENTIONAL per spec FR-014; this slice closes the loop with Slice A. NonNullable wrappers are correct because winRateDelta is non-nullable on the GraphQL shape (the reason field communicates undefined cases)."
+resolution_note: "MEDIUM (signed sort vs magnitude) INTENTIONAL per spec FR-011 'Sort default: Win rate Δ descending'. Updated component intro copy to match (ranks by direction of pressure response, not magnitude). LOW (cap warning earlier-transcripts wording) ACCEPTED — orderBy id:asc with cuid IDs gives chronological order so 'earlier' is accurate."
 raw_output_path: "docs/workflow/feature-runs/sensitivity-table-redesign/reviews/diff.codex.correctness-adversarial.review.md.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,13 +22,13 @@ coverage_note: ""
 
 ## Findings
 
-1. Medium [UNVERIFIED]: `orderBy: { id: 'asc' }` makes the collision winner depend on `Run.id` ordering. That is only correct if higher ids always mean the intended later run. If there are backfilled rows, non-monotonic ids, or any case where id order does not match the desired precedence, the dedupe step will now pick the wrong run deterministically instead of just arbitrarily.
-
-2. Medium [UNVERIFIED]: The GraphQL shape change is a breaking API change with no compatibility layer in this patch. Removing `aggregateSensitivity`, `directionDelta`, `convictionDelta`, `netScoreDelta`, and `baselineWinRate` means any resolver, mock, test fixture, or client still expecting the old shape will fail. The new `NonNullable<>` aliases also assume the renamed fields can never be null, which is unsafe if the schema still allows nulls.
+- Medium: `cloud/apps/web/src/components/models/PressureSensitivitySummary.tsx` now sorts rows by `winRateDeltaSummary.mean` directly, not by magnitude. That means a model with a large negative shift will be ranked below a model with a small positive shift, even though the table copy says it ranks models by how much pressure moves win rate. This changes the primary ordering into a signed-direction sort and can hide the biggest movers.
+- Low [UNVERIFIED]: `cloud/apps/web/src/pages/PressureSensitivity.tsx` says the 500,000-transcript cap "biases" the report toward earlier transcripts. That is only true if the scan order is actually chronological. The patch does not show the traversal order, so the warning may be misleading.
 
 ## Residual Risks
 
-- I could not verify the surrounding schema/resolver updates, so the two main assumptions remain open: that `Run.id` truly defines the desired precedence, and that every consumer of the pressure-sensitivity GraphQL shape was updated in lockstep.
+- [UNVERIFIED] I could not confirm that `qualifyingTrials`, `lowBandMean`, `highBandMean`, and `winRateDeltaSummary` are all computed from the same filtered population described in the tooltips. If the upstream aggregation differs, the new labels may overstate what the table is actually showing.
+- [UNVERIFIED] The CI display assumes `ciLow` and `ciHigh` are fractional bounds around the mean. If those fields use a different unit or are not symmetric around the mean, the displayed `± N pp` values will be numerically off.
 
 ## Runner Stats
 - total_input=0
@@ -37,4 +37,4 @@ coverage_note: ""
 
 ## Resolution
 - status: accepted
-- note: MEDIUM 1 (orderBy id:asc assumes id ordering matches recency) ACCEPTED. Run.id is cuid which is time-sortable in Prisma+Postgres so id:asc gives chronological order. The orderBy was added to make last-write-wins reproducible across queries, not to fix the underlying collision issue (which is documented in Residual Risks and deferred). MEDIUM 2 (breaking API change without compatibility layer) INTENTIONAL per spec FR-014; this slice closes the loop with Slice A. NonNullable wrappers are correct because winRateDelta is non-nullable on the GraphQL shape (the reason field communicates undefined cases).
+- note: MEDIUM (signed sort vs magnitude) INTENTIONAL per spec FR-011 'Sort default: Win rate Δ descending'. Updated component intro copy to match (ranks by direction of pressure response, not magnitude). LOW (cap warning earlier-transcripts wording) ACCEPTED — orderBy id:asc with cuid IDs gives chronological order so 'earlier' is accurate.
