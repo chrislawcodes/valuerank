@@ -34,6 +34,8 @@ export type ProbeScenarioJobData = {
   // Only set by the reprobeAnomalySlot mutation. Bypasses the isRunTerminal guard
   // so manual re-probes can execute on completed runs.
   manualReprobe?: boolean;
+  // Set by reprobeAnomalySlot so the probe→summarize pipeline can track stage.
+  anomalyId?: string;
 };
 
 export type TopUpProbesJobData = {
@@ -45,12 +47,14 @@ export type SummarizeTranscriptJobData = {
   transcriptId: string;
   summaryModelId?: string; // Optional: defaults to configured summary model
   forceSummarize?: boolean; // Optional: bypasses cache and summarization short-circuits
+  anomalyId?: string; // Set by reprobe pipeline to track stage progression
 };
 
 export type AnalyzeBasicJobData = {
   runId: string;
   transcriptIds?: string[]; // Optional: will be fetched from DB if not provided
   force?: boolean; // Force recomputation even if cached
+  anomalyId?: string; // Set by reprobe pipeline to track stage progression
 };
 
 export type ExpandScenariosJobData = {

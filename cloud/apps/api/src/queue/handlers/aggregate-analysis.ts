@@ -12,6 +12,7 @@ import { z } from 'zod';
 import type { AggregateAnalysisJobData } from '../types.js';
 import { updateAggregateRun } from '../../services/analysis/aggregate.js';
 import { parseTemperature } from '../../utils/temperature.js';
+import { setReprobeStage } from '../../services/run/anomaly-persistence.js';
 
 const log = createLogger('queue:aggregate-analysis');
 
@@ -117,11 +118,11 @@ export function createAggregateAnalysisHandler(): PgBoss.WorkHandler<AggregateAn
                             { jobId, definitionId, preambleVersionId },
                             'No definition versions found for legacy aggregate job; skipping'
                         );
-                        continue;
-                    }
-
-                    for (const target of derivedTargets) {
-                        await updateAggregateRun(definitionId, preambleVersionId, target.definitionVersion, target.temperature);
+                        // Fall through to reprobe stage check even on no-op.
+                    } else {
+                        for (const target of derivedTargets) {
+                            await updateAggregateRun(definitionId, preambleVersionId, target.definitionVersion, target.temperature);
+                        }
                     }
                 }
 
@@ -129,6 +130,29 @@ export function createAggregateAnalysisHandler(): PgBoss.WorkHandler<AggregateAn
                     { jobId, definitionId },
                     'Aggregate analysis completed successfully'
                 );
+
+                // Reprobe pipeline: advance anomalies from 'aggregating' → 'fixed' for runs
+                // belonging to this definition.
+                try {
+                    const defRuns = await db.run.findMany({
+                        where: { definitionId, status: 'COMPLETED', deletedAt: null },
+                        select: { id: true },
+                    });
+                    const runIds = defRuns.map((r) => r.id);
+                    const pipelineAnomalies = await db.runAnomaly.findMany({
+                        where: { runId: { in: runIds }, resolvedAt: null },
+                        select: { id: true, details: true },
+                    });
+                    for (const anomaly of pipelineAnomalies) {
+                        const stage = (anomaly.details as Record<string, unknown> | null)?.reprobeStage;
+                        if (stage === 'aggregating') {
+                            await setReprobeStage(anomaly.id, 'fixed');
+                            log.info({ jobId, definitionId, anomalyId: anomaly.id }, 'Advanced reprobe stage to fixed');
+                        }
+                    }
+                } catch (err) {
+                    log.error({ jobId, definitionId, err }, 'Failed to advance reprobe stage after aggregation');
+                }
             } catch (error) {
                 log.error(
                     { jobId, definitionId, err: error },

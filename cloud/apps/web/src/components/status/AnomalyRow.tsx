@@ -240,7 +240,39 @@ export function AnomalyRow({ anomaly, tone, onViewTranscript }: AnomalyRowProps)
   const renderPrimaryAction = () => {
     switch (anomaly.type) {
       case 'INVALID_RESPONSE_FAILURE': {
-        const disabled = !anomaly.reprobeEligible || anomaly.reprobeLimitReached || isReprobing || isResolving;
+        const { reprobeStage } = anomaly;
+
+        // Active pipeline stage: show spinner + label, disable Re-probe.
+        if (reprobeStage != null && reprobeStage !== 'fixed') {
+          const stageLabel: Record<string, string> = {
+            probing: 'Probing…',
+            summarizing: 'Summarizing…',
+            analyzing: 'Analyzing…',
+            aggregating: 'Aggregating…',
+          };
+          const label = stageLabel[reprobeStage] ?? `${reprobeStage}…`;
+          return (
+            <span className="inline-flex items-center gap-1.5 text-sm text-gray-500">
+              <span
+                className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-gray-300 border-t-gray-500"
+                aria-hidden="true"
+              />
+              {label}
+            </span>
+          );
+        }
+
+        // Fixed: pipeline complete, waiting for user to resolve.
+        if (reprobeStage === 'fixed') {
+          return (
+            <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+              Fixed ✓
+            </span>
+          );
+        }
+
+        const isActivePipeline = isReprobing;
+        const disabled = !anomaly.reprobeEligible || anomaly.reprobeLimitReached || isActivePipeline || isResolving;
         const title = anomaly.reprobeLimitReached
           ? 'This slot has been re-probed 3 times. Use [Resolve] to close manually; if the underlying issue persists, the next sweep will re-create the anomaly.'
           : (!anomaly.reprobeEligible ? 'This slot cannot be re-probed.' : undefined);
@@ -266,7 +298,7 @@ export function AnomalyRow({ anomaly, tone, onViewTranscript }: AnomalyRowProps)
               title={title}
               aria-describedby={anomaly.reprobeLimitReached ? limitReachedDescriptionId : undefined}
             >
-              {isReprobing ? 'Re-probing…' : 'Re-probe'}
+              {isActivePipeline ? 'Re-probing…' : 'Re-probe'}
             </Button>
           </div>
         );
