@@ -50,7 +50,6 @@
     "unresolved": []
   },
   "delivery": {},
-  "dirty_overrides": {},
   "checkpoint_fallback": {},
   "parallel_analysis": {
     "reviewed": true,
@@ -586,6 +585,54 @@
       "duration_seconds": 97.182548,
       "agent_id": null,
       "artifact_sha_at_time": "795c180d4cdf013269b43fb492d28a10bb30496a153e4baf1e7e8091d29fc5cf",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-29T01:56:43.241304Z",
+      "started_at": "2026-04-29T01:54:23.525308Z",
+      "ended_at": "2026-04-29T01:56:43.241304Z",
+      "duration_seconds": 139.714873,
+      "agent_id": null,
+      "artifact_sha_at_time": "d6921ddf0431336acadb5fc3f9aa6a39ef9139ac754d6ac02103d6f89a887fb9",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-29T01:57:44.388426Z",
+      "started_at": "2026-04-29T01:56:43.442367Z",
+      "ended_at": "2026-04-29T01:57:44.388426Z",
+      "duration_seconds": 60.945487,
+      "agent_id": null,
+      "artifact_sha_at_time": "d6921ddf0431336acadb5fc3f9aa6a39ef9139ac754d6ac02103d6f89a887fb9",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-29T01:58:48.388390Z",
+      "started_at": "2026-04-29T01:57:44.569573Z",
+      "ended_at": "2026-04-29T01:58:48.388390Z",
+      "duration_seconds": 63.818238,
+      "agent_id": null,
+      "artifact_sha_at_time": "d6921ddf0431336acadb5fc3f9aa6a39ef9139ac754d6ac02103d6f89a887fb9",
       "parse_error": "no Gemini token stats found in stdout"
     }
   ],
@@ -1141,6 +1188,66 @@
       "files_written": 2,
       "subprocess_invocations": 12,
       "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "diff",
+      "ts": "2026-04-29T01:58:49Z",
+      "wall_seconds": 266.179,
+      "input_bytes_read": 866364,
+      "output_bytes_written": 292299,
+      "files_read": 28,
+      "files_written": 7,
+      "subprocess_invocations": 52,
+      "ttl_crossed": false
+    },
+    {
+      "command": "reconcile",
+      "stage": null,
+      "ts": "2026-04-29T02:01:04Z",
+      "wall_seconds": 0.562,
+      "input_bytes_read": 157513,
+      "output_bytes_written": 0,
+      "files_read": 8,
+      "files_written": 0,
+      "subprocess_invocations": 34,
+      "ttl_crossed": false
+    },
+    {
+      "command": "reconcile",
+      "stage": null,
+      "ts": "2026-04-29T02:01:05Z",
+      "wall_seconds": 0.556,
+      "input_bytes_read": 158547,
+      "output_bytes_written": 0,
+      "files_read": 8,
+      "files_written": 0,
+      "subprocess_invocations": 34,
+      "ttl_crossed": false
+    },
+    {
+      "command": "reconcile",
+      "stage": null,
+      "ts": "2026-04-29T02:01:06Z",
+      "wall_seconds": 0.562,
+      "input_bytes_read": 159407,
+      "output_bytes_written": 0,
+      "files_read": 8,
+      "files_written": 0,
+      "subprocess_invocations": 34,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "diff",
+      "ts": "2026-04-29T02:04:41Z",
+      "wall_seconds": 0.193,
+      "input_bytes_read": 404979,
+      "output_bytes_written": 104508,
+      "files_read": 14,
+      "files_written": 2,
+      "subprocess_invocations": 12,
+      "ttl_crossed": false
     }
   ],
   "last_successful_checkpoint_flags": {
@@ -1171,6 +1278,21 @@
       "gemini_timeout_seconds": 240,
       "gemini_retries": 2,
       "repair_timeout_seconds": 300,
+      "allow_large_diff_rerun": false,
+      "keep_intermediates": false
+    },
+    "diff": {
+      "schema_version": 1,
+      "stage": "diff",
+      "artifact_path": "/Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59/docs/workflow/feature-runs/sensitivity-table-redesign/reviews/implementation.diff.patch",
+      "artifact_sha256": "d6921ddf0431336acadb5fc3f9aa6a39ef9139ac754d6ac02103d6f89a887fb9",
+      "no_auto_context": true,
+      "max_artifact_chars": 80000,
+      "max_context_chars": 80000,
+      "max_total_chars": 300000,
+      "gemini_timeout_seconds": 360,
+      "gemini_retries": 2,
+      "repair_timeout_seconds": 600,
       "allow_large_diff_rerun": false,
       "keep_intermediates": false
     }
@@ -1283,6 +1405,18 @@
       ],
       "initial_sha": "bb95d13420e2627fddc03b32675ee4a506cd07fa5ff40020641e53013f758921",
       "judge_next_action": "advance"
+    },
+    "diff": {
+      "adversarial_rounds": 1,
+      "judge_rounds": 0,
+      "judge_verdicts": [],
+      "annotations": [],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [
+        "d6921ddf0431336acadb5fc3f9aa6a39ef9139ac754d6ac02103d6f89a887fb9"
+      ],
+      "initial_sha": "d6921ddf0431336acadb5fc3f9aa6a39ef9139ac754d6ac02103d6f89a887fb9",
+      "judge_next_action": "advance"
     }
   },
   "invariant_warnings": [],
@@ -1326,8 +1460,16 @@
       "ts": "20260429T010212_696208Z",
       "reason": "Tasks adversarial reviews ran 2 rounds with 4 high-severity findings raised total, all resolved. Round 1 caught: grep-too-narrow on .ts only (now includes .tsx and ITs), baselineWinRate orphaned (now removed atomically), transcriptCapHit missing on early-return paths (now wired), selectedModelId default after sort change (resolver re-seats sort by winRateDeltaSummary.mean), FLAT_DELTA_THRESHOLD private (now exported from aggregation.ts), existing Tooltip not reused (now reused), and final grep excluding generated dir (now includes it). Round 2 caught: Slice A grep dependency-impossible (now backend-scoped with wider check at end of Slice C), Tooltip event mismatch (tests now use mouseEnter/mouseLeave with timer), cross-value heat map cell title hardcoded (now full text sweep), sanity panel full label rewrite (now covers all visible copy), and orphaned types/Pothos refs (now explicitly deleted). All 6 reviews reconcile accepted. Judge panel skipped due to the same deterministic schema_violation maximum-recursion-depth bug observed in spec and plan stages and v1 PR 770. Advancing to Slice A implementation dispatch.",
       "head_sha": "037325feb2617aa96b68cfb204a023144a68c88a"
+    },
+    {
+      "stage": "diff",
+      "ts": "20260429T020113_608538Z",
+      "reason": "Slice A diff review surfaced 2 actionable findings, both fixed in commit e83fdb36 (transcriptCapHit false-positive on exact-page-multiple boundary, non-deterministic eligibleRuns ordering). Other findings are either intentional (signed sort per FR-011, pairsPositive threshold per FR-013) or scoped-out (web client cleanup is the deliberate Slice B dependency). All 3 reviews reconcile accepted. Backend build clean; 36 tests pass; backend-scope grep zero matches. Judge panel skipped due to known schema_violation recursion bug. Advancing to Slice B.",
+      "head_sha": "e83fdb3607cb533b109527c6b4ea30bbbc81f8de"
     }
   ],
   "plan_adversarial_rounds": 3,
-  "tasks_adversarial_rounds": 0
+  "tasks_adversarial_rounds": 0,
+  "diff_adversarial_rounds": 1,
+  "dirty_overrides": {}
 }

@@ -1,0 +1,21 @@
+{
+  "repo_root": ".",
+  "git_head_sha": "3565133420c716ceba3bc46c0cb784ce7151b8ed",
+  "git_base_ref": "origin/main",
+  "git_base_sha": "4772ae79f8e1580ee31c0f10f32e6d86a842ef68",
+  "paths": [
+    "cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts",
+    "cloud/apps/api/src/graphql/types/pressure-sensitivity.ts",
+    "cloud/apps/api/src/services/pressure-sensitivity",
+    "cloud/apps/web/schema.graphql",
+    "cloud/apps/web/src/api/operations/pressureSensitivity.graphql",
+    "cloud/apps/web/src/api/operations/pressureSensitivity.ts",
+    "cloud/apps/web/src/components/models/PressureSensitivityDetail.tsx",
+    "cloud/apps/web/src/components/models/PressureSensitivitySummary.tsx",
+    "cloud/apps/web/src/pages/PressureSensitivity.tsx"
+  ],
+  "allowed_dirty_paths": [],
+  "untracked_files_included": [],
+  "artifact_path": "docs/workflow/feature-runs/sensitivity-table-redesign/reviews/implementation.diff.patch",
+  "allow_empty_diff": false
+}

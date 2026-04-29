@@ -1,0 +1,1224 @@
+diff --git a/cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts b/cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts
+index ce39d2e8..057be081 100644
+--- a/cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts
++++ b/cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts
+@@ -1,10 +1,10 @@
++import { createLogger } from '@valuerank/shared';
+ import { db } from '@valuerank/db';
+ import { builder } from '../builder.js';
+ import { runMatchesSignature } from './domain-coverage-gql-types.js';
+ import { resolveTranscriptDecisionModel } from './domain/shared.js';
+ import {
+   PressureSensitivityResultRef,
+-  type BandStatShape,
+   type DirectionalSanityCheckEntryShape,
+   type DirectionalSanityCheckShape,
+   type ExcludedDefinitionShape,
+@@ -17,10 +17,10 @@ import {
+ import { buildSafeLevelLookup, type DefinitionDimension } from './scenarios-utils.js';
+ import { normalizeScenarioAnalysisMetadata } from '../../services/analysis/scenario-metadata.js';
+ import {
+-  aggregateSensitivity,
+-  applyBandReduction,
+   buildCellMetrics,
+-  computeBaselineWinRate,
++  pooledBandReduction,
++  summarizeWinRateDeltas,
++  FLAT_DELTA_THRESHOLD,
+   type Observation,
+ } from '../../services/pressure-sensitivity/aggregation.js';
+ import {
+@@ -39,8 +39,10 @@ import {
+   type PressureSensitivityDecisionSnapshot,
+ } from '../../services/pressure-sensitivity/decision-snapshot.js';
+ 
++const log = createLogger('pressure-sensitivity');
+ const MIN_N = 3;
+-const FLAT_DELTA_THRESHOLD = 0.02;
++const TRANSCRIPT_PAGE_SIZE = 5_000;
++const TRANSCRIPT_FETCH_LIMIT = 500_000;
+ 
+ type ModelRow = {
+   modelId: string;
+@@ -126,6 +128,96 @@ function extractSourceRunIds(config: unknown): string[] {
+   return sourceRunIds.filter((id): id is string => typeof id === 'string' && id.length > 0);
+ }
+ 
++type WarningLogger = {
++  warn: (data: Record<string, unknown>, message: string) => void;
++};
++
++type TranscriptPage = {
++  rows: TranscriptRow[];
++  hasMore: boolean;
++};
++
++type TranscriptPageFetcher = (cursor: { id: string } | undefined) => Promise<TranscriptPage>;
++
++export function buildSourceRunToDefIdMap(
++  eligibleRuns: ReadonlyArray<RunRow>,
++  definitionMeta: ReadonlyMap<string, DefinitionMetadata>,
++  warningLogger: WarningLogger,
++): Map<string, string> {
++  const map = new Map<string, string>();
++  for (const run of eligibleRuns) {
++    const defId = run.definition?.id ?? run.definitionId;
++    if (!definitionMeta.has(defId)) continue;
++    for (const sourceRunId of extractSourceRunIds(run.config)) {
++      const existingDefinitionId = map.get(sourceRunId);
++      if (existingDefinitionId !== undefined && existingDefinitionId !== defId) {
++        warningLogger.warn(
++          {
++            sourceRunId,
++            existingDefinitionId,
++            newDefinitionId: defId,
++            code: 'source_run_collision',
++          },
++          'sourceRunId mapped to multiple definitions; last write wins',
++        );
++      }
++      map.set(sourceRunId, defId);
++    }
++  }
++  return map;
++}
++
++export async function fetchTranscriptsFromSourceRuns(
++  sourceRunIds: ReadonlyArray<string>,
++  rosterModelIds: ReadonlyArray<string>,
++  fetchPage: TranscriptPageFetcher,
++  warningLogger: WarningLogger,
++  limit = TRANSCRIPT_FETCH_LIMIT,
++): Promise<{ transcripts: TranscriptRow[]; transcriptCapHit: boolean }> {
++  const transcripts: TranscriptRow[] = [];
++  let cursor: { id: string } | undefined;
++  let transcriptCapHit = false;
++
++  if (sourceRunIds.length === 0 || rosterModelIds.length === 0) {
++    return { transcripts, transcriptCapHit: false };
++  }
++
++  while (transcripts.length < limit) {
++    const page = await fetchPage(cursor);
++    if (page.rows.length === 0) break;
++
++    const remaining = limit - transcripts.length;
++    if (page.rows.length > remaining) {
++      transcripts.push(...page.rows.slice(0, remaining));
++      transcriptCapHit = true;
++      break;
++    }
++
++    transcripts.push(...page.rows);
++    if (page.hasMore && transcripts.length >= limit) {
++      transcriptCapHit = true;
++      break;
++    }
++    if (!page.hasMore) break;
++
++    cursor = { id: page.rows[page.rows.length - 1]!.id };
++  }
++
++  if (transcriptCapHit) {
++    warningLogger.warn(
++      {
++        sourceRunIds: [...sourceRunIds],
++        scanned: transcripts.length,
++        limit,
++        code: 'transcript_cap_hit',
++      },
++      'Transcript fetch hit cap; results may be biased',
++    );
++  }
++
++  return { transcripts, transcriptCapHit };
++}
++
+ builder.queryField('pressureSensitivity', (t) =>
+   t.field({
+     type: PressureSensitivityResultRef,
+@@ -267,22 +359,14 @@ builder.queryField('pressureSensitivity', (t) =>
+       // the raw transcripts live on the runs listed in `config.sourceRunIds`. Fetching
+       // transcripts WHERE runId IN aggregateRunIds returns 0 rows; the production smoke
+       // test on PR #770 caught this.
+-      const sourceRunToDefId = new Map<string, string>();
+-      for (const r of eligibleRuns) {
+-        const defId = r.definition?.id ?? r.definitionId;
+-        if (!definitionMeta.has(defId)) continue;
+-        for (const sourceRunId of extractSourceRunIds(r.config)) {
+-          sourceRunToDefId.set(sourceRunId, defId);
+-        }
+-      }
++      const sourceRunToDefId = buildSourceRunToDefIdMap(eligibleRuns, definitionMeta, log);
+       const sourceRunIds = [...sourceRunToDefId.keys()];
+       const rosterModelIds = models.map((m) => m.modelId);
+       let excludedScenariosCount = 0;
+ 
+       // Pre-fetch the scenarios for eligible Definitions ONCE into a map. Each scenario's
+       // content + orientationFlipped is the same across thousands of transcripts, so joining
+-      // on transcript blew up the response payload past Prisma's napi String limit. With ~89
+-      // definitions × 25 scenarios = ~2225 unique scenarios per domain, this is bounded.
++      // on transcript blew up the response payload past Prisma's napi String limit.
+       const eligibleDefIds = [...definitionMeta.keys()];
+       const scenarioRows = eligibleDefIds.length === 0
+         ? []
+@@ -293,16 +377,10 @@ builder.queryField('pressureSensitivity', (t) =>
+       const scenarioById = new Map<string, ScenarioRow>();
+       for (const s of scenarioRows) scenarioById.set(s.id, s);
+ 
+-      // Defensive cap on per-page fetch + paginate via cursor so a domain with hundreds of
+-      // thousands of transcripts stays under napi's String conversion limit (~1 GB). The
+-      // production smoke test on PR #772 hit this with one big findMany — paginating in
+-      // 5,000-row pages keeps each page response under ~25 MB.
+-      const TRANSCRIPT_PAGE_SIZE = 5_000;
+-      const TRANSCRIPT_FETCH_LIMIT = 500_000;
+-      const transcripts: TranscriptRow[] = [];
+-      if (sourceRunIds.length > 0 && rosterModelIds.length > 0) {
+-        let cursor: { id: string } | undefined = undefined;
+-        while (transcripts.length < TRANSCRIPT_FETCH_LIMIT) {
++      const { transcripts, transcriptCapHit } = await fetchTranscriptsFromSourceRuns(
++        sourceRunIds,
++        rosterModelIds,
++        async (cursor) => {
+           const page = (await db.transcript.findMany({
+             where: {
+               runId: { in: sourceRunIds },
+@@ -314,21 +392,16 @@ builder.queryField('pressureSensitivity', (t) =>
+               modelId: true,
+               runId: true,
+               scenarioId: true,
+-              // decisionMetadata holds the LLM response and parser evidence; resolveTranscriptDecisionModel
+-              // needs it. definitionSnapshot is intentionally OMITTED — we pass a synthetic snapshot
+-              // built from the eligible Definition's resolvedContent below.
+               decisionMetadata: true,
+             },
+             orderBy: { id: 'asc' },
+             take: TRANSCRIPT_PAGE_SIZE,
+             ...(cursor ? { skip: 1, cursor } : {}),
+           })) as TranscriptRow[];
+-          if (page.length === 0) break;
+-          for (const row of page) transcripts.push(row);
+-          if (page.length < TRANSCRIPT_PAGE_SIZE) break;
+-          cursor = { id: page[page.length - 1]!.id };
+-        }
+-      }
++          return { rows: page, hasMore: page.length === TRANSCRIPT_PAGE_SIZE };
++        },
++        log,
++      );
+ 
+       // 6-8. Bucket transcripts via the sourceRun → definitionId map built above.
+       const perModel = new Map<string, Map<string, PairAccumulator>>();
+@@ -348,9 +421,6 @@ builder.queryField('pressureSensitivity', (t) =>
+         });
+         const direction = decision.canonical.direction as CanonicalDirection;
+ 
+-        // The transcript's canonical direction is relative to the Definition's stored
+-        // value_first / value_second order. assignOwnOpponent remaps it to canonical
+-        // (alphabetical) own/opponent so mirrored Definitions don't end up with inverted Δ.
+         const outcome = assignOwnOpponent(
+           meta.valueFirstToken,
+           meta.valueSecondToken,
+@@ -363,7 +433,6 @@ builder.queryField('pressureSensitivity', (t) =>
+         pairAcc.definitionsMeasured.add(defId);
+ 
+         if (outcome === 'unscored') {
+-          // unscored doesn't go into a cell (no level resolution needed)
+           const unscoredCell = ensureUnscoredCell(pairAcc);
+           unscoredCell.observations.push({ outcome, strength });
+           continue;
+@@ -395,7 +464,7 @@ builder.queryField('pressureSensitivity', (t) =>
+         cell.observations.push({ outcome, strength });
+       }
+ 
+-      // 9-13. Build per-model output
++      // 9-13. Build per-model output.
+       const outputModels: PressureSensitivityModelShape[] = [];
+       const insufficient: InsufficientPressureSensitivityModelShape[] = [];
+       const sanityBreakdown: DirectionalSanityCheckEntryShape[] = [];
+@@ -408,6 +477,9 @@ builder.queryField('pressureSensitivity', (t) =>
+         const pairs = perModel.get(model.modelId) ?? new Map<string, PairAccumulator>();
+         const valuePairs: PressureSensitivityValuePairShape[] = [];
+         let modelUnscored = 0;
++        const perPairWinRateDeltas: number[] = [];
++        const perPairLowBandRates: number[] = [];
++        const perPairHighBandRates: number[] = [];
+ 
+         for (const acc of pairs.values()) {
+           const grid: SensitivityCellShape[] = [];
+@@ -421,6 +493,7 @@ builder.queryField('pressureSensitivity', (t) =>
+               ownLevel: cellAcc.ownLevel,
+               opponentLevel: cellAcc.opponentLevel,
+               n: metrics.n,
++              successes: metrics.successes,
+               unscoredCount: metrics.unscoredCount,
+               winRate: metrics.winRate,
+               conviction: metrics.conviction,
+@@ -430,33 +503,20 @@ builder.queryField('pressureSensitivity', (t) =>
+           }
+           modelUnscored += pairUnscored;
+ 
+-          const reduction = applyBandReduction(grid, MIN_N);
+-          const baseline = computeBaselineWinRate(grid, MIN_N);
+-
+-          const directionDelta: BandStatShape = {
+-            value: reduction.directionDelta,
+-            lowBandMean: reduction.lowBandWinRate,
+-            highBandMean: reduction.highBandWinRate,
+-          };
+-          const convictionDelta: BandStatShape = {
+-            value: reduction.convictionDelta,
+-            lowBandMean: reduction.lowBandConviction,
+-            highBandMean: reduction.highBandConviction,
+-          };
+-          const netScoreDelta: BandStatShape = {
+-            value: reduction.netScoreDelta,
+-            lowBandMean: reduction.lowBandNetScore,
+-            highBandMean: reduction.highBandNetScore,
+-          };
+-
++          const winRateDelta = pooledBandReduction(grid, MIN_N);
+           valuePairs.push({
+             pairKey: acc.pairKey,
+             ownToken: acc.ownToken,
+             opponentToken: acc.opponentToken,
+-            directionDelta,
+-            convictionDelta,
+-            netScoreDelta,
+-            baselineWinRate: baseline,
++            winRateDelta: {
++              value: winRateDelta.value,
++              ciLow: winRateDelta.ciLow,
++              ciHigh: winRateDelta.ciHigh,
++              lowBandMean: winRateDelta.lowBandMean,
++              highBandMean: winRateDelta.highBandMean,
++              reason: winRateDelta.reason,
++            },
++            qualifyingTrials: winRateDelta.qualifyingTrials,
+             n: pairN,
+             unscoredCount: pairUnscored,
+             grid,
+@@ -464,17 +524,24 @@ builder.queryField('pressureSensitivity', (t) =>
+             definitionsExcluded: acc.definitionsExcluded.size,
+           });
+ 
+-          if (reduction.directionDelta !== null) {
+-            const delta = reduction.directionDelta;
++          if (winRateDelta.value !== null && winRateDelta.lowBandMean !== null && winRateDelta.highBandMean !== null) {
++            perPairWinRateDeltas.push(winRateDelta.value);
++            perPairLowBandRates.push(winRateDelta.lowBandMean);
++            perPairHighBandRates.push(winRateDelta.highBandMean);
++
+             const classification: 'positive' | 'flat' | 'negative' =
+-              Math.abs(delta) < FLAT_DELTA_THRESHOLD ? 'flat' : delta > 0 ? 'positive' : 'negative';
++              Math.abs(winRateDelta.value) < FLAT_DELTA_THRESHOLD
++                ? 'flat'
++                : winRateDelta.value > 0
++                  ? 'positive'
++                  : 'negative';
+             if (classification === 'positive') sanityPositive += 1;
+             else if (classification === 'flat') sanityFlat += 1;
+             else sanityNegative += 1;
+             sanityBreakdown.push({
+               modelId: model.modelId,
+               pairKey: acc.pairKey,
+-              directionDelta: delta,
++              winRateDelta: winRateDelta.value,
+               classification,
+             });
+           } else {
+@@ -482,10 +549,13 @@ builder.queryField('pressureSensitivity', (t) =>
+           }
+         }
+ 
+-        const aggregate = aggregateSensitivity(valuePairs.map((vp) => ({ netScoreDelta: vp.netScoreDelta.value })));
+-        const valuePairsExcluded = valuePairs.filter((vp) => vp.netScoreDelta.value === null).length;
++        const winRateDeltaSummary = summarizeWinRateDeltas(
++          perPairWinRateDeltas,
++          perPairLowBandRates,
++          perPairHighBandRates,
++        );
+ 
+-        if (valuePairs.length === 0 || aggregate.valuePairsMeasured === 0) {
++        if (valuePairs.length === 0 || winRateDeltaSummary.pairsMeasured === 0) {
+           insufficient.push({
+             modelId: model.modelId,
+             label: model.displayName,
+@@ -499,7 +569,7 @@ builder.queryField('pressureSensitivity', (t) =>
+           modelId: model.modelId,
+           label: model.displayName,
+           providerName: model.provider.displayName ?? model.provider.name,
+-          aggregateSensitivity: { ...aggregate, valuePairsExcluded },
++          winRateDeltaSummary,
+           valuePairs: valuePairs.sort((a, b) => a.pairKey.localeCompare(b.pairKey)),
+           unscoredCount: modelUnscored,
+         });
+@@ -516,13 +586,22 @@ builder.queryField('pressureSensitivity', (t) =>
+       };
+ 
+       return {
+-        models: outputModels.sort((a, b) =>
+-          (b.aggregateSensitivity.value ?? -1) - (a.aggregateSensitivity.value ?? -1),
+-        ),
++        models: outputModels.sort((a, b) => {
++          const aMean = a.winRateDeltaSummary.mean;
++          const bMean = b.winRateDeltaSummary.mean;
++          if (aMean === null && bMean === null) {
++            return a.label.localeCompare(b.label);
++          }
++          if (aMean === null) return 1;
++          if (bMean === null) return -1;
++          if (bMean !== aMean) return bMean - aMean;
++          return a.label.localeCompare(b.label);
++        }),
+         insufficient,
+         excludedDefinitions,
+         excludedScenariosCount,
+         directionalSanityCheck,
++        transcriptCapHit,
+       };
+     },
+   }),
+@@ -565,7 +644,10 @@ function ensureUnscoredCell(pairAcc: PairAccumulator): CellAccumulator {
+   return cell;
+ }
+ 
+-function buildEmptyResult(models: ModelRow[]): PressureSensitivityResultShape {
++export function buildEmptyResult(
++  models: ModelRow[],
++  transcriptCapHit = false,
++): PressureSensitivityResultShape {
+   return {
+     models: [],
+     insufficient: models.map((m) => ({
+@@ -584,5 +666,6 @@ function buildEmptyResult(models: ModelRow[]): PressureSensitivityResultShape {
+       unmeasurableCount: 0,
+       breakdown: [],
+     },
++    transcriptCapHit,
+   };
+ }
+diff --git a/cloud/apps/api/src/graphql/types/pressure-sensitivity.ts b/cloud/apps/api/src/graphql/types/pressure-sensitivity.ts
+index 50a15120..b1a8dc1b 100644
+--- a/cloud/apps/api/src/graphql/types/pressure-sensitivity.ts
++++ b/cloud/apps/api/src/graphql/types/pressure-sensitivity.ts
+@@ -4,6 +4,7 @@ export type SensitivityCellShape = {
+   ownLevel: number;
+   opponentLevel: number;
+   n: number;
++  successes: number;
+   unscoredCount: number;
+   winRate: number | null;
+   conviction: number | null;
+@@ -11,31 +12,31 @@ export type SensitivityCellShape = {
+   lowData: boolean;
+ };
+ 
+-export type BandStatShape = {
++export type WinRateDeltaShape = {
+   value: number | null;
++  ciLow: number | null;
++  ciHigh: number | null;
+   lowBandMean: number | null;
+   highBandMean: number | null;
++  reason: 'low-band-thin' | 'high-band-thin' | 'both-bands-thin' | null;
+ };
+ 
+-export type BaselineWinRateShape = {
+-  value: number | null;
+-  ceilingFloorFlag: 'ceiling' | 'floor' | null;
+-};
+-
+-export type AggregateSensitivityShape = {
+-  value: number | null;
+-  valuePairsMeasured: number;
+-  valuePairsExcluded: number;
++export type WinRateDeltaSummaryShape = {
++  mean: number | null;
++  ciLow: number | null;
++  ciHigh: number | null;
++  lowBandMean: number | null;
++  highBandMean: number | null;
++  pairsMeasured: number;
++  pairsPositive: number;
+ };
+ 
+ export type PressureSensitivityValuePairShape = {
+   pairKey: string;
+   ownToken: string;
+   opponentToken: string;
+-  directionDelta: BandStatShape;
+-  convictionDelta: BandStatShape;
+-  netScoreDelta: BandStatShape;
+-  baselineWinRate: BaselineWinRateShape;
++  winRateDelta: WinRateDeltaShape;
++  qualifyingTrials: number;
+   n: number;
+   unscoredCount: number;
+   grid: SensitivityCellShape[];
+@@ -47,7 +48,7 @@ export type PressureSensitivityModelShape = {
+   modelId: string;
+   label: string;
+   providerName: string;
+-  aggregateSensitivity: AggregateSensitivityShape;
++  winRateDeltaSummary: WinRateDeltaSummaryShape;
+   valuePairs: PressureSensitivityValuePairShape[];
+   unscoredCount: number;
+ };
+@@ -68,7 +69,7 @@ export type ExcludedDefinitionShape = {
+ export type DirectionalSanityCheckEntryShape = {
+   modelId: string;
+   pairKey: string;
+-  directionDelta: number;
++  winRateDelta: number;
+   classification: 'positive' | 'flat' | 'negative';
+ };
+ 
+@@ -87,12 +88,12 @@ export type PressureSensitivityResultShape = {
+   excludedDefinitions: ExcludedDefinitionShape[];
+   excludedScenariosCount: number;
+   directionalSanityCheck: DirectionalSanityCheckShape;
++  transcriptCapHit: boolean;
+ };
+ 
+ const SensitivityCellRef = builder.objectRef<SensitivityCellShape>('SensitivityCell');
+-const BandStatRef = builder.objectRef<BandStatShape>('BandStat');
+-const BaselineWinRateRef = builder.objectRef<BaselineWinRateShape>('BaselineWinRate');
+-const AggregateSensitivityRef = builder.objectRef<AggregateSensitivityShape>('AggregateSensitivity');
++const WinRateDeltaRef = builder.objectRef<WinRateDeltaShape>('WinRateDelta');
++const WinRateDeltaSummaryRef = builder.objectRef<WinRateDeltaSummaryShape>('WinRateDeltaSummary');
+ const PressureSensitivityValuePairRef = builder.objectRef<PressureSensitivityValuePairShape>(
+   'PressureSensitivityValuePair',
+ );
+@@ -119,6 +120,7 @@ builder.objectType(SensitivityCellRef, {
+     ownLevel: t.exposeInt('ownLevel'),
+     opponentLevel: t.exposeInt('opponentLevel'),
+     n: t.exposeInt('n'),
++    successes: t.exposeInt('successes'),
+     unscoredCount: t.exposeInt('unscoredCount'),
+     winRate: t.exposeFloat('winRate', { nullable: true }),
+     conviction: t.exposeFloat('conviction', { nullable: true }),
+@@ -127,26 +129,26 @@ builder.objectType(SensitivityCellRef, {
+   }),
+ });
+ 
+-builder.objectType(BandStatRef, {
++builder.objectType(WinRateDeltaRef, {
+   fields: (t) => ({
+     value: t.exposeFloat('value', { nullable: true }),
++    ciLow: t.exposeFloat('ciLow', { nullable: true }),
++    ciHigh: t.exposeFloat('ciHigh', { nullable: true }),
+     lowBandMean: t.exposeFloat('lowBandMean', { nullable: true }),
+     highBandMean: t.exposeFloat('highBandMean', { nullable: true }),
++    reason: t.exposeString('reason', { nullable: true }),
+   }),
+ });
+ 
+-builder.objectType(BaselineWinRateRef, {
+-  fields: (t) => ({
+-    value: t.exposeFloat('value', { nullable: true }),
+-    ceilingFloorFlag: t.exposeString('ceilingFloorFlag', { nullable: true }),
+-  }),
+-});
+-
+-builder.objectType(AggregateSensitivityRef, {
++builder.objectType(WinRateDeltaSummaryRef, {
+   fields: (t) => ({
+-    value: t.exposeFloat('value', { nullable: true }),
+-    valuePairsMeasured: t.exposeInt('valuePairsMeasured'),
+-    valuePairsExcluded: t.exposeInt('valuePairsExcluded'),
++    mean: t.exposeFloat('mean', { nullable: true }),
++    ciLow: t.exposeFloat('ciLow', { nullable: true }),
++    ciHigh: t.exposeFloat('ciHigh', { nullable: true }),
++    lowBandMean: t.exposeFloat('lowBandMean', { nullable: true }),
++    highBandMean: t.exposeFloat('highBandMean', { nullable: true }),
++    pairsMeasured: t.exposeInt('pairsMeasured'),
++    pairsPositive: t.exposeInt('pairsPositive'),
+   }),
+ });
+ 
+@@ -155,10 +157,8 @@ builder.objectType(PressureSensitivityValuePairRef, {
+     pairKey: t.exposeString('pairKey'),
+     ownToken: t.exposeString('ownToken'),
+     opponentToken: t.exposeString('opponentToken'),
+-    directionDelta: t.expose('directionDelta', { type: BandStatRef }),
+-    convictionDelta: t.expose('convictionDelta', { type: BandStatRef }),
+-    netScoreDelta: t.expose('netScoreDelta', { type: BandStatRef }),
+-    baselineWinRate: t.expose('baselineWinRate', { type: BaselineWinRateRef }),
++    winRateDelta: t.expose('winRateDelta', { type: WinRateDeltaRef }),
++    qualifyingTrials: t.exposeInt('qualifyingTrials'),
+     n: t.exposeInt('n'),
+     unscoredCount: t.exposeInt('unscoredCount'),
+     grid: t.expose('grid', { type: [SensitivityCellRef] }),
+@@ -172,7 +172,7 @@ builder.objectType(PressureSensitivityModelRef, {
+     modelId: t.exposeString('modelId'),
+     label: t.exposeString('label'),
+     providerName: t.exposeString('providerName'),
+-    aggregateSensitivity: t.expose('aggregateSensitivity', { type: AggregateSensitivityRef }),
++    winRateDeltaSummary: t.expose('winRateDeltaSummary', { type: WinRateDeltaSummaryRef }),
+     valuePairs: t.expose('valuePairs', { type: [PressureSensitivityValuePairRef] }),
+     unscoredCount: t.exposeInt('unscoredCount'),
+   }),
+@@ -199,7 +199,7 @@ builder.objectType(DirectionalSanityCheckEntryRef, {
+   fields: (t) => ({
+     modelId: t.exposeString('modelId'),
+     pairKey: t.exposeString('pairKey'),
+-    directionDelta: t.exposeFloat('directionDelta'),
++    winRateDelta: t.exposeFloat('winRateDelta'),
+     classification: t.exposeString('classification'),
+   }),
+ });
+@@ -222,5 +222,6 @@ builder.objectType(PressureSensitivityResultRef, {
+     excludedDefinitions: t.expose('excludedDefinitions', { type: [ExcludedDefinitionRef] }),
+     excludedScenariosCount: t.exposeInt('excludedScenariosCount'),
+     directionalSanityCheck: t.expose('directionalSanityCheck', { type: DirectionalSanityCheckRef }),
++    transcriptCapHit: t.exposeBoolean('transcriptCapHit'),
+   }),
+ });
+diff --git a/cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts b/cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts
+index f0c58ed3..964255df 100644
+--- a/cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts
++++ b/cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts
+@@ -11,6 +11,8 @@ import type { AssignedOutcome } from './value-pair.js';
+ 
+ export type DecisionStrength = 'strong' | 'lean' | null;
+ 
++export const FLAT_DELTA_THRESHOLD = 0.02;
++
+ export type Observation = {
+   outcome: AssignedOutcome;
+   strength: DecisionStrength;
+@@ -19,6 +21,7 @@ export type Observation = {
+ export type CellMetrics = {
+   n: number;
+   unscoredCount: number;
++  successes: number;
+   winRate: number | null;
+   conviction: number | null;
+   netScore: number | null;
+@@ -30,30 +33,79 @@ export type Cell = CellMetrics & {
+   lowData: boolean;
+ };
+ 
+-export type DeltaTriplet = {
+-  directionDelta: number | null;
+-  convictionDelta: number | null;
+-  netScoreDelta: number | null;
+-  lowBandWinRate: number | null;
+-  highBandWinRate: number | null;
+-  lowBandConviction: number | null;
+-  highBandConviction: number | null;
+-  lowBandNetScore: number | null;
+-  highBandNetScore: number | null;
+-};
+-
+-export type BaselineWinRate = {
++export type WinRateDeltaResult = {
+   value: number | null;
+-  ceilingFloorFlag: 'ceiling' | 'floor' | null;
++  ciLow: number | null;
++  ciHigh: number | null;
++  lowBandMean: number | null;
++  highBandMean: number | null;
++  reason: 'low-band-thin' | 'high-band-thin' | 'both-bands-thin' | null;
++  qualifyingTrials: number;
+ };
+ 
+-export type AggregateSensitivity = {
+-  value: number | null;
+-  valuePairsMeasured: number;
++export type WinRateDeltaSummary = {
++  mean: number | null;
++  ciLow: number | null;
++  ciHigh: number | null;
++  lowBandMean: number | null;
++  highBandMean: number | null;
++  pairsMeasured: number;
++  pairsPositive: number;
+ };
+ 
+-const CEILING_THRESHOLD = 0.9;
+-const FLOOR_THRESHOLD = 0.1;
++const Z_95 = 1.96;
++const STUDENT_T_975 = [
++  12.706204736174694,
++  4.302652729749462,
++  3.182446305283708,
++  2.776445105197793,
++  2.570581835636315,
++  2.446911851144979,
++  2.364624251592784,
++  2.306004135204166,
++  2.262157162798205,
++  2.228138851986274,
++  2.200985160091638,
++  2.178812829667228,
++  2.160368656462791,
++  2.144786687917804,
++  2.131449545559776,
++  2.119905299221255,
++  2.109815577833316,
++  2.100922040241038,
++  2.093024054408309,
++  2.085963447265864,
++  2.07961384472768,
++  2.073873067904025,
++  2.068657610419049,
++  2.063898561628024,
++  2.059538552753298,
++  2.055529438642874,
++  2.051830516480285,
++  2.048407141795245,
++  2.045229642132704,
++  2.042272456301238,
++  2.039513446396408,
++  2.036933343460102,
++  2.034515297449338,
++  2.032244509317719,
++  2.030107928250342,
++  2.02809400098045,
++  2.026192463029109,
++  2.024394163911969,
++  2.022690920036761,
++  2.021075390306273,
++  2.019540970441376,
++  2.018081702818444,
++  2.016692199227824,
++  2.015367574443764,
++  2.014103388880846,
++  2.012895598919429,
++  2.011740513729765,
++  2.010634757624232,
++  2.009575237129239,
++  2.008559112100761,
++] as const;
+ 
+ /**
+  * Compute per-cell metrics from a list of observations.
+@@ -102,7 +154,7 @@ export function buildCellMetrics(observations: ReadonlyArray<Observation>): Cell
+   const n = ownPicked + opponentPicked + neutral;
+ 
+   if (n === 0) {
+-    return { n: 0, unscoredCount, winRate: null, conviction: null, netScore: null };
++    return { n: 0, unscoredCount, successes: 0, winRate: null, conviction: null, netScore: null };
+   }
+ 
+   const winRate = ownPicked / n;
+@@ -111,109 +163,322 @@ export function buildCellMetrics(observations: ReadonlyArray<Observation>): Cell
+     ownPicksWithStrength === 0 ? null : (2 * ownStrong + ownLean) / ownPicksWithStrength;
+   const netScore = (2 * ownStrong + ownLean - 2 * opponentStrong - opponentLean) / n;
+ 
+-  return { n, unscoredCount, winRate, conviction, netScore };
++  return { n, unscoredCount, successes: ownPicked, winRate, conviction, netScore };
++}
++
++function isFiniteNumber(value: unknown): value is number {
++  return typeof value === 'number' && Number.isFinite(value);
++}
++
++function clamp01(value: number): number {
++  if (value < 0) return 0;
++  if (value > 1) return 1;
++  return value;
+ }
+ 
+-function meanOrNull(values: ReadonlyArray<number>): number | null {
+-  if (values.length === 0) return null;
++function sumNumbers(values: ReadonlyArray<number>): number {
+   let sum = 0;
+   for (const v of values) sum += v;
+-  return sum / values.length;
++  return sum;
+ }
+ 
+-function nullableMean(values: ReadonlyArray<number | null>): number | null {
+-  const filtered: number[] = [];
+-  for (const v of values) {
+-    if (v !== null) filtered.push(v);
++function sampleStandardDeviation(values: ReadonlyArray<number>, mean: number): number {
++  if (values.length < 2) return 0;
++  let sumSquared = 0;
++  for (const value of values) {
++    const delta = value - mean;
++    sumSquared += delta * delta;
+   }
+-  return meanOrNull(filtered);
++  return Math.sqrt(sumSquared / (values.length - 1));
+ }
+ 
+-/**
+- * Reduce a (own × opponent) grid to three Δ values per FR-005.
+- *
+- * Low band: cells with `ownLevel <= 2`. High band: cells with `ownLevel >= 4`. Both bands must
+- * include at least one cell that meets the N >= minN threshold (FR-021); otherwise that band's
+- * mean — and therefore the Δ — is undefined.
+- *
+- * Direction Δ uses winRate; Conviction Δ uses conviction; netScore Δ uses netScore.
+- */
+-export function applyBandReduction(grid: ReadonlyArray<Cell>, minN: number): DeltaTriplet {
+-  const lowBandCells = grid.filter((c) => c.ownLevel <= 2 && c.n >= minN);
+-  const highBandCells = grid.filter((c) => c.ownLevel >= 4 && c.n >= minN);
+-
+-  const result: DeltaTriplet = {
+-    directionDelta: null,
+-    convictionDelta: null,
+-    netScoreDelta: null,
+-    lowBandWinRate: null,
+-    highBandWinRate: null,
+-    lowBandConviction: null,
+-    highBandConviction: null,
+-    lowBandNetScore: null,
+-    highBandNetScore: null,
+-  };
++function normalQuantile(p: number): number {
++  if (!(p > 0 && p < 1)) return Number.NaN;
++
++  const a = [
++    -39.69683028665376,
++    220.9460984245205,
++    -275.9285104469687,
++    138.357751867269,
++    -30.66479806614716,
++    2.506628277459239,
++  ] as const;
++  const b = [
++    -54.47609879822406,
++    161.5858368580409,
++    -155.6989798598866,
++    66.80131188771972,
++    -13.28068155288572,
++  ] as const;
++  const c = [
++    -0.007784894002430293,
++    -0.3223964580411365,
++    -2.400758277161838,
++    -2.549732539343734,
++    4.374664141464968,
++    2.938163982698783,
++  ] as const;
++  const d = [
++    0.007784695709041462,
++    0.3224671290700398,
++    2.445134137142996,
++    3.754408661907416,
++  ] as const;
++  const plow = 0.02425;
++  const phigh = 1 - plow;
+ 
+-  if (lowBandCells.length === 0 || highBandCells.length === 0) {
+-    return result;
++  if (p < plow) {
++    const q = Math.sqrt(-2 * Math.log(p));
++    return (
++      (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5])
++      / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1)
++    );
++  }
++  if (p > phigh) {
++    const q = Math.sqrt(-2 * Math.log(1 - p));
++    return -(
++      (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5])
++      / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1)
++    );
+   }
+ 
+-  result.lowBandWinRate = nullableMean(lowBandCells.map((c) => c.winRate));
+-  result.highBandWinRate = nullableMean(highBandCells.map((c) => c.winRate));
+-  result.lowBandConviction = nullableMean(lowBandCells.map((c) => c.conviction));
+-  result.highBandConviction = nullableMean(highBandCells.map((c) => c.conviction));
+-  result.lowBandNetScore = nullableMean(lowBandCells.map((c) => c.netScore));
+-  result.highBandNetScore = nullableMean(highBandCells.map((c) => c.netScore));
++  const q = p - 0.5;
++  const r = q * q;
++  return (
++    (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q
++  ) / (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1);
++}
+ 
+-  if (result.lowBandWinRate !== null && result.highBandWinRate !== null) {
+-    result.directionDelta = result.highBandWinRate - result.lowBandWinRate;
++function studentTQuantile(p: number, df: number): number {
++  if (!Number.isFinite(p) || !Number.isInteger(df) || df <= 0) return Number.NaN;
++  if (Math.abs(p - 0.975) < 1e-12 && df >= 1 && df <= STUDENT_T_975.length) {
++    return STUDENT_T_975[df - 1]!;
+   }
+-  if (result.lowBandConviction !== null && result.highBandConviction !== null) {
+-    result.convictionDelta = result.highBandConviction - result.lowBandConviction;
+-  }
+-  if (result.lowBandNetScore !== null && result.highBandNetScore !== null) {
+-    result.netScoreDelta = result.highBandNetScore - result.lowBandNetScore;
++
++  const z = normalQuantile(p);
++  if (!Number.isFinite(z)) return Number.NaN;
++  const v = df;
++  const z2 = z * z;
++  const z3 = z2 * z;
++  const z5 = z3 * z2;
++  const z7 = z5 * z2;
++  return z
++    + (z3 + z) / (4 * v)
++    + (5 * z5 + 16 * z3 + 3 * z) / (96 * v * v)
++    + (3 * z7 + 19 * z5 + 17 * z3 - 15 * z) / (384 * v * v * v);
++}
++
++function wilsonIntervalFromProportion(
++  proportion: number,
++  trials: number,
++  z: number,
++): { p: number; low: number; high: number } | null {
++  if (!Number.isFinite(proportion) || !Number.isFinite(trials) || !Number.isFinite(z)) return null;
++  if (trials <= 0 || proportion < 0 || proportion > 1 || z <= 0) return null;
++
++  const p = proportion;
++  const zSquared = z * z;
++  const denominator = 1 + zSquared / trials;
++  const center = (p + zSquared / (2 * trials)) / denominator;
++  const margin = (
++    z
++    * Math.sqrt((p * (1 - p) + zSquared / (4 * trials)) / trials)
++  ) / denominator;
++
++  return {
++    p,
++    low: clamp01(center - margin),
++    high: clamp01(center + margin),
++  };
++}
++
++export function wilsonInterval(
++  matches: number,
++  trials: number,
++  z = Z_95,
++): { p: number; low: number; high: number } | null {
++  if (
++    !Number.isFinite(matches)
++    || !Number.isFinite(trials)
++    || !Number.isFinite(z)
++    || !Number.isInteger(matches)
++    || !Number.isInteger(trials)
++    || matches < 0
++    || trials <= 0
++    || matches > trials
++  ) {
++    return null;
+   }
+ 
++  const result = wilsonIntervalFromProportion(matches / trials, trials, z);
++  if (result === null) return null;
++  if (matches === 0) result.low = 0;
++  if (matches === trials) result.high = 1;
+   return result;
+ }
+ 
+ /**
+- * Compute the baseline win rate at the lowest populated own-pressure level that meets minN
+- * (FR-006). Sets a ceiling flag if baseline >= 0.9, floor flag if <= 0.1 (FR-007).
++ * Compute Newcombe Method-10 confidence interval on the difference of two proportions.
++ *
++ * pHigh - pLow is the point estimate convention used by the pressure-sensitivity report.
+  */
+-export function computeBaselineWinRate(grid: ReadonlyArray<Cell>, minN: number): BaselineWinRate {
+-  for (let level = 1; level <= 5; level += 1) {
+-    const cells = grid.filter((c) => c.ownLevel === level && c.n >= minN);
+-    if (cells.length === 0) continue;
+-    const mean = nullableMean(cells.map((c) => c.winRate));
+-    if (mean === null) continue;
+-
+-    let flag: BaselineWinRate['ceilingFloorFlag'] = null;
+-    if (mean >= CEILING_THRESHOLD) flag = 'ceiling';
+-    else if (mean <= FLOOR_THRESHOLD) flag = 'floor';
+-
+-    return { value: mean, ceilingFloorFlag: flag };
++export function diffProportionCI(
++  pLow: number,
++  nLow: number,
++  pHigh: number,
++  nHigh: number,
++  z = Z_95,
++): { ciLow: number; ciHigh: number } | null {
++  if (
++    !Number.isFinite(pLow)
++    || !Number.isFinite(nLow)
++    || !Number.isFinite(pHigh)
++    || !Number.isFinite(nHigh)
++    || !Number.isFinite(z)
++    || pLow < 0
++    || pLow > 1
++    || pHigh < 0
++    || pHigh > 1
++    || nLow <= 0
++    || nHigh <= 0
++    || z <= 0
++  ) {
++    return null;
+   }
+ 
+-  return { value: null, ceilingFloorFlag: null };
++  const lowWilson = wilsonIntervalFromProportion(pLow, nLow, z);
++  const highWilson = wilsonIntervalFromProportion(pHigh, nHigh, z);
++  if (lowWilson === null || highWilson === null) return null;
++
++  const delta = pHigh - pLow;
++  const lowerRadius = Math.sqrt(
++    Math.max(0, (pHigh - highWilson.low) ** 2 + (lowWilson.high - pLow) ** 2),
++  );
++  const upperRadius = Math.sqrt(
++    Math.max(0, (highWilson.high - pHigh) ** 2 + (pLow - lowWilson.low) ** 2),
++  );
++
++  return {
++    ciLow: delta - lowerRadius,
++    ciHigh: delta + upperRadius,
++  };
+ }
+ 
+ /**
+- * Aggregate sensitivity per model = mean of |netScoreDelta| across pairs with a defined Δ
+- * (FR-008). Pairs with null Δ are excluded from both numerator and denominator.
++ * Compute a t-based CI over per-pair deltas.
+  */
+-export function aggregateSensitivity(
+-  perPair: ReadonlyArray<{ netScoreDelta: number | null }>,
+-): AggregateSensitivity {
+-  const measured: number[] = [];
+-  for (const p of perPair) {
+-    if (p.netScoreDelta !== null) measured.push(Math.abs(p.netScoreDelta));
++export function tBasedMeanCI(
++  values: ReadonlyArray<number>,
++  alpha = 0.05,
++): { mean: number | null; ciLow: number | null; ciHigh: number | null; n: number } {
++  const usable = values.filter(isFiniteNumber);
++  const n = usable.length;
++  if (n === 0) {
++    return { mean: null, ciLow: null, ciHigh: null, n: 0 };
+   }
+-  if (measured.length === 0) {
+-    return { value: null, valuePairsMeasured: 0 };
++
++  const mean = sumNumbers(usable) / n;
++  if (n < 2) {
++    return { mean, ciLow: null, ciHigh: null, n };
+   }
+-  let sum = 0;
+-  for (const v of measured) sum += v;
+-  return { value: sum / measured.length, valuePairsMeasured: measured.length };
++
++  if (!Number.isFinite(alpha) || alpha <= 0 || alpha >= 1) {
++    return { mean, ciLow: null, ciHigh: null, n };
++  }
++
++  const sd = sampleStandardDeviation(usable, mean);
++  const t = studentTQuantile(1 - alpha / 2, n - 1);
++  if (!Number.isFinite(t)) {
++    return { mean, ciLow: null, ciHigh: null, n };
++  }
++
++  const margin = t * sd / Math.sqrt(n);
++  return {
++    mean,
++    ciLow: mean - margin,
++    ciHigh: mean + margin,
++    n,
++  };
++}
++
++/**
++ * Reduce a (own × opponent) grid to a pooled win-rate delta per pair.
++ */
++export function pooledBandReduction(grid: ReadonlyArray<Cell>, minN: number): WinRateDeltaResult {
++  const lowBandCells = grid.filter((cell) => cell.ownLevel <= 2 && cell.n >= minN);
++  const highBandCells = grid.filter((cell) => cell.ownLevel >= 4 && cell.n >= minN);
++  const lowBandTrials = sumNumbers(lowBandCells.map((cell) => cell.n));
++  const highBandTrials = sumNumbers(highBandCells.map((cell) => cell.n));
++
++  if (lowBandCells.length === 0 && highBandCells.length === 0) {
++    return {
++      value: null,
++      ciLow: null,
++      ciHigh: null,
++      lowBandMean: null,
++      highBandMean: null,
++      reason: 'both-bands-thin',
++      qualifyingTrials: 0,
++    };
++  }
++
++  if (lowBandCells.length === 0) {
++    return {
++      value: null,
++      ciLow: null,
++      ciHigh: null,
++      lowBandMean: null,
++      highBandMean: null,
++      reason: 'low-band-thin',
++      qualifyingTrials: highBandTrials,
++    };
++  }
++
++  if (highBandCells.length === 0) {
++    return {
++      value: null,
++      ciLow: null,
++      ciHigh: null,
++      lowBandMean: null,
++      highBandMean: null,
++      reason: 'high-band-thin',
++      qualifyingTrials: lowBandTrials,
++    };
++  }
++
++  const lowBandSuccesses = sumNumbers(lowBandCells.map((cell) => cell.successes));
++  const highBandSuccesses = sumNumbers(highBandCells.map((cell) => cell.successes));
++  const lowBandMean = lowBandSuccesses / lowBandTrials;
++  const highBandMean = highBandSuccesses / highBandTrials;
++  const ci = diffProportionCI(lowBandMean, lowBandTrials, highBandMean, highBandTrials);
++
++  return {
++    value: highBandMean - lowBandMean,
++    ciLow: ci?.ciLow ?? null,
++    ciHigh: ci?.ciHigh ?? null,
++    lowBandMean,
++    highBandMean,
++    reason: null,
++    qualifyingTrials: lowBandTrials + highBandTrials,
++  };
++}
++
++export function summarizeWinRateDeltas(
++  perPairWinRateDeltas: ReadonlyArray<number>,
++  perPairLowBandRates: ReadonlyArray<number>,
++  perPairHighBandRates: ReadonlyArray<number>,
++): WinRateDeltaSummary {
++  const deltaStats = tBasedMeanCI(perPairWinRateDeltas);
++  const lowStats = tBasedMeanCI(perPairLowBandRates);
++  const highStats = tBasedMeanCI(perPairHighBandRates);
++
++  return {
++    mean: deltaStats.mean,
++    ciLow: deltaStats.ciLow,
++    ciHigh: deltaStats.ciHigh,
++    lowBandMean: lowStats.mean,
++    highBandMean: highStats.mean,
++    pairsMeasured: deltaStats.n,
++    pairsPositive: perPairWinRateDeltas.filter((delta) => delta > FLAT_DELTA_THRESHOLD).length,
++  };
+ }
+diff --git a/cloud/apps/web/schema.graphql b/cloud/apps/web/schema.graphql
+index d9cc98ca..95cfec7b 100644
+--- a/cloud/apps/web/schema.graphql
++++ b/cloud/apps/web/schema.graphql
+@@ -44,12 +44,6 @@ type AggregateMetadata {
+   sourceRunIds: [String!]!
+ }
+ 
+-type AggregateSensitivity {
+-  value: Float
+-  valuePairsExcluded: Int!
+-  valuePairsMeasured: Int!
+-}
+-
+ type AnalysisFolderCounts {
+   aggregateCount: Int!
+   aggregateTagCounts: [AnalysisFolderTagCount!]!
+@@ -249,17 +243,6 @@ type AvailableSignature {
+   signature: String!
+ }
+ 
+-type BandStat {
+-  highBandMean: Float
+-  lowBandMean: Float
+-  value: Float
+-}
+-
+-type BaselineWinRate {
+-  ceilingFloorFlag: String
+-  value: Float
+-}
+-
+ """Progress breakdown for a specific model"""
+ type ByModelProgress {
+   completed: Int!
+@@ -775,9 +758,9 @@ type DirectionalSanityCheck {
+ 
+ type DirectionalSanityCheckEntry {
+   classification: String!
+-  directionDelta: Float!
+   modelId: String!
+   pairKey: String!
++  winRateDelta: Float!
+ }
+ 
+ """A single domain used to group vignettes"""
+@@ -2055,12 +2038,12 @@ type PreferenceSummary {
+ }
+ 
+ type PressureSensitivityModel {
+-  aggregateSensitivity: AggregateSensitivity!
+   label: String!
+   modelId: String!
+   providerName: String!
+   unscoredCount: Int!
+   valuePairs: [PressureSensitivityValuePair!]!
++  winRateDeltaSummary: WinRateDeltaSummary!
+ }
+ 
+ type PressureSensitivityResult {
+@@ -2069,21 +2052,20 @@ type PressureSensitivityResult {
+   excludedScenariosCount: Int!
+   insufficient: [InsufficientPressureSensitivityModel!]!
+   models: [PressureSensitivityModel!]!
++  transcriptCapHit: Boolean!
+ }
+ 
+ type PressureSensitivityValuePair {
+-  baselineWinRate: BaselineWinRate!
+-  convictionDelta: BandStat!
+   definitionsExcluded: Int!
+   definitionsMeasured: Int!
+-  directionDelta: BandStat!
+   grid: [SensitivityCell!]!
+   n: Int!
+-  netScoreDelta: BandStat!
+   opponentToken: String!
+   ownToken: String!
+   pairKey: String!
++  qualifyingTrials: Int!
+   unscoredCount: Int!
++  winRateDelta: WinRateDelta!
+ }
+ 
+ """Result of a probe job execution"""
+@@ -3173,6 +3155,7 @@ type SensitivityCell {
+   netScore: Float
+   opponentLevel: Int!
+   ownLevel: Int!
++  successes: Int!
+   unscoredCount: Int!
+   winRate: Float
+ }
+@@ -3618,6 +3601,25 @@ enum VignettePairStatus {
+   UPDATED
+ }
+ 
++type WinRateDelta {
++  ciHigh: Float
++  ciLow: Float
++  highBandMean: Float
++  lowBandMean: Float
++  reason: String
++  value: Float
++}
++
++type WinRateDeltaSummary {
++  ciHigh: Float
++  ciLow: Float
++  highBandMean: Float
++  lowBandMean: Float
++  mean: Float
++  pairsMeasured: Int!
++  pairsPositive: Int!
++}
++
+ """Health status for Python workers"""
+ type WorkerHealth {
+   """API key configuration status by provider"""
