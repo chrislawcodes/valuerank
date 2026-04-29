@@ -4301,6 +4301,13 @@ export type DomainEvaluationsQueryVariables = Exact<{
 
 export type DomainEvaluationsQuery = { __typename?: 'Query', domainEvaluations: Array<{ __typename?: 'DomainEvaluation', id: string, domainId: string, domainNameAtLaunch: string, scopeCategory: string, status: string, createdAt: string, startedAt?: string | null, completedAt?: string | null, startedRuns: number, failedDefinitions: number, skippedForBudget: number, projectedCostUsd: number, models: Array<string>, temperature?: number | null, maxBudgetUsd?: number | null, memberCount: number, launchableDefinitionIds: Array<string>, samplePercentage?: number | null, samplesPerScenario?: number | null, targetBatchCount?: number | null }> };
 
+export type ActiveEvaluationsQueryVariables = Exact<{
+  domainId?: InputMaybe<Scalars['ID']['input']>;
+}>;
+
+
+export type ActiveEvaluationsQuery = { __typename?: 'Query', activeEvaluations: Array<{ __typename?: 'DomainEvaluation', id: string, domainId: string, domainNameAtLaunch: string, scopeCategory: string, status: string, createdAt: string, startedAt?: string | null, completedAt?: string | null, startedRuns: number, failedDefinitions: number, skippedForBudget: number, projectedCostUsd: number, models: Array<string>, temperature?: number | null, maxBudgetUsd?: number | null, memberCount: number, launchableDefinitionIds: Array<string>, samplePercentage?: number | null, samplesPerScenario?: number | null, targetBatchCount?: number | null, launchableDefinitions: Array<{ __typename?: 'DomainEvaluationLaunchableDefinition', definitionId: string, definitionName: string, pairKey?: string | null }>, members: Array<{ __typename?: 'DomainEvaluationMember', runId: string, definitionIdAtLaunch: string, definitionNameAtLaunch: string, domainIdAtLaunch: string, modelIds: Array<string>, createdAt: string, runStatus: string, runCategory: string, runStartedAt?: string | null, runCompletedAt?: string | null }> }> };
+
 export type DomainEvaluationQueryVariables = Exact<{
   id: Scalars['ID']['input'];
 }>;
@@ -6251,6 +6258,54 @@ export const DomainEvaluationsDocument = gql`
   }
 }
     `;
+
+export const ActiveEvaluationsDocument = gql`
+    query ActiveEvaluations($domainId: ID) {
+  activeEvaluations(domainId: $domainId) {
+    id
+    domainId
+    domainNameAtLaunch
+    scopeCategory
+    status
+    createdAt
+    startedAt
+    completedAt
+    startedRuns
+    failedDefinitions
+    skippedForBudget
+    projectedCostUsd
+    models
+    temperature
+    maxBudgetUsd
+    memberCount
+    launchableDefinitionIds
+    samplePercentage
+    samplesPerScenario
+    targetBatchCount
+    launchableDefinitions {
+      definitionId
+      definitionName
+      pairKey
+    }
+    members {
+      runId
+      definitionIdAtLaunch
+      definitionNameAtLaunch
+      domainIdAtLaunch
+      modelIds
+      createdAt
+      runStatus
+      runCategory
+      runStartedAt
+      runCompletedAt
+    }
+  }
+}
+    `;
+
+export function useActiveEvaluationsQuery(options?: Omit<Urql.UseQueryArgs<ActiveEvaluationsQueryVariables>, 'query'>) {
+  return Urql.useQuery<ActiveEvaluationsQuery, ActiveEvaluationsQueryVariables>({ query: ActiveEvaluationsDocument, ...options });
+};
 
 export function useDomainEvaluationsQuery(options: Omit<Urql.UseQueryArgs<DomainEvaluationsQueryVariables>, 'query'>) {
   return Urql.useQuery<DomainEvaluationsQuery, DomainEvaluationsQueryVariables>({ query: DomainEvaluationsDocument, ...options });
