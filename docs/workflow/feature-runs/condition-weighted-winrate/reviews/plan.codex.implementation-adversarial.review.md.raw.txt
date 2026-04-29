@@ -1,0 +1,10 @@
+## Findings
+- High: Step 12’s backfill idempotency check is wrong. It says to skip a row when `any` `perModel` entry has `conditionCount`, but Step 2’s design says a row is only fully backfilled when `every` entry has it. Using `any` will false-skip mixed-shape rows and leave some analyses permanently on the old math.
+- Medium [UNVERIFIED]: The rollout order can poison the fresh snapshot cache. The plan bumps `DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION` before the backfill, so any cache rebuild that happens during the backfill window can store stale or mixed old/new data under the new version and keep serving it after the backfill finishes.
+- Medium: Step 3 rounds each per-condition fraction to 6 decimals, but the test plan also demands `count.prioritized + count.deprioritized + count.neutral == conditionCount` within `1e-9`. Independent rounding of three fractions per value will not reliably preserve that conservation property and can bias downstream win-rate math.
+- Medium [UNVERIFIED]: The plan never defines the all-unscored case. If a model has conditions but no signed-distance scores, Step 3 will pass an empty `condition_means` list to `compute_model_summary`; if that helper does not already handle empty input, this path will fail or emit NaNs.
+
+## Residual Risks
+- Deleting `export-pairwise-outcomes` is a breaking removal for any external MCP consumer or ad hoc script that still calls it.
+- The verification checklist is internally inconsistent about skipped rows in the dry run, which makes rollout validation easy to misread.
+- The plan assumes the validator and cache layers already accept the new fractional count shape and optional `conditionCount`; if they do not, the code may compile but still fail at runtime.

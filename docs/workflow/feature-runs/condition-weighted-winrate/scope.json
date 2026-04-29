@@ -1,0 +1,15 @@
+{
+  "paths": [
+    "cloud/apps/api/src/mcp/tools/export-pairwise-outcomes.ts",
+    "cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts",
+    "cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx",
+    "cloud/workers/stats/basic_stats.py"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/api/src/mcp/tools/export-pairwise-outcomes.ts",
+    "cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts",
+    "cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx",
+    "cloud/workers/stats/basic_stats.py",
+    "docs/workflow/feature-runs/condition-weighted-winrate"
+  ]
+}

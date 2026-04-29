@@ -1,0 +1,69 @@
+{
+  "feature_slug": "condition-weighted-winrate",
+  "stage": "spec",
+  "artifact_path": "docs/workflow/feature-runs/condition-weighted-winrate/spec.md",
+  "git_base_ref": "",
+  "allowed_dirty_paths": [],
+  "required_reviews": [
+    {
+      "reviewer": "codex",
+      "lens": "feasibility-adversarial",
+      "stage": "spec",
+      "path": "docs/workflow/feature-runs/condition-weighted-winrate/reviews/spec.codex.feasibility-adversarial.review.md",
+      "context_paths": [
+        "cloud/apps/api/src/services/circumplex/aggregation.ts",
+        "cloud/apps/api/src/graphql/queries/models-confidence.ts",
+        "cloud/workers/stats/basic_stats.py",
+        "cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts",
+        "cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts",
+        "cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts",
+        "cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx",
+        "cloud/apps/api/src/mcp/tools/export-pairwise-outcomes.ts",
+        "cloud/apps/api/tests/mcp/tools/export-pairwise-outcomes.test.ts",
+        "cloud/workers/analyze_basic_aggregation.py"
+      ],
+      "model": "gpt-5.4-mini"
+    },
+    {
+      "reviewer": "codex",
+      "lens": "edge-cases-adversarial",
+      "stage": "spec",
+      "path": "docs/workflow/feature-runs/condition-weighted-winrate/reviews/spec.codex.edge-cases-adversarial.review.md",
+      "context_paths": [
+        "cloud/apps/api/src/services/circumplex/aggregation.ts",
+        "cloud/apps/api/src/graphql/queries/models-confidence.ts",
+        "cloud/workers/stats/basic_stats.py",
+        "cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts",
+        "cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts",
+        "cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts",
+        "cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx",
+        "cloud/apps/api/src/mcp/tools/export-pairwise-outcomes.ts",
+        "cloud/apps/api/tests/mcp/tools/export-pairwise-outcomes.test.ts",
+        "cloud/workers/analyze_basic_aggregation.py"
+      ],
+      "model": "gpt-5.4-mini"
+    },
+    {
+      "reviewer": "gemini",
+      "lens": "requirements-adversarial",
+      "stage": "spec",
+      "path": "docs/workflow/feature-runs/condition-weighted-winrate/reviews/spec.gemini.requirements-adversarial.review.md",
+      "context_paths": [
+        "cloud/apps/api/src/services/circumplex/aggregation.ts",
+        "cloud/apps/api/src/graphql/queries/models-confidence.ts",
+        "cloud/workers/stats/basic_stats.py",
+        "cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts",
+        "cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts",
+        "cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts",
+        "cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx",
+        "cloud/apps/api/src/mcp/tools/export-pairwise-outcomes.ts",
+        "cloud/apps/api/tests/mcp/tools/export-pairwise-outcomes.test.ts",
+        "cloud/workers/analyze_basic_aggregation.py"
+      ],
+      "model": "gemini-2.5-pro"
+    }
+  ],
+  "max_artifact_chars": 50000,
+  "max_context_chars": 60000,
+  "max_total_chars": 250000
+}

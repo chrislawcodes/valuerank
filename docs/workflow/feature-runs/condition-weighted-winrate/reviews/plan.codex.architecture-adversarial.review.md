@@ -1,0 +1,44 @@
+---
+reviewer: "codex"
+lens: "architecture-adversarial"
+stage: "plan"
+artifact_path: "docs/workflow/feature-runs/condition-weighted-winrate/plan.md"
+artifact_sha256: "3542adcf056b225cae8475f4611bed1a6fa4692821c8fee0f8d5ccf8c7664fac"
+repo_root: "."
+git_head_sha: "d0a9b73555aebe903a25a4bc3f3e1863d9d2dfba"
+git_base_ref: "origin/main"
+git_base_sha: "d0a9b73555aebe903a25a4bc3f3e1863d9d2dfba"
+generation_method: "codex-runner"
+resolution_status: "open"
+resolution_note: ""
+raw_output_path: "docs/workflow/feature-runs/condition-weighted-winrate/reviews/plan.codex.architecture-adversarial.review.md.raw.txt"
+narrowed_artifact_path: ""
+narrowed_artifact_sha256: ""
+coverage_status: "full"
+coverage_note: ""
+---
+
+# Review: plan architecture-adversarial
+
+## Findings
+
+- **High**: Step 12’s backfill idempotency check contradicts Decision 2 and will skip partially migrated rows forever. The decision says a record is fully backfilled only if **every** `perModel` entry has `conditionCount`, but Step 12 says to skip if **any** value has the key. A mixed-shape record would be treated as done even though some models are still legacy, which breaks resumability and leaves the corpus inconsistent.
+- **Medium**: The plan silently collapses all transcripts missing `scenarioId` into a single `"unknown"` condition. That is an architectural footgun because unrelated malformed data will be merged into one synthetic condition and can distort both the per-condition vote counts and the overall summary. If missing `scenarioId` is a real input case, it should be isolated or rejected, not pooled.
+- **Medium [UNVERIFIED]**: Deleting `export-pairwise-outcomes` is a breaking API contract change with no compatibility path. Auto-deregistration only removes it from discovery; any cached clients, scripts, tests, or external integrations that call it directly will fail immediately. I cannot verify from the plan alone that this tool is strictly internal, so this is an assumption-dependent risk.
+- **Medium**: Removing the `SMALL_SAMPLE` and `MODERATE_SAMPLE` warnings without adding a replacement guardrail weakens the architecture. The system will still produce outputs for low-support analyses, but it will no longer signal that those outputs are unstable. That shifts the failure mode from “warn loudly” to “look normal,” which is a regression in safety and interpretability.
+
+## Residual Risks
+
+- The plan assumes the `conditionCount` field and the fractional `count` shape are accepted everywhere that reads `AnalysisResult.output`; if any consumer path was missed, the rollout will produce validation or display failures.
+- The cache version bump only covers the domain snapshot cache described in the plan. If there are other derived caches, materialized views, or memoized layers, stale pre-backfill data may still leak through.
+- Equal-weight rollups across runs are only correct if the intended semantic is truly “one vote per run after per-run condition weighting.” If any downstream metric was meant to remain condition-weighted across runs, the new aggregation will still bias results.
+- The backfill assumes re-running historical analyses is safe and deterministic. If the worker code depends on changing upstream state, timestamps, or non-deterministic inputs, historical outputs may drift even after the math fix.
+
+## Runner Stats
+- total_input=0
+- total_output=0
+- total_tokens=0
+
+## Resolution
+- status: open
+- note: 

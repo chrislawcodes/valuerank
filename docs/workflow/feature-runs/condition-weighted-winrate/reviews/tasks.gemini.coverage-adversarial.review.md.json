@@ -1,0 +1,57 @@
+{
+  "session_id": "ef9f521e-4600-4caf-84a5-adb6902c1a4b",
+  "response": "## Findings\n\n| Severity | Finding | Evidence |\n| :--- | :--- | :--- |\n| **HIGH** | Statistical validity warnings are removed without being replaced by a more appropriate metric, creating a risk of misinterpretation. | [CODE-CONFIRMED] |\n| **MEDIUM** | The backfill script uses an insufficient check to identify already-migrated analyses, risking incomplete backfills. | [UNVERIFIED] |\n| **LOW** | The new `conditionCount` metric is calculated in Python but is not consumed by the frontend, which continues to rely on transcript `sampleSize` or unweighted averages. | [UNVERIFIED] |\n| **LOW** | Core utility `compute_win_rate` is repurposed to accept `float` inputs that represent summed fractions, while its existing tests and design assume integer counts. | [CODE-CONFIRMED] |\n\n### **1. Statistical warnings removed without replacement**\n\n**Severity**: HIGH\n**Finding**: Tasks T004 and T006 explicitly remove the `SMALL_SAMPLE` and `MODERATE_SAMPLE` warnings from `analyze_basic_aggregation.py`. These warnings, while previously based on transcript count, served as a crucial guard against over-interpreting results from small datasets. The change to condition-weighted win rates means the effective sample size is now the number of unique scenarios (conditions), which is often much smaller than the transcript count. By removing the warnings entirely instead of adapting them to use the new `conditionCount` metric (added in T002), the system will no longer alert users when statistical conclusions are drawn from a dangerously small number of data points (e.g., 2 or 3 unique scenarios). This creates a significant risk of users lending undue confidence to statistically weak findings.\n**Evidence**: `[CODE-CONFIRMED]`\n-   `tasks.md` (T004): \"Remove `SMALL_SAMPLE` and `MODERATE_SAMPLE` warning blocks from `generate_warnings`\".\n-   `tasks.md` (T006): \"assert the warning codes list does NOT contain `SMALL_SAMPLE` or `MODERATE_SAMPLE`\".\n-   `cloud/workers/analyze_basic_aggregation.py`: The `generate_warnings` function contains the warning blocks that are slated for removal. No task in the plan describes adding a replacement warning based on the number of conditions.\n\n### **2. Insufficient check in backfill script**\n\n**Severity**: MEDIUM\n**Finding**: Task T017 describes a backfill script where the check to see if an analysis has already been migrated (`hasConditionWeightedShape`) is defined as \"returns true if ALL `perModel` entries have `conditionCount`\". This is a weak condition. The more fundamental and important change is that the `ValueCounts` are now floats, not integers. A scenario could exist where an analysis was partially backfilled or is in another intermediate state where `conditionCount` exists but the values are still integers. Relying solely on the presence of one new field to determine migration status is brittle and could cause the backfill to incorrectly skip analyses that need to be recomputed.\n**Evidence**: `[UNVERIFIED]`\n-   `tasks.md` (T017): The logic for the check is described, but the code for the new backfill script is not provided. The finding is based on the described logic.\n\n### **3. `conditionCount` metric is not consumed by frontend**\n\n**Severity**: LOW\n**Finding**: Task T002 adds a `conditionCount` field to the `ModelStats` output from the Python worker. This represents the number of unique scenarios, which is the new effective sample size for overall statistics. However, none of the TypeScript tasks (T007-T013) involve consuming this new field. Instead, the frontend aggregation logic is being changed to use a simple weight of `1` for each analysis run (T007, T009), effectively ignoring both the old `sampleSize` (transcript count) and the new `conditionCount`. The new, more meaningful metric is computed and then immediately discarded, indicating a missed opportunity to improve the accuracy of frontend aggregations or display more relevant metadata to the user.\n**Evidence**: `[UNVERIFIED]`\n-   `tasks.md` (T002, T007, T009): The tasks describe adding the field in Python and changing weighting logic in TypeScript without referencing the new field.\n-   `cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts`: The logic in `aggregateAnalysesLogic` is modified by T007 to use a weight of 1, and does not read or use a `conditionCount` field.\n\n### **4. Mismatch between utility function design and new usage**\n\n**Severity**: LOW\n**Finding**: The `compute_win_rate` function in `basic_stats.py` is designed to operate on integer counts of outcomes (`prioritized`, `deprioritized`, `neutral`). The existing unit tests in `test_basic_stats.py` confirm this by using integer inputs. However, T001 and T003 change the upstream logic so that this function will now receive floats representing summed fractional counts from different conditions. While Python's dynamic typing allows this to execute, it represents a deviation from the function's original, clear contract. It makes the code harder to reason about and could introduce subtle floating-point precision issues that the original integer-based tests were not designed to catch. The new tests planned in T005 are intended to cover this new behavior, but the implicit signature change remains a code quality concern.\n**Evidence**: `[CODE-CONFIRMED]`\n-   `cloud/workers/stats/basic_stats.py`: `compute_win_rate` takes integer-like variable names.\n-   `cloud/workers/stats/tests/test_basic_stats.py`: Existing tests all use integer inputs.\n-   `tasks.md` (T001, T003): These tasks describe changing the data into floats before it reaches `compute_win_rate`.\n\n## Residual Risks\n\n-   **User Misinterpretation**: Even with all tasks completed, the primary residual risk is that users will misinterpret the statistical significance of the analysis. The removal of sample size warnings is the main driver of this risk. Users may see a high win-rate and not realize it's based on only two or three unique scenarios, leading them to believe a model's preference is more stable than it is.\n-   **Incomplete Aggregation Logic**: The frontend aggregation logic is being simplified to \"equal weight per run\" rather than being updated to use a more statistically sound weighting method (e.g., using the number of conditions). This means if one analysis run in an aggregate covers 100 conditions and another covers 10, they will be treated as equally important. This could skew the aggregate view.\n-   **Backfill Failures**: If the backfill script (T017) is not robust, some historical analyses may not be updated correctly, leading to inconsistent data and behavior in the UI depending on whether the user is viewing an old or a newly computed analysis. The reliance on a single field for the idempotency check is the main source of this risk.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 2,
+          "totalErrors": 1,
+          "totalLatencyMs": 94615
+        },
+        "tokens": {
+          "input": 5319,
+          "prompt": 76092,
+          "candidates": 1566,
+          "total": 81584,
+          "cached": 70773,
+          "thoughts": 3926,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 2,
+            "totalErrors": 1,
+            "totalLatencyMs": 94615,
+            "tokens": {
+              "input": 5319,
+              "prompt": 76092,
+              "candidates": 1566,
+              "total": 81584,
+              "cached": 70773,
+              "thoughts": 3926,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

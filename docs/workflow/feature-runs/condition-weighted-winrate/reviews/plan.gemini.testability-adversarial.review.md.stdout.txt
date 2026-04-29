@@ -1,0 +1,57 @@
+MCP issues detected. Run /mcp list for status.{
+  "session_id": "a34eb72f-ffa6-4061-b364-1e3d643363e1",
+  "response": "## Findings\n\n| Severity | Finding | Location |\n| :--- | :--- | :--- |\n| **HIGH** | **Untested Backfill Script** | Testing Plan |\n| The plan introduces a new, data-critical CLI script (`backfill-condition-weighted.ts`) but specifies no automated testing for it (unit, integration, or otherwise). The entire verification process relies on a manual `--dry-run` and post-hoc spot-checking, which is insufficient for a script that overwrites production data. Bugs in argument parsing (`--definition-id`), database interaction, pagination logic, or the idempotency check could lead to incorrect data migration, incomplete backfills, or crashes that are not caught by a simple dry run. |\n| **MEDIUM** | **[UNVERIFIED] Assumed Dead Code** | Architecture Decisions |\n| The plan asserts that `target.winRate` in `aggregate-logic.ts` is dead code and thus requires no change (Decision 4). This is a critical assumption. If this code is live, the multi-run aggregation will remain incorrect, as it will use the old trial-weighted `winRate` instead of the intended run-weighted average. This would silently undermine a core goal of the feature. An explicit test case must be added to prove this code path is unreachable or that its output is ignored. |\n| **MEDIUM** | **Vague Test Plan for API Aggregation Logic** | Testing Plan |\n| The testing plan for the updated TypeScript API aggregation (`aggregate.test.ts`) is too vague, stating only to \"update or add tests for equal-run pooling\". This is insufficient for ensuring correctness. The test plan should explicitly require adversarial scenarios, such as verifying that two runs with vastly different sample sizes (e.g., n=1 vs n=1000) contribute equally to the final `overall.mean` and `overall.stdDev` after the change. |\n| **MEDIUM** | **Brittle Idempotency Check Logic** | Architecture Decisions |\n| The backfill's idempotency check relies on `(output as any).perModel` having a `conditionCount` key on *every* entry. This logic is not robust against malformed data. If `output.perModel` is empty, `null`, or contains non-object entries, the check could crash the backfill script or incorrectly evaluate the condition. The test plan lacks cases for these data shapes. |\n| **LOW** | **[UNVERIFIED] Inconsistent Type Validation** | Implementation Steps |\n| The plan (Step 7) changes validation for `ValueCounts` from `isNonNegativeInteger` to `isNonNegativeNumber` but explicitly leaves the integer check for other count-related fields in the same file. This creates an inconsistent validation surface where some metrics are floats and others are integers, increasing the cognitive load for future developers and the risk of introducing subtle bugs if consumers of the data expect a consistent type. |\n| **LOW** | **[UNVERIFIED] Missing Adversarial Python Test Cases** | Testing Plan |\n| The Python test plan for `aggregate_transcripts_by_model` is good but misses key adversarial cases. It does not account for malformed transcript objects within the input list (e.g., `null`, not a dictionary) which could cause a runtime crash. It also assumes the input list is for a single model, but the function name implies it might handle multiple; this ambiguity is untested. |\n\n## Residual Risks\n\n| Severity | Risk | Mitigation / Comment |\n| :--- | :--- | :--- |\n| **HIGH** | **Operational Coupling Error** | Backfill Runbook |\n| The plan correctly identifies a critical deployment order: code must be deployed *before* the backfill runs to prevent writing new-shaped data that is then read by old-shaped cache logic. However, this is just a procedural note. There is no automated guardrail or check to prevent an operator from running these steps out of order. An out-of-order execution would lead to a period of serving stale analysis data from the cache until it is manually invalidated, undermining the integrity of the results presented to users. |\n| **MEDIUM** | **Large Blast Radius of Single PR** | Summary |\n| The entire change is planned as a single PR, touching Python workers, the Node/TS API, the React frontend, database migration scripts, and test suites for each. This creates a large blast radius, making review difficult and increasing the risk that an issue in one area (e.g., Python logic) will have unforeseen consequences in another (e.g., UI rendering). A single-PR deployment is also harder to roll back safely. Staging changes (e.g., backend logic, then backfill, then UI) would be safer. |\n| **LOW** | **Precision Loss with Floating Point Counts** | Implementation Steps |\n| The plan moves from integer counts to floating-point fractions. While rounding is mentioned, floating-point arithmetic can introduce small precision errors. The test plan's invariant check (`within 1e-9`) is a good practice, but there is a residual risk that downstream consumers of this data (e.g., other parts of the UI, future analytics) might perform comparisons assuming integer precision, leading to subtle off-by-one or equality check bugs. |",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 3,
+          "totalErrors": 2,
+          "totalLatencyMs": 41410
+        },
+        "tokens": {
+          "input": 16741,
+          "prompt": 16741,
+          "candidates": 1124,
+          "total": 19710,
+          "cached": 0,
+          "thoughts": 1845,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 3,
+            "totalErrors": 2,
+            "totalLatencyMs": 41410,
+            "tokens": {
+              "input": 16741,
+              "prompt": 16741,
+              "candidates": 1124,
+              "total": 19710,
+              "cached": 0,
+              "thoughts": 1845,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}
