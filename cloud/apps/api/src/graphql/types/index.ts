@@ -28,6 +28,7 @@ import './probe-result.js';
 // Model types
 import './available-model.js';
 import './models-analysis.js';
+import './models-confidence.js';
 import './models-consistency.js';
 import './pressure-sensitivity.js';
 import './circumplex.js';

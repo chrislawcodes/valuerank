@@ -22,6 +22,7 @@ import { DomainValueShiftHeatmap } from './pages/DomainValueShiftHeatmap';
 import { ModelsConsistency } from './pages/ModelsConsistency';
 import { PressureSensitivity } from './pages/PressureSensitivity';
 import { ModelsCircumplex } from './pages/ModelsCircumplex';
+import { ModelsConfidence } from './pages/ModelsConfidence';
 import { DefinitionDetail } from './pages/DefinitionDetail';
 import { StartPairedBatchPage } from './pages/DefinitionDetail/StartPairedBatchPage';
 import { Runs } from './pages/Runs';
@@ -213,6 +214,14 @@ function App() {
               element={
                 <ProtectedLayout>
                   <ModelsCircumplex />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/models/confidence"
+              element={
+                <ProtectedLayout>
+                  <ModelsConfidence />
                 </ProtectedLayout>
               }
             />
