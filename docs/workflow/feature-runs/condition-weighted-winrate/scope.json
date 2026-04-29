@@ -1,12 +1,10 @@
 {
   "paths": [
     "cloud/apps/api/src/cli/backfill-condition-weighted.ts",
-    "cloud/apps/api/src/mcp/tools/export-pairwise-outcomes.ts",
     "cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts",
     "cloud/apps/api/src/services/analysis/aggregate/contracts.ts",
     "cloud/apps/api/src/services/analysis/domain-analysis-cache-types.ts",
     "cloud/apps/api/tests/cli/backfill-condition-weighted.test.ts",
-    "cloud/apps/api/tests/mcp/tools/export-pairwise-outcomes.test.ts",
     "cloud/apps/api/tests/services/analysis/aggregate.test.ts",
     "cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts",
     "cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts",
@@ -20,12 +18,10 @@
   ],
   "allowed_dirty_paths": [
     "cloud/apps/api/src/cli/backfill-condition-weighted.ts",
-    "cloud/apps/api/src/mcp/tools/export-pairwise-outcomes.ts",
     "cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts",
     "cloud/apps/api/src/services/analysis/aggregate/contracts.ts",
     "cloud/apps/api/src/services/analysis/domain-analysis-cache-types.ts",
     "cloud/apps/api/tests/cli/backfill-condition-weighted.test.ts",
-    "cloud/apps/api/tests/mcp/tools/export-pairwise-outcomes.test.ts",
     "cloud/apps/api/tests/services/analysis/aggregate.test.ts",
     "cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts",
     "cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts",
