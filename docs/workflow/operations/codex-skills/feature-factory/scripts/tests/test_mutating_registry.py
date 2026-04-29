@@ -51,6 +51,7 @@ EXPECTED_SUBCOMMANDS = {
     "closeout",
     "review-extract",
     "check-isolation",
+    "analyze-reviews",
 }
 
 EXPECTED_MUTATING = {
@@ -70,7 +71,7 @@ EXPECTED_MUTATING = {
     "parallel",
 }
 
-EXPECTED_READONLY = {"status", "doctor", "review-extract", "check-isolation"}
+EXPECTED_READONLY = {"status", "doctor", "review-extract", "check-isolation", "analyze-reviews"}
 
 
 def _assert_registry_is_classified(parser: argparse.ArgumentParser) -> None:
@@ -114,6 +115,7 @@ class MutatingRegistryTests(unittest.TestCase):
         self.assertEqual(getattr(RUN_FACTORY.command_doctor, "__ff_readonly_command__"), "doctor")
         self.assertEqual(getattr(RUN_FACTORY.command_review_extract, "__ff_readonly_command__"), "review-extract")
         self.assertEqual(getattr(RUN_FACTORY.command_check_workflow_isolation, "__ff_readonly_command__"), "check-isolation")
+        self.assertEqual(getattr(RUN_FACTORY.command_analyze_reviews, "__ff_readonly_command__"), "analyze-reviews")
 
     def test_fake_undecorated_handler_fails_with_subcommand_name(self) -> None:
         parser = argparse.ArgumentParser()

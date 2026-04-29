@@ -105,6 +105,7 @@ from factory_mutating import (  # noqa: E402
     enumerate_subparser_handlers,
     mutates_state,
 )
+from factory_cmd_analyze_reviews import command_analyze_reviews  # noqa: E402
 from factory_stages import stage_manifest_state  # noqa: E402  (re-imported for invariant check)
 from workflow_utils import resolve_stored_path  # noqa: E402
 
@@ -503,6 +504,14 @@ def build_parser() -> argparse.ArgumentParser:
     isolation_group.add_argument("--check", action="store_true")
     check_isolation_parser.add_argument("--baseline", type=Path)
     check_isolation_parser.set_defaults(func=command_check_workflow_isolation)
+
+    analyze_reviews_parser = subparsers.add_parser(
+        "analyze-reviews",
+        help="Aggregate FF review and judge telemetry into a markdown report",
+    )
+    analyze_reviews_parser.add_argument("--out")
+    analyze_reviews_parser.add_argument("--top-n", type=int, default=20)
+    analyze_reviews_parser.set_defaults(func=command_analyze_reviews)
 
     return parser
 
