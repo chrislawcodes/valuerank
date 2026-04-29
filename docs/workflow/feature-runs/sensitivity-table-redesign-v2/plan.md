@@ -22,6 +22,9 @@ Replace v1 `Win rate Delta` with v2 `Pressure response`.
 - review: reviews/plan.codex.architecture-adversarial.review.md | status: accepted | note: Accepted into final plan and tasks. The contradictory legacy-field compatibility path was removed; v2 pressure-sensitivity SDL now explicitly removes legacy sensitivity, audit, and orientation fields.
 - review: reviews/plan.gemini.testability-adversarial.review.md | status: accepted | note: Accepted into final plan and tasks. Added verification for legacy exclusion removal, Trials audit copy, overlapping exclusion precedence, no-measured-pairs footer behavior, and signed accessible labels.
 - review: reviews/tasks.codex.execution-adversarial.review.md | status: accepted | note: Accepted after marker-format repair. Tasks checkpoint passed with Slice A/B/C marker lines recognized by the runner.
+- review: reviews/diff.codex.correctness-adversarial.review.md | status: accepted | note: HIGH (unreachable exclusion buckets) accepted as defense-in-depth; MEDIUM (surviving pool rate dropped) fixed in Slice A amendment; LOW findings noted.
+- review: reviews/diff.codex.regression-adversarial.review.md | status: accepted | note: HIGH (unreachable exclusion buckets) accepted as defense-in-depth; MEDIUM (both rates nulled when one pool is thin) fixed in Slice A amendment.
+- review: reviews/diff.gemini.quality-adversarial.review.md | status: accepted | note: HIGH (missing exclusion-bucket tests) fixed in Slice A amendment; MEDIUM (missing canonicalization test) fixed in Slice A amendment.
 
 ## Technical Context
 

@@ -201,6 +201,11 @@ function totalPressureConditionExclusions(
   );
 }
 
+/** Exported for testing the defense-in-depth exclusion paths (SC-010). */
+export function emptyPressureConditionExclusionBreakdownForTest(): PressureConditionExclusionBreakdown {
+  return emptyPressureConditionExclusionBreakdown();
+}
+
 export async function fetchTranscriptsFromSourceRuns(
   sourceRunIds: ReadonlyArray<string>,
   rosterModelIds: ReadonlyArray<string>,

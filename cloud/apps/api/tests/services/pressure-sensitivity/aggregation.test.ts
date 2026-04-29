@@ -186,7 +186,7 @@ describe('pooledDirectionalReduction', () => {
     expect(result.qualifyingTrials).toBe(78);
   });
 
-  it('marks the directional pool as thin when no directional cell meets the threshold', () => {
+  it('marks the directional pool as thin but still returns the surviving mirror rate', () => {
     const grid: Cell[] = [
       cell({ ownLevel: 4, opponentLevel: 1, n: 1, successes: 0, lowData: true }),
       cell({ ownLevel: 1, opponentLevel: 4, n: 5, successes: 2, lowData: false }),
@@ -200,13 +200,13 @@ describe('pooledDirectionalReduction', () => {
       ciHigh: null,
       baselineRate: null,
       pushTowardFirstRate: null,
-      pushTowardSecondRate: null,
+      pushTowardSecondRate: 2 / 5,
       reason: 'directional-thin',
       qualifyingTrials: 5,
     });
   });
 
-  it('marks the mirror pool as thin when no mirror cell meets the threshold', () => {
+  it('marks the mirror pool as thin but still returns the surviving directional rate', () => {
     const grid: Cell[] = [
       cell({ ownLevel: 4, opponentLevel: 1, n: 5, successes: 4, lowData: false }),
     ];
@@ -218,7 +218,7 @@ describe('pooledDirectionalReduction', () => {
       ciLow: null,
       ciHigh: null,
       baselineRate: null,
-      pushTowardFirstRate: null,
+      pushTowardFirstRate: 4 / 5,
       pushTowardSecondRate: null,
       reason: 'inverted-thin',
       qualifyingTrials: 5,

@@ -1090,6 +1090,54 @@
       "agent_id": null,
       "artifact_sha_at_time": "5d8712c3b19f3906622e9603b03011778292b399362f15f3c0d961256fb253d3",
       "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-29T18:12:46.928683Z",
+      "started_at": "2026-04-29T18:09:46.915489Z",
+      "ended_at": "2026-04-29T18:12:46.928683Z",
+      "duration_seconds": 180.011791,
+      "agent_id": null,
+      "artifact_sha_at_time": "5110e22f8e30e8a0cb731f6cea64c94b8ba5b3f5fffec20bcb4bd42629579845",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-29T18:15:15.497299Z",
+      "started_at": "2026-04-29T18:12:47.100091Z",
+      "ended_at": "2026-04-29T18:15:15.497299Z",
+      "duration_seconds": 148.396035,
+      "agent_id": null,
+      "artifact_sha_at_time": "5110e22f8e30e8a0cb731f6cea64c94b8ba5b3f5fffec20bcb4bd42629579845",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "diff",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-29T18:18:00.978432Z",
+      "started_at": "2026-04-29T18:15:15.686710Z",
+      "ended_at": "2026-04-29T18:18:00.978432Z",
+      "duration_seconds": 165.290392,
+      "agent_id": null,
+      "artifact_sha_at_time": "5110e22f8e30e8a0cb731f6cea64c94b8ba5b3f5fffec20bcb4bd42629579845",
+      "parse_error": "no Gemini token stats found in stdout"
     }
   ],
   "command_telemetry": [
@@ -1428,6 +1476,18 @@
       "files_written": 7,
       "subprocess_invocations": 14,
       "ttl_crossed": true
+    },
+    {
+      "command": "checkpoint",
+      "stage": "diff",
+      "ts": "2026-04-29T18:18:01Z",
+      "wall_seconds": 494.617,
+      "input_bytes_read": 611662,
+      "output_bytes_written": 276303,
+      "files_read": 12,
+      "files_written": 7,
+      "subprocess_invocations": 14,
+      "ttl_crossed": true
     }
   ],
   "last_successful_checkpoint_flags": {
@@ -1528,7 +1588,8 @@
       "unresolved_concerns": [],
       "adversarial_sha_history": [
         "61276015d3e288bec7edee81dba4d047e6bbcdbf22bd2897af5217cb2b9507e1",
-        "5d8712c3b19f3906622e9603b03011778292b399362f15f3c0d961256fb253d3"
+        "5d8712c3b19f3906622e9603b03011778292b399362f15f3c0d961256fb253d3",
+        "5110e22f8e30e8a0cb731f6cea64c94b8ba5b3f5fffec20bcb4bd42629579845"
       ],
       "initial_sha": "61276015d3e288bec7edee81dba4d047e6bbcdbf22bd2897af5217cb2b9507e1"
     }

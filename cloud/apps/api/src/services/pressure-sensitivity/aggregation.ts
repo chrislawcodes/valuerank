@@ -429,6 +429,8 @@ export function pooledDirectionalReduction(
   const qualifyingTrials = directionalTrials + mirrorTrials + baselineTrials;
   const baselineSuccesses = sumNumbers(baselineCells.map((cell) => cell.successes));
   const baselineRate = baselineTrials === 0 ? null : baselineSuccesses / baselineTrials;
+  const directionalSuccesses = sumNumbers(directionalCells.map((cell) => cell.successes));
+  const mirrorSuccesses = sumNumbers(mirrorCells.map((cell) => cell.successes));
 
   const thin = directionalCells.length === 0 || mirrorCells.length === 0;
   if (thin) {
@@ -443,15 +445,13 @@ export function pooledDirectionalReduction(
       ciLow: null,
       ciHigh: null,
       baselineRate,
-      pushTowardFirstRate: null,
-      pushTowardSecondRate: null,
+      pushTowardFirstRate: directionalTrials > 0 ? directionalSuccesses / directionalTrials : null,
+      pushTowardSecondRate: mirrorTrials > 0 ? mirrorSuccesses / mirrorTrials : null,
       reason,
       qualifyingTrials,
     };
   }
 
-  const directionalSuccesses = sumNumbers(directionalCells.map((cell) => cell.successes));
-  const mirrorSuccesses = sumNumbers(mirrorCells.map((cell) => cell.successes));
   const pushTowardFirstRate = directionalSuccesses / directionalTrials;
   const pushTowardSecondRate = mirrorSuccesses / mirrorTrials;
   const ci = diffProportionCI(
