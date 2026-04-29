@@ -122,10 +122,10 @@ function buildValueCounts(
   }
 
   const firstStats = isRecord(byValue[firstValueKey])
-    ? (byValue[firstValueKey] as Record<string, unknown>)
+    ? byValue[firstValueKey]
     : null;
   const secondStats = isRecord(byValue[secondValueKey])
-    ? (byValue[secondValueKey] as Record<string, unknown>)
+    ? byValue[secondValueKey]
     : null;
   const firstCount = isRecord(firstStats?.count) ? firstStats.count : null;
   const secondCount = isRecord(secondStats?.count) ? secondStats.count : null;

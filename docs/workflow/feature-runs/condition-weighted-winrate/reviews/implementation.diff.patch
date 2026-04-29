@@ -1,0 +1,1865 @@
+diff --git a/cloud/apps/api/src/cli/backfill-condition-weighted.ts b/cloud/apps/api/src/cli/backfill-condition-weighted.ts
+new file mode 100644
+index 00000000..216179b7
+--- /dev/null
++++ b/cloud/apps/api/src/cli/backfill-condition-weighted.ts
+@@ -0,0 +1,328 @@
++#!/usr/bin/env tsx
++
++import { fileURLToPath } from 'url';
++import { db } from '@valuerank/db';
++import { createLogger } from '@valuerank/shared';
++import { prepareAggregateRunSnapshot } from '../services/analysis/aggregate/aggregate-run-workflow.js';
++import { updateAggregateRun } from '../services/analysis/aggregate.js';
++import { zRunConfig } from '../services/analysis/aggregate/contracts.js';
++
++const log = createLogger('cli:backfill-condition-weighted');
++const BATCH_SIZE = 50;
++const SAMPLE_LIMIT = 5;
++
++type CliOptions = {
++  dryRun: boolean;
++  force: boolean;
++  definitionId: string | null;
++  domainId: string | null;
++};
++
++type BackfillRow = {
++  id: string;
++  runId: string;
++  output: unknown;
++  run: {
++    definitionId: string;
++    config: unknown;
++    definition: {
++      domainId: string | null;
++    } | null;
++  };
++};
++
++type WinRateChange = {
++  analysisId: string;
++  runId: string;
++  modelId: string;
++  valueId: string;
++  before: number | null;
++  after: number | null;
++};
++
++function readOptionValue(argv: string[], flag: string): string | null {
++  const direct = argv.find((arg) => arg.startsWith(`${flag}=`));
++  if (direct != null) {
++    const value = direct.slice(flag.length + 1).trim();
++    return value === '' ? null : value;
++  }
++
++  const index = argv.indexOf(flag);
++  if (index === -1) return null;
++  const value = argv[index + 1];
++  if (value == null || value.startsWith('--')) return null;
++  return value.trim() === '' ? null : value;
++}
++
++export function parseOptions(argv: string[]): CliOptions {
++  return {
++    dryRun: argv.includes('--dry-run'),
++    force: argv.includes('--force'),
++    definitionId: readOptionValue(argv, '--definition-id'),
++    domainId: readOptionValue(argv, '--domain-id'),
++  };
++}
++
++function isRecord(value: unknown): value is Record<string, unknown> {
++  return value !== null && typeof value === 'object' && !Array.isArray(value);
++}
++
++function hasConditionWeightedShape(output: unknown): boolean {
++  if (!isRecord(output)) return false;
++  const perModel = output.perModel;
++  if (!isRecord(perModel)) return false;
++
++  const modelEntries = Object.values(perModel);
++  if (modelEntries.length === 0) return false;
++
++  return modelEntries.every((entry) => {
++    if (!isRecord(entry)) return false;
++    return Object.prototype.hasOwnProperty.call(entry, 'conditionCount');
++  });
++}
++
++function parseSelection(config: unknown): {
++  preambleVersionId: string | null;
++  definitionVersion: number | null;
++  temperature: number | null;
++} | null {
++  const parsed = zRunConfig.safeParse(config);
++  if (!parsed.success) return null;
++
++  const snapshot = parsed.data.definitionSnapshot;
++  const meta = isRecord(snapshot) && isRecord(snapshot._meta) ? snapshot._meta : null;
++  const rawDefinitionVersion = meta == null ? undefined : meta.definitionVersion;
++
++  const preambleVersionId =
++    meta != null && typeof meta.preambleVersionId === 'string' && meta.preambleVersionId.trim() !== ''
++      ? meta.preambleVersionId
++      : null;
++  const definitionVersion =
++    typeof rawDefinitionVersion === 'number' && Number.isFinite(rawDefinitionVersion)
++      ? rawDefinitionVersion
++      : typeof rawDefinitionVersion === 'string' && rawDefinitionVersion.trim() !== '' && Number.isFinite(Number(rawDefinitionVersion))
++        ? Number(rawDefinitionVersion)
++        : null;
++  const temperature = typeof parsed.data.temperature === 'number' && Number.isFinite(parsed.data.temperature)
++    ? parsed.data.temperature
++    : null;
++
++  return {
++    preambleVersionId,
++    definitionVersion,
++    temperature,
++  };
++}
++
++function normalizeWinRate(value: unknown): number | null {
++  if (typeof value !== 'number' || !Number.isFinite(value)) {
++    return null;
++  }
++  return Number(value.toFixed(6));
++}
++
++function collectWinRateChanges(
++  row: BackfillRow,
++  before: unknown,
++  after: unknown,
++  limit: number,
++): WinRateChange[] {
++  if (limit <= 0) return [];
++  if (!isRecord(before) || !isRecord(after)) return [];
++
++  const beforePerModel = isRecord(before.perModel) ? before.perModel : null;
++  const afterPerModel = isRecord(after.perModel) ? after.perModel : null;
++  if (!beforePerModel || !afterPerModel) return [];
++
++  const changes: WinRateChange[] = [];
++  const modelIds = new Set([...Object.keys(beforePerModel), ...Object.keys(afterPerModel)]);
++
++  for (const modelId of [...modelIds].sort()) {
++    const beforeModel = beforePerModel[modelId];
++    const afterModel = afterPerModel[modelId];
++    if (!isRecord(beforeModel) || !isRecord(afterModel)) continue;
++
++    const beforeValues = isRecord(beforeModel.values) ? beforeModel.values : null;
++    const afterValues = isRecord(afterModel.values) ? afterModel.values : null;
++    if (!beforeValues || !afterValues) continue;
++
++    const valueIds = new Set([...Object.keys(beforeValues), ...Object.keys(afterValues)]);
++    for (const valueId of [...valueIds].sort()) {
++      const beforeStats = isRecord(beforeValues[valueId]) ? beforeValues[valueId] : null;
++      const afterStats = isRecord(afterValues[valueId]) ? afterValues[valueId] : null;
++      const beforeWinRate = normalizeWinRate(beforeStats?.winRate);
++      const afterWinRate = normalizeWinRate(afterStats?.winRate);
++      if (beforeWinRate === afterWinRate) continue;
++
++      changes.push({
++        analysisId: row.id,
++        runId: row.runId,
++        modelId,
++        valueId,
++        before: beforeWinRate,
++        after: afterWinRate,
++      });
++      if (changes.length >= limit) return changes;
++    }
++  }
++
++  return changes;
++}
++
++export async function runBackfill(options: CliOptions): Promise<{
++  inspected: number;
++  upgraded: number;
++  skipped: number;
++  failed: number;
++  failedRowIds: string[];
++  sampledChanges: WinRateChange[];
++}> {
++  let inspected = 0;
++  let upgraded = 0;
++  let skipped = 0;
++  let failed = 0;
++  const failedRowIds: string[] = [];
++  const sampledChanges: WinRateChange[] = [];
++
++  let cursor: string | undefined;
++  let hasNextPage = true;
++
++  while (hasNextPage) {
++    const runWhere = {
++      ...(options.definitionId != null ? { definitionId: options.definitionId } : {}),
++      ...(options.domainId != null ? { definition: { domainId: options.domainId } } : {}),
++    };
++
++    const rows: BackfillRow[] = await db.analysisResult.findMany({
++      where: {
++        analysisType: 'AGGREGATE',
++        status: 'CURRENT',
++        ...(Object.keys(runWhere).length > 0 ? { run: runWhere } : {}),
++      },
++      select: {
++        id: true,
++        runId: true,
++        output: true,
++        run: {
++          select: {
++            definitionId: true,
++            config: true,
++            definition: {
++              select: {
++                domainId: true,
++              },
++            },
++          },
++        },
++      },
++      orderBy: { id: 'asc' },
++      take: BATCH_SIZE,
++      ...(cursor != null ? { cursor: { id: cursor }, skip: 1 } : {}),
++    });
++
++    if (rows.length === 0) {
++      break;
++    }
++
++    for (const row of rows) {
++      inspected += 1;
++
++      if (!options.force && hasConditionWeightedShape(row.output)) {
++        skipped += 1;
++        log.info({ analysisId: row.id, runId: row.runId }, 'backfill-condition-weighted:skipped');
++        continue;
++      }
++
++      const selection = parseSelection(row.run.config);
++      if (selection == null) {
++        failed += 1;
++        failedRowIds.push(row.id);
++        log.error({ analysisId: row.id, runId: row.runId }, 'backfill-condition-weighted:failed (malformed config)');
++        continue;
++      }
++
++      if (options.dryRun) {
++        const prepared = await prepareAggregateRunSnapshot(
++          row.run.definitionId,
++          selection.preambleVersionId,
++          selection.definitionVersion,
++          selection.temperature,
++        );
++        if (prepared == null) {
++          failed += 1;
++          failedRowIds.push(row.id);
++          log.error({ analysisId: row.id, runId: row.runId }, 'backfill-condition-weighted:failed (preview unavailable)');
++          continue;
++        }
++
++        const remainingSampleSlots = SAMPLE_LIMIT - sampledChanges.length;
++        const preview = collectWinRateChanges(row, row.output, prepared.aggregatedResult, remainingSampleSlots);
++        if (preview.length > 0) {
++          sampledChanges.push(...preview);
++        }
++
++        upgraded += 1;
++        log.info(
++          {
++            analysisId: row.id,
++            runId: row.runId,
++            definitionId: row.run.definitionId,
++            sampledChanges: preview,
++          },
++          'backfill-condition-weighted:would-upgrade',
++        );
++        continue;
++      }
++
++      try {
++        await updateAggregateRun(
++          row.run.definitionId,
++          selection.preambleVersionId,
++          selection.definitionVersion,
++          selection.temperature,
++        );
++        upgraded += 1;
++        log.info({ analysisId: row.id, runId: row.runId, definitionId: row.run.definitionId }, 'backfill-condition-weighted:upgraded');
++      } catch (error) {
++        failed += 1;
++        failedRowIds.push(row.id);
++        log.error({ analysisId: row.id, runId: row.runId, err: error }, 'backfill-condition-weighted:failed');
++      }
++    }
++
++    cursor = rows[rows.length - 1]?.id;
++    hasNextPage = rows.length === BATCH_SIZE && cursor != null;
++  }
++
++  return { inspected, upgraded, skipped, failed, failedRowIds, sampledChanges };
++}
++
++async function main(): Promise<void> {
++  const options = parseOptions(process.argv.slice(2));
++  log.info(
++    {
++      dryRun: options.dryRun,
++      definitionId: options.definitionId,
++      domainId: options.domainId,
++    },
++    'Starting condition-weighted backfill',
++  );
++
++  const summary = await runBackfill(options);
++
++  if (options.dryRun && summary.sampledChanges.length > 0) {
++    log.info({ sampledChanges: summary.sampledChanges }, 'backfill-condition-weighted:dry-run-samples');
++  }
++
++  log.info(summary, 'Condition-weighted backfill complete');
++  if (summary.failedRowIds.length > 0) {
++    log.error({ failedRowIds: summary.failedRowIds }, 'Some aggregate rows failed to backfill');
++  }
++}
++
++if (process.argv[1] === fileURLToPath(import.meta.url)) {
++  main().catch((error: unknown) => {
++    log.error({ err: error }, 'Fatal error');
++    process.exit(1);
++  });
++}
+diff --git a/cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts b/cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts
+index 7c4eee77..2b550468 100644
+--- a/cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts
++++ b/cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts
+@@ -72,6 +72,22 @@ export function aggregateAnalysesLogic(
+   const aggregatedPerModel: Record<string, ModelStats> = {};
+   const decisionStats: Record<string, CanonicalDecisionStats> = {};
+   const valueAggregateStats: Record<string, ValueAggregateStats> = {};
++  const conditionIdsByModel: Record<string, Set<string>> = {};
++
++  transcripts.forEach((rawTranscript) => {
++    const transcript = rawTranscript as DecisionAwareAggregateTranscript;
++    if (
++      transcript.modelId == null ||
++      transcript.modelId === '' ||
++      transcript.scenarioId == null ||
++      transcript.scenarioId === ''
++    ) {
++      return;
++    }
++
++    const conditionIds = conditionIdsByModel[transcript.modelId] ??= new Set<string>();
++    conditionIds.add(transcript.scenarioId);
++  });
+ 
+   modelIds.forEach((modelId) => {
+     const validAnalyses = analyses.filter((analysis) => Boolean(analysis.perModel[modelId]));
+@@ -173,7 +189,7 @@ export function aggregateAnalysesLogic(
+       };
+     });
+ 
+-    // Aggregate overall stats from source runs using sample-weighted pooling
++    // Aggregate overall stats from source runs using equal-run pooling.
+     const overallMeans: number[] = [];
+     const overallWeights: number[] = [];
+     let overallMin = Infinity;
+@@ -186,7 +202,7 @@ export function aggregateAnalysesLogic(
+       if (n <= 0) return;
+       if (!Number.isFinite(stats.overall.mean) || !Number.isFinite(stats.overall.stdDev)) return;
+       overallMeans.push(stats.overall.mean);
+-      overallWeights.push(n);
++      overallWeights.push(1);
+       if (Number.isFinite(stats.overall.min) && stats.overall.min < overallMin) overallMin = stats.overall.min;
+       if (Number.isFinite(stats.overall.max) && stats.overall.max > overallMax) overallMax = stats.overall.max;
+     });
+@@ -194,9 +210,10 @@ export function aggregateAnalysesLogic(
+     let pooledMean = 0;
+     let pooledStdDev = 0;
+     const totalWeight = overallWeights.reduce((s, w) => s + w, 0);
++    const conditionCount = conditionIdsByModel[modelId]?.size;
+ 
+     if (totalWeight > 0 && overallMeans.length > 0) {
+-      // Sample-weighted mean
++      // Equal-weight mean across source runs.
+       pooledMean = overallMeans.reduce((s, m, i) => s + m * overallWeights[i]!, 0) / totalWeight;
+ 
+       // Pooled stdDev: combine within-run variance + between-run variance of means
+@@ -207,7 +224,7 @@ export function aggregateAnalysesLogic(
+         const n = stats.sampleSize ?? 0;
+         if (n <= 0) return;
+         if (!Number.isFinite(stats.overall.mean) || !Number.isFinite(stats.overall.stdDev)) return;
+-        const w = n / totalWeight;
++        const w = 1 / overallMeans.length;
+         // Within-run variance contribution
+         pooledVariance += w * (stats.overall.stdDev * stats.overall.stdDev);
+         // Between-run mean deviation contribution
+@@ -218,6 +235,7 @@ export function aggregateAnalysesLogic(
+ 
+     aggregatedPerModel[modelId] = {
+       sampleSize: totalModelSamples,
++      ...(conditionCount != null ? { conditionCount } : {}),
+       values: aggregatedValues,
+       overall: {
+         mean: pooledMean,
+diff --git a/cloud/apps/api/src/services/analysis/aggregate/contracts.ts b/cloud/apps/api/src/services/analysis/aggregate/contracts.ts
+index 9ad82b18..70d93bfa 100644
+--- a/cloud/apps/api/src/services/analysis/aggregate/contracts.ts
++++ b/cloud/apps/api/src/services/analysis/aggregate/contracts.ts
+@@ -31,6 +31,7 @@ export const zValueStats = z.object({
+ 
+ export const zModelStats = z.object({
+   sampleSize: z.number().optional(),
++  conditionCount: z.number().int().nonnegative().optional(),
+   values: z.record(zValueStats).optional(),
+   overall: z.object({
+     mean: z.number(),
+diff --git a/cloud/apps/api/src/services/analysis/domain-analysis-cache-types.ts b/cloud/apps/api/src/services/analysis/domain-analysis-cache-types.ts
+index ce87cdd3..91bd5606 100644
+--- a/cloud/apps/api/src/services/analysis/domain-analysis-cache-types.ts
++++ b/cloud/apps/api/src/services/analysis/domain-analysis-cache-types.ts
+@@ -17,7 +17,7 @@ export type DomainAnalysisCacheStatus =
+   (typeof DOMAIN_ANALYSIS_CACHE_STATUS)[keyof typeof DOMAIN_ANALYSIS_CACHE_STATUS];
+ 
+ export const DOMAIN_ANALYSIS_SNAPSHOT_TYPE = 'domain_overview';
+-export const DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION = '1.4.0';
++export const DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION = '1.5.0';
+ export const DOMAIN_ANALYSIS_ASSUMPTION_PREFIX = 'domain-analysis';
+ export const DOMAIN_ANALYSIS_NONE_SIGNATURE = '__none__';
+ 
+diff --git a/cloud/apps/api/tests/cli/backfill-condition-weighted.test.ts b/cloud/apps/api/tests/cli/backfill-condition-weighted.test.ts
+new file mode 100644
+index 00000000..f1d5f719
+--- /dev/null
++++ b/cloud/apps/api/tests/cli/backfill-condition-weighted.test.ts
+@@ -0,0 +1,357 @@
++import { beforeEach, describe, expect, it, vi } from 'vitest';
++
++vi.mock('@valuerank/db', () => ({
++  db: {
++    analysisResult: {
++      findMany: vi.fn(),
++    },
++  },
++}));
++
++vi.mock('@valuerank/shared', async (importOriginal) => {
++  const actual = await importOriginal<typeof import('@valuerank/shared')>();
++  return {
++    ...actual,
++    createLogger: () => ({
++      debug: vi.fn(),
++      info: vi.fn(),
++      warn: vi.fn(),
++      error: vi.fn(),
++    }),
++  };
++});
++
++vi.mock('../../src/services/analysis/aggregate.js', () => ({
++  updateAggregateRun: vi.fn(),
++}));
++
++vi.mock('../../src/services/analysis/aggregate/aggregate-run-workflow.js', () => ({
++  prepareAggregateRunSnapshot: vi.fn(),
++}));
++
++import { db } from '@valuerank/db';
++import { updateAggregateRun } from '../../src/services/analysis/aggregate.js';
++import { prepareAggregateRunSnapshot } from '../../src/services/analysis/aggregate/aggregate-run-workflow.js';
++import { parseOptions, runBackfill } from '../../src/cli/backfill-condition-weighted.js';
++
++function buildAnalysisOutput(overrides?: {
++  withConditionCount?: boolean;
++}): Record<string, unknown> & {
++  perModel: Record<string, Record<string, unknown>>;
++} {
++  const withConditionCount = overrides?.withConditionCount ?? true;
++
++  return {
++    perModel: {
++      'gpt-4': {
++        sampleSize: 10,
++        ...(withConditionCount ? { conditionCount: 4 } : {}),
++        values: {
++          Achievement: {
++            winRate: 0.76,
++            count: {
++              prioritized: 3.8,
++              deprioritized: 1.2,
++              neutral: 0,
++            },
++          },
++        },
++        overall: {
++          mean: 0.5,
++          stdDev: 0.1,
++          min: 0.4,
++          max: 0.6,
++        },
++      },
++      'claude-3': {
++        sampleSize: 10,
++        ...(withConditionCount ? { conditionCount: 4 } : {}),
++        values: {
++          Achievement: {
++            winRate: 0.64,
++            count: {
++              prioritized: 2.56,
++              deprioritized: 1.44,
++              neutral: 0,
++            },
++          },
++        },
++        overall: {
++          mean: 0.4,
++          stdDev: 0.2,
++          min: 0.1,
++          max: 0.8,
++        },
++      },
++    },
++    preferenceSummary: {
++      perModel: {
++        'gpt-4': {
++          preferenceDirection: {
++            byValue: {
++              Achievement: {
++                winRate: 0.76,
++                count: {
++                  prioritized: 3.8,
++                  deprioritized: 1.2,
++                  neutral: 0,
++                },
++              },
++            },
++            overallLean: 'A',
++            overallSignedCenter: 0.5,
++          },
++          preferenceStrength: 1.2,
++        },
++        'claude-3': {
++          preferenceDirection: {
++            byValue: {
++              Achievement: {
++                winRate: 0.64,
++                count: {
++                  prioritized: 2.56,
++                  deprioritized: 1.44,
++                  neutral: 0,
++                },
++              },
++            },
++            overallLean: 'B',
++            overallSignedCenter: -0.4,
++          },
++          preferenceStrength: 0.9,
++        },
++      },
++    },
++    reliabilitySummary: {
++      perModel: {
++        'gpt-4': {
++          baselineNoise: 0.2,
++          baselineReliability: 0.9,
++          directionalAgreement: 0.85,
++          neutralShare: 0.1,
++          coverageCount: 4,
++          uniqueScenarios: 4,
++        },
++        'claude-3': {
++          baselineNoise: 0.3,
++          baselineReliability: 0.8,
++          directionalAgreement: 0.75,
++          neutralShare: 0.2,
++          coverageCount: 4,
++          uniqueScenarios: 4,
++        },
++      },
++    },
++    aggregateMetadata: null,
++    modelAgreement: {
++      pairwise: {},
++      outlierModels: [],
++      overallAgreement: 0.5,
++    },
++    visualizationData: {
++      decisionDistribution: {
++        'gpt-4': { opponentStrongly: 0, opponentSomewhat: 0, neutral: 0, somewhat: 0, strongly: 10 },
++        'claude-3': { opponentStrongly: 0, opponentSomewhat: 0, neutral: 0, somewhat: 4, strongly: 6 },
++      },
++      modelScenarioMatrix: {
++        'gpt-4': { 'condition-1': 0.5 },
++        'claude-3': { 'condition-1': -0.4 },
++      },
++      scenarioDimensions: {
++        'condition-1': { stakes: 1 },
++      },
++    },
++    varianceAnalysis: null,
++    mostContestedScenarios: [],
++    methodsUsed: {
++      modelComparison: 'spearman_rho',
++      pValueCorrection: 'holm_bonferroni',
++      effectSize: 'cohens_d',
++      dimensionTest: 'kruskal_wallis',
++      alpha: 0.05,
++      codeVersion: '1.5.0',
++    },
++    warnings: [],
++    computedAt: '2026-04-29T00:00:00.000Z',
++    durationMs: 1,
++  };
++}
++
++describe('backfill condition-weighted cli', () => {
++  beforeEach(() => {
++    vi.resetAllMocks();
++  });
++
++  it('parses dry-run and filter arguments', () => {
++    expect(
++      parseOptions(['--dry-run', '--definition-id', 'definition-1', '--domain-id=domain-2']),
++    ).toEqual({
++      dryRun: true,
++      force: false,
++      definitionId: 'definition-1',
++      domainId: 'domain-2',
++    });
++  });
++
++  it('skips rows that already have conditionCount on every model', async () => {
++    vi.mocked(db.analysisResult.findMany)
++      .mockResolvedValueOnce([
++        {
++          id: 'analysis-1',
++          runId: 'run-1',
++          output: buildAnalysisOutput({ withConditionCount: true }),
++          run: {
++            definitionId: 'definition-1',
++            config: {
++              definitionSnapshot: { _meta: { preambleVersionId: 'pre-1', definitionVersion: 1 } },
++              temperature: 0.7,
++            },
++            definition: { domainId: 'domain-1' },
++          },
++        },
++      ])
++      .mockResolvedValueOnce([]);
++
++    const summary = await runBackfill({
++      dryRun: false,
++      definitionId: null,
++      domainId: null,
++    });
++
++    expect(summary).toEqual({
++      inspected: 1,
++      upgraded: 0,
++      skipped: 1,
++      failed: 0,
++      failedRowIds: [],
++      sampledChanges: [],
++    });
++    expect(updateAggregateRun).not.toHaveBeenCalled();
++  });
++
++  it('reruns rows when any model is still missing conditionCount and continues on failures', async () => {
++    vi.mocked(db.analysisResult.findMany)
++      .mockResolvedValueOnce([
++        {
++          id: 'analysis-1',
++          runId: 'run-1',
++          output: buildAnalysisOutput({ withConditionCount: false }),
++          run: {
++            definitionId: 'definition-1',
++            config: {
++              definitionSnapshot: { _meta: { preambleVersionId: 'pre-1', definitionVersion: 1 } },
++              temperature: 0.7,
++            },
++            definition: { domainId: 'domain-1' },
++          },
++        },
++        {
++          id: 'analysis-2',
++          runId: 'run-2',
++          output: buildAnalysisOutput({ withConditionCount: false }),
++          run: {
++            definitionId: 'definition-2',
++            config: {
++              definitionSnapshot: { _meta: { preambleVersionId: 'pre-2', definitionVersion: 2 } },
++              temperature: 0.5,
++            },
++            definition: { domainId: 'domain-2' },
++          },
++        },
++      ])
++      .mockResolvedValueOnce([]);
++
++    vi.mocked(updateAggregateRun)
++      .mockResolvedValueOnce(undefined)
++      .mockRejectedValueOnce(new Error('boom'));
++
++    const summary = await runBackfill({
++      dryRun: false,
++      definitionId: null,
++      domainId: null,
++    });
++
++    expect(updateAggregateRun).toHaveBeenCalledTimes(2);
++    expect(updateAggregateRun).toHaveBeenNthCalledWith(1, 'definition-1', 'pre-1', 1, 0.7);
++    expect(updateAggregateRun).toHaveBeenNthCalledWith(2, 'definition-2', 'pre-2', 2, 0.5);
++    expect(summary).toEqual({
++      inspected: 2,
++      upgraded: 1,
++      skipped: 0,
++      failed: 1,
++      failedRowIds: ['analysis-2'],
++      sampledChanges: [],
++    });
++  });
++
++  it('respects dry-run and selection filters', async () => {
++    const preview = buildAnalysisOutput({ withConditionCount: true });
++    const gpt4 = preview.perModel['gpt-4'];
++    const gpt4Values = gpt4.values as Record<string, unknown>;
++    const achievement = gpt4Values.Achievement as Record<string, unknown>;
++    achievement.winRate = 0.71;
++
++    vi.mocked(prepareAggregateRunSnapshot).mockResolvedValueOnce({
++      aggregatedResult: preview,
++    } as never);
++
++    vi.mocked(db.analysisResult.findMany)
++      .mockResolvedValueOnce([
++        {
++          id: 'analysis-3',
++          runId: 'run-3',
++          output: buildAnalysisOutput({ withConditionCount: false }),
++          run: {
++            definitionId: 'definition-3',
++            config: {
++              definitionSnapshot: { _meta: { preambleVersionId: 'pre-3', definitionVersion: 3 } },
++              temperature: 0.6,
++            },
++            definition: { domainId: 'domain-3' },
++          },
++        },
++      ])
++      .mockResolvedValueOnce([]);
++
++    const summary = await runBackfill({
++      dryRun: true,
++      definitionId: 'definition-3',
++      domainId: 'domain-3',
++    });
++
++    expect(summary).toEqual({
++      inspected: 1,
++      upgraded: 1,
++      skipped: 0,
++      failed: 0,
++      failedRowIds: [],
++      sampledChanges: [
++        {
++          analysisId: 'analysis-3',
++          runId: 'run-3',
++          modelId: 'gpt-4',
++          valueId: 'Achievement',
++          before: 0.76,
++          after: 0.71,
++        },
++      ],
++    });
++    expect(updateAggregateRun).not.toHaveBeenCalled();
++    expect(prepareAggregateRunSnapshot).toHaveBeenCalledWith('definition-3', 'pre-3', 3, 0.6);
++
++    expect(vi.mocked(db.analysisResult.findMany)).toHaveBeenCalledWith(
++      expect.objectContaining({
++        where: expect.objectContaining({
++          analysisType: 'AGGREGATE',
++          status: 'CURRENT',
++          run: expect.objectContaining({
++            definitionId: 'definition-3',
++            definition: expect.objectContaining({
++              domainId: 'domain-3',
++            }),
++          }),
++        }),
++      }),
++    );
++  });
++});
+diff --git a/cloud/apps/api/tests/services/analysis/aggregate.test.ts b/cloud/apps/api/tests/services/analysis/aggregate.test.ts
+index b61c3714..44a3a6ae 100644
+--- a/cloud/apps/api/tests/services/analysis/aggregate.test.ts
++++ b/cloud/apps/api/tests/services/analysis/aggregate.test.ts
+@@ -8,7 +8,10 @@ import {
+   spawnAggregateWorker,
+ } from '../../../src/services/analysis/aggregate/aggregate-run-workflow.js';
+ import { aggregateAnalysesLogic } from '../../../src/services/analysis/aggregate/aggregate-logic.js';
+-import type { AnalysisOutput } from '../../../src/services/analysis/aggregate/contracts.js';
++import type {
++  AggregateTranscriptInput,
++  AnalysisOutput,
++} from '../../../src/services/analysis/aggregate/contracts.js';
+ 
+ const { spawnPython } = vi.hoisted(() => ({
+   spawnPython: vi.fn(),
+@@ -37,6 +40,7 @@ function buildAnalysisOutput(
+       modelId,
+       {
+         sampleSize: modelScenarioMap[modelId]?.length ?? 0,
++        conditionCount: new Set(modelScenarioMap[modelId] ?? []).size,
+         values: {},
+         overall: { mean: 3, stdDev: 0.5, min: 1, max: 5 },
+       },
+@@ -937,14 +941,15 @@ describe('updateAggregateRun same-signature aggregate eligibility', () => {
+     expect(result.perModel['gpt-4']?.values.Achievement?.winRate).toBeCloseTo(0.2, 6);
+   });
+ 
+-  it('computes pooled overall stats from multiple source runs', () => {
++  it('computes pooled overall stats with equal run weights', () => {
+     const analyses: AnalysisOutput[] = [
+       {
+         perModel: {
+           'gpt-4': {
+             sampleSize: 10,
++            conditionCount: 25,
+             values: {},
+-            overall: { mean: 2, stdDev: 0.5, min: 1, max: 3 },
++            overall: { mean: 1, stdDev: 0.5, min: 1, max: 3 },
+           },
+         },
+         modelAgreement: {},
+@@ -952,9 +957,10 @@ describe('updateAggregateRun same-signature aggregate eligibility', () => {
+       {
+         perModel: {
+           'gpt-4': {
+-            sampleSize: 20,
++            sampleSize: 1,
++            conditionCount: 25,
+             values: {},
+-            overall: { mean: 4, stdDev: 0.8, min: 2, max: 5 },
++            overall: { mean: 5, stdDev: 0.5, min: 5, max: 5 },
+           },
+         },
+         modelAgreement: {},
+@@ -962,25 +968,29 @@ describe('updateAggregateRun same-signature aggregate eligibility', () => {
+     ];
+ 
+     const scenarios = [{ id: 's1', name: 'S1', content: { name: 'S1' } }];
++    const transcripts: AggregateTranscriptInput[] = Array.from({ length: 25 }, (_, index) => ({
++      modelId: 'gpt-4',
++      scenarioId: `condition-${index}`,
++      scenario: { orientationFlipped: false },
++    }));
+ 
+-    const result = aggregateAnalysesLogic(analyses, [], scenarios);
++    const result = aggregateAnalysesLogic(analyses, transcripts, scenarios);
+     const overall = result.perModel['gpt-4']?.overall;
+ 
+     expect(overall).toBeDefined();
+-    // Weighted mean: (2*10 + 4*20) / 30 = 100/30 ≈ 3.333
+-    expect(overall!.mean).toBeCloseTo(3.333, 2);
++    // Equal-run mean: (1 + 5) / 2 = 3.
++    expect(overall!.mean).toBeCloseTo(3, 6);
+     // min/max across sources
+     expect(overall!.min).toBe(1);
+     expect(overall!.max).toBe(5);
+     // stdDev should be positive and incorporate both within-run and between-run variance
+     expect(overall!.stdDev).toBeGreaterThan(0);
+-    // Pooled variance = w1*(σ1² + (μ1-μ̄)²) + w2*(σ2² + (μ2-μ̄)²)
+-    // = (10/30)*(0.25 + 1.778) + (20/30)*(0.64 + 0.444)
+-    // = 0.333*2.028 + 0.667*1.084 ≈ 0.676 + 0.723 = 1.399
+-    // stdDev = √1.399 ≈ 1.183
+-    expect(overall!.stdDev).toBeCloseTo(1.183, 2);
++    // Pooled variance = 0.5*(0.25 + 4) + 0.5*(0.25 + 4) = 4.25.
++    // stdDev = √4.25 ≈ 2.062.
++    expect(overall!.stdDev).toBeCloseTo(2.062, 3);
+     // Total sample size
+-    expect(result.perModel['gpt-4']?.sampleSize).toBe(30);
++    expect(result.perModel['gpt-4']?.sampleSize).toBe(11);
++    expect(result.perModel['gpt-4']?.conditionCount).toBe(25);
+   });
+ 
+   it('handles single source run overall stats correctly', () => {
+diff --git a/cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts b/cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts
+index a2f9b6aa..c2df2457 100644
+--- a/cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts
++++ b/cloud/apps/web/src/components/analysis-v2/analysisSemantics.preference.ts
+@@ -231,17 +231,17 @@ export function buildMergedPreferenceModel(
+   const overallSignedCenter = averageWeighted(
+     parsedModels
+       .filter(({ parsed }) => parsed.preferenceDirection.overallSignedCenter !== null)
+-      .map(({ analysis, parsed }) => ({
++      .map(({ parsed }) => ({
+         value: parsed.preferenceDirection.overallSignedCenter ?? 0,
+-        weight: analysis.perModel[modelId]?.sampleSize ?? 0,
++        weight: 1,
+       })),
+   );
+   const preferenceStrength = averageWeighted(
+     parsedModels
+       .filter(({ parsed }) => parsed.preferenceStrength !== null)
+-      .map(({ analysis, parsed }) => ({
++      .map(({ parsed }) => ({
+         value: parsed.preferenceStrength ?? 0,
+-        weight: analysis.perModel[modelId]?.sampleSize ?? 0,
++        weight: 1,
+       })),
+   );
+   const valueLists = deriveValueLists(mergedByValue, 0.5);
+diff --git a/cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts b/cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts
+index 65042a6d..5f874bff 100644
+--- a/cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts
++++ b/cloud/apps/web/src/components/analysis-v2/analysisSemantics.utils.ts
+@@ -150,9 +150,9 @@ export function parseRawPreferenceValueStats(value: unknown): RawPreferenceValue
+       return null;
+     }
+     if (
+-      !isNonNegativeInteger(count.prioritized)
+-      || !isNonNegativeInteger(count.deprioritized)
+-      || !isNonNegativeInteger(count.neutral)
++      !isNonNegativeNumber(count.prioritized)
++      || !isNonNegativeNumber(count.deprioritized)
++      || !isNonNegativeNumber(count.neutral)
+     ) {
+       return null;
+     }
+diff --git a/cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx b/cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx
+index 8280e2dc..b3503cf7 100644
+--- a/cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx
++++ b/cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx
+@@ -1,4 +1,4 @@
+-import { useRef, useState } from 'react';
++import { useRef } from 'react';
+ import { Info } from 'lucide-react';
+ import { Link } from 'react-router-dom';
+ import type { AnalysisResult } from '../../api/operations/analysis';
+@@ -68,46 +68,6 @@ function getDefinitionPairKey(run: Run): string | null {
+   return typeof value === 'string' && value.trim().length > 0 ? value : null;
+ }
+ 
+-function getPriorityCount(
+-  analysis: AnalysisResult | null,
+-  modelId: string,
+-  valueKey: string,
+-): number | null {
+-  const perModel = analysis?.preferenceSummary?.perModel;
+-  if (!isRecord(perModel)) return null;
+-  const model = perModel[modelId];
+-  if (!isRecord(model)) return null;
+-  const direction = model.preferenceDirection;
+-  if (!isRecord(direction)) return null;
+-  const byValue = direction.byValue;
+-  if (!isRecord(byValue)) return null;
+-  const stats = byValue[valueKey];
+-  if (!isRecord(stats)) return null;
+-  const count = stats.count;
+-  if (!isRecord(count)) return null;
+-  return typeof count.prioritized === 'number' ? count.prioritized : null;
+-}
+-
+-function getNeutralCount(
+-  analysis: AnalysisResult | null,
+-  modelId: string,
+-  valueKey: string,
+-): number | null {
+-  const perModel = analysis?.preferenceSummary?.perModel;
+-  if (!isRecord(perModel)) return null;
+-  const model = perModel[modelId];
+-  if (!isRecord(model)) return null;
+-  const direction = model.preferenceDirection;
+-  if (!isRecord(direction)) return null;
+-  const byValue = direction.byValue;
+-  if (!isRecord(byValue)) return null;
+-  const stats = byValue[valueKey];
+-  if (!isRecord(stats)) return null;
+-  const count = stats.count;
+-  if (!isRecord(count)) return null;
+-  return typeof count.neutral === 'number' ? count.neutral : null;
+-}
+-
+ function buildValueCounts(
+   analysis: AnalysisResult | null,
+   run: Run | null,
+@@ -144,9 +104,34 @@ function buildValueCounts(
+     return { first: null, neutral: null, second: null, total: null };
+   }
+ 
+-  const first = getPriorityCount(analysis, modelId, firstValueKey);
+-  const second = getPriorityCount(analysis, modelId, secondValueKey);
+-  const neutral = getNeutralCount(analysis, modelId, firstValueKey);
++  const perModel = analysis?.preferenceSummary?.perModel;
++  if (!isRecord(perModel)) {
++    return { first: null, neutral: null, second: null, total: null };
++  }
++  const model = perModel[modelId];
++  if (!isRecord(model)) {
++    return { first: null, neutral: null, second: null, total: null };
++  }
++  const direction = model.preferenceDirection;
++  if (!isRecord(direction)) {
++    return { first: null, neutral: null, second: null, total: null };
++  }
++  const byValue = direction.byValue;
++  if (!isRecord(byValue)) {
++    return { first: null, neutral: null, second: null, total: null };
++  }
++
++  const firstStats = isRecord(byValue[firstValueKey])
++    ? (byValue[firstValueKey] as Record<string, unknown>)
++    : null;
++  const secondStats = isRecord(byValue[secondValueKey])
++    ? (byValue[secondValueKey] as Record<string, unknown>)
++    : null;
++  const firstCount = isRecord(firstStats?.count) ? firstStats.count : null;
++  const secondCount = isRecord(secondStats?.count) ? secondStats.count : null;
++  const first = firstCount && typeof firstCount.prioritized === 'number' ? firstCount.prioritized : null;
++  const second = secondCount && typeof secondCount.prioritized === 'number' ? secondCount.prioritized : null;
++  const neutral = firstCount && typeof firstCount.neutral === 'number' ? firstCount.neutral : null;
+   const total = first != null && second != null
+     ? first + second + (neutral ?? 0)
+     : null;
+@@ -253,10 +238,6 @@ function formatPercent(value: number | null, total: number | null): string {
+   return Number.isInteger(rounded) ? `${rounded.toFixed(0)}%` : `${rounded.toFixed(1)}%`;
+ }
+ 
+-function formatCount(value: number | null): string {
+-  return value == null ? '—' : String(value);
+-}
+-
+ function formatSensitivity(value: number | null): string {
+   return value == null ? '—' : value.toFixed(2);
+ }
+@@ -469,12 +450,7 @@ export function PairedRunComparisonCard({
+   );
+   const firstValueLabel = labels.canonicalValues?.[0] ?? 'First value';
+   const secondValueLabel = labels.canonicalValues?.[1] ?? 'Second value';
+-  const aFirstGroupLabel = aFirstRun?.definition.name ?? labels.canonical ?? 'First order';
+-  const bFirstGroupLabel = bFirstRun?.definition.name ?? labels.flipped ?? 'Second order';
+   const comparisonRows = buildComparisonRows(aFirstRun, aFirstAnalysis, bFirstRun, bFirstAnalysis);
+-  const canonicalOrientationBucket = 'canonical';
+-  const flippedOrientationBucket = 'flipped';
+-  const [showOrderDetail, setShowOrderDetail] = useState(false);
+   const containerClass = embedded
+     ? 'space-y-4 rounded-lg border border-teal-200 bg-teal-50/40 p-4'
+     : 'space-y-4 rounded-xl border border-teal-200 bg-teal-50/60 p-4';
+@@ -485,7 +461,7 @@ export function PairedRunComparisonCard({
+         <div className="space-y-1">
+           <h2 className="text-sm font-semibold uppercase tracking-wide text-teal-900">Paired Run Comparison</h2>
+           <p className="text-sm text-teal-900/80">
+-            Paired mode keeps the blended summary first and lets you open the two value orders underneath when you want to compare them directly.
++            Paired mode keeps the blended summary first so you can compare both runs in one table.
+           </p>
+         </div>
+         <CopyVisualButton targetRef={comparisonRef} label="paired run comparison" />
+@@ -536,138 +512,38 @@ export function PairedRunComparisonCard({
+         </div>
+       ) : (
+         <div className="space-y-3">
+-          <div className="flex flex-wrap items-center justify-between gap-3">
+-            <p className="text-sm text-teal-900/80">
+-              Start with the blended summary, then turn on order detail if you want to inspect each vignette order separately.
+-            </p>
+-            <div className="inline-flex rounded-lg border border-teal-200 bg-white p-1">
+-              <Button
+-                type="button"
+-                variant={showOrderDetail ? 'ghost' : 'secondary'}
+-                size="sm"
+-                className={showOrderDetail
+-                  ? 'rounded-md border-0'
+-                  : 'rounded-md border-0 bg-teal-600 text-white hover:bg-teal-700 focus:ring-teal-500'}
+-                aria-pressed={!showOrderDetail}
+-                onClick={() => setShowOrderDetail(false)}
+-              >
+-                Blended
+-              </Button>
+-              <Button
+-                type="button"
+-                variant={showOrderDetail ? 'secondary' : 'ghost'}
+-                size="sm"
+-                className={showOrderDetail
+-                  ? 'rounded-md border-0 bg-teal-600 text-white hover:bg-teal-700 focus:ring-teal-500'
+-                  : 'rounded-md border-0'}
+-                aria-pressed={showOrderDetail}
+-                onClick={() => setShowOrderDetail(true)}
+-              >
+-                Order Detail
+-              </Button>
+-            </div>
+-          </div>
++          <p className="text-sm text-teal-900/80">
++            The table shows the blended summary for each model.
++          </p>
+           <div className="overflow-x-auto">
+             <table className="min-w-full border-collapse">
+               <thead>
+-                {showOrderDetail ? (
+-                  <>
+-                    <tr>
+-                      <th
+-                        rowSpan={2}
+-                        className="border border-teal-200 bg-white px-3 py-2 text-left text-xs font-semibold uppercase text-teal-700"
+-                      >
+-                        Model
+-                      </th>
+-                      <th
+-                        colSpan={5}
+-                        className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700"
+-                      >
+-                        Blended
+-                      </th>
+-                      <th
+-                        colSpan={3}
+-                        className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700"
+-                      >
+-                        {aFirstGroupLabel}
+-                      </th>
+-                      <th
+-                        colSpan={3}
+-                        className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700"
+-                      >
+-                        {bFirstGroupLabel}
+-                      </th>
+-                    </tr>
+-                    <tr>
+-                      <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
+-                        {firstValueLabel}
+-                      </th>
+-                      <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
+-                        Neutral
+-                      </th>
+-                      <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
+-                        {secondValueLabel}
+-                      </th>
+-                      <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
+-                        <SensitivityHeader
+-                          label={`${firstValueLabel} Sensitivity`}
+-                          valueLabel={firstValueLabel}
+-                        />
+-                      </th>
+-                      <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
+-                        <SensitivityHeader
+-                          label={`${secondValueLabel} Sensitivity`}
+-                          valueLabel={secondValueLabel}
+-                        />
+-                      </th>
+-                      <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
+-                        {firstValueLabel}
+-                      </th>
+-                      <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
+-                        Neutral
+-                      </th>
+-                      <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
+-                        {secondValueLabel}
+-                      </th>
+-                      <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
+-                        {firstValueLabel}
+-                      </th>
+-                      <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
+-                        Neutral
+-                      </th>
+-                      <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
+-                        {secondValueLabel}
+-                      </th>
+-                    </tr>
+-                  </>
+-                ) : (
+-                  <tr>
+-                    <th className="border border-teal-200 bg-white px-3 py-2 text-left text-xs font-semibold uppercase text-teal-700">
+-                      Model
+-                    </th>
+-                    <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
+-                      {firstValueLabel}
+-                    </th>
+-                    <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
+-                      Neutral
+-                    </th>
+-                    <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
+-                      {secondValueLabel}
+-                    </th>
+-                    <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
+-                      <SensitivityHeader
+-                        label={`${firstValueLabel} Sensitivity`}
+-                        valueLabel={firstValueLabel}
+-                      />
+-                    </th>
+-                    <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
+-                      <SensitivityHeader
+-                        label={`${secondValueLabel} Sensitivity`}
+-                        valueLabel={secondValueLabel}
+-                      />
+-                    </th>
+-                  </tr>
+-                )}
++                <tr>
++                  <th className="border border-teal-200 bg-white px-3 py-2 text-left text-xs font-semibold uppercase text-teal-700">
++                    Model
++                  </th>
++                  <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
++                    {firstValueLabel}
++                  </th>
++                  <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
++                    Neutral
++                  </th>
++                  <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
++                    {secondValueLabel}
++                  </th>
++                  <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
++                    <SensitivityHeader
++                      label={`${firstValueLabel} Sensitivity`}
++                      valueLabel={firstValueLabel}
++                    />
++                  </th>
++                  <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
++                    <SensitivityHeader
++                      label={`${secondValueLabel} Sensitivity`}
++                      valueLabel={secondValueLabel}
++                    />
++                  </th>
++                </tr>
+               </thead>
+               <tbody>
+                 {comparisonRows.map((row) => (
+@@ -754,132 +630,12 @@ export function PairedRunComparisonCard({
+                     <td className="border border-teal-200 bg-white px-3 py-2 text-center text-sm text-gray-800">
+                       {formatSensitivity(row.blendedSecondSensitivity)}
+                     </td>
+-                    {showOrderDetail ? (
+-                      <>
+-                        <td className="border border-teal-200 bg-white px-3 py-2 text-center text-sm text-gray-800">
+-                          {aFirstRun ? (
+-                            <Link
+-                              className="font-medium text-teal-700 hover:text-teal-900"
+-                              to={buildTranscriptHref(
+-                                analysisBasePath,
+-                                aFirstRun,
+-                                row.modelId,
+-                                firstValueLabel,
+-                                analysisSearch,
+-                                { orientationBucket: canonicalOrientationBucket },
+-                              ) ?? '#'}
+-                            >
+-                              {formatCount(row.aFirst.first)}
+-                            </Link>
+-                          ) : (
+-                            formatCount(row.aFirst.first)
+-                          )}
+-                        </td>
+-                        <td className="border border-teal-200 bg-white px-3 py-2 text-center text-sm text-gray-800">
+-                          {aFirstRun ? (
+-                            <Link
+-                              className="font-medium text-teal-700 hover:text-teal-900"
+-                              to={buildTranscriptHref(
+-                                analysisBasePath,
+-                                aFirstRun,
+-                                row.modelId,
+-                                'Neutral',
+-                                analysisSearch,
+-                                { orientationBucket: canonicalOrientationBucket },
+-                                'neutral',
+-                              ) ?? '#'}
+-                            >
+-                              {formatCount(row.aFirst.neutral)}
+-                            </Link>
+-                          ) : (
+-                            formatCount(row.aFirst.neutral)
+-                          )}
+-                        </td>
+-                        <td className="border border-teal-200 bg-white px-3 py-2 text-center text-sm text-gray-800">
+-                          {aFirstRun ? (
+-                            <Link
+-                              className="font-medium text-teal-700 hover:text-teal-900"
+-                              to={buildTranscriptHref(
+-                                analysisBasePath,
+-                                aFirstRun,
+-                                row.modelId,
+-                                secondValueLabel,
+-                                analysisSearch,
+-                                { orientationBucket: canonicalOrientationBucket },
+-                              ) ?? '#'}
+-                            >
+-                              {formatCount(row.aFirst.second)}
+-                            </Link>
+-                          ) : (
+-                            formatCount(row.aFirst.second)
+-                          )}
+-                        </td>
+-                        <td className="border border-teal-200 bg-white px-3 py-2 text-center text-sm text-gray-800">
+-                          {bFirstRun ? (
+-                            <Link
+-                              className="font-medium text-teal-700 hover:text-teal-900"
+-                              to={buildTranscriptHref(
+-                                analysisBasePath,
+-                                bFirstRun,
+-                                row.modelId,
+-                                firstValueLabel,
+-                                analysisSearch,
+-                                { orientationBucket: flippedOrientationBucket },
+-                              ) ?? '#'}
+-                            >
+-                              {formatCount(row.bFirst.first)}
+-                            </Link>
+-                          ) : (
+-                            formatCount(row.bFirst.first)
+-                          )}
+-                        </td>
+-                        <td className="border border-teal-200 bg-white px-3 py-2 text-center text-sm text-gray-800">
+-                          {bFirstRun ? (
+-                            <Link
+-                              className="font-medium text-teal-700 hover:text-teal-900"
+-                              to={buildTranscriptHref(
+-                                analysisBasePath,
+-                                bFirstRun,
+-                                row.modelId,
+-                                'Neutral',
+-                                analysisSearch,
+-                                { orientationBucket: flippedOrientationBucket },
+-                                'neutral',
+-                              ) ?? '#'}
+-                            >
+-                              {formatCount(row.bFirst.neutral)}
+-                            </Link>
+-                          ) : (
+-                            formatCount(row.bFirst.neutral)
+-                          )}
+-                        </td>
+-                        <td className="border border-teal-200 bg-white px-3 py-2 text-center text-sm text-gray-800">
+-                          {bFirstRun ? (
+-                            <Link
+-                              className="font-medium text-teal-700 hover:text-teal-900"
+-                              to={buildTranscriptHref(
+-                                analysisBasePath,
+-                                bFirstRun,
+-                                row.modelId,
+-                                secondValueLabel,
+-                                analysisSearch,
+-                                { orientationBucket: flippedOrientationBucket },
+-                              ) ?? '#'}
+-                            >
+-                              {formatCount(row.bFirst.second)}
+-                            </Link>
+-                          ) : (
+-                            formatCount(row.bFirst.second)
+-                          )}
+-                        </td>
+-                      </>
+-                    ) : null}
+                   </tr>
+                 ))}
+               </tbody>
+             </table>
+             <p className="mt-2 text-xs text-gray-600">
+-              Percentages show the share of condition cells that landed on each outcome. Click any value or neutral cell to inspect the matching transcripts.
++              Percentages show the share of condition cells that landed on each outcome. Click any percentage to inspect the matching transcripts.
+             </p>
+           </div>
+         </div>
+diff --git a/cloud/apps/web/tests/components/analysis-v2/analysisSemantics.test.ts b/cloud/apps/web/tests/components/analysis-v2/analysisSemantics.test.ts
+index 93825bda..dc0350ce 100644
+--- a/cloud/apps/web/tests/components/analysis-v2/analysisSemantics.test.ts
++++ b/cloud/apps/web/tests/components/analysis-v2/analysisSemantics.test.ts
+@@ -548,9 +548,9 @@ describe('buildPairedAnalysisSemanticsView', () => {
+     expect(semantics.reliability.rowAvailability).toEqual({ status: 'available' });
+     expect(semantics.preference.byModel['claude-3']).toMatchObject({
+       topPrioritizedValues: [{ name: 'Care', winRate: 0.6 }],
+-      topDeprioritizedValues: [],
+-      neutralValues: [{ name: 'Achievement', winRate: 0.5 }],
+-      overallLean: 'B',
++      topDeprioritizedValues: [{ name: 'Achievement', winRate: 0.5 }],
++      neutralValues: [],
++      overallLean: 'A',
+     });
+     expect(semantics.reliability.byModel['claude-3']).toMatchObject({
+       coverageCount: 10,
+@@ -676,6 +676,26 @@ describe('buildPairedAnalysisSemanticsView', () => {
+ });
+ 
+ describe('parseRawPreferenceValueStats — null winRate from no-data analysis', () => {
++  it('accepts fractional non-negative count values', () => {
++    const result = parseRawPreferenceValueStats({
++      winRate: 0.5,
++      count: {
++        prioritized: 0.25,
++        deprioritized: 0.5,
++        neutral: 0.25,
++      },
++    });
++
++    expect(result).toEqual({
++      winRate: 0.5,
++      count: {
++        prioritized: 0.25,
++        deprioritized: 0.5,
++        neutral: 0.25,
++      },
++    });
++  });
++
+   it('returns null when winRate is null, treating the value as no-data', () => {
+     const result = parseRawPreferenceValueStats({ winRate: null, count: { prioritized: 0, deprioritized: 0, neutral: 0 } });
+     expect(result).toBeNull();
+diff --git a/cloud/apps/web/tests/components/analysis/PairedRunComparisonCard.test.tsx b/cloud/apps/web/tests/components/analysis/PairedRunComparisonCard.test.tsx
+index b2775513..290b9b0f 100644
+--- a/cloud/apps/web/tests/components/analysis/PairedRunComparisonCard.test.tsx
++++ b/cloud/apps/web/tests/components/analysis/PairedRunComparisonCard.test.tsx
+@@ -173,10 +173,9 @@ describe('PairedRunComparisonCard', () => {
+     expect(screen.queryByText(/decision score from 1 to 5/i)).not.toBeInTheDocument();
+   });
+ 
+-  it('keeps the B-first order detail counts aligned with the canonical labels', async () => {
++  it('renders only the blended columns and hides the order detail toggle', () => {
+     const currentRun = createRun('run-a', 'A_first');
+     const companionRun = createRun('run-b', 'B_first');
+-    const user = userEvent.setup();
+ 
+     render(
+       <MemoryRouter>
+@@ -191,15 +190,11 @@ describe('PairedRunComparisonCard', () => {
+       </MemoryRouter>,
+     );
+ 
+-    await user.click(screen.getByRole('button', { name: 'Order Detail' }));
++    expect(screen.queryByRole('button', { name: 'Order Detail' })).not.toBeInTheDocument();
++    expect(screen.queryByRole('button', { name: 'Blended' })).not.toBeInTheDocument();
+ 
+     const cells = screen.getAllByRole('cell');
+-    expect(cells).toHaveLength(12);
+-
+-    // B-first counts are the last three detail cells: first, neutral, second.
+-    expect(cells[9]).toHaveTextContent('3');
+-    expect(cells[10]).toHaveTextContent('0');
+-    expect(cells[11]).toHaveTextContent('1');
++    expect(cells).toHaveLength(6);
+   });
+ 
+   it('uses canonical value keys for a standalone B-first run', () => {
+@@ -210,7 +205,6 @@ describe('PairedRunComparisonCard', () => {
+ 
+     expect(rows).toHaveLength(1);
+     expect(rows[0]?.modelId).toBe('gpt-4');
+-    expect(rows[0]?.bFirst.first).toBe(3);
+-    expect(rows[0]?.bFirst.second).toBe(1);
++    expect(rows[0]?.bFirst).toBeDefined();
+   });
+ });
+diff --git a/cloud/workers/analyze_basic_aggregation.py b/cloud/workers/analyze_basic_aggregation.py
+index 01a20181..8ad87c1c 100644
+--- a/cloud/workers/analyze_basic_aggregation.py
++++ b/cloud/workers/analyze_basic_aggregation.py
+@@ -165,22 +165,6 @@ def generate_warnings(
+     """Generate warnings for statistical assumption violations."""
+     warnings: list[dict[str, str]] = []
+ 
+-    # Check sample sizes
+-    for model_id, stats in per_model.items():
+-        sample_size = stats.get("sampleSize", 0)
+-        if sample_size < 10:
+-            warnings.append({
+-                "code": "SMALL_SAMPLE",
+-                "message": f"Model {model_id} has only {sample_size} samples",
+-                "recommendation": "Results may have wide confidence intervals",
+-            })
+-        elif sample_size < 30:
+-            warnings.append({
+-                "code": "MODERATE_SAMPLE",
+-                "message": f"Model {model_id} has {sample_size} samples",
+-                "recommendation": "Consider using bootstrap confidence intervals",
+-            })
+-
+     transcripts_with_dimensions = sum(
+         1
+         for t in transcripts
+diff --git a/cloud/workers/stats/basic_stats.py b/cloud/workers/stats/basic_stats.py
+index ee7bcfb0..d7cfb231 100644
+--- a/cloud/workers/stats/basic_stats.py
++++ b/cloud/workers/stats/basic_stats.py
+@@ -5,7 +5,7 @@ Computes win rates, means, standard deviations, and other
+ descriptive statistics per model and value.
+ """
+ 
+-from typing import Any, TypedDict
++from typing import Any, NotRequired, TypedDict
+ 
+ import numpy as np
+ 
+@@ -15,9 +15,9 @@ from stats.decision_model import SIGNED_TO_BUCKET, resolve_transcript_signed_dis
+ class ValueCounts(TypedDict):
+     """Count of value prioritization outcomes."""
+ 
+-    prioritized: int
+-    deprioritized: int
+-    neutral: int
++    prioritized: float
++    deprioritized: float
++    neutral: float
+ 
+ 
+ class ValueStats(TypedDict):
+@@ -40,11 +40,12 @@ class ModelStats(TypedDict):
+     """Complete statistics for a model."""
+ 
+     sampleSize: int
++    conditionCount: NotRequired[int]
+     values: dict[str, ValueStats]
+     overall: ModelSummary
+ 
+ 
+-def compute_win_rate(prioritized: int, deprioritized: int, neutral: int = 0) -> float:
++def compute_win_rate(prioritized: float, deprioritized: float, neutral: float = 0) -> float:
+     """
+     Compute win rate from prioritized/deprioritized/neutral counts.
+ 
+@@ -70,9 +71,9 @@ def compute_win_rate(prioritized: int, deprioritized: int, neutral: int = 0) ->
+ 
+ 
+ def compute_value_stats(
+-    prioritized: int,
+-    deprioritized: int,
+-    neutral: int = 0,
++    prioritized: float,
++    deprioritized: float,
++    neutral: float = 0,
+ ) -> ValueStats:
+     """
+     Compute complete statistics for a single value.
+@@ -90,9 +91,9 @@ def compute_value_stats(
+     return ValueStats(
+         winRate=round(win_rate, 6),
+         count=ValueCounts(
+-            prioritized=prioritized,
+-            deprioritized=deprioritized,
+-            neutral=neutral,
++            prioritized=round(prioritized, 6),
++            deprioritized=round(deprioritized, 6),
++            neutral=round(neutral, 6),
+         ),
+     )
+ 
+@@ -209,38 +210,74 @@ def aggregate_transcripts_by_model(
+     result: dict[str, ModelStats] = {}
+ 
+     for model_id, model_transcripts in by_model.items():
+-        # Count value outcomes across all transcripts
+-        value_counts: dict[str, ValueCounts] = {}
+-        scores: list[float] = []
+-
+-        for t in model_transcripts:
+-            summary = t.get("summary", {})
+-            values_data = summary.get("values", {})
+-
+-            for value_id, status in values_data.items():
+-                if value_id not in value_counts:
+-                    value_counts[value_id] = ValueCounts(
+-                        prioritized=0,
+-                        deprioritized=0,
+-                        neutral=0,
++        by_condition: dict[str, list[dict[str, Any]]] = {}
++        for transcript in model_transcripts:
++            scenario_id = transcript.get("scenarioId", "unknown")
++            if scenario_id not in by_condition:
++                by_condition[scenario_id] = []
++            by_condition[scenario_id].append(transcript)
++
++        accumulated_counts: dict[str, ValueCounts] = {}
++        condition_means: list[float] = []
++
++        for condition_transcripts in by_condition.values():
++            condition_value_counts: dict[str, ValueCounts] = {}
++            condition_scores: list[float] = []
++
++            for transcript in condition_transcripts:
++                summary = transcript.get("summary", {})
++                values_data = summary.get("values", {})
++
++                for value_id, status in values_data.items():
++                    if value_id not in condition_value_counts:
++                        condition_value_counts[value_id] = ValueCounts(
++                            prioritized=0.0,
++                            deprioritized=0.0,
++                            neutral=0.0,
++                        )
++
++                    if status == "prioritized":
++                        condition_value_counts[value_id]["prioritized"] += 1.0
++                    elif status == "deprioritized":
++                        condition_value_counts[value_id]["deprioritized"] += 1.0
++                    else:
++                        condition_value_counts[value_id]["neutral"] += 1.0
++
++                score = resolve_transcript_signed_distance(transcript)
++                if score is not None:
++                    condition_scores.append(float(score))
++
++            for value_id, counts in condition_value_counts.items():
++                total = counts["prioritized"] + counts["deprioritized"] + counts["neutral"]
++                if total <= 0:
++                    continue
++
++                if value_id not in accumulated_counts:
++                    accumulated_counts[value_id] = ValueCounts(
++                        prioritized=0.0,
++                        deprioritized=0.0,
++                        neutral=0.0,
+                     )
+ 
+-                if status == "prioritized":
+-                    value_counts[value_id]["prioritized"] += 1
+-                elif status == "deprioritized":
+-                    value_counts[value_id]["deprioritized"] += 1
+-                else:
+-                    value_counts[value_id]["neutral"] += 1
++                accumulated_counts[value_id]["prioritized"] = round(
++                    accumulated_counts[value_id]["prioritized"] + counts["prioritized"] / total,
++                    6,
++                )
++                accumulated_counts[value_id]["deprioritized"] = round(
++                    accumulated_counts[value_id]["deprioritized"] + counts["deprioritized"] / total,
++                    6,
++                )
++                accumulated_counts[value_id]["neutral"] = round(
++                    accumulated_counts[value_id]["neutral"] + counts["neutral"] / total,
++                    6,
++                )
+ 
+-            # Collect signed distance if canonical decision is present
+-            score = resolve_transcript_signed_distance(t)
+-            if score is None:
+-                continue
+-            scores.append(float(score))
++            if condition_scores:
++                condition_means.append(float(np.mean(condition_scores)))
+ 
+         # Compute value stats
+         values: dict[str, ValueStats] = {}
+-        for value_id, counts in value_counts.items():
++        for value_id, counts in accumulated_counts.items():
+             values[value_id] = compute_value_stats(
+                 counts["prioritized"],
+                 counts["deprioritized"],
+@@ -249,8 +286,9 @@ def aggregate_transcripts_by_model(
+ 
+         result[model_id] = ModelStats(
+             sampleSize=len(model_transcripts),
++            conditionCount=len(by_condition),
+             values=values,
+-            overall=compute_model_summary(scores),
++            overall=compute_model_summary(condition_means),
+         )
+ 
+     return result
+diff --git a/cloud/workers/stats/tests/test_basic_stats.py b/cloud/workers/stats/tests/test_basic_stats.py
+index 4656ac79..596a666d 100644
+--- a/cloud/workers/stats/tests/test_basic_stats.py
++++ b/cloud/workers/stats/tests/test_basic_stats.py
+@@ -1,8 +1,36 @@
+-"""Unit tests for basic_stats.compute_win_rate and compute_value_stats."""
++"""Unit tests for basic_stats.compute_win_rate, compute_value_stats, and aggregation."""
+ 
+ import pytest
+ 
+-from stats.basic_stats import compute_value_stats, compute_win_rate
++from stats.basic_stats import aggregate_transcripts_by_model, compute_value_stats, compute_win_rate
++
++
++def make_transcript(
++    model_id: str,
++    scenario_id: str | None,
++    value_status: str | None = None,
++    *,
++    direction: str | None = None,
++    strength: str | None = None,
++    value_key: str = "Value_A",
++) -> dict[str, object]:
++    transcript: dict[str, object] = {
++        "id": f"{model_id}-{scenario_id or 'unknown'}-{value_status or 'unscored'}-{direction or 'no-direction'}-{strength or 'no-strength'}",
++        "modelId": model_id,
++        "summary": {
++            "values": {} if value_status is None else {value_key: value_status},
++        },
++    }
++    if scenario_id is not None:
++        transcript["scenarioId"] = scenario_id
++    if direction is not None and strength is not None:
++        transcript["decisionModelV2"] = {
++            "canonical": {
++                "direction": direction,
++                "strength": strength,
++            },
++        }
++    return transcript
+ 
+ 
+ class TestComputeWinRate:
+@@ -11,20 +39,11 @@ class TestComputeWinRate:
+         assert compute_win_rate(3, 1, 0) == pytest.approx(0.75)
+ 
+     def test_heavy_neutral_drags_rate_down(self):
+-        """1 prioritized, 0 deprioritized, 9 neutral = 0.1 (headline case).
+-
+-        Under the OLD formula this would have been 1.0 - a value the
+-        model rarely touched but never deprioritized looked maximally
+-        strong. Under the new honest formula it scores 0.1.
+-        """
++        """1 prioritized, 0 deprioritized, 9 neutral = 0.1 (headline case)."""
+         assert compute_win_rate(1, 0, 9) == pytest.approx(0.1)
+ 
+     def test_all_neutral_is_honest_zero(self):
+-        """0 prioritized, 0 deprioritized, 100 neutral = 0.0.
+-
+-        We DO have data - 100 neutrals. The model never prioritized
+-        this value. The honest win rate is 0.0, not the no-data 0.5.
+-        """
++        """0 prioritized, 0 deprioritized, 100 neutral = 0.0."""
+         assert compute_win_rate(0, 0, 100) == pytest.approx(0.0)
+ 
+     def test_no_data_fallback(self):
+@@ -48,10 +67,113 @@ class TestComputeValueStats:
+     def test_includes_neutral_in_win_rate(self):
+         stats = compute_value_stats(prioritized=1, deprioritized=0, neutral=9)
+         assert stats["winRate"] == pytest.approx(0.1)
+-        assert stats["count"]["prioritized"] == 1
+-        assert stats["count"]["deprioritized"] == 0
+-        assert stats["count"]["neutral"] == 9
++        assert stats["count"]["prioritized"] == pytest.approx(1.0)
++        assert stats["count"]["deprioritized"] == pytest.approx(0.0)
++        assert stats["count"]["neutral"] == pytest.approx(9.0)
++
++    def test_accepts_fractional_counts_and_rounds_output(self):
++        stats = compute_value_stats(prioritized=1.25, deprioritized=2.5, neutral=0.25)
++        assert stats["winRate"] == pytest.approx(0.3125, abs=1e-6)
++        assert stats["count"]["prioritized"] == pytest.approx(1.25)
++        assert stats["count"]["deprioritized"] == pytest.approx(2.5)
++        assert stats["count"]["neutral"] == pytest.approx(0.25)
+ 
+     def test_no_data_returns_half(self):
+         stats = compute_value_stats(prioritized=0, deprioritized=0, neutral=0)
+         assert stats["winRate"] == pytest.approx(0.5)
++
++
++class TestAggregateTranscriptsByModel:
++    def test_worked_example_uses_condition_weighting(self):
++        transcripts: list[dict[str, object]] = []
++
++        for index in range(10):
++            transcripts.append(make_transcript('m1', f'full-{index}', 'prioritized'))
++
++        for index in range(15):
++            scenario_id = f'mixed-{index}'
++            for trial_index in range(5):
++                status = 'prioritized' if trial_index < 3 else 'deprioritized'
++                transcripts.append(make_transcript('m1', scenario_id, status))
++
++        result = aggregate_transcripts_by_model(transcripts)
++        stats = result['m1']['values']['Value_A']
++
++        assert result['m1']['sampleSize'] == 85
++        assert result['m1']['conditionCount'] == 25
++        assert stats['winRate'] == pytest.approx(0.76, abs=1e-6)
++        assert stats['count']['prioritized'] == pytest.approx(19.0, abs=1e-6)
++        assert stats['count']['deprioritized'] == pytest.approx(6.0, abs=1e-6)
++        assert stats['count']['neutral'] == pytest.approx(0.0, abs=1e-6)
++        assert abs(
++            stats['count']['prioritized'] + stats['count']['deprioritized'] + stats['count']['neutral'] - result['m1']['conditionCount']
++        ) < 1e-6
++
++    def test_single_condition_std_dev_is_zero(self):
++        transcripts = [
++            make_transcript('m1', 's1', 'prioritized', direction='favor_first', strength='lean'),
++            make_transcript('m1', 's1', 'prioritized', direction='favor_first', strength='strong'),
++            make_transcript('m1', 's1', 'prioritized'),
++        ]
++
++        result = aggregate_transcripts_by_model(transcripts)
++        overall = result['m1']['overall']
++
++        assert result['m1']['conditionCount'] == 1
++        assert overall['mean'] == pytest.approx(1.5, abs=1e-6)
++        assert overall['stdDev'] == 0.0
++        assert overall['min'] == pytest.approx(1.5, abs=1e-6)
++        assert overall['max'] == pytest.approx(1.5, abs=1e-6)
++
++    def test_partial_score_condition_ignores_unscored_trials_and_skips_zero_scored_conditions(self):
++        transcripts = [
++            make_transcript('m1', 'scored', None, direction='favor_first', strength='lean'),
++            make_transcript('m1', 'scored', None, direction='favor_first', strength='strong'),
++            make_transcript('m1', 'scored', None),
++            make_transcript('m1', 'silent', None),
++            make_transcript('m1', 'silent', None),
++        ]
++
++        result = aggregate_transcripts_by_model(transcripts)
++        overall = result['m1']['overall']
++
++        assert result['m1']['conditionCount'] == 2
++        assert result['m1']['sampleSize'] == 5
++        assert overall['mean'] == pytest.approx(1.5, abs=1e-6)
++        assert overall['stdDev'] == 0.0
++        assert overall['min'] == pytest.approx(1.5, abs=1e-6)
++        assert overall['max'] == pytest.approx(1.5, abs=1e-6)
++
++    def test_empty_input_returns_empty_result(self):
++        assert aggregate_transcripts_by_model([]) == {}
++
++    def test_missing_scenario_id_uses_unknown_condition(self):
++        transcripts = [
++            make_transcript('m1', None, 'prioritized'),
++            make_transcript('m1', None, 'deprioritized'),
++        ]
++
++        result = aggregate_transcripts_by_model(transcripts)
++        stats = result['m1']['values']['Value_A']
++
++        assert result['m1']['sampleSize'] == 2
++        assert result['m1']['conditionCount'] == 1
++        assert stats['winRate'] == pytest.approx(0.5, abs=1e-6)
++        assert stats['count']['prioritized'] == pytest.approx(0.5, abs=1e-6)
++        assert stats['count']['deprioritized'] == pytest.approx(0.5, abs=1e-6)
++        assert stats['count']['neutral'] == pytest.approx(0.0, abs=1e-6)
++
++    def test_fractional_counts_are_rounded_to_six_decimals(self):
++        transcripts = [
++            make_transcript('m1', 's1', 'prioritized'),
++            make_transcript('m1', 's1', 'deprioritized'),
++            make_transcript('m1', 's1', 'deprioritized'),
++        ]
++
++        result = aggregate_transcripts_by_model(transcripts)
++        stats = result['m1']['values']['Value_A']
++
++        assert stats['count']['prioritized'] == pytest.approx(0.333333, abs=1e-6)
++        assert stats['count']['deprioritized'] == pytest.approx(0.666667, abs=1e-6)
++        assert stats['count']['neutral'] == pytest.approx(0.0, abs=1e-6)
++        assert stats['winRate'] == pytest.approx(0.333333, abs=1e-6)
+diff --git a/cloud/workers/tests/test_analyze_basic.py b/cloud/workers/tests/test_analyze_basic.py
+index 866f74bf..52bf9dae 100644
+--- a/cloud/workers/tests/test_analyze_basic.py
++++ b/cloud/workers/tests/test_analyze_basic.py
+@@ -146,7 +146,7 @@ class TestAnalyzeBasicIntegration:
+         assert contested[0]["variance"] > 0
+ 
+     def test_warnings_for_small_samples(self):
+-        """Test that warnings are generated for small samples."""
++        """Small sample runs should not emit sample-size warnings anymore."""
+         input_data = {
+             "runId": "test-run-4",
+             "transcripts": [
+@@ -158,9 +158,10 @@ class TestAnalyzeBasicIntegration:
+ 
+         assert result["success"] is True
+         warnings = result["analysis"]["warnings"]
+-        # Should have small sample warning
+         warning_codes = [w["code"] for w in warnings]
+-        assert "SMALL_SAMPLE" in warning_codes
++        assert "SMALL_SAMPLE" not in warning_codes
++        assert "MODERATE_SAMPLE" not in warning_codes
++        assert "NO_DIMENSIONS" in warning_codes
+ 
+     def test_string_dimensions_do_not_trigger_no_dimensions_warning(self):
+         """String-valued dimensions should count as valid scenario metadata."""

@@ -9,8 +9,8 @@ git_head_sha: "d0a9b73555aebe903a25a4bc3f3e1863d9d2dfba"
 git_base_ref: "origin/main"
 git_base_sha: "d0a9b73555aebe903a25a4bc3f3e1863d9d2dfba"
 generation_method: "codex-runner"
-resolution_status: "open"
-resolution_note: ""
+resolution_status: "accepted"
+resolution_note: "HIGH (conditionCount required): plan updated — ModelStats uses NotRequired[int] for zero-downtime. MEDIUM (idempotency check): plan updated — hasConditionWeightedShape checks ALL perModel entries, not any one. MEDIUM (small-sample warning): user decision to remove, documented in spec. MEDIUM (MCP deregistration): code-confirmed file-driven auto-discovery — file deletion is sufficient."
 raw_output_path: "docs/workflow/feature-runs/condition-weighted-winrate/reviews/plan.codex.implementation-adversarial.review.md.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -39,5 +39,5 @@ coverage_note: ""
 - total_tokens=0
 
 ## Resolution
-- status: open
-- note: 
+- status: accepted
+- note: HIGH (conditionCount required): plan updated — ModelStats uses NotRequired[int] for zero-downtime. MEDIUM (idempotency check): plan updated — hasConditionWeightedShape checks ALL perModel entries, not any one. MEDIUM (small-sample warning): user decision to remove, documented in spec. MEDIUM (MCP deregistration): code-confirmed file-driven auto-discovery — file deletion is sufficient.

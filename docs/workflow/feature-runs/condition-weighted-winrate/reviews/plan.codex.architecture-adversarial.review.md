@@ -9,8 +9,8 @@ git_head_sha: "d0a9b73555aebe903a25a4bc3f3e1863d9d2dfba"
 git_base_ref: "origin/main"
 git_base_sha: "d0a9b73555aebe903a25a4bc3f3e1863d9d2dfba"
 generation_method: "codex-runner"
-resolution_status: "open"
-resolution_note: ""
+resolution_status: "accepted"
+resolution_note: "HIGH (idempotency ALL vs ANY): fixed in plan — hasConditionWeightedShape checks ALL perModel entries. MEDIUM (unknown condition pooling): pre-existing behavior, acceptable. MEDIUM (Bradley-Terry deregistration): code-confirmed file-driven auto-discovery. MEDIUM (small-sample warnings): user decision to remove."
 raw_output_path: "docs/workflow/feature-runs/condition-weighted-winrate/reviews/plan.codex.architecture-adversarial.review.md.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -40,5 +40,5 @@ coverage_note: ""
 - total_tokens=0
 
 ## Resolution
-- status: open
-- note: 
+- status: accepted
+- note: HIGH (idempotency ALL vs ANY): fixed in plan — hasConditionWeightedShape checks ALL perModel entries. MEDIUM (unknown condition pooling): pre-existing behavior, acceptable. MEDIUM (Bradley-Terry deregistration): code-confirmed file-driven auto-discovery. MEDIUM (small-sample warnings): user decision to remove.

@@ -9,8 +9,8 @@ git_head_sha: "d0a9b73555aebe903a25a4bc3f3e1863d9d2dfba"
 git_base_ref: "origin/main"
 git_base_sha: "d0a9b73555aebe903a25a4bc3f3e1863d9d2dfba"
 generation_method: "codex-runner"
-resolution_status: "open"
-resolution_note: ""
+resolution_status: "accepted"
+resolution_note: "HIGH (equal-run unsafe for asymmetric runs): user decision per spec; equal weighting is the intentional algorithmic choice. MEDIUM (modelScenarioMatrix trial-weighted): out of scope; blended count display in PairedRunComparisonCard is being removed entirely (T012)."
 raw_output_path: "docs/workflow/feature-runs/condition-weighted-winrate/reviews/spec.codex.edge-cases-adversarial.review.md.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -46,5 +46,5 @@ coverage_note: ""
 - total_tokens=0
 
 ## Resolution
-- status: open
-- note: 
+- status: accepted
+- note: HIGH (equal-run unsafe for asymmetric runs): user decision per spec; equal weighting is the intentional algorithmic choice. MEDIUM (modelScenarioMatrix trial-weighted): out of scope; blended count display in PairedRunComparisonCard is being removed entirely (T012).

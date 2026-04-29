@@ -9,8 +9,8 @@ git_head_sha: "d0a9b73555aebe903a25a4bc3f3e1863d9d2dfba"
 git_base_ref: "origin/main"
 git_base_sha: "d0a9b73555aebe903a25a4bc3f3e1863d9d2dfba"
 generation_method: "codex-runner"
-resolution_status: "open"
-resolution_note: ""
+resolution_status: "accepted"
+resolution_note: "MEDIUM (tolerance): T005 updated to 1e-6 which covers 6dp rounding accumulation. MEDIUM (conditionCount in aggregate): T007 addressed; Codex also added conditionCount from transcript scenarioIds to aggregate output. MEDIUM (asymmetric equal-run pooling): user decision per spec — equal-run weighting is the intentional algorithm."
 raw_output_path: "docs/workflow/feature-runs/condition-weighted-winrate/reviews/spec.codex.feasibility-adversarial.review.md.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -37,5 +37,5 @@ coverage_note: ""
 - total_tokens=0
 
 ## Resolution
-- status: open
-- note: 
+- status: accepted
+- note: MEDIUM (tolerance): T005 updated to 1e-6 which covers 6dp rounding accumulation. MEDIUM (conditionCount in aggregate): T007 addressed; Codex also added conditionCount from transcript scenarioIds to aggregate output. MEDIUM (asymmetric equal-run pooling): user decision per spec — equal-run weighting is the intentional algorithm.

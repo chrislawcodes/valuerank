@@ -9,8 +9,8 @@ git_head_sha: "d0a9b73555aebe903a25a4bc3f3e1863d9d2dfba"
 git_base_ref: "origin/main"
 git_base_sha: "d0a9b73555aebe903a25a4bc3f3e1863d9d2dfba"
 generation_method: "gemini-cli"
-resolution_status: "open"
-resolution_note: ""
+resolution_status: "accepted"
+resolution_note: "HIGH (backfill untested): addressed — Codex added backfill-condition-weighted.test.ts with 357 lines of tests (second commit). MEDIUM (dead code target.winRate): user decision; decision 4 in plan is confirmed. MEDIUM (vague aggregate tests): T008 adds explicit equal-weight assertions. MEDIUM (brittle idempotency): hasConditionWeightedShape checks ALL perModel entries. LOW (inconsistent validation): T011 is scoped only to count fields. LOW (missing Python adversarials): T005 covers all required cases."
 raw_output_path: "docs/workflow/feature-runs/condition-weighted-winrate/reviews/plan.gemini.testability-adversarial.review.md.json"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -56,5 +56,5 @@ coverage_note: ""
 - `gemini-2.5-pro`: input=16741, output=1124, total=19710
 
 ## Resolution
-- status: open
-- note:
+- status: accepted
+- note: HIGH (backfill untested): addressed — Codex added backfill-condition-weighted.test.ts with 357 lines of tests (second commit). MEDIUM (dead code target.winRate): user decision; decision 4 in plan is confirmed. MEDIUM (vague aggregate tests): T008 adds explicit equal-weight assertions. MEDIUM (brittle idempotency): hasConditionWeightedShape checks ALL perModel entries. LOW (inconsistent validation): T011 is scoped only to count fields. LOW (missing Python adversarials): T005 covers all required cases.

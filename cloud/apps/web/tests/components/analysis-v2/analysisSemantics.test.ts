@@ -548,8 +548,8 @@ describe('buildPairedAnalysisSemanticsView', () => {
     expect(semantics.reliability.rowAvailability).toEqual({ status: 'available' });
     expect(semantics.preference.byModel['claude-3']).toMatchObject({
       topPrioritizedValues: [{ name: 'Care', winRate: 0.6 }],
-      topDeprioritizedValues: [{ name: 'Achievement', winRate: 0.5 }],
-      neutralValues: [],
+      topDeprioritizedValues: [],
+      neutralValues: [{ name: 'Achievement', winRate: 0.5 }],
       overallLean: 'A',
     });
     expect(semantics.reliability.byModel['claude-3']).toMatchObject({
