@@ -14,10 +14,7 @@ import {
   type ModelsConfidenceQueryVariables,
 } from '../api/operations/modelsConfidence';
 import { ConfidenceHeatmap } from '../components/models/ConfidenceHeatmap';
-import {
-  buildDomainShiftSignatureOptions,
-  getDefaultDomainShiftSignature,
-} from './domainValueShiftHeatmapUtils';
+import { buildDomainShiftSignatureOptions } from './domainValueShiftHeatmapUtils';
 
 export function ModelsConfidence() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -43,10 +40,12 @@ export function ModelsConfidence() {
     signatureParam ?? 'vnewtd',
   );
 
+  // When signatures load, if the current selection isn't a real available signature,
+  // switch to the most recent real one so the heatmap shows data by default.
   useEffect(() => {
-    const resolved = getDefaultDomainShiftSignature(availableSignatures, selectedSignature);
-    if (resolved !== selectedSignature) {
-      setSelectedSignature(resolved);
+    if (availableSignatures.length === 0) return;
+    if (!availableSignatures.includes(selectedSignature) && availableSignatures[0] != null) {
+      setSelectedSignature(availableSignatures[0]);
     }
   }, [availableSignatures, selectedSignature]);
 
