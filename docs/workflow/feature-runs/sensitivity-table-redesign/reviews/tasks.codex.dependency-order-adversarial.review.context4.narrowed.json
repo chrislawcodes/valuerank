@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "cloud/apps/web/src/generated/graphql.ts",
+  "source_artifact_sha256": "dd75fc3a97a20f1bcc532c1567feee2da67e1e1e6e64cf115a124ad309bd790d",
+  "narrowed_artifact_path": "docs/workflow/feature-runs/sensitivity-table-redesign/reviews/tasks.codex.dependency-order-adversarial.review.context4.narrowed.txt",
+  "narrowed_artifact_sha256": "ed552e1b304279a726c08682919434bf80b6bee12e274fff2205e1243b1c2e5f",
+  "strategy": "head-tail-numbered-lines"
+}

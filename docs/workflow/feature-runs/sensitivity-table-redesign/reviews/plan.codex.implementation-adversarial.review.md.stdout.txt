@@ -1,0 +1,8 @@
+## Findings
+- Medium [UNVERIFIED]: `HeaderTooltip` is specified as a `<button>` placed inside sortable table headers. If the existing header implementation already uses a button or other interactive wrapper for sorting, this creates nested interactive controls and a likely keyboard/click conflict. The plan only says to stop click bubbling, which does not fix invalid button-in-button markup or the resulting accessibility breakage.
+- Medium [UNVERIFIED]: The cross-model summary row does not lock down one consistent estimand for all three displayed numbers. The plan defines `winRateDeltaSummary` CI as a spread over per-pair deltas, but it does not clearly say whether the summary `Low pressure` and `High pressure` cells use the same pair set and weighting. If those columns are computed differently, the row will mix unlike statistics and the displayed `Δ` will not line up with the visible low/high values.
+
+## Residual Risks
+- The new confidence intervals are still approximation-based. Boundary-heavy data, very small qualifying bands, or highly uneven trial counts can produce results that are statistically awkward even when the formulas are correct.
+- The tooltip and sort interaction still needs live verification in the actual table markup. The plan covers the component contract, but not the full behavior once it is embedded in the existing header cells.
+- The transcript-cap and source-run-collision warnings improve observability, but they do not prevent biased or inconsistent outputs if those conditions are common in real data.

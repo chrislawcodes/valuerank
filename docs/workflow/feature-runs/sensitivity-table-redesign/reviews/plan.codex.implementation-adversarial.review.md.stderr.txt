@@ -1,3 +1,27 @@
+Reading additional input from stdin...
+OpenAI Codex v0.125.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019dd6a1-d05d-74d3-9c31-f9c80f2deb86
+--------
+user
+Review this plan artifact using a implementation-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: plan.md
 # Implementation Plan: Pressure Sensitivity Table Redesign
 
 **Branch:** `claude/sensitivity-table-redesign` | **Date:** 2026-04-28
@@ -13,18 +37,6 @@ Two table redesigns + supporting backend math:
 - **Tooltips** on every column header via a small reusable `<HeaderTooltip>` component.
 
 The legacy GraphQL fields `directionDelta`, `convictionDelta`, `netScoreDelta` (per-pair) and `aggregateSensitivity` (per-model) are **removed entirely** from both the SDL and the resolver per spec FR-014. Cell-level conviction is still computed inside `buildCellMetrics` because the 2D pressure grid drilldown reads it, but it is not surfaced as a per-pair or per-model rollup.
-
-## Review Reconciliation
-
-- review: reviews/spec.codex.feasibility-adversarial.review.md | status: accepted | note: HIGH (transcript ceiling) ELEVATED to hard requirement via new FR-019. Resolver MUST log structured warning on cap hit and surface transcriptCapHit boolean to the frontend so coverage banner can render. Companion FR-020 covers the sourceRunId collision warning case.
-- review: reviews/spec.codex.edge-cases-adversarial.review.md | status: accepted | note: MEDIUM (transparency signals dropped) RESOLVED via new FR-008c explicitly preserving unscoredCount, definitionsMeasured, definitionsExcluded, insufficient list, excludedDefinitions, and excludedScenariosCount in the resolver and the existing coverage footer surfaces. Only Defs and Baseline columns are dropped from the per-pair table proper.
-- review: reviews/spec.gemini.requirements-adversarial.review.md | status: accepted | note: HIGH (Inconsistent Win Rate Definition) DISMISSED. Reviewer claim is incorrect. The resolver code at aggregation.ts line 102 explicitly computes n equals ownPicked plus opponentPicked plus neutral, and line 108 computes winRate equals ownPicked divided by n. This matches the glossary definition of prioritized over prioritized plus deprioritized plus neutral exactly. Neutral is NOT excluded from the denominator; only unscored (refusals and unparseables) is excluded. The reviewer appears to have misread the outcome mapping. MEDIUM (Trials column with thin bands) RESOLVED via new FR-008b restricting Trials to qualifying-cell trials only. LOW (no badge on dash cell) RESOLVED via new FR-007a. LOW (hard-coded 0.02) RESOLVED via FR-006a now requiring import of FLAT_DELTA_THRESHOLD constant rather than literal.
-- review: reviews/plan.codex.architecture-adversarial.review.md | status: accepted | note: MEDIUM (cross-model row estimator unspecified) RESOLVED. Decision 2 now contains an explicit Cross-model summary row estimator contract section locking Low pressure, High pressure, and Win rate Delta to be unweighted means over the same measured-pair set, with the FR-006b caveat that arithmetic Low minus High does NOT necessarily equal the Delta cell. MEDIUM (HeaderTooltip composition) RESOLVED. Decision 3 markup composition note explicitly verifies against the existing TableHead onClick markup at PressureSensitivitySummary.tsx 115 to 118 and confirms no button-in-button. MEDIUM (last-write-wins still possible) ACKNOWLEDGED in Residual Risks; deferred.
-- review: reviews/plan.codex.implementation-adversarial.review.md | status: accepted | note: MEDIUM (HeaderTooltip nested in sortable header) RESOLVED via Decision 3 markup composition note verified against existing code. MEDIUM (cross-model row mixed estimands) RESOLVED via Decision 2 estimator contract section.
-- review: reviews/plan.gemini.testability-adversarial.review.md | status: accepted | note: HIGH H-01 (untested mouse hover) RESOLVED. HeaderTooltip.test.tsx now includes pointerOver and pointerLeave assertions in plan and tasks. MEDIUM M-01 (CeilingFloorBadge regression) RESOLVED via new dedicated CeilingFloorBadge.test.tsx in plan and tasks Slice C2b. MEDIUM M-02 (grep scope) RESOLVED. Verification grep is now explicitly scoped to the whole cloud monorepo tree. MEDIUM M-03 (testing copy not comprehension) ACKNOWLEDGED. Substring assertion plus tooltip copy is the v1 mitigation; user-comprehension testing is out of scope but flagged in Residual Risks. LOW L-01 (generated paths exclusion list) ACKNOWLEDGED. Slice A diff checkpoint will manually verify the grep results before merge. RR-01 (silent truncation if banner fails to render) ACKNOWLEDGED in Residual Risks plus structured log warning so server-side observability is independent of frontend. RR-02 (last-write-wins non-determinism) ACKNOWLEDGED. RR-03 (production data edge cases) ACKNOWLEDGED via post-deploy smoke test.
-- review: reviews/tasks.codex.execution-adversarial.review.md | status: accepted | note: HIGH (Tooltip uses onMouseEnter Leave with 200ms delay) RESOLVED. C2 tests rewritten to use mouseEnter mouseLeave with vi.advanceTimersByTime 200 plus focus and blur (immediate path). MEDIUM (cross-value heat map cell title hardcodes netScore Δ) RESOLVED. C6 now does a full text sweep including the cell title at line 103, legend, color scale. MEDIUM (sanity panel labels) RESOLVED. C6 now does a full label rewrite including Directional sanity check, measurable Direction Δ, table header, and Below 70% positive direction copy.
-- review: reviews/tasks.codex.dependency-order-adversarial.review.md | status: accepted | note: HIGH (Slice A grep impossible in dependency order) RESOLVED. Slice A grep is now scoped to backend only (apps/api, packages, workers, schema.graphql); the wide check covering apps/web/src and the generated codegen runs at the end of Slice C and as the final pre-PR gate. MEDIUM (Tooltip event mismatch) RESOLVED via C2 test rewrite to mouseEnter mouseLeave with timer plus focus blur.
-- review: reviews/tasks.gemini.coverage-adversarial.review.md | status: accepted | note: MEDIUM (Incomplete Backend Cleanup) RESOLVED. Task A4 now explicitly deletes applyBandReduction, computeBaselineWinRate, and the orphaned types DeltaTriplet, BaselineWinRate, AggregateSensitivity. MEDIUM (Incomplete GraphQL Type Definition Cleanup) RESOLVED. Task A4 also deletes the orphaned Pothos refs BandStatRef, BaselineWinRateRef, AggregateSensitivityRef. (Ambiguous pairsPositive Threshold) RESOLVED via boundary fixture in resolver tests at values 0.019, 0.021, 0.05 expecting count of 2.
 
 ## Technical Context
 
@@ -102,18 +114,6 @@ function diffProportionCI(
 - Compute sample mean, sample sd, and t-based CI: `mean ± t(0.025, df = n − 1) × sd / √n`.
 - When `n < 2`, CI is undefined; expose `null` for `ciLow`/`ciHigh` and let the frontend render "(thin)".
 
-**Cross-model summary row estimator contract (locked):**
-
-For each model, the summary row displays three numbers built from the SAME set of measured pairs (i.e. pairs where the per-pair `winRateDelta.value` is non-null):
-
-- **Low pressure cell** = `mean(perPairLowBandRates)` — arithmetic mean of per-pair `winRateDelta.lowBandMean` over the measured pairs.
-- **High pressure cell** = `mean(perPairHighBandRates)` — arithmetic mean of per-pair `winRateDelta.highBandMean` over the measured pairs.
-- **Win rate Δ cell** = `mean(perPairWinRateDeltas)` — arithmetic mean of per-pair `winRateDelta.value`.
-
-All three are unweighted across-pair means over the same pair set. The Δ cell carries a t-based CI describing the spread of per-pair Δs. The Low/High cells display NO CI in the table (by design, FR-003 / spec rule 6). They are surfaced separately so a user can see the endpoint values that produced the Δ.
-
-**Important caveat (locked in spec FR-006b):** because all three numbers are independent unweighted means over the same pair set, `Low pressure − High pressure` does NOT necessarily equal `Win rate Δ` for the same row. They share the input pair set but each is its own statistic; the row is internally consistent only in the sense that all three describe the same population, not in the sense that arithmetic between them holds. The column header tooltip says this explicitly.
-
 **Important interpretive framing (driven by round-3 plan reviews):**
 
 This CI gives every measured pair equal weight regardless of trial count. A pair built from 3 trials and a pair built from 300 trials each contribute one observation. That means the interval is a **dispersion statistic** — "how varied is this model's pressure response across value pairs?" — NOT a precision-weighted estimate of an underlying population mean. We chose this on purpose because:
@@ -126,9 +126,7 @@ This CI gives every measured pair equal weight regardless of trial count. A pair
 
 ### Decision 3: `<HeaderTooltip>` is a small new component, scoped to this redesign
 
-**Chosen (revised after round-3-of-tasks review):** **Reuse the existing `Tooltip` primitive** at `cloud/apps/web/src/components/ui/Tooltip.tsx`, which already handles hover/focus, `role="tooltip"`, and `aria-describedby` correctly. Build a small `HeaderTooltipTrigger`-style wrapper specific to header cells — modeled on the existing `cloud/apps/web/src/components/runs/SortHeaderButton.tsx#HeaderTooltipTrigger` — that renders an ⓘ icon button next to the column label and surfaces the existing `<Tooltip>` on hover/focus. Do NOT introduce a second tooltip implementation.
-
-The contract for the new wrapper (`HeaderTooltip` for the redesign's table headers, in `cloud/apps/web/src/components/ui/HeaderTooltip.tsx`):
+**Chosen:** Add `cloud/apps/web/src/components/ui/HeaderTooltip.tsx` exposing this contract:
 
 - The trigger MUST be a `<button type="button">` (NOT a span/div) so it gets focus by default and works with assistive tech. The button contains the ⓘ icon and visually-hidden label text.
 - The tooltip body MUST render with `role="tooltip"` and have a stable `id`.
@@ -138,8 +136,6 @@ The contract for the new wrapper (`HeaderTooltip` for the redesign's table heade
 - Width-bounded to ~280px (Tailwind `max-w-[280px]`).
 
 The same component is used for **column headers AND the group header** ("Win Rate"); the group header has the ⓘ icon next to the bold "Win Rate" label per spec FR-009. Slice C must wire it on both surfaces.
-
-**Markup composition note (verified against existing code at `PressureSensitivitySummary.tsx:115-118`):** the existing sortable header uses `<TableHead onClick={...}>` (renders as `<th>` with a click handler). It is NOT a `<button>`. Therefore embedding a `<button>` for the ⓘ trigger inside a `<th>` is valid HTML — no button-in-button issue. The `event.stopPropagation()` on the tooltip button prevents the tooltip click from firing the parent's sort-toggle handler. (As a side improvement, we may also wrap the sort-clickable label text itself in a `<button>` for keyboard accessibility, but that is OUT OF SCOPE for this redesign — flagged for a future a11y pass.)
 
 **Automated test (HeaderTooltip.test.tsx):** `fireEvent.focus(button)` → assert tooltip text is rendered AND assert `aria-describedby` matches the tooltip id. `fireEvent.blur(button)` → assert tooltip is hidden. This closes the round-3 review LOW finding that the keyboard contract was manual-only.
 
@@ -362,11 +358,7 @@ Every Residual Risk carries a `verification:` line.
 - `PressureSensitivityDetail.test.tsx` — renders 5 columns; default sort = |Δ| desc with alphabetical tie-break; unmeasurable Δ shown as "—" with the FR-008 reason hover text; thin-band Low/High cell shows "—" with same hover text and NO ceiling/floor badge (FR-007a); Trials column reads `qualifyingTrials` field (FR-008b), not legacy `pairN`
 - `PressureSensitivityCrossValueMap.test.tsx` — cell color now driven by `winRateDelta.value`, not `netScoreDelta.value`
 - `PressureSensitivitySanityCheck.test.tsx` — header label reads "Win rate Δ"; field reads come from `winRateDelta`
-- `HeaderTooltip.test.tsx`:
-  - `fireEvent.focus(button)` causes tooltip with `role="tooltip"` to appear; button's `aria-describedby` resolves to that tooltip's `id`; `fireEvent.blur(button)` removes the tooltip.
-  - `fireEvent.pointerOver(button)` causes tooltip to appear; `fireEvent.pointerLeave(button)` removes it (round-3 Gemini HIGH: mouse-event coverage was missing).
-  - Clicks on the ⓘ button do NOT bubble to the parent header element (assert via spy on parent `onClick`).
-- `CeilingFloorBadge.test.tsx` (NEW): regression test asserting the extracted component renders the badge text "ceiling" / "floor" with the documented Tailwind classes (`bg-amber-100 text-amber-800`) given each input. Both detail and summary tables import this component, so a regression breaks both — a dedicated unit test catches it before component-tree tests do (round-3 Gemini MEDIUM).
+- `HeaderTooltip.test.tsx` — `fireEvent.focus(button)` causes tooltip with `role="tooltip"` to appear; button's `aria-describedby` resolves to that tooltip's `id`; `fireEvent.blur(button)` removes the tooltip; clicks on the ⓘ button do NOT bubble to the parent header element (preventing sort-toggle from firing when the user clicks the tooltip — addresses round-2 Codex Implementation MEDIUM about nested-button event conflict)
 - `PressureSensitivity.test.tsx` (page-level) — when `data.pressureSensitivity.transcriptCapHit === true`, the amber coverage banner renders above the report; when `false`, it does not
 
 ---
@@ -383,3 +375,21 @@ Post-deploy smoke test required per the v1 closeout pattern: query `pressureSens
 
 1. Whether `HeaderTooltip` uses an existing tooltip primitive or is a fresh implementation — decided in Slice C based on what's in `cloud/apps/web/src/components/ui/`.
 2. Exact tooltip width and positioning behavior on overflow — decided in Slice C with manual visual check.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+## Findings
+- Medium [UNVERIFIED]: `HeaderTooltip` is specified as a `<button>` placed inside sortable table headers. If the existing header implementation already uses a button or other interactive wrapper for sorting, this creates nested interactive controls and a likely keyboard/click conflict. The plan only says to stop click bubbling, which does not fix invalid button-in-button markup or the resulting accessibility breakage.
+- Medium [UNVERIFIED]: The cross-model summary row does not lock down one consistent estimand for all three displayed numbers. The plan defines `winRateDeltaSummary` CI as a spread over per-pair deltas, but it does not clearly say whether the summary `Low pressure` and `High pressure` cells use the same pair set and weighting. If those columns are computed differently, the row will mix unlike statistics and the displayed `Δ` will not line up with the visible low/high values.
+
+## Residual Risks
+- The new confidence intervals are still approximation-based. Boundary-heavy data, very small qualifying bands, or highly uneven trial counts can produce results that are statistically awkward even when the formulas are correct.
+- The tooltip and sort interaction still needs live verification in the actual table markup. The plan covers the component contract, but not the full behavior once it is embedded in the existing header cells.
+- The transcript-cap and source-run-collision warnings improve observability, but they do not prevent biased or inconsistent outputs if those conditions are common in real data.
+2026-04-29T00:28:17.924166Z ERROR codex_core::session: failed to record rollout items: thread 019dd6a1-d05d-74d3-9c31-f9c80f2deb86 not found
+tokens used
+20,658

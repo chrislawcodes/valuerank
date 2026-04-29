@@ -1,25 +1,14 @@
 import { db, Prisma } from '@valuerank/db';
 import { NotFoundError, ValidationError } from '@valuerank/shared';
-import { GraphQLError } from 'graphql';
 
 import { builder } from '../builder.js';
 import { UserRef } from '../types/user.js';
 import { UserRoleEnum } from '../types/enums.js';
-import { hashPassword } from '../../auth/services.js';
+import { hashPassword } from '../../auth/index.js';
+import { requireAdmin } from '../../auth/require-admin.js';
 
 const MIN_PASSWORD_LENGTH = 12;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-function throwAdminAccessError(): never {
-  throw new GraphQLError('Admin access required', {
-    extensions: {
-      code: 'FORBIDDEN',
-      http: {
-        status: 403,
-      },
-    },
-  });
-}
 
 const CreateUserInput = builder.inputType('CreateUserInput', {
   fields: (t) => ({
@@ -93,9 +82,7 @@ builder.mutationField('createUser', (t) =>
       input: t.arg({ type: CreateUserInput, required: true }),
     },
     resolve: async (_root, args, ctx) => {
-      if (ctx.user === null || ctx.user === undefined || ctx.user.role !== 'ADMIN') {
-        throwAdminAccessError();
-      }
+      requireAdmin(ctx);
 
       const email = normalizeEmail(args.input.email);
       const name = args.input.name.trim();
@@ -153,9 +140,7 @@ builder.mutationField('updateUserRole', (t) =>
       input: t.arg({ type: UpdateUserRoleInput, required: true }),
     },
     resolve: async (_root, args, ctx) => {
-      if (ctx.user === null || ctx.user === undefined || ctx.user.role !== 'ADMIN') {
-        throwAdminAccessError();
-      }
+      requireAdmin(ctx);
 
       const userId = String(args.input.userId);
       const nextRole = args.input.role;

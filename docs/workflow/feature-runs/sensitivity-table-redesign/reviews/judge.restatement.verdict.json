@@ -1,0 +1,9 @@
+{
+  "judge": "restatement",
+  "model": "gpt-5.4",
+  "verdict": "block",
+  "confidence": 0,
+  "reasoning": "schema_violation: maximum recursion depth exceeded",
+  "evidence": [],
+  "timestamp": "2026-04-29T00:09:04.003088Z"
+}
