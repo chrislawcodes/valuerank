@@ -13,6 +13,7 @@ query OpenRunAnomalies($domainId: ID, $type: RunAnomalyType) {
     reprobeEligible
     reprobeCount
     reprobeLimitReached
+    reprobeStage
     estimatedCost
     run {
       id

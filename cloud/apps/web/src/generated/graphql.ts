@@ -3442,6 +3442,8 @@ export type RunAnomaly = {
   reprobeEligible: Scalars['Boolean']['output'];
   /** True when reprobeCount has reached the circuit-breaker limit (3). UI should disable the [Re-probe] button. */
   reprobeLimitReached: Scalars['Boolean']['output'];
+  /** Current pipeline stage for an in-progress manual re-probe: probing | summarizing | analyzing | aggregating | fixed. Null when no re-probe is in flight. */
+  reprobeStage?: Maybe<Scalars['String']['output']>;
   resolvedAt?: Maybe<Scalars['DateTime']['output']>;
   /** The run this anomaly belongs to */
   run: Run;
@@ -4598,7 +4600,7 @@ export type OpenRunAnomaliesQueryVariables = Exact<{
 }>;
 
 
-export type OpenRunAnomaliesQuery = { __typename?: 'Query', openRunAnomalies: Array<{ __typename?: 'RunAnomaly', id: string, runId: string, type: RunAnomalyType, subject: string, source: RunAnomalySource, details: unknown, firstSeenAt: string, lastSeenAt: string, displayLabel: string, displaySubject: string, reprobeEligible: boolean, reprobeCount: number, reprobeLimitReached: boolean, estimatedCost?: number | null, run: { __typename?: 'Run', id: string, name?: string | null, status: string }, domain?: { __typename?: 'Domain', id: string, name: string } | null }> };
+export type OpenRunAnomaliesQuery = { __typename?: 'Query', openRunAnomalies: Array<{ __typename?: 'RunAnomaly', id: string, runId: string, type: RunAnomalyType, subject: string, source: RunAnomalySource, details: unknown, firstSeenAt: string, lastSeenAt: string, displayLabel: string, displaySubject: string, reprobeEligible: boolean, reprobeCount: number, reprobeLimitReached: boolean, reprobeStage?: string | null, estimatedCost?: number | null, run: { __typename?: 'Run', id: string, name?: string | null, status: string }, domain?: { __typename?: 'Domain', id: string, name: string } | null }> };
 
 export type ReprobeAnomalySlotMutationVariables = Exact<{
   anomalyId: Scalars['ID']['input'];
@@ -7178,6 +7180,7 @@ export const OpenRunAnomaliesDocument = gql`
     reprobeEligible
     reprobeCount
     reprobeLimitReached
+    reprobeStage
     estimatedCost
     run {
       id

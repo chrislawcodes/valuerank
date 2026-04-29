@@ -27,6 +27,7 @@ function buildIncrementedDetails(details: unknown, currentAttempts: number): Pri
     ? { ...(details as Record<string, unknown>) }
     : {};
   base.reprobeAttempts = currentAttempts + 1;
+  base.reprobeStage = 'probing';
   return base as Prisma.InputJsonValue;
 }
 
@@ -204,6 +205,7 @@ builder.mutationField('reprobeAnomalySlot', (t) =>
             sampleIndex: slot.sampleIndex,
             config: { maxTurns: 10 },
             manualReprobe: true,
+            anomalyId,
           },
           { ...jobOptions, singletonKey },
         );

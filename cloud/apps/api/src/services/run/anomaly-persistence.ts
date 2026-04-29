@@ -1,4 +1,4 @@
-import { db } from '@valuerank/db';
+import { db, type Prisma } from '@valuerank/db';
 import type { RunAnomalySource } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 import type { AnomalyDraft, RunAnomalyType } from './anomaly-detection.js';
@@ -79,14 +79,49 @@ export async function syncAnomalies(
       source,
       resolvedAt: null,
     },
-    select: { subject: true },
+    select: { subject: true, details: true },
   });
 
   for (const anomaly of existing) {
     if (!currentSubjects.has(anomaly.subject)) {
+      // Don't auto-resolve when a reprobe pipeline is in flight or has completed.
+      // 'fixed' anomalies must be resolved explicitly by the user; intermediate
+      // stages must not be resolved before the pipeline finishes.
+      const details = anomaly.details as Record<string, unknown> | null;
+      const reprobeStage = typeof details?.reprobeStage === 'string' ? details.reprobeStage : null;
+      if (reprobeStage !== null) {
+        continue;
+      }
       await resolveAnomaly({ runId, type, subject: anomaly.subject, source });
     }
   }
+}
+
+/**
+ * Merge-updates the reprobeStage field inside an anomaly's JSONB details.
+ * Safe to call even if the anomaly has been resolved; logs a warning and no-ops.
+ */
+export async function setReprobeStage(anomalyId: string, stage: string): Promise<void> {
+  const anomaly = await db.runAnomaly.findUnique({
+    where: { id: anomalyId },
+    select: { details: true },
+  });
+  if (anomaly === null) {
+    log.warn({ anomalyId, stage }, 'setReprobeStage: anomaly not found');
+    return;
+  }
+  const current: Record<string, unknown> =
+    anomaly.details !== null &&
+    typeof anomaly.details === 'object' &&
+    !Array.isArray(anomaly.details)
+      ? { ...(anomaly.details as Record<string, unknown>) }
+      : {};
+  current.reprobeStage = stage;
+  await db.runAnomaly.update({
+    where: { id: anomalyId },
+    data: { details: current as Prisma.InputJsonValue },
+  });
+  log.info({ anomalyId, stage }, 'Set reprobeStage');
 }
 
 export async function resolveAnomaly(key: RunAnomalyKey): Promise<void> {

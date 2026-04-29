@@ -24,6 +24,7 @@ import {
   type AnalyzeWorkerInput,
   type AnalyzeWorkerOutput,
 } from './analyze-basic-data.js';
+import { setReprobeStage } from '../../services/run/anomaly-persistence.js';
 
 const log = createLogger('queue:analyze-basic');
 
@@ -74,6 +75,22 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
 
           if (cached) {
             log.info({ jobId, runId, analysisId: cached.id }, 'Using cached analysis result');
+            // Still advance reprobe stage on cache hit — the analysis exists.
+            try {
+              const runAnomalies = await db.runAnomaly.findMany({
+                where: { runId, resolvedAt: null },
+                select: { id: true, details: true },
+              });
+              for (const anomaly of runAnomalies) {
+                const stage = (anomaly.details as Record<string, unknown> | null)?.reprobeStage;
+                if (stage === 'analyzing') {
+                  await setReprobeStage(anomaly.id, 'aggregating');
+                  log.info({ jobId, runId, anomalyId: anomaly.id }, 'Advanced reprobe stage to aggregating (cache hit)');
+                }
+              }
+            } catch (err) {
+              log.error({ jobId, runId, err }, 'Failed to advance reprobe stage on cache hit');
+            }
             return;
           }
         }
@@ -177,6 +194,23 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
           { jobId, runId, durationMs: output.analysis.durationMs },
           'Analyze:basic job completed'
         );
+
+        // Reprobe pipeline: advance any anomalies for this run from 'analyzing' → 'aggregating'.
+        try {
+          const runAnomalies = await db.runAnomaly.findMany({
+            where: { runId, resolvedAt: null },
+            select: { id: true, details: true },
+          });
+          for (const anomaly of runAnomalies) {
+            const stage = (anomaly.details as Record<string, unknown> | null)?.reprobeStage;
+            if (stage === 'analyzing') {
+              await setReprobeStage(anomaly.id, 'aggregating');
+              log.info({ jobId, runId, anomalyId: anomaly.id }, 'Advanced reprobe stage to aggregating');
+            }
+          }
+        } catch (err) {
+          log.error({ jobId, runId, err }, 'Failed to advance reprobe stage after analysis');
+        }
 
         // --- Trigger Aggregate Update ---
         try {

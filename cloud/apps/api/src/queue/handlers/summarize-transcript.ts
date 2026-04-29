@@ -26,6 +26,7 @@ import {
   isSummaryCache,
   type WinnerFirstSummaryCache,
 } from './summarize-types.js';
+import { setReprobeStage } from '../../services/run/anomaly-persistence.js';
 import {
   isCacheRecordMatch,
   persistCachedSummary,
@@ -518,6 +519,19 @@ export function createSummarizeTranscriptHandler(): PgBoss.WorkHandler<Summarize
       },
       'Summarize batch processing complete'
     );
+
+    // Reprobe pipeline: advance stage for any jobs that carried an anomalyId.
+    for (const job of jobs) {
+      const { anomalyId, transcriptId } = job.data;
+      if (anomalyId == null || anomalyId === '') continue;
+      const transcript = await db.transcript.findUnique({
+        where: { id: transcriptId },
+        select: { summarizedAt: true },
+      });
+      if (transcript?.summarizedAt == null) continue;
+      await setReprobeStage(anomalyId, 'analyzing');
+      log.info({ anomalyId, transcriptId, runId: job.data.runId }, 'Advanced reprobe stage to analyzing');
+    }
 
     if (retryableError !== null) {
       throw retryableError;

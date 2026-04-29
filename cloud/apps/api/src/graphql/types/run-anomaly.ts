@@ -170,6 +170,17 @@ builder.objectType(RunAnomalyRef, {
       resolve: (anomaly) => REPROBABLE_TYPES.has(anomaly.type) && readReprobeAttempts(anomaly.details) >= REPROBE_LIMIT,
     }),
 
+    reprobeStage: t.string({
+      nullable: true,
+      description: 'Current pipeline stage for an in-progress manual re-probe: probing | summarizing | analyzing | aggregating | fixed. Null when no re-probe is in flight.',
+      resolve: (anomaly) => {
+        if (!REPROBABLE_TYPES.has(anomaly.type)) return null;
+        const details = anomaly.details as Record<string, unknown> | null;
+        const stage = details?.reprobeStage;
+        return typeof stage === 'string' && stage.length > 0 ? stage : null;
+      },
+    }),
+
     estimatedCost: t.float({
       nullable: true,
       description: 'Best-effort cost estimate for the next re-probe attempt, computed as the average estimatedCost of the last 10 successful (non-deleted, summarized) transcripts for the same modelId across all runs. Returns null when the anomaly is not reprobable, no modelId is available, or no recent transcripts have cost data.',

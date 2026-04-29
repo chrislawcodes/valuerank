@@ -27,6 +27,7 @@ import { enqueueTopUpProbesSingleton } from '../top-up-probes.js';
 import { formatWorkerErrorMessage, extractStoredTranscriptTokenUsage, handleJobError } from './retry.js';
 import { PROBE_WORKER_PATH, fetchScenario, buildWorkerInput } from './worker-input.js';
 import type { ProbeWorkerInput, ProbeWorkerOutput } from './worker-input.js';
+import { setReprobeStage } from '../../../services/run/anomaly-persistence.js';
 
 const log = createLogger('queue:probe-scenario');
 
@@ -333,6 +334,23 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
     // When we just entered SUMMARIZING in this call, queueSummarizeJobs already handled it.
     if (!advanceResult.enteredSummarizing && currentRun?.status === 'SUMMARIZING') {
       await enqueueSummarizeTranscriptSingleton(runId, transcriptRecord.id);
+    }
+
+    // Reprobe pipeline: kick off summarization and advance stage.
+    // Enqueue first so a boss.send failure leaves the stage at 'probing' (safe to retry).
+    // Normal runs handle summarize via SUMMARIZING status; COMPLETED runs need explicit enqueue.
+    if (job.data.manualReprobe === true && typeof job.data.anomalyId === 'string' && job.data.anomalyId !== '') {
+      const anomalyId = job.data.anomalyId;
+      const { getBoss } = await import('../../boss.js');
+      const { DEFAULT_JOB_OPTIONS: jobOptions } = await import('../../types.js');
+      const boss = getBoss();
+      await boss.send(
+        'summarize_transcript',
+        { runId, transcriptId: transcriptRecord.id, anomalyId },
+        { ...jobOptions['summarize_transcript'], singletonKey: transcriptRecord.id },
+      );
+      await setReprobeStage(anomalyId, 'summarizing');
+      log.info({ jobId, runId, anomalyId, transcriptId: transcriptRecord.id }, 'Enqueued summarize for reprobe pipeline');
     }
 
     log.info(

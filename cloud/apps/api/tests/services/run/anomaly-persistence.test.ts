@@ -115,7 +115,7 @@ describe('run anomaly persistence helpers', () => {
 
   it('syncs anomalies without touching other sources', async () => {
     mockAnomalyUpsert.mockResolvedValue(undefined);
-    mockAnomalyFindMany.mockResolvedValue([{ subject: 'group-1' }]);
+    mockAnomalyFindMany.mockResolvedValue([{ subject: 'group-1', details: null }]);
 
     await syncAnomalies('run_1', 'PAIR_ASYMMETRY', [], 'audit');
 
@@ -126,7 +126,7 @@ describe('run anomaly persistence helpers', () => {
         source: 'audit',
         resolvedAt: null,
       },
-      select: { subject: true },
+      select: { subject: true, details: true },
     });
     expect(mockAnomalyUpdateMany).toHaveBeenCalledWith(
       expect.objectContaining({
