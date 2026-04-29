@@ -48,7 +48,6 @@ builder.queryField('modelsConfidence', (t) =>
         where: {
           status: 'COMPLETED',
           deletedAt: null,
-          tags: { some: { tag: { name: 'Aggregate' } } },
         },
         select: { id: true, config: true },
       });
