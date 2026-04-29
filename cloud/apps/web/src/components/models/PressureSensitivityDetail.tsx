@@ -6,6 +6,16 @@ import { Tooltip } from '../ui/Tooltip';
 import { CeilingFloorBadge } from './CeilingFloorBadge';
 import { PressureGrid } from './PressureGrid';
 import type { PressureSensitivityModel, PressureSensitivityValuePair } from '../../api/operations/pressureSensitivity';
+import {
+  GROUP_TOOLTIP,
+  LOW_TOOLTIP as LOW_TOOLTIP_BASE,
+  HIGH_TOOLTIP as HIGH_TOOLTIP_BASE,
+  PAIR_DELTA_TOOLTIP as DELTA_TOOLTIP,
+  formatPercent,
+  formatPoints,
+  getBadgeFlag,
+  reasonHoverText,
+} from './pressureSensitivityFormatting';
 
 type Props = {
   model: PressureSensitivityModel;
@@ -13,52 +23,22 @@ type Props = {
 
 type SortDirection = 'asc' | 'desc';
 
-const GROUP_TOOLTIP =
-  'The percentage of trials where the model picked the value. Same formula as the win rate shown elsewhere in ValueRank: picks / (picks + non-picks + neutrals). Higher = the model picks it more often.';
 const VALUE_PAIR_TOOLTIP = 'The value pair shown in this row.';
 const TRIALS_TOOLTIP =
   'Total scored trials that contributed to this row\'s win rates. Counts only trials inside cells that met the coverage threshold (N ≥ 3) in the light or heavy pressure band. Refusals, unparseable responses, and trials in cells we skipped (low-data cells, level 3) are excluded.';
-const LOW_TOOLTIP =
-  "The model's win rate when pressure on this value is light (levels 1 or 2 out of 5). Per-pair: for this pair specifically.";
-const HIGH_TOOLTIP =
-  "The model's win rate when pressure on this value is heavy (levels 4 or 5 out of 5). Per-pair: for this pair specifically.";
-const DELTA_TOOLTIP =
-  'How much the win rate changes from light pressure to heavy pressure, in percentage points. Light pressure = own pressure level 1 or 2 on this value. Heavy pressure = level 4 or 5. Level 3 is excluded so the Δ reflects the biggest contrast in the data. Example: +40 pp means the model picks the value 40 percentage points more often at heavy pressure than at light. Negative means the model picks it less under heavy pressure. The CI is the spread of per-pair Δs across this model\'s measured value pairs.';
-
-const THIN_REASON_COPY: Record<string, string> = {
-  'low-band-thin': 'Low pressure band has no cells with N ≥ 3 trials. Try adding more low-pressure runs.',
-  'high-band-thin': 'High pressure band has no cells with N ≥ 3 trials. Try adding more high-pressure runs.',
-  'both-bands-thin': 'Neither pressure band has cells with N ≥ 3 trials. This pair needs more coverage to compute a Δ.',
-};
+const LOW_TOOLTIP = `${LOW_TOOLTIP_BASE} Per-pair: for this pair specifically.`;
+const HIGH_TOOLTIP = `${HIGH_TOOLTIP_BASE} Per-pair: for this pair specifically.`;
 
 function pairLabel(pair: PressureSensitivityValuePair): string {
   return `${pair.ownToken} ↔ ${pair.opponentToken}`;
 }
 
-function formatPercent(value: number): string {
-  return `${(value * 100).toFixed(0)}%`;
-}
-
-function formatPoints(value: number): string {
-  return `${Math.abs(value * 100).toFixed(0)} pp`;
-}
-
-function getBadgeFlag(value: number): 'ceiling' | 'floor' | null {
-  if (value >= 0.9) return 'ceiling';
-  if (value <= 0.1) return 'floor';
-  return null;
-}
-
 function bandTooltip(kind: 'low' | 'high', value: number | null | undefined, reason: string | null | undefined): string {
   if (value == null) {
-    if (reason === 'low-band-thin' || reason === 'high-band-thin' || reason === 'both-bands-thin') {
-      return THIN_REASON_COPY[reason] ?? 'No pooled win rate is available.';
-    }
-    return 'No pooled win rate is available.';
+    const explainer = reasonHoverText(reason);
+    return explainer !== '' ? explainer : 'No pooled win rate is available.';
   }
-  return kind === 'low'
-    ? LOW_TOOLTIP
-    : HIGH_TOOLTIP;
+  return kind === 'low' ? LOW_TOOLTIP : HIGH_TOOLTIP;
 }
 
 function renderBandCell(kind: 'low' | 'high', value: number | null | undefined, reason: string | null | undefined) {
@@ -70,7 +50,7 @@ function renderBandCell(kind: 'low' | 'high', value: number | null | undefined, 
     );
   }
 
-  const badgeFlag = kind === 'low' ? getBadgeFlag(value) : null;
+  const badgeFlag = kind === 'low' ? getBadgeFlag(value) ?? null : null;
   return (
     <Tooltip content={<div className="max-w-[280px] whitespace-normal text-xs leading-5">{bandTooltip(kind, value, reason)}</div>} position="top" variant="light">
       <div className="inline-flex items-center gap-1">

@@ -5,6 +5,15 @@ import { HeaderTooltip } from '../ui/HeaderTooltip';
 import { Tooltip } from '../ui/Tooltip';
 import { CeilingFloorBadge } from './CeilingFloorBadge';
 import type { PressureSensitivityModel, PressureSensitivityWinRateDeltaSummary } from '../../api/operations/pressureSensitivity';
+import {
+  GROUP_TOOLTIP,
+  LOW_TOOLTIP as LOW_TOOLTIP_BASE,
+  HIGH_TOOLTIP as HIGH_TOOLTIP_BASE,
+  SUMMARY_DELTA_TOOLTIP as DELTA_TOOLTIP,
+  formatPercent,
+  formatPoints,
+  getBadgeFlag,
+} from './pressureSensitivityFormatting';
 
 type Props = {
   models: PressureSensitivityModel[];
@@ -14,29 +23,9 @@ type Props = {
 
 type SortDirection = 'asc' | 'desc';
 
-const GROUP_TOOLTIP =
-  'The percentage of trials where the model picked the value. Same formula as the win rate shown elsewhere in ValueRank: picks / (picks + non-picks + neutrals). Higher = the model picks it more often.';
 const MODEL_TOOLTIP = 'The model in this row.';
-const LOW_TOOLTIP =
-  "The model's win rate when pressure on this value is light (levels 1 or 2 out of 5). Averaged across this model's measured value pairs.";
-const HIGH_TOOLTIP =
-  "The model's win rate when pressure on this value is heavy (levels 4 or 5 out of 5). Averaged across this model's measured value pairs.";
-const DELTA_TOOLTIP =
-  'How much the win rate changes from light pressure to heavy pressure, in percentage points. Light pressure = own pressure level 1 or 2 on this value. Heavy pressure = level 4 or 5. Level 3 is excluded so the Δ reflects the biggest contrast in the data. The CI is the spread of per-pair Δs across this model\'s measured value pairs.';
-
-function formatPercent(value: number): string {
-  return `${(value * 100).toFixed(0)}%`;
-}
-
-function formatPoints(value: number): string {
-  return `${Math.abs(value * 100).toFixed(0)} pp`;
-}
-
-function getBadgeFlag(value: number): 'ceiling' | 'floor' | null {
-  if (value >= 0.9) return 'ceiling';
-  if (value <= 0.1) return 'floor';
-  return null;
-}
+const LOW_TOOLTIP = `${LOW_TOOLTIP_BASE} Averaged across this model's measured value pairs.`;
+const HIGH_TOOLTIP = `${HIGH_TOOLTIP_BASE} Averaged across this model's measured value pairs.`;
 
 function renderBandCell(value: number | null | undefined, tooltip: ReactNode, badgeFlag: 'ceiling' | 'floor' | null) {
   if (value == null) {

@@ -143,6 +143,6 @@ describe('PressureSensitivityDetail', () => {
     const trigger = screen.getByRole('button', { name: /show win rate Δ ± ci help/i });
     fireEvent.focus(trigger);
 
-    expect(screen.getByRole('tooltip').textContent ?? '').toContain('spread of per-pair Δs');
+    expect(screen.getByRole('tooltip').textContent ?? '').toContain('trial-level uncertainty within the pair');
   });
 });
