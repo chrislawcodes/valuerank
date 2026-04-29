@@ -7,12 +7,23 @@
 import { builder } from '../builder.js';
 import { db } from '@valuerank/db';
 import { AuthenticationError } from '@valuerank/shared';
+import { GraphQLError } from 'graphql';
 import { UserRef } from '../types/user.js';
 import { ApiKeyRef } from '../types/api-key.js';
-import { requireAdmin } from '../../auth/require-admin.js';
 
 const MAX_LIMIT = 100;
 const DEFAULT_LIMIT = 50;
+
+function throwAdminAccessError(): never {
+  throw new GraphQLError('Admin access required', {
+    extensions: {
+      code: 'FORBIDDEN',
+      http: {
+        status: 403,
+      },
+    },
+  });
+}
 
 // Query: me - get current authenticated user
 builder.queryField('me', (t) =>
@@ -54,7 +65,9 @@ builder.queryField('listUsers', (t) =>
     type: [UserRef],
     description: 'List all users. Admin only.',
     resolve: async (_root, _args, ctx) => {
-      requireAdmin(ctx);
+      if (ctx.user === null || ctx.user === undefined || ctx.user.role !== 'ADMIN') {
+        throwAdminAccessError();
+      }
 
       const users = await db.user.findMany({
         orderBy: { createdAt: 'desc' },
