@@ -641,6 +641,8 @@ def _attempt_model_call(
         result = record_ai_call(
             slug, stage, round_number, "judge_panel", model, _call,
             lens=f"{lens}-judge",
+            prompt_chars=len(system_prompt) + len(user_prompt),
+            prompt_cap=None,
         )
     except Exception as exc:
         return None, "", str(exc)

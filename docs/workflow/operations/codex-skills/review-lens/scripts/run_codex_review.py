@@ -39,7 +39,7 @@ from review_attempts import append_review_attempt, review_attempt_record
 
 def main() -> int:
     started_at = time.monotonic()
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--artifact", required=True)
     parser.add_argument("--lens", required=True)
     parser.add_argument("--stage", required=True, choices=["spec", "plan", "tasks", "diff", "closeout"])
@@ -55,9 +55,27 @@ def main() -> int:
     # past 120s never returns a parseable verdict. Saves ~5+ hours of cumulative
     # wall clock across feature runs. Operators can still override per-call.
     parser.add_argument("--timeout-seconds", type=int, default=120)
-    parser.add_argument("--max-artifact-chars", type=int, default=50000)
-    parser.add_argument("--max-context-chars", type=int, default=10000)
-    parser.add_argument("--max-total-chars", type=int, default=70000)
+    # Raised per PR #789's analyzer report plus PR #791's perf fixes.
+    # Operators were already overriding to these values routinely; they
+    # can still override per-call when a review needs tighter limits.
+    parser.add_argument(
+        "--max-artifact-chars",
+        type=int,
+        default=100000,
+        help="Maximum artifact chars to include before narrowing.",
+    )
+    parser.add_argument(
+        "--max-context-chars",
+        type=int,
+        default=20000,
+        help="Maximum chars to include from each context file before narrowing.",
+    )
+    parser.add_argument(
+        "--max-total-chars",
+        type=int,
+        default=200000,
+        help="Maximum total prompt chars allowed after narrowing.",
+    )
     args = parser.parse_args()
 
     try:
@@ -233,6 +251,8 @@ def main() -> int:
         args.model,
         _call,
         lens=args.lens,
+        prompt_chars=len(prompt),
+        prompt_cap=args.max_total_chars,
     )
 
     stdout_path.write_text(result.stdout, encoding="utf-8")

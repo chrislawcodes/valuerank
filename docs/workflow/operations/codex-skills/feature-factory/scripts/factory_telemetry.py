@@ -263,6 +263,8 @@ def record_ai_call(
     model: str,
     callable_fn: Callable[[], subprocess.CompletedProcess],
     lens: Optional[str] = None,
+    prompt_chars: int | None = None,
+    prompt_cap: int | None = None,
 ) -> subprocess.CompletedProcess:
     """Record an AI subprocess call into state.token_usage.
 
@@ -270,6 +272,10 @@ def record_ai_call(
     added in PR #790: the analyzer (PR #789) showed 1186 of 1446 records
     had no unambiguous lens attribution. Callers SHOULD pass it; older
     callers that don't will record `lens: null` (back-compatible).
+
+    `prompt_chars` and `prompt_cap` were added next so the analyzer can
+    measure prompt-cap pressure directly from recorded calls. Callers
+    that do not pass them record `null` for both fields.
     """
     if activity_type not in VALID_ACTIVITY_TYPES:
         raise ValueError(f"Unknown activity type: {activity_type}")
@@ -300,6 +306,8 @@ def record_ai_call(
         "activity_type": activity_type,
         "model": model,
         "lens": lens,
+        "prompt_chars": prompt_chars,
+        "prompt_cap": prompt_cap,
         "input_tokens": parsed["input_tokens"] if parsed else None,
         "output_tokens": parsed["output_tokens"] if parsed else None,
         "cost_usd_estimate": cost_usd_estimate,
