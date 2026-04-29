@@ -1,3 +1,27 @@
+Reading additional input from stdin...
+OpenAI Codex v0.125.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019dd6fb-eb90-7d60-9b2b-a35f695463af
+--------
+user
+Review this diff artifact using a regression-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: implementation.diff.patch
 diff --git a/cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts b/cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts
 index 057be081..d1aa3357 100644
 --- a/cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts
@@ -123,3 +147,23 @@ index f12dcc89..4f602090 100644
  
  export type DirectionalSanityCheck = PressureSensitivityResult['directionalSanityCheck'];
  export type DirectionalSanityCheckEntry = DirectionalSanityCheck['breakdown'][number];
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m reviewing the patch adversarially and staying inside the diff itself. I’ll focus on places where the new behavior can silently misreport data, drop rows, or break existing consumers.
+codex
+## Findings
+- Medium [UNVERIFIED]: The query/type surface changed in a breaking way in [`cloud/apps/web/src/api/operations/pressureSensitivity.graphql`](/Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59/cloud/apps/web/src/api/operations/pressureSensitivity.graphql) and [`cloud/apps/web/src/api/operations/pressureSensitivity.ts`](/Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59/cloud/apps/web/src/api/operations/pressureSensitivity.ts). The old `aggregateSensitivity`, `directionDelta`, `convictionDelta`, `netScoreDelta`, and `baselineWinRate` fields are gone, and the exported aliases `PressureSensitivityBandStat`, `PressureSensitivityBaseline`, and `PressureSensitivityAggregate` were removed. Any caller not updated in the same change will either fail TypeScript compilation or hit GraphQL validation/runtime errors.
+
+- Medium [UNVERIFIED]: The new `orderBy: { id: 'asc' }` in [`cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts`](/Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59/cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts) only preserves determinism if `id` is a safe proxy for run recency. If imported, backfilled, or repaired runs can have IDs that do not track creation order, the "last write wins" collision resolution will become consistently wrong and can silently skew the computed result.
+
+## Residual Risks
+- I could not verify from the diff alone that the server schema already exposes every newly requested field, especially `winRateDeltaSummary`, `winRateDelta`, `reason`, and `transcriptCapHit`.
+- The pagination fix looks correct for exact page boundaries, but I could not verify whether any later filtering or cursor handling elsewhere in the resolver could reintroduce an off-by-one issue.
+2026-04-29T02:06:19.943962Z ERROR codex_core::session: failed to record rollout items: thread 019dd6fb-eb90-7d60-9b2b-a35f695463af not found
+tokens used
+8,697

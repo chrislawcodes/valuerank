@@ -1,41 +1,8 @@
----
-reviewer: "codex"
-lens: "regression-adversarial"
-stage: "diff"
-artifact_path: "docs/workflow/feature-runs/sensitivity-table-redesign/reviews/implementation.diff.patch"
-artifact_sha256: "d54fe983caa2329cfe0bfd339ae00da2fca89d42d57cf2ec7b0702bff9f23bc8"
-repo_root: "."
-git_head_sha: "6f68da8676f6cefa892631008e0a91c8bf9c8b79"
-git_base_ref: "3565133420c716ceba3bc46c0cb784ce7151b8ed"
-git_base_sha: "3565133420c716ceba3bc46c0cb784ce7151b8ed"
-generation_method: "codex-runner"
-resolution_status: "accepted"
-resolution_note: "MEDIUM (breaking API change) INTENTIONAL per FR-014; web client updated atomically. MEDIUM (orderBy id:asc deterministic but not necessarily correct) ACCEPTED — see correctness review reconciliation."
-raw_output_path: "docs/workflow/feature-runs/sensitivity-table-redesign/reviews/diff.codex.regression-adversarial.review.md.raw.txt"
-narrowed_artifact_path: ""
-narrowed_artifact_sha256: ""
-coverage_status: "full"
-coverage_note: ""
----
-
-# Review: diff regression-adversarial
-
 ## Findings
-
 - Medium [UNVERIFIED]: The query/type surface changed in a breaking way in [`cloud/apps/web/src/api/operations/pressureSensitivity.graphql`](/Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59/cloud/apps/web/src/api/operations/pressureSensitivity.graphql) and [`cloud/apps/web/src/api/operations/pressureSensitivity.ts`](/Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59/cloud/apps/web/src/api/operations/pressureSensitivity.ts). The old `aggregateSensitivity`, `directionDelta`, `convictionDelta`, `netScoreDelta`, and `baselineWinRate` fields are gone, and the exported aliases `PressureSensitivityBandStat`, `PressureSensitivityBaseline`, and `PressureSensitivityAggregate` were removed. Any caller not updated in the same change will either fail TypeScript compilation or hit GraphQL validation/runtime errors.
 
 - Medium [UNVERIFIED]: The new `orderBy: { id: 'asc' }` in [`cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts`](/Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59/cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts) only preserves determinism if `id` is a safe proxy for run recency. If imported, backfilled, or repaired runs can have IDs that do not track creation order, the "last write wins" collision resolution will become consistently wrong and can silently skew the computed result.
 
 ## Residual Risks
-
 - I could not verify from the diff alone that the server schema already exposes every newly requested field, especially `winRateDeltaSummary`, `winRateDelta`, `reason`, and `transcriptCapHit`.
 - The pagination fix looks correct for exact page boundaries, but I could not verify whether any later filtering or cursor handling elsewhere in the resolver could reintroduce an off-by-one issue.
-
-## Runner Stats
-- total_input=0
-- total_output=0
-- total_tokens=0
-
-## Resolution
-- status: accepted
-- note: MEDIUM (breaking API change) INTENTIONAL per FR-014; web client updated atomically. MEDIUM (orderBy id:asc deterministic but not necessarily correct) ACCEPTED — see correctness review reconciliation.

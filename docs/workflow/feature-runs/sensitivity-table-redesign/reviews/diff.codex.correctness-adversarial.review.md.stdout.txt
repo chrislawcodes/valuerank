@@ -1,0 +1,8 @@
+## Findings
+1. Medium [UNVERIFIED]: `orderBy: { id: 'asc' }` makes the collision winner depend on `Run.id` ordering. That is only correct if higher ids always mean the intended later run. If there are backfilled rows, non-monotonic ids, or any case where id order does not match the desired precedence, the dedupe step will now pick the wrong run deterministically instead of just arbitrarily.
+
+2. Medium [UNVERIFIED]: The GraphQL shape change is a breaking API change with no compatibility layer in this patch. Removing `aggregateSensitivity`, `directionDelta`, `convictionDelta`, `netScoreDelta`, and `baselineWinRate` means any resolver, mock, test fixture, or client still expecting the old shape will fail. The new `NonNullable<>` aliases also assume the renamed fields can never be null, which is unsafe if the schema still allows nulls.
+
+## Residual Risks
+- I could not verify the surrounding schema/resolver updates, so the two main assumptions remain open: that `Run.id` truly defines the desired precedence, and that every consumer of the pressure-sensitivity GraphQL shape was updated in lockstep.
+

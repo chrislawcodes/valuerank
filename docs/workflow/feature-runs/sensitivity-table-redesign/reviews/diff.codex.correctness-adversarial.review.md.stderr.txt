@@ -1,3 +1,27 @@
+Reading additional input from stdin...
+OpenAI Codex v0.125.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/great-noyce-ed9f59
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019dd6fb-6b5c-7162-b480-0a9fc06df3de
+--------
+user
+Review this diff artifact using a correctness-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: implementation.diff.patch
 diff --git a/cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts b/cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts
 index 057be081..d1aa3357 100644
 --- a/cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts
@@ -123,3 +147,23 @@ index f12dcc89..4f602090 100644
  
  export type DirectionalSanityCheck = PressureSensitivityResult['directionalSanityCheck'];
  export type DirectionalSanityCheckEntry = DirectionalSanityCheck['breakdown'][number];
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m reviewing the patch adversarially for correctness risks only. I’ll look for places where the new logic can silently miscount, mispage, or change semantics in a way that could break callers.
+codex
+## Findings
+1. Medium [UNVERIFIED]: `orderBy: { id: 'asc' }` makes the collision winner depend on `Run.id` ordering. That is only correct if higher ids always mean the intended later run. If there are backfilled rows, non-monotonic ids, or any case where id order does not match the desired precedence, the dedupe step will now pick the wrong run deterministically instead of just arbitrarily.
+
+2. Medium [UNVERIFIED]: The GraphQL shape change is a breaking API change with no compatibility layer in this patch. Removing `aggregateSensitivity`, `directionDelta`, `convictionDelta`, `netScoreDelta`, and `baselineWinRate` means any resolver, mock, test fixture, or client still expecting the old shape will fail. The new `NonNullable<>` aliases also assume the renamed fields can never be null, which is unsafe if the schema still allows nulls.
+
+## Residual Risks
+- I could not verify the surrounding schema/resolver updates, so the two main assumptions remain open: that `Run.id` truly defines the desired precedence, and that every consumer of the pressure-sensitivity GraphQL shape was updated in lockstep.
+
+2026-04-29T02:05:26.473482Z ERROR codex_core::session: failed to record rollout items: thread 019dd6fb-6b5c-7162-b480-0a9fc06df3de not found
+tokens used
+7,514

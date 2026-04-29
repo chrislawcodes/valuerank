@@ -2,7 +2,7 @@
   "feature_slug": "sensitivity-table-redesign",
   "stage": "diff",
   "artifact_path": "docs/workflow/feature-runs/sensitivity-table-redesign/reviews/implementation.diff.patch",
-  "git_base_ref": "origin/main",
+  "git_base_ref": "3565133420c716ceba3bc46c0cb784ce7151b8ed",
   "allowed_dirty_paths": [],
   "required_reviews": [
     {

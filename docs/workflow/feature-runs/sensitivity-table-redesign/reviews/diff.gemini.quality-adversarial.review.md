@@ -3,14 +3,14 @@ reviewer: "gemini"
 lens: "quality-adversarial"
 stage: "diff"
 artifact_path: "docs/workflow/feature-runs/sensitivity-table-redesign/reviews/implementation.diff.patch"
-artifact_sha256: "d6921ddf0431336acadb5fc3f9aa6a39ef9139ac754d6ac02103d6f89a887fb9"
+artifact_sha256: "d54fe983caa2329cfe0bfd339ae00da2fca89d42d57cf2ec7b0702bff9f23bc8"
 repo_root: "."
-git_head_sha: "3565133420c716ceba3bc46c0cb784ce7151b8ed"
-git_base_ref: "origin/main"
-git_base_sha: "4772ae79f8e1580ee31c0f10f32e6d86a842ef68"
+git_head_sha: "6f68da8676f6cefa892631008e0a91c8bf9c8b79"
+git_base_ref: "3565133420c716ceba3bc46c0cb784ce7151b8ed"
+git_base_sha: "3565133420c716ceba3bc46c0cb784ce7151b8ed"
 generation_method: "gemini-cli"
 resolution_status: "accepted"
-resolution_note: "HIGH 1 (sourceRunId collision non-determinism) PARTIALLY RESOLVED. Added orderBy id:asc on db.run.findMany so last-write-wins is reproducible (commit e83fdb36). The fundamental misattribution risk stays in Residual Risks; one-to-many mapping refactor is out of scope. MEDIUM 2 (transcript fetch limit bias toward oldest) ACKNOWLEDGED in Residual Risks. Random sampling refactor deferred; transcriptCapHit warning plus UI banner per Decision 8 is the v1 mitigation."
+resolution_note: "MEDIUM (orderBy patch on deeper symptom) ACKNOWLEDGED. Collision root-cause fix is out of scope per Residual Risk; orderBy makes the symptom reproducible while we wait for telemetry from the new warning. LOW (client null handling for winRateDelta) DEFERRED to Slice C which renders the dash and reason hover per FR-008. This slice (B) only updates the operation shape."
 raw_output_path: "docs/workflow/feature-runs/sensitivity-table-redesign/reviews/diff.gemini.quality-adversarial.review.md.json"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,73 +22,38 @@ coverage_note: ""
 
 ## Findings
 
-### 1. Data Integrity Risk from `sourceRunId` Collisions
+| Severity | Finding |
+| :--- | :--- |
+| **MEDIUM** | **[UNVERIFIED] Arbitrary Determinism May Obscure Data Integrity Issues** |
+| **LOW** | **[UNVERIFIED] Client May Not Gracefully Handle Null Delta Calculations** |
 
-**Severity:** HIGH
-
-A `sourceRunId` can be associated with multiple `definitionId`s if it appears in the configuration of multiple aggregate runs. The function `buildSourceRunToDefIdMap` detects this but resolves it with a "last write wins" strategy, accompanied by a warning log. This has two major flaws:
-
-1.  **Non-Determinism:** The `eligibleRuns` are fetched from the database without a deterministic `ORDER BY` clause. This means the "last write" is arbitrary and can change between identical query executions, leading to flaky and non-reproducible results. Transcripts from the same `sourceRunId` could be assigned to `definitionA` in one run and `definitionB` in the next.
-2.  **Silent Data Misattribution:** While a warning is logged, the process continues by overwriting the previous mapping. This silently misattributes all transcripts from the colliding `sourceRunId` to a single, arbitrarily chosen definition, effectively dropping its association with the other(s).
-
+### **MEDIUM: [UNVERIFIED] Arbitrary Determinism May Obscure Data Integrity Issues**
 **File:** `cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts`
-**Lines:** `140-155` (new `buildSourceRunToDefIdMap`), `274` (call to `buildSourceRunToDefIdMap`), `269` (the `db.run.findMany` call lacking `orderBy`)
 
-**Recommendation:**
-Add a deterministic `orderBy: { id: 'asc' }` to the `db.run.findMany` call for `eligibleRuns` to resolve the non-determinism. For a more robust long-term solution, consider either rejecting queries with collisions with a user-facing error or refactoring the downstream logic to support a one-to-many mapping of `sourceRunId` to `definitionId`.
+The addition of `orderBy: { id: 'asc' }` to the `run` query is intended to make a "last write wins" scenario deterministic when multiple runs collide for the same source. While this prevents inconsistent query results, it feels like a patch on a deeper symptom.
 
----
+- **Weak Assumption:** It assumes the highest `id` always represents the most "correct" or "final" run. This may not be true if data is backfilled, re-imported, or if parallel processes create runs out of order.
+- **Hidden Flaw:** Instead of resolving *why* collisions are happening, this change simply picks a winner based on an arbitrary implementation detail (the auto-incrementing primary key). This could mask underlying bugs or race conditions in the run creation logic, leading to the system silently using potentially incorrect source data. A more robust solution would be to address the source of the collisions.
 
-### 2. Systematic Bias from Transcript Fetch Limit
+### **LOW: [UNVERIFIED] Client May Not Gracefully Handle Null Delta Calculations**
+**Files:** `cloud/apps/web/src/api/operations/pressureSensitivity.graphql`, `cloud/apps/web/src/api/operations/pressureSensitivity.ts`
 
-**Severity:** MEDIUM
+The new `winRateDelta` field on `valuePairs` is nullable. This is confirmed by the use of `NonNullable` in the web app's TypeScript types. While the `reason` field inside the `winRateDelta` object can explain *why a valid calculation might be invalid*, there appears to be no explicit handling for the case where the entire object is `null`.
 
-The new `fetchTranscriptsFromSourceRuns` function imposes a hard limit on the number of transcripts fetched (`TRANSCRIPT_FETCH_LIMIT`, 500,000). Because the database query sorts transcripts by `id: 'asc'`, the analysis will always be performed on the *oldest* 500,000 transcripts if the total number exceeds the limit. This can introduce a systematic bias if there is any temporal drift in model behavior, prompt structure, or data collection methods. While a `transcriptCapHit` flag is helpfully returned, the bias in the resulting analysis is unavoidable and not immediately obvious to the end-user.
-
-**File:** `cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts`
-**Lines:** `157-208` (`fetchTranscriptsFromSourceRuns`), `32-33` (constants)
-
-**Recommendation:**
-To mitigate bias, consider implementing random sampling of transcripts instead of taking the top N. If this is too complex with the current pagination strategy, make the `TRANSCRIPT_FETCH_LIMIT` a configurable parameter with a very prominent warning in the UI when the cap is hit, explaining the potential for bias towards older data.
-
----
-
-### 3. [UNVERIFIED] Potential Violation of Statistical Assumptions in Summary CI
-
-**Severity:** MEDIUM
-
-The function `summarizeWinRateDeltas` computes a t-based confidence interval (`tBasedMeanCI`) over the collection of `perPairWinRateDeltas`. The validity of this CI relies on the assumption that the per-pair deltas are independent observations.
-
-This assumption may be violated in practice. Value pairs are not necessarily independent; for instance, multiple pairs might relate to a single underlying moral dimension (e.g., fairness). If a model has a systematic strength or weakness in that dimension, the deltas for those pairs will be correlated.
-
-Violating the independence assumption can lead to an artificially narrow confidence interval, suggesting a higher degree of precision in the aggregate `mean` delta than is statistically justified.
-
-**File:** `cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts`
-**Lines:** `494-511` (`summarizeWinRateDeltas`), `360-394` (`tBasedMeanCI`)
-
-**Recommendation:**
-Acknowledge this assumption as a limitation in the methodology. For a more rigorous approach in the future, consider more advanced statistical techniques that can account for correlation between pairs, such as hierarchical models or bootstrapping methods.
-
----
+- **Omitted Case:** If the backend returns `null` (e.g., due to having zero `qualifyingTrials`), the client-side logic must be prepared to handle this. Without seeing the UI code, it's possible this could lead to a crash (e.g., trying to access a property on `null`) or a confusing empty state. The UI should explicitly check for null and render a state that communicates "Not enough data to compute."
 
 ## Residual Risks
 
-### 1. Statistical Model Simplification
-The new `pooledBandReduction` function represents a significant statistical improvement. However, it still makes simplifying assumptions. By pooling all trials within a "band" (e.g., `ownLevel <= 2`), it treats them as homogenous. This averages out any variation across different opponent pressure levels within that band. The resulting `winRateDelta` is a powerful summary but obscures more granular interactions that might exist within the grid.
-
-### 2. Interpretation of New Statistical Metrics
-The API now exposes sophisticated metrics like confidence intervals (`ciLow`, `ciHigh`). While this is a positive change, it places a burden on the consumer of the API (and any frontend UI) to interpret them correctly. There is a risk that users may misinterpret a wide confidence interval, a `null` value due to insufficient data, or the meaning of the `reason` field for un-measurable pairs. Clear documentation and careful UI presentation are critical to prevent misinterpretation.
-
-### 3. Change in Core Metric from "Net Score" to "Win Rate"
-The previous implementation centered on `netScoreDelta`, which incorporated conviction strength (`strong` vs. `lean`). The new implementation focuses exclusively on `winRateDelta`, which is based on the binary outcome of "own" vs. "opponent" picked. This is a valid and likely more robust simplification, but it fundamentally changes the primary metric for model sensitivity. Any longitudinal analysis or comparison with results from the old system will be invalid. This is less a technical risk and more a product-level risk of metric discontinuity.
+- **Breaking API Change**: The GraphQL schema has undergone significant renaming and restructuring (e.g., `aggregateSensitivity` -> `winRateDeltaSummary`, `directionDelta` -> `winRateDelta`). While the web client is updated within this artifact, any other consumer of this API (e.g., data analysis scripts, other internal tools) will break upon deployment. This introduces a risk of service disruption for consumers not accounted for in this change.
+- **Loss of Granularity**: The previous implementation exposed `directionDelta`, `convictionDelta`, and `netScoreDelta`. The new implementation consolidates these into a single `winRateDelta`. While this may be an intentional simplification, it represents a loss of data granularity in the API. If clients relied on `conviction` or `netScore` for specific insights, that functionality is now lost. This could be a regression unless it was an explicitly planned removal of those concepts.
 
 ## Token Stats
 
-- total_input=26811
-- total_output=1300
-- total_tokens=33016
-- `gemini-2.5-pro`: input=26811, output=1300, total=33016
+- total_input=13291
+- total_output=727
+- total_tokens=16011
+- `gemini-2.5-pro`: input=13291, output=727, total=16011
 
 ## Resolution
 - status: accepted
-- note: HIGH 1 (sourceRunId collision non-determinism) PARTIALLY RESOLVED. Added orderBy id:asc on db.run.findMany so last-write-wins is reproducible (commit e83fdb36). The fundamental misattribution risk stays in Residual Risks; one-to-many mapping refactor is out of scope. MEDIUM 2 (transcript fetch limit bias toward oldest) ACKNOWLEDGED in Residual Risks. Random sampling refactor deferred; transcriptCapHit warning plus UI banner per Decision 8 is the v1 mitigation.
+- note: MEDIUM (orderBy patch on deeper symptom) ACKNOWLEDGED. Collision root-cause fix is out of scope per Residual Risk; orderBy makes the symptom reproducible while we wait for telemetry from the new warning. LOW (client null handling for winRateDelta) DEFERRED to Slice C which renders the dash and reason hover per FR-008. This slice (B) only updates the operation shape.
