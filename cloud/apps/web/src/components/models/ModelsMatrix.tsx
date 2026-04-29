@@ -189,7 +189,6 @@ export function ModelsMatrix({
                     title={model.label}
                   >
                     <div className="max-w-[180px] truncate font-medium text-gray-900">{model.label}</div>
-                    <div className="text-xs text-gray-500">{model.modelId}</div>
                   </th>
                   {headers.map((value) => {
                     const cell = model.values.find((entry) => entry.valueKey === value.valueKey) ?? null;

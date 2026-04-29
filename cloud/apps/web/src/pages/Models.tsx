@@ -4,6 +4,7 @@ import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Loading } from '../components/ui/Loading';
 import { Button } from '../components/ui/Button';
 import { Select } from '../components/ui/Select';
+import { ScreenshotButton } from '../components/ui/ScreenshotButton';
 import { useDomains } from '../hooks/useDomains';
 import {
   MODELS_ANALYSIS_QUERY,
@@ -24,6 +25,7 @@ const DEFAULT_SIGNATURE = 'vnewtd';
 
 export function Models() {
   const { domains, queryLoading: domainsLoading, error: domainsError } = useDomains();
+  const reportRef = useRef<HTMLDivElement>(null);
 
   const [selectedDomainId, setSelectedDomainId] = useState<string | null>(null);
   const [selectedSignature, setSelectedSignature] = useState<string>(DEFAULT_SIGNATURE);
@@ -178,12 +180,17 @@ export function Models() {
           : `${selectedModelCount} of ${modelOptions.length} selected`;
 
   return (
-    <div className="space-y-6">
+    <div ref={reportRef} className="space-y-6">
       <div className="space-y-2">
-        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Models</h1>
-        <p className="text-sm text-gray-600">
-          Compare model preferences by value and scan whether each pattern stays steady across domains.
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-2">
+            <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Model Value Preference overview</h1>
+            <p className="text-sm text-gray-600">
+              Compare model preferences by value and scan whether each pattern stays steady across domains.
+            </p>
+          </div>
+          <ScreenshotButton targetRef={reportRef} label="report" />
+        </div>
       </div>
 
       {(domainsError != null || error != null) && (
@@ -213,8 +220,8 @@ export function Models() {
           )}
           <details className="flex-1 min-w-[220px]">
             <summary className="cursor-pointer list-none">
-              <p className="text-sm font-medium text-gray-700 mb-1">Model set</p>
-              <div className="inline-flex w-full items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm hover:border-gray-400 min-h-[44px] sm:min-h-0">
+              <p className="mb-1 text-sm font-medium text-gray-700">Model set</p>
+              <div className="inline-flex w-full items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm min-h-[44px] hover:border-gray-400 sm:min-h-0">
                 <span className={modelOptions.length === 0 && !loading ? 'text-gray-400' : ''}>
                   {modelSetSummary}
                 </span>
