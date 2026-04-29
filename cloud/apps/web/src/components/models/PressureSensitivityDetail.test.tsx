@@ -101,6 +101,7 @@ describe('PressureSensitivityDetail', () => {
 
     const row = getRow('Alpha ↔ Delta');
     const deltaCell = within(row).getAllByText('—')[0];
+    if (!deltaCell) throw new Error('Expected at least one — cell in the row');
     fireEvent.mouseEnter(deltaCell);
     act(() => {
       vi.advanceTimersByTime(200);
