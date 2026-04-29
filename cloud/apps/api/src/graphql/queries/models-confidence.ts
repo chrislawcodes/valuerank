@@ -44,17 +44,21 @@ builder.queryField('modelsConfidence', (t) =>
         availableOnly: false,
       });
 
-      const runs = await db.run.findMany({
+      // Aggregate runs are pooling views — they own metadata but transcripts live on
+      // source runs. Fetch aggregate runs (small set), filter by signature, then
+      // follow config.sourceRunIds to reach the actual transcript-bearing runs.
+      const aggregateRuns = await db.run.findMany({
         where: {
           status: 'COMPLETED',
           deletedAt: null,
+          tags: { some: { tag: { name: 'Aggregate' } } },
         },
         select: { id: true, config: true },
       });
 
-      const scopedRuns = signature != null
-        ? runs.filter((run) => runMatchesSignature(run.config, signature))
-        : runs;
+      const scopedAggregateRuns = signature != null
+        ? aggregateRuns.filter((run) => runMatchesSignature(run.config, signature))
+        : aggregateRuns;
 
       const emptyValues = (): ModelsConfidenceValueResultShape[] =>
         DOMAIN_ANALYSIS_VALUE_KEYS.map((k) => ({
@@ -64,7 +68,7 @@ builder.queryField('modelsConfidence', (t) =>
           leanCount: 0,
         }));
 
-      if (scopedRuns.length === 0) {
+      if (scopedAggregateRuns.length === 0) {
         return {
           models: activeModels.map((m) => ({
             modelId: m.modelId,
@@ -77,9 +81,32 @@ builder.queryField('modelsConfidence', (t) =>
         };
       }
 
-      const runIds = scopedRuns.map((r) => r.id);
+      // Collect unique source run IDs from all matching aggregate run configs.
+      const sourceRunIdSet = new Set<string>();
+      for (const run of scopedAggregateRuns) {
+        const config = run.config as { sourceRunIds?: string[] } | null;
+        if (config?.sourceRunIds != null) {
+          for (const id of config.sourceRunIds) {
+            sourceRunIdSet.add(id);
+          }
+        }
+      }
+
+      if (sourceRunIdSet.size === 0) {
+        return {
+          models: activeModels.map((m) => ({
+            modelId: m.modelId,
+            label: m.displayName,
+            overallConfidence: null,
+            overallStrongCount: 0,
+            overallLeanCount: 0,
+            values: emptyValues(),
+          })),
+        };
+      }
+
       const transcripts = await db.transcript.findMany({
-        where: { runId: { in: runIds }, deletedAt: null },
+        where: { runId: { in: Array.from(sourceRunIdSet) }, deletedAt: null },
         select: {
           modelId: true,
           decisionMetadata: true,
