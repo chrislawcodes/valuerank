@@ -96,10 +96,6 @@ export function PressureSensitivitySummary({ models, selectedModelId, onSelectMo
         </div>
       </div>
 
-      <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-        <strong>Heads up:</strong> pressure levels are not calibrated across vignettes. Compare with caution; see the Limitations section below.
-      </div>
-
       <Table variant="bordered">
         <TableHeader variant="bordered">
           <TableRow>
