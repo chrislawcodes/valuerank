@@ -247,6 +247,9 @@ builder.queryField('pressureSensitivity', (t) =>
         );
 
       // 2. Aggregate runs
+      // orderBy id:asc makes sourceRunToDefId Map.set "last write wins" deterministic
+      // across queries; without it the collision warning would point to a different
+      // winner each run (Slice A diff review finding).
       const runs = (await db.run.findMany({
         where: {
           status: 'COMPLETED',
@@ -257,6 +260,7 @@ builder.queryField('pressureSensitivity', (t) =>
         include: {
           definition: { select: { id: true, name: true, domainId: true } },
         },
+        orderBy: { id: 'asc' },
       })) as RunRow[];
 
       // 3. Signature filter
@@ -395,10 +399,13 @@ builder.queryField('pressureSensitivity', (t) =>
               decisionMetadata: true,
             },
             orderBy: { id: 'asc' },
-            take: TRANSCRIPT_PAGE_SIZE,
+            take: TRANSCRIPT_PAGE_SIZE + 1,
             ...(cursor ? { skip: 1, cursor } : {}),
           })) as TranscriptRow[];
-          return { rows: page, hasMore: page.length === TRANSCRIPT_PAGE_SIZE };
+          // Fetch one extra row to detect "more available" without false-positives
+          // on exact-multiple page boundaries (Slice A diff review finding).
+          const hasMore = page.length > TRANSCRIPT_PAGE_SIZE;
+          return { rows: hasMore ? page.slice(0, TRANSCRIPT_PAGE_SIZE) : page, hasMore };
         },
         log,
       );
