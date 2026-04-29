@@ -12,6 +12,7 @@ import {
 } from '../../data/domainAnalysisData';
 import { getPriorityColor } from './domainAnalysisColors';
 import { ValuePrioritiesHelpPanel } from './ValuePrioritiesHelpPanel';
+import { StabilityDots } from '../models/StabilityDotsView';
 
 type SortState = {
   key: 'model' | ValueKey;
@@ -52,6 +53,7 @@ type ValuePrioritiesSectionProps = {
   selectedDomainId: string;
   selectedSignature: string | null;
   isReadOnly?: boolean;
+  showStabilityDots?: boolean;
 };
 
 export function ValuePrioritiesSection({
@@ -59,6 +61,7 @@ export function ValuePrioritiesSection({
   selectedDomainId,
   selectedSignature,
   isReadOnly = false,
+  showStabilityDots = false,
 }: ValuePrioritiesSectionProps) {
   const navigate = useNavigate();
   const detailedTableRef = useRef<HTMLDivElement>(null);
@@ -320,6 +323,7 @@ export function ValuePrioritiesSection({
                   </td>
                   {COLUMN_VALUES.map((value) => {
                     const cellValue = getCellValue(model, value);
+                    const stabilityScore = model.stabilityScores?.[value] ?? null;
                     const background = cellValue === null
                       ? '#F9FAFB'
                       : getPriorityColor(cellValue, valueRange.min, valueRange.max);
@@ -350,6 +354,17 @@ export function ValuePrioritiesSection({
                               return `${cellValue > 0 ? '+' : ''}${cellValue.toFixed(2)}`;
                             })()}
                           </span>
+                          {showStabilityDots && (
+                            <StabilityDots
+                              score={stabilityScore}
+                              className="mt-1 text-current"
+                              title={
+                                stabilityScore != null
+                                  ? `Stability ${Math.round(stabilityScore)}/100`
+                                  : 'Stability unavailable'
+                              }
+                            />
+                          )}
                         </Button>
                       </td>
                     );

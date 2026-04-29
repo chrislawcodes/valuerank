@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Models } from '../../src/pages/Models';
+import { DOMAIN_ANALYSIS_QUERY, type DomainAnalysisQueryResult } from '../../src/api/operations/domainAnalysis';
 import { MODELS_ANALYSIS_QUERY } from '../../src/api/operations/modelsAnalysis';
 import { LLM_MODELS_QUERY } from '../../src/api/operations/llm';
 
@@ -26,6 +27,10 @@ vi.mock('../../src/hooks/useDomains', () => ({
   }),
 }));
 
+vi.mock('../../src/utils/domainAnalysisUtils', () => ({
+  formatSignatureOptionLabel: (option: { label: string }) => option.label,
+}));
+
 function renderModelsPage() {
   return render(
     <MemoryRouter>
@@ -39,6 +44,47 @@ describe('Models page', () => {
     useQueryMock.mockReset();
     useQueryMock.mockImplementation((args: { query: { definitions: Array<{ kind: string; name?: { value: string } }> } }) => {
       const operationName = args.query.definitions.find((definition) => definition.kind === 'OperationDefinition')?.name?.value;
+
+      if (operationName === 'DomainAnalysis') {
+        return [{
+          data: {
+            domainAnalysis: {
+              domainId: 'domain-a',
+              domainName: 'All domains',
+              contributionSummary: [],
+              excludedDataSummary: [],
+              totalDefinitions: 1,
+              targetedDefinitions: 1,
+              coveredDefinitions: 1,
+              missingDefinitionIds: [],
+              missingDefinitions: [],
+              definitionsWithAnalysis: 1,
+              cacheStatus: 'FRESH',
+              generatedAt: '2026-04-17T03:06:20.919Z',
+              models: [
+                {
+                  model: 'model-a',
+                  label: 'Model A',
+                  values: [
+                    {
+                      valueKey: 'Achievement',
+                      score: 0.42,
+                      prioritized: 4,
+                      deprioritized: 3,
+                      neutral: 1,
+                      totalComparisons: 8,
+                    },
+                  ],
+                  unavailableModels: [],
+                },
+              ],
+              unavailableModels: [],
+            },
+          } as DomainAnalysisQueryResult,
+          fetching: false,
+          error: undefined,
+        }];
+      }
 
       if (operationName === 'DomainAvailableSignatures') {
         return [{
@@ -112,7 +158,9 @@ describe('Models page', () => {
 
     expect(screen.getByRole('heading', { name: /model value preference overview/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /screenshot report/i })).toBeInTheDocument();
-    expect(screen.getAllByText('Model A')).toHaveLength(2);
+    expect(screen.getByRole('heading', { name: /all domains value priorities/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /model preference table/i })).toBeInTheDocument();
+    expect(screen.getAllByText('Model A').length).toBeGreaterThan(1);
     expect(screen.queryByText('model-a')).not.toBeInTheDocument();
   });
 });

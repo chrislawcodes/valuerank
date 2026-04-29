@@ -1,7 +1,8 @@
 import { type KeyboardEvent } from 'react';
 import { Button } from '../ui/Button';
 import { type ModelsAnalysisDomainBreakdown } from '../../api/operations/modelsAnalysis';
-import { computeDots, computeSimpleMad, formatStabilityTooltip } from './stabilityDots';
+import { computeSimpleMad, formatStabilityTooltip } from './stabilityDots';
+import { StabilityDots } from './StabilityDotsView';
 
 type ModelsMatrixCellProps = {
   modelLabel: string;
@@ -18,36 +19,6 @@ type ModelsMatrixCellProps = {
 
 function formatPercent(value: number): string {
   return `${Math.round(value)}%`;
-}
-
-type DotsProps = { score: number | null; muted: boolean; className?: string };
-
-function Dots({ score, muted, className }: DotsProps) {
-  const states = computeDots(muted ? null : score);
-  return (
-    <span className={`inline-flex items-center gap-0.5 ${className ?? ''}`} aria-hidden="true">
-      {states.map((state, i) => {
-        if (state === 'full') {
-          return <span key={i} className="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 bg-current" />;
-        }
-        if (state === 'half') {
-          return (
-            <span
-              key={i}
-              className="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0"
-              style={{
-                background: 'linear-gradient(to right, currentColor 50%, transparent 50%)',
-              }}
-            />
-          );
-        }
-        if (state === 'muted') {
-          return <span key={i} className="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 border border-current opacity-30" />;
-        }
-        return <span key={i} className="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 border border-current" />;
-      })}
-    </span>
-  );
 }
 
 export function ModelsMatrixCell({
@@ -98,7 +69,10 @@ export function ModelsMatrixCell({
       <span className={`text-sm font-semibold ${hiddenByFilter || pooledWinRate == null ? 'text-gray-400' : 'text-gray-900'}`}>
         {primaryLabel}
       </span>
-      <Dots score={stabilityScore} muted={mutedDots} className={`mt-1 ${mutedDots ? 'text-gray-400' : 'text-gray-700'}`} />
+      <StabilityDots
+        score={mutedDots ? null : stabilityScore}
+        className={`mt-1 ${mutedDots ? 'text-gray-400' : 'text-gray-700'}`}
+      />
       <span className="sr-only">{tooltip}</span>
     </Button>
   );
