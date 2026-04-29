@@ -692,7 +692,7 @@ export type DirectionalSanityCheckEntry = {
   classification: Scalars['String']['output'];
   modelId: Scalars['String']['output'];
   pairKey: Scalars['String']['output'];
-  winRateDelta: Scalars['Float']['output'];
+  pressureResponse: Scalars['Float']['output'];
 };
 
 /** A single domain used to group vignettes */
@@ -2337,38 +2337,68 @@ export type PreferenceSummary = {
   perModel: Scalars['JSON']['output'];
 };
 
+export type PressureConditionExclusionBreakdown = {
+  __typename?: 'PressureConditionExclusionBreakdown';
+  definitionMetadata: Scalars['Int']['output'];
+  invalidMetadata: Scalars['Int']['output'];
+  levelAssignment: Scalars['Int']['output'];
+  missingScenario: Scalars['Int']['output'];
+  sourceRunMapping: Scalars['Int']['output'];
+};
+
+export type PressureResponse = {
+  __typename?: 'PressureResponse';
+  baselineRate?: Maybe<Scalars['Float']['output']>;
+  ciHigh?: Maybe<Scalars['Float']['output']>;
+  ciLow?: Maybe<Scalars['Float']['output']>;
+  pushTowardFirstRate?: Maybe<Scalars['Float']['output']>;
+  pushTowardSecondRate?: Maybe<Scalars['Float']['output']>;
+  qualifyingTrials: Scalars['Int']['output'];
+  reason?: Maybe<Scalars['String']['output']>;
+  value?: Maybe<Scalars['Float']['output']>;
+};
+
+export type PressureResponseSummary = {
+  __typename?: 'PressureResponseSummary';
+  mean?: Maybe<Scalars['Float']['output']>;
+  pairsMeasured: Scalars['Int']['output'];
+  rangeMax?: Maybe<Scalars['Float']['output']>;
+  rangeMin?: Maybe<Scalars['Float']['output']>;
+};
+
 export type PressureSensitivityModel = {
   __typename?: 'PressureSensitivityModel';
   label: Scalars['String']['output'];
   modelId: Scalars['String']['output'];
+  pressureResponseSummary: PressureResponseSummary;
   providerName: Scalars['String']['output'];
   unscoredCount: Scalars['Int']['output'];
   valuePairs: Array<PressureSensitivityValuePair>;
-  winRateDeltaSummary: WinRateDeltaSummary;
 };
 
 export type PressureSensitivityResult = {
   __typename?: 'PressureSensitivityResult';
   directionalSanityCheck: DirectionalSanityCheck;
   excludedDefinitions: Array<ExcludedDefinition>;
-  excludedScenariosCount: Scalars['Int']['output'];
   insufficient: Array<InsufficientPressureSensitivityModel>;
   models: Array<PressureSensitivityModel>;
+  pressureConditionExcludedCount: Scalars['Int']['output'];
+  pressureConditionExclusionBreakdown: PressureConditionExclusionBreakdown;
   transcriptCapHit: Scalars['Boolean']['output'];
 };
 
 export type PressureSensitivityValuePair = {
   __typename?: 'PressureSensitivityValuePair';
-  definitionsExcluded: Scalars['Int']['output'];
   definitionsMeasured: Scalars['Int']['output'];
+  firstValueLabel: Scalars['String']['output'];
+  firstValueToken: Scalars['String']['output'];
   grid: Array<SensitivityCell>;
   n: Scalars['Int']['output'];
-  opponentToken: Scalars['String']['output'];
-  ownToken: Scalars['String']['output'];
   pairKey: Scalars['String']['output'];
-  qualifyingTrials: Scalars['Int']['output'];
+  pressureResponse: PressureResponse;
+  secondValueLabel: Scalars['String']['output'];
+  secondValueToken: Scalars['String']['output'];
   unscoredCount: Scalars['Int']['output'];
-  winRateDelta: WinRateDelta;
 };
 
 /** Result of a probe job execution */
@@ -3879,27 +3909,6 @@ export type VignettePairStatus =
   | 'SKIPPED_HAS_RUNS'
   | 'UPDATED';
 
-export type WinRateDelta = {
-  __typename?: 'WinRateDelta';
-  ciHigh?: Maybe<Scalars['Float']['output']>;
-  ciLow?: Maybe<Scalars['Float']['output']>;
-  highBandMean?: Maybe<Scalars['Float']['output']>;
-  lowBandMean?: Maybe<Scalars['Float']['output']>;
-  reason?: Maybe<Scalars['String']['output']>;
-  value?: Maybe<Scalars['Float']['output']>;
-};
-
-export type WinRateDeltaSummary = {
-  __typename?: 'WinRateDeltaSummary';
-  ciHigh?: Maybe<Scalars['Float']['output']>;
-  ciLow?: Maybe<Scalars['Float']['output']>;
-  highBandMean?: Maybe<Scalars['Float']['output']>;
-  lowBandMean?: Maybe<Scalars['Float']['output']>;
-  mean?: Maybe<Scalars['Float']['output']>;
-  pairsMeasured: Scalars['Int']['output'];
-  pairsPositive: Scalars['Int']['output'];
-};
-
 /** Health status for Python workers */
 export type WorkerHealth = {
   __typename?: 'WorkerHealth';
@@ -3918,6 +3927,13 @@ export type WorkerHealth = {
   /** Health check warnings */
   warnings: Array<Scalars['String']['output']>;
 };
+
+export type ActiveEvaluationsQueryVariables = Exact<{
+  domainId?: InputMaybe<Scalars['ID']['input']>;
+}>;
+
+
+export type ActiveEvaluationsQuery = { __typename?: 'Query', activeEvaluations: Array<{ __typename?: 'DomainEvaluation', id: string, domainId: string, domainNameAtLaunch: string, scopeCategory: string, status: string, createdAt: string, startedAt?: string | null, completedAt?: string | null, startedRuns: number, failedDefinitions: number, skippedForBudget: number, projectedCostUsd: number, models: Array<string>, temperature?: number | null, maxBudgetUsd?: number | null, memberCount: number, launchableDefinitionIds: Array<string>, samplePercentage?: number | null, samplesPerScenario?: number | null, targetBatchCount?: number | null, launchableDefinitions: Array<{ __typename?: 'DomainEvaluationLaunchableDefinition', definitionId: string, definitionName: string, pairKey?: string | null }>, members: Array<{ __typename?: 'DomainEvaluationMember', runId: string, definitionIdAtLaunch: string, definitionNameAtLaunch: string, domainIdAtLaunch: string, modelIds: Array<string>, createdAt: string, runStatus: string, runCategory: string, runStartedAt?: string | null, runCompletedAt?: string | null }> }> };
 
 export type AnalysisResultFieldsFragment = { __typename?: 'AnalysisResult', id: string, runId: string, analysisType: string, status: string, codeVersion: string, inputHash: string, createdAt: string, computedAt?: string | null, durationMs?: number | null, perModel: unknown, modelAgreement: unknown, dimensionAnalysis?: unknown | null, visualizationData?: unknown | null, varianceAnalysis?: unknown | null, methodsUsed: unknown, preferenceSummary?: { __typename?: 'PreferenceSummary', perModel: unknown } | null, reliabilitySummary?: { __typename?: 'ReliabilitySummary', perModel: unknown } | null, aggregateMetadata?: { __typename?: 'AggregateMetadata', aggregateEligibility: string, aggregateIneligibilityReason?: string | null, sourceRunCount: number, sourceRunIds: Array<string>, conditionCoverage: unknown, perModelRepeatCoverage: unknown, perModelDrift: unknown } | null, mostContestedScenarios: Array<{ __typename?: 'ContestedScenario', scenarioId: string, scenarioName: string, variance: number, modelScores: unknown }>, warnings: Array<{ __typename?: 'AnalysisWarning', code: string, message: string, recommendation: string }> };
 
@@ -4301,13 +4317,6 @@ export type DomainEvaluationsQueryVariables = Exact<{
 
 export type DomainEvaluationsQuery = { __typename?: 'Query', domainEvaluations: Array<{ __typename?: 'DomainEvaluation', id: string, domainId: string, domainNameAtLaunch: string, scopeCategory: string, status: string, createdAt: string, startedAt?: string | null, completedAt?: string | null, startedRuns: number, failedDefinitions: number, skippedForBudget: number, projectedCostUsd: number, models: Array<string>, temperature?: number | null, maxBudgetUsd?: number | null, memberCount: number, launchableDefinitionIds: Array<string>, samplePercentage?: number | null, samplesPerScenario?: number | null, targetBatchCount?: number | null }> };
 
-export type ActiveEvaluationsQueryVariables = Exact<{
-  domainId?: InputMaybe<Scalars['ID']['input']>;
-}>;
-
-
-export type ActiveEvaluationsQuery = { __typename?: 'Query', activeEvaluations: Array<{ __typename?: 'DomainEvaluation', id: string, domainId: string, domainNameAtLaunch: string, scopeCategory: string, status: string, createdAt: string, startedAt?: string | null, completedAt?: string | null, startedRuns: number, failedDefinitions: number, skippedForBudget: number, projectedCostUsd: number, models: Array<string>, temperature?: number | null, maxBudgetUsd?: number | null, memberCount: number, launchableDefinitionIds: Array<string>, samplePercentage?: number | null, samplesPerScenario?: number | null, targetBatchCount?: number | null, launchableDefinitions: Array<{ __typename?: 'DomainEvaluationLaunchableDefinition', definitionId: string, definitionName: string, pairKey?: string | null }>, members: Array<{ __typename?: 'DomainEvaluationMember', runId: string, definitionIdAtLaunch: string, definitionNameAtLaunch: string, domainIdAtLaunch: string, modelIds: Array<string>, createdAt: string, runStatus: string, runCategory: string, runStartedAt?: string | null, runCompletedAt?: string | null }> }> };
-
 export type DomainEvaluationQueryVariables = Exact<{
   id: Scalars['ID']['input'];
 }>;
@@ -4581,7 +4590,7 @@ export type PressureSensitivityQueryVariables = Exact<{
 }>;
 
 
-export type PressureSensitivityQuery = { __typename?: 'Query', pressureSensitivity: { __typename?: 'PressureSensitivityResult', excludedScenariosCount: number, transcriptCapHit: boolean, models: Array<{ __typename?: 'PressureSensitivityModel', modelId: string, label: string, providerName: string, unscoredCount: number, winRateDeltaSummary: { __typename?: 'WinRateDeltaSummary', mean?: number | null, ciLow?: number | null, ciHigh?: number | null, lowBandMean?: number | null, highBandMean?: number | null, pairsMeasured: number, pairsPositive: number }, valuePairs: Array<{ __typename?: 'PressureSensitivityValuePair', pairKey: string, ownToken: string, opponentToken: string, n: number, unscoredCount: number, definitionsMeasured: number, definitionsExcluded: number, qualifyingTrials: number, winRateDelta: { __typename?: 'WinRateDelta', value?: number | null, lowBandMean?: number | null, highBandMean?: number | null, ciLow?: number | null, ciHigh?: number | null, reason?: string | null }, grid: Array<{ __typename?: 'SensitivityCell', ownLevel: number, opponentLevel: number, n: number, unscoredCount: number, winRate?: number | null, conviction?: number | null, netScore?: number | null, lowData: boolean }> }> }>, insufficient: Array<{ __typename?: 'InsufficientPressureSensitivityModel', modelId: string, label: string, providerName: string, reason: string }>, excludedDefinitions: Array<{ __typename?: 'ExcludedDefinition', definitionId: string, name: string, reason: string }>, directionalSanityCheck: { __typename?: 'DirectionalSanityCheck', positivePct: number, flatPct: number, negativePct: number, measuredCount: number, unmeasurableCount: number, breakdown: Array<{ __typename?: 'DirectionalSanityCheckEntry', modelId: string, pairKey: string, winRateDelta: number, classification: string }> } } };
+export type PressureSensitivityQuery = { __typename?: 'Query', pressureSensitivity: { __typename?: 'PressureSensitivityResult', pressureConditionExcludedCount: number, transcriptCapHit: boolean, models: Array<{ __typename?: 'PressureSensitivityModel', modelId: string, label: string, providerName: string, unscoredCount: number, pressureResponseSummary: { __typename?: 'PressureResponseSummary', mean?: number | null, rangeMin?: number | null, rangeMax?: number | null, pairsMeasured: number }, valuePairs: Array<{ __typename?: 'PressureSensitivityValuePair', pairKey: string, firstValueToken: string, firstValueLabel: string, secondValueToken: string, secondValueLabel: string, n: number, unscoredCount: number, definitionsMeasured: number, pressureResponse: { __typename?: 'PressureResponse', value?: number | null, baselineRate?: number | null, pushTowardFirstRate?: number | null, pushTowardSecondRate?: number | null, qualifyingTrials: number, ciLow?: number | null, ciHigh?: number | null, reason?: string | null }, grid: Array<{ __typename?: 'SensitivityCell', ownLevel: number, opponentLevel: number, n: number, unscoredCount: number, winRate?: number | null, conviction?: number | null, netScore?: number | null, lowData: boolean }> }> }>, insufficient: Array<{ __typename?: 'InsufficientPressureSensitivityModel', modelId: string, label: string, providerName: string, reason: string }>, excludedDefinitions: Array<{ __typename?: 'ExcludedDefinition', definitionId: string, name: string, reason: string }>, pressureConditionExclusionBreakdown: { __typename?: 'PressureConditionExclusionBreakdown', sourceRunMapping: number, definitionMetadata: number, missingScenario: number, invalidMetadata: number, levelAssignment: number }, directionalSanityCheck: { __typename?: 'DirectionalSanityCheck', positivePct: number, flatPct: number, negativePct: number, measuredCount: number, unmeasurableCount: number, breakdown: Array<{ __typename?: 'DirectionalSanityCheckEntry', modelId: string, pairKey: string, pressureResponse: number, classification: string }> } } };
 
 export type OpenRunAnomaliesQueryVariables = Exact<{
   domainId?: InputMaybe<Scalars['ID']['input']>;
@@ -5134,6 +5143,53 @@ export const RunWithTranscriptsFieldsFragmentDoc = gql`
   }
 }
     ${RunFieldsFragmentDoc}`;
+export const ActiveEvaluationsDocument = gql`
+    query ActiveEvaluations($domainId: ID) {
+  activeEvaluations(domainId: $domainId) {
+    id
+    domainId
+    domainNameAtLaunch
+    scopeCategory
+    status
+    createdAt
+    startedAt
+    completedAt
+    startedRuns
+    failedDefinitions
+    skippedForBudget
+    projectedCostUsd
+    models
+    temperature
+    maxBudgetUsd
+    memberCount
+    launchableDefinitionIds
+    samplePercentage
+    samplesPerScenario
+    targetBatchCount
+    launchableDefinitions {
+      definitionId
+      definitionName
+      pairKey
+    }
+    members {
+      runId
+      definitionIdAtLaunch
+      definitionNameAtLaunch
+      domainIdAtLaunch
+      modelIds
+      createdAt
+      runStatus
+      runCategory
+      runStartedAt
+      runCompletedAt
+    }
+  }
+}
+    `;
+
+export function useActiveEvaluationsQuery(options?: Omit<Urql.UseQueryArgs<ActiveEvaluationsQueryVariables>, 'query'>) {
+  return Urql.useQuery<ActiveEvaluationsQuery, ActiveEvaluationsQueryVariables>({ query: ActiveEvaluationsDocument, ...options });
+};
 export const AnalysisDocument = gql`
     query Analysis($runId: ID!) {
   analysis(runId: $runId) {
@@ -6259,54 +6315,6 @@ export const DomainEvaluationsDocument = gql`
 }
     `;
 
-export const ActiveEvaluationsDocument = gql`
-    query ActiveEvaluations($domainId: ID) {
-  activeEvaluations(domainId: $domainId) {
-    id
-    domainId
-    domainNameAtLaunch
-    scopeCategory
-    status
-    createdAt
-    startedAt
-    completedAt
-    startedRuns
-    failedDefinitions
-    skippedForBudget
-    projectedCostUsd
-    models
-    temperature
-    maxBudgetUsd
-    memberCount
-    launchableDefinitionIds
-    samplePercentage
-    samplesPerScenario
-    targetBatchCount
-    launchableDefinitions {
-      definitionId
-      definitionName
-      pairKey
-    }
-    members {
-      runId
-      definitionIdAtLaunch
-      definitionNameAtLaunch
-      domainIdAtLaunch
-      modelIds
-      createdAt
-      runStatus
-      runCategory
-      runStartedAt
-      runCompletedAt
-    }
-  }
-}
-    `;
-
-export function useActiveEvaluationsQuery(options?: Omit<Urql.UseQueryArgs<ActiveEvaluationsQueryVariables>, 'query'>) {
-  return Urql.useQuery<ActiveEvaluationsQuery, ActiveEvaluationsQueryVariables>({ query: ActiveEvaluationsDocument, ...options });
-};
-
 export function useDomainEvaluationsQuery(options: Omit<Urql.UseQueryArgs<DomainEvaluationsQueryVariables>, 'query'>) {
   return Urql.useQuery<DomainEvaluationsQuery, DomainEvaluationsQueryVariables>({ query: DomainEvaluationsDocument, ...options });
 };
@@ -7077,28 +7085,27 @@ export const PressureSensitivityDocument = gql`
       label
       providerName
       unscoredCount
-      winRateDeltaSummary {
+      pressureResponseSummary {
         mean
-        ciLow
-        ciHigh
-        lowBandMean
-        highBandMean
+        rangeMin
+        rangeMax
         pairsMeasured
-        pairsPositive
       }
       valuePairs {
         pairKey
-        ownToken
-        opponentToken
+        firstValueToken
+        firstValueLabel
+        secondValueToken
+        secondValueLabel
         n
         unscoredCount
         definitionsMeasured
-        definitionsExcluded
-        qualifyingTrials
-        winRateDelta {
+        pressureResponse {
           value
-          lowBandMean
-          highBandMean
+          baselineRate
+          pushTowardFirstRate
+          pushTowardSecondRate
+          qualifyingTrials
           ciLow
           ciHigh
           reason
@@ -7126,7 +7133,14 @@ export const PressureSensitivityDocument = gql`
       name
       reason
     }
-    excludedScenariosCount
+    pressureConditionExcludedCount
+    pressureConditionExclusionBreakdown {
+      sourceRunMapping
+      definitionMetadata
+      missingScenario
+      invalidMetadata
+      levelAssignment
+    }
     transcriptCapHit
     directionalSanityCheck {
       positivePct
@@ -7137,7 +7151,7 @@ export const PressureSensitivityDocument = gql`
       breakdown {
         modelId
         pairKey
-        winRateDelta
+        pressureResponse
         classification
       }
     }
