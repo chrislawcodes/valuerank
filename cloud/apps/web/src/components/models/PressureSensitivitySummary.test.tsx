@@ -7,12 +7,9 @@ function createModel(
   modelId: string,
   label: string,
   mean: number | null,
-  ciLow: number | null,
-  ciHigh: number | null,
-  lowBandMean: number | null,
-  highBandMean: number | null,
+  rangeMin: number | null,
+  rangeMax: number | null,
   pairsMeasured: number,
-  pairsPositive: number,
 ): PressureSensitivityModel {
   return {
     modelId,
@@ -20,15 +17,7 @@ function createModel(
     providerName: 'Provider',
     unscoredCount: 0,
     valuePairs: [],
-    winRateDeltaSummary: {
-      mean,
-      ciLow,
-      ciHigh,
-      lowBandMean,
-      highBandMean,
-      pairsMeasured,
-      pairsPositive,
-    },
+    pressureResponseSummary: { mean, rangeMin, rangeMax, pairsMeasured },
   };
 }
 
@@ -43,77 +32,57 @@ function getRowByLabel(label: string): HTMLTableRowElement {
 }
 
 describe('PressureSensitivitySummary', () => {
-  it('renders the new win-rate columns and sorts ties alphabetically', () => {
+  it('renders the pressure response column and sorts ties alphabetically', () => {
     renderSummary([
-      createModel('beta', 'Beta', 0.05, 0.01, 0.09, 0.55, 0.61, 2, 1),
-      createModel('alpha', 'Alpha', 0.05, 0.01, 0.09, 0.55, 0.61, 2, 1),
+      createModel('beta', 'Beta', 0.05, 0.01, 0.09, 2),
+      createModel('alpha', 'Alpha', 0.05, 0.01, 0.09, 2),
     ]);
 
-    expect(screen.getByText('Win Rate')).toBeDefined();
+    expect(screen.getByText('Pressure response')).toBeDefined();
     expect(screen.getByText('Model')).toBeDefined();
-    expect(screen.getByText('Low pressure')).toBeDefined();
-    expect(screen.getByText('High pressure')).toBeDefined();
-    expect(screen.getByText('Win rate Δ ± CI')).toBeDefined();
-    expect(screen.queryByText('Aggregate sensitivity')).toBeNull();
-    expect(screen.queryByText('Provider')).toBeNull();
-    expect(screen.queryByText('Pairs measured')).toBeNull();
-    expect(screen.queryByText('Spread')).toBeNull();
+    expect(screen.queryByText('Win Rate')).toBeNull();
+    expect(screen.queryByText('Low pressure')).toBeNull();
+    expect(screen.queryByText('High pressure')).toBeNull();
+    expect(screen.queryByText('Win rate Δ ± CI')).toBeNull();
 
     const rows = screen.getAllByRole('row');
-    expect(rows[2]?.textContent ?? '').toContain('Alpha');
-    expect(rows[3]?.textContent ?? '').toContain('Beta');
+    expect(rows[1]?.textContent ?? '').toContain('Alpha');
+    expect(rows[2]?.textContent ?? '').toContain('Beta');
   });
 
-  it('shows a red negative delta with a leading glyph', () => {
-    renderSummary([
-      createModel('alpha', 'Alpha', -0.05, -0.09, -0.01, 0.45, 0.40, 3, 0),
-    ]);
+  it('shows red negative mean with ▼ glyph', () => {
+    renderSummary([createModel('alpha', 'Alpha', -0.05, -0.09, -0.01, 2)]);
 
     const row = getRowByLabel('Alpha');
     const glyph = within(row).getByText(/▼/);
     expect(glyph.closest('span')?.className ?? '').toContain('text-red-700');
   });
 
-  it('shows the ceiling badge when the low pressure rate is high', () => {
-    renderSummary([
-      createModel('alpha', 'Alpha', 0.05, 0.01, 0.09, 0.95, 0.62, 2, 1),
-    ]);
+  it('renders range annotation when rangeMin and rangeMax are defined', () => {
+    renderSummary([createModel('alpha', 'Alpha', 0.05, 0.01, 0.09, 2)]);
 
-    expect(screen.getByText('ceiling')).toBeDefined();
+    expect(screen.getByText(/range across this model's pairs/)).toBeDefined();
   });
 
-  it('hides the ceiling badge when the low pressure rate is null', () => {
-    renderSummary([
-      createModel('alpha', 'Alpha', 0.05, 0.01, 0.09, null, 0.62, 2, 1),
-    ]);
+  it('shows — when mean is null', () => {
+    renderSummary([createModel('alpha', 'Alpha', null, null, null, 0)]);
 
-    expect(screen.queryByText('ceiling')).toBeNull();
+    const row = getRowByLabel('Alpha');
+    expect(within(row).getByText('—')).toBeDefined();
   });
 
-  it('renders the thin annotation when only one pair is measured', () => {
-    renderSummary([
-      createModel('alpha', 'Alpha', 0.05, null, null, 0.55, 0.61, 1, 1),
-    ]);
+  it('omits range annotation when rangeMin or rangeMax is null', () => {
+    renderSummary([createModel('alpha', 'Alpha', 0.05, null, null, 1)]);
 
-    expect(screen.getByText('(thin)')).toBeDefined();
+    expect(screen.queryByText(/range across this model's pairs/)).toBeNull();
   });
 
-  it('renders the moved-up count when at least two pairs are measured', () => {
-    renderSummary([
-      createModel('alpha', 'Alpha', 0.05, 0.01, 0.09, 0.55, 0.61, 2, 1),
-    ]);
+  it('shows the Pressure response tooltip copy', () => {
+    renderSummary([createModel('alpha', 'Alpha', 0.05, 0.01, 0.09, 2)]);
 
-    expect(screen.getByText(/1\/2 moved up/)).toBeDefined();
-  });
-
-  it('shows the Win rate Δ tooltip copy', () => {
-    renderSummary([
-      createModel('alpha', 'Alpha', 0.05, 0.01, 0.09, 0.55, 0.61, 2, 1),
-    ]);
-
-    const trigger = screen.getByRole('button', { name: /show win rate Δ ± ci help/i });
+    const trigger = screen.getByRole('button', { name: /show pressure response help/i });
     fireEvent.focus(trigger);
 
-    expect(screen.getByRole('tooltip').textContent ?? '').toContain('spread of per-pair Δs');
+    expect(screen.getByRole('tooltip').textContent ?? '').toContain('range in brackets');
   });
 });

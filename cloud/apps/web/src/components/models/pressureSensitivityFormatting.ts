@@ -1,40 +1,44 @@
 /**
  * Shared formatting / classification helpers for the Pressure Sensitivity
- * cross-model summary and per-pair detail tables. Extracted to one place
- * so tooltip copy, percentage rendering, and ceiling/floor logic stay in
- * sync between PressureSensitivitySummary.tsx and PressureSensitivityDetail.tsx.
+ * cross-model summary and per-pair detail tables.
  */
 
-export const GROUP_TOOLTIP =
-  'The percentage of trials where the model picked the value. Same formula as the win rate shown elsewhere in ValueRank: picks / (picks + non-picks + neutrals). Higher = the model picks it more often.';
+export const SUMMARY_PRESSURE_RESPONSE_TOOLTIP =
+  "Arithmetic mean of per-pair pressure responses across this model's measured pairs. The range in brackets is the spread of per-pair values. Positive = more trials pushed toward the model's own value; negative = more trials pushed away.";
 
-export const LOW_TOOLTIP =
-  "The model's win rate when pressure on this value is light (levels 1 or 2 out of 5).";
+export const PAIR_PRESSURE_RESPONSE_TOOLTIP =
+  'Signed push-rate difference: Push toward first minus Push toward other, in percentage points. The CI is the Newcombe 95% confidence interval for the difference of two proportions.';
 
-export const HIGH_TOOLTIP =
-  "The model's win rate when pressure on this value is heavy (levels 4 or 5 out of 5).";
+export const BASELINE_TOOLTIP =
+  'Win rate when own and opponent pressure are both at moderate levels. Used as the reference for the push columns.';
 
-export const SUMMARY_DELTA_TOOLTIP =
-  "How much the win rate changes from light pressure to heavy pressure, in percentage points. Light pressure = own pressure level 1 or 2 on this value. Heavy pressure = level 4 or 5. Level 3 is excluded so the Δ reflects the biggest contrast in the data. The CI is the spread of per-pair Δs across this model's measured value pairs.";
+export const PUSH_TOWARD_FIRST_TOOLTIP =
+  "Win rate when the first value's pressure is high (levels 4–5) and the other value's pressure is moderate. A higher rate means the model picks the first value more under pressure.";
 
-export const PAIR_DELTA_TOOLTIP =
-  'How much the win rate changes from light pressure to heavy pressure for this pair, in percentage points. The CI is trial-level uncertainty within the pair (Wilson-propagated diff-of-proportions).';
+export const PUSH_TOWARD_OTHER_TOOLTIP =
+  "Win rate when the other value's pressure is high (levels 4–5) and the first value's pressure is moderate. A higher rate means the model picks the other value more under pressure.";
+
+export const TRIALS_TOOLTIP =
+  'Qualifying scored trials that contributed to the Baseline, Push toward first, and Push toward other rates. These are the trials used to compute the Pressure response and its confidence interval.';
 
 export function formatPercent(value: number): string {
   return `${(value * 100).toFixed(0)}%`;
 }
 
-/**
- * Format a Δ magnitude as percentage points. Falls back to one decimal
- * place when the rounded integer would be 0 — keeps small but real
- * effects from collapsing into "0 pp".
- */
+/** Unsigned percentage-points string, one decimal place. */
 export function formatPoints(value: number): string {
-  const pp = Math.abs(value * 100);
-  if (pp < 1 && pp > 0) {
-    return `${pp.toFixed(1)} pp`;
-  }
-  return `${pp.toFixed(0)} pp`;
+  return `${Math.abs(value * 100).toFixed(1)} pp`;
+}
+
+/**
+ * Signed percentage-points string, one decimal place.
+ * Exact zero renders without a sign per spec FR-xxx.
+ */
+export function formatSignedPoints(value: number): string {
+  const pp = value * 100;
+  if (pp === 0) return '0.0 pp';
+  const sign = pp < 0 ? '−' : '+';
+  return `${sign}${Math.abs(pp).toFixed(1)} pp`;
 }
 
 /**
@@ -50,18 +54,20 @@ export function getBadgeFlag(value: number | null | undefined): 'ceiling' | 'flo
 }
 
 /**
- * Map an undefined-Δ reason code to the user-facing hover explanation
- * per spec FR-008.
+ * Map an undefined pressure-response reason code to the user-facing hover explanation.
  */
 export function reasonHoverText(reason: string | null | undefined): string {
-  if (reason === 'low-band-thin') {
-    return 'Low pressure band has no cells with N ≥ 3 trials. Try adding more low-pressure runs.';
+  if (reason === 'directional-thin') {
+    return 'The push-toward-first pool has no qualifying cells (N ≥ 3). Add more trials where own pressure is high and opponent pressure is moderate.';
   }
-  if (reason === 'high-band-thin') {
-    return 'High pressure band has no cells with N ≥ 3 trials. Try adding more high-pressure runs.';
+  if (reason === 'inverted-thin') {
+    return 'The push-toward-other pool has no qualifying cells (N ≥ 3). Add more trials where opponent pressure is high and own pressure is moderate.';
   }
-  if (reason === 'both-bands-thin') {
-    return 'Neither pressure band has cells with N ≥ 3 trials. This pair needs more coverage to compute a Δ.';
+  if (reason === 'directional-and-inverted-thin') {
+    return 'Neither direction pool has qualifying cells. This pair needs more coverage to compute a pressure response.';
+  }
+  if (reason === 'baseline-thin') {
+    return 'Pressure response is defined but the baseline pool has no qualifying cells.';
   }
   return '';
 }

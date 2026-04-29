@@ -109,6 +109,7 @@ export function PressureSensitivity() {
   const excludedDefinitions = data?.pressureSensitivity.excludedDefinitions ?? [];
   const directionalSanityCheck = data?.pressureSensitivity.directionalSanityCheck;
   const transcriptCapHit = data?.pressureSensitivity.transcriptCapHit ?? false;
+  const pressureConditionExcludedCount = data?.pressureSensitivity.pressureConditionExcludedCount ?? 0;
 
   useEffect(() => {
     if (selectedModelId == null && models.length > 0) {
@@ -186,7 +187,7 @@ export function PressureSensitivity() {
       <div className="space-y-2">
         <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Models / Pressure Sensitivity</h1>
         <p className="text-sm text-gray-600">
-          This report shows how each model&apos;s win rate shifts when pressure on a value gets light or heavy. The cross-model table ranks models by Win rate Δ, the detail table breaks that out by value pair, and the heat map plus sanity check show whether the pattern is consistent across the grid.
+          This report shows each model&apos;s pressure response — how much added pressure moves the model toward its own value over the other. The cross-model table ranks models by mean pressure response, the detail table breaks that out by value pair, and the heat map plus sanity check show whether the pattern is consistent across the grid.
         </p>
       </div>
 
@@ -205,6 +206,15 @@ export function PressureSensitivity() {
       {transcriptCapHit && (
         <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
           Coverage warning: this report scanned the maximum 500,000 transcripts and stopped before reaching the end of the data. Win rates and CIs may be biased toward earlier transcripts in the corpus.
+          {pressureConditionExcludedCount > 0 && (
+            <>{' '}Together with the {pressureConditionExcludedCount} excluded pressure condition{pressureConditionExcludedCount === 1 ? '' : 's'}, these limits are a lower bound on pressure sensitivity — the true effect could be larger.</>
+          )}
+        </section>
+      )}
+
+      {pressureConditionExcludedCount > 0 && !transcriptCapHit && (
+        <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          Coverage warning: {pressureConditionExcludedCount} pressure condition{pressureConditionExcludedCount === 1 ? '' : 's'} were excluded from this analysis. The remaining results are based on a subset of the available data.
         </section>
       )}
 
@@ -222,7 +232,7 @@ export function PressureSensitivity() {
           <p className="font-medium">All models are below coverage thresholds.</p>
           <p className="mt-1">
             {insufficient.length} model{insufficient.length === 1 ? '' : 's'} have no value
-            pairs that pass the per-cell coverage threshold (N ≥ 3 in both pressure bands).
+            pairs that pass the per-cell coverage threshold (N ≥ 3 in both direction pools).
             See the insufficient-coverage section below for details.
           </p>
         </section>
@@ -261,7 +271,7 @@ export function PressureSensitivity() {
           )}
           {providerId != null && (
             <p className="mt-2 text-gray-400">
-              Provider filter active ({providerId}). Use the filters panel (Slice D) to clear.
+              Provider filter active ({providerId}). Use the filters panel to clear.
             </p>
           )}
         </section>

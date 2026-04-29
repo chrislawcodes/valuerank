@@ -3,38 +3,32 @@ import { render, screen } from '@testing-library/react';
 import { PressureSensitivityCrossValueMap } from './PressureSensitivityCrossValueMap';
 import type { PressureSensitivityModel } from '../../api/operations/pressureSensitivity';
 
-function createModel(): PressureSensitivityModel {
+function createModel(value: number | null = 0.4): PressureSensitivityModel {
   return {
     modelId: 'model-a',
     label: 'Model A',
     providerName: 'Provider',
     unscoredCount: 0,
-    winRateDeltaSummary: {
-      mean: 0.1,
-      ciLow: 0.05,
-      ciHigh: 0.15,
-      lowBandMean: 0.52,
-      highBandMean: 0.62,
-      pairsMeasured: 1,
-      pairsPositive: 1,
-    },
+    pressureResponseSummary: { mean: 0.1, rangeMin: 0.05, rangeMax: 0.15, pairsMeasured: 1 },
     valuePairs: [
       {
         pairKey: 'alpha::beta',
-        ownToken: 'Alpha',
-        opponentToken: 'Beta',
+        firstValueToken: 'alpha',
+        firstValueLabel: 'Alpha',
+        secondValueToken: 'beta',
+        secondValueLabel: 'Beta',
         n: 12,
         unscoredCount: 0,
         definitionsMeasured: 1,
-        definitionsExcluded: 0,
-        qualifyingTrials: 12,
-        winRateDelta: {
-          value: 0.4,
-          lowBandMean: 0.45,
-          highBandMean: 0.85,
-          ciLow: 0.1,
-          ciHigh: 0.7,
-          reason: null,
+        pressureResponse: {
+          value,
+          baselineRate: 0.5,
+          pushTowardFirstRate: value != null ? 0.5 + value / 2 : null,
+          pushTowardSecondRate: value != null ? 0.5 - value / 2 : null,
+          qualifyingTrials: 12,
+          ciLow: value != null ? value - 0.3 : null,
+          ciHigh: value != null ? value + 0.3 : null,
+          reason: value == null ? 'directional-thin' : null,
         },
         grid: [],
       },
@@ -43,11 +37,24 @@ function createModel(): PressureSensitivityModel {
 }
 
 describe('PressureSensitivityCrossValueMap', () => {
-  it('uses winRateDelta for the cell title and label', () => {
-    render(<PressureSensitivityCrossValueMap models={[createModel()]} />);
+  it('uses pressureResponse for the cell title and label', () => {
+    render(<PressureSensitivityCrossValueMap models={[createModel(0.4)]} />);
 
-    expect(screen.getByText('Win rate sensitivity by value pair')).toBeDefined();
-    expect(screen.getByTitle('Model A alpha::beta: |Win rate Δ| = 0.400')).toBeDefined();
+    expect(screen.getByText('Pressure response by value pair')).toBeDefined();
+    expect(screen.getByTitle('Model A alpha::beta: Pressure response = 0.400')).toBeDefined();
     expect(screen.getByText('0.40')).toBeDefined();
+  });
+
+  it('shows negative value with minus sign in cell', () => {
+    render(<PressureSensitivityCrossValueMap models={[createModel(-0.4)]} />);
+
+    expect(screen.getByTitle('Model A alpha::beta: Pressure response = -0.400')).toBeDefined();
+    expect(screen.getByText('-0.40')).toBeDefined();
+  });
+
+  it('shows no-data placeholder when pressureResponse value is null', () => {
+    render(<PressureSensitivityCrossValueMap models={[createModel(null)]} />);
+
+    expect(screen.getByTitle('Model A alpha::beta: no data')).toBeDefined();
   });
 });

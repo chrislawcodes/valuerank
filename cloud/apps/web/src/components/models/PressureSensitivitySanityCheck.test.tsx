@@ -14,7 +14,7 @@ function createData(): DirectionalSanityCheck {
       {
         modelId: 'model-a',
         pairKey: 'alpha::beta',
-        winRateDelta: 0.031,
+        pressureResponse: 0.031,
         classification: 'positive',
       },
     ],
@@ -22,12 +22,12 @@ function createData(): DirectionalSanityCheck {
 }
 
 describe('PressureSensitivitySanityCheck', () => {
-  it('renames the panel and table labels to win rate', () => {
+  it('renames the panel and table labels to pressure response', () => {
     render(<PressureSensitivitySanityCheck data={createData()} />);
 
-    expect(screen.getByText('Win rate sanity check')).toBeDefined();
+    expect(screen.getByText('Pressure response sanity check')).toBeDefined();
     fireEvent.click(screen.getByRole('button', { name: /show breakdown/i }));
-    expect(screen.getByText('Win rate Δ')).toBeDefined();
+    expect(screen.getByText('Pressure response')).toBeDefined();
     expect(screen.getByText('+0.031')).toBeDefined();
     expect(screen.getByText(/Below 70% positive movement/)).toBeDefined();
   });

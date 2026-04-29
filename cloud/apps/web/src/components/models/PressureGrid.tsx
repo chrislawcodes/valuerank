@@ -82,8 +82,8 @@ export function PressureGrid({ pair }: Props) {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <p className="text-xs text-gray-500">
-          Rows: <span className="font-medium">{pair.ownToken}</span> pressure (1=minimal,
-          5=full). Columns: <span className="font-medium">{pair.opponentToken}</span> pressure.
+          Rows: <span className="font-medium">{pair.firstValueToken}</span> pressure (1=minimal,
+          5=full). Columns: <span className="font-medium">{pair.secondValueToken}</span> pressure.
           Cell color shows {metric} per-cell.
         </p>
         <div className="flex gap-1 text-xs">

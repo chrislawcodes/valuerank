@@ -3,17 +3,16 @@ import type { ReactNode } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/Table';
 import { HeaderTooltip } from '../ui/HeaderTooltip';
 import { Tooltip } from '../ui/Tooltip';
-import { CeilingFloorBadge } from './CeilingFloorBadge';
 import { PressureGrid } from './PressureGrid';
 import type { PressureSensitivityModel, PressureSensitivityValuePair } from '../../api/operations/pressureSensitivity';
 import {
-  GROUP_TOOLTIP,
-  LOW_TOOLTIP as LOW_TOOLTIP_BASE,
-  HIGH_TOOLTIP as HIGH_TOOLTIP_BASE,
-  PAIR_DELTA_TOOLTIP as DELTA_TOOLTIP,
+  BASELINE_TOOLTIP,
+  PUSH_TOWARD_FIRST_TOOLTIP,
+  PUSH_TOWARD_OTHER_TOOLTIP,
+  PAIR_PRESSURE_RESPONSE_TOOLTIP,
+  TRIALS_TOOLTIP,
   formatPercent,
-  formatPoints,
-  getBadgeFlag,
+  formatSignedPoints,
   reasonHoverText,
 } from './pressureSensitivityFormatting';
 
@@ -24,63 +23,66 @@ type Props = {
 type SortDirection = 'asc' | 'desc';
 
 const VALUE_PAIR_TOOLTIP = 'The value pair shown in this row.';
-const TRIALS_TOOLTIP =
-  'Total scored trials that contributed to this row\'s win rates. Counts only trials inside cells that met the coverage threshold (N ≥ 3) in the light or heavy pressure band. Refusals, unparseable responses, and trials in cells we skipped (low-data cells, level 3) are excluded.';
-const LOW_TOOLTIP = `${LOW_TOOLTIP_BASE} Per-pair: for this pair specifically.`;
-const HIGH_TOOLTIP = `${HIGH_TOOLTIP_BASE} Per-pair: for this pair specifically.`;
 
 function pairLabel(pair: PressureSensitivityValuePair): string {
-  return `${pair.ownToken} ↔ ${pair.opponentToken}`;
+  return `${pair.firstValueLabel} ↔ ${pair.secondValueLabel}`;
 }
 
-function bandTooltip(kind: 'low' | 'high', value: number | null | undefined, reason: string | null | undefined): string {
-  if (value == null) {
-    const explainer = reasonHoverText(reason);
-    return explainer !== '' ? explainer : 'No pooled win rate is available.';
-  }
-  return kind === 'low' ? LOW_TOOLTIP : HIGH_TOOLTIP;
+function renderRateCell(value: number | null | undefined): ReactNode {
+  if (value == null) return <span className="font-mono text-gray-500">—</span>;
+  return <span className="font-mono text-gray-900">{formatPercent(value)}</span>;
 }
 
-function renderBandCell(kind: 'low' | 'high', value: number | null | undefined, reason: string | null | undefined) {
+function renderResponseCell(pair: PressureSensitivityValuePair): ReactNode {
+  const { value, ciLow, ciHigh, reason } = pair.pressureResponse;
   if (value == null) {
+    const tip = reasonHoverText(reason) || 'Pressure response could not be computed.';
     return (
-      <Tooltip content={<div className="max-w-[280px] whitespace-normal text-xs leading-5">{bandTooltip(kind, value, reason)}</div>} position="top" variant="light">
-        <span className="font-mono text-gray-500">—</span>
-      </Tooltip>
-    );
-  }
-
-  const badgeFlag = kind === 'low' ? getBadgeFlag(value) ?? null : null;
-  return (
-    <Tooltip content={<div className="max-w-[280px] whitespace-normal text-xs leading-5">{bandTooltip(kind, value, reason)}</div>} position="top" variant="light">
-      <div className="inline-flex items-center gap-1">
-        <span className="font-mono text-gray-900">{formatPercent(value)}</span>
-        <CeilingFloorBadge flag={badgeFlag} />
-      </div>
-    </Tooltip>
-  );
-}
-
-function renderDeltaCell(pair: PressureSensitivityValuePair): ReactNode {
-  const { value, ciLow, ciHigh, reason } = pair.winRateDelta;
-  if (value == null) {
-    return (
-      <Tooltip content={<div className="max-w-[280px] whitespace-normal text-xs leading-5">{bandTooltip('low', value, reason)}</div>} position="top" variant="light">
+      <Tooltip
+        content={<div className="max-w-[280px] whitespace-normal text-xs leading-5">{tip}</div>}
+        position="top"
+        variant="light"
+      >
         <span className="font-mono text-gray-500">—</span>
       </Tooltip>
     );
   }
 
   const textClass = value < 0 ? 'text-red-700' : 'text-gray-900';
-  const glyph = value < 0 ? '▼' : '▲';
-  const signed = `${value < 0 ? '−' : '+'}${formatPoints(value)}`;
+  const signed = formatSignedPoints(value);
 
   if (ciLow == null || ciHigh == null) {
-    return <span className={`font-mono ${textClass}`}>{glyph} {signed}</span>;
+    return <span className={`font-mono ${textClass}`}>{signed}</span>;
   }
 
   const halfWidth = Math.abs((ciHigh - ciLow) * 50);
-  return <span className={`font-mono ${textClass}`}>{glyph} {signed} ± {halfWidth.toFixed(0)} pp</span>;
+  return (
+    <span className={`font-mono ${textClass}`}>
+      {signed} ± {halfWidth.toFixed(1)} pp
+    </span>
+  );
+}
+
+function renderTrialsCell(pair: PressureSensitivityValuePair): ReactNode {
+  const { qualifyingTrials } = pair.pressureResponse;
+  if (qualifyingTrials !== pair.n) {
+    return (
+      <Tooltip
+        content={
+          <div className="max-w-[280px] whitespace-normal text-xs leading-5">
+            {qualifyingTrials} of {pair.n} scored trials used
+          </div>
+        }
+        position="top"
+        variant="light"
+      >
+        <span className="cursor-help font-mono text-gray-700 underline decoration-dotted">
+          {qualifyingTrials}
+        </span>
+      </Tooltip>
+    );
+  }
+  return <span className="font-mono text-gray-700">{qualifyingTrials}</span>;
 }
 
 export function PressureSensitivityDetail({ model }: Props) {
@@ -89,8 +91,8 @@ export function PressureSensitivityDetail({ model }: Props) {
 
   const sortedPairs = useMemo(() => {
     return [...model.valuePairs].sort((a, b) => {
-      const aValue = a.winRateDelta.value;
-      const bValue = b.winRateDelta.value;
+      const aValue = a.pressureResponse.value;
+      const bValue = b.pressureResponse.value;
       const aAbs = aValue == null ? null : Math.abs(aValue);
       const bAbs = bValue == null ? null : Math.abs(bValue);
       if (aAbs == null && bAbs == null) return pairLabel(a).localeCompare(pairLabel(b));
@@ -113,31 +115,26 @@ export function PressureSensitivityDetail({ model }: Props) {
   return (
     <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
       <div className="mb-3">
-        <h2 className="text-lg font-semibold text-gray-900">{model.label} — per-pair win rate sensitivity</h2>
+        <h2 className="text-lg font-semibold text-gray-900">{model.label} — per-pair pressure response</h2>
         <p className="text-sm text-gray-600">
-          This table shows how light and heavy pressure change the selected model&apos;s win rate for each value pair. The Δ column is the change in percentage points, and the Trials column counts only the scored trials that met the coverage rule.
+          This table shows the baseline win rate and push rates for each value pair. The Pressure response column is the signed difference between push directions, and the Trials column counts qualifying scored trials.
         </p>
       </div>
 
       <Table variant="bordered">
         <TableHeader variant="bordered">
           <TableRow>
-            <TableHead rowSpan={2} className="align-middle text-xs uppercase tracking-wide text-gray-500">
+            <TableHead className="text-xs uppercase tracking-wide text-gray-500">
               <HeaderTooltip label="Value Pair" content={VALUE_PAIR_TOOLTIP} />
             </TableHead>
-            <TableHead colSpan={3} className="text-center text-xs uppercase tracking-wide text-gray-500">
-              <HeaderTooltip label="Win Rate" content={GROUP_TOOLTIP} />
-            </TableHead>
-            <TableHead rowSpan={2} className="align-middle text-xs uppercase tracking-wide text-gray-500">
-              <HeaderTooltip label="Trials" content={TRIALS_TOOLTIP} />
-            </TableHead>
-          </TableRow>
-          <TableRow>
             <TableHead className="text-xs uppercase tracking-wide text-gray-500">
-              <HeaderTooltip label="Low pressure" content={LOW_TOOLTIP} />
+              <HeaderTooltip label="Baseline" content={BASELINE_TOOLTIP} />
             </TableHead>
             <TableHead className="text-xs uppercase tracking-wide text-gray-500">
-              <HeaderTooltip label="High pressure" content={HIGH_TOOLTIP} />
+              <HeaderTooltip label="Push toward first" content={PUSH_TOWARD_FIRST_TOOLTIP} />
+            </TableHead>
+            <TableHead className="text-xs uppercase tracking-wide text-gray-500">
+              <HeaderTooltip label="Push toward other" content={PUSH_TOWARD_OTHER_TOOLTIP} />
             </TableHead>
             <TableHead
               className="cursor-pointer select-none text-xs uppercase tracking-wide text-gray-500"
@@ -145,18 +142,21 @@ export function PressureSensitivityDetail({ model }: Props) {
               aria-sort={sortDirection === 'asc' ? 'ascending' : 'descending'}
             >
               <div className="inline-flex items-center gap-1">
-                <HeaderTooltip label="Win rate Δ ± CI" content={DELTA_TOOLTIP} />
+                <HeaderTooltip label="Pressure response" content={PAIR_PRESSURE_RESPONSE_TOOLTIP} />
                 <span aria-hidden="true" className="text-[11px] leading-none">
                   {sortDirection === 'asc' ? '▲' : '▼'}
                 </span>
               </div>
+            </TableHead>
+            <TableHead className="text-xs uppercase tracking-wide text-gray-500">
+              <HeaderTooltip label="Trials" content={TRIALS_TOOLTIP} />
             </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {sortedPairs.map((pair) => {
             const isSelected = selectedPair?.pairKey === pair.pairKey;
-            const { lowBandMean, highBandMean, reason } = pair.winRateDelta;
+            const { baselineRate, pushTowardFirstRate, pushTowardSecondRate } = pair.pressureResponse;
 
             return (
               <TableRow
@@ -165,10 +165,11 @@ export function PressureSensitivityDetail({ model }: Props) {
                 onClick={() => setSelectedPairKey(pair.pairKey)}
               >
                 <TableCell className="font-medium text-gray-900">{pairLabel(pair)}</TableCell>
-                <TableCell className="text-sm text-gray-700">{renderBandCell('low', lowBandMean, reason)}</TableCell>
-                <TableCell className="text-sm text-gray-700">{renderBandCell('high', highBandMean, reason)}</TableCell>
-                <TableCell className="text-sm text-gray-900">{renderDeltaCell(pair)}</TableCell>
-                <TableCell className="text-sm text-gray-700">{pair.qualifyingTrials}</TableCell>
+                <TableCell className="text-sm text-gray-700">{renderRateCell(baselineRate)}</TableCell>
+                <TableCell className="text-sm text-gray-700">{renderRateCell(pushTowardFirstRate)}</TableCell>
+                <TableCell className="text-sm text-gray-700">{renderRateCell(pushTowardSecondRate)}</TableCell>
+                <TableCell className="text-sm text-gray-900">{renderResponseCell(pair)}</TableCell>
+                <TableCell className="text-sm text-gray-700">{renderTrialsCell(pair)}</TableCell>
               </TableRow>
             );
           })}
