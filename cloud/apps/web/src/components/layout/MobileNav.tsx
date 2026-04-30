@@ -25,8 +25,7 @@ const navItems: NavItem[] = [
     children: [
       { name: 'Matrix', path: '/models', icon: Cpu, match: 'exact' },
       { name: 'Domain Shifts', path: '/models/domain-shifts', icon: BarChart2 },
-      { name: 'Consistency', path: '/models/consistency', icon: BarChart2 },
-      { name: 'Circumplex', path: '/models/circumplex', icon: BarChart2 },
+      { name: 'Pressure Sensitivity', path: '/models/pressure-sensitivity', icon: BarChart2 },
     ],
   },
   {
@@ -55,6 +54,8 @@ const navItems: NavItem[] = [
     children: [
       { name: 'Legacy Survey Work', path: '/archive/surveys', icon: Archive },
       { name: 'Legacy Survey Results', path: '/archive/survey-results', icon: Archive },
+      { name: 'Circumplex', path: '/archive/circumplex', icon: Archive },
+      { name: 'Consistency', path: '/archive/consistency', icon: Archive },
     ],
   },
   {

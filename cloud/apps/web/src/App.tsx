@@ -20,7 +20,9 @@ import { DomainAnalysisValueDetail } from './pages/DomainAnalysisValueDetail';
 import { Models } from './pages/Models';
 import { DomainValueShiftHeatmap } from './pages/DomainValueShiftHeatmap';
 import { ModelsConsistency } from './pages/ModelsConsistency';
+import { PressureSensitivity } from './pages/PressureSensitivity';
 import { ModelsCircumplex } from './pages/ModelsCircumplex';
+import { ModelsConfidence } from './pages/ModelsConfidence';
 import { DefinitionDetail } from './pages/DefinitionDetail';
 import { StartPairedBatchPage } from './pages/DefinitionDetail/StartPairedBatchPage';
 import { Runs } from './pages/Runs';
@@ -43,6 +45,7 @@ import { DomainContexts } from './pages/DomainContexts';
 import { ValueStatements } from './pages/ValueStatements';
 import { PairedVignetteNew } from './pages/PairedVignetteNew';
 import { StartRedirect } from './pages/StartRedirect';
+import { Status } from './pages/Status';
 import { StatusRedirect } from './pages/StatusRedirect';
 import { NotFound } from './pages/NotFound';
 import { client } from './api/client';
@@ -90,7 +93,7 @@ function App() {
               path="/status"
               element={
                 <ProtectedLayout>
-                  <StatusRedirect />
+                  <Status />
                 </ProtectedLayout>
               }
             />
@@ -190,19 +193,37 @@ function App() {
                 </ProtectedLayout>
               }
             />
+            <Route path="/models/consistency" element={<Navigate to="/archive/consistency" replace />} />
             <Route
-              path="/models/consistency"
+              path="/archive/consistency"
               element={
-                <ProtectedLayout>
+                <ProtectedLayout requiredRole="ADMIN">
                   <ModelsConsistency />
                 </ProtectedLayout>
               }
             />
             <Route
-              path="/models/circumplex"
+              path="/models/pressure-sensitivity"
               element={
                 <ProtectedLayout>
+                  <PressureSensitivity />
+                </ProtectedLayout>
+              }
+            />
+            <Route path="/models/circumplex" element={<Navigate to="/archive/circumplex" replace />} />
+            <Route
+              path="/archive/circumplex"
+              element={
+                <ProtectedLayout requiredRole="ADMIN">
                   <ModelsCircumplex />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/models/confidence"
+              element={
+                <ProtectedLayout>
+                  <ModelsConfidence />
                 </ProtectedLayout>
               }
             />

@@ -252,11 +252,16 @@ describe('DomainValueShiftHeatmap page', () => {
     });
     expect(screen.getByRole('button', { name: /model a/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Latest @ default/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Sort by Avg Win Rate descending/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/Achievement in City Planning: raw win rate 80%; shift \+20 pts/i)).toHaveAccessibleName(
       /average 60%; evidence vignettes —/i,
     );
     expect(screen.getByText('Metric:')).toBeInTheDocument();
     expect(screen.getByText(/percentage-point shift, not percent change/i)).toBeInTheDocument();
+
+    const firstDataRow = screen.getAllByRole('row')[1];
+    expect(within(firstDataRow).getAllByRole('rowheader')[0]).toHaveTextContent('Achievement');
+    expect(within(firstDataRow).getAllByRole('cell')[0]).toHaveTextContent('60%');
   });
 
   it('passes the selected signature to the models analysis query', async () => {
@@ -305,7 +310,7 @@ describe('DomainValueShiftHeatmap page', () => {
 
     const firstDataRow = screen.getAllByRole('row')[1];
     expect(firstDataRow).toBeDefined();
-    expect(within(firstDataRow as HTMLElement).getByRole('columnheader', { name: 'Achievement' })).toBeInTheDocument();
+    expect(within(firstDataRow as HTMLElement).getByRole('rowheader', { name: 'Achievement' })).toBeInTheDocument();
   });
 
   it('lets the user select a different model', async () => {

@@ -38,14 +38,16 @@ const domainMenuItems: MenuItem[] = [
 const modelsMenuItems: MenuItem[] = [
   { name: 'Matrix', path: '/models', match: 'exact' },
   { name: 'Domain Shifts', path: '/models/domain-shifts' },
-  { name: 'Consistency', path: '/models/consistency' },
-  { name: 'Circumplex', path: '/models/circumplex' },
+  { name: 'Pressure Sensitivity', path: '/models/pressure-sensitivity' },
+  { name: 'Confidence', path: '/models/confidence' },
 ];
 
 const archiveMenuItems: MenuItem[] = [
   { name: 'Overview', path: '/archive', aliases: [] as string[] },
   { name: 'Legacy Survey Work', path: '/archive/surveys' },
   { name: 'Legacy Survey Results', path: '/archive/survey-results' },
+  { name: 'Circumplex', path: '/archive/circumplex' },
+  { name: 'Consistency', path: '/archive/consistency' },
 ];
 
 const adminSettingsMenuItems: MenuItem[] = [
