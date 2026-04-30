@@ -61,58 +61,36 @@ builder.queryField('modelsConfidence', (t) =>
         })),
       };
 
-      // Aggregate runs are pooling views — transcripts live on source runs.
-      // Fetch aggregate runs (small set), filter by signature, then follow
-      // config.sourceRunIds to reach transcript-bearing source runs.
-      const aggregateRuns = await db.run.findMany({
+      // Query source runs directly — the same approach circumplexAnalysis uses.
+      // Going through aggregate runs is wrong because aggregate run configs have
+      // no version/temperature, so runMatchesSignature('vnewtd') matches ALL of
+      // them (null === null), pulling every sourceRunId in the system at once.
+      // Source runs store their actual signature in config, so filtering works correctly.
+      const allSourceRuns = await db.run.findMany({
         where: {
           status: 'COMPLETED',
           deletedAt: null,
-          tags: { some: { tag: { name: 'Aggregate' } } },
+          tags: { none: { tag: { name: 'Aggregate' } } },
         },
-        select: { id: true, config: true },
+        select: { id: true, definitionId: true, config: true },
       });
 
-      const scopedAggregateRuns = signature != null
-        ? aggregateRuns.filter((run) => runMatchesSignature(run.config, signature))
-        : aggregateRuns;
+      const matchingRuns = signature != null
+        ? allSourceRuns.filter((r) => runMatchesSignature(r.config, signature))
+        : allSourceRuns;
 
-      if (scopedAggregateRuns.length === 0) return emptyResult;
+      if (matchingRuns.length === 0) return emptyResult;
 
-      // sourceRunIds lives in analysisResult.output, not run.config — follow the join.
-      const aggregateRunIds = scopedAggregateRuns.map((r) => r.id);
-      const aggregateResults = await db.analysisResult.findMany({
-        where: { runId: { in: aggregateRunIds }, status: 'CURRENT' },
-        select: { output: true },
-      });
-
-      const sourceRunIdSet = new Set<string>();
-      for (const result of aggregateResults) {
-        const output = result.output as { sourceRunIds?: string[] } | null;
-        for (const id of output?.sourceRunIds ?? []) {
-          sourceRunIdSet.add(id);
-        }
-      }
-
-      if (sourceRunIdSet.size === 0) return emptyResult;
-
-      const sourceRunIds = Array.from(sourceRunIdSet);
-
-      // Load source runs to get their definitionId — lets us pre-fetch value pairs
-      // by definition rather than per-transcript via the expensive definitionSnapshot blob.
-      const sourceRuns = await db.run.findMany({
-        where: { id: { in: sourceRunIds } },
-        select: { id: true, definitionId: true },
-      });
+      const sourceRunIds = matchingRuns.map((r) => r.id);
 
       const runToDefinitionId = new Map(
-        sourceRuns
+        matchingRuns
           .filter((r): r is typeof r & { definitionId: string } => r.definitionId != null)
           .map((r) => [r.id, r.definitionId]),
       );
 
       const definitionIds = [...new Set(
-        sourceRuns.map((r) => r.definitionId).filter((id): id is string => id != null),
+        matchingRuns.map((r) => r.definitionId).filter((id): id is string => id != null),
       )];
 
       // Fetch definition content once per definition (much cheaper than loading
