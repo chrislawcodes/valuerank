@@ -4,7 +4,6 @@ import { getBoss, isBossRunning } from '../../queue/boss.js';
 import { DEFAULT_JOB_OPTIONS } from '../../queue/types.js';
 import {
   DOMAIN_ANALYSIS_VALUE_KEYS,
-  type DomainAnalysisValueKey,
 } from '../../graphql/queries/domain-analysis-values.js';
 import {
   computeSmoothedLogOddsScore,

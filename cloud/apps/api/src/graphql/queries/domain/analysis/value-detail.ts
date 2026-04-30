@@ -18,7 +18,6 @@ import {
 import type {
   DomainAnalysisVignetteDetail,
 } from '../shared.js';
-import type { DomainAnalysisValueKey } from '../../domain-analysis-values.js';
 import type { MutableVignette } from './value-detail-types.js';
 import { mapVignette } from './value-detail-types.js';
 
