@@ -15,18 +15,6 @@ import {
   type ModelsConfidenceValueResultShape,
 } from '../types/models-confidence.js';
 
-type ConfidenceCounts = { strong: number; lean: number };
-type ModelConfidenceCounts = {
-  valueMap: Map<DomainAnalysisValueKey, ConfidenceCounts>;
-  rawStrong: number;
-  rawLean: number;
-};
-
-function computeConfidence(counts: ConfidenceCounts): number | null {
-  const total = counts.strong + counts.lean;
-  if (total === 0) return null;
-  return (counts.strong / total) * 100;
-}
 
 builder.queryField('modelsConfidence', (t) =>
   t.field({
@@ -116,22 +104,26 @@ builder.queryField('modelsConfidence', (t) =>
         },
       });
 
-      // modelId -> counts
-      const countsMap = new Map<string, ModelConfidenceCounts>();
+      // Accumulate per-definition counts to avoid unequal weighting.
+      // A vignette run 10× would swamp one run once in a flat sum.
+      // Instead: compute strong% per definition, then average across definitions.
+      //
+      // Structure: modelId -> definitionId -> { valueKeys, strong, lean }
+      // All runs of the same definition collapse into one DefData entry.
+      type DefData = { valueKeys: DomainAnalysisValueKey[]; strong: number; lean: number };
+      const perModelDefs = new Map<string, Map<string, DefData>>();
       for (const model of activeModels) {
-        const valueMap = new Map<DomainAnalysisValueKey, ConfidenceCounts>();
-        for (const key of DOMAIN_ANALYSIS_VALUE_KEYS) {
-          valueMap.set(key, { strong: 0, lean: 0 });
-        }
-        countsMap.set(model.modelId, { valueMap, rawStrong: 0, rawLean: 0 });
+        perModelDefs.set(model.modelId, new Map());
       }
 
       for (const transcript of transcripts) {
-        const modelCounts = countsMap.get(transcript.modelId);
-        if (modelCounts == null) continue;
+        const modelMap = perModelDefs.get(transcript.modelId);
+        if (modelMap == null) continue;
 
         const definitionId = runToDefinitionId.get(transcript.runId);
-        const pairOverride = definitionId != null ? defValuePairMap.get(definitionId) : undefined;
+        if (definitionId == null) continue;
+
+        const pairOverride = defValuePairMap.get(definitionId);
 
         // orientationFlipped is not needed: both values in a pair receive the same
         // strength count regardless of which was favored, so direction doesn't matter.
@@ -144,44 +136,65 @@ builder.queryField('modelsConfidence', (t) =>
         if (canonical.direction !== 'favor_first' && canonical.direction !== 'favor_second') continue;
         if (canonical.strength !== 'strong' && canonical.strength !== 'lean') continue;
 
-        if (canonical.strength === 'strong') modelCounts.rawStrong += 1;
-        else modelCounts.rawLean += 1;
-
-        // Both values in the pair receive the strength count — confidence is
-        // about how decisively the model engages with a value, regardless of direction.
-        const valueKeys = [canonical.favoredValueKey, canonical.opposedValueKey].filter(
-          (k): k is DomainAnalysisValueKey => k != null,
-        );
-        for (const valueKey of valueKeys) {
-          const counts = modelCounts.valueMap.get(valueKey);
-          if (counts == null) continue;
-          if (canonical.strength === 'strong') counts.strong += 1;
-          else counts.lean += 1;
+        let defData = modelMap.get(definitionId);
+        if (defData == null) {
+          // Derive the two values tested by this definition from the pair, not from the
+          // canonical decision, so the value association is stable across all transcripts.
+          const pair = defValuePairMap.get(definitionId) ?? null;
+          const valueKeys: DomainAnalysisValueKey[] = pair != null ? [pair.valueA, pair.valueB] : [];
+          defData = { valueKeys, strong: 0, lean: 0 };
+          modelMap.set(definitionId, defData);
         }
+
+        if (canonical.strength === 'strong') defData.strong += 1;
+        else defData.lean += 1;
+      }
+
+      // Per-definition confidence = strong / (strong + lean) for that definition.
+      // Final confidence = mean of per-definition confidences (equal weight per vignette).
+      function meanConfidence(rates: number[]): number | null {
+        if (rates.length === 0) return null;
+        return (rates.reduce((a, b) => a + b, 0) / rates.length) * 100;
       }
 
       const models: ModelsConfidenceModelResultShape[] = activeModels.map((model) => {
-        const modelCounts = countsMap.get(model.modelId);
-        const valueMap = modelCounts?.valueMap ?? new Map<DomainAnalysisValueKey, ConfidenceCounts>();
-        const rawStrong = modelCounts?.rawStrong ?? 0;
-        const rawLean = modelCounts?.rawLean ?? 0;
+        const modelMap = perModelDefs.get(model.modelId) ?? new Map<string, DefData>();
+        const defEntries = [...modelMap.values()];
 
+        // Overall: average per-definition strong% across all definitions for this model.
+        const overallRates = defEntries
+          .map(({ strong, lean }) => {
+            const total = strong + lean;
+            return total > 0 ? strong / total : null;
+          })
+          .filter((v): v is number => v != null);
+        const overallConfidence = meanConfidence(overallRates);
+        const overallStrongCount = defEntries.reduce((s, d) => s + d.strong, 0);
+        const overallLeanCount = defEntries.reduce((s, d) => s + d.lean, 0);
+
+        // Per-value: average per-definition strong% across definitions that test that value.
         const values: ModelsConfidenceValueResultShape[] = DOMAIN_ANALYSIS_VALUE_KEYS.map((valueKey) => {
-          const counts = valueMap.get(valueKey) ?? { strong: 0, lean: 0 };
+          const relevantDefs = defEntries.filter((d) => d.valueKeys.includes(valueKey));
+          const rates = relevantDefs
+            .map(({ strong, lean }) => {
+              const total = strong + lean;
+              return total > 0 ? strong / total : null;
+            })
+            .filter((v): v is number => v != null);
           return {
             valueKey,
-            confidence: computeConfidence(counts),
-            strongCount: counts.strong,
-            leanCount: counts.lean,
+            confidence: meanConfidence(rates),
+            strongCount: relevantDefs.reduce((s, d) => s + d.strong, 0),
+            leanCount: relevantDefs.reduce((s, d) => s + d.lean, 0),
           };
         });
 
         return {
           modelId: model.modelId,
           label: model.displayName,
-          overallConfidence: computeConfidence({ strong: rawStrong, lean: rawLean }),
-          overallStrongCount: rawStrong,
-          overallLeanCount: rawLean,
+          overallConfidence,
+          overallStrongCount,
+          overallLeanCount,
           values,
         };
       });
