@@ -516,7 +516,6 @@ export function DomainAnalysis() {
           />
           <DominanceSection
             models={visibleModels}
-            unavailableModels={unavailableModels}
             selectedModelId={singleSelectedModelId}
           />
           <SimilaritySection models={visibleModels} clusterAnalysis={data?.domainAnalysis.clusterAnalysis} />

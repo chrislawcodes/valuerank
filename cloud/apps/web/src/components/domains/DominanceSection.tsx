@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  type DomainAnalysisModelAvailability,
   type ModelEntry,
   type ValueKey,
 } from '../../data/domainAnalysisData';
@@ -16,7 +15,6 @@ import {
 
 type DominanceSectionProps = {
   models: ModelEntry[];
-  unavailableModels: DomainAnalysisModelAvailability[];
   selectedModelId: string | null;
 };
 
@@ -38,7 +36,7 @@ const THEME_COLORS: DominanceSectionThemeColors = {
   idleRingColor: '#38bdf8',
 };
 
-export function DominanceSection({ models, unavailableModels, selectedModelId }: DominanceSectionProps) {
+export function DominanceSection({ models, selectedModelId }: DominanceSectionProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const [focusedValue, setFocusedValue] = useState<ValueKey | null>(null);
   const [hoveredValue, setHoveredValue] = useState<ValueKey | null>(null);

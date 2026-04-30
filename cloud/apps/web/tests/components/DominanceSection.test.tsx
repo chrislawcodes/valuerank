@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
 import type {
-  DomainAnalysisModelAvailability,
   ModelEntry,
 } from '../../src/data/domainAnalysisData';
 import { DominanceSection } from '../../src/components/domains/DominanceSection';
@@ -65,13 +64,6 @@ const models: ModelEntry[] = [
   },
 ];
 
-const unavailableModels: DomainAnalysisModelAvailability[] = [
-  {
-    model: 'offline-model',
-    label: 'Offline Model',
-    reason: 'not available',
-  },
-];
 
 describe('DominanceSection', () => {
   it('renders the shell and updates summary content when the selected model changes', async () => {
@@ -92,7 +84,6 @@ describe('DominanceSection', () => {
     const { rerender } = render(
       <DominanceSection
         models={models}
-        unavailableModels={unavailableModels}
         selectedModelId="model-a"
       />,
     );
@@ -122,7 +113,6 @@ describe('DominanceSection', () => {
     rerender(
       <DominanceSection
         models={models}
-        unavailableModels={unavailableModels}
         selectedModelId="model-b"
       />,
     );
