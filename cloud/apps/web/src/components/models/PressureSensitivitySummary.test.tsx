@@ -38,6 +38,7 @@ describe('PressureSensitivitySummary', () => {
       createModel('alpha', 'Alpha', 0.05, 0.01, 0.09, 2),
     ]);
 
+    expect(screen.getByText('Pressure Response across models')).toBeDefined();
     expect(screen.getByText('Pressure response')).toBeDefined();
     expect(screen.getByText('Model')).toBeDefined();
     expect(screen.queryByText('Win Rate')).toBeNull();
@@ -84,5 +85,13 @@ describe('PressureSensitivitySummary', () => {
     fireEvent.focus(trigger);
 
     expect(screen.getByRole('tooltip').textContent ?? '').toContain('range in brackets');
+  });
+
+  it('renders the snapshot button with the new label', () => {
+    renderSummary([createModel('alpha', 'Alpha', 0.05, 0.01, 0.09, 2)]);
+
+    expect(
+      screen.getByRole('button', { name: /copy pressure response across models as image/i }),
+    ).toBeDefined();
   });
 });

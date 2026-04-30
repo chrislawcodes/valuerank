@@ -1,5 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import type { ReactNode } from 'react';
+import { CopyVisualButton } from '../ui/CopyVisualButton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/Table';
 import { HeaderTooltip } from '../ui/HeaderTooltip';
 import type { PressureSensitivityModel, PressureResponseSummary } from '../../api/operations/pressureSensitivity';
@@ -38,6 +39,7 @@ function renderResponseCell(summary: PressureResponseSummary): ReactNode {
 }
 
 export function PressureSensitivitySummary({ models, selectedModelId, onSelectModel }: Props) {
+  const tableRef = useRef<HTMLDivElement>(null);
   const sortedModels = useMemo(() => {
     return [...models].sort((a, b) => {
       const aMean = a.pressureResponseSummary.mean;
@@ -52,40 +54,46 @@ export function PressureSensitivitySummary({ models, selectedModelId, onSelectMo
 
   return (
     <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
-      <div className="mb-3">
-        <h2 className="text-lg font-semibold text-gray-900">Cross-model pressure response</h2>
-        <p className="text-sm text-gray-600">
-          This table ranks models by their mean pressure response — how much pressure moves their choice toward their own preferred value across measured pairs.
-        </p>
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="space-y-1">
+          <h2 className="text-lg font-semibold text-gray-900">Pressure Response across models</h2>
+          <p className="text-sm text-gray-600">
+            This table ranks models by their mean pressure response — how much pressure moves their choice toward
+            their own preferred value across measured pairs.
+          </p>
+        </div>
+        <CopyVisualButton targetRef={tableRef} label="Pressure Response across models" />
       </div>
 
-      <Table variant="bordered">
-        <TableHeader variant="bordered">
-          <TableRow>
-            <TableHead className="text-xs uppercase tracking-wide text-gray-500">
-              <HeaderTooltip label="Model" content={MODEL_TOOLTIP} />
-            </TableHead>
-            <TableHead className="text-xs uppercase tracking-wide text-gray-500">
-              <HeaderTooltip label="Pressure response" content={SUMMARY_PRESSURE_RESPONSE_TOOLTIP} />
-            </TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {sortedModels.map((model) => {
-            const isSelected = model.modelId === selectedModelId;
-            return (
-              <TableRow
-                key={model.modelId}
-                className={`cursor-pointer ${isSelected ? 'bg-blue-50' : ''}`}
-                onClick={() => onSelectModel(model.modelId)}
-              >
-                <TableCell className="font-medium text-gray-900">{model.label}</TableCell>
-                <TableCell className="text-sm">{renderResponseCell(model.pressureResponseSummary)}</TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
+      <div ref={tableRef}>
+        <Table variant="bordered">
+          <TableHeader variant="bordered">
+            <TableRow>
+              <TableHead className="text-xs uppercase tracking-wide text-gray-500">
+                <HeaderTooltip label="Model" content={MODEL_TOOLTIP} />
+              </TableHead>
+              <TableHead className="text-xs uppercase tracking-wide text-gray-500">
+                <HeaderTooltip label="Pressure response" content={SUMMARY_PRESSURE_RESPONSE_TOOLTIP} />
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {sortedModels.map((model) => {
+              const isSelected = model.modelId === selectedModelId;
+              return (
+                <TableRow
+                  key={model.modelId}
+                  className={`cursor-pointer ${isSelected ? 'bg-blue-50' : ''}`}
+                  onClick={() => onSelectModel(model.modelId)}
+                >
+                  <TableCell className="font-medium text-gray-900">{model.label}</TableCell>
+                  <TableCell className="text-sm">{renderResponseCell(model.pressureResponseSummary)}</TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
     </section>
   );
 }
