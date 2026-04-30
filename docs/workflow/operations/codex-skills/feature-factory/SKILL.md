@@ -388,6 +388,7 @@ What the runner does **not** measure: Claude orchestrator session tokens. Claude
 Where to look for cross-feature aggregation:
 
 - Run `analyze-reviews` to generate a full report. Section 7a shows per-feature rollups (wall seconds, Codex tokens, Gemini tokens, TTL crossings, command count) sorted by total wall time. The report is saved to `docs/workflow/analysis/review-performance-<date>.md`.
+- **Auto-generated weekly snapshots** are committed to `docs/workflow/analysis/` every Monday by `.github/workflows/ff-analyzer-weekly.yml`. Browse that directory for the running history without having to run the command manually.
 - Run `status --slug <slug> --tokens` to see the last 10 command-telemetry records for a single feature (wall seconds, bytes read/written, TTL crossed). This was shipped in PR #792.
 
 ## Notes
