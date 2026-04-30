@@ -73,6 +73,7 @@ describe('PressureSensitivityDetail', () => {
       ]),
     );
 
+    expect(screen.getByText('Pressure Response by Value Pair')).toBeDefined();
     expect(screen.getByText('Value Pair')).toBeDefined();
     expect(screen.getByText('Baseline')).toBeDefined();
     expect(screen.getByText('Push toward first')).toBeDefined();
@@ -145,5 +146,17 @@ describe('PressureSensitivityDetail', () => {
     fireEvent.focus(trigger);
 
     expect(screen.getByRole('tooltip').textContent ?? '').toContain('Newcombe');
+  });
+
+  it('renders the snapshot button with the new label', () => {
+    renderDetail(
+      createModel([
+        createPair('alpha::delta', 'Alpha', 'Delta', 0.12, 0.48, 0.60, 0.36, 0.08, 0.16, null, 17),
+      ]),
+    );
+
+    expect(
+      screen.getByRole('button', { name: /copy pressure response by value pair as image/i }),
+    ).toBeDefined();
   });
 });

@@ -188,6 +188,19 @@ describe('PressureSensitivity page', () => {
     expect(screen.getByText(/42 pressure conditions were excluded/)).toBeDefined();
   });
 
+  it('renders the by-value section for the selected model', () => {
+    mockDomainsOnce();
+    mockQuery(createPressureData(false));
+
+    render(
+      <MemoryRouter initialEntries={['/models/pressure-sensitivity?domainId=domain-a&signature=vnewtd']}>
+        <PressureSensitivity />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('Pressure Response by Value')).toBeDefined();
+  });
+
   it('appends lower-bound sentence when both transcript cap and exclusions are present', () => {
     mockDomainsOnce();
     mockQuery(createPressureData(true, 10));

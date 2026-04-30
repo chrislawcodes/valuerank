@@ -21,6 +21,14 @@ type AnomalyRowProps = {
   onViewTranscript: (target: { runId: string; transcriptId: string }) => void;
 };
 
+const LEVEL_WORD_TO_NUMBER: Record<string, number> = {
+  full: 5,
+  substantial: 4,
+  moderate: 3,
+  minimal: 2,
+  negligible: 1,
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value != null && typeof value === 'object' && !Array.isArray(value);
 }
@@ -33,51 +41,19 @@ function extractTranscriptId(details: unknown): string | null {
   return typeof transcriptId === 'string' && transcriptId.trim() !== '' ? transcriptId : null;
 }
 
-function formatAge(firstSeenAt: string): string {
-  const ageMs = Date.now() - new Date(firstSeenAt).getTime();
-  if (!Number.isFinite(ageMs) || ageMs <= 0) {
-    return '0s';
-  }
-
-  const seconds = Math.floor(ageMs / 1000);
-  if (seconds < 60) {
-    return `${seconds}s`;
-  }
-
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) {
-    return `${minutes}m`;
-  }
-
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) {
-    return `${hours}h`;
-  }
-
-  const days = Math.floor(hours / 24);
-  if (days < 7) {
-    return `${days}d`;
-  }
-
-  const weeks = Math.floor(days / 7);
-  if (weeks < 5) {
-    return `${weeks}w`;
-  }
-
-  const months = Math.floor(days / 30);
-  if (months < 12) {
-    return `${months}mo`;
-  }
-
-  const years = Math.floor(days / 365);
-  return `${years}y`;
+function formatStrengthLevel(value: string): string {
+  const lower = value.toLowerCase();
+  const num = LEVEL_WORD_TO_NUMBER[lower];
+  const display = value.charAt(0).toUpperCase() + value.slice(1);
+  return num != null ? `${num} - ${display}` : display;
 }
 
-function formatTimestamp(value: string): string {
-  return new Date(value).toLocaleString('en-US', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  });
+function extractStrengthPair(dimensionValues: unknown): [string, string] {
+  if (!isRecord(dimensionValues)) return ['—', '—'];
+  const entries = Object.entries(dimensionValues);
+  const first = entries[0] != null ? formatStrengthLevel(String(entries[0][1])) : '—';
+  const second = entries[1] != null ? formatStrengthLevel(String(entries[1][1])) : '—';
+  return [first, second];
 }
 
 export function AnomalyRow({ anomaly, tone, onViewTranscript }: AnomalyRowProps) {
@@ -189,9 +165,10 @@ export function AnomalyRow({ anomaly, tone, onViewTranscript }: AnomalyRowProps)
     }
   };
 
-  const runLabel = anomaly.run.id.slice(0, 8);
-  const ageLabel = formatAge(anomaly.firstSeenAt);
-  const ageTitle = formatTimestamp(anomaly.firstSeenAt);
+  const modelId = isRecord(anomaly.details) && typeof anomaly.details.modelId === 'string'
+    ? anomaly.details.modelId
+    : null;
+  const [firstStrength, secondStrength] = extractStrengthPair(anomaly.dimensionValues);
 
   const renderViewTranscriptButton = () => {
     if (anomaly.type === 'INVALID_RESPONSE_FAILURE') {
@@ -339,29 +316,23 @@ export function AnomalyRow({ anomaly, tone, onViewTranscript }: AnomalyRowProps)
           {anomaly.domain?.name ?? '—'}
         </td>
         <td className="px-4 py-3 align-top text-sm text-gray-700">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => navigate(`/runs/${anomaly.run.id}`)}
-            className="px-0 text-left font-mono text-sm text-teal-700 hover:bg-transparent hover:text-teal-800"
-            title={anomaly.run.id}
-          >
-            {runLabel}
-          </Button>
+          <span className="block max-w-[16rem] truncate" title={anomaly.scenarioName ?? undefined}>
+            {anomaly.scenarioName ?? '—'}
+          </span>
         </td>
         <td className="px-4 py-3 align-top text-sm text-gray-700">
           <span className="font-medium text-gray-900">{anomaly.displayLabel}</span>
         </td>
         <td className="px-4 py-3 align-top text-sm text-gray-700">
-          <span className="block max-w-[20rem] truncate" title={anomaly.displaySubject}>
-            {anomaly.displaySubject}
+          <span className="block max-w-[16rem] truncate font-mono text-xs" title={modelId ?? undefined}>
+            {modelId ?? '—'}
           </span>
         </td>
-        <td className="px-4 py-3 align-top text-sm text-gray-700">
-          <span title={ageTitle} className="whitespace-nowrap">
-            {ageLabel}
-          </span>
+        <td className="px-4 py-3 align-top text-sm text-gray-700 whitespace-nowrap">
+          {firstStrength}
+        </td>
+        <td className="px-4 py-3 align-top text-sm text-gray-700 whitespace-nowrap">
+          {secondStrength}
         </td>
         <td className="px-4 py-3 align-top text-sm text-gray-700">
           <div className="flex flex-wrap items-center justify-end gap-2">

@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import { CopyVisualButton } from '../ui/CopyVisualButton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/Table';
 import { HeaderTooltip } from '../ui/HeaderTooltip';
 import { Tooltip } from '../ui/Tooltip';
@@ -86,6 +87,7 @@ function renderTrialsCell(pair: PressureSensitivityValuePair): ReactNode {
 }
 
 export function PressureSensitivityDetail({ model }: Props) {
+  const tableRef = useRef<HTMLDivElement>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [selectedPairKey, setSelectedPairKey] = useState<string | null>(null);
 
@@ -114,67 +116,74 @@ export function PressureSensitivityDetail({ model }: Props) {
 
   return (
     <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
-      <div className="mb-3">
-        <h2 className="text-lg font-semibold text-gray-900">{model.label} — per-pair pressure response</h2>
-        <p className="text-sm text-gray-600">
-          This table shows the baseline win rate and push rates for each value pair. The Pressure response column is the signed difference between push directions, and the Trials column counts qualifying scored trials.
-        </p>
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="space-y-1">
+          <h2 className="text-lg font-semibold text-gray-900">Pressure Response by Value Pair</h2>
+          <p className="text-sm text-gray-600">
+            This table shows the baseline win rate and push rates for each value pair. The Pressure response column is
+            the signed difference between push directions, and the Trials column counts qualifying scored trials.
+          </p>
+          <p className="text-xs text-gray-500">Selected model: {model.label}</p>
+        </div>
+        <CopyVisualButton targetRef={tableRef} label="Pressure Response by Value Pair" />
       </div>
 
-      <Table variant="bordered">
-        <TableHeader variant="bordered">
-          <TableRow>
-            <TableHead className="text-xs uppercase tracking-wide text-gray-500">
-              <HeaderTooltip label="Value Pair" content={VALUE_PAIR_TOOLTIP} />
-            </TableHead>
-            <TableHead className="text-xs uppercase tracking-wide text-gray-500">
-              <HeaderTooltip label="Baseline" content={BASELINE_TOOLTIP} />
-            </TableHead>
-            <TableHead className="text-xs uppercase tracking-wide text-gray-500">
-              <HeaderTooltip label="Push toward first" content={PUSH_TOWARD_FIRST_TOOLTIP} />
-            </TableHead>
-            <TableHead className="text-xs uppercase tracking-wide text-gray-500">
-              <HeaderTooltip label="Push toward other" content={PUSH_TOWARD_OTHER_TOOLTIP} />
-            </TableHead>
-            <TableHead
-              className="cursor-pointer select-none text-xs uppercase tracking-wide text-gray-500"
-              onClick={() => setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))}
-              aria-sort={sortDirection === 'asc' ? 'ascending' : 'descending'}
-            >
-              <div className="inline-flex items-center gap-1">
-                <HeaderTooltip label="Pressure response" content={PAIR_PRESSURE_RESPONSE_TOOLTIP} />
-                <span aria-hidden="true" className="text-[11px] leading-none">
-                  {sortDirection === 'asc' ? '▲' : '▼'}
-                </span>
-              </div>
-            </TableHead>
-            <TableHead className="text-xs uppercase tracking-wide text-gray-500">
-              <HeaderTooltip label="Trials" content={TRIALS_TOOLTIP} />
-            </TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {sortedPairs.map((pair) => {
-            const isSelected = selectedPair?.pairKey === pair.pairKey;
-            const { baselineRate, pushTowardFirstRate, pushTowardSecondRate } = pair.pressureResponse;
-
-            return (
-              <TableRow
-                key={pair.pairKey}
-                className={`cursor-pointer ${isSelected ? 'bg-blue-50' : ''}`}
-                onClick={() => setSelectedPairKey(pair.pairKey)}
+      <div ref={tableRef}>
+        <Table variant="bordered">
+          <TableHeader variant="bordered">
+            <TableRow>
+              <TableHead className="text-xs uppercase tracking-wide text-gray-500">
+                <HeaderTooltip label="Value Pair" content={VALUE_PAIR_TOOLTIP} />
+              </TableHead>
+              <TableHead className="text-xs uppercase tracking-wide text-gray-500">
+                <HeaderTooltip label="Baseline" content={BASELINE_TOOLTIP} />
+              </TableHead>
+              <TableHead className="text-xs uppercase tracking-wide text-gray-500">
+                <HeaderTooltip label="Push toward first" content={PUSH_TOWARD_FIRST_TOOLTIP} />
+              </TableHead>
+              <TableHead className="text-xs uppercase tracking-wide text-gray-500">
+                <HeaderTooltip label="Push toward other" content={PUSH_TOWARD_OTHER_TOOLTIP} />
+              </TableHead>
+              <TableHead
+                className="cursor-pointer select-none text-xs uppercase tracking-wide text-gray-500"
+                onClick={() => setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))}
+                aria-sort={sortDirection === 'asc' ? 'ascending' : 'descending'}
               >
-                <TableCell className="font-medium text-gray-900">{pairLabel(pair)}</TableCell>
-                <TableCell className="text-sm text-gray-700">{renderRateCell(baselineRate)}</TableCell>
-                <TableCell className="text-sm text-gray-700">{renderRateCell(pushTowardFirstRate)}</TableCell>
-                <TableCell className="text-sm text-gray-700">{renderRateCell(pushTowardSecondRate)}</TableCell>
-                <TableCell className="text-sm text-gray-900">{renderResponseCell(pair)}</TableCell>
-                <TableCell className="text-sm text-gray-700">{renderTrialsCell(pair)}</TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
+                <div className="inline-flex items-center gap-1">
+                  <HeaderTooltip label="Pressure response" content={PAIR_PRESSURE_RESPONSE_TOOLTIP} />
+                  <span aria-hidden="true" className="text-[11px] leading-none">
+                    {sortDirection === 'asc' ? '▲' : '▼'}
+                  </span>
+                </div>
+              </TableHead>
+              <TableHead className="text-xs uppercase tracking-wide text-gray-500">
+                <HeaderTooltip label="Trials" content={TRIALS_TOOLTIP} />
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {sortedPairs.map((pair) => {
+              const isSelected = selectedPair?.pairKey === pair.pairKey;
+              const { baselineRate, pushTowardFirstRate, pushTowardSecondRate } = pair.pressureResponse;
+
+              return (
+                <TableRow
+                  key={pair.pairKey}
+                  className={`cursor-pointer ${isSelected ? 'bg-blue-50' : ''}`}
+                  onClick={() => setSelectedPairKey(pair.pairKey)}
+                >
+                  <TableCell className="font-medium text-gray-900">{pairLabel(pair)}</TableCell>
+                  <TableCell className="text-sm text-gray-700">{renderRateCell(baselineRate)}</TableCell>
+                  <TableCell className="text-sm text-gray-700">{renderRateCell(pushTowardFirstRate)}</TableCell>
+                  <TableCell className="text-sm text-gray-700">{renderRateCell(pushTowardSecondRate)}</TableCell>
+                  <TableCell className="text-sm text-gray-900">{renderResponseCell(pair)}</TableCell>
+                  <TableCell className="text-sm text-gray-700">{renderTrialsCell(pair)}</TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
 
       {selectedPair != null && (
         <div className="mt-5">

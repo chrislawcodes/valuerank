@@ -3457,6 +3457,10 @@ export type RunAnomaly = {
   /** The run this anomaly belongs to */
   run: Run;
   runId: Scalars['String']['output'];
+  /** Scenario (vignette) name for slot-keyed anomaly types. Null for non-slot types or when the scenario cannot be found. */
+  scenarioName?: Maybe<Scalars['String']['output']>;
+  /** Dimension values from the scenario content for slot-keyed anomaly types. */
+  dimensionValues?: Maybe<Scalars['JSON']['output']>;
   source: RunAnomalySource;
   subject: Scalars['String']['output'];
   type: RunAnomalyType;
@@ -4619,7 +4623,7 @@ export type OpenRunAnomaliesQueryVariables = Exact<{
 }>;
 
 
-export type OpenRunAnomaliesQuery = { __typename?: 'Query', openRunAnomalies: Array<{ __typename?: 'RunAnomaly', id: string, runId: string, type: RunAnomalyType, subject: string, source: RunAnomalySource, details: unknown, firstSeenAt: string, lastSeenAt: string, displayLabel: string, displaySubject: string, reprobeEligible: boolean, reprobeCount: number, reprobeLimitReached: boolean, reprobeStage?: string | null, estimatedCost?: number | null, run: { __typename?: 'Run', id: string, name?: string | null, status: string }, domain?: { __typename?: 'Domain', id: string, name: string } | null }> };
+export type OpenRunAnomaliesQuery = { __typename?: 'Query', openRunAnomalies: Array<{ __typename?: 'RunAnomaly', id: string, runId: string, type: RunAnomalyType, subject: string, source: RunAnomalySource, details: unknown, firstSeenAt: string, lastSeenAt: string, displayLabel: string, displaySubject: string, reprobeEligible: boolean, reprobeCount: number, reprobeLimitReached: boolean, reprobeStage?: string | null, estimatedCost?: number | null, scenarioName?: string | null, dimensionValues?: unknown | null, run: { __typename?: 'Run', id: string, name?: string | null, status: string }, domain?: { __typename?: 'Domain', id: string, name: string } | null }> };
 
 export type ReprobeAnomalySlotMutationVariables = Exact<{
   anomalyId: Scalars['ID']['input'];
@@ -7226,6 +7230,8 @@ export const OpenRunAnomaliesDocument = gql`
     reprobeLimitReached
     reprobeStage
     estimatedCost
+    scenarioName
+    dimensionValues
     run {
       id
       name
