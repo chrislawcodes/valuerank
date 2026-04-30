@@ -181,6 +181,28 @@ builder.objectType(RunAnomalyRef, {
       },
     }),
 
+    activeTranscriptId: t.string({
+      nullable: true,
+      description: 'ID of the most recent non-deleted transcript for this slot. For INVALID_RESPONSE_FAILURE only — queries by (runId, scenarioId, modelId, sampleIndex). Handles reprobe-fixed anomalies where details.transcriptId still points to the original. Null for non-slot types.',
+      resolve: async (anomaly) => {
+        if (!SLOT_KEYED_TYPES.has(anomaly.type)) return null;
+        const slot = parseSlotSubject(anomaly.subject);
+        if (slot === null) return null;
+        const transcript = await db.transcript.findFirst({
+          where: {
+            runId: slot.runId,
+            scenarioId: slot.scenarioId ?? null,
+            modelId: slot.modelId,
+            sampleIndex: slot.sampleIndex,
+            deletedAt: null,
+          },
+          select: { id: true },
+          orderBy: { createdAt: 'desc' },
+        });
+        return transcript?.id ?? null;
+      },
+    }),
+
     scenarioName: t.string({
       nullable: true,
       description: 'Scenario (vignette) name for slot-keyed anomaly types. Null for non-slot types or when the scenario cannot be found.',
