@@ -12,7 +12,7 @@ import { createLogger, NotFoundError } from '@valuerank/shared';
 
 const log = createLogger('services:domain-config:snapshot');
 
-type SnapshotClient = typeof db | Prisma.TransactionClient;
+type SnapshotClient = Prisma.TransactionClient;
 
 /**
  * Ensures a DomainConfigSnapshot exists for the current domain configuration.

@@ -1,4 +1,4 @@
-import type { db, Prisma } from '@valuerank/db';
+import type { Prisma } from '@valuerank/db';
 import type {
   DefinitionRow,
   DomainAnalysisMissingDefinition,
@@ -21,7 +21,7 @@ export const DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION = '1.5.0';
 export const DOMAIN_ANALYSIS_ASSUMPTION_PREFIX = 'domain-analysis';
 export const DOMAIN_ANALYSIS_NONE_SIGNATURE = '__none__';
 
-export type SnapshotClient = typeof db | Prisma.TransactionClient;
+export type SnapshotClient = Prisma.TransactionClient;
 
 export type DomainAnalysisSnapshotModel = {
   model: string;

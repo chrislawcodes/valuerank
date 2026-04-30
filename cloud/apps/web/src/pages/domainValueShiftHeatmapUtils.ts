@@ -143,7 +143,7 @@ export function buildDomainShiftModelOptions(
 export function getDefaultModelId(
   models: ModelsAnalysisModelResult[],
   currentModelId: string | null,
-): string | null {
+): string {
   const sorted = sortModels(models);
   const modelIds = new Set(sorted.map((model) => model.modelId));
   if (currentModelId != null && (currentModelId === ALL_MODELS_OPTION_VALUE || modelIds.has(currentModelId))) {
