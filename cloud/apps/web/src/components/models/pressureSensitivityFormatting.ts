@@ -22,7 +22,7 @@ export const TRIALS_TOOLTIP =
   'Qualifying scored trials that contributed to the Baseline, Push toward first, and Push toward other rates. These are the trials used to compute the Pressure response and its confidence interval.';
 
 export function formatPercent(value: number): string {
-  return `${(value * 100).toFixed(0)}%`;
+  return `${(value * 100).toFixed(1)}%`;
 }
 
 /** Unsigned percentage-points string, one decimal place. */

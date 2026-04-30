@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { CopyVisualButton } from '../ui/CopyVisualButton';
-import { HeaderTooltip } from '../ui/HeaderTooltip';
+import { TooltipIcon } from '../ui/TooltipIcon';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/Table';
 import type { PressureSensitivityCell, PressureSensitivityValuePair } from '../../api/operations/pressureSensitivity';
 import { formatPercent } from './pressureSensitivityFormatting';
@@ -218,7 +218,7 @@ function SortHeaderCell({
 
   return (
     <TableHead
-      className={`${numeric ? 'text-right' : 'text-left'} text-xs uppercase tracking-wide text-gray-500`}
+      className={`${numeric ? 'text-right' : 'text-left'} text-xs uppercase tracking-wide text-gray-700`}
       aria-sort={active ? (direction === 'asc' ? 'ascending' : 'descending') : 'none'}
     >
       <div className={`flex w-full items-center gap-1 ${numeric ? 'justify-end' : 'justify-start'}`}>
@@ -227,16 +227,18 @@ function SortHeaderCell({
           type="button"
           onClick={() => onSort(sortKey)}
           className={`inline-flex items-center gap-1 text-left transition-colors ${
-            active ? 'text-gray-700' : 'text-gray-400 hover:text-gray-600'
+            active ? 'text-gray-900' : 'text-gray-700 hover:text-gray-900'
           }`}
           aria-label={`Sort by ${ariaLabel}${active ? ` (${sortDirection === 'asc' ? 'ascending' : 'descending'})` : ''}`}
         >
           <span>{label}</span>
-          <span aria-hidden="true" className={`text-[11px] leading-none ${active ? 'text-gray-700' : 'text-gray-300'}`}>
-            {active ? (direction === 'asc' ? '↑' : '↓') : '↕'}
-          </span>
+          {active ? (
+            <span aria-hidden="true" className="text-[11px] leading-none text-gray-900">
+              {direction === 'asc' ? '↑' : '↓'}
+            </span>
+          ) : null}
         </button>
-        {tooltip ? <HeaderTooltip label={label} content={tooltip} /> : null}
+        {tooltip ? <TooltipIcon ariaLabel={`Help: ${ariaLabel}`} content={tooltip} /> : null}
       </div>
     </TableHead>
   );
@@ -319,8 +321,8 @@ export function PressureResponseByValueTable({ valuePairs }: Props) {
                 numeric
               />
               <SortHeaderCell
-                label="High pressure on this value"
-                ariaLabel="High pressure on this value"
+                label="High pressure value win rate"
+                ariaLabel="High pressure value win rate"
                 sortKey="highPressureOnThisValue"
                 activeSortKey={sortKey}
                 direction={sortDirection}
@@ -329,8 +331,8 @@ export function PressureResponseByValueTable({ valuePairs }: Props) {
                 numeric
               />
               <SortHeaderCell
-                label="High pressure on opposing value"
-                ariaLabel="High pressure on opposing value"
+                label="High pressure on opposing value win rate"
+                ariaLabel="High pressure on opposing value win rate"
                 sortKey="highPressureOnOpposingValue"
                 activeSortKey={sortKey}
                 direction={sortDirection}

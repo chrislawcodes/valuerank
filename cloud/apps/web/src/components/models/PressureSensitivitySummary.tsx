@@ -69,10 +69,10 @@ export function PressureSensitivitySummary({ models, selectedModelId, onSelectMo
         <Table variant="bordered">
           <TableHeader variant="bordered">
             <TableRow>
-              <TableHead className="text-xs uppercase tracking-wide text-gray-500">
+              <TableHead className="text-xs uppercase tracking-wide text-gray-700">
                 <HeaderTooltip label="Model" content={MODEL_TOOLTIP} />
               </TableHead>
-              <TableHead className="text-xs uppercase tracking-wide text-gray-500">
+              <TableHead className="text-xs uppercase tracking-wide text-gray-700">
                 <HeaderTooltip label="Pressure response" content={SUMMARY_PRESSURE_RESPONSE_TOOLTIP} />
               </TableHead>
             </TableRow>

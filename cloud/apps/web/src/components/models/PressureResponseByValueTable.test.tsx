@@ -216,9 +216,9 @@ describe('PressureResponseByValueTable', () => {
     }
 
     const cells = within(row).getAllByRole('cell');
-    expect(cells[1]?.textContent ?? '').toBe('60%');
-    expect(cells[2]?.textContent ?? '').toBe('40%');
-    expect(cells[3]?.textContent ?? '').toBe('80%');
-    expect(cells[4]?.textContent ?? '').toBe('30%');
+    expect(cells[1]?.textContent ?? '').toBe('60.0%');
+    expect(cells[2]?.textContent ?? '').toBe('40.0%');
+    expect(cells[3]?.textContent ?? '').toBe('80.0%');
+    expect(cells[4]?.textContent ?? '').toBe('30.0%');
   });
 });
