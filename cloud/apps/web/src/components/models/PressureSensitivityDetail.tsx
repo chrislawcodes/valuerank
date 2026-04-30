@@ -132,20 +132,20 @@ export function PressureSensitivityDetail({ model }: Props) {
         <Table variant="bordered">
           <TableHeader variant="bordered">
             <TableRow>
-              <TableHead className="text-xs uppercase tracking-wide text-gray-500">
+              <TableHead className="text-xs uppercase tracking-wide text-gray-700">
                 <HeaderTooltip label="Value Pair" content={VALUE_PAIR_TOOLTIP} />
               </TableHead>
-              <TableHead className="text-xs uppercase tracking-wide text-gray-500">
+              <TableHead className="text-xs uppercase tracking-wide text-gray-700">
                 <HeaderTooltip label="Baseline" content={BASELINE_TOOLTIP} />
               </TableHead>
-              <TableHead className="text-xs uppercase tracking-wide text-gray-500">
+              <TableHead className="text-xs uppercase tracking-wide text-gray-700">
                 <HeaderTooltip label="Push toward first" content={PUSH_TOWARD_FIRST_TOOLTIP} />
               </TableHead>
-              <TableHead className="text-xs uppercase tracking-wide text-gray-500">
+              <TableHead className="text-xs uppercase tracking-wide text-gray-700">
                 <HeaderTooltip label="Push toward other" content={PUSH_TOWARD_OTHER_TOOLTIP} />
               </TableHead>
               <TableHead
-                className="cursor-pointer select-none text-xs uppercase tracking-wide text-gray-500"
+                className="cursor-pointer select-none text-xs uppercase tracking-wide text-gray-700"
                 onClick={() => setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))}
                 aria-sort={sortDirection === 'asc' ? 'ascending' : 'descending'}
               >
@@ -156,7 +156,7 @@ export function PressureSensitivityDetail({ model }: Props) {
                   </span>
                 </div>
               </TableHead>
-              <TableHead className="text-xs uppercase tracking-wide text-gray-500">
+              <TableHead className="text-xs uppercase tracking-wide text-gray-700">
                 <HeaderTooltip label="Trials" content={TRIALS_TOOLTIP} />
               </TableHead>
             </TableRow>
