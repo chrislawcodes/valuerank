@@ -163,4 +163,11 @@ describe('Models page', () => {
     expect(screen.getAllByText('Model A').length).toBeGreaterThan(1);
     expect(screen.queryByText('model-a')).not.toBeInTheDocument();
   });
+
+  it('uses the shared models-analysis win rate in the all-domains value priorities table', () => {
+    renderModelsPage();
+
+    expect(screen.getAllByText('62.0%').length).toBeGreaterThan(1);
+    expect(screen.queryByText('50.0%')).not.toBeInTheDocument();
+  });
 });

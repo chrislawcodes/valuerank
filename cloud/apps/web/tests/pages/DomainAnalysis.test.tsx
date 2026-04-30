@@ -353,4 +353,75 @@ describe('DomainAnalysis', () => {
       }),
     ]);
   });
+
+  it('does not fall back to pooled counts when canonical models-analysis data is missing', async () => {
+    installQueryResponses({
+      analysisData: {
+        domainAnalysis: {
+          ...defaultDomainAnalysis.domainAnalysis,
+          models: [
+            {
+              model: 'model-a',
+              label: 'Model A',
+              values: [
+                {
+                  valueKey: 'Achievement',
+                  score: 0,
+                  prioritized: 9,
+                  deprioritized: 1,
+                  neutral: 0,
+                  totalComparisons: 10,
+                },
+              ],
+            },
+          ],
+        },
+      },
+      modelsAnalysisData: {
+        modelsAnalysis: {
+          models: [
+            {
+              modelId: 'model-a',
+              label: 'Model A',
+              values: [
+                {
+                  valueKey: 'Achievement',
+                  pooledWinRate: null,
+                  stabilityScore: null,
+                  eligibleDomainCount: 0,
+                  domains: [],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <DomainAnalysis />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(valuePrioritiesSectionMock).toHaveBeenCalled();
+    });
+
+    const lastCall = valuePrioritiesSectionMock.mock.calls.at(-1)?.[0] as {
+      models: Array<{
+        model: string;
+        winRates?: Record<string, number | null>;
+      }>;
+    };
+
+    expect(lastCall.models).toEqual([
+      expect.objectContaining({
+        model: 'model-a',
+        winRates: expect.objectContaining({
+          Achievement: null,
+        }),
+      }),
+    ]);
+  });
 });

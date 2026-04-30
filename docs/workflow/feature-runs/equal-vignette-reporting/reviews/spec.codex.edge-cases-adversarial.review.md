@@ -1,0 +1,41 @@
+---
+reviewer: "codex"
+lens: "edge-cases-adversarial"
+stage: "spec"
+artifact_path: "docs/workflow/feature-runs/equal-vignette-reporting/spec.md"
+artifact_sha256: "54501ca48c34fb89e2ffeb3685f907d34d7209dd7d0900fba1f9e901656b2648"
+repo_root: "."
+git_head_sha: "4e2917d11223331dee9f3598a990a883e20e4e04"
+git_base_ref: "origin/main"
+git_base_sha: "4e2917d11223331dee9f3598a990a883e20e4e04"
+generation_method: "codex-runner"
+resolution_status: "open"
+resolution_note: ""
+raw_output_path: "docs/workflow/feature-runs/equal-vignette-reporting/reviews/spec.codex.edge-cases-adversarial.review.md.raw.txt"
+narrowed_artifact_path: ""
+narrowed_artifact_sha256: ""
+coverage_status: "full"
+coverage_note: ""
+---
+
+# Review: spec edge-cases-adversarial
+
+## Findings
+
+- **High** [CODE-CONFIRMED] The legacy policy is still not pinned down, and the resolver already mixes methods per value. In [models-analysis.ts](/Users/chrislaw/valuerank/cloud/apps/api/src/graphql/queries/models-analysis.ts#L152), the code uses precomputed equal-vignette data when `vignetteCount` exists, but falls back to raw-count win rates when it does not. That means one model row can contain a blend of equal-vignette and count-based cells, which would violate the spec’s own “no silent mixed-method rows” requirement.
+- **Medium** [CODE-CONFIRMED] The spec says to remove count-based recomputation from the in-scope UIs, but it does not define the null-path behavior. The current UI code still does count-based fallback in [Models.tsx](/Users/chrislaw/valuerank/cloud/apps/web/src/pages/Models.tsx#L176) and [DomainAnalysis.tsx](/Users/chrislaw/valuerank/cloud/apps/web/src/pages/DomainAnalysis.tsx#L188) whenever `modelsAnalysis.pooledWinRate` is missing. If older snapshots or partial data show up, the old metric can still leak back into the page.
+- **Medium** [CODE-CONFIRMED] The cross-domain rule is mathematically underspecified for uneven vignette counts. [models-analysis.ts](/Users/chrislaw/valuerank/cloud/apps/api/src/graphql/queries/models-analysis.ts#L32) still computes `pooledWinRate` as a plain mean of domain win rates, which only matches equal-vignette semantics while domain vignette counts stay matched. The spec says future drift must still follow equal-vignette weighting, but it never gives the weighted formula or says how `evidenceWeight` should be used.
+
+## Residual Risks
+
+- `DomainValueShiftHeatmap` also consumes `modelsAnalysis.pooledWinRate` and parity checks, so if it is not updated in the same change it can stay semantically out of sync with `/models` and `/domains/analysis`.
+- The aggregator drops zero-evidence runs from the per-vignette rate arrays, but the spec does not say whether those should count as zero, null, or excluded. Sparse or partially empty analyses can still produce surprising `vignetteCount` values.
+
+## Runner Stats
+- total_input=0
+- total_output=0
+- total_tokens=0
+
+## Resolution
+- status: open
+- note: 

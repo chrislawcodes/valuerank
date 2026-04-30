@@ -1,0 +1,57 @@
+{
+  "session_id": "cb83c099-f121-4968-922f-73beab8ef6d5",
+  "response": "## Findings\n\n### 1. HIGH: Aggregator Perpetuates Methodological Conflict by Producing Competing Metrics\n\nThe core aggregator (`domain-analysis-snapshot-aggregator.ts`) computes and exports metrics using two different methodologies. While it correctly produces `valueWinRates` using the \"equal-vignette\" weighting defined as canonical in the spec, it also produces a `counts` record using a different logic (sum of per-run-averaged raw counts).\n\nThe spec explicitly states the goal is to eliminate disagreement between reporting surfaces caused by different weighting rules, and identifies that UI components currently recompute win rates from pooled counts. By continuing to produce the `counts` data in a format that enables the old, non-canonical calculation, the aggregator itself perpetuates the very problem the feature aims to solve. This makes it highly likely that the old methodology will persist in fallbacks or be accidentally used in future development.\n\n**Evidence:** `[CODE-CONFIRMED]`\n\n-   **Canonical Metric (`valueWinRates`):** The code first calculates a per-vignette mean rate (`meanA`, `meanB`) and then calculates a final mean of those per-vignette rates, correctly implementing the spec's definition.\n    ```typescript\n    // cloud/apps/api/src/services/analysis/domain-analysis-snapshot-aggregator.ts:251\n    const mean = rates.reduce((sum, r) => sum + r, 0) / rates.length;\n    winRateMap.set(valueKey, mean * 100);\n    ```\n-   **Non-Canonical Metric (`counts`):** The code calculates total `counts` by summing per-vignette figures that have been normalized by the run count (`n`). This is a different calculation that does not produce a rate and is the source for the count-based metric the spec intends to deprecate.\n    ```typescript\n    // cloud/apps/api/src/services/analysis/domain-analysis-snapshot-aggregator.ts:223\n    existingFirst.prioritized += acc.first.prioritized / n;\n    ```\n\n### 2. MEDIUM: Legacy Fallback Policy Is Ambiguous and Risks Mixing Metrics\n\nThe spec fails to commit to a strict policy for handling legacy data that lacks the new `valueWinRates` metric. It describes the preferred outcome as returning `null` to avoid mixing methodologies but allows an \"acceptable transitional option\" for a fallback.\n\nThis ambiguity defers a critical decision and creates a significant risk that the project will adopt the weaker \"transitional\" path, which directly contradicts the acceptance criteria for user story US-2: \"the product does not silently mix methodologies within the same report\". By leaving this door open, the spec undermines its primary goal of ensuring a user can trust that a metric means the same thing everywhere.\n\n**Evidence:** `[UNVERIFIED]`\n\n-   The resolver and UI code are not provided, but the spec itself documents the ambiguity and indecision.\n-   From `spec.md`, section `modelsAnalysis API resolver`:\n    > \"decide and implement the correct legacy policy for this feature:\n    > - preferred: do not silently mix methodologies within one row...\n    > - acceptable transitional option: retain a temporary compatibility fallback...\"\n\n### 3. LOW: Silent Data Dropping Masks Potential Upstream Errors\n\nThe aggregation logic in `aggregateAnalysisRows` silently skips any analysis rows for which it cannot find corresponding metadata. If a `definitionId` is missing from the `valuePairByDefinition` map or a `runId` is missing from the `filteredSourceRunDefinitionById` map, the loop simply `continue`s without logging or error.\n\nThis behavior can hide upstream data integrity problems. Incomplete aggregation would occur without any warning, potentially leading to reports that are subtly incorrect because they are missing data, which would be difficult to debug.\n\n**Evidence:** `[CODE-CONFIRMED]`\n\n-   The code contains multiple `continue` statements that cause silent skipping of rows.\n    ```typescript\n    // cloud/apps/api/src/services/analysis/domain-analysis-snapshot-aggregator.ts:153\n    const definitionId = filteredSourceRunDefinitionById.get(analysisRow.runId);\n    if (definitionId == null || definitionId === '') continue;\n    const pair = valuePairByDefinition.get(definitionId);\n    if (!pair) continue;\n    ```\n\n## Residual Risks\n\n1.  **Unverified Data Assumptions:** The spec correctly notes that the implementation should not rely on domains having equal vignette counts. The provided code in `domain-analysis-snapshot-aggregator.ts` appears to follow this principle correctly by implementing equal-vignette weighting. However, the assumption itself (\"Domains currently have equal vignette counts\") is unverified and, if false, could have implications for other reporting surfaces not covered by this spec.\n\n2.  **Case-Insensitive Key Collision:** The `getValueCountsFromAnalysis` helper uses a case-insensitive lookup to find value data in the analysis output. If a single analysis output record were to contain multiple value keys that differ only in case (e.g., `\"power_dominance\"` and `\"Power_Dominance\"`), the `Object.entries().find()` logic would return the first one it encountered, which may lead to non-deterministic data retrieval depending on JavaScript engine implementation. This is a low-probability edge case but represents a minor risk if source data quality is not guaranteed.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 4,
+          "totalErrors": 3,
+          "totalLatencyMs": 46395
+        },
+        "tokens": {
+          "input": 17398,
+          "prompt": 17398,
+          "candidates": 1168,
+          "total": 21239,
+          "cached": 0,
+          "thoughts": 2673,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 4,
+            "totalErrors": 3,
+            "totalLatencyMs": 46395,
+            "tokens": {
+              "input": 17398,
+              "prompt": 17398,
+              "candidates": 1168,
+              "total": 21239,
+              "cached": 0,
+              "thoughts": 2673,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

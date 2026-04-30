@@ -163,6 +163,13 @@ export function Models() {
 
   const allDomainsModels = useMemo<ModelEntry[]>(() => {
     const sourceModels = allDomainsData?.domainAnalysis.models ?? [];
+    const pooledWinRatesByModel = new Map<string, Map<string, number | null>>(
+      (modelsAnalysisData?.modelsAnalysis.models ?? []).map((model) => [
+        model.modelId,
+        new Map(model.values.map((value) => [value.valueKey, value.pooledWinRate])),
+      ]),
+    );
+
     return sourceModels.map((model) => {
       const comparisonModel = comparisonModelMap.get(model.model);
       const comparisonValueMap = new Map(comparisonModel?.values.map((value) => [value.valueKey, value.stabilityScore] as const) ?? []);
@@ -174,13 +181,7 @@ export function Models() {
       }, {} as Record<ValueKey, number>);
 
       const winRates = VALUES.reduce<Record<ValueKey, number | null>>((acc, valueKey) => {
-        const value = model.values.find((entry) => entry.valueKey === valueKey) ?? null;
-        if (value == null) {
-          acc[valueKey] = null;
-          return acc;
-        }
-        const total = value.prioritized + value.deprioritized + value.neutral;
-        acc[valueKey] = total > 0 ? (value.prioritized / total) * 100 : null;
+        acc[valueKey] = pooledWinRatesByModel.get(model.model)?.get(valueKey) ?? null;
         return acc;
       }, {} as Record<ValueKey, number | null>);
 
@@ -197,7 +198,7 @@ export function Models() {
         stabilityScores,
       };
     });
-  }, [allDomainsData, comparisonModelMap]);
+  }, [allDomainsData, comparisonModelMap, modelsAnalysisData]);
 
   const defaultSelection = useMemo(() => {
     const availableIds = comparisonModels.map((model) => model.modelId);

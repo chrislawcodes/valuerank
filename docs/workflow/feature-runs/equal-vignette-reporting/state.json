@@ -1,0 +1,371 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": true,
+    "complete": true,
+    "question_count": 0,
+    "asked_count": 0,
+    "questions": [],
+    "assumptions": [
+      "Canonical reporting metric is equal-weight by vignette after equal-weight pooling across runs within each vignette; extra trials within a vignette must not increase its weight.",
+      "Domains currently have equal vignette counts, so equal-domain and global equal-vignette summaries are equivalent for the target reports.",
+      "The methodology change should standardize existing model-reporting surfaces, not redesign unrelated analytics surfaces."
+    ],
+    "summary": "Requirements are stable. This feature standardizes model-reporting win rates on the equal-vignette methodology: average runs equally within each vignette, then average vignettes equally. Because domains have equal vignette counts, the cross-domain summaries should align once count-based recomputation is removed.",
+    "updated_at": 1777572227,
+    "answers": {},
+    "non_goals": [
+      "Do not change production launch planning or batch-count logic.",
+      "Do not rename GraphQL fields in this slice unless required to avoid user-facing confusion."
+    ],
+    "acceptance_criteria": [
+      "On /models, the All domains value priorities table and the Model preference table show the same underlying win-rate metric for the same model/value cell.",
+      "The shared metric gives each vignette equal weight and does not overweight vignettes with more trials.",
+      "Any remaining compatibility fallback is either removed or clearly limited to legacy snapshot support, with tests covering the intended behavior."
+    ],
+    "unresolved": []
+  },
+  "delivery": {},
+  "dirty_overrides": {},
+  "checkpoint_fallback": {},
+  "parallel_analysis": {
+    "reviewed": false,
+    "found": false,
+    "note": "",
+    "updated_at": 0
+  },
+  "init_head_sha": "4e2917d11223331dee9f3598a990a883e20e4e04",
+  "token_usage": [
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "lens": "feasibility-adversarial",
+      "prompt_chars": 21857,
+      "prompt_cap": 250000,
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-30T18:06:45.321720Z",
+      "started_at": "2026-04-30T18:04:45.304831Z",
+      "ended_at": "2026-04-30T18:06:45.321720Z",
+      "duration_seconds": 120.015808,
+      "agent_id": null,
+      "artifact_sha_at_time": "3eb1f7a3a9d95e60e88dde4a870729db5618bb88179998f49c2795cc311c8153",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "lens": "feasibility-adversarial",
+      "prompt_chars": 21857,
+      "prompt_cap": 250000,
+      "input_tokens": 35146,
+      "output_tokens": 0,
+      "cost_usd_estimate": 0.035146,
+      "timestamp": "2026-04-30T18:08:00.706940Z",
+      "started_at": "2026-04-30T18:06:50.879952Z",
+      "ended_at": "2026-04-30T18:08:00.706940Z",
+      "duration_seconds": 69.826425,
+      "agent_id": null,
+      "artifact_sha_at_time": "3eb1f7a3a9d95e60e88dde4a870729db5618bb88179998f49c2795cc311c8153"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "lens": "edge-cases-adversarial",
+      "prompt_chars": 21856,
+      "prompt_cap": 250000,
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-30T18:08:45.470015Z",
+      "started_at": "2026-04-30T18:06:45.460695Z",
+      "ended_at": "2026-04-30T18:08:45.470015Z",
+      "duration_seconds": 120.008379,
+      "agent_id": null,
+      "artifact_sha_at_time": "3eb1f7a3a9d95e60e88dde4a870729db5618bb88179998f49c2795cc311c8153",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "lens": "edge-cases-adversarial",
+      "prompt_chars": 21856,
+      "prompt_cap": 250000,
+      "input_tokens": 55438,
+      "output_tokens": 0,
+      "cost_usd_estimate": 0.055438,
+      "timestamp": "2026-04-30T18:09:31.002263Z",
+      "started_at": "2026-04-30T18:08:00.853994Z",
+      "ended_at": "2026-04-30T18:09:31.002263Z",
+      "duration_seconds": 90.147508,
+      "agent_id": null,
+      "artifact_sha_at_time": "3eb1f7a3a9d95e60e88dde4a870729db5618bb88179998f49c2795cc311c8153"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "lens": "feasibility-adversarial",
+      "prompt_chars": 21857,
+      "prompt_cap": 250000,
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-30T18:09:35.196044Z",
+      "started_at": "2026-04-30T18:07:35.181985Z",
+      "ended_at": "2026-04-30T18:09:35.196044Z",
+      "duration_seconds": 120.013056,
+      "agent_id": null,
+      "artifact_sha_at_time": "3eb1f7a3a9d95e60e88dde4a870729db5618bb88179998f49c2795cc311c8153",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "lens": "requirements-adversarial",
+      "prompt_chars": 21742,
+      "prompt_cap": 250000,
+      "input_tokens": 17265,
+      "output_tokens": 1745,
+      "cost_usd_estimate": 0.03030625,
+      "timestamp": "2026-04-30T18:09:57.950107Z",
+      "started_at": "2026-04-30T18:08:45.633264Z",
+      "ended_at": "2026-04-30T18:09:57.950107Z",
+      "duration_seconds": 72.316213,
+      "agent_id": null,
+      "artifact_sha_at_time": "3eb1f7a3a9d95e60e88dde4a870729db5618bb88179998f49c2795cc311c8153"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "lens": "requirements-adversarial",
+      "prompt_chars": 21742,
+      "prompt_cap": 250000,
+      "input_tokens": 17265,
+      "output_tokens": 1648,
+      "cost_usd_estimate": 0.02982125,
+      "timestamp": "2026-04-30T18:10:49.966122Z",
+      "started_at": "2026-04-30T18:09:58.274671Z",
+      "ended_at": "2026-04-30T18:10:49.966122Z",
+      "duration_seconds": 51.690733,
+      "agent_id": null,
+      "artifact_sha_at_time": "3eb1f7a3a9d95e60e88dde4a870729db5618bb88179998f49c2795cc311c8153"
+    },
+    {
+      "stage": "spec",
+      "round": 3,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "lens": "edge-cases-adversarial",
+      "prompt_chars": 22536,
+      "prompt_cap": 250000,
+      "input_tokens": 44178,
+      "output_tokens": 0,
+      "cost_usd_estimate": 0.044178,
+      "timestamp": "2026-04-30T18:11:22.180899Z",
+      "started_at": "2026-04-30T18:09:35.341316Z",
+      "ended_at": "2026-04-30T18:11:22.180899Z",
+      "duration_seconds": 106.838714,
+      "agent_id": null,
+      "artifact_sha_at_time": "3eb1f7a3a9d95e60e88dde4a870729db5618bb88179998f49c2795cc311c8153"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "lens": "requirements-adversarial",
+      "prompt_chars": 22422,
+      "prompt_cap": 250000,
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-04-30T18:12:23.947975Z",
+      "started_at": "2026-04-30T18:11:22.309140Z",
+      "ended_at": "2026-04-30T18:12:23.947975Z",
+      "duration_seconds": 61.638273,
+      "agent_id": null,
+      "artifact_sha_at_time": "3eb1f7a3a9d95e60e88dde4a870729db5618bb88179998f49c2795cc311c8153",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "lens": "requirements-adversarial",
+      "prompt_chars": 22422,
+      "prompt_cap": 250000,
+      "input_tokens": 17398,
+      "output_tokens": 1168,
+      "cost_usd_estimate": 0.0275875,
+      "timestamp": "2026-04-30T18:13:53.103764Z",
+      "started_at": "2026-04-30T18:12:23.949394Z",
+      "ended_at": "2026-04-30T18:13:53.103764Z",
+      "duration_seconds": 89.153731,
+      "agent_id": null,
+      "artifact_sha_at_time": "3eb1f7a3a9d95e60e88dde4a870729db5618bb88179998f49c2795cc311c8153"
+    }
+  ],
+  "command_telemetry": [
+    {
+      "command": "checkpoint",
+      "stage": "spec",
+      "ts": "2026-04-30T18:08:32Z",
+      "wall_seconds": 0.025,
+      "input_bytes_read": 30250,
+      "output_bytes_written": 13368,
+      "files_read": 6,
+      "files_written": 3,
+      "subprocess_invocations": 2,
+      "ttl_crossed": false
+    },
+    {
+      "command": "judge",
+      "stage": "spec",
+      "ts": "2026-04-30T18:09:40Z",
+      "wall_seconds": 0.11,
+      "input_bytes_read": 57714,
+      "output_bytes_written": 8248,
+      "files_read": 18,
+      "files_written": 1,
+      "subprocess_invocations": 6,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "spec",
+      "ts": "2026-04-30T18:09:45Z",
+      "wall_seconds": 300.037,
+      "input_bytes_read": 37990,
+      "output_bytes_written": 17984,
+      "files_read": 8,
+      "files_written": 5,
+      "subprocess_invocations": 4,
+      "ttl_crossed": true
+    },
+    {
+      "command": "checkpoint",
+      "stage": "spec",
+      "ts": "2026-04-30T18:10:50Z",
+      "wall_seconds": 239.416,
+      "input_bytes_read": 46632,
+      "output_bytes_written": 22524,
+      "files_read": 8,
+      "files_written": 5,
+      "subprocess_invocations": 4,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "spec",
+      "ts": "2026-04-30T18:12:35Z",
+      "wall_seconds": 300.044,
+      "input_bytes_read": 28180,
+      "output_bytes_written": 12611,
+      "files_read": 7,
+      "files_written": 4,
+      "subprocess_invocations": 4,
+      "ttl_crossed": true
+    }
+  ],
+  "last_successful_checkpoint_flags": {},
+  "diff_review_budget": {
+    "recorded_head": "",
+    "last_review_only_advance_at": 0
+  },
+  "stages": {
+    "spec": {
+      "adversarial_rounds": 1,
+      "judge_rounds": 1,
+      "judge_verdicts": [
+        [
+          {
+            "judge": "completeness",
+            "model": "gpt-5.4-mini",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: maximum recursion depth exceeded",
+            "evidence": [],
+            "timestamp": "2026-04-30T18:09:40.112810Z"
+          },
+          {
+            "judge": "restatement",
+            "model": "gpt-5.4",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: maximum recursion depth exceeded",
+            "evidence": [],
+            "timestamp": "2026-04-30T18:09:40.114464Z"
+          },
+          {
+            "judge": "implementation-risk",
+            "model": "gpt-5.4",
+            "verdict": "block",
+            "confidence": 0,
+            "reasoning": "schema_violation: maximum recursion depth exceeded",
+            "evidence": [],
+            "timestamp": "2026-04-30T18:09:40.111168Z"
+          }
+        ]
+      ],
+      "annotations": [],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [
+        "3eb1f7a3a9d95e60e88dde4a870729db5618bb88179998f49c2795cc311c8153",
+        "3eb1f7a3a9d95e60e88dde4a870729db5618bb88179998f49c2795cc311c8153",
+        "3eb1f7a3a9d95e60e88dde4a870729db5618bb88179998f49c2795cc311c8153"
+      ],
+      "initial_sha": "3eb1f7a3a9d95e60e88dde4a870729db5618bb88179998f49c2795cc311c8153",
+      "judge_next_action": "edit_and_rerun_judge"
+    }
+  },
+  "invariant_warnings": [],
+  "schema_version": 2,
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  },
+  "spec_adversarial_rounds": 1,
+  "last_action_result": {
+    "next": "edit_and_rerun_judge",
+    "reason": "block majority; 3 of 3 judges blocked",
+    "blockers": [
+      "schema_violation: maximum recursion depth exceeded",
+      "schema_violation: maximum recursion depth exceeded",
+      "schema_violation: maximum recursion depth exceeded"
+    ],
+    "outcome": "rejudge",
+    "proceed_count": 0,
+    "block_count": 3,
+    "timestamp": "2026-04-30T18:09:40.117084Z",
+    "judge_round": 1
+  },
+  "spec_judge_rounds": 1
+}

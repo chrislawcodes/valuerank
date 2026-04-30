@@ -185,12 +185,10 @@ export function DomainAnalysis() {
 
     return sourceModels.map((model) => {
       const valueMap = new Map(model.values.map((e) => [e.valueKey, e.score]));
-      const winRateMap = new Map(model.values.map((e) => {
-        const neutral = e.neutral ?? 0;
-        const denom = e.prioritized + e.deprioritized + neutral;
-        const pooledWinRate = pooledWinRatesByModel.get(model.model)?.get(e.valueKey) ?? null;
-        return [e.valueKey, pooledWinRate ?? (denom > 0 ? (e.prioritized / denom) * 100 : null)] as const;
-      }));
+      const winRateMap = new Map(model.values.map((e) => [
+        e.valueKey,
+        pooledWinRatesByModel.get(model.model)?.get(e.valueKey) ?? null,
+      ] as const));
       const values = VALUES.reduce<Record<ValueKey, number>>((acc, valueKey) => {
         acc[valueKey] = valueMap.get(valueKey) ?? 0;
         return acc;
