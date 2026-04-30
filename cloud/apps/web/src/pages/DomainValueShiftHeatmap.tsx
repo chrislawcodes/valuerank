@@ -9,6 +9,7 @@ import { Loading } from '../components/ui/Loading';
 import { Select } from '../components/ui/Select';
 import { cn } from '../lib/utils';
 import {
+  ALL_MODELS_OPTION_VALUE,
   DEFAULT_DOMAIN_SHIFT_SORT,
   DEFAULT_DOMAIN_SHIFT_SIGNATURE,
   buildDomainShiftHeatmap,
@@ -29,7 +30,17 @@ import {
 
 const MAX_COLOR_SHIFT = 25;
 
-export { buildDomainShiftHeatmap, formatEvidenceWeight, formatPercent, formatPointShift, getDefaultDomainShiftSignature, getDefaultModelId, sortHeatmapRows } from './domainValueShiftHeatmapUtils';
+export {
+  ALL_MODELS_OPTION_VALUE,
+  buildDomainShiftHeatmap,
+  buildDomainShiftModelOptions,
+  formatEvidenceWeight,
+  formatPercent,
+  formatPointShift,
+  getDefaultDomainShiftSignature,
+  getDefaultModelId,
+  sortHeatmapRows,
+} from './domainValueShiftHeatmapUtils';
 
 function getCellToneClass(shift: number): string {
   const clamped = Math.max(-MAX_COLOR_SHIFT, Math.min(MAX_COLOR_SHIFT, shift));
@@ -160,16 +171,18 @@ function Cell({
   cell,
   valueLabel,
   displayMode,
+  evidenceLabel,
 }: {
   cell: DomainShiftCell | null;
   valueLabel: string;
   displayMode: DomainShiftDisplayMode;
+  evidenceLabel: string;
 }) {
   if (cell == null) {
     return <span className="inline-flex w-full justify-center text-xs font-semibold text-gray-400">n/a</span>;
   }
 
-  const detail = `${valueLabel} in ${cell.domainName}: raw win rate ${formatPercent(cell.winRate)}; shift ${formatPointShift(cell.shift)} versus this value's equal-domain average; average ${formatPercent(cell.averageWinRate)}; evidence vignettes ${formatEvidenceWeight(cell.evidenceWeight)}.`;
+  const detail = `${valueLabel} in ${cell.domainName}: raw win rate ${formatPercent(cell.winRate)}; shift ${formatPointShift(cell.shift)} versus this value's equal-domain average; average ${formatPercent(cell.averageWinRate)}; ${evidenceLabel} ${formatEvidenceWeight(cell.evidenceWeight)}.`;
   const visibleValue = displayMode === 'shift' ? formatPointShift(cell.shift) : formatPercent(cell.winRate);
 
   return (
@@ -209,7 +222,7 @@ export function DomainValueShiftHeatmap() {
     () => new Set((llmModelsData?.llmModels ?? []).filter((model) => model.isDefault).map((model) => model.modelId)),
     [llmModelsData],
   );
-  const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
+  const [selectedModelId, setSelectedModelId] = useState<string>(ALL_MODELS_OPTION_VALUE);
   const [displayMode, setDisplayMode] = useState<DomainShiftDisplayMode>('shift');
   const [sort, setSort] = useState<DomainShiftSort>(DEFAULT_DOMAIN_SHIFT_SORT);
 
@@ -221,16 +234,19 @@ export function DomainValueShiftHeatmap() {
   }, [availableSignatures, selectedSignature]);
 
   useEffect(() => {
-    const nextModelId = getDefaultModelId(models, selectedModelId, defaultModelIds);
+    const nextModelId = getDefaultModelId(models, selectedModelId);
     if (nextModelId !== selectedModelId) {
       setSelectedModelId(nextModelId);
     }
-  }, [defaultModelIds, models, selectedModelId]);
+  }, [models, selectedModelId]);
 
-  const selectedModel = selectedModelId == null
+  const selectedModel = selectedModelId === ALL_MODELS_OPTION_VALUE
     ? null
     : models.find((model) => model.modelId === selectedModelId) ?? null;
-  const heatmap = useMemo(() => buildDomainShiftHeatmap(selectedModel), [selectedModel]);
+  const heatmap = useMemo(
+    () => buildDomainShiftHeatmap(selectedModelId === ALL_MODELS_OPTION_VALUE ? models : selectedModel),
+    [models, selectedModel, selectedModelId],
+  );
   const sortedRows = useMemo(
     () => sortHeatmapRows(heatmap.rows, sort, displayMode),
     [heatmap.rows, sort, displayMode],
@@ -239,8 +255,8 @@ export function DomainValueShiftHeatmap() {
     () => buildDomainShiftModelOptions(models, defaultModelIds),
     [defaultModelIds, models],
   );
-  const tableColumnCount = heatmap.columns.length + 2;
-  const columnWidth = tableColumnCount > 0 ? `${100 / tableColumnCount}%` : '100%';
+  const domainColumnWidth = heatmap.columns.length > 0 ? `${100 / heatmap.columns.length}%` : '100%';
+  const isAllModels = selectedModelId === ALL_MODELS_OPTION_VALUE;
   const loading = fetching && data == null;
 
   return (
@@ -267,10 +283,10 @@ export function DomainValueShiftHeatmap() {
             <Select
               label="Model"
               options={modelOptions}
-              value={selectedModelId ?? undefined}
+              value={selectedModelId}
               onChange={setSelectedModelId}
               placeholder={loading ? 'Loading models...' : 'Select a model'}
-              disabled={loading || modelOptions.length === 0}
+              disabled={loading || models.length === 0}
             />
           </div>
           <div className="min-w-[240px] max-w-xs flex-1">
@@ -295,25 +311,27 @@ export function DomainValueShiftHeatmap() {
         </section>
       )}
 
-      {!loading && models.length > 0 && selectedModel != null && heatmap.eligibleDomainCount < 2 && (
+      {!loading && models.length > 0 && heatmap.eligibleDomainCount < 2 && (
         <section className="rounded-xl border border-amber-200 bg-amber-50 p-6">
           <h2 className="text-base font-semibold text-amber-950">More domain coverage needed</h2>
           <p className="mt-2 text-sm text-amber-900">
             Domain-shift analysis needs at least one value with eligible win-rate data in two or more domains for
-            the selected model. With only one domain for a value, the shift would be 0 pts by definition and would
+            the selected model set. With only one domain for a value, the shift would be 0.0 pts by definition and would
             not be meaningful.
           </p>
         </section>
       )}
 
-      {!loading && selectedModel != null && heatmap.eligibleDomainCount >= 2 && (
+      {!loading && models.length > 0 && heatmap.eligibleDomainCount >= 2 && (
         <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
           <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">{selectedModel.label}</h2>
+              <h2 className="text-lg font-semibold text-gray-900">{isAllModels ? 'All models' : selectedModel?.label ?? 'All models'}</h2>
               <p className="text-sm text-gray-600">
-                Values are rows. Domains are columns. Click any column header to sort. Evidence counts are shown
-                in each cell detail. Signature: {selectedSignature}.
+                {isAllModels
+                  ? 'Averages are across all models. Click any column header to sort. Evidence counts are shown in each cell detail.'
+                  : 'Click any column header to sort. Evidence counts are shown in each cell detail.'}{' '}
+                Signature: {selectedSignature}.
               </p>
             </div>
             <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
@@ -323,10 +341,12 @@ export function DomainValueShiftHeatmap() {
           </div>
 
           <div className="overflow-x-auto rounded border border-gray-100 bg-white p-2">
-            <table className="w-full table-fixed border-collapse text-xs">
+            <table className="w-full table-auto border-collapse text-xs">
               <colgroup>
-                {Array.from({ length: tableColumnCount }).map((_, index) => (
-                  <col key={index} style={{ width: columnWidth }} />
+                <col className="w-max" />
+                <col className="w-max" />
+                {heatmap.columns.map((domain) => (
+                  <col key={domain.domainId} style={{ width: domainColumnWidth }} />
                 ))}
               </colgroup>
               <thead>
@@ -364,10 +384,10 @@ export function DomainValueShiftHeatmap() {
               <tbody>
                 {sortedRows.map((row) => (
                   <tr key={row.valueKey} className="border-b border-gray-100">
-                    <th scope="row" className="border-b border-r-2 border-gray-300 bg-white px-2 py-2 text-left font-medium text-gray-900">
+                    <th scope="row" className="border-b border-r-2 border-gray-300 bg-white px-2 py-2 whitespace-nowrap text-left font-medium text-gray-900">
                       {row.valueLabel}
                     </th>
-                    <td className="border-b border-r-2 border-gray-300 bg-white px-2 py-2 text-right font-mono text-gray-700">
+                    <td className="border-b border-r-2 border-gray-300 bg-white px-2 py-2 whitespace-nowrap text-right font-mono text-gray-700">
                       {formatPercent(row.averageWinRate)}
                       {row.averageMatchesPooled === false && (
                         <span
@@ -391,7 +411,12 @@ export function DomainValueShiftHeatmap() {
 
                       return (
                         <td key={domain.domainId} className={tdClassName}>
-                          <Cell cell={cell} valueLabel={row.valueLabel} displayMode={displayMode} />
+                          <Cell
+                            cell={cell}
+                            valueLabel={row.valueLabel}
+                            displayMode={displayMode}
+                            evidenceLabel={isAllModels ? 'average evidence vignettes' : 'evidence vignettes'}
+                          />
                         </td>
                       );
                     })}

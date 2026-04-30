@@ -3,10 +3,13 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import {
+  ALL_MODELS_OPTION_VALUE,
   DomainValueShiftHeatmap,
   buildDomainShiftHeatmap,
+  buildDomainShiftModelOptions,
   formatEvidenceWeight,
   formatPointShift,
+  formatPercent,
   getDefaultDomainShiftSignature,
   getDefaultModelId,
   sortHeatmapRows,
@@ -177,13 +180,73 @@ describe('DomainValueShiftHeatmap helpers', () => {
   });
 
   it('formats point shifts and unknown evidence without percent-change language', () => {
-    expect(formatPointShift(12.4)).toBe('+12 pts');
-    expect(formatPointShift(-8.6)).toBe('-9 pts');
-    expect(formatPointShift(0.2)).toBe('0 pts');
+    expect(formatPointShift(12.4)).toBe('+12.4 pts');
+    expect(formatPointShift(-8.6)).toBe('-8.6 pts');
+    expect(formatPointShift(0.2)).toBe('+0.2 pts');
+    expect(formatPercent(42.34)).toBe('42.3%');
     expect(formatEvidenceWeight(null)).toBe('—');
     expect(formatEvidenceWeight(0)).toBe('—');
     expect(formatEvidenceWeight(-1)).toBe('—');
-    expect(formatEvidenceWeight(3)).toBe('3');
+    expect(formatEvidenceWeight(3)).toBe('3.0');
+  });
+
+  it('averages domain win rates across multiple models', () => {
+    const heatmap = buildDomainShiftHeatmap([
+      makeModel({
+        modelId: 'model-a',
+        label: 'Model A',
+        values: [
+          {
+            valueKey: 'Achievement',
+            pooledWinRate: 60,
+            stabilityScore: null,
+            eligibleDomainCount: 2,
+            domains: [
+              { domainId: 'city', domainName: 'City Planning', winRate: 40, evidenceWeight: 2 },
+              { domainId: 'jobs', domainName: 'Jobs', winRate: 80, evidenceWeight: 2 },
+            ],
+          },
+        ],
+      }),
+      makeModel({
+        modelId: 'model-b',
+        label: 'Model B',
+        values: [
+          {
+            valueKey: 'Achievement',
+            pooledWinRate: 50,
+            stabilityScore: null,
+            eligibleDomainCount: 2,
+            domains: [
+              { domainId: 'city', domainName: 'City Planning', winRate: 60, evidenceWeight: 4 },
+              { domainId: 'jobs', domainName: 'Jobs', winRate: 40, evidenceWeight: 6 },
+            ],
+          },
+        ],
+      }),
+    ]);
+    const achievement = heatmap.rows.find((row) => row.valueKey === 'Achievement');
+
+    expect(heatmap.columns.map((column) => column.domainName)).toEqual(['City Planning', 'Jobs']);
+    expect(achievement?.averageWinRate).toBe(55);
+    expect(achievement?.pooledWinRate).toBe(55);
+    expect(achievement?.averageMatchesPooled).toBe(true);
+    expect(achievement?.cells.get('city')?.winRate).toBe(50);
+    expect(achievement?.cells.get('jobs')?.winRate).toBe(60);
+  });
+
+  it('puts the all-models option first and keeps grouped models after it', () => {
+    const options = buildDomainShiftModelOptions(
+      [
+        makeModel({ modelId: 'model-c', label: 'Charlie' }),
+        makeModel({ modelId: 'model-a', label: 'Alpha' }),
+        makeModel({ modelId: 'model-b', label: 'Bravo' }),
+      ],
+      new Set(['model-c', 'model-a']),
+    );
+
+    expect(options.map((option) => option.label)).toEqual(['All models', 'Alpha', 'Charlie', '---', 'Bravo']);
+    expect(options[0]?.value).toBe(ALL_MODELS_OPTION_VALUE);
   });
 
   it('sorts domain columns by the visible metric mode', () => {
@@ -223,11 +286,11 @@ describe('DomainValueShiftHeatmap helpers', () => {
       makeModel({ modelId: 'model-a', label: 'Alpha' }),
     ];
 
-    expect(getDefaultModelId(models, null)).toBe('model-a');
-    expect(getDefaultModelId(models, null, new Set(['model-b']))).toBe('model-b');
+    expect(getDefaultModelId(models, null)).toBe(ALL_MODELS_OPTION_VALUE);
+    expect(getDefaultModelId(models, ALL_MODELS_OPTION_VALUE)).toBe(ALL_MODELS_OPTION_VALUE);
     expect(getDefaultModelId(models, 'model-b')).toBe('model-b');
-    expect(getDefaultModelId(models, 'missing')).toBe('model-a');
-    expect(getDefaultModelId([], 'missing')).toBeNull();
+    expect(getDefaultModelId(models, 'missing')).toBe(ALL_MODELS_OPTION_VALUE);
+    expect(getDefaultModelId([], 'missing')).toBe(ALL_MODELS_OPTION_VALUE);
   });
 
   it('defaults signature selection to latest default temperature', () => {
@@ -250,20 +313,20 @@ describe('DomainValueShiftHeatmap page', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Domain Shifts by Value' })).toBeInTheDocument();
     });
-    expect(screen.getByRole('table')).toHaveClass('table-fixed');
-    expect(screen.getByRole('button', { name: /model a/i })).toBeInTheDocument();
+    expect(screen.getByRole('table')).toHaveClass('table-auto');
+    expect(screen.getByRole('button', { name: /all models/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Latest @ default/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Sort by Avg Win Rate descending/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Sort by Value descending/i })).toHaveTextContent('Value↓');
-    expect(screen.getByLabelText(/Achievement in City Planning: raw win rate 80%; shift \+20 pts/i)).toHaveAccessibleName(
-      /average 60%; evidence vignettes —/i,
+    expect(screen.getByLabelText(/Achievement in City Planning: raw win rate 80\.0%; shift \+20\.0 pts/i)).toHaveAccessibleName(
+      /average 60\.0%; average evidence vignettes —/i,
     );
     expect(screen.getByText('Metric:')).toBeInTheDocument();
     expect(screen.getByText(/percentage-point shift, not percent change/i)).toBeInTheDocument();
 
     const firstDataRow = screen.getAllByRole('row')[1];
     expect(within(firstDataRow).getAllByRole('rowheader')[0]).toHaveTextContent('Achievement');
-    expect(within(firstDataRow).getAllByRole('cell')[0]).toHaveTextContent('60%');
+    expect(within(firstDataRow).getAllByRole('cell')[0]).toHaveTextContent('60.0%');
     expect(within(firstDataRow).getAllByRole('cell')[1]).toHaveClass('bg-emerald-100');
   });
 
@@ -273,7 +336,7 @@ describe('DomainValueShiftHeatmap page', () => {
 
     renderPage();
 
-    await screen.findByRole('button', { name: /Latest @ default/i });
+    await screen.findByRole('button', { name: /all models/i });
     const initialModelsCalls = useQueryMock.mock.calls.filter(([args]: [{ query: unknown }]) => args.query === MODELS_ANALYSIS_QUERY);
     expect(initialModelsCalls.at(-1)?.[0]).toEqual(expect.objectContaining({
       variables: { signature: 'vnewtd' },
@@ -294,11 +357,11 @@ describe('DomainValueShiftHeatmap page', () => {
 
     renderPage();
 
-    expect(await screen.findByText('+20 pts')).toBeInTheDocument();
+    expect(await screen.findByText('+20.0 pts')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Raw win rate' }));
 
     expect(screen.getByRole('button', { name: 'Raw win rate' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByText('80%')).toBeInTheDocument();
+    expect(screen.getByText('80.0%')).toBeInTheDocument();
     expect(screen.getByText(/raw domain win rate/i)).toBeInTheDocument();
   });
 
@@ -338,8 +401,8 @@ describe('DomainValueShiftHeatmap page', () => {
 
     renderPage();
 
-    expect(await screen.findByRole('button', { name: /alpha/i })).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /alpha/i }));
+    expect(await screen.findByRole('button', { name: /all models/i })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /all models/i }));
     await user.click(screen.getByRole('option', { name: 'Zulu' }));
 
     expect(screen.getByRole('heading', { name: 'Zulu' })).toBeInTheDocument();
@@ -355,11 +418,11 @@ describe('DomainValueShiftHeatmap page', () => {
 
     renderPage();
 
-    await screen.findByRole('button', { name: /alpha/i });
-    await user.click(screen.getByRole('button', { name: /alpha/i }));
+    await screen.findByRole('button', { name: /all models/i });
+    await user.click(screen.getByRole('button', { name: /all models/i }));
 
     const options = screen.getAllByRole('option').map((option) => option.textContent?.trim());
-    expect(options).toEqual(['Alpha', 'Charlie', '---', 'Bravo']);
+    expect(options).toEqual(['All models', 'Alpha', 'Charlie', '---', 'Bravo']);
   });
 
   it('shows an empty state when fewer than two domains are eligible', async () => {
