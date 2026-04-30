@@ -1,5 +1,5 @@
-query DomainAnalysis($domainId: ID!, $scope: String, $scoreMethod: String, $signature: String) {
-  domainAnalysis(domainId: $domainId, scope: $scope, scoreMethod: $scoreMethod, signature: $signature) {
+query DomainAnalysis($domainId: ID!, $scope: String, $signature: String) {
+  domainAnalysis(domainId: $domainId, scope: $scope, signature: $signature) {
     domainId
     domainName
     contributionSummary {
@@ -120,8 +120,8 @@ query DomainAnalysisLegacy($domainId: ID!) {
   }
 }
 
-query DomainAnalysisValueDetail($domainId: ID!, $modelId: String!, $valueKey: String!, $scoreMethod: String, $signature: String) {
-  domainAnalysisValueDetail(domainId: $domainId, modelId: $modelId, valueKey: $valueKey, scoreMethod: $scoreMethod, signature: $signature) {
+query DomainAnalysisValueDetail($domainId: ID!, $modelId: String!, $valueKey: String!, $signature: String) {
+  domainAnalysisValueDetail(domainId: $domainId, modelId: $modelId, valueKey: $valueKey, signature: $signature) {
     domainId
     domainName
     modelId

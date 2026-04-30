@@ -7,9 +7,7 @@ import {
   type DomainAnalysisValueKey,
 } from '../../graphql/queries/domain-analysis-values.js';
 import {
-  computeFullBTScores,
   computeSmoothedLogOddsScore,
-  type DomainAnalysisScoreMethod,
 } from '../../graphql/queries/domain/shared.js';
 import { computeRankingShapes } from '../../graphql/queries/domain-shape.js';
 import { computeClusterAnalysis } from '../../graphql/queries/domain-clustering.js';
@@ -58,7 +56,6 @@ async function getCurrentSnapshot(
 function buildDomainAnalysisResultFromSnapshot(params: {
   snapshot: DomainAnalysisSnapshotOutput;
   activeModels: Array<{ modelId: string; displayName: string }>;
-  scoreMethod: DomainAnalysisScoreMethod;
   generatedAt: Date;
   cacheStatus: DomainAnalysisCacheStatus;
 }): DomainAnalysisResult {
@@ -66,25 +63,13 @@ function buildDomainAnalysisResultFromSnapshot(params: {
 
   const modelsSortedScores: Array<{ model: string; sortedScores: number[] }> = [];
   const modelsBase = params.snapshot.models.map((model) => {
-    const pairwiseWins = new Map<DomainAnalysisValueKey, Map<DomainAnalysisValueKey, number>>(
-      Object.entries(model.pairwiseWins).map(([winner, opponents]) => [
-        winner as DomainAnalysisValueKey,
-        new Map(Object.entries(opponents).map(([loser, count]) => [loser as DomainAnalysisValueKey, count])),
-      ]),
-    );
-    const btScores = params.scoreMethod === 'FULL_BT'
-      ? computeFullBTScores(DOMAIN_ANALYSIS_VALUE_KEYS, pairwiseWins)
-      : null;
     const values = DOMAIN_ANALYSIS_VALUE_KEYS.map((valueKey) => {
       const counts = model.counts[valueKey] ?? { prioritized: 0, deprioritized: 0, neutral: 0 };
       const wins = counts.prioritized;
       const losses = counts.deprioritized;
-      const score = params.scoreMethod === 'FULL_BT'
-        ? (btScores?.get(valueKey) ?? 0)
-        : computeSmoothedLogOddsScore(wins, losses);
       return {
         valueKey,
-        score,
+        score: computeSmoothedLogOddsScore(wins, losses),
         prioritized: counts.prioritized,
         deprioritized: counts.deprioritized,
         neutral: counts.neutral,
@@ -215,7 +200,6 @@ export async function getDomainAnalysisResult(params: {
   scope: DomainAnalysisScope;
   domainId: string;
   requestedSignature: string | null;
-  scoreMethod: DomainAnalysisScoreMethod;
 }): Promise<DomainAnalysisResult> {
   const state = await prepareDomainAnalysisState({
     scope: params.scope,
@@ -259,7 +243,6 @@ export async function getDomainAnalysisResult(params: {
     return buildDomainAnalysisResultFromSnapshot({
       snapshot: parsedCurrent,
       activeModels,
-      scoreMethod: params.scoreMethod,
       generatedAt: currentSnapshot.createdAt,
       cacheStatus: DOMAIN_ANALYSIS_CACHE_STATUS.FRESH,
     });
@@ -275,7 +258,6 @@ export async function getDomainAnalysisResult(params: {
     return buildDomainAnalysisResultFromSnapshot({
       snapshot: parsedCurrent,
       activeModels,
-      scoreMethod: params.scoreMethod,
       generatedAt: currentSnapshot.createdAt,
       cacheStatus: queued ? DOMAIN_ANALYSIS_CACHE_STATUS.UPDATING : DOMAIN_ANALYSIS_CACHE_STATUS.OUT_OF_DATE,
     });
@@ -293,7 +275,6 @@ export async function getDomainAnalysisResult(params: {
   return buildDomainAnalysisResultFromSnapshot({
     snapshot: parsedFresh,
     activeModels,
-    scoreMethod: params.scoreMethod,
     generatedAt: refreshed.snapshot.createdAt,
     cacheStatus: DOMAIN_ANALYSIS_CACHE_STATUS.FRESH,
   });

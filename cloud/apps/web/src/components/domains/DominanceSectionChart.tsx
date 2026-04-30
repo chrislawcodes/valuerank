@@ -432,7 +432,7 @@ export function DominanceSectionChart({
                 cy={node.y}
                 r={NODE_RADIUS}
                 fill={getPriorityColor(
-                  selectedModel?.values[node.value] ?? 0,
+                  selectedModel?.winRates?.[node.value] ?? 0,
                   priorityValueRange.min,
                   priorityValueRange.max,
                 )}

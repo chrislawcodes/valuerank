@@ -6,19 +6,15 @@ import {
   DomainAnalysisValueDetailResultRef,
 } from '../types.js';
 import {
-  computeFullBTScores,
   computeSmoothedLogOddsScore,
   hydrateDefinitionAncestors,
-  incrementPairwiseWin,
   isDomainAnalysisValueKey,
-  parseDomainAnalysisScoreMethod,
   resolveEffectiveDefaultModelIds,
   resolveSignatureRuns,
   resolveValuePairsInChunks,
   resolveTranscriptDecisionModel,
   selectLatestDefinitionPerLineage,
 } from '../shared.js';
-import { DOMAIN_ANALYSIS_VALUE_KEYS } from '../../domain-analysis-values.js';
 import type {
   DomainAnalysisVignetteDetail,
 } from '../shared.js';
@@ -33,14 +29,12 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
       domainId: t.arg.id({ required: true }),
       modelId: t.arg.string({ required: true }),
       valueKey: t.arg.string({ required: true }),
-      scoreMethod: t.arg.string({ required: false }),
       signature: t.arg.string({ required: false }),
     },
     resolve: async (_root, args, ctx) => {
       const domainId = String(args.domainId);
       const modelId = args.modelId;
       const rawValueKey = args.valueKey;
-      const scoreMethod = parseDomainAnalysisScoreMethod(args.scoreMethod);
       const requestedSignature = typeof args.signature === 'string' && args.signature.trim() !== ''
         ? args.signature.trim()
         : null;
@@ -104,7 +98,7 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
         const pair = valuePairByDefinition.get(definitionId);
         return pair?.valueA === valueKey || pair?.valueB === valueKey;
       });
-      const scoreDefinitionIds = scoreMethod === 'FULL_BT' ? latestDefinitionIds : targetDefinitionIds;
+      const scoreDefinitionIds = targetDefinitionIds;
 
       if (targetDefinitionIds.length === 0) {
         return {
@@ -182,7 +176,6 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
       let totalPrioritized = 0;
       let totalDeprioritized = 0;
       let totalNeutral = 0;
-      const pairwiseWins = new Map<DomainAnalysisValueKey, Map<DomainAnalysisValueKey, number>>();
       const analyzedDefinitionIds = new Set<string>();
 
       if (filteredSourceRunIds.length > 0) {
@@ -273,10 +266,6 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
 
           analyzedDefinitionIds.add(definitionId);
 
-          if (canon.favoredValueKey) {
-            incrementPairwiseWin(pairwiseWins, canon.favoredValueKey, canon.opposedValueKey!);
-          }
-
           if (!targetDefinitionIdSet.has(definitionId) || !vignette) continue;
 
           const outcome = canon.direction === 'neutral'
@@ -353,9 +342,7 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
         modelId,
         modelLabel,
         valueKey,
-        score: scoreMethod === 'FULL_BT'
-          ? (computeFullBTScores(DOMAIN_ANALYSIS_VALUE_KEYS, pairwiseWins).get(valueKey) ?? 0)
-          : computeSmoothedLogOddsScore(totalPrioritized, totalDeprioritized),
+        score: computeSmoothedLogOddsScore(totalPrioritized, totalDeprioritized),
         prioritized: totalPrioritized,
         deprioritized: totalDeprioritized,
         neutral: totalNeutral,

@@ -164,8 +164,7 @@ export function DomainAnalysis() {
 
   useEffect(() => {
     const message = scoredError?.message ?? '';
-    const isFieldError = message.includes('Unknown argument "scoreMethod"')
-      || message.includes('Unknown argument "signature"')
+    const isFieldError = message.includes('Unknown argument "signature"')
       || message.includes('Cannot query field')
       || message.includes('Unknown field');
     if (isFieldError && !useLegacyQuery && selectedScope !== 'ALL_DOMAINS') setUseLegacyQuery(true);

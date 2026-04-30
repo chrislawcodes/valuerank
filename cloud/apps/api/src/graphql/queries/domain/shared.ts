@@ -31,7 +31,7 @@ export type {
 
 export { formatVnewLabel, formatVnewSignature };
 export { aggregateValueCountsFromTranscripts, incrementPairwiseWin, isDomainAnalysisValueKey } from './domain-analysis-aggregation.js';
-export { computeFullBTScores, computeSmoothedLogOddsScore } from './domain-analysis-scoring.js';
+export { computeSmoothedLogOddsScore } from './domain-analysis-scoring.js';
 export type {
   DomainAnalysisConditionDetail,
   DomainAnalysisConditionTranscript,
@@ -41,7 +41,6 @@ export type {
 export const MAX_LIMIT = 500;
 export const DEFAULT_LIMIT = 50;
 const VALUE_PAIR_RESOLVE_CHUNK_SIZE = 20;
-export type DomainAnalysisScoreMethod = 'LOG_ODDS' | 'FULL_BT';
 
 export type DefinitionRow = {
   id: string;
@@ -232,10 +231,6 @@ export function runModelsContainAll(config: unknown, defaultModelIds: string[]):
   return defaultModelIds.every((id) => (models as unknown[]).includes(id));
 }
 
-
-export function parseDomainAnalysisScoreMethod(value: string | null | undefined): DomainAnalysisScoreMethod {
-  return value === 'FULL_BT' ? 'FULL_BT' : 'LOG_ODDS';
-}
 
 export function getMissingReasonLabel(reasonCode: DomainAnalysisMissingReasonCode): string {
   switch (reasonCode) {

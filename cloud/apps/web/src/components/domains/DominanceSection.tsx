@@ -111,21 +111,11 @@ export function DominanceSection({ models, unavailableModels, selectedModelId }:
         <span className={`font-medium ${THEME_COLORS.panelMutedText}`}>Model focus:</span>
         <span className={THEME_COLORS.panelText}>{selectedModel?.label ?? 'No model selected'}</span>
       </div>
-      {unavailableModels.length > 0 && (
-        <p className={`mb-3 text-xs ${THEME_COLORS.panelMutedText}`}>
-          {unavailableModels.length} unavailable model{unavailableModels.length === 1 ? '' : 's'} stay hidden from this analysis.
-        </p>
-      )}
-
       {models.length === 0 && (
         <p className={`mb-3 text-xs ${THEME_COLORS.panelMutedText}`}>
           No analyzed model data is available for this domain yet.
         </p>
       )}
-
-      <p className={`mb-3 text-xs ${THEME_COLORS.panelMutedText}`}>
-        Click a value circle to focus it and fade unrelated arrows. Click it again to clear focus.
-      </p>
 
       <div
         ref={chartRef}
