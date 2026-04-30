@@ -209,25 +209,25 @@ export function OpenAnomaliesSection({
               <table className="min-w-full divide-y divide-amber-200">
                 <thead className="bg-amber-50">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-amber-900">
+                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-amber-900">
                       Domain
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-amber-900">
+                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-amber-900">
                       Vignette
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-amber-900">
+                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-amber-900">
                       Type
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-amber-900">
+                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-amber-900">
                       Model
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-amber-900">
+                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-amber-900">
                       Strength of First Value
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-amber-900">
+                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-amber-900">
                       Strength of Second Value
                     </th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-amber-900">
+                    <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-amber-900">
                       Actions
                     </th>
                   </tr>

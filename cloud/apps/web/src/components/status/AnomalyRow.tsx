@@ -56,6 +56,17 @@ function extractStrengthPair(dimensionValues: unknown): [string, string] {
   return [first, second];
 }
 
+function formatDimensionKey(key: string): string {
+  return key.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+}
+
+function formatValuePair(dimensionValues: unknown): string | null {
+  if (!isRecord(dimensionValues)) return null;
+  const keys = Object.keys(dimensionValues);
+  if (keys.length === 0) return null;
+  return keys.map(formatDimensionKey).join(' / ');
+}
+
 export function AnomalyRow({ anomaly, tone, onViewTranscript }: AnomalyRowProps) {
   const navigate = useNavigate();
   const [isReprobeModalOpen, setIsReprobeModalOpen] = useState(false);
@@ -81,13 +92,15 @@ export function AnomalyRow({ anomaly, tone, onViewTranscript }: AnomalyRowProps)
   const rowHoverClass = tone === 'amber' ? 'hover:bg-amber-100/50' : 'hover:bg-gray-50';
   const transcriptId = useMemo(() => {
     if (anomaly.type === 'INVALID_RESPONSE_FAILURE') {
-      return extractTranscriptId(anomaly.details);
+      // Prefer activeTranscriptId (latest for the slot) — handles reprobe-fixed rows
+      // where details.transcriptId still points to the original transcript.
+      return anomaly.activeTranscriptId ?? extractTranscriptId(anomaly.details);
     }
     if (anomaly.type === 'STRANDED_TRANSCRIPT' || anomaly.type === 'ORPHAN_TRANSCRIPT') {
       return anomaly.subject;
     }
     return null;
-  }, [anomaly.details, anomaly.subject, anomaly.type]);
+  }, [anomaly.activeTranscriptId, anomaly.details, anomaly.subject, anomaly.type]);
 
   useEffect(() => {
     return () => {
@@ -168,6 +181,7 @@ export function AnomalyRow({ anomaly, tone, onViewTranscript }: AnomalyRowProps)
   const modelId = isRecord(anomaly.details) && typeof anomaly.details.modelId === 'string'
     ? anomaly.details.modelId
     : null;
+  const vignetteLabel = formatValuePair(anomaly.dimensionValues) ?? '—';
   const [firstStrength, secondStrength] = extractStrengthPair(anomaly.dimensionValues);
 
   const renderViewTranscriptButton = () => {
@@ -312,30 +326,32 @@ export function AnomalyRow({ anomaly, tone, onViewTranscript }: AnomalyRowProps)
   return (
     <>
       <tr className={rowHoverClass}>
-        <td className="px-4 py-3 align-top text-sm text-gray-700">
-          {anomaly.domain?.name ?? '—'}
-        </td>
-        <td className="px-4 py-3 align-top text-sm text-gray-700">
-          <span className="block max-w-[16rem] truncate" title={anomaly.scenarioName ?? undefined}>
-            {anomaly.scenarioName ?? '—'}
+        <td className="px-3 py-2 align-middle text-sm text-gray-700">
+          <span className="block max-w-[8rem] truncate" title={anomaly.domain?.name ?? undefined}>
+            {anomaly.domain?.name ?? '—'}
           </span>
         </td>
-        <td className="px-4 py-3 align-top text-sm text-gray-700">
+        <td className="px-3 py-2 align-middle text-sm text-gray-700">
+          <span className="block max-w-[12rem] truncate" title={vignetteLabel !== '—' ? vignetteLabel : undefined}>
+            {vignetteLabel}
+          </span>
+        </td>
+        <td className="px-3 py-2 align-middle text-sm text-gray-700">
           <span className="font-medium text-gray-900">{anomaly.displayLabel}</span>
         </td>
-        <td className="px-4 py-3 align-top text-sm text-gray-700">
-          <span className="block max-w-[16rem] truncate font-mono text-xs" title={modelId ?? undefined}>
+        <td className="px-3 py-2 align-middle text-sm text-gray-700">
+          <span className="block max-w-[10rem] truncate font-mono text-xs" title={modelId ?? undefined}>
             {modelId ?? '—'}
           </span>
         </td>
-        <td className="px-4 py-3 align-top text-sm text-gray-700 whitespace-nowrap">
+        <td className="px-3 py-2 align-middle text-sm text-gray-700 whitespace-nowrap">
           {firstStrength}
         </td>
-        <td className="px-4 py-3 align-top text-sm text-gray-700 whitespace-nowrap">
+        <td className="px-3 py-2 align-middle text-sm text-gray-700 whitespace-nowrap">
           {secondStrength}
         </td>
-        <td className="px-4 py-3 align-top text-sm text-gray-700">
-          <div className="flex flex-wrap items-center justify-end gap-2">
+        <td className="px-3 py-2 align-middle text-sm text-gray-700">
+          <div className="flex items-center justify-end gap-1.5 flex-nowrap">
             {renderPrimaryAction()}
             {renderViewTranscriptButton()}
             <Button
@@ -349,7 +365,7 @@ export function AnomalyRow({ anomaly, tone, onViewTranscript }: AnomalyRowProps)
             </Button>
           </div>
           {errorMessage && (
-            <p className="mt-2 max-w-xs text-right text-xs text-red-600">
+            <p className="mt-1 text-right text-xs text-red-600">
               {errorMessage}
             </p>
           )}
