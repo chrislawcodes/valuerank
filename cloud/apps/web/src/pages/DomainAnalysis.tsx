@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery } from 'urql';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
@@ -23,6 +23,7 @@ import {
   type ModelsAnalysisQueryResult,
   type ModelsAnalysisQueryVariables,
 } from '../api/operations/modelsAnalysis';
+import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/llm';
 import { ModelGroupsSection } from '../components/domains/ModelGroupsSection';
 import { DominanceSection } from '../components/domains/DominanceSection';
 import { SimilaritySection } from '../components/domains/SimilaritySection';
@@ -53,7 +54,8 @@ export function DomainAnalysis() {
   );
   const [selectedDomainId, setSelectedDomainId] = useState<string>(searchParams.get('domainId') ?? '');
   const [selectedSignature, setSelectedSignature] = useState<string>(searchParams.get('signature') ?? '');
-  const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
+  const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
+  const initializedModelSelection = useRef(false);
   const [useLegacyQuery, setUseLegacyQuery] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -150,6 +152,11 @@ export function DomainAnalysis() {
     pause: selectedScope === 'DOMAIN' && selectedDomainId === '',
     requestPolicy: 'cache-and-network',
   });
+  const [{ data: llmModelsData }] = useQuery<LlmModelsQueryResult>({
+    query: LLM_MODELS_QUERY,
+    variables: { status: 'ACTIVE' },
+    requestPolicy: 'cache-and-network',
+  });
   const [{ fetching: refreshFetching }, refreshDomainAnalysis] = useMutation<
     RefreshDomainAnalysisMutationResult,
     RefreshDomainAnalysisMutationVariables
@@ -216,23 +223,63 @@ export function DomainAnalysis() {
       };
     });
   }, [data, modelsAnalysisData]);
-  useEffect(() => {
-    if (selectedModelId == null) return;
-    if (models.some((model) => model.model === selectedModelId)) return;
-    setSelectedModelId(null);
-  }, [models, selectedModelId]);
+  const defaultModelIds = useMemo(
+    () => new Set((llmModelsData?.llmModels ?? []).filter((m) => m.isDefault).map((m) => m.modelId)),
+    [llmModelsData],
+  );
 
-  const modelOptions = useMemo(
-    () => [
-      { value: 'all', label: 'All models' },
-      ...models.map((model) => ({ value: model.model, label: model.label })),
-    ],
-    [models],
-  );
+  const defaultSelection = useMemo(() => {
+    const availableIds = models.map((model) => model.model);
+    const defaults = availableIds.filter((id) => defaultModelIds.has(id));
+    return defaults.length > 0 ? defaults : availableIds;
+  }, [models, defaultModelIds]);
+
+  useEffect(() => {
+    if (initializedModelSelection.current) return;
+    if (models.length === 0) return;
+    if (llmModelsData == null) return;
+    setSelectedModelIds(defaultSelection);
+    initializedModelSelection.current = true;
+  }, [models, llmModelsData, defaultSelection]);
+
+  useEffect(() => {
+    if (!initializedModelSelection.current) return;
+    setSelectedModelIds((current) => {
+      if (current.length === 0) return current;
+      const validIds = new Set(models.map((model) => model.model));
+      const next = current.filter((id) => validIds.has(id));
+      return next.length === current.length ? current : next;
+    });
+  }, [models]);
+
+  const isDefaultSelection = useMemo(() => {
+    if (selectedModelIds.length !== defaultSelection.length) return false;
+    const defaultSet = new Set(defaultSelection);
+    return selectedModelIds.every((id) => defaultSet.has(id));
+  }, [selectedModelIds, defaultSelection]);
+
   const visibleModels = useMemo(
-    () => (selectedModelId == null ? models : models.filter((model) => model.model === selectedModelId)),
-    [models, selectedModelId],
+    () => selectedModelIds.length === 0 ? models : models.filter((model) => selectedModelIds.includes(model.model)),
+    [models, selectedModelIds],
   );
+
+  const singleSelectedModelId = selectedModelIds.length === 1 ? (selectedModelIds[0] ?? null) : null;
+
+  const modelSetSummary = models.length === 0
+    ? 'No models available'
+    : isDefaultSelection
+      ? `Default — ${selectedModelIds.length} model${selectedModelIds.length === 1 ? '' : 's'}`
+      : selectedModelIds.length === models.length
+        ? 'All models'
+        : `${selectedModelIds.length} of ${models.length} selected`;
+
+  const toggleModelId = (modelId: string) => {
+    setSelectedModelIds((current) => (
+      current.includes(modelId)
+        ? current.filter((id) => id !== modelId)
+        : [...current, modelId]
+    ));
+  };
 
   const unavailableModels = useMemo<DomainAnalysisModelAvailability[]>(
     () => (data?.domainAnalysis.unavailableModels ?? []).map((m) => ({ model: m.model, label: m.label, reason: m.reason })),
@@ -336,15 +383,52 @@ export function DomainAnalysis() {
                 disabled={signaturesLoading || signatureOptions.length === 0}
               />
             </div>
-            <div className="min-w-[210px]">
-              <Select
-                label="Model focus"
-                options={modelOptions}
-                value={selectedModelId ?? 'all'}
-                onChange={(value) => setSelectedModelId(value === 'all' ? null : value)}
-                disabled={models.length === 0}
-              />
-            </div>
+            <details className="min-w-[210px]">
+              <summary className="cursor-pointer list-none">
+                <p className="mb-1 text-sm font-medium text-gray-700">Model focus</p>
+                <div className="inline-flex w-full items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm min-h-[44px] hover:border-gray-400 sm:min-h-0">
+                  <span className={models.length === 0 ? 'text-gray-400' : ''}>{modelSetSummary}</span>
+                  <span className="ml-2 text-gray-400">▾</span>
+                </div>
+              </summary>
+              <div className="mt-1 space-y-2 rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+                <div className="flex flex-wrap gap-1.5">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedModelIds(defaultSelection)}
+                    className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors min-h-0 ${
+                      isDefaultSelection
+                        ? 'border-teal-600 bg-teal-600 text-white hover:bg-teal-700'
+                        : 'border-gray-300 bg-white text-gray-700 hover:border-teal-400 hover:text-teal-700 hover:bg-white'
+                    }`}
+                  >
+                    Default Models
+                  </Button>
+                  {models.map((model) => {
+                    const isSelected = selectedModelIds.includes(model.model);
+                    return (
+                      <Button
+                        key={model.model}
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => toggleModelId(model.model)}
+                        className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors min-h-0 ${
+                          isSelected
+                            ? 'border-teal-600 bg-teal-600 text-white hover:bg-teal-700'
+                            : 'border-gray-300 bg-white text-gray-700 hover:border-teal-400 hover:text-teal-700 hover:bg-white'
+                        }`}
+                        title={model.label}
+                      >
+                        {model.label}
+                      </Button>
+                    );
+                  })}
+                </div>
+              </div>
+            </details>
             <Button
               type="button"
               variant="secondary"
@@ -358,9 +442,9 @@ export function DomainAnalysis() {
           </div>
           {exportError !== null && <p className="mt-1 text-xs text-amber-700">{exportError}</p>}
         </div>
-        {selectedModelId !== null && (
+        {singleSelectedModelId !== null && (
           <p className="mt-2 text-xs text-gray-500">
-            Showing only {models.find((model) => model.model === selectedModelId)?.label ?? 'the selected model'} across all tables.
+            Showing only {models.find((model) => model.model === singleSelectedModelId)?.label ?? 'the selected model'} across all tables.
           </p>
         )}
         {data?.domainAnalysis != null && missingDefinitionCount > 0 && !isAllDomains && (
@@ -423,7 +507,7 @@ export function DomainAnalysis() {
         <Loading size="lg" text="Loading domain analysis..." />
       ) : (
         <>
-          <ModelGroupsSection clusterAnalysis={data?.domainAnalysis.clusterAnalysis} selectedModelId={selectedModelId} />
+          <ModelGroupsSection clusterAnalysis={data?.domainAnalysis.clusterAnalysis} selectedModelId={singleSelectedModelId} />
           <ValuePrioritiesSection
             models={visibleModels}
             selectedDomainId={selectedDomainId}
@@ -434,7 +518,7 @@ export function DomainAnalysis() {
           <DominanceSection
             models={visibleModels}
             unavailableModels={unavailableModels}
-            selectedModelId={selectedModelId}
+            selectedModelId={singleSelectedModelId}
           />
           <SimilaritySection models={visibleModels} clusterAnalysis={data?.domainAnalysis.clusterAnalysis} />
         </>
