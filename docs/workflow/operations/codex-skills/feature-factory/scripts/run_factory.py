@@ -402,6 +402,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
+    from factory_pollution_check import auto_revert_polluted_state  # noqa: E402
+    auto_revert_polluted_state()
     parser = build_parser()
     args = parser.parse_args()
     # FR-009: route invariant-warning output to stderr (always).

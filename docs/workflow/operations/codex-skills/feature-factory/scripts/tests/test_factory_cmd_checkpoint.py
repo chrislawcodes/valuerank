@@ -1,11 +1,13 @@
 import argparse
 import contextlib
+import gc
 import importlib.util
 import io
 import json
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -123,9 +125,20 @@ class FactoryCheckpointTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmpdir.cleanup)
-        self._root_patch = patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", Path(self._tmpdir.name))
-        self._root_patch.start()
-        self.addCleanup(self._root_patch.stop)
+        # Patch every loaded factory_state module instance so that lazy imports
+        # inside record_command_telemetry (and similar) also see the tmpdir.
+        self._patches: list = []
+        for mod in list(gc.get_objects()):
+            if not isinstance(mod, types.ModuleType):
+                continue
+            if getattr(mod, "__name__", "") != "factory_state":
+                continue
+            if not hasattr(mod, "FACTORY_RUNS_ROOT"):
+                continue
+            p = patch.object(mod, "FACTORY_RUNS_ROOT", Path(self._tmpdir.name))
+            p.start()
+            self._patches.append(p)
+        self.addCleanup(lambda: [p.stop() for p in self._patches])
 
     def _prepare_state(self, adversarial_rounds: int) -> Path:
         return _write_workflow_state(self._tmpdir.name, _spec_stage_state(adversarial_rounds))
