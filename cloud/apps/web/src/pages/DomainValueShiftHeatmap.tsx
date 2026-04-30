@@ -87,9 +87,10 @@ function SortableHeader({
 
   return (
     <th
+      scope="col"
       aria-sort={isActive ? getSortDirectionLabel(sort.direction) : 'none'}
       className={cn(
-        'border-b border-gray-200 bg-white px-3 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500',
+        'border-b border-gray-200 bg-white px-2 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500',
         className,
       )}
     >
@@ -99,17 +100,15 @@ function SortableHeader({
         size="sm"
         onClick={() => onSort(getNextDomainShiftSort(sort, sortKey))}
         className={cn(
-          'inline-flex w-full items-center gap-1 rounded px-1 py-1 hover:bg-gray-100 hover:text-gray-900',
+          'inline-flex w-full items-center rounded px-1 py-1 cursor-pointer hover:bg-gray-100 hover:text-gray-900',
           align === 'left' && 'justify-start text-left',
           align === 'center' && 'justify-center text-center',
           align === 'right' && 'justify-end text-right',
+          isActive && 'text-teal-700',
         )}
         aria-label={`Sort by ${label} ${nextDirection}`}
       >
-        <span>{label}</span>
-        <span aria-hidden="true" className={cn('text-gray-400', isActive && 'text-teal-700')}>
-          {isActive ? (sort.direction === 'asc' ? '↑' : '↓') : '↕'}
-        </span>
+        <span className="whitespace-nowrap">{label}</span>
       </Button>
     </th>
   );
@@ -163,7 +162,7 @@ function Cell({
 }) {
   if (cell == null) {
     return (
-      <span className="inline-flex min-w-[82px] justify-center rounded-md border border-gray-100 bg-gray-50 px-2 py-1 text-sm text-gray-400">
+      <span className="inline-flex min-w-[82px] justify-center rounded-md border border-gray-100 bg-gray-50 px-2 py-1 text-xs text-gray-400">
         n/a
       </span>
     );
@@ -175,7 +174,7 @@ function Cell({
 
   return (
     <span
-      className={`inline-flex min-w-[82px] justify-center rounded-md border px-2 py-1 text-sm font-semibold ${tone}`}
+      className={`inline-flex min-w-[82px] justify-center rounded-md border px-2 py-1 text-xs font-semibold ${tone}`}
       title={detail}
       aria-label={detail}
     >
@@ -325,17 +324,25 @@ export function DomainValueShiftHeatmap() {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="min-w-[900px] border-separate border-spacing-0 text-sm">
+          <div className="overflow-x-auto rounded border border-gray-100 bg-white p-2">
+            <table className="min-w-full border-collapse text-xs">
               <thead>
-                <tr>
+                <tr className="border-b border-gray-200 text-gray-600">
                   <SortableHeader
                     label="Value"
                     sortKey="value"
                     sort={sort}
                     onSort={setSort}
                     align="left"
-                    className="sticky left-0 z-20"
+                    className="border-r-2 border-gray-300"
+                  />
+                  <SortableHeader
+                    label="Avg Win Rate"
+                    sortKey="average"
+                    sort={sort}
+                    onSort={setSort}
+                    align="right"
+                    className="border-r-2 border-gray-300"
                   />
                   {heatmap.columns.map((domain) => {
                     const domainSortKey: DomainShiftSortKey = `domain:${domain.domainId}`;
@@ -349,31 +356,15 @@ export function DomainValueShiftHeatmap() {
                       />
                     );
                   })}
-                  <SortableHeader
-                    label="Avg"
-                    sortKey="average"
-                    sort={sort}
-                    onSort={setSort}
-                    align="right"
-                  />
                 </tr>
               </thead>
               <tbody>
                 {sortedRows.map((row) => (
-                  <tr key={row.valueKey}>
-                    <th className="sticky left-0 z-10 border-b border-gray-100 bg-white px-3 py-3 text-left font-medium text-gray-900">
+                  <tr key={row.valueKey} className="border-b border-gray-100">
+                    <th scope="row" className="border-b border-r-2 border-gray-300 bg-white px-2 py-2 text-left font-medium text-gray-900">
                       {row.valueLabel}
                     </th>
-                    {heatmap.columns.map((domain) => (
-                      <td key={domain.domainId} className="border-b border-gray-100 px-2 py-2 text-center">
-                        <Cell
-                          cell={row.cells.get(domain.domainId) ?? null}
-                          valueLabel={row.valueLabel}
-                          displayMode={displayMode}
-                        />
-                      </td>
-                    ))}
-                    <td className="border-b border-gray-100 px-3 py-3 text-right font-mono text-gray-700">
+                    <td className="border-b border-r-2 border-gray-300 bg-white px-2 py-2 text-right font-mono text-gray-700">
                       {formatPercent(row.averageWinRate)}
                       {row.averageMatchesPooled === false && (
                         <span
@@ -384,6 +375,15 @@ export function DomainValueShiftHeatmap() {
                         </span>
                       )}
                     </td>
+                    {heatmap.columns.map((domain) => (
+                      <td key={domain.domainId} className="border-b border-gray-100 px-2 py-2 text-center">
+                        <Cell
+                          cell={row.cells.get(domain.domainId) ?? null}
+                          valueLabel={row.valueLabel}
+                          displayMode={displayMode}
+                        />
+                      </td>
+                    ))}
                   </tr>
                 ))}
               </tbody>
