@@ -15,6 +15,7 @@ import {
   type PressureSensitivityModel,
 } from '../api/operations/pressureSensitivity';
 import { PressureSensitivitySummary } from '../components/models/PressureSensitivitySummary';
+import { PressureResponseByValueTable } from '../components/models/PressureResponseByValueTable';
 import { PressureSensitivityDetail } from '../components/models/PressureSensitivityDetail';
 import { PressureSensitivityCrossValueMap } from '../components/models/PressureSensitivityCrossValueMap';
 import { PressureSensitivitySanityCheck } from '../components/models/PressureSensitivitySanityCheck';
@@ -187,7 +188,7 @@ export function PressureSensitivity() {
       <div className="space-y-2">
         <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Models / Pressure Sensitivity</h1>
         <p className="text-sm text-gray-600">
-          This report shows each model&apos;s pressure response — how much added pressure moves the model toward its own value over the other. The cross-model table ranks models by mean pressure response, the detail table breaks that out by value pair, and the heat map plus sanity check show whether the pattern is consistent across the grid.
+          This report shows each model&apos;s pressure response — how much added pressure moves the model toward its own value over the other. The cross-model table ranks models by mean pressure response, the by-value table summarizes how each value behaves across its pairings, the detail table breaks that out by value pair, and the heat map plus sanity check show whether the pattern is consistent across the grid.
         </p>
       </div>
 
@@ -223,8 +224,8 @@ export function PressureSensitivity() {
           <p className="font-medium text-gray-900">No coverage yet.</p>
           <p className="mt-1">
             This report depends on Aggregate-tagged runs with measurable transcripts. Once
-            pipeline coverage is populated, the cross-model summary, per-model detail, and
-            heat maps will appear here.
+            pipeline coverage is populated, the cross-model summary, by-value table, per-model
+            detail, and heat maps will appear here.
           </p>
         </section>
       ) : allInsufficient ? (
@@ -243,6 +244,8 @@ export function PressureSensitivity() {
             selectedModelId={selectedModel?.modelId ?? null}
             onSelectModel={setSelectedModelId}
           />
+
+          {selectedModel && <PressureResponseByValueTable valuePairs={selectedModel.valuePairs} />}
 
           {selectedModel && <PressureSensitivityDetail model={selectedModel} />}
 
