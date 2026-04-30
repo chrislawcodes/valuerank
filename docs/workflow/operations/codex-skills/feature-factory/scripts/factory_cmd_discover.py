@@ -23,6 +23,7 @@ from factory_review import trim_detail  # noqa: E402
 
 from factory_emit import _emit_next_action  # noqa: E402
 from factory_mutating import mutates_state  # noqa: E402
+from factory_size_estimate import estimate_size  # noqa: E402
 
 
 @mutates_state("discover")
@@ -279,4 +280,33 @@ def command_discover(args: argparse.Namespace) -> int:
             print(f"  - {u['item']}{status}")
     if args.complete or getattr(args, "force_complete", False):
         _emit_next_action(args.slug, "discovery complete")
+        print("[workflow] ✓ discovery complete")
+        try:
+            est = estimate_size(args.slug)
+            size_label = est["size"].upper()
+            signals = est["signals"]
+            scope_count = signals["scope_path_count"]
+            summary_chars = signals["summary_chars"]
+            diff_lines = signals["diff_lines"]
+            diff_note = "no diff yet" if diff_lines is None else f"{diff_lines}-line diff"
+            print(
+                f"[workflow] size-estimate: {size_label} "
+                f"({scope_count} scope path{'s' if scope_count != 1 else ''}, "
+                f"{summary_chars}-char summary, {diff_note})"
+            )
+            if est["recommended_path"] == "quick":
+                prompt_path_hint = ""
+                try:
+                    import factory_state as _fs
+                    prompt_path_file = _fs.workflow_dir(args.slug) / "prompt.md"
+                    if prompt_path_file.exists():
+                        prompt_path_hint = f" --prompt-path {prompt_path_file}"
+                except Exception:
+                    pass
+                print(f"[workflow] → recommended: quick --slug {args.slug}{prompt_path_hint}")
+                print("[workflow] (override: run author_spec for full workflow)")
+            else:
+                print("[workflow] → recommended: author_spec")
+        except Exception:
+            pass  # size estimate is advisory; never fail discover --complete
     return 0

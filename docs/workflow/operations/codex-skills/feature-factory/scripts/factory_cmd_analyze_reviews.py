@@ -585,6 +585,71 @@ def _largest_artifact_rows(artifact_records: list[dict[str, object]]) -> list[li
     return [[item["slug"], item["stage"], item["char_count"]] for item in ordered]
 
 
+def _per_feature_rows(top_n: int = 20) -> list[list[object]]:
+    """Return rows for the per-feature metrics rollup section."""
+    rows: list[list[object]] = []
+    runs_root = factory_state.FACTORY_RUNS_ROOT
+    if not runs_root.exists():
+        return rows
+
+    for state_path in sorted(runs_root.glob("*/state.json")):
+        slug = state_path.parent.name
+        try:
+            raw_state = json.loads(state_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+
+        command_telemetry = raw_state.get("command_telemetry", [])
+        if not isinstance(command_telemetry, list):
+            command_telemetry = []
+
+        token_usage = raw_state.get("token_usage", [])
+        if not isinstance(token_usage, list):
+            token_usage = []
+
+        total_wall_seconds = 0.0
+        ttl_crossings = 0
+        command_count = 0
+        for entry in command_telemetry:
+            if not isinstance(entry, dict):
+                continue
+            command_count += 1
+            ws = entry.get("wall_seconds")
+            if isinstance(ws, (int, float)) and not isinstance(ws, bool):
+                total_wall_seconds += float(ws)
+            if entry.get("ttl_crossed") is True:
+                ttl_crossings += 1
+
+        codex_tokens = 0
+        gemini_tokens = 0
+        for entry in token_usage:
+            if not isinstance(entry, dict):
+                continue
+            model = entry.get("model", "")
+            if not isinstance(model, str):
+                continue
+            model_lower = model.lower()
+            in_tok = _coerce_int(entry.get("input_tokens")) or 0
+            out_tok = _coerce_int(entry.get("output_tokens")) or 0
+            total = in_tok + out_tok
+            if model_lower.startswith("gpt-"):
+                codex_tokens += total
+            elif model_lower.startswith("gemini-"):
+                gemini_tokens += total
+
+        rows.append([
+            slug,
+            round(total_wall_seconds, 1),
+            codex_tokens,
+            gemini_tokens,
+            ttl_crossings,
+            command_count,
+        ])
+
+    rows.sort(key=lambda row: float(str(row[1])), reverse=True)
+    return rows[:top_n]
+
+
 def _cap_pressure_rows(records: list[dict[str, object]]) -> list[list[object]]:
     grouped: dict[tuple[str, str], list[dict[str, object]]] = defaultdict(list)
     for record in records:
@@ -798,6 +863,35 @@ def _render_report(records: list[dict[str, object]], data_quality: dict[str, obj
         )
     else:
         lines.append("No relevant records found.")
+
+    per_feature_rows = _per_feature_rows(top_n)
+    lines.extend(["", "## 7a. Per-Feature Metrics Rollup (Top 20 by Wall Seconds)", ""])
+    if per_feature_rows:
+        lines.extend(
+            _markdown_table(
+                [
+                    "slug",
+                    "total_wall_seconds",
+                    "codex_tokens",
+                    "gemini_tokens",
+                    "ttl_crossings",
+                    "command_count",
+                ],
+                per_feature_rows,
+            )
+        )
+    else:
+        lines.append("No command telemetry found.")
+    lines.extend([
+        "",
+        "**Note on Claude token measurement.** This table aggregates Codex and Gemini token usage "
+        "(those tools' CLIs report token counts the runner captures). It does NOT include Claude "
+        "orchestrator session tokens — Claude Code does not expose those to the FF runner. For "
+        "session-level Claude usage, run `/cost` in Claude Code. The `ttl_crossings` column is a "
+        "proxy for cache pressure: each crossing means the orchestrator's prompt cache likely "
+        "expired between commands, requiring an uncached re-read.",
+        "",
+    ])
 
     artifact_distribution_rows = _artifact_distribution_rows(artifact_records)
     largest_artifact_rows = _largest_artifact_rows(artifact_records)
