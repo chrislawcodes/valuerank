@@ -94,11 +94,13 @@ function SortableHeader({
         className,
       )}
     >
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        size="sm"
         onClick={() => onSort(getNextDomainShiftSort(sort, sortKey))}
         className={cn(
-          'inline-flex w-full items-center gap-1 bg-transparent px-0 py-0 text-[11px] font-semibold uppercase tracking-wide text-gray-500 transition-colors hover:text-gray-900 focus:outline-none focus-visible:ring-1 focus-visible:ring-teal-500',
+          'w-full gap-1 rounded-none bg-transparent px-0 py-0 min-h-0 text-[11px] font-semibold uppercase tracking-wide text-gray-500 shadow-none transition-colors hover:bg-transparent hover:text-gray-900 focus:ring-0 focus:ring-offset-0',
           align === 'left' && 'justify-start text-left',
           align === 'center' && 'justify-center text-center',
           align === 'right' && 'justify-end text-right',
@@ -112,7 +114,7 @@ function SortableHeader({
             {sort.direction === 'desc' ? '↑' : '↓'}
           </span>
         )}
-      </button>
+      </Button>
     </th>
   );
 }
