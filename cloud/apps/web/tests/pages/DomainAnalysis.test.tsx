@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { DomainAnalysis } from '../../src/pages/DomainAnalysis';
 import {
@@ -9,6 +8,7 @@ import {
   DOMAIN_FINDINGS_ELIGIBILITY_QUERY,
   REFRESH_DOMAIN_ANALYSIS_MUTATION,
 } from '../../src/api/operations/domainAnalysis';
+import { MODELS_ANALYSIS_QUERY } from '../../src/api/operations/modelsAnalysis';
 
 const useQueryMock = vi.fn();
 const useMutationMock = vi.fn();
@@ -71,6 +71,14 @@ const defaultDomainAnalysis = {
   },
 };
 
+const defaultModelsAnalysis = {
+  modelsAnalysis: {
+    models: [],
+  },
+};
+
+const valuePrioritiesSectionMock = vi.fn(() => <div>Mock value priorities section</div>);
+
 function installQueryResponses(options?: {
   findingsData?: typeof defaultFindingsEligibility | undefined;
   findingsFetching?: boolean;
@@ -81,6 +89,7 @@ function installQueryResponses(options?: {
   analysisData?: typeof defaultDomainAnalysis | undefined;
   analysisFetching?: boolean;
   analysisError?: Error | undefined;
+  modelsAnalysisData?: typeof defaultModelsAnalysis | undefined;
 }) {
   const findingsData = options && 'findingsData' in options ? options.findingsData : defaultFindingsEligibility;
   const findingsFetching = options?.findingsFetching ?? false;
@@ -91,6 +100,7 @@ function installQueryResponses(options?: {
   const analysisData = options && 'analysisData' in options ? options.analysisData : defaultDomainAnalysis;
   const analysisFetching = options?.analysisFetching ?? false;
   const analysisError = options?.analysisError;
+  const modelsAnalysisData = options && 'modelsAnalysisData' in options ? options.modelsAnalysisData : defaultModelsAnalysis;
 
   useQueryMock.mockImplementation((args: { query: unknown }) => {
     if (args.query === DOMAIN_AVAILABLE_SIGNATURES_QUERY) {
@@ -112,6 +122,13 @@ function installQueryResponses(options?: {
         data: analysisData,
         fetching: analysisFetching,
         error: analysisError,
+      }];
+    }
+    if (args.query === MODELS_ANALYSIS_QUERY) {
+      return [{
+        data: modelsAnalysisData,
+        fetching: false,
+        error: undefined,
       }];
     }
     return [{ data: undefined, fetching: false, error: undefined }];
@@ -148,7 +165,7 @@ vi.mock('../../src/components/domains/SimilaritySection', () => ({
 }));
 
 vi.mock('../../src/components/domains/ValuePrioritiesSection', () => ({
-  ValuePrioritiesSection: () => <div>Mock value priorities section</div>,
+  ValuePrioritiesSection: (props: unknown) => valuePrioritiesSectionMock(props),
 }));
 
 describe('DomainAnalysis', () => {
@@ -156,6 +173,7 @@ describe('DomainAnalysis', () => {
     useQueryMock.mockReset();
     useMutationMock.mockReset();
     refreshMutationExecuteMock.mockReset();
+    valuePrioritiesSectionMock.mockClear();
     useMutationMock.mockImplementation((query: unknown) => {
       if (query === REFRESH_DOMAIN_ANALYSIS_MUTATION) {
         return [{ fetching: false }, refreshMutationExecuteMock];
@@ -205,19 +223,14 @@ describe('DomainAnalysis', () => {
         expect.objectContaining({
           variables: expect.objectContaining({
             domainId: 'domain-a',
-            scoreMethod: 'FULL_BT',
             signature: 'vnewtd',
           }),
         }),
       );
     });
 
-    const comboboxes = screen.getAllByRole('combobox');
-    const signatureSelect = comboboxes[1];
-    expect(signatureSelect).toHaveValue('vnewtd');
-
-    const optionLabels = within(signatureSelect).getAllByRole('option').map((option) => option.textContent);
-    expect(optionLabels.slice(0, 3)).toEqual(['Latest @ default', 'v1 @ default', 'Latest @ t=0']);
+    const signatureSelect = screen.getByRole('button', { name: /latest @ default/i });
+    expect(signatureSelect).toBeInTheDocument();
   });
 
   it('does not wait for signatures before starting the analysis query', async () => {
@@ -265,5 +278,76 @@ describe('DomainAnalysis', () => {
     expect(screen.queryByText(/raw trials/i)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /export csv/i })).toBeDisabled();
     expect(screen.queryByRole('button', { name: /run missing vignettes/i })).not.toBeInTheDocument();
+  });
+
+  it('passes domain-equal win rates to the value priorities report when models analysis is available', async () => {
+    installQueryResponses({
+      analysisData: {
+        domainAnalysis: {
+          ...defaultDomainAnalysis.domainAnalysis,
+          models: [
+            {
+              model: 'model-a',
+              label: 'Model A',
+              values: [
+                {
+                  valueKey: 'Achievement',
+                  score: 0,
+                  prioritized: 9,
+                  deprioritized: 1,
+                  neutral: 0,
+                  totalComparisons: 10,
+                },
+              ],
+            },
+          ],
+        },
+      },
+      modelsAnalysisData: {
+        modelsAnalysis: {
+          models: [
+            {
+              modelId: 'model-a',
+              label: 'Model A',
+              values: [
+                {
+                  valueKey: 'Achievement',
+                  pooledWinRate: 61,
+                  stabilityScore: 80,
+                  eligibleDomainCount: 2,
+                  domains: [],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <DomainAnalysis />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(valuePrioritiesSectionMock).toHaveBeenCalled();
+    });
+
+    const lastCall = valuePrioritiesSectionMock.mock.calls.at(-1)?.[0] as {
+      models: Array<{
+        model: string;
+        winRates?: Record<string, number | null>;
+      }>;
+    };
+
+    expect(lastCall.models).toEqual([
+      expect.objectContaining({
+        model: 'model-a',
+        winRates: expect.objectContaining({
+          Achievement: 61,
+        }),
+      }),
+    ]);
   });
 });

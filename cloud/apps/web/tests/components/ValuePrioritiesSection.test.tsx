@@ -21,7 +21,7 @@ function buildModel(label: string): ModelEntry {
 }
 
 describe('ValuePrioritiesSection', () => {
-  it('renders the value priorities heading without the old combined model groups block', () => {
+  it('renders the value priorities heading without the retired BT toggle', () => {
     render(
       <MemoryRouter>
         <ValuePrioritiesSection
@@ -34,6 +34,6 @@ describe('ValuePrioritiesSection', () => {
 
     expect(screen.getByRole('heading', { name: 'Value Priorities' })).toBeInTheDocument();
     expect(screen.queryByText(/model groups/i)).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^win rate$/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /full bt/i })).not.toBeInTheDocument();
   });
 });

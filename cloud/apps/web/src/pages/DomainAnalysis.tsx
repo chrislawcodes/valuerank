@@ -4,6 +4,7 @@ import { useMutation, useQuery } from 'urql';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Loading } from '../components/ui/Loading';
 import { Button } from '../components/ui/Button';
+import { Select } from '../components/ui/Select';
 import {
   DOMAIN_AVAILABLE_SIGNATURES_QUERY,
   DOMAIN_ANALYSIS_QUERY,
@@ -17,6 +18,11 @@ import {
   type RefreshDomainAnalysisMutationResult,
   type RefreshDomainAnalysisMutationVariables,
 } from '../api/operations/domainAnalysis';
+import {
+  MODELS_ANALYSIS_QUERY,
+  type ModelsAnalysisQueryResult,
+  type ModelsAnalysisQueryVariables,
+} from '../api/operations/modelsAnalysis';
 import { ModelGroupsSection } from '../components/domains/ModelGroupsSection';
 import { DominanceSection } from '../components/domains/DominanceSection';
 import { SimilaritySection } from '../components/domains/SimilaritySection';
@@ -47,6 +53,7 @@ export function DomainAnalysis() {
   );
   const [selectedDomainId, setSelectedDomainId] = useState<string>(searchParams.get('domainId') ?? '');
   const [selectedSignature, setSelectedSignature] = useState<string>(searchParams.get('signature') ?? '');
+  const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [useLegacyQuery, setUseLegacyQuery] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -107,7 +114,6 @@ export function DomainAnalysis() {
     const next = new URLSearchParams(searchParams);
     if (nextDomainId !== '') next.set('domainId', nextDomainId);
     else next.delete('domainId');
-    next.set('scoreMethod', 'FULL_BT');
     if (selectedScope === 'ALL_DOMAINS') next.set('scope', ALL_DOMAINS_SCOPE);
     else next.delete('scope');
     if (selectedSignature === '') next.delete('signature');
@@ -124,7 +130,6 @@ export function DomainAnalysis() {
     variables: {
       domainId: selectedDomainId === '' ? domains[0]?.id ?? '' : selectedDomainId,
       scope: selectedScope === 'ALL_DOMAINS' ? ALL_DOMAINS_SCOPE : undefined,
-      scoreMethod: 'FULL_BT',
       signature: selectedSignature === '' ? undefined : selectedSignature,
     },
     pause: selectedDomainId === '' || activeUseLegacyQuery,
@@ -134,6 +139,15 @@ export function DomainAnalysis() {
     query: DOMAIN_ANALYSIS_QUERY_LEGACY,
     variables: { domainId: selectedDomainId },
     pause: selectedDomainId === '' || !activeUseLegacyQuery,
+    requestPolicy: 'cache-and-network',
+  });
+  const [{ data: modelsAnalysisData }] = useQuery<ModelsAnalysisQueryResult, ModelsAnalysisQueryVariables>({
+    query: MODELS_ANALYSIS_QUERY,
+    variables: {
+      ...(selectedScope === 'DOMAIN' && selectedDomainId !== '' ? { domainId: selectedDomainId } : {}),
+      ...(selectedSignature !== '' ? { signature: selectedSignature } : {}),
+    },
+    pause: selectedScope === 'DOMAIN' && selectedDomainId === '',
     requestPolicy: 'cache-and-network',
   });
   const [{ fetching: refreshFetching }, refreshDomainAnalysis] = useMutation<
@@ -162,12 +176,20 @@ export function DomainAnalysis() {
 
   const models = useMemo<ModelEntry[]>(() => {
     const sourceModels = data?.domainAnalysis.models ?? [];
+    const pooledWinRatesByModel = new Map<string, Map<string, number | null>>(
+      (modelsAnalysisData?.modelsAnalysis.models ?? []).map((model) => [
+        model.modelId,
+        new Map(model.values.map((value) => [value.valueKey, value.pooledWinRate])),
+      ]),
+    );
+
     return sourceModels.map((model) => {
       const valueMap = new Map(model.values.map((e) => [e.valueKey, e.score]));
       const winRateMap = new Map(model.values.map((e) => {
         const neutral = e.neutral ?? 0;
         const denom = e.prioritized + e.deprioritized + neutral;
-        return [e.valueKey, denom > 0 ? (e.prioritized / denom) * 100 : null] as const;
+        const pooledWinRate = pooledWinRatesByModel.get(model.model)?.get(e.valueKey) ?? null;
+        return [e.valueKey, pooledWinRate ?? (denom > 0 ? (e.prioritized / denom) * 100 : null)] as const;
       }));
       const values = VALUES.reduce<Record<ValueKey, number>>((acc, valueKey) => {
         acc[valueKey] = valueMap.get(valueKey) ?? 0;
@@ -184,7 +206,24 @@ export function DomainAnalysis() {
         winRates,
       };
     });
-  }, [data]);
+  }, [data, modelsAnalysisData]);
+  useEffect(() => {
+    if (selectedModelId == null) return;
+    if (models.some((model) => model.model === selectedModelId)) return;
+    setSelectedModelId(null);
+  }, [models, selectedModelId]);
+
+  const modelOptions = useMemo(
+    () => [
+      { value: 'all', label: 'All models' },
+      ...models.map((model) => ({ value: model.model, label: model.label })),
+    ],
+    [models],
+  );
+  const visibleModels = useMemo(
+    () => (selectedModelId == null ? models : models.filter((model) => model.model === selectedModelId)),
+    [models, selectedModelId],
+  );
 
   const unavailableModels = useMemo<DomainAnalysisModelAvailability[]>(
     () => (data?.domainAnalysis.unavailableModels ?? []).map((m) => ({ model: m.model, label: m.label, reason: m.reason })),
@@ -287,37 +326,51 @@ export function DomainAnalysis() {
                 : 'Analysis is shown from the latest saved snapshot for this domain.'}
             </p>
           </div>
-          <div className="flex flex-col gap-2 md:flex-row md:items-center">
-            <select
-              className="rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800"
-              value={isAllDomains ? ALL_DOMAINS_SCOPE : selectedDomainId}
-              onChange={(e) => {
-                if (e.target.value === ALL_DOMAINS_SCOPE) {
-                  setSelectedScope('ALL_DOMAINS');
-                  return;
+          <div className="flex flex-col gap-2 md:flex-row md:items-end">
+            <div className="min-w-[210px]">
+              <Select
+                label="Domain scope"
+                options={[
+                  { value: ALL_DOMAINS_SCOPE, label: 'All domains' },
+                  ...domains.map((domain) => ({ value: domain.id, label: domain.name })),
+                ]}
+                value={isAllDomains ? ALL_DOMAINS_SCOPE : selectedDomainId}
+                onChange={(value) => {
+                  if (value === ALL_DOMAINS_SCOPE) {
+                    setSelectedScope('ALL_DOMAINS');
+                    return;
+                  }
+                  setSelectedScope('DOMAIN');
+                  setSelectedDomainId(value);
+                }}
+                disabled={domainsLoading || (domains.length === 0 && !isAllDomains)}
+              />
+            </div>
+            <div className="min-w-[210px]">
+              <Select
+                label="Signature"
+                options={
+                  signatureOptions.length === 0
+                    ? [{ value: '', label: 'No signatures with completed runs', disabled: true }]
+                    : signatureOptions.map((opt) => ({
+                      value: opt.signature,
+                      label: formatSignatureOptionLabel(opt),
+                    }))
                 }
-                setSelectedScope('DOMAIN');
-                setSelectedDomainId(e.target.value);
-              }}
-              disabled={domainsLoading || (domains.length === 0 && !isAllDomains)}
-            >
-              <option value={ALL_DOMAINS_SCOPE}>All domains</option>
-              {domains.length === 0 && !domainsLoading && <option value="">No domains available</option>}
-              {domains.map((domain) => (
-                <option key={domain.id} value={domain.id}>{domain.name}</option>
-              ))}
-            </select>
-            <select
-              className="rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800"
-              value={selectedSignature}
-              onChange={(e) => setSelectedSignature(e.target.value)}
-              disabled={signaturesLoading || signatureOptions.length === 0}
-            >
-              {signatureOptions.length === 0 && <option value="">No signatures with completed runs</option>}
-              {signatureOptions.map((opt) => (
-                <option key={opt.signature} value={opt.signature}>{formatSignatureOptionLabel(opt)}</option>
-              ))}
-            </select>
+                value={selectedSignature}
+                onChange={(value) => setSelectedSignature(value)}
+                disabled={signaturesLoading || signatureOptions.length === 0}
+              />
+            </div>
+            <div className="min-w-[210px]">
+              <Select
+                label="Model focus"
+                options={modelOptions}
+                value={selectedModelId ?? 'all'}
+                onChange={(value) => setSelectedModelId(value === 'all' ? null : value)}
+                disabled={models.length === 0}
+              />
+            </div>
             <Button
               type="button"
               variant="secondary"
@@ -331,6 +384,11 @@ export function DomainAnalysis() {
           </div>
           {exportError !== null && <p className="mt-1 text-xs text-amber-700">{exportError}</p>}
         </div>
+        {selectedModelId !== null && (
+          <p className="mt-2 text-xs text-gray-500">
+            Showing only {models.find((model) => model.model === selectedModelId)?.label ?? 'the selected model'} across all tables.
+          </p>
+        )}
         {data?.domainAnalysis != null && missingDefinitionCount > 0 && !isAllDomains && (
           <div className="mt-2 space-y-1 text-xs text-gray-500">
             <>
@@ -356,15 +414,19 @@ export function DomainAnalysis() {
         <Loading size="lg" text="Loading domain analysis..." />
       ) : (
         <>
-          <ModelGroupsSection clusterAnalysis={data?.domainAnalysis.clusterAnalysis} />
+          <ModelGroupsSection clusterAnalysis={data?.domainAnalysis.clusterAnalysis} selectedModelId={selectedModelId} />
           <ValuePrioritiesSection
-            models={models}
+            models={visibleModels}
             selectedDomainId={selectedDomainId}
             selectedSignature={selectedSignature === '' ? null : selectedSignature}
             isReadOnly={isAllDomains}
           />
-          <DominanceSection models={models} unavailableModels={unavailableModels} />
-          <SimilaritySection models={models} clusterAnalysis={data?.domainAnalysis.clusterAnalysis} />
+          <DominanceSection
+            models={visibleModels}
+            unavailableModels={unavailableModels}
+            selectedModelId={selectedModelId}
+          />
+          <SimilaritySection models={visibleModels} clusterAnalysis={data?.domainAnalysis.clusterAnalysis} />
         </>
       )}
 

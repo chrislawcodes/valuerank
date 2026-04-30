@@ -66,15 +66,20 @@ function getClusterPersonality(cluster: DomainCluster): ClusterPersonality {
 
 type ModelGroupsSectionProps = {
   clusterAnalysis?: ClusterAnalysis;
+  selectedModelId?: string | null;
 };
 
-export function ModelGroupsSection({ clusterAnalysis }: ModelGroupsSectionProps) {
+export function ModelGroupsSection({ clusterAnalysis, selectedModelId = null }: ModelGroupsSectionProps) {
   const summaryTableRef = useRef<HTMLDivElement>(null);
   const [showModelGroupsHelp, setShowModelGroupsHelp] = useState(false);
 
   const clusters = useMemo(
-    () => (clusterAnalysis == null || clusterAnalysis.skipped ? [] : clusterAnalysis.clusters),
-    [clusterAnalysis],
+    () => {
+      if (clusterAnalysis == null || clusterAnalysis.skipped) return [];
+      if (selectedModelId == null) return clusterAnalysis.clusters;
+      return clusterAnalysis.clusters.filter((cluster) => cluster.members.some((member) => member.model === selectedModelId));
+    },
+    [clusterAnalysis, selectedModelId],
   );
 
   return (

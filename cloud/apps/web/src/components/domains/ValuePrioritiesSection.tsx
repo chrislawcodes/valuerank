@@ -12,6 +12,7 @@ import {
 } from '../../data/domainAnalysisData';
 import { getPriorityColor } from './domainAnalysisColors';
 import { ValuePrioritiesHelpPanel } from './ValuePrioritiesHelpPanel';
+import { computeDots } from '../models/stabilityDots';
 
 type SortState = {
   key: 'model' | ValueKey;
@@ -47,6 +48,32 @@ function hasGroupEndBorder(value: ValueKey): boolean {
   return value === 'Benevolence_Dependability' || value === 'Security_Personal' || value === 'Self_Direction_Action';
 }
 
+function renderDots(score: number | null): JSX.Element {
+  const states = computeDots(score);
+  return (
+    <span className="inline-flex items-center gap-0.5" aria-hidden="true">
+      {states.map((state, index) => {
+        if (state === 'full') {
+          return <span key={index} className="inline-block h-1.5 w-1.5 rounded-full bg-current" />;
+        }
+        if (state === 'half') {
+          return (
+            <span
+              key={index}
+              className="inline-block h-1.5 w-1.5 rounded-full"
+              style={{ background: 'linear-gradient(to right, currentColor 50%, transparent 50%)' }}
+            />
+          );
+        }
+        if (state === 'muted') {
+          return <span key={index} className="inline-block h-1.5 w-1.5 rounded-full border border-current opacity-30" />;
+        }
+        return <span key={index} className="inline-block h-1.5 w-1.5 rounded-full border border-current" />;
+      })}
+    </span>
+  );
+}
+
 type ValuePrioritiesSectionProps = {
   models: ModelEntry[];
   selectedDomainId: string;
@@ -64,7 +91,6 @@ export function ValuePrioritiesSection({
   const detailedTableRef = useRef<HTMLDivElement>(null);
   const opennessGroupRef = useRef<HTMLTableCellElement>(null);
   const hedonismCellRef = useRef<HTMLTableCellElement>(null);
-  const [scoreMode, setScoreMode] = useState<'WIN_RATE' | 'FULL_BT'>('WIN_RATE');
   const [sortState, setSortState] = useState<SortState>({ key: 'model', direction: 'asc' });
   const [showSectionHelp, setShowSectionHelp] = useState(false);
   const [opennessSplitPercent, setOpennessSplitPercent] = useState(33.3333);
@@ -87,22 +113,15 @@ export function ValuePrioritiesSection({
       );
     } else {
       nextModels.sort((a, b) => {
-        const aVal = scoreMode === 'WIN_RATE' ? (a.winRates?.[key] ?? -Infinity) : a.values[key];
-        const bVal = scoreMode === 'WIN_RATE' ? (b.winRates?.[key] ?? -Infinity) : b.values[key];
+        const aVal = a.winRates?.[key] ?? -Infinity;
+        const bVal = b.winRates?.[key] ?? -Infinity;
         return sortState.direction === 'asc' ? aVal - bVal : bVal - aVal;
       });
     }
     return nextModels;
-  }, [models, sortState, scoreMode]);
+  }, [models, sortState]);
 
-  const valueRange = useMemo(() => {
-    if (scoreMode === 'WIN_RATE') {
-      return { min: 0, max: 100 };
-    }
-    const all = models.flatMap((model) => COLUMN_VALUES.map((v) => model.values[v]));
-    if (all.length === 0) return { min: -1, max: 1 };
-    return { min: Math.min(...all), max: Math.max(...all) };
-  }, [models, scoreMode]);
+  const valueRange = useMemo(() => ({ min: 0, max: 100 }), []);
 
   useLayoutEffect(() => {
     const updateSplitPosition = () => {
@@ -136,7 +155,7 @@ export function ValuePrioritiesSection({
       observer.disconnect();
       window.removeEventListener('resize', updateSplitPosition);
     };
-  }, [scoreMode, models.length]);
+  }, [models.length]);
 
   const handleValueCellClick = (modelId: string, valueKey: ValueKey) => {
     if (isReadOnly || selectedDomainId === '') return;
@@ -144,7 +163,6 @@ export function ValuePrioritiesSection({
       domainId: selectedDomainId,
       modelId,
       valueKey,
-      scoreMethod: 'FULL_BT',
     });
     if (selectedSignature !== null) {
       params.set('signature', selectedSignature);
@@ -153,7 +171,6 @@ export function ValuePrioritiesSection({
   };
 
   function getCellValue(model: ModelEntry, valueKey: ValueKey): number | null {
-    if (scoreMode === 'FULL_BT') return model.values[valueKey];
     return model.winRates?.[valueKey] ?? null;
   }
 
@@ -174,30 +191,10 @@ export function ValuePrioritiesSection({
             </Button>
           </div>
           <p className="text-sm text-gray-600">Which values each model favors most and least.</p>
-          {showSectionHelp && <ValuePrioritiesHelpPanel scoreMode={scoreMode} />}
+          {showSectionHelp && <ValuePrioritiesHelpPanel />}
         </div>
         <div className="flex items-center gap-3">
           <p className="text-xs text-gray-500">Click a column heading to sort.</p>
-          <div className="flex rounded border border-gray-200 text-xs">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setScoreMode('WIN_RATE')}
-              className={`h-auto rounded-none px-3 py-1 text-xs ${scoreMode === 'WIN_RATE' ? 'bg-sky-600 text-white hover:bg-sky-600 hover:text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
-            >
-              Win Rate
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setScoreMode('FULL_BT')}
-              className={`h-auto rounded-none border-l border-gray-200 px-3 py-1 text-xs ${scoreMode === 'FULL_BT' ? 'bg-sky-600 text-white hover:bg-sky-600 hover:text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
-            >
-              Full BT
-            </Button>
-          </div>
         </div>
       </div>
 
@@ -342,13 +339,14 @@ export function ValuePrioritiesSection({
                           onClick={() => handleValueCellClick(model.model, value)}
                           disabled={selectedDomainId === '' || isReadOnly}
                           title={isReadOnly ? 'Value drill-down is unavailable in All domains mode' : undefined}
-                      >
-                          <span>
-                            {(() => {
-                              if (cellValue === null) return 'n/a';
-                              if (scoreMode === 'WIN_RATE') return `${cellValue.toFixed(1)}%`;
-                              return `${cellValue > 0 ? '+' : ''}${cellValue.toFixed(2)}`;
-                            })()}
+                        >
+                          <span className="flex flex-col items-end gap-1">
+                            <span>
+                              {cellValue === null ? 'n/a' : `${cellValue.toFixed(1)}%`}
+                            </span>
+                            <span className={cellValue === null ? 'text-gray-300' : 'text-gray-700'}>
+                              {renderDots(cellValue)}
+                            </span>
                           </span>
                         </Button>
                       </td>
