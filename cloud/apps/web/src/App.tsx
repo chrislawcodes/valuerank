@@ -7,7 +7,6 @@ import { AuthProvider } from './auth/context';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Layout } from './components/layout/Layout';
 import { Login } from './pages/Login';
-import { Dashboard } from './pages/Dashboard';
 import { ArchiveHome } from './pages/ArchiveHome';
 import { Definitions } from './pages/Definitions';
 import { Domains } from './pages/Domains';
@@ -80,14 +79,7 @@ function App() {
             <Route path="/login" element={<Login />} />
 
             {/* Protected routes with layout */}
-            <Route
-              path="/"
-              element={
-                <ProtectedLayout>
-                  <Dashboard />
-                </ProtectedLayout>
-              }
-            />
+            <Route path="/" element={<Navigate to="/domains/analysis" replace />} />
             <Route
               path="/status"
               element={
