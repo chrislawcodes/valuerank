@@ -1,7 +1,6 @@
-import { db } from '@valuerank/db';
+import { db, Prisma } from '@valuerank/db';
 import { getModelsFromDatabase } from '../../config/models.js';
 import { runMatchesSignature } from './domain-coverage-gql-types.js';
-import { resolveTranscriptDecisionModel } from './domain/shared.js';
 import {
   DOMAIN_ANALYSIS_VALUE_KEYS,
   extractValuePair,
@@ -14,7 +13,6 @@ import {
   type ModelsConfidenceModelResultShape,
   type ModelsConfidenceValueResultShape,
 } from '../types/models-confidence.js';
-
 
 builder.queryField('modelsConfidence', (t) =>
   t.field({
@@ -49,11 +47,9 @@ builder.queryField('modelsConfidence', (t) =>
         })),
       };
 
-      // Query source runs directly — the same approach circumplexAnalysis uses.
-      // Going through aggregate runs is wrong because aggregate run configs have
-      // no version/temperature, so runMatchesSignature('vnewtd') matches ALL of
-      // them (null === null), pulling every sourceRunId in the system at once.
-      // Source runs store their actual signature in config, so filtering works correctly.
+      // Query source runs directly — same approach as circumplexAnalysis.
+      // Aggregate run configs have no version/temperature, so signature
+      // matching against them is unreliable (vnewtd matches everything).
       const allSourceRuns = await db.run.findMany({
         where: {
           status: 'COMPLETED',
@@ -81,8 +77,7 @@ builder.queryField('modelsConfidence', (t) =>
         matchingRuns.map((r) => r.definitionId).filter((id): id is string => id != null),
       )];
 
-      // Fetch definition content once per definition (much cheaper than loading
-      // definitionSnapshot JSON blob per transcript).
+      // Fetch definition content once per definition to get the value pair.
       const definitions = await db.definition.findMany({
         where: { id: { in: definitionIds } },
         select: { id: true, content: true },
@@ -93,65 +88,59 @@ builder.queryField('modelsConfidence', (t) =>
         defValuePairMap.set(def.id, extractValuePair(def.content));
       }
 
-      // Fetch transcripts without definitionSnapshot — we supply pairOverride instead,
-      // which resolveTranscriptDecisionModel uses directly (skipping snapshot parsing).
-      const transcripts = await db.transcript.findMany({
-        where: { runId: { in: sourceRunIds }, deletedAt: null },
-        select: {
-          modelId: true,
-          runId: true,
-          decisionMetadata: true,
-        },
-      });
+      // SQL aggregation: extract strength directly from the cached canonical decision
+      // in the JSONB. This avoids loading full 1KB decisionMetadata blobs for each
+      // transcript (313k transcripts × 1KB = 307 MB overflows the Prisma NAPI buffer).
+      // 99.99% of transcripts have a cacheVersion=2 canonical decision in summaryCache.
+      const rawRows = await db.$queryRaw<Array<{
+        model_id: string;
+        run_id: string;
+        strong_count: bigint;
+        lean_count: bigint;
+      }>>(Prisma.sql`
+        SELECT
+          t.model_id,
+          t.run_id,
+          SUM(CASE WHEN t.decision_metadata #>> '{summaryCache,summary,canonicalDecision,strength}' = 'strong' THEN 1 ELSE 0 END)::int AS strong_count,
+          SUM(CASE WHEN t.decision_metadata #>> '{summaryCache,summary,canonicalDecision,strength}' = 'lean'   THEN 1 ELSE 0 END)::int AS lean_count
+        FROM transcripts t
+        WHERE t.run_id = ANY(${sourceRunIds})
+          AND t.deleted_at IS NULL
+          AND t.decision_metadata #>> '{summaryCache,summary,canonicalDecision,cacheVersion}' = '2'
+        GROUP BY t.model_id, t.run_id
+      `);
 
-      // Accumulate per-definition counts to avoid unequal weighting.
-      // A vignette run 10× would swamp one run once in a flat sum.
-      // Instead: compute strong% per definition, then average across definitions.
-      //
+      // Accumulate per-definition counts (not per-transcript) so that vignettes run
+      // many times don't outweigh vignettes run fewer times.
       // Structure: modelId -> definitionId -> { valueKeys, strong, lean }
-      // All runs of the same definition collapse into one DefData entry.
       type DefData = { valueKeys: DomainAnalysisValueKey[]; strong: number; lean: number };
       const perModelDefs = new Map<string, Map<string, DefData>>();
       for (const model of activeModels) {
         perModelDefs.set(model.modelId, new Map());
       }
 
-      for (const transcript of transcripts) {
-        const modelMap = perModelDefs.get(transcript.modelId);
+      for (const row of rawRows) {
+        const modelMap = perModelDefs.get(row.model_id);
         if (modelMap == null) continue;
 
-        const definitionId = runToDefinitionId.get(transcript.runId);
+        const definitionId = runToDefinitionId.get(row.run_id);
         if (definitionId == null) continue;
-
-        const pairOverride = defValuePairMap.get(definitionId);
-
-        // orientationFlipped is not needed: both values in a pair receive the same
-        // strength count regardless of which was favored, so direction doesn't matter.
-        const { canonical } = resolveTranscriptDecisionModel({
-          decisionMetadata: transcript.decisionMetadata,
-          orientationFlipped: null,
-          pairOverride: pairOverride ?? undefined,
-        });
-
-        if (canonical.direction !== 'favor_first' && canonical.direction !== 'favor_second') continue;
-        if (canonical.strength !== 'strong' && canonical.strength !== 'lean') continue;
 
         let defData = modelMap.get(definitionId);
         if (defData == null) {
-          // Derive the two values tested by this definition from the pair, not from the
-          // canonical decision, so the value association is stable across all transcripts.
           const pair = defValuePairMap.get(definitionId) ?? null;
           const valueKeys: DomainAnalysisValueKey[] = pair != null ? [pair.valueA, pair.valueB] : [];
           defData = { valueKeys, strong: 0, lean: 0 };
           modelMap.set(definitionId, defData);
         }
 
-        if (canonical.strength === 'strong') defData.strong += 1;
-        else defData.lean += 1;
+        // Sum across all runs of the same definition.
+        defData.strong += Number(row.strong_count);
+        defData.lean += Number(row.lean_count);
       }
 
-      // Per-definition confidence = strong / (strong + lean) for that definition.
-      // Final confidence = mean of per-definition confidences (equal weight per vignette).
+      // Per-definition confidence = strong / (strong + lean).
+      // Final confidence = mean of per-definition rates (equal weight per vignette).
       function meanConfidence(rates: number[]): number | null {
         if (rates.length === 0) return null;
         return (rates.reduce((a, b) => a + b, 0) / rates.length) * 100;
@@ -172,7 +161,7 @@ builder.queryField('modelsConfidence', (t) =>
         const overallStrongCount = defEntries.reduce((s, d) => s + d.strong, 0);
         const overallLeanCount = defEntries.reduce((s, d) => s + d.lean, 0);
 
-        // Per-value: average per-definition strong% across definitions that test that value.
+        // Per-value: average per-definition strong% across definitions testing that value.
         const values: ModelsConfidenceValueResultShape[] = DOMAIN_ANALYSIS_VALUE_KEYS.map((valueKey) => {
           const relevantDefs = defEntries.filter((d) => d.valueKeys.includes(valueKey));
           const rates = relevantDefs
