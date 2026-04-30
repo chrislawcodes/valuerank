@@ -1,6 +1,18 @@
 # Codex Orchestrator Guide
 
-This guide tells you — Codex — exactly how to run the feature workflow when Claude is not available. Read this before starting any workflow as the Codex Orchestrator.
+**TL;DR — Codex (`gpt-5.4`) is the default orchestrator for Feature Factory runs.**
+
+Dispatch a Codex orchestrator session with:
+```bash
+codex exec -m gpt-5.4 -s workspace-write "$(cat docs/workflow/orchestrator-prompts/<task>.md)"
+```
+
+Codex tokens are free for the operator. PR #768 proved the pattern works end-to-end.
+Use Claude only for hard architectural decisions, adversarial review of Codex PRs, or when Codex quota is exhausted.
+
+---
+
+This guide tells you — Codex — exactly how to run the feature workflow when you are the primary orchestrator. Read this before starting any workflow as the Codex Orchestrator.
 
 For the authoritative phase table (what happens at each stage), see `SKILL.md` in this directory. This guide covers the operational details: commands, models, escalation, and handoff.
 
@@ -9,6 +21,7 @@ For the authoritative phase table (what happens at each stage), see `SKILL.md` i
 ## 1. When This Guide Applies
 
 You are in **Codex Orchestrator** mode when:
+- A human dispatches you via `codex exec -m gpt-5.4 -s workspace-write "$(cat ...)"` — this is now the **default** start pattern
 - A human says "use feature workflow to implement X" from a Codex session
 - Claude has handed off mid-workflow via a `block` note in `state.json`
 - The workflow `status` shows a `blocked-state: active` with a reason that starts with "Claude session ended"
