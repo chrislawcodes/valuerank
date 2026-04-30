@@ -182,6 +182,12 @@ export function DomainAnalysis() {
         new Map(model.values.map((value) => [value.valueKey, value.pooledWinRate])),
       ]),
     );
+    const stabilityScoresByModel = new Map<string, Map<string, number | null>>(
+      (modelsAnalysisData?.modelsAnalysis.models ?? []).map((model) => [
+        model.modelId,
+        new Map(model.values.map((value) => [value.valueKey, value.stabilityScore] as const)),
+      ]),
+    );
 
     return sourceModels.map((model) => {
       const valueMap = new Map(model.values.map((e) => [e.valueKey, e.score]));
@@ -197,11 +203,16 @@ export function DomainAnalysis() {
         acc[valueKey] = winRateMap.get(valueKey) ?? null;
         return acc;
       }, {} as Record<ValueKey, number | null>);
+      const stabilityScores = VALUES.reduce<Record<ValueKey, number | null>>((acc, valueKey) => {
+        acc[valueKey] = stabilityScoresByModel.get(model.model)?.get(valueKey) ?? null;
+        return acc;
+      }, {} as Record<ValueKey, number | null>);
       return {
         model: model.model,
         label: model.label,
         values,
         winRates,
+        stabilityScores,
       };
     });
   }, [data, modelsAnalysisData]);
