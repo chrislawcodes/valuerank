@@ -77,9 +77,9 @@ describe('ValuePrioritiesSection', () => {
     expect(naCell).toBeDefined();
   });
 
-  it('does not render a support rate toggle', () => {
+  it('does not render a Full BT toggle', () => {
     renderSection();
 
-    expect(screen.queryByRole('button', { name: /support rate/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /full bt/i })).toBeNull();
   });
 });

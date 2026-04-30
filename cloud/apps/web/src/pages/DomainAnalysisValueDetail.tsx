@@ -33,12 +33,11 @@ export function DomainAnalysisValueDetail() {
   const modelId = searchParams.get('modelId') ?? '';
   const valueKey = searchParams.get('valueKey') ?? '';
   const signature = searchParams.get('signature');
-  const scoreMethod: 'LOG_ODDS' | 'FULL_BT' = searchParams.get('scoreMethod') === 'FULL_BT' ? 'FULL_BT' : 'LOG_ODDS';
   const backParams = new URLSearchParams();
   if (domainId !== '') backParams.set('domainId', domainId);
-  backParams.set('scoreMethod', scoreMethod);
   if (signature !== null && signature !== '') backParams.set('signature', signature);
   const backLink = `/domains/analysis?${backParams.toString()}`;
+  const scoreMethod = 'LOG_ODDS' as const;
 
   const [{ data: scoredData, fetching: scoredFetching, error: scoredError }] = useQuery<
     DomainAnalysisValueDetailQueryResult,
@@ -187,14 +186,11 @@ export function DomainAnalysisValueDetail() {
       </div>
 
       {showMethodology && (
-        <section className="rounded-lg border border-gray-200 bg-white p-4">
-          <h2 className="text-base font-medium text-gray-900">
-            {scoreMethod === 'FULL_BT' ? 'Score Method (Full Bradley-Terry)' : 'Score Method (Smoothed Log-Odds)'}
-          </h2>
+      <section className="rounded-lg border border-gray-200 bg-white p-4">
+          <h2 className="text-base font-medium text-gray-900">Score Method (Smoothed Log-Odds)</h2>
           <p className="mt-1 text-sm text-gray-600">
-            {scoreMethod === 'FULL_BT'
-              ? 'We fit a full Bradley-Terry model over pairwise value matchups for this AI. The model estimates a latent strength for each value that best explains observed wins and losses.'
-              : 'We compare how often this value wins vs. loses across relevant vignettes. Neutral outcomes are still shown, but the score itself uses wins and losses.'}
+            We compare how often this value wins vs. loses across relevant vignettes. Neutral outcomes are still shown,
+            but the score itself uses wins and losses.
           </p>
           <div className="mt-3 grid gap-2 text-sm text-gray-700 md:grid-cols-2">
             <div className="rounded border border-gray-200 bg-gray-50 p-2">Wins (prioritized): {detail.prioritized}</div>
@@ -204,42 +200,21 @@ export function DomainAnalysisValueDetail() {
           </div>
           <div className="mt-3 rounded border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
             <p className="font-medium">Formula (high-school version)</p>
-            {scoreMethod === 'FULL_BT' ? (
-              <>
-                <p className="mt-1">Score = logarithm(estimated BT strength for this value)</p>
-                <p className="mt-1 text-xs text-sky-800">
-                  The BT model uses all pairwise wins/losses together, then solves for a best-fit strength per value.
-                </p>
-                <p className="mt-1">
-                  Final BT score shown here = {detail.score.toFixed(4)}
-                </p>
-                <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-sky-800">
-                  <li>Name: Full Bradley-Terry score.</li>
-                  <li>Used for pairwise ranking problems where many items compete head-to-head.</li>
-                  <li>Better than simple ratios when comparisons form a connected network across values.</li>
-                  <li>Strengths are estimated jointly, so each value is calibrated against all others.</li>
-                  <li>Positive values indicate above-average latent strength; negative values indicate below-average.</li>
-                </ul>
-              </>
-            ) : (
-              <>
-                <p className="mt-1">Score = logarithm((wins + 1) / (losses + 1))</p>
-                <p className="mt-1 text-xs text-sky-800">
-                  Here, “logarithm” means the natural logarithm (often written as <code>ln</code>).
-                </p>
-                <p className="mt-1">
-                  Score = logarithm(({detail.prioritized} + 1) / ({detail.deprioritized} + 1)) = logarithm({ratio.toFixed(4)}) ={' '}
-                  {detail.score.toFixed(4)}
-                </p>
-                <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-sky-800">
-                  <li>Name: Bradley-Terry-style smoothed log-odds approximation.</li>
-                  <li>Faster to compute and easy to trace directly from wins/losses.</li>
-                  <li>The +1 smoothing avoids divide-by-zero and extreme jumps with sparse data.</li>
-                  <li>Log scaling controls extreme ratios so one matchup does not dominate.</li>
-                  <li>Positive values mean favored more often; negative values mean disfavored more often.</li>
-                </ul>
-              </>
-            )}
+            <p className="mt-1">Score = logarithm((wins + 1) / (losses + 1))</p>
+            <p className="mt-1 text-xs text-sky-800">
+              Here, “logarithm” means the natural logarithm (often written as <code>ln</code>).
+            </p>
+            <p className="mt-1">
+              Score = logarithm(({detail.prioritized} + 1) / ({detail.deprioritized} + 1)) = logarithm({ratio.toFixed(4)}) ={' '}
+              {detail.score.toFixed(4)}
+            </p>
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-sky-800">
+              <li>Name: Bradley-Terry-style smoothed log-odds approximation.</li>
+              <li>Faster to compute and easy to trace directly from wins/losses.</li>
+              <li>The +1 smoothing avoids divide-by-zero and extreme jumps with sparse data.</li>
+              <li>Log scaling controls extreme ratios so one matchup does not dominate.</li>
+              <li>Positive values mean favored more often; negative values mean disfavored more often.</li>
+            </ul>
           </div>
         </section>
       )}

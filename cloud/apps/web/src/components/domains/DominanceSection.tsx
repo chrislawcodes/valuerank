@@ -17,6 +17,7 @@ import {
 type DominanceSectionProps = {
   models: ModelEntry[];
   unavailableModels: DomainAnalysisModelAvailability[];
+  selectedModelId: string | null;
 };
 
 const THEME_COLORS: DominanceSectionThemeColors = {
@@ -37,9 +38,8 @@ const THEME_COLORS: DominanceSectionThemeColors = {
   idleRingColor: '#38bdf8',
 };
 
-export function DominanceSection({ models, unavailableModels }: DominanceSectionProps) {
+export function DominanceSection({ models, unavailableModels, selectedModelId }: DominanceSectionProps) {
   const chartRef = useRef<HTMLDivElement>(null);
-  const [selectedModelId, setSelectedModelId] = useState(models[0]?.model ?? '');
   const [focusedValue, setFocusedValue] = useState<ValueKey | null>(null);
   const [hoveredValue, setHoveredValue] = useState<ValueKey | null>(null);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
@@ -73,17 +73,14 @@ export function DominanceSection({ models, unavailableModels }: DominanceSection
     };
   }, [prefersReducedMotion, selectedModelId, slowestDuration]);
 
-  useEffect(() => {
-    if (!models.some((model) => model.model === selectedModelId)) {
-      setSelectedModelId(models[0]?.model ?? '');
-    }
-  }, [models, selectedModelId]);
-
   const modelById = useMemo(
     () => new Map(models.map((model) => [model.model, model])),
     [models],
   );
-  const selectedModel = modelById.get(selectedModelId);
+  const activeModelId = selectedModelId !== null && modelById.has(selectedModelId)
+    ? selectedModelId
+    : models[0]?.model ?? '';
+  const selectedModel = modelById.get(activeModelId);
 
   const {
     contestedPairs,
@@ -110,30 +107,15 @@ export function DominanceSection({ models, unavailableModels }: DominanceSection
         <CopyVisualButton targetRef={chartRef} label="ranking and cycles chart" />
       </div>
 
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <span className={`text-xs font-medium ${THEME_COLORS.panelMutedText}`}>Select AI:</span>
-        <select
-          className="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-800"
-          value={selectedModelId}
-          onChange={(event) => setSelectedModelId(event.target.value)}
-        >
-          {models.map((model) => (
-            <option key={model.model} value={model.model}>
-              {model.label}
-            </option>
-          ))}
-          {unavailableModels.length > 0 && (
-            <option disabled value="">
-              ----------
-            </option>
-          )}
-          {unavailableModels.map((model) => (
-            <option key={model.model} value={model.model} disabled>
-              {model.label} (Unavailable)
-            </option>
-          ))}
-        </select>
+      <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
+        <span className={`font-medium ${THEME_COLORS.panelMutedText}`}>Model focus:</span>
+        <span className={THEME_COLORS.panelText}>{selectedModel?.label ?? 'No model selected'}</span>
       </div>
+      {unavailableModels.length > 0 && (
+        <p className={`mb-3 text-xs ${THEME_COLORS.panelMutedText}`}>
+          {unavailableModels.length} unavailable model{unavailableModels.length === 1 ? '' : 's'} stay hidden from this analysis.
+        </p>
+      )}
 
       {models.length === 0 && (
         <p className={`mb-3 text-xs ${THEME_COLORS.panelMutedText}`}>
