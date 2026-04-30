@@ -126,6 +126,8 @@ export function aggregateAnalysisRows(params: {
     valueB: DomainAnalysisValueKey;
     first: DomainAnalysisValueCounts;
     second: DomainAnalysisValueCounts;
+    firstRates: number[];
+    secondRates: number[];
     runCount: number;
   };
   const defModelAcc = new Map<string, Map<string, DefinitionModelAcc>>();
@@ -155,6 +157,8 @@ export function aggregateAnalysisRows(params: {
           valueB: pair.valueB,
           first: { prioritized: 0, deprioritized: 0, neutral: 0 },
           second: { prioritized: 0, deprioritized: 0, neutral: 0 },
+          firstRates: [],
+          secondRates: [],
           runCount: 0,
         };
         modelMap.set(modelId, acc);
@@ -169,6 +173,16 @@ export function aggregateAnalysisRows(params: {
       acc.second.prioritized += secondCounts.prioritized;
       acc.second.deprioritized += secondCounts.deprioritized;
       acc.second.neutral += secondCounts.neutral;
+
+      const totalFirst = firstCounts.prioritized + firstCounts.deprioritized + firstCounts.neutral;
+      if (totalFirst > 0) {
+        acc.firstRates.push(firstCounts.prioritized / totalFirst);
+      }
+      const totalSecond = secondCounts.prioritized + secondCounts.deprioritized + secondCounts.neutral;
+      if (totalSecond > 0) {
+        acc.secondRates.push(secondCounts.prioritized / totalSecond);
+      }
+
       acc.runCount += 1;
     }
   }
@@ -214,18 +228,17 @@ export function aggregateAnalysisRows(params: {
       addPairwiseWins(pairwiseWins, acc.valueA, acc.valueB, acc.first.prioritized / n);
       addPairwiseWins(pairwiseWins, acc.valueB, acc.valueA, acc.second.prioritized / n);
 
-      // Per-vignette win rate uses raw (pre-normalisation) counts — the ratio is
-      // identical to using normalised counts, but avoids floating-point amplification.
-      const totalA = acc.first.prioritized + acc.first.deprioritized + acc.first.neutral;
-      if (totalA > 0) {
+      // Per-vignette win rate: equal weight per source run (Path B).
+      if (acc.firstRates.length > 0) {
+        const meanA = acc.firstRates.reduce((s, r) => s + r, 0) / acc.firstRates.length;
         const ratesA = vigRates.get(acc.valueA) ?? [];
-        ratesA.push(acc.first.prioritized / totalA);
+        ratesA.push(meanA);
         vigRates.set(acc.valueA, ratesA);
       }
-      const totalB = acc.second.prioritized + acc.second.deprioritized + acc.second.neutral;
-      if (totalB > 0) {
+      if (acc.secondRates.length > 0) {
+        const meanB = acc.secondRates.reduce((s, r) => s + r, 0) / acc.secondRates.length;
         const ratesB = vigRates.get(acc.valueB) ?? [];
-        ratesB.push(acc.second.prioritized / totalB);
+        ratesB.push(meanB);
         vigRates.set(acc.valueB, ratesB);
       }
 
