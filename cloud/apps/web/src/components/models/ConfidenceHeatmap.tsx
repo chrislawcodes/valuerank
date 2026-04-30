@@ -22,7 +22,12 @@ function buildTooltip(valueKey: string, result: ModelsConfidenceModelResult['val
   return `${formatFullSchwartzValueName(valueKey as Parameters<typeof formatFullSchwartzValueName>[0])}\nStrong: ${result.strongCount} · Lean: ${result.leanCount} · Total: ${total}`;
 }
 
-export function ConfidenceHeatmap({ models }: { models: ModelsConfidenceModelResult[] }) {
+type ConfidenceHeatmapProps = {
+  models: ModelsConfidenceModelResult[];
+  onCellClick?: (modelId: string, modelLabel: string, valueKey: string) => void;
+};
+
+export function ConfidenceHeatmap({ models, onCellClick }: ConfidenceHeatmapProps) {
   const sorted = [...models].sort((a, b) => {
     const aConf = a.overallConfidence ?? -1;
     const bConf = b.overallConfidence ?? -1;
@@ -69,9 +74,11 @@ export function ConfidenceHeatmap({ models }: { models: ModelsConfidenceModelRes
                     <td
                       key={key}
                       title={buildTooltip(key, v)}
+                      onClick={onCellClick != null ? () => onCellClick(model.modelId, model.label, key) : undefined}
                       className={cn(
                         'px-2 py-2 text-center border border-gray-100 tabular-nums',
                         getConfidenceTone(v?.confidence ?? null),
+                        onCellClick != null && 'cursor-pointer hover:ring-1 hover:ring-inset hover:ring-violet-400',
                       )}
                     >
                       {formatConfidence(v?.confidence ?? null)}

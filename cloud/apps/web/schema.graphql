@@ -2353,6 +2353,7 @@ type Query {
   ): [AvailableModel!]!
   availableSignatures: [AvailableSignature!]!
   circumplexAnalysis(minTrialsPerValue: Int, modelIds: [String!]!, signature: String!): CircumplexAnalysisResult!
+  confidenceTranscripts(limit: Int, modelId: String!, signature: String, valueKey: String!): [DomainAnalysisConditionTranscript!]!
 
   """Fetch a single definition by ID. Returns null if not found."""
   definition(
@@ -3109,6 +3110,11 @@ type RunAnomaly {
   True when reprobeCount has reached the circuit-breaker limit (3). UI should disable the [Re-probe] button.
   """
   reprobeLimitReached: Boolean!
+
+  """
+  Current pipeline stage for an in-progress manual re-probe: probing | summarizing | analyzing | aggregating | fixed. Null when no re-probe is in flight.
+  """
+  reprobeStage: String
   resolvedAt: DateTime
 
   """The run this anomaly belongs to"""

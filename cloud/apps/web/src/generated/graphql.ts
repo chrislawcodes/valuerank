@@ -2551,6 +2551,7 @@ export type Query = {
   availableModels: Array<AvailableModel>;
   availableSignatures: Array<AvailableSignature>;
   circumplexAnalysis: CircumplexAnalysisResult;
+  confidenceTranscripts: Array<DomainAnalysisConditionTranscript>;
   /** Fetch a single definition by ID. Returns null if not found. */
   definition?: Maybe<Definition>;
   /** Get ancestors of a definition (full chain to root). Returns definitions ordered from root to immediate parent. */
@@ -2798,6 +2799,14 @@ export type QueryCircumplexAnalysisArgs = {
   minTrialsPerValue?: InputMaybe<Scalars['Int']['input']>;
   modelIds: Array<Scalars['String']['input']>;
   signature: Scalars['String']['input'];
+};
+
+
+export type QueryConfidenceTranscriptsArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  modelId: Scalars['String']['input'];
+  signature?: InputMaybe<Scalars['String']['input']>;
+  valueKey: Scalars['String']['input'];
 };
 
 
@@ -4011,6 +4020,16 @@ export type ComparisonRunsListQueryVariables = Exact<{
 
 
 export type ComparisonRunsListQuery = { __typename?: 'Query', runs: Array<{ __typename?: 'Run', id: string, name?: string | null, definitionId: string, status: string, config: unknown, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, transcriptCount: number, analysisStatus?: string | null, definition?: { __typename?: 'Definition', id: string, name: string, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null }> };
+
+export type ConfidenceTranscriptsQueryVariables = Exact<{
+  modelId: Scalars['String']['input'];
+  valueKey: Scalars['String']['input'];
+  signature?: InputMaybe<Scalars['String']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type ConfidenceTranscriptsQuery = { __typename?: 'Query', confidenceTranscripts: Array<{ __typename?: 'DomainAnalysisConditionTranscript', id: string, runId: string, scenarioId?: string | null, modelId: string, decisionModelV2?: unknown | null, turnCount: number, tokenCount: number, durationMs: number, createdAt: string, content: unknown }> };
 
 export type EstimateCostQueryVariables = Exact<{
   definitionId: Scalars['ID']['input'];
@@ -5367,6 +5386,31 @@ export const ComparisonRunsListDocument = gql`
 
 export function useComparisonRunsListQuery(options?: Omit<Urql.UseQueryArgs<ComparisonRunsListQueryVariables>, 'query'>) {
   return Urql.useQuery<ComparisonRunsListQuery, ComparisonRunsListQueryVariables>({ query: ComparisonRunsListDocument, ...options });
+};
+export const ConfidenceTranscriptsDocument = gql`
+    query ConfidenceTranscripts($modelId: String!, $valueKey: String!, $signature: String, $limit: Int) {
+  confidenceTranscripts(
+    modelId: $modelId
+    valueKey: $valueKey
+    signature: $signature
+    limit: $limit
+  ) {
+    id
+    runId
+    scenarioId
+    modelId
+    decisionModelV2
+    turnCount
+    tokenCount
+    durationMs
+    createdAt
+    content
+  }
+}
+    `;
+
+export function useConfidenceTranscriptsQuery(options: Omit<Urql.UseQueryArgs<ConfidenceTranscriptsQueryVariables>, 'query'>) {
+  return Urql.useQuery<ConfidenceTranscriptsQuery, ConfidenceTranscriptsQueryVariables>({ query: ConfidenceTranscriptsDocument, ...options });
 };
 export const EstimateCostDocument = gql`
     query EstimateCost($definitionId: ID!, $models: [String!]!, $samplePercentage: Int, $samplesPerScenario: Int) {
