@@ -45,7 +45,7 @@ describe('ModelValueDetailDrawer', () => {
     );
 
     expect(screen.getByText(/Pooled win rate/i)).toBeDefined();
-    expect(screen.getByText(/68%/)).toBeDefined();
+    expect(screen.getByText(/68.0%/)).toBeDefined();
     expect(screen.queryByText(/Cross-domain stability/i)).toBeNull();
   });
 });

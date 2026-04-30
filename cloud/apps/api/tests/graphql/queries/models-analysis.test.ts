@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { computePooledWinRate, computeStabilityScore } from '../../../src/graphql/queries/models-analysis-math.js';
 import { selectModelsAnalysisSnapshots } from '../../../src/graphql/queries/models-analysis-snapshot-selection.js';
 
 type Snapshot = {
@@ -43,5 +44,30 @@ describe('selectModelsAnalysisSnapshots', () => {
     expect(selected).toEqual([
       snapshot('job-choice', 'domain-analysis:job-choice', 'vnewt0'),
     ]);
+  });
+});
+
+describe('models-analysis math', () => {
+  it('weights pooled win rate by vignette count instead of treating each domain equally', () => {
+    const pooled = computePooledWinRate([
+      { winRate: 40, evidenceWeight: 1 },
+      { winRate: 80, evidenceWeight: 3 },
+    ]);
+
+    expect(pooled).toBe(70);
+  });
+
+  it('returns null when no eligible vignette-weighted contributions are available', () => {
+    expect(computePooledWinRate([
+      { winRate: 40, evidenceWeight: 0 },
+      { winRate: 80, evidenceWeight: -1 },
+    ])).toBeNull();
+  });
+
+  it('keeps stability as an unweighted MAD across contributing domains', () => {
+    expect(computeStabilityScore([
+      { winRate: 40 },
+      { winRate: 80 },
+    ])).toBe(60);
   });
 });

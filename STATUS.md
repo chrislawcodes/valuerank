@@ -93,7 +93,7 @@ Once the above are resolved:
 - [x] Model Value Preference overview report updated at `/models`; screenshot capture is available, the title now matches the report, and model rows no longer repeat the model ID line.
 - [x] Domain Shifts by Value now has an `All models` aggregate view, one-decimal formatting throughout, and content-fit Value / Avg Win Rate columns in the local branch.
 - [x] Model Value Preference overview report updated at `/models`; screenshot capture is available, the title now matches the report, the all-domains value priorities table now includes stability circles, and the comparison table stays below it.
-- [x] Value Priorities now reuses the `/models` pooled win rate when available, so both reports show the same domain-equal first number for the same model/value cell.
+- [x] `/models` reporting now uses the canonical equal-vignette methodology in both tables, with one-decimal display, vignette-weighted cross-domain pooling, and no silent fallback to pooled raw counts when vignette-aware data is missing.
 - [x] Domain Analysis findings controls now live at the top of the page, and the model focus selector applies across the model groups, value priorities, dominance, and similarity sections.
 - [x] Value Priorities now uses win rate only, with the retired Full BT toggle removed and the cell dots rendered under the numbers.
 

@@ -1,0 +1,2173 @@
+Reading additional input from stdin...
+2026-04-30T18:09:36.597166Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: prompt must be at most 128 characters path=/Users/chrislaw/.codex/.tmp/plugins/plugins/build-ios-apps/.codex-plugin/plugin.json
+2026-04-30T18:09:36.597471Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: maximum of 3 prompts is supported path=/Users/chrislaw/.codex/.tmp/plugins/plugins/plugin-eval/.codex-plugin/plugin.json
+OpenAI Codex v0.128.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019ddf94-ff34-70e1-b4d9-8fe3dd3104a2
+--------
+user
+Review this spec artifact using a edge-cases-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+Code context files are provided above. Before asserting any finding, check whether it is confirmed or refuted by the provided code. Each finding must include an evidence tag:
+  [CODE-CONFIRMED] — the code directly supports this finding
+  [CODE-REFUTED] — the code contradicts this finding (do not include as a finding)
+  [UNVERIFIED] — relevant code was not provided; treat as lower confidence
+Only assign HIGH severity to CODE-CONFIRMED findings.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Context: domain-analysis-snapshot-aggregator.ts
+/**
+ * Pure aggregation logic for domain-analysis snapshots.
+ *
+ * No database access — takes pre-fetched analysis rows and value-pair maps,
+ * runs two phases of accumulation/normalisation, and returns the per-model
+ * model objects that get embedded in the snapshot output.
+ */
+import {
+  DOMAIN_ANALYSIS_VALUE_KEYS,
+  type DomainAnalysisValueKey,
+} from '../../graphql/queries/domain-analysis-values.js';
+import type { DomainAnalysisValueCounts } from '../../graphql/queries/domain/shared.js';
+import type { AnalysisOutputRow } from './domain-analysis-cache-types.js';
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+function parseCount(raw: unknown): DomainAnalysisValueCounts {
+  if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) {
+    return { prioritized: 0, deprioritized: 0, neutral: 0 };
+  }
+  const record = raw as Record<string, unknown>;
+  const prioritized = typeof record.prioritized === 'number' && Number.isFinite(record.prioritized) ? record.prioritized : 0;
+  const deprioritized = typeof record.deprioritized === 'number' && Number.isFinite(record.deprioritized) ? record.deprioritized : 0;
+  const neutral = typeof record.neutral === 'number' && Number.isFinite(record.neutral) ? record.neutral : 0;
+  return { prioritized, deprioritized, neutral };
+}
+
+function getValueCountsFromAnalysis(output: unknown, modelId: string, valueKey: string): DomainAnalysisValueCounts {
+  if (output == null || typeof output !== 'object' || Array.isArray(output)) {
+    return { prioritized: 0, deprioritized: 0, neutral: 0 };
+  }
+  const perModel = (output as { perModel?: unknown }).perModel;
+  if (perModel == null || typeof perModel !== 'object' || Array.isArray(perModel)) {
+    return { prioritized: 0, deprioritized: 0, neutral: 0 };
+  }
+  const modelData = (perModel as Record<string, unknown>)[modelId];
+  if (modelData == null || typeof modelData !== 'object' || Array.isArray(modelData)) {
+    return { prioritized: 0, deprioritized: 0, neutral: 0 };
+  }
+  const values = (modelData as { values?: unknown }).values;
+  if (values == null || typeof values !== 'object' || Array.isArray(values)) {
+    return { prioritized: 0, deprioritized: 0, neutral: 0 };
+  }
+  // Analysis outputs store value keys in lowercase (e.g. "power_dominance") while
+  // the canonical ValueKey type uses PascalCase (e.g. "Power_Dominance"). Do a
+  // case-insensitive lookup so both conventions are handled.
+  const valuesRecord = values as Record<string, unknown>;
+  const keyLower = valueKey.toLowerCase();
+  const valueData = valuesRecord[valueKey]
+    ?? Object.entries(valuesRecord).find(([k]) => k.toLowerCase() === keyLower)?.[1];
+  if (valueData == null || typeof valueData !== 'object' || Array.isArray(valueData)) {
+    return { prioritized: 0, deprioritized: 0, neutral: 0 };
+  }
+  return parseCount((valueData as { count?: unknown }).count);
+}
+
+export function toCountsRecord(valueMap: Map<DomainAnalysisValueKey, DomainAnalysisValueCounts>): Record<string, DomainAnalysisValueCounts> {
+  const record: Record<string, DomainAnalysisValueCounts> = {};
+  for (const valueKey of DOMAIN_ANALYSIS_VALUE_KEYS) {
+    record[valueKey] = valueMap.get(valueKey) ?? { prioritized: 0, deprioritized: 0, neutral: 0 };
+  }
+  return record;
+}
+
+export function toPairwiseRecord(
+  pairwiseWins: Map<DomainAnalysisValueKey, Map<DomainAnalysisValueKey, number>>,
+): Record<string, Record<string, number>> {
+  const record: Record<string, Record<string, number>> = {};
+  for (const valueKey of DOMAIN_ANALYSIS_VALUE_KEYS) {
+    const winnerMap = pairwiseWins.get(valueKey) ?? new Map<DomainAnalysisValueKey, number>();
+    record[valueKey] = Object.fromEntries(
+      Array.from(winnerMap.entries()).map(([opponent, count]) => [opponent, count]),
+    );
+  }
+  return record;
+}
+
+function addPairwiseWins(
+  pairwiseWins: Map<DomainAnalysisValueKey, Map<DomainAnalysisValueKey, number>>,
+  winner: DomainAnalysisValueKey,
+  loser: DomainAnalysisValueKey,
+  count: number,
+): void {
+  if (count <= 0) return;
+  const winsForWinner = pairwiseWins.get(winner) ?? new Map<DomainAnalysisValueKey, number>();
+  winsForWinner.set(loser, (winsForWinner.get(loser) ?? 0) + count);
+  pairwiseWins.set(winner, winsForWinner);
+}
+
+// ---------------------------------------------------------------------------
+// Public aggregation function
+// ---------------------------------------------------------------------------
+
+export type AggregateModelResult = {
+  model: string;
+  counts: Record<string, DomainAnalysisValueCounts>;
+  pairwiseWins: Record<string, Record<string, number>>;
+  valueWinRates: Record<string, number>;
+  vignetteCount: Record<string, number>;
+};
+
+/**
+ * Aggregate analysis rows into per-model model objects.
+ *
+ * Phase 1: accumulate raw counts per (definitionId, modelId), tracking runCount.
+ * Phase 2: normalise by runCount (so each vignette weighs equally regardless of
+ *          how many runs it had), record one per-vignette win rate per value, then
+ *          compute the equal-weight mean win rate and vignette count.
+ */
+export function aggregateAnalysisRows(params: {
+  analysisRows: AnalysisOutputRow[];
+  valuePairByDefinition: Map<string, { valueA: DomainAnalysisValueKey; valueB: DomainAnalysisValueKey }>;
+  filteredSourceRunDefinitionById: Map<string, string>;
+}): { models: AggregateModelResult[]; analyzedDefinitionIds: Set<string> } {
+  const { analysisRows, valuePairByDefinition, filteredSourceRunDefinitionById } = params;
+
+  const aggregatedByModel = new Map<string, Map<DomainAnalysisValueKey, DomainAnalysisValueCounts>>();
+  const pairwiseWinsByModel = new Map<string, Map<DomainAnalysisValueKey, Map<DomainAnalysisValueKey, number>>>();
+  const analyzedDefinitionIds = new Set<string>();
+
+  // Phase 1: accumulate raw counts + runCount per (definitionId, modelId).
+  type DefinitionModelAcc = {
+    valueA: DomainAnalysisValueKey;
+    valueB: DomainAnalysisValueKey;
+    first: DomainAnalysisValueCounts;
+    second: DomainAnalysisValueCounts;
+    firstRates: number[];
+    secondRates: number[];
+    runCount: number;
+  };
+  const defModelAcc = new Map<string, Map<string, DefinitionModelAcc>>();
+
+  for (const analysisRow of analysisRows) {
+    const definitionId = filteredSourceRunDefinitionById.get(analysisRow.runId);
+    if (definitionId == null || definitionId === '') continue;
+    const pair = valuePairByDefinition.get(definitionId);
+    if (!pair) continue;
+
+    const output = analysisRow.output;
+    if (output == null || typeof output !== 'object' || Array.isArray(output)) continue;
+    const perModel = (output as { perModel?: unknown }).perModel;
+    if (perModel == null || typeof perModel !== 'object' || Array.isArray(perModel)) continue;
+
+    let modelMap = defModelAcc.get(definitionId);
+    if (!modelMap) {
+      modelMap = new Map<string, DefinitionModelAcc>();
+      defModelAcc.set(definitionId, modelMap);
+    }
+
+    for (const modelId of Object.keys(perModel as Record<string, unknown>)) {
+      let acc = modelMap.get(modelId);
+      if (!acc) {
+        acc = {
+          valueA: pair.valueA,
+          valueB: pair.valueB,
+          first: { prioritized: 0, deprioritized: 0, neutral: 0 },
+          second: { prioritized: 0, deprioritized: 0, neutral: 0 },
+          firstRates: [],
+          secondRates: [],
+          runCount: 0,
+        };
+        modelMap.set(modelId, acc);
+      }
+
+      const firstCounts = getValueCountsFromAnalysis(output, modelId, pair.valueA);
+      const secondCounts = getValueCountsFromAnalysis(output, modelId, pair.valueB);
+
+      acc.first.prioritized += firstCounts.prioritized;
+      acc.first.deprioritized += firstCounts.deprioritized;
+      acc.first.neutral += firstCounts.neutral;
+      acc.second.prioritized += secondCounts.prioritized;
+      acc.second.deprioritized += secondCounts.deprioritized;
+      acc.second.neutral += secondCounts.neutral;
+
+      const totalFirst = firstCounts.prioritized + firstCounts.deprioritized + firstCounts.neutral;
+      if (totalFirst > 0) {
+        acc.firstRates.push(firstCounts.prioritized / totalFirst);
+      }
+      const totalSecond = secondCounts.prioritized + secondCounts.deprioritized + secondCounts.neutral;
+      if (totalSecond > 0) {
+        acc.secondRates.push(secondCounts.prioritized / totalSecond);
+      }
+
+      acc.runCount += 1;
+    }
+  }
+
+  // Phase 2: normalise by runCount, merge into global aggregates, and record
+  // per-vignette win rates for equal-weight averaging.
+  const vignetteWinRatesByModel = new Map<string, Map<DomainAnalysisValueKey, number[]>>();
+
+  for (const [definitionId, modelMap] of defModelAcc) {
+    for (const [modelId, acc] of modelMap) {
+      if (acc.runCount === 0) continue;
+
+      let valueMap = aggregatedByModel.get(modelId);
+      if (!valueMap) {
+        valueMap = new Map<DomainAnalysisValueKey, DomainAnalysisValueCounts>();
+        aggregatedByModel.set(modelId, valueMap);
+      }
+      let pairwiseWins = pairwiseWinsByModel.get(modelId);
+      if (!pairwiseWins) {
+        pairwiseWins = new Map<DomainAnalysisValueKey, Map<DomainAnalysisValueKey, number>>();
+        pairwiseWinsByModel.set(modelId, pairwiseWins);
+      }
+      let vigRates = vignetteWinRatesByModel.get(modelId);
+      if (!vigRates) {
+        vigRates = new Map<DomainAnalysisValueKey, number[]>();
+        vignetteWinRatesByModel.set(modelId, vigRates);
+      }
+
+      const n = acc.runCount;
+
+      const existingFirst = valueMap.get(acc.valueA) ?? { prioritized: 0, deprioritized: 0, neutral: 0 };
+      existingFirst.prioritized += acc.first.prioritized / n;
+      existingFirst.deprioritized += acc.first.deprioritized / n;
+      existingFirst.neutral += acc.first.neutral / n;
+      valueMap.set(acc.valueA, existingFirst);
+
+      const existingSecond = valueMap.get(acc.valueB) ?? { prioritized: 0, deprioritized: 0, neutral: 0 };
+      existingSecond.prioritized += acc.second.prioritized / n;
+      existingSecond.deprioritized += acc.second.deprioritized / n;
+      existingSecond.neutral += acc.second.neutral / n;
+      valueMap.set(acc.valueB, existingSecond);
+
+      addPairwiseWins(pairwiseWins, acc.valueA, acc.valueB, acc.first.prioritized / n);
+      addPairwiseWins(pairwiseWins, acc.valueB, acc.valueA, acc.second.prioritized / n);
+
+      // Per-vignette win rate: equal weight per source run (Path B).
+      if (acc.firstRates.length > 0) {
+        const meanA = acc.firstRates.reduce((s, r) => s + r, 0) / acc.firstRates.length;
+        const ratesA = vigRates.get(acc.valueA) ?? [];
+        ratesA.push(meanA);
+        vigRates.set(acc.valueA, ratesA);
+      }
+      if (acc.secondRates.length > 0) {
+        const meanB = acc.secondRates.reduce((s, r) => s + r, 0) / acc.secondRates.length;
+        const ratesB = vigRates.get(acc.valueB) ?? [];
+        ratesB.push(meanB);
+        vigRates.set(acc.valueB, ratesB);
+      }
+
+      analyzedDefinitionIds.add(definitionId);
+    }
+  }
+
+  // Compute equal-weight mean win rate (0–100) and vignette count per (model, value).
+  const valueWinRatesByModel = new Map<string, Map<DomainAnalysisValueKey, number>>();
+  const vignetteCountByModel = new Map<string, Map<DomainAnalysisValueKey, number>>();
+
+  for (const [modelId, vigRates] of vignetteWinRatesByModel) {
+    const winRateMap = new Map<DomainAnalysisValueKey, number>();
+    const countMap = new Map<DomainAnalysisValueKey, number>();
+    valueWinRatesByModel.set(modelId, winRateMap);
+    vignetteCountByModel.set(modelId, countMap);
+    for (const [valueKey, rates] of vigRates) {
+      if (rates.length === 0) continue;
+      const mean = rates.reduce((sum, r) => sum + r, 0) / rates.length;
+      winRateMap.set(valueKey, mean * 100);
+      countMap.set(valueKey, rates.length);
+    }
+  }
+
+  const models: AggregateModelResult[] = Array.from(aggregatedByModel.entries())
+    .map(([modelId, valueMap]) => ({
+      model: modelId,
+      counts: toCountsRecord(valueMap),
+      pairwiseWins: toPairwiseRecord(
+        pairwiseWinsByModel.get(modelId) ?? new Map<DomainAnalysisValueKey, Map<DomainAnalysisValueKey, number>>(),
+      ),
+      valueWinRates: Object.fromEntries(
+        valueWinRatesByModel.get(modelId) ?? new Map<DomainAnalysisValueKey, number>()
+      ),
+      vignetteCount: Object.fromEntries(
+        vignetteCountByModel.get(modelId) ?? new Map<DomainAnalysisValueKey, number>()
+      ),
+    }))
+    .sort((left, right) => left.model.localeCompare(right.model));
+
+  return { models, analyzedDefinitionIds };
+}
+
+
+Artifact: spec.md
+# Spec: Equal-Vignette Reporting
+
+**Feature slug:** `equal-vignette-reporting`  
+**Created:** 2026-04-30  
+**Status:** draft  
+**Workflow:** Feature Factory
+
+## Background
+
+ValueRank currently has two different win-rate methodologies showing up in model-reporting surfaces:
+
+1. the newer **equal-vignette** path, where runs are averaged within each vignette and each vignette counts once
+2. the older **count-based** path, where pooled `prioritized / (prioritized + deprioritized + neutral)` counts can overweight vignettes that happened to receive more trials
+
+This mismatch is visible on `/models`, where the `All domains value priorities` table and the `Model preference table` can disagree for the same model/value cell.
+
+The domain-analysis snapshot pipeline already computes the methodology we want. The remaining problem is that some reporting surfaces still recompute win rates from pooled counts or retain backward-compatibility fallbacks that preserve the older weighting behavior.
+
+## Discovery: Assumptions Carried In
+
+Requirements are stable enough to draft the spec without more questions. These assumptions are carried in explicitly:
+
+1. Canonical reporting metric is equal-weight by vignette after equal-weight pooling across runs within each vignette.
+2. Extra trials within one vignette must not increase that vignette's weight.
+3. Domains currently have equal vignette counts, so equal-domain and global equal-vignette summaries are equivalent in today's data, but the implementation should still encode the equal-vignette rule rather than rely on that balance forever.
+4. This feature standardizes existing model-reporting surfaces. It does not redesign unrelated analytics reports.
+
+## Product Goal
+
+All model-reporting surfaces that present cross-vignette value win rates should use one shared methodology:
+
+- average runs equally within each vignette
+- average vignettes equally
+- for cross-domain summaries, average domain vignette-level win rates consistently
+
+For the reports in scope, a user should no longer be able to find one cell on `/models` where the two tables disagree because they are using different weighting rules.
+
+## In Scope
+
+- `/models` page reporting consistency
+- `/domains/analysis` value-priorities consistency with the same methodology
+- `modelsAnalysis` compatibility behavior for legacy snapshots, if that behavior currently preserves the old count-based metric
+- user-facing copy and docs that define the reporting methodology for these surfaces
+- tests that lock in the equal-vignette methodology
+
+## Out Of Scope
+
+- launch planning, batch-counting, or run orchestration
+- pressure sensitivity, condition-level detail views, or other reports that intentionally use a different unit of analysis
+- broad GraphQL renames or schema cleanups unless required for clarity
+
+## Canonical Metric Definition
+
+For a given `model × value`:
+
+### Step 1 — Within-vignette run pooling
+
+If a vignette has multiple runs or trial batches, compute that vignette's win rate as the simple mean of its run-level win rates.
+
+Plain-language meaning:
+
+> A vignette with 5 runs should not count 5 times as much as a vignette with 1 run.
+
+### Step 2 — Within-domain vignette pooling
+
+For one domain, compute the domain value win rate as the simple mean of the vignette win rates for that `model × value`.
+
+Plain-language meaning:
+
+> Each vignette in the domain counts once.
+
+### Step 3 — Cross-domain reporting
+
+For cross-domain reporting surfaces, compute the final value as the equal-vignette average across all eligible domains.
+
+Implementation note:
+
+- when all domains have equal vignette counts, this is numerically identical to a simple mean of domain win rates
+- if domain vignette counts ever drift, the reporting methodology must still follow equal-vignette weighting rather than silently changing meaning
+
+## Non-Canonical Metric
+
+The following metric is **not** canonical for the reporting surfaces in scope:
+
+```text
+prioritized / (prioritized + deprioritized + neutral)
+```
+
+when `prioritized`, `deprioritized`, and `neutral` are pooled across multiple vignettes that may have received different numbers of runs.
+
+This count-based recomputation can overweight vignettes that happened to accumulate more trials and must not be used as the displayed methodology for the in-scope model-reporting surfaces.
+
+## User Stories
+
+### US-1 — `/models` tables agree on one methodology (P1)
+
+As a researcher, I want the two main `/models` reports to use the same weighting rule so I can trust that a cell means the same thing in both places.
+
+**Acceptance scenarios**
+
+1. **Given** I open `/models`, **when** I compare the same `model × value` cell between `All domains value priorities` and `Model preference table`, **then** the values come from the same underlying methodology.
+2. **Given** a vignette has more runs than another vignette, **when** both contribute to a reported cell, **then** the higher-run vignette does not get extra weight.
+3. **Given** formatting differs between tables, **when** the underlying metric is the same, **then** any visible difference is explainable by formatting only, not methodology.
+
+### US-2 — Domain analysis stays aligned (P1)
+
+As a researcher, I want the domain-analysis value priorities report to use the same methodology as the model-analysis reporting surfaces so the product does not contradict itself.
+
+**Acceptance scenarios**
+
+1. **Given** a value-priorities table is built from model reporting data, **when** win rates are present from the equal-vignette snapshot path, **then** the UI uses that path instead of recomputing from pooled counts.
+2. **Given** legacy data exists, **when** equal-vignette data is unavailable, **then** the product does not silently mix methodologies within the same report without explicit code and test coverage.
+
+### US-3 — Users can understand the metric (P2)
+
+As a researcher, I want tooltips and docs to describe the actual weighting rule so I do not infer the wrong methodology from old wording.
+
+**Acceptance scenarios**
+
+1. **Given** I open a model-value detail surface, **when** I read the win-rate explanation, **then** it explains equal run weighting within vignette and equal vignette weighting in the report.
+2. **Given** I read the glossary or reporting docs, **when** they define the in-scope win-rate metric, **then** they match the canonical equal-vignette methodology.
+
+## Affected Surfaces
+
+### 1. `/models`
+
+Current production behavior:
+
+- `All domains value priorities` is built from `DomainAnalysis` snapshot data and currently recomputes `winRates` from pooled counts in `Models.tsx`
+- `Model preference table` reads `modelsAnalysis` and uses `pooledWinRate`
+
+Required outcome:
+
+- both tables read the equal-vignette methodology
+- any remaining display difference should be formatting only
+
+### 2. `/domains/analysis`
+
+Current behavior:
+
+- `DomainAnalysis.tsx` already prefers `modelsAnalysis.pooledWinRate`
+- it still retains a count-based fallback when equal-vignette values are missing
+
+Required outcome:
+
+- confirm whether the fallback should remain as temporary legacy support or be removed from the canonical reporting path
+
+### 3. `modelsAnalysis` API resolver
+
+Current behavior:
+
+- newer snapshots use `valueWinRates` and `vignetteCount`
+- older snapshots can still fall back to pooled counts
+- this fallback can currently happen per value, not only per snapshot
+
+Required outcome:
+
+- decide and implement the correct legacy policy for this feature:
+  - preferred: do not silently mix methodologies within one row; if equal-vignette data is unavailable, return `null` for the reporting metric and rely on snapshot rebuild / refresh
+  - acceptable transitional option: retain a temporary compatibility fallback only if it is clearly documented, explicitly tested, and not presented as the canonical metric
+
+## Implementation Notes
+
+The domain-analysis snapshot pipeline already computes the desired math in:
+
+- `cloud/apps/api/src/services/analysis/domain-analysis-snapshot-aggregator.ts`
+
+That pipeline should remain the source of truth unless the implementation uncovers a real bug in the aggregation itself.
+
+The main expected implementation work is:
+
+1. remove count-based recomputation from in-scope reporting UIs
+2. tighten or remove legacy fallbacks that preserve the old weighting
+3. update tests and explanatory copy
+
+## Acceptance Criteria
+
+1. On `/models`, both main tables use the equal-vignette methodology for the same `model × value` cells.
+2. The in-scope reporting metric does not overweight vignettes with more trials.
+3. Cross-domain reporting follows equal-vignette weighting even if domain vignette counts drift in the future.
+4. Any retained fallback for legacy snapshots is explicit, scoped, and covered by tests; silent mixed-method rows are not allowed.
+5. User-facing methodology explanations for the in-scope reports match the implemented weighting rule.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+2026-04-30T18:09:38.174681Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: prompt must be at most 128 characters path=/Users/chrislaw/.codex/.tmp/plugins/plugins/build-ios-apps/.codex-plugin/plugin.json
+2026-04-30T18:09:38.174910Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: maximum of 3 prompts is supported path=/Users/chrislaw/.codex/.tmp/plugins/plugins/plugin-eval/.codex-plugin/plugin.json
+2026-04-30T18:09:38.187917Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:09:38.187925Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:09:38.188238Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:09:38.188241Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:09:38.188561Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:09:38.188565Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:09:38.188878Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:09:38.188880Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:09:38.189178Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:09:38.189182Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:09:38.189895Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:09:38.189897Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:09:39.589186Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: prompt must be at most 128 characters path=/Users/chrislaw/.codex/.tmp/plugins/plugins/build-ios-apps/.codex-plugin/plugin.json
+2026-04-30T18:09:39.589436Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: maximum of 3 prompts is supported path=/Users/chrislaw/.codex/.tmp/plugins/plugins/plugin-eval/.codex-plugin/plugin.json
+2026-04-30T18:09:39.603191Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:09:39.603200Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:09:39.603691Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:09:39.603699Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:09:39.604154Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:09:39.604159Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:09:39.604558Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:09:39.604563Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:09:39.604989Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:09:39.604992Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:09:39.605791Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:09:39.605794Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+codex
+I’m checking the spec against the provided aggregation code first, then I’ll call out only the edge cases that the code either confirms or leaves exposed.
+exec
+/bin/zsh -lc "rg -n \"aggregateAnalysisRows|domain-analysis-snapshot-aggregator\" cloud/apps -g '"'!**/node_modules/**'"'" in /Users/chrislaw/valuerank
+exec
+/bin/zsh -lc "rg -n \"pooledWinRate|valueWinRates|vignetteCount|modelsAnalysis|All domains value priorities|Model preference table|win rate\" cloud/apps -g '"'!**/node_modules/**'"'" in /Users/chrislaw/valuerank
+ succeeded in 0ms:
+cloud/apps/api/src/services/analysis/domain-analysis-snapshot-builder.ts:15:import { aggregateAnalysisRows } from './domain-analysis-snapshot-aggregator.js';
+cloud/apps/api/src/services/analysis/domain-analysis-snapshot-builder.ts:148:  const { models, analyzedDefinitionIds } = aggregateAnalysisRows({
+cloud/apps/api/src/services/analysis/domain-analysis-snapshot-aggregator.ts:112:export function aggregateAnalysisRows(params: {
+
+ succeeded in 0ms:
+cloud/apps/api/src/queue/handlers/analyze-basic.ts:5: * Computes win rates, confidence intervals, model comparisons, and
+cloud/apps/web/src/pages/domainValueShiftHeatmapUtils.ts:6:} from '../api/operations/modelsAnalysis';
+cloud/apps/web/src/pages/domainValueShiftHeatmapUtils.ts:44:  pooledWinRate: number | null;
+cloud/apps/web/src/pages/domainValueShiftHeatmapUtils.ts:187:  pooledWinRates: number[];
+cloud/apps/web/src/pages/domainValueShiftHeatmapUtils.ts:227:      pooledWinRate: value?.pooledWinRate ?? null,
+cloud/apps/web/src/pages/domainValueShiftHeatmapUtils.ts:229:      averageMatchesPooled: averageWinRate == null || value?.pooledWinRate == null
+cloud/apps/web/src/pages/domainValueShiftHeatmapUtils.ts:231:        : Math.abs(averageWinRate - value.pooledWinRate) <= AVERAGE_PARITY_TOLERANCE,
+cloud/apps/web/src/pages/domainValueShiftHeatmapUtils.ts:255:        pooledWinRates: [],
+cloud/apps/web/src/pages/domainValueShiftHeatmapUtils.ts:259:      if (isFiniteNumber(value.pooledWinRate)) {
+cloud/apps/web/src/pages/domainValueShiftHeatmapUtils.ts:260:        existing.pooledWinRates.push(value.pooledWinRate);
+cloud/apps/web/src/pages/domainValueShiftHeatmapUtils.ts:293:    const pooledWinRate = computeAverageNumber(aggregate?.pooledWinRates ?? []);
+cloud/apps/web/src/pages/domainValueShiftHeatmapUtils.ts:315:      pooledWinRate,
+cloud/apps/web/src/pages/domainValueShiftHeatmapUtils.ts:317:      averageMatchesPooled: averageWinRate == null || pooledWinRate == null
+cloud/apps/web/src/pages/domainValueShiftHeatmapUtils.ts:319:        : Math.abs(averageWinRate - pooledWinRate) <= AVERAGE_PARITY_TOLERANCE,
+cloud/apps/api/src/mcp/tools/get-run-summary.ts:54:Returns computed statistics including per-model win rates, model agreement scores, outlier models, and most contested scenarios.
+cloud/apps/web/src/pages/DomainAnalysis.tsx:25:} from '../api/operations/modelsAnalysis';
+cloud/apps/web/src/pages/DomainAnalysis.tsx:144:  const [{ data: modelsAnalysisData }] = useQuery<ModelsAnalysisQueryResult, ModelsAnalysisQueryVariables>({
+cloud/apps/web/src/pages/DomainAnalysis.tsx:179:    const pooledWinRatesByModel = new Map<string, Map<string, number | null>>(
+cloud/apps/web/src/pages/DomainAnalysis.tsx:180:      (modelsAnalysisData?.modelsAnalysis.models ?? []).map((model) => [
+cloud/apps/web/src/pages/DomainAnalysis.tsx:182:        new Map(model.values.map((value) => [value.valueKey, value.pooledWinRate])),
+cloud/apps/web/src/pages/DomainAnalysis.tsx:191:        const pooledWinRate = pooledWinRatesByModel.get(model.model)?.get(e.valueKey) ?? null;
+cloud/apps/web/src/pages/DomainAnalysis.tsx:192:        return [e.valueKey, pooledWinRate ?? (denom > 0 ? (e.prioritized / denom) * 100 : null)] as const;
+cloud/apps/web/src/pages/DomainAnalysis.tsx:209:  }, [data, modelsAnalysisData]);
+cloud/apps/web/src/pages/DomainStartBatches.tsx:172:  const vignetteCount = plan?.vignettes.length ?? 0;
+cloud/apps/web/src/pages/DomainStartBatches.tsx:174:  const totalPairedBatches = hasValidTargetBatchCount ? vignetteCount * parsedTargetBatchCount : null;
+cloud/apps/web/src/pages/DomainStartBatches.tsx:328:        vignetteCount={vignetteCount}
+cloud/apps/api/src/services/analysis/domain-analysis-snapshot-aggregator.ts:100:  valueWinRates: Record<string, number>;
+cloud/apps/api/src/services/analysis/domain-analysis-snapshot-aggregator.ts:101:  vignetteCount: Record<string, number>;
+cloud/apps/api/src/services/analysis/domain-analysis-snapshot-aggregator.ts:109: *          how many runs it had), record one per-vignette win rate per value, then
+cloud/apps/api/src/services/analysis/domain-analysis-snapshot-aggregator.ts:110: *          compute the equal-weight mean win rate and vignette count.
+cloud/apps/api/src/services/analysis/domain-analysis-snapshot-aggregator.ts:191:  // per-vignette win rates for equal-weight averaging.
+cloud/apps/api/src/services/analysis/domain-analysis-snapshot-aggregator.ts:231:      // Per-vignette win rate: equal weight per source run (Path B).
+cloud/apps/api/src/services/analysis/domain-analysis-snapshot-aggregator.ts:249:  // Compute equal-weight mean win rate (0–100) and vignette count per (model, value).
+cloud/apps/api/src/services/analysis/domain-analysis-snapshot-aggregator.ts:250:  const valueWinRatesByModel = new Map<string, Map<DomainAnalysisValueKey, number>>();
+cloud/apps/api/src/services/analysis/domain-analysis-snapshot-aggregator.ts:251:  const vignetteCountByModel = new Map<string, Map<DomainAnalysisValueKey, number>>();
+cloud/apps/api/src/services/analysis/domain-analysis-snapshot-aggregator.ts:256:    valueWinRatesByModel.set(modelId, winRateMap);
+cloud/apps/api/src/services/analysis/domain-analysis-snapshot-aggregator.ts:257:    vignetteCountByModel.set(modelId, countMap);
+cloud/apps/api/src/services/analysis/domain-analysis-snapshot-aggregator.ts:273:      valueWinRates: Object.fromEntries(
+cloud/apps/api/src/services/analysis/domain-analysis-snapshot-aggregator.ts:274:        valueWinRatesByModel.get(modelId) ?? new Map<DomainAnalysisValueKey, number>()
+cloud/apps/api/src/services/analysis/domain-analysis-snapshot-aggregator.ts:276:      vignetteCount: Object.fromEntries(
+cloud/apps/api/src/services/analysis/domain-analysis-snapshot-aggregator.ts:277:        vignetteCountByModel.get(modelId) ?? new Map<DomainAnalysisValueKey, number>()
+cloud/apps/web/src/generated/graphql.ts:99:  /** Per-model statistics with win rates and confidence intervals */
+cloud/apps/web/src/generated/graphql.ts:1530:  pooledWinRate?: Maybe<Scalars['Float']['output']>;
+cloud/apps/web/src/generated/graphql.ts:2635:  modelsAnalysis: ModelsAnalysisResult;
+cloud/apps/web/src/generated/graphql.ts:4580:export type ModelsAnalysisQuery = { __typename?: 'Query', modelsAnalysis: { __typename?: 'ModelsAnalysisResult', models: Array<{ __typename?: 'ModelsAnalysisModelResult', modelId: string, label: string, values: Array<{ __typename?: 'ModelsAnalysisValueResult', valueKey: string, pooledWinRate?: number | null, stabilityScore?: number | null, eligibleDomainCount: number, domains: Array<{ __typename?: 'ModelsAnalysisDomainBreakdown', domainId: string, domainName: string, winRate: number, evidenceWeight?: number | null }> }> }> } };
+cloud/apps/web/src/generated/graphql.ts:6964:  modelsAnalysis(domainId: $domainId, signature: $signature) {
+cloud/apps/web/src/generated/graphql.ts:6970:        pooledWinRate
+cloud/apps/web/tests/pages/Models.test.tsx:6:import { MODELS_ANALYSIS_QUERY } from '../../src/api/operations/modelsAnalysis';
+cloud/apps/web/tests/pages/Models.test.tsx:104:            modelsAnalysis: {
+cloud/apps/web/tests/pages/Models.test.tsx:112:                      pooledWinRate: 62,
+cloud/apps/api/src/services/analysis/domain-analysis-cache-types.ts:30:  // Equal-weight per-vignette win rates (0–100) and vignette counts per value key.
+cloud/apps/api/src/services/analysis/domain-analysis-cache-types.ts:32:  valueWinRates?: Record<string, number>;
+cloud/apps/api/src/services/analysis/domain-analysis-cache-types.ts:33:  vignetteCount?: Record<string, number>;
+cloud/apps/web/tests/pages/DomainAnalysis.test.tsx:11:import { MODELS_ANALYSIS_QUERY } from '../../src/api/operations/modelsAnalysis';
+cloud/apps/web/tests/pages/DomainAnalysis.test.tsx:75:  modelsAnalysis: {
+cloud/apps/web/tests/pages/DomainAnalysis.test.tsx:92:  modelsAnalysisData?: typeof defaultModelsAnalysis | undefined;
+cloud/apps/web/tests/pages/DomainAnalysis.test.tsx:103:  const modelsAnalysisData = options && 'modelsAnalysisData' in options ? options.modelsAnalysisData : defaultModelsAnalysis;
+cloud/apps/web/tests/pages/DomainAnalysis.test.tsx:129:        data: modelsAnalysisData,
+cloud/apps/web/tests/pages/DomainAnalysis.test.tsx:283:  it('passes domain-equal win rates to the value priorities report when models analysis is available', async () => {
+cloud/apps/web/tests/pages/DomainAnalysis.test.tsx:306:      modelsAnalysisData: {
+cloud/apps/web/tests/pages/DomainAnalysis.test.tsx:307:        modelsAnalysis: {
+cloud/apps/web/tests/pages/DomainAnalysis.test.tsx:315:                  pooledWinRate: 61,
+cloud/apps/api/src/graphql/queries/circumplex-analysis.ts:45:  //       computable win rate and at least one trial), OR
+cloud/apps/web/tests/pages/DomainValueShiftHeatmap.test.tsx:17:import { MODELS_ANALYSIS_QUERY, type ModelsAnalysisModelResult } from '../../src/api/operations/modelsAnalysis';
+cloud/apps/web/tests/pages/DomainValueShiftHeatmap.test.tsx:38:        pooledWinRate: 60,
+cloud/apps/web/tests/pages/DomainValueShiftHeatmap.test.tsx:49:        pooledWinRate: null,
+cloud/apps/web/tests/pages/DomainValueShiftHeatmap.test.tsx:56:        pooledWinRate: 50,
+cloud/apps/web/tests/pages/DomainValueShiftHeatmap.test.tsx:111:        data: { modelsAnalysis: { models } },
+cloud/apps/web/tests/pages/DomainValueShiftHeatmap.test.tsx:129:  it('computes equal-domain averages and point shifts from eligible finite win rates', () => {
+cloud/apps/web/tests/pages/DomainValueShiftHeatmap.test.tsx:154:          pooledWinRate: 40,
+cloud/apps/web/tests/pages/DomainValueShiftHeatmap.test.tsx:161:          pooledWinRate: 70,
+cloud/apps/web/tests/pages/DomainValueShiftHeatmap.test.tsx:193:  it('averages domain win rates across multiple models', () => {
+cloud/apps/web/tests/pages/DomainValueShiftHeatmap.test.tsx:201:            pooledWinRate: 60,
+cloud/apps/web/tests/pages/DomainValueShiftHeatmap.test.tsx:217:            pooledWinRate: 50,
+cloud/apps/web/tests/pages/DomainValueShiftHeatmap.test.tsx:232:    expect(achievement?.pooledWinRate).toBe(55);
+cloud/apps/web/tests/pages/DomainValueShiftHeatmap.test.tsx:257:          pooledWinRate: 30,
+cloud/apps/web/tests/pages/DomainValueShiftHeatmap.test.tsx:267:          pooledWinRate: 79,
+cloud/apps/web/tests/pages/DomainValueShiftHeatmap.test.tsx:321:    expect(screen.getByLabelText(/Achievement in City Planning: raw win rate 80\.0%; shift \+20\.0 pts/i)).toHaveAccessibleName(
+cloud/apps/web/tests/pages/DomainValueShiftHeatmap.test.tsx:354:  it('toggles cells from shifts to raw win rates', async () => {
+cloud/apps/web/tests/pages/DomainValueShiftHeatmap.test.tsx:361:    await user.click(screen.getByRole('button', { name: 'Raw win rate' }));
+cloud/apps/web/tests/pages/DomainValueShiftHeatmap.test.tsx:363:    expect(screen.getByRole('button', { name: 'Raw win rate' })).toHaveAttribute('aria-pressed', 'true');
+cloud/apps/web/tests/pages/DomainValueShiftHeatmap.test.tsx:365:    expect(screen.getByText(/raw domain win rate/i)).toBeInTheDocument();
+cloud/apps/web/tests/pages/DomainValueShiftHeatmap.test.tsx:434:            pooledWinRate: 40,
+cloud/apps/web/schema.graphql:88:  """Per-model statistics with win rates and confidence intervals"""
+cloud/apps/web/schema.graphql:1646:  pooledWinRate: Float
+cloud/apps/web/schema.graphql:2581:  modelsAnalysis(
+cloud/apps/web/src/pages/DomainValueShiftHeatmap.tsx:3:import { MODELS_ANALYSIS_QUERY, type ModelsAnalysisQueryResult } from '../api/operations/modelsAnalysis';
+cloud/apps/web/src/pages/DomainValueShiftHeatmap.tsx:146:          ['winRate', 'Raw win rate'],
+cloud/apps/web/src/pages/DomainValueShiftHeatmap.tsx:185:  const detail = `${valueLabel} in ${cell.domainName}: raw win rate ${formatPercent(cell.winRate)}; shift ${formatPointShift(cell.shift)} versus this value's equal-domain average; average ${formatPercent(cell.averageWinRate)}; ${evidenceLabel} ${formatEvidenceWeight(cell.evidenceWeight)}.`;
+cloud/apps/web/src/pages/DomainValueShiftHeatmap.tsx:220:  const models = useMemo(() => data?.modelsAnalysis.models ?? [], [data]);
+cloud/apps/web/src/pages/DomainValueShiftHeatmap.tsx:269:          straight domain win rates, then click any column header to sort.
+cloud/apps/web/src/pages/DomainValueShiftHeatmap.tsx:339:              {displayMode === 'shift' ? 'percentage-point shift, not percent change' : 'raw domain win rate'}
+cloud/apps/web/src/pages/DomainValueShiftHeatmap.tsx:395:                          title="Computed average differs from the API pooled win rate by more than the allowed tolerance."
+cloud/apps/api/tests/services/pressure-sensitivity/aggregation.test.ts:28:  it('computes win rate, conviction, netScore, and successes for a typical mix', () => {
+cloud/apps/web/src/pages/Models.tsx:20:} from '../api/operations/modelsAnalysis';
+cloud/apps/web/src/pages/Models.tsx:81:  const [{ data: modelsAnalysisData, fetching, error }] = useQuery<ModelsAnalysisQueryResult, ModelsAnalysisQueryVariables>({
+cloud/apps/web/src/pages/Models.tsx:95:  const comparisonModels = useMemo(() => modelsAnalysisData?.modelsAnalysis.models ?? [], [modelsAnalysisData]);
+cloud/apps/web/src/pages/Models.tsx:216:    || (fetching && modelsAnalysisData == null);
+cloud/apps/web/src/pages/Models.tsx:274:                <h2 className="text-lg font-semibold text-gray-900">All domains value priorities</h2>
+cloud/apps/web/src/pages/Models.tsx:292:                <h2 className="text-lg font-semibold text-gray-900">Model preference table</h2>
+cloud/apps/web/tests/components/analysis-v2/analysisSemantics.test.ts:612:  it('merges byValue win rates with equal weights when counts are absent', () => {
+cloud/apps/api/src/graphql/queries/models-analysis.ts:23:// Honest denominator: includes neutral outcomes so win rate is consistent with
+cloud/apps/api/src/graphql/queries/models-analysis.ts:25:// inflate win rates and make evidence weights inconsistent with scenario counts.
+cloud/apps/api/src/graphql/queries/models-analysis.ts:32:// Equal-weight pooled win rate: each domain counts once regardless of vignette count.
+cloud/apps/api/src/graphql/queries/models-analysis.ts:51:    pooledWinRate: null,
+cloud/apps/api/src/graphql/queries/models-analysis.ts:59:  // Null evidenceWeight means the snapshot predates the vignetteCount field (pre-v1.2.0) but the
+cloud/apps/api/src/graphql/queries/models-analysis.ts:60:  // win rate is still valid — include those domains in the pool. Exclude only genuine zero-evidence entries.
+cloud/apps/api/src/graphql/queries/models-analysis.ts:64:    pooledWinRate: computePooledWinRate(eligibleDomains),
+cloud/apps/api/src/graphql/queries/models-analysis.ts:71:builder.queryField('modelsAnalysis', (t) =>
+cloud/apps/api/src/graphql/queries/models-analysis.ts:154:            const vigCount = model.vignetteCount?.[valueKey] ?? 0;
+cloud/apps/api/src/graphql/queries/models-analysis.ts:155:            const precomputedWinRate = model.valueWinRates?.[valueKey];
+cloud/apps/api/src/graphql/queries/models-analysis.ts:165:              // Fallback: snapshot predates vignetteCount (pre-v1.2.0). Compute win rate from
+cloud/apps/web/src/components/analysis/AnalysisPanel.tsx:5: * Shows per-model statistics, win rates, and warnings.
+cloud/apps/web/src/api/operations/modelsAnalysis.graphql:2:  modelsAnalysis(domainId: $domainId, signature: $signature) {
+cloud/apps/web/src/api/operations/modelsAnalysis.graphql:8:        pooledWinRate
+cloud/apps/web/src/components/analysis/tabs/OverviewSummaryTable.tsx:231:                      <SummaryCell title={`Preferred value win rate: ${Math.round(preferredValueWinRate * 100)}%`}>
+cloud/apps/web/tests/components/models/ModelValueDetailDrawer.test.tsx:7:import { type ModelsAnalysisModelResult, type ModelsAnalysisValueResult } from '../../../src/api/operations/modelsAnalysis';
+cloud/apps/web/tests/components/models/ModelValueDetailDrawer.test.tsx:17:  pooledWinRate: 68,
+cloud/apps/web/tests/components/models/ModelValueDetailDrawer.test.tsx:35:  it('shows the pooled win rate card and no cross-domain stability card', () => {
+cloud/apps/web/tests/components/models/ModelValueDetailDrawer.test.tsx:47:    expect(screen.getByText(/Pooled win rate/i)).toBeDefined();
+cloud/apps/web/src/api/operations/modelsAnalysis.ts:13:  pooledWinRate: number | null;
+cloud/apps/web/src/api/operations/modelsAnalysis.ts:26:  modelsAnalysis: {
+cloud/apps/web/src/api/operations/modelsAnalysis.ts:38:    modelsAnalysis(domainId: $domainId, signature: $signature) {
+cloud/apps/web/src/api/operations/modelsAnalysis.ts:44:          pooledWinRate
+cloud/apps/web/tests/components/models/CircumplexMethodologyPanel.test.tsx:39:    expect(screen.getByText(/a value profile is the row of win rates/i)).toBeInTheDocument();
+cloud/apps/web/tests/components/models/CircumplexMatrix.test.tsx:31:    expect(screen.getByText(/not the direct win rate/i)).toBeInTheDocument();
+cloud/apps/api/src/graphql/types/analysis.ts:162:      description: 'Per-model statistics with win rates and confidence intervals',
+cloud/apps/api/src/graphql/types/models-analysis.ts:13:  pooledWinRate: number | null;
+cloud/apps/api/src/graphql/types/models-analysis.ts:55:    pooledWinRate: t.field({
+cloud/apps/api/src/graphql/types/models-analysis.ts:58:      resolve: (value) => value.pooledWinRate,
+cloud/apps/web/src/components/domains/domainTrials/LaunchConfirmModal.tsx:8:  vignetteCount: number;
+cloud/apps/web/src/components/domains/domainTrials/LaunchConfirmModal.tsx:29:  vignetteCount,
+cloud/apps/web/src/components/domains/domainTrials/LaunchConfirmModal.tsx:61:          <div>Selected latest vignettes: <span className="font-medium">{vignetteCount}</span></div>
+cloud/apps/web/src/components/domains/domainTrials/LaunchConfirmModal.tsx:75:            Large launches need an extra check. This run will launch {targetBatchCount} paired batches per vignette across {vignetteCount} vignettes, for {totalTrialRuns ?? 'an unknown number of'} total individual trial runs.
+cloud/apps/web/tests/components/analysis/ConditionDecisionsTable.test.tsx:260:  it('renders canonical win rates and the unknown footer copy', () => {
+cloud/apps/web/tests/components/analysis/OverviewTab.overview.test.tsx:135:  it('renders an em dash when the preferred value win rate is missing', () => {
+cloud/apps/web/tests/components/analysis/PivotAnalysisTable.test.tsx:91:// s2 = neutral neutral → neutral=1 → win rate 0%
+cloud/apps/web/tests/components/analysis/PivotAnalysisTable.test.tsx:111:// s1 = favor_first strong → win rate 100%; s2 = neutral → win rate 0%
+cloud/apps/web/tests/components/analysis/PivotAnalysisTable.test.tsx:347:    // s1 (a1, b1) has favor_first strong → win rate = 100%
+cloud/apps/web/tests/components/domains/domainTrials/LaunchConfirmModal.test.tsx:13:          vignetteCount={2}
+cloud/apps/web/src/components/models/CircumplexMatrix.tsx:49:          Each cell is a Pearson correlation between two values&apos; win-rate profiles, not the direct win rate between those two values.
+cloud/apps/web/src/components/domains/ValuePrioritiesSection.test.tsx:62:  it('keeps win rate mode formatted with one decimal place', () => {
+cloud/apps/web/src/components/domains/ValuePrioritiesSection.test.tsx:69:  it('shows n/a when the win rate is missing', () => {
+cloud/apps/web/src/components/domains/ValuePrioritiesSection.test.tsx:73:    // Find any cell that renders "n/a" text. Achievement and Hedonism have null win rates.
+cloud/apps/web/src/components/models/CircumplexMethodologyPanel.tsx:60:              A value profile is the row of win rates for one value against the other nine values.
+cloud/apps/web/src/components/domains/DominanceSectionSummary.tsx:22:        <li>Arrow thickness: higher pairwise win rate for that value over the other in this AI.</li>
+cloud/apps/web/src/components/domains/DominanceSectionSummary.tsx:23:        <li>Yellow double-headed arrows: near-even win rates (values are highly contestable).</li>
+cloud/apps/web/src/components/models/ConsistencyTable.tsx:112:                  definition="Coherence asks whether win rate rises as pressure to favor a value rises."
+cloud/apps/web/src/components/models/ModelsMatrixCell.tsx:3:import { type ModelsAnalysisDomainBreakdown } from '../../api/operations/modelsAnalysis';
+cloud/apps/web/src/components/models/ModelsMatrixCell.tsx:10:  pooledWinRate: number | null;
+cloud/apps/web/src/components/models/ModelsMatrixCell.tsx:27:  pooledWinRate,
+cloud/apps/web/src/components/models/ModelsMatrixCell.tsx:41:  const primaryLabel = hiddenByFilter || pooledWinRate == null ? 'n/a' : formatPercent(pooledWinRate);
+cloud/apps/web/src/components/models/ModelsMatrixCell.tsx:69:      <span className={`text-sm font-semibold ${hiddenByFilter || pooledWinRate == null ? 'text-gray-400' : 'text-gray-900'}`}>
+cloud/apps/web/src/components/models/PressureResponseByValueTable.test.tsx:196:    fireEvent.click(screen.getByRole('button', { name: /sort by average win rate/i }));
+cloud/apps/web/src/components/models/PressureResponseByValueTable.test.tsx:210:  it('aggregates pooled win rates across multiple pairs', () => {
+cloud/apps/web/src/components/models/stabilityDots.ts:66:  return `Cross-domain stability shows how consistent this value's win rate is across domains. Score: ${roundedScore}/100 - ${describeStability(roundedScore)}${spreadText}. Based on ${formatDomainCount(eligibleDomainCount)}.`;
+cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx:5:import { type ModelsAnalysisModelResult, type ModelsAnalysisValueResult } from '../../api/operations/modelsAnalysis';
+cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx:58:  const pooledWinRateTooltip = (
+cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx:61:        <strong>What it means:</strong> A simple average of win rates across eligible domains.
+cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx:66:        <strong>Formula:</strong> add up all domain win rates, then divide by the number of domains.
+cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx:93:                <td className="text-right pt-1 pl-2">{formatPercent(value.pooledWinRate)}</td>
+cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx:102:  const vignetteCountTooltip = (
+cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx:109:        Multiple runs of the same vignette are pooled into a single win rate before counting,
+cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx:113:        Every vignette counts equally when computing the domain win rate -
+cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx:143:                <span>Pooled win rate</span>
+cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx:145:                  content={pooledWinRateTooltip}
+cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx:150:                  <Button type="button" variant="ghost" size="icon" className="cursor-help p-0 min-w-0 min-h-0 h-4 w-4 text-gray-400 hover:text-gray-600 hover:bg-transparent" aria-label="How pooled win rate is calculated">
+cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx:156:                {formatPercent(value.pooledWinRate)}
+cloud/apps/web/src/components/models/ModelValueDetailDrawer.tsx:186:                            content={vignetteCountTooltip}
+cloud/apps/web/src/components/models/PressureSensitivitySanityCheck.tsx:43:        Of (model, value pair) combinations with a measurable pressure response, what share had a positive response (own pressure increased own win rate)?
+cloud/apps/web/src/components/models/ModelsMatrix.tsx:2:import { type ModelsAnalysisModelResult, type ModelsAnalysisValueResult } from '../../api/operations/modelsAnalysis';
+cloud/apps/web/src/components/models/ModelsMatrix.tsx:23:  if (value == null || value.pooledWinRate == null) return null;
+cloud/apps/web/src/components/models/ModelsMatrix.tsx:61:    const leftRate = leftCell?.pooledWinRate ?? null;
+cloud/apps/web/src/components/models/ModelsMatrix.tsx:62:    const rightRate = rightCell?.pooledWinRate ?? null;
+cloud/apps/web/src/components/models/ModelsMatrix.tsx:105:        if (value.pooledWinRate != null) {
+cloud/apps/web/src/components/models/ModelsMatrix.tsx:210:                          pooledWinRate={cell.pooledWinRate}
+cloud/apps/web/src/components/models/PressureResponseByValueTable.tsx:304:                label="Average win rate"
+cloud/apps/web/src/components/models/PressureResponseByValueTable.tsx:305:                ariaLabel="Average win rate"
+cloud/apps/web/src/components/models/PressureResponseByValueTable.tsx:314:                label="Balanced win rate"
+cloud/apps/web/src/components/models/PressureResponseByValueTable.tsx:315:                ariaLabel="Balanced win rate"
+cloud/apps/web/src/components/models/PressureResponseByValueTable.tsx:324:                label="High pressure value win rate"
+cloud/apps/web/src/components/models/PressureResponseByValueTable.tsx:325:                ariaLabel="High pressure value win rate"
+cloud/apps/web/src/components/models/PressureResponseByValueTable.tsx:334:                label="High pressure on opposing value win rate"
+cloud/apps/web/src/components/models/PressureResponseByValueTable.tsx:335:                ariaLabel="High pressure on opposing value win rate"
+cloud/apps/web/src/components/models/PressureSensitivityDetail.tsx:123:            This table shows the baseline win rate and push rates for each value pair. The Pressure response column is
+
+2026-04-30T18:09:47.959078Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: prompt must be at most 128 characters path=/Users/chrislaw/.codex/.tmp/plugins/plugins/build-ios-apps/.codex-plugin/plugin.json
+2026-04-30T18:09:47.959371Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: maximum of 3 prompts is supported path=/Users/chrislaw/.codex/.tmp/plugins/plugins/plugin-eval/.codex-plugin/plugin.json
+2026-04-30T18:09:47.974422Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:09:47.974434Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:09:47.974814Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:09:47.974819Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:09:47.975239Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:09:47.975242Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:09:47.975648Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:09:47.975657Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:09:47.976191Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:09:47.976194Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:09:47.977032Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:09:47.977037Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+codex
+I found the main reporting code paths. Next I’m reading the resolver and the two UI consumers so I can separate real spec risk from behavior that the code already covers.
+exec
+/bin/zsh -lc "sed -n '1,260p' cloud/apps/api/src/graphql/queries/models-analysis.ts" in /Users/chrislaw/valuerank
+ succeeded in 0ms:
+import { db } from '@valuerank/db';
+import { getModelsFromDatabase } from '../../config/models.js';
+import { buildAssumptionKey, parseSnapshotOutput } from '../../services/analysis/domain-analysis-snapshot-builder.js';
+import { DOMAIN_ANALYSIS_ASSUMPTION_PREFIX, DOMAIN_ANALYSIS_SNAPSHOT_TYPE } from '../../services/analysis/domain-analysis-cache-types.js';
+import { DOMAIN_ANALYSIS_VALUE_KEYS, type DomainAnalysisValueKey } from './domain-analysis-values.js';
+import { selectModelsAnalysisSnapshots } from './models-analysis-snapshot-selection.js';
+import { builder } from '../builder.js';
+import {
+  ModelsAnalysisResultRef,
+  type ModelsAnalysisDomainBreakdownShape,
+  type ModelsAnalysisModelResultShape,
+  type ModelsAnalysisValueResultShape,
+} from '../types/models-analysis.js';
+
+type DomainContribution = ModelsAnalysisDomainBreakdownShape;
+type ModelsAnalysisSnapshotRow = {
+  id: string;
+  assumptionKey: string;
+  configSignature: string;
+  output: unknown;
+};
+
+// Honest denominator: includes neutral outcomes so win rate is consistent with
+// the rest of the product (matches aggregate-logic.ts). Excluding neutrals would
+// inflate win rates and make evidence weights inconsistent with scenario counts.
+function computeDomainWinRate(prioritized: number, deprioritized: number, neutral: number): number | null {
+  const evidenceWeight = prioritized + deprioritized + neutral;
+  if (evidenceWeight <= 0) return null;
+  return (prioritized / evidenceWeight) * 100;
+}
+
+// Equal-weight pooled win rate: each domain counts once regardless of vignette count.
+function computePooledWinRate(domains: DomainContribution[]): number | null {
+  if (domains.length === 0) return null;
+  const sum = domains.reduce((acc, d) => acc + d.winRate, 0);
+  return sum / domains.length;
+}
+
+// Unweighted MAD stability score: each domain counts equally.
+function computeStabilityScore(domains: DomainContribution[]): number | null {
+  if (domains.length < 2) return null;
+  const mean = computePooledWinRate(domains);
+  if (mean === null) return null;
+  const mad = domains.reduce((acc, d) => acc + Math.abs(d.winRate - mean), 0) / domains.length;
+  return Math.max(0, 100 * (1 - mad / 50));
+}
+
+function buildEmptyValueResult(valueKey: DomainAnalysisValueKey): ModelsAnalysisValueResultShape {
+  return {
+    valueKey,
+    pooledWinRate: null,
+    stabilityScore: null,
+    eligibleDomainCount: 0,
+    domains: [],
+  };
+}
+
+function buildValueResult(valueKey: DomainAnalysisValueKey, domains: DomainContribution[]): ModelsAnalysisValueResultShape {
+  // Null evidenceWeight means the snapshot predates the vignetteCount field (pre-v1.2.0) but the
+  // win rate is still valid — include those domains in the pool. Exclude only genuine zero-evidence entries.
+  const eligibleDomains = domains.filter((domain) => domain.evidenceWeight == null || domain.evidenceWeight > 0);
+  return {
+    valueKey,
+    pooledWinRate: computePooledWinRate(eligibleDomains),
+    stabilityScore: computeStabilityScore(eligibleDomains),
+    eligibleDomainCount: eligibleDomains.length,
+    domains: eligibleDomains,
+  };
+}
+
+builder.queryField('modelsAnalysis', (t) =>
+  t.field({
+    type: ModelsAnalysisResultRef,
+    args: {
+      domainId: t.arg.id({
+        required: false,
+        description: 'Optional domain ID to scope the matrix to a single domain',
+      }),
+      signature: t.arg.string({
+        required: false,
+        description: 'Optional batch signature to filter snapshots (e.g. vnewtd, vnewt0)',
+      }),
+    },
+    resolve: async (_root, args, ctx) => {
+      const domainId = args.domainId != null ? String(args.domainId) : null;
+      const signature = args.signature != null ? String(args.signature) : null;
+      const activeModels = await getModelsFromDatabase({
+        activeOnly: true,
+        availableOnly: false,
+      });
+
+      const snapshots = await db.assumptionAnalysisSnapshot.findMany({
+        where: {
+          assumptionKey: domainId != null
+            ? buildAssumptionKey('DOMAIN', domainId)
+            : {
+                startsWith: `${DOMAIN_ANALYSIS_ASSUMPTION_PREFIX}:`,
+              },
+          analysisType: DOMAIN_ANALYSIS_SNAPSHOT_TYPE,
+          ...(signature != null ? { configSignature: signature } : {}),
+          status: 'CURRENT',
+          deletedAt: null,
+        },
+        select: {
+          id: true,
+          assumptionKey: true,
+          configSignature: true,
+          output: true,
+        },
+        orderBy: [
+          { createdAt: 'desc' },
+          { id: 'desc' },
+        ],
+      });
+
+      const selectedSnapshots = selectModelsAnalysisSnapshots(
+        snapshots as ModelsAnalysisSnapshotRow[],
+        signature,
+      );
+
+      const activeModelById = new Map(activeModels.map((model) => [model.modelId, model.displayName] as const));
+      const contributionsByModel = new Map<string, Map<DomainAnalysisValueKey, DomainContribution[]>>();
+
+      for (const model of activeModels) {
+        const valueMap = new Map<DomainAnalysisValueKey, DomainContribution[]>();
+        for (const valueKey of DOMAIN_ANALYSIS_VALUE_KEYS) {
+          valueMap.set(valueKey, []);
+        }
+        contributionsByModel.set(model.modelId, valueMap);
+      }
+
+      for (const snapshot of selectedSnapshots) {
+        const parsed = parseSnapshotOutput(snapshot.output);
+        if (parsed == null) {
+          ctx.log.warn({ assumptionKey: snapshot.assumptionKey, snapshotId: snapshot.id }, 'Skipping unparsable models analysis snapshot');
+          continue;
+        }
+
+        const domainMatch = snapshot.assumptionKey.startsWith('domain-analysis:')
+          ? snapshot.assumptionKey.slice('domain-analysis:'.length)
+          : null;
+
+        for (const model of parsed.models) {
+          if (!activeModelById.has(model.model)) continue;
+          const valueMap = contributionsByModel.get(model.model);
+          if (valueMap == null) continue;
+
+          for (const valueKey of DOMAIN_ANALYSIS_VALUE_KEYS) {
+            const contributions = valueMap.get(valueKey);
+            if (contributions == null) continue;
+
+            // Prefer pre-computed equal-weight fields from snapshots v1.2.0+.
+            // Fall back to raw counts for older snapshots (before the version bump).
+            const vigCount = model.vignetteCount?.[valueKey] ?? 0;
+            const precomputedWinRate = model.valueWinRates?.[valueKey];
+
+            if (vigCount > 0 && precomputedWinRate != null) {
+              contributions.push({
+                domainId: domainMatch ?? parsed.domainId,
+                domainName: parsed.domainName,
+                evidenceWeight: vigCount,
+                winRate: precomputedWinRate,
+              });
+            } else {
+              // Fallback: snapshot predates vignetteCount (pre-v1.2.0). Compute win rate from
+              // accumulated counts but do NOT use the raw count total as evidenceWeight — that
+              // number is total scenario outcomes (not vignette count) and would be misleading.
+              // Set evidenceWeight to null so the UI can show "—" until the snapshot rebuilds.
+              const counts = model.counts[valueKey] ?? { prioritized: 0, deprioritized: 0, neutral: 0 };
+              const rawTotal = counts.prioritized + counts.deprioritized + counts.neutral;
+              if (rawTotal <= 0) continue;
+              const winRate = computeDomainWinRate(counts.prioritized, counts.deprioritized, counts.neutral);
+              if (winRate == null) continue;
+              contributions.push({
+                domainId: domainMatch ?? parsed.domainId,
+                domainName: parsed.domainName,
+                evidenceWeight: null,
+                winRate,
+              });
+            }
+          }
+        }
+      }
+
+      const models: ModelsAnalysisModelResultShape[] = activeModels.map((model) => {
+        const valueMap = contributionsByModel.get(model.modelId) ?? new Map<DomainAnalysisValueKey, DomainContribution[]>();
+        return {
+          modelId: model.modelId,
+          label: model.displayName,
+          values: DOMAIN_ANALYSIS_VALUE_KEYS.map((valueKey) => {
+            const domains = valueMap.get(valueKey) ?? [];
+            return domains.length === 0
+              ? buildEmptyValueResult(valueKey)
+              : buildValueResult(valueKey, domains);
+          }),
+        };
+      });
+
+      return {
+        models,
+      };
+    },
+  }),
+);
+
+exec
+/bin/zsh -lc "sed -n '1,260p' cloud/apps/web/src/pages/Models.tsx" in /Users/chrislaw/valuerank
+ succeeded in 0ms:
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery } from 'urql';
+import { ErrorMessage } from '../components/ui/ErrorMessage';
+import { Button } from '../components/ui/Button';
+import { Select } from '../components/ui/Select';
+import { ScreenshotButton } from '../components/ui/ScreenshotButton';
+import { useDomains } from '../hooks/useDomains';
+import {
+  DOMAIN_ANALYSIS_QUERY,
+  type DomainAnalysisQueryResult,
+  type DomainAnalysisQueryVariables,
+  DOMAIN_AVAILABLE_SIGNATURES_QUERY,
+  type DomainAvailableSignaturesQueryResult,
+} from '../api/operations/domainAnalysis';
+import {
+  MODELS_ANALYSIS_QUERY,
+  type ModelsAnalysisQueryResult,
+  type ModelsAnalysisQueryVariables,
+  type ModelsAnalysisValueResult,
+} from '../api/operations/modelsAnalysis';
+import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/llm';
+import { ModelValueDetailDrawer } from '../components/models/ModelValueDetailDrawer';
+import { ValuePrioritiesSection } from '../components/domains/ValuePrioritiesSection';
+import { ModelsMatrix } from '../components/models/ModelsMatrix';
+import { VALUES, type ModelEntry, type ValueKey } from '../data/domainAnalysisData';
+import { formatSignatureOptionLabel } from '../utils/domainAnalysisUtils';
+
+const DEFAULT_SIGNATURE = 'vnewtd';
+const ALL_DOMAINS_SCOPE = 'all-domains';
+
+export function Models() {
+  const { domains, queryLoading: domainsLoading, error: domainsError } = useDomains();
+  const reportRef = useRef<HTMLDivElement>(null);
+
+  const [selectedDomainId, setSelectedDomainId] = useState<string | null>(null);
+  const [selectedSignature, setSelectedSignature] = useState<string>(DEFAULT_SIGNATURE);
+
+  const [{ data: signatureData }] = useQuery<DomainAvailableSignaturesQueryResult, { domainId: string }>({
+    query: DOMAIN_AVAILABLE_SIGNATURES_QUERY,
+    variables: { domainId: selectedDomainId ?? '' },
+    pause: selectedDomainId == null,
+    requestPolicy: 'cache-and-network',
+  });
+
+  const signatureOptions = useMemo(
+    () => signatureData?.domainAvailableSignatures ?? [],
+    [signatureData],
+  );
+
+  const allDomainsDomainId = domains[0]?.id ?? '';
+
+  const [{ data: allDomainsData, fetching: allDomainsFetching, error: allDomainsError }] = useQuery<
+    DomainAnalysisQueryResult,
+    DomainAnalysisQueryVariables
+  >({
+    query: DOMAIN_ANALYSIS_QUERY,
+    variables: {
+      domainId: allDomainsDomainId,
+      scope: ALL_DOMAINS_SCOPE,
+      scoreMethod: 'FULL_BT',
+      signature: selectedSignature,
+    },
+    pause: allDomainsDomainId === '',
+    requestPolicy: 'cache-and-network',
+  });
+
+  // Reset to default when domain changes; keep valid selection if it exists in new options.
+  useEffect(() => {
+    setSelectedSignature(DEFAULT_SIGNATURE);
+  }, [selectedDomainId]);
+
+  // Memoized to keep the object reference stable across renders.
+  // If new query inputs are added, update the dependency array here too.
+  const queryVariables = useMemo(
+    () => ({
+      ...(selectedDomainId != null ? { domainId: selectedDomainId } : {}),
+      signature: selectedSignature,
+    }),
+    [selectedDomainId, selectedSignature],
+  );
+  const [{ data: modelsAnalysisData, fetching, error }] = useQuery<ModelsAnalysisQueryResult, ModelsAnalysisQueryVariables>({
+    query: MODELS_ANALYSIS_QUERY,
+    variables: queryVariables,
+    requestPolicy: 'cache-and-network',
+  });
+  const [{ data: llmModelsData }] = useQuery<LlmModelsQueryResult>({
+    query: LLM_MODELS_QUERY,
+    variables: { status: 'ACTIVE' },
+    requestPolicy: 'cache-and-network',
+  });
+  const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
+  const [selectedCell, setSelectedCell] = useState<{ modelId: string; valueKey: string } | null>(null);
+  const initializedModelSelection = useRef(false);
+
+  const comparisonModels = useMemo(() => modelsAnalysisData?.modelsAnalysis.models ?? [], [modelsAnalysisData]);
+  const defaultModelIds = useMemo(
+    () => new Set((llmModelsData?.llmModels ?? []).filter((m) => m.isDefault).map((m) => m.modelId)),
+    [llmModelsData],
+  );
+  const selectedDomain = selectedDomainId != null ? domains.find((domain) => domain.id === selectedDomainId) ?? null : null;
+  const singleDomainActive = selectedDomainId != null;
+
+  useEffect(() => {
+    if (selectedDomainId == null) return;
+    if (domains.some((domain) => domain.id === selectedDomainId)) return;
+    setSelectedDomainId(null);
+  }, [domains, selectedDomainId]);
+
+  useEffect(() => {
+    if (initializedModelSelection.current) return;
+    if (comparisonModels.length === 0) return;
+    if (llmModelsData == null) return;
+    const availableIds = comparisonModels.map((model) => model.modelId);
+    const defaultSelection = availableIds.filter((id) => defaultModelIds.has(id));
+    // Fall back to all models if no defaults are configured or none match the current result set
+    setSelectedModelIds(defaultSelection.length > 0 ? defaultSelection : availableIds);
+    initializedModelSelection.current = true;
+  }, [comparisonModels, llmModelsData, defaultModelIds]);
+
+  useEffect(() => {
+    if (!initializedModelSelection.current) return;
+    setSelectedModelIds((current) => {
+      if (current.length === 0) return current;
+      const validIds = new Set(comparisonModels.map((model) => model.modelId));
+      const next = current.filter((modelId) => validIds.has(modelId));
+      return next.length === current.length ? current : next;
+    });
+  }, [comparisonModels]);
+
+  // Close the drawer when its model is no longer visible (filtered out or cleared)
+  useEffect(() => {
+    if (selectedCell == null) return;
+    if (!selectedModelIds.includes(selectedCell.modelId)) {
+      setSelectedCell(null);
+    }
+  }, [selectedModelIds, selectedCell]);
+
+  const modelOptions = useMemo(() => comparisonModels.map((model) => ({
+    value: model.modelId,
+    label: model.label,
+  })), [comparisonModels]);
+
+  const domainOptions = useMemo(() => [
+    { value: 'all', label: 'All domains' },
+    ...domains.map((domain) => ({
+      value: domain.id,
+      label: `${domain.name}`,
+    })),
+  ], [domains]);
+
+  const selectedModel = selectedCell != null
+    ? comparisonModels.find((model) => model.modelId === selectedCell.modelId) ?? null
+    : null;
+  const selectedValue: ModelsAnalysisValueResult | null = useMemo(() => {
+    if (selectedCell == null || selectedModel == null) return null;
+    return selectedModel.values.find((value) => value.valueKey === selectedCell.valueKey) ?? null;
+  }, [selectedCell, selectedModel]);
+
+  const comparisonModelMap = useMemo(
+    () => new Map(comparisonModels.map((model) => [model.modelId, model] as const)),
+    [comparisonModels],
+  );
+
+  const allDomainsModels = useMemo<ModelEntry[]>(() => {
+    const sourceModels = allDomainsData?.domainAnalysis.models ?? [];
+    return sourceModels.map((model) => {
+      const comparisonModel = comparisonModelMap.get(model.model);
+      const comparisonValueMap = new Map(comparisonModel?.values.map((value) => [value.valueKey, value.stabilityScore] as const) ?? []);
+
+      const values = VALUES.reduce<Record<ValueKey, number>>((acc, valueKey) => {
+        const score = model.values.find((value) => value.valueKey === valueKey)?.score ?? 0;
+        acc[valueKey] = score;
+        return acc;
+      }, {} as Record<ValueKey, number>);
+
+      const winRates = VALUES.reduce<Record<ValueKey, number | null>>((acc, valueKey) => {
+        const value = model.values.find((entry) => entry.valueKey === valueKey) ?? null;
+        if (value == null) {
+          acc[valueKey] = null;
+          return acc;
+        }
+        const total = value.prioritized + value.deprioritized + value.neutral;
+        acc[valueKey] = total > 0 ? (value.prioritized / total) * 100 : null;
+        return acc;
+      }, {} as Record<ValueKey, number | null>);
+
+      const stabilityScores = VALUES.reduce<Record<ValueKey, number | null>>((acc, valueKey) => {
+        acc[valueKey] = comparisonValueMap.get(valueKey) ?? null;
+        return acc;
+      }, {} as Record<ValueKey, number | null>);
+
+      return {
+        model: model.model,
+        label: model.label,
+        values,
+        winRates,
+        stabilityScores,
+      };
+    });
+  }, [allDomainsData, comparisonModelMap]);
+
+  const defaultSelection = useMemo(() => {
+    const availableIds = comparisonModels.map((model) => model.modelId);
+    const defaults = availableIds.filter((id) => defaultModelIds.has(id));
+    return defaults.length > 0 ? defaults : availableIds;
+  }, [comparisonModels, defaultModelIds]);
+
+  const isDefaultSelection = useMemo(() => {
+    if (selectedModelIds.length !== defaultSelection.length) return false;
+    const defaultSet = new Set(defaultSelection);
+    return selectedModelIds.every((id) => defaultSet.has(id));
+  }, [selectedModelIds, defaultSelection]);
+
+  const loading = (domainsLoading && domains.length === 0)
+    || (allDomainsFetching && allDomainsData == null)
+    || (fetching && modelsAnalysisData == null);
+  const selectedModelCount = selectedModelIds.length;
+
+  const toggleModelId = (modelId: string) => {
+    setSelectedModelIds((current) => (
+      current.includes(modelId)
+        ? current.filter((id) => id !== modelId)
+        : [...current, modelId]
+    ));
+  };
+
+  const selectAllModels = () => {
+    setSelectedModelIds(comparisonModels.map((model) => model.modelId));
+  };
+
+  const clearModels = () => {
+    setSelectedModelIds([]);
+  };
+
+  const handleCellClick = (modelId: string, valueKey: string) => {
+    setSelectedCell({ modelId, valueKey });
+  };
+
+  const modelSetSummary = loading
+    ? 'Loading...'
+    : modelOptions.length === 0
+      ? 'No models available'
+      : isDefaultSelection
+        ? `Default — ${selectedModelCount} models selected`
+        : selectedModelCount === modelOptions.length
+          ? 'All selected'
+          : `${selectedModelCount} of ${modelOptions.length} selected`;
+
+  return (
+    <div ref={reportRef} className="space-y-6">
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-2">
+            <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Model Value Preference overview</h1>
+            <p className="text-sm text-gray-600">
+              Compare model preferences by value and scan whether each pattern stays steady across domains.
+            </p>
+          </div>
+          <ScreenshotButton targetRef={reportRef} label="report" />
+        </div>
+
+exec
+/bin/zsh -lc "sed -n '1,260p' cloud/apps/web/src/pages/DomainAnalysis.tsx" in /Users/chrislaw/valuerank
+ succeeded in 0ms:
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useMutation, useQuery } from 'urql';
+import { ErrorMessage } from '../components/ui/ErrorMessage';
+import { Loading } from '../components/ui/Loading';
+import { Button } from '../components/ui/Button';
+import { Select } from '../components/ui/Select';
+import {
+  DOMAIN_AVAILABLE_SIGNATURES_QUERY,
+  DOMAIN_ANALYSIS_QUERY,
+  DOMAIN_ANALYSIS_QUERY_LEGACY,
+  REFRESH_DOMAIN_ANALYSIS_MUTATION,
+  type DomainAvailableSignature,
+  type DomainAvailableSignaturesQueryResult,
+  type DomainAvailableSignaturesQueryVariables,
+  type DomainAnalysisQueryResult,
+  type DomainAnalysisQueryVariables,
+  type RefreshDomainAnalysisMutationResult,
+  type RefreshDomainAnalysisMutationVariables,
+} from '../api/operations/domainAnalysis';
+import {
+  MODELS_ANALYSIS_QUERY,
+  type ModelsAnalysisQueryResult,
+  type ModelsAnalysisQueryVariables,
+} from '../api/operations/modelsAnalysis';
+import { ModelGroupsSection } from '../components/domains/ModelGroupsSection';
+import { DominanceSection } from '../components/domains/DominanceSection';
+import { SimilaritySection } from '../components/domains/SimilaritySection';
+import { ValuePrioritiesSection } from '../components/domains/ValuePrioritiesSection';
+import {
+  VALUES,
+  type DomainAnalysisModelAvailability,
+  type ModelEntry,
+  type ValueKey,
+} from '../data/domainAnalysisData';
+import { useDomains } from '../hooks/useDomains';
+import { exportDomainTranscriptsAsCSV } from '../api/export';
+import {
+  formatSignatureOptionLabel,
+  getCacheStatusCopy,
+  getSignaturePriority,
+  parseTemperatureFromSignature,
+} from '../utils/domainAnalysisUtils';
+
+const ALL_DOMAINS_SCOPE = 'all-domains';
+
+export function DomainAnalysis() {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { domains, queryLoading: domainsLoading, error: domainsError } = useDomains();
+  const [selectedScope, setSelectedScope] = useState<'DOMAIN' | 'ALL_DOMAINS'>(
+    searchParams.get('scope') === ALL_DOMAINS_SCOPE ? 'ALL_DOMAINS' : 'DOMAIN',
+  );
+  const [selectedDomainId, setSelectedDomainId] = useState<string>(searchParams.get('domainId') ?? '');
+  const [selectedSignature, setSelectedSignature] = useState<string>(searchParams.get('signature') ?? '');
+  const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
+  const [useLegacyQuery, setUseLegacyQuery] = useState(false);
+  const [exportLoading, setExportLoading] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [refreshNotice, setRefreshNotice] = useState<string | null>(null);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+
+  const [{ data: signatureData, fetching: signaturesLoading, error: signaturesError }] = useQuery<
+    DomainAvailableSignaturesQueryResult, DomainAvailableSignaturesQueryVariables
+  >({
+    query: DOMAIN_AVAILABLE_SIGNATURES_QUERY,
+    variables: {
+      domainId: selectedDomainId === '' ? domains[0]?.id ?? '' : selectedDomainId,
+      scope: selectedScope === 'ALL_DOMAINS' ? ALL_DOMAINS_SCOPE : undefined,
+    },
+    pause: selectedDomainId === '',
+    requestPolicy: 'cache-and-network',
+  });
+
+  const signatureOptions = useMemo<DomainAvailableSignature[]>(() => {
+    const options = signatureData?.domainAvailableSignatures ?? [];
+    return options
+      .map((option, index) => ({ option, index }))
+      .sort((a, b) => {
+        const p = getSignaturePriority(a.option) - getSignaturePriority(b.option);
+        return p !== 0 ? p : a.index - b.index;
+      })
+      .map(({ option }) => option);
+  }, [signatureData]);
+
+  useEffect(() => {
+    if (domains.length === 0) return;
+    if (selectedDomainId !== '' && domains.some((d) => d.id === selectedDomainId)) return;
+    setSelectedDomainId(domains[0]?.id ?? '');
+  }, [domains, selectedDomainId]);
+
+  useEffect(() => {
+    if (signatureOptions.length === 0) { setSelectedSignature(''); return; }
+    if (selectedSignature !== '' && signatureOptions.some((o) => o.signature === selectedSignature)) return;
+    setSelectedSignature(signatureOptions[0]?.signature ?? '');
+  }, [selectedSignature, signatureOptions]);
+
+  useEffect(() => { setExportError(null); }, [selectedDomainId, selectedSignature]);
+
+  useEffect(() => {
+    setRefreshNotice(null);
+    setRefreshError(null);
+  }, [selectedDomainId, selectedSignature]);
+
+  useEffect(() => {
+    const currentScope = searchParams.get('scope') === ALL_DOMAINS_SCOPE ? 'ALL_DOMAINS' : 'DOMAIN';
+    const nextDomainId = selectedDomainId !== '' ? selectedDomainId : (domains[0]?.id ?? '');
+    if (nextDomainId === '' && selectedScope === 'DOMAIN') return;
+    if (
+      searchParams.get('domainId') === nextDomainId
+      && (searchParams.get('signature') ?? '') === selectedSignature
+      && currentScope === selectedScope
+    ) return;
+    const next = new URLSearchParams(searchParams);
+    if (nextDomainId !== '') next.set('domainId', nextDomainId);
+    else next.delete('domainId');
+    if (selectedScope === 'ALL_DOMAINS') next.set('scope', ALL_DOMAINS_SCOPE);
+    else next.delete('scope');
+    if (selectedSignature === '') next.delete('signature');
+    else next.set('signature', selectedSignature);
+    setSearchParams(next, { replace: true });
+  }, [domains, searchParams, selectedDomainId, selectedSignature, selectedScope, setSearchParams]);
+
+  const activeUseLegacyQuery = useLegacyQuery && selectedScope !== 'ALL_DOMAINS';
+  const [
+    { data: scoredData, fetching: scoredFetching, error: scoredError },
+    reexecuteScoredQuery,
+  ] = useQuery<DomainAnalysisQueryResult, DomainAnalysisQueryVariables>({
+    query: DOMAIN_ANALYSIS_QUERY,
+    variables: {
+      domainId: selectedDomainId === '' ? domains[0]?.id ?? '' : selectedDomainId,
+      scope: selectedScope === 'ALL_DOMAINS' ? ALL_DOMAINS_SCOPE : undefined,
+      signature: selectedSignature === '' ? undefined : selectedSignature,
+    },
+    pause: selectedDomainId === '' || activeUseLegacyQuery,
+    requestPolicy: 'cache-and-network',
+  });
+  const [{ data: legacyData, fetching: legacyFetching, error: legacyError }] = useQuery<DomainAnalysisQueryResult, { domainId: string }>({
+    query: DOMAIN_ANALYSIS_QUERY_LEGACY,
+    variables: { domainId: selectedDomainId },
+    pause: selectedDomainId === '' || !activeUseLegacyQuery,
+    requestPolicy: 'cache-and-network',
+  });
+  const [{ data: modelsAnalysisData }] = useQuery<ModelsAnalysisQueryResult, ModelsAnalysisQueryVariables>({
+    query: MODELS_ANALYSIS_QUERY,
+    variables: {
+      ...(selectedScope === 'DOMAIN' && selectedDomainId !== '' ? { domainId: selectedDomainId } : {}),
+      ...(selectedSignature !== '' ? { signature: selectedSignature } : {}),
+    },
+    pause: selectedScope === 'DOMAIN' && selectedDomainId === '',
+    requestPolicy: 'cache-and-network',
+  });
+  const [{ fetching: refreshFetching }, refreshDomainAnalysis] = useMutation<
+    RefreshDomainAnalysisMutationResult,
+    RefreshDomainAnalysisMutationVariables
+  >(REFRESH_DOMAIN_ANALYSIS_MUTATION);
+
+  useEffect(() => {
+    const message = scoredError?.message ?? '';
+    const isFieldError = message.includes('Unknown argument "scoreMethod"')
+      || message.includes('Unknown argument "signature"')
+      || message.includes('Cannot query field')
+      || message.includes('Unknown field');
+    if (isFieldError && !useLegacyQuery && selectedScope !== 'ALL_DOMAINS') setUseLegacyQuery(true);
+  }, [scoredError, selectedScope, useLegacyQuery]);
+
+  const data = activeUseLegacyQuery ? legacyData : scoredData;
+  const fetching = activeUseLegacyQuery ? legacyFetching : scoredFetching;
+  const error = activeUseLegacyQuery ? legacyError : scoredError;
+  const cacheStatusCopy = useMemo(
+    () => getCacheStatusCopy(data?.domainAnalysis.cacheStatus, data?.domainAnalysis.generatedAt),
+    [data?.domainAnalysis.cacheStatus, data?.domainAnalysis.generatedAt],
+  );
+  const showPageLoader = domainsLoading || (selectedDomainId !== '' && data?.domainAnalysis == null && fetching);
+  const isAllDomains = selectedScope === 'ALL_DOMAINS';
+
+  const models = useMemo<ModelEntry[]>(() => {
+    const sourceModels = data?.domainAnalysis.models ?? [];
+    const pooledWinRatesByModel = new Map<string, Map<string, number | null>>(
+      (modelsAnalysisData?.modelsAnalysis.models ?? []).map((model) => [
+        model.modelId,
+        new Map(model.values.map((value) => [value.valueKey, value.pooledWinRate])),
+      ]),
+    );
+
+    return sourceModels.map((model) => {
+      const valueMap = new Map(model.values.map((e) => [e.valueKey, e.score]));
+      const winRateMap = new Map(model.values.map((e) => {
+        const neutral = e.neutral ?? 0;
+        const denom = e.prioritized + e.deprioritized + neutral;
+        const pooledWinRate = pooledWinRatesByModel.get(model.model)?.get(e.valueKey) ?? null;
+        return [e.valueKey, pooledWinRate ?? (denom > 0 ? (e.prioritized / denom) * 100 : null)] as const;
+      }));
+      const values = VALUES.reduce<Record<ValueKey, number>>((acc, valueKey) => {
+        acc[valueKey] = valueMap.get(valueKey) ?? 0;
+        return acc;
+      }, {} as Record<ValueKey, number>);
+      const winRates = VALUES.reduce<Record<ValueKey, number | null>>((acc, valueKey) => {
+        acc[valueKey] = winRateMap.get(valueKey) ?? null;
+        return acc;
+      }, {} as Record<ValueKey, number | null>);
+      return {
+        model: model.model,
+        label: model.label,
+        values,
+        winRates,
+      };
+    });
+  }, [data, modelsAnalysisData]);
+  useEffect(() => {
+    if (selectedModelId == null) return;
+    if (models.some((model) => model.model === selectedModelId)) return;
+    setSelectedModelId(null);
+  }, [models, selectedModelId]);
+
+  const modelOptions = useMemo(
+    () => [
+      { value: 'all', label: 'All models' },
+      ...models.map((model) => ({ value: model.model, label: model.label })),
+    ],
+    [models],
+  );
+  const visibleModels = useMemo(
+    () => (selectedModelId == null ? models : models.filter((model) => model.model === selectedModelId)),
+    [models, selectedModelId],
+  );
+
+  const unavailableModels = useMemo<DomainAnalysisModelAvailability[]>(
+    () => (data?.domainAnalysis.unavailableModels ?? []).map((m) => ({ model: m.model, label: m.label, reason: m.reason })),
+    [data],
+  );
+  const missingDefinitionCount = data?.domainAnalysis.missingDefinitions?.length ?? 0;
+  const allMissingDefinitionIds = useMemo(
+    () => (data?.domainAnalysis.missingDefinitions ?? []).map((m) => m.definitionId),
+    [data?.domainAnalysis.missingDefinitions],
+  );
+
+  const handleExport = async () => {
+    if (selectedDomainId === '' || isAllDomains) return;
+    setExportLoading(true);
+    setExportError(null);
+    try {
+      await exportDomainTranscriptsAsCSV(selectedDomainId, selectedSignature !== '' ? selectedSignature : undefined);
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : 'Export failed');
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
+  const handleRefreshAnalysis = async () => {
+    if (selectedDomainId === '' || isAllDomains) return;
+    setRefreshNotice(null);
+    setRefreshError(null);
+
+    const result = await refreshDomainAnalysis({
+      domainId: selectedDomainId,
+      signature: selectedSignature === '' ? undefined : selectedSignature,
+    });
+
+
+2026-04-30T18:09:52.019365Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: prompt must be at most 128 characters path=/Users/chrislaw/.codex/.tmp/plugins/plugins/build-ios-apps/.codex-plugin/plugin.json
+2026-04-30T18:09:52.019657Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: maximum of 3 prompts is supported path=/Users/chrislaw/.codex/.tmp/plugins/plugins/plugin-eval/.codex-plugin/plugin.json
+2026-04-30T18:09:52.034650Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:09:52.034660Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:09:52.035081Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:09:52.035086Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:09:52.035507Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:09:52.035511Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:09:52.035934Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:09:52.035939Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:09:52.036330Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:09:52.036333Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:09:52.037213Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:09:52.037217Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+codex
+I’ve confirmed the main risk is not just “old code exists,” but that the current resolver and page code can still mix weighting methods. I’m pulling exact line numbers now so the findings are precise.
+exec
+/bin/zsh -lc "nl -ba cloud/apps/web/src/pages/Models.tsx | sed -n '150,215p'" in /Users/chrislaw/valuerank
+exec
+/bin/zsh -lc "nl -ba cloud/apps/api/src/graphql/queries/models-analysis.ts | sed -n '145,190p'" in /Users/chrislaw/valuerank
+ succeeded in 0ms:
+   150	
+   151	  const selectedModel = selectedCell != null
+   152	    ? comparisonModels.find((model) => model.modelId === selectedCell.modelId) ?? null
+   153	    : null;
+   154	  const selectedValue: ModelsAnalysisValueResult | null = useMemo(() => {
+   155	    if (selectedCell == null || selectedModel == null) return null;
+   156	    return selectedModel.values.find((value) => value.valueKey === selectedCell.valueKey) ?? null;
+   157	  }, [selectedCell, selectedModel]);
+   158	
+   159	  const comparisonModelMap = useMemo(
+   160	    () => new Map(comparisonModels.map((model) => [model.modelId, model] as const)),
+   161	    [comparisonModels],
+   162	  );
+   163	
+   164	  const allDomainsModels = useMemo<ModelEntry[]>(() => {
+   165	    const sourceModels = allDomainsData?.domainAnalysis.models ?? [];
+   166	    return sourceModels.map((model) => {
+   167	      const comparisonModel = comparisonModelMap.get(model.model);
+   168	      const comparisonValueMap = new Map(comparisonModel?.values.map((value) => [value.valueKey, value.stabilityScore] as const) ?? []);
+   169	
+   170	      const values = VALUES.reduce<Record<ValueKey, number>>((acc, valueKey) => {
+   171	        const score = model.values.find((value) => value.valueKey === valueKey)?.score ?? 0;
+   172	        acc[valueKey] = score;
+   173	        return acc;
+   174	      }, {} as Record<ValueKey, number>);
+   175	
+   176	      const winRates = VALUES.reduce<Record<ValueKey, number | null>>((acc, valueKey) => {
+   177	        const value = model.values.find((entry) => entry.valueKey === valueKey) ?? null;
+   178	        if (value == null) {
+   179	          acc[valueKey] = null;
+   180	          return acc;
+   181	        }
+   182	        const total = value.prioritized + value.deprioritized + value.neutral;
+   183	        acc[valueKey] = total > 0 ? (value.prioritized / total) * 100 : null;
+   184	        return acc;
+   185	      }, {} as Record<ValueKey, number | null>);
+   186	
+   187	      const stabilityScores = VALUES.reduce<Record<ValueKey, number | null>>((acc, valueKey) => {
+   188	        acc[valueKey] = comparisonValueMap.get(valueKey) ?? null;
+   189	        return acc;
+   190	      }, {} as Record<ValueKey, number | null>);
+   191	
+   192	      return {
+   193	        model: model.model,
+   194	        label: model.label,
+   195	        values,
+   196	        winRates,
+   197	        stabilityScores,
+   198	      };
+   199	    });
+   200	  }, [allDomainsData, comparisonModelMap]);
+   201	
+   202	  const defaultSelection = useMemo(() => {
+   203	    const availableIds = comparisonModels.map((model) => model.modelId);
+   204	    const defaults = availableIds.filter((id) => defaultModelIds.has(id));
+   205	    return defaults.length > 0 ? defaults : availableIds;
+   206	  }, [comparisonModels, defaultModelIds]);
+   207	
+   208	  const isDefaultSelection = useMemo(() => {
+   209	    if (selectedModelIds.length !== defaultSelection.length) return false;
+   210	    const defaultSet = new Set(defaultSelection);
+   211	    return selectedModelIds.every((id) => defaultSet.has(id));
+   212	  }, [selectedModelIds, defaultSelection]);
+   213	
+   214	  const loading = (domainsLoading && domains.length === 0)
+   215	    || (allDomainsFetching && allDomainsData == null)
+
+ succeeded in 0ms:
+   145	          const valueMap = contributionsByModel.get(model.model);
+   146	          if (valueMap == null) continue;
+   147	
+   148	          for (const valueKey of DOMAIN_ANALYSIS_VALUE_KEYS) {
+   149	            const contributions = valueMap.get(valueKey);
+   150	            if (contributions == null) continue;
+   151	
+   152	            // Prefer pre-computed equal-weight fields from snapshots v1.2.0+.
+   153	            // Fall back to raw counts for older snapshots (before the version bump).
+   154	            const vigCount = model.vignetteCount?.[valueKey] ?? 0;
+   155	            const precomputedWinRate = model.valueWinRates?.[valueKey];
+   156	
+   157	            if (vigCount > 0 && precomputedWinRate != null) {
+   158	              contributions.push({
+   159	                domainId: domainMatch ?? parsed.domainId,
+   160	                domainName: parsed.domainName,
+   161	                evidenceWeight: vigCount,
+   162	                winRate: precomputedWinRate,
+   163	              });
+   164	            } else {
+   165	              // Fallback: snapshot predates vignetteCount (pre-v1.2.0). Compute win rate from
+   166	              // accumulated counts but do NOT use the raw count total as evidenceWeight — that
+   167	              // number is total scenario outcomes (not vignette count) and would be misleading.
+   168	              // Set evidenceWeight to null so the UI can show "—" until the snapshot rebuilds.
+   169	              const counts = model.counts[valueKey] ?? { prioritized: 0, deprioritized: 0, neutral: 0 };
+   170	              const rawTotal = counts.prioritized + counts.deprioritized + counts.neutral;
+   171	              if (rawTotal <= 0) continue;
+   172	              const winRate = computeDomainWinRate(counts.prioritized, counts.deprioritized, counts.neutral);
+   173	              if (winRate == null) continue;
+   174	              contributions.push({
+   175	                domainId: domainMatch ?? parsed.domainId,
+   176	                domainName: parsed.domainName,
+   177	                evidenceWeight: null,
+   178	                winRate,
+   179	              });
+   180	            }
+   181	          }
+   182	        }
+   183	      }
+   184	
+   185	      const models: ModelsAnalysisModelResultShape[] = activeModels.map((model) => {
+   186	        const valueMap = contributionsByModel.get(model.modelId) ?? new Map<DomainAnalysisValueKey, DomainContribution[]>();
+   187	        return {
+   188	          modelId: model.modelId,
+   189	          label: model.displayName,
+   190	          values: DOMAIN_ANALYSIS_VALUE_KEYS.map((valueKey) => {
+
+exec
+/bin/zsh -lc "nl -ba cloud/apps/web/src/pages/DomainAnalysis.tsx | sed -n '175,215p'" in /Users/chrislaw/valuerank
+ succeeded in 0ms:
+   175	  const isAllDomains = selectedScope === 'ALL_DOMAINS';
+   176	
+   177	  const models = useMemo<ModelEntry[]>(() => {
+   178	    const sourceModels = data?.domainAnalysis.models ?? [];
+   179	    const pooledWinRatesByModel = new Map<string, Map<string, number | null>>(
+   180	      (modelsAnalysisData?.modelsAnalysis.models ?? []).map((model) => [
+   181	        model.modelId,
+   182	        new Map(model.values.map((value) => [value.valueKey, value.pooledWinRate])),
+   183	      ]),
+   184	    );
+   185	
+   186	    return sourceModels.map((model) => {
+   187	      const valueMap = new Map(model.values.map((e) => [e.valueKey, e.score]));
+   188	      const winRateMap = new Map(model.values.map((e) => {
+   189	        const neutral = e.neutral ?? 0;
+   190	        const denom = e.prioritized + e.deprioritized + neutral;
+   191	        const pooledWinRate = pooledWinRatesByModel.get(model.model)?.get(e.valueKey) ?? null;
+   192	        return [e.valueKey, pooledWinRate ?? (denom > 0 ? (e.prioritized / denom) * 100 : null)] as const;
+   193	      }));
+   194	      const values = VALUES.reduce<Record<ValueKey, number>>((acc, valueKey) => {
+   195	        acc[valueKey] = valueMap.get(valueKey) ?? 0;
+   196	        return acc;
+   197	      }, {} as Record<ValueKey, number>);
+   198	      const winRates = VALUES.reduce<Record<ValueKey, number | null>>((acc, valueKey) => {
+   199	        acc[valueKey] = winRateMap.get(valueKey) ?? null;
+   200	        return acc;
+   201	      }, {} as Record<ValueKey, number | null>);
+   202	      return {
+   203	        model: model.model,
+   204	        label: model.label,
+   205	        values,
+   206	        winRates,
+   207	      };
+   208	    });
+   209	  }, [data, modelsAnalysisData]);
+   210	  useEffect(() => {
+   211	    if (selectedModelId == null) return;
+   212	    if (models.some((model) => model.model === selectedModelId)) return;
+   213	    setSelectedModelId(null);
+   214	  }, [models, selectedModelId]);
+   215	
+
+exec
+/bin/zsh -lc "nl -ba cloud/apps/api/src/services/analysis/domain-analysis-snapshot-aggregator.ts | sed -n '100,285p'" in /Users/chrislaw/valuerank
+ succeeded in 0ms:
+   100	  valueWinRates: Record<string, number>;
+   101	  vignetteCount: Record<string, number>;
+   102	};
+   103	
+   104	/**
+   105	 * Aggregate analysis rows into per-model model objects.
+   106	 *
+   107	 * Phase 1: accumulate raw counts per (definitionId, modelId), tracking runCount.
+   108	 * Phase 2: normalise by runCount (so each vignette weighs equally regardless of
+   109	 *          how many runs it had), record one per-vignette win rate per value, then
+   110	 *          compute the equal-weight mean win rate and vignette count.
+   111	 */
+   112	export function aggregateAnalysisRows(params: {
+   113	  analysisRows: AnalysisOutputRow[];
+   114	  valuePairByDefinition: Map<string, { valueA: DomainAnalysisValueKey; valueB: DomainAnalysisValueKey }>;
+   115	  filteredSourceRunDefinitionById: Map<string, string>;
+   116	}): { models: AggregateModelResult[]; analyzedDefinitionIds: Set<string> } {
+   117	  const { analysisRows, valuePairByDefinition, filteredSourceRunDefinitionById } = params;
+   118	
+   119	  const aggregatedByModel = new Map<string, Map<DomainAnalysisValueKey, DomainAnalysisValueCounts>>();
+   120	  const pairwiseWinsByModel = new Map<string, Map<DomainAnalysisValueKey, Map<DomainAnalysisValueKey, number>>>();
+   121	  const analyzedDefinitionIds = new Set<string>();
+   122	
+   123	  // Phase 1: accumulate raw counts + runCount per (definitionId, modelId).
+   124	  type DefinitionModelAcc = {
+   125	    valueA: DomainAnalysisValueKey;
+   126	    valueB: DomainAnalysisValueKey;
+   127	    first: DomainAnalysisValueCounts;
+   128	    second: DomainAnalysisValueCounts;
+   129	    firstRates: number[];
+   130	    secondRates: number[];
+   131	    runCount: number;
+   132	  };
+   133	  const defModelAcc = new Map<string, Map<string, DefinitionModelAcc>>();
+   134	
+   135	  for (const analysisRow of analysisRows) {
+   136	    const definitionId = filteredSourceRunDefinitionById.get(analysisRow.runId);
+   137	    if (definitionId == null || definitionId === '') continue;
+   138	    const pair = valuePairByDefinition.get(definitionId);
+   139	    if (!pair) continue;
+   140	
+   141	    const output = analysisRow.output;
+   142	    if (output == null || typeof output !== 'object' || Array.isArray(output)) continue;
+   143	    const perModel = (output as { perModel?: unknown }).perModel;
+   144	    if (perModel == null || typeof perModel !== 'object' || Array.isArray(perModel)) continue;
+   145	
+   146	    let modelMap = defModelAcc.get(definitionId);
+   147	    if (!modelMap) {
+   148	      modelMap = new Map<string, DefinitionModelAcc>();
+   149	      defModelAcc.set(definitionId, modelMap);
+   150	    }
+   151	
+   152	    for (const modelId of Object.keys(perModel as Record<string, unknown>)) {
+   153	      let acc = modelMap.get(modelId);
+   154	      if (!acc) {
+   155	        acc = {
+   156	          valueA: pair.valueA,
+   157	          valueB: pair.valueB,
+   158	          first: { prioritized: 0, deprioritized: 0, neutral: 0 },
+   159	          second: { prioritized: 0, deprioritized: 0, neutral: 0 },
+   160	          firstRates: [],
+   161	          secondRates: [],
+   162	          runCount: 0,
+   163	        };
+   164	        modelMap.set(modelId, acc);
+   165	      }
+   166	
+   167	      const firstCounts = getValueCountsFromAnalysis(output, modelId, pair.valueA);
+   168	      const secondCounts = getValueCountsFromAnalysis(output, modelId, pair.valueB);
+   169	
+   170	      acc.first.prioritized += firstCounts.prioritized;
+   171	      acc.first.deprioritized += firstCounts.deprioritized;
+   172	      acc.first.neutral += firstCounts.neutral;
+   173	      acc.second.prioritized += secondCounts.prioritized;
+   174	      acc.second.deprioritized += secondCounts.deprioritized;
+   175	      acc.second.neutral += secondCounts.neutral;
+   176	
+   177	      const totalFirst = firstCounts.prioritized + firstCounts.deprioritized + firstCounts.neutral;
+   178	      if (totalFirst > 0) {
+   179	        acc.firstRates.push(firstCounts.prioritized / totalFirst);
+   180	      }
+   181	      const totalSecond = secondCounts.prioritized + secondCounts.deprioritized + secondCounts.neutral;
+   182	      if (totalSecond > 0) {
+   183	        acc.secondRates.push(secondCounts.prioritized / totalSecond);
+   184	      }
+   185	
+   186	      acc.runCount += 1;
+   187	    }
+   188	  }
+   189	
+   190	  // Phase 2: normalise by runCount, merge into global aggregates, and record
+   191	  // per-vignette win rates for equal-weight averaging.
+   192	  const vignetteWinRatesByModel = new Map<string, Map<DomainAnalysisValueKey, number[]>>();
+   193	
+   194	  for (const [definitionId, modelMap] of defModelAcc) {
+   195	    for (const [modelId, acc] of modelMap) {
+   196	      if (acc.runCount === 0) continue;
+   197	
+   198	      let valueMap = aggregatedByModel.get(modelId);
+   199	      if (!valueMap) {
+   200	        valueMap = new Map<DomainAnalysisValueKey, DomainAnalysisValueCounts>();
+   201	        aggregatedByModel.set(modelId, valueMap);
+   202	      }
+   203	      let pairwiseWins = pairwiseWinsByModel.get(modelId);
+   204	      if (!pairwiseWins) {
+   205	        pairwiseWins = new Map<DomainAnalysisValueKey, Map<DomainAnalysisValueKey, number>>();
+   206	        pairwiseWinsByModel.set(modelId, pairwiseWins);
+   207	      }
+   208	      let vigRates = vignetteWinRatesByModel.get(modelId);
+   209	      if (!vigRates) {
+   210	        vigRates = new Map<DomainAnalysisValueKey, number[]>();
+   211	        vignetteWinRatesByModel.set(modelId, vigRates);
+   212	      }
+   213	
+   214	      const n = acc.runCount;
+   215	
+   216	      const existingFirst = valueMap.get(acc.valueA) ?? { prioritized: 0, deprioritized: 0, neutral: 0 };
+   217	      existingFirst.prioritized += acc.first.prioritized / n;
+   218	      existingFirst.deprioritized += acc.first.deprioritized / n;
+   219	      existingFirst.neutral += acc.first.neutral / n;
+   220	      valueMap.set(acc.valueA, existingFirst);
+   221	
+   222	      const existingSecond = valueMap.get(acc.valueB) ?? { prioritized: 0, deprioritized: 0, neutral: 0 };
+   223	      existingSecond.prioritized += acc.second.prioritized / n;
+   224	      existingSecond.deprioritized += acc.second.deprioritized / n;
+   225	      existingSecond.neutral += acc.second.neutral / n;
+   226	      valueMap.set(acc.valueB, existingSecond);
+   227	
+   228	      addPairwiseWins(pairwiseWins, acc.valueA, acc.valueB, acc.first.prioritized / n);
+   229	      addPairwiseWins(pairwiseWins, acc.valueB, acc.valueA, acc.second.prioritized / n);
+   230	
+   231	      // Per-vignette win rate: equal weight per source run (Path B).
+   232	      if (acc.firstRates.length > 0) {
+   233	        const meanA = acc.firstRates.reduce((s, r) => s + r, 0) / acc.firstRates.length;
+   234	        const ratesA = vigRates.get(acc.valueA) ?? [];
+   235	        ratesA.push(meanA);
+   236	        vigRates.set(acc.valueA, ratesA);
+   237	      }
+   238	      if (acc.secondRates.length > 0) {
+   239	        const meanB = acc.secondRates.reduce((s, r) => s + r, 0) / acc.secondRates.length;
+   240	        const ratesB = vigRates.get(acc.valueB) ?? [];
+   241	        ratesB.push(meanB);
+   242	        vigRates.set(acc.valueB, ratesB);
+   243	      }
+   244	
+   245	      analyzedDefinitionIds.add(definitionId);
+   246	    }
+   247	  }
+   248	
+   249	  // Compute equal-weight mean win rate (0–100) and vignette count per (model, value).
+   250	  const valueWinRatesByModel = new Map<string, Map<DomainAnalysisValueKey, number>>();
+   251	  const vignetteCountByModel = new Map<string, Map<DomainAnalysisValueKey, number>>();
+   252	
+   253	  for (const [modelId, vigRates] of vignetteWinRatesByModel) {
+   254	    const winRateMap = new Map<DomainAnalysisValueKey, number>();
+   255	    const countMap = new Map<DomainAnalysisValueKey, number>();
+   256	    valueWinRatesByModel.set(modelId, winRateMap);
+   257	    vignetteCountByModel.set(modelId, countMap);
+   258	    for (const [valueKey, rates] of vigRates) {
+   259	      if (rates.length === 0) continue;
+   260	      const mean = rates.reduce((sum, r) => sum + r, 0) / rates.length;
+   261	      winRateMap.set(valueKey, mean * 100);
+   262	      countMap.set(valueKey, rates.length);
+   263	    }
+   264	  }
+   265	
+   266	  const models: AggregateModelResult[] = Array.from(aggregatedByModel.entries())
+   267	    .map(([modelId, valueMap]) => ({
+   268	      model: modelId,
+   269	      counts: toCountsRecord(valueMap),
+   270	      pairwiseWins: toPairwiseRecord(
+   271	        pairwiseWinsByModel.get(modelId) ?? new Map<DomainAnalysisValueKey, Map<DomainAnalysisValueKey, number>>(),
+   272	      ),
+   273	      valueWinRates: Object.fromEntries(
+   274	        valueWinRatesByModel.get(modelId) ?? new Map<DomainAnalysisValueKey, number>()
+   275	      ),
+   276	      vignetteCount: Object.fromEntries(
+   277	        vignetteCountByModel.get(modelId) ?? new Map<DomainAnalysisValueKey, number>()
+   278	      ),
+   279	    }))
+   280	    .sort((left, right) => left.model.localeCompare(right.model));
+   281	
+   282	  return { models, analyzedDefinitionIds };
+   283	}
+
+2026-04-30T18:10:25.427896Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: prompt must be at most 128 characters path=/Users/chrislaw/.codex/.tmp/plugins/plugins/build-ios-apps/.codex-plugin/plugin.json
+2026-04-30T18:10:25.429170Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: maximum of 3 prompts is supported path=/Users/chrislaw/.codex/.tmp/plugins/plugins/plugin-eval/.codex-plugin/plugin.json
+2026-04-30T18:10:25.454432Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:10:25.454443Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:10:25.455027Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:10:25.455034Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:10:25.455415Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:10:25.455418Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:10:25.455767Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:10:25.455771Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:10:25.456127Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:10:25.456130Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:10:25.457204Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:10:25.457208Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+exec
+/bin/zsh -lc "nl -ba cloud/apps/web/src/pages/DomainValueShiftHeatmap.tsx | sed -n '220,315p'" in /Users/chrislaw/valuerank
+ succeeded in 0ms:
+   220	  const models = useMemo(() => data?.modelsAnalysis.models ?? [], [data]);
+   221	  const defaultModelIds = useMemo(
+   222	    () => new Set((llmModelsData?.llmModels ?? []).filter((model) => model.isDefault).map((model) => model.modelId)),
+   223	    [llmModelsData],
+   224	  );
+   225	  const [selectedModelId, setSelectedModelId] = useState<string>(ALL_MODELS_OPTION_VALUE);
+   226	  const [displayMode, setDisplayMode] = useState<DomainShiftDisplayMode>('shift');
+   227	  const [sort, setSort] = useState<DomainShiftSort>(DEFAULT_DOMAIN_SHIFT_SORT);
+   228	
+   229	  useEffect(() => {
+   230	    const nextSignature = getDefaultDomainShiftSignature(availableSignatures, selectedSignature);
+   231	    if (nextSignature !== selectedSignature) {
+   232	      setSelectedSignature(nextSignature);
+   233	    }
+   234	  }, [availableSignatures, selectedSignature]);
+   235	
+   236	  useEffect(() => {
+   237	    const nextModelId = getDefaultModelId(models, selectedModelId);
+   238	    if (nextModelId !== selectedModelId) {
+   239	      setSelectedModelId(nextModelId);
+   240	    }
+   241	  }, [models, selectedModelId]);
+   242	
+   243	  const selectedModel = selectedModelId === ALL_MODELS_OPTION_VALUE
+   244	    ? null
+   245	    : models.find((model) => model.modelId === selectedModelId) ?? null;
+   246	  const heatmap = useMemo(
+   247	    () => buildDomainShiftHeatmap(selectedModelId === ALL_MODELS_OPTION_VALUE ? models : selectedModel),
+   248	    [models, selectedModel, selectedModelId],
+   249	  );
+   250	  const sortedRows = useMemo(
+   251	    () => sortHeatmapRows(heatmap.rows, sort, displayMode),
+   252	    [heatmap.rows, sort, displayMode],
+   253	  );
+   254	  const modelOptions = useMemo(
+   255	    () => buildDomainShiftModelOptions(models, defaultModelIds),
+   256	    [defaultModelIds, models],
+   257	  );
+   258	  const domainColumnWidth = heatmap.columns.length > 0 ? `${100 / heatmap.columns.length}%` : '100%';
+   259	  const isAllModels = selectedModelId === ALL_MODELS_OPTION_VALUE;
+   260	  const loading = fetching && data == null;
+   261	
+   262	  return (
+   263	    <div className="space-y-6">
+   264	      <div className="space-y-2">
+   265	        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-teal-700">Models</p>
+   266	        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Domain Shifts by Value</h1>
+   267	        <p className="max-w-3xl text-sm text-gray-600">
+   268	          Exploratory heatmap for domain-associated value shifts. Toggle between percentage-point shifts and
+   269	          straight domain win rates, then click any column header to sort.
+   270	        </p>
+   271	      </div>
+   272	
+   273	      {error != null && (
+   274	        <ErrorMessage message={`Failed to load domain shifts: ${error.message}`} />
+   275	      )}
+   276	      {signatureError != null && (
+   277	        <ErrorMessage message={`Failed to load signature options: ${signatureError.message}`} />
+   278	      )}
+   279	
+   280	      <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
+   281	        <div className="flex flex-wrap items-end gap-5">
+   282	          <div className="min-w-[260px] max-w-sm flex-1">
+   283	            <Select
+   284	              label="Model"
+   285	              options={modelOptions}
+   286	              value={selectedModelId}
+   287	              onChange={setSelectedModelId}
+   288	              placeholder={loading ? 'Loading models...' : 'Select a model'}
+   289	              disabled={loading || models.length === 0}
+   290	            />
+   291	          </div>
+   292	          <div className="min-w-[240px] max-w-xs flex-1">
+   293	            <Select
+   294	              label="Signature"
+   295	              options={signatureOptions}
+   296	              value={selectedSignature}
+   297	              onChange={setSelectedSignature}
+   298	              placeholder={fetchingSignatures && signatureData == null ? 'Loading signatures...' : 'Select a signature'}
+   299	              disabled={fetchingSignatures && signatureData == null}
+   300	            />
+   301	          </div>
+   302	          <DisplayModeToggle displayMode={displayMode} onChange={setDisplayMode} />
+   303	        </div>
+   304	      </section>
+   305	
+   306	      {loading && <Loading size="lg" text="Loading domain shifts..." />}
+   307	
+   308	      {!loading && models.length === 0 && (
+   309	        <section className="rounded-xl border border-gray-200 bg-white p-6">
+   310	          <p className="text-sm text-gray-600">No models with analysis data are available yet.</p>
+   311	        </section>
+   312	      )}
+   313	
+   314	      {!loading && models.length > 0 && heatmap.eligibleDomainCount < 2 && (
+   315	        <section className="rounded-xl border border-amber-200 bg-amber-50 p-6">
+
+2026-04-30T18:10:26.927182Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: prompt must be at most 128 characters path=/Users/chrislaw/.codex/.tmp/plugins/plugins/build-ios-apps/.codex-plugin/plugin.json
+2026-04-30T18:10:26.927502Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: maximum of 3 prompts is supported path=/Users/chrislaw/.codex/.tmp/plugins/plugins/plugin-eval/.codex-plugin/plugin.json
+2026-04-30T18:10:26.942411Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:10:26.942420Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:10:26.942795Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:10:26.942798Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:10:26.943141Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:10:26.943144Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:10:26.943528Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:10:26.943531Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:10:26.943942Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:10:26.943950Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:10:26.944961Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:10:26.944965Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+exec
+/bin/zsh -lc "nl -ba cloud/apps/web/src/pages/domainValueShiftHeatmapUtils.ts | sed -n '210,330p'" in /Users/chrislaw/valuerank
+ succeeded in 0ms:
+   210	          domainId: domain.domainId,
+   211	          domainName: domain.domainName,
+   212	        });
+   213	        cells.set(domain.domainId, {
+   214	          domainId: domain.domainId,
+   215	          domainName: domain.domainName,
+   216	          winRate: domain.winRate,
+   217	          averageWinRate,
+   218	          shift: domain.winRate - averageWinRate,
+   219	          evidenceWeight: isFiniteNumber(domain.evidenceWeight) ? domain.evidenceWeight : null,
+   220	        });
+   221	      }
+   222	    }
+   223	
+   224	    return {
+   225	      valueKey,
+   226	      valueLabel: formatValueLabel(valueKey),
+   227	      pooledWinRate: value?.pooledWinRate ?? null,
+   228	      averageWinRate,
+   229	      averageMatchesPooled: averageWinRate == null || value?.pooledWinRate == null
+   230	        ? null
+   231	        : Math.abs(averageWinRate - value.pooledWinRate) <= AVERAGE_PARITY_TOLERANCE,
+   232	      comparableDomainCount,
+   233	      cells,
+   234	    };
+   235	  });
+   236	  const columns = [...domainById.values()].sort((left, right) => left.domainName.localeCompare(right.domainName));
+   237	
+   238	  return {
+   239	    columns,
+   240	    rows,
+   241	    eligibleDomainCount: columns.length,
+   242	  };
+   243	}
+   244	
+   245	function buildDomainShiftHeatmapForModels(models: ModelsAnalysisModelResult[]): DomainShiftHeatmap {
+   246	  const valueKeys = new Set<string>(VALUES);
+   247	  const rowsByValue: Map<string, AggregateValueStats> = new Map();
+   248	  const domainById = new Map<string, DomainShiftColumn>();
+   249	
+   250	  for (const model of models) {
+   251	    for (const value of model.values) {
+   252	      valueKeys.add(value.valueKey);
+   253	
+   254	      const existing: AggregateValueStats = rowsByValue.get(value.valueKey) ?? {
+   255	        pooledWinRates: [],
+   256	        domains: new Map(),
+   257	      };
+   258	
+   259	      if (isFiniteNumber(value.pooledWinRate)) {
+   260	        existing.pooledWinRates.push(value.pooledWinRate);
+   261	      }
+   262	
+   263	      for (const domain of eligibleDomainsForValue(value)) {
+   264	        domainById.set(domain.domainId, {
+   265	          domainId: domain.domainId,
+   266	          domainName: domain.domainName,
+   267	        });
+   268	        const aggregate: AggregateDomainStats = existing.domains.get(domain.domainId) ?? {
+   269	          domainId: domain.domainId,
+   270	          domainName: domain.domainName,
+   271	          winRates: [],
+   272	          evidenceWeights: [],
+   273	        };
+   274	        aggregate.winRates.push(domain.winRate);
+   275	        if (isFiniteNumber(domain.evidenceWeight)) {
+   276	          aggregate.evidenceWeights.push(domain.evidenceWeight);
+   277	        }
+   278	        existing.domains.set(domain.domainId, aggregate);
+   279	      }
+   280	
+   281	      rowsByValue.set(value.valueKey, existing);
+   282	    }
+   283	  }
+   284	
+   285	  const rows = sortValueKeys(valueKeys).map((valueKey) => {
+   286	    const aggregate = rowsByValue.get(valueKey);
+   287	    const domainEntries = [...(aggregate?.domains.values() ?? [])];
+   288	    const comparableDomainCount = domainEntries.length;
+   289	    const domainAverages = domainEntries
+   290	      .map((entry) => computeAverageNumber(entry.winRates))
+   291	      .filter((value): value is number => value != null);
+   292	    const averageWinRate = comparableDomainCount >= 2 ? computeAverageNumber(domainAverages) : null;
+   293	    const pooledWinRate = computeAverageNumber(aggregate?.pooledWinRates ?? []);
+   294	    const cells = new Map<string, DomainShiftCell>();
+   295	
+   296	    if (valueKeys.has(valueKey) && averageWinRate != null) {
+   297	      for (const domain of domainEntries) {
+   298	        const winRate = computeAverageNumber(domain.winRates);
+   299	        if (winRate == null) continue;
+   300	
+   301	        cells.set(domain.domainId, {
+   302	          domainId: domain.domainId,
+   303	          domainName: domain.domainName,
+   304	          winRate,
+   305	          averageWinRate,
+   306	          shift: winRate - averageWinRate,
+   307	          evidenceWeight: computeAverageNumber(domain.evidenceWeights),
+   308	        });
+   309	      }
+   310	    }
+   311	
+   312	    return {
+   313	      valueKey,
+   314	      valueLabel: formatValueLabel(valueKey),
+   315	      pooledWinRate,
+   316	      averageWinRate,
+   317	      averageMatchesPooled: averageWinRate == null || pooledWinRate == null
+   318	        ? null
+   319	        : Math.abs(averageWinRate - pooledWinRate) <= AVERAGE_PARITY_TOLERANCE,
+   320	      comparableDomainCount,
+   321	      cells,
+   322	    };
+   323	  });
+   324	  const columns = [...domainById.values()].sort((left, right) => left.domainName.localeCompare(right.domainName));
+   325	
+   326	  return {
+   327	    columns,
+   328	    rows,
+   329	    eligibleDomainCount: columns.length,
+   330	  };
+
+2026-04-30T18:10:29.722901Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: prompt must be at most 128 characters path=/Users/chrislaw/.codex/.tmp/plugins/plugins/build-ios-apps/.codex-plugin/plugin.json
+2026-04-30T18:10:29.723217Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: maximum of 3 prompts is supported path=/Users/chrislaw/.codex/.tmp/plugins/plugins/plugin-eval/.codex-plugin/plugin.json
+2026-04-30T18:10:29.737690Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:10:29.737700Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:10:29.738116Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:10:29.738123Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:10:29.738517Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:10:29.738522Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:10:29.738863Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:10:29.738867Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:10:29.739172Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:10:29.739175Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:10:29.739871Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:10:29.739873Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+exec
+/bin/zsh -lc "nl -ba cloud/apps/api/src/graphql/queries/models-analysis.ts | sed -n '20,45p'" in /Users/chrislaw/valuerank
+ succeeded in 0ms:
+    20	  output: unknown;
+    21	};
+    22	
+    23	// Honest denominator: includes neutral outcomes so win rate is consistent with
+    24	// the rest of the product (matches aggregate-logic.ts). Excluding neutrals would
+    25	// inflate win rates and make evidence weights inconsistent with scenario counts.
+    26	function computeDomainWinRate(prioritized: number, deprioritized: number, neutral: number): number | null {
+    27	  const evidenceWeight = prioritized + deprioritized + neutral;
+    28	  if (evidenceWeight <= 0) return null;
+    29	  return (prioritized / evidenceWeight) * 100;
+    30	}
+    31	
+    32	// Equal-weight pooled win rate: each domain counts once regardless of vignette count.
+    33	function computePooledWinRate(domains: DomainContribution[]): number | null {
+    34	  if (domains.length === 0) return null;
+    35	  const sum = domains.reduce((acc, d) => acc + d.winRate, 0);
+    36	  return sum / domains.length;
+    37	}
+    38	
+    39	// Unweighted MAD stability score: each domain counts equally.
+    40	function computeStabilityScore(domains: DomainContribution[]): number | null {
+    41	  if (domains.length < 2) return null;
+    42	  const mean = computePooledWinRate(domains);
+    43	  if (mean === null) return null;
+    44	  const mad = domains.reduce((acc, d) => acc + Math.abs(d.winRate - mean), 0) / domains.length;
+    45	  return Math.max(0, 100 * (1 - mad / 50));
+
+2026-04-30T18:10:40.206807Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: prompt must be at most 128 characters path=/Users/chrislaw/.codex/.tmp/plugins/plugins/build-ios-apps/.codex-plugin/plugin.json
+2026-04-30T18:10:40.207099Z  WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt: maximum of 3 prompts is supported path=/Users/chrislaw/.codex/.tmp/plugins/plugins/plugin-eval/.codex-plugin/plugin.json
+2026-04-30T18:10:40.222185Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:10:40.222195Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:10:40.222576Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:10:40.222580Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:10:40.222943Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:10:40.222946Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:10:40.223469Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:10:40.223480Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:10:40.223917Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:10:40.223920Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+2026-04-30T18:10:40.224750Z  WARN codex_core_skills::loader: ignoring interface.icon_small: icon path must not contain '..'
+2026-04-30T18:10:40.224756Z  WARN codex_core_skills::loader: ignoring interface.icon_large: icon path must not contain '..'
+codex
+## Findings
+- **High** [CODE-CONFIRMED] The legacy policy is still not pinned down, and the resolver already mixes methods per value. In [models-analysis.ts](/Users/chrislaw/valuerank/cloud/apps/api/src/graphql/queries/models-analysis.ts#L152), the code uses precomputed equal-vignette data when `vignetteCount` exists, but falls back to raw-count win rates when it does not. That means one model row can contain a blend of equal-vignette and count-based cells, which would violate the spec’s own “no silent mixed-method rows” requirement.
+- **Medium** [CODE-CONFIRMED] The spec says to remove count-based recomputation from the in-scope UIs, but it does not define the null-path behavior. The current UI code still does count-based fallback in [Models.tsx](/Users/chrislaw/valuerank/cloud/apps/web/src/pages/Models.tsx#L176) and [DomainAnalysis.tsx](/Users/chrislaw/valuerank/cloud/apps/web/src/pages/DomainAnalysis.tsx#L188) whenever `modelsAnalysis.pooledWinRate` is missing. If older snapshots or partial data show up, the old metric can still leak back into the page.
+- **Medium** [CODE-CONFIRMED] The cross-domain rule is mathematically underspecified for uneven vignette counts. [models-analysis.ts](/Users/chrislaw/valuerank/cloud/apps/api/src/graphql/queries/models-analysis.ts#L32) still computes `pooledWinRate` as a plain mean of domain win rates, which only matches equal-vignette semantics while domain vignette counts stay matched. The spec says future drift must still follow equal-vignette weighting, but it never gives the weighted formula or says how `evidenceWeight` should be used.
+
+## Residual Risks
+- `DomainValueShiftHeatmap` also consumes `modelsAnalysis.pooledWinRate` and parity checks, so if it is not updated in the same change it can stay semantically out of sync with `/models` and `/domains/analysis`.
+- The aggregator drops zero-evidence runs from the per-vignette rate arrays, but the spec does not say whether those should count as zero, null, or excluded. Sparse or partially empty analyses can still produce surprising `vignetteCount` values.
+tokens used
+44,178

@@ -1,0 +1,17 @@
+{
+  "paths": [
+    "cloud/apps/api/src/graphql/queries/models-analysis.ts",
+    "cloud/apps/api/src/services/analysis/domain-analysis-snapshot-aggregator.ts",
+    "cloud/apps/web/src/pages/DomainAnalysis.tsx",
+    "cloud/apps/web/src/pages/Models.tsx",
+    "docs/canonical-glossary.md"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/api/src/graphql/queries/models-analysis.ts",
+    "cloud/apps/api/src/services/analysis/domain-analysis-snapshot-aggregator.ts",
+    "cloud/apps/web/src/pages/DomainAnalysis.tsx",
+    "cloud/apps/web/src/pages/Models.tsx",
+    "docs/canonical-glossary.md",
+    "docs/workflow/feature-runs/equal-vignette-reporting"
+  ]
+}

@@ -4,6 +4,7 @@ import { buildAssumptionKey, parseSnapshotOutput } from '../../services/analysis
 import { DOMAIN_ANALYSIS_ASSUMPTION_PREFIX, DOMAIN_ANALYSIS_SNAPSHOT_TYPE } from '../../services/analysis/domain-analysis-cache-types.js';
 import { DOMAIN_ANALYSIS_VALUE_KEYS, type DomainAnalysisValueKey } from './domain-analysis-values.js';
 import { selectModelsAnalysisSnapshots } from './models-analysis-snapshot-selection.js';
+import { computePooledWinRate, computeStabilityScore } from './models-analysis-math.js';
 import { builder } from '../builder.js';
 import {
   ModelsAnalysisResultRef,
@@ -20,31 +21,6 @@ type ModelsAnalysisSnapshotRow = {
   output: unknown;
 };
 
-// Honest denominator: includes neutral outcomes so win rate is consistent with
-// the rest of the product (matches aggregate-logic.ts). Excluding neutrals would
-// inflate win rates and make evidence weights inconsistent with scenario counts.
-function computeDomainWinRate(prioritized: number, deprioritized: number, neutral: number): number | null {
-  const evidenceWeight = prioritized + deprioritized + neutral;
-  if (evidenceWeight <= 0) return null;
-  return (prioritized / evidenceWeight) * 100;
-}
-
-// Equal-weight pooled win rate: each domain counts once regardless of vignette count.
-function computePooledWinRate(domains: DomainContribution[]): number | null {
-  if (domains.length === 0) return null;
-  const sum = domains.reduce((acc, d) => acc + d.winRate, 0);
-  return sum / domains.length;
-}
-
-// Unweighted MAD stability score: each domain counts equally.
-function computeStabilityScore(domains: DomainContribution[]): number | null {
-  if (domains.length < 2) return null;
-  const mean = computePooledWinRate(domains);
-  if (mean === null) return null;
-  const mad = domains.reduce((acc, d) => acc + Math.abs(d.winRate - mean), 0) / domains.length;
-  return Math.max(0, 100 * (1 - mad / 50));
-}
-
 function buildEmptyValueResult(valueKey: DomainAnalysisValueKey): ModelsAnalysisValueResultShape {
   return {
     valueKey,
@@ -56,9 +32,7 @@ function buildEmptyValueResult(valueKey: DomainAnalysisValueKey): ModelsAnalysis
 }
 
 function buildValueResult(valueKey: DomainAnalysisValueKey, domains: DomainContribution[]): ModelsAnalysisValueResultShape {
-  // Null evidenceWeight means the snapshot predates the vignetteCount field (pre-v1.2.0) but the
-  // win rate is still valid — include those domains in the pool. Exclude only genuine zero-evidence entries.
-  const eligibleDomains = domains.filter((domain) => domain.evidenceWeight == null || domain.evidenceWeight > 0);
+  const eligibleDomains = domains.filter((domain) => domain.evidenceWeight != null && domain.evidenceWeight > 0);
   return {
     valueKey,
     pooledWinRate: computePooledWinRate(eligibleDomains),
@@ -149,8 +123,6 @@ builder.queryField('modelsAnalysis', (t) =>
             const contributions = valueMap.get(valueKey);
             if (contributions == null) continue;
 
-            // Prefer pre-computed equal-weight fields from snapshots v1.2.0+.
-            // Fall back to raw counts for older snapshots (before the version bump).
             const vigCount = model.vignetteCount?.[valueKey] ?? 0;
             const precomputedWinRate = model.valueWinRates?.[valueKey];
 
@@ -161,22 +133,16 @@ builder.queryField('modelsAnalysis', (t) =>
                 evidenceWeight: vigCount,
                 winRate: precomputedWinRate,
               });
-            } else {
-              // Fallback: snapshot predates vignetteCount (pre-v1.2.0). Compute win rate from
-              // accumulated counts but do NOT use the raw count total as evidenceWeight — that
-              // number is total scenario outcomes (not vignette count) and would be misleading.
-              // Set evidenceWeight to null so the UI can show "—" until the snapshot rebuilds.
-              const counts = model.counts[valueKey] ?? { prioritized: 0, deprioritized: 0, neutral: 0 };
-              const rawTotal = counts.prioritized + counts.deprioritized + counts.neutral;
-              if (rawTotal <= 0) continue;
-              const winRate = computeDomainWinRate(counts.prioritized, counts.deprioritized, counts.neutral);
-              if (winRate == null) continue;
-              contributions.push({
-                domainId: domainMatch ?? parsed.domainId,
-                domainName: parsed.domainName,
-                evidenceWeight: null,
-                winRate,
-              });
+            } else if ((model.counts[valueKey]?.prioritized ?? 0) + (model.counts[valueKey]?.deprioritized ?? 0) + (model.counts[valueKey]?.neutral ?? 0) > 0) {
+              ctx.log.warn(
+                {
+                  assumptionKey: snapshot.assumptionKey,
+                  snapshotId: snapshot.id,
+                  modelId: model.model,
+                  valueKey,
+                },
+                'Skipping legacy models-analysis contribution without vignette-aware win rate metadata',
+              );
             }
           }
         }

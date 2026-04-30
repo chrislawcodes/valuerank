@@ -305,6 +305,28 @@ Avoid confusion:
 - `winRate` is not the same as the share of only decisive responses
 - it is a rate for one `(model, value)` pair, not a whole run or vignette
 
+### `Equal-Vignette Reporting Win Rate`
+
+For cross-vignette reporting surfaces like the main `/models` reports, the canonical metric is an equal-vignette win rate:
+
+1. average runs equally within each vignette
+2. treat each vignette as one unit
+3. for cross-domain summaries, combine domain results using vignette counts so each vignette still counts once overall
+
+Plain-language meaning:
+
+- extra trials inside one vignette do not give that vignette more weight
+- pooled raw outcome counts are not the canonical cross-vignette reporting metric
+
+Example:
+
+- “If one vignette ran 5 times and another ran once, the report still gives each vignette one vote after the within-vignette average is computed.”
+
+Avoid confusion:
+
+- this is different from pooling all `prioritized`, `deprioritized`, and `neutral` outcomes across vignettes first
+- this is the canonical metric for the model-reporting surfaces, not a blanket rule for every analysis view
+
 ### `Order Invariance`
 
 Order invariance means a model gives the same answer even when the order or presentation changes.

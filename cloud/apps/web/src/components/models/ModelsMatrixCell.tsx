@@ -18,7 +18,7 @@ type ModelsMatrixCellProps = {
 };
 
 function formatPercent(value: number): string {
-  return `${Math.round(value)}%`;
+  return `${value.toFixed(1)}%`;
 }
 
 export function ModelsMatrixCell({

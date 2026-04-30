@@ -16,7 +16,7 @@ type ModelValueDetailDrawerProps = {
 
 function formatPercent(value: number | null): string {
   if (value == null || Number.isNaN(value)) return '—';
-  return `${Math.round(value)}%`;
+  return `${value.toFixed(1)}%`;
 }
 
 function InfoIcon() {
@@ -58,12 +58,12 @@ export function ModelValueDetailDrawer({
   const pooledWinRateTooltip = (
     <div className="space-y-2">
       <p>
-        <strong>What it means:</strong> A simple average of win rates across eligible domains.
-        Each domain counts equally - a domain with more vignettes does not pull the average harder.
-        Win rate per domain = prioritized ÷ (prioritized + deprioritized + neutral) across all its vignettes for this value.
+        <strong>What it means:</strong> Each domain contributes its vignette-level win rate for this value,
+        and the final report weights those domain win rates by vignette count. Extra trials inside one vignette
+        do not give that vignette more influence.
       </p>
       <p>
-        <strong>Formula:</strong> add up all domain win rates, then divide by the number of domains.
+        <strong>Formula:</strong> sum each domain&apos;s `(win rate x vignette count)`, then divide by the total vignette count.
       </p>
       {domains.length > 0 && (
         <div className="border-t border-gray-200 pt-2">
@@ -88,7 +88,7 @@ export function ModelValueDetailDrawer({
             <tfoot>
               <tr className="border-t border-gray-300 font-semibold">
                 <td className="pt-1 pr-3 text-gray-500 font-normal" colSpan={2}>
-                  sum ÷ {domains.length} =
+                  weighted by {domains.reduce((sum, domain) => sum + (domain.evidenceWeight ?? 0), 0)} vignettes =
                 </td>
                 <td className="text-right pt-1 pl-2">{formatPercent(value.pooledWinRate)}</td>
               </tr>
@@ -110,8 +110,8 @@ export function ModelValueDetailDrawer({
         so this number reflects distinct vignettes, not total scenarios or runs.
       </p>
       <p>
-        Every vignette counts equally when computing the domain win rate -
-        a domain with 5 vignettes does not pull the average harder than one with 1.
+        Each vignette counts once inside its domain. The cross-domain report then weights each domain
+        by how many eligible vignettes it contributes for this value.
       </p>
     </div>
   );
@@ -156,7 +156,7 @@ export function ModelValueDetailDrawer({
                 {formatPercent(value.pooledWinRate)}
               </div>
               <p className="mt-2 text-sm text-gray-600">
-                Simple mean across the eligible domains shown below - each domain counts equally.
+                Equal-vignette win rate across the eligible domains shown below.
               </p>
             </div>
           </section>
