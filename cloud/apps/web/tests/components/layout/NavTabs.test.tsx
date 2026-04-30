@@ -63,8 +63,6 @@ describe('NavTabs Component', () => {
     expect(screen.getByRole('link', { name: 'Models' })).toHaveAttribute('href', '/models');
     expect(screen.getByRole('link', { name: 'Matrix' })).toHaveAttribute('href', '/models');
     expect(screen.getByRole('link', { name: 'Domain Shifts' })).toHaveAttribute('href', '/models/domain-shifts');
-    expect(screen.getByRole('link', { name: 'Consistency' })).toHaveAttribute('href', '/models/consistency');
-    expect(screen.getByRole('link', { name: 'Circumplex' })).toHaveAttribute('href', '/models/circumplex');
   });
 
   it('highlights only Domain Shifts inside the models menu on the domain shifts route', async () => {
@@ -108,6 +106,8 @@ describe('NavTabs Component', () => {
 
     expect(screen.getByRole('link', { name: 'Legacy Survey Work' })).toHaveAttribute('href', '/archive/surveys');
     expect(screen.getByRole('link', { name: 'Legacy Survey Results' })).toHaveAttribute('href', '/archive/survey-results');
+    expect(screen.getByRole('link', { name: 'Circumplex' })).toHaveAttribute('href', '/archive/circumplex');
+    expect(screen.getByRole('link', { name: 'Consistency' })).toHaveAttribute('href', '/archive/consistency');
   });
 
   it('highlights Archive on archive compatibility routes', async () => {
