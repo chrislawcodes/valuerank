@@ -8,6 +8,7 @@ import { VALUE_LABELS, VALUES, type ValueKey } from '../data/domainAnalysisData'
 
 const AVERAGE_PARITY_TOLERANCE = 0.05;
 export const DEFAULT_DOMAIN_SHIFT_SIGNATURE = 'vnewtd';
+export const ALL_MODELS_OPTION_VALUE = '__all_models__';
 
 export type DomainShiftDisplayMode = 'shift' | 'winRate';
 export type DomainShiftSortDirection = 'asc' | 'desc';
@@ -80,19 +81,19 @@ function formatValueLabel(valueKey: string): string {
 
 export function formatPointShift(value: number | null): string {
   if (value == null || !Number.isFinite(value)) return 'n/a';
-  const rounded = Math.round(value);
-  if (rounded === 0) return '0 pts';
-  return `${rounded > 0 ? '+' : ''}${rounded} pts`;
+  const rounded = Math.round(value * 10) / 10;
+  if (rounded === 0) return '0.0 pts';
+  return `${rounded > 0 ? '+' : ''}${rounded.toFixed(1)} pts`;
 }
 
 export function formatPercent(value: number | null): string {
   if (value == null || !Number.isFinite(value)) return '—';
-  return `${Math.round(value)}%`;
+  return `${(Math.round(value * 10) / 10).toFixed(1)}%`;
 }
 
 export function formatEvidenceWeight(value: number | null): string {
   if (value == null || !Number.isFinite(value) || value <= 0) return '—';
-  return `${Math.round(value)}`;
+  return (Math.round(value * 10) / 10).toFixed(1);
 }
 
 export function formatDomainShiftSignatureLabel(signature: string): string {
@@ -130,6 +131,7 @@ export function buildDomainShiftModelOptions(
   const defaults = sorted.filter((model) => defaultModelIds.has(model.modelId));
   const nonDefaults = sorted.filter((model) => !defaultModelIds.has(model.modelId));
   return [
+    { value: ALL_MODELS_OPTION_VALUE, label: 'All models' },
     ...defaults.map((model) => ({ value: model.modelId, label: model.label })),
     ...(defaults.length > 0 && nonDefaults.length > 0
       ? [{ value: NON_DEFAULT_MODELS_DIVIDER_VALUE, label: '---', disabled: true }]
@@ -141,13 +143,13 @@ export function buildDomainShiftModelOptions(
 export function getDefaultModelId(
   models: ModelsAnalysisModelResult[],
   currentModelId: string | null,
-  defaultModelIds: ReadonlySet<string> = new Set<string>(),
 ): string | null {
   const sorted = sortModels(models);
-  if (currentModelId != null && sorted.some((model) => model.modelId === currentModelId)) {
+  const modelIds = new Set(sorted.map((model) => model.modelId));
+  if (currentModelId != null && (currentModelId === ALL_MODELS_OPTION_VALUE || modelIds.has(currentModelId))) {
     return currentModelId;
   }
-  return sorted.find((model) => defaultModelIds.has(model.modelId))?.modelId ?? sorted[0]?.modelId ?? null;
+  return ALL_MODELS_OPTION_VALUE;
 }
 
 function sortValueKeys(valueKeys: Set<string>): string[] {
@@ -168,11 +170,25 @@ function computeAverage(domains: ModelsAnalysisDomainBreakdown[]): number | null
   return total / domains.length;
 }
 
-export function buildDomainShiftHeatmap(model: ModelsAnalysisModelResult | null): DomainShiftHeatmap {
-  if (model == null) {
-    return { columns: [], rows: [], eligibleDomainCount: 0 };
-  }
+function computeAverageNumber(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const total = values.reduce((sum, value) => sum + value, 0);
+  return total / values.length;
+}
 
+type AggregateDomainStats = {
+  domainId: string;
+  domainName: string;
+  winRates: number[];
+  evidenceWeights: number[];
+};
+
+type AggregateValueStats = {
+  pooledWinRates: number[];
+  domains: Map<string, AggregateDomainStats>;
+};
+
+function buildDomainShiftHeatmapForModel(model: ModelsAnalysisModelResult): DomainShiftHeatmap {
   const valueKeys = new Set<string>(VALUES);
 
   for (const value of model.values) {
@@ -224,6 +240,105 @@ export function buildDomainShiftHeatmap(model: ModelsAnalysisModelResult | null)
     rows,
     eligibleDomainCount: columns.length,
   };
+}
+
+function buildDomainShiftHeatmapForModels(models: ModelsAnalysisModelResult[]): DomainShiftHeatmap {
+  const valueKeys = new Set<string>(VALUES);
+  const rowsByValue: Map<string, AggregateValueStats> = new Map();
+  const domainById = new Map<string, DomainShiftColumn>();
+
+  for (const model of models) {
+    for (const value of model.values) {
+      valueKeys.add(value.valueKey);
+
+      const existing: AggregateValueStats = rowsByValue.get(value.valueKey) ?? {
+        pooledWinRates: [],
+        domains: new Map(),
+      };
+
+      if (isFiniteNumber(value.pooledWinRate)) {
+        existing.pooledWinRates.push(value.pooledWinRate);
+      }
+
+      for (const domain of eligibleDomainsForValue(value)) {
+        domainById.set(domain.domainId, {
+          domainId: domain.domainId,
+          domainName: domain.domainName,
+        });
+        const aggregate: AggregateDomainStats = existing.domains.get(domain.domainId) ?? {
+          domainId: domain.domainId,
+          domainName: domain.domainName,
+          winRates: [],
+          evidenceWeights: [],
+        };
+        aggregate.winRates.push(domain.winRate);
+        if (isFiniteNumber(domain.evidenceWeight)) {
+          aggregate.evidenceWeights.push(domain.evidenceWeight);
+        }
+        existing.domains.set(domain.domainId, aggregate);
+      }
+
+      rowsByValue.set(value.valueKey, existing);
+    }
+  }
+
+  const rows = sortValueKeys(valueKeys).map((valueKey) => {
+    const aggregate = rowsByValue.get(valueKey);
+    const domainEntries = [...(aggregate?.domains.values() ?? [])];
+    const comparableDomainCount = domainEntries.length;
+    const domainAverages = domainEntries
+      .map((entry) => computeAverageNumber(entry.winRates))
+      .filter((value): value is number => value != null);
+    const averageWinRate = comparableDomainCount >= 2 ? computeAverageNumber(domainAverages) : null;
+    const pooledWinRate = computeAverageNumber(aggregate?.pooledWinRates ?? []);
+    const cells = new Map<string, DomainShiftCell>();
+
+    if (valueKeys.has(valueKey) && averageWinRate != null) {
+      for (const domain of domainEntries) {
+        const winRate = computeAverageNumber(domain.winRates);
+        if (winRate == null) continue;
+
+        cells.set(domain.domainId, {
+          domainId: domain.domainId,
+          domainName: domain.domainName,
+          winRate,
+          averageWinRate,
+          shift: winRate - averageWinRate,
+          evidenceWeight: computeAverageNumber(domain.evidenceWeights),
+        });
+      }
+    }
+
+    return {
+      valueKey,
+      valueLabel: formatValueLabel(valueKey),
+      pooledWinRate,
+      averageWinRate,
+      averageMatchesPooled: averageWinRate == null || pooledWinRate == null
+        ? null
+        : Math.abs(averageWinRate - pooledWinRate) <= AVERAGE_PARITY_TOLERANCE,
+      comparableDomainCount,
+      cells,
+    };
+  });
+  const columns = [...domainById.values()].sort((left, right) => left.domainName.localeCompare(right.domainName));
+
+  return {
+    columns,
+    rows,
+    eligibleDomainCount: columns.length,
+  };
+}
+
+export function buildDomainShiftHeatmap(
+  modelOrModels: ModelsAnalysisModelResult | ModelsAnalysisModelResult[] | null,
+): DomainShiftHeatmap {
+  if (modelOrModels == null) {
+    return { columns: [], rows: [], eligibleDomainCount: 0 };
+  }
+  return Array.isArray(modelOrModels)
+    ? buildDomainShiftHeatmapForModels(modelOrModels)
+    : buildDomainShiftHeatmapForModel(modelOrModels);
 }
 
 export function getNextDomainShiftSort(current: DomainShiftSort, key: DomainShiftSortKey): DomainShiftSort {
