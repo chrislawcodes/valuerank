@@ -313,6 +313,49 @@ class AnalyzeReviewsTests(unittest.TestCase):
         )
         self.assertNotIn("No prompt-size data available yet", report)
 
+    def test_per_feature_metrics_rollup_section(self) -> None:
+        """Section 7a renders correctly with two slugs carrying command telemetry."""
+        ct_alpha = [
+            {"command": "discover", "stage": "spec", "ts": "2026-04-25T10:00:00Z", "wall_seconds": 45.0, "input_bytes_read": 100, "output_bytes_written": 50, "ttl_crossed": False},
+            {"command": "checkpoint", "stage": "spec", "ts": "2026-04-25T10:05:00Z", "wall_seconds": 310.0, "input_bytes_read": 200, "output_bytes_written": 80, "ttl_crossed": True},
+        ]
+        tu_alpha = [
+            {"model": "gpt-5.4-mini", "activity_type": "adversarial_review", "input_tokens": 1000, "output_tokens": 200, "duration_seconds": 10.0},
+            {"model": "gemini-2.5-pro", "activity_type": "adversarial_review", "input_tokens": 800, "output_tokens": 150, "duration_seconds": 12.0},
+        ]
+        ct_beta = [
+            {"command": "discover", "stage": None, "ts": "2026-04-26T10:00:00Z", "wall_seconds": 20.0, "input_bytes_read": 50, "output_bytes_written": 30, "ttl_crossed": False},
+        ]
+        tu_beta = [
+            {"model": "gpt-5.4", "activity_type": "adversarial_review", "input_tokens": 2000, "output_tokens": 300, "duration_seconds": 15.0},
+        ]
+
+        slug_alpha = self.runs_root / "alpha-metrics"
+        slug_alpha.mkdir(parents=True, exist_ok=True)
+        (slug_alpha / "state.json").write_text(
+            json.dumps({"token_usage": tu_alpha, "command_telemetry": ct_alpha}), encoding="utf-8"
+        )
+        slug_beta = self.runs_root / "beta-metrics"
+        slug_beta.mkdir(parents=True, exist_ok=True)
+        (slug_beta / "state.json").write_text(
+            json.dumps({"token_usage": tu_beta, "command_telemetry": ct_beta}), encoding="utf-8"
+        )
+
+        rc, _, stderr, report = self._run()
+        self.assertEqual(rc, 0)
+        self.assertIn("## 7a. Per-Feature Metrics Rollup", report)
+        # alpha has more wall_seconds (355.0) so it should appear before beta (20.0)
+        self.assertIn("alpha-metrics", report)
+        self.assertIn("beta-metrics", report)
+        # alpha: codex_tokens = 1200, gemini_tokens = 950, ttl_crossings = 1, command_count = 2
+        self.assertIn("| alpha-metrics | 355.0 | 1200 | 950 | 1 | 2 |", report)
+        # beta: codex_tokens = 2300, gemini_tokens = 0, ttl_crossings = 0, command_count = 1
+        self.assertIn("| beta-metrics | 20.0 | 2300 | 0 | 0 | 1 |", report)
+        # Note paragraph must be present
+        self.assertIn("Note on Claude token measurement", report)
+        self.assertIn("ttl_crossings", report)
+        self.assertIn("/cost", report)
+
 
 if __name__ == "__main__":
     unittest.main()

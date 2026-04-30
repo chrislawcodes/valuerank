@@ -57,6 +57,7 @@ from factory_next_action import recommended_next_action  # noqa: E402
 
 from factory_deliver import refresh_delivery_snapshot  # noqa: E402
 from factory_mutating import mutates_state, readonly_command  # noqa: E402
+from factory_size_estimate import estimate_size  # noqa: E402
 
 
 def _print_command_telemetry(state: dict) -> None:
@@ -258,6 +259,13 @@ def command_status(args: argparse.Namespace) -> int:
             stage = entry.get("stage", "")
             detail = trim_detail(str(entry.get("detail", "")))
             print(f"- [{at}] {command} stage={stage}: {detail}")
+
+    try:
+        est = estimate_size(args.slug)
+        print("")
+        print(f"size-estimate: {est['size']} ({est['reasoning']})")
+    except Exception:
+        pass  # size estimate is advisory; never fail status
 
     print("")
     print(f"next-action: {next_action}")

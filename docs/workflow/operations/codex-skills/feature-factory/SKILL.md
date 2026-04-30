@@ -374,6 +374,22 @@ Each workflow lives in `docs/workflow/feature-runs/<slug>/`. The files have diff
 
 When in doubt about current workflow state, read `state.json` or run `status --slug <slug>`. Do not infer state from which artifact files exist.
 
+## Measuring FF Cost
+
+The FF runner captures these signals automatically during every command:
+
+- **Per-command wall clock** — recorded in `state.json` under `command_telemetry[].wall_seconds`.
+- **Per-Codex-call tokens** — recorded in `token_usage[]` for entries where `model` starts with `gpt-`. Includes `input_tokens` and `output_tokens`.
+- **Per-Gemini-call tokens** — recorded in `token_usage[]` for entries where `model` starts with `gemini-`.
+- **TTL crossings per command** — `command_telemetry[].ttl_crossed` is `true` when a command ran longer than 270 seconds (the Anthropic prompt-cache TTL). Each crossing means the orchestrator's cache likely expired, requiring an uncached re-read on the next command.
+
+What the runner does **not** measure: Claude orchestrator session tokens. Claude Code does not expose those to the runner. To see session-level Claude usage, run `/cost` in Claude Code after the workflow completes.
+
+Where to look for cross-feature aggregation:
+
+- Run `analyze-reviews` to generate a full report. Section 7a shows per-feature rollups (wall seconds, Codex tokens, Gemini tokens, TTL crossings, command count) sorted by total wall time. The report is saved to `docs/workflow/analysis/review-performance-<date>.md`.
+- Run `status --slug <slug> --tokens` to see the last 10 command-telemetry records for a single feature (wall seconds, bytes read/written, TTL crossed). This was shipped in PR #792.
+
 ## Notes
 
 - The skill should stay lean and prefer the existing Python scripts over new helper code.
