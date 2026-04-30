@@ -174,15 +174,8 @@ export function OpenAnomaliesSection({
               <div className="animate-pulse rounded-lg border border-gray-200 bg-white p-4">
                 <div className="space-y-3">
                   <div className="h-4 w-40 rounded bg-gray-200" />
-                  <div className="grid grid-cols-6 gap-3">
+                  <div className="grid grid-cols-7 gap-3">
                     <div className="h-4 rounded bg-gray-100" />
-                    <div className="h-4 rounded bg-gray-100" />
-                    <div className="h-4 rounded bg-gray-100" />
-                    <div className="h-4 rounded bg-gray-100" />
-                    <div className="h-4 rounded bg-gray-100" />
-                    <div className="h-4 rounded bg-gray-100" />
-                  </div>
-                  <div className="grid grid-cols-6 gap-3">
                     <div className="h-4 rounded bg-gray-100" />
                     <div className="h-4 rounded bg-gray-100" />
                     <div className="h-4 rounded bg-gray-100" />
@@ -190,7 +183,17 @@ export function OpenAnomaliesSection({
                     <div className="h-4 rounded bg-gray-100" />
                     <div className="h-4 rounded bg-gray-100" />
                   </div>
-                  <div className="grid grid-cols-6 gap-3">
+                  <div className="grid grid-cols-7 gap-3">
+                    <div className="h-4 rounded bg-gray-100" />
+                    <div className="h-4 rounded bg-gray-100" />
+                    <div className="h-4 rounded bg-gray-100" />
+                    <div className="h-4 rounded bg-gray-100" />
+                    <div className="h-4 rounded bg-gray-100" />
+                    <div className="h-4 rounded bg-gray-100" />
+                    <div className="h-4 rounded bg-gray-100" />
+                  </div>
+                  <div className="grid grid-cols-7 gap-3">
+                    <div className="h-4 rounded bg-gray-100" />
                     <div className="h-4 rounded bg-gray-100" />
                     <div className="h-4 rounded bg-gray-100" />
                     <div className="h-4 rounded bg-gray-100" />
@@ -210,16 +213,19 @@ export function OpenAnomaliesSection({
                       Domain
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-amber-900">
-                      Run
+                      Vignette
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-amber-900">
                       Type
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-amber-900">
-                      Subject
+                      Model
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-amber-900">
-                      Age
+                      Strength of First Value
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-amber-900">
+                      Strength of Second Value
                     </th>
                     <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-amber-900">
                       Actions

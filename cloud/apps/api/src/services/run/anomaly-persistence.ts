@@ -101,7 +101,11 @@ export async function syncAnomalies(
  * Merge-updates the reprobeStage field inside an anomaly's JSONB details.
  * Safe to call even if the anomaly has been resolved; logs a warning and no-ops.
  */
-export async function setReprobeStage(anomalyId: string, stage: string): Promise<void> {
+export async function setReprobeStage(
+  anomalyId: string,
+  stage: string,
+  extraFields?: Record<string, unknown>,
+): Promise<void> {
   const anomaly = await db.runAnomaly.findUnique({
     where: { id: anomalyId },
     select: { details: true },
@@ -117,6 +121,9 @@ export async function setReprobeStage(anomalyId: string, stage: string): Promise
       ? { ...(anomaly.details as Record<string, unknown>) }
       : {};
   current.reprobeStage = stage;
+  if (extraFields != null) {
+    Object.assign(current, extraFields);
+  }
   await db.runAnomaly.update({
     where: { id: anomalyId },
     data: { details: current as Prisma.InputJsonValue },
