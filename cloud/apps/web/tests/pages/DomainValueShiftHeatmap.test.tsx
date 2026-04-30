@@ -250,9 +250,11 @@ describe('DomainValueShiftHeatmap page', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Domain Shifts by Value' })).toBeInTheDocument();
     });
+    expect(screen.getByRole('table')).toHaveClass('table-fixed');
     expect(screen.getByRole('button', { name: /model a/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Latest @ default/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Sort by Avg Win Rate descending/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Sort by Value descending/i })).toHaveTextContent('Value↓');
     expect(screen.getByLabelText(/Achievement in City Planning: raw win rate 80%; shift \+20 pts/i)).toHaveAccessibleName(
       /average 60%; evidence vignettes —/i,
     );
@@ -262,6 +264,7 @@ describe('DomainValueShiftHeatmap page', () => {
     const firstDataRow = screen.getAllByRole('row')[1];
     expect(within(firstDataRow).getAllByRole('rowheader')[0]).toHaveTextContent('Achievement');
     expect(within(firstDataRow).getAllByRole('cell')[0]).toHaveTextContent('60%');
+    expect(within(firstDataRow).getAllByRole('cell')[1]).toHaveClass('bg-emerald-100');
   });
 
   it('passes the selected signature to the models analysis query', async () => {
@@ -311,6 +314,19 @@ describe('DomainValueShiftHeatmap page', () => {
     const firstDataRow = screen.getAllByRole('row')[1];
     expect(firstDataRow).toBeDefined();
     expect(within(firstDataRow as HTMLElement).getByRole('rowheader', { name: 'Achievement' })).toBeInTheDocument();
+  });
+
+  it('toggles active sort arrows between highest-first and lowest-first', async () => {
+    const user = userEvent.setup({ delay: null });
+    installModels([makeModel()]);
+
+    renderPage();
+
+    expect(await screen.findByRole('button', { name: /Sort by Value descending/i })).toHaveTextContent('Value↓');
+
+    await user.click(screen.getByRole('button', { name: /Sort by Avg Win Rate descending/i }));
+
+    expect(screen.getByRole('button', { name: /Sort by Avg Win Rate ascending/i })).toHaveTextContent('Avg Win Rate↑');
   });
 
   it('lets the user select a different model', async () => {
