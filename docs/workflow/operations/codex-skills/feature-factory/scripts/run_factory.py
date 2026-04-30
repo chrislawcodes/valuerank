@@ -106,6 +106,7 @@ from factory_mutating import (  # noqa: E402
     mutates_state,
 )
 from factory_cmd_analyze_reviews import command_analyze_reviews  # noqa: E402
+from factory_cmd_quick import command_quick  # noqa: E402
 from factory_stages import stage_manifest_state  # noqa: E402  (re-imported for invariant check)
 from workflow_utils import resolve_stored_path  # noqa: E402
 
@@ -512,6 +513,22 @@ def build_parser() -> argparse.ArgumentParser:
     analyze_reviews_parser.add_argument("--out")
     analyze_reviews_parser.add_argument("--top-n", type=int, default=20)
     analyze_reviews_parser.set_defaults(func=command_analyze_reviews)
+
+    quick_parser = subparsers.add_parser(
+        "quick",
+        help="Run a single diff review for a small feature (skip full spec/plan/tasks cycle)",
+    )
+    quick_parser.add_argument("--slug", required=True)
+    quick_parser.add_argument("--prompt-path", dest="prompt_path", default=None,
+        help="Path to a Codex prompt file. If given, dispatches Codex before the review.")
+    quick_parser.add_argument(
+        "--review-lens",
+        dest="review_lens",
+        choices=["correctness", "quality"],
+        default="correctness",
+        help="correctness = Codex correctness-adversarial (default); quality = Gemini quality-adversarial",
+    )
+    quick_parser.set_defaults(func=command_quick)
 
     return parser
 

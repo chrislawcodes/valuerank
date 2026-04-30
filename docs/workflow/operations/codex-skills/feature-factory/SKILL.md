@@ -9,6 +9,28 @@ Use this skill when the user wants to take a feature from idea to shipped code i
 
 This skill is the orchestrator. It should reuse the existing repo-owned scripts for workflow initialization, review checkpoints, reconciliation, and closeout instead of re-implementing that logic in prompt text.
 
+## Choosing an Orchestrator
+
+Use this table to decide which agent drives the workflow for a given feature:
+
+| Situation | Recommended Orchestrator | Why |
+|-----------|--------------------------|-----|
+| Default — any new feature | Codex (`gpt-5.4`) | Codex tokens are free for the operator; Claude tokens are paid. PR #768 demonstrated the Codex-orchestrator pattern works end-to-end (full spec → plan → tasks → implement → deliver). |
+| Hard architectural decision (schema changes, new job types, major tradeoff) | Claude | Claude is better at open-ended judgment calls and adversarial review of Codex PRs. |
+| Codex quota exhausted | Claude | Fall back to Claude when Codex hits usage limits; Claude can drive the full workflow until quota resets. |
+
+### Default dispatch pattern
+
+```bash
+codex exec -m gpt-5.4 -s workspace-write "$(cat docs/workflow/orchestrator-prompts/<task>.md)"
+```
+
+Write the task prompt to `docs/workflow/orchestrator-prompts/<task>.md` before dispatching. This avoids `/tmp` GC risk (see Background Dispatch Discipline below).
+
+Use Claude for: hard architectural calls, adversarial review of Codex's PRs, and when Codex hits quota.
+
+---
+
 ## Orchestration Mode
 
 This skill runs in one of two modes depending on which agent is executing it:
