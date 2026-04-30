@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery } from 'urql';
 import { useSearchParams } from 'react-router-dom';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
@@ -14,6 +14,7 @@ import {
   type ModelsConfidenceQueryVariables,
 } from '../api/operations/modelsConfidence';
 import { ConfidenceHeatmap } from '../components/models/ConfidenceHeatmap';
+import { ConfidenceTranscriptsDrawer } from '../components/models/ConfidenceTranscriptsDrawer';
 import {
   buildDomainShiftSignatureOptions,
   getDefaultDomainShiftSignature,
@@ -65,6 +66,16 @@ export function ModelsConfidence() {
   const models = useMemo(() => data?.modelsConfidence.models ?? [], [data]);
   const loading = fetching && data == null;
 
+  const [drawerState, setDrawerState] = useState<{
+    modelId: string;
+    modelLabel: string;
+    valueKey: string;
+  } | null>(null);
+
+  const handleCellClick = useCallback((modelId: string, modelLabel: string, valueKey: string) => {
+    setDrawerState({ modelId, modelLabel, valueKey });
+  }, []);
+
   return (
     <div className="space-y-6">
       <div className="space-y-2">
@@ -89,7 +100,16 @@ export function ModelsConfidence() {
       </div>
 
       {error != null && <ErrorMessage message={error.message} />}
-      {loading ? <Loading /> : <ConfidenceHeatmap models={models} />}
+      {loading ? <Loading /> : <ConfidenceHeatmap models={models} onCellClick={handleCellClick} />}
+
+      <ConfidenceTranscriptsDrawer
+        open={drawerState != null}
+        modelId={drawerState?.modelId ?? ''}
+        modelLabel={drawerState?.modelLabel ?? ''}
+        valueKey={drawerState?.valueKey ?? null}
+        signature={selectedSignature}
+        onClose={() => setDrawerState(null)}
+      />
     </div>
   );
 }
