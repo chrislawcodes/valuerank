@@ -169,15 +169,14 @@ export function aggregateAnalysesLogic(
       const target = aggregatedValues[valueId];
       if (!target) return;
 
-      const totalWins = target.count.prioritized;
-      const totalResponses =
-        target.count.prioritized + target.count.deprioritized + target.count.neutral;
-      target.winRate = totalResponses > 0 ? totalWins / totalResponses : null;
-
       const rates = modelValueRates[valueId] || [];
-      if (rates.length === 0) return;
+      if (rates.length === 0) {
+        target.winRate = null;
+        return;
+      }
 
       const mean = rates.reduce((sum, value) => sum + value, 0) / rates.length;
+      target.winRate = mean;
       const variance = rates.reduce((sum, value) => sum + Math.pow(value - mean, 2), 0) / rates.length;
       const sd = Math.sqrt(variance);
       const sem = sd / Math.sqrt(rates.length);
