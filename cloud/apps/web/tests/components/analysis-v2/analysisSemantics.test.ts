@@ -549,7 +549,7 @@ describe('buildPairedAnalysisSemanticsView', () => {
       topPrioritizedValues: [{ name: 'Care', winRate: 0.6 }],
       topDeprioritizedValues: [],
       neutralValues: [{ name: 'Achievement', winRate: 0.5 }],
-      overallLean: 'B',
+      overallLean: 'A',
     });
     expect(semantics.reliability.byModel['claude-3']).toMatchObject({
       coverageCount: 10,
