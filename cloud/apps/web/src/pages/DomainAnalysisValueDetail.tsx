@@ -37,14 +37,12 @@ export function DomainAnalysisValueDetail() {
   if (domainId !== '') backParams.set('domainId', domainId);
   if (signature !== null && signature !== '') backParams.set('signature', signature);
   const backLink = `/domains/analysis?${backParams.toString()}`;
-  const scoreMethod = 'LOG_ODDS' as const;
-
   const [{ data: scoredData, fetching: scoredFetching, error: scoredError }] = useQuery<
     DomainAnalysisValueDetailQueryResult,
     DomainAnalysisValueDetailQueryVariables
   >({
     query: DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY,
-    variables: { domainId, modelId, valueKey, scoreMethod, signature: signature ?? undefined },
+    variables: { domainId, modelId, valueKey, signature: signature ?? undefined },
     pause: domainId === '' || modelId === '' || valueKey === '',
     requestPolicy: 'cache-and-network',
   });

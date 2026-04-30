@@ -60,7 +60,7 @@ export function SimilaritySection({ models, clusterAnalysis }: SimilaritySection
   const matrix = useMemo(() => {
     const vectors = new Map<string, number[]>();
     for (const model of models) {
-      vectors.set(model.model, VALUES.map((value) => model.values[value]));
+      vectors.set(model.model, VALUES.map((value) => model.winRates?.[value] ?? 0));
     }
 
     const similarities = new Map<string, Map<string, number>>();

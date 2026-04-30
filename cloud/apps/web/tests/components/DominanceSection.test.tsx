@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
 import type {
-  DomainAnalysisModelAvailability,
   ModelEntry,
 } from '../../src/data/domainAnalysisData';
 import { DominanceSection } from '../../src/components/domains/DominanceSection';
@@ -22,6 +21,18 @@ const models: ModelEntry[] = [
       Stimulation: 1,
       Self_Direction_Action: 0,
     },
+    winRates: {
+      Universalism_Nature: 1.0,
+      Benevolence_Dependability: 0.94,
+      Conformity_Interpersonal: 0.81,
+      Tradition: 0.69,
+      Security_Personal: 0.57,
+      Power_Dominance: 0.45,
+      Achievement: 0.33,
+      Hedonism: 0.22,
+      Stimulation: 0.11,
+      Self_Direction_Action: 0.0,
+    },
   },
   {
     model: 'model-b',
@@ -38,16 +49,21 @@ const models: ModelEntry[] = [
       Stimulation: 8.5,
       Self_Direction_Action: 0.9,
     },
+    winRates: {
+      Universalism_Nature: 0.32,
+      Benevolence_Dependability: 0.64,
+      Conformity_Interpersonal: 1.0,
+      Tradition: 0.54,
+      Security_Personal: 0.84,
+      Power_Dominance: 0.13,
+      Achievement: 0.41,
+      Hedonism: 0.0,
+      Stimulation: 0.93,
+      Self_Direction_Action: 0.35,
+    },
   },
 ];
 
-const unavailableModels: DomainAnalysisModelAvailability[] = [
-  {
-    model: 'offline-model',
-    label: 'Offline Model',
-    reason: 'not available',
-  },
-];
 
 describe('DominanceSection', () => {
   it('renders the shell and updates summary content when the selected model changes', async () => {
@@ -68,7 +84,6 @@ describe('DominanceSection', () => {
     const { rerender } = render(
       <DominanceSection
         models={models}
-        unavailableModels={unavailableModels}
         selectedModelId="model-a"
       />,
     );
@@ -91,8 +106,6 @@ describe('DominanceSection', () => {
     ).toBeInTheDocument();
     expect(screen.getByText('Model focus:')).toBeInTheDocument();
     expect(screen.getByText('Model A')).toBeInTheDocument();
-    expect(screen.getByText('1 unavailable model stay hidden from this analysis.')).toBeInTheDocument();
-
     const summaryList = container!.querySelector('ol');
     expect(summaryList?.textContent).toBeTruthy();
     const initialSummary = summaryList?.textContent ?? '';
@@ -100,7 +113,6 @@ describe('DominanceSection', () => {
     rerender(
       <DominanceSection
         models={models}
-        unavailableModels={unavailableModels}
         selectedModelId="model-b"
       />,
     );

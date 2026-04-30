@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  type DomainAnalysisModelAvailability,
   type ModelEntry,
   type ValueKey,
 } from '../../data/domainAnalysisData';
@@ -16,7 +15,6 @@ import {
 
 type DominanceSectionProps = {
   models: ModelEntry[];
-  unavailableModels: DomainAnalysisModelAvailability[];
   selectedModelId: string | null;
 };
 
@@ -38,7 +36,7 @@ const THEME_COLORS: DominanceSectionThemeColors = {
   idleRingColor: '#38bdf8',
 };
 
-export function DominanceSection({ models, unavailableModels, selectedModelId }: DominanceSectionProps) {
+export function DominanceSection({ models, selectedModelId }: DominanceSectionProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const [focusedValue, setFocusedValue] = useState<ValueKey | null>(null);
   const [hoveredValue, setHoveredValue] = useState<ValueKey | null>(null);
@@ -111,21 +109,11 @@ export function DominanceSection({ models, unavailableModels, selectedModelId }:
         <span className={`font-medium ${THEME_COLORS.panelMutedText}`}>Model focus:</span>
         <span className={THEME_COLORS.panelText}>{selectedModel?.label ?? 'No model selected'}</span>
       </div>
-      {unavailableModels.length > 0 && (
-        <p className={`mb-3 text-xs ${THEME_COLORS.panelMutedText}`}>
-          {unavailableModels.length} unavailable model{unavailableModels.length === 1 ? '' : 's'} stay hidden from this analysis.
-        </p>
-      )}
-
       {models.length === 0 && (
         <p className={`mb-3 text-xs ${THEME_COLORS.panelMutedText}`}>
           No analyzed model data is available for this domain yet.
         </p>
       )}
-
-      <p className={`mb-3 text-xs ${THEME_COLORS.panelMutedText}`}>
-        Click a value circle to focus it and fade unrelated arrows. Click it again to clear focus.
-      </p>
 
       <div
         ref={chartRef}

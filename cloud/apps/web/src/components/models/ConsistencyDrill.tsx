@@ -25,7 +25,6 @@ function conditionMatrixUrl(args: { domainId: string; modelId: string; valueKey:
     modelId: args.modelId,
     valueKey: args.valueKey,
     signature: args.signature,
-    scoreMethod: 'LOG_ODDS',
   });
   return `/domains/analysis/value-detail?${params.toString()}`;
 }

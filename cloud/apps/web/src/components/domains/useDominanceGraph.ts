@@ -141,7 +141,7 @@ export function useDominanceGraph({
   selectedModel,
 }: UseDominanceGraphParams) {
   const edges = useMemo(() => {
-    if (!selectedModel) return [];
+    if (!selectedModel?.winRates) return [];
 
     const allEdges: DominanceEdge[] = [];
     for (let i = 0; i < DISPLAY_VALUES.length; i += 1) {
@@ -149,8 +149,9 @@ export function useDominanceGraph({
         const a = DISPLAY_VALUES[i];
         const b = DISPLAY_VALUES[j];
         if (!a || !b) continue;
-        const aValue = selectedModel.values[a];
-        const bValue = selectedModel.values[b];
+        const aValue = selectedModel.winRates[a];
+        const bValue = selectedModel.winRates[b];
+        if (aValue == null || bValue == null) continue;
         if (aValue === bValue) continue;
         if (aValue > bValue) allEdges.push({ from: a, to: b, gap: aValue - bValue });
         if (bValue > aValue) allEdges.push({ from: b, to: a, gap: bValue - aValue });
@@ -161,7 +162,7 @@ export function useDominanceGraph({
   }, [selectedModel]);
 
   const contestedPairs = useMemo(() => {
-    if (!selectedModel) return [];
+    if (!selectedModel?.winRates) return [];
 
     const pairs: ContestedPair[] = [];
     for (let i = 0; i < DISPLAY_VALUES.length; i += 1) {
@@ -169,8 +170,9 @@ export function useDominanceGraph({
         const a = DISPLAY_VALUES[i];
         const b = DISPLAY_VALUES[j];
         if (!a || !b) continue;
-        const aScore = selectedModel.values[a];
-        const bScore = selectedModel.values[b];
+        const aScore = selectedModel.winRates[a];
+        const bScore = selectedModel.winRates[b];
+        if (aScore == null || bScore == null) continue;
         if (aScore === bScore) continue;
         if (aScore > bScore) {
           pairs.push({ a, b, gap: aScore - bScore, winner: a });
@@ -184,8 +186,10 @@ export function useDominanceGraph({
   }, [selectedModel]);
 
   const priorityValueRange = useMemo(() => {
-    const allValues = models.flatMap((model) => DISPLAY_VALUES.map((value) => model.values[value]));
-    if (allValues.length === 0) return { min: -1, max: 1 };
+    const allValues = models.flatMap((model) =>
+      DISPLAY_VALUES.map((value) => model.winRates?.[value]).filter((v): v is number => v != null),
+    );
+    if (allValues.length === 0) return { min: 0, max: 1 };
     return { min: Math.min(...allValues), max: Math.max(...allValues) };
   }, [models]);
 
