@@ -1,10 +1,12 @@
 import argparse
 import contextlib
+import gc
 import importlib.util
 import io
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -37,16 +39,28 @@ class SelfDocumentingErrorTests(unittest.TestCase):
         self.workflow_dir = self.runs_root / self.slug
         self.workflow_dir.mkdir(parents=True, exist_ok=True)
 
-        self._repo_patch = mock.patch.object(FACTORY_STATE, "REPO_ROOT", self.repo_root)
-        self._runs_patch = mock.patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", self.runs_root)
+        # Patch every loaded factory_state module instance so that lazy imports
+        # inside record_command_telemetry (and similar) also see the tmpdir.
+        self._patches: list = []
+        for mod in list(gc.get_objects()):
+            if not isinstance(mod, types.ModuleType):
+                continue
+            if getattr(mod, "__name__", "") != "factory_state":
+                continue
+            if hasattr(mod, "FACTORY_RUNS_ROOT"):
+                p = mock.patch.object(mod, "FACTORY_RUNS_ROOT", self.runs_root)
+                p.start()
+                self._patches.append(p)
+            if hasattr(mod, "REPO_ROOT"):
+                p = mock.patch.object(mod, "REPO_ROOT", self.repo_root)
+                p.start()
+                self._patches.append(p)
+        self.addCleanup(lambda: [p.stop() for p in self._patches])
+
         self._cmd_checkpoint_repo_patch = mock.patch.object(FACTORY_CMD_CHECKPOINT, "REPO_ROOT", self.repo_root)
         self._cmd_deliver_repo_patch = mock.patch.object(FACTORY_CMD_DELIVER, "REPO_ROOT", self.repo_root)
-        self._repo_patch.start()
-        self._runs_patch.start()
         self._cmd_checkpoint_repo_patch.start()
         self._cmd_deliver_repo_patch.start()
-        self.addCleanup(self._repo_patch.stop)
-        self.addCleanup(self._runs_patch.stop)
         self.addCleanup(self._cmd_checkpoint_repo_patch.stop)
         self.addCleanup(self._cmd_deliver_repo_patch.stop)
 

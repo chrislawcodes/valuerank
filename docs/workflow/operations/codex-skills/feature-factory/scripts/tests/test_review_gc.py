@@ -1,11 +1,13 @@
 import argparse
 import contextlib
+import gc
 import importlib.util
 import io
 import json
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -116,9 +118,23 @@ class ReviewGcTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmpdir.cleanup)
-        self._root_patch = patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", Path(self._tmpdir.name))
-        self._root_patch.start()
-        self.addCleanup(self._root_patch.stop)
+        # Patch every loaded factory_state module instance so that lazy imports
+        # inside record_command_telemetry (and similar) also see the tmpdir.
+        # Multiple test files each load factory_state via importlib into separate
+        # module objects; patching only FACTORY_STATE misses instances referenced
+        # by other already-loaded modules.
+        self._patches: list = []
+        for mod in list(gc.get_objects()):
+            if not isinstance(mod, types.ModuleType):
+                continue
+            if getattr(mod, "__name__", "") != "factory_state":
+                continue
+            if not hasattr(mod, "FACTORY_RUNS_ROOT"):
+                continue
+            p = patch.object(mod, "FACTORY_RUNS_ROOT", Path(self._tmpdir.name))
+            p.start()
+            self._patches.append(p)
+        self.addCleanup(lambda: [p.stop() for p in self._patches])
 
     def _run_checkpoint(self, args: argparse.Namespace) -> tuple[int, str, str]:
         fake_result = subprocess.CompletedProcess(args=["repair"], returncode=0, stdout="", stderr="")
