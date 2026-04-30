@@ -31,7 +31,7 @@ const MAX_COLOR_SHIFT = 25;
 
 export { buildDomainShiftHeatmap, formatEvidenceWeight, formatPercent, formatPointShift, getDefaultDomainShiftSignature, getDefaultModelId, sortHeatmapRows } from './domainValueShiftHeatmapUtils';
 
-function getCellTone(shift: number): string {
+function getCellToneClass(shift: number): string {
   const clamped = Math.max(-MAX_COLOR_SHIFT, Math.min(MAX_COLOR_SHIFT, shift));
   const intensity = Math.abs(clamped) / MAX_COLOR_SHIFT;
   if (Math.abs(shift) < 0.5) {
@@ -51,7 +51,7 @@ function getCellTone(shift: number): string {
       : 'border-rose-100 bg-rose-50/60 text-rose-700';
 }
 
-function getWinRateTone(winRate: number): string {
+function getWinRateToneClass(winRate: number): string {
   if (winRate >= 75) return 'border-sky-300 bg-sky-100 text-sky-950';
   if (winRate >= 50) return 'border-sky-200 bg-sky-50 text-sky-900';
   if (winRate >= 25) return 'border-gray-200 bg-gray-50 text-gray-800';
@@ -100,7 +100,7 @@ function SortableHeader({
         size="sm"
         onClick={() => onSort(getNextDomainShiftSort(sort, sortKey))}
         className={cn(
-          'inline-flex w-full items-center rounded px-1 py-1 cursor-pointer hover:bg-gray-100 hover:text-gray-900',
+          'w-full gap-1 rounded-none bg-transparent px-0 py-0 min-h-0 text-[11px] font-semibold uppercase tracking-wide text-gray-500 shadow-none transition-colors hover:bg-transparent hover:text-gray-900 focus:ring-0 focus:ring-offset-0',
           align === 'left' && 'justify-start text-left',
           align === 'center' && 'justify-center text-center',
           align === 'right' && 'justify-end text-right',
@@ -109,6 +109,11 @@ function SortableHeader({
         aria-label={`Sort by ${label} ${nextDirection}`}
       >
         <span className="whitespace-nowrap">{label}</span>
+        {isActive && (
+          <span aria-hidden="true" className="text-[11px] leading-none text-gray-400">
+            {sort.direction === 'desc' ? '↑' : '↓'}
+          </span>
+        )}
       </Button>
     </th>
   );
@@ -161,23 +166,14 @@ function Cell({
   displayMode: DomainShiftDisplayMode;
 }) {
   if (cell == null) {
-    return (
-      <span className="inline-flex min-w-[82px] justify-center rounded-md border border-gray-100 bg-gray-50 px-2 py-1 text-xs text-gray-400">
-        n/a
-      </span>
-    );
+    return <span className="inline-flex w-full justify-center text-xs font-semibold text-gray-400">n/a</span>;
   }
 
   const detail = `${valueLabel} in ${cell.domainName}: raw win rate ${formatPercent(cell.winRate)}; shift ${formatPointShift(cell.shift)} versus this value's equal-domain average; average ${formatPercent(cell.averageWinRate)}; evidence vignettes ${formatEvidenceWeight(cell.evidenceWeight)}.`;
   const visibleValue = displayMode === 'shift' ? formatPointShift(cell.shift) : formatPercent(cell.winRate);
-  const tone = displayMode === 'shift' ? getCellTone(cell.shift) : getWinRateTone(cell.winRate);
 
   return (
-    <span
-      className={`inline-flex min-w-[82px] justify-center rounded-md border px-2 py-1 text-xs font-semibold ${tone}`}
-      title={detail}
-      aria-label={detail}
-    >
+    <span className="inline-flex w-full justify-center text-xs font-semibold" title={detail} aria-label={detail}>
       {visibleValue}
     </span>
   );
@@ -243,6 +239,8 @@ export function DomainValueShiftHeatmap() {
     () => buildDomainShiftModelOptions(models, defaultModelIds),
     [defaultModelIds, models],
   );
+  const tableColumnCount = heatmap.columns.length + 2;
+  const columnWidth = tableColumnCount > 0 ? `${100 / tableColumnCount}%` : '100%';
   const loading = fetching && data == null;
 
   return (
@@ -325,7 +323,12 @@ export function DomainValueShiftHeatmap() {
           </div>
 
           <div className="overflow-x-auto rounded border border-gray-100 bg-white p-2">
-            <table className="min-w-full border-collapse text-xs">
+            <table className="w-full table-fixed border-collapse text-xs">
+              <colgroup>
+                {Array.from({ length: tableColumnCount }).map((_, index) => (
+                  <col key={index} style={{ width: columnWidth }} />
+                ))}
+              </colgroup>
               <thead>
                 <tr className="border-b border-gray-200 text-gray-600">
                   <SortableHeader
@@ -375,15 +378,23 @@ export function DomainValueShiftHeatmap() {
                         </span>
                       )}
                     </td>
-                    {heatmap.columns.map((domain) => (
-                      <td key={domain.domainId} className="border-b border-gray-100 px-2 py-2 text-center">
-                        <Cell
-                          cell={row.cells.get(domain.domainId) ?? null}
-                          valueLabel={row.valueLabel}
-                          displayMode={displayMode}
-                        />
-                      </td>
-                    ))}
+                    {heatmap.columns.map((domain) => {
+                      const cell = row.cells.get(domain.domainId) ?? null;
+                      const tdClassName = cn(
+                        'border-b border-gray-100 px-2 py-2 text-center align-middle transition-colors',
+                        cell == null
+                          ? 'border-gray-100 bg-gray-50 text-gray-400'
+                          : displayMode === 'shift'
+                            ? getCellToneClass(cell.shift)
+                            : getWinRateToneClass(cell.winRate),
+                      );
+
+                      return (
+                        <td key={domain.domainId} className={tdClassName}>
+                          <Cell cell={cell} valueLabel={row.valueLabel} displayMode={displayMode} />
+                        </td>
+                      );
+                    })}
                   </tr>
                 ))}
               </tbody>
