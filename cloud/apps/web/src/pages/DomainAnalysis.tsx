@@ -281,41 +281,6 @@ export function DomainAnalysis() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Findings</h1>
-        <p className="mt-1 text-sm text-gray-600">
-          Structured domain interpretation across priorities, ranking behavior, and similarity for the selected domain.
-        </p>
-        {data?.domainAnalysis != null && cacheStatusCopy != null && (
-          <div className="mt-2 space-y-1 text-xs text-gray-500">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className={`inline-flex rounded-full border px-2.5 py-1 font-semibold ${cacheStatusCopy.badgeClassName}`}>
-                {cacheStatusCopy.badgeLabel}
-              </span>
-              <span>{cacheStatusCopy.detail}</span>
-              {!activeUseLegacyQuery && !isAllDomains && (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  className="h-auto px-2.5 py-1 text-xs"
-                  onClick={handleRefreshAnalysis}
-                  disabled={refreshFetching}
-                >
-                  {refreshFetching ? 'Refreshing\u2026' : 'Refresh now'}
-                </Button>
-              )}
-            </div>
-            {refreshNotice !== null && <p className="text-green-700">{refreshNotice}</p>}
-            {refreshError !== null && <p className="text-amber-700">{refreshError}</p>}
-          </div>
-        )}
-      </div>
-
-      {(domainsError != null || signaturesError != null || error != null) && (
-        <ErrorMessage message={`Failed to load domain analysis: ${(domainsError ?? signaturesError ?? error)?.message ?? 'Unknown error'}`} />
-      )}
-
       <section className="rounded-lg border border-gray-200 bg-white p-4">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
@@ -379,7 +344,7 @@ export function DomainAnalysis() {
               disabled={selectedDomainId === '' || exportLoading || isAllDomains}
               title={isAllDomains ? 'CSV export is unavailable in All domains mode' : undefined}
             >
-              {exportLoading ? 'Exporting\u2026' : 'Export CSV'}
+              {exportLoading ? 'Exporting…' : 'Export CSV'}
             </Button>
           </div>
           {exportError !== null && <p className="mt-1 text-xs text-amber-700">{exportError}</p>}
@@ -409,6 +374,41 @@ export function DomainAnalysis() {
           </div>
         )}
       </section>
+
+      <div>
+        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Findings</h1>
+        <p className="mt-1 text-sm text-gray-600">
+          Structured domain interpretation across priorities, ranking behavior, and similarity for the selected domain.
+        </p>
+        {data?.domainAnalysis != null && cacheStatusCopy != null && (
+          <div className="mt-2 space-y-1 text-xs text-gray-500">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`inline-flex rounded-full border px-2.5 py-1 font-semibold ${cacheStatusCopy.badgeClassName}`}>
+                {cacheStatusCopy.badgeLabel}
+              </span>
+              <span>{cacheStatusCopy.detail}</span>
+              {!activeUseLegacyQuery && !isAllDomains && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="h-auto px-2.5 py-1 text-xs"
+                  onClick={handleRefreshAnalysis}
+                  disabled={refreshFetching}
+                >
+                  {refreshFetching ? 'Refreshing\u2026' : 'Refresh now'}
+                </Button>
+              )}
+            </div>
+            {refreshNotice !== null && <p className="text-green-700">{refreshNotice}</p>}
+            {refreshError !== null && <p className="text-amber-700">{refreshError}</p>}
+          </div>
+        )}
+      </div>
+
+      {(domainsError != null || signaturesError != null || error != null) && (
+        <ErrorMessage message={`Failed to load domain analysis: ${(domainsError ?? signaturesError ?? error)?.message ?? 'Unknown error'}`} />
+      )}
 
       {showPageLoader ? (
         <Loading size="lg" text="Loading domain analysis..." />

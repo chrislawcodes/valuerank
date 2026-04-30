@@ -201,11 +201,14 @@ describe('DomainAnalysis', () => {
       </MemoryRouter>,
     );
 
+    const domainSelection = await screen.findByRole('heading', { name: 'Domain Selection' });
+    const findingsHeading = screen.getByRole('heading', { name: 'Findings' });
     const modelGroups = await screen.findByText(/mock model groups section/i);
     const valuePriorities = screen.getByText(/mock value priorities section/i);
     const dominance = screen.getByText(/mock dominance section/i);
     const similarity = screen.getByText(/mock similarity section/i);
 
+    expect(domainSelection.compareDocumentPosition(findingsHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(modelGroups.compareDocumentPosition(valuePriorities) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(valuePriorities.compareDocumentPosition(dominance) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(dominance.compareDocumentPosition(similarity) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
