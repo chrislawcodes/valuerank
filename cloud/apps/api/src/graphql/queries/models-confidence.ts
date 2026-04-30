@@ -70,7 +70,7 @@ builder.queryField('modelsConfidence', (t) =>
           deletedAt: null,
           tags: { some: { tag: { name: 'Aggregate' } } },
         },
-        select: { config: true },
+        select: { id: true, config: true },
       });
 
       const scopedAggregateRuns = signature != null
@@ -79,10 +79,17 @@ builder.queryField('modelsConfidence', (t) =>
 
       if (scopedAggregateRuns.length === 0) return emptyResult;
 
+      // sourceRunIds lives in analysisResult.output, not run.config — follow the join.
+      const aggregateRunIds = scopedAggregateRuns.map((r) => r.id);
+      const aggregateResults = await db.analysisResult.findMany({
+        where: { runId: { in: aggregateRunIds }, status: 'CURRENT' },
+        select: { output: true },
+      });
+
       const sourceRunIdSet = new Set<string>();
-      for (const run of scopedAggregateRuns) {
-        const config = run.config as { sourceRunIds?: string[] } | null;
-        for (const id of config?.sourceRunIds ?? []) {
+      for (const result of aggregateResults) {
+        const output = result.output as { sourceRunIds?: string[] } | null;
+        for (const id of output?.sourceRunIds ?? []) {
           sourceRunIdSet.add(id);
         }
       }
