@@ -349,7 +349,7 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
         { runId, transcriptId: transcriptRecord.id, anomalyId },
         { ...jobOptions['summarize_transcript'], singletonKey: transcriptRecord.id },
       );
-      await setReprobeStage(anomalyId, 'summarizing');
+      await setReprobeStage(anomalyId, 'summarizing', { transcriptId: transcriptRecord.id });
       log.info({ jobId, runId, anomalyId, transcriptId: transcriptRecord.id }, 'Enqueued summarize for reprobe pipeline');
     }
 

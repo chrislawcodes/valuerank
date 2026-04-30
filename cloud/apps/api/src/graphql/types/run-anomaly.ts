@@ -181,6 +181,35 @@ builder.objectType(RunAnomalyRef, {
       },
     }),
 
+    scenarioName: t.string({
+      nullable: true,
+      description: 'Scenario (vignette) name for slot-keyed anomaly types. Null for non-slot types or when the scenario cannot be found.',
+      resolve: async (anomaly) => {
+        const details = anomaly.details as Record<string, unknown> | null;
+        const scenarioId = typeof details?.scenarioId === 'string' && details.scenarioId.length > 0 ? details.scenarioId : null;
+        if (scenarioId === null) return null;
+        const scenario = await db.scenario.findUnique({ where: { id: scenarioId }, select: { name: true } });
+        return scenario?.name ?? null;
+      },
+    }),
+
+    dimensionValues: t.field({
+      type: 'JSON',
+      nullable: true,
+      description: 'Dimension values from the scenario content for slot-keyed anomaly types (Record<string, string>). Null for non-slot types.',
+      resolve: async (anomaly) => {
+        const details = anomaly.details as Record<string, unknown> | null;
+        const scenarioId = typeof details?.scenarioId === 'string' && details.scenarioId.length > 0 ? details.scenarioId : null;
+        if (scenarioId === null) return null;
+        const scenario = await db.scenario.findUnique({ where: { id: scenarioId }, select: { content: true } });
+        if (scenario === null) return null;
+        const content = scenario.content as { dimension_values?: Record<string, string> } | null;
+        const dv = content?.dimension_values;
+        if (dv == null || typeof dv !== 'object' || Object.keys(dv).length === 0) return null;
+        return dv;
+      },
+    }),
+
     estimatedCost: t.float({
       nullable: true,
       description: 'Best-effort cost estimate for the next re-probe attempt, computed as the average estimatedCost of the last 10 successful (non-deleted, summarized) transcripts for the same modelId across all runs. Returns null when the anomaly is not reprobable, no modelId is available, or no recent transcripts have cost data.',

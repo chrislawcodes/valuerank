@@ -193,10 +193,11 @@ function App() {
                 </ProtectedLayout>
               }
             />
+            <Route path="/models/consistency" element={<Navigate to="/archive/consistency" replace />} />
             <Route
-              path="/models/consistency"
+              path="/archive/consistency"
               element={
-                <ProtectedLayout>
+                <ProtectedLayout requiredRole="ADMIN">
                   <ModelsConsistency />
                 </ProtectedLayout>
               }
@@ -209,10 +210,11 @@ function App() {
                 </ProtectedLayout>
               }
             />
+            <Route path="/models/circumplex" element={<Navigate to="/archive/circumplex" replace />} />
             <Route
-              path="/models/circumplex"
+              path="/archive/circumplex"
               element={
-                <ProtectedLayout>
+                <ProtectedLayout requiredRole="ADMIN">
                   <ModelsCircumplex />
                 </ProtectedLayout>
               }
