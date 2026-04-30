@@ -38,8 +38,8 @@ describe('MobileNav Component', () => {
     expect(screen.getByRole('link', { name: 'Models' })).toHaveAttribute('href', '/models');
     expect(screen.getByRole('link', { name: 'Matrix' })).toHaveAttribute('href', '/models');
     expect(screen.getByRole('link', { name: 'Domain Shifts' })).toHaveAttribute('href', '/models/domain-shifts');
-    expect(screen.getByRole('link', { name: 'Consistency' })).toHaveAttribute('href', '/models/consistency');
-    expect(screen.getByRole('link', { name: 'Circumplex' })).toHaveAttribute('href', '/models/circumplex');
+    expect(screen.getByRole('link', { name: 'Consistency' })).toHaveAttribute('href', '/archive/consistency');
+    expect(screen.getByRole('link', { name: 'Circumplex' })).toHaveAttribute('href', '/archive/circumplex');
     expect(screen.getByRole('link', { name: 'Archive' })).toHaveAttribute('href', '/archive');
     expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings/account');
   });
