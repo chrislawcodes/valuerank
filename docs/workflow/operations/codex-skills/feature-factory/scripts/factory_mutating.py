@@ -22,10 +22,8 @@ def mutates_state(command_name: str) -> Callable[[Callable[..., Any]], Callable[
         def wrapped(*args: Any, **kwargs: Any) -> Any:
             if args and command_name in {
                 "checkpoint",
-                "judge",
                 "reconcile",
                 "deliver",
-                "auto-reconcile",
             }:
                 slug = getattr(args[0], "slug", None)
                 stage = getattr(args[0], "stage", None)

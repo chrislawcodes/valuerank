@@ -26,8 +26,6 @@ from factory_state import (  # noqa: E402
     load_workflow_state,
     save_workflow_state,
     update_workflow_state,
-    load_checkpoint_manifest,
-    parse_review_frontmatter,
     blocking_unresolved_items,
     discovery_state,
 )
@@ -66,10 +64,8 @@ from factory_review import (  # noqa: E402
     UPDATE_REVIEW,
     APPEND_RECONCILIATION,
     DEFAULT_CODEX_MODEL,
-    _AUTO_ACCEPT_NOTE,
     checkpoint_manifest,
     trim_detail,
-    detect_actionable_findings,
     _advance_checkpoint_progress,
     record_checkpoint_fallback,
     repair_checkpoint_args,
@@ -96,7 +92,6 @@ from factory_deliver import (  # noqa: E402
 from factory_cmd_deliver import command_deliver, command_closeout  # noqa: E402
 from check_workflow_isolation import command_check_workflow_isolation  # noqa: E402
 from factory_cmd_block import command_block  # noqa: E402
-from factory_cmd_judge import run_judge  # noqa: E402
 from factory_cmd_implement import command_implement, command_parallel, _run_serial, _run_parallel  # noqa: E402
 from factory_cmd_status import command_status, command_repair, command_doctor  # noqa: E402
 from factory_invariants import run_invariant_checks, set_json_mode  # noqa: E402
@@ -108,8 +103,6 @@ from factory_mutating import (  # noqa: E402
 from factory_cmd_analyze_reviews import command_analyze_reviews  # noqa: E402
 from factory_cmd_quick import command_quick  # noqa: E402
 from factory_stages import stage_manifest_state  # noqa: E402  (re-imported for invariant check)
-from workflow_utils import resolve_stored_path  # noqa: E402
-
 
 _MUTATING_CACHE: frozenset[str] | None = None
 
@@ -190,100 +183,6 @@ def command_init(args: argparse.Namespace) -> int:
     return 0
 
 
-@mutates_state("auto-reconcile")
-def command_auto_reconcile(args: argparse.Namespace) -> int:
-    """Auto-accept reviews with no HIGH or MEDIUM severity findings.
-
-    Scans all open (resolution_status == "open") reviews for the given stage.
-    Reviews with only LOW or no findings are accepted automatically.
-    Reviews with actionable findings are left open and listed for human review.
-
-    Prints a summary so the orchestrator knows exactly which reviews still need attention.
-    """
-    ensure_sync()
-    manifest = load_checkpoint_manifest(args.slug, args.stage)
-    if not manifest:
-        raise SystemExit(f"no checkpoint manifest found for {args.slug}/{args.stage} — run checkpoint first")
-
-    plan_path = workflow_dir(args.slug) / "plan.md"
-    required = manifest.get("required_reviews", [])
-
-    auto_accepted: list[str] = []
-    needs_review: list[str] = []
-
-    for spec in required:
-        review_path = Path(resolve_stored_path(spec["path"], REPO_ROOT))
-        if not review_path.exists():
-            needs_review.append(f"{spec['path']} (missing)")
-            continue
-        try:
-            data, _ = parse_review_frontmatter(review_path)
-        except Exception:
-            needs_review.append(f"{spec['path']} (unreadable)")
-            continue
-
-        if detect_actionable_findings(review_path):
-            reopen_note = "Actionable HIGH/MEDIUM/LOW/CRITICAL finding detected — review required"
-            run([
-                sys.executable, str(UPDATE_REVIEW),
-                "--review", str(review_path),
-                "--status", "open",
-                "--note", reopen_note,
-            ])
-            run([
-                sys.executable, str(APPEND_RECONCILIATION),
-                "--plan", str(plan_path),
-                "--review", str(review_path),
-                "--status", "open",
-                "--note", reopen_note,
-            ])
-            needs_review.append(spec["path"])
-        elif data.get("resolution_status", "open") != "open":
-            # Already reconciled and still clean — skip.
-            continue
-        else:
-            # Auto-accept: write resolution into file and append to plan reconciliation table.
-            run([
-                sys.executable, str(UPDATE_REVIEW),
-                "--review", str(review_path),
-                "--status", "accepted",
-                "--note", _AUTO_ACCEPT_NOTE,
-            ])
-            run([
-                sys.executable, str(APPEND_RECONCILIATION),
-                "--plan", str(plan_path),
-                "--review", str(review_path),
-                "--status", "accepted",
-                "--note", _AUTO_ACCEPT_NOTE,
-            ])
-            auto_accepted.append(spec["path"])
-
-    if auto_accepted:
-        print(f"auto-accepted ({len(auto_accepted)}):")
-        for path in auto_accepted:
-            print(f"  {path}")
-    if needs_review:
-        print(f"needs-review ({len(needs_review)}):")
-        for path in needs_review:
-            print(f"  {path}")
-    if not auto_accepted and not needs_review:
-        print(f"all reviews for {args.stage} already reconciled")
-    _emit_next_action(args.slug, f"auto-reconcile {args.stage}")
-    return 0
-
-
-@mutates_state("judge")
-def command_judge(args: argparse.Namespace) -> int:
-    return run_judge(
-        args.slug,
-        args.stage,
-        json_output=args.json,
-        prompt_override=args.prompt_override,
-        override_reason=args.override_reason,
-        migration_bypass=args.migration_bypass,
-    )
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -312,12 +211,6 @@ def build_parser() -> argparse.ArgumentParser:
     checkpoint_parser = subparsers.add_parser("checkpoint")
     checkpoint_parser.add_argument("--slug", required=True)
     checkpoint_parser.add_argument("--stage", required=True, choices=CHECKPOINT_STAGES)
-    lifecycle_group = checkpoint_parser.add_mutually_exclusive_group()
-    lifecycle_group.add_argument("--address", metavar="CONCERN_ID")
-    lifecycle_group.add_argument("--defer", metavar="CONCERN_ID")
-    lifecycle_group.add_argument("--dismiss", metavar="CONCERN_ID")
-    checkpoint_parser.add_argument("--evidence", metavar="TEXT")
-    checkpoint_parser.add_argument("--reason", metavar="TEXT")
     checkpoint_parser.add_argument("--artifact")
     checkpoint_parser.add_argument("--base-ref")
     checkpoint_parser.add_argument("--context", action="append", default=[])
@@ -348,9 +241,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     checkpoint_parser.add_argument("--fast", action="store_true",
         help="Fast path: skip prerequisites, run 1 Gemini + 1 Codex review. Requires --stage diff.")
-    checkpoint_parser.add_argument("--validation-only", action="store_true",
-        help="Re-seal the manifest against the current artifact SHA without dispatching any reviewer. "
-             "Used to re-sync after post-cap edits. Mutually exclusive with --fallback, --address, --defer, --dismiss.")
     checkpoint_parser.set_defaults(func=command_checkpoint)
 
     reconcile_parser = subparsers.add_parser("reconcile")
@@ -359,18 +249,6 @@ def build_parser() -> argparse.ArgumentParser:
     reconcile_parser.add_argument("--status", required=True)
     reconcile_parser.add_argument("--note", required=True)
     reconcile_parser.set_defaults(func=command_reconcile)
-
-    auto_reconcile_parser = subparsers.add_parser(
-        "auto-reconcile",
-        help="Auto-accept reviews with no HIGH, MEDIUM, LOW, or CRITICAL findings; list remaining ones for human review",
-    )
-    auto_reconcile_parser.add_argument("--slug", required=True)
-    auto_reconcile_parser.add_argument(
-        "--stage",
-        required=True,
-        choices=["spec", "plan", "tasks", "diff", "closeout"],
-    )
-    auto_reconcile_parser.set_defaults(func=command_auto_reconcile)
 
     block_parser = subparsers.add_parser("block")
     block_parser.add_argument("--slug", required=True)
@@ -394,15 +272,6 @@ def build_parser() -> argparse.ArgumentParser:
     dispatch_parser.add_argument("--model", default="gpt-5.4-mini")
     dispatch_parser.add_argument("--no-auto-commit", action="store_true")
     dispatch_parser.set_defaults(func=command_dispatch_codex)
-
-    judge_parser = subparsers.add_parser("judge")
-    judge_parser.add_argument("--slug", required=True)
-    judge_parser.add_argument("--stage", required=True, choices=CHECKPOINT_STAGES)
-    judge_parser.add_argument("--json", action="store_true")
-    judge_parser.add_argument("--prompt-override", type=Path)
-    judge_parser.add_argument("--override-reason")
-    judge_parser.add_argument("--migration-bypass", action="store_true")
-    judge_parser.set_defaults(func=command_judge)
 
     discover_parser = subparsers.add_parser("discover")
     discover_parser.add_argument("--slug", required=True)
@@ -472,7 +341,6 @@ def build_parser() -> argparse.ArgumentParser:
     deliver_parser.add_argument("--draft", action="store_true")
     deliver_parser.add_argument("--base")
     deliver_parser.add_argument("--title")
-    deliver_parser.add_argument("--override-judges", action="store_true")
     deliver_parser.add_argument("--reason")
     deliver_parser.add_argument("--refresh", action="store_true")
     deliver_parser.add_argument("--resume-merge-wait", action="store_true")
@@ -563,9 +431,6 @@ def _infer_command_name(args: argparse.Namespace) -> str | None:
     # Common mapping — command_X -> X
     if name.startswith("command_"):
         return name[len("command_"):].replace("_", "-")
-    # run_judge is wrapped in a lambda for the judge subcommand.
-    if "run_judge" in qualname or name == "<lambda>":
-        return "judge"
     return None
 
 

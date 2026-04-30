@@ -19,12 +19,6 @@ FACTORY_STATE = importlib.util.module_from_spec(STATE_SPEC)
 sys.modules[STATE_SPEC.name] = FACTORY_STATE
 STATE_SPEC.loader.exec_module(FACTORY_STATE)
 
-PR_BODY_SPEC = importlib.util.spec_from_file_location("factory_pr_body", SCRIPT_DIR / "factory_pr_body.py")
-assert PR_BODY_SPEC and PR_BODY_SPEC.loader
-FACTORY_PR_BODY = importlib.util.module_from_spec(PR_BODY_SPEC)
-sys.modules[PR_BODY_SPEC.name] = FACTORY_PR_BODY
-PR_BODY_SPEC.loader.exec_module(FACTORY_PR_BODY)
-
 DELIVER_SPEC = importlib.util.spec_from_file_location("factory_cmd_deliver", SCRIPT_DIR / "factory_cmd_deliver.py")
 assert DELIVER_SPEC and DELIVER_SPEC.loader
 DELIVER = importlib.util.module_from_spec(DELIVER_SPEC)
@@ -32,23 +26,14 @@ sys.modules[DELIVER_SPEC.name] = DELIVER
 DELIVER_SPEC.loader.exec_module(DELIVER)
 
 
-SLUG = "ff-judge-panel"
+SLUG = "ff-deliver-test"
 _UNSET = object()
 
 
-def _make_stage_state(
-    *,
-    unresolved_concerns: list[dict] | None = None,
-    annotations: list[dict] | None = None,
-    judge_rounds: int = 0,
-    judge_verdicts: list[list[dict]] | None = None,
-) -> dict:
+def _make_stage_state() -> dict:
     return {
         "adversarial_rounds": 3,
-        "judge_rounds": judge_rounds,
-        "judge_verdicts": judge_verdicts or [],
-        "annotations": annotations or [],
-        "unresolved_concerns": unresolved_concerns or [],
+        "annotations": [],
         "adversarial_sha_history": ["sha-round-1", "sha-round-2", "sha-round-3"],
         "initial_sha": "sha-round-1",
     }
@@ -93,7 +78,6 @@ def _deliver_args(**overrides: object) -> argparse.Namespace:
         "draft": False,
         "base": None,
         "title": None,
-        "override_judges": False,
         "reason": None,
         "refresh": False,
         "resume_merge_wait": False,
@@ -126,7 +110,6 @@ class FactoryDeliverTests(unittest.TestCase):
                 FACTORY_STATE.atomic_json_write(manifest_path, {"healthy": True})
 
     def _base_patches(self):
-        # Import factory_deliver lazily so its globals can be patched here.
         import importlib
         factory_deliver = importlib.import_module("factory_deliver")
         return [
@@ -138,10 +121,6 @@ class FactoryDeliverTests(unittest.TestCase):
             patch.object(DELIVER, "upstream_branch_name", return_value="origin/main"),
             patch.object(DELIVER, "git_output", return_value="head-sha"),
             patch.object(DELIVER, "commits_behind_upstream", return_value=0),
-            # PR #751: implementation-rule check makes its own git subprocess
-            # calls. Mock to a no-op for existing deliver tests so they don't
-            # trip on the new shell-out. Tests covering the rule live in
-            # test_implementation_rule.py.
             patch.object(factory_deliver, "check_implementation_rule", return_value=("ok", "")),
         ]
 
@@ -179,136 +158,7 @@ class FactoryDeliverTests(unittest.TestCase):
                 rc = DELIVER.command_deliver(args)
         return rc, stdout.getvalue(), stderr.getvalue()
 
-    def test_override_requires_reason(self) -> None:
-        with patch.object(DELIVER, "ensure_sync", return_value=None), patch.object(DELIVER, "command_path", return_value=True):
-            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()) as stderr:
-                with self.assertRaises(SystemExit) as ctx:
-                    DELIVER.command_deliver(_deliver_args(override_judges=True))
-
-        self.assertEqual(ctx.exception.code, 2)
-        self.assertIn("requires --reason", stderr.getvalue())
-
-    def test_override_records_state(self) -> None:
-        self._write_state(
-            _make_state(
-                {
-                    "plan": _make_stage_state(
-                        unresolved_concerns=[
-                            {
-                                "stage": "plan",
-                                "round": 2,
-                                "judge": "completeness",
-                                "confidence": 4,
-                                "reasoning": "Missing rollback path.",
-                                "also_raised_in_round": [1, 2],
-                            }
-                        ]
-                    ),
-                    "tasks": _make_stage_state(
-                        unresolved_concerns=[
-                            {
-                                "stage": "tasks",
-                                "round": 3,
-                                "judge": "implementation-risk",
-                                "confidence": 3,
-                                "reasoning": "Merge wait may stall forever.",
-                                "also_raised_in_round": [2, 3],
-                            }
-                        ]
-                    ),
-                }
-            )
-        )
-
-        captured_bodies: list[str] = []
-
-        def gh_side_effect(cmd, *args, **kwargs):
-            if cmd[:3] == ["gh", "auth", "status"]:
-                return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
-            if cmd[:3] == ["gh", "pr", "edit"]:
-                body_index = cmd.index("--body") + 1
-                captured_bodies.append(cmd[body_index])
-                return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
-            raise AssertionError(f"unexpected command: {cmd}")
-
-        with patch.dict(DELIVER.os.environ, {"USER": "test-operator"}, clear=False):
-            rc, _, _ = self._run_deliver(
-                _deliver_args(override_judges=True, reason="judge calibration", dry_run=True),
-                current_pr_payload=_make_pr_payload(),
-                required_check_summary=("pass", [], ""),
-                gh_side_effect=gh_side_effect,
-            )
-
-        self.assertEqual(rc, 0)
-        state = json.loads(FACTORY_STATE.factory_state_path(SLUG).read_text(encoding="utf-8"))
-        override = state["override"]
-        self.assertEqual(override["reason"], "judge calibration")
-        self.assertEqual(override["operator_id"], "test-operator")
-        # Concerns now carry backfilled id + lifecycle fields (FR-011a). Check the
-        # stable subset rather than exact equality.
-        affected = override["affected_concerns"]
-        self.assertEqual(len(affected), 2)
-        self.assertEqual(affected[0]["stage"], "plan")
-        self.assertEqual(affected[0]["judge"], "completeness")
-        self.assertEqual(affected[0]["reasoning"], "Missing rollback path.")
-        self.assertTrue(affected[0].get("id"))
-        self.assertEqual(affected[1]["stage"], "tasks")
-        self.assertEqual(affected[1]["judge"], "implementation-risk")
-        self.assertTrue(affected[1].get("id"))
-        self.assertTrue(captured_bodies)
-        self.assertIn(FACTORY_PR_BODY.SENTINEL_BEGIN, captured_bodies[0])
-        self.assertIn("## ⚠ Shipped over judge objection", captured_bodies[0])
-
-    def test_pr_body_sentinel_block_rendered(self) -> None:
-        concern = {
-            "stage": "plan",
-            "round": 3,
-            "judge": "completeness",
-            "confidence": 4,
-            "reasoning": "Missing rollback path in the plan.",
-            "also_raised_in_round": [1, 2],
-        }
-        annotation = {
-            "stage": "plan",
-            "round": 3,
-            "judge": "restatement",
-            "confidence": 5,
-            "reasoning": "Same concern, but note the rollout assumption.",
-        }
-        self._write_state(_make_state({"plan": _make_stage_state(unresolved_concerns=[concern], annotations=[annotation])}))
-
-        captured_bodies: list[str] = []
-
-        def gh_side_effect(cmd, *args, **kwargs):
-            if cmd[:3] == ["gh", "auth", "status"]:
-                return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
-            if cmd[:3] == ["gh", "pr", "create"]:
-                body_index = cmd.index("--body") + 1
-                captured_bodies.append(cmd[body_index])
-                return subprocess.CompletedProcess(cmd, 0, stdout="https://example.test/pr/17\n", stderr="")
-            raise AssertionError(f"unexpected command: {cmd}")
-
-        # Deliver now blocks on open concerns (P1-2 fix) unless --override-judges
-        # is used. This test verifies the PR body sentinel rendering, not the
-        # block-on-open-concerns gate (which has its own tests below).
-        rc, _, _ = self._run_deliver(
-            _deliver_args(create_pr=True, draft=True, dry_run=True, override_judges=True, reason="testing sentinel render"),
-            current_pr_payload=None,
-            gh_side_effect=gh_side_effect,
-        )
-
-        self.assertEqual(rc, 0)
-        self.assertTrue(captured_bodies)
-        body = captured_bodies[0]
-        self.assertIn(FACTORY_PR_BODY.SENTINEL_BEGIN, body)
-        self.assertIn(FACTORY_PR_BODY.SENTINEL_END, body)
-        judge_block = body.split(FACTORY_PR_BODY.SENTINEL_BEGIN, 1)[1].split(FACTORY_PR_BODY.SENTINEL_END, 1)[0]
-        self.assertIn("## ⚠ Unresolved Judge Concerns", judge_block)
-        self.assertIn("Missing rollback path in the plan.", judge_block)
-        self.assertIn("## Annotations", judge_block)
-        self.assertIn("restatement", judge_block)
-
-    def test_pr_body_sentinel_absent_no_concerns(self) -> None:
+    def test_pr_body_generated_when_no_existing_pr(self) -> None:
         self._write_state(_make_state({"plan": _make_stage_state()}))
 
         captured_bodies: list[str] = []
@@ -331,129 +181,7 @@ class FactoryDeliverTests(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertTrue(captured_bodies)
         body = captured_bodies[0]
-        self.assertNotIn(FACTORY_PR_BODY.SENTINEL_BEGIN, body)
-        self.assertNotIn(FACTORY_PR_BODY.SENTINEL_END, body)
         self.assertIn("## Workflow", body)
-
-    def test_refresh_preserves_operator_edits(self) -> None:
-        concern = {
-            "stage": "plan",
-            "round": 3,
-            "judge": "implementation-risk",
-            "confidence": 4,
-            "reasoning": "Merge wait may stall forever unless the state machine is resumable.",
-            "also_raised_in_round": [2, 3],
-        }
-        annotation = {
-            "stage": "plan",
-            "round": 3,
-            "judge": "restatement",
-            "confidence": 5,
-            "reasoning": "This is the same merge-wait concern with a rollout note.",
-        }
-        state = _make_state({"plan": _make_stage_state(unresolved_concerns=[concern], annotations=[annotation])})
-        self._write_state(state)
-
-        old_block = "\n".join(
-            [
-                FACTORY_PR_BODY.SENTINEL_BEGIN,
-                "## ⚠ Unresolved Judge Concerns",
-                "### plan / completeness",
-                "- stage: `plan`",
-                "- judge: `completeness`",
-                "- confidence: `4`",
-                "- reasoning: Old concern that should be replaced.",
-                "- also_raised_in_round: `1, 2`",
-                "- round_raised: `2`",
-                "",
-                FACTORY_PR_BODY.SENTINEL_END,
-            ]
-        )
-        existing_body = "\n".join(
-            [
-                "# Operator Notes",
-                "This section should survive refresh.",
-                "",
-                old_block,
-                "",
-                "## Human Notes",
-                "- keep this exactly as written",
-            ]
-        )
-        # Reload state so expected reflects the backfilled concern fields (FR-011a).
-        loaded_state = FACTORY_STATE.load_workflow_state(SLUG)
-        expected_block = FACTORY_PR_BODY.render_judge_panel_block(loaded_state)
-        expected_body, _ = FACTORY_PR_BODY.upsert_judge_panel_block(existing_body, expected_block)
-
-        captured_bodies: list[str] = []
-
-        def gh_side_effect(cmd, *args, **kwargs):
-            if cmd[:3] == ["gh", "auth", "status"]:
-                return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
-            if cmd[:3] == ["gh", "pr", "view"]:
-                return subprocess.CompletedProcess(cmd, 0, stdout=json.dumps({"body": existing_body}), stderr="")
-            if cmd[:3] == ["gh", "pr", "edit"]:
-                body_index = cmd.index("--body") + 1
-                captured_bodies.append(cmd[body_index])
-                return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
-            raise AssertionError(f"unexpected command: {cmd}")
-
-        rc, stdout, _ = self._run_deliver(
-            _deliver_args(refresh=True),
-            gh_side_effect=gh_side_effect,
-        )
-
-        self.assertEqual(rc, 0)
-        self.assertTrue(captured_bodies)
-        self.assertEqual(captured_bodies[0], expected_body)
-        self.assertIn("# Operator Notes", captured_bodies[0])
-        self.assertIn("## Human Notes", captured_bodies[0])
-        self.assertNotIn("Old concern that should be replaced.", captured_bodies[0])
-        self.assertNotIn("warn: ff-judge-panel sentinels were missing", stdout)
-
-    def test_refresh_warns_when_sentinels_missing(self) -> None:
-        state = _make_state({"plan": _make_stage_state(unresolved_concerns=[{
-            "stage": "plan",
-            "round": 3,
-            "judge": "completeness",
-            "confidence": 4,
-            "reasoning": "Missing rollback path.",
-            "also_raised_in_round": [1, 2],
-        }])})
-        self._write_state(state)
-
-        existing_body = "\n".join(
-            [
-                "# Operator Notes",
-                "No judge block has ever been inserted here.",
-            ]
-        )
-        loaded_state = FACTORY_STATE.load_workflow_state(SLUG)
-        expected_block = FACTORY_PR_BODY.render_judge_panel_block(loaded_state)
-        expected_body = f"{expected_block}\n\n{existing_body}"
-
-        captured_bodies: list[str] = []
-
-        def gh_side_effect(cmd, *args, **kwargs):
-            if cmd[:3] == ["gh", "auth", "status"]:
-                return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
-            if cmd[:3] == ["gh", "pr", "view"]:
-                return subprocess.CompletedProcess(cmd, 0, stdout=json.dumps({"body": existing_body}), stderr="")
-            if cmd[:3] == ["gh", "pr", "edit"]:
-                body_index = cmd.index("--body") + 1
-                captured_bodies.append(cmd[body_index])
-                return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
-            raise AssertionError(f"unexpected command: {cmd}")
-
-        rc, stdout, _ = self._run_deliver(
-            _deliver_args(refresh=True),
-            gh_side_effect=gh_side_effect,
-        )
-
-        self.assertEqual(rc, 0)
-        self.assertTrue(captured_bodies)
-        self.assertEqual(captured_bodies[0], expected_body)
-        self.assertIn("warn: ff-judge-panel sentinels were missing from the PR body; prepending judge block", stdout)
 
     def test_merge_wait_transitions_to_merged(self) -> None:
         state = _make_state({"plan": _make_stage_state()})

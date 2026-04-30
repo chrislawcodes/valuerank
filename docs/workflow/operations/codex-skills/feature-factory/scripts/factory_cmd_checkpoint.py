@@ -2,10 +2,8 @@
 """command_checkpoint implementation."""
 import argparse
 import json
-import os
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 
@@ -36,7 +34,6 @@ from factory_state import (  # noqa: E402
 )
 
 from factory_git import (  # noqa: E402
-    run,
     _sha_is_valid_ancestor,
     _git_head_sha,
     ensure_sync,
@@ -68,7 +65,6 @@ from factory_review import (  # noqa: E402
     required_reviews,
     resolved_review_policy,
     checkpoint_manifest,
-    repair_checkpoint_args,
     run_checkpoint_fallback,
     record_checkpoint_fallback,
     _advance_checkpoint_progress,
@@ -91,10 +87,7 @@ def _ensure_stage_state_blob(state: dict, stage: str) -> dict:
     if not isinstance(stage_state, dict):
         stage_state = {}
     stage_state.setdefault("adversarial_rounds", 0)
-    stage_state.setdefault("judge_rounds", 0)
-    stage_state.setdefault("judge_verdicts", [])
     stage_state.setdefault("annotations", [])
-    stage_state.setdefault("unresolved_concerns", [])
     stage_state.setdefault("adversarial_sha_history", [])
     stage_state.setdefault("initial_sha", "")
     stages[stage] = stage_state
@@ -114,45 +107,10 @@ def _stage_int(stage_state: dict, key: str) -> int:
         return 0
 
 
-def _judge_panel_payload_from_state(slug: str, state: dict) -> dict[str, object] | None:
-    stages = state.get("stages", {})
-    if not isinstance(stages, dict):
-        stages = {}
-    for stage in ("spec", "plan", "tasks", "diff", "closeout"):
-        stage_state = stages.get(stage, {})
-        if not isinstance(stage_state, dict):
-            stage_state = {}
-        adversarial_rounds = _stage_int(stage_state, "adversarial_rounds")
-        judge_rounds = _stage_int(stage_state, "judge_rounds")
-        judge_verdicts = stage_state.get("judge_verdicts", [])
-        latest_round = judge_verdicts[-1] if isinstance(judge_verdicts, list) and judge_verdicts else []
-        block_count = 0
-        if isinstance(latest_round, list):
-            for verdict in latest_round:
-                if isinstance(verdict, dict) and verdict.get("verdict") == "block":
-                    block_count += 1
-        if adversarial_rounds >= 3 and judge_rounds == 0:
-            return {
-                "next": "judge_panel",
-                "reason": f"{stage} reached adversarial round cap",
-                "blockers": [f"{stage}.adversarial_rounds >= 3"],
-            }
-        if judge_rounds < 3 and block_count >= 2:
-            return {
-                "next": "judge_panel",
-                "reason": f"{stage} judge panel voted block",
-                "blockers": [f"{stage}.judge_verdicts[-1] block-majority"],
-            }
-    return None
-
-
 def _checkpoint_next_action_payload(slug: str, state: dict, completed_stage: str) -> dict[str, object]:
     stages = {stage: stage_manifest_state(slug, stage) for stage in CHECKPOINT_STAGES}
     recon_ok, _ = reconciliation_state(slug)
     next_action = recommended_next_action(slug, state, stages, recon_ok)
-    judge_panel_payload = _judge_panel_payload_from_state(slug, state)
-    if next_action == "judge_panel" and judge_panel_payload is not None:
-        return judge_panel_payload
     return {
         "next": next_action,
         "reason": f"{completed_stage} checkpoint completed",
@@ -189,20 +147,6 @@ def _prior_stage_for_checkpoint(stage: str) -> str | None:
     return prior_stage_by_stage.get(stage)
 
 
-def _concern_is_open(concern: dict) -> bool:
-    return all(
-        concern.get(field) is None
-        for field in ("addressed_at", "deferred_reason", "dismissed_reason")
-    )
-
-
-def _concern_reasoning_snippet(concern: dict, limit: int = 60) -> str:
-    reasoning = str(concern.get("reasoning", "") or "").strip()
-    if not reasoning:
-        return "(no reasoning)"
-    return reasoning[:limit]
-
-
 def _gc_review_intermediates(slug: str, stage: str, keep: bool) -> list[Path]:
     if keep:
         return []
@@ -221,153 +165,6 @@ def _gc_review_intermediates(slug: str, stage: str, keep: bool) -> list[Path]:
     return deleted
 
 
-def _find_concerns_by_id(state: dict, concern_id: str) -> list[tuple[str, dict]]:
-    """Return ALL matches so callers can detect ambiguity (P2-3 adversarial finding).
-
-    Previously the helper returned the first hit, which silently resolved the
-    wrong concern when two shared an ID (hash collision, copied state, etc.).
-    """
-    matches: list[tuple[str, dict]] = []
-    stages = state.get("stages", {})
-    if not isinstance(stages, dict):
-        return matches
-    for stage_name, stage_state in stages.items():
-        if not isinstance(stage_state, dict):
-            continue
-        concerns = stage_state.get("unresolved_concerns", [])
-        if not isinstance(concerns, list):
-            continue
-        for concern in concerns:
-            if not isinstance(concern, dict):
-                continue
-            if str(concern.get("id", "") or "") == concern_id:
-                matches.append((stage_name, concern))
-    return matches
-
-
-def _find_concern_by_id(state: dict, concern_id: str) -> tuple[str, dict] | None:
-    """Back-compat shim — returns first match. New callers should use
-    _find_concerns_by_id to detect ambiguity."""
-    matches = _find_concerns_by_id(state, concern_id)
-    return matches[0] if matches else None
-
-
-def _render_open_concern_block(prior_stage: str, concerns: list[dict]) -> None:
-    print(f"blocked: unresolved-concerns-from-{prior_stage}", file=sys.stderr)
-    for concern in concerns:
-        concern_id = str(concern.get("id", "") or "")
-        snippet = _concern_reasoning_snippet(concern)
-        print(f"- {concern_id}: {snippet}", file=sys.stderr)
-        # Substitute concrete concern id so the message is directly actionable
-        # (FR-020 self-documenting errors).
-        print(
-            f"  checkpoint --address {concern_id} --evidence \"fixed in commit abc\"",
-            file=sys.stderr,
-        )
-        print(
-            f"  checkpoint --defer {concern_id} --reason \"follow-up\"",
-            file=sys.stderr,
-        )
-        print(
-            f"  checkpoint --dismiss {concern_id} --reason \"reviewer error\"",
-            file=sys.stderr,
-        )
-
-
-def _nonblank(value: object) -> str | None:
-    """Return value.strip() if it is non-empty after stripping, else None.
-
-    P2-4 (adversarial review): whitespace-only --reason / --evidence strings
-    pass truthiness checks but are meaningless. Treat them as missing.
-    """
-    if value is None:
-        return None
-    stripped = str(value).strip()
-    return stripped if stripped else None
-
-
-def _handle_concern_lifecycle(args: argparse.Namespace) -> int | None:
-    action: str | None = None
-    concern_id: str | None = None
-    evidence: str | None = None
-    reason: str | None = None
-    if getattr(args, "address", None):
-        action = "addressed"
-        concern_id = args.address
-        evidence = _nonblank(getattr(args, "evidence", None))
-        if evidence is None:
-            print("--address requires --evidence TEXT (non-whitespace)", file=sys.stderr)
-            return 2
-    elif getattr(args, "defer", None):
-        action = "deferred"
-        concern_id = args.defer
-        reason = _nonblank(getattr(args, "reason", None))
-        if reason is None:
-            print("--defer requires --reason TEXT (non-whitespace)", file=sys.stderr)
-            return 2
-    elif getattr(args, "dismiss", None):
-        action = "dismissed"
-        concern_id = args.dismiss
-        reason = _nonblank(getattr(args, "reason", None))
-        if reason is None:
-            print("--dismiss requires --reason TEXT (non-whitespace)", file=sys.stderr)
-            return 2
-    else:
-        return None
-
-    if args.stage not in {"spec", "plan", "tasks"}:
-        print("concern lifecycle flags only usable with --stage spec|plan|tasks", file=sys.stderr)
-        return 2
-
-    with with_locked_state(args.slug) as state:
-        matches = _find_concerns_by_id(state, concern_id)
-        if not matches:
-            print(f"concern id {concern_id} not found in any stage", file=sys.stderr)
-            return 2
-        # P2-3 (adversarial review): ambiguous IDs must NOT silently resolve the
-        # first match. Require disambiguation via --stage.
-        if len(matches) > 1:
-            stage_list = ", ".join(sorted({m[0] for m in matches}))
-            matched_stages = [m[0] for m in matches]
-            if matched_stages.count(args.stage) == 1:
-                # --stage disambiguates uniquely.
-                concern = next(c for s, c in matches if s == args.stage)
-            else:
-                print(
-                    f"concern id {concern_id} matches multiple concerns across stages: "
-                    f"{stage_list}. Disambiguate by running with --stage set to the "
-                    f"stage containing exactly one matching concern, or use a longer "
-                    f"concern id.",
-                    file=sys.stderr,
-                )
-                return 2
-        else:
-            concern = matches[0][1]
-        if action == "addressed":
-            concern["addressed_at"] = int(time.time())
-            concern["addressed_by"] = evidence
-        elif action == "deferred":
-            concern["deferred_reason"] = reason
-        elif action == "dismissed":
-            concern["dismissed_reason"] = reason
-
-    print(f"✓ concern {concern_id} marked {action}")
-    return 0
-
-
-_CHECKPOINT_FLAG_KEYS = (
-    "no_auto_context",
-    "max_artifact_chars",
-    "max_context_chars",
-    "max_total_chars",
-    "gemini_timeout_seconds",
-    "gemini_retries",
-    "repair_timeout_seconds",
-    "allow_large_diff_rerun",
-    "keep_intermediates",
-)
-
-
 def _effective_auto_context(args: argparse.Namespace) -> bool:
     if getattr(args, "auto_context", False) and getattr(args, "no_auto_context", False):
         raise SystemExit("--auto-context cannot be combined with --no-auto-context")
@@ -378,182 +175,6 @@ def _effective_auto_context(args: argparse.Namespace) -> bool:
     return args.stage in {"spec", "tasks"}
 
 
-def _checkpoint_flag_record(args: argparse.Namespace, artifact_path: Path, auto_context: bool) -> dict:
-    record: dict[str, object] = {
-        "schema_version": 1,
-        "stage": args.stage,
-        "artifact_path": str(artifact_path),
-        "artifact_sha256": normalized_artifact_hash(args.stage, artifact_path),
-        "no_auto_context": not auto_context,
-    }
-    for key in _CHECKPOINT_FLAG_KEYS:
-        if key == "no_auto_context":
-            continue
-        value = getattr(args, key, None)
-        if isinstance(value, (str, int, float, bool)) or value is None:
-            record[key] = value
-    return record
-
-
-def _persist_checkpoint_flags(slug: str, stage: str, record: dict) -> None:
-    def mutate(state: dict) -> None:
-        flags = state.get("last_successful_checkpoint_flags")
-        if not isinstance(flags, dict):
-            flags = {}
-        flags[stage] = record
-        state["last_successful_checkpoint_flags"] = flags
-
-    update_workflow_state(slug, mutate)
-
-
-def _run_validation_only(slug: str, stage: str) -> int:
-    """Feature B Slice 3 — re-seal the manifest against the current artifact
-    SHA without dispatching any reviewer.
-
-    Lets an operator who has edited the artifact past the 3-round adversarial
-    cap re-sync the manifest instead of hand-editing review frontmatter SHAs.
-    Pure manifest-sync tool — does NOT bypass the concern-lifecycle gate or
-    the judge advance verdict.
-
-    Flow (per spec FR-004-007):
-      1. Load manifest; missing → exit 2.
-      2. Pre-check: every review path exists + is writable. Any failure →
-         exit 2 BEFORE any write so partial-state is impossible.
-      3. Compute current artifact SHA.
-      4. Read each review's frontmatter artifact_sha256.
-      5. If all match → print success, exit 0 (no-op).
-      6. Else: atomic-write each mismatching review with new SHA. Any failure
-         mid-loop → exit 2 with clear error (already-written reviews keep new
-         SHA; operator re-runs to catch the rest, per accepted Risk P3).
-      7. On full success: append advance-with-drift-style annotation to
-         stages[stage].annotations[] and print summary.
-    """
-    import re
-
-    manifest_path = checkpoint_manifest_path(slug, stage)
-    if not manifest_path.exists():
-        print(
-            f"no manifest to validate for stage={stage} — run checkpoint first",
-            file=sys.stderr,
-        )
-        return 2
-
-    try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        print(f"invalid manifest at {manifest_path}: {exc}", file=sys.stderr)
-        return 2
-
-    artifact_path = default_artifact_path(slug, stage)
-    if not artifact_path.exists():
-        print(f"no artifact to validate at {artifact_path}", file=sys.stderr)
-        return 2
-    current_sha = normalized_artifact_hash(stage, artifact_path)
-
-    required_reviews = manifest.get("required_reviews") or []
-    review_paths: list[Path] = []
-    from workflow_utils import resolve_stored_path  # local import
-    for entry in required_reviews:
-        raw = entry.get("path")
-        if not raw:
-            continue
-        review_paths.append(resolve_stored_path(raw, REPO_ROOT))
-
-    # Pre-check every target file before any write (Gemini MEDIUM F-03 best-effort).
-    pre_check_errors: list[str] = []
-    for p in review_paths:
-        if not p.exists():
-            pre_check_errors.append(f"pre-check failed: {p} does not exist")
-        elif not os.access(p, os.W_OK):
-            pre_check_errors.append(f"pre-check failed: {p} not writable")
-    if pre_check_errors:
-        for err in pre_check_errors:
-            print(err, file=sys.stderr)
-        return 2
-
-    # Classify each review as "needs update" or "already matches".
-    frontmatter_re = re.compile(r'(artifact_sha256:\s*)"[^"]*"')
-    needs_update: list[tuple[Path, str, str]] = []  # (path, old, new)
-    old_shas: set[str] = set()
-    for p in review_paths:
-        content = p.read_text(encoding="utf-8")
-        m = re.search(r'artifact_sha256:\s*"([a-f0-9]+)"', content)
-        old = m.group(1) if m else ""
-        old_shas.add(old)
-        if old != current_sha:
-            needs_update.append((p, old, current_sha))
-
-    if not needs_update:
-        print(f"manifest already matches artifact (sha={current_sha[:12]})")
-        return 0
-
-    # Atomic write per file: temp file in same dir + os.replace.
-    for p, _old, _new in needs_update:
-        try:
-            content = p.read_text(encoding="utf-8")
-            new_content, n_replaced = frontmatter_re.subn(
-                lambda m: f'{m.group(1)}"{current_sha}"', content, count=1
-            )
-            # Adversarial-review Codex MEDIUM #1 fix: if the regex didn't
-            # actually replace anything, the frontmatter shape is unexpected
-            # and a silent success would leave stale data. Fail loudly.
-            if n_replaced != 1:
-                print(
-                    f"reseal failure at {p}: expected exactly 1 artifact_sha256 "
-                    f"replacement, got {n_replaced}. Frontmatter format may be unexpected.",
-                    file=sys.stderr,
-                )
-                return 2
-            fd, tmp_name = tempfile.mkstemp(dir=p.parent, prefix=".reseal.", suffix=".md")
-            try:
-                with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                    fh.write(new_content)
-                os.replace(tmp_name, p)
-            except Exception:
-                Path(tmp_name).unlink(missing_ok=True)
-                raise
-        except Exception as exc:  # noqa: BLE001 — report + bail, partial is accepted risk
-            print(
-                f"reseal partial failure at {p}: {exc} — re-run --validation-only to recover",
-                file=sys.stderr,
-            )
-            return 2
-
-    # Record annotation on full success.
-    old_sha_display = next(iter(old_shas - {current_sha}), "unknown")
-    annotation = {
-        "type": "validation-only-reseal",
-        "old_sha": old_sha_display,
-        "new_sha": current_sha,
-        "at": int(time.time()),
-        "files_updated": len(needs_update),
-    }
-    with with_locked_state(slug) as state:
-        stages_state = state.setdefault("stages", {})
-        stage_blob = stages_state.setdefault(stage, {})
-        # Adversarial-review Gemini HIGH fix: refuse to silently overwrite
-        # malformed state. If the stage blob or annotations list is the wrong
-        # type, raise rather than clobber — operator should repair state.json.
-        if not isinstance(stage_blob, dict):
-            raise SystemExit(
-                f"state.stages[{stage}] is not a dict (got {type(stage_blob).__name__}); "
-                f"refusing to overwrite. Repair state.json before retrying."
-            )
-        annotations = stage_blob.setdefault("annotations", [])
-        if not isinstance(annotations, list):
-            raise SystemExit(
-                f"state.stages[{stage}].annotations is not a list (got {type(annotations).__name__}); "
-                f"refusing to overwrite. Repair state.json before retrying."
-            )
-        annotations.append(annotation)
-
-    print(
-        f"manifest re-sealed: {len(needs_update)} review file"
-        f"{'s' if len(needs_update) != 1 else ''} updated to sha={current_sha[:12]}"
-    )
-    return 0
-
-
 @mutates_state("checkpoint")
 def command_checkpoint(args: argparse.Namespace) -> int:
     fast = getattr(args, "fast", False)
@@ -561,26 +182,7 @@ def command_checkpoint(args: argparse.Namespace) -> int:
         raise SystemExit("--fast requires --stage diff")
     auto_context_enabled = _effective_auto_context(args)
 
-    # Feature B Slice 3 — --validation-only is mutually exclusive with all
-    # state-mutating review modes. Argparse can't express this with required
-    # args cleanly; check at runtime.
-    if getattr(args, "validation_only", False):
-        if getattr(args, "fast", False):
-            raise SystemExit("--validation-only cannot be combined with --fast")
-        if getattr(args, "fallback", False):
-            raise SystemExit("--validation-only cannot be combined with --fallback")
-        if getattr(args, "address", None):
-            raise SystemExit("--validation-only cannot be combined with --address")
-        if getattr(args, "defer", None):
-            raise SystemExit("--validation-only cannot be combined with --defer")
-        if getattr(args, "dismiss", None):
-            raise SystemExit("--validation-only cannot be combined with --dismiss")
-        return _run_validation_only(args.slug, args.stage)
-
     ensure_sync()
-    lifecycle_rc = _handle_concern_lifecycle(args)
-    if lifecycle_rc is not None:
-        return lifecycle_rc
     root = workflow_dir(args.slug)
     reviews = reviews_dir(args.slug)
     root.mkdir(parents=True, exist_ok=True)
@@ -619,23 +221,6 @@ def command_checkpoint(args: argparse.Namespace) -> int:
                 "spec checkpoint requires discovery to be complete first; "
                 "record the remaining questions and assumptions with the discover command"
             )
-    prior_stage = _prior_stage_for_checkpoint(args.stage)
-    if prior_stage is not None:
-        prior_state = load_workflow_state(args.slug)
-        stages = prior_state.get("stages", {})
-        prior_stage_state = stages.get(prior_stage, {}) if isinstance(stages, dict) else {}
-        open_concerns: list[dict] = []
-        if isinstance(prior_stage_state, dict):
-            concerns = prior_stage_state.get("unresolved_concerns", [])
-            if isinstance(concerns, list):
-                open_concerns = [
-                    concern
-                    for concern in concerns
-                    if isinstance(concern, dict) and _concern_is_open(concern)
-                ]
-        if open_concerns:
-            _render_open_concern_block(prior_stage, open_concerns)
-            return 2
     policy = resolved_review_policy(args.slug, args)
     context_paths = [normalized_repo_path(path, "context path") for path in args.context]
     allow_dirty_paths = [normalized_repo_path(path, "allow-dirty path") for path in args.allow_dirty_path]
@@ -804,32 +389,16 @@ def command_checkpoint(args: argparse.Namespace) -> int:
             )
 
     artifact_sha = normalized_artifact_hash(args.stage, artifact_path)
-    cap_hit_payload: dict[str, object] | None = None
     with with_locked_state(args.slug) as state:
         stage_state = _ensure_stage_state_blob(state, args.stage)
         current_rounds = _stage_int(stage_state, "adversarial_rounds")
-        if current_rounds >= 3:
-            cap_hit_payload = {
-                "next": "judge_panel",
-                "reason": f"{args.stage} reached adversarial round cap",
-                "blockers": [f"{args.stage}.adversarial_rounds >= 3"],
-            }
-            state["last_action_result"] = cap_hit_payload
-        else:
-            next_rounds = current_rounds + 1
-            stage_state["adversarial_rounds"] = next_rounds
-            stage_state["adversarial_sha_history"] = list(stage_state.get("adversarial_sha_history", []))
-            stage_state["adversarial_sha_history"].append(artifact_sha)
-            if not str(stage_state.get("initial_sha", "")).strip():
-                stage_state["initial_sha"] = artifact_sha
-            state[f"{args.stage}_adversarial_rounds"] = next_rounds
-
-    if cap_hit_payload is not None:
-        if args.json:
-            print(json.dumps(cap_hit_payload))
-        else:
-            print("→ next: judge_panel")
-        return 2
+        next_rounds = current_rounds + 1
+        stage_state["adversarial_rounds"] = next_rounds
+        stage_state["adversarial_sha_history"] = list(stage_state.get("adversarial_sha_history", []))
+        stage_state["adversarial_sha_history"].append(artifact_sha)
+        if not str(stage_state.get("initial_sha", "")).strip():
+            stage_state["initial_sha"] = artifact_sha
+        state[f"{args.stage}_adversarial_rounds"] = next_rounds
 
     reviews_arg = getattr(args, "required_reviews", None)
     if reviews_arg is None:
@@ -944,11 +513,6 @@ def command_checkpoint(args: argparse.Namespace) -> int:
                 if reverted:
                     print(f"reverted protected files: {', '.join(reverted)}", file=sys.stderr)
                 _advance_checkpoint_progress(args.slug, args.stage, pending_head_sha)
-                _persist_checkpoint_flags(
-                    args.slug,
-                    args.stage,
-                    _checkpoint_flag_record(args, artifact_path, auto_context_enabled),
-                )
                 post_state = load_workflow_state(args.slug)
                 payload = _checkpoint_next_action_payload(args.slug, post_state, args.stage)
                 _persist_last_action_result(args.slug, payload)
@@ -979,11 +543,6 @@ def command_checkpoint(args: argparse.Namespace) -> int:
             print(f"reverted protected files: {', '.join(reverted)}", file=sys.stderr)
         record_checkpoint_fallback(args.slug, args.stage, fallback_reason)
         _advance_checkpoint_progress(args.slug, args.stage, pending_head_sha)
-        _persist_checkpoint_flags(
-            args.slug,
-            args.stage,
-            _checkpoint_flag_record(args, artifact_path, auto_context_enabled),
-        )
         heartbeat_set_activity("aggregating results")
         print(f"warning: fallback checkpoint path used for {args.stage} on {args.slug}: {fallback_reason}", file=sys.stderr)
         post_state = load_workflow_state(args.slug)

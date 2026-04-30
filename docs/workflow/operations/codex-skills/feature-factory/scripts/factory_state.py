@@ -222,11 +222,6 @@ def _default_workflow_state() -> dict:
         INIT_HEAD_SHA_KEY: "",
         "token_usage": [],
         "command_telemetry": [],
-        "last_successful_checkpoint_flags": {},
-        "diff_review_budget": {
-            "recorded_head": "",
-            "last_review_only_advance_at": 0,
-        },
         "stages": {},
         INVARIANT_WARNINGS_KEY: [],
         "schema_version": 1,
@@ -246,19 +241,15 @@ def _default_stage_state(state: dict | None = None, stage: str | None = None) ->
     """Return the canonical nested state blob for a single workflow stage."""
     stage_state = {
         "adversarial_rounds": 0,
-        "judge_rounds": 0,
-        "judge_verdicts": [],
         "annotations": [],
-        "unresolved_concerns": [],
         "adversarial_sha_history": [],
         "initial_sha": "",
     }
     if state is None or stage is None:
         return stage_state
-    for key in ("adversarial_rounds", "judge_rounds"):
-        legacy_key = f"{stage}_{key}"
-        if legacy_key in state:
-            stage_state[key] = state[legacy_key]
+    legacy_key = f"{stage}_adversarial_rounds"
+    if legacy_key in state:
+        stage_state["adversarial_rounds"] = state[legacy_key]
     return stage_state
 
 
@@ -439,65 +430,10 @@ def load_workflow_state(slug: str) -> dict:
     state.setdefault(INIT_HEAD_SHA_KEY, "")
     state.setdefault("token_usage", [])
     state.setdefault("command_telemetry", [])
-    flags = state.get("last_successful_checkpoint_flags", {})
-    state["last_successful_checkpoint_flags"] = flags if isinstance(flags, dict) else {}
-    state.setdefault("diff_review_budget", defaults["diff_review_budget"])
     state.setdefault("stages", {})
     state.setdefault(INVARIANT_WARNINGS_KEY, [])
     state.setdefault("schema_version", 1)
-    _backfill_unresolved_concern_ids(state)
     return state
-
-
-def _concern_id_stable(stage: str, judge: str, round_raised: int, reasoning: str) -> str:
-    """Stable concern ID per FR-003. Mirrored in factory_cmd_judge._concern_id.
-
-    Defined here so state-load backfill (FR-011a) does not need to import the
-    judge module at load time.
-    """
-    import hashlib
-    normalized = "".join(reasoning.split())[:48]
-    key = f"{stage}|{judge}|{round_raised}|{normalized}"
-    return hashlib.sha256(key.encode("utf-8")).hexdigest()[:12]
-
-
-def _backfill_unresolved_concern_ids(state: dict) -> None:
-    """FR-011a — backfill `id` on any legacy unresolved_concern without one.
-
-    Older runs (including the run-033 fixture) wrote concerns before FR-003
-    added the stable-id field. On read, synthesize the id so the new
-    checkpoint lifecycle works on in-flight runs without a migration script.
-    Also default-fills addressed_at / addressed_by / deferred_reason /
-    dismissed_reason to ``None``.
-    """
-    stages = state.get("stages")
-    if not isinstance(stages, dict):
-        return
-    for stage_name, stage_state in stages.items():
-        if not isinstance(stage_state, dict):
-            continue
-        concerns = stage_state.get("unresolved_concerns")
-        if not isinstance(concerns, list):
-            continue
-        for concern in concerns:
-            if not isinstance(concern, dict):
-                continue
-            if not concern.get("id"):
-                # Defensive coercion — diff round-1 finding: older/corrupt
-                # state.json may store round_raised as a non-numeric string.
-                # Never let load_workflow_state raise.
-                try:
-                    round_raised = int(concern.get("round_raised") or 0)
-                except (TypeError, ValueError):
-                    round_raised = 0
-                concern["id"] = _concern_id_stable(
-                    str(concern.get("stage") or stage_name),
-                    str(concern.get("judge") or ""),
-                    round_raised,
-                    str(concern.get("reasoning") or ""),
-                )
-            for field in ("addressed_at", "addressed_by", "deferred_reason", "dismissed_reason"):
-                concern.setdefault(field, None)
 
 
 def save_workflow_state(slug: str, state: dict) -> Path:
@@ -538,7 +474,7 @@ def update_stage_state(slug: str, stage: str, updates: dict) -> dict:
             stage_state.setdefault(key, value)
         for key, value in updates.items():
             stage_state[key] = value
-            if key in {"adversarial_rounds", "judge_rounds"}:
+            if key == "adversarial_rounds":
                 state[f"{stage}_{key}"] = value
         stages[stage] = stage_state
         try:
