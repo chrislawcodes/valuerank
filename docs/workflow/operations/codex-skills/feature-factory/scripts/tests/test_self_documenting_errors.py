@@ -54,11 +54,6 @@ class SelfDocumentingErrorTests(unittest.TestCase):
         args = {
             "slug": self.slug,
             "stage": "diff",
-            "address": None,
-            "defer": None,
-            "dismiss": None,
-            "evidence": None,
-            "reason": None,
             "artifact": None,
             "base_ref": None,
             "context": [],
@@ -81,7 +76,6 @@ class SelfDocumentingErrorTests(unittest.TestCase):
             "json": False,
             "keep_intermediates": False,
             "fast": False,
-            "validation_only": False,
         }
         args.update(overrides)
         return argparse.Namespace(**args)
@@ -93,7 +87,6 @@ class SelfDocumentingErrorTests(unittest.TestCase):
             draft=False,
             base=None,
             title=None,
-            override_judges=False,
             reason=None,
             refresh=False,
             resume_merge_wait=False,
@@ -105,16 +98,6 @@ class SelfDocumentingErrorTests(unittest.TestCase):
             override_implementation_rule=False,
             override_implementation_reason=None,
         )
-
-    def test_unresolved_concerns_help_includes_address_flag(self) -> None:
-        stderr = io.StringIO()
-        with contextlib.redirect_stderr(stderr):
-            FACTORY_CMD_CHECKPOINT._render_open_concern_block(
-                "spec",
-                [{"id": "abc123", "reasoning": "Example concern."}],
-            )
-        # Concrete concern id is substituted into the message (FR-020 self-documenting).
-        self.assertIn("checkpoint --address abc123 --evidence", stderr.getvalue())
 
     def test_diff_cap_message_includes_allow_large_diff_rerun_flag(self) -> None:
         artifact = self.workflow_dir / "reviews" / "implementation.diff.patch"

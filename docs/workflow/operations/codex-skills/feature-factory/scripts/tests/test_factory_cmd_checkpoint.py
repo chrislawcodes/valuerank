@@ -47,13 +47,10 @@ def _base_state() -> dict:
     return state
 
 
-def _spec_stage_state(adversarial_rounds: int, judge_rounds: int = 0, judge_verdicts: list | None = None) -> dict:
+def _spec_stage_state(adversarial_rounds: int) -> dict:
     return {
         "adversarial_rounds": adversarial_rounds,
-        "judge_rounds": judge_rounds,
-        "judge_verdicts": judge_verdicts or [],
         "annotations": [],
-        "unresolved_concerns": [],
         "adversarial_sha_history": [],
         "initial_sha": "",
     }
@@ -61,21 +58,20 @@ def _spec_stage_state(adversarial_rounds: int, judge_rounds: int = 0, judge_verd
 
 def _write_workflow_state(tmpdir: str, stage_state: dict) -> Path:
     with patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", Path(tmpdir)):
-        workflow_root = FACTORY_STATE.workflow_dir("ff-judge-panel")
+        workflow_root = FACTORY_STATE.workflow_dir("ff-checkpoint-test")
         workflow_root.mkdir(parents=True, exist_ok=True)
         artifact_path = workflow_root / "spec.md"
         artifact_path.write_text("# Spec\n\nMeaningful content for checkpoint tests.\n", encoding="utf-8")
         state = _base_state()
         state["stages"] = {"spec": stage_state}
         state["spec_adversarial_rounds"] = stage_state["adversarial_rounds"]
-        state["spec_judge_rounds"] = stage_state["judge_rounds"]
-        FACTORY_STATE.atomic_json_write(FACTORY_STATE.factory_state_path("ff-judge-panel"), state)
+        FACTORY_STATE.atomic_json_write(FACTORY_STATE.factory_state_path("ff-checkpoint-test"), state)
         return artifact_path
 
 
 def _args(json_flag: bool = False) -> argparse.Namespace:
     return argparse.Namespace(
-        slug="ff-judge-panel",
+        slug="ff-checkpoint-test",
         stage="spec",
         artifact=None,
         base_ref=None,
@@ -131,11 +127,8 @@ class FactoryCheckpointTests(unittest.TestCase):
         self._root_patch.start()
         self.addCleanup(self._root_patch.stop)
 
-    def _prepare_state(self, adversarial_rounds: int, judge_rounds: int = 0, judge_verdicts: list | None = None) -> Path:
-        return _write_workflow_state(self._tmpdir.name, _spec_stage_state(adversarial_rounds, judge_rounds, judge_verdicts))
-
-    def _patch_runtime(self):
-        return contextlib.ExitStack()
+    def _prepare_state(self, adversarial_rounds: int) -> Path:
+        return _write_workflow_state(self._tmpdir.name, _spec_stage_state(adversarial_rounds))
 
     def test_effective_auto_context_defaults_to_spec_and_tasks_only(self) -> None:
         def enabled(stage: str) -> bool:
@@ -176,53 +169,13 @@ class FactoryCheckpointTests(unittest.TestCase):
                 rc = CHECKPOINT.command_checkpoint(args)
 
         self.assertEqual(rc, 0)
-        persisted = json.loads(FACTORY_STATE.factory_state_path("ff-judge-panel").read_text(encoding="utf-8"))
+        persisted = json.loads(FACTORY_STATE.factory_state_path("ff-checkpoint-test").read_text(encoding="utf-8"))
         spec_state = persisted["stages"]["spec"]
-        expected_sha = WORKFLOW_UTILS.normalized_artifact_hash("spec", FACTORY_STATE.workflow_dir("ff-judge-panel") / "spec.md")
+        expected_sha = WORKFLOW_UTILS.normalized_artifact_hash("spec", FACTORY_STATE.workflow_dir("ff-checkpoint-test") / "spec.md")
         self.assertEqual(spec_state["adversarial_rounds"], 3)
         self.assertEqual(persisted["spec_adversarial_rounds"], 3)
         self.assertEqual(spec_state["initial_sha"], expected_sha)
         self.assertEqual(spec_state["adversarial_sha_history"], [expected_sha])
-        self.assertEqual(persisted["last_action_result"]["next"], "judge_panel")
-        self.assertEqual(persisted["last_action_result"]["blockers"], ["spec.adversarial_rounds >= 3"])
-
-    def test_checkpoint_refuses_at_round_3(self) -> None:
-        self._prepare_state(3)
-        args = _args()
-        with patch.object(CHECKPOINT, "ensure_sync", return_value=None), \
-            patch.object(CHECKPOINT, "stage_manifest_state", side_effect=_fake_stage_manifest_state), \
-            patch.object(CHECKPOINT, "reconciliation_state", return_value=(True, "")), \
-            patch.object(CHECKPOINT, "_emit_next_action", return_value=None), \
-            patch.object(CHECKPOINT.subprocess, "run") as run_mock:
-            with contextlib.redirect_stdout(io.StringIO()) as stdout, contextlib.redirect_stderr(io.StringIO()):
-                rc = CHECKPOINT.command_checkpoint(args)
-
-        self.assertEqual(rc, 2)
-        self.assertEqual(stdout.getvalue().strip(), "→ next: judge_panel")
-        run_mock.assert_not_called()
-        persisted = json.loads(FACTORY_STATE.factory_state_path("ff-judge-panel").read_text(encoding="utf-8"))
-        self.assertEqual(persisted["last_action_result"]["next"], "judge_panel")
-        self.assertFalse((FACTORY_STATE.workflow_dir("ff-judge-panel") / "reviews" / "spec.checkpoint.json").exists())
-
-    def test_checkpoint_json_flag_emits_structured_payload(self) -> None:
-        self._prepare_state(3)
-        args = _args(json_flag=True)
-        with patch.object(CHECKPOINT, "ensure_sync", return_value=None), \
-            patch.object(CHECKPOINT, "stage_manifest_state", side_effect=_fake_stage_manifest_state), \
-            patch.object(CHECKPOINT, "reconciliation_state", return_value=(True, "")), \
-            patch.object(CHECKPOINT, "_emit_next_action", return_value=None), \
-            patch.object(CHECKPOINT.subprocess, "run") as run_mock:
-            with contextlib.redirect_stdout(io.StringIO()) as stdout, contextlib.redirect_stderr(io.StringIO()):
-                rc = CHECKPOINT.command_checkpoint(args)
-
-        self.assertEqual(rc, 2)
-        run_mock.assert_not_called()
-        payload = json.loads(stdout.getvalue().strip())
-        self.assertEqual(payload["next"], "judge_panel")
-        self.assertEqual(payload["reason"], "spec reached adversarial round cap")
-        self.assertEqual(payload["blockers"], ["spec.adversarial_rounds >= 3"])
-        persisted = json.loads(FACTORY_STATE.factory_state_path("ff-judge-panel").read_text(encoding="utf-8"))
-        self.assertEqual(persisted["last_action_result"], payload)
 
     def test_checkpoint_decrements_on_dispatch_failure(self) -> None:
         self._prepare_state(2)
@@ -237,7 +190,7 @@ class FactoryCheckpointTests(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     CHECKPOINT.command_checkpoint(args)
 
-        persisted = json.loads(FACTORY_STATE.factory_state_path("ff-judge-panel").read_text(encoding="utf-8"))
+        persisted = json.loads(FACTORY_STATE.factory_state_path("ff-checkpoint-test").read_text(encoding="utf-8"))
         spec_state = persisted["stages"]["spec"]
         self.assertEqual(spec_state["adversarial_rounds"], 2)
         self.assertEqual(persisted["spec_adversarial_rounds"], 2)
@@ -256,12 +209,12 @@ class FactoryCheckpointTests(unittest.TestCase):
                 rc = CHECKPOINT.command_checkpoint(args)
 
         self.assertEqual(rc, 0)
-        first_sha = WORKFLOW_UTILS.normalized_artifact_hash("spec", FACTORY_STATE.workflow_dir("ff-judge-panel") / "spec.md")
-        persisted = json.loads(FACTORY_STATE.factory_state_path("ff-judge-panel").read_text(encoding="utf-8"))
+        first_sha = WORKFLOW_UTILS.normalized_artifact_hash("spec", FACTORY_STATE.workflow_dir("ff-checkpoint-test") / "spec.md")
+        persisted = json.loads(FACTORY_STATE.factory_state_path("ff-checkpoint-test").read_text(encoding="utf-8"))
         self.assertEqual(persisted["stages"]["spec"]["initial_sha"], first_sha)
         self.assertEqual(persisted["stages"]["spec"]["adversarial_sha_history"], [first_sha])
 
-        artifact_path = FACTORY_STATE.workflow_dir("ff-judge-panel") / "spec.md"
+        artifact_path = FACTORY_STATE.workflow_dir("ff-checkpoint-test") / "spec.md"
         artifact_path.write_text("# Spec\n\nMeaningful content for checkpoint tests, revised.\n", encoding="utf-8")
         second_result = subprocess.CompletedProcess(args=["repair"], returncode=0, stdout="", stderr="")
         with patch.object(CHECKPOINT, "ensure_sync", return_value=None), \
@@ -275,7 +228,7 @@ class FactoryCheckpointTests(unittest.TestCase):
 
         self.assertEqual(rc, 0)
         second_sha = WORKFLOW_UTILS.normalized_artifact_hash("spec", artifact_path)
-        persisted = json.loads(FACTORY_STATE.factory_state_path("ff-judge-panel").read_text(encoding="utf-8"))
+        persisted = json.loads(FACTORY_STATE.factory_state_path("ff-checkpoint-test").read_text(encoding="utf-8"))
         self.assertEqual(persisted["stages"]["spec"]["initial_sha"], first_sha)
         self.assertEqual(persisted["stages"]["spec"]["adversarial_sha_history"], [first_sha, second_sha])
 

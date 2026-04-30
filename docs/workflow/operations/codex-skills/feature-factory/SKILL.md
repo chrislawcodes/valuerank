@@ -86,19 +86,19 @@ Do not duplicate checkpoint manifest logic, review file validation, diff writing
 |---|---|---|---|
 | Discovery | Ask clarifying questions one at a time, record assumptions, determine if spec is stable enough to proceed | Claude | Codex |
 | Write spec | Research real file paths in codebase, author `spec.md` with scope boundaries and acceptance criteria | Claude (research) · Codex (file paths) | Gemini (research) · Codex (authors) |
-| Spec checkpoint | Adversarial attack on spec, semantic review, judge findings and reconcile into spec | Codex (2 adversarial reviews: `feasibility` + `edge-cases`) · Gemini (1 adversarial review: `requirements`) · Claude (judges) | Codex (2 adversarial reviews: `feasibility` + `edge-cases`) · Gemini (1 adversarial review: `requirements`) · Codex (judges, escalates blockers to human) |
+| Spec checkpoint | Adversarial attack on spec, semantic review, reconcile findings into spec | Codex (2 adversarial reviews: `feasibility` + `edge-cases`) · Gemini (1 adversarial review: `requirements`) · Claude (reconciles) | Codex (2 adversarial reviews: `feasibility` + `edge-cases`) · Gemini (1 adversarial review: `requirements`) · Codex (reconciles, escalates blockers to human) |
 | Write plan | Author `plan.md` with architecture decisions, wave breakdown, and risk callouts. Each residual risk MUST have a `verification:` sentence naming a concrete pre-merge check (e.g., "run circumplexAnalysis against a production model ID", "inspect a failing fixture", "grep the migration output for N rows"). Unverified residual risks block plan approval — see "Residual risks must be verifiable" below. | Claude | Codex |
-| Plan checkpoint | Adversarial attack on plan, architecture review, judge findings and reconcile into plan | Codex (2 adversarial reviews: `implementation` + `architecture`) · Gemini (1 adversarial review: `testability`) · Claude (judges) | Codex (2 adversarial reviews: `implementation` + `architecture`) · Gemini (1 adversarial review: `testability`) · Codex (judges, escalates blockers to human) |
+| Plan checkpoint | Adversarial attack on plan, architecture review, reconcile findings into plan | Codex (2 adversarial reviews: `implementation` + `architecture`) · Gemini (1 adversarial review: `testability`) · Claude (reconciles) | Codex (2 adversarial reviews: `implementation` + `architecture`) · Gemini (1 adversarial review: `testability`) · Codex (reconciles, escalates blockers to human) |
 | Write tasks | Author `tasks.md` with executable slices, checkpoint boundaries (`[CHECKPOINT]`), estimated diff size per slice, dependencies, and verification steps. No slice should exceed ~300 lines changed. | Claude | Codex |
 | Record parallel analysis | Look for safe parallel implementation opportunities in tasks.md. Annotate parallel tasks with `[P: file1, file2]`. Run `parallel --slug <slug> --note "..." [--found]`. If opportunities exist, add `[P:]` annotations first — the command validates they are conflict-free. | Claude | Codex |
-| Tasks checkpoint | Adversarial attack on tasks, execution-order review, judge findings and reconcile into tasks | Codex (2 adversarial reviews: `execution` + `dependency-order`) · Gemini (1 adversarial review: `coverage`) · Claude (judges) | Codex (2 adversarial reviews: `execution` + `dependency-order`) · Gemini (1 adversarial review: `coverage`) · Codex (judges, escalates blockers to human) |
+| Tasks checkpoint | Adversarial attack on tasks, execution-order review, reconcile findings into tasks | Codex (2 adversarial reviews: `execution` + `dependency-order`) · Gemini (1 adversarial review: `coverage`) · Claude (reconciles) | Codex (2 adversarial reviews: `execution` + `dependency-order`) · Gemini (1 adversarial review: `coverage`) · Codex (reconciles, escalates blockers to human) |
 | Implementation slice | Implement one `[CHECKPOINT]`-bounded slice from `tasks.md`, run build and tests, commit | Codex | Codex |
-| Diff checkpoint | Adversarial attack on the slice diff only (not the full branch), regression and correctness review, judge findings and reconcile | Codex (2 adversarial reviews: `correctness` + `regression`) · Gemini (1 adversarial review: `quality`) · Claude (judges) | Codex (2 adversarial reviews: `correctness` + `regression`) · Gemini (1 adversarial review: `quality`) · Codex (judges, escalates blockers to human) |
+| Diff checkpoint | Adversarial attack on the slice diff only (not the full branch), regression and correctness review, reconcile findings | Codex (2 adversarial reviews: `correctness` + `regression`) · Gemini (1 adversarial review: `quality`) · Claude (reconciles) | Codex (2 adversarial reviews: `correctness` + `regression`) · Gemini (1 adversarial review: `quality`) · Codex (reconciles, escalates blockers to human) |
 | *(repeat per slice)* | Implementation slice → Diff checkpoint repeats for each `[CHECKPOINT]` boundary in `tasks.md` | | |
 | Deliver | Create PR, watch CI, record delivery state in workflow | Claude | Codex (stages) · Human (approves and creates PR) |
-| CI failure | Extract errors, implement fix, re-run CI | Claude (judges) · Codex (fixes) | Codex (fixes) · Human (approves) |
+| CI failure | Extract errors, implement fix, re-run CI | Claude (reviews fix) · Codex (fixes) | Codex (fixes) · Human (approves) |
 | Write closeout | Write summary of what shipped, what remains open, and deferred risks | Claude | Codex |
-| Closeout checkpoint | Adversarial attack on closeout, final state review, judge findings and approve | Codex (2 adversarial reviews: `fidelity` + `completeness`) · Gemini (1 adversarial review: `residual-risk`) · Claude (judges) | Codex (2 adversarial reviews: `fidelity` + `completeness`) · Gemini (1 adversarial review: `residual-risk`) · Codex (judges, escalates blockers to human) |
+| Closeout checkpoint | Adversarial attack on closeout, final state review, reconcile findings | Codex (2 adversarial reviews: `fidelity` + `completeness`) · Gemini (1 adversarial review: `residual-risk`) · Claude (reconciles) | Codex (2 adversarial reviews: `fidelity` + `completeness`) · Gemini (1 adversarial review: `residual-risk`) · Codex (reconciles, escalates blockers to human) |
 | Write post mortem | Write `postmortem.md` covering what went well, what didn't, and specific proposed workflow changes. Required before workflow is marked done. | Claude | Codex |
 | Update STATUS.md | Update `STATUS.md` to reflect what shipped. Required before workflow is marked done. | Claude | Codex |
 | Post mortem approval | Review proposed workflow changes and approve, reject, or defer each one | Human | Human |
@@ -169,7 +169,7 @@ For workflow-system improvement work, treat the maintained plan as the source of
 
 ## Background Dispatch Discipline
 
-Every background dispatch — `codex exec`, long-running `checkpoint`, `judge`, `implement`, `deliver` — can die silently. The orchestrator will not notice without a heartbeat. This has happened more than once. Treat these rules as non-negotiable.
+Every background dispatch — `codex exec`, long-running `checkpoint`, `implement`, `deliver` — can die silently. The orchestrator will not notice without a heartbeat. This has happened more than once. Treat these rules as non-negotiable.
 
 **Rule 1: Pair every background dispatch with a heartbeat Monitor.** Immediately after starting a background task that may run >10 minutes, start a persistent `Monitor` that emits a line every 600 seconds reporting (a) whether the expected process is still alive, (b) the most recent git commit on the active worktree. Example:
 
@@ -193,15 +193,6 @@ When a monitor reports `codex_procs=0` for 2+ consecutive ticks AND no new commi
 
 **Rule 3: Only use "I'll check back in N minutes" as a comment, not a plan.** The session has no timer that wakes Claude; between background-task notifications, Claude is idle. Any "check back later" commitment must be backed by a running Monitor or a scheduled wakeup. Promises without machinery behind them fail silently.
 
-## Judge Panel
-
-After three adversarial-review rounds on a stage, stop using the review loop and use the judge panel instead. The runner enforces the 3-round adversarial cap and routes the next action to `judge_panel`; do not rely on voluntary convergence to break the loop.
-
-- Judge prompts live under `docs/workflow/operations/codex-skills/feature-factory/judge-prompts/`.
-- The `judge` subcommand is the only supported entry point for panel voting: `judge --slug <slug> --stage <stage>`.
-- Judges are blinded to each other. Dissent escalates back to the orchestrator for edits, and the runner enforces the round cap instead of letting the loop continue forever.
-- When `judge_panel` is the recommended next action, treat that as a hard control-flow signal, not a suggestion.
-
 ## Review Policy
 
 Every checkpoint requires:
@@ -219,9 +210,9 @@ Keep the two Codex reviews independent from each other. Do not let the second Co
 
 ## Codex Orchestrator: Escalation Protocol
 
-When running as Codex Orchestrator, use the following criteria to decide whether to judge a finding or escalate to the human:
+When running as Codex Orchestrator, use the following criteria to decide whether to reconcile a finding or escalate to the human:
 
-**Codex can judge and reconcile:**
+**Codex can reconcile:**
 - findings that are clearly out of scope for the current slice
 - findings that duplicate something already addressed in the artifact
 - findings that conflict with an explicit decision recorded in the spec or plan
@@ -265,9 +256,8 @@ At each checkpoint:
 
 1. create or update the artifact
 2. run the checkpoint
-3. run `auto-reconcile --slug <slug> --stage <stage>` — auto-accepts reviews with no HIGH, MEDIUM, LOW, or CRITICAL findings and prints which reviews still need attention
-4. read and reconcile only the reviews listed under `needs-review` in the auto-reconcile output
-5. only then move forward
+3. read the generated review files in `docs/workflow/feature-runs/<slug>/reviews/` and reconcile each one
+4. only then move forward
 
 ### Auto-Context Defaults
 

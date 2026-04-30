@@ -16,72 +16,6 @@ sys.modules[SPEC.name] = FACTORY_STATE
 SPEC.loader.exec_module(FACTORY_STATE)
 
 
-class UnresolvedConcernBackfillTests(unittest.TestCase):
-    """FR-011a — legacy unresolved_concerns without id/lifecycle fields get backfilled on read."""
-
-    def test_backfill_adds_id_and_lifecycle_fields(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", Path(tmpdir)):
-                slug = "backfill-test"
-                state_path = FACTORY_STATE.factory_state_path(slug)
-                legacy = FACTORY_STATE._default_workflow_state()
-                legacy["stages"] = {
-                    "spec": {
-                        "adversarial_rounds": 3,
-                        "judge_rounds": 3,
-                        "judge_next_action": "advance",
-                        "unresolved_concerns": [
-                            {
-                                "stage": "spec",
-                                "judge": "restatement",
-                                "model": "codex",
-                                "round_raised": 3,
-                                "reasoning": "legacy concern without id or lifecycle fields",
-                            }
-                        ],
-                    }
-                }
-                FACTORY_STATE.atomic_json_write(state_path, legacy)
-
-                loaded = FACTORY_STATE.load_workflow_state(slug)
-                concern = loaded["stages"]["spec"]["unresolved_concerns"][0]
-                self.assertTrue(concern.get("id"))
-                self.assertEqual(len(concern["id"]), 12)
-                for field in ("addressed_at", "addressed_by", "deferred_reason", "dismissed_reason"):
-                    self.assertIsNone(concern[field])
-
-    def test_backfill_preserves_existing_id(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", Path(tmpdir)):
-                slug = "backfill-preserve"
-                state_path = FACTORY_STATE.factory_state_path(slug)
-                legacy = FACTORY_STATE._default_workflow_state()
-                legacy["stages"] = {
-                    "spec": {
-                        "unresolved_concerns": [
-                            {
-                                "id": "deadbeef0000",
-                                "stage": "spec",
-                                "judge": "judge1",
-                                "round_raised": 3,
-                                "reasoning": "existing id must not be overwritten",
-                                "addressed_at": 12345,
-                                "addressed_by": "commit:abc",
-                                "deferred_reason": None,
-                                "dismissed_reason": None,
-                            }
-                        ],
-                    }
-                }
-                FACTORY_STATE.atomic_json_write(state_path, legacy)
-
-                loaded = FACTORY_STATE.load_workflow_state(slug)
-                concern = loaded["stages"]["spec"]["unresolved_concerns"][0]
-                self.assertEqual(concern["id"], "deadbeef0000")
-                self.assertEqual(concern["addressed_at"], 12345)
-                self.assertEqual(concern["addressed_by"], "commit:abc")
-
-
 class FactoryStateTests(unittest.TestCase):
     def test_with_locked_state_single_writer_acquires_and_releases(self) -> None:
         """A single writer can enter, mutate, exit, and reopen the same state."""
@@ -182,7 +116,7 @@ class FactoryStateTests(unittest.TestCase):
                 self.assertEqual(mock_sleep.call_count, 10)
 
     def test_update_stage_state_writes_nested_and_top_level_keys(self) -> None:
-        """Stage writes should land in the new nested shape and the legacy mirrors."""
+        """Stage writes should land in the new nested shape and mirror adversarial_rounds at the top level."""
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", Path(tmpdir)):
                 slug = "dual-write"
@@ -193,7 +127,6 @@ class FactoryStateTests(unittest.TestCase):
                         "review_policy": {"sensitive": True},
                         "custom_key": "keep",
                         "plan_adversarial_rounds": 7,
-                        "plan_judge_rounds": 3,
                     },
                 )
 
@@ -202,10 +135,7 @@ class FactoryStateTests(unittest.TestCase):
                     "plan",
                     {
                         "adversarial_rounds": 6,
-                        "judge_rounds": 2,
-                        "judge_verdicts": [[{"judge": "codex", "verdict": "proceed"}]],
                         "annotations": [{"stage": "plan", "round": 1, "judge": "codex"}],
-                        "unresolved_concerns": [{"stage": "plan", "round": 1, "judge": "claude"}],
                         "adversarial_sha_history": ["sha-1", "sha-2"],
                         "initial_sha": "sha-0",
                     },
@@ -217,21 +147,14 @@ class FactoryStateTests(unittest.TestCase):
                 self.assertEqual(updated["schema_version"], 2)
                 self.assertEqual(updated["custom_key"], "keep")
                 self.assertEqual(plan_state["adversarial_rounds"], 6)
-                self.assertEqual(plan_state["judge_rounds"], 2)
-                self.assertEqual(plan_state["judge_verdicts"], [[{"judge": "codex", "verdict": "proceed"}]])
                 self.assertEqual(plan_state["annotations"], [{"stage": "plan", "round": 1, "judge": "codex"}])
-                self.assertEqual(plan_state["unresolved_concerns"], [{"stage": "plan", "round": 1, "judge": "claude"}])
                 self.assertEqual(plan_state["adversarial_sha_history"], ["sha-1", "sha-2"])
                 self.assertEqual(plan_state["initial_sha"], "sha-0")
                 self.assertEqual(updated["plan_adversarial_rounds"], 6)
-                self.assertEqual(updated["plan_judge_rounds"], 2)
-                self.assertNotIn("plan_judge_verdicts", updated)
                 self.assertNotIn("plan_annotations", updated)
-                self.assertNotIn("plan_unresolved_concerns", updated)
                 self.assertNotIn("plan_adversarial_sha_history", updated)
                 self.assertNotIn("plan_initial_sha", updated)
                 self.assertEqual(persisted["plan_adversarial_rounds"], 6)
-                self.assertEqual(persisted["plan_judge_rounds"], 2)
                 self.assertEqual(persisted["stages"]["plan"]["initial_sha"], "sha-0")
 
     def test_update_stage_state_bumps_schema_version_once(self) -> None:
