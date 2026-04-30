@@ -31,8 +31,14 @@ function buildEmptyValueResult(valueKey: DomainAnalysisValueKey): ModelsAnalysis
   };
 }
 
+function hasCanonicalEvidenceWeight(
+  domain: DomainContribution,
+): domain is DomainContribution & { evidenceWeight: number } {
+  return domain.evidenceWeight != null && domain.evidenceWeight > 0;
+}
+
 function buildValueResult(valueKey: DomainAnalysisValueKey, domains: DomainContribution[]): ModelsAnalysisValueResultShape {
-  const eligibleDomains = domains.filter((domain) => domain.evidenceWeight != null && domain.evidenceWeight > 0);
+  const eligibleDomains = domains.filter(hasCanonicalEvidenceWeight);
   return {
     valueKey,
     pooledWinRate: computePooledWinRate(eligibleDomains),
