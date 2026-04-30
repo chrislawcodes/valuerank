@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import type {
   DomainAnalysisModelAvailability,
   ModelEntry,
@@ -51,7 +50,7 @@ const unavailableModels: DomainAnalysisModelAvailability[] = [
 ];
 
 describe('DominanceSection', () => {
-  it('renders the shell, keeps unavailable options disabled, and updates summary content on model change', async () => {
+  it('renders the shell and updates summary content when the selected model changes', async () => {
     vi.spyOn(window, 'matchMedia').mockImplementation(
       (query) =>
         ({
@@ -65,12 +64,16 @@ describe('DominanceSection', () => {
           dispatchEvent: vi.fn(),
         }) as MediaQueryList,
     );
-    const user = userEvent.setup();
     let container: HTMLElement;
+    const { rerender } = render(
+      <DominanceSection
+        models={models}
+        unavailableModels={unavailableModels}
+        selectedModelId="model-a"
+      />,
+    );
     await act(async () => {
-      ({ container } = render(
-        <DominanceSection models={models} unavailableModels={unavailableModels} />,
-      ));
+      container = screen.getByRole('img', { name: 'Value dominance graph' }).parentElement!.parentElement!;
       await Promise.resolve();
     });
 
@@ -86,22 +89,23 @@ describe('DominanceSection', () => {
     expect(
       screen.getByRole('heading', { name: 'Most Contestable Value Pairs' }),
     ).toBeInTheDocument();
-
-    const modelSelect = screen.getByRole('combobox');
-    expect(modelSelect).toHaveValue('model-a');
-
-    const unavailableOption = screen.getByRole('option', {
-      name: 'Offline Model (Unavailable)',
-    });
-    expect(unavailableOption).toBeDisabled();
+    expect(screen.getByText('Model focus:')).toBeInTheDocument();
+    expect(screen.getByText('Model A')).toBeInTheDocument();
+    expect(screen.getByText('1 unavailable model stay hidden from this analysis.')).toBeInTheDocument();
 
     const summaryList = container!.querySelector('ol');
     expect(summaryList?.textContent).toBeTruthy();
     const initialSummary = summaryList?.textContent ?? '';
 
-    await user.selectOptions(modelSelect, 'model-b');
+    rerender(
+      <DominanceSection
+        models={models}
+        unavailableModels={unavailableModels}
+        selectedModelId="model-b"
+      />,
+    );
 
-    expect(modelSelect).toHaveValue('model-b');
+    expect(screen.getByText('Model B')).toBeInTheDocument();
     expect(summaryList?.textContent).not.toEqual(initialSummary);
   });
 });
