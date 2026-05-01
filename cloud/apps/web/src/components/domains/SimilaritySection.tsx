@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import { HelpCircle, X } from 'lucide-react';
 import { cosineSimilarity } from '@valuerank/shared';
 import { VALUES, type ModelEntry } from '../../data/domainAnalysisData';
+import { Button } from '../ui/Button';
 import { CopyVisualButton } from '../ui/CopyVisualButton';
 import type { ClusterAnalysis } from '../../api/operations/domainAnalysis';
 
@@ -104,14 +105,16 @@ export function SimilaritySection({ models, clusterAnalysis }: SimilaritySection
     <section className="rounded-lg border border-gray-200 bg-white p-4">
       <div className="mb-3 flex items-center gap-2">
         <h2 className="text-base font-medium text-gray-900">Similarities and Differences</h2>
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="icon"
           onClick={() => setShowMatrixHelp((v) => !v)}
-          className="text-gray-400 hover:text-gray-600"
+          className="h-5 w-5 text-gray-400 hover:text-gray-600"
           aria-label={showMatrixHelp ? 'Hide explanation' : 'Show explanation'}
         >
           <HelpCircle className="h-4 w-4" />
-        </button>
+        </Button>
       </div>
 
       <div ref={matrixRef} className="rounded border border-gray-100 bg-white p-2">
@@ -132,14 +135,16 @@ export function SimilaritySection({ models, clusterAnalysis }: SimilaritySection
                 </ol>
                 <p className="mt-1 text-gray-600"><span className="font-medium text-green-700">1.0</span> = identical relative priorities · <span className="font-medium text-yellow-600">0</span> = no relationship · <span className="font-medium text-red-700">−1</span> = opposite priorities</p>
               </div>
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="icon"
                 onClick={() => setShowMatrixHelp(false)}
-                className="shrink-0 text-gray-400 hover:text-gray-600"
+                className="shrink-0 h-6 w-6 text-gray-400 hover:text-gray-600"
                 aria-label="Close explanation"
               >
                 <X className="h-4 w-4" />
-              </button>
+              </Button>
             </div>
           </div>
         )}
