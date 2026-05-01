@@ -21,6 +21,7 @@ import { ModelsConsistency } from './pages/ModelsConsistency';
 import { PressureSensitivity } from './pages/PressureSensitivity';
 import { ModelsCircumplex } from './pages/ModelsCircumplex';
 import { ModelsConfidence } from './pages/ModelsConfidence';
+import { ModelsConfidenceValueDetail } from './pages/ModelsConfidenceValueDetail';
 import { DefinitionDetail } from './pages/DefinitionDetail';
 import { StartPairedBatchPage } from './pages/DefinitionDetail/StartPairedBatchPage';
 import { Runs } from './pages/Runs';
@@ -208,6 +209,14 @@ function App() {
               element={
                 <ProtectedLayout>
                   <ModelsConfidence />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/models/confidence/detail"
+              element={
+                <ProtectedLayout fullWidth>
+                  <ModelsConfidenceValueDetail />
                 </ProtectedLayout>
               }
             />

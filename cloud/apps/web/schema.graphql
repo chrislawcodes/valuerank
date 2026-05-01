@@ -369,6 +369,12 @@ type CompletionEvent {
   success: Boolean!
 }
 
+type ConfidenceValueDetailResult {
+  modelLabel: String!
+  valueKey: String!
+  vignettes: [DomainAnalysisVignetteDetail!]!
+}
+
 type ConsistencyPerCondition {
   matches: Int!
   netPressureRank: Int!
@@ -2353,7 +2359,8 @@ type Query {
   ): [AvailableModel!]!
   availableSignatures: [AvailableSignature!]!
   circumplexAnalysis(minTrialsPerValue: Int, modelIds: [String!]!, signature: String!): CircumplexAnalysisResult!
-  confidenceTranscripts(limit: Int, modelId: String!, signature: String, valueKey: String!): [DomainAnalysisConditionTranscript!]!
+  confidenceTranscripts(definitionId: String, limit: Int, modelId: String!, scenarioId: String, signature: String, valueKey: String!): [DomainAnalysisConditionTranscript!]!
+  confidenceValueDetail(modelId: String!, signature: String, valueKey: String!): ConfidenceValueDetailResult!
 
   """Fetch a single definition by ID. Returns null if not found."""
   definition(

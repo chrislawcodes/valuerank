@@ -1,0 +1,27 @@
+query ConfidenceValueDetail($modelId: String!, $valueKey: String!, $signature: String) {
+  confidenceValueDetail(modelId: $modelId, valueKey: $valueKey, signature: $signature) {
+    modelLabel
+    valueKey
+    vignettes {
+      definitionId
+      definitionName
+      definitionVersion
+      otherValueKey
+      totalTrials
+      conditions {
+        scenarioId
+        conditionName
+        dimensions
+        prioritized
+        deprioritized
+        neutral
+        totalTrials
+        unknownCount
+        strongly
+        somewhat
+        opponentSomewhat
+        opponentStrongly
+      }
+    }
+  }
+}
