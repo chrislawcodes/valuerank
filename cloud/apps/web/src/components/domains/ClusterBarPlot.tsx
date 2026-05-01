@@ -2,8 +2,9 @@ import { useMemo } from 'react';
 import { type DomainCluster } from '../../api/operations/domainAnalysis';
 import { VALUE_LABELS } from '../../data/domainAnalysisData';
 import {
-  CLUSTER_SCORE_MAX,
-  CLUSTER_SCORE_MIN,
+  DOT_BAR_CLUSTER_SCORE_MAX,
+  DOT_BAR_CLUSTER_SCORE_MIN,
+  formatClusterScoreLabel,
   getClusterMemberLabelText,
   getClusterScorePosition,
   getClusterValueOrder,
@@ -39,7 +40,7 @@ export function ClusterBarPlot({ clusters }: ClusterBarPlotProps) {
         <div className="mb-2 flex items-center justify-between gap-2 text-[11px] text-gray-500">
           <span>Values ordered by average favorability across the shown clusters.</span>
           <span>
-            Fixed axis: {CLUSTER_SCORE_MIN.toFixed(2)} to {CLUSTER_SCORE_MAX.toFixed(2)} with 0 at the midpoint.
+            Fixed axis: {formatClusterScoreLabel(DOT_BAR_CLUSTER_SCORE_MIN)} to {formatClusterScoreLabel(DOT_BAR_CLUSTER_SCORE_MAX)} with 0 at the midpoint.
           </span>
         </div>
 
@@ -63,7 +64,7 @@ export function ClusterBarPlot({ clusters }: ClusterBarPlotProps) {
 
           {sortedValues.map((valueKey) => {
             const label = VALUE_LABELS[valueKey];
-            const midpoint = getClusterScorePosition(0);
+            const midpoint = getClusterScorePosition(0, DOT_BAR_CLUSTER_SCORE_MIN, DOT_BAR_CLUSTER_SCORE_MAX);
             const rankedClusters = getClusterBarOrder(clusters, valueKey);
 
             return (
@@ -76,14 +77,14 @@ export function ClusterBarPlot({ clusters }: ClusterBarPlotProps) {
 
                   {rankedClusters.map((cluster, index) => {
                     const score = cluster.centroid[valueKey] ?? 0;
-                    const endPosition = getClusterScorePosition(score);
+                    const endPosition = getClusterScorePosition(score, DOT_BAR_CLUSTER_SCORE_MIN, DOT_BAR_CLUSTER_SCORE_MAX);
                     const left = Math.min(midpoint, endPosition);
                     const width = Math.max(Math.abs(endPosition - midpoint), 1);
                     const clusterIndex = clusters.findIndex((candidate) => candidate.id === cluster.id);
                     const safeClusterIndex = clusterIndex >= 0 ? clusterIndex : 0;
                     const color = CLUSTER_PALETTE[safeClusterIndex % CLUSTER_PALETTE.length];
                     const memberLabels = getClusterMemberLabelText(cluster);
-                    const clipped = isClusterScoreClipped(score);
+                    const clipped = isClusterScoreClipped(score, DOT_BAR_CLUSTER_SCORE_MIN, DOT_BAR_CLUSTER_SCORE_MAX);
 
                     return (
                       <div
@@ -111,7 +112,7 @@ export function ClusterBarPlot({ clusters }: ClusterBarPlotProps) {
           <div className="flex items-center gap-2">
             <div className="w-32 shrink-0" />
             <div className="relative h-5 flex-1">
-              <div className="absolute left-0 top-0 text-xs text-gray-400">{CLUSTER_SCORE_MIN.toFixed(2)}</div>
+              <div className="absolute left-0 top-0 text-xs text-gray-400">{formatClusterScoreLabel(DOT_BAR_CLUSTER_SCORE_MIN)}</div>
               <div
                 className="absolute top-0 text-xs font-semibold text-gray-500"
                 style={{
@@ -121,11 +122,11 @@ export function ClusterBarPlot({ clusters }: ClusterBarPlotProps) {
               >
                 0
               </div>
-              <div className="absolute right-0 top-0 text-xs text-gray-400">{CLUSTER_SCORE_MAX.toFixed(2)}</div>
+              <div className="absolute right-0 top-0 text-xs text-gray-400">{formatClusterScoreLabel(DOT_BAR_CLUSTER_SCORE_MAX)}</div>
             </div>
           </div>
 
-          {clusters.some((cluster) => sortedValues.some((valueKey) => isClusterScoreClipped(cluster.centroid[valueKey] ?? 0))) && (
+          {clusters.some((cluster) => sortedValues.some((valueKey) => isClusterScoreClipped(cluster.centroid[valueKey] ?? 0, DOT_BAR_CLUSTER_SCORE_MIN, DOT_BAR_CLUSTER_SCORE_MAX))) && (
             <p className="px-2 pb-1 text-[11px] text-amber-700">
               Scores outside the fixed range are pinned to the edge.
             </p>

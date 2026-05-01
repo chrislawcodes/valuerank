@@ -5,6 +5,10 @@ export const CLUSTER_SCORE_MIN = -3.25;
 export const CLUSTER_SCORE_MAX = 3.25;
 export const CLUSTER_SCORE_RANGE = CLUSTER_SCORE_MAX - CLUSTER_SCORE_MIN;
 
+export const DOT_BAR_CLUSTER_SCORE_MIN = -2.5;
+export const DOT_BAR_CLUSTER_SCORE_MAX = 2.5;
+export const DOT_BAR_CLUSTER_SCORE_RANGE = DOT_BAR_CLUSTER_SCORE_MAX - DOT_BAR_CLUSTER_SCORE_MIN;
+
 const VALUE_INDEX = new Map(VALUES.map((valueKey, index) => [valueKey, index] as const));
 
 function averageScore(clusters: DomainCluster[], valueKey: ValueKey): number {
@@ -37,20 +41,38 @@ export function getClusterMemberLabelText(cluster: DomainCluster): string {
   return getClusterMemberLabels(cluster).join(', ');
 }
 
-export function clampClusterScore(score: number): number {
-  return Math.max(CLUSTER_SCORE_MIN, Math.min(CLUSTER_SCORE_MAX, score));
+export function formatClusterScoreLabel(score: number): string {
+  return score > 0 ? `+${score.toFixed(2)}` : score.toFixed(2);
 }
 
-export function getClusterScorePosition(score: number): number {
-  const clamped = clampClusterScore(score);
-  return ((clamped - CLUSTER_SCORE_MIN) / CLUSTER_SCORE_RANGE) * 100;
+export function clampClusterScore(score: number, min = CLUSTER_SCORE_MIN, max = CLUSTER_SCORE_MAX): number {
+  return Math.max(min, Math.min(max, score));
 }
 
-export function getClusterHeatmapScale(score: number): number {
-  const clamped = clampClusterScore(score);
-  return ((clamped - CLUSTER_SCORE_MIN) / CLUSTER_SCORE_RANGE) * 2 - 1;
+export function getClusterScorePosition(
+  score: number,
+  min = CLUSTER_SCORE_MIN,
+  max = CLUSTER_SCORE_MAX,
+): number {
+  const clamped = clampClusterScore(score, min, max);
+  const range = max - min;
+  return ((clamped - min) / range) * 100;
 }
 
-export function isClusterScoreClipped(score: number): boolean {
-  return score < CLUSTER_SCORE_MIN || score > CLUSTER_SCORE_MAX;
+export function getClusterHeatmapScale(
+  score: number,
+  min = CLUSTER_SCORE_MIN,
+  max = CLUSTER_SCORE_MAX,
+): number {
+  const clamped = clampClusterScore(score, min, max);
+  const range = max - min;
+  return ((clamped - min) / range) * 2 - 1;
+}
+
+export function isClusterScoreClipped(
+  score: number,
+  min = CLUSTER_SCORE_MIN,
+  max = CLUSTER_SCORE_MAX,
+): boolean {
+  return score < min || score > max;
 }
