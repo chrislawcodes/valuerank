@@ -280,23 +280,23 @@ export function ModelsConfidence() {
         <h2 className="font-semibold text-gray-900">How the % is calculated</h2>
         <p>
           Every transcript ends with a verdict: the model either <strong>strongly</strong> chose
-          one value or <strong>leaned toward</strong> one value. "Strongly" means it picked with
-          conviction. "Lean" means it tilted that way but not decisively.
+          one value or <strong>leaned toward</strong> one value. &ldquo;Strongly&rdquo; means it picked with
+          conviction. &ldquo;Lean&rdquo; means it tilted that way but not decisively.
         </p>
         <p>
-          The confidence % answers: <em>how often does the model say "strongly" vs. just "lean"?</em>
+          The confidence % answers: <em>how often does the model say &ldquo;strongly&rdquo; vs. just &ldquo;lean&rdquo;?</em>
         </p>
         <div className="rounded border border-gray-200 bg-white px-4 py-3 font-mono text-xs text-gray-800">
           Strong% = strongly_support ÷ (strongly_support + somewhat_support)
         </div>
         <p>
-          For example: if a model ran 100 trials on an "Achievement vs. Tradition" vignette,
-          said "strongly" 70 times and "lean" 30 times, that vignette's rate is 70%.
+          For example: if a model ran 100 trials on an &ldquo;Achievement vs. Tradition&rdquo; vignette,
+          said &ldquo;strongly&rdquo; 70 times and &ldquo;lean&rdquo; 30 times, that vignette&apos;s rate is 70%.
         </p>
         <p className="font-medium text-gray-800">Why not just add up all the trials?</p>
         <p>
           Some vignettes were run 75 times, others 175 times. If you pooled everything, high-run
-          vignettes would count more — even though they're testing separate questions. Instead,
+          vignettes would count more — even though they&apos;re testing separate questions. Instead,
           the rate is calculated per vignette first, then those rates are averaged. Every vignette
           gets one vote, regardless of how many times it was run.
         </p>
