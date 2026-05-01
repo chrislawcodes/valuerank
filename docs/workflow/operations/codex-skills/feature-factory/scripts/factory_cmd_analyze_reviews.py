@@ -170,13 +170,11 @@ def _is_relevant_activity(activity_type: object) -> bool:
 
 def _provider_key_from_model(model: str) -> str:
     lowered = model.lower()
-    if lowered.startswith("gemini-"):
-        return "gemini"
     if lowered.startswith("claude-"):
         return "claude"
     if lowered.startswith("gpt-") or lowered.startswith("gpt"):
         return "codex"
-    return lowered
+    return lowered.split("-", 1)[0] if lowered else "unknown"
 
 
 def _scan_review_metadata(
@@ -226,8 +224,6 @@ def _scan_review_metadata(
                 provider_key = "codex"
             elif reviewer.startswith("claude-"):
                 provider_key = "claude"
-            elif reviewer.startswith("gemini-"):
-                provider_key = "gemini"
 
         key = (stage, activity_type, provider_key)
         if lens not in lens_candidates[key]:
@@ -621,7 +617,7 @@ def _per_feature_rows(top_n: int = 20) -> list[list[object]]:
                 ttl_crossings += 1
 
         codex_tokens = 0
-        gemini_tokens = 0
+        claude_tokens = 0
         for entry in token_usage:
             if not isinstance(entry, dict):
                 continue
@@ -634,14 +630,14 @@ def _per_feature_rows(top_n: int = 20) -> list[list[object]]:
             total = in_tok + out_tok
             if model_lower.startswith("gpt-"):
                 codex_tokens += total
-            elif model_lower.startswith("gemini-"):
-                gemini_tokens += total
+            elif model_lower.startswith("claude-"):
+                claude_tokens += total
 
         rows.append([
             slug,
             round(total_wall_seconds, 1),
             codex_tokens,
-            gemini_tokens,
+            claude_tokens,
             ttl_crossings,
             command_count,
         ])
@@ -873,7 +869,7 @@ def _render_report(records: list[dict[str, object]], data_quality: dict[str, obj
                     "slug",
                     "total_wall_seconds",
                     "codex_tokens",
-                    "gemini_tokens",
+                    "claude_tokens",
                     "ttl_crossings",
                     "command_count",
                 ],
@@ -884,12 +880,12 @@ def _render_report(records: list[dict[str, object]], data_quality: dict[str, obj
         lines.append("No command telemetry found.")
     lines.extend([
         "",
-        "**Note on Claude token measurement.** This table aggregates Codex and Gemini token usage "
-        "(those tools' CLIs report token counts the runner captures). It does NOT include Claude "
-        "orchestrator session tokens — Claude Code does not expose those to the FF runner. For "
-        "session-level Claude usage, run `/cost` in Claude Code. The `ttl_crossings` column is a "
-        "proxy for cache pressure: each crossing means the orchestrator's prompt cache likely "
-        "expired between commands, requiring an uncached re-read.",
+        "**Note on token measurement.** This table aggregates Codex and Claude token usage "
+        "(those tools' CLIs report token counts the runner captures). It does NOT include "
+        "orchestrator session tokens from other tools. For session-level Claude usage, run `/cost` "
+        "in Claude Code. The `ttl_crossings` column is a proxy for cache pressure: each crossing "
+        "means the orchestrator's prompt cache likely expired between commands, requiring an "
+        "uncached re-read.",
         "",
     ])
 

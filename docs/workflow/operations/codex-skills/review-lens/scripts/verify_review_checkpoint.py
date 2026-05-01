@@ -198,11 +198,10 @@ def main() -> int:
                 )
 
         raw_output = data.get("raw_output_path")
-        if data.get("reviewer") == "gemini":
-            if not raw_output:
-                errors.append(f"{review_path} is missing raw_output_path")
-            elif not resolve_stored_path(raw_output, REPO_ROOT, data.get("repo_root", "")).exists():
-                errors.append(f"{review_path} raw_output_path is missing: {raw_output}")
+        if not raw_output:
+            errors.append(f"{review_path} is missing raw_output_path")
+        elif not resolve_stored_path(raw_output, REPO_ROOT, data.get("repo_root", "")).exists():
+            errors.append(f"{review_path} raw_output_path is missing: {raw_output}")
         elif data.get("reviewer") == "codex" and data.get("generation_method") not in {"codex-session", "codex-runner"}:
             errors.append(f"{review_path} has unsupported codex generation_method: {data.get('generation_method')}")
 

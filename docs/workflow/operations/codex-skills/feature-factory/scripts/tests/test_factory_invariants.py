@@ -49,7 +49,7 @@ class RunInvariantChecksTests(unittest.TestCase):
         self.assertEqual(appended[0]["command"], "auto-reconcile")
         self.assertIn("judge_next_action=advance", appended[0]["detail"])
         self.assertEqual(len(state["invariant_warnings"]), 1)
-        # Warnings always go to stderr (Gemini round-2 finding: avoid conditional
+        # Warnings always go to stderr (round-2 finding: avoid conditional
         # stdout/stderr routing that can hide warnings from automated parsers).
         self.assertEqual(sys.stdout.getvalue(), "")
         self.assertIn("state contradiction detected", sys.stderr.getvalue())

@@ -95,7 +95,7 @@ def _artifact_sha_at_time(slug: str, stage: str) -> str | None:
 
 
 def _resolve_agent_id() -> str | None:
-    for env_name in ("AGENT_ID", "CODEx_AGENT_ID", "CLAUDE_AGENT_ID", "GEMINI_AGENT_ID"):
+    for env_name in ("AGENT_ID", "CODEx_AGENT_ID", "CLAUDE_AGENT_ID"):
         value = os.environ.get(env_name)
         if value:
             return value
@@ -153,76 +153,6 @@ def parse_tokens_codex(result: subprocess.CompletedProcess) -> Optional[dict]:
     return None
 
 
-def _find_gemini_token_payload(value: object) -> dict[str, object] | None:
-    """Walk a parsed Gemini JSON payload looking for the token block.
-
-    The Gemini CLI emits a stats JSON at end of stdout; the token block
-    can live under several keys depending on version:
-      - `tokens` (current — verified PR #790 against captured stdout)
-      - `tokenStats` (older)
-      - `totalTokens` (older)
-    Walks recursively into dicts/lists. Returns the first match.
-    """
-    if isinstance(value, dict):
-        for key in ("tokens", "tokenStats", "totalTokens"):
-            candidate = value.get(key)
-            if isinstance(candidate, dict):
-                return candidate
-        for nested in value.values():
-            found = _find_gemini_token_payload(nested)
-            if found is not None:
-                return found
-    elif isinstance(value, list):
-        for item in value:
-            found = _find_gemini_token_payload(item)
-            if found is not None:
-                return found
-    return None
-
-
-def parse_tokens_gemini(result: subprocess.CompletedProcess) -> Optional[dict]:
-    """Extract token counts from Gemini CLI stdout.
-
-    Gemini stdout is mixed: free-form prose followed by a JSON stats
-    block at the end. Locate the first `{` that opens a balanced JSON
-    object, attempt to parse from there. If that fails, scan for any
-    embedded JSON object with `"tokens": {...}`.
-    """
-    stdout = _text(getattr(result, "stdout", ""))
-    payload = None
-    # Try parsing the whole stdout (works if stdout is pure JSON).
-    try:
-        payload = json.loads(stdout)
-    except Exception:
-        # Stdout has prose before the JSON block; find the last opening
-        # brace at column 0 (or a JSON object that contains "tokens").
-        for start in range(len(stdout)):
-            if stdout[start] != "{":
-                continue
-            try:
-                payload, _ = json.JSONDecoder().raw_decode(stdout, start)
-                break
-            except Exception:
-                continue
-    if payload is None:
-        return None
-    token_payload = _find_gemini_token_payload(payload)
-    if not isinstance(token_payload, dict):
-        return None
-    # Current Gemini schema: tokens.input, tokens.candidates (output),
-    # tokens.total. Earlier schemas used tokens.prompt for the same value
-    # as input. Try multiple keys for robustness.
-    prompt = token_payload.get("input")
-    if not isinstance(prompt, int):
-        prompt = token_payload.get("prompt")
-    candidates = token_payload.get("candidates")
-    if not isinstance(candidates, int):
-        candidates = token_payload.get("output")
-    if not isinstance(prompt, int) or not isinstance(candidates, int):
-        return None
-    return {"input_tokens": prompt, "output_tokens": candidates}
-
-
 def parse_tokens_claude(result: subprocess.CompletedProcess) -> Optional[dict]:
     combined = _text(getattr(result, "stderr", "")) + "\n" + _text(getattr(result, "stdout", ""))
     input_match = _CLAUDE_INPUT_RE.search(combined)
@@ -240,8 +170,6 @@ def _parser_for_model(model: str):
         return parse_tokens_codex
     if model.startswith("claude-"):
         return parse_tokens_claude
-    if model.startswith("gemini-"):
-        return parse_tokens_gemini
     return None
 
 
@@ -250,8 +178,6 @@ def _parse_error(model: str) -> str:
         return "no Codex token block found in stderr"
     if model.startswith("claude-"):
         return "no Claude token counts found in stdout or stderr"
-    if model.startswith("gemini-"):
-        return "no Gemini token stats found in stdout"
     return f"unsupported model prefix: {model}"
 
 

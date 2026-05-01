@@ -190,7 +190,7 @@ class DispatchCodexTests(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertIn("[workflow] ✓ dispatch-codex", stdout)
         # Auto-commit warnings fire when git is unavailable in the unit-test
-        # env; this is documented behavior (FR-007 round-1 Gemini LOW). Allow
+        # env; this is documented behavior (FR-007 round-1 LOW). Allow
         # auto-commit-warning lines but no other stderr noise.
         for line in stderr.splitlines():
             self.assertTrue(

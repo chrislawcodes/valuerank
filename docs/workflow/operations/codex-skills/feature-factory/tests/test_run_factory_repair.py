@@ -142,7 +142,7 @@ class RepairDecisionTests(unittest.TestCase):
         manifest = {
             "required_reviews": [
                 {
-                    "reviewer": "gemini",
+                    "reviewer": "codex",
                     "lens": "risk-adversarial",
                     "context_paths": ["docs/workflow/feature-runs/feature-workflow-repair/spec.md"],
                 }
@@ -785,8 +785,6 @@ class RepairDecisionTests(unittest.TestCase):
             max_artifact_chars=None,
             max_context_chars=None,
             max_total_chars=None,
-            gemini_timeout_seconds=120,
-            gemini_retries=1,
             repair_timeout_seconds=30,
             fallback=False,
             use_existing_artifact=False,
@@ -826,8 +824,6 @@ class RepairDecisionTests(unittest.TestCase):
             max_artifact_chars=None,
             max_context_chars=None,
             max_total_chars=None,
-            gemini_timeout_seconds=120,
-            gemini_retries=1,
             repair_timeout_seconds=30,
             fallback=False,
             use_existing_artifact=False,
@@ -1328,7 +1324,7 @@ class RepairDecisionTests(unittest.TestCase):
             for stage in ("spec", "plan", "tasks", "diff"):
                 (workflow_root / f"{stage}.checkpoint.json").write_text("{}", encoding="utf-8")
             manifest_path = workflow_root / "closeout.checkpoint.json"
-            review_path = workflow_root / "reviews" / "diff.gemini.review.md"
+            review_path = workflow_root / "reviews" / "diff.codex.correctness-adversarial.review.md"
             review_path.parent.mkdir(parents=True, exist_ok=True)
             review_path.write_text("---\nresolution_status: \"deferred\"\nresolution_note: \"deferred\"\n---\n", encoding="utf-8")
 
@@ -1383,8 +1379,6 @@ class RepairDecisionTests(unittest.TestCase):
             max_artifact_chars=None,
             max_context_chars=None,
             max_total_chars=None,
-            gemini_timeout_seconds=120,
-            gemini_retries=1,
             repair_timeout_seconds=30,
             fallback=True,
             json=False,
@@ -1416,7 +1410,6 @@ class RepairDecisionTests(unittest.TestCase):
                     "sensitive": False,
                     "large_structural": False,
                     "performance_sensitive": False,
-                    "extra_gemini_lenses": [],
                 }
             ), patch.object(
                 CMD_CHECKPOINT_MODULE, "checkpoint_manifest", return_value={"stage": "diff", "required_reviews": []}
@@ -1458,18 +1451,18 @@ class RepairDecisionTests(unittest.TestCase):
             temp_root = Path(temp_dir)
             artifact = temp_root / "artifact.diff.patch"
             artifact.write_text("diff --git a/foo b/foo\n", encoding="utf-8")
-            review_a = temp_root / "diff.gemini.risk.review.md"
+            review_a = temp_root / "diff.codex.risk-adversarial.review.md"
             review_b = temp_root / "diff.codex.feasibility.review.md"
             manifest = {
                 "artifact_path": str(artifact),
                 "stage": "diff",
                 "required_reviews": [
                     {
-                        "reviewer": "gemini",
+                        "reviewer": "codex",
                         "lens": "risk-adversarial",
                         "path": str(review_a),
                         "context_paths": [],
-                        "model": "gemini-2.5-pro",
+                        "model": "gpt-5.4-mini",
                     },
                     {
                         "reviewer": "codex",
@@ -1490,12 +1483,11 @@ class RepairDecisionTests(unittest.TestCase):
                 return SimpleNamespace(returncode=0, stdout="", stderr="")
 
             with patch.object(MODULE.subprocess, "run", side_effect=fake_run):
-                ok, detail = MODULE.run_checkpoint_fallback(manifest_path, Path("/Users/chrislaw/valuerank"), 120, 1)
+                ok, detail = MODULE.run_checkpoint_fallback(manifest_path, Path("/Users/chrislaw/valuerank"))
 
         self.assertTrue(ok)
         self.assertEqual(detail, "")
         joined = "\n".join(" ".join(cmd) for cmd in commands)
-        self.assertIn("run_gemini_review.py", joined)
         self.assertIn("run_codex_review.py", joined)
         self.assertIn("verify_review_checkpoint.py", joined)
 
@@ -1511,8 +1503,6 @@ class RepairDecisionTests(unittest.TestCase):
             max_artifact_chars=None,
             max_context_chars=None,
             max_total_chars=None,
-            gemini_timeout_seconds=120,
-            gemini_retries=1,
             repair_timeout_seconds=30,
             fallback=False,
             json=False,
@@ -1575,7 +1565,6 @@ class RepairDecisionTests(unittest.TestCase):
                     "sensitive": False,
                     "large_structural": False,
                     "performance_sensitive": False,
-                    "extra_gemini_lenses": [],
                 }
             ), patch.object(
                 CMD_CHECKPOINT_MODULE, "diff_review_budget_state",
@@ -1808,94 +1797,26 @@ class DefaultCodexModelTests(unittest.TestCase):
     def test_default_codex_model_constant_exists(self) -> None:
         self.assertEqual(MODULE.DEFAULT_CODEX_MODEL, "gpt-5.4-mini")
 
-    def test_required_reviews_codex_entry_uses_constant(self) -> None:
-        reviews = MODULE.required_reviews(
-            "diff",
-            sensitive=False,
-            large_structural=False,
-            performance_sensitive=False,
-            extra_gemini=[],
-        )
-        codex_entries = [r for r in reviews if r.get("reviewer") == "codex"]
-        self.assertTrue(codex_entries, "expected at least one codex reviewer entry")
-        for entry in codex_entries:
-            self.assertEqual(
-                entry.get("model"),
-                MODULE.DEFAULT_CODEX_MODEL,
-                f"codex entry model should be DEFAULT_CODEX_MODEL, got {entry.get('model')!r}",
+    def test_required_reviews_codex_entries_use_constant(self) -> None:
+        for stage, expected_lens in [
+            ("spec", "feasibility-adversarial"),
+            ("plan", "implementation-adversarial"),
+        ]:
+            reviews = MODULE.required_reviews(
+                stage,
+                sensitive=False,
+                large_structural=False,
+                performance_sensitive=False,
             )
+            self.assertEqual(len(reviews), 1)
+            self.assertEqual(reviews[0].get("reviewer"), "codex")
+            self.assertEqual(reviews[0].get("lens"), expected_lens)
+            self.assertEqual(reviews[0].get("model"), MODULE.DEFAULT_CODEX_MODEL)
 
-    def test_required_reviews_tasks_small_task_set_skips_gemini(self) -> None:
-        reviews = MODULE.required_reviews(
-            "tasks",
-            sensitive=False,
-            large_structural=False,
-            performance_sensitive=False,
-            extra_gemini=[],
-            small_task_set=True,
-        )
-        gemini_entries = [r for r in reviews if r.get("reviewer") == "gemini"]
-        codex_entries = [r for r in reviews if r.get("reviewer") == "codex"]
-        self.assertEqual(gemini_entries, [], "small task set should skip all Gemini reviews")
-        self.assertEqual(len(codex_entries), 1, "small task set should keep one Codex review")
-        self.assertEqual(codex_entries[0].get("lens"), "execution-adversarial")
-
-    def test_required_reviews_tasks_large_task_set_includes_gemini(self) -> None:
-        reviews = MODULE.required_reviews(
-            "tasks",
-            sensitive=False,
-            large_structural=False,
-            performance_sensitive=False,
-            extra_gemini=[],
-            small_task_set=False,
-        )
-        gemini_entries = [r for r in reviews if r.get("reviewer") == "gemini"]
-        codex_entries = [r for r in reviews if r.get("reviewer") == "codex"]
-        self.assertEqual(len(gemini_entries), 1, "full task set should include one Gemini review")
-        self.assertEqual(len(codex_entries), 2, "full task set should include two Codex reviews")
-
-    def test_required_reviews_tasks_small_task_set_sensitive_still_skips_gemini(self) -> None:
-        # sensitive flag adds risk-adversarial as an extra Gemini candidate, but
-        # small_task_set still wins and skips all Gemini reviews
-        reviews = MODULE.required_reviews(
-            "tasks",
-            sensitive=True,
-            large_structural=False,
-            performance_sensitive=False,
-            extra_gemini=[],
-            small_task_set=True,
-        )
-        gemini_entries = [r for r in reviews if r.get("reviewer") == "gemini"]
-        self.assertEqual(gemini_entries, [], "small_task_set should skip Gemini even when sensitive=True")
-
-    def test_required_reviews_closeout_small_task_set_skips_gemini(self) -> None:
-        reviews = MODULE.required_reviews(
-            "closeout",
-            sensitive=False,
-            large_structural=False,
-            performance_sensitive=False,
-            extra_gemini=[],
-            small_task_set=True,
-        )
-        gemini_entries = [r for r in reviews if r.get("reviewer") == "gemini"]
-        codex_entries = [r for r in reviews if r.get("reviewer") == "codex"]
-        self.assertEqual(gemini_entries, [], "small task set should skip all Gemini closeout reviews")
-        self.assertEqual(len(codex_entries), 1)
-        self.assertEqual(codex_entries[0].get("lens"), "fidelity-adversarial")
-
-    def test_required_reviews_closeout_large_task_set_includes_gemini(self) -> None:
-        reviews = MODULE.required_reviews(
-            "closeout",
-            sensitive=False,
-            large_structural=False,
-            performance_sensitive=False,
-            extra_gemini=[],
-            small_task_set=False,
-        )
-        gemini_entries = [r for r in reviews if r.get("reviewer") == "gemini"]
-        codex_entries = [r for r in reviews if r.get("reviewer") == "codex"]
-        self.assertEqual(len(gemini_entries), 1, "full closeout should include one Gemini review")
-        self.assertEqual(len(codex_entries), 2, "full closeout should include two Codex reviews")
+    def test_required_reviews_non_design_stages_are_empty(self) -> None:
+        self.assertEqual(MODULE.required_reviews("tasks", False, False, False), [])
+        self.assertEqual(MODULE.required_reviews("diff", False, False, False), [])
+        self.assertEqual(MODULE.required_reviews("closeout", False, False, False), [])
 
 
 class _CapturedBaseRef(Exception):
@@ -1940,8 +1861,6 @@ class BaseRefResetTests(unittest.TestCase):
             max_artifact_chars=None,
             max_context_chars=None,
             max_total_chars=None,
-            gemini_timeout_seconds=120,
-            gemini_retries=1,
             repair_timeout_seconds=30,
             fallback=False,
             use_existing_artifact=False,
@@ -1965,7 +1884,6 @@ class BaseRefResetTests(unittest.TestCase):
                         "sensitive": False,
                         "large_structural": False,
                         "performance_sensitive": False,
-                        "extra_gemini_lenses": [],
                     }),
                     patch.object(CMD_CHECKPOINT_MODULE, "diff_review_budget_state", return_value={
                         "artifact_exists": False,
@@ -2057,8 +1975,6 @@ class BaseRefResetTests(unittest.TestCase):
             max_artifact_chars=None,
             max_context_chars=None,
             max_total_chars=None,
-            gemini_timeout_seconds=120,
-            gemini_retries=1,
             repair_timeout_seconds=30,
             fallback=False,
             use_existing_artifact=False,
@@ -2087,7 +2003,6 @@ class BaseRefResetTests(unittest.TestCase):
                         "sensitive": False,
                         "large_structural": False,
                         "performance_sensitive": False,
-                        "extra_gemini_lenses": [],
                     }),
                     patch.object(CMD_CHECKPOINT_MODULE, "diff_review_budget_state", return_value={
                         "artifact_exists": False,

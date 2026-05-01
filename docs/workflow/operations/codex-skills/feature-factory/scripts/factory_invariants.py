@@ -19,8 +19,8 @@ from typing import Callable, Iterable
 from factory_state import INVARIANT_WARNINGS_KEY, _INVARIANT_WARNINGS_CAP
 
 
-# Warnings always emit to stderr. Gemini requirements-adversarial round 2
-# flagged conditional stdout/stderr routing as a risk — automated tools
+# Warnings always emit to stderr. A round-2 adversarial review flagged
+# conditional stdout/stderr routing as a risk — automated tools
 # parsing stdout would miss contradiction warnings. Unix convention is
 # warnings → stderr; terminals show both streams so interactive operators
 # still see it. JSON_MODE is preserved for back-compat and tests but has

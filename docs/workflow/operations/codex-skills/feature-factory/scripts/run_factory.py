@@ -166,7 +166,6 @@ def command_init(args: argparse.Namespace) -> int:
             "sensitive": False,
             "large_structural": False,
             "performance_sensitive": False,
-            "extra_gemini_lenses": [],
         },
     )
     existing_state.setdefault(DISCOVERY_KEY, default_discovery_state())
@@ -220,7 +219,6 @@ def build_parser() -> argparse.ArgumentParser:
     checkpoint_parser.add_argument("--base-ref")
     checkpoint_parser.add_argument("--context", action="append", default=[])
     checkpoint_parser.add_argument("--path", action="append", default=[])
-    checkpoint_parser.add_argument("--extra-gemini-lens", action="append", default=[])
     checkpoint_parser.add_argument("--sensitive", action="store_true")
     checkpoint_parser.add_argument("--large-structural", action="store_true")
     checkpoint_parser.add_argument("--performance-sensitive", action="store_true")
@@ -233,8 +231,6 @@ def build_parser() -> argparse.ArgumentParser:
     checkpoint_parser.add_argument("--max-artifact-chars", type=int, default=50000)
     checkpoint_parser.add_argument("--max-context-chars", type=int, default=60000)
     checkpoint_parser.add_argument("--max-total-chars", type=int, default=250000)
-    checkpoint_parser.add_argument("--gemini-timeout-seconds", type=int, default=120)
-    checkpoint_parser.add_argument("--gemini-retries", type=int, default=1)
     checkpoint_parser.add_argument("--repair-timeout-seconds", type=int, default=300)
     checkpoint_parser.add_argument("--allow-large-diff-rerun", action="store_true")
     checkpoint_parser.add_argument("--fallback", action="store_true")
@@ -245,7 +241,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Preserve review intermediate files for debugging instead of deleting them at checkpoint start",
     )
     checkpoint_parser.add_argument("--fast", action="store_true",
-        help="Fast path: skip prerequisites, run 1 Gemini + 1 Codex review. Requires --stage diff.")
+        help="Fast path: skip prerequisites, run 1 Codex review. Requires --stage diff.")
     checkpoint_parser.set_defaults(func=command_checkpoint)
 
     reconcile_parser = subparsers.add_parser("reconcile")
@@ -424,13 +420,6 @@ def build_parser() -> argparse.ArgumentParser:
     quick_parser.add_argument("--slug", required=True)
     quick_parser.add_argument("--prompt-path", dest="prompt_path", default=None,
         help="Path to a Codex prompt file. If given, dispatches Codex before the review.")
-    quick_parser.add_argument(
-        "--review-lens",
-        dest="review_lens",
-        choices=["correctness", "quality"],
-        default="correctness",
-        help="correctness = Codex correctness-adversarial (default); quality = Gemini quality-adversarial",
-    )
     quick_parser.set_defaults(func=command_quick)
 
     audit_parser = subparsers.add_parser(

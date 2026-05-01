@@ -7,7 +7,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from run_gemini_review import (
+from review_common import (
     allowed_roots,
     ensure_allowed_path,
     ensure_sections,

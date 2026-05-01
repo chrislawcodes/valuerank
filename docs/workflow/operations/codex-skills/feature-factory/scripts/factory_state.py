@@ -237,7 +237,6 @@ def _default_workflow_state() -> dict:
             "sensitive": False,
             "large_structural": False,
             "performance_sensitive": False,
-            "extra_gemini_lenses": [],
         },
         BLOCKED_KEY: {
             "active": False,

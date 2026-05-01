@@ -18,16 +18,14 @@ from factory_state import REPO_ROOT  # noqa: E402
 
 SYNC_SCRIPT = REPO_ROOT / "scripts" / "sync-codex-skills.py"
 
-# Files that agents (Codex, Gemini) frequently edit out-of-scope.
+# Files that agents frequently edit out-of-scope.
 # revert_protected_files() restores these to HEAD after every agent subprocess.
 PROTECTED_FILES = [
     "CLAUDE.md",
     "AGENTS.md",
     "MEMORY.md",
-    "GEMINI.md",
     ".gitignore",
     "cloud/CLAUDE.md",
-    "cloud/GEMINI.md",
     "cloud/agents.md",
 ]
 

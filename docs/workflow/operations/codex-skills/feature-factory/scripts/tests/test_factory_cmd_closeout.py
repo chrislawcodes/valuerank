@@ -141,8 +141,8 @@ class CloseoutCommandTests(unittest.TestCase):
 
         # Write the surviving default lenses for spec and plan only.
         for stage, lenses in [
-            ("spec", [("codex", "feasibility-adversarial"), ("gemini", "requirements-adversarial")]),
-            ("plan", [("codex", "implementation-adversarial"), ("gemini", "testability-adversarial")]),
+            ("spec", [("codex", "feasibility-adversarial")]),
+            ("plan", [("codex", "implementation-adversarial")]),
         ]:
             for reviewer, lens in lenses:
                 self._write_review(stage, reviewer, lens)
@@ -167,9 +167,8 @@ class CloseoutCommandTests(unittest.TestCase):
 
         # Write the surviving default lenses for spec/plan and one extra diff review.
         for stage, lenses in [
-            ("spec", [("codex", "feasibility-adversarial"), ("gemini", "requirements-adversarial")]),
-            ("plan", [("codex", "implementation-adversarial"), ("gemini", "testability-adversarial")]),
-            ("diff", [("gemini", "quality-adversarial")]),
+            ("spec", [("codex", "feasibility-adversarial")]),
+            ("plan", [("codex", "implementation-adversarial")]),
         ]:
             for reviewer, lens in lenses:
                 self._write_review(stage, reviewer, lens)
@@ -184,9 +183,9 @@ class CloseoutCommandTests(unittest.TestCase):
 
         diff_skipped = cov.get("diff_lenses_skipped", [])
         self.assertEqual(diff_skipped, [])
-        # Gemini quality should still be counted as run.
+        # Diff has no default lenses, so any reviews there are just extra coverage.
         diff_run = cov.get("diff_lenses_run", [])
-        self.assertIn("gemini:quality-adversarial", diff_run)
+        self.assertEqual(diff_run, [])
         self.assertEqual(cov.get("closeout_lenses_skipped", []), [])
 
     def test_empty_state_refuses_and_exits_zero(self) -> None:
@@ -231,8 +230,8 @@ class CloseoutCommandTests(unittest.TestCase):
         self._write_state(state)
 
         for stage, lenses in [
-            ("spec", [("codex", "feasibility-adversarial"), ("gemini", "requirements-adversarial")]),
-            ("plan", [("codex", "implementation-adversarial"), ("gemini", "testability-adversarial")]),
+            ("spec", [("codex", "feasibility-adversarial")]),
+            ("plan", [("codex", "implementation-adversarial")]),
         ]:
             for reviewer, lens in lenses:
                 self._write_review(stage, reviewer, lens)

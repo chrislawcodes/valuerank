@@ -27,12 +27,12 @@ def _load(name: str):
     return mod
 
 
-GEMINI_REVIEW = _load("run_gemini_review")
+REVIEW_COMMON = _load("review_common")
 
 
 class CodexQuotaClassifierTests(unittest.TestCase):
     def _check(self, stderr: str = "", stdout: str = "") -> bool:
-        return GEMINI_REVIEW.is_codex_quota_exhaustion(stderr, stdout)
+        return REVIEW_COMMON.is_codex_quota_exhaustion(stderr, stdout)
 
     # Phrase-pattern positives
     def test_youve_hit_your_usage_limit(self) -> None:
@@ -117,7 +117,7 @@ class WriteQuotaDeferredTests(unittest.TestCase):
                 "coverage_status": "full",
                 "coverage_note": "",
             }
-            GEMINI_REVIEW.write_quota_deferred(output_path, metadata)
+            REVIEW_COMMON.write_quota_deferred(output_path, metadata)
 
             content = output_path.read_text(encoding="utf-8")
             self.assertIn('resolution_status: "deferred"', content)

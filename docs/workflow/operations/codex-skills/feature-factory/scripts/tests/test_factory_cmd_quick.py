@@ -55,12 +55,10 @@ class QuickCommandTests(unittest.TestCase):
         self,
         slug: str = SLUG,
         prompt_path: str | None = None,
-        review_lens: str = "correctness",
     ) -> argparse.Namespace:
         return argparse.Namespace(
             slug=slug,
             prompt_path=prompt_path,
-            review_lens=review_lens,
             model="gpt-5.4-mini",
         )
 
@@ -182,35 +180,6 @@ class QuickCommandTests(unittest.TestCase):
         self.assertIn("MEDIUM: 1", stdout)
         self.assertIn("LOW: 1", stdout)
         self.assertIn("address HIGH/CRITICAL findings", stdout)
-
-    # ------------------------------------------------------------------
-    # Test 5: --review-lens quality routes to gemini script
-    # ------------------------------------------------------------------
-
-    def test_review_lens_quality_routes_to_gemini(self) -> None:
-        self._make_slug_dir()
-
-        stub_diff = self.runs_root / SLUG / "reviews" / "quick.diff.txt"
-        stub_review = self.runs_root / SLUG / "reviews" / "diff.gemini.quality-adversarial.review.md"
-        stub_review.parent.mkdir(parents=True, exist_ok=True)
-        stub_review.write_text(
-            "---\nresolution_status: open\n---\n## Findings\nNo findings.\n",
-            encoding="utf-8",
-        )
-
-        with (
-            mock.patch.object(FACTORY_CMD_QUICK, "_write_diff_artifact", return_value=stub_diff),
-            mock.patch.object(FACTORY_CMD_QUICK, "_run_codex_review") as mock_codex,
-            mock.patch.object(FACTORY_CMD_QUICK, "_run_gemini_review", return_value=0) as mock_gemini,
-        ):
-            args = self._make_args(review_lens="quality")
-            rc, stdout, _stderr = self._invoke(args)
-
-        self.assertEqual(rc, 0)
-        mock_gemini.assert_called_once()
-        mock_codex.assert_not_called()
-        self.assertIn("gemini.quality-adversarial", stdout)
-
 
 if __name__ == "__main__":
     unittest.main()

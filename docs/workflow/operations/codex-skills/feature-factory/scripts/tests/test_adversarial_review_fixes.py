@@ -79,15 +79,15 @@ class DeferredReviewsInPushedAsideTests(unittest.TestCase):
                 '# Review: diff correctness-adversarial\n',
                 encoding="utf-8",
             )
-            (review_dir / "diff.gemini.quality-adversarial.review.md").write_text(
+            (review_dir / "diff.codex.implementation-adversarial.review.md").write_text(
                 '---\n'
-                'reviewer: "gemini"\n'
-                'lens: "quality-adversarial"\n'
+                'reviewer: "codex"\n'
+                'lens: "implementation-adversarial"\n'
                 'stage: "diff"\n'
                 'resolution_status: "accepted"\n'
                 'resolution_note: "No actionable findings."\n'
                 '---\n\n'
-                '# Review: diff quality-adversarial\n',
+                '# Review: diff implementation-adversarial\n',
                 encoding="utf-8",
             )
 
@@ -129,7 +129,7 @@ class DeferredReviewsInPushedAsideTests(unittest.TestCase):
             self.assertIn("Skipped reviews (runner / tool failures)", rendered)
             self.assertIn("correctness-adversarial", rendered)
             self.assertIn("Subprocess timeout", rendered)
-            self.assertNotIn("quality-adversarial", rendered)  # this one was accepted
+            self.assertNotIn("implementation-adversarial", rendered)  # this one was accepted
 
 
 class RegexShapeNewFindingsTests(unittest.TestCase):

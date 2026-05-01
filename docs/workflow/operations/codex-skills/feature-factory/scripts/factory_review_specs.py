@@ -13,10 +13,8 @@ from factory_io import read_text
 # Constants
 # ---------------------------------------------------------------------------
 
-DEFAULT_GEMINI_MODEL = "gemini-2.5-pro"
 DEFAULT_CODEX_MODEL = "gpt-5.4-mini"
 
-SMALL_TASK_SET_THRESHOLD = 15
 _AUTO_ACCEPT_NOTE = "No HIGH/MEDIUM/LOW/CRITICAL findings detected — auto-accepted"
 
 # Every pattern below is matched against text that has already been lowercased
@@ -36,7 +34,7 @@ _AUTO_ACCEPT_NOTE = "No HIGH/MEDIUM/LOW/CRITICAL findings detected — auto-acce
 #   8. "### 1. Finding title"                  heading with rank prefix (matched via next line)
 #   9. "**HIGH**: ..."                         bold-prefix at paragraph start
 #  10. "**HIGH [CODE-CONFIRMED]**: ..."        bold-prefix with tag
-#  11. "**Severity**: HIGH"                    inline-field form (Gemini style)
+#  11. "**Severity**: HIGH"                    inline-field form
 #  12. "Severity: HIGH"                        inline-field without bold
 ACTIONABLE_FINDING_SHAPES = (
     "bullet-colon",
@@ -180,64 +178,22 @@ def required_reviews(
     sensitive: bool,
     large_structural: bool,
     performance_sensitive: bool,
-    extra_gemini: list[str],
     fast: bool = False,
-    small_task_set: bool = False,
 ) -> list[dict[str, str]]:
     if fast:
         return [
             {"reviewer": "codex", "lens": "correctness-adversarial", "model": DEFAULT_CODEX_MODEL},
-            {"reviewer": "gemini", "lens": "regression-adversarial", "model": DEFAULT_GEMINI_MODEL},
         ]
 
-    # Bundle 2: tasks, diff, and closeout stages have no default adversarial
-    # reviews. Reasoning: tasks is mostly a mechanical translation of plan
-    # (caught by failed implementation if wrong); diff is caught by CI;
-    # closeout is documentation. Spec and plan reviews carry the leverage.
-    # Operators can still pass --extra-codex-lens or --extra-gemini-lens to
-    # add reviews to any stage.
-    gemini_lens = ""
-    codex_primary = ""
-    codex_secondary = ""
-
     if stage == "spec":
-        gemini_lens = "requirements-adversarial"
-        codex_primary = "feasibility-adversarial"
-        codex_secondary = ""
+        return [
+            {"reviewer": "codex", "lens": "feasibility-adversarial", "model": DEFAULT_CODEX_MODEL},
+        ]
     elif stage == "plan":
-        gemini_lens = "testability-adversarial"
-        codex_primary = "implementation-adversarial"
-        codex_secondary = ""
+        return [
+            {"reviewer": "codex", "lens": "implementation-adversarial", "model": DEFAULT_CODEX_MODEL},
+        ]
     elif stage in {"tasks", "diff", "closeout"}:
-        pass
+        return []
     else:
         raise ValueError(f"Unsupported stage: {stage}")
-
-    if small_task_set and stage in ("tasks", "closeout") and not extra_gemini:
-        return []
-
-    reviews: list[dict[str, str]] = []
-    for reviewer, lens, model in (
-        ("codex", codex_primary, DEFAULT_CODEX_MODEL),
-        ("codex", codex_secondary, DEFAULT_CODEX_MODEL),
-        ("gemini", gemini_lens, DEFAULT_GEMINI_MODEL),
-    ):
-        if not lens:
-            continue
-        reviews.append({
-            "reviewer": reviewer,
-            "lens": lens,
-            "model": model,
-        })
-    seen_gemini_lenses = {review["lens"] for review in reviews if review["reviewer"] == "gemini"}
-    for lens in extra_gemini:
-        candidate = lens.strip()
-        if not candidate or candidate in seen_gemini_lenses:
-            continue
-        reviews.append({
-            "reviewer": "gemini",
-            "lens": candidate,
-            "model": DEFAULT_GEMINI_MODEL,
-        })
-        seen_gemini_lenses.add(candidate)
-    return reviews

@@ -386,7 +386,7 @@ def command_doctor(args: argparse.Namespace) -> int:
     }.items():
         add(label, "ok" if path.exists() else "fail", str(path))
 
-    for tool_name in ["git", "codex", "gemini", "gh"]:
+    for tool_name in ["git", "codex", "gh"]:
         found = command_path(tool_name)
         level = "ok" if found else ("warn" if tool_name == "gh" else "fail")
         add(f"tool:{tool_name}", level, found or "not installed")

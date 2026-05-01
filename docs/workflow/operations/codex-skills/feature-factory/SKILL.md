@@ -39,9 +39,9 @@ Use Claude for: hard architectural calls, adversarial review of Codex's PRs, and
 
 This skill runs in one of two modes depending on which agent is executing it:
 
-**Claude Orchestrator** — Claude is available and leads the workflow. Claude authors artifacts, judges review findings, and drives delivery. Codex implements and attacks. Gemini reviews.
+**Claude Orchestrator** — Claude is available and leads the workflow. Claude authors artifacts, judges review findings, and drives delivery. Codex implements and attacks.
 
-**Codex Orchestrator** — Claude is unavailable (token exhaustion or session end). Codex drives the workflow: authors artifacts, implements, attacks, and judges findings. Gemini reviews and researches. The human approves PR creation and post mortem changes.
+**Codex Orchestrator** — Claude is unavailable (token exhaustion or session end). Codex drives the workflow: authors artifacts, implements, attacks, and judges findings. The human approves PR creation and post mortem changes.
 
 If you are Claude, follow Claude Orchestrator behavior throughout this skill.
 If you are Codex, follow Codex Orchestrator behavior throughout this skill.
@@ -89,10 +89,10 @@ Do not duplicate checkpoint manifest logic, review file validation, diff writing
 | Phase | Task | Claude Orchestrator | Codex Orchestrator |
 |---|---|---|---|
 | Discovery | Ask clarifying questions one at a time, record assumptions, determine if spec is stable enough to proceed | Claude | Codex |
-| Write spec | Research real file paths in codebase, author `spec.md` with scope boundaries and acceptance criteria | Claude (research) · Codex (file paths) | Gemini (research) · Codex (authors) |
-| Spec checkpoint | Adversarial attack on spec, semantic review, reconcile findings into spec | Codex (1 adversarial review: `feasibility`) · Gemini (1 adversarial review: `requirements`) · Claude (reconciles) | Codex (1 adversarial review: `feasibility`) · Gemini (1 adversarial review: `requirements`) · Codex (reconciles, escalates blockers to human) |
+| Write spec | Research real file paths in codebase, author `spec.md` with scope boundaries and acceptance criteria | Claude (research) · Codex (file paths) | Codex (research and authors) |
+| Spec checkpoint | Adversarial attack on spec, semantic review, reconcile findings into spec | Codex (1 adversarial review: `feasibility`) · Claude (reconciles) | Codex (1 adversarial review: `feasibility`) · Codex (reconciles, escalates blockers to human) |
 | Write plan | Author `plan.md` with architecture decisions, wave breakdown, and risk callouts. Each residual risk MUST have a `verification:` sentence naming a concrete pre-merge check (e.g., "run circumplexAnalysis against a production model ID", "inspect a failing fixture", "grep the migration output for N rows"). Unverified residual risks block plan approval — see "Residual risks must be verifiable" below. | Claude | Codex |
-| Plan checkpoint | Adversarial attack on plan, architecture review, reconcile findings into plan | Codex (1 adversarial review: `implementation`) · Gemini (1 adversarial review: `testability`) · Claude (reconciles) | Codex (1 adversarial review: `implementation`) · Gemini (1 adversarial review: `testability`) · Codex (reconciles, escalates blockers to human) |
+| Plan checkpoint | Adversarial attack on plan, architecture review, reconcile findings into plan | Codex (1 adversarial review: `implementation`) · Claude (reconciles) | Codex (1 adversarial review: `implementation`) · Codex (reconciles, escalates blockers to human) |
 | Write tasks | Author `tasks.md` with executable slices, checkpoint boundaries (`[CHECKPOINT]`), estimated diff size per slice, dependencies, and verification steps. No slice should exceed ~300 lines changed. | Claude | Codex |
 | Record parallel analysis | Look for safe parallel implementation opportunities in tasks.md. Annotate parallel tasks with `[P: file1, file2]`. Run `parallel --slug <slug> --note "..." [--found]`. If opportunities exist, add `[P:]` annotations first — the command validates they are conflict-free. | Claude | Codex |
 | Tasks checkpoint | Adversarial attack on tasks, execution-order review, reconcile findings into tasks | No default reviews | No default reviews |
@@ -107,7 +107,7 @@ Do not duplicate checkpoint manifest logic, review file validation, diff writing
 | Update STATUS.md | Update `STATUS.md` to reflect what shipped. Required before workflow is marked done. | Claude | Codex |
 | Post mortem approval | Review proposed workflow changes and approve, reject, or defer each one | Human | Human |
 
-Bundle 2 reduced default reviews to spec and plan only. Reviews concentrate leverage at the design stages where mistakes are cheapest to fix. Tasks/diff/closeout failures are caught by failed implementations, CI, and operator review of the closeout artifact respectively. Operators can add an extra Gemini lens at any stage via `--extra-gemini-lens` (a corresponding `--extra-codex-lens` is not currently wired in the runner — add it as a follow-up if needed).
+Bundle 2 reduced default reviews to spec and plan only. Reviews concentrate leverage at the design stages where mistakes are cheapest to fix. Tasks/diff/closeout failures are caught by failed implementations, CI, and operator review of the closeout artifact respectively.
 
 If the workflow already exists, resume from the earliest incomplete stage instead of starting over.
 
@@ -203,16 +203,16 @@ When a monitor reports `codex_procs=0` for 2+ consecutive ticks AND no new commi
 
 Spec and plan use the default adversarial review budget:
 
-- 1 Codex adversarial review
-- 1 Gemini adversarial review
+- spec: 1 Codex adversarial review
+- plan: 1 Codex adversarial review
 
-Tasks, diff, and closeout have no default reviews. Operators can add an extra Gemini lens at any stage with `--extra-gemini-lens` (the equivalent Codex flag is not currently wired in the runner).
+Tasks, diff, and closeout have no default reviews.
 
-All reviews are adversarial — each one is looking for ways the artifact is wrong, incomplete, or risky. Spec and plan concentrate the default leverage because they are the cheapest places to catch bad assumptions before implementation starts. Gemini still gives a different perspective, but the runner now keeps that signal focused on the two design stages.
+All reviews are adversarial — each one is looking for ways the artifact is wrong, incomplete, or risky. Spec and plan concentrate the default leverage because they are the cheapest places to catch bad assumptions before implementation starts.
 
 The judge panel also has a runner-enforced 3-round cap. Reviewers should stay rigorous, but they should not assume the loop can keep refining forever.
 
-The checkpoint runner selects the specific lenses by stage. Bundle 2 keeps the default lenses on `spec` and `plan` only, and leaves `tasks`, `diff`, and `closeout` empty unless the operator explicitly opts in. Keep the Codex and Gemini lenses independent from each other when they are present.
+The checkpoint runner selects the specific lenses by stage. Bundle 2 keeps the default lenses on `spec` and `plan` only, and leaves `tasks`, `diff`, and `closeout` empty unless the operator explicitly opts in.
 
 ## Codex Orchestrator: Escalation Protocol
 
@@ -225,7 +225,7 @@ When running as Codex Orchestrator, use the following criteria to decide whether
 
 **Codex must escalate to human via `block`:**
 - architectural decisions not covered by the existing spec or plan (schema changes, new job types, new external dependencies)
-- conflicting findings from Codex attack and Gemini review that point in opposite directions
+- conflicting findings from multiple Codex reviews that point in opposite directions
 - implementation failures that persist after 3 fix attempts
 - anything that would affect production data, credentials, or deployment configuration
 
@@ -340,9 +340,8 @@ During implementation:
 
 If implementation is large, prefer phase-by-phase progress over a single giant diff.
 
-Gemini review launches are staggered by 30 seconds. The runner may overlap them, but it
-preserves that stagger. Do not start multiple Gemini checkpoint reviews at the same moment
-outside the runner.
+Do not start multiple checkpoint reviews against the same stage at the same moment outside
+the runner.
 
 ## Closeout and Post Mortem
 
@@ -386,14 +385,14 @@ The FF runner captures these signals automatically during every command:
 
 - **Per-command wall clock** — recorded in `state.json` under `command_telemetry[].wall_seconds`.
 - **Per-Codex-call tokens** — recorded in `token_usage[]` for entries where `model` starts with `gpt-`. Includes `input_tokens` and `output_tokens`.
-- **Per-Gemini-call tokens** — recorded in `token_usage[]` for entries where `model` starts with `gemini-`.
+- **Per-Claude-call tokens** — recorded in `token_usage[]` for entries where `model` starts with `claude-`.
 - **TTL crossings per command** — `command_telemetry[].ttl_crossed` is `true` when a command ran longer than 270 seconds (the Anthropic prompt-cache TTL). Each crossing means the orchestrator's cache likely expired, requiring an uncached re-read on the next command.
 
 What the runner does **not** measure: Claude orchestrator session tokens. Claude Code does not expose those to the runner. To see session-level Claude usage, run `/cost` in Claude Code after the workflow completes.
 
 Where to look for cross-feature aggregation:
 
-- Run `analyze-reviews` to generate a full report. Section 7a shows per-feature rollups (wall seconds, Codex tokens, Gemini tokens, TTL crossings, command count) sorted by total wall time. The report is saved to `docs/workflow/analysis/review-performance-<date>.md`.
+- Run `analyze-reviews` to generate a full report. Section 7a shows per-feature rollups (wall seconds, Codex tokens, Claude tokens, TTL crossings, command count) sorted by total wall time. The report is saved to `docs/workflow/analysis/review-performance-<date>.md`.
 - **Auto-generated weekly snapshots** are committed to `docs/workflow/analysis/` every Monday by `.github/workflows/ff-analyzer-weekly.yml`. Browse that directory for the running history without having to run the command manually.
 - Run `status --slug <slug> --tokens` to see the last 10 command-telemetry records for a single feature (wall seconds, bytes read/written, TTL crossed). This was shipped in PR #792.
 

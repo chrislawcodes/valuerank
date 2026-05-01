@@ -149,7 +149,7 @@ class AnalyzeReviewsTests(unittest.TestCase):
                 self._record(stage="spec", round_number=1, activity_type="adversarial_review", model="gpt-5.4-mini", duration_seconds=20.0),
                 self._record(stage="plan", round_number=1, activity_type="judge_panel", model="gpt-5.4", duration_seconds=30.0),
                 self._record(stage="plan", round_number=1, activity_type="judge_panel", model="gpt-5.4", duration_seconds=40.0),
-                self._record(stage="diff", round_number=2, activity_type="adversarial_review", model="gemini-2.5-pro", duration_seconds=50.0),
+                self._record(stage="diff", round_number=2, activity_type="adversarial_review", model="claude-sonnet-4-6", duration_seconds=50.0),
             ],
             stages={"spec": {"adversarial_rounds": 1, "judge_rounds": 0}, "plan": {"adversarial_rounds": 1, "judge_rounds": 1}},
         )
@@ -159,7 +159,7 @@ class AnalyzeReviewsTests(unittest.TestCase):
                 self._record(stage="spec", round_number=2, activity_type="adversarial_review", model="gpt-5.4-mini", duration_seconds=30.0),
                 self._record(stage="tasks", round_number=1, activity_type="judge_panel", model="gpt-5.4", duration_seconds=50.0),
                 self._record(stage="tasks", round_number=1, activity_type="judge_panel", model="gpt-5.4", duration_seconds=60.0),
-                self._record(stage="diff", round_number=2, activity_type="adversarial_review", model="gemini-2.5-pro", duration_seconds=70.0),
+                self._record(stage="diff", round_number=2, activity_type="adversarial_review", model="claude-sonnet-4-6", duration_seconds=70.0),
                 self._record(stage="diff", round_number=2, activity_type="implementation", model="gpt-5.4-mini", duration_seconds=999.0),
             ],
             stages={"tasks": {"adversarial_rounds": 1, "judge_rounds": 3}},
@@ -294,7 +294,7 @@ class AnalyzeReviewsTests(unittest.TestCase):
                     stage="diff",
                     round_number=1,
                     activity_type="adversarial_review",
-                    model="gemini-2.5-pro",
+                    model="claude-sonnet-4-6",
                     duration_seconds=40.0,
                 ),
             ],
@@ -321,7 +321,7 @@ class AnalyzeReviewsTests(unittest.TestCase):
         ]
         tu_alpha = [
             {"model": "gpt-5.4-mini", "activity_type": "adversarial_review", "input_tokens": 1000, "output_tokens": 200, "duration_seconds": 10.0},
-            {"model": "gemini-2.5-pro", "activity_type": "adversarial_review", "input_tokens": 800, "output_tokens": 150, "duration_seconds": 12.0},
+            {"model": "claude-sonnet-4-6", "activity_type": "adversarial_review", "input_tokens": 800, "output_tokens": 150, "duration_seconds": 12.0},
         ]
         ct_beta = [
             {"command": "discover", "stage": None, "ts": "2026-04-26T10:00:00Z", "wall_seconds": 20.0, "input_bytes_read": 50, "output_bytes_written": 30, "ttl_crossed": False},
@@ -347,12 +347,12 @@ class AnalyzeReviewsTests(unittest.TestCase):
         # alpha has more wall_seconds (355.0) so it should appear before beta (20.0)
         self.assertIn("alpha-metrics", report)
         self.assertIn("beta-metrics", report)
-        # alpha: codex_tokens = 1200, gemini_tokens = 950, ttl_crossings = 1, command_count = 2
+        # alpha: codex_tokens = 1200, claude_tokens = 950, ttl_crossings = 1, command_count = 2
         self.assertIn("| alpha-metrics | 355.0 | 1200 | 950 | 1 | 2 |", report)
-        # beta: codex_tokens = 2300, gemini_tokens = 0, ttl_crossings = 0, command_count = 1
+        # beta: codex_tokens = 2300, claude_tokens = 0, ttl_crossings = 0, command_count = 1
         self.assertIn("| beta-metrics | 20.0 | 2300 | 0 | 0 | 1 |", report)
         # Note paragraph must be present
-        self.assertIn("Note on Claude token measurement", report)
+        self.assertIn("Note on token measurement", report)
         self.assertIn("ttl_crossings", report)
         self.assertIn("/cost", report)
 

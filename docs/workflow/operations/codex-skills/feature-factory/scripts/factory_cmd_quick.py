@@ -135,34 +135,13 @@ def _run_codex_review(slug: str, diff_path: Path, output_path: Path) -> int:
         return 1
 
 
-def _run_gemini_review(slug: str, diff_path: Path, output_path: Path) -> int:
-    """Shell out to run_gemini_review.py and return its exit code."""
-    run_gemini = _REVIEW_LENS_DIR / "run_gemini_review.py"
-    cmd = [
-        sys.executable,
-        str(run_gemini),
-        "--artifact", str(diff_path),
-        "--lens", "quality-adversarial",
-        "--stage", "diff",
-        "--output", str(output_path),
-        "--workspace-dir", str(factory_state.REPO_ROOT),
-    ]
-    try:
-        result = subprocess.run(cmd, cwd=factory_state.REPO_ROOT, timeout=300)
-        return result.returncode
-    except subprocess.TimeoutExpired:
-        return 124
-    except OSError:
-        return 1
-
-
 @readonly_command("quick")
 def command_quick(args: argparse.Namespace) -> int:
     """Run a single diff-stage review for a small feature.
 
     1. Assert slug exists.
     2. Optionally dispatch Codex if --prompt-path is given.
-    3. Run ONE diff review (Codex correctness or Gemini quality).
+    3. Run one Codex diff review.
     4. Write the review file and print a summary.
     5. Exit 0 — operator decides what to do with findings.
     """
@@ -194,18 +173,10 @@ def command_quick(args: argparse.Namespace) -> int:
 
     # Step 3: write diff artifact and run review
     diff_path = _write_diff_artifact(args.slug)
-    lens = getattr(args, "review_lens", "correctness")
-
-    if lens == "quality":
-        review_filename = "diff.gemini.quality-adversarial.review.md"
-        output_path = factory_state.reviews_dir(args.slug) / review_filename
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        review_rc = _run_gemini_review(args.slug, diff_path, output_path)
-    else:
-        review_filename = "diff.codex.correctness-adversarial.review.md"
-        output_path = factory_state.reviews_dir(args.slug) / review_filename
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        review_rc = _run_codex_review(args.slug, diff_path, output_path)
+    review_filename = "diff.codex.correctness-adversarial.review.md"
+    output_path = factory_state.reviews_dir(args.slug) / review_filename
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    review_rc = _run_codex_review(args.slug, diff_path, output_path)
 
     if review_rc not in (0, 3, 4, 5):
         # Non-zero exit codes from reviewer don't abort; we still summarize

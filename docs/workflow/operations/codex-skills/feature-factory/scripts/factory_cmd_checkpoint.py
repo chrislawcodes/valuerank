@@ -60,7 +60,6 @@ from factory_stages import (  # noqa: E402
 from factory_review import (  # noqa: E402
     WRITE_DIFF,
     REPAIR,
-    SMALL_TASK_SET_THRESHOLD,
     trim_detail,
     required_reviews,
     resolved_review_policy,
@@ -402,35 +401,12 @@ def command_checkpoint(args: argparse.Namespace) -> int:
 
     reviews_arg = getattr(args, "required_reviews", None)
     if reviews_arg is None:
-        small_task_set = False
-        if args.stage in ("tasks", "closeout"):
-            # For "tasks": count from the artifact (tasks.md is the artifact).
-            # For "closeout": count from tasks.md in the workflow dir (artifact is closeout.md).
-            tasks_file = artifact_path if args.stage == "tasks" else workflow_dir(args.slug) / "tasks.md"
-            if tasks_file.exists():
-                try:
-                    task_text = tasks_file.read_text(encoding="utf-8")
-                    task_count = sum(
-                        1 for line in task_text.splitlines()
-                        if line.strip().startswith("- [ ]") or line.strip().startswith("- [x]") or line.strip().startswith("- [X]")
-                    )
-                    if task_count < SMALL_TASK_SET_THRESHOLD:
-                        small_task_set = True
-                        print(
-                            f"info: small task set ({task_count} tasks < {SMALL_TASK_SET_THRESHOLD} threshold) — "
-                            f"{args.stage} stage has no default reviews; only explicitly requested lenses will run.",
-                            file=sys.stderr,
-                        )
-                except Exception:
-                    pass  # count failed — fall back to full reviews
         reviews_arg = required_reviews(
             args.stage,
             policy["sensitive"],
             policy["large_structural"],
             policy["performance_sensitive"],
-            policy["extra_gemini_lenses"],
             fast=fast,
-            small_task_set=small_task_set,
         )
 
     manifest = checkpoint_manifest(
@@ -482,10 +458,6 @@ def command_checkpoint(args: argparse.Namespace) -> int:
             str(manifest_path),
             "--workspace-dir",
             str(REPO_ROOT),
-            "--gemini-timeout-seconds",
-            str(args.gemini_timeout_seconds),
-            "--gemini-retries",
-            str(args.gemini_retries),
         ]
         try:
             result = subprocess.run(
@@ -527,12 +499,10 @@ def command_checkpoint(args: argparse.Namespace) -> int:
                 return result.returncode
             fallback_reason = f"repair exited {result.returncode}"
 
-        heartbeat_set_activity("reviewer gemini.requirements running")
+        heartbeat_set_activity("reviewer fallback running")
         fallback_ok, fallback_detail = run_checkpoint_fallback(
             manifest_path,
             REPO_ROOT,
-            args.gemini_timeout_seconds,
-            args.gemini_retries,
         )
         if not fallback_ok:
             _rollback_adversarial_round(args.slug, args.stage)

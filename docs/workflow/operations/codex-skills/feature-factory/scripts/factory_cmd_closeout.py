@@ -44,11 +44,9 @@ from factory_mutating import mutates_state  # noqa: E402
 _STAGE_DEFAULT_LENSES: dict[str, list[str]] = {
     "spec": [
         "codex:feasibility-adversarial",
-        "gemini:requirements-adversarial",
     ],
     "plan": [
         "codex:implementation-adversarial",
-        "gemini:testability-adversarial",
     ],
     "tasks": [],
     "diff": [],
@@ -159,7 +157,7 @@ def _build_review_coverage(
             model = entry.get("model", "")
             if not lens_val:
                 continue
-            reviewer = "gemini" if "gemini" in model else "codex"
+            reviewer = "codex" if str(model).lower().startswith("gpt-") else "claude" if str(model).lower().startswith("claude-") else str(model).split("-", 1)[0]
             found_lenses.add(f"{reviewer}:{lens_val}")
 
         run_list = sorted(found_lenses)

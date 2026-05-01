@@ -8,12 +8,12 @@ from pathlib import Path
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-RUN_GEMINI = SCRIPT_DIR / "run_gemini_review.py"
 RUN_CODEX = SCRIPT_DIR / "run_codex_review.py"
 VERIFY = SCRIPT_DIR / "verify_review_checkpoint.py"
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
+from review_common import read_text  # noqa: E402
 from workflow_utils import artifact_hash_matches, normalized_artifact_text, resolve_stored_path
 
 REPO_ROOT = SCRIPT_DIR.parents[5]
@@ -60,10 +60,9 @@ def review_is_healthy(spec: dict, artifact_path: Path) -> bool:
     for marker in ("# Review:", "## Findings", "## Residual Risks", "## Resolution"):
         if marker not in body:
             return False
-    if data.get("reviewer") == "gemini":
-        raw_output = data.get("raw_output_path", "")
-        if not raw_output or not resolve_stored_path(raw_output, REPO_ROOT, data.get("repo_root", "")).exists():
-            return False
+    raw_output = data.get("raw_output_path", "")
+    if not raw_output or not resolve_stored_path(raw_output, REPO_ROOT, data.get("repo_root", "")).exists():
+        return False
     return True
 
 
@@ -106,44 +105,6 @@ def expanded_checkpoint_for_partial_artifact(spec: dict, artifact_path: Path, ch
     return expanded
 
 
-def run_gemini(
-    spec: dict,
-    artifact_path: Path,
-    checkpoint: dict,
-    workspace_dir: Path | None,
-    timeout_seconds: int,
-    retries: int,
-) -> None:
-    cmd = [
-        sys.executable,
-        str(RUN_GEMINI),
-        "--artifact",
-        str(artifact_path),
-        "--lens",
-        spec["lens"],
-        "--stage",
-        checkpoint["stage"],
-        "--output",
-        spec["path"],
-    ]
-    for context_path in spec.get("context_paths", []):
-        cmd.extend(["--context", context_path])
-    if checkpoint.get("git_base_ref"):
-        cmd.extend(["--git-base-ref", checkpoint["git_base_ref"]])
-    if spec.get("model"):
-        cmd.extend(["--model", spec["model"]])
-    if checkpoint.get("max_artifact_chars"):
-        cmd.extend(["--max-artifact-chars", str(checkpoint["max_artifact_chars"])])
-    if checkpoint.get("max_context_chars"):
-        cmd.extend(["--max-context-chars", str(checkpoint["max_context_chars"])])
-    if checkpoint.get("max_total_chars"):
-        cmd.extend(["--max-total-chars", str(checkpoint["max_total_chars"])])
-    if workspace_dir:
-        cmd.extend(["--workspace-dir", str(workspace_dir)])
-    cmd.extend(["--timeout-seconds", str(timeout_seconds), "--retries", str(retries)])
-    subprocess.run(cmd, check=True, text=True, timeout=timeout_seconds + 30)
-
-
 def run_codex(
     spec: dict,
     artifact_path: Path,
@@ -183,8 +144,6 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint-manifest", required=True)
     parser.add_argument("--workspace-dir")
-    parser.add_argument("--gemini-timeout-seconds", type=int, default=120)
-    parser.add_argument("--gemini-retries", type=int, default=1)
     args = parser.parse_args()
 
     manifest_path = Path(args.checkpoint_manifest).resolve()
@@ -193,7 +152,6 @@ def main() -> int:
     workspace_dir = Path(args.workspace_dir).resolve() if args.workspace_dir else None
 
     failed_codex: list[str] = []
-    failed_gemini: list[str] = []
     for spec in checkpoint.get("required_reviews", []):
         if review_is_healthy(spec, artifact_path):
             continue
@@ -206,40 +164,21 @@ def main() -> int:
             )
         else:
             review_checkpoint = checkpoint
-        if spec.get("reviewer") == "gemini":
-            try:
-                run_gemini(
-                    spec,
-                    artifact_path,
-                    review_checkpoint,
-                    workspace_dir,
-                    args.gemini_timeout_seconds,
-                    args.gemini_retries,
-                )
-            except subprocess.TimeoutExpired:
-                failed_gemini.append(f"{spec['path']} (repair timeout)")
-            except subprocess.CalledProcessError:
-                failed_gemini.append(f"{spec['path']} (repair failed)")
-        else:
-            try:
-                run_codex(
-                    spec,
-                    artifact_path,
-                    review_checkpoint,
-                    workspace_dir,
-                )
-            except subprocess.TimeoutExpired:
-                failed_codex.append(f"{spec['path']} (repair timeout)")
-            except subprocess.CalledProcessError:
-                failed_codex.append(f"{spec['path']} (repair failed)")
+        try:
+            run_codex(
+                spec,
+                artifact_path,
+                review_checkpoint,
+                workspace_dir,
+            )
+        except subprocess.TimeoutExpired:
+            failed_codex.append(f"{spec['path']} (repair timeout)")
+        except subprocess.CalledProcessError:
+            failed_codex.append(f"{spec['path']} (repair failed)")
 
     if failed_codex:
         for path in failed_codex:
             print(f"codex review requires retry: {path}")
-    if failed_gemini:
-        for path in failed_gemini:
-            print(f"gemini review requires retry: {path}")
-
     # Diagnose partial-coverage reviews so the operator knows what to do rather
     # than seeing a cryptic "stale" error on every retry.
     for spec in checkpoint.get("required_reviews", []):
@@ -267,7 +206,7 @@ def main() -> int:
         print(verify.stdout, end="")
     if verify.stderr:
         print(verify.stderr, end="", file=sys.stderr)
-    if (failed_codex or failed_gemini) and verify.returncode == 0:
+    if failed_codex and verify.returncode == 0:
         return 1
     return verify.returncode
 

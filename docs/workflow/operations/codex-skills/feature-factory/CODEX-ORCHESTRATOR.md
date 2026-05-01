@@ -26,7 +26,7 @@ You are in **Codex Orchestrator** mode when:
 - Claude has handed off mid-workflow via a `block` note in `state.json`
 - The workflow `status` shows a `blocked-state: active` with a reason that starts with "Claude session ended"
 
-In Codex Orchestrator mode, **you drive the workflow end-to-end**. You write artifacts, call the runner, call Gemini for reviews and research, judge findings where you can, and escalate to the human where you cannot.
+In Codex Orchestrator mode, **you drive the workflow end-to-end**. You write artifacts, call the runner, judge findings where you can, and escalate to the human where you cannot.
 
 ---
 
@@ -35,11 +35,6 @@ In Codex Orchestrator mode, **you drive the workflow end-to-end**. You write art
 | Task | Model | Flag |
 |------|-------|------|
 | All Codex implementation and review tasks | `gpt-5.4-mini` | `-m gpt-5.4-mini` |
-| All Gemini review and research tasks | `gemini-2.5-pro` | `-m gemini-2.5-pro` |
-
-**Gemini launches must be staggered by 30 seconds.** The runner may overlap Gemini reviews,
-but it preserves that 30-second stagger. If you call Gemini directly outside the runner, do
-not start multiple Gemini calls at the same moment. Start them 30 seconds apart.
 
 ---
 
@@ -55,7 +50,7 @@ python3 docs/workflow/operations/codex-skills/feature-factory/scripts/run_factor
 |-------|-------------|----------------|
 | **Check status** | Always start here — read current state | `status --slug <slug>` |
 | **Discovery** | **Mandatory before spec.** Ask clarifying questions one at a time, or explicitly state assumptions you are carrying in. Never silently skip to spec authoring. Record the outcome. | `discover --slug <slug> --question "..." --recommendation "..." --rationale "..."` (repeat per question), then `discover --slug <slug> --summary "<summary>" --complete` |
-| **Write spec** | Research real file paths via Gemini, author `spec.md` | Write to `docs/workflow/feature-runs/<slug>/spec.md`, then checkpoint |
+| **Write spec** | Research real file paths in the codebase, author `spec.md` | Write to `docs/workflow/feature-runs/<slug>/spec.md`, then checkpoint |
 | **Spec checkpoint** | Generate adversarial reviews, judge findings | `checkpoint --slug <slug> --stage spec` |
 | **Write plan** | Author `plan.md` with architecture decisions | Write to `docs/workflow/feature-runs/<slug>/plan.md`, then checkpoint |
 | **Plan checkpoint** | Generate adversarial reviews, judge findings | `checkpoint --slug <slug> --stage plan` |
@@ -93,7 +88,7 @@ For long-running commands (checkpoint, implement), emit a "starting X" message b
 
 ### Codex must escalate to human via `block`:
 - Architectural decisions not covered by the existing spec or plan (schema changes, new job types, new external dependencies)
-- Conflicting findings from Codex attack and Gemini review that point in opposite directions
+- Conflicting findings from multiple Codex reviews that point in opposite directions
 - Implementation failures that persist after 3 fix attempts
 - Anything that would affect production data, credentials, or deployment configuration
 - Any finding where you are genuinely uncertain whether to accept or reject
@@ -104,7 +99,7 @@ python3 docs/workflow/operations/codex-skills/feature-factory/scripts/run_factor
   block --slug <slug> --reason "<specific decision needed — not just 'blocked'"
 ```
 
-Be specific. "Gemini flagged X as a security risk but spec explicitly scopes it out — confirm deferral is correct" is useful. "Something went wrong" is not.
+Be specific. "A Codex review flagged X as a security risk but spec explicitly scopes it out — confirm deferral is correct" is useful. "Something went wrong" is not.
 
 ---
 

@@ -17,11 +17,5 @@
     "output_usd_per_1k_tokens": 0.015,
     "last_updated_iso8601": "2026-04-19T00:00:00Z",
     "placeholder": true
-  },
-  "gemini-2.5-pro": {
-    "input_usd_per_1k_tokens": 0.00125,
-    "output_usd_per_1k_tokens": 0.005,
-    "last_updated_iso8601": "2026-04-19T00:00:00Z",
-    "placeholder": true
   }
 }

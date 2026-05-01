@@ -136,8 +136,8 @@ class ActionableFindingRegexPositiveTests(unittest.TestCase):
             FRS.detect_actionable_findings(_review("**[MEDIUM IMPACT]**: mitigation needed\n"))
         )
 
-    def test_gemini_style_nested_finding(self) -> None:
-        """Real shape produced by the Gemini requirements-adversarial reviewer."""
+    def test_inline_severity_field_nested_finding(self) -> None:
+        """Real shape produced by a nested severity field."""
         body = (
             "### 1. Mandatory tracking introduces scope creep\n"
             "\n"
@@ -185,7 +185,7 @@ class ActionableFindingRegexNegativeTests(unittest.TestCase):
         )
 
     def test_crlf_line_endings_do_not_break_detection(self) -> None:
-        """Windows-style line endings should still detect findings (Gemini coverage F-5)."""
+        """Windows-style line endings should still detect findings."""
         self.assertTrue(
             FRS.detect_actionable_findings(_review("- HIGH: some finding\r\n"))
         )
@@ -256,39 +256,19 @@ class ActionableFindingRegexRealReviewTests(unittest.TestCase):
             self.skipTest(f"fixture review missing: {path}")
         self.assertTrue(FRS.detect_actionable_findings(path))
 
-    def test_gemini_requirements_review_is_actionable(self) -> None:
-        path = self._review_path("spec.gemini.requirements-adversarial.review.md")
-        if not path.exists():
-            self.skipTest(f"fixture review missing: {path}")
-        self.assertTrue(FRS.detect_actionable_findings(path))
-
-
 class RequiredReviewSelectionTests(unittest.TestCase):
     def test_bundle_2_defaults_only_cover_spec_and_plan(self) -> None:
         self.assertEqual(
-            [review["lens"] for review in FRS.required_reviews("spec", False, False, False, [])],
-            ["feasibility-adversarial", "requirements-adversarial"],
+            [review["lens"] for review in FRS.required_reviews("spec", False, False, False)],
+            ["feasibility-adversarial"],
         )
         self.assertEqual(
-            [review["lens"] for review in FRS.required_reviews("plan", False, False, False, [])],
-            ["implementation-adversarial", "testability-adversarial"],
+            [review["lens"] for review in FRS.required_reviews("plan", False, False, False)],
+            ["implementation-adversarial"],
         )
-        self.assertEqual(FRS.required_reviews("tasks", False, False, False, []), [])
-        self.assertEqual(FRS.required_reviews("diff", False, False, False, []), [])
-        self.assertEqual(FRS.required_reviews("closeout", False, False, False, []), [])
-
-    def test_extra_gemini_lens_is_appended_on_a_no_default_stage(self) -> None:
-        reviews = FRS.required_reviews("tasks", False, False, False, ["coverage-adversarial"])
-        self.assertEqual(
-            reviews,
-            [
-                {
-                    "reviewer": "gemini",
-                    "lens": "coverage-adversarial",
-                    "model": FRS.DEFAULT_GEMINI_MODEL,
-                },
-            ],
-        )
+        self.assertEqual(FRS.required_reviews("tasks", False, False, False), [])
+        self.assertEqual(FRS.required_reviews("diff", False, False, False), [])
+        self.assertEqual(FRS.required_reviews("closeout", False, False, False), [])
 
 
 class ActionableFindingShapesManifestTests(unittest.TestCase):

@@ -1,6 +1,7 @@
 """Slice 2 tests — discover CLI append semantics + clear flags.
 
-All tests are integration-level via argparse CLI invocation per Gemini MEDIUM F-04.
+All tests are integration-level via argparse CLI invocation per the round-1
+discovery finding.
 """
 import importlib.util
 import json

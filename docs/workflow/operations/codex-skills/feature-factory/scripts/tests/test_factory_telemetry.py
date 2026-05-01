@@ -210,69 +210,6 @@ class FactoryTelemetryTests(unittest.TestCase):
             {"input_tokens": 100, "output_tokens": 50},
         )
 
-    def test_parse_tokens_gemini_real_world_shape(self) -> None:
-        # PR #790: real Gemini stdout has "tokens" key (not "tokenStats")
-        # nested inside a stats object. The parser walks the JSON tree to
-        # find any of (tokens, tokenStats, totalTokens).
-        result = _completed_process(
-            stdout=json.dumps(
-                {
-                    "response": "review body",
-                    "stats": {
-                        "models": {
-                            "gemini-2.5-pro": {
-                                "tokens": {
-                                    "input": 2440,
-                                    "prompt": 13996,
-                                    "candidates": 807,
-                                    "total": 16603,
-                                }
-                            }
-                        }
-                    },
-                }
-            )
-        )
-        self.assertEqual(
-            FACTORY_TELEMETRY.parse_tokens_gemini(result),
-            {"input_tokens": 2440, "output_tokens": 807},
-        )
-
-    def test_parse_tokens_gemini_prose_then_json(self) -> None:
-        # Real Gemini stdout often has prose before the JSON stats block.
-        # Parser locates the embedded JSON object and parses from there.
-        result = _completed_process(
-            stdout=(
-                "Some review prose here.\n"
-                "More text.\n"
-                + json.dumps({"tokens": {"input": 50, "candidates": 25}})
-            )
-        )
-        self.assertEqual(
-            FACTORY_TELEMETRY.parse_tokens_gemini(result),
-            {"input_tokens": 50, "output_tokens": 25},
-        )
-
-    def test_parse_tokens_gemini_happy_path(self) -> None:
-        result = _completed_process(
-            stdout=json.dumps(
-                {
-                    "response": "review body",
-                    "stats": {
-                        "tokenStats": {
-                            "prompt": 111,
-                            "candidates": 222,
-                            "total": 333,
-                        }
-                    },
-                }
-            )
-        )
-        self.assertEqual(
-            FACTORY_TELEMETRY.parse_tokens_gemini(result),
-            {"input_tokens": 111, "output_tokens": 222},
-        )
-
     def test_parse_tokens_claude_happy_path(self) -> None:
         result = _completed_process(
             stdout='{"input_tokens": 321, "output_tokens": 654, "other": true}'

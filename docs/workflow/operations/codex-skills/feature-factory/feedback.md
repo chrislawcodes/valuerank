@@ -41,7 +41,7 @@ The feature shipped, but the workflow exposed several places where a future agen
    - It did not always make the next action feel obvious without reading the surrounding context.
 
 4. Diff review was valuable, but reconciliation was more awkward than it should be.
-   - Gemini and Codex reviews were generated.
+   - Codex reviews were generated.
    - The Codex review stayed open until I used the lower-level review updater directly.
    - That means the high-level reconciliation path was not obviously complete enough on its own.
 

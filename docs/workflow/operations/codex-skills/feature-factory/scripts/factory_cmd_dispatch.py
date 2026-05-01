@@ -33,7 +33,7 @@ _REVIEW_LENS_DIR = factory_state.REPO_ROOT / "docs/workflow/operations/codex-ski
 if str(_REVIEW_LENS_DIR) not in sys.path:
     sys.path.insert(0, str(_REVIEW_LENS_DIR))
 
-from run_gemini_review import is_codex_quota_exhaustion  # noqa: E402
+from review_common import is_codex_quota_exhaustion  # noqa: E402
 
 
 _PROMPT_BYTES_LIMIT = 100_000
