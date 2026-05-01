@@ -83,8 +83,11 @@ export function CopyVisualButton({ targetRef, label }: CopyVisualButtonProps) {
       el.style.overflow = 'visible';
       el.style.width = `${el.scrollWidth}px`;
     });
-    const captureWidth = target.scrollWidth;
-    const captureHeight = target.scrollHeight;
+    // Add a little safety padding so the last row and border/shadow edges are not clipped
+    // by html-to-image rounding the rendered bounds too tightly.
+    const capturePadding = 24;
+    const captureWidth = Math.ceil(target.scrollWidth) + capturePadding;
+    const captureHeight = Math.ceil(target.scrollHeight) + capturePadding;
 
     try {
       const dataUrl = await toPng(target, {

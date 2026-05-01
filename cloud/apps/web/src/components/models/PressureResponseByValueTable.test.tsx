@@ -184,19 +184,20 @@ describe('PressureResponseByValueTable', () => {
     render(<PressureResponseByValueTable valuePairs={createTenValueModel().valuePairs} />);
 
     const rows = screen.getAllByRole('row');
-    expect(rows).toHaveLength(11);
+    expect(rows).toHaveLength(12);
+    expect(screen.getByText('Win rate')).toBeDefined();
   });
 
   it('sorts by responsiveness by default and re-sorts when a header is clicked', () => {
     render(<PressureResponseByValueTable valuePairs={createSortFixture().valuePairs} />);
 
     const rows = screen.getAllByRole('row');
-    expect(rows[1]?.textContent ?? '').toContain('Alpha');
+    expect(rows[2]?.textContent ?? '').toContain('Alpha');
 
     fireEvent.click(screen.getByRole('button', { name: /sort by average win rate/i }));
 
     const resortedRows = screen.getAllByRole('row');
-    expect(resortedRows[1]?.textContent ?? '').toContain('Beta');
+    expect(resortedRows[2]?.textContent ?? '').toContain('Beta');
   });
 
   it('renders the snapshot button with the correct label', () => {
