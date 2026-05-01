@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { type DomainCluster } from '../../api/operations/domainAnalysis';
-import { VALUE_LABELS } from '../../data/domainAnalysisData';
+import { VALUE_LABELS, type ValueKey } from '../../data/domainAnalysisData';
+import { Tooltip } from '../ui/Tooltip';
 import {
   DOT_BAR_CLUSTER_SCORE_MAX,
   DOT_BAR_CLUSTER_SCORE_MIN,
@@ -17,7 +18,46 @@ type ClusterBarPlotProps = {
 
 const CLUSTER_PALETTE = ['#3b82f6', '#f59e0b', '#10b981', '#f43f5e'] as const;
 
-function getClusterBarOrder(clusters: DomainCluster[], valueKey: string): DomainCluster[] {
+function ClusterValueTooltip({
+  clusters,
+  valueKey,
+  rankedClusters,
+}: {
+  clusters: DomainCluster[];
+  valueKey: ValueKey;
+  rankedClusters: DomainCluster[];
+}) {
+  return (
+    <div className="min-w-[220px] max-w-[280px] whitespace-normal">
+      <div className="mb-2 text-xs font-semibold text-gray-900">{VALUE_LABELS[valueKey]}</div>
+      <div className="mb-1 grid grid-cols-[auto_1fr] gap-x-3 text-[10px] font-medium uppercase tracking-wide text-gray-500">
+        <span>Color</span>
+        <span>Logit</span>
+      </div>
+      <div className="space-y-1.5">
+        {rankedClusters.map((cluster) => {
+          const score = cluster.centroid[valueKey] ?? 0;
+          const clusterIndex = clusters.findIndex((candidate) => candidate.id === cluster.id);
+          const safeClusterIndex = clusterIndex >= 0 ? clusterIndex : 0;
+          const color = CLUSTER_PALETTE[safeClusterIndex % CLUSTER_PALETTE.length]!;
+
+          return (
+            <div key={cluster.id} className="grid grid-cols-[auto_1fr] items-center gap-x-3">
+              <span
+                aria-hidden="true"
+                className="h-2.5 w-2.5 shrink-0 rounded-full"
+                style={{ backgroundColor: color }}
+              />
+              <span className="font-mono text-xs text-gray-900">{formatClusterScoreLabel(score)}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function getClusterBarOrder(clusters: DomainCluster[], valueKey: ValueKey): DomainCluster[] {
   return [...clusters].sort((left, right) => {
     const leftScore = Math.abs(left.centroid[valueKey] ?? 0);
     const rightScore = Math.abs(right.centroid[valueKey] ?? 0);
@@ -83,25 +123,36 @@ export function ClusterBarPlot({ clusters }: ClusterBarPlotProps) {
                     const clusterIndex = clusters.findIndex((candidate) => candidate.id === cluster.id);
                     const safeClusterIndex = clusterIndex >= 0 ? clusterIndex : 0;
                     const color = CLUSTER_PALETTE[safeClusterIndex % CLUSTER_PALETTE.length];
-                    const memberLabels = getClusterMemberLabelText(cluster);
                     const clipped = isClusterScoreClipped(score, DOT_BAR_CLUSTER_SCORE_MIN, DOT_BAR_CLUSTER_SCORE_MAX);
 
                     return (
-                      <div
+                      <Tooltip
                         key={cluster.id}
-                        title={`${memberLabels}: ${score.toFixed(2)}`}
-                        className="absolute top-1/2 h-2.5 rounded-full"
-                        style={{
+                        content={<ClusterValueTooltip clusters={clusters} valueKey={valueKey} rankedClusters={rankedClusters} />}
+                        position="top"
+                        variant="light"
+                        className="max-w-[300px] whitespace-normal"
+                        triggerClassName="absolute top-1/2"
+                        triggerStyle={{
                           left: `${left}%`,
                           width: `${width}%`,
                           transform: 'translateY(-50%)',
-                          backgroundColor: color,
-                          opacity: 0.78,
+                          height: '10px',
                           zIndex: index + 1,
-                          boxShadow: clipped ? '0 0 0 1px rgba(15, 23, 42, 0.12)' : undefined,
-                          border: clipped ? '1px solid rgba(15, 23, 42, 0.4)' : '1px solid rgba(255, 255, 255, 0.8)',
                         }}
-                      />
+                      >
+                        <div
+                          data-cluster-id={cluster.id}
+                          data-value-key={valueKey}
+                          className="h-full w-full rounded-full"
+                          style={{
+                            backgroundColor: color,
+                            opacity: 0.78,
+                            boxShadow: clipped ? '0 0 0 1px rgba(15, 23, 42, 0.12)' : undefined,
+                            border: clipped ? '1px solid rgba(15, 23, 42, 0.4)' : '1px solid rgba(255, 255, 255, 0.8)',
+                          }}
+                        />
+                      </Tooltip>
                     );
                   })}
                 </div>
