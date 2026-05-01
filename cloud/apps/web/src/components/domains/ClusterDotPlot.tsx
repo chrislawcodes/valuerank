@@ -2,8 +2,9 @@ import { useMemo } from 'react';
 import { type DomainCluster } from '../../api/operations/domainAnalysis';
 import { VALUE_LABELS } from '../../data/domainAnalysisData';
 import {
-  CLUSTER_SCORE_MAX,
-  CLUSTER_SCORE_MIN,
+  DOT_BAR_CLUSTER_SCORE_MAX,
+  DOT_BAR_CLUSTER_SCORE_MIN,
+  formatClusterScoreLabel,
   getClusterMemberLabelText,
   getClusterScorePosition,
   getClusterValueOrder,
@@ -27,7 +28,7 @@ export function ClusterDotPlot({ clusters }: ClusterDotPlotProps) {
         <div className="mb-2 flex items-center justify-between gap-2 text-[11px] text-gray-500">
           <span>Values ordered by average favorability across the shown clusters.</span>
           <span>
-            Fixed axis: {CLUSTER_SCORE_MIN.toFixed(2)} to {CLUSTER_SCORE_MAX.toFixed(2)} with 0 at the midpoint.
+            Fixed axis: {formatClusterScoreLabel(DOT_BAR_CLUSTER_SCORE_MIN)} to {formatClusterScoreLabel(DOT_BAR_CLUSTER_SCORE_MAX)} with 0 at the midpoint.
           </span>
         </div>
 
@@ -61,10 +62,10 @@ export function ClusterDotPlot({ clusters }: ClusterDotPlotProps) {
                   <div className="absolute bottom-1 top-1 w-px border-l border-dashed border-gray-200" style={{ left: '75%' }} />
                   {clusters.map((cluster, index) => {
                     const score = cluster.centroid[valueKey] ?? 0;
-                    const xPct = getClusterScorePosition(score);
+                    const xPct = getClusterScorePosition(score, DOT_BAR_CLUSTER_SCORE_MIN, DOT_BAR_CLUSTER_SCORE_MAX);
                     const color = ['#3b82f6', '#f59e0b', '#10b981', '#f43f5e'][index % 4];
                     const memberLabels = cluster.members.map((member) => member.label).join(', ');
-                    const clipped = isClusterScoreClipped(score);
+                    const clipped = isClusterScoreClipped(score, DOT_BAR_CLUSTER_SCORE_MIN, DOT_BAR_CLUSTER_SCORE_MAX);
 
                     return (
                       <div
@@ -93,7 +94,7 @@ export function ClusterDotPlot({ clusters }: ClusterDotPlotProps) {
           <div className="flex items-center gap-2">
             <div className="w-32 shrink-0" />
             <div className="relative h-5 flex-1">
-              <div className="absolute left-0 top-0 text-xs text-gray-400">{CLUSTER_SCORE_MIN.toFixed(2)}</div>
+              <div className="absolute left-0 top-0 text-xs text-gray-400">{formatClusterScoreLabel(DOT_BAR_CLUSTER_SCORE_MIN)}</div>
               <div
                 className="absolute top-0 text-xs font-semibold text-gray-500"
                 style={{
@@ -103,11 +104,11 @@ export function ClusterDotPlot({ clusters }: ClusterDotPlotProps) {
               >
                 0
               </div>
-              <div className="absolute right-0 top-0 text-xs text-gray-400">{CLUSTER_SCORE_MAX.toFixed(2)}</div>
+              <div className="absolute right-0 top-0 text-xs text-gray-400">{formatClusterScoreLabel(DOT_BAR_CLUSTER_SCORE_MAX)}</div>
             </div>
           </div>
 
-          {clusters.some((cluster) => sortedValues.some((valueKey) => isClusterScoreClipped(cluster.centroid[valueKey] ?? 0))) && (
+          {clusters.some((cluster) => sortedValues.some((valueKey) => isClusterScoreClipped(cluster.centroid[valueKey] ?? 0, DOT_BAR_CLUSTER_SCORE_MIN, DOT_BAR_CLUSTER_SCORE_MAX))) && (
             <p className="px-2 pb-1 text-[11px] text-amber-700">
               Scores outside the fixed range are pinned to the edge.
             </p>

@@ -195,7 +195,7 @@ export function ModelGroupsSection({ clusterAnalysis, selectedModelId = null }: 
               priorities point in different directions — large distance.
             </p>
             <p className="mt-1">
-              The default dot map shows each value on a fixed scale from -3.25 to +3.25, with 0 in the
+              The default dot map shows each value on a fixed scale from -2.5 to +2.5, with 0 in the
               middle. Values are sorted from the ones the groups favor most on average to the ones they
               favor least. The bar view shows the same scores as bars instead of dots, with shorter bars
               rendered on top so they stay visible. Use the toggle above to compare the radar chart, dot

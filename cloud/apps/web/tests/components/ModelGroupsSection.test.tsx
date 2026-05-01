@@ -76,6 +76,8 @@ describe('ModelGroupsSection', () => {
     render(<ModelGroupsSection clusterAnalysis={populatedClusterAnalysis} />);
 
     expect(screen.getByRole('button', { name: 'Bar' })).toBeInTheDocument();
+    expect(screen.getByText('-2.50')).toBeInTheDocument();
+    expect(screen.getByText('+2.50')).toBeInTheDocument();
     expect(screen.getByText(/Models: Model A/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Bar' }));
