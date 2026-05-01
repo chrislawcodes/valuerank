@@ -5,7 +5,7 @@ import { CopyVisualButton } from '../ui/CopyVisualButton';
 import { type ClusterAnalysis, type DomainCluster } from '../../api/operations/domainAnalysis';
 import { VALUE_LABELS, type ValueKey } from '../../data/domainAnalysisData';
 import { formatDisplayLabel } from '../../utils/displayLabels';
-import { ClusterRadarChart } from './ClusterRadarChart';
+import { ClusterSmallMultiples } from './ClusterSmallMultiples';
 
 const CLUSTER_COLORS = [
   { border: 'border-blue-500', text: 'text-blue-700', light: 'bg-blue-50' },
@@ -114,7 +114,7 @@ export function ModelGroupsSection({ clusterAnalysis, selectedModelId = null }: 
           </div>
         ) : (
           <>
-            {clusters.length >= 2 ? <ClusterRadarChart clusters={clusters} /> : null}
+            {clusters.length >= 2 ? <ClusterSmallMultiples clusters={clusters} /> : null}
             <div className="flex flex-wrap gap-4">
               {clusters.map((cluster, index) => {
                 const style = getClusterColor(index);
