@@ -5,6 +5,7 @@ import {
   CLUSTER_SCORE_MAX,
   CLUSTER_SCORE_MIN,
   CLUSTER_SCORE_RANGE,
+  getClusterMemberLabelText,
   getClusterValueOrder,
 } from './clusterVisualizationUtils';
 
@@ -66,7 +67,7 @@ export function ClusterRadarChart({ clusters }: ClusterRadarChartProps) {
             Radar chart
           </text>
           <text x={24} y={44} className="fill-gray-400 text-[10px]">
-            Center ring = -2.5, outer ring = +2.5
+            Scale = -3.25 to +3.25
           </text>
 
           {[0, 0.25, 0.5, 0.75, 1].map((fraction) => {
@@ -160,13 +161,13 @@ export function ClusterRadarChart({ clusters }: ClusterRadarChartProps) {
             <line x1={24} y1={512} x2={132} y2={512} stroke="#d1d5db" strokeWidth="1.5" />
             <line x1={78} y1={502} x2={78} y2={522} stroke="#d1d5db" strokeWidth="1.5" />
             <text x={24} y={500} className="fill-gray-400 text-[10px]">
-              -2.5
+              -3.25
             </text>
             <text x={71} y={500} className="fill-gray-500 text-[10px] font-semibold">
               0
             </text>
-            <text x={122} y={500} className="fill-gray-400 text-[10px]">
-              +2.5
+            <text x={116} y={500} className="fill-gray-400 text-[10px]">
+              +3.25
             </text>
           </g>
 
@@ -185,18 +186,17 @@ export function ClusterRadarChart({ clusters }: ClusterRadarChartProps) {
       <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
         {clusters.map((cluster, index) => {
           const palette = CLUSTER_PALETTE[index % CLUSTER_PALETTE.length]!;
-          const memberLabels = cluster.members.map((member) => member.label).join(', ');
+          const memberLabels = getClusterMemberLabelText(cluster);
           const title = cluster.name.length > 0 ? cluster.name : memberLabels;
           return (
             <div key={cluster.id} className="rounded-lg border border-gray-200 bg-white p-3">
               <div className="flex items-start gap-2">
                 <span className="mt-1 h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: palette.stroke }} />
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-gray-900">{title}</p>
-                  <p className="text-xs text-gray-500">{cluster.members.length} model{cluster.members.length === 1 ? '' : 's'}</p>
+                  <p className="truncate text-sm font-semibold text-gray-900">Models: {memberLabels}</p>
+                  <p className="text-xs text-gray-500">Cluster: {title}</p>
                 </div>
               </div>
-              <p className="mt-2 max-h-10 overflow-hidden text-xs text-gray-600">{memberLabels}</p>
             </div>
           );
         })}

@@ -5,6 +5,8 @@ import { CopyVisualButton } from '../ui/CopyVisualButton';
 import { type ClusterAnalysis, type DomainCluster } from '../../api/operations/domainAnalysis';
 import { VALUE_LABELS, type ValueKey } from '../../data/domainAnalysisData';
 import { formatDisplayLabel } from '../../utils/displayLabels';
+import { getClusterMemberLabelText } from './clusterVisualizationUtils';
+import { ClusterBarPlot } from './ClusterBarPlot';
 import { ClusterDotPlot } from './ClusterDotPlot';
 import { ClusterHeatmap } from './ClusterHeatmap';
 import { ClusterRadarChart } from './ClusterRadarChart';
@@ -72,11 +74,12 @@ type ModelGroupsSectionProps = {
   selectedModelId?: string | null;
 };
 
-type ClusterViewMode = 'dot' | 'radar' | 'heatmap';
+type ClusterViewMode = 'dot' | 'bar' | 'radar' | 'heatmap';
 
 const CLUSTER_VIEW_OPTIONS: Array<{ value: ClusterViewMode; label: string }> = [
   { value: 'radar', label: 'Radar' },
   { value: 'dot', label: 'Dot map' },
+  { value: 'bar', label: 'Bar' },
   { value: 'heatmap', label: 'Heatmap' },
 ];
 
@@ -96,9 +99,11 @@ export function ModelGroupsSection({ clusterAnalysis, selectedModelId = null }: 
 
   const copyLabel = viewMode === 'dot'
     ? 'model groups dot map'
-    : viewMode === 'radar'
-      ? 'model groups radar chart'
-      : 'model groups heatmap';
+    : viewMode === 'bar'
+      ? 'model groups bar chart'
+      : viewMode === 'radar'
+        ? 'model groups radar chart'
+        : 'model groups heatmap';
 
   return (
     <section className="rounded-lg border border-gray-200 bg-white p-4">
@@ -192,8 +197,9 @@ export function ModelGroupsSection({ clusterAnalysis, selectedModelId = null }: 
             <p className="mt-1">
               The default dot map shows each value on a fixed scale from -3.25 to +3.25, with 0 in the
               middle. Values are sorted from the ones the groups favor most on average to the ones they
-              favor least. Use the toggle above to compare the radar chart, dot map, and heatmap views of
-              the same cluster data.
+              favor least. The bar view shows the same scores as bars instead of dots, with shorter bars
+              rendered on top so they stay visible. Use the toggle above to compare the radar chart, dot
+              map, bar chart, and heatmap views of the same cluster data.
             </p>
           </div>
         </div>
@@ -207,16 +213,18 @@ export function ModelGroupsSection({ clusterAnalysis, selectedModelId = null }: 
         ) : (
           <>
             {viewMode === 'dot' && <ClusterDotPlot clusters={clusters} />}
+            {viewMode === 'bar' && <ClusterBarPlot clusters={clusters} />}
             {viewMode === 'radar' && <ClusterRadarChart clusters={clusters} />}
             {viewMode === 'heatmap' && <ClusterHeatmap clusters={clusters} />}
             <div className="flex flex-wrap gap-4">
               {clusters.map((cluster, index) => {
                 const style = getClusterColor(index);
                 const personality = getClusterPersonality(cluster);
+                const memberLabels = getClusterMemberLabelText(cluster);
                 return (
                   <div key={cluster.id} className={`min-w-[280px] max-w-[520px] rounded-lg border ${style.border} ${style.light} p-3`}>
                     <p className={`text-sm font-semibold ${style.text}`}>
-                      <span className="font-medium">Members:</span> {cluster.members.map((member) => member.label).join(', ')}
+                      <span className="font-medium">Models:</span> {memberLabels}
                     </p>
                     <p className="mt-2 text-xs text-gray-700">
                       <span className="font-medium">Prioritizes:</span> {personality.topValues.join(', ')}
