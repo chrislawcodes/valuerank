@@ -19,6 +19,12 @@ type SortKey =
   | 'highPressureOnOpposingValue'
   | 'responsiveness';
 
+type CountGridPattern =
+  | 'average'
+  | 'balanced'
+  | 'highPressureOnValue'
+  | 'highPressureOnOpposingValue';
+
 type ValueRow = {
   valueLabel: string;
   averageWinRate: number | null;
@@ -37,14 +43,61 @@ type PairPerspectiveRates = {
 
 const MIN_N = 3;
 
-const AVERAGE_WIN_RATE_TOOLTIP =
-  "The model's overall rate of picking this value, pooled across all 25 cells of the 5x5 pressure grid (every combination of own and opposing pressure levels). Tells you how often the model picks this value across the full range of conditions tested.";
-const BALANCED_WIN_RATE_TOOLTIP =
-  "The model's rate of picking this value when own and opposing pressure are at the same level. Pooled across the 5 diagonal cells (negligible/negligible up through full/full). The reference rate when neither value has a directional advantage from the prompt.";
-const HIGH_PRESSURE_ON_THIS_VALUE_TOOLTIP =
-  'The model\'s rate when the prompt pushes toward this value — this value at heavy or full pressure (level 4 or 5) AND the opposing value at light or moderate (level 1, 2, or 3). 6 cells per pair.';
-const HIGH_PRESSURE_ON_OPPOSING_VALUE_TOOLTIP =
-  'The model\'s rate when the prompt pushes toward the OTHER value instead — opposing at heavy or full, this value at light or moderate. 6 cells per pair.';
+const GRID_LABELS = [5, 4, 3, 2, 1];
+
+function isCountedCell(pattern: CountGridPattern, rowIndex: number, colIndex: number): boolean {
+  switch (pattern) {
+    case 'average':
+      return true;
+    case 'balanced':
+      return rowIndex === colIndex;
+    case 'highPressureOnValue':
+      return rowIndex <= 1 && colIndex >= 2;
+    case 'highPressureOnOpposingValue':
+      return rowIndex >= 2 && colIndex <= 1;
+  }
+}
+
+function CountGrid({ pattern }: { pattern: CountGridPattern }) {
+  return (
+    <div className="grid grid-cols-5 gap-0.5" aria-hidden="true">
+      {GRID_LABELS.map((_, rowIndex) =>
+        GRID_LABELS.map((__, colIndex) => {
+          const filled = isCountedCell(pattern, rowIndex, colIndex);
+          return (
+            <div
+              key={`${pattern}-${rowIndex}-${colIndex}`}
+              className={`h-3.5 w-3.5 rounded-[2px] border ${
+                filled ? 'border-blue-500 bg-blue-500' : 'border-blue-100 bg-blue-50'
+              }`}
+            />
+          );
+        }))}
+    </div>
+  );
+}
+
+function TooltipGridBlock({
+  title,
+  description,
+  pattern,
+}: {
+  title: string;
+  description: string;
+  pattern: CountGridPattern;
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="space-y-0.5">
+        <p className="font-semibold text-gray-900">{title}</p>
+        <p className="text-[11px] leading-4 text-gray-600">{description}</p>
+      </div>
+      <div className="rounded-md border border-gray-200 bg-white p-2">
+        <CountGrid pattern={pattern} />
+      </div>
+    </div>
+  );
+}
 
 function formatRate(value: number | null): ReactNode {
   if (value == null) {
@@ -194,7 +247,7 @@ function sortRows(rows: ValueRow[], sortKey: SortKey, direction: SortDirection):
   });
 }
 
-function SortHeaderCell({
+function SortHeaderContent({
   label,
   ariaLabel,
   sortKey,
@@ -210,36 +263,53 @@ function SortHeaderCell({
   activeSortKey: SortKey;
   direction: SortDirection;
   onSort: (key: SortKey) => void;
-  tooltip?: string;
+  tooltip?: ReactNode;
   numeric?: boolean;
 }) {
   const active = activeSortKey === sortKey;
   const sortDirection = active ? direction : 'desc';
 
   return (
+    <div className={`flex w-full items-center gap-1 ${numeric ? 'justify-end' : 'justify-start'}`}>
+      {/* eslint-disable-next-line react/forbid-elements -- Sortable table headers need a semantic inline button control */}
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={`inline-flex items-center gap-1 text-left transition-colors ${
+          active ? 'text-gray-900' : 'text-gray-700 hover:text-gray-900'
+        }`}
+        aria-label={`Sort by ${ariaLabel}${active ? ` (${sortDirection === 'asc' ? 'ascending' : 'descending'})` : ''}`}
+      >
+        <span>{label}</span>
+        {active ? (
+          <span aria-hidden="true" className="text-[11px] leading-none text-gray-900">
+            {direction === 'asc' ? '↑' : '↓'}
+          </span>
+        ) : null}
+      </button>
+      {tooltip ? <TooltipIcon ariaLabel={`Help: ${ariaLabel}`} content={tooltip} /> : null}
+    </div>
+  );
+}
+
+function SortHeaderCell(props: {
+  label: string;
+  ariaLabel: string;
+  sortKey: SortKey;
+  activeSortKey: SortKey;
+  direction: SortDirection;
+  onSort: (key: SortKey) => void;
+  tooltip?: ReactNode;
+  numeric?: boolean;
+}) {
+  const { numeric } = props;
+
+  return (
     <TableHead
       className={`${numeric ? 'text-right' : 'text-left'} text-xs uppercase tracking-wide text-gray-700`}
-      aria-sort={active ? (direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+      aria-sort={props.activeSortKey === props.sortKey ? (props.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
     >
-      <div className={`flex w-full items-center gap-1 ${numeric ? 'justify-end' : 'justify-start'}`}>
-        {/* eslint-disable-next-line react/forbid-elements -- Sortable table headers need a semantic inline button control */}
-        <button
-          type="button"
-          onClick={() => onSort(sortKey)}
-          className={`inline-flex items-center gap-1 text-left transition-colors ${
-            active ? 'text-gray-900' : 'text-gray-700 hover:text-gray-900'
-          }`}
-          aria-label={`Sort by ${ariaLabel}${active ? ` (${sortDirection === 'asc' ? 'ascending' : 'descending'})` : ''}`}
-        >
-          <span>{label}</span>
-          {active ? (
-            <span aria-hidden="true" className="text-[11px] leading-none text-gray-900">
-              {direction === 'asc' ? '↑' : '↓'}
-            </span>
-          ) : null}
-        </button>
-        {tooltip ? <TooltipIcon ariaLabel={`Help: ${ariaLabel}`} content={tooltip} /> : null}
-      </div>
+      <SortHeaderContent {...props} />
     </TableHead>
   );
 }
@@ -292,52 +362,87 @@ export function PressureResponseByValueTable({ valuePairs }: Props) {
         <Table variant="bordered">
           <TableHeader variant="bordered">
             <TableRow>
+              <TableHead
+                rowSpan={2}
+                className="align-middle text-left text-xs uppercase tracking-wide text-gray-700"
+                aria-sort={sortKey === 'value' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+              >
+                <SortHeaderContent
+                  label="Value"
+                  ariaLabel="Value"
+                  sortKey="value"
+                  activeSortKey={sortKey}
+                  direction={sortDirection}
+                  onSort={handleSort}
+                />
+              </TableHead>
+              <TableHead colSpan={4} className="text-center text-xs uppercase tracking-wide text-gray-700">
+                Win rate
+              </TableHead>
+            </TableRow>
+            <TableRow>
               <SortHeaderCell
-                label="Value"
-                ariaLabel="Value"
-                sortKey="value"
-                activeSortKey={sortKey}
-                direction={sortDirection}
-                onSort={handleSort}
-              />
-              <SortHeaderCell
-                label="Average win rate"
+                label="Average"
                 ariaLabel="Average win rate"
                 sortKey="averageWinRate"
                 activeSortKey={sortKey}
                 direction={sortDirection}
                 onSort={handleSort}
-                tooltip={AVERAGE_WIN_RATE_TOOLTIP}
+                tooltip={
+                  <TooltipGridBlock
+                    title="Average win rate"
+                    description="All 25 cells are counted when pooling this rate."
+                    pattern="average"
+                  />
+                }
                 numeric
               />
               <SortHeaderCell
-                label="Balanced win rate"
+                label="Balanced"
                 ariaLabel="Balanced win rate"
                 sortKey="balancedWinRate"
                 activeSortKey={sortKey}
                 direction={sortDirection}
                 onSort={handleSort}
-                tooltip={BALANCED_WIN_RATE_TOOLTIP}
+                tooltip={
+                  <TooltipGridBlock
+                    title="Balanced win rate"
+                    description="Only the diagonal cells are counted."
+                    pattern="balanced"
+                  />
+                }
                 numeric
               />
               <SortHeaderCell
-                label="High pressure value win rate"
-                ariaLabel="High pressure value win rate"
+                label="High pressure on value"
+                ariaLabel="High pressure on value win rate"
                 sortKey="highPressureOnThisValue"
                 activeSortKey={sortKey}
                 direction={sortDirection}
                 onSort={handleSort}
-                tooltip={HIGH_PRESSURE_ON_THIS_VALUE_TOOLTIP}
+                tooltip={
+                  <TooltipGridBlock
+                    title="High pressure on value win rate"
+                    description="The prompt pushes toward this value: high pressure on this value and low to moderate pressure on the opposing value."
+                    pattern="highPressureOnValue"
+                  />
+                }
                 numeric
               />
               <SortHeaderCell
-                label="High pressure on opposing value win rate"
+                label="High pressure on opposing value"
                 ariaLabel="High pressure on opposing value win rate"
                 sortKey="highPressureOnOpposingValue"
                 activeSortKey={sortKey}
                 direction={sortDirection}
                 onSort={handleSort}
-                tooltip={HIGH_PRESSURE_ON_OPPOSING_VALUE_TOOLTIP}
+                tooltip={
+                  <TooltipGridBlock
+                    title="High pressure on opposing value win rate"
+                    description="The prompt pushes toward the other value: high pressure on the opposing value and low to moderate pressure on this value."
+                    pattern="highPressureOnOpposingValue"
+                  />
+                }
                 numeric
               />
             </TableRow>
@@ -364,7 +469,7 @@ export function PressureResponseByValueTable({ valuePairs }: Props) {
         </p>
         <p>
           The two push columns are most informative when compared against the balanced rate. If &quot;high pressure on
-          this value&quot; is well above balanced, the prompt successfully pushes the model toward this value. If
+          value&quot; is well above balanced, the prompt successfully pushes the model toward this value. If
           &quot;high pressure on opposing value&quot; is well below balanced, the prompt successfully pushes the model
           away from this value.
         </p>
@@ -377,7 +482,7 @@ export function PressureResponseByValueTable({ valuePairs }: Props) {
               under push and pull pressure.
             </li>
             <li>
-              <strong>Push-resistant.</strong> &quot;High pressure on this value&quot; is at or below balanced.
+              <strong>Push-resistant.</strong> &quot;High pressure on value&quot; is at or below balanced.
               Pressure to make the model pick this value does not work; sometimes it actively backfires.
             </li>
             <li>
