@@ -43,8 +43,9 @@ builder.queryField('run', (t) =>
         return null;
       }
 
-      // Track access (non-blocking, fire-and-forget)
-      void trackRunAccess(run.id);
+      // Track access before returning so the timestamp is durable for callers
+      // that verify it immediately after the query.
+      await trackRunAccess(run.id);
 
       return run;
     },
@@ -183,9 +184,10 @@ builder.queryField('runsWithAnalysis', (t) =>
         },
       });
 
-      // Track access for each run (non-blocking)
+      // Track access for each run before returning so the access timestamp is
+      // committed before callers read back the rows.
       for (const run of runs) {
-        void trackRunAccess(run.id);
+        await trackRunAccess(run.id);
       }
 
       ctx.log.debug(
@@ -275,4 +277,3 @@ builder.queryField('runCount', (t) =>
     },
   })
 );
-
