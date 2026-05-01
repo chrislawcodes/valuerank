@@ -166,7 +166,7 @@ describe('ModelGroupsSection', () => {
     expect(screen.getByText('Conservation')).toBeInTheDocument();
     expect(screen.getByText('Self-Enhancement')).toBeInTheDocument();
     expect(screen.getByText('Openness to Change')).toBeInTheDocument();
-    expect(screen.getByText('Universalism')).toHaveAttribute('text-anchor', 'end');
+    expect(screen.getByText('Universalism')).toHaveAttribute('text-anchor', 'start');
     expect(screen.queryByText(/Cluster:/i)).not.toBeInTheDocument();
   });
 });
