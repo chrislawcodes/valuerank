@@ -41,8 +41,6 @@ type PairPerspectiveRates = {
   highPressureOnOpposingValue: number | null;
 };
 
-const MIN_N = 3;
-
 const GRID_LABELS = [5, 4, 3, 2, 1];
 
 function isCountedCell(pattern: CountGridPattern, rowIndex: number, colIndex: number): boolean {
@@ -107,25 +105,25 @@ function formatRate(value: number | null): ReactNode {
   return <span className="font-mono text-gray-900">{formatPercent(value)}</span>;
 }
 
-function invertRate(value: number | null): number | null {
-  if (value == null) return null;
-  return 1 - value;
-}
-
-function poolRate(cells: PressureSensitivityCell[], predicate: (cell: PressureSensitivityCell) => boolean): number | null {
+function poolRate(
+  cells: PressureSensitivityCell[],
+  predicate: (cell: PressureSensitivityCell) => boolean,
+  rateSelector: (cell: PressureSensitivityCell) => number | null | undefined,
+): number | null {
   let weightedSuccesses = 0;
   let trials = 0;
 
   for (const cell of cells) {
-    if (cell.n < MIN_N || !predicate(cell)) {
+    if (!predicate(cell)) {
       continue;
     }
 
-    if (cell.winRate == null) {
+    const rate = rateSelector(cell);
+    if (rate == null) {
       continue;
     }
 
-    weightedSuccesses += cell.winRate * cell.n;
+    weightedSuccesses += rate * cell.n;
     trials += cell.n;
   }
 
@@ -137,31 +135,44 @@ function poolRate(cells: PressureSensitivityCell[], predicate: (cell: PressureSe
 }
 
 function computePairRates(pair: PressureSensitivityValuePair, valueLabel: string): PairPerspectiveRates {
-  const averageWinRate = poolRate(pair.grid, () => true);
-  const balancedWinRate = poolRate(pair.grid, (cell) => cell.ownLevel === cell.opponentLevel);
-  const highPressureOnFirstValue = poolRate(
-    pair.grid,
-    (cell) => cell.ownLevel >= 4 && cell.opponentLevel <= 3,
-  );
-  const highPressureOnSecondValue = poolRate(
-    pair.grid,
-    (cell) => cell.opponentLevel >= 4 && cell.ownLevel <= 3,
-  );
-
   if (pair.firstValueLabel === valueLabel) {
     return {
-      averageWinRate,
-      balancedWinRate,
-      highPressureOnThisValue: highPressureOnFirstValue,
-      highPressureOnOpposingValue: highPressureOnSecondValue,
+      averageWinRate: poolRate(pair.grid, () => true, (cell) => cell.winRate),
+      balancedWinRate: poolRate(
+        pair.grid,
+        (cell) => cell.ownLevel === cell.opponentLevel,
+        (cell) => cell.winRate,
+      ),
+      highPressureOnThisValue: poolRate(
+        pair.grid,
+        (cell) => cell.ownLevel >= 4 && cell.opponentLevel <= 3,
+        (cell) => cell.winRate,
+      ),
+      highPressureOnOpposingValue: poolRate(
+        pair.grid,
+        (cell) => cell.opponentLevel >= 4 && cell.ownLevel <= 3,
+        (cell) => cell.winRate,
+      ),
     };
   }
 
   return {
-    averageWinRate: invertRate(averageWinRate),
-    balancedWinRate: invertRate(balancedWinRate),
-    highPressureOnThisValue: invertRate(highPressureOnSecondValue),
-    highPressureOnOpposingValue: invertRate(highPressureOnFirstValue),
+    averageWinRate: poolRate(pair.grid, () => true, (cell) => cell.opponentWinRate ?? null),
+    balancedWinRate: poolRate(
+      pair.grid,
+      (cell) => cell.ownLevel === cell.opponentLevel,
+      (cell) => cell.opponentWinRate ?? null,
+    ),
+    highPressureOnThisValue: poolRate(
+      pair.grid,
+      (cell) => cell.opponentLevel >= 4 && cell.ownLevel <= 3,
+      (cell) => cell.opponentWinRate ?? null,
+    ),
+    highPressureOnOpposingValue: poolRate(
+      pair.grid,
+      (cell) => cell.ownLevel >= 4 && cell.opponentLevel <= 3,
+      (cell) => cell.opponentWinRate ?? null,
+    ),
   };
 }
 
@@ -351,8 +362,7 @@ export function PressureResponseByValueTable({ valuePairs }: Props) {
           </p>
           <p className="text-xs text-gray-500">
             Each pressure cell counts each vignette once. The pair rows are then averaged equally across the 9 pairs
-            containing this value. For pairs where this value is alphabetically second, we approximate its rate from
-            the first value&apos;s rate (small error from neutral picks, typically under 1 pp).
+            containing this value.
           </p>
         </div>
         <CopyVisualButton targetRef={tableRef} label="Pressure Response by Value" />
@@ -391,7 +401,7 @@ export function PressureResponseByValueTable({ valuePairs }: Props) {
                 tooltip={
                   <TooltipGridBlock
                     title="Average win rate"
-                    description="All 25 cells are counted when pooling this rate."
+                    description="All scored vignette-level cells are counted when pooling this rate."
                     pattern="average"
                   />
                 }
