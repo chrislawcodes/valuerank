@@ -46,25 +46,25 @@ export function ConfidenceHeatmap({ models, selectedModelIds, onCellClick }: Con
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full text-sm border-collapse">
-        <thead>
+    <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm">
+      <table className="min-w-full border-collapse text-sm">
+        <thead className="bg-gray-50">
           <tr>
-            <th className="sticky left-0 z-10 bg-white pr-4 pl-1 py-2 text-left font-medium text-gray-500 border-b border-gray-200 min-w-[160px] whitespace-nowrap">
+            <th className="sticky left-0 z-10 min-w-[160px] whitespace-nowrap border-b border-r border-gray-200 bg-gray-50 px-3 py-2 text-left font-medium text-gray-500">
               Model
+            </th>
+            <th className="min-w-[64px] whitespace-nowrap border-b border-r border-gray-200 bg-gray-50 px-2 py-2 text-center font-semibold text-gray-700">
+              Avg
             </th>
             {VALUES.map((key) => (
               <th
                 key={key}
                 title={formatFullSchwartzValueName(key)}
-                className="px-2 py-2 text-center font-medium text-gray-500 border-b border-gray-200 min-w-[74px] whitespace-nowrap"
+                className="min-w-[74px] whitespace-nowrap border-b border-gray-200 bg-gray-50 px-2 py-2 text-center font-medium text-gray-500"
               >
                 {VALUE_LABELS[key]}
               </th>
             ))}
-            <th className="px-2 py-2 text-center font-semibold text-gray-700 border-b border-l border-gray-200 min-w-[64px]">
-              Avg
-            </th>
           </tr>
         </thead>
         <tbody>
@@ -72,10 +72,19 @@ export function ConfidenceHeatmap({ models, selectedModelIds, onCellClick }: Con
             const byKey = new Map(model.values.map((v) => [v.valueKey, v]));
             return (
               <tr key={model.modelId} className="hover:bg-gray-50/40">
-                <td className="sticky left-0 z-10 bg-white pr-4 pl-1 py-2 font-medium text-gray-800 border-b border-gray-100 whitespace-nowrap">
+                <th className="sticky left-0 z-10 whitespace-nowrap border-b border-r border-gray-100 bg-white px-3 py-2 text-left font-medium text-gray-800">
                   {model.label}
+                </th>
+                <td
+                  title={`Avg: ${formatConfidence(model.overallConfidence ?? null)} · Strong: ${model.overallStrongCount} · Lean: ${model.overallLeanCount}`}
+                  className={cn(
+                    'border-b border-r border-gray-100 px-2 py-2 text-center font-semibold tabular-nums',
+                    getConfidenceTone(model.overallConfidence ?? null),
+                  )}
+                >
+                  {formatConfidence(model.overallConfidence ?? null)}
                 </td>
-                {VALUES.map((key) => {
+                {VALUES.map((key, index) => {
                   const v = byKey.get(key);
                   return (
                     <td
@@ -83,7 +92,8 @@ export function ConfidenceHeatmap({ models, selectedModelIds, onCellClick }: Con
                       title={buildTooltip(key, v)}
                       onClick={onCellClick != null ? () => onCellClick(model.modelId, model.label, key) : undefined}
                       className={cn(
-                        'px-2 py-2 text-center border border-gray-100 tabular-nums',
+                        'border-b border-gray-100 px-2 py-2 text-center tabular-nums',
+                        index !== VALUES.length - 1 && 'border-r border-gray-100',
                         getConfidenceTone(v?.confidence ?? null),
                         onCellClick != null && 'cursor-pointer hover:ring-1 hover:ring-inset hover:ring-violet-400',
                       )}
@@ -92,15 +102,6 @@ export function ConfidenceHeatmap({ models, selectedModelIds, onCellClick }: Con
                     </td>
                   );
                 })}
-                <td
-                  title={`Avg: ${formatConfidence(model.overallConfidence ?? null)} · Strong: ${model.overallStrongCount} · Lean: ${model.overallLeanCount}`}
-                  className={cn(
-                    'px-2 py-2 text-center font-semibold border-l border-l-gray-200 border-b border-b-gray-100 tabular-nums',
-                    getConfidenceTone(model.overallConfidence ?? null),
-                  )}
-                >
-                  {formatConfidence(model.overallConfidence ?? null)}
-                </td>
               </tr>
             );
           })}
