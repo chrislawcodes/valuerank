@@ -29,6 +29,14 @@ export function getClusterValueOrder(clusters: DomainCluster[]): ValueKey[] {
   });
 }
 
+export function getClusterMemberLabels(cluster: DomainCluster): string[] {
+  return cluster.members.map((member) => member.label);
+}
+
+export function getClusterMemberLabelText(cluster: DomainCluster): string {
+  return getClusterMemberLabels(cluster).join(', ');
+}
+
 export function clampClusterScore(score: number): number {
   return Math.max(CLUSTER_SCORE_MIN, Math.min(CLUSTER_SCORE_MAX, score));
 }
