@@ -154,21 +154,9 @@ export function ModelsConfidence() {
         </p>
       </div>
 
-      {/* Controls row: Signature | Domain | Models */}
+      {/* Controls row: Domain | Models | Signature */}
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-4">
-          <div className="flex items-center gap-2">
-            <label className="text-sm text-gray-600">Signature</label>
-            <Select
-              value={selectedSignature}
-              onChange={(value) => {
-                setSelectedSignature(value);
-                setSearchParams({ signature: value });
-              }}
-              options={signatureOptions}
-            />
-          </div>
-
           {domains.length > 0 && (
             <div className="flex items-center gap-2">
               <label className="text-sm text-gray-600">Domain</label>
@@ -214,6 +202,18 @@ export function ModelsConfidence() {
               </button>
             </div>
           )}
+
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-600">Signature</label>
+            <Select
+              value={selectedSignature}
+              onChange={(value) => {
+                setSelectedSignature(value);
+                setSearchParams({ signature: value });
+              }}
+              options={signatureOptions}
+            />
+          </div>
         </div>
 
         {/* Model filter panel (expands below the controls row) */}
@@ -274,6 +274,37 @@ export function ModelsConfidence() {
           onCellClick={handleCellClick}
         />
       )}
+
+      {/* How the % is calculated */}
+      <section className="rounded-lg border border-gray-100 bg-gray-50 p-5 text-sm text-gray-700 space-y-3 max-w-3xl">
+        <h2 className="font-semibold text-gray-900">How the % is calculated</h2>
+        <p>
+          Every transcript ends with a verdict: the model either <strong>strongly</strong> chose
+          one value or <strong>leaned toward</strong> one value. &ldquo;Strongly&rdquo; means it picked with
+          conviction. &ldquo;Lean&rdquo; means it tilted that way but not decisively.
+        </p>
+        <p>
+          The confidence % answers: <em>how often does the model say &ldquo;strongly&rdquo; vs. just &ldquo;lean&rdquo;?</em>
+        </p>
+        <div className="rounded border border-gray-200 bg-white px-4 py-3 font-mono text-xs text-gray-800">
+          Strong% = strongly_support ÷ (strongly_support + somewhat_support)
+        </div>
+        <p>
+          For example: if a model ran 100 trials on an &ldquo;Achievement vs. Tradition&rdquo; vignette,
+          said &ldquo;strongly&rdquo; 70 times and &ldquo;lean&rdquo; 30 times, that vignette&apos;s rate is 70%.
+        </p>
+        <p className="font-medium text-gray-800">Why not just add up all the trials?</p>
+        <p>
+          Some vignettes were run 75 times, others 175 times. If you pooled everything, high-run
+          vignettes would count more — even though they&apos;re testing separate questions. Instead,
+          the rate is calculated per vignette first, then those rates are averaged. Every vignette
+          gets one vote, regardless of how many times it was run.
+        </p>
+        <p>
+          When a domain is selected, only vignettes belonging to that domain are included.
+          Vignettes from other domains are dropped before any counting starts.
+        </p>
+      </section>
     </div>
   );
 }
