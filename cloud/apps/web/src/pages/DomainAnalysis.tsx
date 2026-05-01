@@ -30,7 +30,6 @@ import { SimilaritySection } from '../components/domains/SimilaritySection';
 import { ValuePrioritiesSection } from '../components/domains/ValuePrioritiesSection';
 import {
   VALUES,
-  type DomainAnalysisModelAvailability,
   type ModelEntry,
   type ValueKey,
 } from '../data/domainAnalysisData';
@@ -280,10 +279,6 @@ export function DomainAnalysis() {
     ));
   };
 
-  const unavailableModels = useMemo<DomainAnalysisModelAvailability[]>(
-    () => (data?.domainAnalysis.unavailableModels ?? []).map((m) => ({ model: m.model, label: m.label, reason: m.reason })),
-    [data],
-  );
   const missingDefinitionCount = data?.domainAnalysis.missingDefinitions?.length ?? 0;
   const allMissingDefinitionIds = useMemo(
     () => (data?.domainAnalysis.missingDefinitions ?? []).map((m) => m.definitionId),
@@ -518,20 +513,10 @@ export function DomainAnalysis() {
             models={models}
             defaultModelIds={defaultModelIds}
           />
-          <SimilaritySection models={visibleModels} clusterAnalysis={data?.domainAnalysis.clusterAnalysis} />
+          <SimilaritySection models={visibleModels} />
         </>
       )}
 
-      {unavailableModels.length > 0 && (
-        <footer className="text-xs text-gray-500">
-          <p className="font-medium text-gray-600">Data availability note</p>
-          <ul className="mt-1 list-disc space-y-1 pl-5">
-            {unavailableModels.map((m) => (
-              <li key={m.model}>{m.label}: {m.reason} This model is excluded from analysis tables and graph selectors.</li>
-            ))}
-          </ul>
-        </footer>
-      )}
     </div>
   );
 }

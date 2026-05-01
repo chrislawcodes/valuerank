@@ -4,7 +4,6 @@ import { cosineSimilarity } from '@valuerank/shared';
 import { VALUES, type ModelEntry } from '../../data/domainAnalysisData';
 import { Button } from '../ui/Button';
 import { CopyVisualButton } from '../ui/CopyVisualButton';
-import type { ClusterAnalysis } from '../../api/operations/domainAnalysis';
 
 type PairMetric = {
   a: string;
@@ -41,19 +40,11 @@ function getSimilarityColor(value: number): string {
   return `rgba(${r}, ${g}, ${b}, 0.35)`;
 }
 
-const CLUSTER_COLORS = [
-  { hex: '#3b82f6' },
-  { hex: '#f59e0b' },
-  { hex: '#10b981' },
-  { hex: '#f43f5e' },
-] as const;
-
 type SimilaritySectionProps = {
   models: ModelEntry[];
-  clusterAnalysis?: ClusterAnalysis;
 };
 
-export function SimilaritySection({ models, clusterAnalysis }: SimilaritySectionProps) {
+export function SimilaritySection({ models }: SimilaritySectionProps) {
   const matrixRef = useRef<HTMLDivElement>(null);
   const [showMatrixHelp, setShowMatrixHelp] = useState(false);
 
@@ -101,37 +92,26 @@ export function SimilaritySection({ models, clusterAnalysis }: SimilaritySection
     return { similarities, pairs, averages };
   }, [models]);
 
-  const modelClusterIndex = useMemo(() => {
-    const map = new Map<string, number>();
-    if (clusterAnalysis == null || clusterAnalysis.skipped) return map;
-    clusterAnalysis.clusters.forEach((cluster, ci) => {
-      for (const member of cluster.members) {
-        map.set(member.model, ci);
-      }
-    });
-    return map;
-  }, [clusterAnalysis]);
-
   return (
     <section className="rounded-lg border border-gray-200 bg-white p-4">
-      <div className="mb-3 flex items-center gap-2">
-        <h2 className="text-base font-medium text-gray-900">Similarities and Differences</h2>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          onClick={() => setShowMatrixHelp((v) => !v)}
-          className="h-5 w-5 text-gray-400 hover:text-gray-600"
-          aria-label={showMatrixHelp ? 'Hide explanation' : 'Show explanation'}
-        >
-          <HelpCircle className="h-4 w-4" />
-        </Button>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5">
+          <h2 className="text-base font-medium text-gray-900">Similarities and Differences</h2>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowMatrixHelp((v) => !v)}
+            className="h-7 w-7 text-gray-400 hover:text-gray-600"
+            aria-label={showMatrixHelp ? 'Hide explanation' : 'Show explanation'}
+          >
+            <HelpCircle className="h-5 w-5" />
+          </Button>
+        </div>
+        <CopyVisualButton targetRef={matrixRef} label="similarity matrix table" />
       </div>
 
       <div ref={matrixRef} className="rounded border border-gray-100 bg-white p-2">
-        <div className="mb-3 flex items-center justify-between">
-          <CopyVisualButton targetRef={matrixRef} label="similarity matrix table" />
-        </div>
         {showMatrixHelp && (
           <div className="mb-3 rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs text-gray-700">
             <div className="flex items-start justify-between gap-2">
@@ -140,7 +120,7 @@ export function SimilaritySection({ models, clusterAnalysis }: SimilaritySection
                 <p>For example, if Model A strongly favors Security and avoids Power, and Model B does the same, they score near 1.0 even if Model A wins more overall.</p>
                 <p className="font-medium text-gray-800">How it is calculated (Pearson correlation):</p>
                 <ol className="list-decimal space-y-1 pl-4">
-                  <li>Each model&apos;s win rates are centered — subtract that model&apos;s average so the numbers balance around zero. This removes the effect of one model just being more decisive overall.</li>
+                  <li>Each model&apos;s win rates are <strong>centered</strong> — we subtract that model&apos;s own average win rate from each of its 10 scores. For example, if a model wins 80% on average, a value at 90% becomes +10 and a value at 70% becomes −10. This removes the effect of one model just being more decisive overall.</li>
                   <li>We measure how much the two centered profiles move together across all 10 values.</li>
                   <li>The result is divided by the size of each profile, so the score always falls between −1 and 1.</li>
                 </ol>
@@ -165,36 +145,28 @@ export function SimilaritySection({ models, clusterAnalysis }: SimilaritySection
             <thead>
               <tr className="border-b border-gray-200 text-gray-600">
                 <th scope="col" className="px-2 py-2 text-left font-medium">Model</th>
-                {models.map((model) => {
-                  const ci = modelClusterIndex.get(model.model);
-                  const colStyle = ci != null ? { backgroundColor: `${CLUSTER_COLORS[ci % CLUSTER_COLORS.length]!.hex}22` } : undefined;
-                  return (
-                    <th key={model.model} scope="col" className="px-2 py-2 text-right font-medium" style={colStyle}>
-                      {model.label}
-                    </th>
-                  );
-                })}
+                {models.map((model) => (
+                  <th key={model.model} scope="col" className="px-2 py-2 text-right font-medium">
+                    {model.label}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {models.map((row) => {
-                const rowCi = modelClusterIndex.get(row.model);
-                const rowStyle = rowCi != null ? { backgroundColor: `${CLUSTER_COLORS[rowCi % CLUSTER_COLORS.length]!.hex}11` } : undefined;
-                return (
-                  <tr key={row.model} className="border-b border-gray-100" style={rowStyle}>
-                    <th scope="row" className="px-2 py-2 text-left font-medium text-gray-900">{row.label}</th>
-                    {models.map((col) => {
-                      const similarity = row.model === col.model ? 1 : (matrix.similarities.get(row.model)?.get(col.model) ?? 0);
-                      return (
-                        <td key={col.model} className="px-2 py-2 text-right text-gray-800" style={{ background: getSimilarityColor(similarity) }}>
-                          {similarity.toFixed(2)}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                );
-              })}
-            {models.length > 1 && (
+              {models.map((row) => (
+                <tr key={row.model} className="border-b border-gray-100">
+                  <th scope="row" className="px-2 py-2 text-left font-medium text-gray-900">{row.label}</th>
+                  {models.map((col) => {
+                    const similarity = row.model === col.model ? 1 : (matrix.similarities.get(row.model)?.get(col.model) ?? 0);
+                    return (
+                      <td key={col.model} className="px-2 py-2 text-right text-gray-800" style={{ background: getSimilarityColor(similarity) }}>
+                        {similarity.toFixed(2)}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+              {models.length > 1 && (
                 <tr className="border-t-2 border-gray-300">
                   <th scope="row" className="px-2 py-2 text-left text-xs font-medium italic text-gray-600">Avg similarity</th>
                   {models.map((col) => {
