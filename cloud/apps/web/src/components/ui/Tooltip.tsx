@@ -1,4 +1,4 @@
-import type { ReactElement, ReactNode } from 'react';
+import type { CSSProperties, ReactElement, ReactNode } from 'react';
 import { cloneElement, isValidElement, useState, useRef, useEffect, useCallback, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { cva, type VariantProps } from 'class-variance-authority';
@@ -35,6 +35,10 @@ export type TooltipProps = VariantProps<typeof tooltipVariants> & {
   className?: string;
   /** Disable the tooltip */
   disabled?: boolean;
+  /** Additional class for the trigger wrapper */
+  triggerClassName?: string;
+  /** Additional style for the trigger wrapper */
+  triggerStyle?: CSSProperties;
 };
 
 export function Tooltip({
@@ -45,6 +49,8 @@ export function Tooltip({
   variant,
   className,
   disabled = false,
+  triggerClassName,
+  triggerStyle,
 }: TooltipProps) {
   const [isVisible, setIsVisible] = useState(false);
   const [coords, setCoords] = useState({ top: 0, left: 0 });
@@ -152,7 +158,8 @@ export function Tooltip({
         onMouseLeave={handleMouseLeave}
         onFocus={handleFocus}
         onBlur={handleBlur}
-        className="inline-block"
+        className={cn('inline-block', triggerClassName)}
+        style={triggerStyle}
       >
         {enhancedChildren}
       </div>

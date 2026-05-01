@@ -1,6 +1,5 @@
-import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { ModelGroupsSection } from '../../src/components/domains/ModelGroupsSection';
 import type { ClusterAnalysis } from '../../src/api/operations/domainAnalysis';
 
@@ -62,6 +61,10 @@ const populatedClusterAnalysis: ClusterAnalysis = {
 };
 
 describe('ModelGroupsSection', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('renders the plain model groups heading without numbering', () => {
     render(<ModelGroupsSection clusterAnalysis={skippedClusterAnalysis} />);
 
@@ -70,9 +73,7 @@ describe('ModelGroupsSection', () => {
     expect(screen.queryByText(/^1\./i)).not.toBeInTheDocument();
   });
 
-  it('offers a bar view and keeps the legend focused on model names', async () => {
-    const user = userEvent.setup();
-
+  it('offers a bar view and keeps the legend focused on model names', () => {
     render(<ModelGroupsSection clusterAnalysis={populatedClusterAnalysis} />);
 
     expect(screen.getByRole('button', { name: 'Bar' })).toBeInTheDocument();
@@ -80,9 +81,47 @@ describe('ModelGroupsSection', () => {
     expect(screen.getByText('+2.50')).toBeInTheDocument();
     expect(screen.getByText(/Models: Model A/i)).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Bar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Bar' }));
 
     expect(screen.getByText(/Models: Model A/i)).toBeInTheDocument();
     expect(screen.getByText(/Models: Model B/i)).toBeInTheDocument();
+  });
+
+  it('shows a value tooltip with color rows and logit values on bar hover', () => {
+    vi.useFakeTimers();
+
+    const { container } = render(<ModelGroupsSection clusterAnalysis={populatedClusterAnalysis} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Bar' }));
+
+    const targetBar = container.querySelector('[data-value-key="Achievement"][data-cluster-id="cluster-1"]');
+    expect(targetBar).not.toBeNull();
+
+    fireEvent.mouseEnter(targetBar as Element);
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+
+    const tooltip = screen.getByRole('tooltip');
+    expect(tooltip).toHaveTextContent('Achievement');
+    expect(tooltip).toHaveTextContent('+1.60');
+    expect(tooltip).toHaveTextContent('+0.60');
+    expect(tooltip.querySelectorAll('[aria-hidden="true"]')).toHaveLength(2);
+
+    fireEvent.mouseLeave(targetBar as Element);
+    expect(screen.queryByRole('tooltip')).toBeNull();
+  });
+
+  it('shows the Schwartz category ring in radar view', () => {
+    render(<ModelGroupsSection clusterAnalysis={populatedClusterAnalysis} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Radar' }));
+
+    expect(screen.getByRole('img', { name: /cluster radar chart ordered by favorability with schwartz category ring/i })).toBeInTheDocument();
+    expect(screen.getByText(/schwartz categories:/i)).toBeInTheDocument();
+    expect(screen.getByText('Self-Transcendence')).toBeInTheDocument();
+    expect(screen.getByText('Conservation')).toBeInTheDocument();
+    expect(screen.getByText('Self-Enhancement')).toBeInTheDocument();
+    expect(screen.getByText('Openness to Change')).toBeInTheDocument();
   });
 });
