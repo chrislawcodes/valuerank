@@ -102,6 +102,7 @@ from factory_mutating import (  # noqa: E402
 )
 from factory_cmd_analyze_reviews import command_analyze_reviews  # noqa: E402
 from factory_cmd_quick import command_quick  # noqa: E402
+from factory_cmd_audit import command_audit  # noqa: E402
 from factory_stages import stage_manifest_state  # noqa: E402  (re-imported for invariant check)
 
 _MUTATING_CACHE: frozenset[str] | None = None
@@ -305,6 +306,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="Record answers[QUESTION] = ANSWER")
     discover_parser.add_argument("--force-complete", action="store_true")
     discover_parser.add_argument("--clear", action="store_true")
+    discover_parser.add_argument(
+        "--force-path",
+        dest="force_path",
+        choices=["quick", "full", "none", "auto"],
+        default="auto",
+        help=(
+            "Override the size-estimate recommended path printed at discover --complete. "
+            "'auto' (default) uses the estimate. 'none' prints the skip-FF message even "
+            "if the estimate is not trivial. 'quick'/'full' suppress the skip-FF message "
+            "and show the standard recommendation. Does NOT change FF behavior beyond "
+            "what is printed — the operator still drives the next step."
+        ),
+    )
     discover_parser.set_defaults(func=command_discover)
 
     parallel_parser = subparsers.add_parser(
@@ -397,6 +411,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="correctness = Codex correctness-adversarial (default); quality = Gemini quality-adversarial",
     )
     quick_parser.set_defaults(func=command_quick)
+
+    audit_parser = subparsers.add_parser(
+        "audit",
+        help="Classify all FF runs as closed/active/abandoned/empty. Read-only reporter.",
+    )
+    audit_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON instead of markdown.",
+    )
+    audit_parser.add_argument(
+        "--out",
+        default=None,
+        metavar="PATH",
+        help="Write report to PATH instead of stdout.",
+    )
+    audit_parser.set_defaults(func=command_audit)
 
     return parser
 

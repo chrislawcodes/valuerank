@@ -51,6 +51,7 @@ EXPECTED_SUBCOMMANDS = {
     "check-isolation",
     "analyze-reviews",
     "quick",
+    "audit",
 }
 
 EXPECTED_MUTATING = {
@@ -68,7 +69,7 @@ EXPECTED_MUTATING = {
     "parallel",
 }
 
-EXPECTED_READONLY = {"status", "doctor", "review-extract", "check-isolation", "analyze-reviews", "quick"}
+EXPECTED_READONLY = {"status", "doctor", "review-extract", "check-isolation", "analyze-reviews", "quick", "audit"}
 
 
 def _assert_registry_is_classified(parser: argparse.ArgumentParser) -> None:

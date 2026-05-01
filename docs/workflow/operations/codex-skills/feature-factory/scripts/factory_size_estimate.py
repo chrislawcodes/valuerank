@@ -6,8 +6,8 @@ Exports:
 
 The returned dict has the shape:
     {
-        "size": "small" | "medium" | "large",
-        "recommended_path": "quick" | "full",
+        "size": "trivial" | "small" | "medium" | "large",
+        "recommended_path": "none" | "quick" | "full",
         "signals": {
             "scope_path_count": int,
             "summary_chars": int,
@@ -16,6 +16,16 @@ The returned dict has the shape:
         },
         "reasoning": "<one-line human explanation>",
     }
+
+Size bands (ordered from smallest to largest):
+  trivial — ≤2 scope paths AND <300-char summary AND <100 diff lines AND ≤3 changed files.
+            These thresholds were chosen to capture single-component UI tweaks, type-cast
+            fixes, and copy edits that fit in a single short Codex prompt. For features
+            this small, FF runner overhead exceeds its protection value.
+  small   — ≤3 scope paths AND <500-char summary AND <200 diff lines AND ≤5 changed files.
+  medium  — anything between small and large.
+  large   — any single signal exceeds a large threshold (≥10 paths, >1500 chars, >800 lines,
+            ≥15 files).
 """
 from __future__ import annotations
 
@@ -29,6 +39,16 @@ if str(_SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPT_DIR))
 
 import factory_state
+
+# ---------------------------------------------------------------------------
+# Trivial-band thresholds — tune these constants if the heuristic is too
+# aggressive or too conservative.  A feature must satisfy ALL four to be
+# classified as trivial (all-signals-AND logic, same as the small band).
+# ---------------------------------------------------------------------------
+_TRIVIAL_MAX_PATHS = 2       # ≤ 2 scope paths
+_TRIVIAL_MAX_CHARS = 300     # < 300-char discovery summary
+_TRIVIAL_MAX_DIFF_LINES = 100  # < 100 diff lines  (insertions + deletions)
+_TRIVIAL_MAX_FILES = 3       # ≤ 3 changed files
 
 
 def _read_scope_path_count(slug: str) -> int:
@@ -123,7 +143,7 @@ def _classify(
     diff_lines: int | None,
     changed_files: int | None,
 ) -> str:
-    """Return 'small', 'medium', or 'large' based on heuristics."""
+    """Return 'trivial', 'small', 'medium', or 'large' based on heuristics."""
     # Large: any single signal exceeds the large threshold.
     if scope_path_count >= 10:
         return "large"
@@ -133,6 +153,20 @@ def _classify(
         return "large"
     if changed_files is not None and changed_files >= 15:
         return "large"
+
+    # Trivial: ALL signals within trivial bounds (AND logic).
+    # Note: when diff_lines/changed_files are None (no diff yet), we treat
+    # them as within bounds — trivial classification can happen early in the
+    # workflow before any code is written.
+    trivial_diff_ok = diff_lines is None or diff_lines < _TRIVIAL_MAX_DIFF_LINES
+    trivial_files_ok = changed_files is None or changed_files <= _TRIVIAL_MAX_FILES
+    if (
+        scope_path_count <= _TRIVIAL_MAX_PATHS
+        and summary_chars < _TRIVIAL_MAX_CHARS
+        and trivial_diff_ok
+        and trivial_files_ok
+    ):
+        return "trivial"
 
     # Small: all signals within small bounds.
     diff_ok = diff_lines is None or diff_lines < 200
@@ -155,7 +189,13 @@ def _build_reasoning(
         return "scope.json missing — classified as medium with no scope-path signal"
 
     parts: list[str] = []
-    if size == "large":
+    if size == "trivial":
+        diff_note = "no diff yet" if diff_lines is None else f"{diff_lines} diff lines"
+        return (
+            f"{scope_path_count} scope path{'s' if scope_path_count != 1 else ''}, "
+            f"{summary_chars}-char summary, {diff_note} — all within trivial bounds"
+        )
+    elif size == "large":
         if scope_path_count >= 10:
             parts.append(f"{scope_path_count} scope paths (>= 10)")
         if summary_chars > 1500:
@@ -217,7 +257,12 @@ def estimate_size(slug: str) -> dict:
     else:
         size = _classify(scope_path_count, summary_chars, diff_lines, changed_files)
 
-    recommended_path = "quick" if size == "small" else "full"
+    if size == "trivial":
+        recommended_path = "none"
+    elif size == "small":
+        recommended_path = "quick"
+    else:
+        recommended_path = "full"
     reasoning = _build_reasoning(
         size, scope_path_count, summary_chars, diff_lines, changed_files, scope_missing
     )

@@ -9,6 +9,10 @@ Use this skill when the user wants to take a feature from idea to shipped code i
 
 This skill is the orchestrator. It should reuse the existing repo-owned scripts for workflow initialization, review checkpoints, reconciliation, and closeout instead of re-implementing that logic in prompt text.
 
+## When NOT to Use FF
+
+Trivial features — single-component UI tweaks, type-cast fixes, copy edits, one-file additions under ~100 lines — should bypass the runner entirely. For work that small, the overhead of spec/plan/tasks authoring, three adversarial review rounds, and checkpoint discipline exceeds the protection those steps provide. When `discover --complete` detects a trivial feature it will print a loud "SKIP FF ENTIRELY" block with the direct Codex dispatch command to use instead. You can override it with `--force-path quick` or `--force-path full` if you want the runner for record-keeping. The right default for trivial features is: write the spec inline as a short Codex prompt, dispatch Codex directly, open a PR, and merge on green CI.
+
 ## Choosing an Orchestrator
 
 Use this table to decide which agent drives the workflow for a given feature:
