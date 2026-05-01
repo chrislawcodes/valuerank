@@ -1,0 +1,280 @@
+diff --git a/cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts b/cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts
+index 0732d176..225605ce 100644
+--- a/cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts
++++ b/cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts
+@@ -500,14 +500,17 @@ export function pooledDirectionalReduction(
+     (cell) => cell.ownLevel === cell.opponentLevel,
+   );
+ 
++  const directionalRates = directionalCells.map((cell) => cell.winRate).filter(isFiniteNumber);
++  const mirrorRates = mirrorCells.map((cell) => cell.winRate).filter(isFiniteNumber);
++  const baselineRates = baselineCells.map((cell) => cell.winRate).filter(isFiniteNumber);
++
+   const directionalTrials = sumNumbers(directionalCells.map((cell) => cell.n));
+   const mirrorTrials = sumNumbers(mirrorCells.map((cell) => cell.n));
+   const baselineTrials = sumNumbers(baselineCells.map((cell) => cell.n));
+   const qualifyingTrials = directionalTrials + mirrorTrials + baselineTrials;
+-  const baselineSuccesses = sumNumbers(baselineCells.map((cell) => cell.successes));
+-  const baselineRate = baselineTrials === 0 ? null : baselineSuccesses / baselineTrials;
+-  const directionalSuccesses = sumNumbers(directionalCells.map((cell) => cell.successes));
+-  const mirrorSuccesses = sumNumbers(mirrorCells.map((cell) => cell.successes));
++  const baselineRate = averageNonNull(baselineRates);
++  const directionalRate = averageNonNull(directionalRates);
++  const mirrorRate = averageNonNull(mirrorRates);
+ 
+   const thin = directionalTrials < minN || mirrorTrials < minN;
+   if (thin) {
+@@ -522,20 +525,32 @@ export function pooledDirectionalReduction(
+       ciLow: null,
+       ciHigh: null,
+       baselineRate,
+-      pushTowardFirstRate: directionalTrials > 0 ? directionalSuccesses / directionalTrials : null,
+-      pushTowardSecondRate: mirrorTrials > 0 ? mirrorSuccesses / mirrorTrials : null,
++      pushTowardFirstRate: directionalRate,
++      pushTowardSecondRate: mirrorRate,
+       reason,
+       qualifyingTrials,
+     };
+   }
+ 
+-  const pushTowardFirstRate = directionalSuccesses / directionalTrials;
+-  const pushTowardSecondRate = mirrorSuccesses / mirrorTrials;
++  const pushTowardFirstRate = directionalRate;
++  const pushTowardSecondRate = mirrorRate;
++  if (pushTowardFirstRate == null || pushTowardSecondRate == null) {
++    return {
++      value: null,
++      ciLow: null,
++      ciHigh: null,
++      baselineRate,
++      pushTowardFirstRate,
++      pushTowardSecondRate,
++      reason: baselineRate === null ? 'baseline-thin' : null,
++      qualifyingTrials,
++    };
++  }
+   const ci = diffProportionCI(
+     pushTowardSecondRate,
+-    mirrorTrials,
++    mirrorRates.length,
+     pushTowardFirstRate,
+-    directionalTrials,
++    directionalRates.length,
+   );
+ 
+   return {
+diff --git a/cloud/apps/api/tests/services/pressure-sensitivity/aggregation.test.ts b/cloud/apps/api/tests/services/pressure-sensitivity/aggregation.test.ts
+index e80e3690..7fc77cb1 100644
+--- a/cloud/apps/api/tests/services/pressure-sensitivity/aggregation.test.ts
++++ b/cloud/apps/api/tests/services/pressure-sensitivity/aggregation.test.ts
+@@ -12,6 +12,11 @@ import {
+ } from '../../../src/services/pressure-sensitivity/aggregation.js';
+ 
+ function cell(partial: Partial<Cell> & { ownLevel: number; opponentLevel: number; n: number }): Cell {
++  const winRate =
++    partial.winRate ?? (partial.n > 0 && partial.successes != null ? partial.successes / partial.n : null);
++  const opponentWinRate =
++    partial.opponentWinRate ?? (winRate == null ? null : 1 - winRate);
++
+   return {
+     ownLevel: partial.ownLevel,
+     opponentLevel: partial.opponentLevel,
+@@ -19,8 +24,8 @@ function cell(partial: Partial<Cell> & { ownLevel: number; opponentLevel: number
+     unscoredCount: partial.unscoredCount ?? 0,
+     successes: partial.successes ?? 0,
+     opponentSuccesses: partial.opponentSuccesses ?? 0,
+-    winRate: partial.winRate ?? null,
+-    opponentWinRate: partial.opponentWinRate ?? null,
++    winRate,
++    opponentWinRate,
+     conviction: partial.conviction ?? null,
+     netScore: partial.netScore ?? null,
+     lowData: partial.lowData ?? partial.n < 3,
+@@ -235,13 +240,31 @@ describe('pooledDirectionalReduction', () => {
+     const result = pooledDirectionalReduction(grid, 3);
+ 
+     expect(result.reason).toBeNull();
+-    expect(result.pushTowardFirstRate).toBeCloseTo(17 / 30, 10);
+-    expect(result.pushTowardSecondRate).toBeCloseTo(7 / 40, 10);
+-    expect(result.baselineRate).toBeCloseTo(1 / 2, 10);
+-    expect(result.value).toBeCloseTo(17 / 30 - 7 / 40, 10);
++    expect(result.pushTowardFirstRate).toBeCloseTo(0.6, 10);
++    expect(result.pushTowardSecondRate).toBeCloseTo(0.15, 10);
++    expect(result.baselineRate).toBeCloseTo(0.6875, 10);
++    expect(result.value).toBeCloseTo(0.45, 10);
+     expect(result.qualifyingTrials).toBe(80);
+   });
+ 
++  it('treats each qualifying cell equally instead of weighting by cell size', () => {
++    const grid: Cell[] = [
++      cell({ ownLevel: 4, opponentLevel: 1, n: 1, successes: 0, winRate: 0, lowData: false }),
++      cell({ ownLevel: 5, opponentLevel: 1, n: 100, successes: 100, winRate: 1, lowData: false }),
++      cell({ ownLevel: 1, opponentLevel: 4, n: 1, successes: 1, winRate: 0.5, lowData: false }),
++      cell({ ownLevel: 1, opponentLevel: 5, n: 100, successes: 50, winRate: 0.5, lowData: false }),
++      cell({ ownLevel: 2, opponentLevel: 2, n: 10, successes: 6, winRate: 0.6, lowData: false }),
++    ];
++
++    const result = pooledDirectionalReduction(grid, 3);
++
++    expect(result.reason).toBeNull();
++    expect(result.pushTowardFirstRate).toBeCloseTo(0.5, 10);
++    expect(result.pushTowardSecondRate).toBeCloseTo(0.5, 10);
++    expect(result.value).toBeCloseTo(0, 10);
++    expect(result.baselineRate).toBeCloseTo(0.6, 10);
++  });
++
+   it('marks the directional pool as thin when the total directional vignette count is too small', () => {
+     const grid: Cell[] = [
+       cell({ ownLevel: 4, opponentLevel: 1, n: 1, successes: 0, lowData: true }),
+@@ -275,7 +298,7 @@ describe('pooledDirectionalReduction', () => {
+     );
+ 
+     expect(result.reason).toBeNull();
+-    expect(result.value).toBeCloseTo((2 / 3) - (1 / 3), 10);
++    expect(result.value).toBeCloseTo(0.5, 10);
+     expect(result.qualifyingTrials).toBe(9);
+   });
+ 
+diff --git a/cloud/apps/web/src/components/models/PressureResponseByValueTable.test.tsx b/cloud/apps/web/src/components/models/PressureResponseByValueTable.test.tsx
+index fa2677cb..ef298c75 100644
+--- a/cloud/apps/web/src/components/models/PressureResponseByValueTable.test.tsx
++++ b/cloud/apps/web/src/components/models/PressureResponseByValueTable.test.tsx
+@@ -225,6 +225,32 @@ describe('PressureResponseByValueTable', () => {
+     expect(cells[4]?.textContent ?? '').toBe('30.0%');
+   });
+ 
++  it('treats each pooled condition cell equally instead of weighting by cell size', () => {
++    render(
++      <PressureResponseByValueTable
++        valuePairs={[
++          createPair('alpha::beta', 'Alpha', 'Beta', [
++            createCell(1, 1, 1, 0),
++            createCell(4, 1, 100, 1),
++            createCell(1, 4, 1, 0),
++            createCell(2, 3, 100, 1),
++          ]),
++        ]}
++      />,
++    );
++
++    const row = screen.getByText('Alpha').closest('tr');
++    if (row == null) {
++      throw new Error('Missing Alpha row');
++    }
++
++    const cells = within(row).getAllByRole('cell');
++    expect(cells[1]?.textContent ?? '').toBe('50.0%');
++    expect(cells[2]?.textContent ?? '').toBe('0.0%');
++    expect(cells[3]?.textContent ?? '').toBe('100.0%');
++    expect(cells[4]?.textContent ?? '').toBe('0.0%');
++  });
++
+   it('keeps sparse vignette cells in the pooled rates instead of showing dashes', () => {
+     render(
+       <PressureResponseByValueTable
+diff --git a/cloud/apps/web/src/components/models/PressureResponseByValueTable.tsx b/cloud/apps/web/src/components/models/PressureResponseByValueTable.tsx
+index a16ddbe4..1bb451f3 100644
+--- a/cloud/apps/web/src/components/models/PressureResponseByValueTable.tsx
++++ b/cloud/apps/web/src/components/models/PressureResponseByValueTable.tsx
+@@ -110,8 +110,7 @@ function poolRate(
+   predicate: (cell: PressureSensitivityCell) => boolean,
+   rateSelector: (cell: PressureSensitivityCell) => number | null | undefined,
+ ): number | null {
+-  let weightedSuccesses = 0;
+-  let trials = 0;
++  const rates: number[] = [];
+ 
+   for (const cell of cells) {
+     if (!predicate(cell)) {
+@@ -123,15 +122,10 @@ function poolRate(
+       continue;
+     }
+ 
+-    weightedSuccesses += rate * cell.n;
+-    trials += cell.n;
++    rates.push(rate);
+   }
+ 
+-  if (trials === 0) {
+-    return null;
+-  }
+-
+-  return weightedSuccesses / trials;
++  return mean(rates);
+ }
+ 
+ function computePairRates(pair: PressureSensitivityValuePair, valueLabel: string): PairPerspectiveRates {
+@@ -361,8 +355,8 @@ export function PressureResponseByValueTable({ valuePairs }: Props) {
+             its 9 pairings, broken down by what the prompt was doing.
+           </p>
+           <p className="text-xs text-gray-500">
+-            Each pressure cell counts each vignette once. The pair rows are then averaged equally across the 9 pairs
+-            containing this value.
++            Each pressure cell is pooled from its vignette-level observations, then counted once in the row summary.
++            The pair rows are averaged equally across the 9 pairs containing this value.
+           </p>
+         </div>
+         <CopyVisualButton targetRef={tableRef} label="Pressure Response by Value" />
+@@ -401,7 +395,7 @@ export function PressureResponseByValueTable({ valuePairs }: Props) {
+                 tooltip={
+                   <TooltipGridBlock
+                     title="Average win rate"
+-                    description="All scored vignette-level cells are counted when pooling this rate."
++                    description="All pooled condition cells are counted equally when pooling this rate."
+                     pattern="average"
+                   />
+                 }
+@@ -417,7 +411,7 @@ export function PressureResponseByValueTable({ valuePairs }: Props) {
+                 tooltip={
+                   <TooltipGridBlock
+                     title="Balanced win rate"
+-                    description="Only the diagonal cells are counted."
++                    description="Only the diagonal condition cells are counted."
+                     pattern="balanced"
+                   />
+                 }
+diff --git a/cloud/apps/web/src/components/models/PressureSensitivityDetail.tsx b/cloud/apps/web/src/components/models/PressureSensitivityDetail.tsx
+index 4fb93bfc..db48879c 100644
+--- a/cloud/apps/web/src/components/models/PressureSensitivityDetail.tsx
++++ b/cloud/apps/web/src/components/models/PressureSensitivityDetail.tsx
+@@ -71,7 +71,7 @@ function renderTrialsCell(pair: PressureSensitivityValuePair): ReactNode {
+       <Tooltip
+         content={
+           <div className="max-w-[280px] whitespace-normal text-xs leading-5">
+-            {qualifyingTrials} of {pair.n} scored trials used
++            {qualifyingTrials} of {pair.n} scored observations used
+           </div>
+         }
+         position="top"
+@@ -121,7 +121,8 @@ export function PressureSensitivityDetail({ model }: Props) {
+           <h2 className="text-lg font-semibold text-gray-900">Pressure Response by Value Pair</h2>
+           <p className="text-sm text-gray-600">
+             This table shows the baseline win rate and push rates for each value pair. The Pressure response column is
+-            the signed difference between push directions, and the Trials column counts qualifying scored trials.
++            the signed difference between push directions, and the Trials column counts the scored observations used
++            to pool those rates.
+           </p>
+           <p className="text-xs text-gray-500">Selected model: {model.label}</p>
+         </div>
+diff --git a/cloud/apps/web/src/components/models/pressureSensitivityFormatting.ts b/cloud/apps/web/src/components/models/pressureSensitivityFormatting.ts
+index 0f6237ae..a8fcb515 100644
+--- a/cloud/apps/web/src/components/models/pressureSensitivityFormatting.ts
++++ b/cloud/apps/web/src/components/models/pressureSensitivityFormatting.ts
+@@ -4,7 +4,7 @@
+  */
+ 
+ export const SUMMARY_PRESSURE_RESPONSE_TOOLTIP =
+-  "Arithmetic mean of per-pair pressure responses across this model's measured pairs. The range in brackets is the spread of per-pair values. Positive = more trials pushed toward the model's own value; negative = more trials pushed away.";
++  "Arithmetic mean of per-pair pressure responses across this model's measured pairs. The range in brackets is the spread of per-pair values. Positive = more pressure moved toward the model's own value; negative = more pressure moved away.";
+ 
+ export const PAIR_PRESSURE_RESPONSE_TOOLTIP =
+   'Signed push-rate difference: Push toward first minus Push toward other, in percentage points. The CI is the Newcombe 95% confidence interval for the difference of two proportions.';
+@@ -19,7 +19,7 @@ export const PUSH_TOWARD_OTHER_TOOLTIP =
+   "Win rate when the other value's pressure is high (levels 4–5) and the first value's pressure is moderate. A higher rate means the model picks the other value more under pressure.";
+ 
+ export const TRIALS_TOOLTIP =
+-  'Qualifying scored trials that contributed to the Baseline, Push toward first, and Push toward other rates. These are the trials used to compute the Pressure response and its confidence interval.';
++  'Qualifying scored observations that contributed to the Baseline, Push toward first, and Push toward other rates. These observations feed the pooled rates used to compute the Pressure response and its confidence interval.';
+ 
+ export function formatPercent(value: number): string {
+   return `${(value * 100).toFixed(1)}%`;

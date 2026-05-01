@@ -12,6 +12,11 @@ import {
 } from '../../../src/services/pressure-sensitivity/aggregation.js';
 
 function cell(partial: Partial<Cell> & { ownLevel: number; opponentLevel: number; n: number }): Cell {
+  const winRate =
+    partial.winRate ?? (partial.n > 0 && partial.successes != null ? partial.successes / partial.n : null);
+  const opponentWinRate =
+    partial.opponentWinRate ?? (winRate == null ? null : 1 - winRate);
+
   return {
     ownLevel: partial.ownLevel,
     opponentLevel: partial.opponentLevel,
@@ -19,8 +24,8 @@ function cell(partial: Partial<Cell> & { ownLevel: number; opponentLevel: number
     unscoredCount: partial.unscoredCount ?? 0,
     successes: partial.successes ?? 0,
     opponentSuccesses: partial.opponentSuccesses ?? 0,
-    winRate: partial.winRate ?? null,
-    opponentWinRate: partial.opponentWinRate ?? null,
+    winRate,
+    opponentWinRate,
     conviction: partial.conviction ?? null,
     netScore: partial.netScore ?? null,
     lowData: partial.lowData ?? partial.n < 3,
@@ -235,11 +240,29 @@ describe('pooledDirectionalReduction', () => {
     const result = pooledDirectionalReduction(grid, 3);
 
     expect(result.reason).toBeNull();
-    expect(result.pushTowardFirstRate).toBeCloseTo(17 / 30, 10);
-    expect(result.pushTowardSecondRate).toBeCloseTo(7 / 40, 10);
-    expect(result.baselineRate).toBeCloseTo(1 / 2, 10);
-    expect(result.value).toBeCloseTo(17 / 30 - 7 / 40, 10);
+    expect(result.pushTowardFirstRate).toBeCloseTo(0.6, 10);
+    expect(result.pushTowardSecondRate).toBeCloseTo(0.15, 10);
+    expect(result.baselineRate).toBeCloseTo(0.6875, 10);
+    expect(result.value).toBeCloseTo(0.45, 10);
     expect(result.qualifyingTrials).toBe(80);
+  });
+
+  it('treats each qualifying cell equally instead of weighting by cell size', () => {
+    const grid: Cell[] = [
+      cell({ ownLevel: 4, opponentLevel: 1, n: 1, successes: 0, winRate: 0, lowData: false }),
+      cell({ ownLevel: 5, opponentLevel: 1, n: 100, successes: 100, winRate: 1, lowData: false }),
+      cell({ ownLevel: 1, opponentLevel: 4, n: 1, successes: 1, winRate: 0.5, lowData: false }),
+      cell({ ownLevel: 1, opponentLevel: 5, n: 100, successes: 50, winRate: 0.5, lowData: false }),
+      cell({ ownLevel: 2, opponentLevel: 2, n: 10, successes: 6, winRate: 0.6, lowData: false }),
+    ];
+
+    const result = pooledDirectionalReduction(grid, 3);
+
+    expect(result.reason).toBeNull();
+    expect(result.pushTowardFirstRate).toBeCloseTo(0.5, 10);
+    expect(result.pushTowardSecondRate).toBeCloseTo(0.5, 10);
+    expect(result.value).toBeCloseTo(0, 10);
+    expect(result.baselineRate).toBeCloseTo(0.6, 10);
   });
 
   it('marks the directional pool as thin when the total directional vignette count is too small', () => {
@@ -275,7 +298,7 @@ describe('pooledDirectionalReduction', () => {
     );
 
     expect(result.reason).toBeNull();
-    expect(result.value).toBeCloseTo((2 / 3) - (1 / 3), 10);
+    expect(result.value).toBeCloseTo(0.5, 10);
     expect(result.qualifyingTrials).toBe(9);
   });
 

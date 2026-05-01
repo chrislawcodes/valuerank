@@ -71,7 +71,7 @@ function renderTrialsCell(pair: PressureSensitivityValuePair): ReactNode {
       <Tooltip
         content={
           <div className="max-w-[280px] whitespace-normal text-xs leading-5">
-            {qualifyingTrials} of {pair.n} scored trials used
+            {qualifyingTrials} of {pair.n} scored observations used
           </div>
         }
         position="top"
@@ -121,7 +121,8 @@ export function PressureSensitivityDetail({ model }: Props) {
           <h2 className="text-lg font-semibold text-gray-900">Pressure Response by Value Pair</h2>
           <p className="text-sm text-gray-600">
             This table shows the baseline win rate and push rates for each value pair. The Pressure response column is
-            the signed difference between push directions, and the Trials column counts qualifying scored trials.
+            the signed difference between push directions, and the Trials column counts the scored observations used
+            to pool those rates.
           </p>
           <p className="text-xs text-gray-500">Selected model: {model.label}</p>
         </div>

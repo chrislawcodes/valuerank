@@ -1,0 +1,57 @@
+MCP issues detected. Run /mcp list for status.{
+  "session_id": "64d133ce-6249-4b52-8370-d27f34c2b494",
+  "response": "Here is a requirements-adversarial review of the spec artifact.\n\n## Findings\n\n### 1. HIGH: The Spec Is Unimplementable As Written Due to Contradictory Constraints\n\nThe spec creates a fundamental conflict between its core product goal and its implementation constraints.\n\n- **Spec Requirement:** The report MUST use condition-level pooling (FR-001) where each condition's result counts once, but it MUST NOT change the existing statistical machinery (Non-Goals), which includes using `diffProportionCI` for confidence intervals.\n- **Problem:** The `diffProportionCI` function (`aggregation.ts`) requires trial-level counts (successes and total trials) to operate. However, true condition-level pooling, as demanded by the spec, involves averaging the rates of the conditions, which discards the underlying trial counts needed by the statistical function. One cannot average the rates and also provide the total trial counts needed for the existing CI calculation.\n- **Implementation Choice:** The engineer chose to satisfy the statistical constraint. The `pooledDirectionalReduction` function aggregates data by summing up successes and trials from all vignettes within a pool. This makes the `diffProportionCI` function work, but it directly violates the spec’s primary goal (FR-001, FR-002) by weighting cells with more vignettes more heavily.\n- **Evidence:** `[CODE-CONFIRMED]` in `cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts`. The implementation of `pooledDirectionalReduction` shows data being prepared for `diffProportionCI` by summing trials (`directionalTrials`) and successes (`directionalSuccesses`), which is a trial-weighted approach. This makes implementing the spec's \"count each condition once\" rule impossible without violating the \"don't change the stats\" non-goal.\n\nThis contradiction must be resolved by product and engineering stakeholders before any other fixes are attempted. A decision is required: either change the definition of pooling or change the statistical method.\n\n### 2. HIGH: Backend Aggregation Logic Violates the Spec's Core Principle\n\nEven if the statistical contradiction were resolved, the current backend implementation for calculating the main `pressureResponse` metric is incorrect and re-introduces the very trial-weighting problem this feature aims to eliminate.\n\n- **Spec Requirement:** \"No final roll-up on the page may multiply a pooled condition result by its trial count.\" (FR-003). Each condition must be counted once in roll-ups.\n- **Problem:** The `pooledDirectionalReduction` function in `aggregation.ts` calculates rates like `pushTowardFirstRate` by summing the `successes` from all cells in a pool and dividing by the sum of `n` (the vignette count) from those same cells. This is a weighted average, where cells containing more vignettes have a greater influence on the final rate.\n- **Evidence:** `[CODE-CONFIRMED]` in `cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts`. The lines `const directionalTrials = sumNumbers(directionalCells.map((cell) => cell.n));` and `const pushTowardFirstRate = directionalSuccesses / directionalTrials;` confirm that cells are being weighted by their vignette count (`cell.n`). This directly contradicts FR-003.\n\nThis flawed calculation invalidates the `pressureResponse` value at the heart of the report, along with the derived cross-value map and sanity check views.\n\n### 3. HIGH: Frontend `PressureResponseByValueTable` Re-implements Flawed Aggregation\n\nThe frontend contains a separate, incorrect implementation of the aggregation logic, mirroring the conceptual flaw in the backend.\n\n- **Spec Requirement:** \"The Pressure Response by Value table MUST compute each pair summary from pooled condition results, then average pair summaries equally for each value row.\" (FR-003).\n- **Problem:** The `poolRate` function within `PressureResponseByValueTable.tsx` calculates column values (e.g., \"High pressure on value\") by performing a weighted average. It multiplies each cell's `winRate` by `cell.n` (the number of vignettes in that cell), effectively re-introducing weighting by vignette count.\n- **Evidence:** `[CODE-CONFIRMED]` in `cloud/apps/web/src/components/models/PressureResponseByValueTable.tsx`. The lines `weightedSuccesses += rate * cell.n;` and `return weightedSuccesses / trials;` in the `poolRate` function explicitly implement a weighted average based on vignette count, violating the spec's core requirement.\n\nThis means the \"Pressure Response by Value\" table, a key deliverable, is showing numbers that are distorted by vignette counts, directly opposing the feature's goal.\n\n### 4. MEDIUM: UI Copy Is Misleading and Inconsistent with Implementation\n\nThe user-facing text in the report accurately describes the behavior required by the spec, but since the implementation is flawed, the text actively misleads the user about what the data represents.\n\n- **Spec Requirement:** UI copy must be updated to explain the condition-level pooling rule (FR-008, FR-009).\n- **Problem:** The UI makes explicit claims like, \"Each pressure cell counts each vignette once. The pair rows are then averaged equally...\" (`PressureResponseByValueTable.tsx`) and \"...it does not weight by trial count\" (`PressureSensitivityLimitations.tsx`). As established by previous findings, the implementation does the opposite.\n- **Evidence:** `[CODE-CONFIRMED]` in `cloud/apps/web/src/components/models/PressureResponseByValueTable.tsx` and `cloud/apps/web/src/components/models/PressureSensitivityLimitations.tsx`. The copy is present but describes a reality that the code does not deliver.\n\nThis discrepancy undermines user trust and can lead to serious misinterpretation of the results, as users are being coached to read the numbers with an incorrect understanding of their calculation.\n\n## Residual Risks\n\nAssuming the above findings are addressed, the following risks remain inherent to the design:\n\n- **Statistical Integrity:** The spec's non-goal of changing statistical machinery is a major source of risk. The entire report hinges on `diffProportionCI`, which is designed for comparing simple binomial proportions. The data being fed to it is a complex, multi-level aggregation. There is a risk that even with a \"fixed\" implementation, the chosen statistical method may not be appropriate for the averaged, pooled data, potentially producing misleading confidence intervals.\n- **Ambiguity of \"Condition\":** The spec and code use \"condition,\" \"vignette,\" and \"cell\" somewhat interchangeably. The implementation treats a \"condition\" as a \"vignette\" for weighting purposes. If the true research requirement is for a \"pressure cell\" to be the \"condition\" that is counted once, the entire aggregation logic is wrong in a different way. This ambiguity risks future misalignment.\n- **Scalability Ceiling:** The implementation fetches up to 500,000 transcripts into memory for real-time processing. While `transcriptCapHit` provides a safety valve, it also means the report's utility will degrade as data volume grows. For a feature intended for deep analysis, relying on a synchronous, in-memory aggregation with a fixed cap creates a long-term risk of the feature becoming unusable or systematically biased.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 69822
+        },
+        "tokens": {
+          "input": 43164,
+          "prompt": 43164,
+          "candidates": 1564,
+          "total": 50473,
+          "cached": 0,
+          "thoughts": 5745,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 69822,
+            "tokens": {
+              "input": 43164,
+              "prompt": 43164,
+              "candidates": 1564,
+              "total": 50473,
+              "cached": 0,
+              "thoughts": 5745,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}
