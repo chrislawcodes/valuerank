@@ -22,7 +22,9 @@ export type CellMetrics = {
   n: number;
   unscoredCount: number;
   successes: number;
+  opponentSuccesses: number;
   winRate: number | null;
+  opponentWinRate: number | null;
   conviction: number | null;
   netScore: number | null;
 };
@@ -164,16 +166,35 @@ export function buildCellMetrics(observations: ReadonlyArray<Observation>): Cell
   const n = ownPicked + opponentPicked + neutral;
 
   if (n === 0) {
-    return { n: 0, unscoredCount, successes: 0, winRate: null, conviction: null, netScore: null };
+    return {
+      n: 0,
+      unscoredCount,
+      successes: 0,
+      opponentSuccesses: 0,
+      winRate: null,
+      opponentWinRate: null,
+      conviction: null,
+      netScore: null,
+    };
   }
 
   const winRate = ownPicked / n;
+  const opponentWinRate = opponentPicked / n;
   const ownPicksWithStrength = ownStrong + ownLean;
   const conviction =
     ownPicksWithStrength === 0 ? null : (2 * ownStrong + ownLean) / ownPicksWithStrength;
   const netScore = (2 * ownStrong + ownLean - 2 * opponentStrong - opponentLean) / n;
 
-  return { n, unscoredCount, successes: ownPicked, winRate, conviction, netScore };
+  return {
+    n,
+    unscoredCount,
+    successes: ownPicked,
+    opponentSuccesses: opponentPicked,
+    winRate,
+    opponentWinRate,
+    conviction,
+    netScore,
+  };
 }
 
 function averageNonNull(values: Array<number | null>): number | null {
@@ -202,18 +223,25 @@ export function buildVignetteWeightedCellMetrics(
   const vignetteMetrics = vignetteObservations.map((observations) => buildCellMetrics(observations));
   const scoredVignetteMetrics = vignetteMetrics.filter((metrics) => metrics.n > 0);
   const winRates = scoredVignetteMetrics.map((metrics) => metrics.winRate);
+  const opponentWinRates = scoredVignetteMetrics.map((metrics) => metrics.opponentWinRate);
   const convictions = scoredVignetteMetrics.map((metrics) => metrics.conviction);
   const netScores = scoredVignetteMetrics.map((metrics) => metrics.netScore);
   let successes = 0;
+  let opponentSuccesses = 0;
   for (const rate of winRates) {
     if (rate != null) successes += rate;
+  }
+  for (const rate of opponentWinRates) {
+    if (rate != null) opponentSuccesses += rate;
   }
 
   return {
     n: scoredVignetteMetrics.length,
     unscoredCount: vignetteMetrics.reduce((sum, metrics) => sum + metrics.unscoredCount, 0),
     successes,
+    opponentSuccesses,
     winRate: averageNonNull(winRates),
+    opponentWinRate: averageNonNull(opponentWinRates),
     conviction: averageNonNull(convictions),
     netScore: averageNonNull(netScores),
     lowData: scoredVignetteMetrics.length < minN,
