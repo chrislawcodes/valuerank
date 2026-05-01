@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { ModelGroupsSection } from '../../src/components/domains/ModelGroupsSection';
 import type { ClusterAnalysis } from '../../src/api/operations/domainAnalysis';
+import { DOMAIN_ANALYSIS_MODELS } from '../../src/data/domainAnalysisData';
 
 const skippedClusterAnalysis: ClusterAnalysis = {
   skipped: true,
@@ -60,37 +61,53 @@ const populatedClusterAnalysis: ClusterAnalysis = {
   faultLinesByPair: {},
 };
 
+const populatedModels = DOMAIN_ANALYSIS_MODELS.slice(0, 2);
+
 describe('ModelGroupsSection', () => {
   afterEach(() => {
     vi.useRealTimers();
   });
 
   it('renders the plain model groups heading without numbering', () => {
-    render(<ModelGroupsSection clusterAnalysis={skippedClusterAnalysis} />);
+    render(<ModelGroupsSection clusterAnalysis={skippedClusterAnalysis} models={populatedModels} />);
 
     expect(screen.getByRole('heading', { name: 'Model Groups' })).toBeInTheDocument();
     expect(screen.getByText(/cluster analysis not available/i)).toBeInTheDocument();
     expect(screen.queryByText(/^1\./i)).not.toBeInTheDocument();
   });
 
-  it('offers a bar view and keeps the legend focused on model names', () => {
-    render(<ModelGroupsSection clusterAnalysis={populatedClusterAnalysis} />);
+  it('offers group and individual views without heatmap', () => {
+    render(<ModelGroupsSection clusterAnalysis={populatedClusterAnalysis} models={populatedModels} />);
 
+    expect(screen.getByRole('button', { name: 'Groups' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Individual' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Bar' })).toBeInTheDocument();
-    expect(screen.getByText('-2.50')).toBeInTheDocument();
-    expect(screen.getByText('+2.50')).toBeInTheDocument();
-    expect(screen.getByText(/Models: Model A/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Heatmap' })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Bar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Individual' }));
 
-    expect(screen.getByText(/Models: Model A/i)).toBeInTheDocument();
-    expect(screen.getByText(/Models: Model B/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Claude Sonnet 4.5' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'DeepSeek Chat' })).toBeInTheDocument();
+  });
+
+  it('lights up the selected legend item and fades the others', () => {
+    const { container } = render(<ModelGroupsSection clusterAnalysis={populatedClusterAnalysis} models={populatedModels} />);
+
+    const legendButton = screen.getByRole('button', { name: 'Model A' });
+    fireEvent.click(legendButton);
+
+    const activeDot = container.querySelector('[data-value-key="Achievement"][data-cluster-id="cluster-1"]');
+    const inactiveDot = container.querySelector('[data-value-key="Achievement"][data-cluster-id="cluster-2"]');
+    expect(activeDot).not.toBeNull();
+    expect(inactiveDot).not.toBeNull();
+    expect(activeDot).toHaveStyle({ opacity: '1' });
+    expect(inactiveDot).toHaveStyle({ opacity: '0.2' });
   });
 
   it('shows a value tooltip with color rows and logit values on bar hover', () => {
     vi.useFakeTimers();
 
-    const { container } = render(<ModelGroupsSection clusterAnalysis={populatedClusterAnalysis} />);
+    const { container } = render(<ModelGroupsSection clusterAnalysis={populatedClusterAnalysis} models={populatedModels} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Bar' }));
 
@@ -113,15 +130,16 @@ describe('ModelGroupsSection', () => {
   });
 
   it('shows the Schwartz category ring in radar view', () => {
-    render(<ModelGroupsSection clusterAnalysis={populatedClusterAnalysis} />);
+    render(<ModelGroupsSection clusterAnalysis={populatedClusterAnalysis} models={populatedModels} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Radar' }));
 
     expect(screen.getByRole('img', { name: /cluster radar chart ordered by favorability with schwartz category ring/i })).toBeInTheDocument();
-    expect(screen.queryByText(/ordered to match ranking and cycles/i)).not.toBeInTheDocument();
     expect(screen.getByText('Self-Transcendence')).toBeInTheDocument();
     expect(screen.getByText('Conservation')).toBeInTheDocument();
     expect(screen.getByText('Self-Enhancement')).toBeInTheDocument();
     expect(screen.getByText('Openness to Change')).toBeInTheDocument();
+    expect(screen.getByText('Universalism')).toHaveAttribute('text-anchor', 'end');
+    expect(screen.queryByText(/Cluster:/i)).not.toBeInTheDocument();
   });
 });

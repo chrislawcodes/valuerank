@@ -2,9 +2,6 @@ import { useMemo } from 'react';
 import { type DomainCluster } from '../../api/operations/domainAnalysis';
 import { VALUE_LABELS } from '../../data/domainAnalysisData';
 import {
-  getClusterMemberLabelText,
-} from './clusterVisualizationUtils';
-import {
   DISPLAY_VALUES,
   QUADRANT_ARCS,
   buildValueAngles,
@@ -12,6 +9,7 @@ import {
 
 type ClusterRadarChartProps = {
   clusters: DomainCluster[];
+  activeGroupId?: string | null;
 };
 
 const CHART_SIZE = 640;
@@ -44,8 +42,16 @@ function scoreToRadius(score: number): number {
   return ((clamped - RADAR_SCORE_MIN) / RADAR_SCORE_RANGE) * OUTER_RADIUS;
 }
 
-export function ClusterRadarChart({ clusters }: ClusterRadarChartProps) {
+export function ClusterRadarChart({ clusters, activeGroupId = null }: ClusterRadarChartProps) {
   const valueAngles = useMemo(() => buildValueAngles(), []);
+  const renderedClusters = useMemo(
+    () => [...clusters].sort((left, right) => {
+      const leftActive = activeGroupId != null && left.id === activeGroupId ? 1 : 0;
+      const rightActive = activeGroupId != null && right.id === activeGroupId ? 1 : 0;
+      return leftActive - rightActive;
+    }),
+    [activeGroupId, clusters],
+  );
   const hasClippedScores = useMemo(
     () => clusters.some((cluster) => DISPLAY_VALUES.some((valueKey) => {
       const score = cluster.centroid[valueKey] ?? 0;
@@ -137,14 +143,23 @@ export function ClusterRadarChart({ clusters }: ClusterRadarChartProps) {
             const labelPoint = getPoint(angle, OUTER_RADIUS + 18);
             const label = VALUE_LABELS[valueKey];
             const anchor =
-              labelPoint.x < CENTER_X - 8 ? 'end' : labelPoint.x > CENTER_X + 8 ? 'start' : 'middle';
+              valueKey === 'Universalism_Nature'
+                ? 'end'
+                : labelPoint.x < CENTER_X - 8
+                  ? 'end'
+                  : labelPoint.x > CENTER_X + 8
+                    ? 'start'
+                    : 'middle';
+            const adjustedLabelPoint = valueKey === 'Universalism_Nature'
+              ? { x: labelPoint.x - 14, y: labelPoint.y }
+              : labelPoint;
 
             return (
               <g key={valueKey}>
                 <line x1={CENTER_X} y1={CENTER_Y} x2={outer.x} y2={outer.y} stroke="#e5e7eb" strokeWidth="1" />
                 <text
-                  x={labelPoint.x}
-                  y={labelPoint.y}
+                  x={adjustedLabelPoint.x}
+                  y={adjustedLabelPoint.y}
                   textAnchor={anchor}
                   dominantBaseline="middle"
                   className="fill-gray-700 text-[10px] font-medium"
@@ -157,9 +172,11 @@ export function ClusterRadarChart({ clusters }: ClusterRadarChartProps) {
 
           <circle cx={CENTER_X} cy={CENTER_Y} r="2.75" fill="#94a3b8" />
 
-          {clusters.map((cluster, index) => {
+          {renderedClusters.map((cluster, index) => {
             const palette = CLUSTER_PALETTE[index % CLUSTER_PALETTE.length]!;
             const orderedValues = DISPLAY_VALUES;
+            const isActive = activeGroupId == null || activeGroupId === cluster.id;
+            const faded = activeGroupId != null && !isActive;
             const points = orderedValues.map((valueKey) => {
               const angle = valueAngles.get(valueKey) ?? -Math.PI / 2;
               const score = cluster.centroid[valueKey] ?? 0;
@@ -172,7 +189,14 @@ export function ClusterRadarChart({ clusters }: ClusterRadarChartProps) {
 
             return (
               <g key={cluster.id}>
-                <path d={`${path} Z`} fill={palette.fill} stroke={palette.stroke} strokeWidth="2" />
+                <path
+                  d={`${path} Z`}
+                  fill={palette.fill}
+                  stroke={palette.stroke}
+                  strokeWidth={isActive && activeGroupId != null ? '3' : '2'}
+                  opacity={faded ? 0.16 : activeGroupId != null ? 1 : 0.78}
+                  style={isActive && activeGroupId != null ? { filter: `drop-shadow(0 0 8px rgba(255,255,255,0.35)) drop-shadow(0 0 14px ${palette.stroke}aa)` } : undefined}
+                />
                 {points.map((point, pointIndex) => {
                   const valueKey = orderedValues[pointIndex]!;
                   const score = cluster.centroid[valueKey] ?? 0;
@@ -182,10 +206,12 @@ export function ClusterRadarChart({ clusters }: ClusterRadarChartProps) {
                       <circle
                         cx={point.x}
                         cy={point.y}
-                        r="3.2"
+                        r={isActive && activeGroupId != null ? 4 : 3.2}
                         fill={palette.stroke}
                         stroke="#ffffff"
                         strokeWidth="1.5"
+                        opacity={faded ? 0.2 : activeGroupId != null ? 1 : 0.85}
+                        style={isActive && activeGroupId != null ? { filter: `drop-shadow(0 0 6px rgba(255,255,255,0.35)) drop-shadow(0 0 12px ${palette.stroke}aa)` } : undefined}
                       />
                     </g>
                   );
@@ -219,25 +245,6 @@ export function ClusterRadarChart({ clusters }: ClusterRadarChartProps) {
           Some scores fall outside the fixed range and are shown at the edge of the chart.
         </p>
       )}
-
-      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-        {clusters.map((cluster, index) => {
-          const palette = CLUSTER_PALETTE[index % CLUSTER_PALETTE.length]!;
-          const memberLabels = getClusterMemberLabelText(cluster);
-          const title = cluster.name.length > 0 ? cluster.name : memberLabels;
-          return (
-            <div key={cluster.id} className="rounded-lg border border-gray-200 bg-white p-3">
-              <div className="flex items-start gap-2">
-                <span className="mt-1 h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: palette.stroke }} />
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-gray-900">Models: {memberLabels}</p>
-                  <p className="text-xs text-gray-500">Cluster: {title}</p>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }
