@@ -15,7 +15,7 @@ function getConfidenceTone(confidence: number | null): string {
 
 function formatConfidence(confidence: number | null): string {
   if (confidence == null) return '—';
-  return `${Math.round(confidence)}%`;
+  return `${confidence.toFixed(1)}%`;
 }
 
 function buildTooltip(valueKey: string, result: ModelsConfidenceModelResult['values'][number] | undefined): string {
@@ -148,7 +148,7 @@ export function ConfidenceHeatmap({ models, selectedModelIds, onCellClick }: Con
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm">
+    <div className="overflow-x-auto">
       <table className="min-w-full border-collapse text-sm">
         <thead className="bg-gray-50">
           <tr>
