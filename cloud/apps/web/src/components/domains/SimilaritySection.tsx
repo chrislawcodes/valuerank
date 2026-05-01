@@ -87,7 +87,18 @@ export function SimilaritySection({ models, clusterAnalysis }: SimilaritySection
       similarities.set(a.model, row);
     }
 
-    return { similarities, pairs };
+    const averages = new Map<string, number>();
+    for (const b of models) {
+      const others = models.filter((a) => a.model !== b.model);
+      if (others.length === 0) {
+        averages.set(b.model, 0);
+        continue;
+      }
+      const sum = others.reduce((acc, a) => acc + (similarities.get(a.model)?.get(b.model) ?? 0), 0);
+      averages.set(b.model, sum / others.length);
+    }
+
+    return { similarities, pairs, averages };
   }, [models]);
 
   const modelClusterIndex = useMemo(() => {
@@ -183,6 +194,19 @@ export function SimilaritySection({ models, clusterAnalysis }: SimilaritySection
                   </tr>
                 );
               })}
+            {models.length > 1 && (
+                <tr className="border-t-2 border-gray-300">
+                  <th scope="row" className="px-2 py-2 text-left text-xs font-medium italic text-gray-600">Avg similarity</th>
+                  {models.map((col) => {
+                    const avg = matrix.averages.get(col.model) ?? 0;
+                    return (
+                      <td key={col.model} className="px-2 py-2 text-right text-gray-800" style={{ background: getSimilarityColor(avg) }}>
+                        {avg.toFixed(2)}
+                      </td>
+                    );
+                  })}
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

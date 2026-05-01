@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import type {
   ModelEntry,
 } from '../../src/data/domainAnalysisData';
@@ -64,9 +64,10 @@ const models: ModelEntry[] = [
   },
 ];
 
+const defaultModelIds = new Set(['model-a', 'model-b']);
 
 describe('DominanceSection', () => {
-  it('renders the shell and updates summary content when the selected model changes', async () => {
+  it('renders shell, model picker, and updates summary when model changes', async () => {
     vi.spyOn(window, 'matchMedia').mockImplementation(
       (query) =>
         ({
@@ -80,44 +81,40 @@ describe('DominanceSection', () => {
           dispatchEvent: vi.fn(),
         }) as MediaQueryList,
     );
-    let container: HTMLElement;
-    const { rerender } = render(
+
+    render(
       <DominanceSection
         models={models}
-        selectedModelId="model-a"
+        defaultModelIds={defaultModelIds}
       />,
     );
+
+    let container: HTMLElement;
     await act(async () => {
       container = screen.getByRole('img', { name: 'Value dominance graph' }).parentElement!.parentElement!;
       await Promise.resolve();
     });
 
-    expect(
-      screen.getByRole('heading', { name: 'Ranking and Cycles' }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Ranking and Cycles' })).toBeInTheDocument();
     expect(
       screen.getByText(
         'Directed value graph for one selected AI: arrows point from stronger value to weaker value.',
       ),
     ).toBeInTheDocument();
     expect(screen.getByRole('img', { name: 'Value dominance graph' })).toBeInTheDocument();
-    expect(
-      screen.getByRole('heading', { name: 'Most Contestable Value Pairs' }),
-    ).toBeInTheDocument();
-    expect(screen.getByText('Model focus:')).toBeInTheDocument();
-    expect(screen.getByText('Model A')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Most Contestable Value Pairs' })).toBeInTheDocument();
+
+    const picker = screen.getByLabelText('Model focus:');
+    expect(picker).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'All models (average)' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Model A' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Model B' })).toBeInTheDocument();
+
     const summaryList = container!.querySelector('ol');
     expect(summaryList?.textContent).toBeTruthy();
     const initialSummary = summaryList?.textContent ?? '';
 
-    rerender(
-      <DominanceSection
-        models={models}
-        selectedModelId="model-b"
-      />,
-    );
-
-    expect(screen.getByText('Model B')).toBeInTheDocument();
+    fireEvent.change(picker, { target: { value: 'model-a' } });
     expect(summaryList?.textContent).not.toEqual(initialSummary);
   });
 });

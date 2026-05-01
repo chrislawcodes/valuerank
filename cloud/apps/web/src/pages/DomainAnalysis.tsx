@@ -515,8 +515,8 @@ export function DomainAnalysis() {
             showStabilityDots
           />
           <DominanceSection
-            models={visibleModels}
-            selectedModelId={singleSelectedModelId}
+            models={models}
+            defaultModelIds={defaultModelIds}
           />
           <SimilaritySection models={visibleModels} clusterAnalysis={data?.domainAnalysis.clusterAnalysis} />
         </>

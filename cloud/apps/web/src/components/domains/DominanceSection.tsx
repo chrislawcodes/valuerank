@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  VALUES,
   type ModelEntry,
   type ValueKey,
 } from '../../data/domainAnalysisData';
@@ -15,7 +16,7 @@ import {
 
 type DominanceSectionProps = {
   models: ModelEntry[];
-  selectedModelId: string | null;
+  defaultModelIds: Set<string>;
 };
 
 const THEME_COLORS: DominanceSectionThemeColors = {
@@ -36,13 +37,13 @@ const THEME_COLORS: DominanceSectionThemeColors = {
   idleRingColor: '#38bdf8',
 };
 
-export function DominanceSection({ models, selectedModelId }: DominanceSectionProps) {
+export function DominanceSection({ models, defaultModelIds }: DominanceSectionProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const [focusedValue, setFocusedValue] = useState<ValueKey | null>(null);
   const [hoveredValue, setHoveredValue] = useState<ValueKey | null>(null);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const [animationPhase, setAnimationPhase] = useState<'idle' | 'collapse' | 'expand'>('idle');
-  const prevModelId = useRef(selectedModelId);
+  const [pickedModelId, setPickedModelId] = useState<string>(''); // '' = All models
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
@@ -57,11 +58,54 @@ export function DominanceSection({ models, selectedModelId }: DominanceSectionPr
     NODE_ANIMATION_BASE_DURATION_MS +
     (DISPLAY_VALUES.length - 1) * NODE_ANIMATION_PER_NODE_SLOWDOWN_MS;
 
-  useEffect(() => {
-    if (selectedModelId === prevModelId.current) return;
-    prevModelId.current = selectedModelId;
-    if (prefersReducedMotion) return;
+  const pickerModels = useMemo(
+    () => models.filter((m) => defaultModelIds.has(m.model)),
+    [models, defaultModelIds],
+  );
 
+  const allModelsEntry = useMemo<ModelEntry>(() => {
+    const modelsWithRates = models.filter((m) =>
+      VALUES.some((v) => m.winRates?.[v] != null),
+    );
+    const count = Math.max(modelsWithRates.length, 1);
+    const avgWinRates = Object.fromEntries(
+      VALUES.map((v) => {
+        const rates = modelsWithRates
+          .map((m) => m.winRates?.[v])
+          .filter((r): r is number => r != null);
+        return [v, rates.length > 0 ? rates.reduce((a, b) => a + b, 0) / rates.length : null];
+      }),
+    ) as Record<ValueKey, number | null>;
+    const avgValues = Object.fromEntries(
+      VALUES.map((v) => [
+        v,
+        models.reduce((sum, m) => sum + (m.values[v] ?? 0), 0) / count,
+      ]),
+    ) as Record<ValueKey, number>;
+    return {
+      model: '__all__',
+      label: 'All models (average)',
+      values: avgValues,
+      winRates: avgWinRates,
+    };
+  }, [models]);
+
+  const modelById = useMemo(
+    () => new Map<string, ModelEntry>([
+      ...models.map((m): [string, ModelEntry] => [m.model, m]),
+      ['__all__', allModelsEntry],
+    ]),
+    [models, allModelsEntry],
+  );
+
+  const effectiveModelId = pickedModelId !== '' ? pickedModelId : '__all__';
+  const selectedModel = modelById.get(effectiveModelId);
+
+  const prevActiveId = useRef(effectiveModelId);
+  useEffect(() => {
+    if (effectiveModelId === prevActiveId.current) return;
+    prevActiveId.current = effectiveModelId;
+    if (prefersReducedMotion) return;
     setAnimationPhase('collapse');
     const expandTimer = setTimeout(() => setAnimationPhase('expand'), slowestDuration);
     const idleTimer = setTimeout(() => setAnimationPhase('idle'), 2 * slowestDuration);
@@ -69,16 +113,7 @@ export function DominanceSection({ models, selectedModelId }: DominanceSectionPr
       clearTimeout(expandTimer);
       clearTimeout(idleTimer);
     };
-  }, [prefersReducedMotion, selectedModelId, slowestDuration]);
-
-  const modelById = useMemo(
-    () => new Map(models.map((model) => [model.model, model])),
-    [models],
-  );
-  const activeModelId = selectedModelId !== null && modelById.has(selectedModelId)
-    ? selectedModelId
-    : models[0]?.model ?? '';
-  const selectedModel = modelById.get(activeModelId);
+  }, [effectiveModelId, prefersReducedMotion, slowestDuration]);
 
   const {
     contestedPairs,
@@ -106,9 +141,22 @@ export function DominanceSection({ models, selectedModelId }: DominanceSectionPr
       </div>
 
       <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
-        <span className={`font-medium ${THEME_COLORS.panelMutedText}`}>Model focus:</span>
-        <span className={THEME_COLORS.panelText}>{selectedModel?.label ?? 'No model selected'}</span>
+        <label htmlFor="dominance-model-picker" className={`font-medium ${THEME_COLORS.panelMutedText}`}>
+          Model focus:
+        </label>
+        <select
+          id="dominance-model-picker"
+          className="rounded border border-gray-300 px-1.5 py-0.5 text-xs text-gray-800"
+          value={pickedModelId}
+          onChange={(e) => setPickedModelId(e.target.value)}
+        >
+          <option value="">All models (average)</option>
+          {pickerModels.map((m) => (
+            <option key={m.model} value={m.model}>{m.label}</option>
+          ))}
+        </select>
       </div>
+
       {models.length === 0 && (
         <p className={`mb-3 text-xs ${THEME_COLORS.panelMutedText}`}>
           No analyzed model data is available for this domain yet.
