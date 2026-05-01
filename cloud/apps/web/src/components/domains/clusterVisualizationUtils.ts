@@ -9,6 +9,21 @@ export const DOT_BAR_CLUSTER_SCORE_MIN = -2.5;
 export const DOT_BAR_CLUSTER_SCORE_MAX = 2.5;
 export const DOT_BAR_CLUSTER_SCORE_RANGE = DOT_BAR_CLUSTER_SCORE_MAX - DOT_BAR_CLUSTER_SCORE_MIN;
 
+export const CLUSTER_VISUAL_COLORS = [
+  '#2563eb',
+  '#d97706',
+  '#059669',
+  '#e11d48',
+  '#7c3aed',
+  '#0ea5e9',
+  '#ea580c',
+  '#65a30d',
+  '#d946ef',
+  '#4f46e5',
+  '#14b8a6',
+  '#ca8a04',
+] as const;
+
 const VALUE_INDEX = new Map(VALUES.map((valueKey, index) => [valueKey, index] as const));
 
 function averageScore(clusters: DomainCluster[], valueKey: ValueKey): number {
@@ -58,6 +73,10 @@ export function buildIndividualClusters(models: ModelEntry[]): DomainCluster[] {
       },
     ],
   }));
+}
+
+export function getClusterVisualColor(index: number): string {
+  return CLUSTER_VISUAL_COLORS[index % CLUSTER_VISUAL_COLORS.length]!;
 }
 
 export function formatClusterScoreLabel(score: number): string {

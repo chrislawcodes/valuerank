@@ -104,6 +104,33 @@ describe('ModelGroupsSection', () => {
     expect(inactiveDot).toHaveStyle({ opacity: '0.2' });
   });
 
+  it('allows multi-select in individual mode', () => {
+    const { container } = render(<ModelGroupsSection clusterAnalysis={populatedClusterAnalysis} models={populatedModels} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Individual' }));
+
+    const firstModel = populatedModels[0];
+    const secondModel = populatedModels[1];
+    expect(firstModel).toBeDefined();
+    expect(secondModel).toBeDefined();
+
+    const firstButton = screen.getByRole('button', { name: firstModel?.label ?? '' });
+    const secondButton = screen.getByRole('button', { name: secondModel?.label ?? '' });
+
+    fireEvent.click(firstButton);
+    fireEvent.click(secondButton);
+
+    expect(firstButton).toHaveAttribute('aria-pressed', 'true');
+    expect(secondButton).toHaveAttribute('aria-pressed', 'true');
+
+    const firstDot = container.querySelector(`[data-value-key="Achievement"][data-cluster-id="${firstModel?.model}"]`);
+    const secondDot = container.querySelector(`[data-value-key="Achievement"][data-cluster-id="${secondModel?.model}"]`);
+    expect(firstDot).not.toBeNull();
+    expect(secondDot).not.toBeNull();
+    expect(firstDot as Element).toHaveStyle({ opacity: '1' });
+    expect(secondDot as Element).toHaveStyle({ opacity: '1' });
+  });
+
   it('shows a value tooltip with color rows and logit values on bar hover', () => {
     vi.useFakeTimers();
 

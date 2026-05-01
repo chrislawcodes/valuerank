@@ -7,18 +7,19 @@ import {
   formatClusterScoreLabel,
   getClusterScorePosition,
   getClusterValueOrder,
+  getClusterVisualColor,
   isClusterScoreClipped,
 } from './clusterVisualizationUtils';
 
 type ClusterDotPlotProps = {
   clusters: DomainCluster[];
-  activeGroupId?: string | null;
+  activeGroupIds?: string[];
 };
 
-const DOT_COLORS = ['#3b82f6', '#f59e0b', '#10b981', '#f43f5e'] as const;
-
-export function ClusterDotPlot({ clusters, activeGroupId = null }: ClusterDotPlotProps) {
+export function ClusterDotPlot({ clusters, activeGroupIds = [] }: ClusterDotPlotProps) {
   const sortedValues = useMemo(() => getClusterValueOrder(clusters), [clusters]);
+  const activeGroupSet = useMemo(() => new Set(activeGroupIds), [activeGroupIds]);
+  const hasActiveSelection = activeGroupIds.length > 0;
 
   if (clusters.length === 0) {
     return null;
@@ -65,11 +66,11 @@ export function ClusterDotPlot({ clusters, activeGroupId = null }: ClusterDotPlo
                   {clusters.map((cluster, index) => {
                     const score = cluster.centroid[valueKey] ?? 0;
                     const xPct = getClusterScorePosition(score, DOT_BAR_CLUSTER_SCORE_MIN, DOT_BAR_CLUSTER_SCORE_MAX);
-                    const color = DOT_COLORS[index % DOT_COLORS.length];
+                    const color = getClusterVisualColor(index);
                     const memberLabels = cluster.members.map((member) => member.label).join(', ');
                     const clipped = isClusterScoreClipped(score, DOT_BAR_CLUSTER_SCORE_MIN, DOT_BAR_CLUSTER_SCORE_MAX);
-                    const isActive = activeGroupId == null || activeGroupId === cluster.id;
-                    const faded = activeGroupId != null && !isActive;
+                    const isActive = !hasActiveSelection || activeGroupSet.has(cluster.id);
+                    const faded = hasActiveSelection && !isActive;
 
                     return (
                       <div
@@ -81,15 +82,15 @@ export function ClusterDotPlot({ clusters, activeGroupId = null }: ClusterDotPlo
                         style={{
                           left: `${xPct}%`,
                           top: '50%',
-                          transform: `translate(-50%, -50%) scale(${isActive && activeGroupId != null ? 1.25 : 1})`,
+                          transform: `translate(-50%, -50%) scale(${isActive && hasActiveSelection ? 1.25 : 1})`,
                           backgroundColor: color,
-                          opacity: faded ? 0.2 : activeGroupId != null ? 1 : 0.78,
+                          opacity: faded ? 0.2 : hasActiveSelection ? 1 : 0.78,
                           width: '12px',
                           height: '12px',
                           borderRadius: '50%',
                           border: clipped ? '2px solid rgba(15, 23, 42, 0.45)' : '2px solid white',
                           boxShadow: clipped ? '0 0 0 1px rgba(15, 23, 42, 0.12)' : undefined,
-                          filter: isActive && activeGroupId != null ? `drop-shadow(0 0 8px rgba(255,255,255,0.35)) drop-shadow(0 0 12px ${color}aa)` : undefined,
+                          filter: isActive && hasActiveSelection ? `drop-shadow(0 0 8px rgba(255,255,255,0.35)) drop-shadow(0 0 12px ${color}aa)` : undefined,
                           zIndex: isActive ? index + 20 : index + 1,
                         }}
                       />
