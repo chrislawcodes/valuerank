@@ -2,35 +2,40 @@ import { useMemo } from 'react';
 import { type DomainCluster } from '../../api/operations/domainAnalysis';
 import { VALUE_LABELS } from '../../data/domainAnalysisData';
 import {
-  getClusterMemberLabelText,
-} from './clusterVisualizationUtils';
-import {
   DISPLAY_VALUES,
   QUADRANT_ARCS,
   buildValueAngles,
 } from './useDominanceGraph';
+import { getClusterVisualColor } from './clusterVisualizationUtils';
 
 type ClusterRadarChartProps = {
   clusters: DomainCluster[];
+  activeGroupIds?: string[];
 };
 
 const CHART_SIZE = 640;
 const VIEW_BOX_HEIGHT = 560;
 const CENTER_X = 286;
 const CENTER_Y = 276;
-const OUTER_RADIUS = 184;
+const OUTER_RADIUS = 202;
 const CATEGORY_RING_RADIUS = OUTER_RADIUS + 26;
 const CATEGORY_LABEL_RADIUS = OUTER_RADIUS + 82;
 const RADAR_SCORE_MIN = -2.5;
 const RADAR_SCORE_MAX = 2.5;
 const RADAR_SCORE_RANGE = RADAR_SCORE_MAX - RADAR_SCORE_MIN;
+const UNIVERSALISM_LABEL_OFFSET = 7;
 
-const CLUSTER_PALETTE = [
-  { stroke: '#2563eb', fill: 'rgba(37, 99, 235, 0.14)' },
-  { stroke: '#d97706', fill: 'rgba(217, 119, 6, 0.14)' },
-  { stroke: '#059669', fill: 'rgba(5, 150, 105, 0.14)' },
-  { stroke: '#e11d48', fill: 'rgba(225, 29, 72, 0.14)' },
-] as const;
+function withAlpha(hexColor: string, alpha: number): string {
+  const hex = hexColor.replace('#', '');
+  const fullHex = hex.length === 3
+    ? hex.split('').map((char) => `${char}${char}`).join('')
+    : hex;
+  const value = Number.parseInt(fullHex, 16);
+  const red = (value >> 16) & 255;
+  const green = (value >> 8) & 255;
+  const blue = value & 255;
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
 
 function getPoint(angle: number, radius: number) {
   return {
@@ -44,8 +49,22 @@ function scoreToRadius(score: number): number {
   return ((clamped - RADAR_SCORE_MIN) / RADAR_SCORE_RANGE) * OUTER_RADIUS;
 }
 
-export function ClusterRadarChart({ clusters }: ClusterRadarChartProps) {
+export function ClusterRadarChart({ clusters, activeGroupIds = [] }: ClusterRadarChartProps) {
   const valueAngles = useMemo(() => buildValueAngles(), []);
+  const activeGroupSet = useMemo(() => new Set(activeGroupIds), [activeGroupIds]);
+  const hasActiveSelection = activeGroupIds.length > 0;
+  const clusterColorIndexById = useMemo(
+    () => new Map(clusters.map((cluster, index) => [cluster.id, index] as const)),
+    [clusters],
+  );
+  const renderedClusters = useMemo(
+    () => [...clusters].sort((left, right) => {
+      const leftActive = hasActiveSelection && activeGroupSet.has(left.id) ? 1 : 0;
+      const rightActive = hasActiveSelection && activeGroupSet.has(right.id) ? 1 : 0;
+      return leftActive - rightActive;
+    }),
+    [activeGroupSet, clusters, hasActiveSelection],
+  );
   const hasClippedScores = useMemo(
     () => clusters.some((cluster) => DISPLAY_VALUES.some((valueKey) => {
       const score = cluster.centroid[valueKey] ?? 0;
@@ -137,14 +156,23 @@ export function ClusterRadarChart({ clusters }: ClusterRadarChartProps) {
             const labelPoint = getPoint(angle, OUTER_RADIUS + 18);
             const label = VALUE_LABELS[valueKey];
             const anchor =
-              labelPoint.x < CENTER_X - 8 ? 'end' : labelPoint.x > CENTER_X + 8 ? 'start' : 'middle';
+              valueKey === 'Universalism_Nature'
+                ? 'end'
+                : labelPoint.x < CENTER_X - 8
+                  ? 'end'
+                  : labelPoint.x > CENTER_X + 8
+                    ? 'start'
+                    : 'middle';
+            const adjustedLabelPoint = valueKey === 'Universalism_Nature'
+              ? { x: labelPoint.x - UNIVERSALISM_LABEL_OFFSET, y: labelPoint.y }
+              : labelPoint;
 
             return (
               <g key={valueKey}>
                 <line x1={CENTER_X} y1={CENTER_Y} x2={outer.x} y2={outer.y} stroke="#e5e7eb" strokeWidth="1" />
                 <text
-                  x={labelPoint.x}
-                  y={labelPoint.y}
+                  x={adjustedLabelPoint.x}
+                  y={adjustedLabelPoint.y}
                   textAnchor={anchor}
                   dominantBaseline="middle"
                   className="fill-gray-700 text-[10px] font-medium"
@@ -157,9 +185,13 @@ export function ClusterRadarChart({ clusters }: ClusterRadarChartProps) {
 
           <circle cx={CENTER_X} cy={CENTER_Y} r="2.75" fill="#94a3b8" />
 
-          {clusters.map((cluster, index) => {
-            const palette = CLUSTER_PALETTE[index % CLUSTER_PALETTE.length]!;
+          {renderedClusters.map((cluster, index) => {
+            const clusterColorIndex = clusterColorIndexById.get(cluster.id) ?? index;
+            const stroke = getClusterVisualColor(clusterColorIndex);
+            const fill = withAlpha(stroke, 0.14);
             const orderedValues = DISPLAY_VALUES;
+            const isActive = !hasActiveSelection || activeGroupSet.has(cluster.id);
+            const faded = hasActiveSelection && !isActive;
             const points = orderedValues.map((valueKey) => {
               const angle = valueAngles.get(valueKey) ?? -Math.PI / 2;
               const score = cluster.centroid[valueKey] ?? 0;
@@ -172,7 +204,14 @@ export function ClusterRadarChart({ clusters }: ClusterRadarChartProps) {
 
             return (
               <g key={cluster.id}>
-                <path d={`${path} Z`} fill={palette.fill} stroke={palette.stroke} strokeWidth="2" />
+                <path
+                  d={`${path} Z`}
+                  fill={fill}
+                  stroke={stroke}
+                  strokeWidth={isActive && hasActiveSelection ? '3' : '2'}
+                  opacity={faded ? 0.16 : hasActiveSelection ? 1 : 0.78}
+                  style={isActive && hasActiveSelection ? { filter: `drop-shadow(0 0 8px rgba(255,255,255,0.35)) drop-shadow(0 0 14px ${stroke}aa)` } : undefined}
+                />
                 {points.map((point, pointIndex) => {
                   const valueKey = orderedValues[pointIndex]!;
                   const score = cluster.centroid[valueKey] ?? 0;
@@ -182,10 +221,12 @@ export function ClusterRadarChart({ clusters }: ClusterRadarChartProps) {
                       <circle
                         cx={point.x}
                         cy={point.y}
-                        r="3.2"
-                        fill={palette.stroke}
+                        r={isActive && hasActiveSelection ? 4 : 3.2}
+                        fill={stroke}
                         stroke="#ffffff"
                         strokeWidth="1.5"
+                        opacity={faded ? 0.2 : hasActiveSelection ? 1 : 0.85}
+                        style={isActive && hasActiveSelection ? { filter: `drop-shadow(0 0 6px rgba(255,255,255,0.35)) drop-shadow(0 0 12px ${stroke}aa)` } : undefined}
                       />
                     </g>
                   );
@@ -219,25 +260,6 @@ export function ClusterRadarChart({ clusters }: ClusterRadarChartProps) {
           Some scores fall outside the fixed range and are shown at the edge of the chart.
         </p>
       )}
-
-      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-        {clusters.map((cluster, index) => {
-          const palette = CLUSTER_PALETTE[index % CLUSTER_PALETTE.length]!;
-          const memberLabels = getClusterMemberLabelText(cluster);
-          const title = cluster.name.length > 0 ? cluster.name : memberLabels;
-          return (
-            <div key={cluster.id} className="rounded-lg border border-gray-200 bg-white p-3">
-              <div className="flex items-start gap-2">
-                <span className="mt-1 h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: palette.stroke }} />
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-gray-900">Models: {memberLabels}</p>
-                  <p className="text-xs text-gray-500">Cluster: {title}</p>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }

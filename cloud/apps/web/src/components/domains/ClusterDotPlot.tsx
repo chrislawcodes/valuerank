@@ -5,18 +5,21 @@ import {
   DOT_BAR_CLUSTER_SCORE_MAX,
   DOT_BAR_CLUSTER_SCORE_MIN,
   formatClusterScoreLabel,
-  getClusterMemberLabelText,
   getClusterScorePosition,
   getClusterValueOrder,
+  getClusterVisualColor,
   isClusterScoreClipped,
 } from './clusterVisualizationUtils';
 
 type ClusterDotPlotProps = {
   clusters: DomainCluster[];
+  activeGroupIds?: string[];
 };
 
-export function ClusterDotPlot({ clusters }: ClusterDotPlotProps) {
+export function ClusterDotPlot({ clusters, activeGroupIds = [] }: ClusterDotPlotProps) {
   const sortedValues = useMemo(() => getClusterValueOrder(clusters), [clusters]);
+  const activeGroupSet = useMemo(() => new Set(activeGroupIds), [activeGroupIds]);
+  const hasActiveSelection = activeGroupIds.length > 0;
 
   if (clusters.length === 0) {
     return null;
@@ -63,25 +66,32 @@ export function ClusterDotPlot({ clusters }: ClusterDotPlotProps) {
                   {clusters.map((cluster, index) => {
                     const score = cluster.centroid[valueKey] ?? 0;
                     const xPct = getClusterScorePosition(score, DOT_BAR_CLUSTER_SCORE_MIN, DOT_BAR_CLUSTER_SCORE_MAX);
-                    const color = ['#3b82f6', '#f59e0b', '#10b981', '#f43f5e'][index % 4];
+                    const color = getClusterVisualColor(index);
                     const memberLabels = cluster.members.map((member) => member.label).join(', ');
                     const clipped = isClusterScoreClipped(score, DOT_BAR_CLUSTER_SCORE_MIN, DOT_BAR_CLUSTER_SCORE_MAX);
+                    const isActive = !hasActiveSelection || activeGroupSet.has(cluster.id);
+                    const faded = hasActiveSelection && !isActive;
 
                     return (
                       <div
                         key={cluster.id}
                         title={`${memberLabels}: ${score.toFixed(2)}`}
+                        data-cluster-id={cluster.id}
+                        data-value-key={valueKey}
                         className="absolute"
                         style={{
                           left: `${xPct}%`,
                           top: '50%',
-                          transform: 'translate(-50%, -50%)',
+                          transform: `translate(-50%, -50%) scale(${isActive && hasActiveSelection ? 1.25 : 1})`,
                           backgroundColor: color,
+                          opacity: faded ? 0.2 : hasActiveSelection ? 1 : 0.78,
                           width: '12px',
                           height: '12px',
                           borderRadius: '50%',
                           border: clipped ? '2px solid rgba(15, 23, 42, 0.45)' : '2px solid white',
                           boxShadow: clipped ? '0 0 0 1px rgba(15, 23, 42, 0.12)' : undefined,
+                          filter: isActive && hasActiveSelection ? `drop-shadow(0 0 8px rgba(255,255,255,0.35)) drop-shadow(0 0 12px ${color}aa)` : undefined,
+                          zIndex: isActive ? index + 20 : index + 1,
                         }}
                       />
                     );
@@ -114,23 +124,6 @@ export function ClusterDotPlot({ clusters }: ClusterDotPlotProps) {
             </p>
           )}
         </div>
-      </div>
-
-      <div className="flex flex-wrap gap-3">
-        {clusters.map((cluster, index) => {
-          const color = ['#3b82f6', '#f59e0b', '#10b981', '#f43f5e'][index % 4];
-          const memberList = getClusterMemberLabelText(cluster);
-
-          return (
-            <div key={cluster.id} className="flex items-center gap-1 text-xs text-gray-600" title={memberList}>
-              <span
-                className="h-2.5 w-2.5 shrink-0 rounded-full"
-                style={{ backgroundColor: color }}
-              />
-              <span>Models: {memberList}</span>
-            </div>
-          );
-        })}
       </div>
     </div>
   );

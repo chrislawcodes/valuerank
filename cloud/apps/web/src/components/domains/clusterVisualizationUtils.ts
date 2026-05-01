@@ -1,5 +1,5 @@
 import { type DomainCluster } from '../../api/operations/domainAnalysis';
-import { VALUE_LABELS, VALUES, type ValueKey } from '../../data/domainAnalysisData';
+import { VALUE_LABELS, VALUES, type ModelEntry, type ValueKey } from '../../data/domainAnalysisData';
 
 export const CLUSTER_SCORE_MIN = -3.25;
 export const CLUSTER_SCORE_MAX = 3.25;
@@ -8,6 +8,21 @@ export const CLUSTER_SCORE_RANGE = CLUSTER_SCORE_MAX - CLUSTER_SCORE_MIN;
 export const DOT_BAR_CLUSTER_SCORE_MIN = -2.5;
 export const DOT_BAR_CLUSTER_SCORE_MAX = 2.5;
 export const DOT_BAR_CLUSTER_SCORE_RANGE = DOT_BAR_CLUSTER_SCORE_MAX - DOT_BAR_CLUSTER_SCORE_MIN;
+
+export const CLUSTER_VISUAL_COLORS = [
+  '#2563eb',
+  '#d97706',
+  '#059669',
+  '#e11d48',
+  '#7c3aed',
+  '#0ea5e9',
+  '#ea580c',
+  '#65a30d',
+  '#d946ef',
+  '#4f46e5',
+  '#14b8a6',
+  '#ca8a04',
+] as const;
 
 const VALUE_INDEX = new Map(VALUES.map((valueKey, index) => [valueKey, index] as const));
 
@@ -39,6 +54,29 @@ export function getClusterMemberLabels(cluster: DomainCluster): string[] {
 
 export function getClusterMemberLabelText(cluster: DomainCluster): string {
   return getClusterMemberLabels(cluster).join(', ');
+}
+
+export function buildIndividualClusters(models: ModelEntry[]): DomainCluster[] {
+  return models.map((model) => ({
+    id: model.model,
+    name: model.label,
+    definingValues: [],
+    centroid: model.values,
+    members: [
+      {
+        model: model.model,
+        label: model.label,
+        silhouetteScore: 1,
+        isOutlier: false,
+        nearestClusterIds: null,
+        distancesToNearestClusters: null,
+      },
+    ],
+  }));
+}
+
+export function getClusterVisualColor(index: number): string {
+  return CLUSTER_VISUAL_COLORS[index % CLUSTER_VISUAL_COLORS.length]!;
 }
 
 export function formatClusterScoreLabel(score: number): string {

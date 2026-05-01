@@ -1,109 +1,110 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { HelpCircle, X } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { CopyVisualButton } from '../ui/CopyVisualButton';
 import { type ClusterAnalysis, type DomainCluster } from '../../api/operations/domainAnalysis';
-import { VALUE_LABELS, type ValueKey } from '../../data/domainAnalysisData';
-import { formatDisplayLabel } from '../../utils/displayLabels';
-import { getClusterMemberLabelText } from './clusterVisualizationUtils';
+import { type ModelEntry } from '../../data/domainAnalysisData';
 import { ClusterBarPlot } from './ClusterBarPlot';
 import { ClusterDotPlot } from './ClusterDotPlot';
-import { ClusterHeatmap } from './ClusterHeatmap';
 import { ClusterRadarChart } from './ClusterRadarChart';
+import { buildIndividualClusters, getClusterMemberLabelText } from './clusterVisualizationUtils';
 
-const CLUSTER_COLORS = [
-  { border: 'border-blue-500', text: 'text-blue-700', light: 'bg-blue-50' },
-  { border: 'border-amber-500', text: 'text-amber-700', light: 'bg-amber-50' },
-  { border: 'border-emerald-500', text: 'text-emerald-700', light: 'bg-emerald-50' },
-  { border: 'border-rose-500', text: 'text-rose-700', light: 'bg-rose-50' },
+const LEGEND_COLORS = [
+  { border: 'border-blue-500', text: 'text-blue-700', light: 'bg-blue-50', color: '#2563eb' },
+  { border: 'border-amber-500', text: 'text-amber-700', light: 'bg-amber-50', color: '#d97706' },
+  { border: 'border-emerald-500', text: 'text-emerald-700', light: 'bg-emerald-50', color: '#059669' },
+  { border: 'border-rose-500', text: 'text-rose-700', light: 'bg-rose-50', color: '#e11d48' },
+  { border: 'border-violet-500', text: 'text-violet-700', light: 'bg-violet-50', color: '#7c3aed' },
+  { border: 'border-sky-500', text: 'text-sky-700', light: 'bg-sky-50', color: '#0ea5e9' },
+  { border: 'border-orange-500', text: 'text-orange-700', light: 'bg-orange-50', color: '#ea580c' },
+  { border: 'border-lime-500', text: 'text-lime-700', light: 'bg-lime-50', color: '#65a30d' },
+  { border: 'border-fuchsia-500', text: 'text-fuchsia-700', light: 'bg-fuchsia-50', color: '#d946ef' },
+  { border: 'border-indigo-500', text: 'text-indigo-700', light: 'bg-indigo-50', color: '#4f46e5' },
+  { border: 'border-teal-500', text: 'text-teal-700', light: 'bg-teal-50', color: '#14b8a6' },
+  { border: 'border-yellow-500', text: 'text-yellow-700', light: 'bg-yellow-50', color: '#ca8a04' },
 ] as const;
-
-type ClusterPersonality = {
-  title: string;
-  tendency: string;
-  topValues: string[];
-  bottomValues: string[];
-};
-
-function getClusterColor(index: number) {
-  return CLUSTER_COLORS[index % CLUSTER_COLORS.length]!;
-}
-
-function getClusterPersonality(cluster: DomainCluster): ClusterPersonality {
-  const sortedKeys = Object.entries(cluster.centroid)
-    .sort((a, b) => b[1] - a[1])
-    .map(([valueKey]) => valueKey);
-  const topKeys = sortedKeys.slice(0, 3);
-  const bottomKeys = sortedKeys.slice(-3);
-
-  const hasTop = (valueKey: string) => topKeys.includes(valueKey);
-  const hasBottom = (valueKey: string) => bottomKeys.includes(valueKey);
-
-  let title = 'Values-Driven Advisors';
-  let tendency = 'Recommend paths that align with core priorities over generic prestige paths.';
-
-  if (hasTop('Universalism_Nature') && hasTop('Achievement')) {
-    title = 'Ambition-and-Impact';
-    tendency = 'Recommend high-upside roles where visible outcomes and momentum matter more than comfort.';
-  } else if (hasTop('Self_Direction_Action') && hasTop('Power_Dominance')) {
-    title = 'Practical Independence';
-    tendency = 'Recommend autonomous roles with decision latitude and execution authority over comfort or conformity.';
-  } else if (hasTop('Self_Direction_Action') && hasTop('Tradition') && hasTop('Universalism_Nature')) {
-    if (hasBottom('Conformity_Interpersonal') && hasBottom('Power_Dominance')) {
-      title = 'Purpose-and-Values';
-      tendency = 'Recommend principled work that feels meaningful and socially positive, not status-first ladder climbing.';
-    } else if (hasBottom('Achievement') || hasBottom('Hedonism') || hasBottom('Security_Personal')) {
-      title = 'Stability-with-Principles';
-      tendency = 'Recommend steady, values-aligned paths that preserve long-term fit over short-term rewards.';
-    }
-  } else if (hasTop('Universalism_Nature') && hasTop('Self_Direction_Action')) {
-    title = 'Purpose-and-Values';
-    tendency = 'Recommend values-aligned, self-directed paths with strong emphasis on meaning and contribution.';
-  }
-
-  return {
-    title,
-    tendency,
-    topValues: topKeys.map((key) => VALUE_LABELS[key as ValueKey] ?? formatDisplayLabel(key)),
-    bottomValues: bottomKeys.map((key) => VALUE_LABELS[key as ValueKey] ?? formatDisplayLabel(key)),
-  };
-}
 
 type ModelGroupsSectionProps = {
   clusterAnalysis?: ClusterAnalysis;
+  models: ModelEntry[];
   selectedModelId?: string | null;
 };
 
-type ClusterViewMode = 'dot' | 'bar' | 'radar' | 'heatmap';
+type ClusterViewMode = 'dot' | 'bar' | 'radar';
+type GroupDisplayMode = 'groups' | 'individual';
 
 const CLUSTER_VIEW_OPTIONS: Array<{ value: ClusterViewMode; label: string }> = [
   { value: 'radar', label: 'Radar' },
   { value: 'dot', label: 'Dot map' },
   { value: 'bar', label: 'Bar' },
-  { value: 'heatmap', label: 'Heatmap' },
 ];
 
-export function ModelGroupsSection({ clusterAnalysis, selectedModelId = null }: ModelGroupsSectionProps) {
+const GROUP_DISPLAY_OPTIONS: Array<{ value: GroupDisplayMode; label: string }> = [
+  { value: 'groups', label: 'Groups' },
+  { value: 'individual', label: 'Individual' },
+];
+
+function getLegendColor(index: number) {
+  return LEGEND_COLORS[index % LEGEND_COLORS.length]!;
+}
+
+function getGroupLabel(cluster: DomainCluster): string {
+  return getClusterMemberLabelText(cluster);
+}
+
+export function ModelGroupsSection({
+  clusterAnalysis,
+  models,
+  selectedModelId = null,
+}: ModelGroupsSectionProps) {
   const summaryTableRef = useRef<HTMLDivElement>(null);
   const [showModelGroupsHelp, setShowModelGroupsHelp] = useState(false);
   const [viewMode, setViewMode] = useState<ClusterViewMode>('dot');
+  const [groupDisplayMode, setGroupDisplayMode] = useState<GroupDisplayMode>('groups');
+  const [activeGroupIds, setActiveGroupIds] = useState<string[]>([]);
+
+  const hasGroupedClusters = clusterAnalysis != null && !clusterAnalysis.skipped;
+  const groupedClusters = useMemo(() => clusterAnalysis?.clusters ?? [], [clusterAnalysis]);
+  const individualClusters = useMemo(() => buildIndividualClusters(models), [models]);
+
+  const sourceClusters = useMemo(
+    () => (groupDisplayMode === 'individual' ? individualClusters : groupedClusters),
+    [groupDisplayMode, groupedClusters, individualClusters],
+  );
 
   const clusters = useMemo(
     () => {
-      if (clusterAnalysis == null || clusterAnalysis.skipped) return [];
-      if (selectedModelId == null) return clusterAnalysis.clusters;
-      return clusterAnalysis.clusters.filter((cluster) => cluster.members.some((member) => member.model === selectedModelId));
+      if (selectedModelId == null) return sourceClusters;
+      return sourceClusters.filter((cluster) => cluster.members.some((member) => member.model === selectedModelId));
     },
-    [clusterAnalysis, selectedModelId],
+    [selectedModelId, sourceClusters],
   );
 
-  const copyLabel = viewMode === 'dot'
-    ? 'model groups dot map'
-    : viewMode === 'bar'
-      ? 'model groups bar chart'
-      : viewMode === 'radar'
-        ? 'model groups radar chart'
-        : 'model groups heatmap';
+  useEffect(() => {
+    setActiveGroupIds((current) => {
+      const next = current.filter((id) => clusters.some((cluster) => cluster.id === id));
+      if (next.length === current.length && next.every((id, index) => id === current[index])) {
+        return current;
+      }
+      return next;
+    });
+  }, [clusters]);
+
+  const toggleGroupSelection = (clusterId: string) => {
+    setActiveGroupIds((current) => {
+      if (groupDisplayMode === 'individual') {
+        return current.includes(clusterId)
+          ? current.filter((id) => id !== clusterId)
+          : [...current, clusterId];
+      }
+
+      return current.length === 1 && current[0] === clusterId ? [] : [clusterId];
+    });
+  };
+
+  const copyLabel = `${groupDisplayMode} model groups ${
+    viewMode === 'dot' ? 'dot map' : viewMode === 'bar' ? 'bar chart' : 'radar chart'
+  }`;
 
   return (
     <section className="rounded-lg border border-gray-200 bg-white p-4">
@@ -120,7 +121,28 @@ export function ModelGroupsSection({ clusterAnalysis, selectedModelId = null }: 
             {showModelGroupsHelp ? <X className="h-8 w-8" /> : <HelpCircle className="h-8 w-8" />}
           </Button>
         </div>
+
         <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
+            {GROUP_DISPLAY_OPTIONS.map((option) => {
+              const active = groupDisplayMode === option.value;
+              return (
+                <Button
+                  key={option.value}
+                  type="button"
+                  variant={active ? 'primary' : 'ghost'}
+                  size="sm"
+                  onClick={() => setGroupDisplayMode(option.value)}
+                  className={`rounded-md px-3 py-1 text-xs font-medium min-h-0 ${
+                    active ? 'bg-teal-600 text-white hover:bg-teal-700' : 'text-gray-600 hover:bg-white hover:text-gray-900'
+                  }`}
+                >
+                  {option.label}
+                </Button>
+              );
+            })}
+          </div>
+
           <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
             {CLUSTER_VIEW_OPTIONS.map((option) => {
               const active = viewMode === option.value;
@@ -140,20 +162,22 @@ export function ModelGroupsSection({ clusterAnalysis, selectedModelId = null }: 
               );
             })}
           </div>
+
           <CopyVisualButton targetRef={summaryTableRef} label={copyLabel} />
         </div>
       </div>
+
       {showModelGroupsHelp && (
         <div className="mb-4 space-y-3 rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs text-gray-700">
           <div>
             <p className="mb-1 font-semibold text-gray-800">What is a log-odds score?</p>
             <p>
-              When we compare two values — like Achievement vs. Hedonism — a model has to pick one. We count
+              When we compare two values - like Achievement vs. Hedonism - a model has to pick one. We count
               how many times it picks each, then compute: score = log((wins + 1) / (losses + 1)).
             </p>
             <p className="mt-1">
-              <strong>Zero</strong> means the model chose each value equally often.{' '}
-              <strong>Positive</strong> means it chose this value more often than not.{' '}
+              <strong>Zero</strong> means the model chose each value equally often. {' '}
+              <strong>Positive</strong> means it chose this value more often than not. {' '}
               <strong>Negative</strong> means it avoided this value.
             </p>
             <p className="mt-1">
@@ -172,12 +196,12 @@ export function ModelGroupsSection({ clusterAnalysis, selectedModelId = null }: 
             <p className="mt-1">
               Some models have higher scores across many values simply because they have strong preferences
               in general. We don&apos;t want that to drive the grouping. After mean-centering, a positive
-              score means &ldquo;this value is above this model&apos;s own average&rdquo; — not just
+              score means &ldquo;this value is above this model&apos;s own average&rdquo; - not just
               &ldquo;this model scores high overall.&rdquo;
             </p>
             <p className="mt-1">
               Steps: (1) compute log-odds for all 10 values, (2) average those 10 numbers, (3) subtract the
-              average from each score. Now we&apos;re comparing the shape of each model&apos;s profile —
+              average from each score. Now we&apos;re comparing the shape of each model&apos;s profile -
               which values it ranks above or below its own typical level.
             </p>
           </div>
@@ -191,48 +215,74 @@ export function ModelGroupsSection({ clusterAnalysis, selectedModelId = null }: 
             <p className="mt-1">
               Similarity is measured using cosine distance on the mean-centered scores. Think of each
               model&apos;s 10 scores as an arrow pointing in a direction. Two models that rank values in a
-              similar order point in nearly the same direction — small distance. Models that disagree on
-              priorities point in different directions — large distance.
+              similar order point in nearly the same direction - small distance. Models that disagree on
+              priorities point in different directions - large distance.
             </p>
             <p className="mt-1">
-              The default dot map shows each value on a fixed scale from -2.5 to +2.5, with 0 in the
-              middle. Values are sorted from the ones the groups favor most on average to the ones they
-              favor least. The bar view shows the same scores as bars instead of dots, with shorter bars
-              rendered on top so they stay visible. Use the toggle above to compare the radar chart, dot
-              map, bar chart, and heatmap views of the same cluster data.
+              Use the group toggle above to compare clustered groups against individual models. The dot map
+              and bar chart show each value on a fixed scale from -2.5 to +2.5, with 0 in the middle.
+              Values are sorted from the ones the groups favor most on average to the ones they favor least.
+              The bar view shows the same scores as bars instead of dots, with shorter bars rendered on top
+              so they stay visible.
             </p>
           </div>
         </div>
       )}
+
       <div ref={summaryTableRef}>
-        {clusterAnalysis == null || clusterAnalysis.skipped ? (
+        {groupDisplayMode === 'groups' && !hasGroupedClusters ? (
           <div className="space-y-1 text-xs text-gray-500 italic">
             <p>Cluster analysis not available.</p>
             {clusterAnalysis?.skipReason && <p>{clusterAnalysis.skipReason}</p>}
           </div>
+        ) : groupDisplayMode === 'individual' && models.length === 0 ? (
+          <div className="space-y-1 text-xs text-gray-500 italic">
+            <p>No model data available.</p>
+          </div>
         ) : (
           <>
-            {viewMode === 'dot' && <ClusterDotPlot clusters={clusters} />}
-            {viewMode === 'bar' && <ClusterBarPlot clusters={clusters} />}
-            {viewMode === 'radar' && <ClusterRadarChart clusters={clusters} />}
-            {viewMode === 'heatmap' && <ClusterHeatmap clusters={clusters} />}
-            <div className="flex flex-wrap gap-4">
+            {viewMode === 'dot' && <ClusterDotPlot clusters={clusters} activeGroupIds={activeGroupIds} />}
+            {viewMode === 'bar' && <ClusterBarPlot clusters={clusters} activeGroupIds={activeGroupIds} />}
+            {viewMode === 'radar' && <ClusterRadarChart clusters={clusters} activeGroupIds={activeGroupIds} />}
+
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
               {clusters.map((cluster, index) => {
-                const style = getClusterColor(index);
-                const personality = getClusterPersonality(cluster);
-                const memberLabels = getClusterMemberLabelText(cluster);
+                const style = getLegendColor(index);
+                const memberLabels = getGroupLabel(cluster);
+                const isActive = activeGroupIds.includes(cluster.id);
+
                 return (
-                  <div key={cluster.id} className={`min-w-[280px] max-w-[520px] rounded-lg border ${style.border} ${style.light} p-3`}>
-                    <p className={`text-sm font-semibold ${style.text}`}>
-                      <span className="font-medium">Models:</span> {memberLabels}
-                    </p>
-                    <p className="mt-2 text-xs text-gray-700">
-                      <span className="font-medium">Prioritizes:</span> {personality.topValues.join(', ')}
-                    </p>
-                    <p className="mt-1 text-xs text-gray-700">
-                      <span className="font-medium">Sacrifices:</span> {personality.bottomValues.join(', ')}
-                    </p>
-                  </div>
+                  <Button
+                    key={cluster.id}
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => toggleGroupSelection(cluster.id)}
+                    aria-pressed={isActive}
+                    title={memberLabels}
+                    className={`rounded-lg border p-3 text-left transition ${
+                      isActive
+                        ? `${style.border} ${style.light} ring-2 ring-teal-400 shadow-[0_0_0_1px_rgba(13,148,136,0.25),0_0_16px_rgba(45,212,191,0.35)]`
+                        : 'border-gray-200 bg-white hover:border-teal-300 hover:shadow-sm'
+                    }`}
+                  >
+                    <div className="flex items-start gap-2">
+                      <span
+                        className={`mt-1 h-3 w-3 shrink-0 rounded-full transition ${
+                          isActive ? 'scale-125' : ''
+                        }`}
+                        style={{
+                          backgroundColor: style.color,
+                          boxShadow: isActive ? '0 0 0 1px rgba(255,255,255,0.85), 0 0 12px rgba(45,212,191,0.55)' : undefined,
+                        }}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className={`text-sm font-semibold leading-snug ${style.text} whitespace-normal break-words`}>
+                          {memberLabels}
+                        </p>
+                      </div>
+                    </div>
+                  </Button>
                 );
               })}
             </div>
