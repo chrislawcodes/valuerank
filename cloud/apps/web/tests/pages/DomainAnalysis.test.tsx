@@ -214,7 +214,7 @@ describe('DomainAnalysis', () => {
     expect(dominance.compareDocumentPosition(similarity) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('defaults the signature dropdown to latest default when available', async () => {
+  it('defaults the scope dropdown to all domains when no domain is selected', async () => {
     render(
       <MemoryRouter>
         <DomainAnalysis />
@@ -226,12 +226,14 @@ describe('DomainAnalysis', () => {
         expect.objectContaining({
           variables: expect.objectContaining({
             domainId: 'domain-a',
+            scope: 'all-domains',
             signature: 'vnewtd',
           }),
         }),
       );
     });
 
+    expect(screen.getByRole('button', { name: /all domains/i })).toBeInTheDocument();
     const signatureSelect = screen.getByRole('button', { name: /latest @ default/i });
     expect(signatureSelect).toBeInTheDocument();
   });
