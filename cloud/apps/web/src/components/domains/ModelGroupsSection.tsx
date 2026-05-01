@@ -6,6 +6,8 @@ import { type ClusterAnalysis, type DomainCluster } from '../../api/operations/d
 import { VALUE_LABELS, type ValueKey } from '../../data/domainAnalysisData';
 import { formatDisplayLabel } from '../../utils/displayLabels';
 import { ClusterDotPlot } from './ClusterDotPlot';
+import { ClusterHeatmap } from './ClusterHeatmap';
+import { ClusterRadarChart } from './ClusterRadarChart';
 
 const CLUSTER_COLORS = [
   { border: 'border-blue-500', text: 'text-blue-700', light: 'bg-blue-50' },
@@ -70,9 +72,18 @@ type ModelGroupsSectionProps = {
   selectedModelId?: string | null;
 };
 
+type ClusterViewMode = 'dot' | 'radar' | 'heatmap';
+
+const CLUSTER_VIEW_OPTIONS: Array<{ value: ClusterViewMode; label: string }> = [
+  { value: 'radar', label: 'Radar' },
+  { value: 'dot', label: 'Dot map' },
+  { value: 'heatmap', label: 'Heatmap' },
+];
+
 export function ModelGroupsSection({ clusterAnalysis, selectedModelId = null }: ModelGroupsSectionProps) {
   const summaryTableRef = useRef<HTMLDivElement>(null);
   const [showModelGroupsHelp, setShowModelGroupsHelp] = useState(false);
+  const [viewMode, setViewMode] = useState<ClusterViewMode>('dot');
 
   const clusters = useMemo(
     () => {
@@ -82,6 +93,12 @@ export function ModelGroupsSection({ clusterAnalysis, selectedModelId = null }: 
     },
     [clusterAnalysis, selectedModelId],
   );
+
+  const copyLabel = viewMode === 'dot'
+    ? 'model groups dot map'
+    : viewMode === 'radar'
+      ? 'model groups radar chart'
+      : 'model groups heatmap';
 
   return (
     <section className="rounded-lg border border-gray-200 bg-white p-4">
@@ -98,7 +115,28 @@ export function ModelGroupsSection({ clusterAnalysis, selectedModelId = null }: 
             {showModelGroupsHelp ? <X className="h-8 w-8" /> : <HelpCircle className="h-8 w-8" />}
           </Button>
         </div>
-        <CopyVisualButton targetRef={summaryTableRef} label="model group personalities" />
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
+            {CLUSTER_VIEW_OPTIONS.map((option) => {
+              const active = viewMode === option.value;
+              return (
+                <Button
+                  key={option.value}
+                  type="button"
+                  variant={active ? 'primary' : 'ghost'}
+                  size="sm"
+                  onClick={() => setViewMode(option.value)}
+                  className={`rounded-md px-3 py-1 text-xs font-medium min-h-0 ${
+                    active ? 'bg-teal-600 text-white hover:bg-teal-700' : 'text-gray-600 hover:bg-white hover:text-gray-900'
+                  }`}
+                >
+                  {option.label}
+                </Button>
+              );
+            })}
+          </div>
+          <CopyVisualButton targetRef={summaryTableRef} label={copyLabel} />
+        </div>
       </div>
       {showModelGroupsHelp && (
         <div className="mb-4 space-y-3 rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs text-gray-700">
@@ -152,9 +190,10 @@ export function ModelGroupsSection({ clusterAnalysis, selectedModelId = null }: 
               priorities point in different directions — large distance.
             </p>
             <p className="mt-1">
-              The dot chart above shows all 4 groups on a shared axis. Each row is one value. The further
-              apart the dots on a row, the more the groups disagree on that value. Rows are sorted from most
-              disagreement (top) to least (bottom).
+              The default dot map shows each value on a fixed scale from -3.25 to +3.25, with 0 in the
+              middle. Values are sorted from the ones the groups favor most on average to the ones they
+              favor least. Use the toggle above to compare the radar chart, dot map, and heatmap views of
+              the same cluster data.
             </p>
           </div>
         </div>
@@ -167,7 +206,9 @@ export function ModelGroupsSection({ clusterAnalysis, selectedModelId = null }: 
           </div>
         ) : (
           <>
-            {clusters.length >= 2 ? <ClusterDotPlot clusters={clusters} /> : null}
+            {viewMode === 'dot' && <ClusterDotPlot clusters={clusters} />}
+            {viewMode === 'radar' && <ClusterRadarChart clusters={clusters} />}
+            {viewMode === 'heatmap' && <ClusterHeatmap clusters={clusters} />}
             <div className="flex flex-wrap gap-4">
               {clusters.map((cluster, index) => {
                 const style = getClusterColor(index);
@@ -181,7 +222,7 @@ export function ModelGroupsSection({ clusterAnalysis, selectedModelId = null }: 
                       <span className="font-medium">Prioritizes:</span> {personality.topValues.join(', ')}
                     </p>
                     <p className="mt-1 text-xs text-gray-700">
-                      <span className="font-medium">De-prioritizes:</span> {personality.bottomValues.join(', ')}
+                      <span className="font-medium">Sacrifices:</span> {personality.bottomValues.join(', ')}
                     </p>
                   </div>
                 );
