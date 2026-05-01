@@ -67,17 +67,23 @@ class SizeEstimateTests(unittest.TestCase):
         return mock.patch.object(SIZE_EST, "_git_diff_stats", return_value=(diff_lines, changed_files))
 
     def test_small_classification(self) -> None:
-        self._write_scope("alpha", ["cloud/apps/api/src/foo.ts", "cloud/apps/web/src/bar.tsx"])
-        self._write_state("alpha", summary="A" * 200)
+        # 3 scope paths exceeds the trivial ceiling (≤2) but is within small (≤3).
+        # 350-char summary exceeds trivial ceiling (<300) but is within small (<500).
+        self._write_scope("alpha", [
+            "cloud/apps/api/src/foo.ts",
+            "cloud/apps/web/src/bar.tsx",
+            "cloud/apps/web/src/baz.tsx",
+        ])
+        self._write_state("alpha", summary="A" * 350)
         with self._no_diff():
             result = SIZE_EST.estimate_size("alpha")
         self.assertEqual(result["size"], "small")
         self.assertEqual(result["recommended_path"], "quick")
-        self.assertEqual(result["signals"]["scope_path_count"], 2)
-        self.assertEqual(result["signals"]["summary_chars"], 200)
+        self.assertEqual(result["signals"]["scope_path_count"], 3)
+        self.assertEqual(result["signals"]["summary_chars"], 350)
         self.assertIsNone(result["signals"]["diff_lines"])
-        self.assertIn("2 scope paths", result["reasoning"])
-        self.assertIn("200-char summary", result["reasoning"])
+        self.assertIn("3 scope paths", result["reasoning"])
+        self.assertIn("350-char summary", result["reasoning"])
 
     def test_medium_classification_many_scope_paths(self) -> None:
         self._write_scope("beta", [f"cloud/path{i}.ts" for i in range(5)])
@@ -115,6 +121,50 @@ class SizeEstimateTests(unittest.TestCase):
         self.assertEqual(result["recommended_path"], "full")
         self.assertIn("scope.json missing", result["reasoning"])
         self.assertIsNone(result["signals"]["diff_lines"])
+
+
+    def test_trivial_classification_no_diff(self) -> None:
+        """Feature with 1 scope path and short summary is classified trivial."""
+        self._write_scope("trivial-a", ["cloud/apps/web/src/components/Foo.tsx"])
+        self._write_state("trivial-a", summary="A" * 100)
+        with self._no_diff():
+            result = SIZE_EST.estimate_size("trivial-a")
+        self.assertEqual(result["size"], "trivial")
+        self.assertEqual(result["recommended_path"], "none")
+        self.assertIn("trivial", result["reasoning"])
+
+    def test_trivial_classification_with_diff(self) -> None:
+        """Feature with tiny diff (< 100 lines, ≤ 3 files) is classified trivial."""
+        self._write_scope("trivial-b", ["cloud/apps/web/src/components/Bar.tsx"])
+        self._write_state("trivial-b", summary="B" * 150)
+        with self._with_diff(diff_lines=50, changed_files=2):
+            result = SIZE_EST.estimate_size("trivial-b")
+        self.assertEqual(result["size"], "trivial")
+        self.assertEqual(result["recommended_path"], "none")
+
+    def test_trivial_boundary_just_above_into_small(self) -> None:
+        """A feature at the exact trivial ceiling tips into small, not trivial.
+
+        3 scope paths exceeds the trivial max (2) but is within the small band (≤3).
+        summary_chars=400 exceeds trivial max (300) but is within small (<500).
+        Result should be 'small' with recommended_path 'quick'.
+        """
+        self._write_scope("boundary-c", [f"cloud/path{i}.ts" for i in range(3)])
+        self._write_state("boundary-c", summary="C" * 400)
+        with self._no_diff():
+            result = SIZE_EST.estimate_size("boundary-c")
+        self.assertEqual(result["size"], "small")
+        self.assertEqual(result["recommended_path"], "quick")
+
+    def test_trivial_rejected_by_diff_lines(self) -> None:
+        """A feature with ≥100 diff lines is not trivial even if other signals are small."""
+        self._write_scope("trivial-d", ["cloud/apps/web/src/Foo.tsx"])
+        self._write_state("trivial-d", summary="D" * 100)
+        with self._with_diff(diff_lines=100, changed_files=2):
+            result = SIZE_EST.estimate_size("trivial-d")
+        # 100 diff lines fails the < 100 trivial check, so must be small or medium.
+        self.assertNotEqual(result["size"], "trivial")
+        self.assertNotEqual(result["recommended_path"], "none")
 
 
 if __name__ == "__main__":

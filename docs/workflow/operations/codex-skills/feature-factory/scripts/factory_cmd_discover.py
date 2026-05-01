@@ -294,7 +294,40 @@ def command_discover(args: argparse.Namespace) -> int:
                 f"({scope_count} scope path{'s' if scope_count != 1 else ''}, "
                 f"{summary_chars}-char summary, {diff_note})"
             )
-            if est["recommended_path"] == "quick":
+
+            # Determine effective recommended path, respecting --force-path.
+            force_path = getattr(args, "force_path", "auto")
+            effective_path = est["recommended_path"] if force_path == "auto" else force_path
+
+            if force_path not in ("auto", "none") and est["recommended_path"] == "none":
+                print(
+                    f"[workflow] note: size-estimate recommended 'none' (skip FF) but "
+                    f"--force-path {force_path} overrides."
+                )
+
+            if effective_path == "none":
+                # Louder "skip FF" recommendation for trivial features.
+                signal_list = ", ".join(
+                    k for k, v in [
+                        ("few scope paths", scope_count <= 2),
+                        ("short summary", summary_chars < 300),
+                        ("small diff", diff_lines is not None and diff_lines < 100),
+                        ("few files changed", signals.get("changed_files") is not None and signals["changed_files"] <= 3),
+                    ] if v
+                ) or est["reasoning"]
+                print(f"[ff] This feature looks trivial (size: trivial, signals: {signal_list}).")
+                print("[ff] Recommendation: SKIP FF ENTIRELY.")
+                print("[ff]   - Write the spec inline (a few sentences in the Codex prompt is fine).")
+                print(f"[ff]   - Dispatch Codex directly: codex exec -m gpt-5.4-mini -s workspace-write \"<spec>\"")
+                print("[ff]   - Open a PR and merge on green CI.")
+                print("[ff]")
+                print("[ff] FF adds value when there's enough surface area for adversarial review or")
+                print("[ff] checkpoint discipline to catch real risk. For a feature this small, the")
+                print("[ff] runner overhead exceeds its protection.")
+                print("[ff]")
+                print(f"[ff] If you want to use FF anyway (e.g., to keep a state.json record): rerun")
+                print(f"[ff] with --force-path quick or --force-path full.")
+            elif effective_path == "quick":
                 prompt_path_hint = ""
                 try:
                     import factory_state as _fs
