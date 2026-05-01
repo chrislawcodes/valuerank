@@ -48,6 +48,7 @@ Canonical source: `docs/canonical-glossary.md`
 
 - Open PRs against `chrislawcodes/valuerank`.
 - Follow the Preflight Gate in `cloud/CLAUDE.md` before any `git push` or PR creation.
+- Invoked delivery actions (Feature Factory `deliver`, `/ship`, explicit "push and open the PR" instructions) do not need re-confirmation. The invocation is the consent. See `cloud/CLAUDE.md` for the full rule.
 - One feature per branch. Do not stack new work on top of an open feature PR unless the human asks.
 - Fix the root cause when CI fails. Do not retry blindly.
 
