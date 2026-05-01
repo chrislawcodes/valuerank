@@ -216,7 +216,13 @@ def required_reviews(
         elif performance_sensitive:
             codex_secondary = "performance-adversarial"
         else:
-            codex_secondary = "regression-adversarial"
+            # PR #832: dropped 'regression-adversarial' from the default diff-stage
+            # Codex review. Operator was skipping it routinely (no actionable
+            # findings on small UI features); the false-positive rate on cross-file
+            # impact analysis was high enough to make it noise. Operators can still
+            # opt back in via --extra-codex-lens regression-adversarial on the
+            # review dispatch.
+            codex_secondary = ""
     elif stage == "closeout":
         gemini_lens = "residual-risk-adversarial"
         codex_primary = "fidelity-adversarial"
@@ -233,20 +239,22 @@ def required_reviews(
             },
         ]
 
-    return [
+    reviews = [
         {
             "reviewer": "codex",
             "lens": codex_primary,
             "model": DEFAULT_CODEX_MODEL,
         },
-        {
+    ]
+    if codex_secondary:
+        reviews.append({
             "reviewer": "codex",
             "lens": codex_secondary,
             "model": DEFAULT_CODEX_MODEL,
-        },
-        {
-            "reviewer": "gemini",
-            "lens": gemini_lens,
-            "model": DEFAULT_GEMINI_MODEL,
-        },
-    ]
+        })
+    reviews.append({
+        "reviewer": "gemini",
+        "lens": gemini_lens,
+        "model": DEFAULT_GEMINI_MODEL,
+    })
+    return reviews

@@ -97,7 +97,7 @@ Do not duplicate checkpoint manifest logic, review file validation, diff writing
 | Record parallel analysis | Look for safe parallel implementation opportunities in tasks.md. Annotate parallel tasks with `[P: file1, file2]`. Run `parallel --slug <slug> --note "..." [--found]`. If opportunities exist, add `[P:]` annotations first — the command validates they are conflict-free. | Claude | Codex |
 | Tasks checkpoint | Adversarial attack on tasks, execution-order review, reconcile findings into tasks | Codex (2 adversarial reviews: `execution` + `dependency-order`) · Gemini (1 adversarial review: `coverage`) · Claude (reconciles) | Codex (2 adversarial reviews: `execution` + `dependency-order`) · Gemini (1 adversarial review: `coverage`) · Codex (reconciles, escalates blockers to human) |
 | Implementation slice | Implement one `[CHECKPOINT]`-bounded slice from `tasks.md`, run build and tests, commit | Codex | Codex |
-| Diff checkpoint | Adversarial attack on the slice diff only (not the full branch), regression and correctness review, reconcile findings | Codex (2 adversarial reviews: `correctness` + `regression`) · Gemini (1 adversarial review: `quality`) · Claude (reconciles) | Codex (2 adversarial reviews: `correctness` + `regression`) · Gemini (1 adversarial review: `quality`) · Codex (reconciles, escalates blockers to human) |
+| Diff checkpoint | Adversarial attack on the slice diff only (not the full branch), correctness review, reconcile findings | Codex (1 adversarial review: `correctness`) · Gemini (1 adversarial review: `quality`) · Claude (reconciles) | Codex (1 adversarial review: `correctness`) · Gemini (1 adversarial review: `quality`) · Codex (reconciles, escalates blockers to human) |
 | *(repeat per slice)* | Implementation slice → Diff checkpoint repeats for each `[CHECKPOINT]` boundary in `tasks.md` | | |
 | Deliver | Create PR, watch CI, record delivery state in workflow | Claude | Codex (stages) · Human (approves and creates PR) |
 | CI failure | Extract errors, implement fix, re-run CI | Claude (reviews fix) · Codex (fixes) | Codex (fixes) · Human (approves) |
@@ -199,12 +199,14 @@ When a monitor reports `codex_procs=0` for 2+ consecutive ticks AND no new commi
 
 ## Review Policy
 
-Every checkpoint requires:
+Most checkpoints require:
 
 - 2 Codex adversarial reviews, each using a different lens
 - 1 Gemini adversarial review
 
-All three are adversarial — each one is looking for ways the artifact is wrong, incomplete, or risky. Codex runs two lenses because it has codebase context and is more likely to find hard technical issues. Gemini runs one lens chosen for its different perspective — it is less likely to find hard issues but adds signal from a different angle.
+**Exception — diff stage:** the default diff-stage run uses 1 Codex review (`correctness-adversarial`) and 1 Gemini review (`quality-adversarial`). The second Codex lens (`regression-adversarial`) was dropped as a default in PR #832 — it was routinely skipped because the false-positive rate on cross-file impact analysis is high for small UI features. To opt back in, use `--extra-codex-lens regression-adversarial` when dispatching the diff review.
+
+All reviews are adversarial — each one is looking for ways the artifact is wrong, incomplete, or risky. Codex runs two lenses at most stages because it has codebase context and is more likely to find hard technical issues. Gemini runs one lens chosen for its different perspective — it is less likely to find hard issues but adds signal from a different angle.
 
 The judge panel also has a runner-enforced 3-round cap. Reviewers should stay rigorous, but they should not assume the loop can keep refining forever.
 

@@ -89,7 +89,11 @@ from factory_deliver import (  # noqa: E402
     refresh_delivery_snapshot,
     required_check_summary,
 )
-from factory_cmd_deliver import command_deliver, command_closeout  # noqa: E402
+from factory_cmd_deliver import command_deliver, command_workflow_closeout  # noqa: E402
+from factory_cmd_closeout import command_standalone_closeout  # noqa: E402
+# Expose the standalone closeout under the canonical name so it's accessible
+# as run_factory.command_closeout in tests and the mutating registry.
+command_closeout = command_standalone_closeout
 from check_workflow_isolation import command_check_workflow_isolation  # noqa: E402
 from factory_cmd_block import command_block  # noqa: E402
 from factory_cmd_implement import command_implement, command_parallel, _run_serial, _run_parallel  # noqa: E402
@@ -370,9 +374,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="Reason for overriding the implementation-rule WARN. Must be at least 10 characters.")
     deliver_parser.set_defaults(func=command_deliver)
 
-    closeout_parser = subparsers.add_parser("closeout")
+    closeout_parser = subparsers.add_parser(
+        "closeout",
+        help=(
+            "Post-merge closeout: write closeout.md with review coverage, "
+            "update state.delivery, tick confirmed slice checkboxes. "
+            "Run after `gh pr merge`."
+        ),
+    )
     closeout_parser.add_argument("--slug", required=True)
-    closeout_parser.set_defaults(func=command_closeout)
+    closeout_parser.add_argument("--pr-url", dest="pr_url", default=None,
+        help="PR URL (detected via gh CLI if omitted)")
+    closeout_parser.add_argument("--pr-number", dest="pr_number", type=int, default=None,
+        help="PR number (detected via gh CLI if omitted)")
+    closeout_parser.add_argument("--merge-sha", dest="merge_sha", default=None,
+        help="Merge commit SHA (detected via gh CLI if omitted)")
+    closeout_parser.add_argument("--note", default=None,
+        help="Optional 1–2 sentence operator note for the closeout")
+    closeout_parser.add_argument("--out", default=None,
+        help="Override output path for closeout.md (default: <slug-dir>/closeout.md)")
+    closeout_parser.set_defaults(func=command_standalone_closeout)
 
     review_extract_parser = subparsers.add_parser("review-extract")
     review_extract_parser.add_argument("--slug", required=True)
