@@ -307,9 +307,14 @@ export function computeClusterAnalysis(models: ClusterModelInput[]): ClusterAnal
     };
   }
 
-  // Build value key list and score vectors
+  // Build value key list and score vectors, mean-centered so cosine distance
+  // measures shape of priorities (like Pearson r) rather than raw magnitude.
   const valueKeys = Object.keys(models[0]!.scores);
-  const vectors = models.map((m) => valueKeys.map((vk) => m.scores[vk] ?? 0));
+  const rawVectors = models.map((m) => valueKeys.map((vk) => m.scores[vk] ?? 0));
+  const vectors = rawVectors.map((v) => {
+    const mean = v.reduce((s, x) => s + x, 0) / v.length;
+    return v.map((x) => x - mean);
+  });
 
   const distMatrix = cosineDistanceMatrix(vectors);
   const { mergeHeights, snapshots } = upgma(distMatrix, n);
