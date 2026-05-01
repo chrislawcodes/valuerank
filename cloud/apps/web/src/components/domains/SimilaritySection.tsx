@@ -60,7 +60,9 @@ export function SimilaritySection({ models, clusterAnalysis }: SimilaritySection
   const matrix = useMemo(() => {
     const vectors = new Map<string, number[]>();
     for (const model of models) {
-      vectors.set(model.model, VALUES.map((value) => model.winRates?.[value] ?? 0));
+      const raw = VALUES.map((value) => model.winRates?.[value] ?? 0);
+      const mean = raw.reduce((s, v) => s + v, 0) / raw.length;
+      vectors.set(model.model, raw.map((v) => v - mean));
     }
 
     const similarities = new Map<string, Map<string, number>>();
@@ -101,33 +103,51 @@ export function SimilaritySection({ models, clusterAnalysis }: SimilaritySection
 
   return (
     <section className="rounded-lg border border-gray-200 bg-white p-4">
-      <div className="mb-3">
+      <div className="mb-3 flex items-center gap-2">
         <h2 className="text-base font-medium text-gray-900">Similarities and Differences</h2>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={() => setShowMatrixHelp((v) => !v)}
+          className="h-5 w-5 text-gray-400 hover:text-gray-600"
+          aria-label={showMatrixHelp ? 'Hide explanation' : 'Show explanation'}
+        >
+          <HelpCircle className="h-4 w-4" />
+        </Button>
       </div>
 
       <div ref={matrixRef} className="rounded border border-gray-100 bg-white p-2">
-        <div className="mb-2 flex items-center justify-between">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setShowMatrixHelp((v) => !v)}
-              className="h-8 w-8 text-gray-500 hover:text-gray-700"
-              aria-label={showMatrixHelp ? 'Hide explanation' : 'Show explanation'}
-            >
-              {showMatrixHelp ? <X className="h-8 w-8" /> : <HelpCircle className="h-8 w-8" />}
-            </Button>
-            {showMatrixHelp && (
-              <div className="mt-2 basis-full rounded-lg border border-blue-100 bg-blue-50 p-2.5 text-xs text-gray-700">
-                Each cell shows how similar two models&apos; value profiles are — how much they agree on
-                which values matter most. 1.0 = identical priorities, 0 = unrelated.
-                Green = think alike, yellow = partial overlap, red = consistently prioritize different things.
-                The diagonal is always 1.0 (a model compared to itself).
-              </div>
-            )}
-          </div>
+        <div className="mb-3 flex items-center justify-between">
           <CopyVisualButton targetRef={matrixRef} label="similarity matrix table" />
         </div>
+        {showMatrixHelp && (
+          <div className="mb-3 rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs text-gray-700">
+            <div className="flex items-start justify-between gap-2">
+              <div className="space-y-2">
+                <p>Each number shows how similar two models&apos; value priorities are — not whether their win rates are close, but whether they prioritize the same values relative to their own average.</p>
+                <p>For example, if Model A strongly favors Security and avoids Power, and Model B does the same, they score near 1.0 even if Model A wins more overall.</p>
+                <p className="font-medium text-gray-800">How it is calculated (Pearson correlation):</p>
+                <ol className="list-decimal space-y-1 pl-4">
+                  <li>Each model&apos;s win rates are centered — subtract that model&apos;s average so the numbers balance around zero. This removes the effect of one model just being more decisive overall.</li>
+                  <li>We measure how much the two centered profiles move together across all 10 values.</li>
+                  <li>The result is divided by the size of each profile, so the score always falls between −1 and 1.</li>
+                </ol>
+                <p className="mt-1 text-gray-600"><span className="font-medium text-green-700">1.0</span> = identical relative priorities · <span className="font-medium text-yellow-600">0</span> = no relationship · <span className="font-medium text-red-700">−1</span> = opposite priorities</p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowMatrixHelp(false)}
+                className="shrink-0 h-6 w-6 text-gray-400 hover:text-gray-600"
+                aria-label="Close explanation"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
         <div className="overflow-x-auto">
           <table className="min-w-full text-xs">
             <caption className="sr-only">Pairwise similarity matrix</caption>
