@@ -5,7 +5,7 @@ import { CopyVisualButton } from '../ui/CopyVisualButton';
 import { type ClusterAnalysis, type DomainCluster } from '../../api/operations/domainAnalysis';
 import { VALUE_LABELS, type ValueKey } from '../../data/domainAnalysisData';
 import { formatDisplayLabel } from '../../utils/displayLabels';
-import { ClusterSmallMultiples } from './ClusterSmallMultiples';
+import { ClusterDotPlot } from './ClusterDotPlot';
 
 const CLUSTER_COLORS = [
   { border: 'border-blue-500', text: 'text-blue-700', light: 'bg-blue-50' },
@@ -101,9 +101,62 @@ export function ModelGroupsSection({ clusterAnalysis, selectedModelId = null }: 
         <CopyVisualButton targetRef={summaryTableRef} label="model group personalities" />
       </div>
       {showModelGroupsHelp && (
-        <div className="mb-2 rounded-lg border border-blue-100 bg-blue-50 p-2.5 text-xs text-gray-700">
-          Models are grouped by overall similarity in full value profiles. Each card name is a shorthand persona,
-          then the lines below show what that group prioritizes and de-prioritizes based on cluster centroid scores.
+        <div className="mb-4 space-y-3 rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs text-gray-700">
+          <div>
+            <p className="mb-1 font-semibold text-gray-800">What is a log-odds score?</p>
+            <p>
+              When we compare two values — like Achievement vs. Hedonism — a model has to pick one. We count
+              how many times it picks each, then compute: score = log((wins + 1) / (losses + 1)).
+            </p>
+            <p className="mt-1">
+              <strong>Zero</strong> means the model chose each value equally often.{' '}
+              <strong>Positive</strong> means it chose this value more often than not.{' '}
+              <strong>Negative</strong> means it avoided this value.
+            </p>
+            <p className="mt-1">
+              Why not just use a percentage? Percentages distort differences at the extremes. A model that
+              wins 95% of the time is far stronger than one that wins 90%, but the gap looks small (5 points).
+              Log-odds shows this difference properly. The +1 in the formula also prevents extreme results
+              when a value was only tested a few times.
+            </p>
+          </div>
+          <div>
+            <p className="mb-1 font-semibold text-gray-800">Why do we adjust each model&apos;s scores?</p>
+            <p>
+              Before grouping, we subtract each model&apos;s own average score from all 10 of its scores.
+              This is called mean-centering.
+            </p>
+            <p className="mt-1">
+              Some models have higher scores across many values simply because they have strong preferences
+              in general. We don&apos;t want that to drive the grouping. After mean-centering, a positive
+              score means &ldquo;this value is above this model&apos;s own average&rdquo; — not just
+              &ldquo;this model scores high overall.&rdquo;
+            </p>
+            <p className="mt-1">
+              Steps: (1) compute log-odds for all 10 values, (2) average those 10 numbers, (3) subtract the
+              average from each score. Now we&apos;re comparing the shape of each model&apos;s profile —
+              which values it ranks above or below its own typical level.
+            </p>
+          </div>
+          <div>
+            <p className="mb-1 font-semibold text-gray-800">How are the groups formed?</p>
+            <p>
+              We use a method called UPGMA (Unweighted Pair Group Method with Arithmetic Mean). It builds
+              groups like a reverse tournament: start with every model alone, find the two most similar
+              models and merge them, repeat until you have 4 groups.
+            </p>
+            <p className="mt-1">
+              Similarity is measured using cosine distance on the mean-centered scores. Think of each
+              model&apos;s 10 scores as an arrow pointing in a direction. Two models that rank values in a
+              similar order point in nearly the same direction — small distance. Models that disagree on
+              priorities point in different directions — large distance.
+            </p>
+            <p className="mt-1">
+              The dot chart above shows all 4 groups on a shared axis. Each row is one value. The further
+              apart the dots on a row, the more the groups disagree on that value. Rows are sorted from most
+              disagreement (top) to least (bottom).
+            </p>
+          </div>
         </div>
       )}
       <div ref={summaryTableRef}>
@@ -114,7 +167,7 @@ export function ModelGroupsSection({ clusterAnalysis, selectedModelId = null }: 
           </div>
         ) : (
           <>
-            {clusters.length >= 2 ? <ClusterSmallMultiples clusters={clusters} /> : null}
+            {clusters.length >= 2 ? <ClusterDotPlot clusters={clusters} /> : null}
             <div className="flex flex-wrap gap-4">
               {clusters.map((cluster, index) => {
                 const style = getClusterColor(index);
