@@ -96,6 +96,8 @@ Once the above are resolved:
 - [x] `/models` reporting now uses the canonical equal-vignette methodology in both tables, with one-decimal display, vignette-weighted cross-domain pooling, and no silent fallback to pooled raw counts when vignette-aware data is missing.
 - [x] Domain Analysis findings controls now live at the top of the page, and the model focus selector applies across the model groups, value priorities, dominance, and similarity sections.
 - [x] Value Priorities now uses win rate only, with the retired Full BT toggle removed and the cell dots rendered under the numbers.
+- [x] Pressure Sensitivity page now includes a **Pressure Directional Breakdown** cross-model table showing pushed-for effect, pushed-against effect, gap, and pairs per model. Answers: "Does pressure work equally in both directions?" PR #834.
+- [x] Pressure Sensitivity now uses the standard default-model multi-select, keeps the tooltip anchored while scrolling, and moves the cross-model response table to the bottom of the report.
 
 ---
 

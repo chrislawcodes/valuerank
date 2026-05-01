@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Loading } from '../components/ui/Loading';
 import { useDomains } from '../hooks/useDomains';
+import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/llm';
 import {
   DOMAIN_AVAILABLE_SIGNATURES_QUERY,
   type DomainAvailableSignaturesQueryResult,
@@ -36,7 +37,7 @@ export function PressureSensitivity() {
   const signatureParam = searchParams.get('signature');
   const hasDomainParam = domainParam != null;
   const domainFilter = domainParam === 'all' ? null : domainParam;
-  const [providerId, setProviderId] = useState<string | null>(null);
+  const [selectedModelIds, setSelectedModelIds] = useState<string[] | null>(null);
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
 
   const defaultDomainId = domains[0]?.id ?? null;
@@ -59,6 +60,54 @@ export function PressureSensitivity() {
     () => signatureData?.domainAvailableSignatures ?? [],
     [signatureData],
   );
+
+  const [{ data: llmModelsData, fetching: llmModelsLoading, error: llmModelsError }] = useQuery<LlmModelsQueryResult>({
+    query: LLM_MODELS_QUERY,
+    variables: { status: 'ACTIVE' },
+    requestPolicy: 'cache-and-network',
+  });
+
+  const activeModels = useMemo(() => llmModelsData?.llmModels ?? [], [llmModelsData]);
+  const noActiveModels = !llmModelsLoading && activeModels.length === 0;
+  const defaultModelIds = useMemo(() => {
+    const defaults = activeModels.filter((model) => model.isDefault).map((model) => model.modelId);
+    return defaults.length > 0 ? defaults : activeModels.map((model) => model.modelId);
+  }, [activeModels]);
+  const activeModelIdSet = useMemo(() => new Set(activeModels.map((model) => model.modelId)), [activeModels]);
+  const modelOptions = useMemo(
+    () => {
+      const sorted = [...activeModels].sort((left, right) => left.displayName.localeCompare(right.displayName));
+      const defaults = sorted.filter((model) => defaultModelIds.includes(model.modelId));
+      const nonDefaults = sorted.filter((model) => !defaultModelIds.includes(model.modelId));
+      return [...defaults, ...nonDefaults].map((model) => ({
+        value: model.modelId,
+        label: model.displayName,
+        isDefault: defaultModelIds.includes(model.modelId),
+      }));
+    },
+    [activeModels, defaultModelIds],
+  );
+
+  useEffect(() => {
+    if (activeModels.length === 0) {
+      return;
+    }
+
+    setSelectedModelIds((current) => {
+      if (current == null) {
+        return [...defaultModelIds];
+      }
+
+      const filtered = current.filter((modelId) => activeModelIdSet.has(modelId));
+      if (filtered.length === current.length) {
+        return current;
+      }
+      if (filtered.length > 0) {
+        return filtered;
+      }
+      return current.length === 0 ? current : [...defaultModelIds];
+    });
+  }, [activeModelIdSet, activeModels.length, defaultModelIds, llmModelsLoading]);
 
   // Default signature picker: honor URL first, otherwise prefer the canonical
   // DEFAULT_SIGNATURE if available for this domain, otherwise first available.
@@ -89,9 +138,9 @@ export function PressureSensitivity() {
 
   const queryVariables = useMemo<PressureSensitivityQueryVariables>(() => ({
     ...(urlDomainId != null ? { domainId: urlDomainId } : {}),
-    ...(providerId != null ? { providerId } : {}),
+    ...(selectedModelIds != null ? { modelIds: selectedModelIds } : {}),
     signature: selectedSignature,
-  }), [providerId, selectedSignature, urlDomainId]);
+  }), [selectedModelIds, selectedSignature, urlDomainId]);
 
   const [{ data, fetching, error }] = useQuery<
     PressureSensitivityQueryResult,
@@ -99,7 +148,7 @@ export function PressureSensitivity() {
   >({
     query: PRESSURE_SENSITIVITY_QUERY,
     variables: queryVariables,
-    pause: (!hasDomainParam && urlDomainId == null) || signatureChoice == null,
+    pause: (!hasDomainParam && urlDomainId == null) || signatureChoice == null || (selectedModelIds == null && !noActiveModels),
     requestPolicy: 'cache-and-network',
   });
 
@@ -129,8 +178,11 @@ export function PressureSensitivity() {
 
   const loading =
     (domainsLoading && domains.length === 0)
+    || llmModelsLoading
     || signatureChoice == null
+    || (selectedModelIds == null && !noActiveModels)
     || (fetching && data == null);
+  const noModelsSelected = selectedModelIds != null && selectedModelIds.length === 0;
   const emptyState = models.length === 0 && insufficient.length === 0;
   const allInsufficient = models.length === 0 && insufficient.length > 0;
 
@@ -139,12 +191,6 @@ export function PressureSensitivity() {
     () => availableSignatures.map((option) => ({ value: option.signature, label: formatSignatureOptionLabel(option) })),
     [availableSignatures],
   );
-  const providerOptions = useMemo(() => {
-    const unique = new Map<string, string>();
-    for (const m of models) unique.set(m.providerName, m.providerName);
-    for (const i of insufficient) unique.set(i.providerName, i.providerName);
-    return [...unique.values()].map((value) => ({ value, label: value }));
-  }, [models, insufficient]);
 
   const handleDomainChange = (value: string | null) => {
     const next = new URLSearchParams(searchParams);
@@ -164,10 +210,14 @@ export function PressureSensitivity() {
     setSearchParams(next, { replace: true });
   };
 
+  const handleModelSelectionChange = (value: string[]) => {
+    setSelectedModelIds(value);
+  };
+
   if (domainsError != null || error != null) {
     return (
       <ErrorMessage
-        message={`Failed to load pressure sensitivity report: ${(domainsError ?? error)?.message ?? 'Unknown error'}`}
+        message={`Failed to load pressure sensitivity report: ${(domainsError ?? llmModelsError ?? error)?.message ?? 'Unknown error'}`}
       />
     );
   }
@@ -188,21 +238,19 @@ export function PressureSensitivity() {
     <div className="space-y-6">
       <div className="space-y-2">
         <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Models / Pressure Sensitivity</h1>
-        <p className="text-sm text-gray-600">
-          This report shows each model&apos;s pressure response — how much added pressure moves the model toward its own value over the other. The cross-model table ranks models by mean pressure response, the by-value table summarizes how each value behaves across its pairings, the detail table breaks that out by value pair, and the heat map plus sanity check show whether the pattern is consistent across the grid.
-        </p>
       </div>
 
       <PressureSensitivityFilters
         domainId={urlDomainId}
-        providerId={providerId}
         signature={selectedSignature}
+        selectedModelIds={selectedModelIds ?? []}
+        defaultModelIds={defaultModelIds}
         domainOptions={domainOptions}
-        providerOptions={providerOptions}
         signatureOptions={signatureOptions}
+        modelOptions={modelOptions}
         onDomainChange={handleDomainChange}
-        onProviderChange={setProviderId}
         onSignatureChange={handleSignatureChange}
+        onModelSelectionChange={handleModelSelectionChange}
       />
 
       {transcriptCapHit && (
@@ -222,11 +270,19 @@ export function PressureSensitivity() {
 
       {emptyState ? (
         <section className="rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-600">
-          <p className="font-medium text-gray-900">No coverage yet.</p>
+          <p className="font-medium text-gray-900">
+            {noActiveModels
+              ? 'No active models are available yet.'
+              : noModelsSelected
+                ? 'Pick one or more models to see the report.'
+                : 'No coverage yet.'}
+          </p>
           <p className="mt-1">
-            This report depends on Aggregate-tagged runs with measurable transcripts. Once
-            pipeline coverage is populated, the cross-model summary, by-value table, per-model
-            detail, and heat maps will appear here.
+            {noActiveModels
+              ? 'Create or activate models first, then reopen this report.'
+              : noModelsSelected
+              ? 'Use the Models picker above to choose a default set or your own subset.'
+              : 'This report depends on Aggregate-tagged runs with measurable transcripts. Once pipeline coverage is populated, the detail tables and heat maps will appear here.'}
           </p>
         </section>
       ) : allInsufficient ? (
@@ -241,12 +297,6 @@ export function PressureSensitivity() {
       ) : (
         <>
           <PressureDirectionalBreakdown models={models} />
-          <PressureSensitivitySummary
-            models={models}
-            selectedModelId={selectedModel?.modelId ?? null}
-            onSelectModel={setSelectedModelId}
-          />
-
           {selectedModel && <PressureResponseByValueTable valuePairs={selectedModel.valuePairs} />}
 
           {selectedModel && <PressureSensitivityDetail model={selectedModel} />}
@@ -256,6 +306,12 @@ export function PressureSensitivity() {
           {directionalSanityCheck && <PressureSensitivitySanityCheck data={directionalSanityCheck} />}
 
           <PressureSensitivityLimitations />
+
+          <PressureSensitivitySummary
+            models={models}
+            selectedModelId={selectedModel?.modelId ?? null}
+            onSelectModel={setSelectedModelId}
+          />
         </>
       )}
 
@@ -272,11 +328,6 @@ export function PressureSensitivity() {
             <p className="mt-2">
               {excludedDefinitions.length} definition
               {excludedDefinitions.length === 1 ? '' : 's'} excluded.
-            </p>
-          )}
-          {providerId != null && (
-            <p className="mt-2 text-gray-400">
-              Provider filter active ({providerId}). Use the filters panel to clear.
             </p>
           )}
         </section>

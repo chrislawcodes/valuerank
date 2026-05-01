@@ -2605,7 +2605,7 @@ type Query {
 
   """List all preambles"""
   preambles: [Preamble!]!
-  pressureSensitivity(domainId: ID, providerId: ID, signature: String!): PressureSensitivityResult!
+  pressureSensitivity(domainId: ID, modelIds: [String!], providerId: ID, signature: String!): PressureSensitivityResult!
 
   "\n      Get health status for all LLM providers.\n\n      Checks connectivity to each provider's API.\n      Results are cached for 5 minutes.\n\n      Use the `refresh` argument to force a fresh check.\n    "
   providerHealth(

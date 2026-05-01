@@ -20,16 +20,16 @@ vi.mock('@valuerank/db', () => ({
   },
 }));
 
-import { computeRunProgress } from '../../../src/services/run/derived-progress.js';
-
 describe('computeRunProgress', () => {
   beforeEach(() => {
+    vi.resetModules();
     mockFindUnique.mockReset();
     mockGroupBy.mockReset();
     mockTranscriptCount.mockReset();
   });
 
   it('derives probe and transcript counts from the authoritative tables', async () => {
+    const { computeRunProgress } = await import('../../../src/services/run/derived-progress.js');
     mockFindUnique.mockResolvedValue({ progress: { total: 10 } });
     mockGroupBy.mockResolvedValue([
       { status: 'SUCCESS', _count: { _all: 6 } },
@@ -53,6 +53,7 @@ describe('computeRunProgress', () => {
   });
 
   it('returns zero counts for an empty run', async () => {
+    const { computeRunProgress } = await import('../../../src/services/run/derived-progress.js');
     mockFindUnique.mockResolvedValue({ progress: { total: 0 } });
     mockGroupBy.mockResolvedValue([]);
     mockTranscriptCount.mockResolvedValue(0);
