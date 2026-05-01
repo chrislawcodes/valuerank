@@ -54,7 +54,7 @@ async function getCurrentSnapshot(
 
 function buildDomainAnalysisResultFromSnapshot(params: {
   snapshot: DomainAnalysisSnapshotOutput;
-  activeModels: Array<{ modelId: string; displayName: string }>;
+  activeModels: Array<{ modelId: string; displayName: string; isDefault: boolean }>;
   generatedAt: Date;
   cacheStatus: DomainAnalysisCacheStatus;
 }): DomainAnalysisResult {
@@ -86,11 +86,14 @@ function buildDomainAnalysisResultFromSnapshot(params: {
   });
 
   const { shapes, benchmarks } = computeRankingShapes(modelsSortedScores);
-  const clusterModels = modelsBase.map((model) => ({
-    model: model.model,
-    label: model.label,
-    scores: Object.fromEntries(model.values.map((value) => [value.valueKey, value.score])),
-  }));
+  const defaultModelIds = new Set(params.activeModels.filter((m) => m.isDefault).map((m) => m.modelId));
+  const clusterModels = modelsBase
+    .filter((model) => defaultModelIds.has(model.model))
+    .map((model) => ({
+      model: model.model,
+      label: model.label,
+      scores: Object.fromEntries(model.values.map((value) => [value.valueKey, value.score])),
+    }));
   const clusterAnalysis = computeClusterAnalysis(clusterModels);
 
   const models: DomainAnalysisModel[] = modelsBase.map((model) => ({
@@ -207,7 +210,7 @@ export async function getDomainAnalysisResult(params: {
   });
   const activeModels = await db.llmModel.findMany({
     where: { status: 'ACTIVE' },
-    select: { modelId: true, displayName: true },
+    select: { modelId: true, displayName: true, isDefault: true },
   });
 
   if (state.definitions.length === 0) {
