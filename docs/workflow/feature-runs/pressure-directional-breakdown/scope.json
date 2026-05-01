@@ -1,0 +1,11 @@
+{
+  "paths": [
+    "cloud/apps/web/src/components/models",
+    "cloud/apps/web/src/pages/PressureSensitivity.tsx"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/web/src/components/models",
+    "cloud/apps/web/src/pages/PressureSensitivity.tsx",
+    "docs/workflow/feature-runs/pressure-directional-breakdown"
+  ]
+}

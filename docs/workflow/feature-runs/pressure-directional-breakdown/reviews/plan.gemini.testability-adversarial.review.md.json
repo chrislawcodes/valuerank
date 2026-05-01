@@ -1,0 +1,57 @@
+{
+  "session_id": "6fc644d5-9dd7-4ad8-a17f-4d8efec26e29",
+  "response": "## Findings\n\n| Severity | Finding |\n| :--- | :--- |\n| **HIGH** | **Core calculations are undefined.** The plan states the component will compute `pushedForEffect`, `pushedAgainstEffect`, and `gap`, but omits the formulas. Without these definitions, it is impossible to write tests for correctness or to verify the component's primary function. |\n| **HIGH** | **Input data contract is missing.** The component's primary input, `PressureSensitivityModel[]`, is not defined. To write effective tests, the shape of this model object is required, including the specific names and types of the \"three rate fields\" used for validity filtering and computation. It is impossible to mock test data or validate edge cases (e.g., null vs. undefined fields) without this contract. |\n| **MEDIUM** | **[UNVERIFIED] External dependency behavior is assumed.** The plan requires reusing `formatSignedPoints` but does not account for its test coverage or behavior with edge-case inputs (e.g., zero, very large numbers, non-numbers). A bug or unexpected behavior in this dependency will manifest as a failure in the new component, complicating debugging and testing. |\n| **MEDIUM**| **[UNVERIFIED] Integration point is fragile.** The plan specifies rendering the new component inside a \"non-empty, non-allInsufficient block\" in `PressureSensitivity.tsx`. This prose-based description suggests a potentially complex or unstable location in the parent's render logic. This makes placement difficult to verify with a unit test and brittle against unrelated refactoring in the parent component. |\n| **LOW** | **Sorting tie-breaker field is ambiguous.** The plan specifies sorting by \"label ascending\" to break ties. It does not define which property on the model constitutes the \"label\". While likely the model name, this ambiguity could lead to incorrect test implementation or unexpected sort behavior if the assumption is wrong. |\n| **LOW** | **Null-render condition is imprecise.** The component \"Returns `null` when ... all pairsUsed = 0\". This could be interpreted as \"the sum of `pairsUsed` across all models is zero\" or \"every individual model has `pairsUsed: 0`\". The latter is more likely, but the ambiguity could cause a test to miss an edge case where some, but not all, models have zero pairs. |\n\n## Residual Risks\n\n- **Untested Logic Propagation:** The most significant residual risk is that the core business logic\u2014the calculations for `pushedForEffect`, `pushedAgainstEffect`, and `gap`\u2014is not only missing but may also be flawed. Since it's undefined, the planned tests cannot cover it, and a faulty implementation could be shipped.\n- **Data Shape Mismatch:** Because the `PressureSensitivityModel` shape is unknown, there is a risk that the live data from the GraphQL API will contain structures or edge cases (e.g., null nested objects, missing arrays) not anticipated by the planned \"validity filter,\" leading to runtime errors in production that were not covered in testing.\n- **Brittle Rendering:** The dependency on the parent component's internal structure for rendering placement means that future unrelated code changes in `PressureSensitivity.tsx` could silently cause the `PressureDirectionalBreakdown` component to no longer appear, a class of bug that unit tests are unlikely to catch.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 35669
+        },
+        "tokens": {
+          "input": 12396,
+          "prompt": 12396,
+          "candidates": 709,
+          "total": 15324,
+          "cached": 0,
+          "thoughts": 2219,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 35669,
+            "tokens": {
+              "input": 12396,
+              "prompt": 12396,
+              "candidates": 709,
+              "total": 15324,
+              "cached": 0,
+              "thoughts": 2219,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

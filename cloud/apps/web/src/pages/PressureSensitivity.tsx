@@ -14,6 +14,7 @@ import {
   type PressureSensitivityQueryVariables,
   type PressureSensitivityModel,
 } from '../api/operations/pressureSensitivity';
+import { PressureDirectionalBreakdown } from '../components/models/PressureDirectionalBreakdown';
 import { PressureSensitivitySummary } from '../components/models/PressureSensitivitySummary';
 import { PressureResponseByValueTable } from '../components/models/PressureResponseByValueTable';
 import { PressureSensitivityDetail } from '../components/models/PressureSensitivityDetail';
@@ -239,6 +240,7 @@ export function PressureSensitivity() {
         </section>
       ) : (
         <>
+          <PressureDirectionalBreakdown models={models} />
           <PressureSensitivitySummary
             models={models}
             selectedModelId={selectedModel?.modelId ?? null}
