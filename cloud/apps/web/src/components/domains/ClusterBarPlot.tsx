@@ -10,11 +10,23 @@ import {
   isClusterScoreClipped,
 } from './clusterVisualizationUtils';
 
-type ClusterDotPlotProps = {
+type ClusterBarPlotProps = {
   clusters: DomainCluster[];
 };
 
-export function ClusterDotPlot({ clusters }: ClusterDotPlotProps) {
+const CLUSTER_PALETTE = ['#3b82f6', '#f59e0b', '#10b981', '#f43f5e'] as const;
+
+function getClusterBarOrder(clusters: DomainCluster[], valueKey: string): DomainCluster[] {
+  return [...clusters].sort((left, right) => {
+    const leftScore = Math.abs(left.centroid[valueKey] ?? 0);
+    const rightScore = Math.abs(right.centroid[valueKey] ?? 0);
+    const lengthDiff = rightScore - leftScore;
+    if (Math.abs(lengthDiff) > 1e-9) return lengthDiff;
+    return left.id.localeCompare(right.id);
+  });
+}
+
+export function ClusterBarPlot({ clusters }: ClusterBarPlotProps) {
   const sortedValues = useMemo(() => getClusterValueOrder(clusters), [clusters]);
 
   if (clusters.length === 0) {
@@ -51,36 +63,42 @@ export function ClusterDotPlot({ clusters }: ClusterDotPlotProps) {
 
           {sortedValues.map((valueKey) => {
             const label = VALUE_LABELS[valueKey];
+            const midpoint = getClusterScorePosition(0);
+            const rankedClusters = getClusterBarOrder(clusters, valueKey);
 
             return (
               <div key={valueKey} className="flex items-center gap-2">
                 <div className="w-32 shrink-0 pr-2 text-right text-xs text-gray-700">{label}</div>
-                <div className="relative h-5 flex-1 rounded-md bg-gray-50">
+                <div className="relative h-6 flex-1 rounded-md bg-gray-50">
                   <div className="absolute bottom-0 top-0 w-px bg-gray-300" style={{ left: '50%' }} />
                   <div className="absolute bottom-1 top-1 w-px border-l border-dashed border-gray-200" style={{ left: '25%' }} />
                   <div className="absolute bottom-1 top-1 w-px border-l border-dashed border-gray-200" style={{ left: '75%' }} />
-                  {clusters.map((cluster, index) => {
+
+                  {rankedClusters.map((cluster, index) => {
                     const score = cluster.centroid[valueKey] ?? 0;
-                    const xPct = getClusterScorePosition(score);
-                    const color = ['#3b82f6', '#f59e0b', '#10b981', '#f43f5e'][index % 4];
-                    const memberLabels = cluster.members.map((member) => member.label).join(', ');
+                    const endPosition = getClusterScorePosition(score);
+                    const left = Math.min(midpoint, endPosition);
+                    const width = Math.max(Math.abs(endPosition - midpoint), 1);
+                    const clusterIndex = clusters.findIndex((candidate) => candidate.id === cluster.id);
+                    const safeClusterIndex = clusterIndex >= 0 ? clusterIndex : 0;
+                    const color = CLUSTER_PALETTE[safeClusterIndex % CLUSTER_PALETTE.length];
+                    const memberLabels = getClusterMemberLabelText(cluster);
                     const clipped = isClusterScoreClipped(score);
 
                     return (
                       <div
                         key={cluster.id}
                         title={`${memberLabels}: ${score.toFixed(2)}`}
-                        className="absolute"
+                        className="absolute top-1/2 h-2.5 rounded-full"
                         style={{
-                          left: `${xPct}%`,
-                          top: '50%',
-                          transform: 'translate(-50%, -50%)',
+                          left: `${left}%`,
+                          width: `${width}%`,
+                          transform: 'translateY(-50%)',
                           backgroundColor: color,
-                          width: '12px',
-                          height: '12px',
-                          borderRadius: '50%',
-                          border: clipped ? '2px solid rgba(15, 23, 42, 0.45)' : '2px solid white',
+                          opacity: 0.78,
+                          zIndex: index + 1,
                           boxShadow: clipped ? '0 0 0 1px rgba(15, 23, 42, 0.12)' : undefined,
+                          border: clipped ? '1px solid rgba(15, 23, 42, 0.4)' : '1px solid rgba(255, 255, 255, 0.8)',
                         }}
                       />
                     );
@@ -117,7 +135,7 @@ export function ClusterDotPlot({ clusters }: ClusterDotPlotProps) {
 
       <div className="flex flex-wrap gap-3">
         {clusters.map((cluster, index) => {
-          const color = ['#3b82f6', '#f59e0b', '#10b981', '#f43f5e'][index % 4];
+          const color = CLUSTER_PALETTE[index % CLUSTER_PALETTE.length]!;
           const memberList = getClusterMemberLabelText(cluster);
 
           return (

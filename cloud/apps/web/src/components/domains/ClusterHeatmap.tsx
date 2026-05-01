@@ -2,7 +2,12 @@ import { useMemo } from 'react';
 import { type DomainCluster } from '../../api/operations/domainAnalysis';
 import { VALUE_LABELS } from '../../data/domainAnalysisData';
 import { getPriorityColor } from './domainAnalysisColors';
-import { CLUSTER_SCORE_MAX, CLUSTER_SCORE_MIN, getClusterValueOrder } from './clusterVisualizationUtils';
+import {
+  CLUSTER_SCORE_MAX,
+  CLUSTER_SCORE_MIN,
+  getClusterMemberLabelText,
+  getClusterValueOrder,
+} from './clusterVisualizationUtils';
 
 type ClusterHeatmapProps = {
   clusters: DomainCluster[];
@@ -52,12 +57,12 @@ export function ClusterHeatmap({ clusters }: ClusterHeatmapProps) {
             </tr>
           </thead>
           <tbody>
-            {clusters.map((cluster, index) => {
-              const palette = CLUSTER_PALETTE[index % CLUSTER_PALETTE.length]!;
-              const memberLabels = cluster.members.map((member) => member.label).join(', ');
-              const clusterName = cluster.name.length > 0 ? cluster.name : memberLabels;
-              return (
-                <tr key={cluster.id}>
+          {clusters.map((cluster, index) => {
+            const palette = CLUSTER_PALETTE[index % CLUSTER_PALETTE.length]!;
+            const memberLabels = getClusterMemberLabelText(cluster);
+            const clusterName = cluster.name.length > 0 ? cluster.name : memberLabels;
+            return (
+              <tr key={cluster.id}>
                   <th
                     scope="row"
                     className={`sticky left-0 z-10 border-b border-gray-100 px-3 py-2 text-left align-top ${palette.accent}`}
@@ -66,8 +71,8 @@ export function ClusterHeatmap({ clusters }: ClusterHeatmapProps) {
                     <div className="flex items-start gap-2">
                       <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${palette.dot}`} />
                       <div className="min-w-0">
-                        <div className="truncate text-sm font-semibold text-gray-900">{clusterName}</div>
-                        <div className="text-[11px] text-gray-500">{cluster.members.length} model{cluster.members.length === 1 ? '' : 's'}</div>
+                        <div className="truncate text-sm font-semibold text-gray-900">Models: {memberLabels}</div>
+                        <div className="truncate text-[11px] text-gray-500">Cluster: {clusterName}</div>
                       </div>
                     </div>
                   </th>
