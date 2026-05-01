@@ -2812,6 +2812,7 @@ export type QueryCircumplexAnalysisArgs = {
 
 export type QueryConfidenceTranscriptsArgs = {
   definitionId?: InputMaybe<Scalars['String']['input']>;
+  domainId?: InputMaybe<Scalars['ID']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
   modelId: Scalars['String']['input'];
   scenarioId?: InputMaybe<Scalars['String']['input']>;
@@ -2821,6 +2822,7 @@ export type QueryConfidenceTranscriptsArgs = {
 
 
 export type QueryConfidenceValueDetailArgs = {
+  domainId?: InputMaybe<Scalars['ID']['input']>;
   modelId: Scalars['String']['input'];
   signature?: InputMaybe<Scalars['String']['input']>;
   valueKey: Scalars['String']['input'];
@@ -3067,6 +3069,7 @@ export type QueryModelsAnalysisArgs = {
 
 
 export type QueryModelsConfidenceArgs = {
+  domainId?: InputMaybe<Scalars['ID']['input']>;
   signature?: InputMaybe<Scalars['String']['input']>;
 };
 
@@ -3448,7 +3451,11 @@ export type RunTranscriptsArgs = {
 export type RunAnomaly = {
   __typename?: 'RunAnomaly';
   acknowledgedByUserId?: Maybe<Scalars['String']['output']>;
+  /** ID of the most recent non-deleted transcript for this slot. For INVALID_RESPONSE_FAILURE only — queries by (runId, scenarioId, modelId, sampleIndex). Handles reprobe-fixed anomalies where details.transcriptId still points to the original. Null for non-slot types. */
+  activeTranscriptId?: Maybe<Scalars['String']['output']>;
   details: Scalars['JSON']['output'];
+  /** Dimension values from the scenario content for slot-keyed anomaly types (Record<string, string>). Null for non-slot types. */
+  dimensionValues?: Maybe<Scalars['JSON']['output']>;
   /** Human-friendly anomaly type label. For unknown future enum values, returns the raw enum string. */
   displayLabel: Scalars['String']['output'];
   /** Human-friendly subject label. Type-aware: slot-keyed types render as "model X · sample N", transcript-keyed types render as "transcript <short>", others return the raw subject. */
@@ -3472,12 +3479,8 @@ export type RunAnomaly = {
   /** The run this anomaly belongs to */
   run: Run;
   runId: Scalars['String']['output'];
-  /** ID of the most recent non-deleted transcript for this slot. Null for non-slot types. */
-  activeTranscriptId?: Maybe<Scalars['String']['output']>;
   /** Scenario (vignette) name for slot-keyed anomaly types. Null for non-slot types or when the scenario cannot be found. */
   scenarioName?: Maybe<Scalars['String']['output']>;
-  /** Dimension values from the scenario content for slot-keyed anomaly types. */
-  dimensionValues?: Maybe<Scalars['JSON']['output']>;
   source: RunAnomalySource;
   subject: Scalars['String']['output'];
   type: RunAnomalyType;
@@ -4049,6 +4052,7 @@ export type ConfidenceTranscriptsQueryVariables = Exact<{
   limit?: InputMaybe<Scalars['Int']['input']>;
   definitionId?: InputMaybe<Scalars['String']['input']>;
   scenarioId?: InputMaybe<Scalars['String']['input']>;
+  domainId?: InputMaybe<Scalars['ID']['input']>;
 }>;
 
 
@@ -4058,6 +4062,7 @@ export type ConfidenceValueDetailQueryVariables = Exact<{
   modelId: Scalars['String']['input'];
   valueKey: Scalars['String']['input'];
   signature?: InputMaybe<Scalars['String']['input']>;
+  domainId?: InputMaybe<Scalars['ID']['input']>;
 }>;
 
 
@@ -4605,6 +4610,7 @@ export type ModelsAnalysisQuery = { __typename?: 'Query', modelsAnalysis: { __ty
 
 export type ModelsConfidenceQueryVariables = Exact<{
   signature?: InputMaybe<Scalars['String']['input']>;
+  domainId?: InputMaybe<Scalars['ID']['input']>;
 }>;
 
 
@@ -5418,7 +5424,7 @@ export function useComparisonRunsListQuery(options?: Omit<Urql.UseQueryArgs<Comp
   return Urql.useQuery<ComparisonRunsListQuery, ComparisonRunsListQueryVariables>({ query: ComparisonRunsListDocument, ...options });
 };
 export const ConfidenceTranscriptsDocument = gql`
-    query ConfidenceTranscripts($modelId: String!, $valueKey: String!, $signature: String, $limit: Int, $definitionId: String, $scenarioId: String) {
+    query ConfidenceTranscripts($modelId: String!, $valueKey: String!, $signature: String, $limit: Int, $definitionId: String, $scenarioId: String, $domainId: ID) {
   confidenceTranscripts(
     modelId: $modelId
     valueKey: $valueKey
@@ -5426,6 +5432,7 @@ export const ConfidenceTranscriptsDocument = gql`
     limit: $limit
     definitionId: $definitionId
     scenarioId: $scenarioId
+    domainId: $domainId
   ) {
     id
     runId
@@ -5445,11 +5452,12 @@ export function useConfidenceTranscriptsQuery(options: Omit<Urql.UseQueryArgs<Co
   return Urql.useQuery<ConfidenceTranscriptsQuery, ConfidenceTranscriptsQueryVariables>({ query: ConfidenceTranscriptsDocument, ...options });
 };
 export const ConfidenceValueDetailDocument = gql`
-    query ConfidenceValueDetail($modelId: String!, $valueKey: String!, $signature: String) {
+    query ConfidenceValueDetail($modelId: String!, $valueKey: String!, $signature: String, $domainId: ID) {
   confidenceValueDetail(
     modelId: $modelId
     valueKey: $valueKey
     signature: $signature
+    domainId: $domainId
   ) {
     modelLabel
     valueKey
@@ -5890,11 +5898,7 @@ export function useDeleteDomainContextMutation() {
 };
 export const DomainAnalysisDocument = gql`
     query DomainAnalysis($domainId: ID!, $scope: String, $signature: String) {
-  domainAnalysis(
-    domainId: $domainId
-    scope: $scope
-    signature: $signature
-  ) {
+  domainAnalysis(domainId: $domainId, scope: $scope, signature: $signature) {
     domainId
     domainName
     contributionSummary {
@@ -7047,8 +7051,8 @@ export function useModelsAnalysisQuery(options?: Omit<Urql.UseQueryArgs<ModelsAn
   return Urql.useQuery<ModelsAnalysisQuery, ModelsAnalysisQueryVariables>({ query: ModelsAnalysisDocument, ...options });
 };
 export const ModelsConfidenceDocument = gql`
-    query ModelsConfidence($signature: String) {
-  modelsConfidence(signature: $signature) {
+    query ModelsConfidence($signature: String, $domainId: ID) {
+  modelsConfidence(signature: $signature, domainId: $domainId) {
     models {
       modelId
       label

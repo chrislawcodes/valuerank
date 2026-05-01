@@ -19,9 +19,11 @@ builder.queryField('modelsConfidence', (t) =>
     type: ModelsConfidenceResultRef,
     args: {
       signature: t.arg.string({ required: false }),
+      domainId: t.arg.id({ required: false }),
     },
     resolve: async (_root, args) => {
       const signature = args.signature != null ? String(args.signature) : null;
+      const domainId = args.domainId != null ? String(args.domainId) : null;
 
       const activeModels = await getModelsFromDatabase({
         activeOnly: true,
@@ -78,10 +80,23 @@ builder.queryField('modelsConfidence', (t) =>
       )];
 
       // Fetch definition content once per definition to get the value pair.
+      // When domainId is provided, scope to definitions belonging to that domain.
       const definitions = await db.definition.findMany({
-        where: { id: { in: definitionIds } },
+        where: {
+          id: { in: definitionIds },
+          ...(domainId !== null ? { domainId } : {}),
+        },
         select: { id: true, content: true },
       });
+
+      // When domain-scoped, restrict source runs to those whose definition is in the domain.
+      const allowedDefIds = new Set(definitions.map((d) => d.id));
+      const filteredRunIds = domainId !== null
+        ? sourceRunIds.filter((id) => {
+          const defId = runToDefinitionId.get(id);
+          return defId != null && allowedDefIds.has(defId);
+        })
+        : sourceRunIds;
 
       const defValuePairMap = new Map<string, DomainAnalysisValuePair | null>();
       for (const def of definitions) {
@@ -92,6 +107,8 @@ builder.queryField('modelsConfidence', (t) =>
       // in the JSONB. This avoids loading full 1KB decisionMetadata blobs for each
       // transcript (313k transcripts × 1KB = 307 MB overflows the Prisma NAPI buffer).
       // 99.99% of transcripts have a cacheVersion=2 canonical decision in summaryCache.
+      if (filteredRunIds.length === 0) return emptyResult;
+
       const rawRows = await db.$queryRaw<Array<{
         model_id: string;
         run_id: string;
@@ -104,7 +121,7 @@ builder.queryField('modelsConfidence', (t) =>
           SUM(CASE WHEN t.decision_metadata #>> '{summaryCache,summary,canonicalDecision,strength}' = 'strong' THEN 1 ELSE 0 END)::int AS strong_count,
           SUM(CASE WHEN t.decision_metadata #>> '{summaryCache,summary,canonicalDecision,strength}' = 'lean'   THEN 1 ELSE 0 END)::int AS lean_count
         FROM transcripts t
-        WHERE t.run_id = ANY(${sourceRunIds})
+        WHERE t.run_id = ANY(${filteredRunIds})
           AND t.deleted_at IS NULL
           AND t.decision_metadata #>> '{summaryCache,summary,canonicalDecision,cacheVersion}' = '2'
         GROUP BY t.model_id, t.run_id

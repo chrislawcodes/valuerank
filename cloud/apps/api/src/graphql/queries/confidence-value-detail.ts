@@ -16,6 +16,7 @@ builder.queryField('confidenceValueDetail', (t) =>
       modelId: t.arg.string({ required: true }),
       valueKey: t.arg.string({ required: true }),
       signature: t.arg.string({ required: false }),
+      domainId: t.arg.id({ required: false }),
     },
     resolve: async (_root, args) => {
       const modelId = args.modelId;
@@ -28,6 +29,7 @@ builder.queryField('confidenceValueDetail', (t) =>
         typeof args.signature === 'string' && args.signature.trim() !== ''
           ? args.signature.trim()
           : null;
+      const domainId = args.domainId != null ? String(args.domainId) : null;
 
       // Resolve model display name.
       const modelMeta = await db.llmModel.findFirst({
@@ -68,8 +70,12 @@ builder.queryField('confidenceValueDetail', (t) =>
       }
 
       // Find definitions that have this valueKey in their pair.
+      // When domainId is provided, scope to that domain only.
       const definitions = await db.definition.findMany({
-        where: { id: { in: definitionIds } },
+        where: {
+          id: { in: definitionIds },
+          ...(domainId !== null ? { domainId } : {}),
+        },
         select: { id: true, name: true, version: true, content: true },
       });
 
