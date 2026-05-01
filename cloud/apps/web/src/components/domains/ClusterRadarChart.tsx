@@ -17,13 +17,12 @@ const CHART_SIZE = 640;
 const VIEW_BOX_HEIGHT = 560;
 const CENTER_X = 286;
 const CENTER_Y = 276;
-const OUTER_RADIUS = 202;
+const OUTER_RADIUS = 228;
 const CATEGORY_RING_RADIUS = OUTER_RADIUS + 26;
 const CATEGORY_LABEL_RADIUS = OUTER_RADIUS + 82;
 const RADAR_SCORE_MIN = -2.5;
 const RADAR_SCORE_MAX = 2.5;
 const RADAR_SCORE_RANGE = RADAR_SCORE_MAX - RADAR_SCORE_MIN;
-const UNIVERSALISM_LABEL_OFFSET = 7;
 
 function withAlpha(hexColor: string, alpha: number): string {
   const hex = hexColor.replace('#', '');
@@ -156,23 +155,18 @@ export function ClusterRadarChart({ clusters, activeGroupIds = [] }: ClusterRada
             const labelPoint = getPoint(angle, OUTER_RADIUS + 18);
             const label = VALUE_LABELS[valueKey];
             const anchor =
-              valueKey === 'Universalism_Nature'
+              labelPoint.x < CENTER_X - 8
                 ? 'end'
-                : labelPoint.x < CENTER_X - 8
-                  ? 'end'
-                  : labelPoint.x > CENTER_X + 8
-                    ? 'start'
-                    : 'middle';
-            const adjustedLabelPoint = valueKey === 'Universalism_Nature'
-              ? { x: labelPoint.x - UNIVERSALISM_LABEL_OFFSET, y: labelPoint.y }
-              : labelPoint;
+                : labelPoint.x > CENTER_X + 8
+                  ? 'start'
+                  : 'middle';
 
             return (
               <g key={valueKey}>
                 <line x1={CENTER_X} y1={CENTER_Y} x2={outer.x} y2={outer.y} stroke="#e5e7eb" strokeWidth="1" />
                 <text
-                  x={adjustedLabelPoint.x}
-                  y={adjustedLabelPoint.y}
+                  x={labelPoint.x}
+                  y={labelPoint.y}
                   textAnchor={anchor}
                   dominantBaseline="middle"
                   className="fill-gray-700 text-[10px] font-medium"
@@ -235,23 +229,6 @@ export function ClusterRadarChart({ clusters, activeGroupIds = [] }: ClusterRada
             );
           })}
 
-          <g>
-            <line x1={24} y1={512} x2={132} y2={512} stroke="#d1d5db" strokeWidth="1.5" />
-            <line x1={78} y1={502} x2={78} y2={522} stroke="#d1d5db" strokeWidth="1.5" />
-            <text x={24} y={500} className="fill-gray-400 text-[10px]">
-              -2.5
-            </text>
-            <text x={71} y={500} className="fill-gray-500 text-[10px] font-semibold">
-              0
-            </text>
-            <text x={116} y={500} className="fill-gray-400 text-[10px]">
-              +2.5
-            </text>
-          </g>
-
-          <text x={24} y={534} className="fill-gray-500 text-[10px]">
-            Mid-ring = neutral, outer ring = strongest favoring.
-          </text>
         </svg>
       </div>
 
