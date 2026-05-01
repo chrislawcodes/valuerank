@@ -38,31 +38,21 @@ from factory_mutating import mutates_state  # noqa: E402
 # ---------------------------------------------------------------------------
 # Lens definitions — what each stage's default review set looks like.
 # Used to compute "skipped" entries (default lenses not found in reviews/).
-# Matches factory_review_specs.required_reviews() defaults (non-sensitive,
-# non-performance-sensitive path).
+# Matches factory_review_specs.required_reviews() defaults.
 # ---------------------------------------------------------------------------
 
 _STAGE_DEFAULT_LENSES: dict[str, list[str]] = {
     "spec": [
         "codex:feasibility-adversarial",
-        "codex:edge-cases-adversarial",
         "gemini:requirements-adversarial",
     ],
     "plan": [
         "codex:implementation-adversarial",
-        "codex:architecture-adversarial",
         "gemini:testability-adversarial",
     ],
-    "tasks": [
-        "codex:execution-adversarial",
-        "codex:dependency-order-adversarial",
-        "gemini:coverage-adversarial",
-    ],
-    # diff: regression-adversarial dropped as default in PR #832
-    "diff": [
-        "codex:correctness-adversarial",
-        "gemini:quality-adversarial",
-    ],
+    "tasks": [],
+    "diff": [],
+    "closeout": [],
 }
 
 # Pattern for review filenames: <stage>.<reviewer>.<lens>.review.md
@@ -152,8 +142,8 @@ def _build_review_coverage(
     review_map: dict[str, set[str]],
     token_usage: list[dict],
 ) -> dict:
-    """Compute review_coverage_summary across all four artifact stages."""
-    stages = ["spec", "plan", "tasks", "diff"]
+    """Compute review_coverage_summary across all tracked stages."""
+    stages = ["spec", "plan", "tasks", "diff", "closeout"]
     summary: dict = {}
     for stage in stages:
         default_lenses = set(_STAGE_DEFAULT_LENSES.get(stage, []))
@@ -188,7 +178,7 @@ def _coverage_table_text(coverage: dict) -> str:
         "| Stage | Lenses run | Lenses skipped |",
         "| --- | --- | --- |",
     ]
-    for stage in ["spec", "plan", "tasks", "diff"]:
+    for stage in ["spec", "plan", "tasks", "diff", "closeout"]:
         data = coverage.get(stage, {})
         run = ", ".join(data.get("lenses_run", [])) or "—"
         skipped = ", ".join(data.get("lenses_skipped", [])) or "—"

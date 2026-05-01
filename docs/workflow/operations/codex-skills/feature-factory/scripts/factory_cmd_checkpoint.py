@@ -418,7 +418,7 @@ def command_checkpoint(args: argparse.Namespace) -> int:
                         small_task_set = True
                         print(
                             f"info: small task set ({task_count} tasks < {SMALL_TASK_SET_THRESHOLD} threshold) — "
-                            f"skipping Gemini reviews for {args.stage} stage, running Codex review only.",
+                            f"{args.stage} stage has no default reviews; only explicitly requested lenses will run.",
                             file=sys.stderr,
                         )
                 except Exception:

@@ -106,8 +106,6 @@ def reviews_from_manifest(manifest_path: Path) -> tuple[Path, list[dict[str, str
     payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     artifact_path = resolve_stored_path(payload["artifact_path"], REPO_ROOT)
     reviews = payload.get("required_reviews", [])
-    if not reviews:
-        raise ValueError(f"{manifest_path} does not define required reviews")
     return artifact_path, reviews
 
 
@@ -187,9 +185,17 @@ def main() -> int:
         else:
             status, note = resolution_values
             if status != data.get("resolution_status", ""):
-                errors.append(f"{review_path} resolution status does not match frontmatter")
+                errors.append(
+                    f'Review file {review_path} has body Resolution status="{status}" '
+                    f'but frontmatter resolution_status="{data.get("resolution_status", "")}". '
+                    "These got out of sync — re-run `reconcile` instead of editing the file by hand."
+                )
             if note != data.get("resolution_note", ""):
-                errors.append(f"{review_path} resolution note does not match frontmatter")
+                errors.append(
+                    f'Review file {review_path} has body Resolution note="{note}" '
+                    f'but frontmatter resolution_note="{data.get("resolution_note", "")}". '
+                    "These got out of sync — re-run `reconcile` instead of editing the file by hand."
+                )
 
         raw_output = data.get("raw_output_path")
         if data.get("reviewer") == "gemini":
