@@ -10,10 +10,18 @@ import { ClusterRadarChart } from './ClusterRadarChart';
 import { buildIndividualClusters, getClusterMemberLabelText } from './clusterVisualizationUtils';
 
 const LEGEND_COLORS = [
-  { border: 'border-blue-500', text: 'text-blue-700', light: 'bg-blue-50', color: '#3b82f6' },
-  { border: 'border-amber-500', text: 'text-amber-700', light: 'bg-amber-50', color: '#f59e0b' },
-  { border: 'border-emerald-500', text: 'text-emerald-700', light: 'bg-emerald-50', color: '#10b981' },
-  { border: 'border-rose-500', text: 'text-rose-700', light: 'bg-rose-50', color: '#f43f5e' },
+  { border: 'border-blue-500', text: 'text-blue-700', light: 'bg-blue-50', color: '#2563eb' },
+  { border: 'border-amber-500', text: 'text-amber-700', light: 'bg-amber-50', color: '#d97706' },
+  { border: 'border-emerald-500', text: 'text-emerald-700', light: 'bg-emerald-50', color: '#059669' },
+  { border: 'border-rose-500', text: 'text-rose-700', light: 'bg-rose-50', color: '#e11d48' },
+  { border: 'border-violet-500', text: 'text-violet-700', light: 'bg-violet-50', color: '#7c3aed' },
+  { border: 'border-sky-500', text: 'text-sky-700', light: 'bg-sky-50', color: '#0ea5e9' },
+  { border: 'border-orange-500', text: 'text-orange-700', light: 'bg-orange-50', color: '#ea580c' },
+  { border: 'border-lime-500', text: 'text-lime-700', light: 'bg-lime-50', color: '#65a30d' },
+  { border: 'border-fuchsia-500', text: 'text-fuchsia-700', light: 'bg-fuchsia-50', color: '#d946ef' },
+  { border: 'border-indigo-500', text: 'text-indigo-700', light: 'bg-indigo-50', color: '#4f46e5' },
+  { border: 'border-teal-500', text: 'text-teal-700', light: 'bg-teal-50', color: '#14b8a6' },
+  { border: 'border-yellow-500', text: 'text-yellow-700', light: 'bg-yellow-50', color: '#ca8a04' },
 ] as const;
 
 type ModelGroupsSectionProps = {
@@ -53,7 +61,7 @@ export function ModelGroupsSection({
   const [showModelGroupsHelp, setShowModelGroupsHelp] = useState(false);
   const [viewMode, setViewMode] = useState<ClusterViewMode>('dot');
   const [groupDisplayMode, setGroupDisplayMode] = useState<GroupDisplayMode>('groups');
-  const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
+  const [activeGroupIds, setActiveGroupIds] = useState<string[]>([]);
 
   const hasGroupedClusters = clusterAnalysis != null && !clusterAnalysis.skipped;
   const groupedClusters = useMemo(() => clusterAnalysis?.clusters ?? [], [clusterAnalysis]);
@@ -73,10 +81,26 @@ export function ModelGroupsSection({
   );
 
   useEffect(() => {
-    if (activeGroupId == null) return;
-    if (clusters.some((cluster) => cluster.id === activeGroupId)) return;
-    setActiveGroupId(null);
-  }, [activeGroupId, clusters]);
+    setActiveGroupIds((current) => {
+      const next = current.filter((id) => clusters.some((cluster) => cluster.id === id));
+      if (next.length === current.length && next.every((id, index) => id === current[index])) {
+        return current;
+      }
+      return next;
+    });
+  }, [clusters]);
+
+  const toggleGroupSelection = (clusterId: string) => {
+    setActiveGroupIds((current) => {
+      if (groupDisplayMode === 'individual') {
+        return current.includes(clusterId)
+          ? current.filter((id) => id !== clusterId)
+          : [...current, clusterId];
+      }
+
+      return current.length === 1 && current[0] === clusterId ? [] : [clusterId];
+    });
+  };
 
   const copyLabel = `${groupDisplayMode} model groups ${
     viewMode === 'dot' ? 'dot map' : viewMode === 'bar' ? 'bar chart' : 'radar chart'
@@ -217,15 +241,15 @@ export function ModelGroupsSection({
           </div>
         ) : (
           <>
-            {viewMode === 'dot' && <ClusterDotPlot clusters={clusters} activeGroupId={activeGroupId} />}
-            {viewMode === 'bar' && <ClusterBarPlot clusters={clusters} activeGroupId={activeGroupId} />}
-            {viewMode === 'radar' && <ClusterRadarChart clusters={clusters} activeGroupId={activeGroupId} />}
+            {viewMode === 'dot' && <ClusterDotPlot clusters={clusters} activeGroupIds={activeGroupIds} />}
+            {viewMode === 'bar' && <ClusterBarPlot clusters={clusters} activeGroupIds={activeGroupIds} />}
+            {viewMode === 'radar' && <ClusterRadarChart clusters={clusters} activeGroupIds={activeGroupIds} />}
 
             <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
               {clusters.map((cluster, index) => {
                 const style = getLegendColor(index);
                 const memberLabels = getGroupLabel(cluster);
-                const isActive = activeGroupId === cluster.id;
+                const isActive = activeGroupIds.includes(cluster.id);
 
                 return (
                   <Button
@@ -233,7 +257,7 @@ export function ModelGroupsSection({
                     type="button"
                     variant="ghost"
                     size="sm"
-                    onClick={() => setActiveGroupId((current) => (current === cluster.id ? null : cluster.id))}
+                    onClick={() => toggleGroupSelection(cluster.id)}
                     aria-pressed={isActive}
                     title={memberLabels}
                     className={`rounded-lg border p-3 text-left transition ${
@@ -252,10 +276,12 @@ export function ModelGroupsSection({
                           boxShadow: isActive ? '0 0 0 1px rgba(255,255,255,0.85), 0 0 12px rgba(45,212,191,0.55)' : undefined,
                         }}
                       />
-                      <div className="min-w-0">
-                        <p className={`truncate text-sm font-semibold ${style.text}`}>{memberLabels}</p>
-                        </div>
+                      <div className="min-w-0 flex-1">
+                        <p className={`text-sm font-semibold leading-snug ${style.text} whitespace-normal break-words`}>
+                          {memberLabels}
+                        </p>
                       </div>
+                    </div>
                   </Button>
                 );
               })}

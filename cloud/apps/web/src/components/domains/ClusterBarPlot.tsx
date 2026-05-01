@@ -8,15 +8,14 @@ import {
   formatClusterScoreLabel,
   getClusterScorePosition,
   getClusterValueOrder,
+  getClusterVisualColor,
   isClusterScoreClipped,
 } from './clusterVisualizationUtils';
 
 type ClusterBarPlotProps = {
   clusters: DomainCluster[];
-  activeGroupId?: string | null;
+  activeGroupIds?: string[];
 };
-
-const CLUSTER_PALETTE = ['#3b82f6', '#f59e0b', '#10b981', '#f43f5e'] as const;
 
 function ClusterValueTooltip({
   clusters,
@@ -39,7 +38,7 @@ function ClusterValueTooltip({
           const score = cluster.centroid[valueKey] ?? 0;
           const clusterIndex = clusters.findIndex((candidate) => candidate.id === cluster.id);
           const safeClusterIndex = clusterIndex >= 0 ? clusterIndex : 0;
-          const color = CLUSTER_PALETTE[safeClusterIndex % CLUSTER_PALETTE.length]!;
+          const color = getClusterVisualColor(safeClusterIndex);
 
           return (
             <div key={cluster.id} className="grid grid-cols-[auto_1fr] items-center gap-x-3">
@@ -67,8 +66,10 @@ function getClusterBarOrder(clusters: DomainCluster[], valueKey: ValueKey): Doma
   });
 }
 
-export function ClusterBarPlot({ clusters, activeGroupId = null }: ClusterBarPlotProps) {
+export function ClusterBarPlot({ clusters, activeGroupIds = [] }: ClusterBarPlotProps) {
   const sortedValues = useMemo(() => getClusterValueOrder(clusters), [clusters]);
+  const activeGroupSet = useMemo(() => new Set(activeGroupIds), [activeGroupIds]);
+  const hasActiveSelection = activeGroupIds.length > 0;
 
   if (clusters.length === 0) {
     return null;
@@ -122,10 +123,10 @@ export function ClusterBarPlot({ clusters, activeGroupId = null }: ClusterBarPlo
                     const width = Math.max(Math.abs(endPosition - midpoint), 1);
                     const clusterIndex = clusters.findIndex((candidate) => candidate.id === cluster.id);
                     const safeClusterIndex = clusterIndex >= 0 ? clusterIndex : 0;
-                    const color = CLUSTER_PALETTE[safeClusterIndex % CLUSTER_PALETTE.length]!;
+                    const color = getClusterVisualColor(safeClusterIndex);
                     const clipped = isClusterScoreClipped(score, DOT_BAR_CLUSTER_SCORE_MIN, DOT_BAR_CLUSTER_SCORE_MAX);
-                    const isActive = activeGroupId == null || activeGroupId === cluster.id;
-                    const faded = activeGroupId != null && !isActive;
+                    const isActive = !hasActiveSelection || activeGroupSet.has(cluster.id);
+                    const faded = hasActiveSelection && !isActive;
 
                     return (
                       <Tooltip
@@ -141,8 +142,8 @@ export function ClusterBarPlot({ clusters, activeGroupId = null }: ClusterBarPlo
                           transform: 'translateY(-50%)',
                           height: '10px',
                           zIndex: isActive ? rankedClusters.length + 20 - index : index + 1,
-                          opacity: faded ? 0.18 : activeGroupId != null ? 1 : 0.78,
-                          filter: isActive && activeGroupId != null ? `drop-shadow(0 0 8px rgba(255,255,255,0.35)) drop-shadow(0 0 12px ${color}99)` : undefined,
+                          opacity: faded ? 0.18 : hasActiveSelection ? 1 : 0.78,
+                          filter: isActive && hasActiveSelection ? `drop-shadow(0 0 8px rgba(255,255,255,0.35)) drop-shadow(0 0 12px ${color}99)` : undefined,
                         }}
                       >
                         <div
@@ -151,7 +152,7 @@ export function ClusterBarPlot({ clusters, activeGroupId = null }: ClusterBarPlo
                           className="h-full w-full rounded-full"
                           style={{
                             backgroundColor: color,
-                            boxShadow: isActive && activeGroupId != null ? `0 0 0 1px rgba(255,255,255,0.7), 0 0 10px ${color}80` : undefined,
+                            boxShadow: isActive && hasActiveSelection ? `0 0 0 1px rgba(255,255,255,0.7), 0 0 10px ${color}80` : undefined,
                             border: clipped ? '1px solid rgba(15, 23, 42, 0.4)' : '1px solid rgba(255, 255, 255, 0.8)',
                           }}
                         />
