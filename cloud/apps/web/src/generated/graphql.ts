@@ -2858,7 +2858,6 @@ export type QueryDomainArgs = {
 export type QueryDomainAnalysisArgs = {
   domainId: Scalars['ID']['input'];
   scope?: InputMaybe<Scalars['String']['input']>;
-  scoreMethod?: InputMaybe<Scalars['String']['input']>;
   signature?: InputMaybe<Scalars['String']['input']>;
 };
 
@@ -2877,7 +2876,6 @@ export type QueryDomainAnalysisConditionTranscriptsArgs = {
 export type QueryDomainAnalysisValueDetailArgs = {
   domainId: Scalars['ID']['input'];
   modelId: Scalars['String']['input'];
-  scoreMethod?: InputMaybe<Scalars['String']['input']>;
   signature?: InputMaybe<Scalars['String']['input']>;
   valueKey: Scalars['String']['input'];
 };
@@ -4178,7 +4176,6 @@ export type DeleteDomainContextMutation = { __typename?: 'Mutation', deleteDomai
 export type DomainAnalysisQueryVariables = Exact<{
   domainId: Scalars['ID']['input'];
   scope?: InputMaybe<Scalars['String']['input']>;
-  scoreMethod?: InputMaybe<Scalars['String']['input']>;
   signature?: InputMaybe<Scalars['String']['input']>;
 }>;
 
@@ -4204,7 +4201,6 @@ export type DomainAnalysisValueDetailQueryVariables = Exact<{
   domainId: Scalars['ID']['input'];
   modelId: Scalars['String']['input'];
   valueKey: Scalars['String']['input'];
-  scoreMethod?: InputMaybe<Scalars['String']['input']>;
   signature?: InputMaybe<Scalars['String']['input']>;
 }>;
 
@@ -5826,11 +5822,10 @@ export function useDeleteDomainContextMutation() {
   return Urql.useMutation<DeleteDomainContextMutation, DeleteDomainContextMutationVariables>(DeleteDomainContextDocument);
 };
 export const DomainAnalysisDocument = gql`
-    query DomainAnalysis($domainId: ID!, $scope: String, $scoreMethod: String, $signature: String) {
+    query DomainAnalysis($domainId: ID!, $scope: String, $signature: String) {
   domainAnalysis(
     domainId: $domainId
     scope: $scope
-    scoreMethod: $scoreMethod
     signature: $signature
   ) {
     domainId
@@ -5968,12 +5963,11 @@ export function useDomainAnalysisLegacyQuery(options: Omit<Urql.UseQueryArgs<Dom
   return Urql.useQuery<DomainAnalysisLegacyQuery, DomainAnalysisLegacyQueryVariables>({ query: DomainAnalysisLegacyDocument, ...options });
 };
 export const DomainAnalysisValueDetailDocument = gql`
-    query DomainAnalysisValueDetail($domainId: ID!, $modelId: String!, $valueKey: String!, $scoreMethod: String, $signature: String) {
+    query DomainAnalysisValueDetail($domainId: ID!, $modelId: String!, $valueKey: String!, $signature: String) {
   domainAnalysisValueDetail(
     domainId: $domainId
     modelId: $modelId
     valueKey: $valueKey
-    scoreMethod: $scoreMethod
     signature: $signature
   ) {
     domainId
