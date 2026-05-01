@@ -3,6 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { render, screen } from '@testing-library/react';
 import { PressureSensitivity } from './PressureSensitivity';
 import { DOMAIN_AVAILABLE_SIGNATURES_QUERY } from '../api/operations/domainAnalysis';
+import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/llm';
 import { PRESSURE_SENSITIVITY_QUERY } from '../api/operations/pressureSensitivity';
 import type { PressureSensitivityQueryResult } from '../api/operations/pressureSensitivity';
 
@@ -86,6 +87,65 @@ function createPressureData(
   };
 }
 
+function createModelsData(): LlmModelsQueryResult {
+  return {
+    llmModels: [
+      {
+        id: 'model-a-id',
+        providerId: 'provider-a',
+        modelId: 'model-a',
+        displayName: 'Model A',
+        costInputPerMillion: 1,
+        costOutputPerMillion: 2,
+        status: 'ACTIVE',
+        isDefault: true,
+        isAvailable: true,
+        apiConfig: null,
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+        provider: {
+          id: 'provider-a',
+          name: 'provider-a',
+          displayName: 'Provider A',
+          maxParallelRequests: 10,
+          requestsPerMinute: 60,
+          isEnabled: true,
+          balance: null,
+          createdAt: '2025-01-01T00:00:00.000Z',
+          updatedAt: '2025-01-01T00:00:00.000Z',
+          models: [],
+        },
+      },
+      {
+        id: 'model-b-id',
+        providerId: 'provider-b',
+        modelId: 'model-b',
+        displayName: 'Model B',
+        costInputPerMillion: 1,
+        costOutputPerMillion: 2,
+        status: 'ACTIVE',
+        isDefault: true,
+        isAvailable: true,
+        apiConfig: null,
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+        provider: {
+          id: 'provider-b',
+          name: 'provider-b',
+          displayName: 'Provider B',
+          maxParallelRequests: 10,
+          requestsPerMinute: 60,
+          isEnabled: true,
+          balance: null,
+          createdAt: '2025-01-01T00:00:00.000Z',
+          updatedAt: '2025-01-01T00:00:00.000Z',
+          models: [],
+        },
+      },
+    ],
+  };
+}
+
 function mockDomainsOnce() {
   mockedUseDomains.mockReturnValue({
     domains: [{ id: 'domain-a', name: 'Domain A' }],
@@ -116,6 +176,16 @@ function mockQuery(data: PressureSensitivityQueryResult) {
           data: {
             domainAvailableSignatures: [{ signature: 'vnewtd' }],
           },
+          fetching: false,
+          error: undefined,
+        } as unknown,
+        vi.fn(),
+      ] as unknown as ReturnType<typeof useQuery>;
+    }
+    if (query === LLM_MODELS_QUERY) {
+      return [
+        {
+          data: createModelsData(),
           fetching: false,
           error: undefined,
         } as unknown,
@@ -199,6 +269,26 @@ describe('PressureSensitivity page', () => {
     );
 
     expect(screen.getByText('Pressure Response by Value')).toBeDefined();
+  });
+
+  it('defaults to the model picker and removes the provider filter copy', () => {
+    mockDomainsOnce();
+    mockQuery(createPressureData(false));
+
+    render(
+      <MemoryRouter initialEntries={['/models/pressure-sensitivity?domainId=domain-a&signature=vnewtd']}>
+        <PressureSensitivity />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('Models:')).toBeDefined();
+    expect(screen.getByText('Default models')).toBeDefined();
+    expect(screen.queryByText('Provider')).toBeNull();
+    expect(
+      screen.queryByText(
+        /This report shows each model's pressure response — how much added pressure moves the model toward its own value over the other\./,
+      ),
+    ).toBeNull();
   });
 
   it('appends lower-bound sentence when both transcript cap and exclusions are present', () => {

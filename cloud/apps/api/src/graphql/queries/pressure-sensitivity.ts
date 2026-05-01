@@ -45,6 +45,7 @@ const TRANSCRIPT_PAGE_SIZE = 5_000;
 const TRANSCRIPT_FETCH_LIMIT = 500_000;
 
 type ModelRow = {
+  id: string;
   modelId: string;
   displayName: string;
   providerId: string;
@@ -262,11 +263,13 @@ builder.queryField('pressureSensitivity', (t) =>
     type: PressureSensitivityResultRef,
     args: {
       domainId: t.arg.id({ required: false }),
+      modelIds: t.arg.stringList({ required: false }),
       providerId: t.arg.id({ required: false }),
       signature: t.arg.string({ required: true }),
     },
     resolve: async (_root, args): Promise<PressureSensitivityResultShape> => {
       const domainId = args.domainId != null ? String(args.domainId) : null;
+      const modelIds = args.modelIds != null ? [...new Set(args.modelIds.map((value) => String(value)).filter((value) => value.length > 0))] : null;
       const providerId = args.providerId != null ? String(args.providerId) : null;
       const signature = String(args.signature);
 
@@ -276,14 +279,18 @@ builder.queryField('pressureSensitivity', (t) =>
         include: { provider: true },
       })) as ModelRow[];
 
-      const models = providerId == null
-        ? activeModels
-        : activeModels.filter((m) =>
-          m.providerId === providerId
+      const models = activeModels.filter((m) => {
+        const matchesModelIds =
+          modelIds == null
+          || (modelIds.length > 0 && (modelIds.includes(m.modelId) || modelIds.includes(m.id)));
+        const matchesProvider =
+          providerId == null
+          || m.providerId === providerId
           || m.provider.id === providerId
           || m.provider.name === providerId
-          || m.provider.displayName === providerId,
-        );
+          || m.provider.displayName === providerId;
+        return matchesModelIds && matchesProvider;
+      });
 
       // 2. Aggregate runs
       // orderBy id:asc makes sourceRunToDefId Map.set "last write wins" deterministic

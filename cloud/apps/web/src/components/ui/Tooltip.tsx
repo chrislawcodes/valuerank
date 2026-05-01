@@ -6,7 +6,7 @@ import { cn } from '../../lib/utils';
 
 const tooltipVariants = cva(
   // Base styles
-  'absolute z-50 px-2 py-1 text-sm rounded shadow-lg pointer-events-none',
+  'fixed z-50 px-2 py-1 text-sm rounded shadow-lg pointer-events-none',
   {
     variants: {
       variant: {
@@ -91,9 +91,18 @@ export function Tooltip({
   }, [position]);
 
   useEffect(() => {
-    if (isVisible) {
+    if (!isVisible) return undefined;
+
+    calculatePosition();
+    const handleReposition = () => {
       calculatePosition();
-    }
+    };
+    window.addEventListener('scroll', handleReposition, true);
+    window.addEventListener('resize', handleReposition);
+    return () => {
+      window.removeEventListener('scroll', handleReposition, true);
+      window.removeEventListener('resize', handleReposition);
+    };
   }, [isVisible, calculatePosition]);
 
   const handleMouseEnter = () => {

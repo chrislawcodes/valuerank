@@ -1,11 +1,11 @@
 query PressureSensitivity(
   $domainId: ID
-  $providerId: ID
+  $modelIds: [String!]
   $signature: String!
 ) {
   pressureSensitivity(
     domainId: $domainId
-    providerId: $providerId
+    modelIds: $modelIds
     signature: $signature
   ) {
     models {
