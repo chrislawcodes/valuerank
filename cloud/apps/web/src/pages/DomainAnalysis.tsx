@@ -48,10 +48,11 @@ export function DomainAnalysis() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { domains, queryLoading: domainsLoading, error: domainsError } = useDomains();
+  const initialDomainId = searchParams.get('domainId') ?? '';
   const [selectedScope, setSelectedScope] = useState<'DOMAIN' | 'ALL_DOMAINS'>(
-    searchParams.get('scope') === ALL_DOMAINS_SCOPE ? 'ALL_DOMAINS' : 'DOMAIN',
+    searchParams.get('scope') === ALL_DOMAINS_SCOPE || initialDomainId.trim() === '' ? 'ALL_DOMAINS' : 'DOMAIN',
   );
-  const [selectedDomainId, setSelectedDomainId] = useState<string>(searchParams.get('domainId') ?? '');
+  const [selectedDomainId, setSelectedDomainId] = useState<string>(initialDomainId);
   const [selectedSignature, setSelectedSignature] = useState<string>(searchParams.get('signature') ?? '');
   const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
   const initializedModelSelection = useRef(false);
