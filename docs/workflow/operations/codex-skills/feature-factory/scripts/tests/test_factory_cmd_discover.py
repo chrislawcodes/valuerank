@@ -1,11 +1,13 @@
 """Tests for factory_cmd_discover — specifically the trivial/no-FF recommendation path."""
 from __future__ import annotations
 
+import gc
 import importlib.util
 import io
 import json
 import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -35,14 +37,30 @@ class DiscoverTrivialRecommendationTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmpdir.cleanup)
-        self.runs_root = Path(self._tmpdir.name)
+        self.repo_root = Path(self._tmpdir.name)
+        self.runs_root = self.repo_root / "docs" / "workflow" / "feature-runs"
+        self.runs_root.mkdir(parents=True, exist_ok=True)
         self.slug = "trivial-test-slug"
 
-        # Use FACTORY_STATE (module-level reference locked in at class definition
-        # time, before other tests may overwrite sys.modules entries).
-        self._runs_patch = patch.object(FACTORY_STATE, "FACTORY_RUNS_ROOT", self.runs_root)
-        self._runs_patch.start()
-        self.addCleanup(self._runs_patch.stop)
+        # Patch FACTORY_RUNS_ROOT and REPO_ROOT on every loaded factory_state
+        # module instance — multiple importlib loads create independent modules,
+        # and lazy imports (record_command_telemetry, etc.) resolve via
+        # sys.modules at call time. See PR #820 for the full root-cause writeup.
+        self._patches: list = []
+        for mod in list(gc.get_objects()):
+            if not isinstance(mod, types.ModuleType):
+                continue
+            if getattr(mod, "__name__", "") != "factory_state":
+                continue
+            if hasattr(mod, "FACTORY_RUNS_ROOT"):
+                p = patch.object(mod, "FACTORY_RUNS_ROOT", self.runs_root)
+                p.start()
+                self._patches.append(p)
+            if hasattr(mod, "REPO_ROOT"):
+                p = patch.object(mod, "REPO_ROOT", self.repo_root)
+                p.start()
+                self._patches.append(p)
+        self.addCleanup(lambda: [p.stop() for p in self._patches])
 
         # Bootstrap a minimal workflow state for the slug.
         FACTORY_STATE.workflow_dir(self.slug).mkdir(parents=True, exist_ok=True)
