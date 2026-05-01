@@ -118,6 +118,7 @@ describe('ModelGroupsSection', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Radar' }));
 
     expect(screen.getByRole('img', { name: /cluster radar chart ordered by favorability with schwartz category ring/i })).toBeInTheDocument();
+    expect(screen.queryByText(/ordered to match ranking and cycles/i)).not.toBeInTheDocument();
     expect(screen.getByText('Self-Transcendence')).toBeInTheDocument();
     expect(screen.getByText('Conservation')).toBeInTheDocument();
     expect(screen.getByText('Self-Enhancement')).toBeInTheDocument();
