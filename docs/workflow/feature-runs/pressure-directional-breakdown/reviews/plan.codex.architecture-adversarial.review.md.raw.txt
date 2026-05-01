@@ -1,0 +1,11 @@
+## Findings
+1. **[UNVERIFIED] MEDIUM** - The plan assumes `PressureSensitivityModel` already contains the pair-level rate fields needed to compute `pushedForEffect`, `pushedAgainstEffect`, and `gap` entirely on the client. If the current GraphQL shape only exposes pre-aggregated model data, this is not actually a “pure web-side addition” and would require backend/schema changes. The artifact never verifies that data shape.
+
+2. **MEDIUM** - The null/render logic is incomplete. It only says to return `null` when `models` is empty or when all `pairsUsed = 0`, but it does not cover the case where models exist and all pairs are filtered out by the missing/non-finite guard. That can leave the component with no valid rows while still rendering a table shell or a misleading empty state. The plan also never defines whether `pairsUsed` is the raw source count or the count after filtering, so the Pairs column can disagree with the rows actually included.
+
+3. **LOW** - The test slice is too narrow for the behavior being introduced. It mentions non-finite coverage and the Pairs column, but it does not lock down the sort order, the tie-break on label, or the empty-after-filter case. Those are the most likely places for a quiet regression in a client-side derived table.
+
+## Residual Risks
+- The unweighted per-model mean can still misstate reality when pair counts vary a lot across models or when one pair is much noisier than the rest.
+- The table may be cramped on smaller screens because no responsive behavior or column-hiding strategy is described.
+- If labels are not normalized, the ascending label tie-break may produce surprising order differences across casing or locale rules.

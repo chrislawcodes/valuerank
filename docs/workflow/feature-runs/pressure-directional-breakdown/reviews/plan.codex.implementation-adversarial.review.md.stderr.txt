@@ -1,0 +1,95 @@
+Reading additional input from stdin...
+OpenAI Codex v0.128.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019de1a0-98df-7a61-9f0f-83d0c92180db
+--------
+user
+Review this plan artifact using a implementation-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: plan.md
+# Plan: Pressure Directional Breakdown
+
+## Overview
+
+Pure web-side addition. One new component and one page edit. No API, schema, or DB changes.
+
+---
+
+## Architecture
+
+### New component: `PressureDirectionalBreakdown.tsx`
+
+Location: `cloud/apps/web/src/components/models/PressureDirectionalBreakdown.tsx`
+
+- Pure derived view — takes `models: PressureSensitivityModel[]`, computes per-model breakdown client-side
+- Three computed values per model: `pushedForEffect`, `pushedAgainstEffect`, `gap`
+- Validity filter excludes pairs missing any of the three rate fields, or where any is non-finite
+- Sort: absolute gap descending, ties broken by label ascending
+- Returns `null` when models is empty or all pairsUsed = 0
+- Reuses `formatSignedPoints` from `pressureSensitivityFormatting.ts`
+- Uses `Table`, `TableBody`, `TableCell`, `TableHead`, `TableHeader`, `TableRow` from `../ui/Table`
+- Uses `HeaderTooltip` from `../ui/HeaderTooltip` for the three numeric columns
+
+### Page edit: `PressureSensitivity.tsx`
+
+- Import `PressureDirectionalBreakdown`
+- Render as first child of the non-empty, non-allInsufficient block (before `<PressureSensitivitySummary>`)
+
+---
+
+## Waves
+
+### Wave 1 (only slice)
+
+All changes fit in one slice well under 300 lines:
+
+1. Create `PressureDirectionalBreakdown.tsx` (~100 lines)
+2. Create `PressureDirectionalBreakdown.test.tsx` (~120 lines)
+3. Edit `PressureSensitivity.tsx` (2 lines: import + render)
+
+Total estimated diff: ~225 lines.
+
+---
+
+## Residual Risks
+
+- **Unweighted mean across pairs**: the per-model mean treats all pairs equally regardless of trial count or noise. A model with one noisy pair and nine stable pairs could look more asymmetric than it really is.
+  Accepted: the Pairs column in this component shows pairsUsed directly. A weighted mean would require significant additional UI complexity not in scope.
+  **verification:** after implementation, confirm the Pairs column renders correctly for each model row.
+
+- **Non-finite guard**: rates come from the GraphQL server. In practice these are computed from trial counts and can't be NaN or Inf, but the isFinite guard is cheap and makes the component safe against future schema or computation changes.
+  **verification:** covered by unit tests (FR-008 test cases 5 and 6).
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+## Findings
+1. **Medium [UNVERIFIED]** The null/empty-state rule is incomplete. The plan only returns `null` when `models` is empty or all `pairsUsed = 0`, but the validity filter can still remove every row when `pairsUsed > 0` and the rate fields are missing or non-finite. That would likely leave an empty table shell or a misleading blank section. The plan should define behavior for “no valid rows after filtering” and test it.
+
+2. **Medium [UNVERIFIED]** The component can report a `pairsUsed` count that does not match the data actually used to compute the directional values. The plan says invalid pairs are filtered out, but also says the Pairs column shows `pairsUsed` directly. That means users may see a denominator that includes pairs excluded from the mean, which weakens the meaning of the table. The plan should either surface the valid-pair count or explicitly state that the visible averages still use all counted pairs.
+
+3. **Low [UNVERIFIED]** The `gap` definition is underspecified. The plan names three computed values, but never states the formula or sign convention for `gap`. That creates room for an implementation that sorts correctly by absolute value but displays the wrong directionality. The plan should define the formula in writing and pin it in tests.
+
+## Residual Risks
+- [UNVERIFIED] This plan assumes `PressureSensitivityModel` already contains all per-pair rate fields needed for the derived view. If it does not, the “pure client-side” approach will not hold without a data-shape change.
+- The table will still rely on unweighted per-pair averages, so a model with a small or noisy sample can look more extreme than a model with many stable pairs.
+tokens used
+15,706

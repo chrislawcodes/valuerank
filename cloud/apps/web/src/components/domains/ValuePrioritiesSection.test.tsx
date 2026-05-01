@@ -66,14 +66,14 @@ describe('ValuePrioritiesSection', () => {
     expect(firstCell.textContent).toMatch(/^\d+\.\d%$/);
   });
 
-  it('shows n/a when the win rate is missing', () => {
+  it('shows — when the win rate is missing', () => {
     renderSection();
 
     const row = getModelRow('Model B');
-    // Find any cell that renders "n/a" text. Achievement and Hedonism have null win rates.
+    // Find any cell that renders "—" text. Achievement and Hedonism have null win rates.
     const naCell = within(row)
       .getAllByRole('button')
-      .find((cell) => cell.textContent === 'n/a');
+      .find((cell) => cell.textContent === '—');
     expect(naCell).toBeDefined();
   });
 

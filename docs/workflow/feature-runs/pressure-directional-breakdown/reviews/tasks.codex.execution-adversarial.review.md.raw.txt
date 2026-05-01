@@ -1,0 +1,8 @@
+## Findings
+- **MEDIUM [UNVERIFIED]** The task assumes every `PressureSensitivityModel` has a usable `valuePairs` array plus string-like `label` and `modelId` fields. If any model is partially hydrated or malformed, T1.1 can throw during filtering or sorting instead of safely skipping that row. The artifact should either specify those fields as guaranteed by contract or add defensive handling.
+- **MEDIUM [UNVERIFIED]** T1.2 locks the suite to **exactly 13 tests**, which is brittle and leaves no room for additional adversarial coverage around malformed rows, missing `valuePairs`, duplicate labels, or accessibility behavior. That constraint can force the implementation to pass a narrow checklist while missing the most failure-prone cases.
+
+## Residual Risks
+- `HeaderTooltip` behavior is assumed, especially around focus/ARIA exposure. The tooltip test may pass even if the trigger is not truly accessible.
+- The artifact does not define how to handle partially invalid `models` entries beyond the `valuePairs` filters, so row rendering and sorting still depend on the existing model shape contract.
+- The sort rule is precise, but it may still produce surprising ordering when two models have equal absolute gaps and similar labels; that is covered only by the stated tie-breakers, not by any broader stability guarantee.

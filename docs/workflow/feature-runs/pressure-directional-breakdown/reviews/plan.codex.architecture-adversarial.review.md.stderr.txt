@@ -1,0 +1,98 @@
+Reading additional input from stdin...
+OpenAI Codex v0.128.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019de1a0-f676-7fa3-88f2-00c85c6b7419
+--------
+user
+Review this plan artifact using a architecture-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: plan.md
+# Plan: Pressure Directional Breakdown
+
+## Overview
+
+Pure web-side addition. One new component and one page edit. No API, schema, or DB changes.
+
+---
+
+## Architecture
+
+### New component: `PressureDirectionalBreakdown.tsx`
+
+Location: `cloud/apps/web/src/components/models/PressureDirectionalBreakdown.tsx`
+
+- Pure derived view — takes `models: PressureSensitivityModel[]`, computes per-model breakdown client-side
+- Three computed values per model: `pushedForEffect`, `pushedAgainstEffect`, `gap`
+- Validity filter excludes pairs missing any of the three rate fields, or where any is non-finite
+- Sort: absolute gap descending, ties broken by label ascending
+- Returns `null` when models is empty or all pairsUsed = 0
+- Reuses `formatSignedPoints` from `pressureSensitivityFormatting.ts`
+- Uses `Table`, `TableBody`, `TableCell`, `TableHead`, `TableHeader`, `TableRow` from `../ui/Table`
+- Uses `HeaderTooltip` from `../ui/HeaderTooltip` for the three numeric columns
+
+### Page edit: `PressureSensitivity.tsx`
+
+- Import `PressureDirectionalBreakdown`
+- Render as first child of the non-empty, non-allInsufficient block (before `<PressureSensitivitySummary>`)
+
+---
+
+## Waves
+
+### Wave 1 (only slice)
+
+All changes fit in one slice well under 300 lines:
+
+1. Create `PressureDirectionalBreakdown.tsx` (~100 lines)
+2. Create `PressureDirectionalBreakdown.test.tsx` (~120 lines)
+3. Edit `PressureSensitivity.tsx` (2 lines: import + render)
+
+Total estimated diff: ~225 lines.
+
+---
+
+## Residual Risks
+
+- **Unweighted mean across pairs**: the per-model mean treats all pairs equally regardless of trial count or noise. A model with one noisy pair and nine stable pairs could look more asymmetric than it really is.
+  Accepted: the Pairs column in this component shows pairsUsed directly. A weighted mean would require significant additional UI complexity not in scope.
+  **verification:** after implementation, confirm the Pairs column renders correctly for each model row.
+
+- **Non-finite guard**: rates come from the GraphQL server. In practice these are computed from trial counts and can't be NaN or Inf, but the isFinite guard is cheap and makes the component safe against future schema or computation changes.
+  **verification:** covered by unit tests (FR-008 test cases 5 and 6).
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m reviewing the plan as an adversary: checking for silent assumptions, mismatched data shapes, and cases the plan doesn’t explicitly cover.
+codex
+## Findings
+1. **[UNVERIFIED] MEDIUM** - The plan assumes `PressureSensitivityModel` already contains the pair-level rate fields needed to compute `pushedForEffect`, `pushedAgainstEffect`, and `gap` entirely on the client. If the current GraphQL shape only exposes pre-aggregated model data, this is not actually a “pure web-side addition” and would require backend/schema changes. The artifact never verifies that data shape.
+
+2. **MEDIUM** - The null/render logic is incomplete. It only says to return `null` when `models` is empty or when all `pairsUsed = 0`, but it does not cover the case where models exist and all pairs are filtered out by the missing/non-finite guard. That can leave the component with no valid rows while still rendering a table shell or a misleading empty state. The plan also never defines whether `pairsUsed` is the raw source count or the count after filtering, so the Pairs column can disagree with the rows actually included.
+
+3. **LOW** - The test slice is too narrow for the behavior being introduced. It mentions non-finite coverage and the Pairs column, but it does not lock down the sort order, the tie-break on label, or the empty-after-filter case. Those are the most likely places for a quiet regression in a client-side derived table.
+
+## Residual Risks
+- The unweighted per-model mean can still misstate reality when pair counts vary a lot across models or when one pair is much noisier than the rest.
+- The table may be cramped on smaller screens because no responsive behavior or column-hiding strategy is described.
+- If labels are not normalized, the ascending label tie-break may produce surprising order differences across casing or locale rules.
+tokens used
+3,260
