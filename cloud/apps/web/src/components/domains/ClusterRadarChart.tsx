@@ -1,13 +1,17 @@
 import { useMemo } from 'react';
 import { type DomainCluster } from '../../api/operations/domainAnalysis';
-import { VALUE_LABELS, type ValueKey } from '../../data/domainAnalysisData';
+import { VALUE_LABELS } from '../../data/domainAnalysisData';
 import {
   CLUSTER_SCORE_MAX,
   CLUSTER_SCORE_MIN,
   CLUSTER_SCORE_RANGE,
   getClusterMemberLabelText,
-  getClusterValueOrder,
 } from './clusterVisualizationUtils';
+import {
+  DISPLAY_VALUES,
+  QUADRANT_ARCS,
+  buildValueAngles,
+} from './useDominanceGraph';
 
 type ClusterRadarChartProps = {
   clusters: DomainCluster[];
@@ -18,8 +22,8 @@ const VIEW_BOX_HEIGHT = 560;
 const CENTER_X = 286;
 const CENTER_Y = 276;
 const OUTER_RADIUS = 184;
-const CATEGORY_RING_INNER_RADIUS = OUTER_RADIUS + 12;
-const CATEGORY_RING_OUTER_RADIUS = OUTER_RADIUS + 24;
+const CATEGORY_RING_RADIUS = OUTER_RADIUS + 26;
+const CATEGORY_LABEL_RADIUS = OUTER_RADIUS + 82;
 
 const CLUSTER_PALETTE = [
   { stroke: '#2563eb', fill: 'rgba(37, 99, 235, 0.14)' },
@@ -28,68 +32,11 @@ const CLUSTER_PALETTE = [
   { stroke: '#e11d48', fill: 'rgba(225, 29, 72, 0.14)' },
 ] as const;
 
-type SchwartzCategoryName =
-  | 'Self-Transcendence'
-  | 'Conservation'
-  | 'Self-Enhancement'
-  | 'Openness to Change';
-
-type SchwartzCategory = {
-  name: SchwartzCategoryName;
-  label: string;
-  color: string;
-};
-
-const SCHWARTZ_CATEGORIES = [
-  { name: 'Self-Transcendence', label: 'Self-Transcendence', color: '#f59e0b' },
-  { name: 'Conservation', label: 'Conservation', color: '#84cc16' },
-  { name: 'Self-Enhancement', label: 'Self-Enhancement', color: '#f97316' },
-  { name: 'Openness to Change', label: 'Openness to Change', color: '#f472b6' },
-] as const satisfies readonly [SchwartzCategory, SchwartzCategory, SchwartzCategory, SchwartzCategory];
-
 function getPoint(angle: number, radius: number) {
   return {
     x: CENTER_X + Math.cos(angle) * radius,
     y: CENTER_Y + Math.sin(angle) * radius,
   };
-}
-
-function getRingSegmentPath(innerRadius: number, outerRadius: number, startAngle: number, endAngle: number) {
-  const outerStart = getPoint(startAngle, outerRadius);
-  const outerEnd = getPoint(endAngle, outerRadius);
-  const innerEnd = getPoint(endAngle, innerRadius);
-  const innerStart = getPoint(startAngle, innerRadius);
-  const largeArcFlag = endAngle - startAngle > Math.PI ? 1 : 0;
-
-  return [
-    `M ${outerStart.x.toFixed(2)} ${outerStart.y.toFixed(2)}`,
-    `A ${outerRadius} ${outerRadius} 0 ${largeArcFlag} 1 ${outerEnd.x.toFixed(2)} ${outerEnd.y.toFixed(2)}`,
-    `L ${innerEnd.x.toFixed(2)} ${innerEnd.y.toFixed(2)}`,
-    `A ${innerRadius} ${innerRadius} 0 ${largeArcFlag} 0 ${innerStart.x.toFixed(2)} ${innerStart.y.toFixed(2)}`,
-    'Z',
-  ].join(' ');
-}
-
-function getValueCategories(valueKey: ValueKey): readonly SchwartzCategory[] {
-  switch (valueKey) {
-    case 'Universalism_Nature':
-    case 'Benevolence_Dependability':
-      return [SCHWARTZ_CATEGORIES[0]];
-    case 'Conformity_Interpersonal':
-    case 'Tradition':
-    case 'Security_Personal':
-      return [SCHWARTZ_CATEGORIES[1]];
-    case 'Power_Dominance':
-    case 'Achievement':
-      return [SCHWARTZ_CATEGORIES[2]];
-    case 'Hedonism':
-      return [SCHWARTZ_CATEGORIES[2], SCHWARTZ_CATEGORIES[3]];
-    case 'Stimulation':
-    case 'Self_Direction_Action':
-      return [SCHWARTZ_CATEGORIES[3]];
-    default:
-      return [];
-  }
 }
 
 function scoreToRadius(score: number): number {
@@ -98,20 +45,18 @@ function scoreToRadius(score: number): number {
 }
 
 export function ClusterRadarChart({ clusters }: ClusterRadarChartProps) {
-  const orderedValues = useMemo(() => getClusterValueOrder(clusters), [clusters]);
+  const valueAngles = useMemo(() => buildValueAngles(), []);
   const hasClippedScores = useMemo(
-    () => clusters.some((cluster) => orderedValues.some((valueKey) => {
+    () => clusters.some((cluster) => DISPLAY_VALUES.some((valueKey) => {
       const score = cluster.centroid[valueKey] ?? 0;
       return score < CLUSTER_SCORE_MIN || score > CLUSTER_SCORE_MAX;
     })),
-    [clusters, orderedValues],
+    [clusters],
   );
 
   if (clusters.length === 0) {
     return null;
   }
-
-  const angleStep = (Math.PI * 2) / orderedValues.length;
 
   return (
     <div className="space-y-3">
@@ -126,7 +71,7 @@ export function ClusterRadarChart({ clusters }: ClusterRadarChartProps) {
             Radar chart
           </text>
           <text x={24} y={44} className="fill-gray-400 text-[10px]">
-            Ordered by average favorability, with a Schwartz category ring.
+            Ordered to match Ranking and Cycles, with the same outer Schwartz ring.
           </text>
 
           {[0, 0.25, 0.5, 0.75, 1].map((fraction) => {
@@ -155,59 +100,47 @@ export function ClusterRadarChart({ clusters }: ClusterRadarChartProps) {
             );
           })}
 
-          {orderedValues.map((valueKey, index) => {
-            const angleStart = -Math.PI / 2 + angleStep * index;
-            const angleEnd = angleStart + angleStep;
-            const categories = getValueCategories(valueKey);
+          {QUADRANT_ARCS.map((quadrant) => {
+            const midAngle = (quadrant.startAngle + quadrant.endAngle) / 2;
+            const start = getPoint(quadrant.startAngle, CATEGORY_RING_RADIUS);
+            const end = getPoint(quadrant.endAngle, CATEGORY_RING_RADIUS);
+            const largeArcFlag = quadrant.endAngle - quadrant.startAngle > Math.PI ? 1 : 0;
+            const fillStart = getPoint(quadrant.startAngle, CATEGORY_RING_RADIUS);
+            const fillEnd = getPoint(quadrant.endAngle, CATEGORY_RING_RADIUS);
 
-            if (categories.length === 0) return null;
-
-            if (valueKey === 'Hedonism' && categories.length === 2) {
-              const midAngle = angleStart + angleStep / 2;
-              const firstCategory = categories[0];
-              const secondCategory = categories[1];
-              if (firstCategory == null || secondCategory == null) return null;
-
-              return (
-                <g key={`${valueKey}-category-ring`}>
-                  <path
-                    d={getRingSegmentPath(CATEGORY_RING_INNER_RADIUS, CATEGORY_RING_OUTER_RADIUS, angleStart, midAngle)}
-                    fill={firstCategory.color}
-                    fillOpacity="0.18"
-                    stroke="#ffffff"
-                    strokeWidth="1"
-                  />
-                  <path
-                    d={getRingSegmentPath(CATEGORY_RING_INNER_RADIUS, CATEGORY_RING_OUTER_RADIUS, midAngle, angleEnd)}
-                    fill={secondCategory.color}
-                    fillOpacity="0.18"
-                    stroke="#ffffff"
-                    strokeWidth="1"
-                  />
-                </g>
-              );
-            }
-
-            const category = categories[0];
-            if (category == null) return null;
             return (
-              <path
-                key={`${valueKey}-category-ring`}
-                d={getRingSegmentPath(CATEGORY_RING_INNER_RADIUS, CATEGORY_RING_OUTER_RADIUS, angleStart, angleEnd)}
-                fill={category.color}
-                fillOpacity="0.18"
-                stroke="#ffffff"
-                strokeWidth="1"
-              />
+              <g key={quadrant.label}>
+                <path
+                  d={`M ${CENTER_X} ${CENTER_Y} L ${fillStart.x.toFixed(2)} ${fillStart.y.toFixed(2)} A ${CATEGORY_RING_RADIUS} ${CATEGORY_RING_RADIUS} 0 ${largeArcFlag} 1 ${fillEnd.x.toFixed(2)} ${fillEnd.y.toFixed(2)} Z`}
+                  fill={quadrant.fill}
+                />
+                <path
+                  d={`M ${start.x.toFixed(2)} ${start.y.toFixed(2)} A ${CATEGORY_RING_RADIUS} ${CATEGORY_RING_RADIUS} 0 ${largeArcFlag} 1 ${end.x.toFixed(2)} ${end.y.toFixed(2)}`}
+                  fill="none"
+                  stroke={quadrant.ring}
+                  strokeWidth="18"
+                  opacity="0.72"
+                />
+                <text
+                  x={getPoint(midAngle, CATEGORY_LABEL_RADIUS).x}
+                  y={getPoint(midAngle, CATEGORY_LABEL_RADIUS).y}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  className="fill-gray-700 text-[10px] font-semibold"
+                >
+                  {quadrant.label}
+                </text>
+              </g>
             );
           })}
 
-          {orderedValues.map((valueKey, index) => {
-            const angle = -Math.PI / 2 + angleStep * index;
+          {DISPLAY_VALUES.map((valueKey) => {
+            const angle = valueAngles.get(valueKey) ?? -Math.PI / 2;
             const outer = getPoint(angle, OUTER_RADIUS);
-            const labelPoint = getPoint(angle, OUTER_RADIUS + 24);
+            const labelPoint = getPoint(angle, OUTER_RADIUS + 18);
             const label = VALUE_LABELS[valueKey];
-            const anchor = labelPoint.x < CENTER_X - 8 ? 'end' : labelPoint.x > CENTER_X + 8 ? 'start' : 'middle';
+            const anchor =
+              labelPoint.x < CENTER_X - 8 ? 'end' : labelPoint.x > CENTER_X + 8 ? 'start' : 'middle';
 
             return (
               <g key={valueKey}>
@@ -229,8 +162,9 @@ export function ClusterRadarChart({ clusters }: ClusterRadarChartProps) {
 
           {clusters.map((cluster, index) => {
             const palette = CLUSTER_PALETTE[index % CLUSTER_PALETTE.length]!;
-            const points = orderedValues.map((valueKey, valueIndex) => {
-              const angle = -Math.PI / 2 + angleStep * valueIndex;
+            const orderedValues = DISPLAY_VALUES;
+            const points = orderedValues.map((valueKey) => {
+              const angle = valueAngles.get(valueKey) ?? -Math.PI / 2;
               const score = cluster.centroid[valueKey] ?? 0;
               return getPoint(angle, scoreToRadius(score));
             });
@@ -281,16 +215,6 @@ export function ClusterRadarChart({ clusters }: ClusterRadarChartProps) {
             Mid-ring = neutral, outer ring = strongest favoring.
           </text>
         </svg>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2 text-[11px] text-gray-600">
-        <span className="font-medium text-gray-500">Schwartz categories:</span>
-        {SCHWARTZ_CATEGORIES.map((category) => (
-          <span key={category.label} className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white px-2 py-1">
-            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: category.color }} />
-            <span>{category.label}</span>
-          </span>
-        ))}
       </div>
 
       {hasClippedScores && (

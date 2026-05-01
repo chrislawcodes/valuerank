@@ -92,7 +92,7 @@ type UseDominanceGraphParams = {
   selectedModel: ModelEntry | undefined;
 };
 
-function buildValueAngles(): Map<ValueKey, number> {
+export function buildValueAngles(): Map<ValueKey, number> {
   const result = new Map<ValueKey, number>();
 
   const selfTranscendence = QUADRANT_ARCS[0];
