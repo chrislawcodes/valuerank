@@ -409,6 +409,85 @@ def number_lines(text: str) -> str:
     return "\n".join(f"{idx + 1:05d}: {line}" for idx, line in enumerate(text.splitlines()))
 
 
+# ---------------------------------------------------------------------------
+# New-file detection for diff stage (Change 3, PR #832)
+#
+# When a git diff contains a new file, the diff body is all `+` lines with no
+# context. Gemini reads these as partial context and raises false positives
+# (e.g. claiming an import is missing when it's on line 5 of the new file).
+# For new files, we replace the diff chunk with the full file content so
+# Gemini has accurate context.
+# ---------------------------------------------------------------------------
+
+_NEW_FILE_HEADER_RE = re.compile(r"^new file mode \d+", re.MULTILINE)
+_DIFF_PLUS_PLUS_RE = re.compile(r"^\+\+\+ b/(.+)$", re.MULTILINE)
+
+
+def _extract_new_file_path(chunk: str) -> str | None:
+    """Return the repo-relative path of a new file in a diff chunk, or None."""
+    if not _NEW_FILE_HEADER_RE.search(chunk):
+        return None
+    m = _DIFF_PLUS_PLUS_RE.search(chunk)
+    if not m:
+        return None
+    return m.group(1)
+
+
+def expand_new_files_in_diff(diff_text: str, repo_root: Path, max_total_chars: int) -> str:
+    """Replace new-file diff chunks with the file's full content from disk.
+
+    For each file in the diff that has `new file mode` in its header, reads the
+    file from ``repo_root`` and replaces the `+`-prefixed diff lines with a
+    ``## New file: <path>`` block containing the raw file content.
+
+    Modified files are left unchanged.  If the file does not exist on disk (e.g.
+    the worktree is ahead of origin), the original diff chunk is kept.
+
+    The result is re-capped to ``max_total_chars`` so callers do not need to
+    worry about expansion blowing up the prompt size.
+    """
+    # Split the diff into per-file chunks.
+    # "diff --git " starts each new file section.
+    parts = diff_text.split("\ndiff --git ")
+    if not parts:
+        return diff_text
+
+    output_parts: list[str] = []
+    for idx, chunk in enumerate(parts):
+        # Re-attach the separator (except for the very first chunk which may be
+        # a preamble or the first file header without the leading \n).
+        if idx > 0:
+            chunk = "diff --git " + chunk
+
+        new_file_rel = _extract_new_file_path(chunk)
+        if new_file_rel is None:
+            output_parts.append(chunk)
+            continue
+
+        # New file: try to read from disk
+        disk_path = repo_root / new_file_rel
+        if not disk_path.exists():
+            # File not on disk — keep original diff chunk
+            output_parts.append(chunk)
+            continue
+
+        try:
+            file_content = disk_path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            output_parts.append(chunk)
+            continue
+
+        # Replace the chunk with the full file content under a clear header
+        replacement = f"## New file: {new_file_rel}\n\n{file_content}"
+        output_parts.append(replacement)
+
+    result = "\n".join(output_parts)
+    # Guard against expansion blowing the budget — keep first max_total_chars chars
+    if len(result) > max_total_chars:
+        result = result[:max_total_chars]
+    return result
+
+
 def narrow_text(stage: str, text: str, max_chars: int) -> tuple[str, dict]:
     if len(text) <= max_chars:
         return text, {"strategy": "none"}
@@ -627,6 +706,14 @@ def main() -> int:
     }
 
     artifact_text = source_artifact_text
+    # Change 3, PR #832: for diff reviews, expand new-file chunks so Gemini
+    # sees full file content instead of `+`-prefixed lines without context.
+    if args.stage == "diff":
+        artifact_text = expand_new_files_in_diff(artifact_text, repo_root, args.max_total_chars)
+        # Recompute hash so the review metadata reflects the expanded content
+        source_artifact_hash = sha256_text(artifact_text)
+        metadata["artifact_sha256"] = source_artifact_hash
+
     if len(artifact_text) > args.max_artifact_chars:
         narrowed_path, narrowed_hash = write_narrowed_artifact(
             output_path,

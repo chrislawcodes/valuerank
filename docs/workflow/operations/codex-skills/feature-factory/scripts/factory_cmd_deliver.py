@@ -476,8 +476,8 @@ def command_deliver(args: argparse.Namespace) -> int:
     return 0
 
 
-@mutates_state("closeout")
-def command_closeout(args: argparse.Namespace) -> int:
+@mutates_state("workflow-closeout")
+def command_workflow_closeout(args: argparse.Namespace) -> int:
     from factory_cmd_checkpoint import command_checkpoint  # noqa: E402
     ensure_sync()
     root = workflow_dir(args.slug)
