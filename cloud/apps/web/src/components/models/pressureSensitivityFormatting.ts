@@ -58,16 +58,16 @@ export function getBadgeFlag(value: number | null | undefined): 'ceiling' | 'flo
  */
 export function reasonHoverText(reason: string | null | undefined): string {
   if (reason === 'directional-thin') {
-    return 'The push-toward-first pool has no qualifying cells (N ≥ 3). Add more trials where own pressure is high and opponent pressure is moderate.';
+    return 'The push-toward-first pool has fewer than 3 vignette observations. Add more coverage where own pressure is high and opponent pressure is moderate.';
   }
   if (reason === 'inverted-thin') {
-    return 'The push-toward-other pool has no qualifying cells (N ≥ 3). Add more trials where opponent pressure is high and own pressure is moderate.';
+    return 'The push-toward-other pool has fewer than 3 vignette observations. Add more coverage where opponent pressure is high and own pressure is moderate.';
   }
   if (reason === 'directional-and-inverted-thin') {
-    return 'Neither direction pool has qualifying cells. This pair needs more coverage to compute a pressure response.';
+    return 'Neither direction pool has enough vignette observations. This pair needs more coverage to compute a pressure response.';
   }
   if (reason === 'baseline-thin') {
-    return 'Pressure response is defined but the baseline pool has no qualifying cells.';
+    return 'Pressure response is defined but the baseline pool does not yet have enough vignette observations.';
   }
   return '';
 }
