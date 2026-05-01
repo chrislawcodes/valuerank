@@ -99,7 +99,7 @@ Do not duplicate checkpoint manifest logic, review file validation, diff writing
 | Implementation slice | Implement one `[CHECKPOINT]`-bounded slice from `tasks.md`, run build and tests, commit | Codex | Codex |
 | Diff checkpoint | Adversarial attack on the slice diff only (not the full branch), correctness review, reconcile findings | Codex (1 adversarial review: `correctness`) · Gemini (1 adversarial review: `quality`) · Claude (reconciles) | Codex (1 adversarial review: `correctness`) · Gemini (1 adversarial review: `quality`) · Codex (reconciles, escalates blockers to human) |
 | *(repeat per slice)* | Implementation slice → Diff checkpoint repeats for each `[CHECKPOINT]` boundary in `tasks.md` | | |
-| Deliver | Create PR, watch CI, record delivery state in workflow | Claude | Codex (stages) · Human (approves and creates PR) |
+| Deliver | Push branch, create PR, watch CI, record delivery state in workflow. The `deliver` invocation is itself the consent — do not re-prompt before push or PR creation. The human still squash-merges. | Claude | Codex (stages, push, create PR) · Human (approves and squash-merges) |
 | CI failure | Extract errors, implement fix, re-run CI | Claude (reviews fix) · Codex (fixes) | Codex (fixes) · Human (approves) |
 | Write closeout | Write summary of what shipped, what remains open, and deferred risks | Claude | Codex |
 | Closeout checkpoint | Adversarial attack on closeout, final state review, reconcile findings | Codex (2 adversarial reviews: `fidelity` + `completeness`) · Gemini (1 adversarial review: `residual-risk`) · Claude (reconciles) | Codex (2 adversarial reviews: `fidelity` + `completeness`) · Gemini (1 adversarial review: `residual-risk`) · Codex (reconciles, escalates blockers to human) |

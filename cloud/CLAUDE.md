@@ -7,7 +7,9 @@ Repo-wide agent behavior, delivery paths, terminology policy, and memory policy 
 ## Push And PR Checks
 
 - Use Pull Requests for changes that will land on `main`.
-- Ask the human before running `git push`.
+- Never push directly to `main`. Always go via a feature branch + PR.
+- For invoked delivery actions (Feature Factory `deliver`, `/ship`, explicit "push and open the PR" instructions): the invocation IS the consent. Push the feature branch and create the PR without re-prompting.
+- For ad-hoc work where no explicit delivery instruction was given: ask before `git push`.
 - Run the Preflight Gate before any `git push` or PR creation.
 
 ## Workflow State
