@@ -249,5 +249,5 @@
     "blockers": []
   },
   "plan_adversarial_rounds": 1,
-  "tasks_adversarial_rounds": 1,
+  "tasks_adversarial_rounds": 1
 }
