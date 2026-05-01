@@ -18,9 +18,7 @@ function cell(partial: Partial<Cell> & { ownLevel: number; opponentLevel: number
     n: partial.n,
     unscoredCount: partial.unscoredCount ?? 0,
     successes: partial.successes ?? 0,
-    opponentSuccesses: partial.opponentSuccesses ?? 0,
     winRate: partial.winRate ?? null,
-    opponentWinRate: partial.opponentWinRate ?? null,
     conviction: partial.conviction ?? null,
     netScore: partial.netScore ?? null,
     lowData: partial.lowData ?? partial.n < 3,
@@ -39,9 +37,7 @@ describe('buildCellMetrics', () => {
       n: 3,
       unscoredCount: 0,
       successes: 2,
-      opponentSuccesses: 0,
       winRate: 2 / 3,
-      opponentWinRate: 0,
       conviction: 1.5,
       netScore: (2 * 1 + 1 - 0 - 0) / 3,
     });
@@ -57,9 +53,7 @@ describe('buildCellMetrics', () => {
       n: 0,
       unscoredCount: 2,
       successes: 0,
-      opponentSuccesses: 0,
       winRate: null,
-      opponentWinRate: null,
       conviction: null,
       netScore: null,
     });
@@ -73,9 +67,7 @@ describe('buildCellMetrics', () => {
 
     expect(result.n).toBe(2);
     expect(result.successes).toBe(0);
-    expect(result.opponentSuccesses).toBe(2);
     expect(result.winRate).toBe(0);
-    expect(result.opponentWinRate).toBe(1);
     expect(result.conviction).toBeNull();
     expect(result.netScore).toBe((0 - 2 * 2) / 2);
   });
@@ -89,7 +81,6 @@ describe('buildCellMetrics', () => {
 
     expect(result.netScore).toBeCloseTo(2 / 3, 10);
     expect(result.conviction).toBe(1.5);
-    expect(result.opponentWinRate).toBeCloseTo(1 / 3, 10);
   });
 });
 
@@ -110,9 +101,7 @@ describe('buildVignetteWeightedCellMetrics', () => {
       n: 2,
       unscoredCount: 0,
       successes: (1 + 1 / 3),
-      opponentSuccesses: (1 / 3 + 1 / 3),
       winRate: (1 + 1 / 3) / 2,
-      opponentWinRate: (1 / 3 + 1 / 3) / 2,
       conviction: 1.5,
       netScore: (2 + (-1 / 3)) / 2,
       lowData: true,
@@ -129,9 +118,7 @@ describe('buildVignetteWeightedCellMetrics', () => {
       n: 1,
       unscoredCount: 1,
       successes: 1,
-      opponentSuccesses: 0,
       winRate: 1,
-      opponentWinRate: 0,
       conviction: 1,
       netScore: 1,
       lowData: true,

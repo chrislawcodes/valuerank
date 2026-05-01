@@ -5,10 +5,8 @@ export type SensitivityCellShape = {
   opponentLevel: number;
   n: number;
   successes: number;
-  opponentSuccesses: number;
   unscoredCount: number;
   winRate: number | null;
-  opponentWinRate: number | null;
   conviction: number | null;
   netScore: number | null;
   lowData: boolean;
@@ -141,10 +139,8 @@ builder.objectType(SensitivityCellRef, {
     opponentLevel: t.exposeInt('opponentLevel'),
     n: t.exposeInt('n'),
     successes: t.exposeInt('successes'),
-    opponentSuccesses: t.exposeInt('opponentSuccesses'),
     unscoredCount: t.exposeInt('unscoredCount'),
     winRate: t.exposeFloat('winRate', { nullable: true }),
-    opponentWinRate: t.exposeFloat('opponentWinRate', { nullable: true }),
     conviction: t.exposeFloat('conviction', { nullable: true }),
     netScore: t.exposeFloat('netScore', { nullable: true }),
     lowData: t.exposeBoolean('lowData'),

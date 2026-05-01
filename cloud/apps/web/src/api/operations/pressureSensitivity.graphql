@@ -44,7 +44,6 @@ query PressureSensitivity(
           n
           unscoredCount
           winRate
-          opponentWinRate
           conviction
           netScore
           lowData

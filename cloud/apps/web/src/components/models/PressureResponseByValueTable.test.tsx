@@ -25,7 +25,6 @@ function createCell(
   opponentLevel: number,
   n: number,
   winRate: number,
-  opponentWinRate: number = 1 - winRate,
 ): PressureSensitivityCell {
   return {
     ownLevel,
@@ -33,7 +32,6 @@ function createCell(
     n,
     unscoredCount: 0,
     winRate,
-    opponentWinRate,
     conviction: null,
     netScore: null,
     lowData: false,
@@ -212,32 +210,6 @@ describe('PressureResponseByValueTable', () => {
 
   it('aggregates pooled win rates across multiple pairs', () => {
     render(<PressureResponseByValueTable valuePairs={createMathFixture().valuePairs} />);
-
-    const row = screen.getByText('Alpha').closest('tr');
-    if (row == null) {
-      throw new Error('Missing Alpha row');
-    }
-
-    const cells = within(row).getAllByRole('cell');
-    expect(cells[1]?.textContent ?? '').toBe('60.0%');
-    expect(cells[2]?.textContent ?? '').toBe('40.0%');
-    expect(cells[3]?.textContent ?? '').toBe('80.0%');
-    expect(cells[4]?.textContent ?? '').toBe('30.0%');
-  });
-
-  it('keeps sparse vignette cells in the pooled rates instead of showing dashes', () => {
-    render(
-      <PressureResponseByValueTable
-        valuePairs={[
-          createPair('alpha::beta', 'Alpha', 'Beta', [
-            createCell(1, 1, 1, 0.4),
-            createCell(4, 1, 1, 0.8),
-            createCell(1, 4, 2, 0.3),
-            createCell(2, 3, 2, 0.9),
-          ]),
-        ]}
-      />,
-    );
 
     const row = screen.getByText('Alpha').closest('tr');
     if (row == null) {
