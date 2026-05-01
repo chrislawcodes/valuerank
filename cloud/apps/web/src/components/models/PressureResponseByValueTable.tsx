@@ -350,9 +350,9 @@ export function PressureResponseByValueTable({ valuePairs }: Props) {
             its 9 pairings, broken down by what the prompt was doing.
           </p>
           <p className="text-xs text-gray-500">
-            All four rates are averaged across the 9 pairs containing this value. For pairs where this value is
-            alphabetically second, we approximate its rate from the first value&apos;s rate (small error from neutral
-            picks, typically under 1 pp).
+            Each pressure cell counts each vignette once. The pair rows are then averaged equally across the 9 pairs
+            containing this value. For pairs where this value is alphabetically second, we approximate its rate from
+            the first value&apos;s rate (small error from neutral picks, typically under 1 pp).
           </p>
         </div>
         <CopyVisualButton targetRef={tableRef} label="Pressure Response by Value" />

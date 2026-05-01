@@ -3,6 +3,7 @@ import {
   type Cell,
   type Observation,
   buildCellMetrics,
+  buildVignetteWeightedCellMetrics,
   diffProportionCI,
   pooledDirectionalReduction,
   summarizePressureResponse,
@@ -80,6 +81,48 @@ describe('buildCellMetrics', () => {
 
     expect(result.netScore).toBeCloseTo(2 / 3, 10);
     expect(result.conviction).toBe(1.5);
+  });
+});
+
+describe('buildVignetteWeightedCellMetrics', () => {
+  it('counts each vignette once inside a cell and averages vignette win rates equally', () => {
+    const result = buildVignetteWeightedCellMetrics([
+      [
+        { outcome: 'own_picked', strength: 'strong' },
+      ],
+      [
+        { outcome: 'own_picked', strength: 'lean' },
+        { outcome: 'opponent_picked', strength: 'lean' },
+        { outcome: 'opponent_picked', strength: 'lean' },
+      ],
+    ]);
+
+    expect(result).toEqual({
+      n: 2,
+      unscoredCount: 0,
+      successes: 2,
+      winRate: (1 + 1 / 3) / 2,
+      conviction: 1.5,
+      netScore: (2 + (-1 / 3)) / 2,
+      lowData: true,
+    });
+  });
+
+  it('ignores vignette groups with no scored observations', () => {
+    const result = buildVignetteWeightedCellMetrics([
+      [{ outcome: 'unscored', strength: null }],
+      [{ outcome: 'own_picked', strength: 'lean' }],
+    ]);
+
+    expect(result).toEqual({
+      n: 1,
+      unscoredCount: 1,
+      successes: 1,
+      winRate: 1,
+      conviction: 1,
+      netScore: 1,
+      lowData: true,
+    });
   });
 });
 

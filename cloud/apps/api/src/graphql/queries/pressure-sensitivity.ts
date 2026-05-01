@@ -17,7 +17,7 @@ import {
 import { buildSafeLevelLookup, type DefinitionDimension } from './scenarios-utils.js';
 import { normalizeScenarioAnalysisMetadata } from '../../services/analysis/scenario-metadata.js';
 import {
-  buildCellMetrics,
+  buildVignetteWeightedCellMetrics,
   pooledDirectionalReduction,
   summarizePressureResponse,
   FLAT_DELTA_THRESHOLD,
@@ -95,7 +95,7 @@ type DefinitionMetadata = {
 type CellAccumulator = {
   ownLevel: number;
   opponentLevel: number;
-  observations: Observation[];
+  observationsByDefinition: Map<string, Observation[]>;
 };
 
 type PairAccumulator = {
@@ -497,7 +497,12 @@ builder.queryField('pressureSensitivity', (t) =>
 
         if (outcome === 'unscored') {
           const unscoredCell = ensureUnscoredCell(pairAcc);
-          unscoredCell.observations.push({ outcome, strength });
+          const observations = unscoredCell.observationsByDefinition.get(defId);
+          if (observations) {
+            observations.push({ outcome, strength });
+          } else {
+            unscoredCell.observationsByDefinition.set(defId, [{ outcome, strength }]);
+          }
           continue;
         }
 
@@ -527,10 +532,19 @@ builder.queryField('pressureSensitivity', (t) =>
         const key = cellKey(levels.ownLevel, levels.opponentLevel);
         let cell = pairAcc.cells.get(key);
         if (!cell) {
-          cell = { ownLevel: levels.ownLevel, opponentLevel: levels.opponentLevel, observations: [] };
+          cell = {
+            ownLevel: levels.ownLevel,
+            opponentLevel: levels.opponentLevel,
+            observationsByDefinition: new Map(),
+          };
           pairAcc.cells.set(key, cell);
         }
-        cell.observations.push({ outcome, strength });
+        const observations = cell.observationsByDefinition.get(defId);
+        if (observations) {
+          observations.push({ outcome, strength });
+        } else {
+          cell.observationsByDefinition.set(defId, [{ outcome, strength }]);
+        }
       }
 
       // 9-13. Build per-model output.
@@ -553,7 +567,11 @@ builder.queryField('pressureSensitivity', (t) =>
           let pairN = 0;
           let pairUnscored = 0;
           for (const [, cellAcc] of acc.cells) {
-            const metrics = buildCellMetrics(cellAcc.observations);
+            const metrics = buildVignetteWeightedCellMetrics(
+              [...cellAcc.observationsByDefinition.values()],
+              MIN_N,
+            );
+
             pairN += metrics.n;
             pairUnscored += metrics.unscoredCount;
             grid.push({
@@ -565,7 +583,7 @@ builder.queryField('pressureSensitivity', (t) =>
               winRate: metrics.winRate,
               conviction: metrics.conviction,
               netScore: metrics.netScore,
-              lowData: metrics.n < MIN_N,
+              lowData: metrics.lowData,
             });
           }
           modelUnscored += pairUnscored;
@@ -703,7 +721,11 @@ function ensureUnscoredCell(pairAcc: PairAccumulator): CellAccumulator {
   const key = cellKey(0, 0);
   let cell = pairAcc.cells.get(key);
   if (!cell) {
-    cell = { ownLevel: 0, opponentLevel: 0, observations: [] };
+    cell = {
+      ownLevel: 0,
+      opponentLevel: 0,
+      observationsByDefinition: new Map(),
+    };
     pairAcc.cells.set(key, cell);
   }
   return cell;

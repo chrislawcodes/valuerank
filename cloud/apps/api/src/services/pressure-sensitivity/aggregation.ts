@@ -33,6 +33,11 @@ export type Cell = CellMetrics & {
   lowData: boolean;
 };
 
+export type VignetteWeightedCellMetrics = CellMetrics & {
+  n: number;
+  lowData: boolean;
+};
+
 export type PressureResponseReason =
   | 'directional-thin'
   | 'inverted-thin'
@@ -169,6 +174,43 @@ export function buildCellMetrics(observations: ReadonlyArray<Observation>): Cell
   const netScore = (2 * ownStrong + ownLean - 2 * opponentStrong - opponentLean) / n;
 
   return { n, unscoredCount, successes: ownPicked, winRate, conviction, netScore };
+}
+
+function averageNonNull(values: Array<number | null>): number | null {
+  let sum = 0;
+  let count = 0;
+
+  for (const value of values) {
+    if (value == null) continue;
+    sum += value;
+    count += 1;
+  }
+
+  return count === 0 ? null : sum / count;
+}
+
+/**
+ * Aggregate vignette-level observations into a single cell using equal weight per vignette.
+ *
+ * This is the unit-of-analysis rule used by the pressure-response report when the goal is to
+ * compare values as vignette-level objects instead of transcript-level observations.
+ */
+export function buildVignetteWeightedCellMetrics(
+  vignetteObservations: ReadonlyArray<ReadonlyArray<Observation>>,
+  minN = 3,
+): VignetteWeightedCellMetrics {
+  const vignetteMetrics = vignetteObservations.map((observations) => buildCellMetrics(observations));
+  const scoredVignetteMetrics = vignetteMetrics.filter((metrics) => metrics.n > 0);
+
+  return {
+    n: scoredVignetteMetrics.length,
+    unscoredCount: vignetteMetrics.reduce((sum, metrics) => sum + metrics.unscoredCount, 0),
+    successes: scoredVignetteMetrics.reduce((sum, metrics) => sum + metrics.successes, 0),
+    winRate: averageNonNull(scoredVignetteMetrics.map((metrics) => metrics.winRate)),
+    conviction: averageNonNull(scoredVignetteMetrics.map((metrics) => metrics.conviction)),
+    netScore: averageNonNull(scoredVignetteMetrics.map((metrics) => metrics.netScore)),
+    lowData: scoredVignetteMetrics.length < minN,
+  };
 }
 
 function isFiniteNumber(value: unknown): value is number {
