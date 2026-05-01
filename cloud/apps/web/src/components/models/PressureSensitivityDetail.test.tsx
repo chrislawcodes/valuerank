@@ -109,7 +109,7 @@ describe('PressureSensitivityDetail', () => {
       vi.advanceTimersByTime(200);
     });
 
-    expect(screen.getByRole('tooltip').textContent ?? '').toContain('push-toward-first pool has no qualifying cells');
+    expect(screen.getByRole('tooltip').textContent ?? '').toContain('push-toward-first pool has fewer than 3 vignette observations');
   });
 
   it('shows — in rate cells when rates are null', () => {
