@@ -500,14 +500,17 @@ export function pooledDirectionalReduction(
     (cell) => cell.ownLevel === cell.opponentLevel,
   );
 
+  const directionalRates = directionalCells.map((cell) => cell.winRate).filter(isFiniteNumber);
+  const mirrorRates = mirrorCells.map((cell) => cell.winRate).filter(isFiniteNumber);
+  const baselineRates = baselineCells.map((cell) => cell.winRate).filter(isFiniteNumber);
+
   const directionalTrials = sumNumbers(directionalCells.map((cell) => cell.n));
   const mirrorTrials = sumNumbers(mirrorCells.map((cell) => cell.n));
   const baselineTrials = sumNumbers(baselineCells.map((cell) => cell.n));
   const qualifyingTrials = directionalTrials + mirrorTrials + baselineTrials;
-  const baselineSuccesses = sumNumbers(baselineCells.map((cell) => cell.successes));
-  const baselineRate = baselineTrials === 0 ? null : baselineSuccesses / baselineTrials;
-  const directionalSuccesses = sumNumbers(directionalCells.map((cell) => cell.successes));
-  const mirrorSuccesses = sumNumbers(mirrorCells.map((cell) => cell.successes));
+  const baselineRate = averageNonNull(baselineRates);
+  const directionalRate = averageNonNull(directionalRates);
+  const mirrorRate = averageNonNull(mirrorRates);
 
   const thin = directionalTrials < minN || mirrorTrials < minN;
   if (thin) {
@@ -522,20 +525,32 @@ export function pooledDirectionalReduction(
       ciLow: null,
       ciHigh: null,
       baselineRate,
-      pushTowardFirstRate: directionalTrials > 0 ? directionalSuccesses / directionalTrials : null,
-      pushTowardSecondRate: mirrorTrials > 0 ? mirrorSuccesses / mirrorTrials : null,
+      pushTowardFirstRate: directionalRate,
+      pushTowardSecondRate: mirrorRate,
       reason,
       qualifyingTrials,
     };
   }
 
-  const pushTowardFirstRate = directionalSuccesses / directionalTrials;
-  const pushTowardSecondRate = mirrorSuccesses / mirrorTrials;
+  const pushTowardFirstRate = directionalRate;
+  const pushTowardSecondRate = mirrorRate;
+  if (pushTowardFirstRate == null || pushTowardSecondRate == null) {
+    return {
+      value: null,
+      ciLow: null,
+      ciHigh: null,
+      baselineRate,
+      pushTowardFirstRate,
+      pushTowardSecondRate,
+      reason: baselineRate === null ? 'baseline-thin' : null,
+      qualifyingTrials,
+    };
+  }
   const ci = diffProportionCI(
     pushTowardSecondRate,
-    mirrorTrials,
+    mirrorRates.length,
     pushTowardFirstRate,
-    directionalTrials,
+    directionalRates.length,
   );
 
   return {

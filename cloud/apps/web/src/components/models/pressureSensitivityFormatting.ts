@@ -4,7 +4,7 @@
  */
 
 export const SUMMARY_PRESSURE_RESPONSE_TOOLTIP =
-  "Arithmetic mean of per-pair pressure responses across this model's measured pairs. The range in brackets is the spread of per-pair values. Positive = more trials pushed toward the model's own value; negative = more trials pushed away.";
+  "Arithmetic mean of per-pair pressure responses across this model's measured pairs. The range in brackets is the spread of per-pair values. Positive = more pressure moved toward the model's own value; negative = more pressure moved away.";
 
 export const PAIR_PRESSURE_RESPONSE_TOOLTIP =
   'Signed push-rate difference: Push toward first minus Push toward other, in percentage points. The CI is the Newcombe 95% confidence interval for the difference of two proportions.';
@@ -19,7 +19,7 @@ export const PUSH_TOWARD_OTHER_TOOLTIP =
   "Win rate when the other value's pressure is high (levels 4–5) and the first value's pressure is moderate. A higher rate means the model picks the other value more under pressure.";
 
 export const TRIALS_TOOLTIP =
-  'Qualifying scored trials that contributed to the Baseline, Push toward first, and Push toward other rates. These are the trials used to compute the Pressure response and its confidence interval.';
+  'Qualifying scored observations that contributed to the Baseline, Push toward first, and Push toward other rates. These observations feed the pooled rates used to compute the Pressure response and its confidence interval.';
 
 export function formatPercent(value: number): string {
   return `${(value * 100).toFixed(1)}%`;

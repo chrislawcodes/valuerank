@@ -110,8 +110,7 @@ function poolRate(
   predicate: (cell: PressureSensitivityCell) => boolean,
   rateSelector: (cell: PressureSensitivityCell) => number | null | undefined,
 ): number | null {
-  let weightedSuccesses = 0;
-  let trials = 0;
+  const rates: number[] = [];
 
   for (const cell of cells) {
     if (!predicate(cell)) {
@@ -123,15 +122,10 @@ function poolRate(
       continue;
     }
 
-    weightedSuccesses += rate * cell.n;
-    trials += cell.n;
+    rates.push(rate);
   }
 
-  if (trials === 0) {
-    return null;
-  }
-
-  return weightedSuccesses / trials;
+  return mean(rates);
 }
 
 function computePairRates(pair: PressureSensitivityValuePair, valueLabel: string): PairPerspectiveRates {
@@ -361,8 +355,8 @@ export function PressureResponseByValueTable({ valuePairs }: Props) {
             its 9 pairings, broken down by what the prompt was doing.
           </p>
           <p className="text-xs text-gray-500">
-            Each pressure cell counts each vignette once. The pair rows are then averaged equally across the 9 pairs
-            containing this value.
+            Each pressure cell is pooled from its vignette-level observations, then counted once in the row summary.
+            The pair rows are averaged equally across the 9 pairs containing this value.
           </p>
         </div>
         <CopyVisualButton targetRef={tableRef} label="Pressure Response by Value" />
@@ -401,7 +395,7 @@ export function PressureResponseByValueTable({ valuePairs }: Props) {
                 tooltip={
                   <TooltipGridBlock
                     title="Average win rate"
-                    description="All scored vignette-level cells are counted when pooling this rate."
+                    description="All pooled condition cells are counted equally when pooling this rate."
                     pattern="average"
                   />
                 }
@@ -417,7 +411,7 @@ export function PressureResponseByValueTable({ valuePairs }: Props) {
                 tooltip={
                   <TooltipGridBlock
                     title="Balanced win rate"
-                    description="Only the diagonal cells are counted."
+                    description="Only the diagonal condition cells are counted."
                     pattern="balanced"
                   />
                 }

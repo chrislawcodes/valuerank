@@ -225,6 +225,32 @@ describe('PressureResponseByValueTable', () => {
     expect(cells[4]?.textContent ?? '').toBe('30.0%');
   });
 
+  it('treats each pooled condition cell equally instead of weighting by cell size', () => {
+    render(
+      <PressureResponseByValueTable
+        valuePairs={[
+          createPair('alpha::beta', 'Alpha', 'Beta', [
+            createCell(1, 1, 1, 0),
+            createCell(4, 1, 100, 1),
+            createCell(1, 4, 1, 0),
+            createCell(2, 3, 100, 1),
+          ]),
+        ]}
+      />,
+    );
+
+    const row = screen.getByText('Alpha').closest('tr');
+    if (row == null) {
+      throw new Error('Missing Alpha row');
+    }
+
+    const cells = within(row).getAllByRole('cell');
+    expect(cells[1]?.textContent ?? '').toBe('50.0%');
+    expect(cells[2]?.textContent ?? '').toBe('0.0%');
+    expect(cells[3]?.textContent ?? '').toBe('100.0%');
+    expect(cells[4]?.textContent ?? '').toBe('0.0%');
+  });
+
   it('keeps sparse vignette cells in the pooled rates instead of showing dashes', () => {
     render(
       <PressureResponseByValueTable

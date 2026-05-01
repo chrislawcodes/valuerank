@@ -1,0 +1,57 @@
+{
+  "session_id": "78d1a3cc-085d-409f-80e2-d36bc7055c02",
+  "response": "## Findings\n\n| Severity | Finding |\n| :--- | :--- |\n| **HIGH** | **Ambiguous Test Strategy for \"Equal Weight\" Rule** |\n| | The plan's central goal is to enforce \"equal-weight pooled condition results.\" However, the verification plan is not specific enough about how to prove this adversarially. A test could pass with a simple fixture, but it wouldn't guarantee the absence of trial-count weighting. **A critical test case is missing:** The API aggregation tests *must* use a fixture with significantly imbalanced trial counts across different conditions that roll up into the same pressure cell. The test should then assert that the final aggregated value is the simple average of the individual *condition* rates, not the weighted average of the underlying *trial* rates. |\n| **MEDIUM** | **Unspecified Handling of \"Non-Finite Rate\" Edge Cases** |\n| | The plan states that if a pooled cell has a \"non-finite rate, it is skipped.\" This is ambiguous. In JavaScript, division by zero can result in `Infinity`, `-Infinity`, or `NaN` (`0/0`). These are distinct states. The plan and its test specifications do not require testing these cases individually. The shared helper's tests should include explicit scenarios for `n/0`, `0/0`, and `-n/0` to ensure they are all handled consistently and correctly identified as \"non-finite\" and skipped as intended. Without this, behavior for different division-by-zero errors could be inconsistent. |\n| **MEDIUM** | **[UNVERIFIED] Brittle Manual Verification for Helper Usage** |\n| | Slice 1 proposes \"a codebase search step during verification to confirm every pressure consumer uses the shared helper.\" This is a manual, one-time check that is prone to error and offers no protection against future regressions. A developer could easily miss a consumer during the search, or a new consumer could be added later that re-implements the logic incorrectly. This manual step is a weak point in ensuring the long-term integrity of the fix. |\n| **LOW** | **[UNVERIFIED] Ambiguous Definition of \"Malformed Levels\"** |\n| | The test plan for Slice 1 laudably includes testing for \"malformed levels.\" However, \"malformed\" is not defined. This leaves room for developer interpretation, which may lead to an incomplete set of test cases. A robust test would require clear definitions of malformed inputs, such as `null`, an empty string, a string with an incorrect delimiter (`N-vs-M`), non-numeric pressure values (`\"foo_vs_bar\"`), or an incorrect number of components. Without this specificity, the tests may not be as comprehensive as intended. |\n| **LOW** | **Vague \"Deterministic\" Skip Logic** |\n| | The plan requires that non-finite cells are \"skipped deterministically.\" While good in principle, the basis for this determinism is undefined. Is it based on sorting by a condition's name or ID? Is it the natural order of the data as received? If two parts of the system (e.g., API and web) have slightly different data ordering, they might \"deterministically\" skip cells in a different order, which could cause subtle inconsistencies in presentation if not handled carefully. The expected deterministic behavior should be specified and tested. |\n\n## Residual Risks\n\n| Risk | Description |\n| :--- | :--- |\n| **Future Code Drift** | The plan relies on a shared helper and a one-time manual search to correct the weighting logic. A residual risk remains that a future developer, unaware of this context, will add a new pressure-related component, bypass the shared helper, and re-introduce trial-count weighting. The current plan does not include any mechanism (like a custom lint rule) to prevent this from happening automatically. |\n| **Incomplete Null/Empty State Handling** | The plan correctly aims to differentiate between various \"missing data\" states (thin data, cap hits, exclusions). However, it uses the term `null` to describe the output for some of these cases (e.g., \"summary stays `null`\"). There is a risk that developers might treat all `null` or empty states identically in the UI, leading to the very information loss the plan seeks to prevent. The test plan must be extremely rigorous in creating fixtures for each distinct empty/error state and asserting that the UI presents a unique and correct message for each one. |\n| **Unverified Assumptions about Existing Code** | Because no code context is provided, this review cannot verify assumptions made about the current implementation. The plan assumes, for example, that the web table might be inferring second-side rates, or that coverage signals are available where needed. If these assumptions are wrong, parts of the implementation plan may be based on a false premise, leading to wasted effort or incorrect fixes. All findings marked `[UNVERIFIED]` highlight this risk. |",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 43655
+        },
+        "tokens": {
+          "input": 2532,
+          "prompt": 11633,
+          "candidates": 1041,
+          "total": 14832,
+          "cached": 9101,
+          "thoughts": 2158,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 43655,
+            "tokens": {
+              "input": 2532,
+              "prompt": 11633,
+              "candidates": 1041,
+              "total": 14832,
+              "cached": 9101,
+              "thoughts": 2158,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

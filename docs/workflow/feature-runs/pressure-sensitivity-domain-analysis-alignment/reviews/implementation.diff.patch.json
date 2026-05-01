@@ -1,0 +1,18 @@
+{
+  "repo_root": ".",
+  "git_head_sha": "091e556939d1da5f726884a79da281bf207123d7",
+  "git_base_ref": "origin/main",
+  "git_base_sha": "091e556939d1da5f726884a79da281bf207123d7",
+  "paths": [
+    "cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts",
+    "cloud/apps/api/tests/services/pressure-sensitivity/aggregation.test.ts",
+    "cloud/apps/web/src/components/models/PressureResponseByValueTable.test.tsx",
+    "cloud/apps/web/src/components/models/PressureResponseByValueTable.tsx",
+    "cloud/apps/web/src/components/models/PressureSensitivityDetail.tsx",
+    "cloud/apps/web/src/components/models/pressureSensitivityFormatting.ts"
+  ],
+  "allowed_dirty_paths": [],
+  "untracked_files_included": [],
+  "artifact_path": "docs/workflow/feature-runs/pressure-sensitivity-domain-analysis-alignment/reviews/implementation.diff.patch",
+  "allow_empty_diff": false
+}
