@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from 'urql';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
@@ -15,6 +15,7 @@ import {
 } from '../api/operations/modelsConfidence';
 import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/llm';
 import { ConfidenceHeatmap } from '../components/models/ConfidenceHeatmap';
+import { ScreenshotButton } from '../components/ui/ScreenshotButton';
 import {
   buildDomainShiftSignatureOptions,
   getDefaultDomainShiftSignature,
@@ -24,6 +25,7 @@ import { useDomains } from '../hooks/useDomains';
 export function ModelsConfidence() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const heatmapRef = useRef<HTMLDivElement>(null);
   const signatureParam = searchParams.get('signature');
 
   const { domains } = useDomains();
@@ -155,7 +157,7 @@ export function ModelsConfidence() {
       </div>
 
       {/* Controls row: Domain | Models | Signature */}
-      <div className="space-y-2">
+      <div ref={heatmapRef} className="space-y-2">
         <div className="flex flex-wrap items-center gap-4">
           {domains.length > 0 && (
             <div className="flex items-center gap-2">
@@ -165,6 +167,7 @@ export function ModelsConfidence() {
                 onChange={(value) => setSelectedDomainId(value === '' ? null : value)}
                 options={domainOptions}
               />
+              <ScreenshotButton targetRef={heatmapRef} label="confidence heatmap" />
             </div>
           )}
 
@@ -262,18 +265,18 @@ export function ModelsConfidence() {
             </div>
           </div>
         )}
-      </div>
 
-      {error != null && <ErrorMessage message={error.message} />}
-      {loading ? (
-        <Loading />
-      ) : (
-        <ConfidenceHeatmap
-          models={models}
-          selectedModelIds={filteredModelIds ?? undefined}
-          onCellClick={handleCellClick}
-        />
-      )}
+        {error != null && <ErrorMessage message={error.message} />}
+        {loading ? (
+          <Loading />
+        ) : (
+          <ConfidenceHeatmap
+            models={models}
+            selectedModelIds={filteredModelIds ?? undefined}
+            onCellClick={handleCellClick}
+          />
+        )}
+      </div>
 
       {/* How the % is calculated */}
       <section className="rounded-lg border border-gray-100 bg-gray-50 p-5 text-sm text-gray-700 space-y-3 max-w-3xl">
