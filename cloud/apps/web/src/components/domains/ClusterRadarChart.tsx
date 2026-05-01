@@ -2,9 +2,6 @@ import { useMemo } from 'react';
 import { type DomainCluster } from '../../api/operations/domainAnalysis';
 import { VALUE_LABELS } from '../../data/domainAnalysisData';
 import {
-  CLUSTER_SCORE_MAX,
-  CLUSTER_SCORE_MIN,
-  CLUSTER_SCORE_RANGE,
   getClusterMemberLabelText,
 } from './clusterVisualizationUtils';
 import {
@@ -24,6 +21,9 @@ const CENTER_Y = 276;
 const OUTER_RADIUS = 184;
 const CATEGORY_RING_RADIUS = OUTER_RADIUS + 26;
 const CATEGORY_LABEL_RADIUS = OUTER_RADIUS + 82;
+const RADAR_SCORE_MIN = -2.5;
+const RADAR_SCORE_MAX = 2.5;
+const RADAR_SCORE_RANGE = RADAR_SCORE_MAX - RADAR_SCORE_MIN;
 
 const CLUSTER_PALETTE = [
   { stroke: '#2563eb', fill: 'rgba(37, 99, 235, 0.14)' },
@@ -40,8 +40,8 @@ function getPoint(angle: number, radius: number) {
 }
 
 function scoreToRadius(score: number): number {
-  const clamped = Math.max(CLUSTER_SCORE_MIN, Math.min(CLUSTER_SCORE_MAX, score));
-  return ((clamped - CLUSTER_SCORE_MIN) / CLUSTER_SCORE_RANGE) * OUTER_RADIUS;
+  const clamped = Math.max(RADAR_SCORE_MIN, Math.min(RADAR_SCORE_MAX, score));
+  return ((clamped - RADAR_SCORE_MIN) / RADAR_SCORE_RANGE) * OUTER_RADIUS;
 }
 
 export function ClusterRadarChart({ clusters }: ClusterRadarChartProps) {
@@ -49,7 +49,7 @@ export function ClusterRadarChart({ clusters }: ClusterRadarChartProps) {
   const hasClippedScores = useMemo(
     () => clusters.some((cluster) => DISPLAY_VALUES.some((valueKey) => {
       const score = cluster.centroid[valueKey] ?? 0;
-      return score < CLUSTER_SCORE_MIN || score > CLUSTER_SCORE_MAX;
+      return score < RADAR_SCORE_MIN || score > RADAR_SCORE_MAX;
     })),
     [clusters],
   );
@@ -70,13 +70,10 @@ export function ClusterRadarChart({ clusters }: ClusterRadarChartProps) {
           <text x={24} y={28} className="fill-gray-500 text-[11px] uppercase tracking-wide">
             Radar chart
           </text>
-          <text x={24} y={44} className="fill-gray-400 text-[10px]">
-            Ordered to match Ranking and Cycles, with the same outer Schwartz ring.
-          </text>
 
           {[0, 0.25, 0.5, 0.75, 1].map((fraction) => {
             const radius = OUTER_RADIUS * fraction;
-            const value = CLUSTER_SCORE_MIN + CLUSTER_SCORE_RANGE * fraction;
+            const value = RADAR_SCORE_MIN + RADAR_SCORE_RANGE * fraction;
             return (
               <g key={fraction}>
                 <circle cx={CENTER_X} cy={CENTER_Y} r={radius} fill="none" stroke="#e5e7eb" strokeWidth="1" />
@@ -201,13 +198,13 @@ export function ClusterRadarChart({ clusters }: ClusterRadarChartProps) {
             <line x1={24} y1={512} x2={132} y2={512} stroke="#d1d5db" strokeWidth="1.5" />
             <line x1={78} y1={502} x2={78} y2={522} stroke="#d1d5db" strokeWidth="1.5" />
             <text x={24} y={500} className="fill-gray-400 text-[10px]">
-              -3.25
+              -2.5
             </text>
             <text x={71} y={500} className="fill-gray-500 text-[10px] font-semibold">
               0
             </text>
             <text x={116} y={500} className="fill-gray-400 text-[10px]">
-              +3.25
+              +2.5
             </text>
           </g>
 
