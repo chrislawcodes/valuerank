@@ -131,7 +131,7 @@ export function buildDomainShiftModelOptions(
   const defaults = sorted.filter((model) => defaultModelIds.has(model.modelId));
   const nonDefaults = sorted.filter((model) => !defaultModelIds.has(model.modelId));
   return [
-    { value: ALL_MODELS_OPTION_VALUE, label: 'All models' },
+    { value: ALL_MODELS_OPTION_VALUE, label: 'Default models' },
     ...defaults.map((model) => ({ value: model.modelId, label: model.label })),
     ...(defaults.length > 0 && nonDefaults.length > 0
       ? [{ value: NON_DEFAULT_MODELS_DIVIDER_VALUE, label: '---', disabled: true }]

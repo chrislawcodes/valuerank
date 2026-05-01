@@ -240,12 +240,16 @@ export function DomainValueShiftHeatmap() {
     }
   }, [models, selectedModelId]);
 
+  const defaultModels = useMemo(
+    () => models.filter((model) => defaultModelIds.has(model.modelId)),
+    [models, defaultModelIds],
+  );
   const selectedModel = selectedModelId === ALL_MODELS_OPTION_VALUE
     ? null
     : models.find((model) => model.modelId === selectedModelId) ?? null;
   const heatmap = useMemo(
-    () => buildDomainShiftHeatmap(selectedModelId === ALL_MODELS_OPTION_VALUE ? models : selectedModel),
-    [models, selectedModel, selectedModelId],
+    () => buildDomainShiftHeatmap(selectedModelId === ALL_MODELS_OPTION_VALUE ? defaultModels : selectedModel),
+    [defaultModels, selectedModel, selectedModelId],
   );
   const sortedRows = useMemo(
     () => sortHeatmapRows(heatmap.rows, sort, displayMode),
@@ -326,10 +330,10 @@ export function DomainValueShiftHeatmap() {
         <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
           <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">{isAllModels ? 'All models' : selectedModel?.label ?? 'All models'}</h2>
+              <h2 className="text-lg font-semibold text-gray-900">{isAllModels ? 'Default models' : selectedModel?.label ?? 'Default models'}</h2>
               <p className="text-sm text-gray-600">
                 {isAllModels
-                  ? 'Averages are across all models. Click any column header to sort. Evidence counts are shown in each cell detail.'
+                  ? 'Averages are across default models. Click any column header to sort. Evidence counts are shown in each cell detail.'
                   : 'Click any column header to sort. Evidence counts are shown in each cell detail.'}{' '}
                 Signature: {selectedSignature}.
               </p>
