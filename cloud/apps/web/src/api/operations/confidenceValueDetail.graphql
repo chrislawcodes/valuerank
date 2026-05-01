@@ -1,5 +1,5 @@
-query ConfidenceValueDetail($modelId: String!, $valueKey: String!, $signature: String) {
-  confidenceValueDetail(modelId: $modelId, valueKey: $valueKey, signature: $signature) {
+query ConfidenceValueDetail($modelId: String!, $valueKey: String!, $signature: String, $domainId: ID) {
+  confidenceValueDetail(modelId: $modelId, valueKey: $valueKey, signature: $signature, domainId: $domainId) {
     modelLabel
     valueKey
     vignettes {

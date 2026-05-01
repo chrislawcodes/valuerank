@@ -1,5 +1,5 @@
-query ConfidenceTranscripts($modelId: String!, $valueKey: String!, $signature: String, $limit: Int, $definitionId: String, $scenarioId: String) {
-  confidenceTranscripts(modelId: $modelId, valueKey: $valueKey, signature: $signature, limit: $limit, definitionId: $definitionId, scenarioId: $scenarioId) {
+query ConfidenceTranscripts($modelId: String!, $valueKey: String!, $signature: String, $limit: Int, $definitionId: String, $scenarioId: String, $domainId: ID) {
+  confidenceTranscripts(modelId: $modelId, valueKey: $valueKey, signature: $signature, limit: $limit, definitionId: $definitionId, scenarioId: $scenarioId, domainId: $domainId) {
     id
     runId
     scenarioId

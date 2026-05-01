@@ -2359,8 +2359,8 @@ type Query {
   ): [AvailableModel!]!
   availableSignatures: [AvailableSignature!]!
   circumplexAnalysis(minTrialsPerValue: Int, modelIds: [String!]!, signature: String!): CircumplexAnalysisResult!
-  confidenceTranscripts(definitionId: String, limit: Int, modelId: String!, scenarioId: String, signature: String, valueKey: String!): [DomainAnalysisConditionTranscript!]!
-  confidenceValueDetail(modelId: String!, signature: String, valueKey: String!): ConfidenceValueDetailResult!
+  confidenceTranscripts(definitionId: String, domainId: ID, limit: Int, modelId: String!, scenarioId: String, signature: String, valueKey: String!): [DomainAnalysisConditionTranscript!]!
+  confidenceValueDetail(domainId: ID, modelId: String!, signature: String, valueKey: String!): ConfidenceValueDetailResult!
 
   """Fetch a single definition by ID. Returns null if not found."""
   definition(
@@ -2447,9 +2447,9 @@ type Query {
     withoutDomain: Boolean
   ): [Definition!]!
   domain(id: ID!): Domain
-  domainAnalysis(domainId: ID!, scope: String, scoreMethod: String, signature: String): DomainAnalysisResult!
+  domainAnalysis(domainId: ID!, scope: String, signature: String): DomainAnalysisResult!
   domainAnalysisConditionTranscripts(definitionId: ID!, domainId: ID!, limit: Int, modelId: String!, scenarioId: ID, signature: String, valueKey: String!): [DomainAnalysisConditionTranscript!]!
-  domainAnalysisValueDetail(domainId: ID!, modelId: String!, scoreMethod: String, signature: String, valueKey: String!): DomainAnalysisValueDetailResult!
+  domainAnalysisValueDetail(domainId: ID!, modelId: String!, signature: String, valueKey: String!): DomainAnalysisValueDetailResult!
   domainAvailableSignatures(domainId: ID!, scope: String): [DomainAvailableSignature!]!
   domainConfigSnapshots(domainId: ID!, limit: Int): [DomainConfigSnapshotSummary!]!
   domainContext(id: ID!): DomainContext
@@ -2592,7 +2592,7 @@ type Query {
     """Optional batch signature to filter snapshots (e.g. vnewtd, vnewt0)"""
     signature: String
   ): ModelsAnalysisResult!
-  modelsConfidence(signature: String): ModelsConfidenceResult!
+  modelsConfidence(domainId: ID, signature: String): ModelsConfidenceResult!
   modelsConsistency(domainId: ID, minScenarios: Int, providerId: ID, signature: String!): ModelsConsistencyResult!
 
   """
@@ -3078,7 +3078,17 @@ type Run {
 """Structured anomaly record for a run"""
 type RunAnomaly {
   acknowledgedByUserId: String
+
+  """
+  ID of the most recent non-deleted transcript for this slot. For INVALID_RESPONSE_FAILURE only — queries by (runId, scenarioId, modelId, sampleIndex). Handles reprobe-fixed anomalies where details.transcriptId still points to the original. Null for non-slot types.
+  """
+  activeTranscriptId: String
   details: JSON!
+
+  """
+  Dimension values from the scenario content for slot-keyed anomaly types (Record<string, string>). Null for non-slot types.
+  """
+  dimensionValues: JSON
 
   """
   Human-friendly anomaly type label. For unknown future enum values, returns the raw enum string.
@@ -3127,6 +3137,11 @@ type RunAnomaly {
   """The run this anomaly belongs to"""
   run: Run!
   runId: String!
+
+  """
+  Scenario (vignette) name for slot-keyed anomaly types. Null for non-slot types or when the scenario cannot be found.
+  """
+  scenarioName: String
   source: RunAnomalySource!
   subject: String!
   type: RunAnomalyType!

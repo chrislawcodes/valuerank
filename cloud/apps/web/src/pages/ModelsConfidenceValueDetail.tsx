@@ -62,9 +62,12 @@ export function ModelsConfidenceValueDetail() {
   const valueKey = searchParams.get('valueKey') ?? '';
   const signature = searchParams.get('signature') ?? '';
   const modelLabelParam = searchParams.get('modelLabel');
+  const domainIdParam = searchParams.get('domainId');
+  const domainId = domainIdParam !== null && domainIdParam !== '' ? domainIdParam : null;
 
   const backParams = new URLSearchParams();
   if (signature !== '') backParams.set('signature', signature);
+  if (domainId !== null) backParams.set('domainId', domainId);
   const backLink = `/models/confidence${backParams.size > 0 ? `?${backParams.toString()}` : ''}`;
 
   const [selectedCondition, setSelectedCondition] = useState<{
@@ -83,6 +86,7 @@ export function ModelsConfidenceValueDetail() {
       modelId,
       valueKey,
       signature: signature !== '' ? signature : undefined,
+      domainId: domainId ?? undefined,
     },
     pause: modelId === '' || valueKey === '',
     requestPolicy: 'cache-and-network',
@@ -98,6 +102,7 @@ export function ModelsConfidenceValueDetail() {
         limit: 100,
         definitionId: selectedCondition?.definitionId ?? undefined,
         scenarioId: selectedCondition?.scenarioId ?? undefined,
+        domainId: domainId ?? undefined,
       },
       pause: selectedCondition === null || modelId === '' || valueKey === '',
       requestPolicy: 'cache-and-network',

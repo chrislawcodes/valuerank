@@ -16,6 +16,7 @@ builder.queryField('confidenceTranscripts', (t) =>
       limit: t.arg.int({ required: false }),
       definitionId: t.arg.string({ required: false }),
       scenarioId: t.arg.string({ required: false }),
+      domainId: t.arg.id({ required: false }),
     },
     resolve: async (_root, args) => {
       const modelId = args.modelId;
@@ -28,6 +29,7 @@ builder.queryField('confidenceTranscripts', (t) =>
         typeof args.scenarioId === 'string' && args.scenarioId.trim() !== ''
           ? args.scenarioId.trim()
           : null;
+      const domainId = args.domainId != null ? String(args.domainId) : null;
       if (!isDomainAnalysisValueKey(rawValueKey)) {
         throw new ValidationError(`Unsupported value key: ${rawValueKey}`);
       }
@@ -67,7 +69,10 @@ builder.queryField('confidenceTranscripts', (t) =>
       }
 
       const definitions = await db.definition.findMany({
-        where: { id: { in: definitionIds } },
+        where: {
+          id: { in: definitionIds },
+          ...(domainId !== null ? { domainId } : {}),
+        },
         select: { id: true, content: true },
       });
 
