@@ -5,6 +5,7 @@ import { CopyVisualButton } from '../ui/CopyVisualButton';
 import { type ClusterAnalysis, type DomainCluster } from '../../api/operations/domainAnalysis';
 import { VALUE_LABELS, type ValueKey } from '../../data/domainAnalysisData';
 import { formatDisplayLabel } from '../../utils/displayLabels';
+import { ClusterRadarChart } from './ClusterRadarChart';
 
 const CLUSTER_COLORS = [
   { border: 'border-blue-500', text: 'text-blue-700', light: 'bg-blue-50' },
@@ -112,25 +113,28 @@ export function ModelGroupsSection({ clusterAnalysis, selectedModelId = null }: 
             {clusterAnalysis?.skipReason && <p>{clusterAnalysis.skipReason}</p>}
           </div>
         ) : (
-          <div className="flex flex-wrap gap-4">
-            {clusters.map((cluster, index) => {
-              const style = getClusterColor(index);
-              const personality = getClusterPersonality(cluster);
-              return (
-                <div key={cluster.id} className={`min-w-[280px] max-w-[520px] rounded-lg border ${style.border} ${style.light} p-3`}>
-                  <p className={`text-sm font-semibold ${style.text}`}>
-                    <span className="font-medium">Members:</span> {cluster.members.map((member) => member.label).join(', ')}
-                  </p>
-                  <p className="mt-2 text-xs text-gray-700">
-                    <span className="font-medium">Prioritizes:</span> {personality.topValues.join(', ')}
-                  </p>
-                  <p className="mt-1 text-xs text-gray-700">
-                    <span className="font-medium">De-prioritizes:</span> {personality.bottomValues.join(', ')}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
+          <>
+            {clusters.length >= 2 ? <ClusterRadarChart clusters={clusters} /> : null}
+            <div className="flex flex-wrap gap-4">
+              {clusters.map((cluster, index) => {
+                const style = getClusterColor(index);
+                const personality = getClusterPersonality(cluster);
+                return (
+                  <div key={cluster.id} className={`min-w-[280px] max-w-[520px] rounded-lg border ${style.border} ${style.light} p-3`}>
+                    <p className={`text-sm font-semibold ${style.text}`}>
+                      <span className="font-medium">Members:</span> {cluster.members.map((member) => member.label).join(', ')}
+                    </p>
+                    <p className="mt-2 text-xs text-gray-700">
+                      <span className="font-medium">Prioritizes:</span> {personality.topValues.join(', ')}
+                    </p>
+                    <p className="mt-1 text-xs text-gray-700">
+                      <span className="font-medium">De-prioritizes:</span> {personality.bottomValues.join(', ')}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </>
         )}
       </div>
     </section>
