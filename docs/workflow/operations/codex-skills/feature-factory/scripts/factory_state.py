@@ -32,7 +32,37 @@ from workflow_utils import normalized_artifact_hash, normalized_artifact_text
 # Repository root + canonical subdirectory roots
 # ---------------------------------------------------------------------------
 
-REPO_ROOT: Path = Path(__file__).resolve().parents[6]
+_DEFAULT_REPO_ROOT = Path(__file__).resolve().parents[6]
+
+
+def _resolve_repo_root() -> Path:
+    """Resolve the repository root, preferring the current git worktree.
+
+    This keeps the runner pointed at the active worktree when the operator is
+    running from a nested git worktree instead of the main checkout. If the
+    current directory is not inside a git repository, fall back to the
+    historical path derived from this file so installs and tests still work.
+    """
+    override = os.environ.get("FF_REPO_ROOT")
+    if override:
+        return Path(override).expanduser().resolve()
+
+    git_result = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        cwd=Path.cwd(),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if git_result.returncode == 0:
+        git_root = git_result.stdout.strip()
+        if git_root:
+            return Path(git_root).expanduser().resolve()
+
+    return _DEFAULT_REPO_ROOT
+
+
+REPO_ROOT: Path = _resolve_repo_root()
 # PR #751 / FF Housekeeping Slice 4: honor FF_FACTORY_RUNS_ROOT env var so
 # tests can redirect the workflow root via subprocess env without monkey-
 # patching module state. Production paths are unaffected when absent.

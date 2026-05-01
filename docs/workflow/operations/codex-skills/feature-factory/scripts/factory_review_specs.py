@@ -190,8 +190,12 @@ def required_reviews(
             {"reviewer": "gemini", "lens": "regression-adversarial", "model": DEFAULT_GEMINI_MODEL},
         ]
 
-    # Codex runs two reviews (primary + secondary) — it has codebase context and finds hard issues.
-    # Gemini runs one review using the broadest-perspective lens for the stage.
+    # Bundle 2: tasks, diff, and closeout stages have no default adversarial
+    # reviews. Reasoning: tasks is mostly a mechanical translation of plan
+    # (caught by failed implementation if wrong); diff is caught by CI;
+    # closeout is documentation. Spec and plan reviews carry the leverage.
+    # Operators can still pass --extra-codex-lens or --extra-gemini-lens to
+    # add reviews to any stage.
     gemini_lens = ""
     codex_primary = ""
     codex_secondary = ""
@@ -199,62 +203,41 @@ def required_reviews(
     if stage == "spec":
         gemini_lens = "requirements-adversarial"
         codex_primary = "feasibility-adversarial"
-        codex_secondary = "risk-adversarial" if sensitive else "edge-cases-adversarial"
+        codex_secondary = ""
     elif stage == "plan":
         gemini_lens = "testability-adversarial"
         codex_primary = "implementation-adversarial"
-        codex_secondary = "risk-adversarial" if sensitive else "architecture-adversarial"
-    elif stage == "tasks":
-        gemini_lens = "coverage-adversarial"
-        codex_primary = "execution-adversarial"
-        codex_secondary = "risk-adversarial" if sensitive else "dependency-order-adversarial"
-    elif stage == "diff":
-        gemini_lens = "quality-adversarial"
-        codex_primary = "correctness-adversarial"
-        if sensitive:
-            codex_secondary = "security-adversarial"
-        elif performance_sensitive:
-            codex_secondary = "performance-adversarial"
-        else:
-            # PR #832: dropped 'regression-adversarial' from the default diff-stage
-            # Codex review. Operator was skipping it routinely (no actionable
-            # findings on small UI features); the false-positive rate on cross-file
-            # impact analysis was high enough to make it noise. Operators can still
-            # opt back in via --extra-codex-lens regression-adversarial on the
-            # review dispatch.
-            codex_secondary = ""
-    elif stage == "closeout":
-        gemini_lens = "residual-risk-adversarial"
-        codex_primary = "fidelity-adversarial"
-        codex_secondary = "rollout-risk-adversarial" if sensitive else "completeness-adversarial"
+        codex_secondary = ""
+    elif stage in {"tasks", "diff", "closeout"}:
+        pass
     else:
         raise ValueError(f"Unsupported stage: {stage}")
 
-    if small_task_set and stage in ("tasks", "closeout"):
-        return [
-            {
-                "reviewer": "codex",
-                "lens": codex_primary,
-                "model": DEFAULT_CODEX_MODEL,
-            },
-        ]
+    if small_task_set and stage in ("tasks", "closeout") and not extra_gemini:
+        return []
 
-    reviews = [
-        {
-            "reviewer": "codex",
-            "lens": codex_primary,
-            "model": DEFAULT_CODEX_MODEL,
-        },
-    ]
-    if codex_secondary:
+    reviews: list[dict[str, str]] = []
+    for reviewer, lens, model in (
+        ("codex", codex_primary, DEFAULT_CODEX_MODEL),
+        ("codex", codex_secondary, DEFAULT_CODEX_MODEL),
+        ("gemini", gemini_lens, DEFAULT_GEMINI_MODEL),
+    ):
+        if not lens:
+            continue
         reviews.append({
-            "reviewer": "codex",
-            "lens": codex_secondary,
-            "model": DEFAULT_CODEX_MODEL,
+            "reviewer": reviewer,
+            "lens": lens,
+            "model": model,
         })
-    reviews.append({
-        "reviewer": "gemini",
-        "lens": gemini_lens,
-        "model": DEFAULT_GEMINI_MODEL,
-    })
+    seen_gemini_lenses = {review["lens"] for review in reviews if review["reviewer"] == "gemini"}
+    for lens in extra_gemini:
+        candidate = lens.strip()
+        if not candidate or candidate in seen_gemini_lenses:
+            continue
+        reviews.append({
+            "reviewer": "gemini",
+            "lens": candidate,
+            "model": DEFAULT_GEMINI_MODEL,
+        })
+        seen_gemini_lenses.add(candidate)
     return reviews

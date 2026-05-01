@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import argparse
+import os
 import re
+import tempfile
 from pathlib import Path
 
 
@@ -67,7 +69,10 @@ def main() -> int:
         new_fm = update_frontmatter(fm_lines, args.status, args.note)
         new_body = update_resolution_block(body, args.status, args.note)
         updated = "---\n" + "\n".join(new_fm) + "\n---\n\n" + new_body.lstrip()
-        path.write_text(updated, encoding="utf-8")
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=str(path.parent), delete=False) as tmp:
+            tmp.write(updated)
+            tmp_path = Path(tmp.name)
+        os.replace(tmp_path, path)
 
     return 0
 

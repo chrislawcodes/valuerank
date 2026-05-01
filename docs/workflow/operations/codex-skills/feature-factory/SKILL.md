@@ -11,7 +11,7 @@ This skill is the orchestrator. It should reuse the existing repo-owned scripts 
 
 ## When NOT to Use FF
 
-Trivial features — single-component UI tweaks, type-cast fixes, copy edits, one-file additions under ~100 lines — should bypass the runner entirely. For work that small, the overhead of spec/plan/tasks authoring, three adversarial review rounds, and checkpoint discipline exceeds the protection those steps provide. When `discover --complete` detects a trivial feature it will print a loud "SKIP FF ENTIRELY" block with the direct Codex dispatch command to use instead. You can override it with `--force-path quick` or `--force-path full` if you want the runner for record-keeping. The right default for trivial features is: write the spec inline as a short Codex prompt, dispatch Codex directly, open a PR, and merge on green CI.
+Trivial features — single-component UI tweaks, type-cast fixes, copy edits, one-file additions under ~100 lines — should bypass the runner entirely. For work that small, the overhead of spec/plan/tasks authoring, two adversarial review rounds, and checkpoint discipline exceeds the protection those steps provide. When `discover --complete` detects a trivial feature it will print a loud "SKIP FF ENTIRELY" block with the direct Codex dispatch command to use instead. You can override it with `--force-path quick` or `--force-path full` if you want the runner for record-keeping. The right default for trivial features is: write the spec inline as a short Codex prompt, dispatch Codex directly, open a PR, and merge on green CI.
 
 ## Choosing an Orchestrator
 
@@ -90,22 +90,24 @@ Do not duplicate checkpoint manifest logic, review file validation, diff writing
 |---|---|---|---|
 | Discovery | Ask clarifying questions one at a time, record assumptions, determine if spec is stable enough to proceed | Claude | Codex |
 | Write spec | Research real file paths in codebase, author `spec.md` with scope boundaries and acceptance criteria | Claude (research) · Codex (file paths) | Gemini (research) · Codex (authors) |
-| Spec checkpoint | Adversarial attack on spec, semantic review, reconcile findings into spec | Codex (2 adversarial reviews: `feasibility` + `edge-cases`) · Gemini (1 adversarial review: `requirements`) · Claude (reconciles) | Codex (2 adversarial reviews: `feasibility` + `edge-cases`) · Gemini (1 adversarial review: `requirements`) · Codex (reconciles, escalates blockers to human) |
+| Spec checkpoint | Adversarial attack on spec, semantic review, reconcile findings into spec | Codex (1 adversarial review: `feasibility`) · Gemini (1 adversarial review: `requirements`) · Claude (reconciles) | Codex (1 adversarial review: `feasibility`) · Gemini (1 adversarial review: `requirements`) · Codex (reconciles, escalates blockers to human) |
 | Write plan | Author `plan.md` with architecture decisions, wave breakdown, and risk callouts. Each residual risk MUST have a `verification:` sentence naming a concrete pre-merge check (e.g., "run circumplexAnalysis against a production model ID", "inspect a failing fixture", "grep the migration output for N rows"). Unverified residual risks block plan approval — see "Residual risks must be verifiable" below. | Claude | Codex |
-| Plan checkpoint | Adversarial attack on plan, architecture review, reconcile findings into plan | Codex (2 adversarial reviews: `implementation` + `architecture`) · Gemini (1 adversarial review: `testability`) · Claude (reconciles) | Codex (2 adversarial reviews: `implementation` + `architecture`) · Gemini (1 adversarial review: `testability`) · Codex (reconciles, escalates blockers to human) |
+| Plan checkpoint | Adversarial attack on plan, architecture review, reconcile findings into plan | Codex (1 adversarial review: `implementation`) · Gemini (1 adversarial review: `testability`) · Claude (reconciles) | Codex (1 adversarial review: `implementation`) · Gemini (1 adversarial review: `testability`) · Codex (reconciles, escalates blockers to human) |
 | Write tasks | Author `tasks.md` with executable slices, checkpoint boundaries (`[CHECKPOINT]`), estimated diff size per slice, dependencies, and verification steps. No slice should exceed ~300 lines changed. | Claude | Codex |
 | Record parallel analysis | Look for safe parallel implementation opportunities in tasks.md. Annotate parallel tasks with `[P: file1, file2]`. Run `parallel --slug <slug> --note "..." [--found]`. If opportunities exist, add `[P:]` annotations first — the command validates they are conflict-free. | Claude | Codex |
-| Tasks checkpoint | Adversarial attack on tasks, execution-order review, reconcile findings into tasks | Codex (2 adversarial reviews: `execution` + `dependency-order`) · Gemini (1 adversarial review: `coverage`) · Claude (reconciles) | Codex (2 adversarial reviews: `execution` + `dependency-order`) · Gemini (1 adversarial review: `coverage`) · Codex (reconciles, escalates blockers to human) |
+| Tasks checkpoint | Adversarial attack on tasks, execution-order review, reconcile findings into tasks | No default reviews | No default reviews |
 | Implementation slice | Implement one `[CHECKPOINT]`-bounded slice from `tasks.md`, run build and tests, commit | Codex | Codex |
-| Diff checkpoint | Adversarial attack on the slice diff only (not the full branch), correctness review, reconcile findings | Codex (1 adversarial review: `correctness`) · Gemini (1 adversarial review: `quality`) · Claude (reconciles) | Codex (1 adversarial review: `correctness`) · Gemini (1 adversarial review: `quality`) · Codex (reconciles, escalates blockers to human) |
+| Diff checkpoint | Adversarial attack on the slice diff only (not the full branch), correctness review, reconcile findings | No default reviews | No default reviews |
 | *(repeat per slice)* | Implementation slice → Diff checkpoint repeats for each `[CHECKPOINT]` boundary in `tasks.md` | | |
 | Deliver | Push branch, create PR, watch CI, record delivery state in workflow. The `deliver` invocation is itself the consent — do not re-prompt before push or PR creation. The human still squash-merges. | Claude | Codex (stages, push, create PR) · Human (approves and squash-merges) |
 | CI failure | Extract errors, implement fix, re-run CI | Claude (reviews fix) · Codex (fixes) | Codex (fixes) · Human (approves) |
 | Write closeout | Write summary of what shipped, what remains open, and deferred risks | Claude | Codex |
-| Closeout checkpoint | Adversarial attack on closeout, final state review, reconcile findings | Codex (2 adversarial reviews: `fidelity` + `completeness`) · Gemini (1 adversarial review: `residual-risk`) · Claude (reconciles) | Codex (2 adversarial reviews: `fidelity` + `completeness`) · Gemini (1 adversarial review: `residual-risk`) · Codex (reconciles, escalates blockers to human) |
+| Closeout checkpoint | Adversarial attack on closeout, final state review, reconcile findings | No default reviews | No default reviews |
 | Write post mortem | Write `postmortem.md` covering what went well, what didn't, and specific proposed workflow changes. Required before workflow is marked done. | Claude | Codex |
 | Update STATUS.md | Update `STATUS.md` to reflect what shipped. Required before workflow is marked done. | Claude | Codex |
 | Post mortem approval | Review proposed workflow changes and approve, reject, or defer each one | Human | Human |
+
+Bundle 2 reduced default reviews to spec and plan only. Reviews concentrate leverage at the design stages where mistakes are cheapest to fix. Tasks/diff/closeout failures are caught by failed implementations, CI, and operator review of the closeout artifact respectively. Operators can add an extra Gemini lens at any stage via `--extra-gemini-lens` (a corresponding `--extra-codex-lens` is not currently wired in the runner — add it as a follow-up if needed).
 
 If the workflow already exists, resume from the earliest incomplete stage instead of starting over.
 
@@ -199,20 +201,18 @@ When a monitor reports `codex_procs=0` for 2+ consecutive ticks AND no new commi
 
 ## Review Policy
 
-Most checkpoints require:
+Spec and plan use the default adversarial review budget:
 
-- 2 Codex adversarial reviews, each using a different lens
+- 1 Codex adversarial review
 - 1 Gemini adversarial review
 
-**Exception — diff stage:** the default diff-stage run uses 1 Codex review (`correctness-adversarial`) and 1 Gemini review (`quality-adversarial`). The second Codex lens (`regression-adversarial`) was dropped as a default in PR #832 — it was routinely skipped because the false-positive rate on cross-file impact analysis is high for small UI features. To opt back in, use `--extra-codex-lens regression-adversarial` when dispatching the diff review.
+Tasks, diff, and closeout have no default reviews. Operators can add an extra Gemini lens at any stage with `--extra-gemini-lens` (the equivalent Codex flag is not currently wired in the runner).
 
-All reviews are adversarial — each one is looking for ways the artifact is wrong, incomplete, or risky. Codex runs two lenses at most stages because it has codebase context and is more likely to find hard technical issues. Gemini runs one lens chosen for its different perspective — it is less likely to find hard issues but adds signal from a different angle.
+All reviews are adversarial — each one is looking for ways the artifact is wrong, incomplete, or risky. Spec and plan concentrate the default leverage because they are the cheapest places to catch bad assumptions before implementation starts. Gemini still gives a different perspective, but the runner now keeps that signal focused on the two design stages.
 
 The judge panel also has a runner-enforced 3-round cap. Reviewers should stay rigorous, but they should not assume the loop can keep refining forever.
 
-The checkpoint runner selects the specific lenses by stage. The default lenses are configured for `spec`, `plan`, `tasks`, `diff`, and `closeout`. Sensitive or performance-critical features may swap the Codex secondary lens for `risk-adversarial`, `security-adversarial`, or `performance-adversarial`.
-
-Keep the two Codex reviews independent from each other. Do not let the second Codex review merely restate the first.
+The checkpoint runner selects the specific lenses by stage. Bundle 2 keeps the default lenses on `spec` and `plan` only, and leaves `tasks`, `diff`, and `closeout` empty unless the operator explicitly opts in. Keep the Codex and Gemini lenses independent from each other when they are present.
 
 ## Codex Orchestrator: Escalation Protocol
 

@@ -2,7 +2,7 @@
 
 Covers the four required test cases:
   a. All stages fully reviewed → zero skipped lenses in coverage summary.
-  b. Diff-stage Codex review absent → correctness-adversarial in diff_lenses_skipped.
+  b. Diff-stage default reviews removed → diff_lenses_skipped stays empty.
   c. Empty state (no stages, no token_usage, no discovery) → refuse, exit 0, no files.
   d. Re-run is idempotent: generated section of closeout.md is identical on second call.
 """
@@ -135,16 +135,14 @@ class CloseoutCommandTests(unittest.TestCase):
         return state
 
     def test_all_stages_fully_reviewed_zero_skipped(self) -> None:
-        """a. All default lenses present → coverage summary reports zero skipped."""
+        """a. Surviving default lenses present → coverage summary reports zero skipped."""
         state = self._make_state_with_stages()
         self._write_state(state)
 
-        # Write all default lenses for every stage
+        # Write the surviving default lenses for spec and plan only.
         for stage, lenses in [
-            ("spec", [("codex", "feasibility-adversarial"), ("codex", "edge-cases-adversarial"), ("gemini", "requirements-adversarial")]),
-            ("plan", [("codex", "implementation-adversarial"), ("codex", "architecture-adversarial"), ("gemini", "testability-adversarial")]),
-            ("tasks", [("codex", "execution-adversarial"), ("codex", "dependency-order-adversarial"), ("gemini", "coverage-adversarial")]),
-            ("diff", [("codex", "correctness-adversarial"), ("gemini", "quality-adversarial")]),
+            ("spec", [("codex", "feasibility-adversarial"), ("gemini", "requirements-adversarial")]),
+            ("plan", [("codex", "implementation-adversarial"), ("gemini", "testability-adversarial")]),
         ]:
             for reviewer, lens in lenses:
                 self._write_review(stage, reviewer, lens)
@@ -157,22 +155,21 @@ class CloseoutCommandTests(unittest.TestCase):
         delivery = reloaded.get("delivery", {})
         cov = delivery.get("review_coverage_summary", {})
 
-        # No stage should have skipped lenses
-        for stage in ["spec", "plan", "tasks", "diff"]:
+        # No stage should have skipped lenses.
+        for stage in ["spec", "plan", "tasks", "diff", "closeout"]:
             skipped = cov.get(f"{stage}_lenses_skipped", [])
             self.assertEqual(skipped, [], f"Expected no skipped lenses for {stage}, got {skipped}")
 
-    def test_diff_codex_missing_appears_in_skipped(self) -> None:
-        """b. Diff-stage correctness-adversarial Codex absent → in diff_lenses_skipped."""
+    def test_diff_has_no_default_skipped_lenses(self) -> None:
+        """b. Diff-stage no longer has default reviews, so skipped stays empty."""
         state = self._make_state_with_stages()
         self._write_state(state)
 
-        # Write all non-diff lenses and only Gemini for diff
+        # Write the surviving default lenses for spec/plan and one extra diff review.
         for stage, lenses in [
-            ("spec", [("codex", "feasibility-adversarial"), ("codex", "edge-cases-adversarial"), ("gemini", "requirements-adversarial")]),
-            ("plan", [("codex", "implementation-adversarial"), ("codex", "architecture-adversarial"), ("gemini", "testability-adversarial")]),
-            ("tasks", [("codex", "execution-adversarial"), ("codex", "dependency-order-adversarial"), ("gemini", "coverage-adversarial")]),
-            ("diff", [("gemini", "quality-adversarial")]),  # Codex correctness missing
+            ("spec", [("codex", "feasibility-adversarial"), ("gemini", "requirements-adversarial")]),
+            ("plan", [("codex", "implementation-adversarial"), ("gemini", "testability-adversarial")]),
+            ("diff", [("gemini", "quality-adversarial")]),
         ]:
             for reviewer, lens in lenses:
                 self._write_review(stage, reviewer, lens)
@@ -186,10 +183,11 @@ class CloseoutCommandTests(unittest.TestCase):
         cov = delivery.get("review_coverage_summary", {})
 
         diff_skipped = cov.get("diff_lenses_skipped", [])
-        self.assertIn("codex:correctness-adversarial", diff_skipped)
-        # Gemini quality should NOT be in skipped since it was run
+        self.assertEqual(diff_skipped, [])
+        # Gemini quality should still be counted as run.
         diff_run = cov.get("diff_lenses_run", [])
         self.assertIn("gemini:quality-adversarial", diff_run)
+        self.assertEqual(cov.get("closeout_lenses_skipped", []), [])
 
     def test_empty_state_refuses_and_exits_zero(self) -> None:
         """c. Empty state → refuses with informative message, exit 0, no files written."""
@@ -235,8 +233,6 @@ class CloseoutCommandTests(unittest.TestCase):
         for stage, lenses in [
             ("spec", [("codex", "feasibility-adversarial"), ("gemini", "requirements-adversarial")]),
             ("plan", [("codex", "implementation-adversarial"), ("gemini", "testability-adversarial")]),
-            ("tasks", [("codex", "execution-adversarial"), ("gemini", "coverage-adversarial")]),
-            ("diff", [("codex", "correctness-adversarial"), ("gemini", "quality-adversarial")]),
         ]:
             for reviewer, lens in lenses:
                 self._write_review(stage, reviewer, lens)

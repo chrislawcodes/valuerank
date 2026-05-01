@@ -263,6 +263,34 @@ class ActionableFindingRegexRealReviewTests(unittest.TestCase):
         self.assertTrue(FRS.detect_actionable_findings(path))
 
 
+class RequiredReviewSelectionTests(unittest.TestCase):
+    def test_bundle_2_defaults_only_cover_spec_and_plan(self) -> None:
+        self.assertEqual(
+            [review["lens"] for review in FRS.required_reviews("spec", False, False, False, [])],
+            ["feasibility-adversarial", "requirements-adversarial"],
+        )
+        self.assertEqual(
+            [review["lens"] for review in FRS.required_reviews("plan", False, False, False, [])],
+            ["implementation-adversarial", "testability-adversarial"],
+        )
+        self.assertEqual(FRS.required_reviews("tasks", False, False, False, []), [])
+        self.assertEqual(FRS.required_reviews("diff", False, False, False, []), [])
+        self.assertEqual(FRS.required_reviews("closeout", False, False, False, []), [])
+
+    def test_extra_gemini_lens_is_appended_on_a_no_default_stage(self) -> None:
+        reviews = FRS.required_reviews("tasks", False, False, False, ["coverage-adversarial"])
+        self.assertEqual(
+            reviews,
+            [
+                {
+                    "reviewer": "gemini",
+                    "lens": "coverage-adversarial",
+                    "model": FRS.DEFAULT_GEMINI_MODEL,
+                },
+            ],
+        )
+
+
 class ActionableFindingShapesManifestTests(unittest.TestCase):
     def test_shapes_manifest_present(self) -> None:
         """ACTIONABLE_FINDING_SHAPES documents every pattern the regex covers."""

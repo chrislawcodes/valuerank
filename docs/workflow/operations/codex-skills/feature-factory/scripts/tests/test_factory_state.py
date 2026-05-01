@@ -17,6 +17,28 @@ SPEC.loader.exec_module(FACTORY_STATE)
 
 
 class FactoryStateTests(unittest.TestCase):
+    def test_repo_root_uses_git_toplevel_inside_worktree(self) -> None:
+        """A nested worktree should resolve REPO_ROOT from `git rev-parse`."""
+        with patch.dict(FACTORY_STATE.os.environ, {"FF_REPO_ROOT": ""}, clear=False), patch.object(
+            FACTORY_STATE.subprocess,
+            "run",
+            return_value=FACTORY_STATE.subprocess.CompletedProcess(
+                args=["git", "rev-parse", "--show-toplevel"],
+                returncode=0,
+                stdout="/tmp/active-worktree\n",
+                stderr="",
+            ),
+        ):
+            spec = importlib.util.spec_from_file_location(
+                "factory_state_repo_root_test",
+                SCRIPT_PATH,
+            )
+            assert spec and spec.loader
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+
+        self.assertEqual(module.REPO_ROOT, Path("/tmp/active-worktree").resolve())
+
     def test_with_locked_state_single_writer_acquires_and_releases(self) -> None:
         """A single writer can enter, mutate, exit, and reopen the same state."""
         with tempfile.TemporaryDirectory() as tmpdir:
