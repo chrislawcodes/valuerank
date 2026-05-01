@@ -71,8 +71,3 @@ export function reasonHoverText(reason: string | null | undefined): string {
   }
   return '';
 }
-
-export function formatSignedPoints(value: number): string {
-  const sign = value < 0 ? '−' : '+';
-  return `${sign}${formatPoints(value)}`;
-}
