@@ -6,7 +6,6 @@ import {
   DOT_BAR_CLUSTER_SCORE_MAX,
   DOT_BAR_CLUSTER_SCORE_MIN,
   formatClusterScoreLabel,
-  getClusterMemberLabelText,
   getClusterScorePosition,
   getClusterValueOrder,
   isClusterScoreClipped,
@@ -14,6 +13,7 @@ import {
 
 type ClusterBarPlotProps = {
   clusters: DomainCluster[];
+  activeGroupId?: string | null;
 };
 
 const CLUSTER_PALETTE = ['#3b82f6', '#f59e0b', '#10b981', '#f43f5e'] as const;
@@ -67,7 +67,7 @@ function getClusterBarOrder(clusters: DomainCluster[], valueKey: ValueKey): Doma
   });
 }
 
-export function ClusterBarPlot({ clusters }: ClusterBarPlotProps) {
+export function ClusterBarPlot({ clusters, activeGroupId = null }: ClusterBarPlotProps) {
   const sortedValues = useMemo(() => getClusterValueOrder(clusters), [clusters]);
 
   if (clusters.length === 0) {
@@ -122,8 +122,10 @@ export function ClusterBarPlot({ clusters }: ClusterBarPlotProps) {
                     const width = Math.max(Math.abs(endPosition - midpoint), 1);
                     const clusterIndex = clusters.findIndex((candidate) => candidate.id === cluster.id);
                     const safeClusterIndex = clusterIndex >= 0 ? clusterIndex : 0;
-                    const color = CLUSTER_PALETTE[safeClusterIndex % CLUSTER_PALETTE.length];
+                    const color = CLUSTER_PALETTE[safeClusterIndex % CLUSTER_PALETTE.length]!;
                     const clipped = isClusterScoreClipped(score, DOT_BAR_CLUSTER_SCORE_MIN, DOT_BAR_CLUSTER_SCORE_MAX);
+                    const isActive = activeGroupId == null || activeGroupId === cluster.id;
+                    const faded = activeGroupId != null && !isActive;
 
                     return (
                       <Tooltip
@@ -138,7 +140,9 @@ export function ClusterBarPlot({ clusters }: ClusterBarPlotProps) {
                           width: `${width}%`,
                           transform: 'translateY(-50%)',
                           height: '10px',
-                          zIndex: index + 1,
+                          zIndex: isActive ? rankedClusters.length + 20 - index : index + 1,
+                          opacity: faded ? 0.18 : activeGroupId != null ? 1 : 0.78,
+                          filter: isActive && activeGroupId != null ? `drop-shadow(0 0 8px rgba(255,255,255,0.35)) drop-shadow(0 0 12px ${color}99)` : undefined,
                         }}
                       >
                         <div
@@ -147,8 +151,7 @@ export function ClusterBarPlot({ clusters }: ClusterBarPlotProps) {
                           className="h-full w-full rounded-full"
                           style={{
                             backgroundColor: color,
-                            opacity: 0.78,
-                            boxShadow: clipped ? '0 0 0 1px rgba(15, 23, 42, 0.12)' : undefined,
+                            boxShadow: isActive && activeGroupId != null ? `0 0 0 1px rgba(255,255,255,0.7), 0 0 10px ${color}80` : undefined,
                             border: clipped ? '1px solid rgba(15, 23, 42, 0.4)' : '1px solid rgba(255, 255, 255, 0.8)',
                           }}
                         />
@@ -183,23 +186,6 @@ export function ClusterBarPlot({ clusters }: ClusterBarPlotProps) {
             </p>
           )}
         </div>
-      </div>
-
-      <div className="flex flex-wrap gap-3">
-        {clusters.map((cluster, index) => {
-          const color = CLUSTER_PALETTE[index % CLUSTER_PALETTE.length]!;
-          const memberList = getClusterMemberLabelText(cluster);
-
-          return (
-            <div key={cluster.id} className="flex items-center gap-1 text-xs text-gray-600" title={memberList}>
-              <span
-                className="h-2.5 w-2.5 shrink-0 rounded-full"
-                style={{ backgroundColor: color }}
-              />
-              <span>Models: {memberList}</span>
-            </div>
-          );
-        })}
       </div>
     </div>
   );

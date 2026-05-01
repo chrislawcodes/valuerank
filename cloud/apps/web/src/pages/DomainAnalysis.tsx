@@ -502,7 +502,11 @@ export function DomainAnalysis() {
         <Loading size="lg" text="Loading domain analysis..." />
       ) : (
         <>
-          <ModelGroupsSection clusterAnalysis={data?.domainAnalysis.clusterAnalysis} selectedModelId={singleSelectedModelId} />
+          <ModelGroupsSection
+            clusterAnalysis={data?.domainAnalysis.clusterAnalysis}
+            models={models}
+            selectedModelId={singleSelectedModelId}
+          />
           <ValuePrioritiesSection
             models={visibleModels}
             selectedDomainId={selectedDomainId}

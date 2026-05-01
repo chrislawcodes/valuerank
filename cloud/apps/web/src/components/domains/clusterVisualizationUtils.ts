@@ -1,5 +1,5 @@
 import { type DomainCluster } from '../../api/operations/domainAnalysis';
-import { VALUE_LABELS, VALUES, type ValueKey } from '../../data/domainAnalysisData';
+import { VALUE_LABELS, VALUES, type ModelEntry, type ValueKey } from '../../data/domainAnalysisData';
 
 export const CLUSTER_SCORE_MIN = -3.25;
 export const CLUSTER_SCORE_MAX = 3.25;
@@ -39,6 +39,25 @@ export function getClusterMemberLabels(cluster: DomainCluster): string[] {
 
 export function getClusterMemberLabelText(cluster: DomainCluster): string {
   return getClusterMemberLabels(cluster).join(', ');
+}
+
+export function buildIndividualClusters(models: ModelEntry[]): DomainCluster[] {
+  return models.map((model) => ({
+    id: model.model,
+    name: model.label,
+    definingValues: [],
+    centroid: model.values,
+    members: [
+      {
+        model: model.model,
+        label: model.label,
+        silhouetteScore: 1,
+        isOutlier: false,
+        nearestClusterIds: null,
+        distancesToNearestClusters: null,
+      },
+    ],
+  }));
 }
 
 export function formatClusterScoreLabel(score: number): string {
