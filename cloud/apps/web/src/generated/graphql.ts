@@ -354,6 +354,13 @@ export type CompletionEvent = {
   success: Scalars['Boolean']['output'];
 };
 
+export type ConfidenceValueDetailResult = {
+  __typename?: 'ConfidenceValueDetailResult';
+  modelLabel: Scalars['String']['output'];
+  valueKey: Scalars['String']['output'];
+  vignettes: Array<DomainAnalysisVignetteDetail>;
+};
+
 export type ConsistencyPerCondition = {
   __typename?: 'ConsistencyPerCondition';
   matches: Scalars['Int']['output'];
@@ -2552,6 +2559,7 @@ export type Query = {
   availableSignatures: Array<AvailableSignature>;
   circumplexAnalysis: CircumplexAnalysisResult;
   confidenceTranscripts: Array<DomainAnalysisConditionTranscript>;
+  confidenceValueDetail: ConfidenceValueDetailResult;
   /** Fetch a single definition by ID. Returns null if not found. */
   definition?: Maybe<Definition>;
   /** Get ancestors of a definition (full chain to root). Returns definitions ordered from root to immediate parent. */
@@ -2803,7 +2811,16 @@ export type QueryCircumplexAnalysisArgs = {
 
 
 export type QueryConfidenceTranscriptsArgs = {
+  definitionId?: InputMaybe<Scalars['String']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
+  modelId: Scalars['String']['input'];
+  scenarioId?: InputMaybe<Scalars['String']['input']>;
+  signature?: InputMaybe<Scalars['String']['input']>;
+  valueKey: Scalars['String']['input'];
+};
+
+
+export type QueryConfidenceValueDetailArgs = {
   modelId: Scalars['String']['input'];
   signature?: InputMaybe<Scalars['String']['input']>;
   valueKey: Scalars['String']['input'];
@@ -4030,10 +4047,21 @@ export type ConfidenceTranscriptsQueryVariables = Exact<{
   valueKey: Scalars['String']['input'];
   signature?: InputMaybe<Scalars['String']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
+  definitionId?: InputMaybe<Scalars['String']['input']>;
+  scenarioId?: InputMaybe<Scalars['String']['input']>;
 }>;
 
 
 export type ConfidenceTranscriptsQuery = { __typename?: 'Query', confidenceTranscripts: Array<{ __typename?: 'DomainAnalysisConditionTranscript', id: string, runId: string, scenarioId?: string | null, modelId: string, decisionModelV2?: unknown | null, turnCount: number, tokenCount: number, durationMs: number, createdAt: string, content: unknown }> };
+
+export type ConfidenceValueDetailQueryVariables = Exact<{
+  modelId: Scalars['String']['input'];
+  valueKey: Scalars['String']['input'];
+  signature?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type ConfidenceValueDetailQuery = { __typename?: 'Query', confidenceValueDetail: { __typename?: 'ConfidenceValueDetailResult', modelLabel: string, valueKey: string, vignettes: Array<{ __typename?: 'DomainAnalysisVignetteDetail', definitionId: string, definitionName: string, definitionVersion: number, otherValueKey: string, totalTrials: number, conditions: Array<{ __typename?: 'DomainAnalysisConditionDetail', scenarioId?: string | null, conditionName: string, dimensions?: unknown | null, prioritized: number, deprioritized: number, neutral: number, totalTrials: number, unknownCount: number, strongly: number, somewhat: number, opponentSomewhat: number, opponentStrongly: number }> }> } };
 
 export type EstimateCostQueryVariables = Exact<{
   definitionId: Scalars['ID']['input'];
@@ -5390,12 +5418,14 @@ export function useComparisonRunsListQuery(options?: Omit<Urql.UseQueryArgs<Comp
   return Urql.useQuery<ComparisonRunsListQuery, ComparisonRunsListQueryVariables>({ query: ComparisonRunsListDocument, ...options });
 };
 export const ConfidenceTranscriptsDocument = gql`
-    query ConfidenceTranscripts($modelId: String!, $valueKey: String!, $signature: String, $limit: Int) {
+    query ConfidenceTranscripts($modelId: String!, $valueKey: String!, $signature: String, $limit: Int, $definitionId: String, $scenarioId: String) {
   confidenceTranscripts(
     modelId: $modelId
     valueKey: $valueKey
     signature: $signature
     limit: $limit
+    definitionId: $definitionId
+    scenarioId: $scenarioId
   ) {
     id
     runId
@@ -5413,6 +5443,43 @@ export const ConfidenceTranscriptsDocument = gql`
 
 export function useConfidenceTranscriptsQuery(options: Omit<Urql.UseQueryArgs<ConfidenceTranscriptsQueryVariables>, 'query'>) {
   return Urql.useQuery<ConfidenceTranscriptsQuery, ConfidenceTranscriptsQueryVariables>({ query: ConfidenceTranscriptsDocument, ...options });
+};
+export const ConfidenceValueDetailDocument = gql`
+    query ConfidenceValueDetail($modelId: String!, $valueKey: String!, $signature: String) {
+  confidenceValueDetail(
+    modelId: $modelId
+    valueKey: $valueKey
+    signature: $signature
+  ) {
+    modelLabel
+    valueKey
+    vignettes {
+      definitionId
+      definitionName
+      definitionVersion
+      otherValueKey
+      totalTrials
+      conditions {
+        scenarioId
+        conditionName
+        dimensions
+        prioritized
+        deprioritized
+        neutral
+        totalTrials
+        unknownCount
+        strongly
+        somewhat
+        opponentSomewhat
+        opponentStrongly
+      }
+    }
+  }
+}
+    `;
+
+export function useConfidenceValueDetailQuery(options: Omit<Urql.UseQueryArgs<ConfidenceValueDetailQueryVariables>, 'query'>) {
+  return Urql.useQuery<ConfidenceValueDetailQuery, ConfidenceValueDetailQueryVariables>({ query: ConfidenceValueDetailDocument, ...options });
 };
 export const EstimateCostDocument = gql`
     query EstimateCost($definitionId: ID!, $models: [String!]!, $samplePercentage: Int, $samplesPerScenario: Int) {

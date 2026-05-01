@@ -29,6 +29,7 @@ import './probe-result.js';
 import './available-model.js';
 import './models-analysis.js';
 import './models-confidence.js';
+import './confidence-value-detail.js';
 import './models-consistency.js';
 import './pressure-sensitivity.js';
 import './circumplex.js';

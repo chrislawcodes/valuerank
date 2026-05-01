@@ -24,17 +24,24 @@ function buildTooltip(valueKey: string, result: ModelsConfidenceModelResult['val
 
 type ConfidenceHeatmapProps = {
   models: ModelsConfidenceModelResult[];
+  /** When provided, only rows whose modelId is in this list are shown. */
+  selectedModelIds?: string[];
   onCellClick?: (modelId: string, modelLabel: string, valueKey: string) => void;
 };
 
-export function ConfidenceHeatmap({ models, onCellClick }: ConfidenceHeatmapProps) {
-  const sorted = [...models].sort((a, b) => {
+export function ConfidenceHeatmap({ models, selectedModelIds, onCellClick }: ConfidenceHeatmapProps) {
+  const visibleModels =
+    selectedModelIds != null
+      ? models.filter((m) => selectedModelIds.includes(m.modelId))
+      : models;
+
+  const sorted = [...visibleModels].sort((a, b) => {
     const aConf = a.overallConfidence ?? -1;
     const bConf = b.overallConfidence ?? -1;
     return bConf - aConf;
   });
 
-  if (models.length === 0) {
+  if (visibleModels.length === 0) {
     return <p className="text-sm text-gray-500">No data</p>;
   }
 

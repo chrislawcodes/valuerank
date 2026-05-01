@@ -6,6 +6,7 @@ import type { TranscriptDecisionModelV2 } from './runs';
 
 export { ConfidenceTranscriptsDocument as CONFIDENCE_TRANSCRIPTS_QUERY } from '../../generated/graphql';
 
+// ConfidenceTranscriptsQueryVariables now includes optional definitionId + scenarioId for condition-level filtering.
 export type ConfidenceTranscriptsQueryVariables = GeneratedConfidenceTranscriptsQueryVariables;
 export type ConfidenceTranscriptsQueryResult = GeneratedConfidenceTranscriptsQuery;
 

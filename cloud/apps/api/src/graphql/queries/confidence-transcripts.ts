@@ -14,10 +14,20 @@ builder.queryField('confidenceTranscripts', (t) =>
       valueKey: t.arg.string({ required: true }),
       signature: t.arg.string({ required: false }),
       limit: t.arg.int({ required: false }),
+      definitionId: t.arg.string({ required: false }),
+      scenarioId: t.arg.string({ required: false }),
     },
     resolve: async (_root, args) => {
       const modelId = args.modelId;
       const rawValueKey = args.valueKey;
+      const filterDefinitionId =
+        typeof args.definitionId === 'string' && args.definitionId.trim() !== ''
+          ? args.definitionId.trim()
+          : null;
+      const filterScenarioId =
+        typeof args.scenarioId === 'string' && args.scenarioId.trim() !== ''
+          ? args.scenarioId.trim()
+          : null;
       if (!isDomainAnalysisValueKey(rawValueKey)) {
         throw new ValidationError(`Unsupported value key: ${rawValueKey}`);
       }
@@ -69,6 +79,8 @@ builder.queryField('confidenceTranscripts', (t) =>
       const matchingDefIds = new Set(
         definitions
           .filter((definition) => {
+            // When a specific definitionId filter is requested, respect it.
+            if (filterDefinitionId !== null && definition.id !== filterDefinitionId) return false;
             const pair = defValuePairMap.get(definition.id) ?? null;
             return pair?.valueA === valueKey || pair?.valueB === valueKey;
           })
@@ -98,6 +110,7 @@ builder.queryField('confidenceTranscripts', (t) =>
           runId: { in: relevantRunIds },
           modelId,
           deletedAt: null,
+          ...(filterScenarioId !== null ? { scenarioId: filterScenarioId } : {}),
         },
         orderBy: { createdAt: 'desc' },
         take: limit,
