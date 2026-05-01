@@ -314,7 +314,7 @@ describe('DomainValueShiftHeatmap page', () => {
       expect(screen.getByRole('heading', { name: 'Domain Shifts by Value' })).toBeInTheDocument();
     });
     expect(screen.getByRole('table')).toHaveClass('table-auto');
-    expect(screen.getByRole('button', { name: /all models/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /default models/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Latest @ default/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Sort by Avg Win Rate descending/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Sort by Value descending/i })).toHaveTextContent('Value↓');
@@ -336,7 +336,7 @@ describe('DomainValueShiftHeatmap page', () => {
 
     renderPage();
 
-    await screen.findByRole('button', { name: /all models/i });
+    await screen.findByRole('button', { name: /default models/i });
     const initialModelsCalls = useQueryMock.mock.calls.filter(([args]: [{ query: unknown }]) => args.query === MODELS_ANALYSIS_QUERY);
     expect(initialModelsCalls.at(-1)?.[0]).toEqual(expect.objectContaining({
       variables: { signature: 'vnewtd' },
@@ -401,8 +401,8 @@ describe('DomainValueShiftHeatmap page', () => {
 
     renderPage();
 
-    expect(await screen.findByRole('button', { name: /all models/i })).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /all models/i }));
+    expect(await screen.findByRole('button', { name: /default models/i })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /default models/i }));
     await user.click(screen.getByRole('option', { name: 'Zulu' }));
 
     expect(screen.getByRole('heading', { name: 'Zulu' })).toBeInTheDocument();
@@ -418,8 +418,8 @@ describe('DomainValueShiftHeatmap page', () => {
 
     renderPage();
 
-    await screen.findByRole('button', { name: /all models/i });
-    await user.click(screen.getByRole('button', { name: /all models/i }));
+    await screen.findByRole('button', { name: /default models/i });
+    await user.click(screen.getByRole('button', { name: /default models/i }));
 
     const options = screen.getAllByRole('option').map((option) => option.textContent?.trim());
     expect(options).toEqual(['Default models', 'Alpha', 'Charlie', '---', 'Bravo']);
