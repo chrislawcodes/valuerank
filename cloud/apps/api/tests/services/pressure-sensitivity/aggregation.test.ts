@@ -100,7 +100,7 @@ describe('buildVignetteWeightedCellMetrics', () => {
     expect(result).toEqual({
       n: 2,
       unscoredCount: 0,
-      successes: 2,
+      successes: (1 + 1 / 3),
       winRate: (1 + 1 / 3) / 2,
       conviction: 1.5,
       netScore: (2 + (-1 / 3)) / 2,
@@ -224,12 +224,12 @@ describe('pooledDirectionalReduction', () => {
     expect(result.reason).toBeNull();
     expect(result.pushTowardFirstRate).toBeCloseTo(17 / 30, 10);
     expect(result.pushTowardSecondRate).toBeCloseTo(7 / 40, 10);
-    expect(result.baselineRate).toBeCloseTo(3 / 8, 10);
+    expect(result.baselineRate).toBeCloseTo(1 / 2, 10);
     expect(result.value).toBeCloseTo(17 / 30 - 7 / 40, 10);
-    expect(result.qualifyingTrials).toBe(78);
+    expect(result.qualifyingTrials).toBe(80);
   });
 
-  it('marks the directional pool as thin but still returns the surviving mirror rate', () => {
+  it('marks the directional pool as thin when the total directional vignette count is too small', () => {
     const grid: Cell[] = [
       cell({ ownLevel: 4, opponentLevel: 1, n: 1, successes: 0, lowData: true }),
       cell({ ownLevel: 1, opponentLevel: 4, n: 5, successes: 2, lowData: false }),
@@ -242,11 +242,28 @@ describe('pooledDirectionalReduction', () => {
       ciLow: null,
       ciHigh: null,
       baselineRate: null,
-      pushTowardFirstRate: null,
+      pushTowardFirstRate: 0,
       pushTowardSecondRate: 2 / 5,
       reason: 'directional-thin',
-      qualifyingTrials: 5,
+      qualifyingTrials: 6,
     });
+  });
+
+  it('keeps response defined when sparse cells still add up to enough vignette observations in each pool', () => {
+    const result = pooledDirectionalReduction(
+      [
+        cell({ ownLevel: 4, opponentLevel: 1, n: 1, successes: 1, lowData: true }),
+        cell({ ownLevel: 5, opponentLevel: 2, n: 2, successes: 1, lowData: true }),
+        cell({ ownLevel: 1, opponentLevel: 4, n: 1, successes: 0, lowData: true }),
+        cell({ ownLevel: 2, opponentLevel: 5, n: 2, successes: 1, lowData: true }),
+        cell({ ownLevel: 3, opponentLevel: 3, n: 3, successes: 2, lowData: false }),
+      ],
+      3,
+    );
+
+    expect(result.reason).toBeNull();
+    expect(result.value).toBeCloseTo((2 / 3) - (1 / 3), 10);
+    expect(result.qualifyingTrials).toBe(9);
   });
 
   it('marks the mirror pool as thin but still returns the surviving directional rate', () => {
@@ -278,11 +295,11 @@ describe('pooledDirectionalReduction', () => {
       value: null,
       ciLow: null,
       ciHigh: null,
-      baselineRate: null,
+      baselineRate: 0.5,
       pushTowardFirstRate: null,
       pushTowardSecondRate: null,
       reason: 'directional-and-inverted-thin',
-      qualifyingTrials: 0,
+      qualifyingTrials: 2,
     });
   });
 

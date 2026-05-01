@@ -99,6 +99,7 @@ Once the above are resolved:
 - [x] Value Priorities now uses win rate only, with the retired Full BT toggle removed and the cell dots rendered under the numbers.
 - [x] Pressure Sensitivity page now includes a **Pressure Directional Breakdown** cross-model table showing pushed-for effect, pushed-against effect, gap, and pairs per model. Answers: "Does pressure work equally in both directions?" PR #834.
 - [x] Pressure Sensitivity now uses the standard default-model multi-select, keeps the tooltip anchored while scrolling, and moves the cross-model response table to the bottom of the report.
+- [x] Pressure Response by Value now weights each vignette once and uses pooled directional coverage, so sparse cells no longer trip the "below coverage thresholds" error when the report has enough total vignette coverage.
 
 ---
 

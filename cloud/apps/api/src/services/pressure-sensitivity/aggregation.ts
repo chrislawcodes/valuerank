@@ -201,14 +201,21 @@ export function buildVignetteWeightedCellMetrics(
 ): VignetteWeightedCellMetrics {
   const vignetteMetrics = vignetteObservations.map((observations) => buildCellMetrics(observations));
   const scoredVignetteMetrics = vignetteMetrics.filter((metrics) => metrics.n > 0);
+  const winRates = scoredVignetteMetrics.map((metrics) => metrics.winRate);
+  const convictions = scoredVignetteMetrics.map((metrics) => metrics.conviction);
+  const netScores = scoredVignetteMetrics.map((metrics) => metrics.netScore);
+  let successes = 0;
+  for (const rate of winRates) {
+    if (rate != null) successes += rate;
+  }
 
   return {
     n: scoredVignetteMetrics.length,
     unscoredCount: vignetteMetrics.reduce((sum, metrics) => sum + metrics.unscoredCount, 0),
-    successes: scoredVignetteMetrics.reduce((sum, metrics) => sum + metrics.successes, 0),
-    winRate: averageNonNull(scoredVignetteMetrics.map((metrics) => metrics.winRate)),
-    conviction: averageNonNull(scoredVignetteMetrics.map((metrics) => metrics.conviction)),
-    netScore: averageNonNull(scoredVignetteMetrics.map((metrics) => metrics.netScore)),
+    successes,
+    winRate: averageNonNull(winRates),
+    conviction: averageNonNull(convictions),
+    netScore: averageNonNull(netScores),
     lowData: scoredVignetteMetrics.length < minN,
   };
 }
@@ -456,13 +463,13 @@ export function pooledDirectionalReduction(
   minN: number,
 ): PressureResponseResult {
   const directionalCells = grid.filter(
-    (cell) => cell.ownLevel >= 4 && cell.opponentLevel <= 3 && cell.n >= minN,
+    (cell) => cell.ownLevel >= 4 && cell.opponentLevel <= 3,
   );
   const mirrorCells = grid.filter(
-    (cell) => cell.opponentLevel >= 4 && cell.ownLevel <= 3 && cell.n >= minN,
+    (cell) => cell.opponentLevel >= 4 && cell.ownLevel <= 3,
   );
   const baselineCells = grid.filter(
-    (cell) => cell.ownLevel === cell.opponentLevel && cell.n >= minN,
+    (cell) => cell.ownLevel === cell.opponentLevel,
   );
 
   const directionalTrials = sumNumbers(directionalCells.map((cell) => cell.n));
@@ -474,12 +481,12 @@ export function pooledDirectionalReduction(
   const directionalSuccesses = sumNumbers(directionalCells.map((cell) => cell.successes));
   const mirrorSuccesses = sumNumbers(mirrorCells.map((cell) => cell.successes));
 
-  const thin = directionalCells.length === 0 || mirrorCells.length === 0;
+  const thin = directionalTrials < minN || mirrorTrials < minN;
   if (thin) {
     const reason: PressureResponseReason =
-      directionalCells.length === 0 && mirrorCells.length === 0
+      directionalTrials < minN && mirrorTrials < minN
         ? 'directional-and-inverted-thin'
-        : directionalCells.length === 0
+        : directionalTrials < minN
           ? 'directional-thin'
           : 'inverted-thin';
     return {
