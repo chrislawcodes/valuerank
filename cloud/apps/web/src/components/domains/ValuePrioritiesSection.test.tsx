@@ -1,16 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { act } from 'react';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { ValuePrioritiesSection } from './ValuePrioritiesSection';
 import { VALUES, type ModelEntry, type ValueKey } from '../../data/domainAnalysisData';
 
 function createRecord(
-  generator: (valueKey: ValueKey, index: number) => number | null,
+  generator: (valueKey: ValueKey, index: number) => number | null
 ): Record<ValueKey, number | null> {
-  return Object.fromEntries(VALUES.map((valueKey, index) => [valueKey, generator(valueKey, index)])) as Record<
-    ValueKey,
-    number | null
-  >;
+  return Object.fromEntries(
+    VALUES.map((valueKey, index) => [valueKey, generator(valueKey, index)])
+  ) as Record<ValueKey, number | null>;
 }
 
 function createModels(): ModelEntry[] {
@@ -18,13 +19,17 @@ function createModels(): ModelEntry[] {
     {
       model: 'model-a',
       label: 'Model A',
-      values: Object.fromEntries(VALUES.map((valueKey, index) => [valueKey, index + 1.25])) as Record<ValueKey, number>,
+      values: Object.fromEntries(
+        VALUES.map((valueKey, index) => [valueKey, index + 1.25])
+      ) as Record<ValueKey, number>,
       winRates: createRecord((_valueKey, index) => 64.2 + index),
     },
     {
       model: 'model-b',
       label: 'Model B',
-      values: Object.fromEntries(VALUES.map((valueKey, index) => [valueKey, index + 2.5])) as Record<ValueKey, number>,
+      values: Object.fromEntries(
+        VALUES.map((valueKey, index) => [valueKey, index + 2.5])
+      ) as Record<ValueKey, number>,
       winRates: createRecord((valueKey) => {
         if (valueKey === 'Achievement') return null;
         if (valueKey === 'Hedonism') return null;
@@ -37,8 +42,12 @@ function createModels(): ModelEntry[] {
 function renderSection() {
   render(
     <MemoryRouter>
-      <ValuePrioritiesSection models={createModels()} selectedDomainId="domain-a" selectedSignature="vnewtd" />
-    </MemoryRouter>,
+      <ValuePrioritiesSection
+        models={createModels()}
+        selectedDomainId="domain-a"
+        selectedSignature="vnewtd"
+      />
+    </MemoryRouter>
   );
 }
 
@@ -64,6 +73,21 @@ describe('ValuePrioritiesSection', () => {
 
     const firstCell = getFirstValueCell(getModelRow('Model A'));
     expect(firstCell.textContent).toMatch(/^\d+\.\d%$/);
+  });
+
+  it('switches the table to logit values', async () => {
+    const user = userEvent.setup();
+    renderSection();
+
+    expect(getFirstValueCell(getModelRow('Model A')).textContent).toMatch(/%$/);
+
+    await act(async () => {
+      await user.click(screen.getByRole('button', { name: /logit/i }));
+    });
+
+    await waitFor(() => {
+      expect(getFirstValueCell(getModelRow('Model A')).textContent).toBe('2.25');
+    });
   });
 
   it('shows n/a when the win rate is missing', () => {
