@@ -245,7 +245,7 @@ describe('DomainValueShiftHeatmap helpers', () => {
       new Set(['model-c', 'model-a']),
     );
 
-    expect(options.map((option) => option.label)).toEqual(['All models', 'Alpha', 'Charlie', '---', 'Bravo']);
+    expect(options.map((option) => option.label)).toEqual(['Default models', 'Alpha', 'Charlie', '---', 'Bravo']);
     expect(options[0]?.value).toBe(ALL_MODELS_OPTION_VALUE);
   });
 
@@ -422,7 +422,7 @@ describe('DomainValueShiftHeatmap page', () => {
     await user.click(screen.getByRole('button', { name: /all models/i }));
 
     const options = screen.getAllByRole('option').map((option) => option.textContent?.trim());
-    expect(options).toEqual(['All models', 'Alpha', 'Charlie', '---', 'Bravo']);
+    expect(options).toEqual(['Default models', 'Alpha', 'Charlie', '---', 'Bravo']);
   });
 
   it('shows an empty state when fewer than two domains are eligible', async () => {
