@@ -99,6 +99,16 @@ export function ValuePrioritiesSection({
 
   const valueRange = useMemo(() => ({ min: 0, max: 100 }), []);
 
+  const avgWinRates = useMemo(
+    () => Object.fromEntries(
+      COLUMN_VALUES.map((value) => {
+        const vals = models.map((m) => m.winRates?.[value] ?? null).filter((v): v is number => v !== null);
+        return [value, vals.length > 0 ? vals.reduce((s, v) => s + v, 0) / vals.length : null];
+      }),
+    ) as Record<ValueKey, number | null>,
+    [models],
+  );
+
   useLayoutEffect(() => {
     const updateSplitPosition = () => {
       const opennessWidth = opennessGroupRef.current?.getBoundingClientRect().width ?? 0;
@@ -337,6 +347,32 @@ export function ValuePrioritiesSection({
                   })}
                 </tr>
             ))}
+            {models.length > 1 && (
+              <tr className="border-t-2 border-gray-300">
+                <td className="border-r-2 border-gray-300 px-2 py-2">
+                  <div className="text-xs font-medium italic text-gray-500">Avg</div>
+                </td>
+                {COLUMN_VALUES.map((value) => {
+                  const avg = avgWinRates[value];
+                  const background = avg === null
+                    ? '#F9FAFB'
+                    : getPriorityColor(avg, valueRange.min, valueRange.max);
+                  return (
+                    <td
+                      key={value}
+                      className={`px-2 py-2 text-right text-xs text-gray-700 ${
+                        hasGroupStartBorder(value) ? 'border-l-2 border-gray-300' : ''
+                      } ${hasGroupEndBorder(value) ? 'border-r-2 border-gray-300' : ''} ${
+                        value === HEDONISM_SPLIT_VALUE ? 'border-x border-dashed border-gray-400' : ''
+                      }`}
+                      style={{ background }}
+                    >
+                      {avg === null ? 'n/a' : `${avg.toFixed(1)}%`}
+                    </td>
+                  );
+                })}
+              </tr>
+            )}
           </tbody>
           </table>
         </div>
