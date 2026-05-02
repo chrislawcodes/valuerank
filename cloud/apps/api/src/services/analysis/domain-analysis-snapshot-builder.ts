@@ -12,7 +12,7 @@ import {
   type SnapshotClient,
 } from './domain-analysis-cache-types.js';
 import { computeCellWeightedDomainRates } from './domain-analysis-cell-win-rates.js';
-import { accumulateTranscriptCells } from './transcript-cell-accumulator.js';
+import { accumulateTranscriptCells, type CellCounts } from './transcript-cell-accumulator.js';
 import { type DomainAnalysisScope } from './domain-analysis-scope.js';
 import { resolveDomainAnalysisScopeDefinitions } from './domain-analysis-scope-loader.js';
 
@@ -126,9 +126,14 @@ export async function buildSnapshotOutput(
   state: DomainAnalysisPreparedState,
 ): Promise<DomainAnalysisSnapshotOutput> {
   const valuePairByDefinition = await resolveValuePairsInChunks(state.latestDefinitionIds);
-  const transcripts = state.resolvedSignatureRuns.filteredSourceRunIds.length === 0
-    ? []
-    : await db.transcript.findMany({
+
+  const TRANSCRIPT_BATCH_SIZE = 500;
+  const cellMap = new Map<string, CellCounts>();
+
+  if (state.resolvedSignatureRuns.filteredSourceRunIds.length > 0) {
+    let lastId: string | undefined = undefined;
+    while (true) {
+      const batch = await db.transcript.findMany({
         where: {
           runId: { in: state.resolvedSignatureRuns.filteredSourceRunIds },
           deletedAt: null,
@@ -149,12 +154,31 @@ export async function buildSnapshotOutput(
             },
           },
         },
+        orderBy: { id: 'asc' },
+        take: TRANSCRIPT_BATCH_SIZE,
+        ...(lastId !== undefined ? { cursor: { id: lastId }, skip: 1 } : {}),
       });
 
-  const cellMap = accumulateTranscriptCells({
-    transcripts,
-    filteredSourceRunDefinitionById: state.resolvedSignatureRuns.filteredSourceRunDefinitionById,
-  });
+      if (batch.length === 0) break;
+
+      const batchCellMap = accumulateTranscriptCells({
+        transcripts: batch,
+        filteredSourceRunDefinitionById: state.resolvedSignatureRuns.filteredSourceRunDefinitionById,
+      });
+
+      for (const [key, counts] of batchCellMap.entries()) {
+        const existing = cellMap.get(key) ?? { wins: 0, losses: 0, neutrals: 0 };
+        existing.wins += counts.wins;
+        existing.losses += counts.losses;
+        existing.neutrals += counts.neutrals;
+        cellMap.set(key, existing);
+      }
+
+      const lastRow = batch[batch.length - 1];
+      if (batch.length < TRANSCRIPT_BATCH_SIZE || lastRow === undefined) break;
+      lastId = lastRow.id;
+    }
+  }
   const { models, analyzedDefinitionIds } = computeCellWeightedDomainRates({
     cellMap,
     filteredSourceRunDefinitionById: state.resolvedSignatureRuns.filteredSourceRunDefinitionById,
