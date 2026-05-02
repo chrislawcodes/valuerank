@@ -7,17 +7,14 @@ import {
   DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION,
   DOMAIN_ANALYSIS_SNAPSHOT_TYPE,
   type AnalysisFingerprintRow,
-  type AnalysisOutputRow,
   type DomainAnalysisPreparedState,
   type DomainAnalysisSnapshotOutput,
   type SnapshotClient,
 } from './domain-analysis-cache-types.js';
-import { aggregateAnalysisRows } from './domain-analysis-snapshot-aggregator.js';
+import { computeCellWeightedDomainRates } from './domain-analysis-cell-win-rates.js';
+import { accumulateTranscriptCells } from './transcript-cell-accumulator.js';
 import { type DomainAnalysisScope } from './domain-analysis-scope.js';
-import {
-  buildContributionAndExcludedSummary,
-  resolveDomainAnalysisScopeDefinitions,
-} from './domain-analysis-scope-loader.js';
+import { resolveDomainAnalysisScopeDefinitions } from './domain-analysis-scope-loader.js';
 
 export function buildAssumptionKey(scope: DomainAnalysisScope, domainId: string): string {
   return scope === 'ALL_DOMAINS'
@@ -129,35 +126,39 @@ export async function buildSnapshotOutput(
   state: DomainAnalysisPreparedState,
 ): Promise<DomainAnalysisSnapshotOutput> {
   const valuePairByDefinition = await resolveValuePairsInChunks(state.latestDefinitionIds);
-  const analysisRows: AnalysisOutputRow[] = state.resolvedSignatureRuns.filteredSourceRunIds.length === 0
+  const transcripts = state.resolvedSignatureRuns.filteredSourceRunIds.length === 0
     ? []
-    : await db.analysisResult.findMany({
+    : await db.transcript.findMany({
         where: {
           runId: { in: state.resolvedSignatureRuns.filteredSourceRunIds },
-          analysisType: 'basic',
-          status: 'CURRENT',
           deletedAt: null,
         },
         select: {
+          id: true,
           runId: true,
-          inputHash: true,
-          output: true,
+          modelId: true,
+          decisionMetadata: true,
+          definitionSnapshot: true,
+          deletedAt: true,
+          scenario: {
+            select: {
+              id: true,
+              content: true,
+              orientationFlipped: true,
+              deletedAt: true,
+            },
+          },
         },
       });
 
-  const { models, analyzedDefinitionIds } = aggregateAnalysisRows({
-    analysisRows,
-    valuePairByDefinition,
+  const cellMap = accumulateTranscriptCells({
+    transcripts,
     filteredSourceRunDefinitionById: state.resolvedSignatureRuns.filteredSourceRunDefinitionById,
   });
-
-  const domainNameById = new Map(state.domains.map((domain) => [domain.id, domain.name]));
-  const { contributionSummary, excludedDataSummary } = buildContributionAndExcludedSummary({
-    domainNameById,
-    definitionDomainIdById: state.definitionDomainIdById,
-    valuePairByDefinition,
-    analysisRows,
+  const { models, analyzedDefinitionIds } = computeCellWeightedDomainRates({
+    cellMap,
     filteredSourceRunDefinitionById: state.resolvedSignatureRuns.filteredSourceRunDefinitionById,
+    definitionValuePairById: valuePairByDefinition,
   });
 
   const missingReasonByDefinitionId = new Map(state.resolvedSignatureRuns.missingReasonByDefinitionId);
@@ -191,8 +192,8 @@ export async function buildSnapshotOutput(
     definitionsWithAnalysis: analyzedDefinitionIds.size,
     missingDefinitions,
     models,
-    contributionSummary,
-    excludedDataSummary,
+    contributionSummary: [],
+    excludedDataSummary: [],
   };
 }
 

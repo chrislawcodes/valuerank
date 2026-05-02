@@ -1,0 +1,40 @@
+{
+  "feature_slug": "cell-weighted-domain-analysis",
+  "stage": "spec",
+  "artifact_path": "docs/workflow/feature-runs/cell-weighted-domain-analysis/spec.md",
+  "git_base_ref": "",
+  "allowed_dirty_paths": [],
+  "required_reviews": [
+    {
+      "reviewer": "codex",
+      "lens": "feasibility-adversarial",
+      "stage": "spec",
+      "path": "docs/workflow/feature-runs/cell-weighted-domain-analysis/reviews/spec.codex.feasibility-adversarial.review.md",
+      "context_paths": [
+        "cloud/apps/api/src/services/analysis/domain-analysis-cache-types.ts",
+        "cloud/apps/api/src/services/analysis/domain-analysis-snapshot-aggregator.ts",
+        "cloud/apps/api/src/services/analysis/domain-analysis-snapshot-builder.ts",
+        "cloud/CLAUDE.md",
+        "cloud/apps/api/src/services/circumplex/aggregation.ts"
+      ],
+      "model": "gpt-5.4-mini"
+    },
+    {
+      "reviewer": "gemini",
+      "lens": "requirements-adversarial",
+      "stage": "spec",
+      "path": "docs/workflow/feature-runs/cell-weighted-domain-analysis/reviews/spec.gemini.requirements-adversarial.review.md",
+      "context_paths": [
+        "cloud/apps/api/src/services/analysis/domain-analysis-cache-types.ts",
+        "cloud/apps/api/src/services/analysis/domain-analysis-snapshot-aggregator.ts",
+        "cloud/apps/api/src/services/analysis/domain-analysis-snapshot-builder.ts",
+        "cloud/CLAUDE.md",
+        "cloud/apps/api/src/services/circumplex/aggregation.ts"
+      ],
+      "model": "gemini-2.5-pro"
+    }
+  ],
+  "max_artifact_chars": 50000,
+  "max_context_chars": 60000,
+  "max_total_chars": 250000
+}
