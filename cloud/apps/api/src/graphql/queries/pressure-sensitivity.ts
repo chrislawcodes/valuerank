@@ -23,10 +23,7 @@ import {
   FLAT_DELTA_THRESHOLD,
   type Observation,
 } from '../../services/pressure-sensitivity/aggregation.js';
-import {
-  validateDefinitionForPressureSensitivity,
-  type ValidationResult,
-} from '../../services/pressure-sensitivity/definition-validation.js';
+import { validateDefinitionForPressureSensitivity } from '../../services/pressure-sensitivity/definition-validation.js';
 import {
   assignOwnOpponent,
   assignOwnOpponentLevels,
@@ -330,8 +327,14 @@ builder.queryField('pressureSensitivity', (t) =>
       const definitionMeta = new Map<string, DefinitionMetadata>();
       const excludedDefinitions: ExcludedDefinitionShape[] = [];
 
-      for (const defId of distinctDefIds) {
-        const validation: ValidationResult = await validateDefinitionForPressureSensitivity(defId);
+      const validationResults = await Promise.all(
+        [...distinctDefIds].map(async (defId) => ({
+          defId,
+          validation: await validateDefinitionForPressureSensitivity(defId),
+        })),
+      );
+
+      for (const { defId, validation } of validationResults) {
         if (validation.status === 'excluded') {
           excludedDefinitions.push({
             definitionId: defId,
