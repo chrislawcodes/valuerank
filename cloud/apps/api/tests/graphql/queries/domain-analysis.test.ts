@@ -147,6 +147,10 @@ describe('GraphQL domain analysis', () => {
             autonomy: 'very high',
             risk: 'low',
           },
+          dimensionValues: {
+            Achievement: 1,
+            Benevolence_Dependability: 2,
+          },
         },
       },
     });
@@ -180,7 +184,14 @@ describe('GraphQL domain analysis', () => {
           responseExcerpt: 'Strongly support taking the job with recognition of their expertise',
         },
         definitionSnapshot: {
-          dimensions: [{ name: 'Achievement' }, { name: 'Benevolence_Dependability' }],
+          components: {
+            value_first: { token: 'Achievement' },
+            value_second: { token: 'Benevolence_Dependability' },
+          },
+          dimensions: [
+            { name: 'Achievement', levels: [{ score: 1, label: '1' }, { score: 2, label: '2' }] },
+            { name: 'Benevolence_Dependability', levels: [{ score: 1, label: '1' }, { score: 2, label: '2' }] },
+          ],
           methodology: {
             presentation_order: 'A_first',
           },
@@ -237,6 +248,19 @@ describe('GraphQL domain analysis', () => {
           parserVersion: 'job-choice-v2',
           matchedLabel: 'Strongly support taking the job with trust from other people',
           responseExcerpt: 'Strongly support taking the job with trust from other people',
+        },
+        definitionSnapshot: {
+          components: {
+            value_first: { token: 'Benevolence_Dependability' },
+            value_second: { token: 'Achievement' },
+          },
+          dimensions: [
+            { name: 'Achievement', levels: [{ score: 1, label: '1' }, { score: 2, label: '2' }] },
+            { name: 'Benevolence_Dependability', levels: [{ score: 1, label: '1' }, { score: 2, label: '2' }] },
+          ],
+          methodology: {
+            presentation_order: 'B_first',
+          },
         },
         turnCount: 2,
         tokenCount: 100,

@@ -1,0 +1,915 @@
+Warning: 256-color support not detected. Using a terminal with at least 256-color support is recommended for a better visual experience.
+YOLO mode is enabled. All tool calls will be automatically approved.
+YOLO mode is enabled. All tool calls will be automatically approved.
+Error stating path localhost:5433/valuerank_test"
+```
+
+Setup test DB: `npm run db:test:setup` (from `cloud/`). Reset on data pollution: `npm run db:test:reset`.
+
+---
+
+## Logging Standards
+
+All logging goes through the centralized logger — never use `console.log` directly.
+
+```typescript
+import { createLogger } from '@valuerank/shared';
+const log = createLogger('runs');
+
+log.info({ runId: run.id }, 'Run created');
+log.error({ err, config }, 'Failed to create run');
+```
+
+Always use structured data (object + message), never string interpolation.
+
+### Log Levels
+
+| Level | Use For |
+|-------|---------|
+| `error` | Exceptions, failed operations that need attention |
+| `warn` | Recoverable issues, deprecations, retry attempts |
+| `info` | Key business events (run started, completed, user action) |
+| `debug` | Detailed flow info, useful for local debugging |
+
+---
+
+## Code Organization
+
+### Import Order
+
+1. Node built-ins (`fs`, `path`)
+2. External packages (`express`, `zod`)
+3. Internal packages (`@valuerank/shared`, `@valuerank/db`)
+4. Relative imports (`./validation`, `./types`)
+
+### Folder Structure
+
+```
+apps/api/src/
+├── auth/         # Authentication middleware and JWT handling
+├── cli/          # Admin scripts (create-user, normalize, shadow)
+├── config/       # Server configuration
+├── graphql/      # GraphQL schema, queries, mutations, types
+├── mcp/          # MCP server tools and OAuth
+├── middleware/    # Express middleware
+├── queue/        # PgBoss job handlers and queue orchestration
+├── routes/       # Express route handlers (REST, CSV, OData)
+├── services/     # Business logic
+└── utils/        # Pure utility functions
+
+apps/web/src/
+├── api/          # GraphQL operations and client setup
+├── components/   # React components
+├── hooks/        # Custom hooks
+├── lib/          # Shared libraries (statistics, formatting)
+├── pages/        # Route pages
+└── utils/        # Pure utility functions
+```
+
+---
+
+## Error Handling
+
+Use custom error classes (`AppError`, `NotFoundError`, `ValidationError`) from `packages/shared`. Always catch and forward to error middleware in routes — never swallow errors silently.
+
+---
+
+## Database Access
+
+### Use Prisma with Type Safety
+
+Use typed queries and `$transaction` for multi-step operations.
+
+### Soft Delete Pattern
+
+Entities use soft delete via `deletedAt` timestamp. **Never physically delete** — set `deletedAt` instead.
+
+**Tables with soft delete:** `definitions`, `definition_tags`, `scenarios`
+
+```typescript
+// ALWAYS filter out soft-deleted records
+const definitions = await prisma.definition.findMany({
+  where: { deletedAt: null },  // Required!
+});
+
+// When "deleting", set deletedAt
+await prisma.definition.update({
+  where: { id: definitionId },
+  data: { deletedAt: new Date() },
+});
+```
+
+`deletedAt` is **never exposed** in GraphQL schema. All resolvers must filter `deletedAt: null` automatically.
+
+---
+
+## Database Connections
+
+The project uses PostgreSQL with PgBouncer for connection pooling.
+
+**Application** (via PgBouncer): `DATABASE_URL` — include `?pgbouncer=true` to disable prepared statements.
+
+**Migrations** (direct): `DIRECT_URL` — Prisma Migrate requires a direct connection, not a pooler.
+
+```bash
+# .env
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:6432/valuerank: ENAMETOOLONG: name too long, stat '/Users/chrislaw/valuerank/.claude/worktrees/quirky-fermi-47d94b/localhost:5433/valuerank_test"
+```
+
+Setup test DB: `npm run db:test:setup` (from `cloud/`). Reset on data pollution: `npm run db:test:reset`.
+
+---
+
+## Logging Standards
+
+All logging goes through the centralized logger — never use `console.log` directly.
+
+```typescript
+import { createLogger } from '@valuerank/shared';
+const log = createLogger('runs');
+
+log.info({ runId: run.id }, 'Run created');
+log.error({ err, config }, 'Failed to create run');
+```
+
+Always use structured data (object + message), never string interpolation.
+
+### Log Levels
+
+| Level | Use For |
+|-------|---------|
+| `error` | Exceptions, failed operations that need attention |
+| `warn` | Recoverable issues, deprecations, retry attempts |
+| `info` | Key business events (run started, completed, user action) |
+| `debug` | Detailed flow info, useful for local debugging |
+
+---
+
+## Code Organization
+
+### Import Order
+
+1. Node built-ins (`fs`, `path`)
+2. External packages (`express`, `zod`)
+3. Internal packages (`@valuerank/shared`, `@valuerank/db`)
+4. Relative imports (`./validation`, `./types`)
+
+### Folder Structure
+
+```
+apps/api/src/
+├── auth/         # Authentication middleware and JWT handling
+├── cli/          # Admin scripts (create-user, normalize, shadow)
+├── config/       # Server configuration
+├── graphql/      # GraphQL schema, queries, mutations, types
+├── mcp/          # MCP server tools and OAuth
+├── middleware/    # Express middleware
+├── queue/        # PgBoss job handlers and queue orchestration
+├── routes/       # Express route handlers (REST, CSV, OData)
+├── services/     # Business logic
+└── utils/        # Pure utility functions
+
+apps/web/src/
+├── api/          # GraphQL operations and client setup
+├── components/   # React components
+├── hooks/        # Custom hooks
+├── lib/          # Shared libraries (statistics, formatting)
+├── pages/        # Route pages
+└── utils/        # Pure utility functions
+```
+
+---
+
+## Error Handling
+
+Use custom error classes (`AppError`, `NotFoundError`, `ValidationError`) from `packages/shared`. Always catch and forward to error middleware in routes — never swallow errors silently.
+
+---
+
+## Database Access
+
+### Use Prisma with Type Safety
+
+Use typed queries and `$transaction` for multi-step operations.
+
+### Soft Delete Pattern
+
+Entities use soft delete via `deletedAt` timestamp. **Never physically delete** — set `deletedAt` instead.
+
+**Tables with soft delete:** `definitions`, `definition_tags`, `scenarios`
+
+```typescript
+/ ALWAYS filter out soft-deleted records
+const definitions = await prisma.definition.findMany({
+  where: { deletedAt: null },  / Required!
+});
+
+/ When "deleting", set deletedAt
+await prisma.definition.update({
+  where: { id: definitionId },
+  data: { deletedAt: new Date() },
+});
+```
+
+`deletedAt` is **never exposed** in GraphQL schema. All resolvers must filter `deletedAt: null` automatically.
+
+---
+
+## Database Connections
+
+The project uses PostgreSQL with PgBouncer for connection pooling.
+
+**Application** (via PgBouncer): `DATABASE_URL` — include `?pgbouncer=true` to disable prepared statements.
+
+**Migrations** (direct): `DIRECT_URL` — Prisma Migrate requires a direct connection, not a pooler.
+
+```bash
+# .env
+DATABASE_URL="postgresql:/valuerank:valuerank@localhost:6432/valuerank'
+Error stating path localhost:5433/valuerank"
+```
+
+Start local DB: `docker-compose up -d` from `cloud/`.
+
+---
+
+## Schema Changes (Migrations)
+
+**Always use Prisma Migrate — never `db push`.**
+
+```bash
+# Create and apply a migration
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank" \
+  npx prisma migrate dev --name add_feature_tables --schema packages/db/prisma/schema.prisma
+```
+
+Production deployments run `prisma migrate deploy` automatically on startup.
+
+---
+
+## Quick Reference
+
+```
+File size:      enforced by scripts (prod warn 400/err 700, tests warn 800/err 1200)
+any types:      NEVER (use unknown if truly unknown)
+Test coverage:  80% minimum
+Console.log:    NEVER (use logger)
+Error handling: Custom AppError classes
+Imports:        Node → External → Internal → Relative
+```
+
+---
+
+## Terminology
+
+Canonical source: `docs/canonical-glossary.md`
+
+- Follow the terminology policy in repo-root `AGENTS.md`.
+- In cloud code, older names like `definition`, `dimension`, and `scenario` may still appear in code, schema, or APIs. Map them to glossary terms instead of renaming them casually.
+
+
+Context: aggregation.ts
+import { db as defaultDb } from '@valuerank/db';
+import { SCHWARTZ_CIRCULAR_ORDER, type ValueKey } from '@valuerank/shared/schwartz';
+import { extractValuePair, type DomainAnalysisValuePair } from '../../graphql/queries/domain-analysis-values.js';
+import { runMatchesSignature } from '../../graphql/queries/domain-coverage-gql-types.js';
+import { resolveTranscriptDecisionModel } from '../../graphql/queries/domain/decision-model.js';
+import { computePairwiseWinRate } from '../../utils/pairwise-math.js';
+
+export type CircumplexPairCell = {
+  winRate: number | null;
+  trials: number;
+  neutrals: number;
+};
+
+export type CircumplexPairMatrix = CircumplexPairCell[][];
+
+type RunRow = {
+  id: string;
+  config: unknown;
+  status: string;
+  deletedAt: Date | null;
+};
+
+type TranscriptRow = {
+  runId: string;
+  modelId: string;
+  decisionMetadata: unknown;
+  definitionSnapshot: unknown;
+  scenario: {
+    orientationFlipped: boolean | null;
+    deletedAt: Date | null;
+  } | null;
+  deletedAt: Date | null;
+};
+
+type CircumplexDb = Pick<typeof defaultDb, 'run' | 'transcript'>;
+
+type PairStats = {
+  pair: DomainAnalysisValuePair;
+  prioritizedA: number;
+  prioritizedB: number;
+  neutrals: number;
+};
+
+function createEmptyCell(): CircumplexPairCell {
+  return { winRate: null, trials: 0, neutrals: 0 };
+}
+
+function createEmptyMatrix(): CircumplexPairMatrix {
+  return SCHWARTZ_CIRCULAR_ORDER.map(() => SCHWARTZ_CIRCULAR_ORDER.map(() => createEmptyCell()));
+}
+
+function pairKey(pair: DomainAnalysisValuePair): string {
+  // Canonicalize: always sort alphabetically so both ingest and lookup
+  // produce the same key regardless of whether extractValuePair returns
+  // (A, B) or (B, A) for the same underlying scenario. This prevents
+  // silent split of counts across two keys.
+  const [first, second] = pair.valueA < pair.valueB
+    ? [pair.valueA, pair.valueB]
+    : [pair.valueB, pair.valueA];
+  return `${first}::${second}`;
+}
+
+function buildOrderedCell(stats: PairStats | undefined, left: ValueKey): CircumplexPairCell {
+  if (stats == null) {
+    return createEmptyCell();
+  }
+
+  const wins = left === stats.pair.valueA ? stats.prioritizedA : stats.prioritizedB;
+  const losses = left === stats.pair.valueA ? stats.prioritizedB : stats.prioritizedA;
+  const winRate = computePairwiseWinRate(wins, losses, stats.neutrals);
+  if (winRate === null) return createEmptyCell();
+  return {
+    winRate,
+    trials: wins + losses + stats.neutrals,
+    neutrals: stats.neutrals,
+  };
+}
+
+export async function aggregatePairwiseWinRates(args: {
+  modelIds: string[];
+  signature: string;
+  db?: CircumplexDb;
+}): Promise<Map<string, CircumplexPairMatrix>> {
+  const db = args.db ?? defaultDb;
+  const modelIdSet = new Set(args.modelIds);
+  const scopedRunIdSet = new Set<string>();
+  const output = new Map<string, CircumplexPairMatrix>();
+  const statsByModel = new Map<string, Map<string, PairStats>>();
+
+  for (const modelId of args.modelIds) {
+    output.set(modelId, createEmptyMatrix());
+    statsByModel.set(modelId, new Map<string, PairStats>());
+  }
+
+  if (args.modelIds.length === 0) {
+    return output;
+  }
+
+  // Circumplex needs raw transcripts. Aggregate-tagged runs are rollups that
+  // reference sourceRunIds — they don't have transcripts directly. We need
+  // the PRIMARY runs that actually produced transcripts. We filter out the
+  // aggregate rollups (config.isAggregate === true) to avoid double-counting
+  // their source data, then pick the ones that match the requested signature.
+  const runs = (await db.run.findMany({
+    where: {
+      status: 'COMPLETED',
+      deletedAt: null,
+    },
+    select: {
+      id: true,
+      config: true,
+      status: true,
+      deletedAt: true,
+    },
+  })) as RunRow[];
+
+  const scopedRunIds = runs
+    .filter((run) => {
+      if (run.status !== 'COMPLETED' || run.deletedAt != null) return false;
+      // Skip aggregate-rollup runs — their transcripts (if any) duplicate source runs.
+      const config = run.config as { isAggregate?: boolean } | null;
+      if (config?.isAggregate === true) return false;
+      return runMatchesSignature(run.config, args.signature);
+    })
+    .map((run) => run.id);
+  for (const runId of scopedRunIds) {
+    scopedRunIdSet.add(runId);
+  }
+  if (scopedRunIds.length === 0) {
+    return output;
+  }
+
+  // Query transcripts per-model instead of one big IN clause. Each transcript
+  // row carries a large JSON blob (definitionSnapshot + decisionMetadata), so
+  // fetching 20+ models × thousands of trials in one shot blows past Prisma's
+  // napi-to-rust string buffer limit and crashes. Per-model keeps each query's
+  // result set bounded. Parallelize across models so wall-clock stays under
+  // browser timeout — at ~6-8s per model, 20 serial = ~2 min (timeout),
+  // parallel = ~8-10s (limited by connection pool).
+  const transcriptBatches = await Promise.all(
+    args.modelIds.map(async (modelId) => (await db.transcript.findMany({
+      where: {
+        runId: { in: scopedRunIds },
+        modelId,
+        deletedAt: null,
+      },
+      select: {
+        runId: true,
+        modelId: true,
+        decisionMetadata: true,
+        definitionSnapshot: true,
+        deletedAt: true,
+        scenario: {
+          select: {
+            orientationFlipped: true,
+            deletedAt: true,
+          },
+        },
+      },
+    })) as TranscriptRow[]),
+  );
+
+  for (const transcripts of transcriptBatches) {
+    for (const transcript of transcripts) {
+      if (!scopedRunIdSet.has(transcript.runId)) continue;
+      if (!modelIdSet.has(transcript.modelId)) continue;
+      if (transcript.deletedAt != null || transcript.scenario?.deletedAt != null) continue;
+
+      const pair = extractValuePair(transcript.definitionSnapshot);
+      if (pair == null) continue;
+
+      const resolved = resolveTranscriptDecisionModel({
+        decisionMetadata: transcript.decisionMetadata,
+        definitionSnapshot: transcript.definitionSnapshot,
+        orientationFlipped: transcript.scenario?.orientationFlipped ?? null,
+        pairOverride: pair,
+      });
+
+      if (resolved.canonical.direction === 'unknown') {
+        continue;
+      }
+
+      const statsMap = statsByModel.get(transcript.modelId);
+      if (statsMap == null) continue;
+
+      // Canonicalize the pair orientation so prioritizedA always refers to the
+      // lexicographically-smaller value, regardless of which orientation the
+      // transcript's definitionSnapshot used. Without this, transcripts from
+      // different orientation conventions merge their counts incorrectly.
+      const canonicalPair: DomainAnalysisValuePair = pair.valueA < pair.valueB
+        ? pair
+        : { valueA: pair.valueB, valueB: pair.valueA };
+
+      const key = pairKey(canonicalPair);
+      const stats = statsMap.get(key) ?? {
+        pair: canonicalPair,
+        prioritizedA: 0,
+        prioritizedB: 0,
+        neutrals: 0,
+      };
+
+      if (resolved.canonical.direction === 'neutral') {
+        stats.neutrals += 1;
+      } else if (resolved.canonical.favoredValueKey === canonicalPair.valueA) {
+        stats.prioritizedA += 1;
+      } else if (resolved.canonical.favoredValueKey === canonicalPair.valueB) {
+        stats.prioritizedB += 1;
+      } else {
+        continue;
+      }
+
+      statsMap.set(key, stats);
+    }
+  }
+
+  for (const [modelId, statsMap] of statsByModel.entries()) {
+    const matrix = createEmptyMatrix();
+
+    for (let row = 0; row < SCHWARTZ_CIRCULAR_ORDER.length; row += 1) {
+      const left = SCHWARTZ_CIRCULAR_ORDER[row]!;
+      for (let col = 0; col < SCHWARTZ_CIRCULAR_ORDER.length; col += 1) {
+        const right = SCHWARTZ_CIRCULAR_ORDER[col]!;
+        if (row === col) {
+          matrix[row]![col] = createEmptyCell();
+          continue;
+        }
+        const sortedPair = left < right
+          ? { valueA: left, valueB: right }
+          : { valueA: right, valueB: left };
+        matrix[row]![col] = buildOrderedCell(statsMap.get(pairKey(sortedPair)), left);
+      }
+    }
+
+    output.set(modelId, matrix);
+  }
+
+  return output;
+}
+
+
+Artifact: spec.md
+# Spec: Cell-Weighted Win Rates for Domain Analysis (Shared Aggregation)
+
+## Problem
+
+Domain Analysis currently computes `valueWinRates` (the win rate shown per value per model)
+by pooling all trial observations within each source run, then averaging those pooled run-level
+rates equally. The equal-weight-per-run fix (commit `61992664`) addressed the _between-runs_
+imbalance, but within each run the win rate is still a pooled observation count across ALL 25
+pressure cells (5 own-pressure levels × 5 opponent-pressure levels).
+
+This violates the project's core equal-weight principle:
+
+> **More trials in a cell give you more confidence about what is happening in that cell.
+> Trials do NOT increase a cell's weight when computing the vignette's win rate.
+> Each cell gets equal weight within a vignette.
+> Each vignette gets equal weight within a domain.**
+
+Pressure Sensitivity already implements this correctly — it queries raw transcripts and
+computes per-cell win rates before collapsing to the 5×5 grid. Domain Analysis needs to do
+the same, and both should use a **single shared accumulation component** so the methodology
+is consistent across the system.
+
+## Fix
+
+**Two-part change:**
+
+### Part 1: Extract a shared transcript-cell accumulator
+
+Create `cloud/apps/api/src/services/analysis/transcript-cell-accumulator.ts` — a pure,
+reusable function that takes raw transcripts and returns per-cell win/loss/neutral counts.
+This function encodes the core methodology so both Domain Analysis and Pressure Sensitivity
+(and any future consumer) use identical logic.
+
+### Part 2: Plug Domain Analysis into the shared accumulator
+
+Replace ALL metric computation in the Domain Analysis snapshot builder with transcript-based
+aggregation. This includes `counts`, `pairwiseWins`, `valueWinRates`, and `vignetteCount`.
+Using a single data source eliminates the dual-source inconsistency that would arise if some
+fields came from `analysis_results` and others from transcripts.
+
+The `aggregateAnalysisRows` function (which reads from `analysis_results`) is removed from
+`buildSnapshotOutput`. The `analysis_results` table is no longer queried when building
+the snapshot output (only when computing the input hash fingerprint, which is unchanged).
+
+## Guiding Principle (must be preserved at every level of the call stack)
+
+- **Trials → confidence within a cell** (more trials = narrower CI, not higher weight)
+- **Cells → equal weight within a vignette**
+- **Vignettes → equal weight within a domain**
+
+Every new function introduced must respect these three rules. Do not pool raw counts across
+cells anywhere in the new code.
+
+## Architecture: the shared accumulator
+
+**File:** `cloud/apps/api/src/services/analysis/transcript-cell-accumulator.ts`
+
+```typescript
+export type CellKey = {
+  definitionId: string;
+  modelId: string;
+  valueKey: string;         // the value that "wins": ENAMETOOLONG: name too long, stat '/Users/chrislaw/valuerank/.claude/worktrees/quirky-fermi-47d94b/localhost:5433/valuerank"
+```
+
+Start local DB: `docker-compose up -d` from `cloud/`.
+
+---
+
+## Schema Changes (Migrations)
+
+**Always use Prisma Migrate — never `db push`.**
+
+```bash
+# Create and apply a migration
+DATABASE_URL="postgresql:/valuerank:valuerank@localhost:5433/valuerank" \
+  npx prisma migrate dev --name add_feature_tables --schema packages/db/prisma/schema.prisma
+```
+
+Production deployments run `prisma migrate deploy` automatically on startup.
+
+---
+
+## Quick Reference
+
+```
+File size:      enforced by scripts (prod warn 400/err 700, tests warn 800/err 1200)
+any types:      NEVER (use unknown if truly unknown)
+Test coverage:  80% minimum
+Console.log:    NEVER (use logger)
+Error handling: Custom AppError classes
+Imports:        Node → External → Internal → Relative
+```
+
+---
+
+## Terminology
+
+Canonical source: `docs/canonical-glossary.md`
+
+- Follow the terminology policy in repo-root `AGENTS.md`.
+- In cloud code, older names like `definition`, `dimension`, and `scenario` may still appear in code, schema, or APIs. Map them to glossary terms instead of renaming them casually.
+
+
+Context: aggregation.ts
+import { db as defaultDb } from '@valuerank/db';
+import { SCHWARTZ_CIRCULAR_ORDER, type ValueKey } from '@valuerank/shared/graphql/queries/graphql/queries/graphql/queries/domain/utils/pairwise-math.js';
+
+export type CircumplexPairCell = {
+  winRate: number | null;
+  trials: number;
+  neutrals: number;
+};
+
+export type CircumplexPairMatrix = CircumplexPairCell[][];
+
+type RunRow = {
+  id: string;
+  config: unknown;
+  status: string;
+  deletedAt: Date | null;
+};
+
+type TranscriptRow = {
+  runId: string;
+  modelId: string;
+  decisionMetadata: unknown;
+  definitionSnapshot: unknown;
+  scenario: {
+    orientationFlipped: boolean | null;
+    deletedAt: Date | null;
+  } | null;
+  deletedAt: Date | null;
+};
+
+type CircumplexDb = Pick<typeof defaultDb, 'run' | 'transcript'>;
+
+type PairStats = {
+  pair: DomainAnalysisValuePair;
+  prioritizedA: number;
+  prioritizedB: number;
+  neutrals: number;
+};
+
+function createEmptyCell(): CircumplexPairCell {
+  return { winRate: null, trials: 0, neutrals: 0 };
+}
+
+function createEmptyMatrix(): CircumplexPairMatrix {
+  return SCHWARTZ_CIRCULAR_ORDER.map(() => SCHWARTZ_CIRCULAR_ORDER.map(() => createEmptyCell()));
+}
+
+function pairKey(pair: DomainAnalysisValuePair): string {
+  / Canonicalize: always sort alphabetically so both ingest and lookup
+  / produce the same key regardless of whether extractValuePair returns
+  / (A, B) or (B, A) for the same underlying scenario. This prevents
+  / silent split of counts across two keys.
+  const [first, second] = pair.valueA < pair.valueB
+    ? [pair.valueA, pair.valueB]
+    : [pair.valueB, pair.valueA];
+  return `${first}::${second}`;
+}
+
+function buildOrderedCell(stats: PairStats | undefined, left: ValueKey): CircumplexPairCell {
+  if (stats == null) {
+    return createEmptyCell();
+  }
+
+  const wins = left === stats.pair.valueA ? stats.prioritizedA : stats.prioritizedB;
+  const losses = left === stats.pair.valueA ? stats.prioritizedB : stats.prioritizedA;
+  const winRate = computePairwiseWinRate(wins, losses, stats.neutrals);
+  if (winRate === null) return createEmptyCell();
+  return {
+    winRate,
+    trials: wins + losses + stats.neutrals,
+    neutrals: stats.neutrals,
+  };
+}
+
+export async function aggregatePairwiseWinRates(args: {
+  modelIds: string[];
+  signature: string;
+  db?: CircumplexDb;
+}): Promise<Map<string, CircumplexPairMatrix>> {
+  const db = args.db ?? defaultDb;
+  const modelIdSet = new Set(args.modelIds);
+  const scopedRunIdSet = new Set<string>();
+  const output = new Map<string, CircumplexPairMatrix>();
+  const statsByModel = new Map<string, Map<string, PairStats>>();
+
+  for (const modelId of args.modelIds) {
+    output.set(modelId, createEmptyMatrix());
+    statsByModel.set(modelId, new Map<string, PairStats>());
+  }
+
+  if (args.modelIds.length === 0) {
+    return output;
+  }
+
+  / Circumplex needs raw transcripts. Aggregate-tagged runs are rollups that
+  / reference sourceRunIds — they don't have transcripts directly. We need
+  / the PRIMARY runs that actually produced transcripts. We filter out the
+  / aggregate rollups (config.isAggregate === true) to avoid double-counting
+  / their source data, then pick the ones that match the requested signature.
+  const runs = (await db.run.findMany({
+    where: {
+      status: 'COMPLETED',
+      deletedAt: null,
+    },
+    select: {
+      id: true,
+      config: true,
+      status: true,
+      deletedAt: true,
+    },
+  })) as RunRow[];
+
+  const scopedRunIds = runs
+    .filter((run) => {
+      if (run.status !== 'COMPLETED' || run.deletedAt != null) return false;
+      / Skip aggregate-rollup runs — their transcripts (if any) duplicate source runs.
+      const config = run.config as { isAggregate?: boolean } | null;
+      if (config?.isAggregate === true) return false;
+      return runMatchesSignature(run.config, args.signature);
+    })
+    .map((run) => run.id);
+  for (const runId of scopedRunIds) {
+    scopedRunIdSet.add(runId);
+  }
+  if (scopedRunIds.length === 0) {
+    return output;
+  }
+
+  / Query transcripts per-model instead of one big IN clause. Each transcript
+  / row carries a large JSON blob (definitionSnapshot + decisionMetadata), so
+  / fetching 20+ models × thousands of trials in one shot blows past Prisma's
+  / napi-to-rust string buffer limit and crashes. Per-model keeps each query's
+  / result set bounded. Parallelize across models so wall-clock stays under
+  / browser timeout — at ~6-8s per model, 20 serial = ~2 min (timeout),
+  / parallel = ~8-10s (limited by connection pool).
+  const transcriptBatches = await Promise.all(
+    args.modelIds.map(async (modelId) => (await db.transcript.findMany({
+      where: {
+        runId: { in: scopedRunIds },
+        modelId,
+        deletedAt: null,
+      },
+      select: {
+        runId: true,
+        modelId: true,
+        decisionMetadata: true,
+        definitionSnapshot: true,
+        deletedAt: true,
+        scenario: {
+          select: {
+            orientationFlipped: true,
+            deletedAt: true,
+          },
+        },
+      },
+    })) as TranscriptRow[]),
+  );
+
+  for (const transcripts of transcriptBatches) {
+    for (const transcript of transcripts) {
+      if (!scopedRunIdSet.has(transcript.runId)) continue;
+      if (!modelIdSet.has(transcript.modelId)) continue;
+      if (transcript.deletedAt != null || transcript.scenario?.deletedAt != null) continue;
+
+      const pair = extractValuePair(transcript.definitionSnapshot);
+      if (pair == null) continue;
+
+      const resolved = resolveTranscriptDecisionModel({
+        decisionMetadata: transcript.decisionMetadata,
+        definitionSnapshot: transcript.definitionSnapshot,
+        orientationFlipped: transcript.scenario?.orientationFlipped ?? null,
+        pairOverride: pair,
+      });
+
+      if (resolved.canonical.direction === 'unknown') {
+        continue;
+      }
+
+      const statsMap = statsByModel.get(transcript.modelId);
+      if (statsMap == null) continue;
+
+      / Canonicalize the pair orientation so prioritizedA always refers to the
+      / lexicographically-smaller value, regardless of which orientation the
+      / transcript's definitionSnapshot used. Without this, transcripts from
+      / different orientation conventions merge their counts incorrectly.
+      const canonicalPair: DomainAnalysisValuePair = pair.valueA < pair.valueB
+        ? pair
+        : { valueA: pair.valueB, valueB: pair.valueA };
+
+      const key = pairKey(canonicalPair);
+      const stats = statsMap.get(key) ?? {
+        pair: canonicalPair,
+        prioritizedA: 0,
+        prioritizedB: 0,
+        neutrals: 0,
+      };
+
+      if (resolved.canonical.direction === 'neutral') {
+        stats.neutrals += 1;
+      } else if (resolved.canonical.favoredValueKey === canonicalPair.valueA) {
+        stats.prioritizedA += 1;
+      } else if (resolved.canonical.favoredValueKey === canonicalPair.valueB) {
+        stats.prioritizedB += 1;
+      } else {
+        continue;
+      }
+
+      statsMap.set(key, stats);
+    }
+  }
+
+  for (const [modelId, statsMap] of statsByModel.entries()) {
+    const matrix = createEmptyMatrix();
+
+    for (let row = 0; row < SCHWARTZ_CIRCULAR_ORDER.length; row += 1) {
+      const left = SCHWARTZ_CIRCULAR_ORDER[row]!;
+      for (let col = 0; col < SCHWARTZ_CIRCULAR_ORDER.length; col += 1) {
+        const right = SCHWARTZ_CIRCULAR_ORDER[col]!;
+        if (row === col) {
+          matrix[row]![col] = createEmptyCell();
+          continue;
+        }
+        const sortedPair = left < right
+          ? { valueA: left, valueB: right }
+          : { valueA: right, valueB: left };
+        matrix[row]![col] = buildOrderedCell(statsMap.get(pairKey(sortedPair)), left);
+      }
+    }
+
+    output.set(modelId, matrix);
+  }
+
+  return output;
+}
+
+
+Artifact: spec.md
+# Spec: Cell-Weighted Win Rates for Domain Analysis (Shared Aggregation)
+
+## Problem
+
+Domain Analysis currently computes `valueWinRates` (the win rate shown per value per model)
+by pooling all trial observations within each source run, then averaging those pooled run-level
+rates equally. The equal-weight-per-run fix (commit `61992664`) addressed the _between-runs_
+imbalance, but within each run the win rate is still a pooled observation count across ALL 25
+pressure cells (5 own-pressure levels × 5 opponent-pressure levels).
+
+This violates the project's core equal-weight principle:
+
+> **More trials in a cell give you more confidence about what is happening in that cell.
+> Trials do NOT increase a cell's weight when computing the vignette's win rate.
+> Each cell gets equal weight within a vignette.
+> Each vignette gets equal weight within a domain.**
+
+Pressure Sensitivity already implements this correctly — it queries raw transcripts and
+computes per-cell win rates before collapsing to the 5×5 grid. Domain Analysis needs to do
+the same, and both should use a **single shared accumulation component** so the methodology
+is consistent across the system.
+
+## Fix
+
+**Two-part change:**
+
+### Part 1: Extract a shared transcript-cell accumulator
+
+Create `cloud/apps/api/src/services/analysis/transcript-cell-accumulator.ts` — a pure,
+reusable function that takes raw transcripts and returns per-cell win/loss/neutral counts.
+This function encodes the core methodology so both Domain Analysis and Pressure Sensitivity
+(and any future consumer) use identical logic.
+
+### Part 2: Plug Domain Analysis into the shared accumulator
+
+Replace ALL metric computation in the Domain Analysis snapshot builder with transcript-based
+aggregation. This includes `counts`, `pairwiseWins`, `valueWinRates`, and `vignetteCount`.
+Using a single data source eliminates the dual-source inconsistency that would arise if some
+fields came from `analysis_results` and others from transcripts.
+
+The `aggregateAnalysisRows` function (which reads from `analysis_results`) is removed from
+`buildSnapshotOutput`. The `analysis_results` table is no longer queried when building
+the snapshot output (only when computing the input hash fingerprint, which is unchanged).
+
+## Guiding Principle (must be preserved at every level of the call stack)
+
+- **Trials → confidence within a cell** (more trials = narrower CI, not higher weight)
+- **Cells → equal weight within a vignette**
+- **Vignettes → equal weight within a domain**
+
+Every new function introduced must respect these three rules. Do not pool raw counts across
+cells anywhere in the new code.
+
+## Architecture: the shared accumulator
+
+**File:** `cloud/apps/api/src/services/analysis/transcript-cell-accumulator.ts`
+
+```typescript
+export type CellKey = {
+  definitionId: string;
+  modelId: string;
+  valueKey: string;         / the value that "wins"'

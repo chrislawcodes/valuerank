@@ -1,0 +1,141 @@
+Reading additional input from stdin...
+OpenAI Codex v0.128.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/quirky-fermi-47d94b
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019de72a-0698-7952-a0b9-c2db7735ff6e
+--------
+user
+Review this plan artifact using a implementation-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: plan.md
+# Plan: Cell-Weighted Win Rates for Domain Analysis
+
+Slug: `cell-weighted-domain-analysis`
+Spec: `spec.md`
+
+## Architecture Decisions
+
+### A1: All metrics from one source — transcripts
+
+`counts`, `pairwiseWins`, `valueWinRates`, and `vignetteCount` all derived from raw transcripts.
+`aggregateAnalysisRows` and the `analysis_results` output query are removed from `buildSnapshotOutput`.
+The fingerprint query (for cache invalidation) still reads `analysis_results` — unchanged.
+
+### A2: Shared accumulator is pure
+
+`transcript-cell-accumulator.ts` has zero database access. Takes arrays/maps, returns a flat
+cell map. Trivially testable.
+
+### A3: Three-level collapse: cell → vignette → domain
+
+1. Cell rate = `computePairwiseWinRate(wins, losses, neutrals)` — neutrals always in denominator
+2. Vignette rate = equal-weight mean of non-null cell rates for (definitionId, modelId, valueKey)
+3. Domain rate = equal-weight mean of non-null vignette rates for (modelId, valueKey)
+
+Zero-trial cells excluded. Vignettes with no valid cells excluded. No pooling across cells.
+
+### A4: Per-model paginated transcript query
+
+Follow `circumplex/aggregation.ts` lines 140–161: `Promise.all` over per-model queries.
+
+### A5: Code version 1.7.0
+
+Bumped from `1.6.0`. Old snapshots superseded lazily on next request.
+
+---
+
+## Wave Breakdown
+
+### Wave 1: Shared accumulator
+
+**Create:** `cloud/apps/api/src/services/analysis/transcript-cell-accumulator.ts`
+
+Exports `accumulateTranscriptCells(params)` → `Map<string, CellCounts>`.
+Reuses helpers from `pressure-sensitivity/value-pair.ts`, `domain/decision-model.ts`, and
+`domain-analysis-values.ts`. Parses dimensions from `transcript.definitionSnapshot`.
+
+**Tests:** `cloud/apps/api/tests/services/analysis/transcript-cell-accumulator.test.ts`
+- Happy path, neutrals in denominator, unknown direction excluded, missing/deleted scenario excluded,
+  missing dimension excluded, runId not in map excluded.
+
+[CHECKPOINT]
+
+### Wave 2: Domain win rate collapse
+
+**Create:** `cloud/apps/api/src/services/analysis/domain-analysis-cell-win-rates.ts`
+
+Exports `computeCellWeightedDomainRates(params)` → `valueWinRates`, `vignetteCount`, `counts`,
+`pairwiseWins` per modelId.
+
+**Tests:** `cloud/apps/api/tests/services/analysis/domain-analysis-cell-win-rates.test.ts`
+- Equal-weight collapse, zero-trial cell excluded, multiple vignettes averaged equally,
+  raw counts tallied correctly, pairwiseWins accumulated.
+
+[CHECKPOINT]
+
+### Wave 3: Wire into snapshot builder + cleanup
+
+**Modify:** `domain-analysis-snapshot-builder.ts` — replace analysis_results output query +
+`aggregateAnalysisRows` with per-model transcript query + new functions.
+
+**Modify:** `domain-analysis-cache-types.ts` — bump version to `1.7.0`.
+
+**Modify/Delete:** `domain-analysis-snapshot-aggregator.ts` — remove `aggregateAnalysisRows`
+and all supporting code no longer called. Delete file if empty.
+
+[CHECKPOINT]
+
+---
+
+## Residual Risks
+
+### R1: Memory for ALL_DOMAINS scope
+**Mitigation:** per-model paginated queries bound each batch.
+**verification:** query Domain Analysis ALL_DOMAINS via MCP `graphql_query` before merge;
+confirm non-error response and non-null `valueWinRates` for ≥3 models.
+
+### R2: Snapshot coexistence window
+**Mitigation:** version bump forces supersession on first request.
+**verification:** after deploy, one Domain Analysis query → confirm new methodology applied.
+
+### R3: Win rate delta vs previous methodology
+**verification:** query one known domain+model via MCP `graphql_query` BEFORE merge against
+production. After deploy, query same pair. Document delta in PR. Expect < 10% relative change.
+Large deviations → investigate before marking done.
+
+### R4: aggregateAnalysisRows referenced elsewhere
+**verification:** `npm run build --workspace @valuerank/api` passes — catches any dangling imports.
+
+---
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+## Findings
+- **Medium [UNVERIFIED]**: A1 makes the snapshot output transcript-based, but the fingerprint query still reads `analysis_results`. If `analysis_results` is no longer refreshed from the same path, cache invalidation will miss transcript-only changes and serve stale snapshots under the old fingerprint.
+- **Medium [UNVERIFIED]**: A4’s `Promise.all` over per-model paginated transcript queries is still an unbounded fan-out. In `ALL_DOMAINS`, page size limits memory per query, but not the number of concurrent queries, so the change can move the bottleneck from RAM to DB pressure or request concurrency.
+- **Medium [UNVERIFIED]**: The plan does not define whether `counts` and `pairwiseWins` remain raw transcript totals or are recomputed after cell collapse. That creates a real chance of output fields that no longer correspond to the rate denominator users infer from the new methodology.
+
+## Residual Risks
+- Lazy supersession means old `1.6.0` snapshots can remain in use for untouched domains until someone requests them again.
+- The plan does not include a dedupe strategy for paginated transcript reads, so any cursor bug or overlapping page boundary could double-count cells.
+- The test list covers happy paths and basic exclusions, but it does not exercise large `ALL_DOMAINS` fan-out or confirm that the new output shape still satisfies every downstream consumer.
+tokens used
+4,838
