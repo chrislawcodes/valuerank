@@ -173,7 +173,8 @@ export function accumulateTranscriptCells(params: {
 
     const scenarioContent = transcript.scenario.content;
     if (!isRecord(scenarioContent)) continue;
-    const dimensionValues = scenarioContent.dimensionValues;
+    // Production scenarios use snake_case `dimension_values`; test/newer data uses camelCase `dimensionValues`.
+    const dimensionValues = scenarioContent.dimensionValues ?? scenarioContent.dimension_values;
     if (!isRecord(dimensionValues)) continue;
 
     const levels = assignOwnOpponentLevels(
