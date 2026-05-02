@@ -17,7 +17,7 @@ export type DomainAnalysisCacheStatus =
   (typeof DOMAIN_ANALYSIS_CACHE_STATUS)[keyof typeof DOMAIN_ANALYSIS_CACHE_STATUS];
 
 export const DOMAIN_ANALYSIS_SNAPSHOT_TYPE = 'domain_overview';
-export const DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION = '1.7.0';
+export const DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION = '1.7.1';
 export const DOMAIN_ANALYSIS_ASSUMPTION_PREFIX = 'domain-analysis';
 export const DOMAIN_ANALYSIS_NONE_SIGNATURE = '__none__';
 

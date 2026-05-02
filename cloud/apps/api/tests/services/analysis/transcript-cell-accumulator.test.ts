@@ -189,4 +189,44 @@ describe('accumulateTranscriptCells', () => {
 
     expect(cellMap.size).toBe(0);
   });
+
+  it('normalizes lowercase token names in definitionSnapshot to canonical PascalCase', () => {
+    const lowercaseFirst = FIRST_VALUE.toLowerCase();
+    const lowercaseSecond = SECOND_VALUE.toLowerCase();
+    const transcript = buildTranscript({
+      runId: 'run-1',
+      definitionSnapshot: buildDefinitionSnapshot(lowercaseFirst, lowercaseSecond),
+      scenario: {
+        id: 'scenario-1',
+        content: {
+          dimensionValues: {
+            [lowercaseFirst]: 1,
+            [lowercaseSecond]: 2,
+          },
+        },
+        orientationFlipped: false,
+        deletedAt: null,
+      },
+    });
+    const cellMap = accumulateTranscriptCells({
+      transcripts: [transcript],
+      filteredSourceRunDefinitionById: new Map([['run-1', 'def1']]),
+    });
+
+    expect(cellMap.size).toBe(2);
+    expect(cellMap.get(encodeCellKey({
+      definitionId: 'def1',
+      modelId: 'm1',
+      valueKey: FIRST_VALUE,
+      ownLevel: 1,
+      opponentLevel: 2,
+    }))).toEqual({ wins: 1, losses: 0, neutrals: 0 });
+    expect(cellMap.get(encodeCellKey({
+      definitionId: 'def1',
+      modelId: 'm1',
+      valueKey: SECOND_VALUE,
+      ownLevel: 2,
+      opponentLevel: 1,
+    }))).toEqual({ wins: 0, losses: 1, neutrals: 0 });
+  });
 });
