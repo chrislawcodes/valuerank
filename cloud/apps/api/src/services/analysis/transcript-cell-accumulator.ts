@@ -82,6 +82,12 @@ function isDomainAnalysisValueKey(value: string): value is DomainAnalysisValueKe
   return (DOMAIN_ANALYSIS_VALUE_KEYS as readonly string[]).includes(value);
 }
 
+function normalizeToDomainAnalysisValueKey(rawToken: string): DomainAnalysisValueKey | null {
+  const lower = rawToken.trim().toLowerCase();
+  const match = (DOMAIN_ANALYSIS_VALUE_KEYS as readonly string[]).find((key) => key.toLowerCase() === lower);
+  return match !== undefined ? (match as DomainAnalysisValueKey) : null;
+}
+
 function getStringToken(value: unknown): string | null {
   return typeof value === 'string' && value.trim() !== '' ? value.trim() : null;
 }
@@ -92,14 +98,17 @@ function getSnapshotValuePair(definitionSnapshot: unknown): [string, string] | n
   if (!isRecord(components)) return null;
   const valueFirstComponent = components.value_first;
   const valueSecondComponent = components.value_second;
-  const valueFirstToken = getStringToken(isRecord(valueFirstComponent) ? valueFirstComponent.token : undefined);
-  const valueSecondToken = getStringToken(isRecord(valueSecondComponent) ? valueSecondComponent.token : undefined);
+  const valueFirstRaw = getStringToken(isRecord(valueFirstComponent) ? valueFirstComponent.token : undefined);
+  const valueSecondRaw = getStringToken(isRecord(valueSecondComponent) ? valueSecondComponent.token : undefined);
+  if (valueFirstRaw === null || valueSecondRaw === null) return null;
+  const valueFirstToken = normalizeToDomainAnalysisValueKey(valueFirstRaw);
+  const valueSecondToken = normalizeToDomainAnalysisValueKey(valueSecondRaw);
   if (valueFirstToken === null || valueSecondToken === null) return null;
   return canonicalOwnOpponent(valueFirstToken, valueSecondToken);
 }
 
 function isDimensionMatch(dimension: unknown, token: string): dimension is DefinitionDimension {
-  return isRecord(dimension) && typeof dimension.name === 'string' && dimension.name.trim() === token;
+  return isRecord(dimension) && typeof dimension.name === 'string' && dimension.name.trim().toLowerCase() === token.toLowerCase();
 }
 
 function getDefinitionDimensions(definitionSnapshot: unknown, firstValueToken: string, secondValueToken: string): {

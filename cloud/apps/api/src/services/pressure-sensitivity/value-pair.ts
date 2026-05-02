@@ -94,15 +94,17 @@ export function assignOwnOpponentLevels(
   const opponentTrimmed = secondValueToken.trim();
 
   const ownDim = definitionDimensions.find(
-    (d) => typeof d.name === 'string' && d.name.trim() === ownTrimmed,
+    (d) => typeof d.name === 'string' && d.name.trim().toLowerCase() === ownTrimmed.toLowerCase(),
   );
   const opponentDim = definitionDimensions.find(
-    (d) => typeof d.name === 'string' && d.name.trim() === opponentTrimmed,
+    (d) => typeof d.name === 'string' && d.name.trim().toLowerCase() === opponentTrimmed.toLowerCase(),
   );
   if (!ownDim || !opponentDim) return null;
 
-  const ownRaw = scenarioDimensionValues[ownTrimmed];
-  const opponentRaw = scenarioDimensionValues[opponentTrimmed];
+  const ownStoredName = (ownDim.name as string).trim();
+  const opponentStoredName = (opponentDim.name as string).trim();
+  const ownRaw = scenarioDimensionValues[ownStoredName];
+  const opponentRaw = scenarioDimensionValues[opponentStoredName];
   if (ownRaw === undefined || opponentRaw === undefined) return null;
 
   const ownLevel = ownLookup(ownRaw);
