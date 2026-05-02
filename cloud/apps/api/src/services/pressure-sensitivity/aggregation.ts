@@ -8,6 +8,7 @@
  */
 
 import type { AssignedOutcome } from './value-pair.js';
+import { computePairwiseWinRate } from '../../utils/pairwise-math.js';
 
 export type DecisionStrength = 'strong' | 'lean' | null;
 
@@ -178,8 +179,8 @@ export function buildCellMetrics(observations: ReadonlyArray<Observation>): Cell
     };
   }
 
-  const winRate = ownPicked / n;
-  const opponentWinRate = opponentPicked / n;
+  const winRate = computePairwiseWinRate(ownPicked, opponentPicked, neutral);
+  const opponentWinRate = computePairwiseWinRate(opponentPicked, ownPicked, neutral);
   const ownPicksWithStrength = ownStrong + ownLean;
   const conviction =
     ownPicksWithStrength === 0 ? null : (2 * ownStrong + ownLean) / ownPicksWithStrength;
