@@ -26,12 +26,37 @@
     "unresolved": []
   },
   "delivery": {
-    "branch": "claude/adoring-wilbur",
-    "head_sha": "c9a355b7f07d3fe0c4906ecb99563e111072b2ff",
-    "updated_at": 1775786247,
-    "upstream": "origin/main",
-    "pr_url": "https://github.com/chrislawcodes/valuerank/pull/581",
-    "checks_summary": "not-started"
+    "pr_url": "",
+    "pr_number": null,
+    "merge_sha": "",
+    "closed_at": "2026-05-02T07:23:25+00:00",
+    "operator_note": "",
+    "review_coverage_summary": {
+      "spec_lenses_run": [
+        "codex:feasibility-adversarial",
+        "gemini:edge-cases-adversarial",
+        "gemini:requirements-adversarial"
+      ],
+      "spec_lenses_skipped": [],
+      "plan_lenses_run": [
+        "codex:implementation-adversarial",
+        "gemini:architecture-adversarial",
+        "gemini:testability-adversarial"
+      ],
+      "plan_lenses_skipped": [],
+      "tasks_lenses_run": [
+        "codex:execution-adversarial",
+        "gemini:coverage-adversarial",
+        "gemini:dependency-order-adversarial"
+      ],
+      "tasks_lenses_skipped": [],
+      "diff_lenses_run": [
+        "codex:correctness-adversarial",
+        "gemini:quality-adversarial",
+        "gemini:regression-adversarial"
+      ],
+      "diff_lenses_skipped": []
+    }
   },
   "checkpoint_progress": {
     "index": 0,
@@ -39,5 +64,17 @@
     "last_diff_head_sha": ""
   },
   "checkpoint_fallback": {},
-  "dirty_overrides": {}
+  "dirty_overrides": {},
+  "parallel_analysis": {
+    "reviewed": false,
+    "found": false,
+    "note": "",
+    "updated_at": 0
+  },
+  "init_head_sha": "",
+  "token_usage": [],
+  "command_telemetry": [],
+  "stages": {},
+  "invariant_warnings": [],
+  "schema_version": 1
 }

@@ -3,6 +3,7 @@ import { SCHWARTZ_CIRCULAR_ORDER, type ValueKey } from '@valuerank/shared/schwar
 import { extractValuePair, type DomainAnalysisValuePair } from '../../graphql/queries/domain-analysis-values.js';
 import { runMatchesSignature } from '../../graphql/queries/domain-coverage-gql-types.js';
 import { resolveTranscriptDecisionModel } from '../../graphql/queries/domain/decision-model.js';
+import { computePairwiseWinRate } from '../../utils/pairwise-math.js';
 
 export type CircumplexPairCell = {
   winRate: number | null;
@@ -64,15 +65,13 @@ function buildOrderedCell(stats: PairStats | undefined, left: ValueKey): Circump
     return createEmptyCell();
   }
 
-  const total = stats.prioritizedA + stats.prioritizedB + stats.neutrals;
-  if (total <= 0) {
-    return createEmptyCell();
-  }
-
-  const winCount = left === stats.pair.valueA ? stats.prioritizedA : stats.prioritizedB;
+  const wins = left === stats.pair.valueA ? stats.prioritizedA : stats.prioritizedB;
+  const losses = left === stats.pair.valueA ? stats.prioritizedB : stats.prioritizedA;
+  const winRate = computePairwiseWinRate(wins, losses, stats.neutrals);
+  if (winRate === null) return createEmptyCell();
   return {
-    winRate: winCount / total,
-    trials: total,
+    winRate,
+    trials: wins + losses + stats.neutrals,
     neutrals: stats.neutrals,
   };
 }

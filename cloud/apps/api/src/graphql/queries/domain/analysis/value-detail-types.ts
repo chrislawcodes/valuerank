@@ -1,5 +1,6 @@
 import type { DomainAnalysisConditionDetail, DomainAnalysisVignetteDetail } from '../shared.js';
 import type { DomainAnalysisValueKey } from '../../domain-analysis-values.js';
+import { computePairwiseWinRate } from '../../../../utils/pairwise-math.js';
 
 export type MutableCondition = {
   scenarioId: string | null;
@@ -30,8 +31,6 @@ export type MutableVignette = {
 };
 
 export function mapCondition(condition: MutableCondition): DomainAnalysisConditionDetail {
-  const comparisonDenominator =
-    condition.prioritized + condition.deprioritized + condition.neutral;
   return {
     scenarioId: condition.scenarioId,
     conditionName: condition.conditionName,
@@ -40,7 +39,7 @@ export function mapCondition(condition: MutableCondition): DomainAnalysisConditi
     deprioritized: condition.deprioritized,
     neutral: condition.neutral,
     totalTrials: condition.totalTrials,
-    selectedValueWinRate: comparisonDenominator === 0 ? null : condition.prioritized / comparisonDenominator,
+    selectedValueWinRate: computePairwiseWinRate(condition.prioritized, condition.deprioritized, condition.neutral),
     strongly: condition.strongly,
     somewhat: condition.somewhat,
     opponentSomewhat: condition.opponentSomewhat,
@@ -53,8 +52,6 @@ export function mapVignette(vignette: MutableVignette): DomainAnalysisVignetteDe
   const conditions: DomainAnalysisConditionDetail[] = Array.from(vignette.conditions.values())
     .sort((left, right) => left.conditionName.localeCompare(right.conditionName))
     .map(mapCondition);
-  const comparisonDenominator =
-    vignette.prioritized + vignette.deprioritized + vignette.neutral;
   return {
     definitionId: vignette.definitionId,
     definitionName: vignette.definitionName,
@@ -65,7 +62,7 @@ export function mapVignette(vignette: MutableVignette): DomainAnalysisVignetteDe
     deprioritized: vignette.deprioritized,
     neutral: vignette.neutral,
     totalTrials: vignette.totalTrials,
-    selectedValueWinRate: comparisonDenominator === 0 ? null : vignette.prioritized / comparisonDenominator,
+    selectedValueWinRate: computePairwiseWinRate(vignette.prioritized, vignette.deprioritized, vignette.neutral),
     conditions,
   };
 }

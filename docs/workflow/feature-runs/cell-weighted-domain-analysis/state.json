@@ -1,0 +1,400 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": false,
+    "complete": true,
+    "question_count": 0,
+    "asked_count": 0,
+    "questions": [],
+    "assumptions": [],
+    "summary": "",
+    "updated_at": 1777698711,
+    "answers": {},
+    "non_goals": [],
+    "acceptance_criteria": [],
+    "unresolved": []
+  },
+  "delivery": {
+    "pr_url": "",
+    "pr_number": null,
+    "merge_sha": "",
+    "closed_at": "2026-05-02T07:23:25+00:00",
+    "operator_note": "",
+    "review_coverage_summary": {
+      "spec_lenses_run": [
+        "codex:feasibility-adversarial",
+        "gemini:requirements-adversarial"
+      ],
+      "spec_lenses_skipped": [],
+      "plan_lenses_run": [
+        "codex:implementation-adversarial",
+        "gemini:testability-adversarial"
+      ],
+      "plan_lenses_skipped": [],
+      "tasks_lenses_run": [],
+      "tasks_lenses_skipped": [],
+      "diff_lenses_run": [],
+      "diff_lenses_skipped": []
+    }
+  },
+  "dirty_overrides": {},
+  "checkpoint_fallback": {},
+  "parallel_analysis": {
+    "reviewed": false,
+    "found": false,
+    "note": "",
+    "updated_at": 0
+  },
+  "init_head_sha": "",
+  "token_usage": [
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "lens": "feasibility-adversarial",
+      "prompt_chars": 51160,
+      "prompt_cap": 250000,
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-05-02T05:17:32.083601Z",
+      "started_at": "2026-05-02T05:15:32.070992Z",
+      "ended_at": "2026-05-02T05:17:32.083601Z",
+      "duration_seconds": 120.011662,
+      "agent_id": null,
+      "artifact_sha_at_time": "6ccfc79661dbd6a3f8d6d7b2dfd87932d5ca2356fedc56d7b50fb03e316ffaa3",
+      "parse_error": "no Codex token block found in stderr"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "lens": "requirements-adversarial",
+      "prompt_chars": 51045,
+      "prompt_cap": 250000,
+      "input_tokens": 25644,
+      "output_tokens": 814,
+      "cost_usd_estimate": 0.036125,
+      "timestamp": "2026-05-02T05:18:30.099762Z",
+      "started_at": "2026-05-02T05:17:32.286047Z",
+      "ended_at": "2026-05-02T05:18:30.099762Z",
+      "duration_seconds": 57.813231,
+      "agent_id": null,
+      "artifact_sha_at_time": "6ccfc79661dbd6a3f8d6d7b2dfd87932d5ca2356fedc56d7b50fb03e316ffaa3"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "lens": "feasibility-adversarial",
+      "prompt_chars": 52461,
+      "prompt_cap": 250000,
+      "input_tokens": 33336,
+      "output_tokens": 0,
+      "cost_usd_estimate": 0.033336,
+      "timestamp": "2026-05-02T05:23:31.264709Z",
+      "started_at": "2026-05-02T05:22:06.723461Z",
+      "ended_at": "2026-05-02T05:23:31.264709Z",
+      "duration_seconds": 84.540584,
+      "agent_id": null,
+      "artifact_sha_at_time": "2a1b790484effd59dba4588e04e1954991e413d2acdf3cddd0a4b276e8e3aee3"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "lens": "requirements-adversarial",
+      "prompt_chars": 52346,
+      "prompt_cap": 250000,
+      "input_tokens": 25947,
+      "output_tokens": 1381,
+      "cost_usd_estimate": 0.03933875,
+      "timestamp": "2026-05-02T05:24:28.751183Z",
+      "started_at": "2026-05-02T05:23:31.486142Z",
+      "ended_at": "2026-05-02T05:24:28.751183Z",
+      "duration_seconds": 57.264127,
+      "agent_id": null,
+      "artifact_sha_at_time": "2a1b790484effd59dba4588e04e1954991e413d2acdf3cddd0a4b276e8e3aee3"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "lens": "implementation-adversarial",
+      "prompt_chars": 709,
+      "prompt_cap": 200000,
+      "input_tokens": 18005,
+      "output_tokens": 0,
+      "cost_usd_estimate": 0.018005,
+      "timestamp": "2026-05-02T05:25:29.500592Z",
+      "started_at": "2026-05-02T05:24:29.474099Z",
+      "ended_at": "2026-05-02T05:25:29.500592Z",
+      "duration_seconds": 60.025032,
+      "agent_id": null,
+      "artifact_sha_at_time": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "lens": "testability-adversarial",
+      "prompt_chars": 590,
+      "prompt_cap": 200000,
+      "input_tokens": 47998,
+      "output_tokens": 1418,
+      "cost_usd_estimate": 0.0670875,
+      "timestamp": "2026-05-02T05:26:27.091167Z",
+      "started_at": "2026-05-02T05:25:29.701747Z",
+      "ended_at": "2026-05-02T05:26:27.091167Z",
+      "duration_seconds": 57.388898,
+      "agent_id": null,
+      "artifact_sha_at_time": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "stage": "plan",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "lens": "implementation-adversarial",
+      "prompt_chars": 4548,
+      "prompt_cap": 250000,
+      "input_tokens": 4838,
+      "output_tokens": 0,
+      "cost_usd_estimate": 0.004838,
+      "timestamp": "2026-05-02T05:30:08.071042Z",
+      "started_at": "2026-05-02T05:29:43.522355Z",
+      "ended_at": "2026-05-02T05:30:08.071042Z",
+      "duration_seconds": 24.548426,
+      "agent_id": null,
+      "artifact_sha_at_time": "157f63f0806854f2db82d7de0733d6b0e74308f5e1af09127cb5be642507864e"
+    },
+    {
+      "stage": "plan",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "lens": "testability-adversarial",
+      "prompt_chars": 4429,
+      "prompt_cap": 250000,
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-05-02T05:30:30.693781Z",
+      "started_at": "2026-05-02T05:30:08.248852Z",
+      "ended_at": "2026-05-02T05:30:30.693781Z",
+      "duration_seconds": 22.444672,
+      "agent_id": null,
+      "artifact_sha_at_time": "157f63f0806854f2db82d7de0733d6b0e74308f5e1af09127cb5be642507864e",
+      "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "plan",
+      "round": 2,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "lens": "testability-adversarial",
+      "prompt_chars": 4429,
+      "prompt_cap": 250000,
+      "input_tokens": 13054,
+      "output_tokens": 842,
+      "cost_usd_estimate": 0.0205275,
+      "timestamp": "2026-05-02T05:31:29.893016Z",
+      "started_at": "2026-05-02T05:30:30.695677Z",
+      "ended_at": "2026-05-02T05:31:29.893016Z",
+      "duration_seconds": 59.196927,
+      "agent_id": null,
+      "artifact_sha_at_time": "157f63f0806854f2db82d7de0733d6b0e74308f5e1af09127cb5be642507864e"
+    }
+  ],
+  "command_telemetry": [
+    {
+      "command": "checkpoint",
+      "stage": "spec",
+      "ts": "2026-05-02T05:18:30Z",
+      "wall_seconds": 178.357,
+      "input_bytes_read": 17137,
+      "output_bytes_written": 7021,
+      "files_read": 7,
+      "files_written": 5,
+      "subprocess_invocations": 4,
+      "ttl_crossed": false
+    },
+    {
+      "command": "reconcile",
+      "stage": null,
+      "ts": "2026-05-02T05:21:42Z",
+      "wall_seconds": 0.072,
+      "input_bytes_read": 0,
+      "output_bytes_written": 0,
+      "files_read": 0,
+      "files_written": 0,
+      "subprocess_invocations": 6,
+      "ttl_crossed": false
+    },
+    {
+      "command": "reconcile",
+      "stage": null,
+      "ts": "2026-05-02T05:21:46Z",
+      "wall_seconds": 0.366,
+      "input_bytes_read": 15126,
+      "output_bytes_written": 0,
+      "files_read": 4,
+      "files_written": 0,
+      "subprocess_invocations": 20,
+      "ttl_crossed": false
+    },
+    {
+      "command": "reconcile",
+      "stage": null,
+      "ts": "2026-05-02T05:21:53Z",
+      "wall_seconds": 0.315,
+      "input_bytes_read": 15610,
+      "output_bytes_written": 0,
+      "files_read": 4,
+      "files_written": 0,
+      "subprocess_invocations": 20,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "spec",
+      "ts": "2026-05-02T05:24:29Z",
+      "wall_seconds": 142.668,
+      "input_bytes_read": 64645,
+      "output_bytes_written": 18098,
+      "files_read": 14,
+      "files_written": 5,
+      "subprocess_invocations": 18,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "plan",
+      "ts": "2026-05-02T05:26:27Z",
+      "wall_seconds": 118.468,
+      "input_bytes_read": 74610,
+      "output_bytes_written": 24884,
+      "files_read": 16,
+      "files_written": 5,
+      "subprocess_invocations": 28,
+      "ttl_crossed": false
+    },
+    {
+      "command": "reconcile",
+      "stage": null,
+      "ts": "2026-05-02T05:29:24Z",
+      "wall_seconds": 0.457,
+      "input_bytes_read": 24614,
+      "output_bytes_written": 0,
+      "files_read": 5,
+      "files_written": 0,
+      "subprocess_invocations": 26,
+      "ttl_crossed": false
+    },
+    {
+      "command": "reconcile",
+      "stage": null,
+      "ts": "2026-05-02T05:29:25Z",
+      "wall_seconds": 0.443,
+      "input_bytes_read": 25254,
+      "output_bytes_written": 0,
+      "files_read": 5,
+      "files_written": 0,
+      "subprocess_invocations": 26,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "plan",
+      "ts": "2026-05-02T05:31:30Z",
+      "wall_seconds": 106.95,
+      "input_bytes_read": 76731,
+      "output_bytes_written": 35108,
+      "files_read": 11,
+      "files_written": 5,
+      "subprocess_invocations": 18,
+      "ttl_crossed": false
+    },
+    {
+      "command": "reconcile",
+      "stage": null,
+      "ts": "2026-05-02T05:32:08Z",
+      "wall_seconds": 0.473,
+      "input_bytes_read": 28141,
+      "output_bytes_written": 0,
+      "files_read": 5,
+      "files_written": 0,
+      "subprocess_invocations": 26,
+      "ttl_crossed": false
+    },
+    {
+      "command": "reconcile",
+      "stage": null,
+      "ts": "2026-05-02T05:32:09Z",
+      "wall_seconds": 0.547,
+      "input_bytes_read": 28601,
+      "output_bytes_written": 0,
+      "files_read": 5,
+      "files_written": 0,
+      "subprocess_invocations": 26,
+      "ttl_crossed": false
+    }
+  ],
+  "stages": {
+    "spec": {
+      "adversarial_rounds": 1,
+      "annotations": [],
+      "adversarial_sha_history": [
+        "6ccfc79661dbd6a3f8d6d7b2dfd87932d5ca2356fedc56d7b50fb03e316ffaa3",
+        "2a1b790484effd59dba4588e04e1954991e413d2acdf3cddd0a4b276e8e3aee3"
+      ],
+      "initial_sha": "6ccfc79661dbd6a3f8d6d7b2dfd87932d5ca2356fedc56d7b50fb03e316ffaa3"
+    },
+    "plan": {
+      "adversarial_rounds": 2,
+      "annotations": [],
+      "adversarial_sha_history": [
+        "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+        "157f63f0806854f2db82d7de0733d6b0e74308f5e1af09127cb5be642507864e"
+      ],
+      "initial_sha": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    "tasks": {
+      "judge_next_action": "advance"
+    }
+  },
+  "invariant_warnings": [],
+  "schema_version": 2,
+  "spec_adversarial_rounds": 1,
+  "last_action_result": {
+    "next": "author_tasks",
+    "reason": "plan checkpoint completed",
+    "blockers": []
+  },
+  "plan_adversarial_rounds": 2,
+  "annotations": [
+    {
+      "stage": "tasks",
+      "ts": "20260502T053320_945658Z",
+      "reason": "tasks.md authored with wave breakdown, CHECKPOINT markers, review findings incorporated",
+      "head_sha": "b0cabb57fda701370894594aa2d7a68338016bf9"
+    }
+  ]
+}

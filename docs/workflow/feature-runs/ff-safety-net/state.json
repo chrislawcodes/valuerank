@@ -49,13 +49,37 @@
     "unresolved": []
   },
   "delivery": {
-    "pr_url": "https://github.com/chrislawcodes/valuerank/pull/749",
-    "pr_number": 749,
-    "pr_state": "open",
-    "pr_is_draft": true,
-    "checks_summary": "pass",
-    "head_sha": "671bdc14",
-    "recorded_at": 1777064813
+    "pr_url": "",
+    "pr_number": null,
+    "merge_sha": "",
+    "closed_at": "2026-05-02T07:23:34+00:00",
+    "operator_note": "",
+    "review_coverage_summary": {
+      "spec_lenses_run": [
+        "codex:edge-cases-adversarial",
+        "codex:feasibility-adversarial",
+        "gemini:requirements-adversarial"
+      ],
+      "spec_lenses_skipped": [],
+      "plan_lenses_run": [
+        "codex:architecture-adversarial",
+        "codex:implementation-adversarial",
+        "gemini:testability-adversarial"
+      ],
+      "plan_lenses_skipped": [],
+      "tasks_lenses_run": [
+        "codex:dependency-order-adversarial",
+        "codex:execution-adversarial",
+        "gemini:coverage-adversarial"
+      ],
+      "tasks_lenses_skipped": [],
+      "diff_lenses_run": [
+        "codex:correctness-adversarial",
+        "codex:regression-adversarial",
+        "gemini:quality-adversarial"
+      ],
+      "diff_lenses_skipped": []
+    }
   },
   "checkpoint_fallback": {},
   "parallel_analysis": {
@@ -980,5 +1004,6 @@
   "plan_adversarial_rounds": 2,
   "tasks_adversarial_rounds": 2,
   "diff_adversarial_rounds": 1,
-  "dirty_overrides": {}
+  "dirty_overrides": {},
+  "command_telemetry": []
 }

@@ -48,7 +48,30 @@
     "acceptance_criteria": [],
     "unresolved": []
   },
-  "delivery": {},
+  "delivery": {
+    "pr_url": "",
+    "pr_number": null,
+    "merge_sha": "",
+    "closed_at": "2026-05-02T07:23:32+00:00",
+    "operator_note": "",
+    "review_coverage_summary": {
+      "spec_lenses_run": [
+        "codex:edge-cases-adversarial",
+        "codex:feasibility-adversarial",
+        "gemini:requirements-adversarial"
+      ],
+      "spec_lenses_skipped": [],
+      "plan_lenses_run": [],
+      "plan_lenses_skipped": [
+        "codex:implementation-adversarial",
+        "gemini:testability-adversarial"
+      ],
+      "tasks_lenses_run": [],
+      "tasks_lenses_skipped": [],
+      "diff_lenses_run": [],
+      "diff_lenses_skipped": []
+    }
+  },
   "dirty_overrides": {},
   "parallel_analysis": {
     "reviewed": false,
@@ -7478,5 +7501,6 @@
       "parse_error": "no Codex token block found in stderr"
     }
   ],
-  "invariant_warnings": []
+  "invariant_warnings": [],
+  "command_telemetry": []
 }

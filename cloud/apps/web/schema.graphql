@@ -3233,6 +3233,8 @@ type SensitivityCell {
   n: Int!
   netScore: Float
   opponentLevel: Int!
+  opponentSuccesses: Int!
+  opponentWinRate: Float
   ownLevel: Int!
   successes: Int!
   unscoredCount: Int!

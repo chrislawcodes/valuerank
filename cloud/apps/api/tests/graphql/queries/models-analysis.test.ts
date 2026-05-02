@@ -48,13 +48,13 @@ describe('selectModelsAnalysisSnapshots', () => {
 });
 
 describe('models-analysis math', () => {
-  it('weights pooled win rate by vignette count instead of treating each domain equally', () => {
+  it('treats each domain equally regardless of vignette count', () => {
     const pooled = computePooledWinRate([
       { winRate: 40, evidenceWeight: 1 },
       { winRate: 80, evidenceWeight: 3 },
     ]);
 
-    expect(pooled).toBe(70);
+    expect(pooled).toBe(60);
   });
 
   it('returns null when no eligible vignette-weighted contributions are available', () => {

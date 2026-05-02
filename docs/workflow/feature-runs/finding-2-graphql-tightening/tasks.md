@@ -12,7 +12,7 @@
 
 ## Slice 0: Regenerate `schema.graphql` from the Pothos backend
 
-- [ ] **T0.1 [CHECKPOINT]** Check if `cloud/apps/api/src/scripts/emit-schema.ts` (or similar) exists. If yes, use it. If no, add one: print the Pothos schema's SDL to stdout, invocable as `npm run emit-schema --workspace @valuerank/api > ../web/schema.graphql`.
+- [x] **T0.1 [CHECKPOINT]** Check if `cloud/apps/api/src/scripts/emit-schema.ts` (or similar) exists. If yes, use it. If no, add one: print the Pothos schema's SDL to stdout, invocable as `npm run emit-schema --workspace @valuerank/api > ../web/schema.graphql`.
 - [ ] **T0.2** Run the emitter to regenerate `cloud/apps/web/schema.graphql`.
 - [ ] **T0.3** Verify fields appear in the regenerated snapshot:
   - `grep "backfillDomainEvaluationModels" cloud/apps/web/schema.graphql` (expect match)
@@ -28,7 +28,7 @@
 
 ## Slice 1: Core queries — Domains, DomainEvaluations, DomainEvaluation
 
-- [ ] **T1.1 [CHECKPOINT] [P: cloud/apps/web/src/api/operations/domains.graphql]** Edit the `Domains` query in `domains.graphql`: add `defaultModelIds`, `sentencePrefix`, `labelPrefix` to the `domains` selection.
+- [x] **T1.1 [CHECKPOINT] [P: cloud/apps/web/src/api/operations/domains.graphql]** Edit the `Domains` query in `domains.graphql`: add `defaultModelIds`, `sentencePrefix`, `labelPrefix` to the `domains` selection.
 - [ ] **T1.2 [P: cloud/apps/web/src/api/operations/domains.graphql]** Edit the `DomainEvaluations` query: add `launchableDefinitionIds`, `samplePercentage`, `samplesPerScenario`, `targetBatchCount`, `memberCount`, plus nested `members { modelIds, …existing fields }`.
 - [ ] **T1.3 [P: cloud/apps/web/src/api/operations/domains.graphql]** Edit the `DomainEvaluation` query: add `launchableDefinitions { definitionId, definitionName, pairKey }` plus all fields T1.2 added.
 - [ ] **T1.4** Run `npm run codegen --workspace @valuerank/web`. Verify `DomainsQuery`, `DomainEvaluationsQuery`, `DomainEvaluationQuery` generated types include the new fields.
@@ -41,7 +41,7 @@
 
 ## Slice 2: Remaining queries — DomainSettings, DomainTrialRunsStatus, EstimateDomainEvaluationCost
 
-- [ ] **T2.1 [CHECKPOINT] [P: cloud/apps/web/src/api/operations/domains.graphql]** Edit the `DomainSettings` query: add `domain { defaultModelIds, sentencePrefix, labelPrefix }` as a sub-selection (NOT on `DomainSettings` directly — the fields live on `Domain`).
+- [x] **T2.1 [CHECKPOINT] [P: cloud/apps/web/src/api/operations/domains.graphql]** Edit the `DomainSettings` query: add `domain { defaultModelIds, sentencePrefix, labelPrefix }` as a sub-selection (NOT on `DomainSettings` directly — the fields live on `Domain`).
 - [ ] **T2.2 [P: cloud/apps/web/src/api/operations/domains.graphql]** Edit the `DomainTrialRunsStatus` query: select every field that `DomainTrialRunsStatusQueryResult.RowView` reads (analysisStatus, runId, …). Confirm generated type matches consumer shape.
 - [ ] **T2.3 [P: cloud/apps/web/src/api/operations/domains.graphql]** Edit the `EstimateDomainEvaluationCost` query: select all fields listed in the current hand-typed `DomainEvaluationCostEstimate`. Note: `estimateConfidence` remains a `String`; narrowing to `'HIGH' | 'MEDIUM' | 'LOW'` happens in `narrowings.ts` (Slice 3).
 - [ ] **T2.4** Regen codegen. Delete hand-typed `DomainSettings`, `ValueStatementWithVersions`, `DomainTrialRunsStatusQueryResult`, `DomainEvaluationCostEstimateModel`, `DomainEvaluationCostEstimateDefinition`, `DomainEvaluationCostEstimate`, `DomainSettingsQueryResult`, `EstimateDomainEvaluationCostQueryResult` from `domains.ts`.
@@ -53,7 +53,7 @@
 
 ## Slice 3: Wire orphan mutation + narrowings helper
 
-- [ ] **T3.1 [CHECKPOINT] [P: cloud/apps/web/src/api/operations/domains.graphql]** Move the `BACKFILL_DOMAIN_EVALUATION_MODELS_MUTATION` gql content from `domains.ts` into `domains.graphql` as a proper GraphQL document.
+- [x] **T3.1 [CHECKPOINT] [P: cloud/apps/web/src/api/operations/domains.graphql]** Move the `BACKFILL_DOMAIN_EVALUATION_MODELS_MUTATION` gql content from `domains.ts` into `domains.graphql` as a proper GraphQL document.
 - [ ] **T3.2** Regen codegen. Verify `BackfillDomainEvaluationModelsDocument`, `BackfillDomainEvaluationModelsMutation`, `BackfillDomainEvaluationModelsMutationVariables` appear in `generated/graphql.ts`.
 - [ ] **T3.3 [P: cloud/apps/web/src/api/operations/domains.ts]** Replace the hand-written `gql\`...\`` block in `domains.ts` with a re-export: `export { BackfillDomainEvaluationModelsDocument as BACKFILL_DOMAIN_EVALUATION_MODELS_MUTATION } from '../../generated/graphql'`.
 - [ ] **T3.4 [P: cloud/apps/web/src/api/operations/narrowings.ts]** Create `narrowings.ts` with: (a) `narrowEstimateConfidence(value: string): 'HIGH' | 'MEDIUM' | 'LOW' | null`, (b) `narrowAnalysisStatus(value: string | null | undefined): string | null` (round-4 plan review correction — `DomainTrialRunsStatusQueryResult.analysisStatus` was being narrowed from `string|null|undefined` to `string|null` by the hand-type; preserve that narrowing in the helper).
@@ -64,7 +64,7 @@
 
 ## Slice 4: ESLint rule + allowlist
 
-- [ ] **T4.1 [CHECKPOINT]** Create `cloud/apps/web/eslint-rules/no-hand-typed-graphql-shapes.js`. Use `@typescript-eslint/utils` to walk the AST. Pattern detection (round-4 plan review correction: includes single-property wrappers): flag ANY `TSTypeLiteral` (≥ 1 member), flag `TSIntersectionType` with any `TSTypeLiteral` branch. Allow `TSTypeReference`/`TSIndexedAccessType` pointing at generated types. Apply only to `src/api/operations/**/*.ts`. Single-property wrappers like `{ domains: Domain[] }` must flag — they're exactly the pattern we're removing.
+- [x] **T4.1 [CHECKPOINT]** Create `cloud/apps/web/eslint-rules/no-hand-typed-graphql-shapes.js`. Use `@typescript-eslint/utils` to walk the AST. Pattern detection (round-4 plan review correction: includes single-property wrappers): flag ANY `TSTypeLiteral` (≥ 1 member), flag `TSIntersectionType` with any `TSTypeLiteral` branch. Allow `TSTypeReference`/`TSIndexedAccessType` pointing at generated types. Apply only to `src/api/operations/**/*.ts`. Single-property wrappers like `{ domains: Domain[] }` must flag — they're exactly the pattern we're removing.
 - [ ] **T4.2 [P: cloud/apps/web/eslint-rules/no-hand-typed-graphql-shapes.test.js]** Write rule tests covering: object-literal fail, extend-and-reshape fail, generated-alias pass, allowlisted-file pass, orphan-allowlist warn.
 - [ ] **T4.3 [P: cloud/.eslintrc.cjs]** Register the rule in `cloud/.eslintrc.cjs` (the actual web-workspace config) under the `apps/web/**/*.{ts,tsx}` override. Allowlist `domainAnalysis.ts`, `runs.ts`, `narrowings.ts`, `modelsAnalysis.ts`, `scenarios.ts`, `definitions.ts`, `llm.ts` with TODO comments for each.
 - [ ] **T4.4** Verification: `npm run lint --workspace @valuerank/web` passes on the current branch. Add a throwaway `export type Test = { foo: string }` to `domains.ts` → lint fails. Revert → lint passes. Add same line to an allowlisted file (e.g. `runs.ts`) → lint still passes.
@@ -73,7 +73,7 @@
 
 ## Slice 5: PR polish
 
-- [ ] **T5.1 [CHECKPOINT]** Run all grep verification steps from SC-001, SC-002, SC-003 and capture before/after counts for the PR description.
+- [x] **T5.1 [CHECKPOINT]** Run all grep verification steps from SC-001, SC-002, SC-003 and capture before/after counts for the PR description.
 - [ ] **T5.2 [P: new task chip]** Spawn a followup task chip `finding-3-runs-operations-cleanup`: port the same schema-tightening pattern to `runs.ts` and remove from the ESLint allowlist.
 - [ ] **T5.3 [P: new task chip]** Spawn another followup chip for `modelsAnalysis.ts`, `scenarios.ts`, `definitions.ts`, `llm.ts` cleanups — these were discovered during this feature's ESLint-rule scoping.
 - [ ] **T5.4** Write the PR description with the before/after table per spec User Story 5.

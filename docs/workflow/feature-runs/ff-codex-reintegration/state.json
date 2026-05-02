@@ -41,7 +41,39 @@
     ],
     "unresolved": []
   },
-  "delivery": {},
+  "delivery": {
+    "pr_url": "",
+    "pr_number": null,
+    "merge_sha": "",
+    "closed_at": "2026-05-02T07:23:30+00:00",
+    "operator_note": "",
+    "review_coverage_summary": {
+      "spec_lenses_run": [
+        "codex:edge-cases-adversarial",
+        "codex:feasibility-adversarial",
+        "gemini:requirements-adversarial"
+      ],
+      "spec_lenses_skipped": [],
+      "plan_lenses_run": [
+        "codex:architecture-adversarial",
+        "codex:implementation-adversarial",
+        "gemini:testability-adversarial"
+      ],
+      "plan_lenses_skipped": [],
+      "tasks_lenses_run": [
+        "codex:dependency-order-adversarial",
+        "codex:execution-adversarial",
+        "gemini:coverage-adversarial"
+      ],
+      "tasks_lenses_skipped": [],
+      "diff_lenses_run": [
+        "codex:correctness-adversarial",
+        "codex:regression-adversarial",
+        "gemini:quality-adversarial"
+      ],
+      "diff_lenses_skipped": []
+    }
+  },
   "checkpoint_fallback": {},
   "parallel_analysis": {
     "reviewed": true,
@@ -2136,5 +2168,6 @@
     "reason": "Self-fixing PR \u2014 Slice 5 builds the dispatch-codex subcommand itself; cannot dogfood it before it lands. All 5 slices were dispatched via 'codex exec' from the shell with explicit prompts at /tmp/codex-slice{1,2,3,4,5}-spec.txt; 5 commits 47fa..b3f8 attribute Codex via Co-Authored-By trailer. Future features will use the new dispatch-codex subcommand and populate codex_dispatches[] for the freshness check this PR ships.",
     "operator": "chrislaw",
     "head_sha": "6c6e4bf923909ca5e115791f67cffd3e0c210d82"
-  }
+  },
+  "command_telemetry": []
 }

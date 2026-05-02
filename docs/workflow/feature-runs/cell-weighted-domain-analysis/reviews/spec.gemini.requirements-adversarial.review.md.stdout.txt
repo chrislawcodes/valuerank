@@ -1,0 +1,57 @@
+MCP issues detected. Run /mcp list for status.{
+  "session_id": "9d6fed42-5766-4264-adc5-0dbad5e220e5",
+  "response": "## Findings\n\n### 1. HIGH: Snapshot output generation will break due to a missed dependency\n\nThe spec correctly identifies that `aggregateAnalysisRows` and its underlying query against `analysis_results` must be replaced with a transcript-based pipeline. However, it fails to account for another function, `buildContributionAndExcludedSummary`, which also depends on this same `analysis_results` data. The spec does not include refactoring this function in its scope.\n\nIf the `analysis_results` query is removed as planned, the `analysisRows` variable passed to `buildContributionAndExcludedSummary` will be empty, causing the `contributionSummary` and `excludedDataSummary` sections of the final snapshot to be incorrect or causing the build to fail entirely.\n\n**[CODE-CONFIRMED]** — `cloud/apps/api/src/services/analysis/domain-analysis-snapshot-builder.ts` shows that `buildSnapshotOutput` calls `buildContributionAndExcludedSummary` and passes `analysisRows` to it, confirming the dependency that the spec overlooks.\n\n```typescript\n// from cloud/apps/api/src/services/analysis/domain-analysis-snapshot-builder.ts\n\nexport async function buildSnapshotOutput(\n  state: DomainAnalysisPreparedState,\n): Promise<DomainAnalysisSnapshotOutput> {\n  // ...\n  const analysisRows: AnalysisOutputRow[] = state.resolvedSignatureRuns.filteredSourceRunIds.length === 0\n    ? []\n    : await db.analysisResult.findMany({ /* ...query slated for removal... */ });\n\n  // ... aggregateAnalysisRows is called (this is being replaced)\n\n  const { contributionSummary, excludedDataSummary } = buildContributionAndExcludedSummary({\n    domainNameById,\n    definitionDomainIdById: state.definitionDomainIdById,\n    valuePairByDefinition,\n    analysisRows, // <-- This dependency is not addressed in the spec\n    filteredSourceRunDefinitionById: state.resolvedSignatureRuns.filteredSourceRunDefinitionById,\n  });\n\n  // ...\n}\n```\n\n### 2. MEDIUM: Transcript query strategy has a hidden scalability failure mode\n\nThe spec advises copying the data loading pattern from `circumplex/aggregation.ts`, which batches transcript queries by `modelId` to avoid Prisma's buffer limits. While this prevents crashes when many models are queried, it does not protect against the case where a *single model* has a very large number of associated transcripts.\n\nIf a domain analysis is run on a scope that includes a very large number of runs for a single model, the query for that model's transcripts could still fetch enough data to exceed Prisma's internal buffer and crash the process.\n\n**[CODE-CONFIRMED]** — The referenced file, `cloud/apps/api/src/services/circumplex/aggregation.ts`, confirms it uses a `Promise.all` over an array of `modelIds`, where each parallel promise fetches all transcripts for that model in a single `findMany` call. This pattern is vulnerable to the single-model-high-volume failure case.\n\n```typescript\n// from cloud/apps/api/src/services/circumplex/aggregation.ts\nconst transcriptBatches = await Promise.all(\n  args.modelIds.map(async (modelId) => (await db.transcript.findMany({\n    where: {\n      runId: { in: scopedRunIds },\n      modelId, // <-- one query per modelId\n      deletedAt: null,\n    },\n    // ...\n  })) as TranscriptRow[]),\n);\n```\n\n### 3. MEDIUM: Proposed \"shared\" accumulator will introduce new code duplication\n\nThe spec calls for creating a new, pure `transcript-cell-accumulator.ts` to be used by Domain Analysis and, in the future, Pressure Sensitivity. However, it overlooks that a large, nearly identical transcript processing pipeline already exists in `cloud/apps/api/src/services/circumplex/aggregation.ts`.\n\nCreating the new accumulator as specified, without first extracting the common logic from `circumplex/aggregation.ts`, will result in two parallel and highly similar transcript aggregation pipelines. This introduces tech debt and increases the maintenance burden, as any changes to core transcript processing (e.g., how decisions are resolved) would need to be implemented in multiple places.\n\n**[CODE-CONFIRMED]** — `cloud/apps/api/src/services/circumplex/aggregation.ts` contains logic for fetching transcripts based on a signature, resolving decisions using `resolveTranscriptDecisionModel`, canonicalizing value pairs, and accumulating wins/losses. This is substantively the same set of operations required for the new Domain Analysis pipeline, confirming the duplication risk.\n\n### 4. UNVERIFIED: Core logic for cell mapping is based on an uninspected assumption\n\nA central requirement of the spec is to weight win rates by \"pressure cells,\" which are defined by `ownLevel` and `opponentLevel` (from 1-5). The spec states that the new accumulator will derive these levels by reusing a helper function, `assignOwnOpponentLevels`, from a file that was not provided in the context (`pressure-sensitivity/value-pair.ts`).\n\nBecause this function is critical for correctly mapping trials to cells, and its code is not available for review, its correctness is an unverified assumption. Any bugs or logical flaws in this unseen helper would invalidate the \"cell-weighted\" results.\n\n**[UNVERIFIED]** — The relevant code for `assignOwnOpponentLevels` was not provided, so this finding cannot be confirmed or refuted by the available context.\n\n## Residual Risks\n\nIf the spec is implemented as written, the following risks remain:\n\n1.  **Broken Snapshot Data:** The `contributionSummary` and `excludedDataSummary` fields in the domain analysis snapshot will be empty or incorrect, as their data source will have been removed without a replacement. This could break downstream data consumers or UI components.\n2.  **Production Failures at Scale:** The service is likely to experience crashes when calculating domain analysis for large domains, due to the vulnerability in the transcript query batching strategy.\n3.  **Increased Maintenance Cost:** The codebase will contain two divergent, hard-to-maintain transcript processing pipelines, increasing the risk of bugs and the effort required for future changes.\n4.  **Incorrect Analysis:** If the unverified `assignOwnOpponentLevels` helper contains flaws, the resulting `valueWinRates` will be calculated incorrectly, undermining the primary goal of the feature.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 53578
+        },
+        "tokens": {
+          "input": 25947,
+          "prompt": 25947,
+          "candidates": 1381,
+          "total": 31271,
+          "cached": 0,
+          "thoughts": 3943,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 53578,
+            "tokens": {
+              "input": 25947,
+              "prompt": 25947,
+              "candidates": 1381,
+              "total": 31271,
+              "cached": 0,
+              "thoughts": 3943,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}
