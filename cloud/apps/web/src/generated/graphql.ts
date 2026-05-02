@@ -3569,6 +3569,8 @@ export type SensitivityCell = {
   n: Scalars['Int']['output'];
   netScore?: Maybe<Scalars['Float']['output']>;
   opponentLevel: Scalars['Int']['output'];
+  opponentSuccesses: Scalars['Int']['output'];
+  opponentWinRate?: Maybe<Scalars['Float']['output']>;
   ownLevel: Scalars['Int']['output'];
   successes: Scalars['Int']['output'];
   unscoredCount: Scalars['Int']['output'];
@@ -7234,6 +7236,7 @@ export const PressureSensitivityDocument = gql`
           n
           unscoredCount
           winRate
+          opponentWinRate
           conviction
           netScore
           lowData
