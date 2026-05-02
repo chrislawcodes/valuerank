@@ -141,7 +141,7 @@ export function ClusterBarPlot({ clusters, activeGroupIds = [] }: ClusterBarPlot
                           width: `${width}%`,
                           transform: 'translateY(-50%)',
                           height: '10px',
-                          zIndex: isActive ? rankedClusters.length + 20 - index : index + 1,
+                          zIndex: isActive ? index + 20 : index + 1,
                           opacity: faded ? 0.18 : hasActiveSelection ? 1 : 0.78,
                           filter: isActive && hasActiveSelection ? `drop-shadow(0 0 8px rgba(255,255,255,0.35)) drop-shadow(0 0 12px ${color}99)` : undefined,
                         }}
