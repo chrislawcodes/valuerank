@@ -18,7 +18,7 @@ const VIEW_BOX_HEIGHT = 560;
 const CENTER_X = 286;
 const CENTER_Y = 276;
 const OUTER_RADIUS = 228;
-const CATEGORY_RING_RADIUS = OUTER_RADIUS + 26;
+const CATEGORY_RING_RADIUS = OUTER_RADIUS + 9;
 const CATEGORY_LABEL_RADIUS = OUTER_RADIUS + 82;
 const RADAR_SCORE_MIN = -2.5;
 const RADAR_SCORE_MAX = 2.5;
@@ -81,7 +81,7 @@ export function ClusterRadarChart({ clusters, activeGroupIds = [] }: ClusterRada
       <div className="overflow-x-auto rounded-lg border border-gray-100 bg-white p-2">
         <svg
           viewBox={`0 0 ${CHART_SIZE} ${VIEW_BOX_HEIGHT}`}
-          className="h-auto min-w-[640px] w-full"
+          className="h-auto min-w-[512px] max-w-[512px] w-full"
           role="img"
           aria-label="Cluster radar chart ordered by favorability with Schwartz category ring"
         >
