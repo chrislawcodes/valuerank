@@ -330,8 +330,14 @@ builder.queryField('pressureSensitivity', (t) =>
       const definitionMeta = new Map<string, DefinitionMetadata>();
       const excludedDefinitions: ExcludedDefinitionShape[] = [];
 
-      for (const defId of distinctDefIds) {
-        const validation: ValidationResult = await validateDefinitionForPressureSensitivity(defId);
+      const validationResults = await Promise.all(
+        [...distinctDefIds].map(async (defId) => ({
+          defId,
+          validation: await validateDefinitionForPressureSensitivity(defId) as ValidationResult,
+        })),
+      );
+
+      for (const { defId, validation } of validationResults) {
         if (validation.status === 'excluded') {
           excludedDefinitions.push({
             definitionId: defId,
