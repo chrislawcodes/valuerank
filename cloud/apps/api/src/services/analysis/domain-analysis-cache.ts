@@ -72,7 +72,7 @@ function buildDomainAnalysisResultFromSnapshot(params: {
         prioritized: counts.prioritized,
         deprioritized: counts.deprioritized,
         neutral: counts.neutral,
-        totalComparisons: wins + losses,
+        totalComparisons: wins + losses + counts.neutral,
       };
     });
 
