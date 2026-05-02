@@ -10,17 +10,17 @@ type DomainContribution = {
 export function computePooledWinRate(domains: WeightedDomainContribution[]): number | null {
   if (domains.length === 0) return null;
 
-  let weightedSum = 0;
-  let totalWeight = 0;
+  let sum = 0;
+  let count = 0;
 
   for (const domain of domains) {
     if (!Number.isFinite(domain.evidenceWeight) || domain.evidenceWeight <= 0) continue;
-    weightedSum += domain.winRate * domain.evidenceWeight;
-    totalWeight += domain.evidenceWeight;
+    sum += domain.winRate;
+    count += 1;
   }
 
-  if (totalWeight <= 0) return null;
-  return weightedSum / totalWeight;
+  if (count === 0) return null;
+  return sum / count;
 }
 
 export function computeStabilityScore(domains: DomainContribution[]): number | null {
