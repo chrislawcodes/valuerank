@@ -38,31 +38,37 @@
     "unresolved": []
   },
   "delivery": {
-    "branch": "codex/domain-analysis-ordering-fix",
-    "head_sha": "b3e2d63328dccb036ae789ac1f04a3ce39404f32",
-    "updated_at": 1774507338,
-    "pr_number": 415,
-    "pr_url": "https://github.com/chrislawcodes/valuerank/pull/415",
-    "pr_state": "OPEN",
-    "pr_is_draft": false,
-    "pr_head_branch": "codex/domain-analysis-ordering-fix",
-    "pr_head_sha": "209e1db655d6c0573721f8e7b206bdbe83c70a82",
-    "pr_base_branch": "main",
-    "mergeable": "UNKNOWN",
-    "merge_state_status": "UNKNOWN",
-    "checks_summary": "pass",
-    "required_checks": [
-      {
-        "bucket": "pass",
-        "link": "https://github.com/chrislawcodes/valuerank/actions/runs/23577260638/job/68652247264",
-        "name": "Lint, Build & Test",
-        "state": "SUCCESS",
-        "workflow": "CI"
-      }
-    ],
-    "upstream": "origin/codex/domain-analysis-ordering-fix",
-    "checks_detail": "",
-    "head_mismatch": true
+    "pr_url": "",
+    "pr_number": null,
+    "merge_sha": "",
+    "closed_at": "2026-05-02T07:23:24+00:00",
+    "operator_note": "",
+    "review_coverage_summary": {
+      "spec_lenses_run": [
+        "codex:feasibility-adversarial",
+        "gemini:edge-cases-adversarial",
+        "gemini:requirements-adversarial"
+      ],
+      "spec_lenses_skipped": [],
+      "plan_lenses_run": [
+        "codex:implementation-adversarial",
+        "gemini:architecture-adversarial",
+        "gemini:testability-adversarial"
+      ],
+      "plan_lenses_skipped": [],
+      "tasks_lenses_run": [
+        "codex:execution-adversarial",
+        "gemini:coverage-adversarial",
+        "gemini:dependency-order-adversarial"
+      ],
+      "tasks_lenses_skipped": [],
+      "diff_lenses_run": [
+        "codex:correctness-adversarial",
+        "gemini:operational-risk-adversarial",
+        "gemini:regression-adversarial"
+      ],
+      "diff_lenses_skipped": []
+    }
   },
   "dirty_overrides": {
     "allowed_dirty_paths": [
@@ -99,5 +105,17 @@
     "limit": 400,
     "reason": "explicit --allow-large-diff-slice",
     "updated_at": 1774506673
-  }
+  },
+  "parallel_analysis": {
+    "reviewed": false,
+    "found": false,
+    "note": "",
+    "updated_at": 0
+  },
+  "init_head_sha": "",
+  "token_usage": [],
+  "command_telemetry": [],
+  "stages": {},
+  "invariant_warnings": [],
+  "schema_version": 1
 }

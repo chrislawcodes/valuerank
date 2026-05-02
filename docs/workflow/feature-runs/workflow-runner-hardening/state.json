@@ -22,12 +22,37 @@
     "updated_at": 0
   },
   "delivery": {
-    "branch": "main",
-    "head_sha": "3e90acf9d1c5a39a84582bc7bd354329ea0b8a3e",
-    "updated_at": 1774033025,
-    "upstream": "origin/main",
     "pr_url": "",
-    "checks_summary": "not-started"
+    "pr_number": null,
+    "merge_sha": "",
+    "closed_at": "2026-05-02T07:23:44+00:00",
+    "operator_note": "",
+    "review_coverage_summary": {
+      "spec_lenses_run": [
+        "codex:feasibility-adversarial",
+        "gemini:edge-cases-adversarial",
+        "gemini:requirements-adversarial"
+      ],
+      "spec_lenses_skipped": [],
+      "plan_lenses_run": [
+        "codex:implementation-adversarial",
+        "gemini:architecture-adversarial",
+        "gemini:testability-adversarial"
+      ],
+      "plan_lenses_skipped": [],
+      "tasks_lenses_run": [
+        "codex:execution-adversarial",
+        "gemini:coverage-adversarial",
+        "gemini:dependency-order-adversarial"
+      ],
+      "tasks_lenses_skipped": [],
+      "diff_lenses_run": [
+        "codex:correctness-adversarial",
+        "gemini:quality-adversarial",
+        "gemini:regression-adversarial"
+      ],
+      "diff_lenses_skipped": []
+    }
   },
   "dirty_overrides": {
     "allowed_dirty_paths": [
@@ -45,5 +70,17 @@
     "markers_sha": "",
     "last_diff_head_sha": ""
   },
-  "checkpoint_fallback": {}
+  "checkpoint_fallback": {},
+  "parallel_analysis": {
+    "reviewed": false,
+    "found": false,
+    "note": "",
+    "updated_at": 0
+  },
+  "init_head_sha": "",
+  "token_usage": [],
+  "command_telemetry": [],
+  "stages": {},
+  "invariant_warnings": [],
+  "schema_version": 1
 }

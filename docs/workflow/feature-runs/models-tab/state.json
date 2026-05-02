@@ -39,12 +39,37 @@
     "unresolved": []
   },
   "delivery": {
-    "branch": "claude/magical-mcclintock",
-    "head_sha": "238d34705bb54e94e0bcf6a65d04f519d3f891ba",
-    "updated_at": 1776292852,
-    "upstream": "origin/main",
     "pr_url": "",
-    "checks_summary": "not-started"
+    "pr_number": null,
+    "merge_sha": "",
+    "closed_at": "2026-05-02T07:23:37+00:00",
+    "operator_note": "",
+    "review_coverage_summary": {
+      "spec_lenses_run": [
+        "codex:edge-cases-adversarial",
+        "codex:feasibility-adversarial",
+        "gemini:requirements-adversarial"
+      ],
+      "spec_lenses_skipped": [],
+      "plan_lenses_run": [
+        "codex:architecture-adversarial",
+        "codex:implementation-adversarial",
+        "gemini:testability-adversarial"
+      ],
+      "plan_lenses_skipped": [],
+      "tasks_lenses_run": [
+        "codex:dependency-order-adversarial",
+        "codex:execution-adversarial",
+        "gemini:coverage-adversarial"
+      ],
+      "tasks_lenses_skipped": [],
+      "diff_lenses_run": [
+        "codex:correctness-adversarial",
+        "codex:regression-adversarial",
+        "gemini:quality-adversarial"
+      ],
+      "diff_lenses_skipped": []
+    }
   },
   "parallel_analysis": {
     "reviewed": true,
@@ -59,5 +84,10 @@
     "last_diff_head_sha": ""
   },
   "checkpoint_fallback": {},
-  "dirty_overrides": {}
+  "dirty_overrides": {},
+  "token_usage": [],
+  "command_telemetry": [],
+  "stages": {},
+  "invariant_warnings": [],
+  "schema_version": 1
 }

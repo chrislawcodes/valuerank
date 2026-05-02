@@ -53,23 +53,35 @@
     "unresolved": []
   },
   "delivery": {
-    "branch": "wave/replace-canonical-decisions",
-    "head_sha": "f4283ddae37fcb66ad22992ebc97f50addf848ed",
-    "updated_at": 1774484547,
-    "pr_number": 411,
-    "pr_url": "https://github.com/chrislawcodes/valuerank/pull/411",
-    "pr_state": "OPEN",
-    "pr_is_draft": false,
-    "pr_head_branch": "wave/replace-canonical-decisions",
-    "pr_head_sha": "2d8327d767d54cd54ef169da3af823737e6c882d",
-    "pr_base_branch": "main",
-    "mergeable": "MERGEABLE",
-    "merge_state_status": "BEHIND",
-    "checks_summary": "api lint/test/build and web lint/test/build passed",
-    "required_checks": [],
-    "upstream": "",
-    "checks_detail": "",
-    "head_mismatch": false
+    "pr_url": "",
+    "pr_number": null,
+    "merge_sha": "",
+    "closed_at": "2026-05-02T07:23:41+00:00",
+    "operator_note": "",
+    "review_coverage_summary": {
+      "spec_lenses_run": [
+        "codex:feasibility-adversarial",
+        "gemini:ambiguity-adversarial",
+        "gemini:requirements-adversarial"
+      ],
+      "spec_lenses_skipped": [],
+      "plan_lenses_run": [
+        "codex:implementation-adversarial",
+        "gemini:architecture-adversarial",
+        "gemini:risk-boundary-adversarial"
+      ],
+      "plan_lenses_skipped": [
+        "gemini:testability-adversarial"
+      ],
+      "tasks_lenses_run": [
+        "codex:execution-adversarial",
+        "gemini:dependency-order-adversarial",
+        "gemini:slice-risk-adversarial"
+      ],
+      "tasks_lenses_skipped": [],
+      "diff_lenses_run": [],
+      "diff_lenses_skipped": []
+    }
   },
   "dirty_overrides": {
     "allowed_dirty_paths": [
@@ -84,5 +96,17 @@
     "markers_sha": "",
     "last_diff_head_sha": ""
   },
-  "checkpoint_fallback": {}
+  "checkpoint_fallback": {},
+  "parallel_analysis": {
+    "reviewed": false,
+    "found": false,
+    "note": "",
+    "updated_at": 0
+  },
+  "init_head_sha": "",
+  "token_usage": [],
+  "command_telemetry": [],
+  "stages": {},
+  "invariant_warnings": [],
+  "schema_version": 1
 }
