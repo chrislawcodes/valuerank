@@ -333,7 +333,7 @@ builder.queryField('pressureSensitivity', (t) =>
       const validationResults = await Promise.all(
         [...distinctDefIds].map(async (defId) => ({
           defId,
-          validation: await validateDefinitionForPressureSensitivity(defId) as ValidationResult,
+          validation: await validateDefinitionForPressureSensitivity(defId),
         })),
       );
 
