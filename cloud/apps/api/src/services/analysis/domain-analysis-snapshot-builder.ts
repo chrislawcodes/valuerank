@@ -131,7 +131,7 @@ export async function buildSnapshotOutput(
   const cellMap = new Map<string, CellCounts>();
 
   if (state.resolvedSignatureRuns.filteredSourceRunIds.length > 0) {
-    let lastId: string | undefined = undefined;
+    let offset = 0;
     let fetchedCount = TRANSCRIPT_BATCH_SIZE;
 
     while (fetchedCount >= TRANSCRIPT_BATCH_SIZE) {
@@ -158,7 +158,7 @@ export async function buildSnapshotOutput(
         },
         orderBy: { id: 'asc' },
         take: TRANSCRIPT_BATCH_SIZE,
-        ...(lastId !== undefined ? { cursor: { id: lastId }, skip: 1 } : {}),
+        skip: offset,
       });
 
       fetchedCount = batch.length;
@@ -177,10 +177,7 @@ export async function buildSnapshotOutput(
         cellMap.set(key, existing);
       }
 
-      const lastRow = batch[fetchedCount - 1];
-      if (lastRow !== undefined) {
-        lastId = lastRow.id;
-      }
+      offset += fetchedCount;
     }
   }
   const { models, analyzedDefinitionIds } = computeCellWeightedDomainRates({
