@@ -132,7 +132,9 @@ export async function buildSnapshotOutput(
 
   if (state.resolvedSignatureRuns.filteredSourceRunIds.length > 0) {
     let lastId: string | undefined = undefined;
-    while (true) {
+    let fetchedCount = TRANSCRIPT_BATCH_SIZE;
+
+    while (fetchedCount >= TRANSCRIPT_BATCH_SIZE) {
       const batch = await db.transcript.findMany({
         where: {
           runId: { in: state.resolvedSignatureRuns.filteredSourceRunIds },
@@ -159,7 +161,8 @@ export async function buildSnapshotOutput(
         ...(lastId !== undefined ? { cursor: { id: lastId }, skip: 1 } : {}),
       });
 
-      if (batch.length === 0) break;
+      fetchedCount = batch.length;
+      if (fetchedCount === 0) break;
 
       const batchCellMap = accumulateTranscriptCells({
         transcripts: batch,
@@ -174,9 +177,10 @@ export async function buildSnapshotOutput(
         cellMap.set(key, existing);
       }
 
-      const lastRow = batch[batch.length - 1];
-      if (batch.length < TRANSCRIPT_BATCH_SIZE || lastRow === undefined) break;
-      lastId = lastRow.id;
+      const lastRow = batch[fetchedCount - 1];
+      if (lastRow !== undefined) {
+        lastId = lastRow.id;
+      }
     }
   }
   const { models, analyzedDefinitionIds } = computeCellWeightedDomainRates({
