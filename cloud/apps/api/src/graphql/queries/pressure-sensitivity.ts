@@ -23,10 +23,7 @@ import {
   FLAT_DELTA_THRESHOLD,
   type Observation,
 } from '../../services/pressure-sensitivity/aggregation.js';
-import {
-  validateDefinitionForPressureSensitivity,
-  type ValidationResult,
-} from '../../services/pressure-sensitivity/definition-validation.js';
+import { validateDefinitionForPressureSensitivity } from '../../services/pressure-sensitivity/definition-validation.js';
 import {
   assignOwnOpponent,
   assignOwnOpponentLevels,
