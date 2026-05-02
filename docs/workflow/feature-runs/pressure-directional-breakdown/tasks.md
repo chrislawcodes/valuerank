@@ -14,7 +14,7 @@ One slice. All three files in a single Codex dispatch.
 
 ## Slice 1: PressureDirectionalBreakdown component, tests, and page integration
 
-- [ ] **T1.1 [CHECKPOINT]** Create `cloud/apps/web/src/components/models/PressureDirectionalBreakdown.tsx`.
+- [x] **T1.1 [CHECKPOINT]** Create `cloud/apps/web/src/components/models/PressureDirectionalBreakdown.tsx`.
 
   **Component props:**
   ```typescript
