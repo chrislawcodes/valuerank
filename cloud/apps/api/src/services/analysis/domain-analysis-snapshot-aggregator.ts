@@ -11,6 +11,7 @@ import {
 } from '../../graphql/queries/domain-analysis-values.js';
 import type { DomainAnalysisValueCounts } from '../../graphql/queries/domain/shared.js';
 import type { AnalysisOutputRow } from './domain-analysis-cache-types.js';
+import { computePairwiseWinRate } from '../../utils/pairwise-math.js';
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -174,14 +175,10 @@ export function aggregateAnalysisRows(params: {
       acc.second.deprioritized += secondCounts.deprioritized;
       acc.second.neutral += secondCounts.neutral;
 
-      const totalFirst = firstCounts.prioritized + firstCounts.deprioritized + firstCounts.neutral;
-      if (totalFirst > 0) {
-        acc.firstRates.push(firstCounts.prioritized / totalFirst);
-      }
-      const totalSecond = secondCounts.prioritized + secondCounts.deprioritized + secondCounts.neutral;
-      if (totalSecond > 0) {
-        acc.secondRates.push(secondCounts.prioritized / totalSecond);
-      }
+      const firstRate = computePairwiseWinRate(firstCounts.prioritized, firstCounts.deprioritized, firstCounts.neutral);
+      if (firstRate !== null) acc.firstRates.push(firstRate);
+      const secondRate = computePairwiseWinRate(secondCounts.prioritized, secondCounts.deprioritized, secondCounts.neutral);
+      if (secondRate !== null) acc.secondRates.push(secondRate);
 
       acc.runCount += 1;
     }
