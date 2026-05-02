@@ -38,6 +38,8 @@ FACTORY_CMD_CLOSEOUT = _load("factory_cmd_closeout")
 command_standalone_closeout = FACTORY_CMD_CLOSEOUT.command_standalone_closeout
 _GEN_START = FACTORY_CMD_CLOSEOUT._GEN_START
 _GEN_END = FACTORY_CMD_CLOSEOUT._GEN_END
+_RUN_FACTS_START = FACTORY_CMD_CLOSEOUT._RUN_FACTS_START
+_RUN_FACTS_END = FACTORY_CMD_CLOSEOUT._RUN_FACTS_END
 
 
 def _patch_factory_state_roots(runs_root: Path, repo_root: Path) -> list:
@@ -278,6 +280,302 @@ class CloseoutCommandTests(unittest.TestCase):
 
         # Operator notes should be preserved
         self.assertIn("Handwritten operator note here.", text2)
+
+
+    # ------------------------------------------------------------------
+    # Run Facts tests
+    # ------------------------------------------------------------------
+
+    def _make_token_usage_entries(self) -> list[dict]:
+        """Return a realistic token_usage list covering spec, plan, tasks, diff stages."""
+        base = "2026-04-27T"
+        return [
+            # spec — two Codex calls + one Gemini call
+            {
+                "stage": "spec", "round": 1, "activity_type": "adversarial_review",
+                "model": "gpt-5.4-mini",
+                "started_at": f"{base}10:00:00Z", "ended_at": f"{base}10:01:00Z",
+                "duration_seconds": 60.0, "parse_error": None,
+            },
+            {
+                "stage": "spec", "round": 1, "activity_type": "adversarial_review",
+                "model": "gpt-5.4-mini",
+                "started_at": f"{base}10:01:01Z", "ended_at": f"{base}10:02:00Z",
+                "duration_seconds": 59.0, "parse_error": None,
+            },
+            {
+                "stage": "spec", "round": 1, "activity_type": "adversarial_review",
+                "model": "gemini-2.5-pro",
+                "started_at": f"{base}10:02:01Z", "ended_at": f"{base}10:03:00Z",
+                "duration_seconds": 59.0, "parse_error": None,
+            },
+            # plan — one Codex, one Gemini with parse_error
+            {
+                "stage": "plan", "round": 1, "activity_type": "adversarial_review",
+                "model": "gpt-5.4-mini",
+                "started_at": f"{base}10:10:00Z", "ended_at": f"{base}10:11:00Z",
+                "duration_seconds": 60.0, "parse_error": None,
+            },
+            {
+                "stage": "plan", "round": 1, "activity_type": "adversarial_review",
+                "model": "gemini-2.5-pro",
+                "started_at": f"{base}10:11:01Z", "ended_at": f"{base}10:12:00Z",
+                "duration_seconds": 59.0, "parse_error": "no Gemini token stats found in stdout",
+            },
+        ]
+
+    def _make_codex_dispatch_entries(self) -> list[dict]:
+        """Two dispatches — one single-try, one retried (same prompt_sha256)."""
+        return [
+            {
+                "head_sha": "aaa", "ts": "20260427T100000_000000Z",
+                "prompt_path": "/tmp/slice1.txt", "prompt_sha256": "sha_slice_1",
+                "model": "gpt-5.4-mini", "exit_code": 0,
+                "stdout_path": "out.txt", "stderr_path": "err.txt",
+                "branch_base_sha": None, "lines_added_at_dispatch_time": None,
+                "auto_commit": {"skipped": True, "reason": "no codex-introduced changes"},
+            },
+            # Retry: same prompt_sha256 as next entry
+            {
+                "head_sha": "bbb", "ts": "20260427T110000_000000Z",
+                "prompt_path": "/tmp/slice2.txt", "prompt_sha256": "sha_slice_2",
+                "model": "gpt-5.4-mini", "exit_code": 1,
+                "stdout_path": "out.txt", "stderr_path": "err.txt",
+                "branch_base_sha": None, "lines_added_at_dispatch_time": None,
+                "auto_commit": {"skipped": True, "reason": "no codex-introduced changes"},
+            },
+            {
+                "head_sha": "ccc", "ts": "20260427T110500_000000Z",
+                "prompt_path": "/tmp/slice2.txt", "prompt_sha256": "sha_slice_2",
+                "model": "gpt-5.4-mini", "exit_code": 0,
+                "stdout_path": "out.txt", "stderr_path": "err.txt",
+                "branch_base_sha": None, "lines_added_at_dispatch_time": None,
+                "auto_commit": {"skipped": True, "reason": "no codex-introduced changes"},
+            },
+        ]
+
+    def _extract_run_facts_section(self, text: str) -> str:
+        """Extract the text between begin-run-facts and end-run-facts markers."""
+        start = text.find(_RUN_FACTS_START)
+        end = text.find(_RUN_FACTS_END)
+        if start < 0 or end < 0:
+            return ""
+        return text[start:end + len(_RUN_FACTS_END)]
+
+    def test_run_facts_full_data(self) -> None:
+        """1. State with full token_usage and dispatches → Run Facts shows real numbers."""
+        state = self._make_state_with_stages()
+        state["token_usage"] = self._make_token_usage_entries()
+        state["codex_dispatches"] = self._make_codex_dispatch_entries()
+        self._write_state(state)
+
+        args = _closeout_args(slug=self.slug, pr_url="https://example.com/pr/10", pr_number=10)
+        rc = command_standalone_closeout(args)
+        self.assertEqual(rc, 0)
+
+        text = (self.workflow_dir / "closeout.md").read_text(encoding="utf-8")
+
+        # Run Facts section must be present
+        self.assertIn(_RUN_FACTS_START, text)
+        self.assertIn(_RUN_FACTS_END, text)
+        self.assertIn("## Run Facts", text)
+
+        facts = self._extract_run_facts_section(text)
+        # Wall clock: spec starts at 10:00:00, plan ends at 10:12:00 → 72 min total
+        self.assertIn("Total:", facts)
+        self.assertNotIn("(no data)", facts)
+
+        # Subprocess counts: 3 Codex + 2 Gemini in token_usage
+        self.assertIn("Codex: 3 total", facts)
+        self.assertIn("Gemini: 2 total", facts)
+
+        # Dispatches: 3 entries → 2 slices (sha_slice_1 + sha_slice_2), 1 retry
+        self.assertIn("2 slices", facts)
+        self.assertIn("1 retr", facts)
+
+        # Stages exercised
+        self.assertIn("spec", facts)
+        self.assertIn("plan", facts)
+
+        # Stages skipped (tasks, diff, closeout are absent from token_usage)
+        self.assertIn("Stages skipped:", facts)
+
+    def test_run_facts_empty_token_usage(self) -> None:
+        """2. State with empty token_usage → Run Facts shows 'no recorded subprocess activity'."""
+        state = self._make_state_with_stages()
+        state["token_usage"] = []
+        state["codex_dispatches"] = []
+        self._write_state(state)
+
+        args = _closeout_args(slug=self.slug, pr_url="https://example.com/pr/11", pr_number=11)
+        rc = command_standalone_closeout(args)
+        self.assertEqual(rc, 0)
+
+        text = (self.workflow_dir / "closeout.md").read_text(encoding="utf-8")
+        self.assertIn(_RUN_FACTS_START, text)
+        self.assertIn(_RUN_FACTS_END, text)
+        # Should indicate no data
+        self.assertIn("no recorded subprocess activity", text)
+
+    def test_run_facts_codex_timeout(self) -> None:
+        """3. State with Codex timeout in token_usage → timeout count = 1."""
+        state = self._make_state_with_stages()
+        state["token_usage"] = [
+            {
+                "stage": "spec", "round": 1, "activity_type": "adversarial_review",
+                "model": "gpt-5.4-mini",
+                "started_at": "2026-04-27T10:00:00Z", "ended_at": "2026-04-27T10:02:00Z",
+                "duration_seconds": 120.0,
+                "parse_error": "codex exec timeout after 120s",
+            },
+            {
+                "stage": "spec", "round": 1, "activity_type": "adversarial_review",
+                "model": "gpt-5.4-mini",
+                "started_at": "2026-04-27T10:02:01Z", "ended_at": "2026-04-27T10:03:00Z",
+                "duration_seconds": 59.0,
+                "parse_error": None,
+            },
+        ]
+        state["codex_dispatches"] = []
+        self._write_state(state)
+
+        args = _closeout_args(slug=self.slug, pr_url="https://example.com/pr/12", pr_number=12)
+        rc = command_standalone_closeout(args)
+        self.assertEqual(rc, 0)
+
+        text = (self.workflow_dir / "closeout.md").read_text(encoding="utf-8")
+        facts = self._extract_run_facts_section(text)
+
+        # 2 Codex calls, 1 timeout, 0 other errors
+        self.assertIn("Codex: 2 total", facts)
+        self.assertIn("1 timeout", facts)
+        self.assertIn("0 other error", facts)
+
+    def test_run_facts_retried_slice(self) -> None:
+        """4. State with retried slice → slice retries reported correctly."""
+        state = self._make_state_with_stages()
+        state["token_usage"] = [
+            {
+                "stage": "diff", "round": 1, "activity_type": "adversarial_review",
+                "model": "gpt-5.4-mini",
+                "started_at": "2026-04-27T11:00:00Z", "ended_at": "2026-04-27T11:01:00Z",
+                "duration_seconds": 60.0, "parse_error": None,
+            },
+        ]
+        # Three entries with the same prompt_sha256 → 3 attempts for 1 slice
+        state["codex_dispatches"] = [
+            {
+                "head_sha": "a", "ts": "20260427T110000Z", "prompt_path": "/tmp/s.txt",
+                "prompt_sha256": "sha_retry_slice",
+                "model": "gpt-5.4-mini", "exit_code": 1,
+                "stdout_path": "o.txt", "stderr_path": "e.txt",
+                "branch_base_sha": None, "lines_added_at_dispatch_time": None,
+                "auto_commit": {"skipped": True, "reason": "overlap with operator dirty"},
+            },
+            {
+                "head_sha": "b", "ts": "20260427T110500Z", "prompt_path": "/tmp/s.txt",
+                "prompt_sha256": "sha_retry_slice",
+                "model": "gpt-5.4-mini", "exit_code": 1,
+                "stdout_path": "o.txt", "stderr_path": "e.txt",
+                "branch_base_sha": None, "lines_added_at_dispatch_time": None,
+                "auto_commit": {"skipped": True, "reason": "overlap with operator dirty"},
+            },
+            {
+                "head_sha": "c", "ts": "20260427T111000Z", "prompt_path": "/tmp/s.txt",
+                "prompt_sha256": "sha_retry_slice",
+                "model": "gpt-5.4-mini", "exit_code": 0,
+                "stdout_path": "o.txt", "stderr_path": "e.txt",
+                "branch_base_sha": None, "lines_added_at_dispatch_time": None,
+                "auto_commit": {"skipped": True, "reason": "no codex-introduced changes"},
+            },
+        ]
+        self._write_state(state)
+
+        args = _closeout_args(slug=self.slug, pr_url="https://example.com/pr/13", pr_number=13)
+        rc = command_standalone_closeout(args)
+        self.assertEqual(rc, 0)
+
+        text = (self.workflow_dir / "closeout.md").read_text(encoding="utf-8")
+        facts = self._extract_run_facts_section(text)
+
+        # 1 slice (all same sha), 1 retry, 3 attempts
+        self.assertIn("1 slices", facts)
+        self.assertIn("1 retr", facts)
+        self.assertIn("3 attempts", facts)
+
+    def test_run_facts_idempotent(self) -> None:
+        """5. Running closeout twice produces identical Run Facts section."""
+        state = self._make_state_with_stages()
+        state["token_usage"] = self._make_token_usage_entries()
+        state["codex_dispatches"] = self._make_codex_dispatch_entries()
+        self._write_state(state)
+
+        for stage, lenses in [
+            ("spec", [("codex", "feasibility-adversarial"), ("gemini", "requirements-adversarial")]),
+            ("plan", [("codex", "implementation-adversarial"), ("gemini", "testability-adversarial")]),
+        ]:
+            for reviewer, lens in lenses:
+                self._write_review(stage, reviewer, lens)
+
+        args = _closeout_args(
+            slug=self.slug,
+            pr_url="https://example.com/pr/14",
+            pr_number=14,
+            merge_sha="deadbeef",
+        )
+
+        rc1 = command_standalone_closeout(args)
+        self.assertEqual(rc1, 0)
+        text1 = (self.workflow_dir / "closeout.md").read_text(encoding="utf-8")
+        facts1 = self._extract_run_facts_section(text1)
+
+        rc2 = command_standalone_closeout(args)
+        self.assertEqual(rc2, 0)
+        text2 = (self.workflow_dir / "closeout.md").read_text(encoding="utf-8")
+        facts2 = self._extract_run_facts_section(text2)
+
+        self.assertEqual(facts1, facts2, "Run Facts section should be identical on second run")
+
+    def test_run_facts_operator_notes_preserved(self) -> None:
+        """6. Regenerating Run Facts leaves Operator Notes intact."""
+        state = self._make_state_with_stages()
+        state["token_usage"] = self._make_token_usage_entries()
+        state["codex_dispatches"] = []
+        self._write_state(state)
+
+        args = _closeout_args(
+            slug=self.slug,
+            pr_url="https://example.com/pr/15",
+            pr_number=15,
+        )
+
+        # First run to create the file
+        rc1 = command_standalone_closeout(args)
+        self.assertEqual(rc1, 0)
+        closeout_path = self.workflow_dir / "closeout.md"
+        text1 = closeout_path.read_text(encoding="utf-8")
+
+        # Simulate operator writing notes after the generated block
+        operator_note = "This is a handwritten operator note that must survive regeneration."
+        text_with_notes = text1 + "\n" + operator_note
+        closeout_path.write_text(text_with_notes, encoding="utf-8")
+
+        # Second run — regenerate
+        rc2 = command_standalone_closeout(args)
+        self.assertEqual(rc2, 0)
+        text2 = closeout_path.read_text(encoding="utf-8")
+
+        # Run Facts should still be there
+        self.assertIn(_RUN_FACTS_START, text2)
+        self.assertIn(_RUN_FACTS_END, text2)
+
+        # Operator note must be preserved
+        self.assertIn(operator_note, text2)
+
+        # Operator note must appear AFTER the generated block
+        gen_end_pos = text2.find(_GEN_END)
+        note_pos = text2.find(operator_note)
+        self.assertGreater(note_pos, gen_end_pos, "Operator note must come after end-generated marker")
 
 
 if __name__ == "__main__":
