@@ -37,14 +37,13 @@ export function ModelsConsistency() {
   const [minScenarios, setMinScenarios] = useState(5);
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
 
-  const defaultDomainId = domains[0]?.id ?? null;
-  const urlDomainId = hasDomainParam ? domainFilter : defaultDomainId;
+  const urlDomainId = hasDomainParam ? domainFilter : null;
   const hasExplicitDomain = hasDomainParam && domainParam !== 'all';
 
   const [{ data: signatureData, error: signatureError }] = useQuery<DomainAvailableSignaturesQueryResult, { domainId: string }>({
     query: DOMAIN_AVAILABLE_SIGNATURES_QUERY,
-    variables: { domainId: hasExplicitDomain && urlDomainId != null ? urlDomainId : (defaultDomainId ?? '') },
-    pause: !hasExplicitDomain && defaultDomainId == null,
+    variables: { domainId: urlDomainId ?? '' },
+    pause: !hasExplicitDomain,
     requestPolicy: 'cache-and-network',
   });
 
@@ -67,7 +66,7 @@ export function ModelsConsistency() {
   // fall back to DEFAULT_SIGNATURE constant only when nothing is loaded yet.
   const signatureChoice = (() => {
     if (signatureParam != null) return signatureParam;
-    if (hasDomainParam && domainParam === 'all') return DEFAULT_SIGNATURE;
+    if (!hasDomainParam || domainParam === 'all') return DEFAULT_SIGNATURE;
     if (signatureError != null) return DEFAULT_SIGNATURE;
     if (signatureData == null) return null;
     if (availableSignatures.some((option) => option.signature === DEFAULT_SIGNATURE)) {
@@ -81,7 +80,7 @@ export function ModelsConsistency() {
     if (signatureParam != null || signatureChoice == null) {
       return;
     }
-    if (hasDomainParam && domainParam === 'all') {
+    if (!hasDomainParam || domainParam === 'all') {
       setSearchParams({ domainId: 'all', signature: signatureChoice }, { replace: true });
       return;
     }
@@ -100,7 +99,7 @@ export function ModelsConsistency() {
   const [{ data, fetching, error }] = useQuery<ModelsConsistencyQueryResult, ModelsConsistencyQueryVariables>({
     query: MODELS_CONSISTENCY_QUERY,
     variables: queryVariables,
-    pause: (!hasDomainParam && urlDomainId == null) || signatureChoice == null,
+    pause: signatureChoice == null,
     requestPolicy: 'cache-and-network',
   });
 
