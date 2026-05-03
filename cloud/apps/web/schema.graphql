@@ -1196,17 +1196,34 @@ type DomainTrialRunStatus {
   updatedAt: DateTime!
 }
 
+type CoverageModelCount {
+  label: String!
+  modelId: String!
+  trialCount: Int!
+}
+
+type CoverageWeakestCondition {
+  conditionLabel: String!
+  modelCounts: [CoverageModelCount!]!
+  otherConditionsCount: Int
+}
+
 type DomainValueCoverageCell {
+  aFirstBatchEquivalent: Int!
   """
   Count of complete A-first runs for this value pair after model-set filtering. This is the filtered directional count for the first value in the pair.
   """
   aFirstBatchCount: Int!
+  aFirstDefinitionName: String
   aggregateRunId: String
 
+  batchEquivalent: Int!
   """
   Count of complete B-first runs for this value pair after model-set filtering. This is the filtered directional count for the second value in the pair.
   """
   bFirstBatchCount: Int!
+  bFirstBatchEquivalent: Int!
+  bFirstDefinitionName: String
 
   """
   Count of fully-complete non-aggregate runs for this value pair. A run is complete when every selected model has at least one transcript at every (scenario × sampleIndex) slot. samplesPerScenario does not multiply this count -- a complete run contributes 1 regardless of how many samples per scenario were planned. Aggregate runs are excluded.
@@ -1232,6 +1249,7 @@ type DomainValueCoverageCell {
   maxTrialCount: Int
   minTrialCount: Int
   modelBreakdown: [CoverageModelBreakdown!]
+  weakestCondition: CoverageWeakestCondition
 
   """
   Count of unmatched directional runs for this value pair, computed as max(complete A-first runs, complete B-first runs) - min(complete A-first runs, complete B-first runs). When both directions are equal this is 0; when only one direction has runs this is the count of that side. Runs without a recognizable direction token are excluded.
@@ -2099,6 +2117,7 @@ type PressureSensitivityModel {
   providerName: String!
   unscoredCount: Int!
   valuePairs: [PressureSensitivityValuePair!]!
+  valueRates: [PressureSensitivityValueRate!]!
 }
 
 type PressureSensitivityResult {
@@ -2130,6 +2149,16 @@ type PressureSensitivityValuePair {
   secondValueLabel: String!
   secondValueToken: String!
   unscoredCount: Int!
+}
+
+type PressureSensitivityValueRate {
+  averageWinRate: Float
+  balancedWinRate: Float
+  highPressureOnOpposingValueWinRate: Float
+  highPressureOnThisValueWinRate: Float
+  pairsMeasured: Int!
+  valueLabel: String!
+  valueToken: String!
 }
 
 """Result of a probe job execution"""

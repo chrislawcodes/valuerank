@@ -3,11 +3,11 @@ import type { ReactNode } from 'react';
 import { CopyVisualButton } from '../ui/CopyVisualButton';
 import { TooltipIcon } from '../ui/TooltipIcon';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/Table';
-import type { PressureSensitivityValuePair } from '../../api/operations/pressureSensitivity';
+import type { PressureSensitivityValueRate } from '../../api/operations/pressureSensitivity';
 import { formatPercent } from './pressureSensitivityFormatting';
 
 type Props = {
-  valuePairs: PressureSensitivityValuePair[];
+  valueRates: PressureSensitivityValueRate[];
 };
 
 type SortDirection = 'asc' | 'desc';
@@ -32,13 +32,6 @@ type ValueRow = {
   highPressureOnThisValue: number | null;
   highPressureOnOpposingValue: number | null;
   responsiveness: number | null;
-};
-
-type PairPerspectiveRates = {
-  averageWinRate: number | null;
-  balancedWinRate: number | null;
-  highPressureOnThisValue: number | null;
-  highPressureOnOpposingValue: number | null;
 };
 
 const GRID_LABELS = [5, 4, 3, 2, 1];
@@ -103,73 +96,6 @@ function formatRate(value: number | null): ReactNode {
   }
 
   return <span className="font-mono text-gray-900">{formatPercent(value)}</span>;
-}
-
-
-function computePairRates(pair: PressureSensitivityValuePair, valueLabel: string): PairPerspectiveRates {
-  if (pair.firstValueLabel === valueLabel) {
-    return {
-      averageWinRate: pair.directionBalancedWinRate ?? null,
-      balancedWinRate: pair.directionBalancedBalancedWinRate ?? null,
-      highPressureOnThisValue: pair.directionBalancedHighPressureOwnWinRate ?? null,
-      highPressureOnOpposingValue: pair.directionBalancedHighPressureOpponentWinRate ?? null,
-    };
-  }
-
-  return {
-    averageWinRate: pair.directionBalancedOpponentWinRate ?? null,
-    balancedWinRate: pair.directionBalancedBalancedOpponentWinRate ?? null,
-    highPressureOnThisValue: pair.directionBalancedHighPressureOpponentOpponentWinRate ?? null,
-    highPressureOnOpposingValue: pair.directionBalancedHighPressureOwnOpponentWinRate ?? null,
-  };
-}
-
-function mean(values: Array<number | null>): number | null {
-  let sum = 0;
-  let count = 0;
-
-  for (const value of values) {
-    if (value == null) {
-      continue;
-    }
-    sum += value;
-    count += 1;
-  }
-
-  if (count === 0) {
-    return null;
-  }
-
-  return sum / count;
-}
-
-function buildValueRows(valuePairs: PressureSensitivityValuePair[]): ValueRow[] {
-  const valueLabels = [...new Set(valuePairs.flatMap((pair) => [pair.firstValueLabel, pair.secondValueLabel]))].sort((a, b) =>
-    a.localeCompare(b),
-  );
-
-  return valueLabels.map((valueLabel) => {
-    const pairRates = valuePairs
-      .filter((pair) => pair.firstValueLabel === valueLabel || pair.secondValueLabel === valueLabel)
-      .map((pair) => computePairRates(pair, valueLabel));
-
-    const averageWinRate = mean(pairRates.map((rates) => rates.averageWinRate));
-    const balancedWinRate = mean(pairRates.map((rates) => rates.balancedWinRate));
-    const highPressureOnThisValue = mean(pairRates.map((rates) => rates.highPressureOnThisValue));
-    const highPressureOnOpposingValue = mean(pairRates.map((rates) => rates.highPressureOnOpposingValue));
-
-    return {
-      valueLabel,
-      averageWinRate,
-      balancedWinRate,
-      highPressureOnThisValue,
-      highPressureOnOpposingValue,
-      responsiveness:
-        highPressureOnThisValue != null && balancedWinRate != null
-          ? highPressureOnThisValue - balancedWinRate
-          : null,
-    };
-  });
 }
 
 function defaultDirectionForKey(key: SortKey): SortDirection {
@@ -277,12 +203,26 @@ function RateCell({ value }: { value: number | null }) {
   return <TableCell className="text-right text-sm">{formatRate(value)}</TableCell>;
 }
 
-export function PressureResponseByValueTable({ valuePairs }: Props) {
+export function PressureResponseByValueTable({ valueRates }: Props) {
   const tableRef = useRef<HTMLDivElement>(null);
   const [sortKey, setSortKey] = useState<SortKey>('responsiveness');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
-  const rows = useMemo(() => buildValueRows(valuePairs), [valuePairs]);
+  const rows = useMemo(
+    () =>
+      valueRates.map((vr) => ({
+        valueLabel: vr.valueLabel,
+        averageWinRate: vr.averageWinRate ?? null,
+        balancedWinRate: vr.balancedWinRate ?? null,
+        highPressureOnThisValue: vr.highPressureOnThisValueWinRate ?? null,
+        highPressureOnOpposingValue: vr.highPressureOnOpposingValueWinRate ?? null,
+        responsiveness:
+          vr.highPressureOnThisValueWinRate != null && vr.balancedWinRate != null
+            ? vr.highPressureOnThisValueWinRate - vr.balancedWinRate
+            : null,
+      })),
+    [valueRates],
+  );
 
   const sortedRows = useMemo(
     () => sortRows(rows, sortKey, sortDirection),

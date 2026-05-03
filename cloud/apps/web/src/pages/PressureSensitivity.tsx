@@ -297,7 +297,7 @@ export function PressureSensitivity() {
       ) : (
         <>
           <PressureDirectionalBreakdown models={models} />
-          {selectedModel && <PressureResponseByValueTable valuePairs={selectedModel.valuePairs} />}
+          {selectedModel && <PressureResponseByValueTable valueRates={selectedModel.valueRates} />}
 
           {selectedModel && <PressureSensitivityDetail model={selectedModel} />}
 

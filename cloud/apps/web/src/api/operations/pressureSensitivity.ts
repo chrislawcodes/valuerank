@@ -23,6 +23,7 @@ export type PressureSensitivityExcludedDefinition =
   PressureSensitivityResult['excludedDefinitions'][number];
 
 export type PressureSensitivityValuePair = PressureSensitivityModel['valuePairs'][number];
+export type PressureSensitivityValueRate = PressureSensitivityModel['valueRates'][number];
 export type PressureSensitivityCell = PressureSensitivityValuePair['grid'][number];
 export type PressureResponse = NonNullable<PressureSensitivityValuePair['pressureResponse']>;
 export type PressureResponseSummary =

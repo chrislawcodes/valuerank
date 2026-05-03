@@ -12,11 +12,13 @@ import {
   type PressureSensitivityModelShape,
   type PressureSensitivityResultShape,
   type PressureSensitivityValuePairShape,
+  type PressureSensitivityValueRateShape,
   type SensitivityCellShape,
 } from '../types/pressure-sensitivity.js';
 import { buildSafeLevelLookup, type DefinitionDimension } from './scenarios-utils.js';
 import { normalizeScenarioAnalysisMetadata } from '../../services/analysis/scenario-metadata.js';
 import {
+  buildCellMetrics,
   buildVignetteWeightedCellMetrics,
   computeDirectionBalancedPairWinRates,
   pooledDirectionalReduction,
@@ -36,6 +38,7 @@ import {
   buildPressureSensitivityDecisionSnapshot,
   type PressureSensitivityDecisionSnapshot,
 } from '../../services/pressure-sensitivity/decision-snapshot.js';
+import { aggregateValueWinRates } from '../../services/analysis/value-win-rate-aggregation.js';
 
 const log = createLogger('pressure-sensitivity');
 const MIN_N = 3;
@@ -113,6 +116,21 @@ type PressureConditionExclusionBreakdown = {
   levelAssignment: number;
 };
 
+type ValueRateFilter =
+  | 'all'
+  | 'balanced'
+  | 'highPressureOnValue'
+  | 'highPressureOnOpposingValue';
+
+type ValueRateCellAccumulator = {
+  valueKey: string;
+  definitionId: string;
+  domainId: string;
+  pairKey: string;
+  directionKey: string;
+  cellRates: number[];
+};
+
 function cellKey(ownLevel: number, opponentLevel: number): string {
   return `${ownLevel}::${opponentLevel}`;
 }
@@ -177,6 +195,78 @@ export function buildSourceRunToDefIdMap(
 
 function formatValueLabel(token: string): string {
   return token.replaceAll('_', ' ').trim();
+}
+
+function shouldIncludeValueRateCell(
+  filter: ValueRateFilter,
+  isCanonicalFirst: boolean,
+  ownLevel: number,
+  opponentLevel: number,
+): boolean {
+  if (filter === 'all') return true;
+  if (filter === 'balanced') return ownLevel === opponentLevel;
+
+  if (isCanonicalFirst) {
+    if (filter === 'highPressureOnValue') {
+      return ownLevel >= 4 && opponentLevel <= 3;
+    }
+    return opponentLevel >= 4 && ownLevel <= 3;
+  }
+
+  if (filter === 'highPressureOnValue') {
+    return opponentLevel >= 4 && ownLevel <= 3;
+  }
+  return ownLevel >= 4 && opponentLevel <= 3;
+}
+
+function addValueRateCell(
+  groups: Map<string, ValueRateCellAccumulator>,
+  params: {
+    valueKey: string;
+    definitionId: string;
+    domainId: string;
+    pairKey: string;
+    directionKey: string;
+    cellRate: number;
+  },
+): void {
+  const key = [
+    params.valueKey,
+    params.definitionId,
+    params.domainId,
+    params.pairKey,
+    params.directionKey,
+  ].join('||');
+  const existing = groups.get(key) ?? {
+    valueKey: params.valueKey,
+    definitionId: params.definitionId,
+    domainId: params.domainId,
+    pairKey: params.pairKey,
+    directionKey: params.directionKey,
+    cellRates: [],
+  };
+  existing.cellRates.push(params.cellRate);
+  groups.set(key, existing);
+}
+
+function toValueRateInputs(groups: Map<string, ValueRateCellAccumulator>) {
+  const inputs = [];
+
+  for (const group of groups.values()) {
+    if (group.cellRates.length === 0) continue;
+    const vignetteRate =
+      group.cellRates.reduce((sum, rate) => sum + rate, 0) / group.cellRates.length;
+    inputs.push({
+      domainId: group.domainId,
+      definitionId: group.definitionId,
+      valueKey: group.valueKey,
+      pairKey: group.pairKey,
+      directionKey: group.directionKey,
+      vignetteRate,
+    });
+  }
+
+  return inputs;
 }
 
 function emptyPressureConditionExclusionBreakdown(): PressureConditionExclusionBreakdown {
@@ -581,6 +671,7 @@ builder.queryField('pressureSensitivity', (t) =>
       for (const model of models) {
         const pairs = perModel.get(model.modelId) ?? new Map<string, PairAccumulator>();
         const valuePairs: PressureSensitivityValuePairShape[] = [];
+        const pairKeysByValue = new Map<string, Set<string>>();
         let modelUnscored = 0;
         const perPairPressureResponses: number[] = [];
 
@@ -667,6 +758,14 @@ builder.queryField('pressureSensitivity', (t) =>
             directionBalancedHighPressureOpponentOpponentWinRate: dbHighOpponent.opponentRate,
           });
 
+          const firstPairKeys = pairKeysByValue.get(acc.firstValueToken) ?? new Set<string>();
+          firstPairKeys.add(acc.pairKey);
+          pairKeysByValue.set(acc.firstValueToken, firstPairKeys);
+
+          const secondPairKeys = pairKeysByValue.get(acc.secondValueToken) ?? new Set<string>();
+          secondPairKeys.add(acc.pairKey);
+          pairKeysByValue.set(acc.secondValueToken, secondPairKeys);
+
           if (pressureResponse.value !== null) {
             perPairPressureResponses.push(pressureResponse.value);
 
@@ -690,6 +789,95 @@ builder.queryField('pressureSensitivity', (t) =>
           }
         }
 
+        const valueRateGroupsByFilter: Record<ValueRateFilter, Map<string, ValueRateCellAccumulator>> = {
+          all: new Map(),
+          balanced: new Map(),
+          highPressureOnValue: new Map(),
+          highPressureOnOpposingValue: new Map(),
+        };
+
+        for (const acc of pairs.values()) {
+          for (const [, cellAcc] of acc.cells) {
+            for (const [defId, observations] of cellAcc.observationsByDefinition.entries()) {
+              const authoredFirstToken = authoredFirstTokenByDef.get(defId);
+              if (authoredFirstToken == null) continue;
+
+              const metrics = buildCellMetrics([...observations]);
+              if (
+                metrics.n === 0
+                || metrics.winRate == null
+                || metrics.opponentWinRate == null
+              ) {
+                continue;
+              }
+
+              const domainForDefinition = domainByDef.get(defId) ?? defId;
+              const sides = [
+                {
+                  valueToken: acc.firstValueToken,
+                  cellRate: metrics.winRate,
+                  isCanonicalFirst: true,
+                },
+                {
+                  valueToken: acc.secondValueToken,
+                  cellRate: metrics.opponentWinRate,
+                  isCanonicalFirst: false,
+                },
+              ] as const;
+
+              for (const side of sides) {
+                if (side.cellRate == null) continue;
+
+                for (const filter of Object.keys(valueRateGroupsByFilter) as ValueRateFilter[]) {
+                  if (
+                    !shouldIncludeValueRateCell(
+                      filter,
+                      side.isCanonicalFirst,
+                      cellAcc.ownLevel,
+                      cellAcc.opponentLevel,
+                    )
+                  ) {
+                    continue;
+                  }
+
+                  addValueRateCell(valueRateGroupsByFilter[filter], {
+                    valueKey: side.valueToken,
+                    definitionId: defId,
+                    domainId: domainForDefinition,
+                    pairKey: acc.pairKey,
+                    directionKey: authoredFirstToken,
+                    cellRate: side.cellRate,
+                  });
+                }
+              }
+            }
+          }
+        }
+
+        const allValueRates = aggregateValueWinRates(toValueRateInputs(valueRateGroupsByFilter.all));
+        const balancedValueRates = aggregateValueWinRates(
+          toValueRateInputs(valueRateGroupsByFilter.balanced),
+        );
+        const highPressureOnValueRates = aggregateValueWinRates(
+          toValueRateInputs(valueRateGroupsByFilter.highPressureOnValue),
+        );
+        const highPressureOnOpposingValueRates = aggregateValueWinRates(
+          toValueRateInputs(valueRateGroupsByFilter.highPressureOnOpposingValue),
+        );
+
+        const valueTokens = [...pairKeysByValue.keys()].sort((left, right) => left.localeCompare(right));
+        const valueRates: PressureSensitivityValueRateShape[] = valueTokens.map((valueToken) => ({
+          valueToken,
+          valueLabel: formatValueLabel(valueToken),
+          averageWinRate: allValueRates.get(valueToken)?.crossDomainRate ?? null,
+          balancedWinRate: balancedValueRates.get(valueToken)?.crossDomainRate ?? null,
+          highPressureOnThisValueWinRate:
+            highPressureOnValueRates.get(valueToken)?.crossDomainRate ?? null,
+          highPressureOnOpposingValueWinRate:
+            highPressureOnOpposingValueRates.get(valueToken)?.crossDomainRate ?? null,
+          pairsMeasured: pairKeysByValue.get(valueToken)?.size ?? 0,
+        }));
+
         const pressureResponseSummary = summarizePressureResponse(perPairPressureResponses);
 
         if (valuePairs.length === 0 || pressureResponseSummary.pairsMeasured === 0) {
@@ -708,6 +896,7 @@ builder.queryField('pressureSensitivity', (t) =>
           providerName: model.provider.displayName ?? model.provider.name,
           pressureResponseSummary,
           valuePairs: valuePairs.sort((a, b) => a.pairKey.localeCompare(b.pairKey)),
+          valueRates,
           unscoredCount: modelUnscored,
         });
       }

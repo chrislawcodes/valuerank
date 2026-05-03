@@ -1182,17 +1182,40 @@ export type DomainTrialRunStatus = {
 
 export type DomainValueCoverageCell = {
   __typename?: 'DomainValueCoverageCell';
+  /** Count of complete A-first runs for this value pair after model-set filtering. This is the filtered directional count for the first value in the pair. */
+  aFirstBatchCount: Scalars['Int']['output'];
   aFirstBatchEquivalent: Scalars['Int']['output'];
   aFirstDefinitionName?: Maybe<Scalars['String']['output']>;
   aggregateRunId?: Maybe<Scalars['String']['output']>;
+  /** Count of complete B-first runs for this value pair after model-set filtering. This is the filtered directional count for the second value in the pair. */
+  bFirstBatchCount: Scalars['Int']['output'];
   bFirstBatchEquivalent: Scalars['Int']['output'];
   bFirstDefinitionName?: Maybe<Scalars['String']['output']>;
+  /** Count of fully-complete non-aggregate runs for this value pair. A run is complete when every selected model has at least one transcript at every (scenario × sampleIndex) slot. samplesPerScenario does not multiply this count -- a complete run contributes 1 regardless of how many samples per scenario were planned. Aggregate runs are excluded. */
+  batchCount: Scalars['Int']['output'];
   batchEquivalent: Scalars['Int']['output'];
+  /** Union of definition IDs that contribute data to this coverage cell, sorted alphabetically. */
   contributingDefinitionIds: Array<Scalars['String']['output']>;
   definitionId?: Maybe<Scalars['String']['output']>;
-  weakestCondition?: Maybe<CoverageWeakestCondition>;
+  definitionName?: Maybe<Scalars['String']['output']>;
+  /** Per-direction condition coverage for this value pair, including complete batches, filled slots, leftover conditions from incomplete runs, and contributing definition IDs. */
+  directionalCoverage: Array<DirectionalCoverage>;
+  /** Count of non-aggregate runs that expect transcripts but are missing one or more (model × scenario × sampleIndex) slots. Per-run; samplesPerScenario does not multiply this count. Aggregate runs and runs with zero expected slots are excluded. */
+  incompleteBatchCount: Scalars['Int']['output'];
+  maxTrialCount?: Maybe<Scalars['Int']['output']>;
+  minTrialCount?: Maybe<Scalars['Int']['output']>;
+  modelBreakdown?: Maybe<Array<CoverageModelBreakdown>>;
+  /** Count of unmatched directional runs for this value pair, computed as max(complete A-first runs, complete B-first runs) - min(complete A-first runs, complete B-first runs). When both directions are equal this is 0; when only one direction has runs this is the count of that side. Runs without a recognizable direction token are excluded. */
+  orphanedBatchCount: Scalars['Int']['output'];
+  /** Count of unmatched condition slots across both directions, computed as the size of the symmetric difference of filled (scenarioId, modelId, sampleIndex) slots. */
+  orphanedConditionCount: Scalars['Int']['output'];
+  /** Count of pairable analysis-ready batches for this value pair, computed as min(complete A-first non-aggregate runs, complete B-first non-aggregate runs) where direction is read from config.jobChoiceValueFirst. A launch where only one direction completed contributes 0 here (the surviving complete run still appears in batchCount). Runs without a recognizable direction token are excluded from both sides. See docs/canonical-glossary.md "Paired Batch" for full semantic. */
+  pairedBatchCount: Scalars['Int']['output'];
+  /** Count of matched condition slots across both directions, computed as the size of the intersection of filled (scenarioId, modelId, sampleIndex) slots. */
+  pairedConditionCount: Scalars['Int']['output'];
   valueA: Scalars['String']['output'];
   valueB: Scalars['String']['output'];
+  weakestCondition?: Maybe<CoverageWeakestCondition>;
 };
 
 export type DomainValueCoverageResult = {
@@ -2378,6 +2401,7 @@ export type PressureSensitivityModel = {
   providerName: Scalars['String']['output'];
   unscoredCount: Scalars['Int']['output'];
   valuePairs: Array<PressureSensitivityValuePair>;
+  valueRates: Array<PressureSensitivityValueRate>;
 };
 
 export type PressureSensitivityResult = {
@@ -2411,6 +2435,17 @@ export type PressureSensitivityValuePair = {
   secondValueLabel: Scalars['String']['output'];
   secondValueToken: Scalars['String']['output'];
   unscoredCount: Scalars['Int']['output'];
+};
+
+export type PressureSensitivityValueRate = {
+  __typename?: 'PressureSensitivityValueRate';
+  averageWinRate?: Maybe<Scalars['Float']['output']>;
+  balancedWinRate?: Maybe<Scalars['Float']['output']>;
+  highPressureOnOpposingValueWinRate?: Maybe<Scalars['Float']['output']>;
+  highPressureOnThisValueWinRate?: Maybe<Scalars['Float']['output']>;
+  pairsMeasured: Scalars['Int']['output'];
+  valueLabel: Scalars['String']['output'];
+  valueToken: Scalars['String']['output'];
 };
 
 /** Result of a probe job execution */
@@ -4283,7 +4318,7 @@ export type DomainValueCoverageQueryVariables = Exact<{
 }>;
 
 
-export type DomainValueCoverageQuery = { __typename?: 'Query', domainValueCoverage?: { __typename?: 'DomainValueCoverageResult', domainId: string, values: Array<string>, cells: Array<{ __typename?: 'DomainValueCoverageCell', valueA: string, valueB: string, batchEquivalent: number, aFirstBatchEquivalent: number, bFirstBatchEquivalent: number, aFirstDefinitionName?: string | null, bFirstDefinitionName?: string | null, weakestCondition?: { __typename?: 'CoverageWeakestCondition', conditionLabel: string, otherConditionsCount?: number | null, modelCounts: Array<{ __typename?: 'CoverageModelCount', modelId: string, label: string, trialCount: number }> } | null, contributingDefinitionIds: Array<string>, definitionId?: string | null, aggregateRunId?: string | null }>, availableModels: Array<{ __typename?: 'CoverageModelOption', modelId: string, label: string }> } | null };
+export type DomainValueCoverageQuery = { __typename?: 'Query', domainValueCoverage?: { __typename?: 'DomainValueCoverageResult', domainId: string, values: Array<string>, cells: Array<{ __typename?: 'DomainValueCoverageCell', valueA: string, valueB: string, batchEquivalent: number, aFirstBatchEquivalent: number, bFirstBatchEquivalent: number, aFirstDefinitionName?: string | null, bFirstDefinitionName?: string | null, contributingDefinitionIds: Array<string>, definitionId?: string | null, aggregateRunId?: string | null, weakestCondition?: { __typename?: 'CoverageWeakestCondition', conditionLabel: string, otherConditionsCount?: number | null, modelCounts: Array<{ __typename?: 'CoverageModelCount', modelId: string, label: string, trialCount: number }> } | null }>, availableModels: Array<{ __typename?: 'CoverageModelOption', modelId: string, label: string }> } | null };
 
 export type DomainValueCoverageLegacyQueryVariables = Exact<{
   domainId: Scalars['ID']['input'];
@@ -4291,7 +4326,7 @@ export type DomainValueCoverageLegacyQueryVariables = Exact<{
 }>;
 
 
-export type DomainValueCoverageLegacyQuery = { __typename?: 'Query', domainValueCoverage?: { __typename?: 'DomainValueCoverageResult', domainId: string, values: Array<string>, cells: Array<{ __typename?: 'DomainValueCoverageCell', valueA: string, valueB: string, batchEquivalent: number, aFirstBatchEquivalent: number, bFirstBatchEquivalent: number, aFirstDefinitionName?: string | null, bFirstDefinitionName?: string | null, weakestCondition?: { __typename?: 'CoverageWeakestCondition', conditionLabel: string, otherConditionsCount?: number | null, modelCounts: Array<{ __typename?: 'CoverageModelCount', modelId: string, label: string, trialCount: number }> } | null, contributingDefinitionIds: Array<string>, definitionId?: string | null, aggregateRunId?: string | null }>, availableModels: Array<{ __typename?: 'CoverageModelOption', modelId: string, label: string }> } | null };
+export type DomainValueCoverageLegacyQuery = { __typename?: 'Query', domainValueCoverage?: { __typename?: 'DomainValueCoverageResult', domainId: string, values: Array<string>, cells: Array<{ __typename?: 'DomainValueCoverageCell', valueA: string, valueB: string, batchEquivalent: number, aFirstBatchEquivalent: number, bFirstBatchEquivalent: number, aFirstDefinitionName?: string | null, bFirstDefinitionName?: string | null, contributingDefinitionIds: Array<string>, definitionId?: string | null, aggregateRunId?: string | null, weakestCondition?: { __typename?: 'CoverageWeakestCondition', conditionLabel: string, otherConditionsCount?: number | null, modelCounts: Array<{ __typename?: 'CoverageModelCount', modelId: string, label: string, trialCount: number }> } | null }>, availableModels: Array<{ __typename?: 'CoverageModelOption', modelId: string, label: string }> } | null };
 
 export type DomainsQueryVariables = Exact<{
   search?: InputMaybe<Scalars['String']['input']>;
@@ -4655,7 +4690,7 @@ export type PressureSensitivityQueryVariables = Exact<{
 }>;
 
 
-export type PressureSensitivityQuery = { __typename?: 'Query', pressureSensitivity: { __typename?: 'PressureSensitivityResult', pressureConditionExcludedCount: number, transcriptCapHit: boolean, models: Array<{ __typename?: 'PressureSensitivityModel', modelId: string, label: string, providerName: string, unscoredCount: number, pressureResponseSummary: { __typename?: 'PressureResponseSummary', mean?: number | null, rangeMin?: number | null, rangeMax?: number | null, pairsMeasured: number }, valuePairs: Array<{ __typename?: 'PressureSensitivityValuePair', pairKey: string, firstValueToken: string, firstValueLabel: string, secondValueToken: string, secondValueLabel: string, n: number, unscoredCount: number, definitionsMeasured: number, directionBalancedWinRate?: number | null, directionBalancedOpponentWinRate?: number | null, directionBalancedBalancedWinRate?: number | null, directionBalancedBalancedOpponentWinRate?: number | null, directionBalancedHighPressureOwnWinRate?: number | null, directionBalancedHighPressureOwnOpponentWinRate?: number | null, directionBalancedHighPressureOpponentWinRate?: number | null, directionBalancedHighPressureOpponentOpponentWinRate?: number | null, pressureResponse: { __typename?: 'PressureResponse', value?: number | null, baselineRate?: number | null, pushTowardFirstRate?: number | null, pushTowardSecondRate?: number | null, qualifyingTrials: number, ciLow?: number | null, ciHigh?: number | null, reason?: string | null }, grid: Array<{ __typename?: 'SensitivityCell', ownLevel: number, opponentLevel: number, n: number, unscoredCount: number, winRate?: number | null, opponentWinRate?: number | null, conviction?: number | null, netScore?: number | null, lowData: boolean }> }> }>, insufficient: Array<{ __typename?: 'InsufficientPressureSensitivityModel', modelId: string, label: string, providerName: string, reason: string }>, excludedDefinitions: Array<{ __typename?: 'ExcludedDefinition', definitionId: string, name: string, reason: string }>, pressureConditionExclusionBreakdown: { __typename?: 'PressureConditionExclusionBreakdown', sourceRunMapping: number, definitionMetadata: number, missingScenario: number, invalidMetadata: number, levelAssignment: number }, directionalSanityCheck: { __typename?: 'DirectionalSanityCheck', positivePct: number, flatPct: number, negativePct: number, measuredCount: number, unmeasurableCount: number, breakdown: Array<{ __typename?: 'DirectionalSanityCheckEntry', modelId: string, pairKey: string, pressureResponse: number, classification: string }> } } };
+export type PressureSensitivityQuery = { __typename?: 'Query', pressureSensitivity: { __typename?: 'PressureSensitivityResult', pressureConditionExcludedCount: number, transcriptCapHit: boolean, models: Array<{ __typename?: 'PressureSensitivityModel', modelId: string, label: string, providerName: string, unscoredCount: number, pressureResponseSummary: { __typename?: 'PressureResponseSummary', mean?: number | null, rangeMin?: number | null, rangeMax?: number | null, pairsMeasured: number }, valueRates: Array<{ __typename?: 'PressureSensitivityValueRate', valueToken: string, valueLabel: string, averageWinRate?: number | null, balancedWinRate?: number | null, highPressureOnThisValueWinRate?: number | null, highPressureOnOpposingValueWinRate?: number | null, pairsMeasured: number }>, valuePairs: Array<{ __typename?: 'PressureSensitivityValuePair', pairKey: string, firstValueToken: string, firstValueLabel: string, secondValueToken: string, secondValueLabel: string, n: number, unscoredCount: number, definitionsMeasured: number, directionBalancedWinRate?: number | null, directionBalancedOpponentWinRate?: number | null, directionBalancedBalancedWinRate?: number | null, directionBalancedBalancedOpponentWinRate?: number | null, directionBalancedHighPressureOwnWinRate?: number | null, directionBalancedHighPressureOwnOpponentWinRate?: number | null, directionBalancedHighPressureOpponentWinRate?: number | null, directionBalancedHighPressureOpponentOpponentWinRate?: number | null, pressureResponse: { __typename?: 'PressureResponse', value?: number | null, baselineRate?: number | null, pushTowardFirstRate?: number | null, pushTowardSecondRate?: number | null, qualifyingTrials: number, ciLow?: number | null, ciHigh?: number | null, reason?: string | null }, grid: Array<{ __typename?: 'SensitivityCell', ownLevel: number, opponentLevel: number, n: number, unscoredCount: number, winRate?: number | null, opponentWinRate?: number | null, conviction?: number | null, netScore?: number | null, lowData: boolean }> }> }>, insufficient: Array<{ __typename?: 'InsufficientPressureSensitivityModel', modelId: string, label: string, providerName: string, reason: string }>, excludedDefinitions: Array<{ __typename?: 'ExcludedDefinition', definitionId: string, name: string, reason: string }>, pressureConditionExclusionBreakdown: { __typename?: 'PressureConditionExclusionBreakdown', sourceRunMapping: number, definitionMetadata: number, missingScenario: number, invalidMetadata: number, levelAssignment: number }, directionalSanityCheck: { __typename?: 'DirectionalSanityCheck', positivePct: number, flatPct: number, negativePct: number, measuredCount: number, unmeasurableCount: number, breakdown: Array<{ __typename?: 'DirectionalSanityCheckEntry', modelId: string, pairKey: string, pressureResponse: number, classification: string }> } } };
 
 export type OpenRunAnomaliesQueryVariables = Exact<{
   domainId?: InputMaybe<Scalars['ID']['input']>;
@@ -7204,6 +7239,15 @@ export const PressureSensitivityDocument = gql`
         mean
         rangeMin
         rangeMax
+        pairsMeasured
+      }
+      valueRates {
+        valueToken
+        valueLabel
+        averageWinRate
+        balancedWinRate
+        highPressureOnThisValueWinRate
+        highPressureOnOpposingValueWinRate
         pairsMeasured
       }
       valuePairs {

@@ -58,12 +58,23 @@ export type PressureSensitivityValuePairShape = {
   directionBalancedHighPressureOpponentOpponentWinRate: number | null;
 };
 
+export type PressureSensitivityValueRateShape = {
+  valueToken: string;
+  valueLabel: string;
+  averageWinRate: number | null;
+  balancedWinRate: number | null;
+  highPressureOnThisValueWinRate: number | null;
+  highPressureOnOpposingValueWinRate: number | null;
+  pairsMeasured: number;
+};
+
 export type PressureSensitivityModelShape = {
   modelId: string;
   label: string;
   providerName: string;
   pressureResponseSummary: PressureResponseSummaryShape;
   valuePairs: PressureSensitivityValuePairShape[];
+  valueRates: PressureSensitivityValueRateShape[];
   unscoredCount: number;
 };
 
@@ -121,6 +132,9 @@ const PressureResponseSummaryRef = builder.objectRef<PressureResponseSummaryShap
 );
 const PressureSensitivityValuePairRef = builder.objectRef<PressureSensitivityValuePairShape>(
   'PressureSensitivityValuePair',
+);
+const PressureSensitivityValueRateRef = builder.objectRef<PressureSensitivityValueRateShape>(
+  'PressureSensitivityValueRate',
 );
 const PressureSensitivityModelRef = builder.objectRef<PressureSensitivityModelShape>(
   'PressureSensitivityModel',
@@ -204,6 +218,23 @@ builder.objectType(PressureSensitivityValuePairRef, {
   }),
 });
 
+builder.objectType(PressureSensitivityValueRateRef, {
+  fields: (t) => ({
+    valueToken: t.exposeString('valueToken'),
+    valueLabel: t.exposeString('valueLabel'),
+    averageWinRate: t.exposeFloat('averageWinRate', { nullable: true }),
+    balancedWinRate: t.exposeFloat('balancedWinRate', { nullable: true }),
+    highPressureOnThisValueWinRate: t.exposeFloat('highPressureOnThisValueWinRate', {
+      nullable: true,
+    }),
+    highPressureOnOpposingValueWinRate: t.exposeFloat(
+      'highPressureOnOpposingValueWinRate',
+      { nullable: true },
+    ),
+    pairsMeasured: t.exposeInt('pairsMeasured'),
+  }),
+});
+
 builder.objectType(PressureSensitivityModelRef, {
   fields: (t) => ({
     modelId: t.exposeString('modelId'),
@@ -213,6 +244,7 @@ builder.objectType(PressureSensitivityModelRef, {
       type: PressureResponseSummaryRef,
     }),
     valuePairs: t.expose('valuePairs', { type: [PressureSensitivityValuePairRef] }),
+    valueRates: t.expose('valueRates', { type: [PressureSensitivityValueRateRef] }),
     unscoredCount: t.exposeInt('unscoredCount'),
   }),
 });
