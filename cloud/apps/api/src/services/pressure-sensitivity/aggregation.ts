@@ -598,64 +598,110 @@ export function computeDirectionBalancedPairWinRates(params: {
   cellFilter?: (ownLevel: number, opponentLevel: number) => boolean;
 }): { ownRate: number | null; opponentRate: number | null } {
   const { cells, canonicalFirstValueToken, authoredFirstTokenByDef, domainByDef, cellFilter } = params;
+  type DirectionKey = 'first' | 'second';
+  type CellRateBucket = { ownRates: number[]; opponentRates: number[] };
+  type DomainDirectionBuckets = Record<DirectionKey, CellRateBucket>;
 
-  // Per-domain direction buckets: domainKey → { first: rates[], second: rates[] }
-  const ratesByDomain = new Map<string, { first: number[]; second: number[] }>();
+  const getDirectionBuckets = (): DomainDirectionBuckets => ({
+    first: { ownRates: [], opponentRates: [] },
+    second: { ownRates: [], opponentRates: [] },
+  });
+
+  const parseCellLevels = (key: string): { ownLevel: number; opponentLevel: number } | null => {
+    const colonIdx = key.indexOf('::');
+    if (colonIdx === -1) return null;
+
+    const ownLevel = parseInt(key.slice(0, colonIdx), 10);
+    const opponentLevel = parseInt(key.slice(colonIdx + 2), 10);
+    if (!Number.isFinite(ownLevel) || !Number.isFinite(opponentLevel)) {
+      return null;
+    }
+
+    return { ownLevel, opponentLevel };
+  };
+
+  // Collect per-vignette cell rates first so each vignette gets one vote before direction pooling.
+  const cellRatesByDef = new Map<string, CellRateBucket>();
 
   for (const [key, cell] of cells) {
     if (cellFilter != null) {
-      const colonIdx = key.indexOf('::');
-      if (colonIdx === -1) continue;
-      const ownLevel = parseInt(key.slice(0, colonIdx), 10);
-      const opponentLevel = parseInt(key.slice(colonIdx + 2), 10);
-      if (!Number.isFinite(ownLevel) || !Number.isFinite(opponentLevel)) continue;
-      if (!cellFilter(ownLevel, opponentLevel)) continue;
+      const cellLevels = parseCellLevels(key);
+      if (cellLevels == null) continue;
+      if (!cellFilter(cellLevels.ownLevel, cellLevels.opponentLevel)) continue;
     }
 
     for (const [defId, observations] of cell.observationsByDefinition) {
-      const authoredFirstToken = authoredFirstTokenByDef.get(defId);
-      if (authoredFirstToken == null) continue;
-
       const metrics = buildCellMetrics([...observations]);
       if (metrics.n === 0) continue;
 
-      const domainKey = domainByDef.get(defId) ?? defId;
-      let bucket = ratesByDomain.get(domainKey);
-      if (bucket == null) {
-        bucket = { first: [], second: [] };
-        ratesByDomain.set(domainKey, bucket);
+      let defRates = cellRatesByDef.get(defId);
+      if (defRates == null) {
+        defRates = { ownRates: [], opponentRates: [] };
+        cellRatesByDef.set(defId, defRates);
       }
 
       // winRate is always the canonical own rate — assignOwnOpponent maps all outcomes
-      // to canonical own/opponent regardless of authored direction. The bucket split
-      // (first vs second) controls direction balancing; both buckets track the same value.
-      if (metrics.winRate != null) {
-        if (authoredFirstToken === canonicalFirstValueToken) {
-          bucket.first.push(metrics.winRate);
-        } else {
-          bucket.second.push(metrics.winRate);
-        }
-      }
+      // to canonical own/opponent regardless of authored direction.
+      if (metrics.winRate != null) defRates.ownRates.push(metrics.winRate);
+      if (metrics.opponentWinRate != null) defRates.opponentRates.push(metrics.opponentWinRate);
     }
+  }
+
+  // Per-domain direction buckets: domainKey → { first: vignette rates[], second: vignette rates[] }
+  const ratesByDomain = new Map<string, DomainDirectionBuckets>();
+  for (const [defId, defRates] of cellRatesByDef) {
+    const authoredFirstToken = authoredFirstTokenByDef.get(defId);
+    if (authoredFirstToken == null) continue;
+
+    const directionKey: DirectionKey =
+      authoredFirstToken === canonicalFirstValueToken ? 'first' : 'second';
+    const vignetteOwnRate = averageNonNull(defRates.ownRates);
+    const vignetteOpponentRate = averageNonNull(defRates.opponentRates);
+    if (vignetteOwnRate == null && vignetteOpponentRate == null) continue;
+
+    const domainKey = domainByDef.get(defId) ?? defId;
+    let bucket = ratesByDomain.get(domainKey);
+    if (bucket == null) {
+      bucket = getDirectionBuckets();
+      ratesByDomain.set(domainKey, bucket);
+    }
+
+    if (vignetteOwnRate != null) bucket[directionKey].ownRates.push(vignetteOwnRate);
+    if (vignetteOpponentRate != null) bucket[directionKey].opponentRates.push(vignetteOpponentRate);
   }
 
   // Per-domain: average directions, then collect domain rates.
   const domainOwnRates: number[] = [];
+  const domainOpponentRates: number[] = [];
   for (const bucket of ratesByDomain.values()) {
-    const firstMean = averageNonNull(bucket.first);
-    const secondMean = averageNonNull(bucket.second);
-    if (firstMean == null && secondMean == null) continue;
+    const firstOwnMean = averageNonNull(bucket.first.ownRates);
+    const secondOwnMean = averageNonNull(bucket.second.ownRates);
+    const firstOpponentMean = averageNonNull(bucket.first.opponentRates);
+    const secondOpponentMean = averageNonNull(bucket.second.opponentRates);
+
+    if (
+      firstOwnMean == null
+      && secondOwnMean == null
+      && firstOpponentMean == null
+      && secondOpponentMean == null
+    ) {
+      continue;
+    }
+
     // If only one direction has data, use it as the sole estimate for this domain.
-    const domainRate = averageNonNull([firstMean, secondMean]);
-    if (domainRate != null) domainOwnRates.push(domainRate);
+    const domainOwnRate = averageNonNull([firstOwnMean, secondOwnMean]);
+    const domainOpponentRate = averageNonNull([firstOpponentMean, secondOpponentMean]);
+    if (domainOwnRate != null) domainOwnRates.push(domainOwnRate);
+    if (domainOpponentRate != null) domainOpponentRates.push(domainOpponentRate);
   }
 
-  if (domainOwnRates.length === 0) {
+  const ownRate = averageNonNull(domainOwnRates);
+  const opponentRate = averageNonNull(domainOpponentRates);
+  if (ownRate == null && opponentRate == null) {
     return { ownRate: null, opponentRate: null };
   }
 
-  const ownRate = domainOwnRates.reduce((sum, r) => sum + r, 0) / domainOwnRates.length;
-  return { ownRate, opponentRate: 1 - ownRate };
+  return { ownRate, opponentRate };
 }
 
 export function summarizePressureResponse(
