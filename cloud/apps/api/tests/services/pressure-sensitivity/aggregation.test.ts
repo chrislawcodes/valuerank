@@ -639,6 +639,39 @@ describe('computeDirectionBalancedPairWinRates (second suite)', () => {
     expect(result.opponentRate).toBeCloseTo(0.4, 10);
   });
 
+  it('gives each vignette one vote within a direction instead of pooling all of its cells', () => {
+    // This regression distinguishes the PRD-correct vignette weighting from the old cell-pooling
+    // behavior. Old logic would pool six A-first cell rates as one bucket:
+    //   (1 + 1 + 1 + 1 + 1 + 0) / 6 = 0.8333...
+    // PRD logic averages per vignette first:
+    //   def-many = 1.0 across 5 cells, def-few = 0.0 across 1 cell, direction = (1 + 0) / 2 = 0.5
+    const cells = new Map([
+      makeCell('1::1', 'def-many', [makeObs('own_picked')]),
+      makeCell('1::2', 'def-many', [makeObs('own_picked')]),
+      makeCell('1::3', 'def-many', [makeObs('own_picked')]),
+      makeCell('2::1', 'def-many', [makeObs('own_picked')]),
+      makeCell('2::2', 'def-many', [makeObs('own_picked')]),
+      makeCell('3::3', 'def-few', [makeObs('opponent_picked')]),
+    ]);
+
+    const result = computeDirectionBalancedPairWinRates({
+      cells,
+      definitionsMeasured: new Set(['def-many', 'def-few']),
+      canonicalFirstValueToken: 'alpha',
+      authoredFirstTokenByDef: new Map([
+        ['def-many', 'alpha'],
+        ['def-few', 'alpha'],
+      ]),
+      domainByDef: new Map([
+        ['def-many', 'd1'],
+        ['def-few', 'd1'],
+      ]),
+    });
+
+    expect(result.ownRate).toBeCloseTo(0.5, 10);
+    expect(result.opponentRate).toBeCloseTo(0.5, 10);
+  });
+
   it('applies cellFilter to restrict which cells contribute', () => {
     // Two cells: 1::1 (balanced) and 4::1 (high pressure on own)
     // Only the balanced cell should contribute with cellFilter own===opp

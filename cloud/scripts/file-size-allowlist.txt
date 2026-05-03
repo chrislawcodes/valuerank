@@ -9,6 +9,10 @@ cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx
 # fetchTranscriptsFromSourceRuns, buildEmptyResult) exported for tests.
 # Split into resolver-helpers.ts when convenient.
 cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts
+# Pressure sensitivity aggregation: mixes domain aggregation logic with
+# statistical math helpers (wilsonInterval, diffProportionCI, tBasedMeanCI).
+# Extract stat helpers into stat-math.ts when convenient.
+cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts
 
 # Large test files over 1200
 cloud/apps/api/tests/services/run/start.test.ts
