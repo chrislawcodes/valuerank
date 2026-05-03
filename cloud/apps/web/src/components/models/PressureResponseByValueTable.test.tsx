@@ -45,6 +45,8 @@ function createPair(
   firstValueLabel: string,
   secondValueLabel: string,
   grid: PressureSensitivityCell[],
+  directionBalancedWinRate: number | null = null,
+  directionBalancedOpponentWinRate: number | null = null,
 ): PressureSensitivityValuePair {
   const n = grid.reduce((sum, cell) => sum + cell.n, 0);
 
@@ -57,6 +59,8 @@ function createPair(
     n,
     unscoredCount: 0,
     definitionsMeasured: 1,
+    directionBalancedWinRate,
+    directionBalancedOpponentWinRate,
     pressureResponse: {
       value: null,
       baselineRate: null,
@@ -117,6 +121,9 @@ function createTenValueModel(): PressureSensitivityModel {
 }
 
 function createSortFixture(): PressureSensitivityModel {
+  // alpha::beta / alpha::charlie: Alpha flat-avg = 0.3, opponent (Beta/Charlie) flat-avg = 0.7
+  // beta::charlie: Beta flat-avg = 0.8, Charlie opponent flat-avg = 0.2
+  // Sorted by average descending: Beta (mean[0.7,0.8]=0.75) > Charlie (mean[0.7,0.2]=0.45) > Alpha (mean[0.3,0.3]=0.3)
   return createModel([
     createPair(
       'alpha::beta',
@@ -128,6 +135,8 @@ function createSortFixture(): PressureSensitivityModel {
         createCell(1, 4, 10, 0),
         createCell(2, 3, 10, 0),
       ],
+      0.3,
+      0.7,
     ),
     createPair(
       'alpha::charlie',
@@ -139,6 +148,8 @@ function createSortFixture(): PressureSensitivityModel {
         createCell(1, 4, 10, 0),
         createCell(2, 3, 10, 0),
       ],
+      0.3,
+      0.7,
     ),
     createPair(
       'beta::charlie',
@@ -150,11 +161,16 @@ function createSortFixture(): PressureSensitivityModel {
         createCell(1, 4, 10, 0.6),
         createCell(2, 3, 10, 0.9),
       ],
+      0.8,
+      0.2,
     ),
   ]);
 }
 
 function createMathFixture(): PressureSensitivityModel {
+  // alpha::beta: Alpha flat-avg winRate = mean([0.4,0.8,0.3,0.9]) = 0.6; opponent = 0.4
+  // gamma::alpha: Gamma flat-avg = mean([0.6,0.7,0.2,0.1]) = 0.4; Alpha (opponent) flat-avg = 0.6
+  // Alpha average = mean([0.6 (from alpha::beta as first), 0.6 (from gamma::alpha as second)]) = 0.6
   return createModel([
     createPair(
       'alpha::beta',
@@ -166,6 +182,8 @@ function createMathFixture(): PressureSensitivityModel {
         createCell(1, 4, 10, 0.3),
         createCell(2, 3, 10, 0.9),
       ],
+      0.6,
+      0.4,
     ),
     createPair(
       'gamma::alpha',
@@ -177,6 +195,8 @@ function createMathFixture(): PressureSensitivityModel {
         createCell(1, 4, 10, 0.2),
         createCell(2, 3, 10, 0.1),
       ],
+      0.4,
+      0.6,
     ),
   ]);
 }
@@ -229,12 +249,19 @@ describe('PressureResponseByValueTable', () => {
     render(
       <PressureResponseByValueTable
         valuePairs={[
-          createPair('alpha::beta', 'Alpha', 'Beta', [
-            createCell(1, 1, 1, 0),
-            createCell(4, 1, 100, 1),
-            createCell(1, 4, 1, 0),
-            createCell(2, 3, 100, 1),
-          ]),
+          createPair(
+            'alpha::beta',
+            'Alpha',
+            'Beta',
+            [
+              createCell(1, 1, 1, 0),
+              createCell(4, 1, 100, 1),
+              createCell(1, 4, 1, 0),
+              createCell(2, 3, 100, 1),
+            ],
+            0.5,
+            0.5,
+          ),
         ]}
       />,
     );
@@ -255,12 +282,19 @@ describe('PressureResponseByValueTable', () => {
     render(
       <PressureResponseByValueTable
         valuePairs={[
-          createPair('alpha::beta', 'Alpha', 'Beta', [
-            createCell(1, 1, 1, 0.4),
-            createCell(4, 1, 1, 0.8),
-            createCell(1, 4, 2, 0.3),
-            createCell(2, 3, 2, 0.9),
-          ]),
+          createPair(
+            'alpha::beta',
+            'Alpha',
+            'Beta',
+            [
+              createCell(1, 1, 1, 0.4),
+              createCell(4, 1, 1, 0.8),
+              createCell(1, 4, 2, 0.3),
+              createCell(2, 3, 2, 0.9),
+            ],
+            0.6,
+            0.4,
+          ),
         ]}
       />,
     );
