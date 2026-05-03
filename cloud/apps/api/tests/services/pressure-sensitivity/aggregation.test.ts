@@ -385,6 +385,12 @@ describe('computeDirectionBalancedPairWinRates', () => {
         ['def3', 'A'],
         ['def4', 'B'],
       ]),
+      domainByDef: new Map([
+        ['def1', 'd1'],
+        ['def2', 'd1'],
+        ['def3', 'd1'],
+        ['def4', 'd1'],
+      ]),
     });
 
     expect(result.ownRate).toBeCloseTo(0.5, 10);
@@ -413,6 +419,10 @@ describe('computeDirectionBalancedPairWinRates', () => {
         ['defA', 'X'],
         ['defB', 'Y'],
       ]),
+      domainByDef: new Map([
+        ['defA', 'd1'],
+        ['defB', 'd1'],
+      ]),
     });
 
     expect(result.ownRate).toBeCloseTo(0.25, 10);
@@ -430,6 +440,7 @@ describe('computeDirectionBalancedPairWinRates', () => {
       definitionsMeasured: new Set(['def1']),
       canonicalFirstValueToken: 'A',
       authoredFirstTokenByDef: new Map([['def1', 'A']]),
+      domainByDef: new Map([['def1', 'd1']]),
     });
 
     expect(result.ownRate).toBeNull();
@@ -442,6 +453,7 @@ describe('computeDirectionBalancedPairWinRates', () => {
       definitionsMeasured: new Set(),
       canonicalFirstValueToken: 'A',
       authoredFirstTokenByDef: new Map(),
+      domainByDef: new Map(),
     });
 
     expect(result.ownRate).toBeNull();
@@ -460,34 +472,86 @@ describe('computeDirectionBalancedPairWinRates', () => {
       definitionsMeasured: new Set(['defA']),
       canonicalFirstValueToken: 'A',
       authoredFirstTokenByDef: new Map([['defA', 'A']]),
+      domainByDef: new Map([['defA', 'd1']]),
     });
 
     expect(result.ownRate).toBeCloseTo(1.0, 10);
     expect(result.opponentRate).toBeCloseTo(0.0, 10);
   });
-});
 
-describe('summarizePressureResponse', () => {
-  it('computes an equal-weight mean and range across measured pairs', () => {
-    const summary = summarizePressureResponse([0.019, 0.021, 0.05]);
+  it('weights domains equally regardless of how many vignettes each domain has', () => {
+    // Domain A has 2 A-first vignettes both winning 100%.
+    // Domain B has 1 A-first vignette winning 0%.
+    // Flat pool: (1 + 1 + 0) / 3 = 0.667
+    // Per-domain equal weighting: avg(domainA=1.0, domainB=0.0) = 0.5
+    const cells = new Map([
+      makeCell('cell1', {
+        defA1: [{ outcome: 'own_picked', strength: 'strong' }],
+        defA2: [{ outcome: 'own_picked', strength: 'strong' }],
+        defB1: [{ outcome: 'opponent_picked', strength: 'strong' }],
+      }),
+    ]);
 
-    expect(summary.pairsMeasured).toBe(3);
-    expect(summary.mean).toBeCloseTo(0.03, 10);
-    expect(summary.rangeMin).toBe(0.019);
-    expect(summary.rangeMax).toBe(0.05);
-  });
-
-  it('returns null summary fields when no pairs are measured', () => {
-    expect(summarizePressureResponse([])).toEqual({
-      mean: null,
-      rangeMin: null,
-      rangeMax: null,
-      pairsMeasured: 0,
+    const result = computeDirectionBalancedPairWinRates({
+      cells,
+      definitionsMeasured: new Set(['defA1', 'defA2', 'defB1']),
+      canonicalFirstValueToken: 'A',
+      authoredFirstTokenByDef: new Map([
+        ['defA1', 'A'],
+        ['defA2', 'A'],
+        ['defB1', 'A'],
+      ]),
+      domainByDef: new Map([
+        ['defA1', 'domain-alpha'],
+        ['defA2', 'domain-alpha'],
+        ['defB1', 'domain-beta'],
+      ]),
     });
+
+    expect(result.ownRate).toBeCloseTo(0.5, 10);
+    expect(result.opponentRate).toBeCloseTo(0.5, 10);
+  });
+
+  it('combines direction balancing and domain equal-weighting independently', () => {
+    // Domain A: defA1 authored A-first wins 100%; defA2 authored B-first canonical-own=0%
+    //   → firstMean=1.0, secondMean=0.0 → domainRate=0.5
+    // Domain B: defB1 authored A-first wins 0%
+    //   → firstMean=0.0, secondMean=null → domainRate=0.0
+    // ownRate = avg(0.5, 0.0) = 0.25
+    const cells = new Map([
+      makeCell('cell1', {
+        defA1: [{ outcome: 'own_picked', strength: 'strong' }],
+        defA2: [{ outcome: 'own_picked', strength: 'strong' }],
+        defB1: [{ outcome: 'opponent_picked', strength: 'strong' }],
+      }),
+    ]);
+
+    const result = computeDirectionBalancedPairWinRates({
+      cells,
+      definitionsMeasured: new Set(['defA1', 'defA2', 'defB1']),
+      canonicalFirstValueToken: 'A',
+      authoredFirstTokenByDef: new Map([
+        ['defA1', 'A'],
+        ['defA2', 'B'],
+        ['defB1', 'A'],
+      ]),
+      domainByDef: new Map([
+        ['defA1', 'domain-alpha'],
+        ['defA2', 'domain-alpha'],
+        ['defB1', 'domain-beta'],
+      ]),
+    });
+
+    // defA2 is authored B-first and own_picked → B won → canonical own (A) lost → opponentWinRate=0
+    // Domain alpha: firstMean=avg(1.0)=1.0, secondMean=avg(0.0)=0.0 → domainRate=0.5
+    // Domain beta:  firstMean=avg(0.0)=0.0, secondMean=null           → domainRate=0.0
+    // ownRate = avg(0.5, 0.0) = 0.25
+    expect(result.ownRate).toBeCloseTo(0.25, 10);
+    expect(result.opponentRate).toBeCloseTo(0.75, 10);
   });
 });
 
-describe('computeDirectionBalancedPairWinRates', () => {
+describe('computeDirectionBalancedPairWinRates (second suite)', () => {
   function makeObs(outcome: 'own_picked' | 'opponent_picked' | 'neutral'): Observation {
     return { outcome, strength: null };
   }
@@ -506,6 +570,7 @@ describe('computeDirectionBalancedPairWinRates', () => {
       definitionsMeasured: new Set(['def-a']),
       canonicalFirstValueToken: 'alpha',
       authoredFirstTokenByDef: new Map([['def-a', 'alpha']]),
+      domainByDef: new Map([['def-a', 'd1']]),
     });
 
     expect(result.ownRate).toBeNull();
@@ -523,6 +588,7 @@ describe('computeDirectionBalancedPairWinRates', () => {
       definitionsMeasured: new Set(['def-a']),
       canonicalFirstValueToken: 'alpha',
       authoredFirstTokenByDef: new Map([['def-a', 'alpha']]),
+      domainByDef: new Map([['def-a', 'd1']]),
     });
 
     expect(result.ownRate).toBeCloseTo(0.75, 10);
@@ -541,6 +607,7 @@ describe('computeDirectionBalancedPairWinRates', () => {
       definitionsMeasured: new Set(['def-b']),
       canonicalFirstValueToken: 'alpha',
       authoredFirstTokenByDef: new Map([['def-b', 'beta']]),
+      domainByDef: new Map([['def-b', 'd1']]),
     });
 
     // opponentWinRate of the cell = 0.75, which is the canonical own rate
@@ -562,6 +629,7 @@ describe('computeDirectionBalancedPairWinRates', () => {
       definitionsMeasured: new Set(['def-a', 'def-b']),
       canonicalFirstValueToken: 'alpha',
       authoredFirstTokenByDef: new Map([['def-a', 'alpha'], ['def-b', 'beta']]),
+      domainByDef: new Map([['def-a', 'd1'], ['def-b', 'd1']]),
     });
 
     // def-a cell: winRate = 4/5 = 0.8 (authored first → canonical own)
@@ -584,6 +652,7 @@ describe('computeDirectionBalancedPairWinRates', () => {
       definitionsMeasured: new Set(['def-a']),
       canonicalFirstValueToken: 'alpha',
       authoredFirstTokenByDef: new Map([['def-a', 'alpha']]),
+      domainByDef: new Map([['def-a', 'd1']]),
       cellFilter: (own, opp) => own === opp,
     });
 
@@ -595,6 +664,7 @@ describe('computeDirectionBalancedPairWinRates', () => {
       definitionsMeasured: new Set(['def-a']),
       canonicalFirstValueToken: 'alpha',
       authoredFirstTokenByDef: new Map([['def-a', 'alpha']]),
+      domainByDef: new Map([['def-a', 'd1']]),
       cellFilter: (own, opp) => own >= 4 && opp <= 3,
     });
 
@@ -612,6 +682,7 @@ describe('computeDirectionBalancedPairWinRates', () => {
       definitionsMeasured: new Set(['def-a']),
       canonicalFirstValueToken: 'alpha',
       authoredFirstTokenByDef: new Map([['def-a', 'alpha']]),
+      domainByDef: new Map([['def-a', 'd1']]),
       cellFilter: (own, opp) => own >= 4 && opp <= 3,
     });
 

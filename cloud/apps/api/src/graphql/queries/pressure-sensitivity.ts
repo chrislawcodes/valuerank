@@ -75,6 +75,7 @@ type ScenarioRow = {
 type DefinitionMetadata = {
   id: string;
   name: string;
+  domainId: string | null;
   /** Definition's stored value_first.token (used to remap canonical direction). */
   valueFirstToken: string;
   /** Definition's stored value_second.token (used to remap canonical direction). */
@@ -315,10 +316,12 @@ builder.queryField('pressureSensitivity', (t) =>
       // 4. Distinct definitions → validation
       const distinctDefIds = new Set<string>();
       const defNames = new Map<string, string>();
+      const defDomainId = new Map<string, string>();
       for (const r of eligibleRuns) {
         if (r.definition?.id != null) {
           distinctDefIds.add(r.definition.id);
           defNames.set(r.definition.id, r.definition.name);
+          if (r.definition.domainId != null) defDomainId.set(r.definition.id, r.definition.domainId);
         } else {
           distinctDefIds.add(r.definitionId);
         }
@@ -399,6 +402,7 @@ builder.queryField('pressureSensitivity', (t) =>
         definitionMeta.set(defId, {
           id: defId,
           name: defNames.get(defId) ?? defId,
+          domainId: defDomainId.get(defId) ?? null,
           valueFirstToken: components.value_first.token,
           valueSecondToken: components.value_second.token,
           firstValueToken,
@@ -415,6 +419,12 @@ builder.queryField('pressureSensitivity', (t) =>
       const authoredFirstTokenByDef = new Map<string, string>(
         [...definitionMeta.entries()].map(([id, meta]) => [id, meta.valueFirstToken]),
       );
+
+      // Build a lookup from definitionId → domainId for per-domain equal-weight averaging.
+      const domainByDef = new Map<string, string>();
+      for (const [defId, meta] of definitionMeta.entries()) {
+        if (meta.domainId != null) domainByDef.set(defId, meta.domainId);
+      }
 
       // 5. Build a direct run → definition map and stream transcripts.
       // Eligible runs are source runs with real transcripts; map each run.id to its
@@ -609,6 +619,7 @@ builder.queryField('pressureSensitivity', (t) =>
             definitionsMeasured: acc.definitionsMeasured,
             canonicalFirstValueToken: acc.firstValueToken,
             authoredFirstTokenByDef,
+            domainByDef,
           };
 
           const dbAll = computeDirectionBalancedPairWinRates(directionBalancedCommonParams);
