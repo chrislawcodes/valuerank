@@ -18,6 +18,7 @@ import { buildSafeLevelLookup, type DefinitionDimension } from './scenarios-util
 import { normalizeScenarioAnalysisMetadata } from '../../services/analysis/scenario-metadata.js';
 import {
   buildVignetteWeightedCellMetrics,
+  computeDirectionBalancedPairWinRates,
   pooledDirectionalReduction,
   summarizePressureResponse,
   FLAT_DELTA_THRESHOLD,
@@ -411,6 +412,11 @@ builder.queryField('pressureSensitivity', (t) =>
         });
       }
 
+      // Build a lookup from definitionId → authored first value token for direction balancing.
+      const authoredFirstTokenByDef = new Map<string, string>(
+        [...definitionMeta.entries()].map(([id, meta]) => [id, meta.valueFirstToken]),
+      );
+
       // 5. Stream transcripts from the SOURCE runs of each Aggregate-tagged run.
       // Aggregate runs are pooling views — they own metadata (perScenario summaries) but
       // the raw transcripts live on the runs listed in `config.sourceRunIds`. Fetching
@@ -594,6 +600,12 @@ builder.queryField('pressureSensitivity', (t) =>
           modelUnscored += pairUnscored;
 
           const pressureResponse = pooledDirectionalReduction(grid, MIN_N);
+          const balancedRates = computeDirectionBalancedPairWinRates({
+            cells: acc.cells,
+            definitionsMeasured: acc.definitionsMeasured,
+            canonicalFirstValueToken: acc.firstValueToken,
+            authoredFirstTokenByDef,
+          });
           valuePairs.push({
             pairKey: acc.pairKey,
             firstValueToken: acc.firstValueToken,
@@ -614,6 +626,8 @@ builder.queryField('pressureSensitivity', (t) =>
             unscoredCount: pairUnscored,
             grid,
             definitionsMeasured: acc.definitionsMeasured.size,
+            directionBalancedWinRate: balancedRates.ownRate,
+            directionBalancedOpponentWinRate: balancedRates.opponentRate,
           });
 
           if (pressureResponse.value !== null) {

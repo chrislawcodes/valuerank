@@ -48,6 +48,8 @@ export type PressureSensitivityValuePairShape = {
   unscoredCount: number;
   grid: SensitivityCellShape[];
   definitionsMeasured: number;
+  directionBalancedWinRate: number | null;
+  directionBalancedOpponentWinRate: number | null;
 };
 
 export type PressureSensitivityModelShape = {
@@ -185,6 +187,8 @@ builder.objectType(PressureSensitivityValuePairRef, {
     unscoredCount: t.exposeInt('unscoredCount'),
     grid: t.expose('grid', { type: [SensitivityCellRef] }),
     definitionsMeasured: t.exposeInt('definitionsMeasured'),
+    directionBalancedWinRate: t.exposeFloat('directionBalancedWinRate', { nullable: true }),
+    directionBalancedOpponentWinRate: t.exposeFloat('directionBalancedOpponentWinRate', { nullable: true }),
   }),
 });
 

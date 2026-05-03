@@ -131,7 +131,7 @@ function poolRate(
 function computePairRates(pair: PressureSensitivityValuePair, valueLabel: string): PairPerspectiveRates {
   if (pair.firstValueLabel === valueLabel) {
     return {
-      averageWinRate: poolRate(pair.grid, () => true, (cell) => cell.winRate),
+      averageWinRate: pair.directionBalancedWinRate ?? null,
       balancedWinRate: poolRate(
         pair.grid,
         (cell) => cell.ownLevel === cell.opponentLevel,
@@ -151,7 +151,7 @@ function computePairRates(pair: PressureSensitivityValuePair, valueLabel: string
   }
 
   return {
-    averageWinRate: poolRate(pair.grid, () => true, (cell) => cell.opponentWinRate ?? null),
+    averageWinRate: pair.directionBalancedOpponentWinRate ?? null,
     balancedWinRate: poolRate(
       pair.grid,
       (cell) => cell.ownLevel === cell.opponentLevel,

@@ -2113,6 +2113,8 @@ type PressureSensitivityResult {
 
 type PressureSensitivityValuePair {
   definitionsMeasured: Int!
+  directionBalancedOpponentWinRate: Float
+  directionBalancedWinRate: Float
   firstValueLabel: String!
   firstValueToken: String!
   grid: [SensitivityCell!]!

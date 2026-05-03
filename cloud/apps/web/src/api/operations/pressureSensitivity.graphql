@@ -38,6 +38,8 @@ query PressureSensitivity(
           ciHigh
           reason
         }
+        directionBalancedWinRate
+        directionBalancedOpponentWinRate
         grid {
           ownLevel
           opponentLevel
