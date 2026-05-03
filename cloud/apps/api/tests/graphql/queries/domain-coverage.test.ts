@@ -24,6 +24,7 @@ describe('extractValuePair', () => {
     ).toEqual({
       valueA: 'Achievement',
       valueB: 'Benevolence_Dependability',
+      valueFirst: 'Achievement',
     });
   });
 
@@ -38,6 +39,7 @@ describe('extractValuePair', () => {
     ).toEqual({
       valueA: 'Self_Direction_Action',
       valueB: 'Universalism_Nature',
+      valueFirst: 'Self_Direction_Action',
     });
   });
 
@@ -53,6 +55,7 @@ describe('extractValuePair', () => {
     ).toEqual({
       valueA: 'Achievement',
       valueB: 'Benevolence_Dependability',
+      valueFirst: 'Achievement',
     });
   });
 
