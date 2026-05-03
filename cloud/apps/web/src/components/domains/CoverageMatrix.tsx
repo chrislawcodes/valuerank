@@ -393,19 +393,19 @@ export const CoverageMatrix = forwardRef<HTMLDivElement, { domainId: string }>(
                           <CoverageCell
                             valueA={rowVal}
                             valueB={colVal}
-                            batchCount={cell?.batchCount ?? 0}
-                            pairedBatchCount={cell?.pairedBatchCount ?? 0}
-                            orphanedBatchCount={cell?.orphanedBatchCount ?? 0}
-                            aFirstBatchCount={cell?.aFirstBatchCount ?? 0}
-                            bFirstBatchCount={cell?.bFirstBatchCount ?? 0}
-                            pairedConditionCount={cell?.pairedConditionCount ?? 0}
-                            orphanedConditionCount={cell?.orphanedConditionCount ?? 0}
-                            directionalCoverage={cell?.directionalCoverage ?? []}
+                            batchEquivalent={cell?.batchEquivalent ?? 0}
+                            aFirstBatchEquivalent={cell?.aFirstBatchEquivalent ?? 0}
+                            bFirstBatchEquivalent={cell?.bFirstBatchEquivalent ?? 0}
+                            aFirstDefinitionName={cell?.aFirstDefinitionName ?? null}
+                            bFirstDefinitionName={cell?.bFirstDefinitionName ?? null}
+                            weakestCondition={cell?.weakestCondition != null ? {
+                              conditionLabel: cell.weakestCondition.conditionLabel,
+                              modelCounts: cell.weakestCondition.modelCounts,
+                              otherConditionsCount: cell.weakestCondition.otherConditionsCount ?? null,
+                            } : null}
                             contributingDefinitionIds={cell?.contributingDefinitionIds ?? []}
-                            incompleteBatchCount={cell?.incompleteBatchCount ?? 0}
                             definitionId={cell?.definitionId ?? null}
                             aggregateRunId={cell?.aggregateRunId ?? null}
-                            modelBreakdown={cell?.modelBreakdown ?? null}
                           />
                         </td>
                       );

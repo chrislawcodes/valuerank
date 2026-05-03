@@ -15,36 +15,22 @@ function renderCell(overrides: Partial<Parameters<typeof CoverageCell>[0]> = {})
               <CoverageCell
                 valueA="Achievement"
                 valueB="Power_Dominance"
-                batchCount={4}
-                pairedBatchCount={2}
-                orphanedBatchCount={0}
-                aFirstBatchCount={2}
-                bFirstBatchCount={2}
-                pairedConditionCount={8}
-                orphanedConditionCount={0}
-                directionalCoverage={[
-                  {
-                    direction: 'Achievement',
-                    completeBatches: 2,
-                    filledSlots: 8,
-                    leftoverConditions: 1,
-                    definitionIds: ['def-a'],
-                  },
-                  {
-                    direction: 'Power_Dominance',
-                    completeBatches: 2,
-                    filledSlots: 10,
-                    leftoverConditions: 2,
-                    definitionIds: ['def-b'],
-                  },
-                ]}
+                batchEquivalent={2}
+                aFirstBatchEquivalent={2}
+                bFirstBatchEquivalent={3}
+                aFirstDefinitionName="Achievement-first vignette"
+                bFirstDefinitionName="Power-first vignette"
+                weakestCondition={{
+                  conditionLabel: '5×1',
+                  modelCounts: [
+                    { modelId: 'gpt-4', label: 'GPT-4', trialCount: 3 },
+                    { modelId: 'gpt-5', label: 'GPT-5', trialCount: 2 },
+                  ],
+                  otherConditionsCount: 4,
+                }}
                 contributingDefinitionIds={['def-a', 'def-b']}
-                incompleteBatchCount={1}
                 definitionId="def-1"
                 aggregateRunId={null}
-                modelBreakdown={[
-                  { modelId: 'gpt-4', label: 'GPT-4', trialCount: 3 },
-                ]}
                 {...overrides}
               />
             </div>
@@ -62,26 +48,23 @@ function LocationStateProbe() {
 }
 
 describe('CoverageCell', () => {
-  it('shows the direction table, transcripts header, and top-up action for imbalanced cells', async () => {
+  it('shows the direction breakdown, weakest condition, and top-up action for imbalanced cells', async () => {
     const user = userEvent.setup();
     renderCell();
 
     await user.click(screen.getByRole('button', { name: /power versus achievement/i }));
 
-    expect(screen.getByText('Direction imbalance')).toBeInTheDocument();
-    expect(screen.getByText('Batches')).toBeInTheDocument();
-    expect(screen.getByText('Conditions')).toBeInTheDocument();
-    expect(screen.getByText('Achievement-first')).toBeInTheDocument();
-    expect(screen.getByText('Power-first')).toBeInTheDocument();
-    expect(screen.getAllByText('2').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('8').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('10').length).toBeGreaterThan(0);
-    expect(screen.getByText('Transcripts')).toBeInTheDocument();
+    expect(screen.getByText('2 batch equivalents')).toBeInTheDocument();
+    expect(screen.getByText('Achievement-first vignette')).toBeInTheDocument();
+    expect(screen.getByText('Power-first vignette')).toBeInTheDocument();
+    expect(screen.getByText('Weakest condition')).toBeInTheDocument();
+    expect(screen.getByText('(Achievement-first vignette)')).toBeInTheDocument();
     expect(screen.getByText('GPT-4')).toBeInTheDocument();
-    expect(screen.getByText('1 incomplete batch — not all transcripts generated')).toBeInTheDocument();
+    expect(screen.getByText('GPT-5')).toBeInTheDocument();
+    expect(screen.getByText('All other conditions: 4 per model')).toBeInTheDocument();
 
     const matchPairCountsLink = screen.getByRole('link', { name: /match pair counts/i });
-    expect(matchPairCountsLink).toHaveAttribute('href', '/definitions/def-a/start-paired-batch');
+    expect(matchPairCountsLink).toHaveAttribute('href', '/definitions/def-1/start-paired-batch');
 
     await user.click(matchPairCountsLink);
 
@@ -93,15 +76,23 @@ describe('CoverageCell', () => {
         launchDefinitionId: string;
         laggingDirection: string;
         contributingDefinitionIds: string[];
+        before: {
+          directionA: { name: string; batches: number; conditions: number };
+          directionB: { name: string; batches: number; conditions: number };
+        };
       };
     };
     expect(state.matchPairCounts).toEqual(expect.objectContaining({
       pairKey: 'achievement::power_dominance',
       valueA: 'Achievement',
       valueB: 'Power_Dominance',
-      launchDefinitionId: 'def-a',
+      launchDefinitionId: 'def-1',
       laggingDirection: 'Achievement',
       contributingDefinitionIds: ['def-a', 'def-b'],
+      before: expect.objectContaining({
+        directionA: expect.objectContaining({ name: 'Achievement', batches: 2, conditions: 2 }),
+        directionB: expect.objectContaining({ name: 'Power_Dominance', batches: 3, conditions: 3 }),
+      }),
     }));
   });
 
@@ -111,22 +102,14 @@ describe('CoverageCell', () => {
     // `aggregateRunId` from `latestAggregateRunIdByDefinitionId ?? latestMatchingRunIdByDefinitionId`,
     // so it is non-null on every cell with any completed run — the gate was
     // hiding the CTA on virtually every cell with real data. The correct gate
-    // is `hasImbalance` only; cells with purely aggregate data already report
-    // `orphanedBatchCount = 0` and `orphanedConditionCount = 0` because the
-    // resolver excludes aggregate runs from those counts. So setting
-    // aggregateRunId without any imbalance signal must hide the CTA.
+    // is `hasImbalance` only. So setting aggregateRunId without any imbalance
+    // signal must hide the CTA.
     const user = userEvent.setup();
     renderCell({
       aggregateRunId: 'run-1',
-      orphanedBatchCount: 0,
-      orphanedConditionCount: 0,
-      aFirstBatchCount: 2,
-      bFirstBatchCount: 2,
-      directionalCoverage: [
-        { direction: 'Achievement', completeBatches: 2, filledSlots: 8, leftoverConditions: 0, definitionIds: ['def-a'] },
-        { direction: 'Power_Dominance', completeBatches: 2, filledSlots: 8, leftoverConditions: 0, definitionIds: ['def-b'] },
-      ],
-      incompleteBatchCount: 0,
+      aFirstBatchEquivalent: 2,
+      bFirstBatchEquivalent: 2,
+      weakestCondition: null,
     });
 
     await user.click(screen.getByRole('button', { name: /power versus achievement/i }));
@@ -137,12 +120,14 @@ describe('CoverageCell', () => {
 
   it('shows Match Pair Counts on imbalanced cells regardless of aggregateRunId', async () => {
     // Companion to the test above: when the cell has an imbalance signal
-    // (orphanedBatchCount, orphanedConditionCount, mismatched filledSlots, or
-    // mismatched a/b-first batch counts), the CTA must show even when
+    // (mismatched a/b-first batch equivalents), the CTA must show even when
     // aggregateRunId is non-null.
     const user = userEvent.setup();
     renderCell({
       aggregateRunId: 'run-1',
+      aFirstBatchEquivalent: 1,
+      bFirstBatchEquivalent: 2,
+      weakestCondition: null,
     });
 
     await user.click(screen.getByRole('button', { name: /power versus achievement/i }));
