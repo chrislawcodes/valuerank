@@ -19,6 +19,15 @@ query PressureSensitivity(
         rangeMax
         pairsMeasured
       }
+      valueRates {
+        valueToken
+        valueLabel
+        averageWinRate
+        balancedWinRate
+        highPressureOnThisValueWinRate
+        highPressureOnOpposingValueWinRate
+        pairsMeasured
+      }
       valuePairs {
         pairKey
         firstValueToken

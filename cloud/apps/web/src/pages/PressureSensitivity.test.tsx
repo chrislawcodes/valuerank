@@ -41,6 +41,17 @@ function createPressureData(
             rangeMax: 0.15,
             pairsMeasured: 1,
           },
+          valueRates: [
+            {
+              valueToken: 'alpha',
+              valueLabel: 'Alpha',
+              averageWinRate: 0.6,
+              balancedWinRate: 0.5,
+              highPressureOnThisValueWinRate: 0.7,
+              highPressureOnOpposingValueWinRate: 0.3,
+              pairsMeasured: 1,
+            },
+          ],
           valuePairs: [
             {
               pairKey: 'alpha::beta',
