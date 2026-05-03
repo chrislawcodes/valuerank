@@ -569,36 +569,38 @@ export function pooledDirectionalReduction(
 /**
  * Compute direction-balanced win rates for a canonical value pair.
  *
- * Each vignette contributes equally regardless of which direction it was authored.
+ * Each vignette contributes equally regardless of which direction it was authored,
+ * and each domain contributes equally regardless of how many vignettes it has.
  * Optionally restricts to a subset of cells via `cellFilter`.
  *
  * The `cells` Map key format is `${ownLevel}::${opponentLevel}`.
  * `canonicalFirstValueToken` is the alphabetically-first value token.
  * `authoredFirstTokenByDef` maps definitionId to the token that was value_first in that definition.
+ * `domainByDef` maps definitionId to its domain ID; definitions absent from this map fall back
+ * to using their defId as the domain key (treated as a singleton domain).
  *
  * Algorithm:
- * 1. For each cell (filtered by `cellFilter` if provided), split observations into two direction buckets:
- *    - authored-first: definitions where value_first === canonicalFirstValueToken
- *    - authored-second: definitions where value_first !== canonicalFirstValueToken
- * 2. Compute a per-vignette win rate within each direction bucket.
- * 3. Average the per-vignette rates within each direction bucket.
- * 4. Return the mean of the two direction averages (equally weighted regardless of vignette count).
+ * 1. For each cell (filtered by `cellFilter` if provided), split observations by domain and
+ *    authoring direction into per-domain direction buckets.
+ * 2. Within each domain, average the per-vignette rates in each direction bucket.
+ * 3. Average the two direction means within each domain (equally weighted).
+ * 4. Average the per-domain rates equally (one vote per domain).
  *
- * Prevents a direction with more vignettes from outweighing the other, consistent
- * with how domain analysis aggregates across directions.
+ * This matches domain analysis's aggregation order: conditions → vignette → direction → pair → domain.
+ * Prevents a domain with more vignettes or runs from outweighing a smaller domain.
  */
 export function computeDirectionBalancedPairWinRates(params: {
   cells: ReadonlyMap<string, Readonly<{ observationsByDefinition: ReadonlyMap<string, ReadonlyArray<Observation>> }>>;
   definitionsMeasured: ReadonlySet<string>;
   canonicalFirstValueToken: string;
   authoredFirstTokenByDef: ReadonlyMap<string, string>;
+  domainByDef: ReadonlyMap<string, string>;
   cellFilter?: (ownLevel: number, opponentLevel: number) => boolean;
 }): { ownRate: number | null; opponentRate: number | null } {
-  const { cells, canonicalFirstValueToken, authoredFirstTokenByDef, cellFilter } = params;
+  const { cells, canonicalFirstValueToken, authoredFirstTokenByDef, domainByDef, cellFilter } = params;
 
-  // Per-vignette rates for each authoring direction.
-  const firstDirectionOwnRates: number[] = [];   // defs where authored value_first === canonical first
-  const secondDirectionOwnRates: number[] = [];  // defs where authored value_first !== canonical first
+  // Per-domain direction buckets: domainKey → { first: rates[], second: rates[] }
+  const ratesByDomain = new Map<string, { first: number[]; second: number[] }>();
 
   for (const [key, cell] of cells) {
     if (cellFilter != null) {
@@ -617,28 +619,40 @@ export function computeDirectionBalancedPairWinRates(params: {
       const metrics = buildCellMetrics([...observations]);
       if (metrics.n === 0) continue;
 
+      const domainKey = domainByDef.get(defId) ?? defId;
+      let bucket = ratesByDomain.get(domainKey);
+      if (bucket == null) {
+        bucket = { first: [], second: [] };
+        ratesByDomain.set(domainKey, bucket);
+      }
+
       if (authoredFirstToken === canonicalFirstValueToken) {
         // Authored first = canonical first: winRate is the canonical own rate.
-        if (metrics.winRate != null) firstDirectionOwnRates.push(metrics.winRate);
+        if (metrics.winRate != null) bucket.first.push(metrics.winRate);
       } else {
         // Authored first = canonical second: opponentWinRate is the canonical own rate.
-        if (metrics.opponentWinRate != null) secondDirectionOwnRates.push(metrics.opponentWinRate);
+        if (metrics.opponentWinRate != null) bucket.second.push(metrics.opponentWinRate);
       }
     }
   }
 
-  const firstMean = averageNonNull(firstDirectionOwnRates);
-  const secondMean = averageNonNull(secondDirectionOwnRates);
+  // Per-domain: average directions, then collect domain rates.
+  const domainOwnRates: number[] = [];
+  for (const bucket of ratesByDomain.values()) {
+    const firstMean = averageNonNull(bucket.first);
+    const secondMean = averageNonNull(bucket.second);
+    if (firstMean == null && secondMean == null) continue;
+    // If only one direction has data, use it as the sole estimate for this domain.
+    const domainRate = averageNonNull([firstMean, secondMean]);
+    if (domainRate != null) domainOwnRates.push(domainRate);
+  }
 
-  if (firstMean == null && secondMean == null) {
+  if (domainOwnRates.length === 0) {
     return { ownRate: null, opponentRate: null };
   }
 
-  // If only one direction has data, use it as the sole estimate.
-  const ownRate = averageNonNull([firstMean, secondMean]);
-  const opponentRate = ownRate == null ? null : 1 - ownRate;
-
-  return { ownRate, opponentRate };
+  const ownRate = domainOwnRates.reduce((sum, r) => sum + r, 0) / domainOwnRates.length;
+  return { ownRate, opponentRate: 1 - ownRate };
 }
 
 export function summarizePressureResponse(
