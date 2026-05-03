@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { CopyVisualButton } from '../ui/CopyVisualButton';
 import { TooltipIcon } from '../ui/TooltipIcon';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/Table';
-import type { PressureSensitivityCell, PressureSensitivityValuePair } from '../../api/operations/pressureSensitivity';
+import type { PressureSensitivityValuePair } from '../../api/operations/pressureSensitivity';
 import { formatPercent } from './pressureSensitivityFormatting';
 
 type Props = {
@@ -105,28 +105,6 @@ function formatRate(value: number | null): ReactNode {
   return <span className="font-mono text-gray-900">{formatPercent(value)}</span>;
 }
 
-function poolRate(
-  cells: PressureSensitivityCell[],
-  predicate: (cell: PressureSensitivityCell) => boolean,
-  rateSelector: (cell: PressureSensitivityCell) => number | null | undefined,
-): number | null {
-  const rates: number[] = [];
-
-  for (const cell of cells) {
-    if (!predicate(cell)) {
-      continue;
-    }
-
-    const rate = rateSelector(cell);
-    if (rate == null) {
-      continue;
-    }
-
-    rates.push(rate);
-  }
-
-  return mean(rates);
-}
 
 function computePairRates(pair: PressureSensitivityValuePair, valueLabel: string): PairPerspectiveRates {
   if (pair.firstValueLabel === valueLabel) {
