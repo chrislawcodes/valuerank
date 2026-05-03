@@ -364,13 +364,14 @@ describe('computeDirectionBalancedPairWinRates', () => {
   it('gives equal weight to both directions even when one has more vignettes', () => {
     // Direction A (authoredFirst === canonicalFirst): 3 vignettes, each winning 100%
     // Direction B (authoredFirst !== canonicalFirst): 1 vignette, winning 0%
+    //   def4 is authored B-first; outcome 'own_picked' means B won → canonical first (A) won 0%
     // Flat average would be 3/4 = 0.75; direction-balanced average = (1.0 + 0.0) / 2 = 0.5
     const cells = new Map([
       makeCell('cell1', {
         def1: [{ outcome: 'own_picked', strength: 'strong' }],
         def2: [{ outcome: 'own_picked', strength: 'strong' }],
         def3: [{ outcome: 'own_picked', strength: 'strong' }],
-        def4: [{ outcome: 'opponent_picked', strength: 'strong' }],
+        def4: [{ outcome: 'own_picked', strength: 'strong' }],
       }),
     ]);
 
@@ -391,13 +392,13 @@ describe('computeDirectionBalancedPairWinRates', () => {
   });
 
   it('averages vignette rates within each direction independently', () => {
-    // Direction A: vignette wins 1.0 in cell1, wins 0.0 in cell2 → vignette rate = 0.5
-    // Direction B: vignette wins 0.0 in cell1 → vignette rate = 0.0
+    // Direction A: defA wins in cell1 (own_picked→winRate=1), loses in cell2 (opponent_picked→winRate=0) → mean=0.5
+    // Direction B: defB authored Y first; own_picked means Y won → X (canonical first) lost → opponentWinRate=0 → mean=0.0
     // Expected ownRate = (0.5 + 0.0) / 2 = 0.25
     const cells = new Map([
       makeCell('cell1', {
         defA: [{ outcome: 'own_picked', strength: 'strong' }],
-        defB: [{ outcome: 'opponent_picked', strength: 'strong' }],
+        defB: [{ outcome: 'own_picked', strength: 'strong' }],
       }),
       makeCell('cell2', {
         defA: [{ outcome: 'opponent_picked', strength: 'strong' }],
