@@ -78,8 +78,7 @@ export function CoverageCell(props: CoverageCellProps) {
   const hasImbalance =
     aFirstBatchCount !== bFirstBatchCount ||
     filledSlotsA !== filledSlotsB ||
-    orphanedBatchCount > 0 ||
-    orphanedConditionCount > 0;
+    orphanedBatchCount > 0;
   const laggingDirection = hasImbalance
     ? computeLaggingDirection({
         valueA,
