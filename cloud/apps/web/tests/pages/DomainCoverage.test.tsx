@@ -128,6 +128,9 @@ describe('DomainCoverage Page', () => {
           error: undefined,
         }];
       }
+      if (operationName === 'LlmModels') {
+        return [{ data: { llmModels: [] }, fetching: false, error: undefined }];
+      }
       if (operationName === 'DomainValueCoverageLegacy') {
         const legacyCoverage = coverageByDomain[args.variables.domainId];
         return [{ data: { domainValueCoverage: legacyCoverage }, fetching: false, error: undefined }];
@@ -145,8 +148,8 @@ describe('DomainCoverage Page', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /copy coverage table as image/i })).toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: 'Model A' })).not.toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: 'Model B' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Model A' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Model B' })).toBeInTheDocument();
     });
   });
 
