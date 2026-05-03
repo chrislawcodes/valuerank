@@ -597,8 +597,8 @@ builder.queryField('pressureSensitivity', (t) =>
         const direction = decision.canonical.direction as CanonicalDirection;
 
         const outcome = assignOwnOpponent(
-          meta.valueFirstToken,
-          meta.valueSecondToken,
+          meta.firstValueToken,
+          meta.secondValueToken,
           direction,
         );
 
