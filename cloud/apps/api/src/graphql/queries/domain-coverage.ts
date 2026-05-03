@@ -230,19 +230,15 @@ builder.queryField('domainValueCoverage', (t) =>
           const models = Array.isArray(config.models)
             ? config.models.filter((m): m is string => typeof m === 'string' && m.length > 0)
             : null;
-          const matchesEffectiveModelSet = effectiveModelIds.length === 0
-            || (models !== null && effectiveModelIds.every((id) => models.includes(id)));
+          // When the caller provides explicit modelIds, those replace the effective
+          // model set filter so counts reflect runs planned for exactly those models.
+          // When no explicit modelIds, fall back to the domain's effective defaults.
+          const activeModelFilter = filterModelIds.length > 0 ? filterModelIds : effectiveModelIds;
+          const matchesEffectiveModelSet = activeModelFilter.length === 0
+            || (models !== null && activeModelFilter.every((id) => models.includes(id)));
           if (!matchesEffectiveModelSet) {
             continue;
           }
-
-          // Apply the explicit model-ID filter symmetrically: a run that doesn't
-          // match contributes to neither bucket. Without this, incompleteBatchCount
-          // would mention runs that batchCount cannot, breaking the "exactly one
-          // bucket" invariant.
-          const matchesModelFilter = filterModelIds.length === 0
-            || run.transcripts.some((transcript) => filterModelIds.includes(transcript.modelId));
-          if (!matchesModelFilter) continue;
 
           const matchingTranscripts = run.transcripts.filter((transcript): transcript is {
             modelId: string;

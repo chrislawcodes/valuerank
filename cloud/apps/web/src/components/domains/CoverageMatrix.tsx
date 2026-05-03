@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useMemo, useState } from 'react';
+import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from 'urql';
 import { ErrorMessage } from '../ui/ErrorMessage';
 import { Loading } from '../ui/Loading';
@@ -19,6 +19,8 @@ import { cn } from '../../lib/utils';
 import { getCanonicalDimension } from '@valuerank/shared';
 import { CoverageCell } from './CoverageCell';
 import { selectPreferredSignature } from './coverageMatrixHelpers';
+import { Button } from '../ui/Button';
+import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../../api/operations/llm';
 
 type CategoryGroup = {
   name: string;
@@ -37,6 +39,8 @@ export const CoverageMatrix = forwardRef<HTMLDivElement, { domainId: string }>(
   const [selectedSignature, setSelectedSignature] = useState<string>('');
   const [allowAllSignatures, setAllowAllSignatures] = useState(false);
   const [useLegacyQuery, setUseLegacyQuery] = useState(false);
+  const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
+  const initializedModelSelection = useRef(false);
 
   const [{ data: signatureData, fetching: signaturesLoading, error: signaturesError }] = useQuery<
     DomainAvailableSignaturesQueryResult,
@@ -65,11 +69,19 @@ export const CoverageMatrix = forwardRef<HTMLDivElement, { domainId: string }>(
     && hasValidSelectedSignature
     && (selectedSignature !== '' || allowAllSignatures || signatureOptions.length === 0);
 
+  const [{ data: llmModelsData }] = useQuery<LlmModelsQueryResult>({
+    query: LLM_MODELS_QUERY,
+    variables: { status: 'ACTIVE' },
+    requestPolicy: 'cache-and-network',
+  });
+
   // Reset state when domainId changes
   useEffect(() => {
     setSelectedSignature('');
     setAllowAllSignatures(false);
     setUseLegacyQuery(false);
+    setSelectedModelIds([]);
+    initializedModelSelection.current = false;
   }, [domainId]);
 
   useEffect(() => {
@@ -91,6 +103,7 @@ export const CoverageMatrix = forwardRef<HTMLDivElement, { domainId: string }>(
     variables: {
       domainId,
       signature: selectedSignature === '' ? undefined : selectedSignature,
+      modelIds: selectedModelIds.length === 0 ? undefined : selectedModelIds,
     },
     pause: domainId === '' || !signatureSelectionReady || useLegacyQuery,
     requestPolicy: 'network-only',
@@ -122,6 +135,48 @@ export const CoverageMatrix = forwardRef<HTMLDivElement, { domainId: string }>(
   const error = useLegacyQuery ? legacyError : scoredError;
 
   const canonicalValues = data?.domainValueCoverage?.values ?? [];
+  const availableModels = data?.domainValueCoverage?.availableModels ?? [];
+
+  const defaultModelIds = useMemo(
+    () => new Set((llmModelsData?.llmModels ?? []).filter((m) => m.isDefault).map((m) => m.modelId)),
+    [llmModelsData],
+  );
+
+  const defaultSelection = useMemo(() => {
+    const availableIds = availableModels.map((m) => m.modelId);
+    const defaults = availableIds.filter((id) => defaultModelIds.has(id));
+    return defaults.length > 0 ? defaults : availableIds;
+  }, [availableModels, defaultModelIds]);
+
+  useEffect(() => {
+    if (initializedModelSelection.current) return;
+    if (availableModels.length === 0) return;
+    if (llmModelsData == null) return;
+    setSelectedModelIds(defaultSelection);
+    initializedModelSelection.current = true;
+  }, [availableModels, llmModelsData, defaultSelection]);
+
+  const isDefaultSelection = useMemo(() => {
+    if (selectedModelIds.length !== defaultSelection.length) return false;
+    const defaultSet = new Set(defaultSelection);
+    return selectedModelIds.every((id) => defaultSet.has(id));
+  }, [selectedModelIds, defaultSelection]);
+
+  const modelSetSummary = availableModels.length === 0
+    ? 'Loading...'
+    : isDefaultSelection
+      ? `Default — ${selectedModelIds.length} model${selectedModelIds.length === 1 ? '' : 's'}`
+      : selectedModelIds.length === availableModels.length
+        ? 'All models'
+        : `${selectedModelIds.length} of ${availableModels.length} selected`;
+
+  const toggleModelId = (modelId: string) => {
+    setSelectedModelIds((current) => (
+      current.includes(modelId)
+        ? current.filter((id) => id !== modelId)
+        : [...current, modelId]
+    ));
+  };
 
   const cellLookup = useMemo(() => {
     const defaultCells = data?.domainValueCoverage?.cells ?? [];
@@ -210,6 +265,54 @@ export const CoverageMatrix = forwardRef<HTMLDivElement, { domainId: string }>(
             ))}
           </select>
         </div>
+        {availableModels.length > 0 && (
+          <details className="min-w-[210px]">
+            <summary className="cursor-pointer list-none">
+              <p className="mb-1 text-sm font-medium text-gray-700">Model filter</p>
+              <div className="inline-flex w-full items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm min-h-[44px] hover:border-gray-400 sm:min-h-0">
+                <span>{modelSetSummary}</span>
+                <span className="ml-2 text-gray-400">▾</span>
+              </div>
+            </summary>
+            <div className="mt-1 space-y-2 rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+              <div className="flex flex-wrap gap-1.5">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelectedModelIds(defaultSelection)}
+                  className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors min-h-0 ${
+                    isDefaultSelection
+                      ? 'border-teal-600 bg-teal-600 text-white hover:bg-teal-700'
+                      : 'border-gray-300 bg-white text-gray-700 hover:border-teal-400 hover:text-teal-700 hover:bg-white'
+                  }`}
+                >
+                  Default Models
+                </Button>
+                {availableModels.map((model) => {
+                  const isSelected = selectedModelIds.includes(model.modelId);
+                  return (
+                    <Button
+                      key={model.modelId}
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => toggleModelId(model.modelId)}
+                      className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors min-h-0 ${
+                        isSelected
+                          ? 'border-teal-600 bg-teal-600 text-white hover:bg-teal-700'
+                          : 'border-gray-300 bg-white text-gray-700 hover:border-teal-400 hover:text-teal-700 hover:bg-white'
+                      }`}
+                      title={model.label}
+                    >
+                      {model.label}
+                    </Button>
+                  );
+                })}
+              </div>
+            </div>
+          </details>
+        )}
       </div>
 
       {/* Matrix */}
