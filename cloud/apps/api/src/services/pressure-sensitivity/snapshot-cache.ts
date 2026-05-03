@@ -14,10 +14,10 @@ import {
   PRESSURE_SENSITIVITY_SNAPSHOT_TYPE,
 } from './snapshot-types.js';
 import {
-  buildPressureSensitivitySnapshotOutput,
   preparePressureSensitivityState,
   writeSnapshot,
 } from './snapshot-builder.js';
+import { buildPressureSensitivitySnapshotOutput } from './snapshot-compute.js';
 
 const log = createLogger('pressure-sensitivity:cache');
 
