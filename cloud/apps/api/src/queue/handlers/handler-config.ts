@@ -17,6 +17,7 @@ import type {
   ProbeDeadLetterJobData,
   AggregateAnalysisJobData,
   RefreshDomainAnalysisSnapshotJobData,
+  RefreshPressureSensitivitySnapshotJobData,
 } from '../types.js';
 import { createProbeScenarioHandler } from './probe-scenario/index.js';
 import { createSummarizeTranscriptHandler } from './summarize-transcript.js';
@@ -29,6 +30,7 @@ import { createRunStateAuditHandler } from './run-state-audit.js';
 import { createAnalysisResultJanitorHandler } from './analysis-result-janitor.js';
 import { createAggregateAnalysisHandler } from './aggregate-analysis.js';
 import { createRefreshDomainAnalysisSnapshotHandler } from './refresh-domain-analysis-snapshot.js';
+import { createRefreshPressureSensitivitySnapshotHandler } from './refresh-pressure-sensitivity-snapshot.js';
 
 // Re-export job data types for handlers
 export type {
@@ -43,6 +45,7 @@ export type {
   ProbeDeadLetterJobData,
   AggregateAnalysisJobData,
   RefreshDomainAnalysisSnapshotJobData,
+  RefreshPressureSensitivitySnapshotJobData,
 };
 
 // Dead letter queue name for probe jobs
@@ -163,6 +166,16 @@ export const handlerRegistrations: HandlerRegistration[] = [
         'refresh_domain_analysis_snapshot',
         { batchSize },
         createRefreshDomainAnalysisSnapshotHandler()
+      );
+    },
+  },
+  {
+    name: 'refresh_pressure_sensitivity_snapshot',
+    register: async (boss, batchSize) => {
+      await boss.work<RefreshPressureSensitivitySnapshotJobData>(
+        'refresh_pressure_sensitivity_snapshot',
+        { batchSize },
+        createRefreshPressureSensitivitySnapshotHandler()
       );
     },
   },
