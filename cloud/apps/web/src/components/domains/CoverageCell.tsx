@@ -86,7 +86,6 @@ export function CoverageCell(props: CoverageCellProps) {
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
       <PopoverTrigger asChild>
-        {/* eslint-disable-next-line react/forbid-elements */}
         <button
           type="button"
           disabled={isDiagonal}
