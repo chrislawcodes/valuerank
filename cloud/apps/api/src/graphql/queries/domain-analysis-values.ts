@@ -16,6 +16,8 @@ export type DomainAnalysisValueKey = (typeof DOMAIN_ANALYSIS_VALUE_KEYS)[number]
 export type DomainAnalysisValuePair = {
   valueA: DomainAnalysisValueKey;
   valueB: DomainAnalysisValueKey;
+  /** Which value was authored first in the definition content (before alphabetical sort). */
+  valueFirst?: DomainAnalysisValueKey;
 };
 
 function isDomainAnalysisValueKey(value: string): value is DomainAnalysisValueKey {
@@ -46,5 +48,5 @@ export function extractValuePair(content: unknown): DomainAnalysisValuePair | nu
   const normalizedB = toPascalCaseKey(nameB);
   if (!isDomainAnalysisValueKey(normalizedA) || !isDomainAnalysisValueKey(normalizedB)) return null;
   const [first, second] = [normalizedA, normalizedB].sort() as [DomainAnalysisValueKey, DomainAnalysisValueKey];
-  return { valueA: first, valueB: second };
+  return { valueA: first, valueB: second, valueFirst: normalizedA };
 }

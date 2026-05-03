@@ -61,6 +61,8 @@ export type DomainAnalysisValueCounts = {
 export type DomainAnalysisValuePair = {
   valueA: DomainAnalysisValueKey;
   valueB: DomainAnalysisValueKey;
+  /** Which value was authored first in the definition content (before alphabetical sort). */
+  valueFirst?: DomainAnalysisValueKey;
 };
 
 export type DomainAnalysisValueScore = {

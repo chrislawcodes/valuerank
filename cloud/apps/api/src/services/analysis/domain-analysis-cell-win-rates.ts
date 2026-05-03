@@ -73,7 +73,7 @@ function getOrCreatePairwise(
 export function computeCellWeightedDomainRates(params: {
   cellMap: Map<string, CellCounts>;
   filteredSourceRunDefinitionById: Map<string, string>;
-  definitionValuePairById: Map<string, { valueA: DomainAnalysisValueKey; valueB: DomainAnalysisValueKey }>;
+  definitionValuePairById: Map<string, { valueA: DomainAnalysisValueKey; valueB: DomainAnalysisValueKey; valueFirst?: DomainAnalysisValueKey }>;
 }): { models: CellWeightedDomainModel[]; analyzedDefinitionIds: Set<string> } {
   const countsByModel = new Map<string, Map<DomainAnalysisValueKey, DomainAnalysisValueCounts>>();
   const pairwiseWinsByModel = new Map<string, Map<DomainAnalysisValueKey, Map<DomainAnalysisValueKey, number>>>();
@@ -126,25 +126,65 @@ export function computeCellWeightedDomainRates(params: {
     .map((modelId) => {
       const valueCounts = countsByModel.get(modelId) ?? new Map<DomainAnalysisValueKey, DomainAnalysisValueCounts>();
       const modelDefinitionRates = ratesByModelDefinitionValue.get(modelId) ?? new Map<string, Map<DomainAnalysisValueKey, number[]>>();
-      const vignetteRatesByValue = new Map<DomainAnalysisValueKey, number[]>();
 
-      for (const [, valueRatesByDefinition] of modelDefinitionRates.entries()) {
+      // Aggregation chain: conditions → vignette → direction → pair → domain.
+      // This ensures extra vignettes in one direction or for one pair do not inflate that
+      // pairing's weight in the final domain win rate.
+      //
+      // Structure: pairKey → directionKey → valueKey → [per-vignette rates]
+      const ratesByPairDirection = new Map<string, Map<DomainAnalysisValueKey, Map<DomainAnalysisValueKey, number[]>>>();
+
+      for (const [definitionId, valueRatesByDefinition] of modelDefinitionRates.entries()) {
+        const pair = params.definitionValuePairById.get(definitionId);
+        if (pair == null) continue;
+        const pairKey = `${pair.valueA}::${pair.valueB}`;
+        const directionKey: DomainAnalysisValueKey = pair.valueFirst ?? pair.valueA;
+
+        const byDirection = ratesByPairDirection.get(pairKey) ?? new Map<DomainAnalysisValueKey, Map<DomainAnalysisValueKey, number[]>>();
+        if (!ratesByPairDirection.has(pairKey)) ratesByPairDirection.set(pairKey, byDirection);
+
+        const byValue = byDirection.get(directionKey) ?? new Map<DomainAnalysisValueKey, number[]>();
+        if (!byDirection.has(directionKey)) byDirection.set(directionKey, byValue);
+
         for (const [valueKey, rates] of valueRatesByDefinition.entries()) {
           if (rates.length === 0) continue;
-          const vignetteRate = rates.reduce((sum, rate) => sum + rate, 0) / rates.length;
-          const existingRates = vignetteRatesByValue.get(valueKey) ?? [];
-          existingRates.push(vignetteRate);
-          vignetteRatesByValue.set(valueKey, existingRates);
+          const vignetteRate = rates.reduce((sum, r) => sum + r, 0) / rates.length;
+          const existing = byValue.get(valueKey) ?? [];
+          existing.push(vignetteRate);
+          byValue.set(valueKey, existing);
+        }
+      }
+
+      // Roll up: directions → pair rate, then pairs → domain rate.
+      const pairRatesByValue = new Map<DomainAnalysisValueKey, number[]>();
+      for (const [, byDirection] of ratesByPairDirection.entries()) {
+        const allValueKeys = new Set<DomainAnalysisValueKey>();
+        for (const [, byValue] of byDirection.entries()) {
+          for (const [valueKey] of byValue.entries()) allValueKeys.add(valueKey);
+        }
+
+        for (const valueKey of allValueKeys) {
+          const directionRates: number[] = [];
+          for (const [, byValue] of byDirection.entries()) {
+            const vignetteRates = byValue.get(valueKey) ?? [];
+            if (vignetteRates.length === 0) continue;
+            directionRates.push(vignetteRates.reduce((sum, r) => sum + r, 0) / vignetteRates.length);
+          }
+          if (directionRates.length === 0) continue;
+          const pairRate = directionRates.reduce((sum, r) => sum + r, 0) / directionRates.length;
+          const existing = pairRatesByValue.get(valueKey) ?? [];
+          existing.push(pairRate);
+          pairRatesByValue.set(valueKey, existing);
         }
       }
 
       const valueWinRates: Record<string, number> = {};
       const vignetteCount: Record<string, number> = {};
-      for (const [valueKey, vignetteRates] of vignetteRatesByValue.entries()) {
-        if (vignetteRates.length === 0) continue;
-        const domainRate = vignetteRates.reduce((sum, rate) => sum + rate, 0) / vignetteRates.length;
+      for (const [valueKey, pairRates] of pairRatesByValue.entries()) {
+        if (pairRates.length === 0) continue;
+        const domainRate = pairRates.reduce((sum, r) => sum + r, 0) / pairRates.length;
         valueWinRates[valueKey] = domainRate * 100;
-        vignetteCount[valueKey] = vignetteRates.length;
+        vignetteCount[valueKey] = pairRates.length;
       }
 
       return {
