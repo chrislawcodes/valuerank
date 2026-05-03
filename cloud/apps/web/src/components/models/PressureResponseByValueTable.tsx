@@ -132,41 +132,17 @@ function computePairRates(pair: PressureSensitivityValuePair, valueLabel: string
   if (pair.firstValueLabel === valueLabel) {
     return {
       averageWinRate: pair.directionBalancedWinRate ?? null,
-      balancedWinRate: poolRate(
-        pair.grid,
-        (cell) => cell.ownLevel === cell.opponentLevel,
-        (cell) => cell.winRate,
-      ),
-      highPressureOnThisValue: poolRate(
-        pair.grid,
-        (cell) => cell.ownLevel >= 4 && cell.opponentLevel <= 3,
-        (cell) => cell.winRate,
-      ),
-      highPressureOnOpposingValue: poolRate(
-        pair.grid,
-        (cell) => cell.opponentLevel >= 4 && cell.ownLevel <= 3,
-        (cell) => cell.winRate,
-      ),
+      balancedWinRate: pair.directionBalancedBalancedWinRate ?? null,
+      highPressureOnThisValue: pair.directionBalancedHighPressureOwnWinRate ?? null,
+      highPressureOnOpposingValue: pair.directionBalancedHighPressureOpponentWinRate ?? null,
     };
   }
 
   return {
     averageWinRate: pair.directionBalancedOpponentWinRate ?? null,
-    balancedWinRate: poolRate(
-      pair.grid,
-      (cell) => cell.ownLevel === cell.opponentLevel,
-      (cell) => cell.opponentWinRate ?? null,
-    ),
-    highPressureOnThisValue: poolRate(
-      pair.grid,
-      (cell) => cell.opponentLevel >= 4 && cell.ownLevel <= 3,
-      (cell) => cell.opponentWinRate ?? null,
-    ),
-    highPressureOnOpposingValue: poolRate(
-      pair.grid,
-      (cell) => cell.ownLevel >= 4 && cell.opponentLevel <= 3,
-      (cell) => cell.opponentWinRate ?? null,
-    ),
+    balancedWinRate: pair.directionBalancedBalancedOpponentWinRate ?? null,
+    highPressureOnThisValue: pair.directionBalancedHighPressureOpponentOpponentWinRate ?? null,
+    highPressureOnOpposingValue: pair.directionBalancedHighPressureOwnOpponentWinRate ?? null,
   };
 }
 

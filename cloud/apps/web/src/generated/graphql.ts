@@ -2397,6 +2397,12 @@ export type PressureSensitivityResult = {
 export type PressureSensitivityValuePair = {
   __typename?: 'PressureSensitivityValuePair';
   definitionsMeasured: Scalars['Int']['output'];
+  directionBalancedBalancedOpponentWinRate?: Maybe<Scalars['Float']['output']>;
+  directionBalancedBalancedWinRate?: Maybe<Scalars['Float']['output']>;
+  directionBalancedHighPressureOpponentOpponentWinRate?: Maybe<Scalars['Float']['output']>;
+  directionBalancedHighPressureOpponentWinRate?: Maybe<Scalars['Float']['output']>;
+  directionBalancedHighPressureOwnOpponentWinRate?: Maybe<Scalars['Float']['output']>;
+  directionBalancedHighPressureOwnWinRate?: Maybe<Scalars['Float']['output']>;
   directionBalancedOpponentWinRate?: Maybe<Scalars['Float']['output']>;
   directionBalancedWinRate?: Maybe<Scalars['Float']['output']>;
   firstValueLabel: Scalars['String']['output'];
@@ -4652,7 +4658,7 @@ export type PressureSensitivityQueryVariables = Exact<{
 }>;
 
 
-export type PressureSensitivityQuery = { __typename?: 'Query', pressureSensitivity: { __typename?: 'PressureSensitivityResult', pressureConditionExcludedCount: number, transcriptCapHit: boolean, models: Array<{ __typename?: 'PressureSensitivityModel', modelId: string, label: string, providerName: string, unscoredCount: number, pressureResponseSummary: { __typename?: 'PressureResponseSummary', mean?: number | null, rangeMin?: number | null, rangeMax?: number | null, pairsMeasured: number }, valuePairs: Array<{ __typename?: 'PressureSensitivityValuePair', pairKey: string, firstValueToken: string, firstValueLabel: string, secondValueToken: string, secondValueLabel: string, n: number, unscoredCount: number, definitionsMeasured: number, directionBalancedWinRate?: number | null, directionBalancedOpponentWinRate?: number | null, pressureResponse: { __typename?: 'PressureResponse', value?: number | null, baselineRate?: number | null, pushTowardFirstRate?: number | null, pushTowardSecondRate?: number | null, qualifyingTrials: number, ciLow?: number | null, ciHigh?: number | null, reason?: string | null }, grid: Array<{ __typename?: 'SensitivityCell', ownLevel: number, opponentLevel: number, n: number, unscoredCount: number, winRate?: number | null, opponentWinRate?: number | null, conviction?: number | null, netScore?: number | null, lowData: boolean }> }> }>, insufficient: Array<{ __typename?: 'InsufficientPressureSensitivityModel', modelId: string, label: string, providerName: string, reason: string }>, excludedDefinitions: Array<{ __typename?: 'ExcludedDefinition', definitionId: string, name: string, reason: string }>, pressureConditionExclusionBreakdown: { __typename?: 'PressureConditionExclusionBreakdown', sourceRunMapping: number, definitionMetadata: number, missingScenario: number, invalidMetadata: number, levelAssignment: number }, directionalSanityCheck: { __typename?: 'DirectionalSanityCheck', positivePct: number, flatPct: number, negativePct: number, measuredCount: number, unmeasurableCount: number, breakdown: Array<{ __typename?: 'DirectionalSanityCheckEntry', modelId: string, pairKey: string, pressureResponse: number, classification: string }> } } };
+export type PressureSensitivityQuery = { __typename?: 'Query', pressureSensitivity: { __typename?: 'PressureSensitivityResult', pressureConditionExcludedCount: number, transcriptCapHit: boolean, models: Array<{ __typename?: 'PressureSensitivityModel', modelId: string, label: string, providerName: string, unscoredCount: number, pressureResponseSummary: { __typename?: 'PressureResponseSummary', mean?: number | null, rangeMin?: number | null, rangeMax?: number | null, pairsMeasured: number }, valuePairs: Array<{ __typename?: 'PressureSensitivityValuePair', pairKey: string, firstValueToken: string, firstValueLabel: string, secondValueToken: string, secondValueLabel: string, n: number, unscoredCount: number, definitionsMeasured: number, directionBalancedWinRate?: number | null, directionBalancedOpponentWinRate?: number | null, directionBalancedBalancedWinRate?: number | null, directionBalancedBalancedOpponentWinRate?: number | null, directionBalancedHighPressureOwnWinRate?: number | null, directionBalancedHighPressureOwnOpponentWinRate?: number | null, directionBalancedHighPressureOpponentWinRate?: number | null, directionBalancedHighPressureOpponentOpponentWinRate?: number | null, pressureResponse: { __typename?: 'PressureResponse', value?: number | null, baselineRate?: number | null, pushTowardFirstRate?: number | null, pushTowardSecondRate?: number | null, qualifyingTrials: number, ciLow?: number | null, ciHigh?: number | null, reason?: string | null }, grid: Array<{ __typename?: 'SensitivityCell', ownLevel: number, opponentLevel: number, n: number, unscoredCount: number, winRate?: number | null, opponentWinRate?: number | null, conviction?: number | null, netScore?: number | null, lowData: boolean }> }> }>, insufficient: Array<{ __typename?: 'InsufficientPressureSensitivityModel', modelId: string, label: string, providerName: string, reason: string }>, excludedDefinitions: Array<{ __typename?: 'ExcludedDefinition', definitionId: string, name: string, reason: string }>, pressureConditionExclusionBreakdown: { __typename?: 'PressureConditionExclusionBreakdown', sourceRunMapping: number, definitionMetadata: number, missingScenario: number, invalidMetadata: number, levelAssignment: number }, directionalSanityCheck: { __typename?: 'DirectionalSanityCheck', positivePct: number, flatPct: number, negativePct: number, measuredCount: number, unmeasurableCount: number, breakdown: Array<{ __typename?: 'DirectionalSanityCheckEntry', modelId: string, pairKey: string, pressureResponse: number, classification: string }> } } };
 
 export type OpenRunAnomaliesQueryVariables = Exact<{
   domainId?: InputMaybe<Scalars['ID']['input']>;
@@ -7222,6 +7228,14 @@ export const PressureSensitivityDocument = gql`
         n
         unscoredCount
         definitionsMeasured
+        directionBalancedWinRate
+        directionBalancedOpponentWinRate
+        directionBalancedBalancedWinRate
+        directionBalancedBalancedOpponentWinRate
+        directionBalancedHighPressureOwnWinRate
+        directionBalancedHighPressureOwnOpponentWinRate
+        directionBalancedHighPressureOpponentWinRate
+        directionBalancedHighPressureOpponentOpponentWinRate
         pressureResponse {
           value
           baselineRate
@@ -7232,8 +7246,6 @@ export const PressureSensitivityDocument = gql`
           ciHigh
           reason
         }
-        directionBalancedWinRate
-        directionBalancedOpponentWinRate
         grid {
           ownLevel
           opponentLevel

@@ -28,6 +28,14 @@ query PressureSensitivity(
         n
         unscoredCount
         definitionsMeasured
+        directionBalancedWinRate
+        directionBalancedOpponentWinRate
+        directionBalancedBalancedWinRate
+        directionBalancedBalancedOpponentWinRate
+        directionBalancedHighPressureOwnWinRate
+        directionBalancedHighPressureOwnOpponentWinRate
+        directionBalancedHighPressureOpponentWinRate
+        directionBalancedHighPressureOpponentOpponentWinRate
         pressureResponse {
           value
           baselineRate
@@ -38,8 +46,6 @@ query PressureSensitivity(
           ciHigh
           reason
         }
-        directionBalancedWinRate
-        directionBalancedOpponentWinRate
         grid {
           ownLevel
           opponentLevel
