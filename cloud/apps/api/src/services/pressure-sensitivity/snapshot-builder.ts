@@ -10,12 +10,15 @@ import type {
   PressureSensitivityModelShape,
   PressureSensitivityResultShape,
   PressureSensitivityValuePairShape,
+  PressureSensitivityValueRateShape,
   SensitivityCellShape,
 } from '../../graphql/types/pressure-sensitivity.js';
 import { buildSafeLevelLookup, type DefinitionDimension } from '../../graphql/queries/scenarios-utils.js';
 import { normalizeScenarioAnalysisMetadata } from './../../services/analysis/scenario-metadata.js';
 import {
+  buildCellMetrics,
   buildVignetteWeightedCellMetrics,
+  computeDirectionBalancedPairWinRates,
   pooledDirectionalReduction,
   summarizePressureResponse,
   FLAT_DELTA_THRESHOLD,
@@ -33,6 +36,7 @@ import {
   buildPressureSensitivityDecisionSnapshot,
   type PressureSensitivityDecisionSnapshot,
 } from './decision-snapshot.js';
+import { aggregateValueWinRates } from '../analysis/value-win-rate-aggregation.js';
 import { computeAggregateFingerprint } from '../analysis/aggregate/aggregate-helpers.js';
 import {
   PRESSURE_SENSITIVITY_SNAPSHOT_CODE_VERSION,
@@ -78,6 +82,7 @@ type ScenarioRow = {
 export type DefinitionMetadata = {
   id: string;
   name: string;
+  domainId: string | null;
   valueFirstToken: string;
   valueSecondToken: string;
   firstValueToken: string;
@@ -109,6 +114,21 @@ export type PressureConditionExclusionBreakdown = {
   missingScenario: number;
   invalidMetadata: number;
   levelAssignment: number;
+};
+
+type ValueRateFilter =
+  | 'all'
+  | 'balanced'
+  | 'highPressureOnValue'
+  | 'highPressureOnOpposingValue';
+
+type ValueRateCellAccumulator = {
+  valueKey: string;
+  definitionId: string;
+  domainId: string;
+  pairKey: string;
+  directionKey: string;
+  cellRates: number[];
 };
 
 export type PressureSensitivityPreparedState = {
@@ -172,6 +192,63 @@ export function buildSourceRunToDefIdMap(
 
 function formatValueLabel(token: string): string {
   return token.replaceAll('_', ' ').trim();
+}
+
+function shouldIncludeValueRateCell(
+  filter: ValueRateFilter,
+  isCanonicalFirst: boolean,
+  ownLevel: number,
+  opponentLevel: number,
+): boolean {
+  if (filter === 'all') return true;
+  if (filter === 'balanced') return ownLevel === opponentLevel;
+  if (isCanonicalFirst) {
+    if (filter === 'highPressureOnValue') return ownLevel >= 4 && opponentLevel <= 3;
+    return opponentLevel >= 4 && ownLevel <= 3;
+  }
+  if (filter === 'highPressureOnValue') return opponentLevel >= 4 && ownLevel <= 3;
+  return ownLevel >= 4 && opponentLevel <= 3;
+}
+
+function addValueRateCell(
+  groups: Map<string, ValueRateCellAccumulator>,
+  params: {
+    valueKey: string;
+    definitionId: string;
+    domainId: string;
+    pairKey: string;
+    directionKey: string;
+    cellRate: number;
+  },
+): void {
+  const key = [params.valueKey, params.definitionId, params.domainId, params.pairKey, params.directionKey].join('||');
+  const existing = groups.get(key) ?? {
+    valueKey: params.valueKey,
+    definitionId: params.definitionId,
+    domainId: params.domainId,
+    pairKey: params.pairKey,
+    directionKey: params.directionKey,
+    cellRates: [],
+  };
+  existing.cellRates.push(params.cellRate);
+  groups.set(key, existing);
+}
+
+function toValueRateInputs(groups: Map<string, ValueRateCellAccumulator>) {
+  const inputs = [];
+  for (const group of groups.values()) {
+    if (group.cellRates.length === 0) continue;
+    const vignetteRate = group.cellRates.reduce((sum, rate) => sum + rate, 0) / group.cellRates.length;
+    inputs.push({
+      domainId: group.domainId,
+      definitionId: group.definitionId,
+      valueKey: group.valueKey,
+      pairKey: group.pairKey,
+      directionKey: group.directionKey,
+      vignetteRate,
+    });
+  }
+  return inputs;
 }
 
 export function emptyPressureConditionExclusionBreakdown(): PressureConditionExclusionBreakdown {
@@ -259,10 +336,7 @@ function ensurePairAccumulator(
   meta: DefinitionMetadata,
 ): PairAccumulator {
   let pairs = perModel.get(modelId);
-  if (pairs == null) {
-    pairs = new Map();
-    perModel.set(modelId, pairs);
-  }
+  if (pairs == null) { pairs = new Map(); perModel.set(modelId, pairs); }
   let acc = pairs.get(meta.pairKey);
   if (acc == null) {
     acc = {
@@ -295,7 +369,7 @@ export async function preparePressureSensitivityState(params: {
     where: {
       status: 'COMPLETED',
       deletedAt: null,
-      tags: { some: { tag: { name: 'Aggregate' } } },
+      tags: { none: { tag: { name: 'Aggregate' } } },
       ...(params.domainId != null ? { definition: { domainId: params.domainId } } : {}),
     },
     include: { definition: { select: { id: true, name: true, domainId: true } } },
@@ -335,12 +409,23 @@ export async function buildPressureSensitivitySnapshotOutput(
     include: { provider: true },
   })) as ModelRow[];
 
-  if (state.eligibleRuns.length === 0) {
-    return buildEmptyResult(activeModels);
+  if (state.eligibleRuns.length === 0) return buildEmptyResult(activeModels);
+
+  const distinctDefIds = new Set<string>();
+  const defNames = new Map<string, string>();
+  const defDomainId = new Map<string, string>();
+  for (const r of state.eligibleRuns) {
+    if (r.definition?.id != null) {
+      distinctDefIds.add(r.definition.id);
+      defNames.set(r.definition.id, r.definition.name);
+      if (r.definition.domainId != null) defDomainId.set(r.definition.id, r.definition.domainId);
+    } else {
+      distinctDefIds.add(r.definitionId);
+    }
   }
 
   const validationResults = await Promise.all(
-    [...new Set(state.eligibleRuns.map((r) => r.definition?.id ?? r.definitionId))].map(async (defId) => ({
+    [...distinctDefIds].map(async (defId) => ({
       defId,
       validation: await validateDefinitionForPressureSensitivity(defId),
     })),
@@ -348,17 +433,12 @@ export async function buildPressureSensitivitySnapshotOutput(
 
   const definitionMeta = new Map<string, DefinitionMetadata>();
   const excludedDefinitions: ExcludedDefinitionShape[] = [];
-  const defNames = new Map<string, string>();
-  for (const r of state.eligibleRuns) {
-    if (r.definition?.id != null) defNames.set(r.definition.id, r.definition.name);
-  }
 
   for (const { defId, validation } of validationResults) {
     if (validation.status === 'excluded') {
       excludedDefinitions.push({ definitionId: defId, name: defNames.get(defId) ?? defId, reason: validation.reason });
       continue;
     }
-
     const content = validation.resolvedContent;
     const components = content.components;
     if (components == null) {
@@ -370,17 +450,9 @@ export async function buildPressureSensitivitySnapshotOutput(
       excludedDefinitions.push({ definitionId: defId, name: defNames.get(defId) ?? defId, reason: 'missing-or-self-pair-tokens' });
       continue;
     }
-    const [firstValueToken, secondValueToken] = canonicalOwnOpponent(
-      components.value_first.token,
-      components.value_second.token,
-    );
+    const [firstValueToken, secondValueToken] = canonicalOwnOpponent(components.value_first.token, components.value_second.token);
 
-    const dimensions: DefinitionDimension[] = (content.dimensions ?? []).map((d) => ({
-      name: d.name,
-      levels: d.levels,
-      values: d.values,
-    }));
-
+    const dimensions: DefinitionDimension[] = (content.dimensions ?? []).map((d) => ({ name: d.name, levels: d.levels, values: d.values }));
     const ownDim = dimensions.find((d) => typeof d.name === 'string' && d.name.trim() === firstValueToken);
     const opponentDim = dimensions.find((d) => typeof d.name === 'string' && d.name.trim() === secondValueToken);
     if (ownDim == null || opponentDim == null) {
@@ -410,6 +482,7 @@ export async function buildPressureSensitivitySnapshotOutput(
     definitionMeta.set(defId, {
       id: defId,
       name: defNames.get(defId) ?? defId,
+      domainId: defDomainId.get(defId) ?? null,
       valueFirstToken: components.value_first.token,
       valueSecondToken: components.value_second.token,
       firstValueToken,
@@ -422,7 +495,19 @@ export async function buildPressureSensitivitySnapshotOutput(
     });
   }
 
-  const sourceRunToDefId = buildSourceRunToDefIdMap(state.eligibleRuns, definitionMeta, log);
+  const authoredFirstTokenByDef = new Map<string, string>(
+    [...definitionMeta.entries()].map(([id, meta]) => [id, meta.valueFirstToken]),
+  );
+  const domainByDef = new Map<string, string>();
+  for (const [defId, meta] of definitionMeta.entries()) {
+    if (meta.domainId != null) domainByDef.set(defId, meta.domainId);
+  }
+
+  const sourceRunToDefId = new Map<string, string>();
+  for (const run of state.eligibleRuns) {
+    const defId = run.definition?.id ?? run.definitionId;
+    if (definitionMeta.has(defId)) sourceRunToDefId.set(run.id, defId);
+  }
   const sourceRunIds = [...sourceRunToDefId.keys()];
   const rosterModelIds = activeModels.map((m) => m.modelId);
   const pressureConditionExclusionBreakdown = emptyPressureConditionExclusionBreakdown();
@@ -460,14 +545,14 @@ export async function buildPressureSensitivitySnapshotOutput(
     if (defId == null) { pressureConditionExclusionBreakdown.sourceRunMapping += 1; continue; }
     const meta = definitionMeta.get(defId);
     if (meta == null) { pressureConditionExclusionBreakdown.definitionMetadata += 1; continue; }
-
     const scenario = tx.scenarioId != null ? scenarioById.get(tx.scenarioId) ?? null : null;
+
     const decision = resolveTranscriptDecisionModel({
       decisionMetadata: tx.decisionMetadata,
       definitionSnapshot: meta.decisionSnapshot,
       orientationFlipped: scenario?.orientationFlipped ?? null,
     });
-    const outcome = assignOwnOpponent(meta.valueFirstToken, meta.valueSecondToken, decision.canonical.direction as CanonicalDirection);
+    const outcome = assignOwnOpponent(meta.firstValueToken, meta.secondValueToken, decision.canonical.direction as CanonicalDirection);
     const strength = strengthFromCanonical(decision.canonical.strength);
     const pairAcc = ensurePairAccumulator(perModel, tx.modelId, meta);
     pairAcc.definitionsMeasured.add(defId);
@@ -484,14 +569,7 @@ export async function buildPressureSensitivitySnapshotOutput(
     const normalized = normalizeScenarioAnalysisMetadata(scenario.content);
     if (normalized === null) { pressureConditionExclusionBreakdown.invalidMetadata += 1; continue; }
 
-    const levels = assignOwnOpponentLevels(
-      meta.dimensions,
-      normalized.groupingDimensions,
-      meta.ownLookup,
-      meta.opponentLookup,
-      meta.firstValueToken,
-      meta.secondValueToken,
-    );
+    const levels = assignOwnOpponentLevels(meta.dimensions, normalized.groupingDimensions, meta.ownLookup, meta.opponentLookup, meta.firstValueToken, meta.secondValueToken);
     if (levels === null) { pressureConditionExclusionBreakdown.levelAssignment += 1; continue; }
 
     const key = cellKey(levels.ownLevel, levels.opponentLevel);
@@ -516,6 +594,7 @@ export async function buildPressureSensitivitySnapshotOutput(
   for (const model of activeModels) {
     const pairs = perModel.get(model.modelId) ?? new Map<string, PairAccumulator>();
     const valuePairs: PressureSensitivityValuePairShape[] = [];
+    const pairKeysByValue = new Map<string, Set<string>>();
     let modelUnscored = 0;
     const perPairPressureResponses: number[] = [];
 
@@ -544,6 +623,18 @@ export async function buildPressureSensitivitySnapshotOutput(
       modelUnscored += pairUnscored;
 
       const pressureResponse = pooledDirectionalReduction(grid, MIN_N);
+      const dbCommonParams = {
+        cells: acc.cells,
+        definitionsMeasured: acc.definitionsMeasured,
+        canonicalFirstValueToken: acc.firstValueToken,
+        authoredFirstTokenByDef,
+        domainByDef,
+      };
+      const dbAll = computeDirectionBalancedPairWinRates(dbCommonParams);
+      const dbBalanced = computeDirectionBalancedPairWinRates({ ...dbCommonParams, cellFilter: (own, opp) => own === opp });
+      const dbHighOwn = computeDirectionBalancedPairWinRates({ ...dbCommonParams, cellFilter: (own, opp) => own >= 4 && opp <= 3 });
+      const dbHighOpponent = computeDirectionBalancedPairWinRates({ ...dbCommonParams, cellFilter: (own, opp) => opp >= 4 && own <= 3 });
+
       valuePairs.push({
         pairKey: acc.pairKey,
         firstValueToken: acc.firstValueToken,
@@ -564,7 +655,22 @@ export async function buildPressureSensitivitySnapshotOutput(
         unscoredCount: pairUnscored,
         grid,
         definitionsMeasured: acc.definitionsMeasured.size,
+        directionBalancedWinRate: dbAll.ownRate,
+        directionBalancedOpponentWinRate: dbAll.opponentRate,
+        directionBalancedBalancedWinRate: dbBalanced.ownRate,
+        directionBalancedBalancedOpponentWinRate: dbBalanced.opponentRate,
+        directionBalancedHighPressureOwnWinRate: dbHighOwn.ownRate,
+        directionBalancedHighPressureOwnOpponentWinRate: dbHighOwn.opponentRate,
+        directionBalancedHighPressureOpponentWinRate: dbHighOpponent.ownRate,
+        directionBalancedHighPressureOpponentOpponentWinRate: dbHighOpponent.opponentRate,
       });
+
+      const firstPairKeys = pairKeysByValue.get(acc.firstValueToken) ?? new Set<string>();
+      firstPairKeys.add(acc.pairKey);
+      pairKeysByValue.set(acc.firstValueToken, firstPairKeys);
+      const secondPairKeys = pairKeysByValue.get(acc.secondValueToken) ?? new Set<string>();
+      secondPairKeys.add(acc.pairKey);
+      pairKeysByValue.set(acc.secondValueToken, secondPairKeys);
 
       if (pressureResponse.value !== null) {
         perPairPressureResponses.push(pressureResponse.value);
@@ -581,6 +687,52 @@ export async function buildPressureSensitivitySnapshotOutput(
       }
     }
 
+    const valueRateGroupsByFilter: Record<ValueRateFilter, Map<string, ValueRateCellAccumulator>> = {
+      all: new Map(), balanced: new Map(), highPressureOnValue: new Map(), highPressureOnOpposingValue: new Map(),
+    };
+
+    for (const acc of pairs.values()) {
+      for (const [, cellAcc] of acc.cells) {
+        for (const [defId, observations] of cellAcc.observationsByDefinition.entries()) {
+          const authoredFirstToken = authoredFirstTokenByDef.get(defId);
+          if (authoredFirstToken == null) continue;
+          const metrics = buildCellMetrics([...observations]);
+          if (metrics.n === 0 || metrics.winRate == null || metrics.opponentWinRate == null) continue;
+          const domainForDefinition = domainByDef.get(defId) ?? defId;
+          const sides = [
+            { valueToken: acc.firstValueToken, cellRate: metrics.winRate, isCanonicalFirst: true },
+            { valueToken: acc.secondValueToken, cellRate: metrics.opponentWinRate, isCanonicalFirst: false },
+          ] as const;
+          for (const side of sides) {
+            if (side.cellRate == null) continue;
+            for (const filter of Object.keys(valueRateGroupsByFilter) as ValueRateFilter[]) {
+              if (!shouldIncludeValueRateCell(filter, side.isCanonicalFirst, cellAcc.ownLevel, cellAcc.opponentLevel)) continue;
+              addValueRateCell(valueRateGroupsByFilter[filter], {
+                valueKey: side.valueToken, definitionId: defId, domainId: domainForDefinition,
+                pairKey: acc.pairKey, directionKey: authoredFirstToken, cellRate: side.cellRate,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    const allValueRates = aggregateValueWinRates(toValueRateInputs(valueRateGroupsByFilter.all));
+    const balancedValueRates = aggregateValueWinRates(toValueRateInputs(valueRateGroupsByFilter.balanced));
+    const highPressureOnValueRates = aggregateValueWinRates(toValueRateInputs(valueRateGroupsByFilter.highPressureOnValue));
+    const highPressureOnOpposingValueRates = aggregateValueWinRates(toValueRateInputs(valueRateGroupsByFilter.highPressureOnOpposingValue));
+
+    const valueTokens = [...pairKeysByValue.keys()].sort((a, b) => a.localeCompare(b));
+    const valueRates: PressureSensitivityValueRateShape[] = valueTokens.map((valueToken) => ({
+      valueToken,
+      valueLabel: formatValueLabel(valueToken),
+      averageWinRate: allValueRates.get(valueToken)?.crossDomainRate ?? null,
+      balancedWinRate: balancedValueRates.get(valueToken)?.crossDomainRate ?? null,
+      highPressureOnThisValueWinRate: highPressureOnValueRates.get(valueToken)?.crossDomainRate ?? null,
+      highPressureOnOpposingValueWinRate: highPressureOnOpposingValueRates.get(valueToken)?.crossDomainRate ?? null,
+      pairsMeasured: pairKeysByValue.get(valueToken)?.size ?? 0,
+    }));
+
     const pressureResponseSummary = summarizePressureResponse(perPairPressureResponses);
     if (valuePairs.length === 0 || pressureResponseSummary.pairsMeasured === 0) {
       insufficient.push({ modelId: model.modelId, label: model.displayName, providerName: model.provider.displayName ?? model.provider.name, reason: 'no-coverage' });
@@ -592,6 +744,7 @@ export async function buildPressureSensitivitySnapshotOutput(
       providerName: model.provider.displayName ?? model.provider.name,
       pressureResponseSummary,
       valuePairs: valuePairs.sort((a, b) => a.pairKey.localeCompare(b.pairKey)),
+      valueRates,
       unscoredCount: modelUnscored,
     });
   }
