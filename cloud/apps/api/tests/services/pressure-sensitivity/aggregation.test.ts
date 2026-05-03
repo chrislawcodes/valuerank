@@ -4,6 +4,7 @@ import {
   type Observation,
   buildCellMetrics,
   buildVignetteWeightedCellMetrics,
+  computeDirectionBalancedPairWinRates,
   diffProportionCI,
   pooledDirectionalReduction,
   summarizePressureResponse,
@@ -352,6 +353,116 @@ describe('pooledDirectionalReduction', () => {
     expect(result.baselineRate).toBeNull();
     expect(result.reason).toBe('baseline-thin');
     expect(result.qualifyingTrials).toBe(10);
+  });
+});
+
+describe('computeDirectionBalancedPairWinRates', () => {
+  function makeCell(key: string, obsMap: Record<string, Observation[]>) {
+    return [key, { observationsByDefinition: new Map(Object.entries(obsMap)) }] as const;
+  }
+
+  it('gives equal weight to both directions even when one has more vignettes', () => {
+    // Direction A (authoredFirst === canonicalFirst): 3 vignettes, each winning 100%
+    // Direction B (authoredFirst !== canonicalFirst): 1 vignette, winning 0%
+    // Flat average would be 3/4 = 0.75; direction-balanced average = (1.0 + 0.0) / 2 = 0.5
+    const cells = new Map([
+      makeCell('cell1', {
+        def1: [{ outcome: 'own_picked', strength: 'strong' }],
+        def2: [{ outcome: 'own_picked', strength: 'strong' }],
+        def3: [{ outcome: 'own_picked', strength: 'strong' }],
+        def4: [{ outcome: 'opponent_picked', strength: 'strong' }],
+      }),
+    ]);
+
+    const result = computeDirectionBalancedPairWinRates({
+      cells,
+      definitionsMeasured: new Set(['def1', 'def2', 'def3', 'def4']),
+      canonicalFirstValueToken: 'A',
+      authoredFirstTokenByDef: new Map([
+        ['def1', 'A'],
+        ['def2', 'A'],
+        ['def3', 'A'],
+        ['def4', 'B'],
+      ]),
+    });
+
+    expect(result.ownRate).toBeCloseTo(0.5, 10);
+    expect(result.opponentRate).toBeCloseTo(0.5, 10);
+  });
+
+  it('averages vignette rates within each direction independently', () => {
+    // Direction A: vignette wins 1.0 in cell1, wins 0.0 in cell2 → vignette rate = 0.5
+    // Direction B: vignette wins 0.0 in cell1 → vignette rate = 0.0
+    // Expected ownRate = (0.5 + 0.0) / 2 = 0.25
+    const cells = new Map([
+      makeCell('cell1', {
+        defA: [{ outcome: 'own_picked', strength: 'strong' }],
+        defB: [{ outcome: 'opponent_picked', strength: 'strong' }],
+      }),
+      makeCell('cell2', {
+        defA: [{ outcome: 'opponent_picked', strength: 'strong' }],
+      }),
+    ]);
+
+    const result = computeDirectionBalancedPairWinRates({
+      cells,
+      definitionsMeasured: new Set(['defA', 'defB']),
+      canonicalFirstValueToken: 'X',
+      authoredFirstTokenByDef: new Map([
+        ['defA', 'X'],
+        ['defB', 'Y'],
+      ]),
+    });
+
+    expect(result.ownRate).toBeCloseTo(0.25, 10);
+  });
+
+  it('returns null when no definitions have any scored observations', () => {
+    const cells = new Map([
+      makeCell('cell1', {
+        def1: [{ outcome: 'unscored', strength: null }],
+      }),
+    ]);
+
+    const result = computeDirectionBalancedPairWinRates({
+      cells,
+      definitionsMeasured: new Set(['def1']),
+      canonicalFirstValueToken: 'A',
+      authoredFirstTokenByDef: new Map([['def1', 'A']]),
+    });
+
+    expect(result.ownRate).toBeNull();
+    expect(result.opponentRate).toBeNull();
+  });
+
+  it('returns null when the definitionsMeasured set is empty', () => {
+    const result = computeDirectionBalancedPairWinRates({
+      cells: new Map(),
+      definitionsMeasured: new Set(),
+      canonicalFirstValueToken: 'A',
+      authoredFirstTokenByDef: new Map(),
+    });
+
+    expect(result.ownRate).toBeNull();
+    expect(result.opponentRate).toBeNull();
+  });
+
+  it('uses only direction A rate when direction B has no scored vignettes', () => {
+    const cells = new Map([
+      makeCell('cell1', {
+        defA: [{ outcome: 'own_picked', strength: 'strong' }],
+      }),
+    ]);
+
+    const result = computeDirectionBalancedPairWinRates({
+      cells,
+      definitionsMeasured: new Set(['defA']),
+      canonicalFirstValueToken: 'A',
+      authoredFirstTokenByDef: new Map([['defA', 'A']]),
+    });
+
+    expect(result.ownRate).toBeCloseTo(1.0, 10);
+    expect(result.opponentRate).toBeCloseTo(0.0, 10);
   });
 });
 

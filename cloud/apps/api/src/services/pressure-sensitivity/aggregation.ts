@@ -566,6 +566,78 @@ export function pooledDirectionalReduction(
   };
 }
 
+/**
+ * Compute direction-balanced win rates for a canonical value pair.
+ *
+ * Matches the domain analysis 4-level chain (conditions → vignette → direction → pair):
+ * 1. Per vignette (definition): average its per-condition win rates → vignette rate.
+ * 2. Average vignette rates within each authored direction → direction rate.
+ * 3. Average the two direction rates → balanced pair rate.
+ *
+ * Prevents a direction with more vignettes from outweighing the other, consistent
+ * with how `computeCellWeightedDomainRates` aggregates in domain analysis.
+ */
+export function computeDirectionBalancedPairWinRates(params: {
+  cells: ReadonlyMap<string, Readonly<{ observationsByDefinition: ReadonlyMap<string, ReadonlyArray<Observation>> }>>;
+  definitionsMeasured: ReadonlySet<string>;
+  canonicalFirstValueToken: string;
+  authoredFirstTokenByDef: ReadonlyMap<string, string>;
+}): { ownRate: number | null; opponentRate: number | null } {
+  const directionA = { ownRates: [] as number[], opponentRates: [] as number[] };
+  const directionB = { ownRates: [] as number[], opponentRates: [] as number[] };
+
+  for (const defId of params.definitionsMeasured) {
+    const authoredFirst = params.authoredFirstTokenByDef.get(defId);
+    if (authoredFirst == null) continue;
+
+    const ownCellRates: number[] = [];
+    const opponentCellRates: number[] = [];
+
+    for (const [, cellAcc] of params.cells) {
+      const observations = cellAcc.observationsByDefinition.get(defId);
+      if (observations == null || observations.length === 0) continue;
+
+      let ownPicked = 0;
+      let opponentPicked = 0;
+      let neutral = 0;
+      for (const obs of observations) {
+        if (obs.outcome === 'own_picked') ownPicked += 1;
+        else if (obs.outcome === 'opponent_picked') opponentPicked += 1;
+        else if (obs.outcome === 'neutral') neutral += 1;
+      }
+
+      const ownRate = computePairwiseWinRate(ownPicked, opponentPicked, neutral);
+      if (ownRate === null) continue;
+      ownCellRates.push(ownRate);
+      const opponentRate = computePairwiseWinRate(opponentPicked, ownPicked, neutral);
+      if (opponentRate !== null) opponentCellRates.push(opponentRate);
+    }
+
+    if (ownCellRates.length === 0) continue;
+    const vigOwnRate = ownCellRates.reduce((a, b) => a + b, 0) / ownCellRates.length;
+    const vigOpponentRate = opponentCellRates.length > 0
+      ? opponentCellRates.reduce((a, b) => a + b, 0) / opponentCellRates.length
+      : null;
+
+    const target = authoredFirst === params.canonicalFirstValueToken ? directionA : directionB;
+    target.ownRates.push(vigOwnRate);
+    if (vigOpponentRate !== null) target.opponentRates.push(vigOpponentRate);
+  }
+
+  function avgDirections(a: number[], b: number[]): number | null {
+    const rates: number[] = [];
+    if (a.length > 0) rates.push(a.reduce((sum, r) => sum + r, 0) / a.length);
+    if (b.length > 0) rates.push(b.reduce((sum, r) => sum + r, 0) / b.length);
+    if (rates.length === 0) return null;
+    return rates.reduce((sum, r) => sum + r, 0) / rates.length;
+  }
+
+  return {
+    ownRate: avgDirections(directionA.ownRates, directionB.ownRates),
+    opponentRate: avgDirections(directionA.opponentRates, directionB.opponentRates),
+  };
+}
+
 export function summarizePressureResponse(
   perPairPressureResponses: ReadonlyArray<number>,
 ): PressureResponseSummary {
