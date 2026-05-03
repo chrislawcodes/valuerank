@@ -286,13 +286,33 @@ export function getCoverageBatchGroupId(runConfig: unknown): string | null {
  */
 export function getCoverageDirection(runConfig: unknown): string | null {
   if (typeof runConfig !== 'object' || runConfig === null) return null;
-  const config = runConfig as { jobChoiceValueFirst?: unknown };
-  if (typeof config.jobChoiceValueFirst !== 'string') return null;
-  const trimmed = config.jobChoiceValueFirst.trim();
-  if (trimmed.length === 0) return null;
+  const config = runConfig as {
+    jobChoiceValueFirst?: unknown;
+    jobChoicePresentationOrder?: unknown;
+    definitionSnapshot?: {
+      components?: {
+        value_first?: { token?: unknown };
+        value_second?: { token?: unknown };
+      };
+    };
+  };
+
+  // Primary: explicit direction token present on newer runs.
+  if (typeof config.jobChoiceValueFirst === 'string') {
+    const trimmed = config.jobChoiceValueFirst.trim();
+    if (trimmed.length > 0) return toPascalCaseKey(trimmed);
+  }
+
+  // Fallback: older runs use jobChoicePresentationOrder + definition snapshot tokens.
+  const order = config.jobChoicePresentationOrder;
+  if (order !== 'A_first' && order !== 'B_first') return null;
+  const components = config.definitionSnapshot?.components;
+  const token = order === 'A_first'
+    ? components?.value_first?.token
+    : components?.value_second?.token;
+  if (typeof token !== 'string' || token.trim().length === 0) return null;
   // Normalize to PascalCase_Underscore to match COVERAGE_VALUE_KEYS.
-  // Prod stores tokens as lowercase (e.g. "hedonism"); keys are "Hedonism".
-  return toPascalCaseKey(trimmed);
+  return toPascalCaseKey(token.trim());
 }
 
 /**
