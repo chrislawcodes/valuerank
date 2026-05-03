@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ComponentType, type RefObject } from 'react';
+import { type FocusEvent, useEffect, useRef, useState, type ComponentType, type RefObject } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   Activity,
@@ -140,6 +140,20 @@ export function Header() {
       : isTabActive(item.path, item.aliases ?? [], item.match ?? 'prefix')
   );
 
+  const handleMenuFocus = (setOpen: (value: boolean) => void) => () => {
+    setOpen(true);
+  };
+
+  const handleMenuBlur =
+    (menuRef: RefObject<HTMLDivElement>, setOpen: (value: boolean) => void) =>
+      (event: FocusEvent<HTMLDivElement>) => {
+        const nextFocused = event.relatedTarget as Node | null;
+        if (menuRef.current && nextFocused && menuRef.current.contains(nextFocused)) {
+          return;
+        }
+        setOpen(false);
+      };
+
   const visibleDomainMenuItems = isAdmin
     ? domainMenuItems
     : domainMenuItems.filter((item) => !isMenuGroupItem(item) && item.path !== '/domains/manage');
@@ -167,6 +181,8 @@ export function Header() {
         className="relative group"
         onMouseEnter={() => setOpen(true)}
         onMouseLeave={() => setOpen(false)}
+        onFocus={handleMenuFocus((value) => setOpen(value))}
+        onBlur={handleMenuBlur(ref, (value) => setOpen(value))}
       >
         <div
           className={cn(
@@ -252,7 +268,7 @@ export function Header() {
           </span>
         </div>
 
-        <nav className="hidden min-w-0 flex-1 sm:flex items-stretch gap-1 overflow-x-auto">
+        <nav className="hidden min-w-0 flex-1 sm:flex items-stretch gap-1">
           {renderMenu(modelsMenuRef, 'Models', '/domains/analysis', Cpu, modelsMenuItems, isModelsActive, isModelsMenuOpen, setIsModelsMenuOpen)}
           {renderMenu(domainsMenuRef, 'Domains', '/domains', FolderTree, visibleDomainMenuItems, isDomainsActive, isDomainsMenuOpen, setIsDomainsMenuOpen)}
           {renderMenu(vignettesMenuRef, 'Vignettes', '/definitions', Library, vignettesMenuItems, isVignettesActive, isVignettesMenuOpen, setIsVignettesMenuOpen)}

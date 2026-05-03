@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router-dom';
 import { Header } from '../../../src/components/layout/Header';
@@ -87,5 +87,20 @@ describe('Header Component', () => {
     await waitFor(() => {
       expect(screen.queryByText('Sign out')).not.toBeInTheDocument();
     });
+  });
+
+  it('should open the navigation dropdown and show submenu links', async () => {
+    renderHeader();
+
+    const navToggle = screen.getByRole('button', { name: 'Toggle Vignettes menu' });
+    const menuRoot = navToggle.closest('.relative');
+    expect(menuRoot).toBeTruthy();
+    fireEvent.mouseEnter(menuRoot!);
+
+    await waitFor(() => {
+      expect(navToggle).toHaveAttribute('aria-expanded', 'true');
+    });
+    expect(within(menuRoot!).getByRole('link', { name: 'Runs' })).toBeInTheDocument();
+    expect(within(menuRoot!).getByRole('link', { name: 'Analysis' })).toBeInTheDocument();
   });
 });
