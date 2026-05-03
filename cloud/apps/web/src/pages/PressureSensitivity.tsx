@@ -18,7 +18,7 @@ import {
 import { PressureDirectionalBreakdown } from '../components/models/PressureDirectionalBreakdown';
 import { PressureSensitivitySummary } from '../components/models/PressureSensitivitySummary';
 import { PressureResponseByValueTable } from '../components/models/PressureResponseByValueTable';
-import { PressureSensitivityDetail } from '../components/models/PressureSensitivityDetail';
+import { PressureSensitivityGridSection } from '../components/models/PressureSensitivityGridSection';
 import { PressureSensitivityCrossValueMap } from '../components/models/PressureSensitivityCrossValueMap';
 import { PressureSensitivitySanityCheck } from '../components/models/PressureSensitivitySanityCheck';
 import { PressureSensitivityLimitations } from '../components/models/PressureSensitivityLimitations';
@@ -38,7 +38,6 @@ export function PressureSensitivity() {
   const hasDomainParam = domainParam != null;
   const domainFilter = domainParam === 'all' ? null : domainParam;
   const [selectedModelIds, setSelectedModelIds] = useState<string[] | null>(null);
-  const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
 
   const defaultDomainId = domains[0]?.id ?? null;
   const urlDomainId = hasDomainParam ? domainFilter : defaultDomainId;
@@ -162,20 +161,6 @@ export function PressureSensitivity() {
   const transcriptCapHit = data?.pressureSensitivity.transcriptCapHit ?? false;
   const pressureConditionExcludedCount = data?.pressureSensitivity.pressureConditionExcludedCount ?? 0;
 
-  useEffect(() => {
-    if (selectedModelId == null && models.length > 0) {
-      setSelectedModelId(models[0]!.modelId);
-      return;
-    }
-    if (selectedModelId != null && !models.some((m) => m.modelId === selectedModelId)) {
-      setSelectedModelId(models[0]?.modelId ?? null);
-    }
-  }, [models, selectedModelId]);
-
-  const selectedModel = selectedModelId != null
-    ? models.find((m) => m.modelId === selectedModelId) ?? null
-    : models[0] ?? null;
-
   const loading =
     (domainsLoading && domains.length === 0)
     || llmModelsLoading
@@ -297,21 +282,25 @@ export function PressureSensitivity() {
       ) : (
         <>
           <PressureDirectionalBreakdown models={models} />
-          {selectedModel && <PressureResponseByValueTable valueRates={selectedModel.valueRates} />}
+          <PressureResponseByValueTable models={models} />
 
-          {selectedModel && <PressureSensitivityDetail model={selectedModel} />}
+          <PressureSensitivityGridSection models={models}>
+            {({ selectedModelId, onSelectModel }) => (
+              <>
+                <PressureSensitivityCrossValueMap models={models} />
 
-          <PressureSensitivityCrossValueMap models={models} />
+                {directionalSanityCheck && <PressureSensitivitySanityCheck data={directionalSanityCheck} />}
 
-          {directionalSanityCheck && <PressureSensitivitySanityCheck data={directionalSanityCheck} />}
+                <PressureSensitivityLimitations />
 
-          <PressureSensitivityLimitations />
-
-          <PressureSensitivitySummary
-            models={models}
-            selectedModelId={selectedModel?.modelId ?? null}
-            onSelectModel={setSelectedModelId}
-          />
+                <PressureSensitivitySummary
+                  models={models}
+                  selectedModelId={selectedModelId}
+                  onSelectModel={onSelectModel}
+                />
+              </>
+            )}
+          </PressureSensitivityGridSection>
         </>
       )}
 

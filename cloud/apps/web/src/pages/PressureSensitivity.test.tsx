@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { PressureSensitivity } from './PressureSensitivity';
 import { DOMAIN_AVAILABLE_SIGNATURES_QUERY } from '../api/operations/domainAnalysis';
 import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/llm';
@@ -45,9 +45,9 @@ function createPressureData(
             {
               valueToken: 'alpha',
               valueLabel: 'Alpha',
-              averageWinRate: 0.6,
-              balancedWinRate: 0.5,
-              highPressureOnThisValueWinRate: 0.7,
+              averageWinRate: 0.4,
+              balancedWinRate: 0.3,
+              highPressureOnThisValueWinRate: 0.6,
               highPressureOnOpposingValueWinRate: 0.3,
               pairsMeasured: 1,
             },
@@ -70,6 +70,52 @@ function createPressureData(
                 qualifyingTrials: 12,
                 ciLow: 0.1,
                 ciHigh: 0.7,
+                reason: null,
+              },
+              grid: [],
+            },
+          ],
+        },
+        {
+          modelId: 'model-b',
+          label: 'Model B',
+          providerName: 'Provider',
+          unscoredCount: 0,
+          pressureResponseSummary: {
+            mean: 0.2,
+            rangeMin: 0.1,
+            rangeMax: 0.3,
+            pairsMeasured: 1,
+          },
+          valueRates: [
+            {
+              valueToken: 'alpha',
+              valueLabel: 'Alpha',
+              averageWinRate: 0.8,
+              balancedWinRate: 0.5,
+              highPressureOnThisValueWinRate: 0.9,
+              highPressureOnOpposingValueWinRate: 0.2,
+              pairsMeasured: 1,
+            },
+          ],
+          valuePairs: [
+            {
+              pairKey: 'gamma::delta',
+              firstValueToken: 'gamma',
+              firstValueLabel: 'Gamma',
+              secondValueToken: 'delta',
+              secondValueLabel: 'Delta',
+              n: 8,
+              unscoredCount: 0,
+              definitionsMeasured: 1,
+              pressureResponse: {
+                value: -0.2,
+                baselineRate: 0.4,
+                pushTowardFirstRate: 0.3,
+                pushTowardSecondRate: 0.5,
+                qualifyingTrials: 8,
+                ciLow: -0.4,
+                ciHigh: 0,
                 reason: null,
               },
               grid: [],
@@ -280,6 +326,7 @@ describe('PressureSensitivity page', () => {
     );
 
     expect(screen.getByText('Pressure Response by Value')).toBeDefined();
+    expect(screen.getByText(/Averaged across 2 selected models/)).toBeDefined();
   });
 
   it('defaults to the model picker and removes the provider filter copy', () => {
@@ -313,5 +360,42 @@ describe('PressureSensitivity page', () => {
     );
 
     expect(screen.getByText(/lower bound on pressure sensitivity/)).toBeDefined();
+  });
+
+  it('switches the grid model picker without changing the averaged by-value table', () => {
+    mockDomainsOnce();
+    mockQuery(createPressureData(false));
+
+    render(
+      <MemoryRouter initialEntries={['/models/pressure-sensitivity?domainId=domain-a&signature=vnewtd']}>
+        <PressureSensitivity />
+      </MemoryRouter>,
+    );
+
+    const valueRow = screen.getByText('Alpha').closest('tr');
+    if (valueRow == null) {
+      throw new Error('Missing Alpha row');
+    }
+
+    let valueCells = within(valueRow).getAllByRole('cell');
+    expect(valueCells[1]?.textContent ?? '').toBe('60.0%');
+    expect(screen.getByText('Alpha ↔ Beta')).toBeDefined();
+    expect(screen.queryByText('Gamma ↔ Delta')).toBeNull();
+
+    const gridLabel = screen.getByText('Show grids for');
+    const gridPickerButton = gridLabel.nextElementSibling;
+    if (!(gridPickerButton instanceof HTMLButtonElement)) {
+      throw new Error('Missing grid picker button');
+    }
+
+    fireEvent.click(gridPickerButton);
+    fireEvent.click(screen.getByRole('option', { name: 'Model B' }));
+
+    expect(screen.queryByText('Alpha ↔ Beta')).toBeNull();
+    expect(screen.getByText('Gamma ↔ Delta')).toBeDefined();
+
+    valueCells = within(valueRow).getAllByRole('cell');
+    expect(valueCells[1]?.textContent ?? '').toBe('60.0%');
+    expect(screen.getByText(/Averaged across 2 selected models/)).toBeDefined();
   });
 });
