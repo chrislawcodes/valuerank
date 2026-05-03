@@ -9,19 +9,14 @@
 import { builder } from '../builder.js';
 import { db, resolveDefinitionContent } from '@valuerank/db';
 import { AppError } from '@valuerank/shared';
-
 import {
   COVERAGE_VALUE_KEYS,
   type CoverageValueKey,
-  computeConditionCounts,
+  computeBatchEquivalent,
   extractValuePair,
-  getCoverageBatchGroupId,
+  findWeakestCondition,
   getCoverageDirection,
-  selectPrimaryDefinitionCounts,
-  computePerModelTrialCounts,
-  deduplicateRunsByGroupId,
 } from './domain-coverage-utils.js';
-import { isRunComplete } from '../../services/run/coverage-completeness.js';
 import { resolveEffectiveDefaultModelIds } from './domain/shared.js';
 import {
   DomainValueCoverageResultRef,
@@ -31,6 +26,110 @@ import {
 } from './domain-coverage-gql-types.js';
 
 const VALUE_PAIR_RESOLVE_CHUNK_SIZE = 20;
+
+type CoverageTranscript = {
+  modelId: string;
+  scenarioId: string | null;
+  sampleIndex: number;
+};
+
+type ScopedRun = {
+  id: string;
+  definitionId: string;
+  config: unknown;
+  transcripts: CoverageTranscript[];
+};
+
+type TrialMap = Map<string, Map<string, Map<string, Map<string, number>>>>;
+
+function incrementTrialCount(
+  trialsByDefAndDirection: TrialMap,
+  definitionId: string,
+  direction: string,
+  scenarioId: string,
+  modelId: string,
+): void {
+  const directionMap = trialsByDefAndDirection.get(definitionId) ?? new Map<string, Map<string, Map<string, number>>>();
+  const scenarioMap = directionMap.get(direction) ?? new Map<string, Map<string, number>>();
+  const modelMap = scenarioMap.get(scenarioId) ?? new Map<string, number>();
+
+  modelMap.set(modelId, (modelMap.get(modelId) ?? 0) + 1);
+  scenarioMap.set(scenarioId, modelMap);
+  directionMap.set(direction, scenarioMap);
+  trialsByDefAndDirection.set(definitionId, directionMap);
+}
+
+function mergeTrialMapsForDirection(
+  defIdsForPair: readonly string[],
+  direction: string,
+  trialsByDefAndDirection: TrialMap,
+): Map<string, Map<string, number>> {
+  const merged = new Map<string, Map<string, number>>();
+
+  for (const defId of defIdsForPair) {
+    const directionMap = trialsByDefAndDirection.get(defId)?.get(direction);
+    if (directionMap == null) continue;
+
+    for (const [scenarioId, modelMap] of directionMap) {
+      const mergedScenarioMap = merged.get(scenarioId) ?? new Map<string, number>();
+      for (const [modelId, trialCount] of modelMap) {
+        mergedScenarioMap.set(modelId, (mergedScenarioMap.get(modelId) ?? 0) + trialCount);
+      }
+      merged.set(scenarioId, mergedScenarioMap);
+    }
+  }
+
+  return merged;
+}
+
+function sumTrialsForDefinition(
+  definitionId: string,
+  trialsByDefAndDirection: TrialMap,
+): number {
+  const directionMap = trialsByDefAndDirection.get(definitionId);
+  if (directionMap == null) return 0;
+
+  let total = 0;
+  for (const scenarioMap of directionMap.values()) {
+    for (const modelMap of scenarioMap.values()) {
+      for (const trialCount of modelMap.values()) {
+        total += trialCount;
+      }
+    }
+  }
+  return total;
+}
+
+function findDirectionalDefinitionName(
+  defIdsForPair: readonly string[],
+  direction: string,
+  trialsByDefAndDirection: TrialMap,
+  pairByDefinitionId: ReadonlyMap<string, { name: string }>,
+): string | null {
+  for (const defId of defIdsForPair) {
+    const directionMap = trialsByDefAndDirection.get(defId)?.get(direction);
+    if (directionMap != null && directionMap.size > 0) {
+      return pairByDefinitionId.get(defId)?.name ?? null;
+    }
+  }
+  return null;
+}
+
+function formatScenarioLabel(content: unknown, fallbackId: string): string {
+  if (content === null || typeof content !== 'object' || Array.isArray(content)) {
+    return fallbackId.slice(0, 6);
+  }
+
+  const dimensionValues = (content as { dimension_values?: unknown }).dimension_values;
+  if (dimensionValues === null || typeof dimensionValues !== 'object' || Array.isArray(dimensionValues)) {
+    return fallbackId.slice(0, 6);
+  }
+
+  const entries = Object.entries(dimensionValues as Record<string, unknown>)
+    .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey));
+  const label = entries.map(([, value]) => String(value)).join('×');
+  return label.length > 0 ? label : fallbackId.slice(0, 6);
+}
 
 builder.queryField('domainValueCoverage', (t) =>
   t.field({
@@ -69,24 +168,16 @@ builder.queryField('domainValueCoverage', (t) =>
 
       ctx.log.debug({ domainId, filterModelIds, selectedSignature }, 'Computing domain value coverage');
 
-      const domain = await db.domain.findUnique({ where: { id: domainId }, select: { id: true, defaultModelIds: true } });
+      const domain = await db.domain.findUnique({
+        where: { id: domainId },
+        select: { id: true, defaultModelIds: true },
+      });
       if (!domain) return null;
 
       // Resolve effective model IDs: use domain-specific list if set, otherwise fall back
       // to globally defaulted models (isDefault=true, ACTIVE) from the Models settings page.
       const effectiveModelIds = await resolveEffectiveDefaultModelIds(domain.defaultModelIds);
-
-      // Pre-fetch labels for effective models so we can populate model breakdown
-      const defaultModelLabelById = new Map<string, string>();
-      if (effectiveModelIds.length > 0) {
-        const defaultModelRows = await db.llmModel.findMany({
-          where: { modelId: { in: effectiveModelIds } },
-          select: { modelId: true, displayName: true },
-        });
-        for (const row of defaultModelRows) {
-          defaultModelLabelById.set(row.modelId, row.displayName);
-        }
-      }
+      const activeModelFilter = filterModelIds.length > 0 ? filterModelIds : effectiveModelIds;
 
       // Fetch all non-deleted definitions (need IDs to resolve content)
       const definitions = await db.definition.findMany({
@@ -98,7 +189,6 @@ builder.queryField('domainValueCoverage', (t) =>
       // Map definition ID -> value pair (only those with recognized canonical pair)
       type DefValuePair = { valueA: CoverageValueKey; valueB: CoverageValueKey; name: string };
       const pairByDefinitionId = new Map<string, DefValuePair>();
-      // Map directional pair key -> definition IDs (to detect multi-vignette cells)
       const definitionsByPairKey = new Map<string, string[]>();
 
       // Resolve definition contents in chunks to handle inheritance
@@ -115,47 +205,23 @@ builder.queryField('domainValueCoverage', (t) =>
             const existing = definitionsByPairKey.get(key) ?? [];
             existing.push(def.id);
             definitionsByPairKey.set(key, existing);
-          })
+          }),
         );
         settled.forEach((result, idx) => {
           if (result.status === 'rejected') {
             ctx.log.error(
               { err: result.reason as unknown, definitionId: batch[idx]?.id },
-              'Failed to resolve definition content for coverage grid'
+              'Failed to resolve definition content for coverage grid',
             );
           }
         });
       }
 
-      // Count completed runs per definition, optionally filtered by signature and model
       const definitionIds = Array.from(pairByDefinitionId.keys());
-      const batchCountByDefinitionId = new Map<string, number>();
-      // Per-definition map: direction token -> Set<groupKey> where groupKey is
-      // the run's jobChoiceBatchGroupId (collapses retry duplicates within a
-      // launch group) or "__ungrouped__:<runId>" so each ungrouped run still
-      // counts once. Drives the new pairedBatchCount = min(A-first, B-first).
-      const directionalGroupsByDefinitionId =
-        new Map<string, Map<string, Set<string>>>();
-      const directionalSlotsByDefinitionId =
-        new Map<string, Map<string, Set<string>>>();
-      const directionalLeftoverSlotsByDefinitionId =
-        new Map<string, Map<string, Set<string>>>();
+      const trialsByDefAndDirection: TrialMap = new Map();
       const latestMatchingRunIdByDefinitionId = new Map<string, string>();
       const latestAggregateRunIdByDefinitionId = new Map<string, string>();
-      const incompleteBatchCountByDefinitionId = new Map<string, number>();
-      const signatureScopedRunsByDefinitionId = new Map<string, Array<{
-        id: string;
-        definitionId: string;
-        config: unknown;
-        transcripts: Array<{ modelId: string; scenarioId: string | null; sampleIndex: number }>;
-        scenarioIds: string[];
-      }>>();
-      // Non-aggregate runs per definition (for per-model trial count computation)
-      const nonAggregateRunsByDefinitionId = new Map<string, Array<{
-        config: unknown;
-        transcripts: Array<{ modelId: string; scenarioId: string | null; sampleIndex: number }>;
-        scenarioIds: string[];
-      }>>();
+      const signatureScopedRunsByDefinitionId = new Map<string, ScopedRun[]>();
 
       if (definitionIds.length > 0) {
         const completedRuns = await db.run.findMany({
@@ -185,15 +251,6 @@ builder.queryField('domainValueCoverage', (t) =>
           : completedRuns.filter((run) => runMatchesSignature(run.config, selectedSignature));
 
         for (const run of signatureScopedRuns) {
-          // Per the canonical glossary (docs/canonical-glossary.md), a `Batch` is
-          // one fully-complete run -- every selected model has a transcript at
-          // every (scenarioId × sampleIndex) slot. samplesPerScenario does not
-          // multiply the count. Aggregate runs are excluded from both batch
-          // and incomplete-batch counts (they are rollup records, not data).
-          //
-          // A COMPLETED run with null/malformed `config` or no `models` array
-          // is a data corruption signal; surface it instead of silently
-          // skipping. `samplesPerScenario` and `isAggregate` remain optional.
           if (run.config === null || typeof run.config !== 'object') {
             throw new AppError(
               `Run ${run.id} has null or non-object config; cannot compute coverage`,
@@ -202,25 +259,22 @@ builder.queryField('domainValueCoverage', (t) =>
               { runId: run.id },
             );
           }
+
           const config = run.config as {
             isAggregate?: boolean;
             models?: unknown;
-            samplesPerScenario?: unknown;
           };
-          const scenarioIds = run.scenarioSelections.map((s) => s.scenarioId);
-          const runWithScenarios = {
+          const scopedRun: ScopedRun = {
             id: run.id,
             definitionId: run.definitionId,
             config: run.config,
             transcripts: run.transcripts,
-            scenarioIds,
           };
           const existingRuns = signatureScopedRunsByDefinitionId.get(run.definitionId) ?? [];
-          existingRuns.push(runWithScenarios);
+          existingRuns.push(scopedRun);
           signatureScopedRunsByDefinitionId.set(run.definitionId, existingRuns);
 
-          const isAggregateRun = config.isAggregate === true;
-          if (isAggregateRun) {
+          if (config.isAggregate === true) {
             if (!latestAggregateRunIdByDefinitionId.has(run.definitionId)) {
               latestAggregateRunIdByDefinitionId.set(run.definitionId, run.id);
             }
@@ -228,119 +282,37 @@ builder.queryField('domainValueCoverage', (t) =>
           }
 
           const models = Array.isArray(config.models)
-            ? config.models.filter((m): m is string => typeof m === 'string' && m.length > 0)
+            ? config.models.filter((model): model is string => typeof model === 'string' && model.length > 0)
             : null;
-          // When the caller provides explicit modelIds, those replace the effective
-          // model set filter so counts reflect runs planned for exactly those models.
-          // When no explicit modelIds, fall back to the domain's effective defaults.
-          const activeModelFilter = filterModelIds.length > 0 ? filterModelIds : effectiveModelIds;
           const matchesEffectiveModelSet = activeModelFilter.length === 0
             || (models !== null && activeModelFilter.every((id) => models.includes(id)));
           if (!matchesEffectiveModelSet) {
             continue;
           }
 
-          const matchingTranscripts = run.transcripts.filter((transcript): transcript is {
-            modelId: string;
-            scenarioId: string;
-            sampleIndex: number;
-          } => transcript.scenarioId !== null
-            && transcript.sampleIndex !== null
-            && (filterModelIds.length === 0 || filterModelIds.includes(transcript.modelId)));
-
           const direction = getCoverageDirection(run.config);
-          if (direction !== null && matchingTranscripts.length > 0) {
-            const defMap = directionalSlotsByDefinitionId.get(run.definitionId)
-              ?? new Map<string, Set<string>>();
-            const slotSet = defMap.get(direction) ?? new Set<string>();
-            for (const transcript of matchingTranscripts) {
-              slotSet.add(`${transcript.scenarioId}|${transcript.modelId}|${transcript.sampleIndex}`);
-            }
-            defMap.set(direction, slotSet);
-            directionalSlotsByDefinitionId.set(run.definitionId, defMap);
+          if (direction === null) {
+            continue;
           }
 
           if (!latestMatchingRunIdByDefinitionId.has(run.definitionId)) {
             latestMatchingRunIdByDefinitionId.set(run.definitionId, run.id);
           }
 
-          // Track non-aggregate runs for per-model trial count computation.
-          const nonAggregateRuns = nonAggregateRunsByDefinitionId.get(run.definitionId) ?? [];
-          nonAggregateRuns.push({ config: run.config, transcripts: run.transcripts, scenarioIds });
-          nonAggregateRunsByDefinitionId.set(run.definitionId, nonAggregateRuns);
-
-          // Determine completeness using the existing helper. A run is complete
-          // iff every (scenarioId × modelId × sampleIndex) slot has at least
-          // one transcript. Extra transcripts in a slot do NOT break
-          // completeness; only missing slots do.
-          if (models === null) {
-            throw new AppError(
-              `Run ${run.id} config has no models array; cannot compute coverage`,
-              'RUN_CONFIG_INVALID',
-              500,
-              { runId: run.id },
-            );
-          }
-          if (models.length === 0) {
-            throw new AppError(
-              `Run ${run.id} has empty or invalid models array`,
-              'RUN_CONFIG_INVALID',
-              500,
-              { runId: run.id },
-            );
-          }
-          const rawSamples = config.samplesPerScenario;
-          const samplesPerScenario = typeof rawSamples === 'number' ? rawSamples : null;
-          const existingTranscripts = run.transcripts
-            .filter((t): t is { scenarioId: string; modelId: string; sampleIndex: number } => t.scenarioId !== null && t.sampleIndex !== null);
-          const complete = isRunComplete({
-            scenarioIds,
-            models,
-            samplesPerScenario,
-            existingTranscripts,
-          });
-
-          if (!complete) {
-            incompleteBatchCountByDefinitionId.set(
-              run.definitionId,
-              (incompleteBatchCountByDefinitionId.get(run.definitionId) ?? 0) + 1,
-            );
-
-            if (direction !== null && matchingTranscripts.length > 0) {
-              const defMap = directionalLeftoverSlotsByDefinitionId.get(run.definitionId)
-                ?? new Map<string, Set<string>>();
-              const slotSet = defMap.get(direction) ?? new Set<string>();
-              for (const transcript of matchingTranscripts) {
-                slotSet.add(`${transcript.scenarioId}|${transcript.modelId}|${transcript.sampleIndex}`);
-              }
-              defMap.set(direction, slotSet);
-              directionalLeftoverSlotsByDefinitionId.set(run.definitionId, defMap);
+          for (const transcript of run.transcripts) {
+            if (transcript.scenarioId === null) {
+              continue;
             }
-            continue;
-          }
-
-          // Run is complete: contribute exactly 1 to batchCount regardless of
-          // samplesPerScenario.
-          batchCountByDefinitionId.set(
-            run.definitionId,
-            (batchCountByDefinitionId.get(run.definitionId) ?? 0) + 1,
-          );
-
-          // pairedBatchCount semantic: count complete A-first vs B-first runs
-          // independently per the direction token in config.jobChoiceValueFirst.
-          // The Set<groupKey> collapses retry duplicates that share the same
-          // launch group; ungrouped runs use a unique sentinel so they each
-          // count once. Runs with no recognizable direction token are skipped
-          // here (they still count toward batchCount above).
-          if (direction !== null) {
-            const launchGroupId = getCoverageBatchGroupId(run.config);
-            const groupKey = launchGroupId ?? `__ungrouped__:${run.id}`;
-            const defMap = directionalGroupsByDefinitionId.get(run.definitionId)
-              ?? new Map<string, Set<string>>();
-            const dirSet = defMap.get(direction) ?? new Set<string>();
-            dirSet.add(groupKey);
-            defMap.set(direction, dirSet);
-            directionalGroupsByDefinitionId.set(run.definitionId, defMap);
+            if (activeModelFilter.length > 0 && !activeModelFilter.includes(transcript.modelId)) {
+              continue;
+            }
+            incrementTrialCount(
+              trialsByDefAndDirection,
+              run.definitionId,
+              direction,
+              transcript.scenarioId,
+              transcript.modelId,
+            );
           }
         }
       }
@@ -354,27 +326,48 @@ builder.queryField('domainValueCoverage', (t) =>
         }
       }
 
-      const modelDetailRows =
-        availableModelIds.size > 0
-          ? await db.llmModel.findMany({
-            where: { modelId: { in: Array.from(availableModelIds) } },
-            select: { modelId: true, displayName: true },
-            orderBy: { displayName: 'asc' },
-          })
-          : [];
+      const modelDetailRows = availableModelIds.size > 0
+        ? await db.llmModel.findMany({
+          where: { modelId: { in: Array.from(availableModelIds) } },
+          select: { modelId: true, displayName: true },
+          orderBy: { displayName: 'asc' },
+        })
+        : [];
 
-      const availableModels: CoverageModelOption[] = modelDetailRows.map((m) => ({
-        modelId: m.modelId,
-        label: m.displayName,
+      const availableModels: CoverageModelOption[] = modelDetailRows.map((model) => ({
+        modelId: model.modelId,
+        label: model.displayName,
       }));
+      const modelLabelById = new Map<string, string>(
+        availableModels.map((model) => [model.modelId, model.label] as const),
+      );
 
-      // Build the symmetric 45-cell matrix (one cell per unique sorted pair)
+      const allScenarioIds = new Set<string>();
+      for (const directionMap of trialsByDefAndDirection.values()) {
+        for (const scenarioMap of directionMap.values()) {
+          for (const scenarioId of scenarioMap.keys()) {
+            allScenarioIds.add(scenarioId);
+          }
+        }
+      }
+
+      const scenarioLabelMap = new Map<string, string>();
+      if (allScenarioIds.size > 0) {
+        const scenarioRows = await db.scenario.findMany({
+          where: { id: { in: [...allScenarioIds] } },
+          select: { id: true, content: true },
+        });
+
+        for (const scenarioRow of scenarioRows) {
+          scenarioLabelMap.set(scenarioRow.id, formatScenarioLabel(scenarioRow.content, scenarioRow.id));
+        }
+      }
+
       const values = [...COVERAGE_VALUE_KEYS] as string[];
       const cells: DomainValueCoverageCell[] = [];
 
       for (const valueA of COVERAGE_VALUE_KEYS) {
         for (const valueB of COVERAGE_VALUE_KEYS) {
-          // Only emit sorted pairs: skip diagonal and reversed pairs
           if (valueA.localeCompare(valueB) >= 0) continue;
 
           const key = `${valueA}::${valueB}`;
@@ -384,154 +377,71 @@ builder.queryField('domainValueCoverage', (t) =>
             cells.push({
               valueA,
               valueB,
-              batchCount: 0,
-              pairedBatchCount: 0,
-              orphanedBatchCount: 0,
-              aFirstBatchCount: 0,
-              bFirstBatchCount: 0,
-              pairedConditionCount: 0,
-              orphanedConditionCount: 0,
-              directionalCoverage: [],
+              batchEquivalent: 0,
+              aFirstBatchEquivalent: 0,
+              bFirstBatchEquivalent: 0,
+              aFirstDefinitionName: null,
+              bFirstDefinitionName: null,
+              weakestCondition: null,
               contributingDefinitionIds: [],
-              incompleteBatchCount: 0,
               definitionId: null,
-              definitionName: null,
               aggregateRunId: null,
-              minTrialCount: null,
-              maxTrialCount: null,
-              modelBreakdown: null,
             });
-          } else {
-            // Use the total counts across all definitions for the visible cell, but
-            // still choose one stable definition for the analysis link target.
-            const {
-              primaryDefinitionId,
-              batchCount,
-              pairedBatchCount,
-              orphanedBatchCount,
-              aFirstBatchCount,
-              bFirstBatchCount,
-            } = selectPrimaryDefinitionCounts(
-              defIdsForPair,
-              batchCountByDefinitionId,
-              directionalGroupsByDefinitionId,
-              valueA,
-              valueB,
-              ctx.log,
-              `${valueA}::${valueB}`,
-            );
-            const conditionCounts = computeConditionCounts(defIdsForPair, directionalSlotsByDefinitionId);
-            const primaryDefId = primaryDefinitionId ?? '';
-            const primaryPair = pairByDefinitionId.get(primaryDefId);
-            const aggregateRunId = primaryDefId === ''
-              ? null
-              : (latestAggregateRunIdByDefinitionId.get(primaryDefId)
-                ?? latestMatchingRunIdByDefinitionId.get(primaryDefId)
-                ?? null);
-
-            // Sum incompleteBatchCount across all definitions for this pair
-            const incompleteBatchCount = defIdsForPair.reduce(
-              (sum, defId) => sum + (incompleteBatchCountByDefinitionId.get(defId) ?? 0),
-              0,
-            );
-
-            // Compute per-model trial counts across all definitions for this pair.
-            // Deduplicate by group ID first: A-first and B-first companion definitions
-            // share the same jobChoiceBatchGroupId, so flatMapping across both would
-            // double-count each paired batch.
-            //
-            // When companions have different completeness, prefer the complete one
-            // for the trial-count computation. This is read-time consistency with
-            // batchCount: the surviving run is the one whose data feeds analysis.
-            //
-            // Intentionally unchanged by the directional-pairedBatchCount refactor:
-            // the trial-count path keeps the surviving-companion semantic so that
-            // healthy paired batches do not double their displayed trial counts.
-            // See spec §5.7 ("Per-model trial counts — intentionally unchanged").
-            const allNonAggregateRunsForPair = deduplicateRunsByGroupId(
-              defIdsForPair.flatMap((defId) => nonAggregateRunsByDefinitionId.get(defId) ?? []),
-              (run) => {
-                const configModels = (run.config as { models?: unknown } | null)?.models;
-                const models = Array.isArray(configModels)
-                  ? configModels.filter((m): m is string => typeof m === 'string' && m.length > 0)
-                  : [];
-                const rawSamples = (run.config as { samplesPerScenario?: unknown } | null)?.samplesPerScenario;
-                const existing = run.transcripts
-                  .filter((t): t is { scenarioId: string; modelId: string; sampleIndex: number } => t.scenarioId !== null);
-                return isRunComplete({
-                  scenarioIds: run.scenarioIds,
-                  models,
-                  samplesPerScenario: typeof rawSamples === 'number' ? rawSamples : null,
-                  existingTranscripts: existing,
-                });
-              },
-            );
-            const { minTrialCount, maxTrialCount, modelBreakdown } = computePerModelTrialCounts(
-              allNonAggregateRunsForPair,
-              effectiveModelIds,
-              defaultModelLabelById,
-            );
-
-            const mergedDirectionalGroups = new Map<string, Set<string>>();
-            const mergedDirectionalLeftovers = new Map<string, Set<string>>();
-            for (const defId of new Set(defIdsForPair)) {
-              const defMap = directionalGroupsByDefinitionId.get(defId);
-              if (defMap == null) continue;
-              for (const [direction, groupKeys] of defMap) {
-                const existing = mergedDirectionalGroups.get(direction) ?? new Set<string>();
-                for (const groupKey of groupKeys) {
-                  existing.add(groupKey);
-                }
-                mergedDirectionalGroups.set(direction, existing);
-              }
-
-              const leftoverMap = directionalLeftoverSlotsByDefinitionId.get(defId);
-              if (leftoverMap == null) continue;
-              for (const [direction, slotKeys] of leftoverMap) {
-                const existing = mergedDirectionalLeftovers.get(direction) ?? new Set<string>();
-                for (const slotKey of slotKeys) {
-                  existing.add(slotKey);
-                }
-                mergedDirectionalLeftovers.set(direction, existing);
-              }
-            }
-
-            const orderedDirections = [
-              valueA,
-              valueB,
-              ...Array.from(conditionCounts.perDirection.keys())
-                .filter((direction) => direction !== valueA && direction !== valueB)
-                .sort((left, right) => left.localeCompare(right)),
-            ].filter((direction, index, array) => array.indexOf(direction) === index);
-            const directionalCoverage = orderedDirections.map((direction) => ({
-              direction,
-              completeBatches: mergedDirectionalGroups.get(direction)?.size ?? 0,
-              filledSlots: conditionCounts.perDirection.get(direction)?.filledSlots ?? 0,
-              leftoverConditions: mergedDirectionalLeftovers.get(direction)?.size ?? 0,
-              definitionIds: conditionCounts.perDirection.get(direction)?.definitionIds ?? [],
-            }));
-
-            cells.push({
-              valueA,
-              valueB,
-              batchCount,
-              pairedBatchCount,
-              orphanedBatchCount,
-              aFirstBatchCount,
-              bFirstBatchCount,
-              pairedConditionCount: conditionCounts.pairedConditionCount,
-              orphanedConditionCount: conditionCounts.orphanedConditionCount,
-              directionalCoverage,
-              contributingDefinitionIds: Array.from(new Set(defIdsForPair)).sort((left, right) => left.localeCompare(right)),
-              incompleteBatchCount,
-              definitionId: primaryDefId !== '' ? primaryDefId : null,
-              definitionName: primaryPair?.name ?? null,
-              aggregateRunId,
-              minTrialCount,
-              maxTrialCount,
-              modelBreakdown,
-            });
+            continue;
           }
+
+          const uniqueDefIdsForPair = Array.from(new Set(defIdsForPair)).sort((left, right) => left.localeCompare(right));
+          const primaryDefinitionId = uniqueDefIdsForPair.reduce((best, defId) => {
+            const bestCount = sumTrialsForDefinition(best, trialsByDefAndDirection);
+            const thisCount = sumTrialsForDefinition(defId, trialsByDefAndDirection);
+            if (thisCount > bestCount) return defId;
+            if (thisCount < bestCount) return best;
+            return defId.localeCompare(best) < 0 ? defId : best;
+          }, uniqueDefIdsForPair[0] ?? '');
+          const primaryDefinitionName = pairByDefinitionId.get(primaryDefinitionId)?.name ?? null;
+
+          const mergedAFirstTrialMap = mergeTrialMapsForDirection(uniqueDefIdsForPair, valueA, trialsByDefAndDirection);
+          const mergedBFirstTrialMap = mergeTrialMapsForDirection(uniqueDefIdsForPair, valueB, trialsByDefAndDirection);
+          const aFirstBatchEquivalent = computeBatchEquivalent(mergedAFirstTrialMap, activeModelFilter);
+          const bFirstBatchEquivalent = computeBatchEquivalent(mergedBFirstTrialMap, activeModelFilter);
+          const batchEquivalent = Math.min(aFirstBatchEquivalent, bFirstBatchEquivalent);
+          const aFirstDefinitionName = findDirectionalDefinitionName(
+            uniqueDefIdsForPair,
+            valueA,
+            trialsByDefAndDirection,
+            pairByDefinitionId,
+          ) ?? primaryDefinitionName;
+          const bFirstDefinitionName = findDirectionalDefinitionName(
+            uniqueDefIdsForPair,
+            valueB,
+            trialsByDefAndDirection,
+            pairByDefinitionId,
+          ) ?? primaryDefinitionName;
+          const weakestCondition = aFirstBatchEquivalent === bFirstBatchEquivalent
+            ? null
+            : findWeakestCondition(
+              aFirstBatchEquivalent < bFirstBatchEquivalent ? mergedAFirstTrialMap : mergedBFirstTrialMap,
+              activeModelFilter,
+              scenarioLabelMap,
+              modelLabelById,
+            );
+          const aggregateRunId = latestAggregateRunIdByDefinitionId.get(primaryDefinitionId)
+            ?? latestMatchingRunIdByDefinitionId.get(primaryDefinitionId)
+            ?? null;
+
+          cells.push({
+            valueA,
+            valueB,
+            batchEquivalent,
+            aFirstBatchEquivalent,
+            bFirstBatchEquivalent,
+            aFirstDefinitionName,
+            bFirstDefinitionName,
+            weakestCondition,
+            contributingDefinitionIds: uniqueDefIdsForPair,
+            definitionId: primaryDefinitionId === '' ? null : primaryDefinitionId,
+            aggregateRunId,
+          });
         }
       }
 
@@ -540,3 +450,4 @@ builder.queryField('domainValueCoverage', (t) =>
     },
   })
 );
+

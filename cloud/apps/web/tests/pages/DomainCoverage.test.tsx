@@ -46,10 +46,14 @@ const coverageByDomain = {
       {
         valueA: 'Achievement',
         valueB: 'Self_Direction_Action',
-        batchCount: 3,
-        pairedBatchCount: 2,
+        batchEquivalent: 2,
+        aFirstBatchEquivalent: 2,
+        bFirstBatchEquivalent: 3,
+        aFirstDefinitionName: 'A vs B',
+        bFirstDefinitionName: 'B vs A',
+        weakestCondition: null,
+        contributingDefinitionIds: ['def-1'],
         definitionId: 'def-1',
-        definitionName: 'A vs B',
         aggregateRunId: 'run-1',
       },
     ],
@@ -65,10 +69,14 @@ const coverageByDomain = {
       {
         valueA: 'Achievement',
         valueB: 'Self_Direction_Action',
-        batchCount: 4,
-        pairedBatchCount: 3,
+        batchEquivalent: 3,
+        aFirstBatchEquivalent: 3,
+        bFirstBatchEquivalent: 4,
+        aFirstDefinitionName: 'B vs A',
+        bFirstDefinitionName: 'A vs B',
+        weakestCondition: null,
+        contributingDefinitionIds: ['def-2'],
         definitionId: 'def-2',
-        definitionName: 'B vs A',
         aggregateRunId: 'run-2',
       },
     ],
@@ -250,7 +258,7 @@ describe('DomainCoverage Page', () => {
 
     await act(async () => {
       await user.click(
-        screen.getByRole('button', { name: /self-direction versus achievement.*2 paired batch/i })
+        screen.getByRole('button', { name: /self-direction versus achievement.*2 batch equivalent/i })
       );
     });
 
@@ -264,7 +272,7 @@ describe('DomainCoverage Page', () => {
     expect(url.pathname).toBe('/analysis/run-1');
     expect(url.searchParams.get('tab')).toBe('overview');
     expect(url.searchParams.get('mode')).toBe('single');
-    expect(url.searchParams.get('coverageBatchCount')).toBe('3');
+    expect(url.searchParams.get('coverageBatchCount')).toBe('2');
     expect(url.searchParams.get('coveragePairedBatchCount')).toBe('2');
     expect(screen.queryByRole('link', { name: /view domain analysis/i })).not.toBeInTheDocument();
   });

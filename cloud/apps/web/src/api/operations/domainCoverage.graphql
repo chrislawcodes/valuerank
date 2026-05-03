@@ -5,32 +5,23 @@ query DomainValueCoverage($domainId: ID!, $modelIds: [String!], $signature: Stri
     cells {
       valueA
       valueB
-      batchCount
-      pairedBatchCount
-      orphanedBatchCount
-      aFirstBatchCount
-      bFirstBatchCount
-      pairedConditionCount
-      orphanedConditionCount
-      directionalCoverage {
-        direction
-        completeBatches
-        filledSlots
-        leftoverConditions
-        definitionIds
+      batchEquivalent
+      aFirstBatchEquivalent
+      bFirstBatchEquivalent
+      aFirstDefinitionName
+      bFirstDefinitionName
+      weakestCondition {
+        conditionLabel
+        modelCounts {
+          modelId
+          label
+          trialCount
+        }
+        otherConditionsCount
       }
       contributingDefinitionIds
-      incompleteBatchCount
       definitionId
-      definitionName
       aggregateRunId
-      minTrialCount
-      maxTrialCount
-      modelBreakdown {
-        modelId
-        label
-        trialCount
-      }
     }
     availableModels {
       modelId
@@ -46,23 +37,22 @@ query DomainValueCoverageLegacy($domainId: ID!, $modelIds: [String!]) {
     cells {
       valueA
       valueB
-      batchCount
-      pairedBatchCount
-      orphanedBatchCount
-      aFirstBatchCount
-      bFirstBatchCount
-      pairedConditionCount
-      orphanedConditionCount
-      directionalCoverage {
-        direction
-        completeBatches
-        filledSlots
-        leftoverConditions
-        definitionIds
+      batchEquivalent
+      aFirstBatchEquivalent
+      bFirstBatchEquivalent
+      aFirstDefinitionName
+      bFirstDefinitionName
+      weakestCondition {
+        conditionLabel
+        modelCounts {
+          modelId
+          label
+          trialCount
+        }
+        otherConditionsCount
       }
       contributingDefinitionIds
       definitionId
-      definitionName
       aggregateRunId
     }
     availableModels {

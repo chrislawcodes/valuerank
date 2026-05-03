@@ -1,4 +1,5 @@
 import { DOMAIN_ANALYSIS_VALUE_KEYS, extractValuePair, toPascalCaseKey, type DomainAnalysisValueKey } from './domain-analysis-values.js';
+import type { CoverageWeakestCondition } from './domain-coverage-gql-types.js';
 
 export const COVERAGE_VALUE_KEYS = DOMAIN_ANALYSIS_VALUE_KEYS;
 export type CoverageValueKey = DomainAnalysisValueKey;
@@ -38,6 +39,126 @@ export function getCoverageBatchIncrement(samplesPerScenario: unknown): number {
 
 export type CoverageModelBreakdown = { modelId: string; label: string; trialCount: number };
 export type CoverageConditionBreakdown = { filledSlots: number; definitionIds: string[] };
+
+/**
+ * Compute batch equivalent from a trial count map.
+ *
+ * trialMap: scenarioId -> modelId -> trialCount
+ * selectedModelIds: models to require (all must have trials for a scenario to count)
+ *
+ * Returns min across all scenarios of (min per model across selectedModelIds).
+ * A scenario with 0 trials for any selected model contributes 0.
+ * Returns 0 if trialMap is empty or selectedModelIds is empty.
+ */
+export function computeBatchEquivalent(
+  trialMap: ReadonlyMap<string, ReadonlyMap<string, number>>,
+  selectedModelIds: readonly string[],
+): number {
+  if (trialMap.size === 0 || selectedModelIds.length === 0) {
+    return 0;
+  }
+
+  let weakestScenarioCount = Number.POSITIVE_INFINITY;
+  for (const scenarioMap of trialMap.values()) {
+    let perScenarioCount = Number.POSITIVE_INFINITY;
+    for (const modelId of selectedModelIds) {
+      perScenarioCount = Math.min(perScenarioCount, scenarioMap.get(modelId) ?? 0);
+    }
+    weakestScenarioCount = Math.min(weakestScenarioCount, perScenarioCount);
+  }
+
+  return Number.isFinite(weakestScenarioCount) ? weakestScenarioCount : 0;
+}
+
+function countTrialsForScenario(
+  scenarioMap: ReadonlyMap<string, number>,
+  selectedModelIds: readonly string[],
+): number {
+  let count = Number.POSITIVE_INFINITY;
+  for (const modelId of selectedModelIds) {
+    count = Math.min(count, scenarioMap.get(modelId) ?? 0);
+  }
+  return Number.isFinite(count) ? count : 0;
+}
+
+function buildCoverageWeakestCondition(
+  scenarioId: string,
+  scenarioMap: ReadonlyMap<string, number>,
+  selectedModelIds: readonly string[],
+  scenarioLabelMap: ReadonlyMap<string, string>,
+  modelLabelById: ReadonlyMap<string, string>,
+): {
+  scenarioId: string;
+  conditionLabel: string;
+  minCount: number;
+  modelCounts: { modelId: string; label: string; trialCount: number }[];
+} {
+  const modelCounts = selectedModelIds.map((modelId) => ({
+    modelId,
+    label: modelLabelById.get(modelId) ?? modelId,
+    trialCount: scenarioMap.get(modelId) ?? 0,
+  }));
+  return {
+    scenarioId,
+    conditionLabel: scenarioLabelMap.get(scenarioId) ?? scenarioId.slice(0, 6),
+    minCount: countTrialsForScenario(scenarioMap, selectedModelIds),
+    modelCounts,
+  };
+}
+
+/**
+ * Find the weakest condition: the scenario with the lowest min-per-model count.
+ * Returns null if all scenarios have equal coverage (no variation), or trialMap is empty.
+ *
+ * scenarioLabelMap: scenarioId -> human-readable label (e.g. "5×1")
+ * modelLabelById: modelId -> display name
+ */
+export function findWeakestCondition(
+  trialMap: ReadonlyMap<string, ReadonlyMap<string, number>>,
+  selectedModelIds: readonly string[],
+  scenarioLabelMap: ReadonlyMap<string, string>,
+  modelLabelById: ReadonlyMap<string, string>,
+): CoverageWeakestCondition | null {
+  if (trialMap.size === 0 || selectedModelIds.length === 0) {
+    return null;
+  }
+
+  const scenarioCounts = Array.from(trialMap.entries())
+    .map(([scenarioId, scenarioMap]) =>
+      buildCoverageWeakestCondition(scenarioId, scenarioMap, selectedModelIds, scenarioLabelMap, modelLabelById))
+    .sort((left, right) => {
+      if (left.minCount !== right.minCount) return left.minCount - right.minCount;
+      return left.scenarioId.localeCompare(right.scenarioId);
+    });
+
+  if (scenarioCounts.length <= 1) {
+    return null;
+  }
+
+  const firstCount = scenarioCounts[0]?.minCount ?? 0;
+  const allEqual = scenarioCounts.every((entry) => entry.minCount === firstCount);
+  if (allEqual) {
+    return null;
+  }
+
+  const weakest = scenarioCounts[0];
+  if (weakest == null) {
+    return null;
+  }
+
+  const otherCounts = scenarioCounts.slice(1).map((entry) => entry.minCount);
+  let otherConditionsCount: number | null = null;
+  if (otherCounts.length > 0) {
+    const uniformOtherCount = otherCounts.every((count) => count === otherCounts[0]);
+    otherConditionsCount = uniformOtherCount ? otherCounts[0] ?? null : otherCounts[0] ?? null;
+  }
+
+  return {
+    conditionLabel: weakest.conditionLabel,
+    modelCounts: weakest.modelCounts,
+    otherConditionsCount,
+  };
+}
 
 /**
  * Deduplicate a list of runs by their paired-batch group ID.

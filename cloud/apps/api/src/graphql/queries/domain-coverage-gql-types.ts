@@ -13,30 +13,33 @@ import {
 } from '@valuerank/shared/trial-signature';
 import { parseDefinitionVersion } from '../../utils/definition-version.js';
 import { parseTemperature } from '../../utils/temperature.js';
-import type { CoverageModelBreakdown } from './domain-coverage-utils.js';
 
 // ─── TypeScript types ─────────────────────────────────────────────────────────
+
+export type CoverageModelCount = {
+  modelId: string;
+  label: string;
+  trialCount: number;
+};
+
+export type CoverageWeakestCondition = {
+  conditionLabel: string;
+  modelCounts: CoverageModelCount[];
+  otherConditionsCount: number | null;
+};
 
 export type DomainValueCoverageCell = {
   valueA: string;
   valueB: string;
-  batchCount: number;
-  pairedBatchCount: number;
-  orphanedBatchCount: number;
-  aFirstBatchCount: number;
-  bFirstBatchCount: number;
-  pairedConditionCount: number;
-  orphanedConditionCount: number;
-  directionalCoverage: DirectionalCoverage[];
+  batchEquivalent: number;
+  aFirstBatchEquivalent: number;
+  bFirstBatchEquivalent: number;
+  aFirstDefinitionName: string | null;
+  bFirstDefinitionName: string | null;
+  weakestCondition: CoverageWeakestCondition | null;
   contributingDefinitionIds: string[];
-  /** Number of non-aggregate runs whose transcript count is less than expected. */
-  incompleteBatchCount: number;
   definitionId: string | null;
-  definitionName: string | null;
   aggregateRunId: string | null;
-  minTrialCount: number | null;
-  maxTrialCount: number | null;
-  modelBreakdown: CoverageModelBreakdown[] | null;
 };
 
 export type CoverageModelOption = {
@@ -70,8 +73,8 @@ const CoverageModelOptionRef = builder
     }),
   });
 
-const CoverageModelBreakdownRef = builder
-  .objectRef<CoverageModelBreakdown>('CoverageModelBreakdown')
+const CoverageModelCountRef = builder
+  .objectRef<CoverageModelCount>('CoverageModelCount')
   .implement({
     fields: (t) => ({
       modelId: t.exposeString('modelId'),
@@ -80,15 +83,16 @@ const CoverageModelBreakdownRef = builder
     }),
   });
 
-const DirectionalCoverageRef = builder
-  .objectRef<DirectionalCoverage>('DirectionalCoverage')
+const CoverageWeakestConditionRef = builder
+  .objectRef<CoverageWeakestCondition>('CoverageWeakestCondition')
   .implement({
     fields: (t) => ({
-      direction: t.exposeString('direction'),
-      completeBatches: t.exposeInt('completeBatches'),
-      filledSlots: t.exposeInt('filledSlots'),
-      leftoverConditions: t.exposeInt('leftoverConditions'),
-      definitionIds: t.exposeStringList('definitionIds'),
+      conditionLabel: t.exposeString('conditionLabel'),
+      modelCounts: t.field({
+        type: [CoverageModelCountRef],
+        resolve: (parent) => parent.modelCounts,
+      }),
+      otherConditionsCount: t.exposeInt('otherConditionsCount', { nullable: true }),
     }),
   });
 
@@ -98,80 +102,22 @@ const DomainValueCoverageCellRef = builder
     fields: (t) => ({
       valueA: t.exposeString('valueA'),
       valueB: t.exposeString('valueB'),
-      batchCount: t.exposeInt('batchCount', {
-        description:
-          'Count of fully-complete non-aggregate runs for this value pair. ' +
-          'A run is complete when every selected model has at least one ' +
-          'transcript at every (scenario × sampleIndex) slot. samplesPerScenario ' +
-          'does not multiply this count -- a complete run contributes 1 ' +
-          'regardless of how many samples per scenario were planned. ' +
-          'Aggregate runs are excluded.',
-      }),
-      pairedBatchCount: t.exposeInt('pairedBatchCount', {
-        description:
-          'Count of pairable analysis-ready batches for this value pair, ' +
-          'computed as min(complete A-first non-aggregate runs, ' +
-          'complete B-first non-aggregate runs) where direction is read from ' +
-          'config.jobChoiceValueFirst. A launch where only one direction completed ' +
-          'contributes 0 here (the surviving complete run still appears in batchCount). ' +
-          'Runs without a recognizable direction token are excluded from both sides. ' +
-          'See docs/canonical-glossary.md "Paired Batch" for full semantic.',
-      }),
-      orphanedBatchCount: t.exposeInt('orphanedBatchCount', {
-        description:
-          'Count of unmatched directional runs for this value pair, computed as ' +
-          'max(complete A-first runs, complete B-first runs) - ' +
-          'min(complete A-first runs, complete B-first runs). When both directions ' +
-          'are equal this is 0; when only one direction has runs this is the count ' +
-          'of that side. Runs without a recognizable direction token are excluded.',
-      }),
-      aFirstBatchCount: t.exposeInt('aFirstBatchCount', {
-        description:
-          'Count of complete A-first runs for this value pair after model-set filtering. ' +
-          'This is the filtered directional count for the first value in the pair.',
-      }),
-      bFirstBatchCount: t.exposeInt('bFirstBatchCount', {
-        description:
-          'Count of complete B-first runs for this value pair after model-set filtering. ' +
-          'This is the filtered directional count for the second value in the pair.',
-      }),
-      pairedConditionCount: t.exposeInt('pairedConditionCount', {
-        description:
-          'Count of matched condition slots across both directions, computed as the ' +
-          'size of the intersection of filled (scenarioId, modelId, sampleIndex) slots.',
-      }),
-      orphanedConditionCount: t.exposeInt('orphanedConditionCount', {
-        description:
-          'Count of unmatched condition slots across both directions, computed as the ' +
-          'size of the symmetric difference of filled (scenarioId, modelId, sampleIndex) slots.',
-      }),
-      directionalCoverage: t.field({
-        type: [DirectionalCoverageRef],
-        resolve: (parent) => parent.directionalCoverage,
-        description:
-          'Per-direction condition coverage for this value pair, including complete batches, ' +
-          'filled slots, leftover conditions from incomplete runs, and contributing definition IDs.',
+      batchEquivalent: t.exposeInt('batchEquivalent'),
+      aFirstBatchEquivalent: t.exposeInt('aFirstBatchEquivalent'),
+      bFirstBatchEquivalent: t.exposeInt('bFirstBatchEquivalent'),
+      aFirstDefinitionName: t.exposeString('aFirstDefinitionName', { nullable: true }),
+      bFirstDefinitionName: t.exposeString('bFirstDefinitionName', { nullable: true }),
+      weakestCondition: t.field({
+        type: CoverageWeakestConditionRef,
+        nullable: true,
+        resolve: (parent) => parent.weakestCondition,
       }),
       contributingDefinitionIds: t.exposeStringList('contributingDefinitionIds', {
         description:
           'Union of definition IDs that contribute data to this coverage cell, sorted alphabetically.',
       }),
-      incompleteBatchCount: t.exposeInt('incompleteBatchCount', {
-        description:
-          'Count of non-aggregate runs that expect transcripts but are ' +
-          'missing one or more (model × scenario × sampleIndex) slots. ' +
-          'Per-run; samplesPerScenario does not multiply this count. ' +
-          'Aggregate runs and runs with zero expected slots are excluded.',
-      }),
       definitionId: t.exposeString('definitionId', { nullable: true }),
-      definitionName: t.exposeString('definitionName', { nullable: true }),
       aggregateRunId: t.exposeString('aggregateRunId', { nullable: true }),
-      minTrialCount: t.exposeInt('minTrialCount', { nullable: true }),
-      maxTrialCount: t.exposeInt('maxTrialCount', { nullable: true }),
-      modelBreakdown: t.expose('modelBreakdown', {
-        type: [CoverageModelBreakdownRef],
-        nullable: true,
-      }),
     }),
   });
 
