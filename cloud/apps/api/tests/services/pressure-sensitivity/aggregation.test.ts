@@ -362,16 +362,16 @@ describe('computeDirectionBalancedPairWinRates', () => {
   }
 
   it('gives equal weight to both directions even when one has more vignettes', () => {
-    // Direction A (authoredFirst === canonicalFirst): 3 vignettes, each winning 100%
-    // Direction B (authoredFirst !== canonicalFirst): 1 vignette, winning 0%
-    //   def4 is authored B-first; outcome 'own_picked' means B won → canonical first (A) won 0%
-    // Flat average would be 3/4 = 0.75; direction-balanced average = (1.0 + 0.0) / 2 = 0.5
+    // Direction A (authoredFirst === canonicalFirst): 3 vignettes, each winning 100% for A.
+    // Direction B (authoredFirst !== canonicalFirst): 1 vignette, B wins → A's winRate=0%.
+    //   def4 is authored B-first; 'opponent_picked' means B won → canonical first (A) lost.
+    // Flat pool would be (1+1+1+0)/4=0.75; direction-balanced = avg(1.0, 0.0) = 0.5
     const cells = new Map([
       makeCell('cell1', {
         def1: [{ outcome: 'own_picked', strength: 'strong' }],
         def2: [{ outcome: 'own_picked', strength: 'strong' }],
         def3: [{ outcome: 'own_picked', strength: 'strong' }],
-        def4: [{ outcome: 'own_picked', strength: 'strong' }],
+        def4: [{ outcome: 'opponent_picked', strength: 'strong' }],
       }),
     ]);
 
@@ -399,12 +399,12 @@ describe('computeDirectionBalancedPairWinRates', () => {
 
   it('averages vignette rates within each direction independently', () => {
     // Direction A: defA wins in cell1 (own_picked→winRate=1), loses in cell2 (opponent_picked→winRate=0) → mean=0.5
-    // Direction B: defB authored Y first; own_picked means Y won → X (canonical first) lost → opponentWinRate=0 → mean=0.0
+    // Direction B: defB authored Y first; opponent_picked means Y won → X (canonical first) lost → winRate=0 → mean=0.0
     // Expected ownRate = (0.5 + 0.0) / 2 = 0.25
     const cells = new Map([
       makeCell('cell1', {
         defA: [{ outcome: 'own_picked', strength: 'strong' }],
-        defB: [{ outcome: 'own_picked', strength: 'strong' }],
+        defB: [{ outcome: 'opponent_picked', strength: 'strong' }],
       }),
       makeCell('cell2', {
         defA: [{ outcome: 'opponent_picked', strength: 'strong' }],
@@ -513,7 +513,7 @@ describe('computeDirectionBalancedPairWinRates', () => {
   });
 
   it('combines direction balancing and domain equal-weighting independently', () => {
-    // Domain A: defA1 authored A-first wins 100%; defA2 authored B-first canonical-own=0%
+    // Domain A: defA1 authored A-first wins 100%; defA2 authored B-first, B wins → A's rate=0%
     //   → firstMean=1.0, secondMean=0.0 → domainRate=0.5
     // Domain B: defB1 authored A-first wins 0%
     //   → firstMean=0.0, secondMean=null → domainRate=0.0
@@ -521,7 +521,7 @@ describe('computeDirectionBalancedPairWinRates', () => {
     const cells = new Map([
       makeCell('cell1', {
         defA1: [{ outcome: 'own_picked', strength: 'strong' }],
-        defA2: [{ outcome: 'own_picked', strength: 'strong' }],
+        defA2: [{ outcome: 'opponent_picked', strength: 'strong' }],
         defB1: [{ outcome: 'opponent_picked', strength: 'strong' }],
       }),
     ]);
@@ -542,7 +542,7 @@ describe('computeDirectionBalancedPairWinRates', () => {
       ]),
     });
 
-    // defA2 is authored B-first and own_picked → B won → canonical own (A) lost → opponentWinRate=0
+    // defA2: authored B-first, opponent_picked → B won → A's winRate=0
     // Domain alpha: firstMean=avg(1.0)=1.0, secondMean=avg(0.0)=0.0 → domainRate=0.5
     // Domain beta:  firstMean=avg(0.0)=0.0, secondMean=null           → domainRate=0.0
     // ownRate = avg(0.5, 0.0) = 0.25
@@ -596,10 +596,11 @@ describe('computeDirectionBalancedPairWinRates (second suite)', () => {
   });
 
   it('computes direction-balanced rates from a single authored-second definition', () => {
-    // def-b authored beta first (≠ canonical first=alpha). opponentWinRate = own rate for alpha.
-    // 1 own_picked, 3 opponent_picked → winRate=0.25, opponentWinRate=0.75 → alpha ownRate=0.75
+    // def-b authored beta first (≠ canonical first=alpha). winRate is still alpha's rate because
+    // assignOwnOpponent always maps outcomes to canonical own/opponent.
+    // 3 own_picked, 1 opponent_picked → winRate=0.75 → alpha ownRate=0.75
     const cells = new Map([
-      makeCell('1::1', 'def-b', [makeObs('own_picked'), makeObs('opponent_picked'), makeObs('opponent_picked'), makeObs('opponent_picked')]),
+      makeCell('1::1', 'def-b', [makeObs('own_picked'), makeObs('own_picked'), makeObs('own_picked'), makeObs('opponent_picked')]),
     ]);
 
     const result = computeDirectionBalancedPairWinRates({
@@ -610,15 +611,14 @@ describe('computeDirectionBalancedPairWinRates (second suite)', () => {
       domainByDef: new Map([['def-b', 'd1']]),
     });
 
-    // opponentWinRate of the cell = 0.75, which is the canonical own rate
     expect(result.ownRate).toBeCloseTo(0.75, 10);
     expect(result.opponentRate).toBeCloseTo(0.25, 10);
   });
 
   it('averages equally across both authoring directions', () => {
-    // def-a (authored alpha first): 4 own_picked, 1 opponent → winRate=0.8
-    // def-b (authored beta first): 2 own_picked, 3 opponent → opponentWinRate=0.6 → alpha ownRate=0.6
-    // direction-balanced ownRate = (0.8 + 0.6) / 2 = 0.7
+    // def-a (authored alpha first): 4 own_picked, 1 opponent → alpha winRate=0.8
+    // def-b (authored beta first): 2 own_picked, 3 opponent → alpha winRate=0.4
+    // direction-balanced ownRate = (0.8 + 0.4) / 2 = 0.6
     const cells = new Map([
       makeCell('1::1', 'def-a', [makeObs('own_picked'), makeObs('own_picked'), makeObs('own_picked'), makeObs('own_picked'), makeObs('opponent_picked')]),
       makeCell('2::2', 'def-b', [makeObs('own_picked'), makeObs('own_picked'), makeObs('opponent_picked'), makeObs('opponent_picked'), makeObs('opponent_picked')]),
@@ -632,11 +632,11 @@ describe('computeDirectionBalancedPairWinRates (second suite)', () => {
       domainByDef: new Map([['def-a', 'd1'], ['def-b', 'd1']]),
     });
 
-    // def-a cell: winRate = 4/5 = 0.8 (authored first → canonical own)
-    // def-b cell: opponentWinRate = 3/5 = 0.6 (authored second → canonical own = opponentWinRate)
-    // mean = (0.8 + 0.6) / 2 = 0.7
-    expect(result.ownRate).toBeCloseTo(0.7, 10);
-    expect(result.opponentRate).toBeCloseTo(0.3, 10);
+    // def-a cell: winRate = 4/5 = 0.8 (authored alpha-first)
+    // def-b cell: winRate = 2/5 = 0.4 (authored beta-first; winRate is still alpha's rate)
+    // direction-balanced mean = (0.8 + 0.4) / 2 = 0.6
+    expect(result.ownRate).toBeCloseTo(0.6, 10);
+    expect(result.opponentRate).toBeCloseTo(0.4, 10);
   });
 
   it('applies cellFilter to restrict which cells contribute', () => {
