@@ -290,15 +290,14 @@ builder.queryField('pressureSensitivity', (t) =>
         return matchesModelIds && matchesProvider;
       });
 
-      // 2. Aggregate runs
-      // orderBy id:asc makes sourceRunToDefId Map.set "last write wins" deterministic
-      // across queries; without it the collision warning would point to a different
-      // winner each run (Slice A diff review finding).
+      // 2. Source runs (direct — same selection logic as domain analysis)
+      // Exclude Aggregate-tagged runs; those are pooling views with no transcripts of
+      // their own. orderBy id:asc keeps the defId mapping deterministic.
       const runs = (await db.run.findMany({
         where: {
           status: 'COMPLETED',
           deletedAt: null,
-          tags: { some: { tag: { name: 'Aggregate' } } },
+          tags: { none: { tag: { name: 'Aggregate' } } },
           ...(domainId != null ? { definition: { domainId } } : {}),
         },
         include: {
@@ -417,12 +416,16 @@ builder.queryField('pressureSensitivity', (t) =>
         [...definitionMeta.entries()].map(([id, meta]) => [id, meta.valueFirstToken]),
       );
 
-      // 5. Stream transcripts from the SOURCE runs of each Aggregate-tagged run.
-      // Aggregate runs are pooling views — they own metadata (perScenario summaries) but
-      // the raw transcripts live on the runs listed in `config.sourceRunIds`. Fetching
-      // transcripts WHERE runId IN aggregateRunIds returns 0 rows; the production smoke
-      // test on PR #770 caught this.
-      const sourceRunToDefId = buildSourceRunToDefIdMap(eligibleRuns, definitionMeta, log);
+      // 5. Build a direct run → definition map and stream transcripts.
+      // Eligible runs are source runs with real transcripts; map each run.id to its
+      // definition so transcript rows can be routed without a join.
+      const sourceRunToDefId = new Map<string, string>();
+      for (const run of eligibleRuns) {
+        const defId = run.definition?.id ?? run.definitionId;
+        if (definitionMeta.has(defId)) {
+          sourceRunToDefId.set(run.id, defId);
+        }
+      }
       const sourceRunIds = [...sourceRunToDefId.keys()];
       const rosterModelIds = models.map((m) => m.modelId);
       const pressureConditionExclusionBreakdown = emptyPressureConditionExclusionBreakdown();
