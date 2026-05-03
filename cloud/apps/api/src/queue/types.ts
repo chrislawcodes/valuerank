@@ -17,7 +17,8 @@ export type JobType =
   | 'run_state_audit'
   | 'analysis_result_janitor'
   | 'aggregate_analysis'
-  | 'refresh_domain_analysis_snapshot';
+  | 'refresh_domain_analysis_snapshot'
+  | 'refresh_pressure_sensitivity_snapshot';
 
 // Job data interfaces
 export type ProbeScenarioJobData = {
@@ -90,6 +91,12 @@ export type RefreshDomainAnalysisSnapshotJobData = {
   reason: string;
 };
 
+export type RefreshPressureSensitivitySnapshotJobData = {
+  domainId: string | null;
+  signature: string;
+  reason: string;
+};
+
 // Dead letter job data - same as probe scenario but handled separately for failed/expired jobs
 export type ProbeDeadLetterJobData = ProbeScenarioJobData;
 
@@ -105,7 +112,8 @@ export type JobData =
   | RunStateAuditJobData
   | AnalysisResultJanitorJobData
   | AggregateAnalysisJobData
-  | RefreshDomainAnalysisSnapshotJobData;
+  | RefreshDomainAnalysisSnapshotJobData
+  | RefreshPressureSensitivitySnapshotJobData;
 
 // Job options interface
 export type JobOptions = {
@@ -179,6 +187,12 @@ export const DEFAULT_JOB_OPTIONS: Record<JobType, JobOptions> = {
     retryDelay: 10,
     retryBackoff: true,
     expireInSeconds: 300, // 5 minutes
+  },
+  'refresh_pressure_sensitivity_snapshot': {
+    retryLimit: 2,
+    retryDelay: 10,
+    retryBackoff: true,
+    expireInSeconds: 600, // 10 minutes — PS computation is heavier than domain analysis
   },
   'probe_dead_letter': {
     retryLimit: 0, // Don't retry dead letter jobs - just log and record

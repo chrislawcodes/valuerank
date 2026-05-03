@@ -16,7 +16,7 @@ vi.mock('@valuerank/shared', () => ({
 
 async function loadModule() {
   vi.resetModules();
-  return import('../../../src/graphql/queries/pressure-sensitivity.js');
+  return import('../../../src/services/pressure-sensitivity/snapshot-builder.js');
 }
 
 describe('pressure-sensitivity resolver helpers', () => {
