@@ -364,13 +364,14 @@ describe('computeDirectionBalancedPairWinRates', () => {
   it('gives equal weight to both directions even when one has more vignettes', () => {
     // Direction A (authoredFirst === canonicalFirst): 3 vignettes, each winning 100%
     // Direction B (authoredFirst !== canonicalFirst): 1 vignette, winning 0%
+    //   def4 is authored B-first; outcome 'own_picked' means B won → canonical first (A) won 0%
     // Flat average would be 3/4 = 0.75; direction-balanced average = (1.0 + 0.0) / 2 = 0.5
     const cells = new Map([
       makeCell('cell1', {
         def1: [{ outcome: 'own_picked', strength: 'strong' }],
         def2: [{ outcome: 'own_picked', strength: 'strong' }],
         def3: [{ outcome: 'own_picked', strength: 'strong' }],
-        def4: [{ outcome: 'opponent_picked', strength: 'strong' }],
+        def4: [{ outcome: 'own_picked', strength: 'strong' }],
       }),
     ]);
 
@@ -391,13 +392,13 @@ describe('computeDirectionBalancedPairWinRates', () => {
   });
 
   it('averages vignette rates within each direction independently', () => {
-    // Direction A: vignette wins 1.0 in cell1, wins 0.0 in cell2 → vignette rate = 0.5
-    // Direction B: vignette wins 0.0 in cell1 → vignette rate = 0.0
+    // Direction A: defA wins in cell1 (own_picked→winRate=1), loses in cell2 (opponent_picked→winRate=0) → mean=0.5
+    // Direction B: defB authored Y first; own_picked means Y won → X (canonical first) lost → opponentWinRate=0 → mean=0.0
     // Expected ownRate = (0.5 + 0.0) / 2 = 0.25
     const cells = new Map([
       makeCell('cell1', {
         defA: [{ outcome: 'own_picked', strength: 'strong' }],
-        defB: [{ outcome: 'opponent_picked', strength: 'strong' }],
+        defB: [{ outcome: 'own_picked', strength: 'strong' }],
       }),
       makeCell('cell2', {
         defA: [{ outcome: 'opponent_picked', strength: 'strong' }],
@@ -483,5 +484,138 @@ describe('summarizePressureResponse', () => {
       rangeMax: null,
       pairsMeasured: 0,
     });
+  });
+});
+
+describe('computeDirectionBalancedPairWinRates', () => {
+  function makeObs(outcome: 'own_picked' | 'opponent_picked' | 'neutral'): Observation {
+    return { outcome, strength: null };
+  }
+
+  function makeCell(
+    key: string,
+    defId: string,
+    observations: Observation[],
+  ): [string, { observationsByDefinition: Map<string, Observation[]> }] {
+    return [key, { observationsByDefinition: new Map([[defId, observations]]) }];
+  }
+
+  it('returns null when no cells have data', () => {
+    const result = computeDirectionBalancedPairWinRates({
+      cells: new Map(),
+      definitionsMeasured: new Set(['def-a']),
+      canonicalFirstValueToken: 'alpha',
+      authoredFirstTokenByDef: new Map([['def-a', 'alpha']]),
+    });
+
+    expect(result.ownRate).toBeNull();
+    expect(result.opponentRate).toBeNull();
+  });
+
+  it('computes direction-balanced rates from a single authored-first definition', () => {
+    // def-a authored alpha first (= canonical first). 3 own_picked, 1 opponent_picked → winRate = 0.75
+    const cells = new Map([
+      makeCell('1::1', 'def-a', [makeObs('own_picked'), makeObs('own_picked'), makeObs('own_picked'), makeObs('opponent_picked')]),
+    ]);
+
+    const result = computeDirectionBalancedPairWinRates({
+      cells,
+      definitionsMeasured: new Set(['def-a']),
+      canonicalFirstValueToken: 'alpha',
+      authoredFirstTokenByDef: new Map([['def-a', 'alpha']]),
+    });
+
+    expect(result.ownRate).toBeCloseTo(0.75, 10);
+    expect(result.opponentRate).toBeCloseTo(0.25, 10);
+  });
+
+  it('computes direction-balanced rates from a single authored-second definition', () => {
+    // def-b authored beta first (≠ canonical first=alpha). opponentWinRate = own rate for alpha.
+    // 1 own_picked, 3 opponent_picked → winRate=0.25, opponentWinRate=0.75 → alpha ownRate=0.75
+    const cells = new Map([
+      makeCell('1::1', 'def-b', [makeObs('own_picked'), makeObs('opponent_picked'), makeObs('opponent_picked'), makeObs('opponent_picked')]),
+    ]);
+
+    const result = computeDirectionBalancedPairWinRates({
+      cells,
+      definitionsMeasured: new Set(['def-b']),
+      canonicalFirstValueToken: 'alpha',
+      authoredFirstTokenByDef: new Map([['def-b', 'beta']]),
+    });
+
+    // opponentWinRate of the cell = 0.75, which is the canonical own rate
+    expect(result.ownRate).toBeCloseTo(0.75, 10);
+    expect(result.opponentRate).toBeCloseTo(0.25, 10);
+  });
+
+  it('averages equally across both authoring directions', () => {
+    // def-a (authored alpha first): 4 own_picked, 1 opponent → winRate=0.8
+    // def-b (authored beta first): 2 own_picked, 3 opponent → opponentWinRate=0.6 → alpha ownRate=0.6
+    // direction-balanced ownRate = (0.8 + 0.6) / 2 = 0.7
+    const cells = new Map([
+      makeCell('1::1', 'def-a', [makeObs('own_picked'), makeObs('own_picked'), makeObs('own_picked'), makeObs('own_picked'), makeObs('opponent_picked')]),
+      makeCell('2::2', 'def-b', [makeObs('own_picked'), makeObs('own_picked'), makeObs('opponent_picked'), makeObs('opponent_picked'), makeObs('opponent_picked')]),
+    ]);
+
+    const result = computeDirectionBalancedPairWinRates({
+      cells,
+      definitionsMeasured: new Set(['def-a', 'def-b']),
+      canonicalFirstValueToken: 'alpha',
+      authoredFirstTokenByDef: new Map([['def-a', 'alpha'], ['def-b', 'beta']]),
+    });
+
+    // def-a cell: winRate = 4/5 = 0.8 (authored first → canonical own)
+    // def-b cell: opponentWinRate = 3/5 = 0.6 (authored second → canonical own = opponentWinRate)
+    // mean = (0.8 + 0.6) / 2 = 0.7
+    expect(result.ownRate).toBeCloseTo(0.7, 10);
+    expect(result.opponentRate).toBeCloseTo(0.3, 10);
+  });
+
+  it('applies cellFilter to restrict which cells contribute', () => {
+    // Two cells: 1::1 (balanced) and 4::1 (high pressure on own)
+    // Only the balanced cell should contribute with cellFilter own===opp
+    const cells = new Map([
+      makeCell('1::1', 'def-a', [makeObs('own_picked'), makeObs('own_picked'), makeObs('opponent_picked')]),
+      makeCell('4::1', 'def-a', [makeObs('own_picked'), makeObs('own_picked'), makeObs('own_picked'), makeObs('opponent_picked')]),
+    ]);
+
+    const balancedResult = computeDirectionBalancedPairWinRates({
+      cells,
+      definitionsMeasured: new Set(['def-a']),
+      canonicalFirstValueToken: 'alpha',
+      authoredFirstTokenByDef: new Map([['def-a', 'alpha']]),
+      cellFilter: (own, opp) => own === opp,
+    });
+
+    // Only cell 1::1 contributes: 2 own_picked / 3 = 0.667
+    expect(balancedResult.ownRate).toBeCloseTo(2 / 3, 10);
+
+    const highOwnResult = computeDirectionBalancedPairWinRates({
+      cells,
+      definitionsMeasured: new Set(['def-a']),
+      canonicalFirstValueToken: 'alpha',
+      authoredFirstTokenByDef: new Map([['def-a', 'alpha']]),
+      cellFilter: (own, opp) => own >= 4 && opp <= 3,
+    });
+
+    // Only cell 4::1 contributes: 3 own_picked / 4 = 0.75
+    expect(highOwnResult.ownRate).toBeCloseTo(0.75, 10);
+  });
+
+  it('returns null when cellFilter excludes all cells', () => {
+    const cells = new Map([
+      makeCell('1::1', 'def-a', [makeObs('own_picked'), makeObs('opponent_picked')]),
+    ]);
+
+    const result = computeDirectionBalancedPairWinRates({
+      cells,
+      definitionsMeasured: new Set(['def-a']),
+      canonicalFirstValueToken: 'alpha',
+      authoredFirstTokenByDef: new Map([['def-a', 'alpha']]),
+      cellFilter: (own, opp) => own >= 4 && opp <= 3,
+    });
+
+    expect(result.ownRate).toBeNull();
+    expect(result.opponentRate).toBeNull();
   });
 });

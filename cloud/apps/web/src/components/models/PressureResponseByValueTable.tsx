@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { CopyVisualButton } from '../ui/CopyVisualButton';
 import { TooltipIcon } from '../ui/TooltipIcon';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/Table';
-import type { PressureSensitivityCell, PressureSensitivityValuePair } from '../../api/operations/pressureSensitivity';
+import type { PressureSensitivityValuePair } from '../../api/operations/pressureSensitivity';
 import { formatPercent } from './pressureSensitivityFormatting';
 
 type Props = {
@@ -105,68 +105,22 @@ function formatRate(value: number | null): ReactNode {
   return <span className="font-mono text-gray-900">{formatPercent(value)}</span>;
 }
 
-function poolRate(
-  cells: PressureSensitivityCell[],
-  predicate: (cell: PressureSensitivityCell) => boolean,
-  rateSelector: (cell: PressureSensitivityCell) => number | null | undefined,
-): number | null {
-  const rates: number[] = [];
-
-  for (const cell of cells) {
-    if (!predicate(cell)) {
-      continue;
-    }
-
-    const rate = rateSelector(cell);
-    if (rate == null) {
-      continue;
-    }
-
-    rates.push(rate);
-  }
-
-  return mean(rates);
-}
 
 function computePairRates(pair: PressureSensitivityValuePair, valueLabel: string): PairPerspectiveRates {
   if (pair.firstValueLabel === valueLabel) {
     return {
       averageWinRate: pair.directionBalancedWinRate ?? null,
-      balancedWinRate: poolRate(
-        pair.grid,
-        (cell) => cell.ownLevel === cell.opponentLevel,
-        (cell) => cell.winRate,
-      ),
-      highPressureOnThisValue: poolRate(
-        pair.grid,
-        (cell) => cell.ownLevel >= 4 && cell.opponentLevel <= 3,
-        (cell) => cell.winRate,
-      ),
-      highPressureOnOpposingValue: poolRate(
-        pair.grid,
-        (cell) => cell.opponentLevel >= 4 && cell.ownLevel <= 3,
-        (cell) => cell.winRate,
-      ),
+      balancedWinRate: pair.directionBalancedBalancedWinRate ?? null,
+      highPressureOnThisValue: pair.directionBalancedHighPressureOwnWinRate ?? null,
+      highPressureOnOpposingValue: pair.directionBalancedHighPressureOpponentWinRate ?? null,
     };
   }
 
   return {
     averageWinRate: pair.directionBalancedOpponentWinRate ?? null,
-    balancedWinRate: poolRate(
-      pair.grid,
-      (cell) => cell.ownLevel === cell.opponentLevel,
-      (cell) => cell.opponentWinRate ?? null,
-    ),
-    highPressureOnThisValue: poolRate(
-      pair.grid,
-      (cell) => cell.opponentLevel >= 4 && cell.ownLevel <= 3,
-      (cell) => cell.opponentWinRate ?? null,
-    ),
-    highPressureOnOpposingValue: poolRate(
-      pair.grid,
-      (cell) => cell.ownLevel >= 4 && cell.opponentLevel <= 3,
-      (cell) => cell.opponentWinRate ?? null,
-    ),
+    balancedWinRate: pair.directionBalancedBalancedOpponentWinRate ?? null,
+    highPressureOnThisValue: pair.directionBalancedHighPressureOpponentOpponentWinRate ?? null,
+    highPressureOnOpposingValue: pair.directionBalancedHighPressureOwnOpponentWinRate ?? null,
   };
 }
 

@@ -50,6 +50,12 @@ export type PressureSensitivityValuePairShape = {
   definitionsMeasured: number;
   directionBalancedWinRate: number | null;
   directionBalancedOpponentWinRate: number | null;
+  directionBalancedBalancedWinRate: number | null;
+  directionBalancedBalancedOpponentWinRate: number | null;
+  directionBalancedHighPressureOwnWinRate: number | null;
+  directionBalancedHighPressureOwnOpponentWinRate: number | null;
+  directionBalancedHighPressureOpponentWinRate: number | null;
+  directionBalancedHighPressureOpponentOpponentWinRate: number | null;
 };
 
 export type PressureSensitivityModelShape = {
@@ -189,6 +195,12 @@ builder.objectType(PressureSensitivityValuePairRef, {
     definitionsMeasured: t.exposeInt('definitionsMeasured'),
     directionBalancedWinRate: t.exposeFloat('directionBalancedWinRate', { nullable: true }),
     directionBalancedOpponentWinRate: t.exposeFloat('directionBalancedOpponentWinRate', { nullable: true }),
+    directionBalancedBalancedWinRate: t.exposeFloat('directionBalancedBalancedWinRate', { nullable: true }),
+    directionBalancedBalancedOpponentWinRate: t.exposeFloat('directionBalancedBalancedOpponentWinRate', { nullable: true }),
+    directionBalancedHighPressureOwnWinRate: t.exposeFloat('directionBalancedHighPressureOwnWinRate', { nullable: true }),
+    directionBalancedHighPressureOwnOpponentWinRate: t.exposeFloat('directionBalancedHighPressureOwnOpponentWinRate', { nullable: true }),
+    directionBalancedHighPressureOpponentWinRate: t.exposeFloat('directionBalancedHighPressureOpponentWinRate', { nullable: true }),
+    directionBalancedHighPressureOpponentOpponentWinRate: t.exposeFloat('directionBalancedHighPressureOpponentOpponentWinRate', { nullable: true }),
   }),
 });
 

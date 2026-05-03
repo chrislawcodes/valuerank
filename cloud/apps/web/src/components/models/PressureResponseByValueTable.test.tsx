@@ -40,13 +40,23 @@ function createCell(
   };
 }
 
+type DirectionBalancedFields = {
+  directionBalancedWinRate?: number | null;
+  directionBalancedOpponentWinRate?: number | null;
+  directionBalancedBalancedWinRate?: number | null;
+  directionBalancedBalancedOpponentWinRate?: number | null;
+  directionBalancedHighPressureOwnWinRate?: number | null;
+  directionBalancedHighPressureOwnOpponentWinRate?: number | null;
+  directionBalancedHighPressureOpponentWinRate?: number | null;
+  directionBalancedHighPressureOpponentOpponentWinRate?: number | null;
+};
+
 function createPair(
   pairKey: string,
   firstValueLabel: string,
   secondValueLabel: string,
   grid: PressureSensitivityCell[],
-  directionBalancedWinRate: number | null = null,
-  directionBalancedOpponentWinRate: number | null = null,
+  directionBalanced: DirectionBalancedFields = {},
 ): PressureSensitivityValuePair {
   const n = grid.reduce((sum, cell) => sum + cell.n, 0);
 
@@ -59,8 +69,6 @@ function createPair(
     n,
     unscoredCount: 0,
     definitionsMeasured: 1,
-    directionBalancedWinRate,
-    directionBalancedOpponentWinRate,
     pressureResponse: {
       value: null,
       baselineRate: null,
@@ -72,6 +80,14 @@ function createPair(
       reason: null,
     },
     grid,
+    directionBalancedWinRate: directionBalanced.directionBalancedWinRate ?? null,
+    directionBalancedOpponentWinRate: directionBalanced.directionBalancedOpponentWinRate ?? null,
+    directionBalancedBalancedWinRate: directionBalanced.directionBalancedBalancedWinRate ?? null,
+    directionBalancedBalancedOpponentWinRate: directionBalanced.directionBalancedBalancedOpponentWinRate ?? null,
+    directionBalancedHighPressureOwnWinRate: directionBalanced.directionBalancedHighPressureOwnWinRate ?? null,
+    directionBalancedHighPressureOwnOpponentWinRate: directionBalanced.directionBalancedHighPressureOwnOpponentWinRate ?? null,
+    directionBalancedHighPressureOpponentWinRate: directionBalanced.directionBalancedHighPressureOpponentWinRate ?? null,
+    directionBalancedHighPressureOpponentOpponentWinRate: directionBalanced.directionBalancedHighPressureOpponentOpponentWinRate ?? null,
   };
 }
 
@@ -121,9 +137,13 @@ function createTenValueModel(): PressureSensitivityModel {
 }
 
 function createSortFixture(): PressureSensitivityModel {
-  // alpha::beta / alpha::charlie: Alpha flat-avg = 0.3, opponent (Beta/Charlie) flat-avg = 0.7
-  // beta::charlie: Beta flat-avg = 0.8, Charlie opponent flat-avg = 0.2
-  // Sorted by average descending: Beta (mean[0.7,0.8]=0.75) > Charlie (mean[0.7,0.2]=0.45) > Alpha (mean[0.3,0.3]=0.3)
+  // alpha::beta / alpha::charlie: Alpha average = 0.3 (via directionBalancedWinRate)
+  // beta::charlie: Beta average = 0.8 (via directionBalancedWinRate)
+  // Sorted by responsiveness (highPressureOnValue - balanced):
+  //   Alpha: highOwn(0.9) - balanced(0.3) = 0.6
+  //   Beta: highOwn(0.9) - balanced(mean[0.7,0.8]=0.75) = 0.15
+  //   Charlie: highOwn(mean[1,0.4]=0.7) - balanced(mean[0.7,0.2]=0.45) = 0.25
+  //   → Alpha (0.6) > Charlie (0.25) > Beta (0.15)
   return createModel([
     createPair(
       'alpha::beta',
@@ -135,8 +155,16 @@ function createSortFixture(): PressureSensitivityModel {
         createCell(1, 4, 10, 0),
         createCell(2, 3, 10, 0),
       ],
-      0.3,
-      0.7,
+      {
+        directionBalancedWinRate: 0.3,
+        directionBalancedOpponentWinRate: 0.7,
+        directionBalancedBalancedWinRate: 0.3,
+        directionBalancedBalancedOpponentWinRate: 0.7,
+        directionBalancedHighPressureOwnWinRate: 0.9,
+        directionBalancedHighPressureOwnOpponentWinRate: 0.1,
+        directionBalancedHighPressureOpponentWinRate: 0,
+        directionBalancedHighPressureOpponentOpponentWinRate: 1,
+      },
     ),
     createPair(
       'alpha::charlie',
@@ -148,8 +176,16 @@ function createSortFixture(): PressureSensitivityModel {
         createCell(1, 4, 10, 0),
         createCell(2, 3, 10, 0),
       ],
-      0.3,
-      0.7,
+      {
+        directionBalancedWinRate: 0.3,
+        directionBalancedOpponentWinRate: 0.7,
+        directionBalancedBalancedWinRate: 0.3,
+        directionBalancedBalancedOpponentWinRate: 0.7,
+        directionBalancedHighPressureOwnWinRate: 0.9,
+        directionBalancedHighPressureOwnOpponentWinRate: 0.1,
+        directionBalancedHighPressureOpponentWinRate: 0,
+        directionBalancedHighPressureOpponentOpponentWinRate: 1,
+      },
     ),
     createPair(
       'beta::charlie',
@@ -161,16 +197,27 @@ function createSortFixture(): PressureSensitivityModel {
         createCell(1, 4, 10, 0.6),
         createCell(2, 3, 10, 0.9),
       ],
-      0.8,
-      0.2,
+      {
+        directionBalancedWinRate: 0.8,
+        directionBalancedOpponentWinRate: 0.2,
+        directionBalancedBalancedWinRate: 0.8,
+        directionBalancedBalancedOpponentWinRate: 0.2,
+        directionBalancedHighPressureOwnWinRate: 0.9,
+        directionBalancedHighPressureOwnOpponentWinRate: 0.1,
+        directionBalancedHighPressureOpponentWinRate: 0.6,
+        directionBalancedHighPressureOpponentOpponentWinRate: 0.4,
+      },
     ),
   ]);
 }
 
 function createMathFixture(): PressureSensitivityModel {
-  // alpha::beta: Alpha flat-avg winRate = mean([0.4,0.8,0.3,0.9]) = 0.6; opponent = 0.4
-  // gamma::alpha: Gamma flat-avg = mean([0.6,0.7,0.2,0.1]) = 0.4; Alpha (opponent) flat-avg = 0.6
-  // Alpha average = mean([0.6 (from alpha::beta as first), 0.6 (from gamma::alpha as second)]) = 0.6
+  // alpha::beta: Alpha direction-balanced average = 0.6 (directionBalancedWinRate)
+  // gamma::alpha: Alpha direction-balanced average (as second) = 0.6 (directionBalancedOpponentWinRate)
+  // Alpha average = mean([0.6, 0.6]) = 0.6
+  // Alpha balanced = mean([0.4, 0.4]) = 0.4
+  // Alpha highOwn = mean([0.8, 0.8]) = 0.8
+  // Alpha highOpp = mean([0.3, 0.3]) = 0.3
   return createModel([
     createPair(
       'alpha::beta',
@@ -182,8 +229,17 @@ function createMathFixture(): PressureSensitivityModel {
         createCell(1, 4, 10, 0.3),
         createCell(2, 3, 10, 0.9),
       ],
-      0.6,
-      0.4,
+      {
+        // Alpha is first
+        directionBalancedWinRate: 0.6,
+        directionBalancedOpponentWinRate: 0.4,
+        directionBalancedBalancedWinRate: 0.4,
+        directionBalancedBalancedOpponentWinRate: 0.6,
+        directionBalancedHighPressureOwnWinRate: 0.8,
+        directionBalancedHighPressureOwnOpponentWinRate: 0.2,
+        directionBalancedHighPressureOpponentWinRate: 0.3,
+        directionBalancedHighPressureOpponentOpponentWinRate: 0.7,
+      },
     ),
     createPair(
       'gamma::alpha',
@@ -195,8 +251,17 @@ function createMathFixture(): PressureSensitivityModel {
         createCell(1, 4, 10, 0.2),
         createCell(2, 3, 10, 0.1),
       ],
-      0.4,
-      0.6,
+      {
+        // Alpha is second
+        directionBalancedWinRate: 0.4,
+        directionBalancedOpponentWinRate: 0.6,
+        directionBalancedBalancedWinRate: 0.6,
+        directionBalancedBalancedOpponentWinRate: 0.4,
+        directionBalancedHighPressureOwnWinRate: 0.7,
+        directionBalancedHighPressureOwnOpponentWinRate: 0.3,
+        directionBalancedHighPressureOpponentWinRate: 0.2,
+        directionBalancedHighPressureOpponentOpponentWinRate: 0.8,
+      },
     ),
   ]);
 }
@@ -259,8 +324,12 @@ describe('PressureResponseByValueTable', () => {
               createCell(1, 4, 1, 0),
               createCell(2, 3, 100, 1),
             ],
-            0.5,
-            0.5,
+            {
+              directionBalancedWinRate: 0.5,
+              directionBalancedBalancedWinRate: 0,
+              directionBalancedHighPressureOwnWinRate: 1,
+              directionBalancedHighPressureOpponentWinRate: 0,
+            },
           ),
         ]}
       />,
@@ -292,8 +361,12 @@ describe('PressureResponseByValueTable', () => {
               createCell(1, 4, 2, 0.3),
               createCell(2, 3, 2, 0.9),
             ],
-            0.6,
-            0.4,
+            {
+              directionBalancedWinRate: 0.6,
+              directionBalancedBalancedWinRate: 0.4,
+              directionBalancedHighPressureOwnWinRate: 0.8,
+              directionBalancedHighPressureOpponentWinRate: 0.3,
+            },
           ),
         ]}
       />,

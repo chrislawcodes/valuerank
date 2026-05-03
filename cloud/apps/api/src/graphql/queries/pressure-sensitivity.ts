@@ -600,12 +600,29 @@ builder.queryField('pressureSensitivity', (t) =>
           modelUnscored += pairUnscored;
 
           const pressureResponse = pooledDirectionalReduction(grid, MIN_N);
-          const balancedRates = computeDirectionBalancedPairWinRates({
+
+          const directionBalancedCommonParams = {
             cells: acc.cells,
             definitionsMeasured: acc.definitionsMeasured,
             canonicalFirstValueToken: acc.firstValueToken,
             authoredFirstTokenByDef,
+          };
+
+          const dbAll = computeDirectionBalancedPairWinRates(directionBalancedCommonParams);
+          const dbBalanced = computeDirectionBalancedPairWinRates({
+            ...directionBalancedCommonParams,
+            cellFilter: (own, opp) => own === opp,
           });
+          const dbHighOwn = computeDirectionBalancedPairWinRates({
+            ...directionBalancedCommonParams,
+            cellFilter: (own, opp) => own >= 4 && opp <= 3,
+          });
+          const dbHighOpponent = computeDirectionBalancedPairWinRates({
+            ...directionBalancedCommonParams,
+            cellFilter: (own, opp) => opp >= 4 && own <= 3,
+          });
+
+
           valuePairs.push({
             pairKey: acc.pairKey,
             firstValueToken: acc.firstValueToken,
@@ -626,8 +643,14 @@ builder.queryField('pressureSensitivity', (t) =>
             unscoredCount: pairUnscored,
             grid,
             definitionsMeasured: acc.definitionsMeasured.size,
-            directionBalancedWinRate: balancedRates.ownRate,
-            directionBalancedOpponentWinRate: balancedRates.opponentRate,
+            directionBalancedWinRate: dbAll.ownRate,
+            directionBalancedOpponentWinRate: dbAll.opponentRate,
+            directionBalancedBalancedWinRate: dbBalanced.ownRate,
+            directionBalancedBalancedOpponentWinRate: dbBalanced.opponentRate,
+            directionBalancedHighPressureOwnWinRate: dbHighOwn.ownRate,
+            directionBalancedHighPressureOwnOpponentWinRate: dbHighOwn.opponentRate,
+            directionBalancedHighPressureOpponentWinRate: dbHighOpponent.ownRate,
+            directionBalancedHighPressureOpponentOpponentWinRate: dbHighOpponent.opponentRate,
           });
 
           if (pressureResponse.value !== null) {
