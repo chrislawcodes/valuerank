@@ -626,12 +626,15 @@ export function computeDirectionBalancedPairWinRates(params: {
         ratesByDomain.set(domainKey, bucket);
       }
 
-      if (authoredFirstToken === canonicalFirstValueToken) {
-        // Authored first = canonical first: winRate is the canonical own rate.
-        if (metrics.winRate != null) bucket.first.push(metrics.winRate);
-      } else {
-        // Authored first = canonical second: opponentWinRate is the canonical own rate.
-        if (metrics.opponentWinRate != null) bucket.second.push(metrics.opponentWinRate);
+      // winRate is always the canonical own rate — assignOwnOpponent maps all outcomes
+      // to canonical own/opponent regardless of authored direction. The bucket split
+      // (first vs second) controls direction balancing; both buckets track the same value.
+      if (metrics.winRate != null) {
+        if (authoredFirstToken === canonicalFirstValueToken) {
+          bucket.first.push(metrics.winRate);
+        } else {
+          bucket.second.push(metrics.winRate);
+        }
       }
     }
   }
