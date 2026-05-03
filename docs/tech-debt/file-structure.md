@@ -37,6 +37,7 @@ Exempt from the hard line-size cap via `cloud/scripts/file-size-allowlist.txt`.
 | [start.test.ts](../../cloud/apps/api/tests/services/run/start.test.ts) | 1975 | Split by scenario group |
 | [definition.test.ts (queries)](../../cloud/apps/api/tests/graphql/queries/definition.test.ts) | 1336 | Split by test group |
 | [run.test.ts (queries)](../../cloud/apps/api/tests/graphql/queries/run.test.ts) | 1226 | Split by test group |
+| [aggregation.ts (pressure-sensitivity)](../../cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts) | 721 | Extract stat helpers (wilsonInterval, diffProportionCI, tBasedMeanCI) into stat-math.ts |
 
 ## Existing banned-suffix files (filename allowlist)
 

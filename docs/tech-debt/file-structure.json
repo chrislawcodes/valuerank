@@ -64,6 +64,11 @@
       "file": "cloud/apps/api/tests/graphql/queries/run.test.ts",
       "lines": 1226,
       "action": "Split by test group next time you touch it."
+    },
+    {
+      "file": "cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts",
+      "lines": 721,
+      "action": "Extract stat helpers (wilsonInterval, diffProportionCI, tBasedMeanCI) into stat-math.ts next time you touch it."
     }
   ]
 }
