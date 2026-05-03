@@ -3,11 +3,12 @@ import type { ReactNode } from 'react';
 import { CopyVisualButton } from '../ui/CopyVisualButton';
 import { TooltipIcon } from '../ui/TooltipIcon';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/Table';
-import type { PressureSensitivityValueRate } from '../../api/operations/pressureSensitivity';
+import type { PressureSensitivityModel } from '../../api/operations/pressureSensitivity';
 import { formatPercent } from './pressureSensitivityFormatting';
+import { averageValueRatesAcrossModels } from './pressureResponseAggregation';
 
 type Props = {
-  valueRates: PressureSensitivityValueRate[];
+  models: PressureSensitivityModel[];
 };
 
 type SortDirection = 'asc' | 'desc';
@@ -203,10 +204,11 @@ function RateCell({ value }: { value: number | null }) {
   return <TableCell className="text-right text-sm">{formatRate(value)}</TableCell>;
 }
 
-export function PressureResponseByValueTable({ valueRates }: Props) {
+export function PressureResponseByValueTable({ models }: Props) {
   const tableRef = useRef<HTMLDivElement>(null);
   const [sortKey, setSortKey] = useState<SortKey>('responsiveness');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const valueRates = useMemo(() => averageValueRatesAcrossModels(models), [models]);
 
   const rows = useMemo(
     () =>
@@ -239,13 +241,27 @@ export function PressureResponseByValueTable({ valueRates }: Props) {
     setSortDirection(defaultDirectionForKey(key));
   };
 
+  if (models.length === 0) {
+    return (
+      <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
+        <div className="space-y-1">
+          <h2 className="text-lg font-semibold text-gray-900">Pressure Response by Value</h2>
+          <p className="text-sm text-gray-600">No by-value data is available for the selected models.</p>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="space-y-1">
           <h2 className="text-lg font-semibold text-gray-900">Pressure Response by Value</h2>
           <p className="text-sm text-gray-600">
-            Each row is one of the model&apos;s values. The columns show how often the model picks that value across
+            Averaged across {models.length} selected model{models.length === 1 ? '' : 's'} in the page filter.
+          </p>
+          <p className="text-sm text-gray-600">
+            Each row is one value. The columns show how often the selected model set picks that value across
             its 9 pairings, broken down by what the prompt was doing.
           </p>
           <p className="text-xs text-gray-500">
@@ -362,8 +378,8 @@ export function PressureResponseByValueTable({ valueRates }: Props) {
       <div className="mt-4 space-y-3 text-sm text-gray-600">
         <h3 className="text-sm font-semibold text-gray-900">Reading this table</h3>
         <p>
-          Each row is one of the model&apos;s values. The columns show how often the model picks that value across
-          its 9 pairings, broken down by what the prompt was doing.
+          Each row is one value. The columns show how often the selected model set picks that value across its
+          9 pairings, broken down by what the prompt was doing.
         </p>
         <p>
           The two push columns are most informative when compared against the balanced rate. If &quot;high pressure on
@@ -375,17 +391,17 @@ export function PressureResponseByValueTable({ valueRates }: Props) {
           <p className="font-semibold text-gray-900">Patterns to look for:</p>
           <ul className="mt-2 list-disc space-y-2 pl-5">
             <li>
-              <strong>Moral attractor.</strong> Both push columns are higher than balanced. The model leans toward
-              this value regardless of which way the prompt steers. Unusual - most values move in opposite directions
-              under push and pull pressure.
+              <strong>Moral attractor.</strong> Both push columns are higher than balanced. The selected models lean
+              toward this value regardless of which way the prompt steers. Unusual - most values move in opposite
+              directions under push and pull pressure.
             </li>
             <li>
               <strong>Push-resistant.</strong> &quot;High pressure on value&quot; is at or below balanced.
-              Pressure to make the model pick this value does not work; sometimes it actively backfires.
+              Pressure to make the selected models pick this value does not work; sometimes it actively backfires.
             </li>
             <li>
-              <strong>Inert.</strong> All four columns are within a few points of each other. The model&apos;s choice
-              on pairs involving this value does not shift much based on prompt pressure.
+              <strong>Inert.</strong> All four columns are within a few points of each other. The selected models&apos;
+              choices on pairs involving this value do not shift much based on prompt pressure.
             </li>
           </ul>
         </div>
