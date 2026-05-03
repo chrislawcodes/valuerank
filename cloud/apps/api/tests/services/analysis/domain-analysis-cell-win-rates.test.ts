@@ -158,6 +158,33 @@ describe('computeCellWeightedDomainRates', () => {
     });
   });
 
+  it('weights directions equally when one direction has more vignettes than the other', () => {
+    // 2 vignettes with Achievement-first direction (def1 + def2), 1 with Security-first (def3).
+    // Without direction balancing, Achievement-first would get 2/3 of the weight.
+    // With direction balancing: avg(def1, def2) → direction rate; then avg(A-first, S-first) → pair rate.
+    const cellMap = new Map<string, CellCounts>([
+      [buildCellKey({ definitionId: 'def1', modelId: 'm1', valueKey: FIRST_VALUE, ownLevel: 1, opponentLevel: 1 }), buildCounts(9, 1, 0)],
+      [buildCellKey({ definitionId: 'def2', modelId: 'm1', valueKey: FIRST_VALUE, ownLevel: 1, opponentLevel: 1 }), buildCounts(7, 3, 0)],
+      [buildCellKey({ definitionId: 'def3', modelId: 'm1', valueKey: FIRST_VALUE, ownLevel: 1, opponentLevel: 1 }), buildCounts(2, 8, 0)],
+    ]);
+
+    const result = computeCellWeightedDomainRates({
+      cellMap,
+      filteredSourceRunDefinitionById: new Map([['run-1', 'def1'], ['run-2', 'def2'], ['run-3', 'def3']]),
+      definitionValuePairById: new Map([
+        ['def1', { valueA: FIRST_VALUE, valueB: SECOND_VALUE, valueFirst: FIRST_VALUE }],
+        ['def2', { valueA: FIRST_VALUE, valueB: SECOND_VALUE, valueFirst: FIRST_VALUE }],
+        ['def3', { valueA: FIRST_VALUE, valueB: SECOND_VALUE, valueFirst: SECOND_VALUE }],
+      ]),
+    });
+
+    // A-first direction rate = avg(90%, 70%) = 80%
+    // S-first direction rate = 20%
+    // pair rate = avg(80%, 20%) = 50%
+    // (old flat average would be (90+70+20)/3 ≈ 60%)
+    expect(result.models[0]?.valueWinRates[FIRST_VALUE]).toBeCloseTo(50, 5);
+  });
+
   it('maps pairwise wins by winner and opponent value key', () => {
     const cellMap = new Map<string, CellCounts>([
       [buildCellKey({ definitionId: 'def1', modelId: 'm1', valueKey: FIRST_VALUE, ownLevel: 1, opponentLevel: 2 }), buildCounts(3, 1, 0)],

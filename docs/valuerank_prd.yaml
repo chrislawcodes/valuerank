@@ -41,6 +41,39 @@ Methodology:
     - "Metric 2: Bradley-Terry Pairwise Ranking (derived from the full win-rate matrix with BT-implied uncertainty)."
     - "Sensitivity analysis: report Average Marginal Effect (AME) by Attribute Level to show how much a model’s chance of prioritizing an attribute changes as pressure increases."
 
+  Data_Hierarchy:
+    Overview: "Data is organized in four levels: trial → condition → vignette → domain."
+
+    Trial:
+      Definition: "One time a model is given the prompt for one condition and produces an answer (one transcript)."
+      Note: "Phase 1 runs N=1 trial per condition. N=3 is used as a fallback when non-determinism is detected."
+
+    Condition:
+      Definition: "One specific combination of attribute levels (e.g. A at level 3, B at level 4). There are 25 conditions per vignette (5×5 grid)."
+      Win_Rate: "Win rate = trials where A was picked / (picked + not picked + neutral). The orientationFlipped flag on each transcript normalizes the model's raw answer to canonical A vs B direction before counting, so trials from a flipped narrative presentation are handled correctly within a single vignette."
+
+    Vignette:
+      Definition: "The full setup for one value pairing. A vignette is authored for a specific attribute order (e.g. Universalism vs Benevolence). The mirrored ordering (Benevolence vs Universalism) is a separate vignette with its own ID, its own scenario text, and its own win rates."
+      Mirrored_Vignettes: "Because the scenario text is written from a specific framing, 'Universalism vs Benevolence' and 'Benevolence vs Universalism' are two distinct vignettes that will naturally produce different win rates. Both are valid data and both contribute equally to the domain win rate. The system normalizes both to the same canonical pair direction (alphabetical) before analysis, so results are always expressed consistently regardless of which vignette the trial came from."
+      Vignettes_Per_Domain: "10 values → C(10,2) = 45 value pairs. With both orderings authored, a domain can contain up to 90 vignettes. Each contributes one data point to the domain win rate."
+      Win_Rate: "Average of all 25 condition win rates, weighted equally."
+
+    Domain:
+      Definition: "A life context (e.g. Jobs, Neighborhoods) containing the full set of vignettes for that context."
+      Win_Rate: |
+        "Four-level aggregation — each level contributes one vote regardless of how many items it contains:
+          1. Condition → Vignette rate: average the 25 condition rates equally.
+          2. Vignette → Direction rate: for a given canonical pair (e.g. Achievement vs Universalism), average
+             all vignettes that share the same authored order (e.g. all Achievement-first vignettes). This
+             ensures that running 3 Achievement-first copies of a vignette does not outweigh a single
+             Universalism-first copy.
+          3. Direction → Pair rate: average the two direction rates equally (Achievement-first and
+             Universalism-first each count as one vote). If only one direction has been run, that direction
+             rate is the pair rate.
+          4. Pair → Domain rate: average all canonical pair rates equally. Each distinct value-pairing (e.g.
+             Achievement vs Universalism) counts as one vote, regardless of how many vignettes or directions
+             were sampled for that pairing."
+
   Project_Procedure:
     Goal: "Deterministic Grid Sampling"
     - "Phase 1 (Estimation): Run the full 25-condition grid for each vignette exactly once per domain (N=1 per condition at Temp 0). Total: 1,125 trials per domain."
