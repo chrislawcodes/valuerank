@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Loading } from '../components/ui/Loading';
 import { Select } from '../components/ui/Select';
+import { AnalysisContextBar } from '../components/analysis/AnalysisContextBar';
 import {
   AVAILABLE_SIGNATURES_QUERY,
   type AvailableSignaturesQueryResult,
@@ -25,7 +26,7 @@ import { useDomains } from '../hooks/useDomains';
 export function ModelsConfidence() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const heatmapRef = useRef<HTMLDivElement>(null);
+  const heatmapRef = useRef<HTMLElement>(null);
   const signatureParam = searchParams.get('signature');
 
   const { domains } = useDomains();
@@ -145,6 +146,16 @@ export function ModelsConfidence() {
     setSelectedModelIds(next);
   };
 
+  const selectedDomainLabel = selectedDomainId == null
+    ? 'All domains'
+    : domainOptions.find((option) => option.value === selectedDomainId)?.label ?? 'Selected domain';
+  const selectedModelLabel = selectedModelIds === null || isDefaultSelection
+    ? 'Default models'
+    : selectedModelIds.length === 0
+      ? 'No models selected'
+      : `${selectedModelIds.length} of ${allModels.length} selected`;
+  const summary = `${selectedDomainLabel} · ${selectedModelLabel} · ${selectedSignature}`;
+
   return (
     <div className="space-y-6">
       <div className="space-y-2">
@@ -156,129 +167,131 @@ export function ModelsConfidence() {
         </p>
       </div>
 
-      <section ref={heatmapRef} className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
-        <div className="mb-3 flex items-start justify-between gap-3">
-          <div className="flex min-w-0 flex-wrap items-center gap-4">
-            {domains.length > 0 && (
-              <div className="flex items-center gap-2">
-                <label className="text-sm text-gray-600">Domain</label>
-                <Select
-                  value={selectedDomainId ?? ''}
-                  onChange={(value) => setSelectedDomainId(value === '' ? null : value)}
-                  options={domainOptions}
-                />
+      <AnalysisContextBar
+        ref={heatmapRef}
+        title="Analysis Context"
+        summary={summary}
+        headerActions={<CopyVisualButton targetRef={heatmapRef} label="confidence heatmap" />}
+        secondary={(
+          <>
+            {/* Model filter panel (expands below the controls row) */}
+            {modelFilterOpen && allModels.length > 0 && (
+              <div className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+                <div className="mb-3 flex items-center justify-between">
+                  <span className="text-xs font-medium uppercase tracking-wide text-gray-600">
+                    Select models
+                  </span>
+                  <div className="flex items-center gap-3">
+                    {/* eslint-disable-next-line react/forbid-elements */}
+                    <button
+                      type="button"
+                      className="text-xs font-medium text-teal-700 hover:text-teal-800"
+                      onClick={() => setSelectedModelIds(allModels.map((m) => m.modelId))}
+                    >
+                      Select all
+                    </button>
+                    {/* eslint-disable-next-line react/forbid-elements */}
+                    <button
+                      type="button"
+                      className="text-xs font-medium text-gray-600 hover:text-gray-800"
+                      onClick={() => setSelectedModelIds([])}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+                <div className="max-h-52 space-y-2 overflow-y-auto">
+                  {allModels.map((m) => (
+                    <label
+                      key={m.modelId}
+                      className="flex cursor-pointer items-center gap-2 text-sm text-gray-700"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={(selectedModelIds ?? []).includes(m.modelId)}
+                        onChange={() => handleToggleModel(m.modelId)}
+                        className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                      />
+                      <span className="flex-1 truncate" title={m.modelId}>
+                        {m.displayName}
+                      </span>
+                    </label>
+                  ))}
+                </div>
               </div>
             )}
+          </>
+        )}
+      >
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="min-w-[220px] flex-1">
+            <Select
+              label="Domain"
+              value={selectedDomainId ?? ''}
+              onChange={(value) => setSelectedDomainId(value === '' ? null : value)}
+              options={domainOptions}
+            />
+          </div>
 
-            {allModels.length > 0 && (
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-600">Models:</span>
-                {selectedModelIds === null || isDefaultSelection ? (
-                  <span className="text-xs font-medium text-gray-700">Default</span>
-                ) : selectedModelIds.length === 0 ? (
-                  <span className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
-                    None selected
-                  </span>
-                ) : (
-                  <span className="text-xs font-medium text-gray-700">
-                    {selectedModelIds.length} of {allModels.length}
-                  </span>
-                )}
-                {selectedModelIds !== null && !isDefaultSelection && defaultModelIds.length > 0 && (
-                  // eslint-disable-next-line react/forbid-elements
-                  <button
-                    type="button"
-                    className="text-xs text-teal-600 underline-offset-2 hover:text-teal-800 hover:underline"
-                    onClick={() => setSelectedModelIds(defaultModelIds)}
-                  >
-                    Reset to default
-                  </button>
-                )}
-                {/* eslint-disable-next-line react/forbid-elements */}
-                <button
-                  type="button"
-                  className="text-xs text-gray-500 underline-offset-2 hover:text-gray-700 hover:underline"
-                  onClick={() => setModelFilterOpen((v) => !v)}
-                >
-                  {modelFilterOpen ? '▴ Close' : '▾ Change'}
-                </button>
-              </div>
-            )}
-
+          <div className="flex min-w-[260px] flex-1 flex-wrap items-end gap-3">
             <div className="flex items-center gap-2">
-              <label className="text-sm text-gray-600">Signature</label>
-              <Select
-                value={selectedSignature}
-                onChange={(value) => {
-                  setSelectedSignature(value);
-                  setSearchParams({ signature: value });
-                }}
-                options={signatureOptions}
-              />
+              <span className="text-sm text-gray-600">Models:</span>
+              {selectedModelIds === null || isDefaultSelection ? (
+                <span className="text-xs font-medium text-gray-700">Default</span>
+              ) : selectedModelIds.length === 0 ? (
+                <span className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
+                  None selected
+                </span>
+              ) : (
+                <span className="text-xs font-medium text-gray-700">
+                  {selectedModelIds.length} of {allModels.length}
+                </span>
+              )}
             </div>
+            {selectedModelIds !== null && !isDefaultSelection && defaultModelIds.length > 0 && (
+              // eslint-disable-next-line react/forbid-elements
+              <button
+                type="button"
+                className="text-xs text-teal-600 underline-offset-2 hover:text-teal-800 hover:underline"
+                onClick={() => setSelectedModelIds(defaultModelIds)}
+              >
+                Reset to default
+              </button>
+            )}
+            {/* eslint-disable-next-line react/forbid-elements */}
+            <button
+              type="button"
+              className="text-xs text-gray-500 underline-offset-2 hover:text-gray-700 hover:underline"
+              onClick={() => setModelFilterOpen((v) => !v)}
+            >
+              {modelFilterOpen ? '▴ Close' : '▾ Change'}
+            </button>
           </div>
 
-          <CopyVisualButton targetRef={heatmapRef} label="confidence heatmap" />
+          <div className="ml-auto min-w-[220px] max-w-xs flex-1">
+            <Select
+              label="Signature"
+              value={selectedSignature}
+              onChange={(value) => {
+                setSelectedSignature(value);
+                setSearchParams({ signature: value });
+              }}
+              options={signatureOptions}
+            />
+          </div>
         </div>
+      </AnalysisContextBar>
 
-        {/* Model filter panel (expands below the controls row) */}
-        {modelFilterOpen && allModels.length > 0 && (
-          <div className="mb-4 rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
-            <div className="mb-3 flex items-center justify-between">
-              <span className="text-xs font-medium uppercase tracking-wide text-gray-600">
-                Select models
-              </span>
-              <div className="flex items-center gap-3">
-                {/* eslint-disable-next-line react/forbid-elements */}
-                <button
-                  type="button"
-                  className="text-xs font-medium text-teal-700 hover:text-teal-800"
-                  onClick={() => setSelectedModelIds(allModels.map((m) => m.modelId))}
-                >
-                  Select all
-                </button>
-                {/* eslint-disable-next-line react/forbid-elements */}
-                <button
-                  type="button"
-                  className="text-xs font-medium text-gray-600 hover:text-gray-800"
-                  onClick={() => setSelectedModelIds([])}
-                >
-                  Clear
-                </button>
-              </div>
-            </div>
-            <div className="max-h-52 space-y-2 overflow-y-auto">
-              {allModels.map((m) => (
-                <label
-                  key={m.modelId}
-                  className="flex cursor-pointer items-center gap-2 text-sm text-gray-700"
-                >
-                  <input
-                    type="checkbox"
-                    checked={(selectedModelIds ?? []).includes(m.modelId)}
-                    onChange={() => handleToggleModel(m.modelId)}
-                    className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
-                  />
-                  <span className="flex-1 truncate" title={m.modelId}>
-                    {m.displayName}
-                  </span>
-                </label>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {error != null && <ErrorMessage message={error.message} />}
-        {loading ? (
-          <Loading />
-        ) : (
-          <ConfidenceHeatmap
-            models={models}
-            selectedModelIds={filteredModelIds ?? undefined}
-            onCellClick={handleCellClick}
-          />
-        )}
-      </section>
+      {error != null && <ErrorMessage message={error.message} />}
+      {loading ? (
+        <Loading />
+      ) : (
+        <ConfidenceHeatmap
+          models={models}
+          selectedModelIds={filteredModelIds ?? undefined}
+          onCellClick={handleCellClick}
+        />
+      )}
 
       {/* How the % is calculated */}
       <section className="rounded-lg border border-gray-100 bg-gray-50 p-5 text-sm text-gray-700 space-y-3 max-w-3xl">
