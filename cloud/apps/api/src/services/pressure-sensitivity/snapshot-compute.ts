@@ -161,6 +161,115 @@ function toValueRateInputs(groups: Map<string, ValueRateCellAccumulator>) {
   return inputs;
 }
 
+function computeModelPushedEffects(
+  pairs: ReadonlyMap<string, PairAccumulator>,
+  authoredFirstTokenByDef: ReadonlyMap<string, string>,
+  domainByDef: ReadonlyMap<string, string>,
+): { pushedForEffect: number | null; pushedAgainstEffect: number | null; pairsUsed: number } {
+  type DirBuckets = { first: number[]; second: number[] };
+
+  const pushBuckets = new Map<string, DirBuckets>();
+  const balancedBuckets = new Map<string, DirBuckets>();
+  const mirrorBuckets = new Map<string, DirBuckets>();
+
+  function getOrCreate(map: Map<string, DirBuckets>, key: string): DirBuckets {
+    let b = map.get(key);
+    if (b == null) { b = { first: [], second: [] }; map.set(key, b); }
+    return b;
+  }
+
+  for (const acc of pairs.values()) {
+    for (const cellAcc of acc.cells.values()) {
+      const { ownLevel, opponentLevel } = cellAcc;
+      const isPush = ownLevel >= 4 && opponentLevel <= 3;
+      const isBalanced = ownLevel === opponentLevel;
+      const isMirror = opponentLevel >= 4 && ownLevel <= 3;
+      if (!isPush && !isBalanced && !isMirror) continue;
+
+      for (const [defId, observations] of cellAcc.observationsByDefinition) {
+        const authoredFirst = authoredFirstTokenByDef.get(defId);
+        if (authoredFirst == null) continue;
+        const metrics = buildCellMetrics([...observations]);
+        if (metrics.n === 0 || metrics.winRate == null) continue;
+
+        const domainKey = domainByDef.get(defId) ?? defId;
+        const pdKey = `${acc.pairKey}||${domainKey}`;
+        const dir: 'first' | 'second' = authoredFirst === acc.firstValueToken ? 'first' : 'second';
+
+        if (isPush) getOrCreate(pushBuckets, pdKey)[dir].push(metrics.winRate);
+        if (isBalanced) getOrCreate(balancedBuckets, pdKey)[dir].push(metrics.winRate);
+        if (isMirror) getOrCreate(mirrorBuckets, pdKey)[dir].push(metrics.winRate);
+      }
+    }
+  }
+
+  function dirBalance(b: DirBuckets): number | null {
+    const f = b.first.length > 0 ? b.first.reduce((a, v) => a + v, 0) / b.first.length : null;
+    const s = b.second.length > 0 ? b.second.reduce((a, v) => a + v, 0) / b.second.length : null;
+    const vals = [f, s].filter((v): v is number => v != null);
+    return vals.length > 0 ? vals.reduce((a, v) => a + v, 0) / vals.length : null;
+  }
+
+  function splitPD(pdKey: string): { pairKey: string; domainKey: string } {
+    const idx = pdKey.indexOf('||');
+    return idx === -1
+      ? { pairKey: pdKey, domainKey: pdKey }
+      : { pairKey: pdKey.slice(0, idx), domainKey: pdKey.slice(idx + 2) };
+  }
+
+  type DomainAccum = { push: number[]; balanced: number[]; mirror: number[]; pairKeys: Set<string> };
+  const domainAccum = new Map<string, DomainAccum>();
+
+  function getOrCreateDomain(key: string): DomainAccum {
+    let d = domainAccum.get(key);
+    if (d == null) { d = { push: [], balanced: [], mirror: [], pairKeys: new Set() }; domainAccum.set(key, d); }
+    return d;
+  }
+
+  for (const [pdKey, bucket] of pushBuckets) {
+    const rate = dirBalance(bucket);
+    if (rate == null) continue;
+    const { pairKey, domainKey } = splitPD(pdKey);
+    const d = getOrCreateDomain(domainKey);
+    d.push.push(rate);
+    d.pairKeys.add(pairKey);
+  }
+  for (const [pdKey, bucket] of balancedBuckets) {
+    const rate = dirBalance(bucket);
+    if (rate == null) continue;
+    getOrCreateDomain(splitPD(pdKey).domainKey).balanced.push(rate);
+  }
+  for (const [pdKey, bucket] of mirrorBuckets) {
+    const rate = dirBalance(bucket);
+    if (rate == null) continue;
+    getOrCreateDomain(splitPD(pdKey).domainKey).mirror.push(rate);
+  }
+
+  const mean = (arr: number[]): number | null =>
+    arr.length > 0 ? arr.reduce((a, v) => a + v, 0) / arr.length : null;
+
+  const pushedForDomains: number[] = [];
+  const pushedAgainstDomains: number[] = [];
+  const allPairKeys = new Set<string>();
+
+  for (const d of domainAccum.values()) {
+    const dp = mean(d.push);
+    const db = mean(d.balanced);
+    const dm = mean(d.mirror);
+    if (dp != null && db != null) {
+      pushedForDomains.push(dp - db);
+      for (const pk of d.pairKeys) allPairKeys.add(pk);
+    }
+    if (db != null && dm != null) pushedAgainstDomains.push(db - dm);
+  }
+
+  return {
+    pushedForEffect: mean(pushedForDomains),
+    pushedAgainstEffect: mean(pushedAgainstDomains),
+    pairsUsed: allPairKeys.size,
+  };
+}
+
 function ensurePairAccumulator(
   perModel: Map<string, Map<string, PairAccumulator>>,
   modelId: string,
@@ -529,6 +638,8 @@ export async function buildPressureSensitivitySnapshotOutput(
       insufficient.push({ modelId: model.modelId, label: model.displayName, providerName: model.provider.displayName ?? model.provider.name, reason: 'no-coverage' });
       continue;
     }
+    const { pushedForEffect, pushedAgainstEffect, pairsUsed: pushedEffectPairsUsed } =
+      computeModelPushedEffects(pairs, authoredFirstTokenByDef, domainByDef);
     outputModels.push({
       modelId: model.modelId,
       label: model.displayName,
@@ -537,6 +648,9 @@ export async function buildPressureSensitivitySnapshotOutput(
       valuePairs: valuePairs.sort((a, b) => a.pairKey.localeCompare(b.pairKey)),
       valueRates,
       unscoredCount: modelUnscored,
+      pushedForEffect,
+      pushedAgainstEffect,
+      pushedEffectPairsUsed,
     });
   }
 

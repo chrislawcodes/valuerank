@@ -17,83 +17,31 @@ type ModelRow = {
   pairsUsed: number;
 };
 
-type DirectionalPressureResponse = {
-  baselineRate: number | null;
-  pushTowardFirstRate: number | null;
-  pushTowardSecondRate: number | null;
-};
-
-type DirectionalValuePair = {
-  pressureResponse: DirectionalPressureResponse | null;
-};
-
-type DirectionalMeasuredPressureResponse = {
-  baselineRate: number;
-  pushTowardFirstRate: number;
-  pushTowardSecondRate: number;
-};
-
-type DirectionalMeasuredValuePair = {
-  pressureResponse: DirectionalMeasuredPressureResponse;
-};
-
-type DirectionalModel = Pick<PressureSensitivityModel, 'modelId' | 'label'> & {
-  valuePairs: DirectionalValuePair[];
-};
-
 const PUSHED_FOR_TOOLTIP =
-  "Average win-rate lift above baseline when a value's pressure is high and the other's is calm, across all measured pairs for this model. Positive means the model moves toward the value being pressed.";
+  "Win-rate lift above balanced baseline when a value's pressure is high and the other's is calm. Direction-balanced and domain-averaged across all measured pairs for this model. Positive means the model moves toward the value being pressed.";
 const PUSHED_AGAINST_TOOLTIP =
-  'How much the model moves away from a value when the competing value is championed, averaged across all measured pairs for this model. A large positive value means the model follows opposing pressure — it yields. Near zero means it holds its position.';
+  "How much the model moves away from a value when the competing value is championed. Direction-balanced and domain-averaged across all measured pairs for this model. A large positive value means the model follows opposing pressure — it yields. Near zero means it holds its position.";
 const GAP_TOOLTIP =
   'Pushed-for effect minus pushed-against effect. Near zero means pressure works equally in both directions. A large positive gap means the model responds more when a value is directly championed than when it is opposed.';
 const PAIRS_TOOLTIP =
-  'Number of value pairs that had sufficient data to compute both directional effects for this model.';
-
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value);
-}
-
-function hasMeasuredPressureResponse(pair: DirectionalValuePair): pair is DirectionalMeasuredValuePair {
-  const response = pair.pressureResponse;
-  return (
-    response != null
-    && isFiniteNumber(response.baselineRate)
-    && isFiniteNumber(response.pushTowardFirstRate)
-    && isFiniteNumber(response.pushTowardSecondRate)
-  );
-}
+  'Number of value pairs that had sufficient data to compute the pushed-for effect for this model.';
 
 export function PressureDirectionalBreakdown({ models }: Props) {
   const rows = useMemo<ModelRow[]>(() => {
     const nextRows: ModelRow[] = [];
 
-    for (const model of models as unknown as DirectionalModel[]) {
-      const validPairs = model.valuePairs.filter(hasMeasuredPressureResponse);
-
-      const pairsUsed = validPairs.length;
-      if (pairsUsed === 0) continue;
-
-      let pushedForTotal = 0;
-      let pushedAgainstTotal = 0;
-
-      for (const pair of validPairs) {
-        const response = pair.pressureResponse;
-        pushedForTotal += response.pushTowardFirstRate - response.baselineRate;
-        pushedAgainstTotal += response.baselineRate - response.pushTowardSecondRate;
-      }
-
-      const pushedForEffect = pushedForTotal / pairsUsed;
-      const pushedAgainstEffect = pushedAgainstTotal / pairsUsed;
-      const gap = pushedForEffect - pushedAgainstEffect;
+    for (const model of models) {
+      const pushedForEffect = model.pushedForEffect;
+      const pushedAgainstEffect = model.pushedAgainstEffect;
+      if (pushedForEffect == null || pushedAgainstEffect == null) continue;
 
       nextRows.push({
         modelId: model.modelId,
         label: model.label,
         pushedForEffect,
         pushedAgainstEffect,
-        gap,
-        pairsUsed,
+        gap: pushedForEffect - pushedAgainstEffect,
+        pairsUsed: model.pushedEffectPairsUsed,
       });
     }
 

@@ -44,6 +44,7 @@ function createModel(
     label: modelId,
     providerName: 'Provider',
     unscoredCount: 0,
+    pushedEffectPairsUsed: 0,
     pressureResponseSummary: {
       mean: 0.1,
       rangeMin: 0.05,
