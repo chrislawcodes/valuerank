@@ -15,25 +15,48 @@ import {
   type DomainAvailableSignaturesQueryResult,
   type DomainAvailableSignaturesQueryVariables,
 } from '../api/operations/domainAnalysis';
+import {
+  MODELS_ANALYSIS_QUERY,
+  type ModelsAnalysisModelResult,
+  type ModelsAnalysisQueryResult,
+  type ModelsAnalysisQueryVariables,
+} from '../api/operations/modelsAnalysis';
 import { ModelGroupsSection } from '../components/domains/ModelGroupsSection';
+import { ModelSimilarityTableSection } from '../components/models/ModelSimilarityTableSection';
 import { useDomains } from '../hooks/useDomains';
 import { VALUES, type ModelEntry, type ValueKey } from '../data/domainAnalysisData';
 import { formatSignatureOptionLabel, getCacheStatusCopy, getSignaturePriority } from '../utils/domainAnalysisUtils';
 
 const ALL_DOMAINS_SCOPE = 'all-domains';
 
-function buildModelEntries(models: DomainAnalysisModel[]): ModelEntry[] {
+function buildModelEntries(
+  models: DomainAnalysisModel[],
+  modelsAnalysisModels: ModelsAnalysisModelResult[] = [],
+): ModelEntry[] {
+  const pooledWinRatesByModel = new Map<string, Map<string, number | null>>(
+    modelsAnalysisModels.map((model) => [
+      model.modelId,
+      new Map(model.values.map((value) => [value.valueKey, value.pooledWinRate])),
+    ]),
+  );
+
   return models.map((model) => {
     const valueMap = new Map(model.values.map((value) => [value.valueKey, value.score] as const));
+    const winRateMap = pooledWinRatesByModel.get(model.model);
     const values = VALUES.reduce<Record<ValueKey, number>>((acc, valueKey) => {
       acc[valueKey] = valueMap.get(valueKey) ?? 0;
       return acc;
     }, {} as Record<ValueKey, number>);
+    const winRates = VALUES.reduce<Record<ValueKey, number | null>>((acc, valueKey) => {
+      acc[valueKey] = winRateMap?.get(valueKey) ?? null;
+      return acc;
+    }, {} as Record<ValueKey, number | null>);
 
     return {
       model: model.model,
       label: model.label,
       values,
+      winRates,
     };
   });
 }
@@ -118,6 +141,18 @@ export function ModelsGroups() {
     pause: selectedDomainId === '' || activeUseLegacyQuery,
     requestPolicy: 'cache-and-network',
   });
+  const [{ data: modelsAnalysisData, fetching: modelsAnalysisFetching, error: modelsAnalysisError }] = useQuery<
+    ModelsAnalysisQueryResult,
+    ModelsAnalysisQueryVariables
+  >({
+    query: MODELS_ANALYSIS_QUERY,
+    variables: {
+      ...(selectedScope === 'DOMAIN' && selectedDomainId !== '' ? { domainId: selectedDomainId } : {}),
+      ...(selectedSignature !== '' ? { signature: selectedSignature } : {}),
+    },
+    pause: selectedScope === 'DOMAIN' && selectedDomainId === '',
+    requestPolicy: 'cache-and-network',
+  });
   const [{ data: legacyData, fetching: legacyFetching, error: legacyError }] = useQuery<DomainAnalysisQueryResult, { domainId: string }>({
     query: DOMAIN_ANALYSIS_QUERY_LEGACY,
     variables: { domainId: selectedDomainId },
@@ -140,8 +175,13 @@ export function ModelsGroups() {
     () => getCacheStatusCopy(data?.domainAnalysis.cacheStatus, data?.domainAnalysis.generatedAt),
     [data?.domainAnalysis.cacheStatus, data?.domainAnalysis.generatedAt],
   );
-  const showPageLoader = domainsLoading || (selectedDomainId !== '' && data?.domainAnalysis == null && fetching);
-  const models = useMemo(() => buildModelEntries(data?.domainAnalysis.models ?? []), [data?.domainAnalysis.models]);
+  const showPageLoader = domainsLoading
+    || (selectedDomainId !== '' && data?.domainAnalysis == null && fetching)
+    || (selectedDomainId !== '' && modelsAnalysisData == null && modelsAnalysisFetching);
+  const models = useMemo(
+    () => buildModelEntries(data?.domainAnalysis.models ?? [], modelsAnalysisData?.modelsAnalysis.models ?? []),
+    [data?.domainAnalysis.models, modelsAnalysisData?.modelsAnalysis.models],
+  );
   const isAllDomains = selectedScope === 'ALL_DOMAINS';
   const domainSelectionSection = (
     <section className="rounded-lg border border-gray-200 bg-white p-4">
@@ -195,11 +235,11 @@ export function ModelsGroups() {
     </section>
   );
 
-  if (domainsError != null || signaturesError != null || error != null) {
+  if (domainsError != null || signaturesError != null || error != null || modelsAnalysisError != null) {
     return (
       <div className="space-y-6">
         {domainSelectionSection}
-        <ErrorMessage message={`Failed to load model groups report: ${(domainsError ?? signaturesError ?? error)?.message ?? 'Unknown error'}`} />
+        <ErrorMessage message={`Failed to load model groups report: ${(domainsError ?? signaturesError ?? error ?? modelsAnalysisError)?.message ?? 'Unknown error'}`} />
       </div>
     );
   }
@@ -227,10 +267,13 @@ export function ModelsGroups() {
       {showPageLoader ? (
         <Loading size="lg" text="Loading model groups..." />
       ) : (
-        <ModelGroupsSection
-          clusterAnalysis={data?.domainAnalysis.clusterAnalysis}
-          models={models}
-        />
+        <div className="space-y-6">
+          <ModelGroupsSection
+            clusterAnalysis={data?.domainAnalysis.clusterAnalysis}
+            models={models}
+          />
+          <ModelSimilarityTableSection models={models} />
+        </div>
       )}
     </div>
   );

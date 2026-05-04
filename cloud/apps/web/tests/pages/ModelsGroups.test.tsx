@@ -7,9 +7,11 @@ import {
   DOMAIN_ANALYSIS_QUERY_LEGACY,
   DOMAIN_AVAILABLE_SIGNATURES_QUERY,
 } from '../../src/api/operations/domainAnalysis';
+import { MODELS_ANALYSIS_QUERY } from '../../src/api/operations/modelsAnalysis';
 
 const useQueryMock = vi.fn();
 const modelGroupsSectionMock = vi.fn(() => <div>Mock model groups section</div>);
+const modelSimilarityTableSectionMock = vi.fn(() => <div>Mock model similarity table section</div>);
 
 const defaultSignatureData = {
   domainAvailableSignatures: [
@@ -70,6 +72,20 @@ const defaultAnalysis = {
   },
 };
 
+const defaultModelsAnalysis = {
+  modelsAnalysis: {
+    models: [
+      {
+        modelId: 'model-a',
+        label: 'Model A',
+        values: [
+          { valueKey: 'Achievement', pooledWinRate: 72.5, stabilityScore: 91.2, eligibleDomainCount: 2, domains: [] },
+        ],
+      },
+    ],
+  },
+};
+
 function installQueryResponses() {
   useQueryMock.mockImplementation((args: { query: unknown }) => {
     if (args.query === DOMAIN_AVAILABLE_SIGNATURES_QUERY) {
@@ -82,6 +98,13 @@ function installQueryResponses() {
     if (args.query === DOMAIN_ANALYSIS_QUERY || args.query === DOMAIN_ANALYSIS_QUERY_LEGACY) {
       return [{
         data: defaultAnalysis,
+        fetching: false,
+        error: undefined,
+      }];
+    }
+    if (args.query === MODELS_ANALYSIS_QUERY) {
+      return [{
+        data: defaultModelsAnalysis,
         fetching: false,
         error: undefined,
       }];
@@ -110,10 +133,15 @@ vi.mock('../../src/components/domains/ModelGroupsSection', () => ({
   ModelGroupsSection: (props: unknown) => modelGroupsSectionMock(props),
 }));
 
+vi.mock('../../src/components/models/ModelSimilarityTableSection', () => ({
+  ModelSimilarityTableSection: (props: unknown) => modelSimilarityTableSectionMock(props),
+}));
+
 describe('ModelsGroups', () => {
   beforeEach(() => {
     useQueryMock.mockReset();
     modelGroupsSectionMock.mockClear();
+    modelSimilarityTableSectionMock.mockClear();
     installQueryResponses();
   });
 
@@ -132,8 +160,8 @@ describe('ModelsGroups', () => {
       expect(modelGroupsSectionMock).toHaveBeenCalledWith(
         expect.objectContaining({
           clusterAnalysis: defaultAnalysis.domainAnalysis.clusterAnalysis,
-          models: [
-            {
+          models: expect.arrayContaining([
+            expect.objectContaining({
               model: 'model-a',
               label: 'Model A',
               values: {
@@ -148,8 +176,30 @@ describe('ModelsGroups', () => {
                 Hedonism: -1,
                 Conformity_Interpersonal: 0,
               },
-            },
-          ],
+            }),
+          ]),
+        }),
+      );
+      expect(modelSimilarityTableSectionMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          models: expect.arrayContaining([
+            expect.objectContaining({
+              model: 'model-a',
+              label: 'Model A',
+              winRates: {
+                Self_Direction_Action: null,
+                Universalism_Nature: null,
+                Benevolence_Dependability: null,
+                Security_Personal: null,
+                Power_Dominance: null,
+                Achievement: 72.5,
+                Tradition: null,
+                Stimulation: null,
+                Hedonism: null,
+                Conformity_Interpersonal: null,
+              },
+            }),
+          ]),
         }),
       );
     });
