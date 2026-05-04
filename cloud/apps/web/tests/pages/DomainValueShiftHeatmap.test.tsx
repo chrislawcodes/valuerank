@@ -4,7 +4,6 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import {
   ALL_MODELS_OPTION_VALUE,
-  DomainValueShiftHeatmap,
   buildDomainShiftHeatmap,
   buildDomainShiftModelOptions,
   formatEvidenceWeight,
@@ -13,12 +12,31 @@ import {
   getDefaultDomainShiftSignature,
   getDefaultModelId,
   sortHeatmapRows,
-} from '../../src/pages/DomainValueShiftHeatmap';
-import { MODELS_ANALYSIS_QUERY, type ModelsAnalysisModelResult } from '../../src/api/operations/modelsAnalysis';
-import { AVAILABLE_SIGNATURES_QUERY } from '../../src/api/operations/available-signatures';
-import { LLM_MODELS_QUERY } from '../../src/api/operations/llm';
+} from '../../src/pages/domainValueShiftHeatmapUtils';
+import { DomainValueShiftHeatmap } from '../../src/pages/DomainValueShiftHeatmap';
+import { type ModelsAnalysisModelResult } from '../../src/api/operations/modelsAnalysis';
+import { type Domain } from '../../src/api/operations/domains';
 
 const useQueryMock = vi.fn();
+const useDomainsMock = vi.fn();
+
+function getOperationName(query: unknown): string | null {
+  const typedQuery = query as {
+    definitions?: Array<{ kind?: string; name?: { value?: string } }>;
+    loc?: { source?: { body?: string } };
+  } | null;
+  const definitions = typedQuery?.definitions ?? [];
+  const operationName = definitions.find((definition) => definition.kind === 'OperationDefinition' && definition.name?.value)?.name?.value;
+  if (operationName != null) {
+    return operationName;
+  }
+
+  const body = typedQuery?.loc?.source?.body ?? '';
+  if (body.includes('query ModelsAnalysis')) return 'ModelsAnalysis';
+  if (body.includes('query AvailableSignatures')) return 'AvailableSignatures';
+  if (body.includes('query LlmModels')) return 'LlmModels';
+  return null;
+}
 
 vi.mock('urql', async () => {
   const actual = await vi.importActual<typeof import('urql')>('urql');
@@ -27,6 +45,10 @@ vi.mock('urql', async () => {
     useQuery: (args: unknown) => useQueryMock(args),
   };
 });
+
+vi.mock('../../src/hooks/useDomains', () => ({
+  useDomains: () => useDomainsMock(),
+}));
 
 function makeModel(overrides: Partial<ModelsAnalysisModelResult> = {}): ModelsAnalysisModelResult {
   return {
@@ -72,7 +94,13 @@ function installModels(
   defaultModelIds: string[] = models.map((model) => model.modelId),
 ) {
   useQueryMock.mockImplementation((args: { query: unknown }) => {
-    if (args.query === AVAILABLE_SIGNATURES_QUERY) {
+    const operationName = getOperationName(args.query);
+    const variables = (args as { variables?: Record<string, unknown> }).variables ?? {};
+
+    if (
+      operationName === 'AvailableSignatures'
+      || (Object.keys(variables).length === 0 && !('status' in variables) && !('signature' in variables) && !('domainId' in variables) && !('providerId' in variables))
+    ) {
       return [{
         data: {
           availableSignatures: signatures.map((signature) => ({
@@ -84,7 +112,7 @@ function installModels(
         error: undefined,
       }];
     }
-    if (args.query === LLM_MODELS_QUERY) {
+    if (operationName === 'LlmModels' || variables.status === 'ACTIVE') {
       return [{
         data: {
           llmModels: models.map((model) => ({
@@ -106,7 +134,7 @@ function installModels(
         error: undefined,
       }];
     }
-    if (args.query === MODELS_ANALYSIS_QUERY) {
+    if (operationName === 'ModelsAnalysis' || 'signature' in variables || 'domainId' in variables) {
       return [{
         data: { modelsAnalysis: { models } },
         fetching: false,
@@ -114,6 +142,33 @@ function installModels(
       }];
     }
     return [{ data: undefined, fetching: false, error: undefined }];
+  });
+}
+
+function installDomains(
+  domains: Domain[] = [
+    { id: 'jobs', name: 'Jobs', description: null },
+    { id: 'city', name: 'City Planning', description: null },
+  ],
+) {
+  useDomainsMock.mockReturnValue({
+    domains,
+    loading: false,
+    queryLoading: false,
+    creating: false,
+    renaming: false,
+    deleting: false,
+    assigningByIds: false,
+    assigningByFilter: false,
+    runningDomainTrials: false,
+    error: null,
+    refetch: vi.fn(),
+    createDomain: vi.fn(),
+    renameDomain: vi.fn(),
+    deleteDomain: vi.fn(),
+    assignDomainToDefinitions: vi.fn(),
+    assignDomainToDefinitionsByFilter: vi.fn(),
+    runTrialsForDomain: vi.fn(),
   });
 }
 
@@ -303,6 +358,8 @@ describe('DomainValueShiftHeatmap helpers', () => {
 describe('DomainValueShiftHeatmap page', () => {
   beforeEach(() => {
     useQueryMock.mockReset();
+    useDomainsMock.mockReset();
+    installDomains();
   });
 
   it('renders the selected model heatmap with raw detail in accessible text', async () => {
@@ -311,7 +368,7 @@ describe('DomainValueShiftHeatmap page', () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Default models' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Model A' })).toBeInTheDocument();
     });
     expect(screen.getByRole('table')).toHaveClass('table-auto');
     expect(screen.getByRole('button', { name: /default models/i })).toBeInTheDocument();
@@ -337,7 +394,7 @@ describe('DomainValueShiftHeatmap page', () => {
     renderPage();
 
     await screen.findByRole('button', { name: /default models/i });
-    const initialModelsCalls = useQueryMock.mock.calls.filter(([args]: [{ query: unknown }]) => args.query === MODELS_ANALYSIS_QUERY);
+    const initialModelsCalls = useQueryMock.mock.calls.filter(([args]: [{ query: unknown }]) => getOperationName(args.query) === 'ModelsAnalysis');
     expect(initialModelsCalls.at(-1)?.[0]).toEqual(expect.objectContaining({
       variables: { signature: 'vnewtd' },
     }));
@@ -345,7 +402,7 @@ describe('DomainValueShiftHeatmap page', () => {
     await user.click(screen.getByRole('button', { name: /Latest @ default/i }));
     await user.click(screen.getByRole('option', { name: 'Latest @ t=0' }));
 
-    const updatedModelsCalls = useQueryMock.mock.calls.filter(([args]: [{ query: unknown }]) => args.query === MODELS_ANALYSIS_QUERY);
+    const updatedModelsCalls = useQueryMock.mock.calls.filter(([args]: [{ query: unknown }]) => getOperationName(args.query) === 'ModelsAnalysis');
     expect(updatedModelsCalls.at(-1)?.[0]).toEqual(expect.objectContaining({
       variables: { signature: 'vnewt0' },
     }));
@@ -401,9 +458,8 @@ describe('DomainValueShiftHeatmap page', () => {
 
     renderPage();
 
-    expect(await screen.findByRole('button', { name: /default models/i })).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /default models/i }));
-    await user.click(screen.getByRole('option', { name: 'Zulu' }));
+    expect(await screen.findByText('Default — 2 models')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Alpha' }));
 
     expect(screen.getByRole('heading', { name: 'Zulu' })).toBeInTheDocument();
   });
@@ -418,11 +474,10 @@ describe('DomainValueShiftHeatmap page', () => {
 
     renderPage();
 
-    await screen.findByRole('button', { name: /default models/i });
-    await user.click(screen.getByRole('button', { name: /default models/i }));
-
-    const options = screen.getAllByRole('option').map((option) => option.textContent?.trim());
-    expect(options).toEqual(['Default models', 'Alpha', 'Charlie', '---', 'Bravo']);
+    const modelButtons = screen
+      .getAllByRole('button', { name: /^(Default Models|Alpha|Charlie|Bravo)$/i })
+      .map((button) => button.textContent?.trim());
+    expect(modelButtons).toEqual(['Default Models', 'Alpha', 'Charlie', 'Bravo']);
   });
 
   it('shows an empty state when fewer than two domains are eligible', async () => {
@@ -451,6 +506,7 @@ describe('DomainValueShiftHeatmap page', () => {
 
     renderPage();
 
-    expect(await screen.findByText(/No models with analysis data/i)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'No active models are available yet' })).toBeInTheDocument();
+    expect(screen.getByText('Create or activate models first, then reopen this report.')).toBeInTheDocument();
   });
 });

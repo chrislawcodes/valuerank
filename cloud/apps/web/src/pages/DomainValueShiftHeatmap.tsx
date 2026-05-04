@@ -7,21 +7,18 @@ import { Button } from '../components/ui/Button';
 import { CopyVisualButton } from '../components/ui/CopyVisualButton';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Loading } from '../components/ui/Loading';
-import { Select } from '../components/ui/Select';
 import { AnalysisContextBar } from '../components/analysis/AnalysisContextBar';
 import { cn } from '../lib/utils';
+import { useDomains } from '../hooks/useDomains';
 import {
-  ALL_MODELS_OPTION_VALUE,
   DEFAULT_DOMAIN_SHIFT_SORT,
   DEFAULT_DOMAIN_SHIFT_SIGNATURE,
   buildDomainShiftHeatmap,
-  buildDomainShiftModelOptions,
   buildDomainShiftSignatureOptions,
   formatEvidenceWeight,
   formatPercent,
   formatPointShift,
   getDefaultDomainShiftSignature,
-  getDefaultModelId,
   getNextDomainShiftSort,
   sortHeatmapRows,
   type DomainShiftCell,
@@ -33,14 +30,11 @@ import {
 const MAX_COLOR_SHIFT = 25;
 
 export {
-  ALL_MODELS_OPTION_VALUE,
   buildDomainShiftHeatmap,
-  buildDomainShiftModelOptions,
   formatEvidenceWeight,
   formatPercent,
   formatPointShift,
   getDefaultDomainShiftSignature,
-  getDefaultModelId,
   sortHeatmapRows,
 } from './domainValueShiftHeatmapUtils';
 
@@ -195,22 +189,23 @@ function Cell({
 }
 
 export function DomainValueShiftHeatmap() {
+  const { domains, queryLoading: domainsLoading, error: domainsError } = useDomains();
   const [{ data: signatureData, fetching: fetchingSignatures, error: signatureError }] = useQuery<AvailableSignaturesQueryResult>({
     query: AVAILABLE_SIGNATURES_QUERY,
     variables: {},
     requestPolicy: 'cache-and-network',
   });
-  const [selectedSignature, setSelectedSignature] = useState<string>(DEFAULT_DOMAIN_SHIFT_SIGNATURE);
-  const [{ data: llmModelsData }] = useQuery<LlmModelsQueryResult>({
+  const [{ data: llmModelsData, fetching: llmModelsLoading, error: llmModelsError }] = useQuery<LlmModelsQueryResult>({
     query: LLM_MODELS_QUERY,
     variables: { status: 'ACTIVE' },
     requestPolicy: 'cache-and-network',
   });
-  const [{ data, fetching, error }] = useQuery<ModelsAnalysisQueryResult>({
-    query: MODELS_ANALYSIS_QUERY,
-    variables: { signature: selectedSignature },
-    requestPolicy: 'cache-and-network',
-  });
+  const [selectedDomainId, setSelectedDomainId] = useState<string | null>(null);
+  const [selectedSignature, setSelectedSignature] = useState<string>(DEFAULT_DOMAIN_SHIFT_SIGNATURE);
+  const [selectedModelIds, setSelectedModelIds] = useState<string[] | null>(null);
+  const [displayMode, setDisplayMode] = useState<DomainShiftDisplayMode>('shift');
+  const [sort, setSort] = useState<DomainShiftSort>(DEFAULT_DOMAIN_SHIFT_SORT);
+
   const availableSignatures = useMemo(
     () => signatureData?.availableSignatures.map((entry) => entry.signature) ?? [],
     [signatureData],
@@ -219,14 +214,38 @@ export function DomainValueShiftHeatmap() {
     () => buildDomainShiftSignatureOptions(availableSignatures),
     [availableSignatures],
   );
-  const models = useMemo(() => data?.modelsAnalysis.models ?? [], [data]);
-  const defaultModelIds = useMemo(
-    () => new Set((llmModelsData?.llmModels ?? []).filter((model) => model.isDefault).map((model) => model.modelId)),
+  const activeModels = useMemo(
+    () => (llmModelsData?.llmModels ?? []).filter((model) => model.status === 'ACTIVE'),
     [llmModelsData],
   );
-  const [selectedModelId, setSelectedModelId] = useState<string>(ALL_MODELS_OPTION_VALUE);
-  const [displayMode, setDisplayMode] = useState<DomainShiftDisplayMode>('shift');
-  const [sort, setSort] = useState<DomainShiftSort>(DEFAULT_DOMAIN_SHIFT_SORT);
+  const noActiveModels = !llmModelsLoading && activeModels.length === 0;
+  const defaultModelIds = useMemo(
+    () => activeModels.filter((model) => model.isDefault).map((model) => model.modelId),
+    [activeModels],
+  );
+  const activeModelIdSet = useMemo(() => new Set(activeModels.map((model) => model.modelId)), [activeModels]);
+  const modelOptions = useMemo(
+    () => {
+      const sorted = [...activeModels].sort((left, right) => left.displayName.localeCompare(right.displayName));
+      const defaults = sorted.filter((model) => defaultModelIds.includes(model.modelId));
+      const nonDefaults = sorted.filter((model) => !defaultModelIds.includes(model.modelId));
+      return [...defaults, ...nonDefaults].map((model) => ({
+        value: model.modelId,
+        label: model.displayName,
+        isDefault: defaultModelIds.includes(model.modelId),
+      }));
+    },
+    [activeModels, defaultModelIds],
+  );
+
+  const [{ data, fetching, error }] = useQuery<ModelsAnalysisQueryResult>({
+    query: MODELS_ANALYSIS_QUERY,
+    variables: {
+      ...(selectedDomainId != null ? { domainId: selectedDomainId } : {}),
+      signature: selectedSignature,
+    },
+    requestPolicy: 'cache-and-network',
+  });
 
   useEffect(() => {
     const nextSignature = getDefaultDomainShiftSignature(availableSignatures, selectedSignature);
@@ -236,111 +255,162 @@ export function DomainValueShiftHeatmap() {
   }, [availableSignatures, selectedSignature]);
 
   useEffect(() => {
-    const nextModelId = getDefaultModelId(models, selectedModelId);
-    if (nextModelId !== selectedModelId) {
-      setSelectedModelId(nextModelId);
-    }
-  }, [models, selectedModelId]);
+    if (selectedDomainId == null) return;
+    if (domains.some((domain) => domain.id === selectedDomainId)) return;
+    setSelectedDomainId(null);
+  }, [domains, selectedDomainId]);
 
-  const defaultModels = useMemo(
-    () => models.filter((model) => defaultModelIds.has(model.modelId)),
-    [models, defaultModelIds],
-  );
-  const selectedModel = selectedModelId === ALL_MODELS_OPTION_VALUE
-    ? null
-    : models.find((model) => model.modelId === selectedModelId) ?? null;
+  useEffect(() => {
+    if (activeModels.length === 0) {
+      return;
+    }
+
+    setSelectedModelIds((current) => {
+      if (current == null) {
+        return [...defaultModelIds];
+      }
+
+      const filtered = current.filter((modelId) => activeModelIdSet.has(modelId));
+      if (filtered.length === current.length) {
+        return current;
+      }
+      if (filtered.length > 0) {
+        return filtered;
+      }
+      return [...defaultModelIds];
+    });
+  }, [activeModelIdSet, activeModels.length, defaultModelIds]);
+
+  const models = useMemo(() => data?.modelsAnalysis.models ?? [], [data]);
+  const selectedModels = useMemo(() => {
+    const selectedIds = selectedModelIds ?? defaultModelIds;
+    if (selectedIds.length === 0) return [];
+    const selectedSet = new Set(selectedIds);
+    return models.filter((model) => selectedSet.has(model.modelId));
+  }, [defaultModelIds, models, selectedModelIds]);
+  const isDefaultSelection = useMemo(() => {
+    if (selectedModelIds == null) return true;
+    if (selectedModelIds.length !== defaultModelIds.length) return false;
+    const defaultSet = new Set(defaultModelIds);
+    return selectedModelIds.every((id) => defaultSet.has(id));
+  }, [defaultModelIds, selectedModelIds]);
+
   const heatmap = useMemo(
-    () => buildDomainShiftHeatmap(selectedModelId === ALL_MODELS_OPTION_VALUE ? defaultModels : selectedModel),
-    [defaultModels, selectedModel, selectedModelId],
+    () => buildDomainShiftHeatmap(selectedModels),
+    [selectedModels],
   );
   const sortedRows = useMemo(
     () => sortHeatmapRows(heatmap.rows, sort, displayMode),
     [heatmap.rows, sort, displayMode],
   );
-  const modelOptions = useMemo(
-    () => buildDomainShiftModelOptions(models, defaultModelIds),
-    [defaultModelIds, models],
-  );
   const domainColumnWidth = heatmap.columns.length > 0 ? `${100 / heatmap.columns.length}%` : '100%';
-  const isAllModels = selectedModelId === ALL_MODELS_OPTION_VALUE;
-  const loading = fetching && data == null;
   const tableRef = useRef<HTMLDivElement>(null);
-  const selectedModelLabel = isAllModels ? 'Default models' : selectedModel?.label ?? 'Selected model';
-  const summary = `${selectedModelLabel} · ${selectedSignature}`;
+  const loading =
+    (domainsLoading && domains.length === 0)
+    || (fetchingSignatures && signatureData == null)
+    || (llmModelsLoading && llmModelsData == null)
+    || (fetching && data == null)
+    || (selectedModelIds == null && !noActiveModels);
+
+  const domainOptions = useMemo(
+    () => [{ value: 'all', label: 'All domains' }, ...domains.map((domain) => ({ value: domain.id, label: domain.name }))],
+    [domains],
+  );
+  const selectedModelsLabel = selectedModels.length === 1
+    ? selectedModels[0]?.label ?? 'Selected model'
+    : isDefaultSelection
+      ? 'Default models'
+      : `${selectedModels.length} selected models`;
+
+  if (domainsError != null || signatureError != null || llmModelsError != null || error != null) {
+    return (
+      <ErrorMessage
+        message={`Failed to load domain shifts: ${(domainsError ?? signatureError ?? llmModelsError ?? error)?.message ?? 'Unknown error'}`}
+      />
+    );
+  }
+
+  if (!domainsLoading && domains.length === 0) {
+    return (
+      <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+        No domains are available yet. Populate domains first, then reopen this report.
+      </div>
+    );
+  }
+
+  if (loading) {
+    return <Loading size="lg" text="Loading domain shifts..." />;
+  }
 
   return (
     <div className="space-y-6">
+      <AnalysisContextBar
+        domain={{
+          label: 'Domain',
+          value: selectedDomainId ?? 'all',
+          onChange: (value) => setSelectedDomainId(value === 'all' ? null : value),
+          options: domainOptions,
+          disabled: domainsLoading && domains.length === 0,
+        }}
+        signature={{
+          label: 'Signature',
+          value: selectedSignature,
+          onChange: setSelectedSignature,
+          options:
+            signatureOptions.length > 0
+              ? signatureOptions
+              : [{ value: selectedSignature, label: selectedSignature, disabled: true }],
+          disabled: fetchingSignatures && signatureData == null,
+        }}
+        models={{
+          label: 'Models',
+          selectedModelIds,
+          defaultModelIds,
+          options: modelOptions,
+          onChange: setSelectedModelIds,
+        }}
+      />
+
       <div className="space-y-2">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-teal-700">Models</p>
+        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Domain shifts</h1>
         <p className="max-w-3xl text-sm text-gray-600">
-          Exploratory heatmap for domain-associated value shifts. Toggle between percentage-point shifts and
-          straight domain win rates, then click any column header to sort.
+          Exploratory heatmap for domain-associated value shifts. Toggle between percentage-point shifts and raw win
+          rates, then click any column header to sort.
         </p>
       </div>
 
-      {error != null && (
-        <ErrorMessage message={`Failed to load domain shifts: ${error.message}`} />
-      )}
-      {signatureError != null && (
-        <ErrorMessage message={`Failed to load signature options: ${signatureError.message}`} />
-      )}
-
-      <AnalysisContextBar
-        title="Analysis Context"
-        summary={summary}
-        headerActions={<CopyVisualButton targetRef={tableRef} label="domain shifts table" />}
-        secondary={<DisplayModeToggle displayMode={displayMode} onChange={setDisplayMode} />}
-      >
-        <div className="flex flex-wrap items-end gap-4">
-          <div className="min-w-[260px] max-w-sm flex-1">
-            <Select
-              label="Model"
-              options={modelOptions}
-              value={selectedModelId}
-              onChange={setSelectedModelId}
-              placeholder={loading ? 'Loading models...' : 'Select a model'}
-              disabled={loading || models.length === 0}
-            />
-          </div>
-          <div className="ml-auto min-w-[240px] max-w-xs flex-1">
-            <Select
-              label="Signature"
-              options={signatureOptions}
-              value={selectedSignature}
-              onChange={setSelectedSignature}
-              placeholder={fetchingSignatures && signatureData == null ? 'Loading signatures...' : 'Select a signature'}
-              disabled={fetchingSignatures && signatureData == null}
-            />
-          </div>
-        </div>
-      </AnalysisContextBar>
-
-      {loading && <Loading size="lg" text="Loading domain shifts..." />}
-
-      {!loading && models.length === 0 && (
-        <section className="rounded-xl border border-gray-200 bg-white p-6">
-          <p className="text-sm text-gray-600">No models with analysis data are available yet.</p>
+      {noActiveModels ? (
+        <section className="rounded-xl border border-amber-200 bg-amber-50 p-6">
+          <h2 className="text-base font-semibold text-amber-950">No active models are available yet</h2>
+          <p className="mt-2 text-sm text-amber-900">
+            Create or activate models first, then reopen this report.
+          </p>
         </section>
-      )}
-
-      {!loading && models.length > 0 && heatmap.eligibleDomainCount < 2 && (
+      ) : selectedModels.length === 0 ? (
+        <section className="rounded-xl border border-amber-200 bg-amber-50 p-6">
+          <h2 className="text-base font-semibold text-amber-950">Pick at least one model</h2>
+          <p className="mt-2 text-sm text-amber-900">
+            Use the Models picker in the bar above to choose the default set or your own subset.
+          </p>
+        </section>
+      ) : heatmap.eligibleDomainCount < 2 ? (
         <section className="rounded-xl border border-amber-200 bg-amber-50 p-6">
           <h2 className="text-base font-semibold text-amber-950">More domain coverage needed</h2>
           <p className="mt-2 text-sm text-amber-900">
-            Domain-shift analysis needs at least one value with eligible win-rate data in two or more domains for
-            the selected model set. With only one domain for a value, the shift would be 0.0 pts by definition and would
+            Domain-shift analysis needs at least one value with eligible win-rate data in two or more domains for the
+            selected model set. With only one domain for a value, the shift would be 0.0 pts by definition and would
             not be meaningful.
           </p>
         </section>
-      )}
-
-      {!loading && models.length > 0 && heatmap.eligibleDomainCount >= 2 && (
+      ) : (
         <section ref={tableRef} className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
           <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">{isAllModels ? 'Default models' : selectedModel?.label ?? 'Default models'}</h2>
+              <h2 className="text-lg font-semibold text-gray-900">{selectedModelsLabel}</h2>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <DisplayModeToggle displayMode={displayMode} onChange={setDisplayMode} />
               <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
                 <span className="font-semibold text-gray-800">Metric:</span>{' '}
                 {displayMode === 'shift' ? 'percentage-point shift, not percent change' : 'raw domain win rate'}
@@ -424,7 +494,7 @@ export function DomainValueShiftHeatmap() {
                             cell={cell}
                             valueLabel={row.valueLabel}
                             displayMode={displayMode}
-                            evidenceLabel={isAllModels ? 'average evidence vignettes' : 'evidence vignettes'}
+                            evidenceLabel={isDefaultSelection ? 'average evidence vignettes' : 'evidence vignettes'}
                           />
                         </td>
                       );

@@ -231,7 +231,9 @@ function mockDomainsOnce() {
 }
 
 function mockQuery(data: PressureSensitivityQueryResult) {
-  mockedUseQuery.mockImplementation(({ query }: { query: unknown }) => {
+  mockedUseQuery.mockImplementation((args: Parameters<typeof useQuery>[0]) => {
+    const { query } = args;
+    const variables = args.variables as { modelIds?: string[] | string | null } | undefined;
     if (query === DOMAIN_AVAILABLE_SIGNATURES_QUERY) {
       return [
         {
@@ -267,9 +269,20 @@ function mockQuery(data: PressureSensitivityQueryResult) {
       ] as unknown as ReturnType<typeof useQuery>;
     }
     if (query === PRESSURE_SENSITIVITY_QUERY) {
+      const modelIds = variables?.modelIds;
+      const selectedModelIds = modelIds == null ? null : (Array.isArray(modelIds) ? modelIds : [modelIds]);
+      const filteredModels = selectedModelIds == null
+        ? data.pressureSensitivity.models
+        : data.pressureSensitivity.models.filter((model) => selectedModelIds.includes(model.modelId));
       return [
         {
-          data,
+          data: {
+            ...data,
+            pressureSensitivity: {
+              ...data.pressureSensitivity,
+              models: filteredModels,
+            },
+          },
           fetching: false,
           error: undefined,
         } as unknown,
@@ -346,7 +359,7 @@ describe('PressureSensitivity page', () => {
     expect(screen.getByText(/Averaged across 2 selected models/)).toBeDefined();
   });
 
-  it('defaults to the model picker and removes the provider filter copy', () => {
+  it('defaults to the shared bar and removes the provider filter copy', () => {
     mockDomainsOnce();
     mockQuery(createPressureData(false));
 
@@ -366,8 +379,8 @@ describe('PressureSensitivity page', () => {
     const pressureQueryArgs = pressureQueryCall[0] as { variables?: Record<string, unknown> };
     expect(pressureQueryArgs.variables).not.toHaveProperty('domainId');
     expect(screen.getByRole('button', { name: /^All domains$/i })).toBeDefined();
-    expect(screen.getByText('Models:')).toBeDefined();
-    expect(screen.getByText(/^Default models$/i)).toBeDefined();
+    expect(screen.getByText(/^Models$/i)).toBeDefined();
+    expect(screen.getByText(/^Default — 2 models$/i)).toBeDefined();
     expect(screen.queryByText('Provider')).toBeNull();
     expect(
       screen.queryByText(
@@ -406,23 +419,19 @@ describe('PressureSensitivity page', () => {
 
     let valueCells = within(valueRow).getAllByRole('cell');
     expect(valueCells[1]?.textContent ?? '').toBe('60.0%');
-    expect(screen.getByText('Alpha ↔ Beta')).toBeDefined();
+    expect(screen.getByText(/Pick a single model in the bar above to view the pair-by-pair grid\./)).toBeDefined();
+    expect(screen.queryByText('Alpha ↔ Beta')).toBeNull();
     expect(screen.queryByText('Gamma ↔ Delta')).toBeNull();
 
-    const gridLabel = screen.getByText('Show grids for');
-    const gridPickerButton = gridLabel.nextElementSibling;
-    if (!(gridPickerButton instanceof HTMLButtonElement)) {
-      throw new Error('Missing grid picker button');
-    }
+    fireEvent.click(screen.getByText(/^Default — 2 models$/i));
+    fireEvent.click(screen.getByRole('button', { name: /^Model A$/i }));
 
-    fireEvent.click(gridPickerButton);
-    fireEvent.click(screen.getByRole('option', { name: 'Model B' }));
-
-    expect(screen.queryByText('Alpha ↔ Beta')).toBeNull();
+    expect(screen.queryByText(/Pick a single model in the bar above to view the pair-by-pair grid\./)).toBeNull();
     expect(screen.getByText('Gamma ↔ Delta')).toBeDefined();
+    expect(screen.queryByText('Alpha ↔ Beta')).toBeNull();
 
     valueCells = within(valueRow).getAllByRole('cell');
-    expect(valueCells[1]?.textContent ?? '').toBe('60.0%');
-    expect(screen.getByText(/Averaged across 2 selected models/)).toBeDefined();
+    expect(valueCells[1]?.textContent ?? '').toBe('80.0%');
+    expect(screen.getByText(/Averaged across 1 selected model/)).toBeDefined();
   });
 });
