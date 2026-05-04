@@ -78,7 +78,7 @@ describe('PressureSensitivityDetail', () => {
 
     expect(screen.getByText('Pressure Response by Value Pair')).toBeDefined();
     expect(screen.getByText('Value Pair')).toBeDefined();
-    expect(screen.getByText('Baseline')).toBeDefined();
+    expect(screen.getByText('Balanced')).toBeDefined();
     expect(screen.getByText('Push toward first')).toBeDefined();
     expect(screen.getByText('Push toward other')).toBeDefined();
     expect(screen.getByText('Pressure response')).toBeDefined();
@@ -94,7 +94,7 @@ describe('PressureSensitivityDetail', () => {
 
   it('shows the thin-pool reason on the dash pressure-response cell', () => {
     vi.useFakeTimers();
-    // directional-thin: pushTowardFirstRate null, pushTowardSecondRate/baselineRate available
+    // directional-thin: pushTowardFirstRate null, pushTowardSecondRate/balancedRate available
     renderDetail(
       createModel([
         createPair('alpha::delta', 'Alpha', 'Delta', null, 0.5, null, 0.6, null, null, 'directional-thin', 17),
@@ -102,7 +102,7 @@ describe('PressureSensitivityDetail', () => {
     );
 
     const row = getRow('Alpha ↔ Delta');
-    // Pressure response is column index 4 (Value Pair=0, Baseline=1, Push1=2, Push2=3, Response=4, Trials=5)
+    // Pressure response is column index 4 (Value Pair=0, Balanced=1, Push1=2, Push2=3, Response=4, Trials=5)
     const cells = within(row).getAllByRole('cell');
     const responseCell = cells[4];
     if (!responseCell) throw new Error('Expected pressure response cell at index 4');

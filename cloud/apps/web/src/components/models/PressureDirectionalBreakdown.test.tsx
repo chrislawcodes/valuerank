@@ -178,7 +178,7 @@ describe('PressureDirectionalBreakdown', () => {
 
     const overallTrigger = screen.getByRole('button', { name: /show overall help/i });
     fireEvent.focus(overallTrigger);
-    expect(screen.getByRole('tooltip').textContent ?? '').toContain('Win-rate lift above balanced baseline');
+    expect(screen.getByRole('tooltip').textContent ?? '').toContain('Win-rate lift above balanced');
     fireEvent.blur(overallTrigger);
 
     const ethicsTrigger = screen.getByRole('button', { name: /show ethics help/i });

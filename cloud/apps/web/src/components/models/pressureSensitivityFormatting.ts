@@ -9,7 +9,7 @@ export const SUMMARY_PRESSURE_RESPONSE_TOOLTIP =
 export const PAIR_PRESSURE_RESPONSE_TOOLTIP =
   'Signed push-rate difference: Push toward first minus Push toward other, in percentage points. The CI is the Newcombe 95% confidence interval for the difference of two proportions.';
 
-export const BASELINE_TOOLTIP =
+export const BALANCED_TOOLTIP =
   'Win rate when own and opponent pressure are both at moderate levels. Used as the reference for the push columns.';
 
 export const PUSH_TOWARD_FIRST_TOOLTIP =
@@ -19,7 +19,7 @@ export const PUSH_TOWARD_OTHER_TOOLTIP =
   "Win rate when the other value's pressure is high (levels 4–5) and the first value's pressure is moderate. A higher rate means the model picks the other value more under pressure.";
 
 export const TRIALS_TOOLTIP =
-  'Qualifying scored observations that contributed to the Baseline, Push toward first, and Push toward other rates. These observations feed the pooled rates used to compute the Pressure response and its confidence interval.';
+  'Qualifying scored observations that contributed to the Balanced, Push toward first, and Push toward other rates. These observations feed the pooled rates used to compute the Pressure response and its confidence interval.';
 
 export function formatPercent(value: number): string {
   return `${(value * 100).toFixed(1)}%`;
@@ -67,7 +67,7 @@ export function reasonHoverText(reason: string | null | undefined): string {
     return 'Neither direction pool has enough vignette observations. This pair needs more coverage to compute a pressure response.';
   }
   if (reason === 'baseline-thin') {
-    return 'Pressure response is defined but the baseline pool does not yet have enough vignette observations.';
+    return 'Pressure response is defined but the balanced pool does not yet have enough vignette observations.';
   }
   return '';
 }
