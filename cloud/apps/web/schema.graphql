@@ -2115,6 +2115,9 @@ type PressureSensitivityModel {
   modelId: String!
   pressureResponseSummary: PressureResponseSummary!
   providerName: String!
+  pushedAgainstEffect: Float
+  pushedEffectPairsUsed: Int!
+  pushedForEffect: Float
   unscoredCount: Int!
   valuePairs: [PressureSensitivityValuePair!]!
   valueRates: [PressureSensitivityValueRate!]!
