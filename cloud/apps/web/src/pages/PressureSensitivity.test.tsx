@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { PressureSensitivity } from './PressureSensitivity';
+import { AVAILABLE_SIGNATURES_QUERY } from '../api/operations/available-signatures';
 import { DOMAIN_AVAILABLE_SIGNATURES_QUERY } from '../api/operations/domainAnalysis';
 import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/llm';
 import { PRESSURE_SENSITIVITY_QUERY } from '../api/operations/pressureSensitivity';
@@ -243,6 +244,18 @@ function mockQuery(data: PressureSensitivityQueryResult) {
         vi.fn(),
       ] as unknown as ReturnType<typeof useQuery>;
     }
+    if (query === AVAILABLE_SIGNATURES_QUERY) {
+      return [
+        {
+          data: {
+            availableSignatures: [{ signature: 'vnewtd', mostRecentRunAt: '2025-01-01T00:00:00.000Z' }],
+          },
+          fetching: false,
+          error: undefined,
+        } as unknown,
+        vi.fn(),
+      ] as unknown as ReturnType<typeof useQuery>;
+    }
     if (query === LLM_MODELS_QUERY) {
       return [
         {
@@ -338,11 +351,21 @@ describe('PressureSensitivity page', () => {
     mockQuery(createPressureData(false));
 
     render(
-      <MemoryRouter initialEntries={['/models/pressure-sensitivity?domainId=domain-a&signature=vnewtd']}>
+      <MemoryRouter initialEntries={['/models/pressure-sensitivity']}>
         <PressureSensitivity />
       </MemoryRouter>,
     );
 
+    const pressureQueryCalls = mockedUseQuery.mock.calls.filter(
+      (call) => (call[0] as { query?: unknown }).query === PRESSURE_SENSITIVITY_QUERY,
+    );
+    const pressureQueryCall = pressureQueryCalls[pressureQueryCalls.length - 1];
+    if (pressureQueryCall == null) {
+      throw new Error('Missing pressure sensitivity query call');
+    }
+    const pressureQueryArgs = pressureQueryCall[0] as { variables?: Record<string, unknown> };
+    expect(pressureQueryArgs.variables).not.toHaveProperty('domainId');
+    expect(screen.getByText('All domains')).toBeDefined();
     expect(screen.getByText('Models:')).toBeDefined();
     expect(screen.getByText('Default models')).toBeDefined();
     expect(screen.queryByText('Provider')).toBeNull();
