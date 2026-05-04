@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from 'urql';
 import { useSearchParams } from 'react-router-dom';
+import { AnalysisContextBar } from '../components/analysis/AnalysisContextBar';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Loading } from '../components/ui/Loading';
-import { Select } from '../components/ui/Select';
 import {
   DOMAIN_ANALYSIS_QUERY,
   DOMAIN_ANALYSIS_QUERY_LEGACY,
@@ -183,98 +183,84 @@ export function ModelsGroups() {
     [data?.domainAnalysis.models, modelsAnalysisData?.modelsAnalysis.models],
   );
   const isAllDomains = selectedScope === 'ALL_DOMAINS';
-  const domainSelectionSection = (
-    <section className="rounded-lg border border-gray-200 bg-white p-4">
-      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h2 className="text-sm font-semibold text-gray-900">Domain Selection</h2>
-          <p className="text-xs text-gray-600">
-            {isAllDomains
-              ? 'Cross-domain analysis is read-only and pools every visible domain that matches the selected signature.'
-              : 'Model groups are shown from the latest saved snapshot for this domain.'}
-          </p>
-        </div>
-        <div className="flex flex-col gap-2 md:flex-row md:items-end">
-          <div className="min-w-[210px]">
-            <Select
-              label="Domain scope"
-              options={[
-                { value: ALL_DOMAINS_SCOPE, label: 'All domains' },
-                ...domains.map((domain) => ({ value: domain.id, label: domain.name })),
-              ]}
-              value={isAllDomains ? ALL_DOMAINS_SCOPE : selectedDomainId}
-              onChange={(value) => {
-                if (value === ALL_DOMAINS_SCOPE) {
-                  setSelectedScope('ALL_DOMAINS');
-                  return;
-                }
-                setSelectedScope('DOMAIN');
-                setSelectedDomainId(value);
-              }}
-              disabled={domainsLoading || (domains.length === 0 && !isAllDomains)}
-            />
-          </div>
-          <div className="min-w-[210px]">
-            <Select
-              label="Signature"
-              options={
-                signatureOptions.length === 0
-                  ? [{ value: '', label: 'No signatures with completed runs', disabled: true }]
-                  : signatureOptions.map((option) => ({
-                    value: option.signature,
-                    label: formatSignatureOptionLabel(option),
-                  }))
-              }
-              value={selectedSignature}
-              onChange={(value) => setSelectedSignature(value)}
-              disabled={signaturesLoading || signatureOptions.length === 0}
-            />
-          </div>
-        </div>
-      </div>
-    </section>
+  const contextBar = (
+    <AnalysisContextBar
+      domain={{
+        label: 'Domain',
+        value: isAllDomains ? ALL_DOMAINS_SCOPE : selectedDomainId,
+        options: [
+          { value: ALL_DOMAINS_SCOPE, label: 'All domains' },
+          ...domains.map((domain) => ({ value: domain.id, label: domain.name })),
+        ],
+        onChange: (value) => {
+          if (value === ALL_DOMAINS_SCOPE) {
+            setSelectedScope('ALL_DOMAINS');
+            return;
+          }
+          setSelectedScope('DOMAIN');
+          setSelectedDomainId(value);
+        },
+        disabled: domainsLoading || (domains.length === 0 && !isAllDomains),
+      }}
+      signature={{
+        label: 'Signature',
+        value: selectedSignature,
+        options:
+          signatureOptions.length === 0
+            ? [{ value: '', label: 'No signatures with completed runs', disabled: true }]
+            : signatureOptions.map((option) => ({
+              value: option.signature,
+              label: formatSignatureOptionLabel(option),
+            })),
+        onChange: (value) => setSelectedSignature(value),
+        disabled: signaturesLoading || signatureOptions.length === 0,
+      }}
+    />
   );
 
   if (domainsError != null || signaturesError != null || error != null || modelsAnalysisError != null) {
     return (
-      <div className="space-y-6">
-        {domainSelectionSection}
-        <ErrorMessage message={`Failed to load model groups report: ${(domainsError ?? signaturesError ?? error ?? modelsAnalysisError)?.message ?? 'Unknown error'}`} />
-      </div>
+      <>
+        {contextBar}
+        <div className="space-y-6 px-4 py-6">
+          <ErrorMessage message={`Failed to load model groups report: ${(domainsError ?? signaturesError ?? error ?? modelsAnalysisError)?.message ?? 'Unknown error'}`} />
+        </div>
+      </>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {domainSelectionSection}
+    <>
+      {contextBar}
+      <div className="space-y-6 px-4 py-6">
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-teal-700">Models</p>
+          <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Model Groups</h1>
+          <p className="max-w-3xl text-sm text-gray-600">
+            Clustered model families for the selected domain and signature.
+          </p>
+          {cacheStatusCopy != null && (
+            <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+              <span className={`inline-flex rounded-full border px-2.5 py-1 font-semibold ${cacheStatusCopy.badgeClassName}`}>
+                {cacheStatusCopy.badgeLabel}
+              </span>
+              <span>{cacheStatusCopy.detail}</span>
+            </div>
+          )}
+        </div>
 
-      <div className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-teal-700">Models</p>
-        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Model Groups</h1>
-        <p className="max-w-3xl text-sm text-gray-600">
-          Clustered model families for the selected domain and signature.
-        </p>
-        {cacheStatusCopy != null && (
-          <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
-            <span className={`inline-flex rounded-full border px-2.5 py-1 font-semibold ${cacheStatusCopy.badgeClassName}`}>
-              {cacheStatusCopy.badgeLabel}
-            </span>
-            <span>{cacheStatusCopy.detail}</span>
+        {showPageLoader ? (
+          <Loading size="lg" text="Loading model groups..." />
+        ) : (
+          <div className="space-y-6">
+            <ModelGroupsSection
+              clusterAnalysis={data?.domainAnalysis.clusterAnalysis}
+              models={models}
+            />
+            <ModelSimilarityTableSection models={models} />
           </div>
         )}
       </div>
-
-      {showPageLoader ? (
-        <Loading size="lg" text="Loading model groups..." />
-      ) : (
-        <div className="space-y-6">
-          <ModelGroupsSection
-            clusterAnalysis={data?.domainAnalysis.clusterAnalysis}
-            models={models}
-          />
-          <ModelSimilarityTableSection models={models} />
-        </div>
-      )}
-    </div>
+    </>
   );
 }

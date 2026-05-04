@@ -152,7 +152,7 @@ describe('ModelsGroups', () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByRole('heading', { name: 'Domain Selection' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /domain:/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Model Groups' })).toBeInTheDocument();
     expect(screen.getByText(/mock model groups section/i)).toBeInTheDocument();
 
