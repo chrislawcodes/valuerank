@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from 'urql';
 import { MODELS_ANALYSIS_QUERY, type ModelsAnalysisQueryResult } from '../api/operations/modelsAnalysis';
 import { AVAILABLE_SIGNATURES_QUERY, type AvailableSignaturesQueryResult } from '../api/operations/available-signatures';
 import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/llm';
 import { Button } from '../components/ui/Button';
+import { CopyVisualButton } from '../components/ui/CopyVisualButton';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Loading } from '../components/ui/Loading';
 import { Select } from '../components/ui/Select';
@@ -262,12 +263,12 @@ export function DomainValueShiftHeatmap() {
   const domainColumnWidth = heatmap.columns.length > 0 ? `${100 / heatmap.columns.length}%` : '100%';
   const isAllModels = selectedModelId === ALL_MODELS_OPTION_VALUE;
   const loading = fetching && data == null;
+  const tableRef = useRef<HTMLDivElement>(null);
 
   return (
     <div className="space-y-6">
       <div className="space-y-2">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-teal-700">Models</p>
-        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Domain Shifts by Value</h1>
         <p className="max-w-3xl text-sm text-gray-600">
           Exploratory heatmap for domain-associated value shifts. Toggle between percentage-point shifts and
           straight domain win rates, then click any column header to sort.
@@ -327,20 +328,17 @@ export function DomainValueShiftHeatmap() {
       )}
 
       {!loading && models.length > 0 && heatmap.eligibleDomainCount >= 2 && (
-        <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
+        <section ref={tableRef} className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
           <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold text-gray-900">{isAllModels ? 'Default models' : selectedModel?.label ?? 'Default models'}</h2>
-              <p className="text-sm text-gray-600">
-                {isAllModels
-                  ? 'Averages are across default models. Click any column header to sort. Evidence counts are shown in each cell detail.'
-                  : 'Click any column header to sort. Evidence counts are shown in each cell detail.'}{' '}
-                Signature: {selectedSignature}.
-              </p>
             </div>
-            <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
-              <span className="font-semibold text-gray-800">Metric:</span>{' '}
-              {displayMode === 'shift' ? 'percentage-point shift, not percent change' : 'raw domain win rate'}
+            <div className="flex items-center gap-2">
+              <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+                <span className="font-semibold text-gray-800">Metric:</span>{' '}
+                {displayMode === 'shift' ? 'percentage-point shift, not percent change' : 'raw domain win rate'}
+              </div>
+              <CopyVisualButton targetRef={tableRef} label="domain shifts table" />
             </div>
           </div>
 
