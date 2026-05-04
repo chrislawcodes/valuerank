@@ -89,6 +89,7 @@ Once the above are resolved:
 - [ ] Review with Ari
 
 ### Analysis Reports
+- [x] Model Groups page now includes a win-rate weighted Euclidean similarity table with a distance/similarity toggle and per-pair detail drawer.
 - [x] Domain Shifts by Value heatmap implemented at `/models/domain-shifts`; focused tests and web preflight pass.
 - [x] Domain Shifts readability controls added locally: cells can toggle between shift and raw win rate, and table columns are sortable.
 - [x] Domain Shifts model picker now groups default models first and separates non-default models with `---` before alphabetical non-default options.
