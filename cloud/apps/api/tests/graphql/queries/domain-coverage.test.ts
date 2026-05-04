@@ -369,47 +369,79 @@ describe('deduplicateRunsByGroupId', () => {
 });
 
 describe('getCoverageDirection', () => {
-  it('returns the trimmed string for a normal direction token', () => {
-    // Normalizes to PascalCase_Underscore to match COVERAGE_VALUE_KEYS.
-    // Prod tokens are lowercase (e.g. "career"); keys are "Career".
-    expect(getCoverageDirection({ jobChoiceValueFirst: 'career' })).toBe('Career');
+  function makeConfig(valueFirstToken: string) {
+    return {
+      definitionSnapshot: {
+        components: {
+          value_first: { token: valueFirstToken },
+        },
+      },
+    };
+  }
+
+  describe('primary path — definitionSnapshot.components.value_first.token', () => {
+    it('returns the token from the snapshot', () => {
+      expect(getCoverageDirection(makeConfig('career'))).toBe('Career');
+    });
+
+    it('trims whitespace from the snapshot token', () => {
+      expect(getCoverageDirection(makeConfig('  career  '))).toBe('Career');
+    });
+
+    it('normalizes multi-word snake_case tokens', () => {
+      expect(getCoverageDirection(makeConfig('conformity_interpersonal'))).toBe('Conformity_Interpersonal');
+    });
+
+    it('snapshot takes priority over a conflicting jobChoiceValueFirst', () => {
+      // Reproduces the backfill bug: old C→A runs have jobChoiceValueFirst='achievement'
+      // but value_first.token='conformity_interpersonal'. Snapshot must win.
+      expect(getCoverageDirection({
+        ...makeConfig('conformity_interpersonal'),
+        jobChoiceValueFirst: 'achievement',
+      })).toBe('Conformity_Interpersonal');
+    });
+
+    it('returns null when snapshot token is empty', () => {
+      expect(getCoverageDirection(makeConfig(''))).toBeNull();
+    });
+
+    it('returns null when snapshot token is whitespace-only', () => {
+      expect(getCoverageDirection(makeConfig('   '))).toBeNull();
+    });
   });
 
-  it('trims whitespace', () => {
-    expect(getCoverageDirection({ jobChoiceValueFirst: '  career  ' })).toBe('Career');
+  describe('fallback path — deprecated jobChoiceValueFirst', () => {
+    it('returns the trimmed string when no snapshot is present', () => {
+      expect(getCoverageDirection({ jobChoiceValueFirst: 'career' })).toBe('Career');
+    });
+
+    it('trims whitespace', () => {
+      expect(getCoverageDirection({ jobChoiceValueFirst: '  career  ' })).toBe('Career');
+    });
+
+    it('returns null for an empty string', () => {
+      expect(getCoverageDirection({ jobChoiceValueFirst: '' })).toBeNull();
+    });
+
+    it('returns null for whitespace-only', () => {
+      expect(getCoverageDirection({ jobChoiceValueFirst: '   ' })).toBeNull();
+    });
+
+    it('returns null for a non-string number value', () => {
+      expect(getCoverageDirection({ jobChoiceValueFirst: 42 })).toBeNull();
+    });
+
+    it('returns null for a non-string boolean value', () => {
+      expect(getCoverageDirection({ jobChoiceValueFirst: true })).toBeNull();
+    });
   });
 
-  it('returns null for an empty string', () => {
-    expect(getCoverageDirection({ jobChoiceValueFirst: '' })).toBeNull();
-  });
-
-  it('returns null for whitespace-only', () => {
-    expect(getCoverageDirection({ jobChoiceValueFirst: '   ' })).toBeNull();
-  });
-
-  it('returns null when the field is missing', () => {
+  it('returns null when neither source is present', () => {
     expect(getCoverageDirection({})).toBeNull();
-  });
-
-  it('returns null for a non-string number value', () => {
-    expect(getCoverageDirection({ jobChoiceValueFirst: 42 })).toBeNull();
-  });
-
-  it('returns null for a non-string boolean value', () => {
-    expect(getCoverageDirection({ jobChoiceValueFirst: true })).toBeNull();
   });
 
   it('returns null for null config', () => {
     expect(getCoverageDirection(null)).toBeNull();
-  });
-
-  it('returns the value even when launch mode is not PAIRED_BATCH (trust-but-do-not-validate tripwire)', () => {
-    // The algorithm trusts jobChoiceValueFirst regardless of launch mode.
-    // If a future change adds a launch-mode guard, this test should fail
-    // and force a deliberate update.
-    expect(
-      getCoverageDirection({ jobChoiceLaunchMode: 'AD_HOC_BATCH', jobChoiceValueFirst: 'career' }),
-    ).toBe('Career');
   });
 });
 

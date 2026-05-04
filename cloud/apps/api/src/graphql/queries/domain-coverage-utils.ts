@@ -278,18 +278,45 @@ export function getCoverageBatchGroupId(runConfig: unknown): string | null {
 }
 
 /**
- * Read the direction token off a Run's config. Returns null for missing,
- * blank, or non-string `jobChoiceValueFirst`. Trimmed.
+ * Read the direction token off a Run's config.
  *
- * Defensive against any non-object input (number, boolean, etc.); returns
- * null without touching the value.
+ * Primary source: `definitionSnapshot.components.value_first.token` — the
+ * value that assembleTemplate always renders first, set at definition-creation
+ * time and immutable thereafter.
+ *
+ * Fallback: deprecated `jobChoiceValueFirst` field. This field was backfilled
+ * with incorrect logic for older runs on B-first definitions and must not be
+ * trusted as the primary signal.
+ *
+ * Returns null when neither source yields a non-blank string. Defensive
+ * against any non-object input.
  */
 export function getCoverageDirection(runConfig: unknown): string | null {
   if (typeof runConfig !== 'object' || runConfig === null) return null;
-  const config = runConfig as { jobChoiceValueFirst?: unknown };
-  if (typeof config.jobChoiceValueFirst !== 'string') return null;
-  const trimmed = config.jobChoiceValueFirst.trim();
-  return trimmed.length > 0 ? toPascalCaseKey(trimmed) : null;
+  const config = runConfig as Record<string, unknown>;
+
+  const snapshot = config.definitionSnapshot;
+  if (typeof snapshot === 'object' && snapshot !== null) {
+    const components = (snapshot as Record<string, unknown>).components;
+    if (typeof components === 'object' && components !== null) {
+      const valueFirst = (components as Record<string, unknown>).value_first;
+      if (typeof valueFirst === 'object' && valueFirst !== null) {
+        const token = (valueFirst as Record<string, unknown>).token;
+        if (typeof token === 'string' && token.trim().length > 0) {
+          return toPascalCaseKey(token.trim());
+        }
+      }
+    }
+  }
+
+  // Deprecated fallback — may be incorrect for runs backfilled before 2026-05.
+  const jcvf = config.jobChoiceValueFirst;
+  if (typeof jcvf === 'string') {
+    const trimmed = jcvf.trim();
+    return trimmed.length > 0 ? toPascalCaseKey(trimmed) : null;
+  }
+
+  return null;
 }
 
 /**
@@ -397,7 +424,7 @@ export function selectPrimaryDefinitionCounts(
     if (log != null) {
       log.warn(
         { cellKey, directions: Array.from(merged.keys()), definitionIds: uniqueDefinitionIds },
-        '>2 distinct jobChoiceValueFirst tokens in single coverage cell; using min of two largest',
+        '>2 distinct direction tokens in single coverage cell; using min of two largest',
       );
     }
   }
