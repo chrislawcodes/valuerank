@@ -207,7 +207,7 @@ describe('DomainAnalysis', () => {
       </MemoryRouter>,
     );
 
-    const domainSelection = await screen.findByRole('heading', { name: 'Domain Selection' });
+    const domainSelection = await screen.findByRole('button', { name: /all domains/i });
     const findingsHeading = screen.getByRole('heading', { name: 'Findings' });
     const valuePriorities = screen.getByText(/mock value priorities section/i);
     const dominance = screen.getByText(/mock dominance section/i);
