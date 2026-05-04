@@ -1,6 +1,7 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/Table';
 import { HeaderTooltip } from '../ui/HeaderTooltip';
+import { ScreenshotButton } from '../ui/ScreenshotButton';
 import type { PressureSensitivityModel } from '../../api/operations/pressureSensitivity';
 import { formatSignedPoints } from './pressureSensitivityFormatting';
 
@@ -25,6 +26,7 @@ function domainTooltip(domainName: string): string {
 }
 
 export function PressureDirectionalBreakdown({ models }: Props) {
+  const tableRef = useRef<HTMLDivElement>(null);
   const domains = useMemo<Domain[]>(() => {
     const domainMap = new Map<string, string>();
     for (const model of models) {
@@ -64,13 +66,16 @@ export function PressureDirectionalBreakdown({ models }: Props) {
   if (rows.length === 0) return null;
 
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
-      <div className="mb-3">
-        <h2 className="text-lg font-semibold text-gray-900">Pressure sensitivity by domain</h2>
-        <p className="text-sm text-gray-600">
-          How much each model shifts toward a value when that value is explicitly pressed, versus a
-          neutral baseline. Broken down by domain to show where pressure sensitivity is strongest.
-        </p>
+    <section ref={tableRef} className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">Pressure sensitivity by domain</h2>
+          <p className="text-sm text-gray-600">
+            How much each model shifts toward a value when that value is explicitly pressed, versus a
+            neutral baseline. Broken down by domain to show where pressure sensitivity is strongest.
+          </p>
+        </div>
+        <ScreenshotButton targetRef={tableRef} label="pressure sensitivity by domain" />
       </div>
       <Table variant="bordered">
         <TableHeader variant="bordered">
