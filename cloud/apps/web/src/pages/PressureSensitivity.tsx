@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from 'urql';
 import { useSearchParams } from 'react-router-dom';
+import { formatVnewLabel, isVnewSignature, parseVnewTemperature } from '@valuerank/shared/trial-signature';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Loading } from '../components/ui/Loading';
 import { useDomains } from '../hooks/useDomains';
+import { AVAILABLE_SIGNATURES_QUERY, type AvailableSignaturesQueryResult } from '../api/operations/available-signatures';
 import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/llm';
 import {
   DOMAIN_AVAILABLE_SIGNATURES_QUERY,
@@ -23,9 +25,26 @@ import { PressureSensitivityCrossValueMap } from '../components/models/PressureS
 import { PressureSensitivitySanityCheck } from '../components/models/PressureSensitivitySanityCheck';
 import { PressureSensitivityLimitations } from '../components/models/PressureSensitivityLimitations';
 import { PressureSensitivityFilters } from '../components/models/PressureSensitivityFilters';
-import { formatSignatureOptionLabel } from '../utils/domainAnalysisUtils';
 
 const DEFAULT_SIGNATURE = 'vnewtd';
+
+function formatPressureSensitivitySignatureLabel(signature: string): string {
+  if (!isVnewSignature(signature)) {
+    const defaultMatch = signature.match(/^v(\d+)td$/i);
+    if (defaultMatch != null) return `v${defaultMatch[1]} @ default`;
+
+    const tempMatch = signature.match(/^v(\d+)t(.+)$/i);
+    if (tempMatch != null) return `v${tempMatch[1]} @ t=${tempMatch[2]}`;
+
+    return signature;
+  }
+
+  try {
+    return formatVnewLabel(parseVnewTemperature(signature));
+  } catch {
+    return signature;
+  }
+}
 
 export function PressureSensitivity() {
   const { domains, queryLoading: domainsLoading, error: domainsError } = useDomains();
@@ -35,29 +54,39 @@ export function PressureSensitivity() {
   // (per Gemini Slice B review MEDIUM).
   const domainParam = rawDomainParam === '' ? null : rawDomainParam;
   const signatureParam = searchParams.get('signature');
-  const hasDomainParam = domainParam != null;
-  const domainFilter = domainParam === 'all' ? null : domainParam;
+  const hasExplicitDomain = domainParam != null && domainParam !== 'all';
+  const urlDomainId = hasExplicitDomain ? domainParam : null;
   const [selectedModelIds, setSelectedModelIds] = useState<string[] | null>(null);
 
-  const defaultDomainId = domains[0]?.id ?? null;
-  const urlDomainId = hasDomainParam ? domainFilter : defaultDomainId;
-  const hasExplicitDomain = hasDomainParam && domainParam !== 'all';
-
-  const [{ data: signatureData, error: signatureError }] = useQuery<
+  const [{ data: domainSignatureData, error: domainSignatureError }] = useQuery<
     DomainAvailableSignaturesQueryResult,
     { domainId: string }
   >({
     query: DOMAIN_AVAILABLE_SIGNATURES_QUERY,
     variables: {
-      domainId: hasExplicitDomain && urlDomainId != null ? urlDomainId : (defaultDomainId ?? ''),
+      domainId: urlDomainId ?? '',
     },
-    pause: !hasExplicitDomain && defaultDomainId == null,
+    pause: !hasExplicitDomain,
     requestPolicy: 'cache-and-network',
   });
 
+  const [{ data: globalSignatureData, error: globalSignatureError }] = useQuery<AvailableSignaturesQueryResult>({
+    query: AVAILABLE_SIGNATURES_QUERY,
+    pause: hasExplicitDomain,
+    requestPolicy: 'cache-and-network',
+  });
+
+  const signatureData = hasExplicitDomain ? domainSignatureData : globalSignatureData;
+  const signatureError = hasExplicitDomain ? domainSignatureError : globalSignatureError;
+
   const availableSignatures = useMemo(
-    () => signatureData?.domainAvailableSignatures ?? [],
-    [signatureData],
+    () => {
+      if (hasExplicitDomain) {
+        return domainSignatureData?.domainAvailableSignatures.map((option) => option.signature) ?? [];
+      }
+      return globalSignatureData?.availableSignatures.map((entry) => entry.signature) ?? [];
+    },
+    [domainSignatureData, globalSignatureData, hasExplicitDomain],
   );
 
   const [{ data: llmModelsData, fetching: llmModelsLoading, error: llmModelsError }] = useQuery<LlmModelsQueryResult>({
@@ -109,16 +138,15 @@ export function PressureSensitivity() {
   }, [activeModelIdSet, activeModels.length, defaultModelIds, llmModelsLoading]);
 
   // Default signature picker: honor URL first, otherwise prefer the canonical
-  // DEFAULT_SIGNATURE if available for this domain, otherwise first available.
+  // DEFAULT_SIGNATURE if available for the current signature scope, otherwise first available.
   const signatureChoice = (() => {
     if (signatureParam != null) return signatureParam;
-    if (hasDomainParam && domainParam === 'all') return DEFAULT_SIGNATURE;
     if (signatureError != null) return DEFAULT_SIGNATURE;
     if (signatureData == null) return null;
-    if (availableSignatures.some((option) => option.signature === DEFAULT_SIGNATURE)) {
+    if (availableSignatures.some((option) => option === DEFAULT_SIGNATURE)) {
       return DEFAULT_SIGNATURE;
     }
-    return availableSignatures[0]?.signature ?? DEFAULT_SIGNATURE;
+    return availableSignatures[0] ?? DEFAULT_SIGNATURE;
   })();
   const selectedSignature = signatureChoice ?? DEFAULT_SIGNATURE;
 
@@ -126,14 +154,12 @@ export function PressureSensitivity() {
   // URLs stay in sync with what the page is actually querying.
   useEffect(() => {
     if (signatureParam != null || signatureChoice == null) return;
-    if (hasDomainParam && domainParam === 'all') {
+    if (urlDomainId == null) {
       setSearchParams({ domainId: 'all', signature: signatureChoice }, { replace: true });
       return;
     }
-    if (urlDomainId != null) {
-      setSearchParams({ domainId: urlDomainId, signature: signatureChoice }, { replace: true });
-    }
-  }, [domainParam, hasDomainParam, setSearchParams, signatureChoice, signatureParam, urlDomainId]);
+    setSearchParams({ domainId: urlDomainId, signature: signatureChoice }, { replace: true });
+  }, [setSearchParams, signatureChoice, signatureParam, urlDomainId]);
 
   const queryVariables = useMemo<PressureSensitivityQueryVariables>(() => ({
     ...(urlDomainId != null ? { domainId: urlDomainId } : {}),
@@ -147,7 +173,7 @@ export function PressureSensitivity() {
   >({
     query: PRESSURE_SENSITIVITY_QUERY,
     variables: queryVariables,
-    pause: (!hasDomainParam && urlDomainId == null) || signatureChoice == null || (selectedModelIds == null && !noActiveModels),
+    pause: signatureChoice == null || (selectedModelIds == null && !noActiveModels),
     requestPolicy: 'cache-and-network',
   });
 
@@ -173,7 +199,7 @@ export function PressureSensitivity() {
 
   const domainOptions = useMemo(() => domains.map((d) => ({ value: d.id, label: d.name })), [domains]);
   const signatureOptions = useMemo(
-    () => availableSignatures.map((option) => ({ value: option.signature, label: formatSignatureOptionLabel(option) })),
+    () => availableSignatures.map((signature) => ({ value: signature, label: formatPressureSensitivitySignatureLabel(signature) })),
     [availableSignatures],
   );
 
@@ -207,7 +233,7 @@ export function PressureSensitivity() {
     );
   }
 
-  if (!domainsLoading && domains.length === 0 && !hasDomainParam) {
+  if (!domainsLoading && domains.length === 0) {
     return (
       <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
         No domains are available yet. Populate domains first, then reopen this report.
