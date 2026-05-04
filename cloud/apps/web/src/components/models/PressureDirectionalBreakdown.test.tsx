@@ -4,23 +4,24 @@ import { PressureDirectionalBreakdown } from './PressureDirectionalBreakdown';
 import { formatSignedPoints } from './pressureSensitivityFormatting';
 import type { PressureSensitivityModel } from '../../api/operations/pressureSensitivity';
 
-type TestPair = {
-  pressureResponse: {
-    baselineRate: number | null;
-    pushTowardFirstRate: number | null;
-    pushTowardSecondRate: number | null;
-  } | null;
-};
-
 function createModel(
   modelId: string,
   label: string,
-  valuePairs: TestPair[],
+  pushedForEffect: number | null,
+  pushedAgainstEffect: number | null,
+  pushedEffectPairsUsed = 1,
 ): PressureSensitivityModel {
   return {
     modelId,
     label,
-    valuePairs,
+    providerName: 'Provider',
+    unscoredCount: 0,
+    pushedForEffect,
+    pushedAgainstEffect,
+    pushedEffectPairsUsed,
+    pressureResponseSummary: { mean: 0.1, rangeMin: 0.05, rangeMax: 0.15, pairsMeasured: 1 },
+    valueRates: [],
+    valuePairs: [],
   } as unknown as PressureSensitivityModel;
 }
 
@@ -40,11 +41,7 @@ function getCells(row: HTMLTableRowElement) {
 
 describe('PressureDirectionalBreakdown', () => {
   it('renders heading and column headers', () => {
-    renderBreakdown([
-      createModel('alpha', 'Alpha', [
-        { pressureResponse: { baselineRate: 0.5, pushTowardFirstRate: 0.7, pushTowardSecondRate: 0.4 } },
-      ]),
-    ]);
+    renderBreakdown([createModel('alpha', 'Alpha', 0.2, 0.1)]);
 
     expect(screen.getByText('Does pressure work both ways?')).toBeDefined();
     expect(screen.getByText('Pushed for')).toBeDefined();
@@ -52,33 +49,28 @@ describe('PressureDirectionalBreakdown', () => {
     expect(screen.getByText('Gap')).toBeDefined();
   });
 
-  it('computes pushed-for, pushed-against, and gap values', () => {
-    const expectedPushedFor = formatSignedPoints(0.2);
-    const expectedPushedAgainst = formatSignedPoints(0.1);
-    const expectedGap = formatSignedPoints(0.1);
-
-    renderBreakdown([
-      createModel('alpha', 'Alpha', [
-        { pressureResponse: { baselineRate: 0.5, pushTowardFirstRate: 0.7, pushTowardSecondRate: 0.4 } },
-        { pressureResponse: { baselineRate: 0.5, pushTowardFirstRate: 0.7, pushTowardSecondRate: 0.4 } },
-      ]),
-    ]);
+  it('displays backend-provided pushed-for, pushed-against, and gap values', () => {
+    renderBreakdown([createModel('alpha', 'Alpha', 0.2, 0.1)]);
 
     const row = getRowByLabel('Alpha');
     const cells = getCells(row);
-    expect(cells[1]?.textContent ?? '').toBe(expectedPushedFor);
-    expect(cells[2]?.textContent ?? '').toBe(expectedPushedAgainst);
-    expect(cells[3]?.textContent ?? '').toBe(expectedGap);
+    expect(cells[1]?.textContent ?? '').toBe(formatSignedPoints(0.2));
+    expect(cells[2]?.textContent ?? '').toBe(formatSignedPoints(0.1));
+    expect(cells[3]?.textContent ?? '').toBe(formatSignedPoints(0.1));
+  });
+
+  it('displays pairs count from backend', () => {
+    renderBreakdown([createModel('alpha', 'Alpha', 0.2, 0.1, 5)]);
+
+    const row = getRowByLabel('Alpha');
+    const cells = getCells(row);
+    expect(cells[4]?.textContent ?? '').toBe('5');
   });
 
   it('sorts by absolute gap descending', () => {
     renderBreakdown([
-      createModel('model-b', 'ModelB', [
-        { pressureResponse: { baselineRate: 0.5, pushTowardFirstRate: 0.55, pushTowardSecondRate: 0.5 } },
-      ]),
-      createModel('model-a', 'ModelA', [
-        { pressureResponse: { baselineRate: 0.5, pushTowardFirstRate: 0.7, pushTowardSecondRate: 0.5 } },
-      ]),
+      createModel('model-b', 'ModelB', 0.55, 0.5),  // gap = 0.05
+      createModel('model-a', 'ModelA', 0.7, 0.5),   // gap = 0.20
     ]);
 
     const rows = screen.getAllByRole('row');
@@ -88,12 +80,8 @@ describe('PressureDirectionalBreakdown', () => {
 
   it('breaks ties alphabetically', () => {
     renderBreakdown([
-      createModel('bravo', 'Bravo', [
-        { pressureResponse: { baselineRate: 0.5, pushTowardFirstRate: 0.7, pushTowardSecondRate: 0.5 } },
-      ]),
-      createModel('alpha', 'Alpha', [
-        { pressureResponse: { baselineRate: 0.5, pushTowardFirstRate: 0.3, pushTowardSecondRate: 0.5 } },
-      ]),
+      createModel('bravo', 'Bravo', 0.7, 0.5),  // gap = 0.2
+      createModel('alpha', 'Alpha', 0.3, 0.5),  // gap = -0.2, same |gap|
     ]);
 
     const rows = screen.getAllByRole('row');
@@ -101,22 +89,20 @@ describe('PressureDirectionalBreakdown', () => {
     expect(rows[2]?.textContent ?? '').toContain('Bravo');
   });
 
-  it('excludes models with zero valid pairs', () => {
+  it('excludes models where pushed effects are null', () => {
     renderBreakdown([
-      createModel('invalid', 'Invalid', [{ pressureResponse: null }]),
-      createModel('valid', 'Valid', [
-        { pressureResponse: { baselineRate: 0.5, pushTowardFirstRate: 0.7, pushTowardSecondRate: 0.4 } },
-      ]),
+      createModel('invalid', 'Invalid', null, null),
+      createModel('valid', 'Valid', 0.7, 0.4),
     ]);
 
     expect(screen.queryByText('Invalid')).toBeNull();
     expect(screen.getByText('Valid')).toBeDefined();
   });
 
-  it('returns null when all models have zero valid pairs', () => {
+  it('returns null when all models have null effects', () => {
     renderBreakdown([
-      createModel('invalid-a', 'Invalid A', [{ pressureResponse: null }]),
-      createModel('invalid-b', 'Invalid B', [{ pressureResponse: null }]),
+      createModel('invalid-a', 'Invalid A', null, null),
+      createModel('invalid-b', 'Invalid B', null, null),
     ]);
 
     expect(screen.queryByText('Does pressure work both ways?')).toBeNull();
@@ -129,11 +115,7 @@ describe('PressureDirectionalBreakdown', () => {
   });
 
   it('uses red text for a negative pushed-for effect', () => {
-    renderBreakdown([
-      createModel('alpha', 'Alpha', [
-        { pressureResponse: { baselineRate: 0.5, pushTowardFirstRate: 0.4, pushTowardSecondRate: 0.4 } },
-      ]),
-    ]);
+    renderBreakdown([createModel('alpha', 'Alpha', -0.1, 0.1)]);
 
     const row = getRowByLabel('Alpha');
     const cell = within(row).getByText(formatSignedPoints(-0.1)).closest('td');
@@ -141,11 +123,7 @@ describe('PressureDirectionalBreakdown', () => {
   });
 
   it('uses gray text for a positive pushed-for effect', () => {
-    renderBreakdown([
-      createModel('alpha', 'Alpha', [
-        { pressureResponse: { baselineRate: 0.5, pushTowardFirstRate: 0.6, pushTowardSecondRate: 0.4 } },
-      ]),
-    ]);
+    renderBreakdown([createModel('alpha', 'Alpha', 0.1, 0.05)]);
 
     const row = getRowByLabel('Alpha');
     const cell = getCells(row)[1];
@@ -154,25 +132,17 @@ describe('PressureDirectionalBreakdown', () => {
   });
 
   it('uses red text for a negative gap', () => {
-    renderBreakdown([
-      createModel('alpha', 'Alpha', [
-        { pressureResponse: { baselineRate: 0.5, pushTowardFirstRate: 0.4, pushTowardSecondRate: 0.3 } },
-      ]),
-    ]);
+    renderBreakdown([createModel('alpha', 'Alpha', 0.3, 0.5)]);  // gap = -0.2
 
     const row = getRowByLabel('Alpha');
     const cell = getCells(row)[3];
     expect(cell?.className ?? '').toContain('text-red-700');
   });
 
-  it('sorts by absolute value', () => {
+  it('sorts by absolute gap — negative gap same magnitude as positive', () => {
     renderBreakdown([
-      createModel('model-b', 'ModelB', [
-        { pressureResponse: { baselineRate: 0.5, pushTowardFirstRate: 0.6, pushTowardSecondRate: 0.5 } },
-      ]),
-      createModel('model-a', 'ModelA', [
-        { pressureResponse: { baselineRate: 0.5, pushTowardFirstRate: 0.3, pushTowardSecondRate: 0.5 } },
-      ]),
+      createModel('model-b', 'ModelB', 0.6, 0.5),  // gap = 0.1
+      createModel('model-a', 'ModelA', 0.3, 0.5),  // gap = -0.2
     ]);
 
     const rows = screen.getAllByRole('row');
@@ -181,15 +151,11 @@ describe('PressureDirectionalBreakdown', () => {
   });
 
   it('shows all four tooltip texts', () => {
-    renderBreakdown([
-      createModel('alpha', 'Alpha', [
-        { pressureResponse: { baselineRate: 0.5, pushTowardFirstRate: 0.7, pushTowardSecondRate: 0.4 } },
-      ]),
-    ]);
+    renderBreakdown([createModel('alpha', 'Alpha', 0.2, 0.1)]);
 
     const pushedForTrigger = screen.getByRole('button', { name: /show pushed for help/i });
     fireEvent.focus(pushedForTrigger);
-    expect(screen.getByRole('tooltip').textContent ?? '').toContain('Average win-rate lift above baseline');
+    expect(screen.getByRole('tooltip').textContent ?? '').toContain('Win-rate lift above balanced baseline');
     fireEvent.blur(pushedForTrigger);
 
     const pushedAgainstTrigger = screen.getByRole('button', { name: /show pushed against help/i });
@@ -204,21 +170,6 @@ describe('PressureDirectionalBreakdown', () => {
 
     const pairsTrigger = screen.getByRole('button', { name: /show pairs help/i });
     fireEvent.focus(pairsTrigger);
-    expect(screen.getByRole('tooltip').textContent ?? '').toContain('sufficient data to compute both directional effects');
-  });
-
-  it('excludes non-finite pairs', () => {
-    renderBreakdown([
-      createModel('alpha', 'Alpha', [
-        { pressureResponse: { baselineRate: 0.5, pushTowardFirstRate: 0.7, pushTowardSecondRate: 0.4 } },
-        { pressureResponse: { baselineRate: 0.5, pushTowardFirstRate: Number.NaN, pushTowardSecondRate: 0.4 } },
-      ]),
-    ]);
-
-    const row = getRowByLabel('Alpha');
-    const cells = getCells(row);
-    expect(cells[4]?.textContent ?? '').toBe('1');
-    expect(cells[1]?.textContent ?? '').toBe(formatSignedPoints(0.2));
-    expect(cells[2]?.textContent ?? '').toBe(formatSignedPoints(0.1));
+    expect(screen.getByRole('tooltip').textContent ?? '').toContain('sufficient data to compute the pushed-for effect');
   });
 });
