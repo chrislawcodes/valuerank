@@ -128,12 +128,6 @@ export function PairDetailDrawer({ open, metric, onClose }: PairDetailDrawerProp
                           <th className="px-4 py-3 text-right font-medium">centered</th>
                           <th className="px-4 py-3 text-right font-medium">product</th>
                         </>
-                      ) : metric.method === 'absolute-value' ? (
-                        <>
-                          <th className="px-4 py-3 text-right font-medium">diff</th>
-                          <th className="px-4 py-3 text-right font-medium">|diff|</th>
-                          <th className="px-4 py-3 text-right font-medium" />
-                        </>
                       ) : (
                         <>
                           <th className="px-4 py-3 text-right font-medium">rank</th>
@@ -168,14 +162,6 @@ export function PairDetailDrawer({ open, metric, onClose }: PairDetailDrawerProp
                                 ? '—'
                                 : formatMetricNumber((step.leftDerived ?? 0) * (step.rightDerived ?? 0))}
                             </td>
-                          </>
-                        ) : metric.method === 'absolute-value' ? (
-                          <>
-                            <td className="px-4 py-3 text-right font-mono text-gray-900">{formatMetricNumber(step.diff)}</td>
-                            <td className="px-4 py-3 text-right font-mono text-gray-900">
-                              {step.diff == null ? '—' : formatMetricNumber(Math.abs(step.diff))}
-                            </td>
-                            <td className="px-4 py-3 text-right font-mono text-gray-900">—</td>
                           </>
                         ) : (
                           <>

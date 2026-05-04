@@ -1,6 +1,6 @@
 import { type ModelEntry, VALUES, VALUE_LABELS, type ValueKey } from '../../data/domainAnalysisData';
 
-export type CalculationMethod = 'weighted-euclidean' | 'cosine' | 'spearman' | 'kendall' | 'absolute-value';
+export type CalculationMethod = 'weighted-euclidean' | 'cosine' | 'spearman' | 'kendall';
 export type MetricView = 'distance' | 'similarity';
 
 export type PairStep = {
@@ -45,7 +45,6 @@ export const CALCULATION_METHODS: Array<{ value: CalculationMethod; label: strin
   { value: 'cosine', label: 'Cosine' },
   { value: 'spearman', label: 'Spearman' },
   { value: 'kendall', label: 'Kendall' },
-  { value: 'absolute-value', label: 'Absolute Value' },
 ];
 
 function clamp01(value: number): number {
@@ -117,12 +116,6 @@ export function getMethodCopy(method: CalculationMethod) {
         summaryLabel: 'Kendall tau-b',
         summaryNote: 'Bigger means the two models are closer.',
         helpCopy: 'We compare every pair of values and count how often the two models keep the same order.',
-      };
-    case 'absolute-value':
-      return {
-        summaryLabel: 'Mean absolute difference',
-        summaryNote: 'Smaller means the two models are closer.',
-        helpCopy: 'We take the absolute value of the win-rate difference for each value, then average them.',
       };
   }
 }
@@ -196,7 +189,7 @@ function cosineSimilarity(xs: number[], ys: number[]): number | null {
 function buildDisplayScores(rawScore: number | null, method: CalculationMethod): { distance: number | null; similarity: number | null } {
   if (rawScore == null) return { distance: null, similarity: null };
 
-  if (method === 'weighted-euclidean' || method === 'absolute-value') {
+  if (method === 'weighted-euclidean') {
     return {
       distance: rawScore,
       similarity: clamp01(1 - rawScore / 100),
@@ -353,45 +346,6 @@ export function computePairMetric(left: ModelEntry, right: ModelEntry, method: C
         { label: 'Sum of rank diff²', value: sumRankDiffSquared },
         { label: 'Pearson correlation of ranks', value: rawScore },
         { label: 'Spearman rho', value: rawScore },
-      ],
-    };
-  }
-
-  if (method === 'absolute-value') {
-    const steps: PairStep[] = comparableValues.map((entry) => {
-      const diff = (entry.leftWinRate ?? 0) - (entry.rightWinRate ?? 0);
-      return {
-        ...entry,
-        leftDerived: null,
-        rightDerived: null,
-        diff,
-        diffSquared: null,
-        weight: null,
-        weightedDiffSquared: null,
-      };
-    });
-
-    const usedValueCount = steps.length;
-    const sumAbsDiff = steps.reduce((sum, step) => sum + Math.abs(step.diff ?? 0), 0);
-    const rawScore = usedValueCount === 0 ? null : sumAbsDiff / usedValueCount;
-    const displayScores = buildDisplayScores(rawScore, method);
-
-    return {
-      left,
-      right,
-      method,
-      steps,
-      kendallSteps: [],
-      usedValueCount,
-      rawScore,
-      distance: displayScores.distance,
-      similarity: displayScores.similarity,
-      summaryLabel: copy.summaryLabel,
-      summaryNote: copy.summaryNote,
-      summaryRows: [
-        { label: 'Sum of |diff|', value: sumAbsDiff },
-        { label: 'Divide by count', value: usedValueCount === 0 ? null : sumAbsDiff / usedValueCount },
-        { label: 'Mean absolute difference', value: rawScore },
       ],
     };
   }
