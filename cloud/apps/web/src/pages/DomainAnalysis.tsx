@@ -504,7 +504,7 @@ export function DomainAnalysis() {
         <>
           <ModelGroupsSection
             clusterAnalysis={data?.domainAnalysis.clusterAnalysis}
-            models={models}
+            models={visibleModels}
             selectedModelId={singleSelectedModelId}
           />
           <ValuePrioritiesSection
