@@ -92,7 +92,7 @@ export function PressureDirectionalBreakdown({ models }: Props) {
           <h2 className="text-lg font-semibold text-gray-900">Pressure sensitivity by domain</h2>
           <p className="text-sm text-gray-600">
             How much each model shifts toward a value when that value is explicitly pressed, versus a
-            neutral baseline. Domain cells show the delta from each model's overall average.
+            neutral baseline. Domain cells show the delta from each model&apos;s overall average.
           </p>
         </div>
         <ScreenshotButton targetRef={tableRef} label="pressure sensitivity by domain" />
