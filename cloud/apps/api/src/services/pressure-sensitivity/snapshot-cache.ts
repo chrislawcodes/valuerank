@@ -24,12 +24,13 @@ const log = createLogger('pressure-sensitivity:cache');
 export function parseSnapshotOutput(raw: unknown): PressureSensitivityResultShape | null {
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const result = raw as PressureSensitivityResultShape;
-  // Backfill fields added after the snapshot was written (pushedEffectPairsUsed is Int! so null crashes).
-  for (const model of result.models) {
-    if ((model as { pushedEffectPairsUsed?: unknown }).pushedEffectPairsUsed == null) {
-      model.pushedEffectPairsUsed = 0;
-    }
-  }
+  // Snapshots written before v1.1.0 don't have pushedForEffect / pushedAgainstEffect.
+  // Return null so the caller falls through to synchronous recompute rather than
+  // serving stale data that makes the "Does pressure work both ways?" table invisible.
+  const missingNewFields = result.models.some(
+    (m) => (m as { pushedEffectPairsUsed?: unknown }).pushedEffectPairsUsed == null,
+  );
+  if (missingNewFields) return null;
   return result;
 }
 
