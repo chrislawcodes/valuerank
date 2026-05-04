@@ -24,7 +24,6 @@ import {
   type ModelsAnalysisQueryVariables,
 } from '../api/operations/modelsAnalysis';
 import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/llm';
-import { ModelGroupsSection } from '../components/domains/ModelGroupsSection';
 import { DominanceSection } from '../components/domains/DominanceSection';
 import { SimilaritySection } from '../components/domains/SimilaritySection';
 import { ValuePrioritiesSection } from '../components/domains/ValuePrioritiesSection';
@@ -502,11 +501,6 @@ export function DomainAnalysis() {
         <Loading size="lg" text="Loading domain analysis..." />
       ) : (
         <>
-          <ModelGroupsSection
-            clusterAnalysis={data?.domainAnalysis.clusterAnalysis}
-            models={visibleModels}
-            selectedModelId={singleSelectedModelId}
-          />
           <ValuePrioritiesSection
             models={visibleModels}
             selectedDomainId={selectedDomainId}

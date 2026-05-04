@@ -15,6 +15,10 @@ vi.mock('../src/pages/DomainValueShiftHeatmap', () => ({
   DomainValueShiftHeatmap: () => <div>Domain shifts route smoke</div>,
 }));
 
+vi.mock('../src/pages/ModelsGroups', () => ({
+  ModelsGroups: () => <div>Model groups route smoke</div>,
+}));
+
 // Mock localStorage
 beforeEach(() => {
   localStorage.clear();
@@ -66,6 +70,21 @@ describe('App Routing', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Domain shifts route smoke')).toBeInTheDocument();
+    });
+  });
+
+  it('should render the protected models route when authenticated', async () => {
+    localStorage.setItem('valuerank_token', 'test-token');
+    window.history.pushState({}, '', '/models');
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 'user-1', email: 'researcher@example.com', name: 'Researcher' }),
+    } as Response);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Model groups route smoke')).toBeInTheDocument();
     });
   });
 });
