@@ -9,6 +9,7 @@ import {
   REFRESH_DOMAIN_ANALYSIS_MUTATION,
 } from '../../src/api/operations/domainAnalysis';
 import { MODELS_ANALYSIS_QUERY } from '../../src/api/operations/modelsAnalysis';
+import { LLM_MODELS_QUERY } from '../../src/api/operations/llm';
 
 const useQueryMock = vi.fn();
 const useMutationMock = vi.fn();
@@ -78,6 +79,7 @@ const defaultModelsAnalysis = {
 };
 
 const valuePrioritiesSectionMock = vi.fn(() => <div>Mock value priorities section</div>);
+const modelGroupsSectionMock = vi.fn(() => <div>Mock model groups section</div>);
 
 function installQueryResponses(options?: {
   findingsData?: typeof defaultFindingsEligibility | undefined;
@@ -90,6 +92,7 @@ function installQueryResponses(options?: {
   analysisFetching?: boolean;
   analysisError?: Error | undefined;
   modelsAnalysisData?: typeof defaultModelsAnalysis | undefined;
+  llmModelsData?: { llmModels: Array<{ modelId: string; isDefault: boolean }> } | undefined;
 }) {
   const findingsData = options && 'findingsData' in options ? options.findingsData : defaultFindingsEligibility;
   const findingsFetching = options?.findingsFetching ?? false;
@@ -101,6 +104,7 @@ function installQueryResponses(options?: {
   const analysisFetching = options?.analysisFetching ?? false;
   const analysisError = options?.analysisError;
   const modelsAnalysisData = options && 'modelsAnalysisData' in options ? options.modelsAnalysisData : defaultModelsAnalysis;
+  const llmModelsData = options && 'llmModelsData' in options ? options.llmModelsData : { llmModels: [] };
 
   useQueryMock.mockImplementation((args: { query: unknown }) => {
     if (args.query === DOMAIN_AVAILABLE_SIGNATURES_QUERY) {
@@ -131,6 +135,13 @@ function installQueryResponses(options?: {
         error: undefined,
       }];
     }
+    if (args.query === LLM_MODELS_QUERY) {
+      return [{
+        data: llmModelsData,
+        fetching: false,
+        error: undefined,
+      }];
+    }
     return [{ data: undefined, fetching: false, error: undefined }];
   });
 }
@@ -157,7 +168,7 @@ vi.mock('../../src/components/domains/DominanceSection', () => ({
 }));
 
 vi.mock('../../src/components/domains/ModelGroupsSection', () => ({
-  ModelGroupsSection: () => <div>Mock model groups section</div>,
+  ModelGroupsSection: (props: unknown) => modelGroupsSectionMock(props),
 }));
 
 vi.mock('../../src/components/domains/SimilaritySection', () => ({
@@ -174,6 +185,7 @@ describe('DomainAnalysis', () => {
     useMutationMock.mockReset();
     refreshMutationExecuteMock.mockReset();
     valuePrioritiesSectionMock.mockClear();
+    modelGroupsSectionMock.mockClear();
     useMutationMock.mockImplementation((query: unknown) => {
       if (query === REFRESH_DOMAIN_ANALYSIS_MUTATION) {
         return [{ fetching: false }, refreshMutationExecuteMock];
@@ -354,6 +366,72 @@ describe('DomainAnalysis', () => {
         }),
       }),
     ]);
+  });
+
+  it('passes only picker-selected models into model groups', async () => {
+    installQueryResponses({
+      analysisData: {
+        domainAnalysis: {
+          ...defaultDomainAnalysis.domainAnalysis,
+          models: [
+            {
+              model: 'model-a',
+              label: 'Model A',
+              values: [
+                {
+                  valueKey: 'Achievement',
+                  score: 0,
+                  prioritized: 9,
+                  deprioritized: 1,
+                  neutral: 0,
+                  totalComparisons: 10,
+                },
+              ],
+            },
+            {
+              model: 'model-b',
+              label: 'Model B',
+              values: [
+                {
+                  valueKey: 'Achievement',
+                  score: 0,
+                  prioritized: 4,
+                  deprioritized: 6,
+                  neutral: 0,
+                  totalComparisons: 10,
+                },
+              ],
+            },
+          ],
+        },
+      },
+      llmModelsData: {
+        llmModels: [
+          { modelId: 'model-a', isDefault: true },
+          { modelId: 'model-b', isDefault: false },
+        ],
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <DomainAnalysis />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(modelGroupsSectionMock).toHaveBeenCalled();
+    });
+
+    const lastCall = modelGroupsSectionMock.mock.calls.at(-1)?.[0] as {
+      models: Array<{ model: string }>;
+      selectedModelId: string | null;
+    };
+
+    expect(lastCall.models).toEqual([
+      expect.objectContaining({ model: 'model-a' }),
+    ]);
+    expect(lastCall.selectedModelId).toBe('model-a');
   });
 
   it('does not fall back to pooled counts when canonical models-analysis data is missing', async () => {
