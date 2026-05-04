@@ -23,7 +23,14 @@ const log = createLogger('pressure-sensitivity:cache');
 
 export function parseSnapshotOutput(raw: unknown): PressureSensitivityResultShape | null {
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return null;
-  return raw as PressureSensitivityResultShape;
+  const result = raw as PressureSensitivityResultShape;
+  // Backfill fields added after the snapshot was written (pushedEffectPairsUsed is Int! so null crashes).
+  for (const model of result.models) {
+    if ((model as { pushedEffectPairsUsed?: unknown }).pushedEffectPairsUsed == null) {
+      model.pushedEffectPairsUsed = 0;
+    }
+  }
+  return result;
 }
 
 function recomputeSanityCheck(models: PressureSensitivityModelShape[]): DirectionalSanityCheckShape {
