@@ -23,7 +23,8 @@ const navItems: NavItem[] = [
     icon: Cpu,
     activateWithChildren: true,
     children: [
-      { name: 'Matrix', path: '/models', icon: Cpu, match: 'exact' },
+      { name: 'Model Groups', path: '/models', icon: Cpu, match: 'exact' },
+      { name: 'Domain Analysis', path: '/domains/analysis', icon: BarChart2 },
       { name: 'Domain Shifts', path: '/models/domain-shifts', icon: BarChart2 },
       { name: 'Pressure Sensitivity', path: '/models/pressure-sensitivity', icon: BarChart2 },
     ],
@@ -33,7 +34,6 @@ const navItems: NavItem[] = [
     path: '/domains',
     icon: FolderTree,
     children: [
-      { name: 'Domain Analysis', path: '/domains/analysis', icon: BarChart2 },
       { name: 'Manage Domains', path: '/domains/manage', icon: FolderTree },
     ],
   },

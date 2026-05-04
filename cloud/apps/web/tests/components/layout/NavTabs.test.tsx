@@ -35,7 +35,7 @@ describe('NavTabs Component', () => {
     renderNavTabs();
 
     expect(screen.queryByRole('link', { name: 'Home' })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Models' })).toHaveAttribute('href', '/domains/analysis');
+    expect(screen.getByRole('link', { name: 'Models' })).toHaveAttribute('href', '/models');
     expect(screen.getByRole('link', { name: 'Domains' })).toHaveAttribute('href', '/domains');
     expect(screen.getByRole('link', { name: 'Vignettes' })).toHaveAttribute('href', '/definitions');
     expect(screen.getByRole('link', { name: 'Archive' })).toHaveAttribute('href', '/archive');
@@ -60,7 +60,8 @@ describe('NavTabs Component', () => {
     await waitFor(() => {
       expect(toggle).toHaveAttribute('aria-expanded', 'true');
     });
-    expect(screen.getByRole('link', { name: 'Models' })).toHaveAttribute('href', '/domains/analysis');
+    expect(screen.getByRole('link', { name: 'Models' })).toHaveAttribute('href', '/models');
+    expect(screen.getByRole('link', { name: 'Model Groups' })).toHaveAttribute('href', '/models');
     expect(screen.getByRole('link', { name: 'Domain Analysis' })).toHaveAttribute('href', '/domains/analysis');
     expect(screen.getByRole('link', { name: 'Domain Shifts' })).toHaveAttribute('href', '/models/domain-shifts');
   });
@@ -70,6 +71,7 @@ describe('NavTabs Component', () => {
     await openMenu('Models');
 
     expect(screen.getByRole('link', { name: 'Models' }).parentElement?.className).toContain('border-teal-500');
+    expect(screen.getByRole('link', { name: 'Model Groups' }).className).not.toContain('bg-teal-600/20');
     expect(screen.getByRole('link', { name: 'Domain Analysis' }).className).not.toContain('bg-teal-600/20');
     expect(screen.getByRole('link', { name: 'Domain Shifts' }).className).toContain('bg-teal-600/20');
     expect(screen.getByRole('link', { name: 'Consistency' }).className).not.toContain('bg-teal-600/20');

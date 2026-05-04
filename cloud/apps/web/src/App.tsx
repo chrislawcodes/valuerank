@@ -17,6 +17,7 @@ import { DomainAnalysis } from './pages/DomainAnalysis';
 import { DomainCoverage } from './pages/DomainCoverage';
 import { DomainAnalysisValueDetail } from './pages/DomainAnalysisValueDetail';
 import { DomainValueShiftHeatmap } from './pages/DomainValueShiftHeatmap';
+import { ModelsGroups } from './pages/ModelsGroups';
 import { ModelsConsistency } from './pages/ModelsConsistency';
 import { PressureSensitivity } from './pages/PressureSensitivity';
 import { ModelsCircumplex } from './pages/ModelsCircumplex';
@@ -169,7 +170,14 @@ function App() {
                 </ProtectedLayout>
               }
             />
-            <Route path="/models" element={<Navigate to="/domains/analysis" replace />} />
+            <Route
+              path="/models"
+              element={
+                <ProtectedLayout>
+                  <ModelsGroups />
+                </ProtectedLayout>
+              }
+            />
             <Route
               path="/models/domain-shifts"
               element={

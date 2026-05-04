@@ -36,7 +36,7 @@ describe('MobileNav Component', () => {
     expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/');
     expect(screen.getByRole('link', { name: 'Domains' })).toHaveAttribute('href', '/domains');
     expect(screen.getByRole('link', { name: 'Models' })).toHaveAttribute('href', '/models');
-    expect(screen.getByRole('link', { name: 'Matrix' })).toHaveAttribute('href', '/models');
+    expect(screen.getByRole('link', { name: 'Model Groups' })).toHaveAttribute('href', '/models');
     expect(screen.getByRole('link', { name: 'Domain Shifts' })).toHaveAttribute('href', '/models/domain-shifts');
     expect(screen.getByRole('link', { name: 'Consistency' })).toHaveAttribute('href', '/archive/consistency');
     expect(screen.getByRole('link', { name: 'Circumplex' })).toHaveAttribute('href', '/archive/circumplex');
@@ -48,16 +48,17 @@ describe('MobileNav Component', () => {
     await renderMobileNav('/models/domain-shifts');
 
     expect(screen.getByRole('link', { name: 'Models' }).className).toContain('border-teal-500');
-    expect(screen.getByRole('link', { name: 'Matrix' }).className).not.toContain('border-teal-500');
+    expect(screen.getByRole('link', { name: 'Model Groups' }).className).not.toContain('border-teal-500');
     expect(screen.getByRole('link', { name: 'Domain Shifts' }).className).toContain('border-teal-500');
     expect(screen.getByRole('link', { name: 'Consistency' }).className).not.toContain('border-teal-500');
     expect(screen.getByRole('link', { name: 'Circumplex' }).className).not.toContain('border-teal-500');
   });
 
-  it('keeps the domain compatibility links nested under Domains', async () => {
+  it('keeps the model and domain compatibility links available in the mobile menu', async () => {
     await renderMobileNav('/domains');
 
     expect(screen.getByRole('link', { name: 'Vignettes' })).toHaveAttribute('href', '/definitions');
+    expect(screen.getByRole('link', { name: 'Model Groups' })).toHaveAttribute('href', '/models');
     expect(screen.getByRole('link', { name: 'Domain Analysis' })).toHaveAttribute('href', '/domains/analysis');
     expect(screen.getByRole('link', { name: 'Manage Domains' })).toHaveAttribute('href', '/domains/manage');
     expect(screen.queryByRole('link', { name: 'Coverage' })).not.toBeInTheDocument();

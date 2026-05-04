@@ -35,6 +35,7 @@ const domainMenuItems: MenuItem[] = [
 ];
 
 const modelsMenuItems: MenuItem[] = [
+  { name: 'Model Groups', path: '/models', match: 'exact' },
   { name: 'Domain Analysis', path: '/domains/analysis' },
   { name: 'Domain Shifts', path: '/models/domain-shifts' },
   { name: 'Pressure Sensitivity', path: '/models/pressure-sensitivity' },
@@ -242,7 +243,7 @@ export function NavTabs() {
     <nav className="hidden sm:block bg-[#1A1A1A] border-t border-gray-800 sticky top-14 z-10">
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex gap-1">
-          {renderMenu(modelsMenuRef, 'Models', '/domains/analysis', Cpu, modelsMenuItems, isModelsActive, isModelsMenuOpen, setIsModelsMenuOpen)}
+          {renderMenu(modelsMenuRef, 'Models', '/models', Cpu, modelsMenuItems, isModelsActive, isModelsMenuOpen, setIsModelsMenuOpen)}
           {renderMenu(domainMenuRef, 'Domains', '/domains', FolderTree, visibleDomainMenuItems, isDomainsActive, isDomainsMenuOpen, setIsDomainsMenuOpen)}
           {renderMenu(vignettesMenuRef, 'Vignettes', '/definitions', Library, vignettesMenuItems, isVignettesActive, isVignettesMenuOpen, setIsVignettesMenuOpen)}
           {isAdmin ? renderMenu(archiveMenuRef, 'Archive', '/archive', Archive, archiveMenuItems, isArchiveActive, isArchiveMenuOpen, setIsArchiveMenuOpen) : null}

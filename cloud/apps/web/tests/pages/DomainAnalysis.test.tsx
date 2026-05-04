@@ -79,7 +79,6 @@ const defaultModelsAnalysis = {
 };
 
 const valuePrioritiesSectionMock = vi.fn(() => <div>Mock value priorities section</div>);
-const modelGroupsSectionMock = vi.fn(() => <div>Mock model groups section</div>);
 
 function installQueryResponses(options?: {
   findingsData?: typeof defaultFindingsEligibility | undefined;
@@ -167,10 +166,6 @@ vi.mock('../../src/components/domains/DominanceSection', () => ({
   DominanceSection: () => <div>Mock dominance section</div>,
 }));
 
-vi.mock('../../src/components/domains/ModelGroupsSection', () => ({
-  ModelGroupsSection: (props: unknown) => modelGroupsSectionMock(props),
-}));
-
 vi.mock('../../src/components/domains/SimilaritySection', () => ({
   SimilaritySection: () => <div>Mock similarity section</div>,
 }));
@@ -185,7 +180,6 @@ describe('DomainAnalysis', () => {
     useMutationMock.mockReset();
     refreshMutationExecuteMock.mockReset();
     valuePrioritiesSectionMock.mockClear();
-    modelGroupsSectionMock.mockClear();
     useMutationMock.mockImplementation((query: unknown) => {
       if (query === REFRESH_DOMAIN_ANALYSIS_MUTATION) {
         return [{ fetching: false }, refreshMutationExecuteMock];
@@ -215,13 +209,11 @@ describe('DomainAnalysis', () => {
 
     const domainSelection = await screen.findByRole('heading', { name: 'Domain Selection' });
     const findingsHeading = screen.getByRole('heading', { name: 'Findings' });
-    const modelGroups = await screen.findByText(/mock model groups section/i);
     const valuePriorities = screen.getByText(/mock value priorities section/i);
     const dominance = screen.getByText(/mock dominance section/i);
     const similarity = screen.getByText(/mock similarity section/i);
 
     expect(domainSelection.compareDocumentPosition(findingsHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(modelGroups.compareDocumentPosition(valuePriorities) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(valuePriorities.compareDocumentPosition(dominance) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(dominance.compareDocumentPosition(similarity) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
@@ -366,72 +358,6 @@ describe('DomainAnalysis', () => {
         }),
       }),
     ]);
-  });
-
-  it('passes only picker-selected models into model groups', async () => {
-    installQueryResponses({
-      analysisData: {
-        domainAnalysis: {
-          ...defaultDomainAnalysis.domainAnalysis,
-          models: [
-            {
-              model: 'model-a',
-              label: 'Model A',
-              values: [
-                {
-                  valueKey: 'Achievement',
-                  score: 0,
-                  prioritized: 9,
-                  deprioritized: 1,
-                  neutral: 0,
-                  totalComparisons: 10,
-                },
-              ],
-            },
-            {
-              model: 'model-b',
-              label: 'Model B',
-              values: [
-                {
-                  valueKey: 'Achievement',
-                  score: 0,
-                  prioritized: 4,
-                  deprioritized: 6,
-                  neutral: 0,
-                  totalComparisons: 10,
-                },
-              ],
-            },
-          ],
-        },
-      },
-      llmModelsData: {
-        llmModels: [
-          { modelId: 'model-a', isDefault: true },
-          { modelId: 'model-b', isDefault: false },
-        ],
-      },
-    });
-
-    render(
-      <MemoryRouter>
-        <DomainAnalysis />
-      </MemoryRouter>,
-    );
-
-    await waitFor(() => {
-      expect(modelGroupsSectionMock).toHaveBeenCalled();
-    });
-
-    const lastCall = modelGroupsSectionMock.mock.calls.at(-1)?.[0] as {
-      models: Array<{ model: string }>;
-      selectedModelId: string | null;
-    };
-
-    expect(lastCall.models).toEqual([
-      expect.objectContaining({ model: 'model-a' }),
-    ]);
-    expect(lastCall.selectedModelId).toBe('model-a');
   });
 
   it('does not fall back to pooled counts when canonical models-analysis data is missing', async () => {

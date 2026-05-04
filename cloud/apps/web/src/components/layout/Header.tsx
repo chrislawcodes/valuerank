@@ -54,6 +54,7 @@ const domainMenuItems: MenuItem[] = [
 ];
 
 const modelsMenuItems: MenuItem[] = [
+  { name: 'Model Groups', path: '/models', match: 'exact' },
   { name: 'Domain Analysis', path: '/domains/analysis' },
   { name: 'Domain Shifts', path: '/models/domain-shifts' },
   { name: 'Pressure Sensitivity', path: '/models/pressure-sensitivity' },
@@ -269,7 +270,7 @@ export function Header() {
         </div>
 
         <nav className="hidden min-w-0 flex-1 sm:flex items-stretch gap-1">
-          {renderMenu(modelsMenuRef, 'Models', '/domains/analysis', Cpu, modelsMenuItems, isModelsActive, isModelsMenuOpen, setIsModelsMenuOpen)}
+          {renderMenu(modelsMenuRef, 'Models', '/models', Cpu, modelsMenuItems, isModelsActive, isModelsMenuOpen, setIsModelsMenuOpen)}
           {renderMenu(domainsMenuRef, 'Domains', '/domains', FolderTree, visibleDomainMenuItems, isDomainsActive, isDomainsMenuOpen, setIsDomainsMenuOpen)}
           {renderMenu(vignettesMenuRef, 'Vignettes', '/definitions', Library, vignettesMenuItems, isVignettesActive, isVignettesMenuOpen, setIsVignettesMenuOpen)}
           {isAdmin ? renderMenu(archiveMenuRef, 'Archive', '/archive', Archive, archiveMenuItems, isArchiveActive, isArchiveMenuOpen, setIsArchiveMenuOpen) : null}
