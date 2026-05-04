@@ -10,6 +10,7 @@ function createModel(value: number | null = 0.4): PressureSensitivityModel {
     providerName: 'Provider',
     unscoredCount: 0,
     pushedEffectPairsUsed: 0,
+    domainPressureEffects: [],
     pressureResponseSummary: { mean: 0.1, rangeMin: 0.05, rangeMax: 0.15, pairsMeasured: 1 },
     valueRates: [],
     valuePairs: [

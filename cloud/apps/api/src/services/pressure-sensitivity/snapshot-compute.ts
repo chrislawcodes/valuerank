@@ -4,6 +4,7 @@ import { resolveTranscriptDecisionModel } from '../../graphql/queries/domain/sha
 import type {
   DirectionalSanityCheckEntryShape,
   DirectionalSanityCheckShape,
+  DomainPressureEffectShape,
   ExcludedDefinitionShape,
   InsufficientPressureSensitivityModelShape,
   PressureSensitivityModelShape,
@@ -165,7 +166,8 @@ function computeModelPushedEffects(
   pairs: ReadonlyMap<string, PairAccumulator>,
   authoredFirstTokenByDef: ReadonlyMap<string, string>,
   domainByDef: ReadonlyMap<string, string>,
-): { pushedForEffect: number | null; pushedAgainstEffect: number | null; pairsUsed: number } {
+  domainNameById: ReadonlyMap<string, string>,
+): { pushedForEffect: number | null; pushedAgainstEffect: number | null; pairsUsed: number; domainPressureEffects: DomainPressureEffectShape[] } {
   type DirBuckets = { first: number[]; second: number[] };
 
   const pushBuckets = new Map<string, DirBuckets>();
@@ -263,10 +265,18 @@ function computeModelPushedEffects(
     if (db != null && dm != null) pushedAgainstDomains.push(db - dm);
   }
 
+  const domainPressureEffects: DomainPressureEffectShape[] = [...domainAccum.entries()]
+    .filter(([dk]) => domainNameById.has(dk))
+    .map(([dk, d]) => {
+      const [dp, db] = [mean(d.push), mean(d.balanced)];
+      return { domainId: dk, domainName: domainNameById.get(dk)!, pushedForEffect: dp != null && db != null ? dp - db : null };
+    });
+
   return {
     pushedForEffect: mean(pushedForDomains),
     pushedAgainstEffect: mean(pushedAgainstDomains),
     pairsUsed: allPairKeys.size,
+    domainPressureEffects,
   };
 }
 
@@ -402,6 +412,11 @@ export async function buildPressureSensitivitySnapshotOutput(
   for (const [defId, meta] of definitionMeta.entries()) {
     if (meta.domainId != null) domainByDef.set(defId, meta.domainId);
   }
+  const distinctDomainIds = [...new Set(domainByDef.values())];
+  const domainNameById = new Map<string, string>(
+    (distinctDomainIds.length === 0 ? [] : await db.domain.findMany({ where: { id: { in: distinctDomainIds } }, select: { id: true, name: true } }))
+      .map((d) => [d.id, d.name]),
+  );
 
   const sourceRunToDefId = new Map<string, string>();
   for (const run of state.eligibleRuns) {
@@ -638,8 +653,8 @@ export async function buildPressureSensitivitySnapshotOutput(
       insufficient.push({ modelId: model.modelId, label: model.displayName, providerName: model.provider.displayName ?? model.provider.name, reason: 'no-coverage' });
       continue;
     }
-    const { pushedForEffect, pushedAgainstEffect, pairsUsed: pushedEffectPairsUsed } =
-      computeModelPushedEffects(pairs, authoredFirstTokenByDef, domainByDef);
+    const { pushedForEffect, pushedAgainstEffect, pairsUsed: pushedEffectPairsUsed, domainPressureEffects } =
+      computeModelPushedEffects(pairs, authoredFirstTokenByDef, domainByDef, domainNameById);
     outputModels.push({
       modelId: model.modelId,
       label: model.displayName,
@@ -651,6 +666,7 @@ export async function buildPressureSensitivitySnapshotOutput(
       pushedForEffect,
       pushedAgainstEffect,
       pushedEffectPairsUsed,
+      domainPressureEffects,
     });
   }
 

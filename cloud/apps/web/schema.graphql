@@ -2110,7 +2110,14 @@ type PressureResponseSummary {
   rangeMin: Float
 }
 
+type DomainPressureEffect {
+  domainId: String!
+  domainName: String!
+  pushedForEffect: Float
+}
+
 type PressureSensitivityModel {
+  domainPressureEffects: [DomainPressureEffect!]!
   label: String!
   modelId: String!
   pressureResponseSummary: PressureResponseSummary!
