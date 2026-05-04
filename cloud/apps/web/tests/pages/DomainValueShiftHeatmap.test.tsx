@@ -363,6 +363,7 @@ describe('DomainValueShiftHeatmap page', () => {
   });
 
   it('renders the selected model heatmap with raw detail in accessible text', async () => {
+    const user = userEvent.setup({ delay: null });
     installModels([makeModel()]);
 
     renderPage();
@@ -371,8 +372,9 @@ describe('DomainValueShiftHeatmap page', () => {
       expect(screen.getByRole('heading', { name: 'Model A' })).toBeInTheDocument();
     });
     expect(screen.getByRole('table')).toHaveClass('table-auto');
+    await user.click(screen.getByRole('button', { name: /default — 1 model/i }));
     expect(screen.getByRole('button', { name: /default models/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Latest @ default/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /signature: latest @ default/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Sort by Avg Win Rate descending/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Sort by Value descending/i })).toHaveTextContent('Value↓');
     expect(screen.getByLabelText(/Achievement in City Planning: raw win rate 80\.0%; shift \+20\.0 pts/i)).toHaveAccessibleName(
@@ -393,7 +395,7 @@ describe('DomainValueShiftHeatmap page', () => {
 
     renderPage();
 
-    await screen.findByRole('button', { name: /default models/i });
+    await screen.findByRole('button', { name: /default — 1 model/i });
     const initialModelsCalls = useQueryMock.mock.calls.filter(([args]: [{ query: unknown }]) => getOperationName(args.query) === 'ModelsAnalysis');
     expect(initialModelsCalls.at(-1)?.[0]).toEqual(expect.objectContaining({
       variables: { signature: 'vnewtd' },
@@ -459,6 +461,7 @@ describe('DomainValueShiftHeatmap page', () => {
     renderPage();
 
     expect(await screen.findByText('Default — 2 models')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /default — 2 models/i }));
     await user.click(screen.getByRole('button', { name: 'Alpha' }));
 
     expect(screen.getByRole('heading', { name: 'Zulu' })).toBeInTheDocument();
@@ -474,6 +477,7 @@ describe('DomainValueShiftHeatmap page', () => {
 
     renderPage();
 
+    await user.click(screen.getByRole('button', { name: /default — 2 models/i }));
     const modelButtons = screen
       .getAllByRole('button', { name: /^(Default Models|Alpha|Charlie|Bravo)$/i })
       .map((button) => button.textContent?.trim());

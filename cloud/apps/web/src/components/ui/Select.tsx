@@ -40,6 +40,7 @@ export type SelectProps<T = string> = VariantProps<typeof selectTriggerVariants>
   disabled?: boolean;
   className?: string;
   label?: string;
+  ariaLabel?: string;
   error?: string;
   /** Render custom option content */
   renderOption?: (option: SelectOption<T>, isSelected: boolean) => ReactNode;
@@ -55,6 +56,7 @@ export function Select<T extends string = string>({
   size,
   className,
   label,
+  ariaLabel,
   error,
   renderOption,
 }: SelectProps<T>) {
@@ -64,6 +66,7 @@ export function Select<T extends string = string>({
   const listboxRef = useRef<HTMLUListElement>(null);
 
   const selectedOption = options.find((opt) => opt.value === value);
+  const accessibleLabel = ariaLabel ?? label ?? 'Select';
 
   // Close on outside click
   useEffect(() => {
@@ -175,12 +178,16 @@ export function Select<T extends string = string>({
     triggerRef.current?.focus();
   };
 
-  const listboxId = `select-listbox-${label?.replace(/\s+/g, '-').toLowerCase() || 'default'}`;
+  const slug = accessibleLabel
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  const listboxId = `select-listbox-${slug || 'default'}`;
 
   return (
     <div className={cn('relative', className)}>
       {label && (
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+        <label className="mb-1 block text-sm font-medium text-gray-700">
           {label}
         </label>
       )}
@@ -199,10 +206,10 @@ export function Select<T extends string = string>({
         disabled={disabled}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
-        aria-labelledby={label ? `${listboxId}-label` : undefined}
+        aria-label={`${accessibleLabel}: ${selectedOption?.label || placeholder}`}
         aria-controls={isOpen ? listboxId : undefined}
       >
-        <span className={cn(!selectedOption && 'text-gray-400')}>
+        <span className={cn('min-w-0 flex-1 truncate', !selectedOption && 'text-gray-400')}>
           {selectedOption?.label || placeholder}
         </span>
         <ChevronDown
@@ -219,8 +226,8 @@ export function Select<T extends string = string>({
           ref={listboxRef}
           id={listboxId}
           role="listbox"
-          aria-label={label}
-          className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-auto py-1"
+          aria-label={accessibleLabel}
+          className="absolute z-50 mt-1 w-full max-h-60 overflow-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg"
         >
           {options.map((option, index) => {
             const isSelected = option.value === value;
