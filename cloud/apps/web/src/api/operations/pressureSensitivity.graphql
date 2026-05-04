@@ -13,6 +13,9 @@ query PressureSensitivity(
       label
       providerName
       unscoredCount
+      pushedForEffect
+      pushedAgainstEffect
+      pushedEffectPairsUsed
       pressureResponseSummary {
         mean
         rangeMin

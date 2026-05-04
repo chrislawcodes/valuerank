@@ -76,6 +76,9 @@ export type PressureSensitivityModelShape = {
   valuePairs: PressureSensitivityValuePairShape[];
   valueRates: PressureSensitivityValueRateShape[];
   unscoredCount: number;
+  pushedForEffect: number | null;
+  pushedAgainstEffect: number | null;
+  pushedEffectPairsUsed: number;
 };
 
 export type InsufficientPressureSensitivityModelShape = {
@@ -246,6 +249,9 @@ builder.objectType(PressureSensitivityModelRef, {
     valuePairs: t.expose('valuePairs', { type: [PressureSensitivityValuePairRef] }),
     valueRates: t.expose('valueRates', { type: [PressureSensitivityValueRateRef] }),
     unscoredCount: t.exposeInt('unscoredCount'),
+    pushedForEffect: t.exposeFloat('pushedForEffect', { nullable: true }),
+    pushedAgainstEffect: t.exposeFloat('pushedAgainstEffect', { nullable: true }),
+    pushedEffectPairsUsed: t.exposeInt('pushedEffectPairsUsed'),
   }),
 });
 
