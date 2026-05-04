@@ -1,17 +1,17 @@
 #!/usr/bin/env tsx
 
 /**
- * Backfills `jobChoiceValueFirst` onto runs that were created before this field
- * existed. Those runs carry `jobChoicePresentationOrder` ("A_first"/"B_first")
- * together with a `definitionSnapshot.components.value_first/second.token` that
- * holds the actual value name.
+ * @deprecated Do not run this script. The backfill logic here is incorrect for
+ * runs on B-first definitions: it reads `components.value_second.token` for
+ * `B_first` runs, but the correct value is always `components.value_first.token`
+ * (the slot assembleTemplate renders first is always value_first, regardless of
+ * presentation order).
  *
- * After this backfill confirms clean, the `jobChoicePresentationOrder` fallback
- * in `getCoverageDirection` can be removed.
+ * `getCoverageDirection` now reads `definitionSnapshot.components.value_first.token`
+ * directly as its primary signal, making `jobChoiceValueFirst` unnecessary.
  *
- * Usage:
- *   npx tsx src/cli/backfill-job-choice-value-first.ts --dry-run
- *   npx tsx src/cli/backfill-job-choice-value-first.ts
+ * Original intent: backfill `jobChoiceValueFirst` onto runs that were created
+ * before this field existed, using `jobChoicePresentationOrder` as the source.
  */
 
 import { fileURLToPath } from 'url';
