@@ -81,7 +81,7 @@ export function ClusterRadarChart({ clusters, activeGroupIds = [] }: ClusterRada
       <div className="overflow-x-auto rounded-lg border border-gray-100 bg-white p-2">
         <svg
           viewBox={`0 0 ${CHART_SIZE} ${VIEW_BOX_HEIGHT}`}
-          className="h-auto min-w-[512px] max-w-[512px] w-full"
+          className="h-auto min-w-[1024px] max-w-[1024px]"
           role="img"
           aria-label="Cluster radar chart ordered by favorability with Schwartz category ring"
         >
