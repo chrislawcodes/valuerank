@@ -16,6 +16,7 @@ function createModel(
     label,
     providerName: 'Provider',
     unscoredCount: 0,
+    pushedEffectPairsUsed: 0,
     valueRates: [],
     valuePairs: [],
     pressureResponseSummary: { mean, rangeMin, rangeMax, pairsMeasured },

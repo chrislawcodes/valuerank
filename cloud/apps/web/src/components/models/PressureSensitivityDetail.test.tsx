@@ -45,6 +45,7 @@ function createModel(valuePairs: PressureSensitivityValuePair[]): PressureSensit
     label: 'Model A',
     providerName: 'Provider',
     unscoredCount: 0,
+    pushedEffectPairsUsed: 0,
     pressureResponseSummary: { mean: 0.1, rangeMin: 0.05, rangeMax: 0.15, pairsMeasured: 2 },
     valueRates: [],
     valuePairs,
