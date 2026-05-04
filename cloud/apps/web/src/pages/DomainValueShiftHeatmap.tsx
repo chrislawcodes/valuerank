@@ -8,6 +8,7 @@ import { CopyVisualButton } from '../components/ui/CopyVisualButton';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Loading } from '../components/ui/Loading';
 import { Select } from '../components/ui/Select';
+import { AnalysisContextBar } from '../components/analysis/AnalysisContextBar';
 import { cn } from '../lib/utils';
 import {
   ALL_MODELS_OPTION_VALUE,
@@ -264,6 +265,8 @@ export function DomainValueShiftHeatmap() {
   const isAllModels = selectedModelId === ALL_MODELS_OPTION_VALUE;
   const loading = fetching && data == null;
   const tableRef = useRef<HTMLDivElement>(null);
+  const selectedModelLabel = isAllModels ? 'Default models' : selectedModel?.label ?? 'Selected model';
+  const summary = `${selectedModelLabel} · ${selectedSignature}`;
 
   return (
     <div className="space-y-6">
@@ -282,8 +285,13 @@ export function DomainValueShiftHeatmap() {
         <ErrorMessage message={`Failed to load signature options: ${signatureError.message}`} />
       )}
 
-      <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
-        <div className="flex flex-wrap items-end gap-5">
+      <AnalysisContextBar
+        title="Analysis Context"
+        summary={summary}
+        headerActions={<CopyVisualButton targetRef={tableRef} label="domain shifts table" />}
+        secondary={<DisplayModeToggle displayMode={displayMode} onChange={setDisplayMode} />}
+      >
+        <div className="flex flex-wrap items-end gap-4">
           <div className="min-w-[260px] max-w-sm flex-1">
             <Select
               label="Model"
@@ -294,7 +302,7 @@ export function DomainValueShiftHeatmap() {
               disabled={loading || models.length === 0}
             />
           </div>
-          <div className="min-w-[240px] max-w-xs flex-1">
+          <div className="ml-auto min-w-[240px] max-w-xs flex-1">
             <Select
               label="Signature"
               options={signatureOptions}
@@ -304,9 +312,8 @@ export function DomainValueShiftHeatmap() {
               disabled={fetchingSignatures && signatureData == null}
             />
           </div>
-          <DisplayModeToggle displayMode={displayMode} onChange={setDisplayMode} />
         </div>
-      </section>
+      </AnalysisContextBar>
 
       {loading && <Loading size="lg" text="Loading domain shifts..." />}
 

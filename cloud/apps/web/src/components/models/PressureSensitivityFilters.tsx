@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp, Filter } from 'lucide-react';
+import { AnalysisContextBar } from '../analysis/AnalysisContextBar';
 import { Button } from '../ui/Button';
 import { Select } from '../ui/Select';
 
@@ -71,9 +72,78 @@ export function PressureSensitivityFilters({
     onModelSelectionChange([...defaultSelection]);
   };
 
+  const domainSummary = domainId == null
+    ? 'All domains'
+    : domainOptions.find((option) => option.value === domainId)?.label ?? 'Selected domain';
+  const summary = `${domainSummary} · ${selectedSummary} · ${signature}`;
+
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-4">
-      <div className="flex flex-wrap gap-4">
+    <AnalysisContextBar
+      title="Analysis Context"
+      summary={summary}
+      secondary={(
+        <>
+          {isModelsOpen && (
+            <div role="group" aria-label="Model filter" className="mt-3 rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <span className="text-xs font-medium uppercase tracking-wide text-gray-600">Select models</span>
+                <div className="flex items-center gap-3">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-auto min-h-0 px-0 py-0 text-xs font-medium text-teal-700 hover:text-teal-800"
+                    onClick={handleSelectAll}
+                  >
+                    Select all
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-auto min-h-0 px-0 py-0 text-xs font-medium text-gray-600 hover:text-gray-800"
+                    onClick={handleClear}
+                  >
+                    Clear
+                  </Button>
+                </div>
+              </div>
+
+              <div className="max-h-60 space-y-2 overflow-y-auto">
+                {modelOptions.map((model) => {
+                  const isSelected = selectedModelIds.includes(model.value);
+                  return (
+                    <label key={model.value} className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => handleToggleModel(model.value)}
+                        className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                      />
+                      <span className="truncate flex-1" title={model.label}>
+                        {model.label}
+                      </span>
+                      {model.isDefault ? (
+                        <span className="shrink-0 rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-medium text-teal-700">
+                          default
+                        </span>
+                      ) : null}
+                    </label>
+                  );
+                })}
+              </div>
+
+              {modelOptions.length === 0 ? (
+                <p className="mt-2 text-xs text-gray-500">No active models are available yet.</p>
+              ) : null}
+            </div>
+          )}
+
+          <p className="mt-3 text-xs text-gray-500">
+            Domain and signature stay URL-driven. Model selection uses the standard default-model picker.
+          </p>
+        </>
+      )}
+    >
+      <div className="flex flex-wrap items-end gap-4">
         <div className="min-w-[220px] flex-1">
           <Select
             label="Domain"
@@ -82,18 +152,7 @@ export function PressureSensitivityFilters({
             options={[{ value: 'all', label: 'All domains' }, ...domainOptions]}
           />
         </div>
-        <div className="min-w-[220px] flex-1">
-          <Select
-            label="Signature"
-            value={signature}
-            onChange={(value) => onSignatureChange(value)}
-            options={signatureOptions.length > 0 ? signatureOptions : [{ value: signature, label: signature }]}
-          />
-        </div>
-      </div>
-
-      <div className="mt-4 border-t border-gray-200 pt-4">
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex min-w-[260px] flex-1 items-end gap-3">
           <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500">
             <Filter className="h-3.5 w-3.5" />
             <span>Models:</span>
@@ -139,65 +198,15 @@ export function PressureSensitivityFilters({
             )}
           </Button>
         </div>
-
-        {isModelsOpen && (
-          <div role="group" aria-label="Model filter" className="mt-3 rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <span className="text-xs font-medium uppercase tracking-wide text-gray-600">Select models</span>
-              <div className="flex items-center gap-3">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-auto min-h-0 px-0 py-0 text-xs font-medium text-teal-700 hover:text-teal-800"
-                  onClick={handleSelectAll}
-                >
-                  Select all
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-auto min-h-0 px-0 py-0 text-xs font-medium text-gray-600 hover:text-gray-800"
-                  onClick={handleClear}
-                >
-                  Clear
-                </Button>
-              </div>
-            </div>
-
-            <div className="max-h-60 space-y-2 overflow-y-auto">
-              {modelOptions.map((model) => {
-                const isSelected = selectedModelIds.includes(model.value);
-                return (
-                  <label key={model.value} className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => handleToggleModel(model.value)}
-                      className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
-                    />
-                    <span className="truncate flex-1" title={model.label}>
-                      {model.label}
-                    </span>
-                    {model.isDefault ? (
-                      <span className="shrink-0 rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-medium text-teal-700">
-                        default
-                      </span>
-                    ) : null}
-                  </label>
-                );
-              })}
-            </div>
-
-            {modelOptions.length === 0 ? (
-              <p className="mt-2 text-xs text-gray-500">No active models are available yet.</p>
-            ) : null}
-          </div>
-        )}
+        <div className="ml-auto min-w-[220px] max-w-xs flex-1">
+          <Select
+            label="Signature"
+            value={signature}
+            onChange={(value) => onSignatureChange(value)}
+            options={signatureOptions.length > 0 ? signatureOptions : [{ value: signature, label: signature }]}
+          />
+        </div>
       </div>
-
-      <p className="mt-3 text-xs text-gray-500">
-        Domain and signature stay URL-driven. Model selection uses the standard default-model picker.
-      </p>
-    </section>
+    </AnalysisContextBar>
   );
 }

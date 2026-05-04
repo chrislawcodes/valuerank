@@ -5,6 +5,7 @@ import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Loading } from '../components/ui/Loading';
 import { Button } from '../components/ui/Button';
 import { Select } from '../components/ui/Select';
+import { AnalysisContextBar } from '../components/analysis/AnalysisContextBar';
 import {
   DOMAIN_AVAILABLE_SIGNATURES_QUERY,
   DOMAIN_ANALYSIS_QUERY,
@@ -271,6 +272,11 @@ export function DomainAnalysis() {
         ? 'All models'
         : `${selectedModelIds.length} of ${models.length} selected`;
 
+  const selectedDomainLabel = isAllDomains
+    ? 'All domains'
+    : domains.find((domain) => domain.id === selectedDomainId)?.name ?? 'Selected domain';
+  const contextSummary = `${selectedDomainLabel} · ${modelSetSummary} · ${selectedSignature === '' ? 'No signature' : selectedSignature}`;
+
   const toggleModelId = (modelId: string) => {
     setSelectedModelIds((current) => (
       current.includes(modelId)
@@ -331,53 +337,60 @@ export function DomainAnalysis() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-lg border border-gray-200 bg-white p-4">
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h2 className="text-sm font-semibold text-gray-900">Domain Selection</h2>
-            <p className="text-xs text-gray-600">
-              {isAllDomains
-                ? 'Cross-domain analysis is read-only and pools every visible domain that matches the selected signature.'
-                : 'Analysis is shown from the latest saved snapshot for this domain.'}
-            </p>
-          </div>
-          <div className="flex flex-col gap-2 md:flex-row md:items-end">
-            <div className="min-w-[210px]">
-              <Select
-                label="Domain scope"
-                options={[
-                  { value: ALL_DOMAINS_SCOPE, label: 'All domains' },
-                  ...domains.map((domain) => ({ value: domain.id, label: domain.name })),
-                ]}
-                value={isAllDomains ? ALL_DOMAINS_SCOPE : selectedDomainId}
-                onChange={(value) => {
-                  if (value === ALL_DOMAINS_SCOPE) {
-                    setSelectedScope('ALL_DOMAINS');
-                    return;
-                  }
-                  setSelectedScope('DOMAIN');
-                  setSelectedDomainId(value);
-                }}
-                disabled={domainsLoading || (domains.length === 0 && !isAllDomains)}
-              />
-            </div>
-            <div className="min-w-[210px]">
-              <Select
-                label="Signature"
-                options={
-                  signatureOptions.length === 0
-                    ? [{ value: '', label: 'No signatures with completed runs', disabled: true }]
-                    : signatureOptions.map((opt) => ({
-                      value: opt.signature,
-                      label: formatSignatureOptionLabel(opt),
-                    }))
+      <AnalysisContextBar
+        title="Domain Selection"
+        summary={contextSummary}
+        headerActions={(
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={handleExport}
+            disabled={selectedDomainId === '' || exportLoading || isAllDomains}
+            title={isAllDomains ? 'CSV export is unavailable in All domains mode' : undefined}
+          >
+            {exportLoading ? 'Exporting…' : 'Export CSV'}
+          </Button>
+        )}
+      >
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="min-w-[210px] flex-1">
+            <Select
+              label="Domain scope"
+              options={[
+                { value: ALL_DOMAINS_SCOPE, label: 'All domains' },
+                ...domains.map((domain) => ({ value: domain.id, label: domain.name })),
+              ]}
+              value={isAllDomains ? ALL_DOMAINS_SCOPE : selectedDomainId}
+              onChange={(value) => {
+                if (value === ALL_DOMAINS_SCOPE) {
+                  setSelectedScope('ALL_DOMAINS');
+                  return;
                 }
-                value={selectedSignature}
-                onChange={(value) => setSelectedSignature(value)}
-                disabled={signaturesLoading || signatureOptions.length === 0}
-              />
-            </div>
-            <details className="min-w-[210px]">
+                setSelectedScope('DOMAIN');
+                setSelectedDomainId(value);
+              }}
+              disabled={domainsLoading || (domains.length === 0 && !isAllDomains)}
+            />
+          </div>
+          <div className="min-w-[210px] flex-1">
+            <Select
+              label="Signature"
+              options={
+                signatureOptions.length === 0
+                  ? [{ value: '', label: 'No signatures with completed runs', disabled: true }]
+                  : signatureOptions.map((opt) => ({
+                    value: opt.signature,
+                    label: formatSignatureOptionLabel(opt),
+                  }))
+              }
+              value={selectedSignature}
+              onChange={(value) => setSelectedSignature(value)}
+              disabled={signaturesLoading || signatureOptions.length === 0}
+            />
+          </div>
+          <div className="ml-auto min-w-[210px] flex-1">
+            <details>
               <summary className="cursor-pointer list-none">
                 <p className="mb-1 text-sm font-medium text-gray-700">Model focus</p>
                 <div className="inline-flex w-full items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm min-h-[44px] hover:border-gray-400 sm:min-h-0">
@@ -423,44 +436,35 @@ export function DomainAnalysis() {
                 </div>
               </div>
             </details>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={handleExport}
-              disabled={selectedDomainId === '' || exportLoading || isAllDomains}
-              title={isAllDomains ? 'CSV export is unavailable in All domains mode' : undefined}
-            >
-              {exportLoading ? 'Exporting…' : 'Export CSV'}
-            </Button>
           </div>
-          {exportError !== null && <p className="mt-1 text-xs text-amber-700">{exportError}</p>}
         </div>
-        {singleSelectedModelId !== null && (
-          <p className="mt-2 text-xs text-gray-500">
-            Showing only {models.find((model) => model.model === singleSelectedModelId)?.label ?? 'the selected model'} across all tables.
-          </p>
-        )}
-        {data?.domainAnalysis != null && missingDefinitionCount > 0 && !isAllDomains && (
-          <div className="mt-2 space-y-1 text-xs text-gray-500">
-            <>
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="text-amber-700">Analysis filter excluded {missingDefinitionCount} vignette{missingDefinitionCount === 1 ? '' : 's'}.</p>
-                <Button type="button" variant="secondary" size="sm" onClick={handleRunMissingVignettes} disabled={allMissingDefinitionIds.length === 0}>
-                  Run Missing Vignettes
-                </Button>
-              </div>
-              <ul className="list-disc space-y-1 pl-5 text-amber-800">
-                {(data.domainAnalysis.missingDefinitions ?? []).map((m) => (
-                  <li key={m.definitionId}>
-                    {m.definitionName} ({m.definitionId}) - {m.reasonLabel} - AIs: {m.missingAllModels ? 'All AIs' : m.missingModelLabels.join(', ')}
-                  </li>
-                ))}
-              </ul>
-            </>
-          </div>
-        )}
-      </section>
+      </AnalysisContextBar>
+
+      {exportError !== null && <p className="mt-1 text-xs text-amber-700">{exportError}</p>}
+      {singleSelectedModelId !== null && (
+        <p className="mt-2 text-xs text-gray-500">
+          Showing only {models.find((model) => model.model === singleSelectedModelId)?.label ?? 'the selected model'} across all tables.
+        </p>
+      )}
+      {data?.domainAnalysis != null && missingDefinitionCount > 0 && !isAllDomains && (
+        <div className="mt-2 space-y-1 text-xs text-gray-500">
+          <>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-amber-700">Analysis filter excluded {missingDefinitionCount} vignette{missingDefinitionCount === 1 ? '' : 's'}.</p>
+              <Button type="button" variant="secondary" size="sm" onClick={handleRunMissingVignettes} disabled={allMissingDefinitionIds.length === 0}>
+                Run Missing Vignettes
+              </Button>
+            </div>
+            <ul className="list-disc space-y-1 pl-5 text-amber-800">
+              {(data.domainAnalysis.missingDefinitions ?? []).map((m) => (
+                <li key={m.definitionId}>
+                  {m.definitionName} ({m.definitionId}) - {m.reasonLabel} - AIs: {m.missingAllModels ? 'All AIs' : m.missingModelLabels.join(', ')}
+                </li>
+              ))}
+            </ul>
+          </>
+        </div>
+      )}
 
       <div>
         <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Findings</h1>
