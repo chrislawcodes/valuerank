@@ -45,6 +45,7 @@ function createModel(
     providerName: 'Provider',
     unscoredCount: 0,
     pushedEffectPairsUsed: 0,
+    domainPressureEffects: [],
     pressureResponseSummary: {
       mean: 0.1,
       rangeMin: 0.05,

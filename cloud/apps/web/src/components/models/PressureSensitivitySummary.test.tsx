@@ -17,6 +17,7 @@ function createModel(
     providerName: 'Provider',
     unscoredCount: 0,
     pushedEffectPairsUsed: 0,
+    domainPressureEffects: [],
     valueRates: [],
     valuePairs: [],
     pressureResponseSummary: { mean, rangeMin, rangeMax, pairsMeasured },

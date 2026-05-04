@@ -68,6 +68,12 @@ export type PressureSensitivityValueRateShape = {
   pairsMeasured: number;
 };
 
+export type DomainPressureEffectShape = {
+  domainId: string;
+  domainName: string;
+  pushedForEffect: number | null;
+};
+
 export type PressureSensitivityModelShape = {
   modelId: string;
   label: string;
@@ -79,6 +85,7 @@ export type PressureSensitivityModelShape = {
   pushedForEffect: number | null;
   pushedAgainstEffect: number | null;
   pushedEffectPairsUsed: number;
+  domainPressureEffects: DomainPressureEffectShape[];
 };
 
 export type InsufficientPressureSensitivityModelShape = {
@@ -139,6 +146,7 @@ const PressureSensitivityValuePairRef = builder.objectRef<PressureSensitivityVal
 const PressureSensitivityValueRateRef = builder.objectRef<PressureSensitivityValueRateShape>(
   'PressureSensitivityValueRate',
 );
+const DomainPressureEffectRef = builder.objectRef<DomainPressureEffectShape>('DomainPressureEffect');
 const PressureSensitivityModelRef = builder.objectRef<PressureSensitivityModelShape>(
   'PressureSensitivityModel',
 );
@@ -238,6 +246,14 @@ builder.objectType(PressureSensitivityValueRateRef, {
   }),
 });
 
+builder.objectType(DomainPressureEffectRef, {
+  fields: (t) => ({
+    domainId: t.exposeString('domainId'),
+    domainName: t.exposeString('domainName'),
+    pushedForEffect: t.exposeFloat('pushedForEffect', { nullable: true }),
+  }),
+});
+
 builder.objectType(PressureSensitivityModelRef, {
   fields: (t) => ({
     modelId: t.exposeString('modelId'),
@@ -252,6 +268,7 @@ builder.objectType(PressureSensitivityModelRef, {
     pushedForEffect: t.exposeFloat('pushedForEffect', { nullable: true }),
     pushedAgainstEffect: t.exposeFloat('pushedAgainstEffect', { nullable: true }),
     pushedEffectPairsUsed: t.exposeInt('pushedEffectPairsUsed'),
+    domainPressureEffects: t.expose('domainPressureEffects', { type: [DomainPressureEffectRef] }),
   }),
 });
 

@@ -16,6 +16,11 @@ query PressureSensitivity(
       pushedForEffect
       pushedAgainstEffect
       pushedEffectPairsUsed
+      domainPressureEffects {
+        domainId
+        domainName
+        pushedForEffect
+      }
       pressureResponseSummary {
         mean
         rangeMin
