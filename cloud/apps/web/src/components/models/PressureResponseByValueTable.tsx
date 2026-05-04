@@ -35,7 +35,7 @@ type ValueRow = {
   responsiveness: number | null;
 };
 
-const GRID_LABELS = [5, 4, 3, 2, 1];
+const GRID_LABELS = [1, 2, 3, 4, 5];
 
 function isCountedCell(pattern: CountGridPattern, rowIndex: number, colIndex: number): boolean {
   switch (pattern) {
@@ -44,27 +44,41 @@ function isCountedCell(pattern: CountGridPattern, rowIndex: number, colIndex: nu
     case 'balanced':
       return rowIndex === colIndex;
     case 'highPressureOnValue':
-      return rowIndex <= 1 && colIndex >= 2;
+      return rowIndex <= 2 && colIndex >= 3;
     case 'highPressureOnOpposingValue':
-      return rowIndex >= 2 && colIndex <= 1;
+      return rowIndex >= 3 && colIndex <= 2;
   }
 }
 
 function CountGrid({ pattern }: { pattern: CountGridPattern }) {
   return (
-    <div className="grid grid-cols-5 gap-0.5" aria-hidden="true">
-      {GRID_LABELS.map((_, rowIndex) =>
-        GRID_LABELS.map((__, colIndex) => {
-          const filled = isCountedCell(pattern, rowIndex, colIndex);
-          return (
-            <div
-              key={`${pattern}-${rowIndex}-${colIndex}`}
-              className={`h-3.5 w-3.5 rounded-[2px] border ${
-                filled ? 'border-blue-500 bg-blue-500' : 'border-blue-100 bg-blue-50'
-              }`}
-            />
-          );
-        }))}
+    <div className="space-y-0.5" aria-hidden="true">
+      <div className="flex items-center gap-0.5">
+        <div className="w-3" />
+        {GRID_LABELS.map((label) => (
+          <div key={label} className="flex h-3.5 w-3.5 items-center justify-center text-[8px] leading-none text-gray-400">
+            {label}
+          </div>
+        ))}
+      </div>
+      {GRID_LABELS.map((rowLabel, rowIndex) => (
+        <div key={rowLabel} className="flex items-center gap-0.5">
+          <div className="flex h-3.5 w-3 items-center justify-end pr-0.5 text-[8px] leading-none text-gray-400">
+            {rowLabel}
+          </div>
+          {GRID_LABELS.map((_, colIndex) => {
+            const filled = isCountedCell(pattern, rowIndex, colIndex);
+            return (
+              <div
+                key={colIndex}
+                className={`h-3.5 w-3.5 rounded-[2px] border ${
+                  filled ? 'border-blue-500 bg-blue-500' : 'border-blue-100 bg-blue-50'
+                }`}
+              />
+            );
+          })}
+        </div>
+      ))}
     </div>
   );
 }

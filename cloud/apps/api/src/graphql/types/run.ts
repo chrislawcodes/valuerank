@@ -28,6 +28,7 @@ type RunConfig = {
   estimatedCosts?: CostEstimateShape;
   companionRunId?: string | null;
   jobChoiceBatchGroupId?: string | null;
+  /** @deprecated Use definitionSnapshot.components.value_first.token instead. */
   jobChoiceValueFirst?: string | null;
   isAggregate?: boolean;
   sourceRunIds?: string[];

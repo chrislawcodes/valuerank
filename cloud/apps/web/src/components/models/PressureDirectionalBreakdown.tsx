@@ -1,6 +1,7 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/Table';
 import { HeaderTooltip } from '../ui/HeaderTooltip';
+import { ScreenshotButton } from '../ui/ScreenshotButton';
 import type { PressureSensitivityModel } from '../../api/operations/pressureSensitivity';
 import { formatSignedPoints } from './pressureSensitivityFormatting';
 
@@ -11,152 +12,128 @@ type Props = {
 type ModelRow = {
   modelId: string;
   label: string;
-  pushedForEffect: number;
-  pushedAgainstEffect: number;
-  gap: number;
-  pairsUsed: number;
+  overallEffect: number;
+  domainEffects: Map<string, number | null>;
 };
 
-type DirectionalPressureResponse = {
-  baselineRate: number | null;
-  pushTowardFirstRate: number | null;
-  pushTowardSecondRate: number | null;
-};
+type Domain = { id: string; name: string };
 
-type DirectionalValuePair = {
-  pressureResponse: DirectionalPressureResponse | null;
-};
+const MAX_DELTA = 0.25;
 
-type DirectionalMeasuredPressureResponse = {
-  baselineRate: number;
-  pushTowardFirstRate: number;
-  pushTowardSecondRate: number;
-};
+const OVERALL_TOOLTIP =
+  "Win-rate lift above balanced baseline when a value's pressure is high and the other's is calm. Direction-balanced and averaged across all domains and measured pairs.";
 
-type DirectionalMeasuredValuePair = {
-  pressureResponse: DirectionalMeasuredPressureResponse;
-};
-
-type DirectionalModel = Pick<PressureSensitivityModel, 'modelId' | 'label'> & {
-  valuePairs: DirectionalValuePair[];
-};
-
-const PUSHED_FOR_TOOLTIP =
-  "Average win-rate lift above baseline when a value's pressure is high and the other's is calm, across all measured pairs for this model. Positive means the model moves toward the value being pressed.";
-const PUSHED_AGAINST_TOOLTIP =
-  'How much the model moves away from a value when the competing value is championed, averaged across all measured pairs for this model. A large positive value means the model follows opposing pressure — it yields. Near zero means it holds its position.';
-const GAP_TOOLTIP =
-  'Pushed-for effect minus pushed-against effect. Near zero means pressure works equally in both directions. A large positive gap means the model responds more when a value is directly championed than when it is opposed.';
-const PAIRS_TOOLTIP =
-  'Number of value pairs that had sufficient data to compute both directional effects for this model.';
-
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value);
+function domainTooltip(domainName: string): string {
+  return `How this model's pressure sensitivity in ${domainName} compares to its overall average. Green means more pressure-sensitive here; red means less.`;
 }
 
-function hasMeasuredPressureResponse(pair: DirectionalValuePair): pair is DirectionalMeasuredValuePair {
-  const response = pair.pressureResponse;
-  return (
-    response != null
-    && isFiniteNumber(response.baselineRate)
-    && isFiniteNumber(response.pushTowardFirstRate)
-    && isFiniteNumber(response.pushTowardSecondRate)
-  );
+function getCellDeltaClass(delta: number): string {
+  const clamped = Math.max(-MAX_DELTA, Math.min(MAX_DELTA, delta));
+  const intensity = Math.abs(clamped) / MAX_DELTA;
+  if (Math.abs(delta) < 0.005) return 'border-gray-200 bg-gray-50 text-gray-700';
+  if (delta > 0) {
+    return intensity > 0.66
+      ? 'border-emerald-300 bg-emerald-100 text-emerald-900'
+      : intensity > 0.33
+        ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+        : 'border-emerald-100 bg-emerald-50/60 text-emerald-700';
+  }
+  return intensity > 0.66
+    ? 'border-rose-300 bg-rose-100 text-rose-900'
+    : intensity > 0.33
+      ? 'border-rose-200 bg-rose-50 text-rose-800'
+      : 'border-rose-100 bg-rose-50/60 text-rose-700';
 }
 
 export function PressureDirectionalBreakdown({ models }: Props) {
+  const tableRef = useRef<HTMLDivElement>(null);
+  const domains = useMemo<Domain[]>(() => {
+    const domainMap = new Map<string, string>();
+    for (const model of models) {
+      for (const de of model.domainPressureEffects) {
+        domainMap.set(de.domainId, de.domainName);
+      }
+    }
+    return [...domainMap.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }));
+  }, [models]);
+
   const rows = useMemo<ModelRow[]>(() => {
     const nextRows: ModelRow[] = [];
-
-    for (const model of models as unknown as DirectionalModel[]) {
-      const validPairs = model.valuePairs.filter(hasMeasuredPressureResponse);
-
-      const pairsUsed = validPairs.length;
-      if (pairsUsed === 0) continue;
-
-      let pushedForTotal = 0;
-      let pushedAgainstTotal = 0;
-
-      for (const pair of validPairs) {
-        const response = pair.pressureResponse;
-        pushedForTotal += response.pushTowardFirstRate - response.baselineRate;
-        pushedAgainstTotal += response.baselineRate - response.pushTowardSecondRate;
+    for (const model of models) {
+      if (model.pushedForEffect == null) continue;
+      const domainEffects = new Map<string, number | null>();
+      for (const de of model.domainPressureEffects) {
+        domainEffects.set(de.domainId, de.pushedForEffect ?? null);
       }
-
-      const pushedForEffect = pushedForTotal / pairsUsed;
-      const pushedAgainstEffect = pushedAgainstTotal / pairsUsed;
-      const gap = pushedForEffect - pushedAgainstEffect;
-
       nextRows.push({
         modelId: model.modelId,
         label: model.label,
-        pushedForEffect,
-        pushedAgainstEffect,
-        gap,
-        pairsUsed,
+        overallEffect: model.pushedForEffect,
+        domainEffects,
       });
     }
-
-    return nextRows;
-  }, [models]);
-
-  const sortedRows = useMemo(
-    () => [...rows].sort((a, b) => {
-      const gapDelta = Math.abs(b.gap) - Math.abs(a.gap);
-      if (gapDelta !== 0) return gapDelta;
+    return nextRows.sort((a, b) => {
+      const delta = b.overallEffect - a.overallEffect;
+      if (delta !== 0) return delta;
       const labelDelta = a.label.localeCompare(b.label, 'en', { sensitivity: 'base' });
       if (labelDelta !== 0) return labelDelta;
       return a.modelId.localeCompare(b.modelId);
-    }),
-    [rows],
-  );
+    });
+  }, [models]);
 
-  if (sortedRows.length === 0) {
-    return null;
-  }
+  if (rows.length === 0) return null;
 
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
-      <div className="mb-3">
-        <h2 className="text-lg font-semibold text-gray-900">Does pressure work both ways?</h2>
-        <p className="text-sm text-gray-600">
-          For each model, this table compares how much the model moves when a value is actively
-          pressed versus when it is opposed. Equal effects mean pressure works symmetrically. A
-          large gap means the model responds more to one direction than the other.
-        </p>
+    <section ref={tableRef} className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">Pressure sensitivity by domain</h2>
+          <p className="text-sm text-gray-600">
+            How much each model shifts toward a value when that value is explicitly pressed, versus a
+            neutral baseline. Domain cells show the delta from each model&apos;s overall average.
+          </p>
+        </div>
+        <ScreenshotButton targetRef={tableRef} label="pressure sensitivity by domain" />
       </div>
       <Table variant="bordered">
         <TableHeader variant="bordered">
           <TableRow>
             <TableHead className="text-xs uppercase tracking-wide text-gray-500">Model</TableHead>
             <TableHead className="text-xs uppercase tracking-wide text-gray-500">
-              <HeaderTooltip label="Pushed for" content={PUSHED_FOR_TOOLTIP} />
+              <HeaderTooltip label="Overall" content={OVERALL_TOOLTIP} />
             </TableHead>
-            <TableHead className="text-xs uppercase tracking-wide text-gray-500">
-              <HeaderTooltip label="Pushed against" content={PUSHED_AGAINST_TOOLTIP} />
-            </TableHead>
-            <TableHead className="text-xs uppercase tracking-wide text-gray-500">
-              <HeaderTooltip label="Gap" content={GAP_TOOLTIP} />
-            </TableHead>
-            <TableHead className="text-xs uppercase tracking-wide text-gray-500">
-              <HeaderTooltip label="Pairs" content={PAIRS_TOOLTIP} />
-            </TableHead>
+            {domains.map((domain) => (
+              <TableHead key={domain.id} className="text-xs uppercase tracking-wide text-gray-500">
+                <HeaderTooltip label={domain.name} content={domainTooltip(domain.name)} />
+              </TableHead>
+            ))}
           </TableRow>
         </TableHeader>
         <TableBody>
-          {sortedRows.map((row) => (
+          {rows.map((row) => (
             <TableRow key={row.modelId}>
               <TableCell className="font-medium text-gray-900">{row.label}</TableCell>
-              <TableCell className={`font-mono ${row.pushedForEffect < 0 ? 'text-red-700' : 'text-gray-900'}`}>
-                {formatSignedPoints(row.pushedForEffect)}
+              <TableCell className={`font-mono ${row.overallEffect < 0 ? 'text-red-700' : 'text-gray-900'}`}>
+                {formatSignedPoints(row.overallEffect)}
               </TableCell>
-              <TableCell className={`font-mono ${row.pushedAgainstEffect < 0 ? 'text-red-700' : 'text-gray-900'}`}>
-                {formatSignedPoints(row.pushedAgainstEffect)}
-              </TableCell>
-              <TableCell className={`font-mono ${row.gap < 0 ? 'text-red-700' : 'text-gray-900'}`}>
-                {formatSignedPoints(row.gap)}
-              </TableCell>
-              <TableCell className="font-mono text-gray-700">{row.pairsUsed}</TableCell>
+              {domains.map((domain) => {
+                const effect = row.domainEffects.get(domain.id) ?? null;
+                const delta = effect != null ? effect - row.overallEffect : null;
+                return (
+                  <TableCell
+                    key={domain.id}
+                    className={`text-center text-xs font-semibold transition-colors ${
+                      delta != null
+                        ? getCellDeltaClass(delta)
+                        : 'border-gray-100 bg-gray-50 text-gray-400'
+                    }`}
+                  >
+                    {delta != null ? formatSignedPoints(delta) : '—'}
+                  </TableCell>
+                );
+              })}
             </TableRow>
           ))}
         </TableBody>

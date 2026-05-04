@@ -2110,11 +2110,21 @@ type PressureResponseSummary {
   rangeMin: Float
 }
 
+type DomainPressureEffect {
+  domainId: String!
+  domainName: String!
+  pushedForEffect: Float
+}
+
 type PressureSensitivityModel {
+  domainPressureEffects: [DomainPressureEffect!]!
   label: String!
   modelId: String!
   pressureResponseSummary: PressureResponseSummary!
   providerName: String!
+  pushedAgainstEffect: Float
+  pushedEffectPairsUsed: Int!
+  pushedForEffect: Float
   unscoredCount: Int!
   valuePairs: [PressureSensitivityValuePair!]!
   valueRates: [PressureSensitivityValueRate!]!

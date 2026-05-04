@@ -4,25 +4,33 @@ import { PressureDirectionalBreakdown } from './PressureDirectionalBreakdown';
 import { formatSignedPoints } from './pressureSensitivityFormatting';
 import type { PressureSensitivityModel } from '../../api/operations/pressureSensitivity';
 
-type TestPair = {
-  pressureResponse: {
-    baselineRate: number | null;
-    pushTowardFirstRate: number | null;
-    pushTowardSecondRate: number | null;
-  } | null;
-};
+type DomainEffect = { domainId: string; domainName: string; pushedForEffect: number | null };
 
 function createModel(
   modelId: string,
   label: string,
-  valuePairs: TestPair[],
+  pushedForEffect: number | null,
+  domainEffects: DomainEffect[] = [],
 ): PressureSensitivityModel {
   return {
     modelId,
     label,
-    valuePairs,
+    providerName: 'Provider',
+    unscoredCount: 0,
+    pushedForEffect,
+    pushedAgainstEffect: null,
+    pushedEffectPairsUsed: domainEffects.length,
+    domainPressureEffects: domainEffects,
+    pressureResponseSummary: { mean: 0.1, rangeMin: 0.05, rangeMax: 0.15, pairsMeasured: 1 },
+    valueRates: [],
+    valuePairs: [],
   } as unknown as PressureSensitivityModel;
 }
+
+const DOMAINS: DomainEffect[] = [
+  { domainId: 'dom-1', domainName: 'Ethics', pushedForEffect: 0.3 },
+  { domainId: 'dom-2', domainName: 'Politics', pushedForEffect: 0.1 },
+];
 
 function renderBreakdown(models: PressureSensitivityModel[]) {
   render(<PressureDirectionalBreakdown models={models} />);
@@ -40,45 +48,43 @@ function getCells(row: HTMLTableRowElement) {
 
 describe('PressureDirectionalBreakdown', () => {
   it('renders heading and column headers', () => {
-    renderBreakdown([
-      createModel('alpha', 'Alpha', [
-        { pressureResponse: { baselineRate: 0.5, pushTowardFirstRate: 0.7, pushTowardSecondRate: 0.4 } },
-      ]),
-    ]);
+    renderBreakdown([createModel('alpha', 'Alpha', 0.2, DOMAINS)]);
 
-    expect(screen.getByText('Does pressure work both ways?')).toBeDefined();
-    expect(screen.getByText('Pushed for')).toBeDefined();
-    expect(screen.getByText('Pushed against')).toBeDefined();
-    expect(screen.getByText('Gap')).toBeDefined();
+    expect(screen.getByText('Pressure sensitivity by domain')).toBeDefined();
+    expect(screen.getByText('Overall')).toBeDefined();
+    expect(screen.getByText('Ethics')).toBeDefined();
+    expect(screen.getByText('Politics')).toBeDefined();
   });
 
-  it('computes pushed-for, pushed-against, and gap values', () => {
-    const expectedPushedFor = formatSignedPoints(0.2);
-    const expectedPushedAgainst = formatSignedPoints(0.1);
-    const expectedGap = formatSignedPoints(0.1);
+  it('displays overall effect and domain deltas (domain minus overall)', () => {
+    // DOMAINS: Ethics=0.3, Politics=0.1; overall=0.2
+    // Ethics delta: 0.3 - 0.2 = +0.1
+    // Politics delta: 0.1 - 0.2 = -0.1
+    renderBreakdown([createModel('alpha', 'Alpha', 0.2, DOMAINS)]);
 
+    const row = getRowByLabel('Alpha');
+    const cells = getCells(row);
+    expect(cells[1]?.textContent ?? '').toBe(formatSignedPoints(0.2));   // Overall unchanged
+    expect(cells[2]?.textContent ?? '').toBe(formatSignedPoints(0.1));   // Ethics delta
+    expect(cells[3]?.textContent ?? '').toBe(formatSignedPoints(-0.1));  // Politics delta
+  });
+
+  it('shows em dash for null domain effect', () => {
     renderBreakdown([
-      createModel('alpha', 'Alpha', [
-        { pressureResponse: { baselineRate: 0.5, pushTowardFirstRate: 0.7, pushTowardSecondRate: 0.4 } },
-        { pressureResponse: { baselineRate: 0.5, pushTowardFirstRate: 0.7, pushTowardSecondRate: 0.4 } },
+      createModel('alpha', 'Alpha', 0.2, [
+        { domainId: 'dom-1', domainName: 'Ethics', pushedForEffect: null },
       ]),
     ]);
 
     const row = getRowByLabel('Alpha');
     const cells = getCells(row);
-    expect(cells[1]?.textContent ?? '').toBe(expectedPushedFor);
-    expect(cells[2]?.textContent ?? '').toBe(expectedPushedAgainst);
-    expect(cells[3]?.textContent ?? '').toBe(expectedGap);
+    expect(cells[2]?.textContent ?? '').toBe('—');
   });
 
-  it('sorts by absolute gap descending', () => {
+  it('sorts by overall effect descending', () => {
     renderBreakdown([
-      createModel('model-b', 'ModelB', [
-        { pressureResponse: { baselineRate: 0.5, pushTowardFirstRate: 0.55, pushTowardSecondRate: 0.5 } },
-      ]),
-      createModel('model-a', 'ModelA', [
-        { pressureResponse: { baselineRate: 0.5, pushTowardFirstRate: 0.7, pushTowardSecondRate: 0.5 } },
-      ]),
+      createModel('model-b', 'ModelB', 0.1, DOMAINS),
+      createModel('model-a', 'ModelA', 0.3, DOMAINS),
     ]);
 
     const rows = screen.getAllByRole('row');
@@ -88,12 +94,8 @@ describe('PressureDirectionalBreakdown', () => {
 
   it('breaks ties alphabetically', () => {
     renderBreakdown([
-      createModel('bravo', 'Bravo', [
-        { pressureResponse: { baselineRate: 0.5, pushTowardFirstRate: 0.7, pushTowardSecondRate: 0.5 } },
-      ]),
-      createModel('alpha', 'Alpha', [
-        { pressureResponse: { baselineRate: 0.5, pushTowardFirstRate: 0.3, pushTowardSecondRate: 0.5 } },
-      ]),
+      createModel('bravo', 'Bravo', 0.2, DOMAINS),
+      createModel('alpha', 'Alpha', 0.2, DOMAINS),
     ]);
 
     const rows = screen.getAllByRole('row');
@@ -101,51 +103,41 @@ describe('PressureDirectionalBreakdown', () => {
     expect(rows[2]?.textContent ?? '').toContain('Bravo');
   });
 
-  it('excludes models with zero valid pairs', () => {
+  it('excludes models where overall pushed effect is null', () => {
     renderBreakdown([
-      createModel('invalid', 'Invalid', [{ pressureResponse: null }]),
-      createModel('valid', 'Valid', [
-        { pressureResponse: { baselineRate: 0.5, pushTowardFirstRate: 0.7, pushTowardSecondRate: 0.4 } },
-      ]),
+      createModel('invalid', 'Invalid', null, DOMAINS),
+      createModel('valid', 'Valid', 0.2, DOMAINS),
     ]);
 
     expect(screen.queryByText('Invalid')).toBeNull();
     expect(screen.getByText('Valid')).toBeDefined();
   });
 
-  it('returns null when all models have zero valid pairs', () => {
+  it('returns null when all models have null overall effect', () => {
     renderBreakdown([
-      createModel('invalid-a', 'Invalid A', [{ pressureResponse: null }]),
-      createModel('invalid-b', 'Invalid B', [{ pressureResponse: null }]),
+      createModel('a', 'A', null),
+      createModel('b', 'B', null),
     ]);
 
-    expect(screen.queryByText('Does pressure work both ways?')).toBeNull();
+    expect(screen.queryByText('Pressure sensitivity by domain')).toBeNull();
   });
 
   it('returns null for an empty models array', () => {
     renderBreakdown([]);
 
-    expect(screen.queryByText('Does pressure work both ways?')).toBeNull();
+    expect(screen.queryByText('Pressure sensitivity by domain')).toBeNull();
   });
 
-  it('uses red text for a negative pushed-for effect', () => {
-    renderBreakdown([
-      createModel('alpha', 'Alpha', [
-        { pressureResponse: { baselineRate: 0.5, pushTowardFirstRate: 0.4, pushTowardSecondRate: 0.4 } },
-      ]),
-    ]);
+  it('uses red text for a negative overall effect', () => {
+    renderBreakdown([createModel('alpha', 'Alpha', -0.1, DOMAINS)]);
 
     const row = getRowByLabel('Alpha');
-    const cell = within(row).getByText(formatSignedPoints(-0.1)).closest('td');
+    const cell = getCells(row)[1];
     expect(cell?.className ?? '').toContain('text-red-700');
   });
 
-  it('uses gray text for a positive pushed-for effect', () => {
-    renderBreakdown([
-      createModel('alpha', 'Alpha', [
-        { pressureResponse: { baselineRate: 0.5, pushTowardFirstRate: 0.6, pushTowardSecondRate: 0.4 } },
-      ]),
-    ]);
+  it('uses default text for a positive overall effect', () => {
+    renderBreakdown([createModel('alpha', 'Alpha', 0.1, DOMAINS)]);
 
     const row = getRowByLabel('Alpha');
     const cell = getCells(row)[1];
@@ -153,72 +145,45 @@ describe('PressureDirectionalBreakdown', () => {
     expect(cell?.className ?? '').not.toContain('text-red-700');
   });
 
-  it('uses red text for a negative gap', () => {
+  it('uses rose background for a negative domain delta', () => {
+    // delta = -0.2 - 0.1 = -0.3 → intensity > 0.66 → rose-300/100 classes
     renderBreakdown([
-      createModel('alpha', 'Alpha', [
-        { pressureResponse: { baselineRate: 0.5, pushTowardFirstRate: 0.4, pushTowardSecondRate: 0.3 } },
+      createModel('alpha', 'Alpha', 0.1, [
+        { domainId: 'dom-1', domainName: 'Ethics', pushedForEffect: -0.2 },
       ]),
     ]);
 
     const row = getRowByLabel('Alpha');
-    const cell = getCells(row)[3];
-    expect(cell?.className ?? '').toContain('text-red-700');
+    const cell = getCells(row)[2];
+    expect(cell?.className ?? '').toContain('rose');
   });
 
-  it('sorts by absolute value', () => {
+  it('sorts domain columns alphabetically by name', () => {
     renderBreakdown([
-      createModel('model-b', 'ModelB', [
-        { pressureResponse: { baselineRate: 0.5, pushTowardFirstRate: 0.6, pushTowardSecondRate: 0.5 } },
-      ]),
-      createModel('model-a', 'ModelA', [
-        { pressureResponse: { baselineRate: 0.5, pushTowardFirstRate: 0.3, pushTowardSecondRate: 0.5 } },
+      createModel('alpha', 'Alpha', 0.2, [
+        { domainId: 'dom-z', domainName: 'Zoology', pushedForEffect: 0.1 },
+        { domainId: 'dom-a', domainName: 'Art', pushedForEffect: 0.2 },
       ]),
     ]);
 
-    const rows = screen.getAllByRole('row');
-    expect(rows[1]?.textContent ?? '').toContain('ModelA');
-    expect(rows[2]?.textContent ?? '').toContain('ModelB');
+    const headers = screen.getAllByRole('columnheader');
+    const headerText = headers.map((h) => h.textContent ?? '');
+    const artIdx = headerText.findIndex((t) => t.includes('Art'));
+    const zooIdx = headerText.findIndex((t) => t.includes('Zoology'));
+    expect(artIdx).toBeLessThan(zooIdx);
   });
 
-  it('shows all four tooltip texts', () => {
-    renderBreakdown([
-      createModel('alpha', 'Alpha', [
-        { pressureResponse: { baselineRate: 0.5, pushTowardFirstRate: 0.7, pushTowardSecondRate: 0.4 } },
-      ]),
-    ]);
+  it('shows overall and domain tooltips', () => {
+    renderBreakdown([createModel('alpha', 'Alpha', 0.2, DOMAINS)]);
 
-    const pushedForTrigger = screen.getByRole('button', { name: /show pushed for help/i });
-    fireEvent.focus(pushedForTrigger);
-    expect(screen.getByRole('tooltip').textContent ?? '').toContain('Average win-rate lift above baseline');
-    fireEvent.blur(pushedForTrigger);
+    const overallTrigger = screen.getByRole('button', { name: /show overall help/i });
+    fireEvent.focus(overallTrigger);
+    expect(screen.getByRole('tooltip').textContent ?? '').toContain('Win-rate lift above balanced baseline');
+    fireEvent.blur(overallTrigger);
 
-    const pushedAgainstTrigger = screen.getByRole('button', { name: /show pushed against help/i });
-    fireEvent.focus(pushedAgainstTrigger);
-    expect(screen.getByRole('tooltip').textContent ?? '').toContain('moves away from a value');
-    fireEvent.blur(pushedAgainstTrigger);
-
-    const gapTrigger = screen.getByRole('button', { name: /show gap help/i });
-    fireEvent.focus(gapTrigger);
-    expect(screen.getByRole('tooltip').textContent ?? '').toContain('Pushed-for effect minus pushed-against effect');
-    fireEvent.blur(gapTrigger);
-
-    const pairsTrigger = screen.getByRole('button', { name: /show pairs help/i });
-    fireEvent.focus(pairsTrigger);
-    expect(screen.getByRole('tooltip').textContent ?? '').toContain('sufficient data to compute both directional effects');
-  });
-
-  it('excludes non-finite pairs', () => {
-    renderBreakdown([
-      createModel('alpha', 'Alpha', [
-        { pressureResponse: { baselineRate: 0.5, pushTowardFirstRate: 0.7, pushTowardSecondRate: 0.4 } },
-        { pressureResponse: { baselineRate: 0.5, pushTowardFirstRate: Number.NaN, pushTowardSecondRate: 0.4 } },
-      ]),
-    ]);
-
-    const row = getRowByLabel('Alpha');
-    const cells = getCells(row);
-    expect(cells[4]?.textContent ?? '').toBe('1');
-    expect(cells[1]?.textContent ?? '').toBe(formatSignedPoints(0.2));
-    expect(cells[2]?.textContent ?? '').toBe(formatSignedPoints(0.1));
+    const ethicsTrigger = screen.getByRole('button', { name: /show ethics help/i });
+    fireEvent.focus(ethicsTrigger);
+    expect(screen.getByRole('tooltip').textContent ?? '').toContain('Ethics');
+    fireEvent.blur(ethicsTrigger);
   });
 });
