@@ -1,6 +1,7 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/Table';
 import { HeaderTooltip } from '../ui/HeaderTooltip';
+import { ScreenshotButton } from '../ui/ScreenshotButton';
 import type { PressureSensitivityModel } from '../../api/operations/pressureSensitivity';
 import { formatSignedPoints } from './pressureSensitivityFormatting';
 
@@ -17,14 +18,35 @@ type ModelRow = {
 
 type Domain = { id: string; name: string };
 
+const MAX_DELTA = 0.25;
+
 const OVERALL_TOOLTIP =
   "Win-rate lift above balanced baseline when a value's pressure is high and the other's is calm. Direction-balanced and averaged across all domains and measured pairs.";
 
 function domainTooltip(domainName: string): string {
-  return `Pressure sensitivity within ${domainName}. Win-rate lift above balanced baseline, averaged across pairs in this domain.`;
+  return `How this model's pressure sensitivity in ${domainName} compares to its overall average. Green means more pressure-sensitive here; red means less.`;
+}
+
+function getCellDeltaClass(delta: number): string {
+  const clamped = Math.max(-MAX_DELTA, Math.min(MAX_DELTA, delta));
+  const intensity = Math.abs(clamped) / MAX_DELTA;
+  if (Math.abs(delta) < 0.005) return 'border-gray-200 bg-gray-50 text-gray-700';
+  if (delta > 0) {
+    return intensity > 0.66
+      ? 'border-emerald-300 bg-emerald-100 text-emerald-900'
+      : intensity > 0.33
+        ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+        : 'border-emerald-100 bg-emerald-50/60 text-emerald-700';
+  }
+  return intensity > 0.66
+    ? 'border-rose-300 bg-rose-100 text-rose-900'
+    : intensity > 0.33
+      ? 'border-rose-200 bg-rose-50 text-rose-800'
+      : 'border-rose-100 bg-rose-50/60 text-rose-700';
 }
 
 export function PressureDirectionalBreakdown({ models }: Props) {
+  const tableRef = useRef<HTMLDivElement>(null);
   const domains = useMemo<Domain[]>(() => {
     const domainMap = new Map<string, string>();
     for (const model of models) {
@@ -64,13 +86,16 @@ export function PressureDirectionalBreakdown({ models }: Props) {
   if (rows.length === 0) return null;
 
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
-      <div className="mb-3">
-        <h2 className="text-lg font-semibold text-gray-900">Pressure sensitivity by domain</h2>
-        <p className="text-sm text-gray-600">
-          How much each model shifts toward a value when that value is explicitly pressed, versus a
-          neutral baseline. Broken down by domain to show where pressure sensitivity is strongest.
-        </p>
+    <section ref={tableRef} className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">Pressure sensitivity by domain</h2>
+          <p className="text-sm text-gray-600">
+            How much each model shifts toward a value when that value is explicitly pressed, versus a
+            neutral baseline. Domain cells show the delta from each model&apos;s overall average.
+          </p>
+        </div>
+        <ScreenshotButton targetRef={tableRef} label="pressure sensitivity by domain" />
       </div>
       <Table variant="bordered">
         <TableHeader variant="bordered">
@@ -95,12 +120,17 @@ export function PressureDirectionalBreakdown({ models }: Props) {
               </TableCell>
               {domains.map((domain) => {
                 const effect = row.domainEffects.get(domain.id) ?? null;
+                const delta = effect != null ? effect - row.overallEffect : null;
                 return (
                   <TableCell
                     key={domain.id}
-                    className={`font-mono ${effect != null && effect < 0 ? 'text-red-700' : 'text-gray-500'}`}
+                    className={`text-center text-xs font-semibold transition-colors ${
+                      delta != null
+                        ? getCellDeltaClass(delta)
+                        : 'border-gray-100 bg-gray-50 text-gray-400'
+                    }`}
                   >
-                    {effect != null ? formatSignedPoints(effect) : '—'}
+                    {delta != null ? formatSignedPoints(delta) : '—'}
                   </TableCell>
                 );
               })}

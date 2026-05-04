@@ -56,14 +56,17 @@ describe('PressureDirectionalBreakdown', () => {
     expect(screen.getByText('Politics')).toBeDefined();
   });
 
-  it('displays overall effect and domain effects', () => {
+  it('displays overall effect and domain deltas (domain minus overall)', () => {
+    // DOMAINS: Ethics=0.3, Politics=0.1; overall=0.2
+    // Ethics delta: 0.3 - 0.2 = +0.1
+    // Politics delta: 0.1 - 0.2 = -0.1
     renderBreakdown([createModel('alpha', 'Alpha', 0.2, DOMAINS)]);
 
     const row = getRowByLabel('Alpha');
     const cells = getCells(row);
-    expect(cells[1]?.textContent ?? '').toBe(formatSignedPoints(0.2));
-    expect(cells[2]?.textContent ?? '').toBe(formatSignedPoints(0.3));
-    expect(cells[3]?.textContent ?? '').toBe(formatSignedPoints(0.1));
+    expect(cells[1]?.textContent ?? '').toBe(formatSignedPoints(0.2));   // Overall unchanged
+    expect(cells[2]?.textContent ?? '').toBe(formatSignedPoints(0.1));   // Ethics delta
+    expect(cells[3]?.textContent ?? '').toBe(formatSignedPoints(-0.1));  // Politics delta
   });
 
   it('shows em dash for null domain effect', () => {
@@ -142,7 +145,8 @@ describe('PressureDirectionalBreakdown', () => {
     expect(cell?.className ?? '').not.toContain('text-red-700');
   });
 
-  it('uses red text for a negative domain effect', () => {
+  it('uses rose background for a negative domain delta', () => {
+    // delta = -0.2 - 0.1 = -0.3 → intensity > 0.66 → rose-300/100 classes
     renderBreakdown([
       createModel('alpha', 'Alpha', 0.1, [
         { domainId: 'dom-1', domainName: 'Ethics', pushedForEffect: -0.2 },
@@ -151,7 +155,7 @@ describe('PressureDirectionalBreakdown', () => {
 
     const row = getRowByLabel('Alpha');
     const cell = getCells(row)[2];
-    expect(cell?.className ?? '').toContain('text-red-700');
+    expect(cell?.className ?? '').toContain('rose');
   });
 
   it('sorts domain columns alphabetically by name', () => {
@@ -179,7 +183,7 @@ describe('PressureDirectionalBreakdown', () => {
 
     const ethicsTrigger = screen.getByRole('button', { name: /show ethics help/i });
     fireEvent.focus(ethicsTrigger);
-    expect(screen.getByRole('tooltip').textContent ?? '').toContain('Pressure sensitivity within Ethics');
+    expect(screen.getByRole('tooltip').textContent ?? '').toContain('Ethics');
     fireEvent.blur(ethicsTrigger);
   });
 });
