@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import { formatVnewLabel, isVnewSignature, parseVnewTemperature } from '@valuerank/shared/trial-signature';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Loading } from '../components/ui/Loading';
+import { AnalysisContextBar } from '../components/analysis/AnalysisContextBar';
 import { useDomains } from '../hooks/useDomains';
 import { AVAILABLE_SIGNATURES_QUERY, type AvailableSignaturesQueryResult } from '../api/operations/available-signatures';
 import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/llm';
@@ -24,7 +25,6 @@ import { PressureSensitivityGridSection } from '../components/models/PressureSen
 import { PressureSensitivityCrossValueMap } from '../components/models/PressureSensitivityCrossValueMap';
 import { PressureSensitivitySanityCheck } from '../components/models/PressureSensitivitySanityCheck';
 import { PressureSensitivityLimitations } from '../components/models/PressureSensitivityLimitations';
-import { PressureSensitivityFilters } from '../components/models/PressureSensitivityFilters';
 
 const DEFAULT_SIGNATURE = 'vnewtd';
 
@@ -197,7 +197,10 @@ export function PressureSensitivity() {
   const emptyState = models.length === 0 && insufficient.length === 0;
   const allInsufficient = models.length === 0 && insufficient.length > 0;
 
-  const domainOptions = useMemo(() => domains.map((d) => ({ value: d.id, label: d.name })), [domains]);
+  const domainOptions = useMemo(
+    () => [{ value: 'all', label: 'All domains' }, ...domains.map((d) => ({ value: d.id, label: d.name }))],
+    [domains],
+  );
   const signatureOptions = useMemo(
     () => availableSignatures.map((signature) => ({ value: signature, label: formatPressureSensitivitySignatureLabel(signature) })),
     [availableSignatures],
@@ -247,22 +250,40 @@ export function PressureSensitivity() {
 
   return (
     <div className="space-y-6">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Models / Pressure Sensitivity</h1>
-      </div>
-
-      <PressureSensitivityFilters
-        domainId={urlDomainId}
-        signature={selectedSignature}
-        selectedModelIds={selectedModelIds ?? []}
-        defaultModelIds={defaultModelIds}
-        domainOptions={domainOptions}
-        signatureOptions={signatureOptions}
-        modelOptions={modelOptions}
-        onDomainChange={handleDomainChange}
-        onSignatureChange={handleSignatureChange}
-        onModelSelectionChange={handleModelSelectionChange}
+      <AnalysisContextBar
+        domain={{
+          label: 'Domain',
+          value: urlDomainId ?? 'all',
+          onChange: (value) => handleDomainChange(value === 'all' ? null : value),
+          options: domainOptions,
+          disabled: domainsLoading || (domains.length === 0 && !hasExplicitDomain),
+        }}
+        signature={{
+          label: 'Signature',
+          value: selectedSignature,
+          onChange: handleSignatureChange,
+          options:
+            signatureOptions.length > 0
+              ? signatureOptions
+              : [{ value: selectedSignature, label: selectedSignature, disabled: true }],
+          disabled: signatureOptions.length === 0,
+        }}
+        models={{
+          label: 'Models',
+          selectedModelIds,
+          defaultModelIds,
+          options: modelOptions,
+          onChange: handleModelSelectionChange,
+        }}
       />
+
+      <div className="space-y-2">
+        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Pressure Sensitivity</h1>
+        <p className="max-w-3xl text-sm text-gray-600">
+          Compare how pressure changes model choices across value pairs. Use the bar above to scope the report by
+          domain, signature, and model set. The pair grid below needs exactly one model selected in the bar.
+        </p>
+      </div>
 
       {transcriptCapHit && (
         <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
@@ -292,7 +313,7 @@ export function PressureSensitivity() {
             {noActiveModels
               ? 'Create or activate models first, then reopen this report.'
               : noModelsSelected
-              ? 'Use the Models picker above to choose a default set or your own subset.'
+              ? 'Use the Models selector in the bar above to choose a default set or your own subset.'
               : 'This report depends on Aggregate-tagged runs with measurable transcripts. Once pipeline coverage is populated, the detail tables and heat maps will appear here.'}
           </p>
         </section>

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { PressureSensitivityModel } from '../../api/operations/pressureSensitivity';
-import { Select } from '../ui/Select';
 import { PressureSensitivityDetail } from './PressureSensitivityDetail';
 
 type Props = {
@@ -34,35 +33,30 @@ export function PressureSensitivityGridSection({ models, children }: Props) {
     [models, selectedModelId],
   );
 
-  const modelOptions = useMemo(
-    () => models.map((model) => ({ value: model.modelId, label: model.label })),
-    [models],
-  );
-
-  if (selectedModel == null) {
-    return null;
-  }
+  const hasSingleModel = models.length === 1;
+  const detailModel = hasSingleModel ? selectedModel ?? models[0] ?? null : null;
 
   return (
     <div className="space-y-3">
       <div className="rounded-xl border border-gray-200 bg-white p-4">
-        <div className="max-w-sm">
-          <Select
-            label="Show grids for"
-            value={selectedModel.modelId}
-            onChange={(value) => setSelectedModelId(value)}
-            options={modelOptions}
-          />
-        </div>
-        <p className="mt-2 text-xs text-gray-500">
-          The per-pair grid stays model-specific, so this picker only changes the detail section below.
+        <h3 className="text-base font-semibold text-gray-900">Pair grid</h3>
+        <p className="mt-2 text-sm text-gray-600">
+          This table is model-specific. Pick a single model in the bar above to see the pair-by-pair grid.
         </p>
+
+        {detailModel != null ? (
+          <div className="mt-4">
+            <PressureSensitivityDetail model={detailModel} />
+          </div>
+        ) : (
+          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+            Pick a single model in the bar above to view the pair-by-pair grid.
+          </div>
+        )}
       </div>
 
-      <PressureSensitivityDetail model={selectedModel} />
-
       {children?.({
-        selectedModelId: selectedModel.modelId,
+        selectedModelId: selectedModel?.modelId ?? null,
         onSelectModel: setSelectedModelId,
       })}
     </div>

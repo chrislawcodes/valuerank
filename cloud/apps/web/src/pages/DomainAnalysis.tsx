@@ -3,9 +3,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery } from 'urql';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Loading } from '../components/ui/Loading';
-import { Button } from '../components/ui/Button';
-import { Select } from '../components/ui/Select';
 import { AnalysisContextBar } from '../components/analysis/AnalysisContextBar';
+import { Button } from '../components/ui/Button';
 import {
   DOMAIN_AVAILABLE_SIGNATURES_QUERY,
   DOMAIN_ANALYSIS_QUERY,
@@ -251,39 +250,19 @@ export function DomainAnalysis() {
     });
   }, [models]);
 
-  const isDefaultSelection = useMemo(() => {
-    if (selectedModelIds.length !== defaultSelection.length) return false;
-    const defaultSet = new Set(defaultSelection);
-    return selectedModelIds.every((id) => defaultSet.has(id));
-  }, [selectedModelIds, defaultSelection]);
+  const modelOptions = useMemo(
+    () => models.map((model) => ({
+      value: model.model,
+      label: model.label,
+      isDefault: defaultSelection.includes(model.model),
+    })),
+    [defaultSelection, models],
+  );
 
   const visibleModels = useMemo(
     () => selectedModelIds.length === 0 ? models : models.filter((model) => selectedModelIds.includes(model.model)),
     [models, selectedModelIds],
   );
-
-  const singleSelectedModelId = selectedModelIds.length === 1 ? (selectedModelIds[0] ?? null) : null;
-
-  const modelSetSummary = models.length === 0
-    ? 'No models available'
-    : isDefaultSelection
-      ? `Default — ${selectedModelIds.length} model${selectedModelIds.length === 1 ? '' : 's'}`
-      : selectedModelIds.length === models.length
-        ? 'All models'
-        : `${selectedModelIds.length} of ${models.length} selected`;
-
-  const selectedDomainLabel = isAllDomains
-    ? 'All domains'
-    : domains.find((domain) => domain.id === selectedDomainId)?.name ?? 'Selected domain';
-  const contextSummary = `${selectedDomainLabel} · ${modelSetSummary} · ${selectedSignature === '' ? 'No signature' : selectedSignature}`;
-
-  const toggleModelId = (modelId: string) => {
-    setSelectedModelIds((current) => (
-      current.includes(modelId)
-        ? current.filter((id) => id !== modelId)
-        : [...current, modelId]
-    ));
-  };
 
   const missingDefinitionCount = data?.domainAnalysis.missingDefinitions?.length ?? 0;
   const allMissingDefinitionIds = useMemo(
@@ -338,114 +317,65 @@ export function DomainAnalysis() {
   return (
     <div className="space-y-6">
       <AnalysisContextBar
-        title="Domain Selection"
-        summary={contextSummary}
-        headerActions={(
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={handleExport}
-            disabled={selectedDomainId === '' || exportLoading || isAllDomains}
-            title={isAllDomains ? 'CSV export is unavailable in All domains mode' : undefined}
-          >
-            {exportLoading ? 'Exporting…' : 'Export CSV'}
-          </Button>
-        )}
-      >
-        <div className="flex flex-wrap items-end gap-4">
-          <div className="min-w-[210px] flex-1">
-            <Select
-              label="Domain scope"
-              options={[
-                { value: ALL_DOMAINS_SCOPE, label: 'All domains' },
-                ...domains.map((domain) => ({ value: domain.id, label: domain.name })),
-              ]}
-              value={isAllDomains ? ALL_DOMAINS_SCOPE : selectedDomainId}
-              onChange={(value) => {
-                if (value === ALL_DOMAINS_SCOPE) {
-                  setSelectedScope('ALL_DOMAINS');
-                  return;
-                }
-                setSelectedScope('DOMAIN');
-                setSelectedDomainId(value);
-              }}
-              disabled={domainsLoading || (domains.length === 0 && !isAllDomains)}
-            />
-          </div>
-          <div className="min-w-[210px] flex-1">
-            <Select
-              label="Signature"
-              options={
-                signatureOptions.length === 0
-                  ? [{ value: '', label: 'No signatures with completed runs', disabled: true }]
-                  : signatureOptions.map((opt) => ({
-                    value: opt.signature,
-                    label: formatSignatureOptionLabel(opt),
-                  }))
-              }
-              value={selectedSignature}
-              onChange={(value) => setSelectedSignature(value)}
-              disabled={signaturesLoading || signatureOptions.length === 0}
-            />
-          </div>
-          <div className="ml-auto min-w-[210px] flex-1">
-            <details>
-              <summary className="cursor-pointer list-none">
-                <p className="mb-1 text-sm font-medium text-gray-700">Model focus</p>
-                <div className="inline-flex w-full items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm min-h-[44px] hover:border-gray-400 sm:min-h-0">
-                  <span className={models.length === 0 ? 'text-gray-400' : ''}>{modelSetSummary}</span>
-                  <span className="ml-2 text-gray-400">▾</span>
-                </div>
-              </summary>
-              <div className="mt-1 space-y-2 rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
-                <div className="flex flex-wrap gap-1.5">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setSelectedModelIds(defaultSelection)}
-                    className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors min-h-0 ${
-                      isDefaultSelection
-                        ? 'border-teal-600 bg-teal-600 text-white hover:bg-teal-700'
-                        : 'border-gray-300 bg-white text-gray-700 hover:border-teal-400 hover:text-teal-700 hover:bg-white'
-                    }`}
-                  >
-                    Default Models
-                  </Button>
-                  {models.map((model) => {
-                    const isSelected = selectedModelIds.includes(model.model);
-                    return (
-                      <Button
-                        key={model.model}
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => toggleModelId(model.model)}
-                        className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors min-h-0 ${
-                          isSelected
-                            ? 'border-teal-600 bg-teal-600 text-white hover:bg-teal-700'
-                            : 'border-gray-300 bg-white text-gray-700 hover:border-teal-400 hover:text-teal-700 hover:bg-white'
-                        }`}
-                        title={model.label}
-                      >
-                        {model.label}
-                      </Button>
-                    );
-                  })}
-                </div>
-              </div>
-            </details>
-          </div>
+        domain={{
+          label: 'Domain',
+          value: isAllDomains ? ALL_DOMAINS_SCOPE : selectedDomainId,
+          options: [
+            { value: ALL_DOMAINS_SCOPE, label: 'All domains' },
+            ...domains.map((domain) => ({ value: domain.id, label: domain.name })),
+          ],
+          onChange: (value) => {
+            if (value === ALL_DOMAINS_SCOPE) {
+              setSelectedScope('ALL_DOMAINS');
+              return;
+            }
+            setSelectedScope('DOMAIN');
+            setSelectedDomainId(value);
+          },
+          disabled: domainsLoading || (domains.length === 0 && !isAllDomains),
+        }}
+        signature={{
+          label: 'Signature',
+          value: selectedSignature,
+          options:
+            signatureOptions.length === 0
+              ? [{ value: '', label: 'No signatures with completed runs', disabled: true }]
+              : signatureOptions.map((opt) => ({
+                value: opt.signature,
+                label: formatSignatureOptionLabel(opt),
+              })),
+          onChange: (value) => setSelectedSignature(value),
+          disabled: signaturesLoading || signatureOptions.length === 0,
+        }}
+        models={{
+          label: 'Models',
+          selectedModelIds,
+          defaultModelIds: defaultSelection,
+          options: modelOptions,
+          onChange: setSelectedModelIds,
+        }}
+      />
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="space-y-2">
+          <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Findings</h1>
+          <p className="text-sm text-gray-600">
+            Structured domain interpretation across priorities, ranking behavior, and similarity for the selected domain.
+          </p>
         </div>
-      </AnalysisContextBar>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={handleExport}
+          disabled={selectedDomainId === '' || exportLoading || isAllDomains}
+          title={isAllDomains ? 'CSV export is unavailable in All domains mode' : undefined}
+        >
+          {exportLoading ? 'Exporting…' : 'Export CSV'}
+        </Button>
+      </div>
 
       {exportError !== null && <p className="mt-1 text-xs text-amber-700">{exportError}</p>}
-      {singleSelectedModelId !== null && (
-        <p className="mt-2 text-xs text-gray-500">
-          Showing only {models.find((model) => model.model === singleSelectedModelId)?.label ?? 'the selected model'} across all tables.
-        </p>
-      )}
       {data?.domainAnalysis != null && missingDefinitionCount > 0 && !isAllDomains && (
         <div className="mt-2 space-y-1 text-xs text-gray-500">
           <>
@@ -466,36 +396,30 @@ export function DomainAnalysis() {
         </div>
       )}
 
-      <div>
-        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Findings</h1>
-        <p className="mt-1 text-sm text-gray-600">
-          Structured domain interpretation across priorities, ranking behavior, and similarity for the selected domain.
-        </p>
-        {data?.domainAnalysis != null && cacheStatusCopy != null && (
-          <div className="mt-2 space-y-1 text-xs text-gray-500">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className={`inline-flex rounded-full border px-2.5 py-1 font-semibold ${cacheStatusCopy.badgeClassName}`}>
-                {cacheStatusCopy.badgeLabel}
-              </span>
-              <span>{cacheStatusCopy.detail}</span>
-              {!activeUseLegacyQuery && !isAllDomains && (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  className="h-auto px-2.5 py-1 text-xs"
-                  onClick={handleRefreshAnalysis}
-                  disabled={refreshFetching}
-                >
-                  {refreshFetching ? 'Refreshing\u2026' : 'Refresh now'}
-                </Button>
-              )}
-            </div>
-            {refreshNotice !== null && <p className="text-green-700">{refreshNotice}</p>}
-            {refreshError !== null && <p className="text-amber-700">{refreshError}</p>}
+      {data?.domainAnalysis != null && cacheStatusCopy != null && (
+        <div className="space-y-1 text-xs text-gray-500">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`inline-flex rounded-full border px-2.5 py-1 font-semibold ${cacheStatusCopy.badgeClassName}`}>
+              {cacheStatusCopy.badgeLabel}
+            </span>
+            <span>{cacheStatusCopy.detail}</span>
+            {!activeUseLegacyQuery && !isAllDomains && (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="h-auto px-2.5 py-1 text-xs"
+                onClick={handleRefreshAnalysis}
+                disabled={refreshFetching}
+              >
+                {refreshFetching ? 'Refreshing\u2026' : 'Refresh now'}
+              </Button>
+            )}
           </div>
-        )}
-      </div>
+          {refreshNotice !== null && <p className="text-green-700">{refreshNotice}</p>}
+          {refreshError !== null && <p className="text-amber-700">{refreshError}</p>}
+        </div>
+      )}
 
       {(domainsError != null || signaturesError != null || error != null) && (
         <ErrorMessage message={`Failed to load domain analysis: ${(domainsError ?? signaturesError ?? error)?.message ?? 'Unknown error'}`} />

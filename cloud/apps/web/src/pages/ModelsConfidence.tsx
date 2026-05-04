@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery } from 'urql';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Loading } from '../components/ui/Loading';
-import { Select } from '../components/ui/Select';
 import { AnalysisContextBar } from '../components/analysis/AnalysisContextBar';
 import {
   AVAILABLE_SIGNATURES_QUERY,
@@ -16,7 +15,6 @@ import {
 } from '../api/operations/modelsConfidence';
 import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/llm';
 import { ConfidenceHeatmap } from '../components/models/ConfidenceHeatmap';
-import { CopyVisualButton } from '../components/ui/CopyVisualButton';
 import {
   buildDomainShiftSignatureOptions,
   getDefaultDomainShiftSignature,
@@ -26,7 +24,6 @@ import { useDomains } from '../hooks/useDomains';
 export function ModelsConfidence() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const heatmapRef = useRef<HTMLElement>(null);
   const signatureParam = searchParams.get('signature');
 
   const { domains } = useDomains();
@@ -110,8 +107,7 @@ export function ModelsConfidence() {
   const models = useMemo(() => data?.modelsConfidence.models ?? [], [data]);
   const loading = fetching && data == null;
 
-  // Filter heatmap rows to selected models (null = not yet loaded, show all).
-  const filteredModelIds = selectedModelIds;
+  const filteredModelIds = selectedModelIds ?? defaultModelIds;
 
   const handleCellClick = useCallback(
     (modelId: string, modelLabel: string, valueKey: string) => {
@@ -129,35 +125,42 @@ export function ModelsConfidence() {
     [navigate, selectedSignature, selectedDomainId],
   );
 
-  // Model filter state helpers.
-  const isDefaultSelection =
-    selectedModelIds !== null &&
-    defaultModelIds.length > 0 &&
-    selectedModelIds.length === defaultModelIds.length &&
-    defaultModelIds.every((id) => selectedModelIds.includes(id));
-
-  const [modelFilterOpen, setModelFilterOpen] = useState(false);
-
-  const handleToggleModel = (modelId: string) => {
-    const current = selectedModelIds ?? [];
-    const next = current.includes(modelId)
-      ? current.filter((id) => id !== modelId)
-      : [...current, modelId];
-    setSelectedModelIds(next);
-  };
-
-  const selectedDomainLabel = selectedDomainId == null
-    ? 'All domains'
-    : domainOptions.find((option) => option.value === selectedDomainId)?.label ?? 'Selected domain';
-  const selectedModelLabel = selectedModelIds === null || isDefaultSelection
-    ? 'Default models'
-    : selectedModelIds.length === 0
-      ? 'No models selected'
-      : `${selectedModelIds.length} of ${allModels.length} selected`;
-  const summary = `${selectedDomainLabel} · ${selectedModelLabel} · ${selectedSignature}`;
+  const modelOptions = useMemo(
+    () => allModels.map((model) => ({
+      value: model.modelId,
+      label: model.displayName,
+      isDefault: defaultModelIds.includes(model.modelId),
+    })),
+    [allModels, defaultModelIds],
+  );
 
   return (
     <div className="space-y-6">
+      <AnalysisContextBar
+        domain={{
+          label: 'Domain',
+          value: selectedDomainId ?? '',
+          onChange: (value) => setSelectedDomainId(value === '' ? null : value),
+          options: domainOptions,
+        }}
+        signature={{
+          label: 'Signature',
+          value: selectedSignature,
+          onChange: (value) => {
+            setSelectedSignature(value);
+            setSearchParams({ signature: value });
+          },
+          options: signatureOptions,
+        }}
+        models={{
+          label: 'Models',
+          selectedModelIds,
+          defaultModelIds,
+          options: modelOptions,
+          onChange: setSelectedModelIds,
+        }}
+      />
+
       <div className="space-y-2">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-teal-700">Models</p>
         <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Confidence Heatmap</h1>
@@ -166,121 +169,6 @@ export function ModelsConfidence() {
           Strong% = strongly support / (strongly support + somewhat support).
         </p>
       </div>
-
-      <AnalysisContextBar
-        ref={heatmapRef}
-        title="Analysis Context"
-        summary={summary}
-        headerActions={<CopyVisualButton targetRef={heatmapRef} label="confidence heatmap" />}
-        secondary={(
-          <>
-            {/* Model filter panel (expands below the controls row) */}
-            {modelFilterOpen && allModels.length > 0 && (
-              <div className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
-                <div className="mb-3 flex items-center justify-between">
-                  <span className="text-xs font-medium uppercase tracking-wide text-gray-600">
-                    Select models
-                  </span>
-                  <div className="flex items-center gap-3">
-                    {/* eslint-disable-next-line react/forbid-elements */}
-                    <button
-                      type="button"
-                      className="text-xs font-medium text-teal-700 hover:text-teal-800"
-                      onClick={() => setSelectedModelIds(allModels.map((m) => m.modelId))}
-                    >
-                      Select all
-                    </button>
-                    {/* eslint-disable-next-line react/forbid-elements */}
-                    <button
-                      type="button"
-                      className="text-xs font-medium text-gray-600 hover:text-gray-800"
-                      onClick={() => setSelectedModelIds([])}
-                    >
-                      Clear
-                    </button>
-                  </div>
-                </div>
-                <div className="max-h-52 space-y-2 overflow-y-auto">
-                  {allModels.map((m) => (
-                    <label
-                      key={m.modelId}
-                      className="flex cursor-pointer items-center gap-2 text-sm text-gray-700"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={(selectedModelIds ?? []).includes(m.modelId)}
-                        onChange={() => handleToggleModel(m.modelId)}
-                        className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
-                      />
-                      <span className="flex-1 truncate" title={m.modelId}>
-                        {m.displayName}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
-          </>
-        )}
-      >
-        <div className="flex flex-wrap items-end gap-4">
-          <div className="min-w-[220px] flex-1">
-            <Select
-              label="Domain"
-              value={selectedDomainId ?? ''}
-              onChange={(value) => setSelectedDomainId(value === '' ? null : value)}
-              options={domainOptions}
-            />
-          </div>
-
-          <div className="flex min-w-[260px] flex-1 flex-wrap items-end gap-3">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-600">Models:</span>
-              {selectedModelIds === null || isDefaultSelection ? (
-                <span className="text-xs font-medium text-gray-700">Default</span>
-              ) : selectedModelIds.length === 0 ? (
-                <span className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
-                  None selected
-                </span>
-              ) : (
-                <span className="text-xs font-medium text-gray-700">
-                  {selectedModelIds.length} of {allModels.length}
-                </span>
-              )}
-            </div>
-            {selectedModelIds !== null && !isDefaultSelection && defaultModelIds.length > 0 && (
-              // eslint-disable-next-line react/forbid-elements
-              <button
-                type="button"
-                className="text-xs text-teal-600 underline-offset-2 hover:text-teal-800 hover:underline"
-                onClick={() => setSelectedModelIds(defaultModelIds)}
-              >
-                Reset to default
-              </button>
-            )}
-            {/* eslint-disable-next-line react/forbid-elements */}
-            <button
-              type="button"
-              className="text-xs text-gray-500 underline-offset-2 hover:text-gray-700 hover:underline"
-              onClick={() => setModelFilterOpen((v) => !v)}
-            >
-              {modelFilterOpen ? '▴ Close' : '▾ Change'}
-            </button>
-          </div>
-
-          <div className="ml-auto min-w-[220px] max-w-xs flex-1">
-            <Select
-              label="Signature"
-              value={selectedSignature}
-              onChange={(value) => {
-                setSelectedSignature(value);
-                setSearchParams({ signature: value });
-              }}
-              options={signatureOptions}
-            />
-          </div>
-        </div>
-      </AnalysisContextBar>
 
       {error != null && <ErrorMessage message={error.message} />}
       {loading ? (
