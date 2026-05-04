@@ -265,14 +265,12 @@ function computeModelPushedEffects(
     if (db != null && dm != null) pushedAgainstDomains.push(db - dm);
   }
 
-  const domainPressureEffects: DomainPressureEffectShape[] = [];
-  for (const [dk, d] of domainAccum.entries()) {
-    const name = domainNameById.get(dk);
-    if (name == null) continue;
-    const dp = mean(d.push);
-    const db = mean(d.balanced);
-    domainPressureEffects.push({ domainId: dk, domainName: name, pushedForEffect: dp != null && db != null ? dp - db : null });
-  }
+  const domainPressureEffects: DomainPressureEffectShape[] = [...domainAccum.entries()]
+    .filter(([dk]) => domainNameById.has(dk))
+    .map(([dk, d]) => {
+      const [dp, db] = [mean(d.push), mean(d.balanced)];
+      return { domainId: dk, domainName: domainNameById.get(dk)!, pushedForEffect: dp != null && db != null ? dp - db : null };
+    });
 
   return {
     pushedForEffect: mean(pushedForDomains),
@@ -415,11 +413,10 @@ export async function buildPressureSensitivitySnapshotOutput(
     if (meta.domainId != null) domainByDef.set(defId, meta.domainId);
   }
   const distinctDomainIds = [...new Set(domainByDef.values())];
-  const domainNameRows = distinctDomainIds.length === 0 ? [] : await db.domain.findMany({
-    where: { id: { in: distinctDomainIds } },
-    select: { id: true, name: true },
-  });
-  const domainNameById = new Map<string, string>(domainNameRows.map((d) => [d.id, d.name]));
+  const domainNameById = new Map<string, string>(
+    (distinctDomainIds.length === 0 ? [] : await db.domain.findMany({ where: { id: { in: distinctDomainIds } }, select: { id: true, name: true } }))
+      .map((d) => [d.id, d.name]),
+  );
 
   const sourceRunToDefId = new Map<string, string>();
   for (const run of state.eligibleRuns) {
