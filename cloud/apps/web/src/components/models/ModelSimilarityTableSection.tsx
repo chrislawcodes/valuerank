@@ -38,7 +38,19 @@ export function ModelSimilarityTableSection({ models }: ModelSimilarityTableSect
       rows.set(left.model, row);
     }
 
-    return { rows };
+    const similarities: number[] = [];
+    for (const row of rows.values()) {
+      for (const metric of row.values()) {
+        if (metric != null && metric.usedValueCount > 0 && metric.similarity != null) {
+          similarities.push(metric.similarity);
+        }
+      }
+    }
+
+    const minSimilarity = similarities.length > 0 ? Math.min(...similarities) : 0;
+    const maxSimilarity = similarities.length > 0 ? Math.max(...similarities) : 1;
+
+    return { rows, minSimilarity, maxSimilarity };
   }, [models, method]);
 
   const activeMetric = useMemo(() => {
@@ -171,7 +183,11 @@ export function ModelSimilarityTableSection({ models }: ModelSimilarityTableSect
                     const isSelf = rowModel.model === colModel.model;
                     const isUnavailable = metric == null || metric.usedValueCount === 0;
                     const displayValue = formatViewValue(metric, view);
-                    const intensity = getCellIntensity(metric);
+                    const rawIntensity = getCellIntensity(metric);
+                    const { minSimilarity, maxSimilarity } = matrix;
+                    const intensity = maxSimilarity === minSimilarity
+                      ? rawIntensity
+                      : (rawIntensity - minSimilarity) / (maxSimilarity - minSimilarity);
                     return (
                       <td
                         key={colModel.model}
