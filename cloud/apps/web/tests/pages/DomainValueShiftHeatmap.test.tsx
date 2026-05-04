@@ -311,7 +311,7 @@ describe('DomainValueShiftHeatmap page', () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Domain Shifts by Value' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Default models' })).toBeInTheDocument();
     });
     expect(screen.getByRole('table')).toHaveClass('table-auto');
     expect(screen.getByRole('button', { name: /default models/i })).toBeInTheDocument();
