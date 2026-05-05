@@ -9,7 +9,7 @@ import {
   computeSmoothedLogOddsScore,
 } from '../../graphql/queries/domain/shared.js';
 import { computeRankingShapes } from '../../graphql/queries/domain-shape.js';
-import { computeClusterAnalysis, type ClusteringMethod } from '../../graphql/queries/domain-clustering.js';
+import { computeClusterAnalysis, computeAllClusterAnalyses } from '../../graphql/queries/domain-clustering.js';
 import type {
   DomainAnalysisModel,
   DomainAnalysisResult,
@@ -19,6 +19,7 @@ import {
   DOMAIN_ANALYSIS_SNAPSHOT_TYPE,
   type DomainAnalysisCacheStatus,
   type DomainAnalysisSnapshotOutput,
+  type DomainAnalysisSnapshotModel,
   type SnapshotClient,
 } from './domain-analysis-cache-types.js';
 import {
@@ -52,12 +53,27 @@ async function getCurrentSnapshot(
   });
 }
 
+function extractWinRates(snapshotModel: DomainAnalysisSnapshotModel, valueKeys: readonly string[]): Record<string, number | null> {
+  const result: Record<string, number | null> = {};
+  for (const vk of valueKeys) {
+    if (snapshotModel.valueWinRates != null && snapshotModel.valueWinRates[vk] != null) {
+      // valueWinRates is stored on a 0–100 scale; normalize to [0, 1]
+      result[vk] = (snapshotModel.valueWinRates[vk] ?? 0) / 100;
+    } else {
+      const counts = snapshotModel.counts[vk];
+      if (counts == null) { result[vk] = null; continue; }
+      const total = counts.prioritized + counts.deprioritized + counts.neutral;
+      result[vk] = total > 0 ? counts.prioritized / total : null;
+    }
+  }
+  return result;
+}
+
 function buildDomainAnalysisResultFromSnapshot(params: {
   snapshot: DomainAnalysisSnapshotOutput;
   activeModels: Array<{ modelId: string; displayName: string; isDefault: boolean }>;
   generatedAt: Date;
   cacheStatus: DomainAnalysisCacheStatus;
-  clusteringMethod?: ClusteringMethod;
 }): DomainAnalysisResult {
   const activeModelLabelById = new Map(params.activeModels.map((model) => [model.modelId, model.displayName]));
 
@@ -88,14 +104,23 @@ function buildDomainAnalysisResultFromSnapshot(params: {
 
   const { shapes, benchmarks } = computeRankingShapes(modelsSortedScores);
   const defaultModelIds = new Set(params.activeModels.filter((m) => m.isDefault).map((m) => m.modelId));
+
+  // Build cluster model inputs with both log-odds scores and domain-local win rates
+  const snapshotModelByModelId = new Map(params.snapshot.models.map((m) => [m.model, m]));
   const clusterModels = modelsBase
     .filter((model) => defaultModelIds.has(model.model))
-    .map((model) => ({
-      model: model.model,
-      label: model.label,
-      scores: Object.fromEntries(model.values.map((value) => [value.valueKey, value.score])),
-    }));
-  const clusterAnalysis = computeClusterAnalysis(clusterModels, params.clusteringMethod);
+    .map((model) => {
+      const snapshotModel = snapshotModelByModelId.get(model.model);
+      return {
+        model: model.model,
+        label: model.label,
+        scores: Object.fromEntries(model.values.map((value) => [value.valueKey, value.score])),
+        winRates: snapshotModel != null ? extractWinRates(snapshotModel, DOMAIN_ANALYSIS_VALUE_KEYS) : undefined,
+      };
+    });
+
+  const clusterAnalysis = computeClusterAnalysis(clusterModels);
+  const clusterAnalysisByMethod = computeAllClusterAnalyses(clusterModels);
 
   const models: DomainAnalysisModel[] = modelsBase.map((model) => ({
     ...model,
@@ -138,6 +163,7 @@ function buildDomainAnalysisResultFromSnapshot(params: {
     generatedAt: params.generatedAt,
     rankingShapeBenchmarks: benchmarks,
     clusterAnalysis,
+    clusterAnalysisByMethod,
     cacheStatus: params.cacheStatus,
     contributionSummary: params.snapshot.contributionSummary ?? [],
     excludedDataSummary: params.snapshot.excludedDataSummary ?? [],
@@ -203,7 +229,6 @@ export async function getDomainAnalysisResult(params: {
   scope: DomainAnalysisScope;
   domainId: string;
   requestedSignature: string | null;
-  clusteringMethod?: ClusteringMethod;
 }): Promise<DomainAnalysisResult> {
   const state = await prepareDomainAnalysisState({
     scope: params.scope,
@@ -234,6 +259,7 @@ export async function getDomainAnalysisResult(params: {
       generatedAt: new Date(),
       rankingShapeBenchmarks: { domainMeanTopGap: 0, domainStdTopGap: null, medianSpread: 0 },
       clusterAnalysis: { clusters: [], faultLinesByPair: {}, defaultPair: null, skipped: true, skipReason: 'No vignettes found in this scope.' },
+      clusterAnalysisByMethod: {},
       cacheStatus: DOMAIN_ANALYSIS_CACHE_STATUS.FRESH,
       contributionSummary: [],
       excludedDataSummary: [],
@@ -249,7 +275,6 @@ export async function getDomainAnalysisResult(params: {
       activeModels,
       generatedAt: currentSnapshot.createdAt,
       cacheStatus: DOMAIN_ANALYSIS_CACHE_STATUS.FRESH,
-      clusteringMethod: params.clusteringMethod,
     });
   }
 
@@ -265,7 +290,6 @@ export async function getDomainAnalysisResult(params: {
       activeModels,
       generatedAt: currentSnapshot.createdAt,
       cacheStatus: queued ? DOMAIN_ANALYSIS_CACHE_STATUS.UPDATING : DOMAIN_ANALYSIS_CACHE_STATUS.OUT_OF_DATE,
-      clusteringMethod: params.clusteringMethod,
     });
   }
 
@@ -283,6 +307,5 @@ export async function getDomainAnalysisResult(params: {
     activeModels,
     generatedAt: refreshed.snapshot.createdAt,
     cacheStatus: DOMAIN_ANALYSIS_CACHE_STATUS.FRESH,
-    clusteringMethod: params.clusteringMethod,
   });
 }

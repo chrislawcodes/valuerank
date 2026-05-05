@@ -18,12 +18,19 @@ import { PairDetailDrawer } from './ModelSimilarityPairDetailDrawer';
 
 type ModelSimilarityTableSectionProps = {
   models: ModelEntry[];
+  method?: CalculationMethod;
+  onMethodChange?: (method: CalculationMethod) => void;
 };
 
-export function ModelSimilarityTableSection({ models }: ModelSimilarityTableSectionProps) {
+export function ModelSimilarityTableSection({ models, method: methodProp, onMethodChange }: ModelSimilarityTableSectionProps) {
   const tableRef = useRef<HTMLDivElement>(null);
   const [showHelp, setShowHelp] = useState(false);
-  const [method, setMethod] = useState<CalculationMethod>('weighted-euclidean');
+  const [internalMethod, setInternalMethod] = useState<CalculationMethod>('weighted-euclidean');
+  const method = methodProp ?? internalMethod;
+  const setMethod = (m: CalculationMethod) => {
+    setInternalMethod(m);
+    onMethodChange?.(m);
+  };
   const [view, setView] = useState<MetricView>('distance');
   const [activePair, setActivePair] = useState<{ left: string; right: string } | null>(null);
 

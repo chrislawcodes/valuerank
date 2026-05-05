@@ -3,15 +3,12 @@ import { cosineSimilarity } from '@valuerank/shared';
 /**
  * domain-clustering.ts
  *
- * Pure computation helpers for cluster analysis (#025).
+ * Pure computation helpers for cluster analysis.
  * No database access. No external dependencies.
  *
- * Algorithm: Average-Linkage Hierarchical Clustering (UPGMA)
- * Valid for arbitrary symmetric distance matrices (cosine distance).
- * O(N³) — acceptable for N ≤ 20.
- *
- * Calibration constants — validate against real domain data before launch.
- * All threshold names match spec documentation for traceability.
+ * Algorithms: UPGMA and Ward's minimum-variance hierarchical clustering.
+ * Supports 5 distance methods × 2 data sources × 2 linkages = 20 combinations.
+ * O(N³) per combination — acceptable for N ≤ 20.
  */
 
 export type ClusterMember = {
@@ -36,7 +33,7 @@ export type ValueFaultLine = {
 export type ClusterPairFaultLines = {
   clusterAId: string;
   clusterBId: string;
-  distance: number;                // mean inter-cluster cosine distance
+  distance: number;                // mean inter-cluster distance
   faultLines: ValueFaultLine[];   // top 3, sorted by absDelta descending
 };
 
@@ -59,8 +56,13 @@ export type ClusterAnalysis = {
 export type ClusterModelInput = {
   model: string;
   label: string;
-  scores: Record<string, number>;
+  scores: Record<string, number>;        // log-odds scores
+  winRates?: Record<string, number | null>; // domain-local win rates (0–1)
 };
+
+export type ClusteringMethod = 'upgma' | 'ward';
+export type ClusterDistanceMethod = 'cosine' | 'euclidean' | 'absolute-value' | 'spearman' | 'kendall';
+export type ClusterDataSource = 'log-odds' | 'win-rate';
 
 // --- Calibration constants ---
 const OUTLIER_SILHOUETTE_THRESHOLD = 0.2;
@@ -68,16 +70,16 @@ const MIN_CLUSTER_GAP = 0.015;
 const MAX_CLUSTERS = 4;
 const MIN_MODELS_FOR_CLUSTERING = 3;
 
-/**
- * Compute cosine similarity between two numeric vectors.
- */
+const CLUSTER_DISTANCE_METHODS: ClusterDistanceMethod[] = ['cosine', 'euclidean', 'absolute-value', 'spearman', 'kendall'];
+const CLUSTER_DATA_SOURCES: ClusterDataSource[] = ['log-odds', 'win-rate'];
+const CLUSTER_LINKAGE_METHODS: ClusteringMethod[] = ['upgma', 'ward'];
+
 export { cosineSimilarity };
 
-/**
- * Build N×N cosine distance matrix.
- * Distance = (1 - similarity) / 2, range [0, 1].
- * Diagonal is 0. Matrix is symmetric.
- */
+// ---------------------------------------------------------------------------
+// Distance matrix builders
+// ---------------------------------------------------------------------------
+
 export function cosineDistanceMatrix(vectors: number[][]): number[][] {
   const n = vectors.length;
   const matrix: number[][] = Array.from({ length: n }, () => new Array<number>(n).fill(0));
@@ -91,14 +93,143 @@ export function cosineDistanceMatrix(vectors: number[][]): number[][] {
   return matrix;
 }
 
-/**
- * Average linkage distance between two clusters (by model indices).
- */
-function avgLinkageDist(
-  clusterA: number[],
-  clusterB: number[],
-  distMatrix: number[][],
-): number {
+function euclideanDistanceMatrix(vectors: number[][]): number[][] {
+  const n = vectors.length;
+  const matrix: number[][] = Array.from({ length: n }, () => new Array<number>(n).fill(0));
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const v1 = vectors[i]!, v2 = vectors[j]!;
+      let sum = 0;
+      for (let k = 0; k < v1.length; k++) { const d = v1[k]! - v2[k]!; sum += d * d; }
+      const dist = v1.length > 0 ? Math.sqrt(sum / v1.length) : 0;
+      matrix[i]![j] = dist;
+      matrix[j]![i] = dist;
+    }
+  }
+  return matrix;
+}
+
+function absoluteValueDistanceMatrix(vectors: number[][]): number[][] {
+  const n = vectors.length;
+  const matrix: number[][] = Array.from({ length: n }, () => new Array<number>(n).fill(0));
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const v1 = vectors[i]!, v2 = vectors[j]!;
+      let sum = 0;
+      for (let k = 0; k < v1.length; k++) sum += Math.abs(v1[k]! - v2[k]!);
+      const dist = v1.length > 0 ? sum / v1.length : 0;
+      matrix[i]![j] = dist;
+      matrix[j]![i] = dist;
+    }
+  }
+  return matrix;
+}
+
+function rankVector(values: number[]): number[] {
+  const indexed = values.map((v, i) => ({ v, i }));
+  indexed.sort((a, b) => b.v - a.v);
+  const ranks = new Array<number>(values.length).fill(0);
+  let i = 0;
+  while (i < indexed.length) {
+    let end = i + 1;
+    while (end < indexed.length && Math.abs(indexed[end]!.v - indexed[i]!.v) < 1e-9) end++;
+    const avgRank = ((i + 1) + end) / 2;
+    for (let j = i; j < end; j++) ranks[indexed[j]!.i] = avgRank;
+    i = end;
+  }
+  return ranks;
+}
+
+function pearsonCorrelation(xs: number[], ys: number[]): number {
+  const n = xs.length;
+  if (n === 0) return 0;
+  const meanX = xs.reduce((s, v) => s + v, 0) / n;
+  const meanY = ys.reduce((s, v) => s + v, 0) / n;
+  let num = 0, denomX = 0, denomY = 0;
+  for (let k = 0; k < n; k++) {
+    const dx = xs[k]! - meanX, dy = ys[k]! - meanY;
+    num += dx * dy; denomX += dx * dx; denomY += dy * dy;
+  }
+  const denom = Math.sqrt(denomX * denomY);
+  return denom === 0 ? 0 : num / denom;
+}
+
+function kendallTau(xs: number[], ys: number[]): number {
+  const n = xs.length;
+  let concordant = 0, discordant = 0, tieX = 0, tieY = 0;
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const dx = xs[i]! - xs[j]!, dy = ys[i]! - ys[j]!;
+      const tiedX = Math.abs(dx) < 1e-9, tiedY = Math.abs(dy) < 1e-9;
+      if (tiedX) tieX++;
+      if (tiedY) tieY++;
+      if (!tiedX && !tiedY) {
+        if (Math.sign(dx) === Math.sign(dy)) concordant++;
+        else discordant++;
+      }
+    }
+  }
+  const n0 = n * (n - 1) / 2;
+  const denom = Math.sqrt((n0 - tieX) * (n0 - tieY));
+  return denom === 0 ? 0 : (concordant - discordant) / denom;
+}
+
+function spearmanDistanceMatrix(vectors: number[][]): number[][] {
+  const n = vectors.length;
+  const ranked = vectors.map(rankVector);
+  const matrix: number[][] = Array.from({ length: n }, () => new Array<number>(n).fill(0));
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const dist = (1 - pearsonCorrelation(ranked[i]!, ranked[j]!)) / 2;
+      matrix[i]![j] = dist;
+      matrix[j]![i] = dist;
+    }
+  }
+  return matrix;
+}
+
+function kendallDistanceMatrix(vectors: number[][]): number[][] {
+  const n = vectors.length;
+  const matrix: number[][] = Array.from({ length: n }, () => new Array<number>(n).fill(0));
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const dist = (1 - kendallTau(vectors[i]!, vectors[j]!)) / 2;
+      matrix[i]![j] = dist;
+      matrix[j]![i] = dist;
+    }
+  }
+  return matrix;
+}
+
+function buildDistanceMatrixForMethod(
+  models: ClusterModelInput[],
+  distanceMethod: ClusterDistanceMethod,
+  dataSource: ClusterDataSource,
+): number[][] {
+  const valueKeys = Object.keys(models[0]!.scores);
+  const rawVectors = models.map((m) => {
+    if (dataSource === 'win-rate') {
+      return valueKeys.map((vk) => { const wr = m.winRates?.[vk]; return wr != null ? wr : 0; });
+    }
+    return valueKeys.map((vk) => m.scores[vk] ?? 0);
+  });
+
+  if (distanceMethod === 'cosine') {
+    // Mean-center before cosine to measure shape of profile rather than level
+    const vectors = rawVectors.map((v) => { const mean = v.reduce((s, x) => s + x, 0) / v.length; return v.map((x) => x - mean); });
+    return cosineDistanceMatrix(vectors);
+  }
+  if (distanceMethod === 'euclidean') return euclideanDistanceMatrix(rawVectors);
+  if (distanceMethod === 'absolute-value') return absoluteValueDistanceMatrix(rawVectors);
+  if (distanceMethod === 'spearman') return spearmanDistanceMatrix(rawVectors);
+  return kendallDistanceMatrix(rawVectors);
+}
+
+// ---------------------------------------------------------------------------
+// UPGMA
+// ---------------------------------------------------------------------------
+
+function avgLinkageDist(clusterA: number[], clusterB: number[], distMatrix: number[][]): number {
   let total = 0;
   for (const i of clusterA) {
     for (const j of clusterB) {
@@ -108,23 +239,15 @@ function avgLinkageDist(
   return total / (clusterA.length * clusterB.length);
 }
 
-export type ClusteringMethod = 'upgma' | 'ward';
-
 export type MergeStep = {
   height: number;
 };
 
 export type UpgmaResult = {
   mergeHeights: number[];
-  // snapshots[k] = cluster assignments after k merges (N-k clusters)
   snapshots: number[][][];
 };
 
-/**
- * Run UPGMA on an N×N distance matrix.
- * snapshots[0] = initial N singleton clusters.
- * snapshots[k] = state after k merges (N-k clusters).
- */
 export function upgma(distMatrix: number[][], n: number): UpgmaResult {
   if (n === 0) return { mergeHeights: [], snapshots: [] };
 
@@ -140,15 +263,10 @@ export function upgma(distMatrix: number[][], n: number): UpgmaResult {
     for (let i = 0; i < clusters.length; i++) {
       for (let j = i + 1; j < clusters.length; j++) {
         const d = avgLinkageDist(clusters[i]!, clusters[j]!, distMatrix);
-        if (d < minDist) {
-          minDist = d;
-          minI = i;
-          minJ = j;
-        }
+        if (d < minDist) { minDist = d; minI = i; minJ = j; }
       }
     }
 
-    // Merge clusters[minI] and clusters[minJ] (remove higher index first)
     const newCluster = [...clusters[minI]!, ...clusters[minJ]!];
     clusters.splice(minJ, 1);
     clusters.splice(minI, 1);
@@ -161,21 +279,17 @@ export function upgma(distMatrix: number[][], n: number): UpgmaResult {
   return { mergeHeights, snapshots };
 }
 
-/**
- * Run Ward's minimum-variance clustering on an N×N distance matrix.
- * Uses the Lance-Williams update formula to maintain inter-cluster distances.
- * Returns the same UpgmaResult shape so it can share cutAtLargestGap.
- */
+// ---------------------------------------------------------------------------
+// Ward (Lance-Williams update formula)
+// ---------------------------------------------------------------------------
+
 export function ward(distMatrix: number[][], n: number): UpgmaResult {
   if (n === 0) return { mergeHeights: [], snapshots: [] };
 
   const sizes: number[] = Array(n).fill(1) as number[];
   const members: number[][] = Array.from({ length: n }, (_, i) => [i]);
   const active: boolean[] = Array(n).fill(true) as boolean[];
-
-  // Working copy of the distance matrix — updated in place
   const d: number[][] = distMatrix.map((row) => [...row]);
-
   const mergeHeights: number[] = [];
   const snapshots: number[][][] = [members.map((c) => [...c])];
 
@@ -188,11 +302,7 @@ export function ward(distMatrix: number[][], n: number): UpgmaResult {
       if (!active[i]) continue;
       for (let j = i + 1; j < n; j++) {
         if (!active[j]) continue;
-        if ((d[i]![j] ?? 0) < minDist) {
-          minDist = d[i]![j] ?? 0;
-          minI = i;
-          minJ = j;
-        }
+        if ((d[i]![j] ?? 0) < minDist) { minDist = d[i]![j] ?? 0; minI = i; minJ = j; }
       }
     }
 
@@ -202,7 +312,6 @@ export function ward(distMatrix: number[][], n: number): UpgmaResult {
     const nB = sizes[minJ]!;
     const dAB = d[minI]![minJ] ?? 0;
 
-    // Update distances using Lance-Williams formula for Ward's method
     for (let k = 0; k < n; k++) {
       if (!active[k] || k === minI || k === minJ) continue;
       const nC = sizes[k]!;
@@ -219,36 +328,21 @@ export function ward(distMatrix: number[][], n: number): UpgmaResult {
     active[minJ] = false;
 
     mergeHeights.push(minDist);
-    const activeClusters = members.filter((_, i) => active[i]);
-    snapshots.push(activeClusters.map((c) => [...c]));
+    snapshots.push(members.filter((_, i) => active[i]).map((c) => [...c]));
   }
 
   return { mergeHeights, snapshots };
 }
 
-/**
- * Cut dendrogram to find the most clusters supported by the data.
- *
- * Strategy: find the EARLIEST significant gap in the valid range rather than
- * the largest. The largest gap is usually the outlier merge (e.g. one very
- * different model joining last), which produces only 2 clusters and hides
- * meaningful sub-structure in the rest. By taking the earliest significant gap
- * we surface as many real groups as possible, capped at MAX_CLUSTERS.
- *
- * Valid range: snapshot indices that produce between 2 and MAX_CLUSTERS clusters.
- * Returns single cluster when no meaningful structure exists.
- */
-export function cutAtLargestGap(
-  mergeHeights: number[],
-  snapshots: number[][][],
-  n: number,
-): number[][] {
+// ---------------------------------------------------------------------------
+// Dendrogram cutting
+// ---------------------------------------------------------------------------
+
+export function cutAtLargestGap(mergeHeights: number[], snapshots: number[][][], n: number): number[][] {
   const fallback = snapshots[snapshots.length - 1] ?? [Array.from({ length: n }, (_, i) => i)];
 
   if (mergeHeights.length < 2) return fallback;
 
-  // snapshots[k] has N-k clusters.
-  // Valid range: 2 ≤ (N-k) ≤ MAX_CLUSTERS  →  N-MAX_CLUSTERS ≤ k ≤ N-2
   const minCutIdx = Math.max(1, n - MAX_CLUSTERS);
   const maxCutIdx = n - 2;
 
@@ -262,26 +356,20 @@ export function cutAtLargestGap(
     if (gap > MIN_CLUSTER_GAP) {
       hasAnySignificantGap = true;
       const cutIdx = j + 1;
-      if (cutIdx >= minCutIdx && cutIdx <= maxCutIdx) {
-        validCuts.push(cutIdx);
-      }
+      if (cutIdx >= minCutIdx && cutIdx <= maxCutIdx) validCuts.push(cutIdx);
     }
   }
 
-  if (!hasAnySignificantGap) {
-    // No meaningful structure — all models are similar
-    return fallback;
-  }
+  if (!hasAnySignificantGap) return fallback;
+  if (validCuts.length === 0) return snapshots[minCutIdx] ?? fallback;
 
-  if (validCuts.length === 0) {
-    // Gaps exist but all produce too many clusters — cap at MAX_CLUSTERS
-    return snapshots[minCutIdx] ?? fallback;
-  }
-
-  // Earliest valid cut = most clusters within the cap
   validCuts.sort((a, b) => a - b);
   return snapshots[validCuts[0]!] ?? fallback;
 }
+
+// ---------------------------------------------------------------------------
+// Silhouettes
+// ---------------------------------------------------------------------------
 
 type SilhouetteEntry = {
   score: number;
@@ -289,21 +377,13 @@ type SilhouetteEntry = {
   nearestOtherDistances: [number, number] | null;
 };
 
-/**
- * Compute silhouette score for each model.
- * Keys are original model indices (0..N-1).
- */
-export function computeSilhouettes(
-  rawClusters: number[][],
-  distMatrix: number[][],
-): Map<number, SilhouetteEntry> {
+export function computeSilhouettes(rawClusters: number[][], distMatrix: number[][]): Map<number, SilhouetteEntry> {
   const result = new Map<number, SilhouetteEntry>();
 
   for (let ci = 0; ci < rawClusters.length; ci++) {
     const cluster = rawClusters[ci]!;
 
     for (const m of cluster) {
-      // a(m) = mean distance to other members of same cluster
       let a = 0;
       if (cluster.length > 1) {
         let sum = 0;
@@ -313,15 +393,12 @@ export function computeSilhouettes(
         a = sum / (cluster.length - 1);
       }
 
-      // Mean distance from m to each other cluster
       const otherMeans: Array<{ clusterIdx: number; mean: number }> = [];
       for (let cj = 0; cj < rawClusters.length; cj++) {
         if (cj === ci) continue;
         const other = rawClusters[cj]!;
         let sum = 0;
-        for (const o of other) {
-          sum += distMatrix[m]![o] ?? 0;
-        }
+        for (const o of other) sum += distMatrix[m]![o] ?? 0;
         otherMeans.push({ clusterIdx: cj, mean: sum / other.length });
       }
       otherMeans.sort((x, y) => x.mean - y.mean);
@@ -343,13 +420,11 @@ export function computeSilhouettes(
   return result;
 }
 
-/**
- * Name cluster from the top 3 centroid values.
- */
-export function nameCluster(
-  centroid: Record<string, number>,
-  valueKeys: string[],
-): { name: string; definingValues: string[] } {
+// ---------------------------------------------------------------------------
+// Cluster naming
+// ---------------------------------------------------------------------------
+
+export function nameCluster(centroid: Record<string, number>, valueKeys: string[]): { name: string; definingValues: string[] } {
   const top3 = [...valueKeys]
     .sort((a, b) => (centroid[b] ?? 0) - (centroid[a] ?? 0))
     .slice(0, 3)
@@ -358,86 +433,56 @@ export function nameCluster(
   return { name: top3.join(' / '), definingValues: top3 };
 }
 
-/**
- * Main entry point. Compute full cluster analysis from model score vectors.
- */
-export function computeClusterAnalysis(models: ClusterModelInput[], method: ClusteringMethod = 'upgma'): ClusterAnalysis {
+// ---------------------------------------------------------------------------
+// Core clustering from a pre-built distance matrix
+// ---------------------------------------------------------------------------
+
+function runClusteringFromDistMatrix(
+  models: ClusterModelInput[],
+  distMatrix: number[][],
+  valueKeys: string[],
+  linkage: ClusteringMethod,
+): ClusterAnalysis {
   const n = models.length;
 
   if (n < MIN_MODELS_FOR_CLUSTERING) {
-    return {
-      clusters: [],
-      faultLinesByPair: {},
-      defaultPair: null,
-      skipped: true,
-      skipReason: `Clustering requires at least ${MIN_MODELS_FOR_CLUSTERING} models; ${n} available.`,
-    };
+    return { clusters: [], faultLinesByPair: {}, defaultPair: null, skipped: true,
+      skipReason: `Clustering requires at least ${MIN_MODELS_FOR_CLUSTERING} models; ${n} available.` };
   }
 
-  // Build value key list and score vectors, mean-centered so cosine distance
-  // measures shape of priorities (like Pearson r) rather than raw magnitude.
-  const valueKeys = Object.keys(models[0]!.scores);
-  const rawVectors = models.map((m) => valueKeys.map((vk) => m.scores[vk] ?? 0));
-  const vectors = rawVectors.map((v) => {
-    const mean = v.reduce((s, x) => s + x, 0) / v.length;
-    return v.map((x) => x - mean);
-  });
-
-  const distMatrix = cosineDistanceMatrix(vectors);
-  const { mergeHeights, snapshots } = method === 'ward' ? ward(distMatrix, n) : upgma(distMatrix, n);
+  const { mergeHeights, snapshots } = linkage === 'ward' ? ward(distMatrix, n) : upgma(distMatrix, n);
   const rawClusters = cutAtLargestGap(mergeHeights, snapshots, n);
 
   if (rawClusters.length === 1) {
-    return {
-      clusters: [],
-      faultLinesByPair: {},
-      defaultPair: null,
-      skipped: true,
-      skipReason: 'All models in this domain have similar value profiles.',
-    };
+    return { clusters: [], faultLinesByPair: {}, defaultPair: null, skipped: true,
+      skipReason: 'All models in this domain have similar value profiles.' };
   }
 
   const silhouettes = computeSilhouettes(rawClusters, distMatrix);
 
-  // Build DomainCluster objects
   const clusters: DomainCluster[] = rawClusters.map((memberIndices, ci) => {
     const id = `cluster-${ci + 1}`;
-
     const centroid: Record<string, number> = {};
     for (const vk of valueKeys) {
       centroid[vk] = memberIndices.reduce((acc, mi) => acc + (models[mi]!.scores[vk] ?? 0), 0) / memberIndices.length;
     }
-
     const { name, definingValues } = nameCluster(centroid, valueKeys);
-
     const members: ClusterMember[] = memberIndices.map((mi) => {
       const entry = silhouettes.get(mi);
       const silhouetteScore = entry?.score ?? 0;
       const isOutlier = silhouetteScore < OUTLIER_SILHOUETTE_THRESHOLD;
-
       let nearestClusterIds: [string, string] | null = null;
       let distancesToNearestClusters: [number, number] | null = null;
-
       if (isOutlier && entry?.nearestOtherClusterIndices != null) {
         const [nc1, nc2] = entry.nearestOtherClusterIndices;
         nearestClusterIds = [`cluster-${nc1 + 1}`, `cluster-${nc2 + 1}`];
         distancesToNearestClusters = entry.nearestOtherDistances ?? null;
       }
-
-      return {
-        model: models[mi]!.model,
-        label: models[mi]!.label,
-        silhouetteScore,
-        isOutlier,
-        nearestClusterIds,
-        distancesToNearestClusters,
-      };
+      return { model: models[mi]!.model, label: models[mi]!.label, silhouetteScore, isOutlier, nearestClusterIds, distancesToNearestClusters };
     });
-
     return { id, name, members, centroid, definingValues };
   });
 
-  // Compute fault lines for all cluster pairs + find default pair
   const faultLinesByPair: Record<string, ClusterPairFaultLines> = {};
   let defaultPair: [string, string] | null = null;
   let maxInterClusterDist = -Infinity;
@@ -449,7 +494,6 @@ export function computeClusterAnalysis(models: ClusterModelInput[], method: Clus
       const aMemberIndices = rawClusters[i]!;
       const bMemberIndices = rawClusters[j]!;
 
-      // Mean inter-cluster cosine distance
       let distSum = 0;
       for (const ai of aMemberIndices) {
         for (const bi of bMemberIndices) {
@@ -458,10 +502,7 @@ export function computeClusterAnalysis(models: ClusterModelInput[], method: Clus
       }
       const distance = distSum / (aMemberIndices.length * bMemberIndices.length);
 
-      if (distance > maxInterClusterDist) {
-        maxInterClusterDist = distance;
-        defaultPair = [a.id, b.id];
-      }
+      if (distance > maxInterClusterDist) { maxInterClusterDist = distance; defaultPair = [a.id, b.id]; }
 
       const faultLines: ValueFaultLine[] = valueKeys.map((vk) => {
         const clusterAScore = a.centroid[vk] ?? 0;
@@ -470,15 +511,53 @@ export function computeClusterAnalysis(models: ClusterModelInput[], method: Clus
         return { valueKey: vk, clusterAId: a.id, clusterBId: b.id, clusterAScore, clusterBScore, delta, absDelta: Math.abs(delta) };
       });
       faultLines.sort((x, y) => y.absDelta - x.absDelta);
-
-      faultLinesByPair[`${a.id}:${b.id}`] = {
-        clusterAId: a.id,
-        clusterBId: b.id,
-        distance,
-        faultLines: faultLines.slice(0, 3),
-      };
+      faultLinesByPair[`${a.id}:${b.id}`] = { clusterAId: a.id, clusterBId: b.id, distance, faultLines: faultLines.slice(0, 3) };
     }
   }
 
   return { clusters, faultLinesByPair, defaultPair, skipped: false, skipReason: null };
+}
+
+// ---------------------------------------------------------------------------
+// Main entry points
+// ---------------------------------------------------------------------------
+
+/**
+ * Pre-compute all 20 clustering combinations: 5 distance methods × 2 data sources × 2 linkages.
+ * Keys are formatted as "${dataSource}-${distanceMethod}-${linkage}" (e.g., "log-odds-cosine-upgma").
+ */
+export function computeAllClusterAnalyses(models: ClusterModelInput[]): Record<string, ClusterAnalysis> {
+  const result: Record<string, ClusterAnalysis> = {};
+  if (models.length === 0) return result;
+  const valueKeys = Object.keys(models[0]!.scores);
+
+  for (const dataSource of CLUSTER_DATA_SOURCES) {
+    for (const distanceMethod of CLUSTER_DISTANCE_METHODS) {
+      const distMatrix = buildDistanceMatrixForMethod(models, distanceMethod, dataSource);
+      for (const linkage of CLUSTER_LINKAGE_METHODS) {
+        const key = `${dataSource}-${distanceMethod}-${linkage}`;
+        result[key] = runClusteringFromDistMatrix(models, distMatrix, valueKeys, linkage);
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Compute cluster analysis using log-odds scores with cosine distance.
+ * Kept for backward compatibility; prefer computeAllClusterAnalyses for new code.
+ */
+export function computeClusterAnalysis(models: ClusterModelInput[], method: ClusteringMethod = 'upgma'): ClusterAnalysis {
+  if (models.length === 0) {
+    return { clusters: [], faultLinesByPair: {}, defaultPair: null, skipped: true,
+      skipReason: 'No models provided.' };
+  }
+  const valueKeys = Object.keys(models[0]!.scores);
+  const rawVectors = models.map((m) => valueKeys.map((vk) => m.scores[vk] ?? 0));
+  const vectors = rawVectors.map((v) => {
+    const mean = v.reduce((s, x) => s + x, 0) / v.length;
+    return v.map((x) => x - mean);
+  });
+  return runClusteringFromDistMatrix(models, cosineDistanceMatrix(vectors), valueKeys, method);
 }
