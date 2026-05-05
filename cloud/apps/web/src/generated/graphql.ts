@@ -3146,6 +3146,7 @@ export type QueryPreambleArgs = {
 
 
 export type QueryPressureSensitivityArgs = {
+  definitionId?: InputMaybe<Scalars['ID']['input']>;
   domainId?: InputMaybe<Scalars['ID']['input']>;
   modelIds?: InputMaybe<Array<Scalars['String']['input']>>;
   providerId?: InputMaybe<Scalars['ID']['input']>;
@@ -4697,6 +4698,7 @@ export type UpdatePairedVignetteMutation = { __typename?: 'Mutation', updatePair
 
 export type PressureSensitivityQueryVariables = Exact<{
   domainId?: InputMaybe<Scalars['ID']['input']>;
+  definitionId?: InputMaybe<Scalars['ID']['input']>;
   modelIds?: InputMaybe<Array<Scalars['String']['input']> | Scalars['String']['input']>;
   signature: Scalars['String']['input'];
 }>;
@@ -7237,9 +7239,10 @@ export function useUpdatePairedVignetteMutation() {
   return Urql.useMutation<UpdatePairedVignetteMutation, UpdatePairedVignetteMutationVariables>(UpdatePairedVignetteDocument);
 };
 export const PressureSensitivityDocument = gql`
-    query PressureSensitivity($domainId: ID, $modelIds: [String!], $signature: String!) {
+    query PressureSensitivity($domainId: ID, $definitionId: ID, $modelIds: [String!], $signature: String!) {
   pressureSensitivity(
     domainId: $domainId
+    definitionId: $definitionId
     modelIds: $modelIds
     signature: $signature
   ) {

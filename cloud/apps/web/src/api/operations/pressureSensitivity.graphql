@@ -1,10 +1,12 @@
 query PressureSensitivity(
   $domainId: ID
+  $definitionId: ID
   $modelIds: [String!]
   $signature: String!
 ) {
   pressureSensitivity(
     domainId: $domainId
+    definitionId: $definitionId
     modelIds: $modelIds
     signature: $signature
   ) {
