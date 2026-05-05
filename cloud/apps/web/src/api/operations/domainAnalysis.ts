@@ -143,6 +143,7 @@ export type DomainAnalysisResult = {
   unavailableModels: DomainAnalysisUnavailableModel[];
   rankingShapeBenchmarks?: RankingShapeBenchmarks;
   clusterAnalysis?: ClusterAnalysis;
+  clusterAnalysisByMethod?: Record<string, ClusterAnalysis>;
 };
 
 export type DomainAnalysisQueryResult = {
