@@ -204,4 +204,15 @@ describe('ModelsGroups', () => {
       );
     });
   });
+
+  it('shows the transcript count in the freshness line', async () => {
+    render(
+      <MemoryRouter initialEntries={['/models?domainId=domain-a&signature=vnewtd']}>
+        <ModelsGroups />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText(/^Fresh$/)).toBeInTheDocument();
+    expect(screen.getByText(/0 transcripts analyzed/i)).toBeInTheDocument();
+  });
 });

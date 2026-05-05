@@ -36,6 +36,7 @@ import { useDomains } from '../hooks/useDomains';
 import { exportDomainTranscriptsAsCSV } from '../api/export';
 import {
   formatSignatureOptionLabel,
+  countAnalyzedTranscripts,
   getCacheStatusCopy,
   getSignaturePriority,
   parseTemperatureFromSignature,
@@ -172,9 +173,13 @@ export function DomainAnalysis() {
   const data = activeUseLegacyQuery ? legacyData : scoredData;
   const fetching = activeUseLegacyQuery ? legacyFetching : scoredFetching;
   const error = activeUseLegacyQuery ? legacyError : scoredError;
+  const transcriptCount = useMemo(
+    () => countAnalyzedTranscripts(data?.domainAnalysis.models ?? [], selectedModelIds),
+    [data?.domainAnalysis.models, selectedModelIds],
+  );
   const cacheStatusCopy = useMemo(
-    () => getCacheStatusCopy(data?.domainAnalysis.cacheStatus, data?.domainAnalysis.generatedAt),
-    [data?.domainAnalysis.cacheStatus, data?.domainAnalysis.generatedAt],
+    () => getCacheStatusCopy(data?.domainAnalysis.cacheStatus, data?.domainAnalysis.generatedAt, transcriptCount),
+    [data?.domainAnalysis.cacheStatus, data?.domainAnalysis.generatedAt, transcriptCount],
   );
   const showPageLoader = domainsLoading || (selectedDomainId !== '' && data?.domainAnalysis == null && fetching);
   const isAllDomains = selectedScope === 'ALL_DOMAINS';
