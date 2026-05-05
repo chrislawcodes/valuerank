@@ -686,6 +686,18 @@
       "files_written": 5,
       "subprocess_invocations": 36,
       "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "diff",
+      "ts": "2026-05-05T21:24:46Z",
+      "wall_seconds": 0.155,
+      "input_bytes_read": 96364,
+      "output_bytes_written": 53790,
+      "files_read": 4,
+      "files_written": 2,
+      "subprocess_invocations": 12,
+      "ttl_crossed": false
     }
   ],
   "stages": {
@@ -736,5 +748,23 @@
     "blockers": []
   },
   "plan_adversarial_rounds": 3,
-  "tasks_adversarial_rounds": 1
+  "tasks_adversarial_rounds": 1,
+  "codex_dispatches": [
+    {
+      "head_sha": "b60d67ed3ae0d9e22c6927b5719d042518b919f8",
+      "ts": "20260505T211912_080038Z",
+      "prompt_path": "docs/workflow/feature-runs/vignette-paired-analysis/codex-specs/slice-1.md",
+      "prompt_sha256": "0e12f077268cee49f4d82a0ca8711b6a9ad2e3d59ee986391815e7fd61480f40",
+      "model": "gpt-5.4-mini",
+      "exit_code": 0,
+      "stdout_path": "docs/workflow/feature-runs/vignette-paired-analysis/codex-dispatches/20260505T211912_080038Z/stdout.txt",
+      "stderr_path": "docs/workflow/feature-runs/vignette-paired-analysis/codex-dispatches/20260505T211912_080038Z/stderr.txt",
+      "branch_base_sha": "9328814d61644d24c9f6a3c9aa1d25efcaa08c7e",
+      "lines_added_at_dispatch_time": 169,
+      "auto_commit": {
+        "skipped": true,
+        "reason": "no codex-introduced changes"
+      }
+    }
+  ]
 }

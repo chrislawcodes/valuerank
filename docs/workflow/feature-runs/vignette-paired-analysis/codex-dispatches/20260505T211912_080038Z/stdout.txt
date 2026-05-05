@@ -1,0 +1,30 @@
+Implemented slice 1 backend and committed it as `b60d67ed` (`ff(slice 1): backend definitionId arg + companion expansion + telemetry`).
+
+Changed files:
+- [snapshot-builder.ts](/Users/chrislaw/valuerank/.claude/worktrees/strange-shtern-32c78d/cloud/apps/api/src/services/pressure-sensitivity/snapshot-builder.ts)
+- [snapshot-cache.ts](/Users/chrislaw/valuerank/.claude/worktrees/strange-shtern-32c78d/cloud/apps/api/src/services/pressure-sensitivity/snapshot-cache.ts)
+- [pressure-sensitivity.ts](/Users/chrislaw/valuerank/.claude/worktrees/strange-shtern-32c78d/cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts)
+
+What changed:
+- Added `expandToCompanionDefinition` plus the public companion expansion exports in `snapshot-builder.ts`.
+- Threaded optional `definitionId` through `preparePressureSensitivityState`, with the companion-expanded `definitionId IN (...)` run filter on that path.
+- Added the `definitionId` resolver arg and the `domainId`/`definitionId` mutual-exclusion validation.
+- Skipped snapshot cache read/write on the `definitionId` path, added structured timer logging, and returned a fallback `excludedDefinitions[]` result for companion collision / mirror failure.
+- Used the repo’s actual `AppError(message, code, statusCode, context)` constructor shape.
+
+Verification:
+| Command | Result |
+|---|---|
+| `git diff --check` | Passed |
+| `npm run db:test:setup` | Failed before our code ran: Prisma `P1012` schema validation, because this workspace’s Prisma CLI no longer accepts `url` / `directUrl` in `schema.prisma` |
+| `npm run lint --workspace @valuerank/shared` | Failed: `eslint: command not found` |
+| `npm run lint --workspace @valuerank/api` | Failed: `eslint: command not found` |
+| `npm run test --workspace @valuerank/api` | Failed: `vitest: command not found` |
+| `npm run build --workspace @valuerank/api` | Failed: `tsc: command not found` |
+
+Notes:
+- I did not modify any files outside the three allowed paths.
+- `git status` after commit shows one pre-existing untracked directory: `docs/workflow/feature-runs/vignette-paired-analysis/codex-specs/`. I left it untouched.
+- Files I inspected but did not modify: [auto-pair.ts](/Users/chrislaw/valuerank/.claude/worktrees/strange-shtern-32c78d/cloud/apps/api/src/utils/auto-pair.ts), [aggregation.ts](/Users/chrislaw/valuerank/.claude/worktrees/strange-shtern-32c78d/cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts), [snapshot-compute.ts](/Users/chrislaw/valuerank/.claude/worktrees/strange-shtern-32c78d/cloud/apps/api/src/services/pressure-sensitivity/snapshot-compute.ts), [paired-vignette-helpers.ts](/Users/chrislaw/valuerank/.claude/worktrees/strange-shtern-32c78d/cloud/apps/api/src/graphql/mutations/paired-vignette-helpers.ts), [definition-validation.ts](/Users/chrislaw/valuerank/.claude/worktrees/strange-shtern-32c78d/cloud/apps/api/src/services/pressure-sensitivity/definition-validation.ts), [snapshot-types.ts](/Users/chrislaw/valuerank/.claude/worktrees/strange-shtern-32c78d/cloud/apps/api/src/services/pressure-sensitivity/snapshot-types.ts).
+
+
