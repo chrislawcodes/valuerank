@@ -316,9 +316,9 @@ export function ModelGroupsSection({
           </div>
         ) : (
           <>
-            {viewMode === 'dot' && <ClusterDotPlot clusters={clusters} activeGroupIds={activeGroupIds} />}
-            {viewMode === 'bar' && <ClusterBarPlot clusters={clusters} activeGroupIds={activeGroupIds} />}
-            {viewMode === 'radar' && <ClusterRadarChart clusters={clusters} activeGroupIds={activeGroupIds} />}
+            {viewMode === 'dot' && <ClusterDotPlot clusters={clusters} activeGroupIds={activeGroupIds} dataSource={groupDisplayMode === 'groups' ? dataSource : 'log-odds'} />}
+            {viewMode === 'bar' && <ClusterBarPlot clusters={clusters} activeGroupIds={activeGroupIds} dataSource={groupDisplayMode === 'groups' ? dataSource : 'log-odds'} />}
+            {viewMode === 'radar' && <ClusterRadarChart clusters={clusters} activeGroupIds={activeGroupIds} dataSource={groupDisplayMode === 'groups' ? dataSource : 'log-odds'} />}
 
             <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
               {clusters.map((cluster, index) => {
