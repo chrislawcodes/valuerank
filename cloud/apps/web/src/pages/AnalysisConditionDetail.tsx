@@ -4,7 +4,7 @@ import { ChevronRight } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Loading } from '../components/ui/Loading';
-import { findCompanionPairedRun } from '../components/analysis/PairedRunComparisonCard';
+import { findCompanionPairedRun } from '../utils/legacyCompanionPairedRun';
 import { useAnalysis } from '../hooks/useAnalysis';
 import { useRun } from '../hooks/useRun';
 import { useRuns } from '../hooks/useRuns';

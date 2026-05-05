@@ -6,7 +6,6 @@
 
 import { useMemo, useRef } from 'react';
 import { CopyVisualButton } from '../../ui/CopyVisualButton';
-import { PairedRunComparisonCard } from '../PairedRunComparisonCard';
 import { resolveScenarioAttributes } from '../../../utils/decisionLabels';
 import {
   ANALYSIS_BASE_PATH,
@@ -51,8 +50,8 @@ export function OverviewSummaryTable({
   isAggregate,
   analysisMode,
   currentRun,
-  currentAnalysis,
-  companionRun,
+  currentAnalysis: _currentAnalysis,
+  companionRun: _companionRun,
 }: {
   runId: string;
   analysisBasePath?: AnalysisBasePath;
@@ -302,20 +301,15 @@ export function OverviewSummaryTable({
       </div>
 
       <div className="border-t border-gray-200 pt-4">
-        {analysisMode === 'paired' && currentRun && currentAnalysis ? (
-          <PairedRunComparisonCard
-            currentRun={currentRun}
-            currentAnalysis={currentAnalysis}
-            companionRun={companionRun ?? null}
-            companionAnalysis={companionAnalysis ?? null}
-            analysisBasePath={analysisBasePath}
-            analysisSearch={typeof analysisSearchParams === 'string' ? analysisSearchParams : analysisSearchParams?.toString() ?? ''}
-            embedded
+        {currentRun?.definition?.id != null ? (
+          <ModeAvailabilitySection
+            title="Paired Run Comparison"
+            message={`Paired analysis has moved to its own page. Open /vignette/${currentRun.definition.id}/paired to see direction-balanced numbers across all completed runs.`}
           />
         ) : (
           <ModeAvailabilitySection
             title="Paired Run Comparison"
-            message="This comparison is only available in Paired vignettes mode. Switch the toggle above to see both vignette orders together."
+            message="Paired analysis has moved to a vignette-scoped page. This run is not linked to a vignette, so the new view is unreachable from here."
           />
         )}
       </div>

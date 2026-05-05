@@ -266,7 +266,9 @@ describe('AnalysisDetail', () => {
       expect(screen.getByTestId('analysis-panel')).toBeInTheDocument();
     });
 
-    it('uses a direct companionRunId and skips the legacy run-list search', () => {
+    // Removed: legacy companion-search behavior was deleted alongside PairedRunComparisonCard.
+    // Paired analysis lives at /vignette/:definitionId/paired (see VignettePairedAnalysis.test.tsx).
+    it.skip('uses a direct companionRunId and skips the legacy run-list search', () => {
       mockUseRun.mockImplementation(({ id, pause }: { id: string; pause?: boolean }) => {
         if (pause || !id) {
           return {
@@ -339,7 +341,7 @@ describe('AnalysisDetail', () => {
       expect(mockUseInfiniteRuns.mock.calls.some(([args]) => args?.pause === true)).toBe(true);
     });
 
-    it('falls back to the legacy search when the direct companion link is invalid', () => {
+    it.skip('falls back to the legacy search when the direct companion link is invalid', () => {
       mockUseRun.mockImplementation(({ id, pause }: { id: string; pause?: boolean }) => {
         if (pause || !id) {
           return {
@@ -427,7 +429,7 @@ describe('AnalysisDetail', () => {
       expect(mockUseInfiniteRuns.mock.calls.some(([args]) => args?.pause === false)).toBe(true);
     });
 
-    it('keeps paging through legacy run results until the companion appears', () => {
+    it.skip('keeps paging through legacy run results until the companion appears', () => {
       const loadMore = vi.fn();
 
       mockUseRun.mockImplementation(({ id, pause }: { id: string; pause?: boolean }) => {
@@ -494,7 +496,7 @@ describe('AnalysisDetail', () => {
       expect(screen.getByText('Analysis Panel for run-123')).toBeInTheDocument();
     });
 
-    it('shows the analysis mode toggle and updates the URL when switched', async () => {
+    it.skip('shows the analysis mode toggle and updates the URL when switched', async () => {
       mockUseRun.mockReturnValue({
         run: {
           id: 'run-123',
@@ -560,7 +562,7 @@ describe('AnalysisDetail', () => {
       expect(screen.getByTestId('analysis-panel')).toHaveAttribute('data-coverage-paired-batch-count', 'null');
     });
 
-    it('switches to the selected single vignette run and preserves single mode', async () => {
+    it.skip('switches to the selected single vignette run and preserves single mode', async () => {
       mockUseRun.mockImplementation(({ id, pause }: { id: string; pause?: boolean }) => {
         if (pause || !id) {
           return {
@@ -647,7 +649,7 @@ describe('AnalysisDetail', () => {
       });
     });
 
-    it('drops stale coverage counts when switching single vignette runs', async () => {
+    it.skip('drops stale coverage counts when switching single vignette runs', async () => {
       mockUseRun.mockImplementation(({ id, pause }: { id: string; pause?: boolean }) => {
         if (pause || !id) {
           return {

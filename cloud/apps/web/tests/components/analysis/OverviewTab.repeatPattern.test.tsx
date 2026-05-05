@@ -315,7 +315,9 @@ describe('OverviewTab', () => {
     expect(screen.queryByText(/Paired vignette scope/i)).not.toBeInTheDocument();
   });
 
-  it('shows pooled paired summary context without duplicating the condition table', () => {
+  // Skipped: PairedRunComparisonCard was deleted in slice 3 of vignette-paired-analysis.
+  // The paired comparison now lives at /vignette/:definitionId/paired.
+  it.skip('shows pooled paired summary context without duplicating the condition table', () => {
     const currentAnalysis: AnalysisResult = {
       ...createCompanionAnalysis(),
       runId: 'run-b',
