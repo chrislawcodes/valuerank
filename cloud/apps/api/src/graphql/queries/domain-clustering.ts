@@ -442,6 +442,7 @@ function runClusteringFromDistMatrix(
   distMatrix: number[][],
   valueKeys: string[],
   linkage: ClusteringMethod,
+  dataSource: ClusterDataSource = 'log-odds',
 ): ClusterAnalysis {
   const n = models.length;
 
@@ -464,7 +465,13 @@ function runClusteringFromDistMatrix(
     const id = `cluster-${ci + 1}`;
     const centroid: Record<string, number> = {};
     for (const vk of valueKeys) {
-      centroid[vk] = memberIndices.reduce((acc, mi) => acc + (models[mi]!.scores[vk] ?? 0), 0) / memberIndices.length;
+      centroid[vk] = memberIndices.reduce((acc, mi) => {
+        if (dataSource === 'win-rate') {
+          const wr = models[mi]!.winRates?.[vk];
+          return acc + (wr != null ? wr : 0);
+        }
+        return acc + (models[mi]!.scores[vk] ?? 0);
+      }, 0) / memberIndices.length;
     }
     const { name, definingValues } = nameCluster(centroid, valueKeys);
     const members: ClusterMember[] = memberIndices.map((mi) => {
@@ -536,7 +543,7 @@ export function computeAllClusterAnalyses(models: ClusterModelInput[]): Record<s
       const distMatrix = buildDistanceMatrixForMethod(models, distanceMethod, dataSource);
       for (const linkage of CLUSTER_LINKAGE_METHODS) {
         const key = `${dataSource}-${distanceMethod}-${linkage}`;
-        result[key] = runClusteringFromDistMatrix(models, distMatrix, valueKeys, linkage);
+        result[key] = runClusteringFromDistMatrix(models, distMatrix, valueKeys, linkage, dataSource);
       }
     }
   }

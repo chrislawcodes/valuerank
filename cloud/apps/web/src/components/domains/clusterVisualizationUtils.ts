@@ -9,6 +9,10 @@ export const DOT_BAR_CLUSTER_SCORE_MIN = -2.5;
 export const DOT_BAR_CLUSTER_SCORE_MAX = 2.5;
 export const DOT_BAR_CLUSTER_SCORE_RANGE = DOT_BAR_CLUSTER_SCORE_MAX - DOT_BAR_CLUSTER_SCORE_MIN;
 
+export const DOT_BAR_WIN_RATE_MIN = 0;
+export const DOT_BAR_WIN_RATE_MAX = 1;
+export const WIN_RATE_MIDPOINT = 0.5;
+
 export const CLUSTER_VISUAL_COLORS = [
   '#2563eb',
   '#d97706',
@@ -81,6 +85,10 @@ export function getClusterVisualColor(index: number): string {
 
 export function formatClusterScoreLabel(score: number): string {
   return score > 0 ? `+${score.toFixed(2)}` : score.toFixed(2);
+}
+
+export function formatWinRateLabel(rate: number): string {
+  return `${Math.round(rate * 100)}%`;
 }
 
 export function clampClusterScore(score: number, min = CLUSTER_SCORE_MIN, max = CLUSTER_SCORE_MAX): number {
