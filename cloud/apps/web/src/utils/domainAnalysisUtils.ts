@@ -59,7 +59,7 @@ export function countAnalyzedTranscripts(
 }
 
 function formatTranscriptCount(transcriptCount: number): string {
-  return `${transcriptCount} transcript${transcriptCount === 1 ? '' : 's'} analyzed.`;
+  return `${transcriptCount.toLocaleString()} transcript${transcriptCount === 1 ? '' : 's'} analyzed.`;
 }
 
 export function getCacheStatusCopy(
