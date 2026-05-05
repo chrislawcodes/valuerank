@@ -53,7 +53,7 @@ async function getCurrentSnapshot(
   });
 }
 
-function extractWinRates(snapshotModel: DomainAnalysisSnapshotModel, valueKeys: string[]): Record<string, number | null> {
+function extractWinRates(snapshotModel: DomainAnalysisSnapshotModel, valueKeys: readonly string[]): Record<string, number | null> {
   const result: Record<string, number | null> = {};
   for (const vk of valueKeys) {
     if (snapshotModel.valueWinRates != null && snapshotModel.valueWinRates[vk] != null) {
