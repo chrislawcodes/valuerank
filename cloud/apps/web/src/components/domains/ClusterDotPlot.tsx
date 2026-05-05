@@ -91,7 +91,7 @@ export function ClusterDotPlot({ clusters, activeGroupIds = [] }: ClusterDotPlot
                           border: clipped ? '2px solid rgba(15, 23, 42, 0.45)' : '2px solid white',
                           boxShadow: clipped ? '0 0 0 1px rgba(15, 23, 42, 0.12)' : undefined,
                           filter: isActive && hasActiveSelection ? `drop-shadow(0 0 8px rgba(255,255,255,0.35)) drop-shadow(0 0 12px ${color}aa)` : undefined,
-                          zIndex: isActive ? index + 20 : index + 1,
+                          zIndex: index + 1,
                         }}
                       />
                     );
