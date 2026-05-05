@@ -255,21 +255,19 @@ function computeModelPushedEffects(
   const allPairKeys = new Set<string>();
 
   for (const d of domainAccum.values()) {
-    const dp = mean(d.push);
-    const db = mean(d.balanced);
-    const dm = mean(d.mirror);
-    if (dp != null && db != null) {
-      pushedForDomains.push(dp - db);
-      for (const pk of d.pairKeys) allPairKeys.add(pk);
-    }
-    if (db != null && dm != null) pushedAgainstDomains.push(db - dm);
+    const [dp, db, dm] = [mean(d.push), mean(d.balanced), mean(d.mirror)];
+    const fxs: number[] = [];
+    if (dp != null && db != null) { fxs.push(dp - db); for (const pk of d.pairKeys) allPairKeys.add(pk); }
+    if (db != null && dm != null) { fxs.push(db - dm); pushedAgainstDomains.push(db - dm); }
+    const fx = mean(fxs); if (fx != null) pushedForDomains.push(fx);
   }
 
   const domainPressureEffects: DomainPressureEffectShape[] = [...domainAccum.entries()]
     .filter(([dk]) => domainNameById.has(dk))
     .map(([dk, d]) => {
-      const [dp, db] = [mean(d.push), mean(d.balanced)];
-      return { domainId: dk, domainName: domainNameById.get(dk)!, pushedForEffect: dp != null && db != null ? dp - db : null };
+      const [dp, db, dm] = [mean(d.push), mean(d.balanced), mean(d.mirror)];
+      const fx = [dp != null && db != null ? dp - db : null, db != null && dm != null ? db - dm : null].filter((v): v is number => v != null);
+      return { domainId: dk, domainName: domainNameById.get(dk)!, pushedForEffect: mean(fx) };
     });
 
   return {
