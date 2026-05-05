@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from 'urql';
 import { useSearchParams } from 'react-router-dom';
 import { AnalysisContextBar } from '../components/analysis/AnalysisContextBar';
@@ -21,6 +21,7 @@ import {
   type ModelsAnalysisQueryResult,
   type ModelsAnalysisQueryVariables,
 } from '../api/operations/modelsAnalysis';
+import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/llm';
 import { ModelGroupsSection } from '../components/domains/ModelGroupsSection';
 import { ModelSimilarityTableSection } from '../components/models/ModelSimilarityTableSection';
 import { useDomains } from '../hooks/useDomains';
@@ -71,6 +72,8 @@ export function ModelsGroups() {
   const [selectedDomainId, setSelectedDomainId] = useState<string>(initialDomainId);
   const [selectedSignature, setSelectedSignature] = useState<string>(searchParams.get('signature') ?? '');
   const [useLegacyQuery, setUseLegacyQuery] = useState(false);
+  const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
+  const initializedModelSelection = useRef(false);
 
   const [{ data: signatureData, fetching: signaturesLoading, error: signaturesError }] = useQuery<
     DomainAvailableSignaturesQueryResult,
@@ -153,6 +156,11 @@ export function ModelsGroups() {
     pause: selectedScope === 'DOMAIN' && selectedDomainId === '',
     requestPolicy: 'cache-and-network',
   });
+  const [{ data: llmModelsData }] = useQuery<LlmModelsQueryResult>({
+    query: LLM_MODELS_QUERY,
+    variables: { status: 'ACTIVE' },
+    requestPolicy: 'cache-and-network',
+  });
   const [{ data: legacyData, fetching: legacyFetching, error: legacyError }] = useQuery<DomainAnalysisQueryResult, { domainId: string }>({
     query: DOMAIN_ANALYSIS_QUERY_LEGACY,
     variables: { domainId: selectedDomainId },
@@ -182,6 +190,43 @@ export function ModelsGroups() {
     () => buildModelEntries(data?.domainAnalysis.models ?? [], modelsAnalysisData?.modelsAnalysis.models ?? []),
     [data?.domainAnalysis.models, modelsAnalysisData?.modelsAnalysis.models],
   );
+  const defaultModelIds = useMemo(
+    () => new Set((llmModelsData?.llmModels ?? []).filter((m) => m.isDefault).map((m) => m.modelId)),
+    [llmModelsData],
+  );
+  const defaultSelection = useMemo(() => {
+    const availableIds = models.map((model) => model.model);
+    const defaults = availableIds.filter((id) => defaultModelIds.has(id));
+    return defaults.length > 0 ? defaults : availableIds;
+  }, [models, defaultModelIds]);
+  const modelOptions = useMemo(
+    () => models.map((model) => ({ value: model.model, label: model.label, isDefault: defaultSelection.includes(model.model) })),
+    [defaultSelection, models],
+  );
+
+  useEffect(() => {
+    if (initializedModelSelection.current) return;
+    if (models.length === 0) return;
+    if (llmModelsData == null) return;
+    setSelectedModelIds(defaultSelection);
+    initializedModelSelection.current = true;
+  }, [models, llmModelsData, defaultSelection]);
+
+  useEffect(() => {
+    if (!initializedModelSelection.current) return;
+    setSelectedModelIds((current) => {
+      if (current.length === 0) return current;
+      const validIds = new Set(models.map((model) => model.model));
+      const next = current.filter((id) => validIds.has(id));
+      return next.length === current.length ? current : next;
+    });
+  }, [models]);
+
+  const visibleModels = useMemo(
+    () => selectedModelIds.length === 0 ? models : models.filter((model) => selectedModelIds.includes(model.model)),
+    [models, selectedModelIds],
+  );
+
   const isAllDomains = selectedScope === 'ALL_DOMAINS';
   const contextBar = (
     <AnalysisContextBar
@@ -214,6 +259,13 @@ export function ModelsGroups() {
             })),
         onChange: (value) => setSelectedSignature(value),
         disabled: signaturesLoading || signatureOptions.length === 0,
+      }}
+      models={{
+        label: 'Models',
+        selectedModelIds: selectedModelIds.length > 0 ? selectedModelIds : null,
+        defaultModelIds: defaultSelection,
+        options: modelOptions,
+        onChange: setSelectedModelIds,
       }}
     />
   );
@@ -255,9 +307,9 @@ export function ModelsGroups() {
           <div className="space-y-6">
             <ModelGroupsSection
               clusterAnalysis={data?.domainAnalysis.clusterAnalysis}
-              models={models}
+              models={visibleModels}
             />
-            <ModelSimilarityTableSection models={models} />
+            <ModelSimilarityTableSection models={visibleModels} />
           </div>
         )}
       </div>
