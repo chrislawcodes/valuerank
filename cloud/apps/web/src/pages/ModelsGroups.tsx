@@ -27,7 +27,12 @@ import { ModelSimilarityTableSection } from '../components/models/ModelSimilarit
 import { type CalculationMethod } from '../components/models/ModelSimilarityMetrics';
 import { useDomains } from '../hooks/useDomains';
 import { VALUES, type ModelEntry, type ValueKey } from '../data/domainAnalysisData';
-import { formatSignatureOptionLabel, getCacheStatusCopy, getSignaturePriority } from '../utils/domainAnalysisUtils';
+import {
+  countAnalyzedTranscripts,
+  formatSignatureOptionLabel,
+  getCacheStatusCopy,
+  getSignaturePriority,
+} from '../utils/domainAnalysisUtils';
 
 const ALL_DOMAINS_SCOPE = 'all-domains';
 
@@ -182,9 +187,13 @@ export function ModelsGroups() {
   const data = activeUseLegacyQuery ? legacyData : scoredData;
   const fetching = activeUseLegacyQuery ? legacyFetching : scoredFetching;
   const error = activeUseLegacyQuery ? legacyError : scoredError;
+  const transcriptCount = useMemo(
+    () => countAnalyzedTranscripts(data?.domainAnalysis.models ?? []),
+    [data?.domainAnalysis.models],
+  );
   const cacheStatusCopy = useMemo(
-    () => getCacheStatusCopy(data?.domainAnalysis.cacheStatus, data?.domainAnalysis.generatedAt),
-    [data?.domainAnalysis.cacheStatus, data?.domainAnalysis.generatedAt],
+    () => getCacheStatusCopy(data?.domainAnalysis.cacheStatus, data?.domainAnalysis.generatedAt, transcriptCount),
+    [data?.domainAnalysis.cacheStatus, data?.domainAnalysis.generatedAt, transcriptCount],
   );
   const showPageLoader = domainsLoading
     || (selectedDomainId !== '' && data?.domainAnalysis == null && fetching)

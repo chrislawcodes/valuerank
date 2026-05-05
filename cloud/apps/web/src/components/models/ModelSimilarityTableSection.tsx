@@ -59,7 +59,6 @@ export function ModelSimilarityTableSection({ models, method: methodProp, onMeth
 
     return { rows, minSimilarity, maxSimilarity };
   }, [models, method]);
-
   const activeMetric = useMemo(() => {
     if (activePair == null) return null;
     const left = models.find((model) => model.model === activePair.left) ?? null;
