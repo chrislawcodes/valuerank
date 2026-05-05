@@ -814,6 +814,7 @@ export type DomainAnalysisResult = {
   __typename?: 'DomainAnalysisResult';
   cacheStatus: Scalars['String']['output'];
   clusterAnalysis: ClusterAnalysis;
+  clusterAnalysisByMethod: Scalars['JSON']['output'];
   contributionSummary: Array<DomainAnalysisContributionSummary>;
   coveredDefinitions: Scalars['Int']['output'];
   definitionsWithAnalysis: Scalars['Int']['output'];
@@ -2926,7 +2927,6 @@ export type QueryDomainArgs = {
 
 
 export type QueryDomainAnalysisArgs = {
-  clusteringMethod?: InputMaybe<Scalars['String']['input']>;
   domainId: Scalars['ID']['input'];
   scope?: InputMaybe<Scalars['String']['input']>;
   signature?: InputMaybe<Scalars['String']['input']>;
@@ -4265,11 +4265,10 @@ export type DomainAnalysisQueryVariables = Exact<{
   domainId: Scalars['ID']['input'];
   scope?: InputMaybe<Scalars['String']['input']>;
   signature?: InputMaybe<Scalars['String']['input']>;
-  clusteringMethod?: InputMaybe<Scalars['String']['input']>;
 }>;
 
 
-export type DomainAnalysisQuery = { __typename?: 'Query', domainAnalysis: { __typename?: 'DomainAnalysisResult', domainId: string, domainName: string, totalDefinitions: number, targetedDefinitions: number, coveredDefinitions: number, missingDefinitionIds: Array<string>, definitionsWithAnalysis: number, cacheStatus: string, generatedAt: string, contributionSummary: Array<{ __typename?: 'DomainAnalysisContributionSummary', domainId: string, domainName: string, rawTrialCount: number, share: number }>, excludedDataSummary: Array<{ __typename?: 'DomainAnalysisExcludedDataSummary', domainId: string, domainName: string, reasonCode: string, count: number }>, missingDefinitions: Array<{ __typename?: 'DomainAnalysisMissingDefinition', definitionId: string, definitionName: string, reasonCode: string, reasonLabel: string, missingAllModels: boolean, missingModelIds: Array<string>, missingModelLabels: Array<string> }>, models: Array<{ __typename?: 'DomainAnalysisModel', model: string, label: string, values: Array<{ __typename?: 'DomainAnalysisValueScore', valueKey: string, score: number, prioritized: number, deprioritized: number, neutral: number, totalComparisons: number }>, rankingShape: { __typename?: 'RankingShape', topStructure: string, bottomStructure: string, topGap: number, bottomGap: number, spread: number, steepness: number, dominanceZScore?: number | null } }>, unavailableModels: Array<{ __typename?: 'DomainAnalysisUnavailableModel', model: string, label: string, reason: string }>, rankingShapeBenchmarks: { __typename?: 'RankingShapeBenchmarks', domainMeanTopGap: number, domainStdTopGap?: number | null, medianSpread: number }, clusterAnalysis: { __typename?: 'ClusterAnalysis', skipped: boolean, skipReason?: string | null, defaultPair?: Array<string> | null, faultLinesByPair: unknown, clusters: Array<{ __typename?: 'DomainCluster', id: string, name: string, definingValues: Array<string>, centroid: unknown, members: Array<{ __typename?: 'ClusterMember', model: string, label: string, silhouetteScore: number, isOutlier: boolean, nearestClusterIds?: Array<string> | null, distancesToNearestClusters?: Array<number> | null }> }> } } };
+export type DomainAnalysisQuery = { __typename?: 'Query', domainAnalysis: { __typename?: 'DomainAnalysisResult', domainId: string, domainName: string, totalDefinitions: number, targetedDefinitions: number, coveredDefinitions: number, missingDefinitionIds: Array<string>, definitionsWithAnalysis: number, cacheStatus: string, generatedAt: string, clusterAnalysisByMethod: unknown, contributionSummary: Array<{ __typename?: 'DomainAnalysisContributionSummary', domainId: string, domainName: string, rawTrialCount: number, share: number }>, excludedDataSummary: Array<{ __typename?: 'DomainAnalysisExcludedDataSummary', domainId: string, domainName: string, reasonCode: string, count: number }>, missingDefinitions: Array<{ __typename?: 'DomainAnalysisMissingDefinition', definitionId: string, definitionName: string, reasonCode: string, reasonLabel: string, missingAllModels: boolean, missingModelIds: Array<string>, missingModelLabels: Array<string> }>, models: Array<{ __typename?: 'DomainAnalysisModel', model: string, label: string, values: Array<{ __typename?: 'DomainAnalysisValueScore', valueKey: string, score: number, prioritized: number, deprioritized: number, neutral: number, totalComparisons: number }>, rankingShape: { __typename?: 'RankingShape', topStructure: string, bottomStructure: string, topGap: number, bottomGap: number, spread: number, steepness: number, dominanceZScore?: number | null } }>, unavailableModels: Array<{ __typename?: 'DomainAnalysisUnavailableModel', model: string, label: string, reason: string }>, rankingShapeBenchmarks: { __typename?: 'RankingShapeBenchmarks', domainMeanTopGap: number, domainStdTopGap?: number | null, medianSpread: number }, clusterAnalysis: { __typename?: 'ClusterAnalysis', skipped: boolean, skipReason?: string | null, defaultPair?: Array<string> | null, faultLinesByPair: unknown, clusters: Array<{ __typename?: 'DomainCluster', id: string, name: string, definingValues: Array<string>, centroid: unknown, members: Array<{ __typename?: 'ClusterMember', model: string, label: string, silhouetteScore: number, isOutlier: boolean, nearestClusterIds?: Array<string> | null, distancesToNearestClusters?: Array<number> | null }> }> } } };
 
 export type RefreshDomainAnalysisMutationVariables = Exact<{
   domainId: Scalars['ID']['input'];
@@ -5953,13 +5952,8 @@ export function useDeleteDomainContextMutation() {
   return Urql.useMutation<DeleteDomainContextMutation, DeleteDomainContextMutationVariables>(DeleteDomainContextDocument);
 };
 export const DomainAnalysisDocument = gql`
-    query DomainAnalysis($domainId: ID!, $scope: String, $signature: String, $clusteringMethod: String) {
-  domainAnalysis(
-    domainId: $domainId
-    scope: $scope
-    signature: $signature
-    clusteringMethod: $clusteringMethod
-  ) {
+    query DomainAnalysis($domainId: ID!, $scope: String, $signature: String) {
+  domainAnalysis(domainId: $domainId, scope: $scope, signature: $signature) {
     domainId
     domainName
     contributionSummary {
@@ -6041,6 +6035,7 @@ export const DomainAnalysisDocument = gql`
       }
       faultLinesByPair
     }
+    clusterAnalysisByMethod
   }
 }
     `;
