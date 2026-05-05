@@ -72,6 +72,7 @@ export function ModelsGroups() {
   const [selectedDomainId, setSelectedDomainId] = useState<string>(initialDomainId);
   const [selectedSignature, setSelectedSignature] = useState<string>(searchParams.get('signature') ?? '');
   const [useLegacyQuery, setUseLegacyQuery] = useState(false);
+  const [clusteringMethod, setClusteringMethod] = useState<'upgma' | 'ward'>('upgma');
   const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
   const initializedModelSelection = useRef(false);
 
@@ -140,6 +141,7 @@ export function ModelsGroups() {
       domainId: selectedDomainId === '' ? domains[0]?.id ?? '' : selectedDomainId,
       scope: selectedScope === 'ALL_DOMAINS' ? ALL_DOMAINS_SCOPE : undefined,
       signature: selectedSignature === '' ? undefined : selectedSignature,
+      clusteringMethod,
     },
     pause: selectedDomainId === '' || activeUseLegacyQuery,
     requestPolicy: 'cache-and-network',
@@ -308,6 +310,8 @@ export function ModelsGroups() {
             <ModelGroupsSection
               clusterAnalysis={data?.domainAnalysis.clusterAnalysis}
               models={visibleModels}
+              clusteringMethod={clusteringMethod}
+              onClusteringMethodChange={setClusteringMethod}
             />
             <ModelSimilarityTableSection models={visibleModels} />
           </div>
