@@ -1,0 +1,17 @@
+{
+  "paths": [
+    "cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts",
+    "cloud/apps/api/src/services/pressure-sensitivity",
+    "cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx",
+    "cloud/apps/web/src/pages/AnalysisDetail.tsx",
+    "cloud/apps/web/src/pages/VignettePairedAnalysis.tsx"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts",
+    "cloud/apps/api/src/services/pressure-sensitivity",
+    "cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx",
+    "cloud/apps/web/src/pages/AnalysisDetail.tsx",
+    "cloud/apps/web/src/pages/VignettePairedAnalysis.tsx",
+    "docs/workflow/feature-runs/vignette-paired-analysis"
+  ]
+}
