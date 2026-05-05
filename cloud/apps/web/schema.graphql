@@ -858,6 +858,7 @@ type DomainAnalysisRefreshResult {
 type DomainAnalysisResult {
   cacheStatus: String!
   clusterAnalysis: ClusterAnalysis!
+  clusterAnalysisByMethod: JSON!
   contributionSummary: [DomainAnalysisContributionSummary!]!
   coveredDefinitions: Int!
   definitionsWithAnalysis: Int!

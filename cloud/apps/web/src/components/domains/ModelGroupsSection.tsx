@@ -4,6 +4,7 @@ import { Button } from '../ui/Button';
 import { CopyVisualButton } from '../ui/CopyVisualButton';
 import { type ClusterAnalysis, type DomainCluster } from '../../api/operations/domainAnalysis';
 import { type ModelEntry } from '../../data/domainAnalysisData';
+import { type CalculationMethod } from '../models/ModelSimilarityMetrics';
 import { ClusterBarPlot } from './ClusterBarPlot';
 import { ClusterDotPlot } from './ClusterDotPlot';
 import { ClusterRadarChart } from './ClusterRadarChart';
@@ -24,10 +25,26 @@ const LEGEND_COLORS = [
   { border: 'border-yellow-500', text: 'text-yellow-700', light: 'bg-yellow-50', color: '#ca8a04' },
 ] as const;
 
+type ClusteringLinkage = 'upgma' | 'ward';
+type ClusterDataSource = 'log-odds' | 'win-rate';
+
+const LINKAGE_OPTIONS: Array<{ value: ClusteringLinkage; label: string }> = [
+  { value: 'upgma', label: 'UPGMA' },
+  { value: 'ward', label: 'Ward' },
+];
+
+const DATA_SOURCE_OPTIONS: Array<{ value: ClusterDataSource; label: string }> = [
+  { value: 'log-odds', label: 'Log Odds' },
+  { value: 'win-rate', label: 'Win Rate' },
+];
+
 type ModelGroupsSectionProps = {
-  clusterAnalysis?: ClusterAnalysis;
+  clusterAnalysisByMethod?: Record<string, ClusterAnalysis>;
+  distanceMethod?: CalculationMethod;
   models: ModelEntry[];
   selectedModelId?: string | null;
+  clusteringMethod?: ClusteringLinkage;
+  onClusteringMethodChange?: (method: ClusteringLinkage) => void;
 };
 
 type ClusterViewMode = 'dot' | 'bar' | 'radar';
@@ -44,6 +61,12 @@ const GROUP_DISPLAY_OPTIONS: Array<{ value: GroupDisplayMode; label: string }> =
   { value: 'individual', label: 'Individual' },
 ];
 
+// The similarity table uses 'weighted-euclidean'; backend distance key uses 'euclidean'
+function toBackendDistanceMethod(method: CalculationMethod | undefined): string {
+  if (method == null || method === 'weighted-euclidean') return 'euclidean';
+  return method;
+}
+
 function getLegendColor(index: number) {
   return LEGEND_COLORS[index % LEGEND_COLORS.length]!;
 }
@@ -53,18 +76,25 @@ function getGroupLabel(cluster: DomainCluster): string {
 }
 
 export function ModelGroupsSection({
-  clusterAnalysis,
+  clusterAnalysisByMethod,
+  distanceMethod,
   models,
   selectedModelId = null,
+  clusteringMethod = 'upgma',
+  onClusteringMethodChange,
 }: ModelGroupsSectionProps) {
   const summaryTableRef = useRef<HTMLDivElement>(null);
   const [showModelGroupsHelp, setShowModelGroupsHelp] = useState(false);
   const [viewMode, setViewMode] = useState<ClusterViewMode>('dot');
   const [groupDisplayMode, setGroupDisplayMode] = useState<GroupDisplayMode>('groups');
   const [activeGroupIds, setActiveGroupIds] = useState<string[]>([]);
+  const [dataSource, setDataSource] = useState<ClusterDataSource>('log-odds');
 
-  const hasGroupedClusters = clusterAnalysis != null && !clusterAnalysis.skipped;
-  const groupedClusters = useMemo(() => clusterAnalysis?.clusters ?? [], [clusterAnalysis]);
+  const backendKey = `${dataSource}-${toBackendDistanceMethod(distanceMethod)}-${clusteringMethod}`;
+  const activeClusterAnalysis = clusterAnalysisByMethod?.[backendKey] ?? null;
+
+  const hasGroupedClusters = activeClusterAnalysis != null && !activeClusterAnalysis.skipped;
+  const groupedClusters = useMemo(() => activeClusterAnalysis?.clusters ?? [], [activeClusterAnalysis]);
   const individualClusters = useMemo(() => buildIndividualClusters(models), [models]);
 
   const sourceClusters = useMemo(
@@ -143,6 +173,58 @@ export function ModelGroupsSection({
             })}
           </div>
 
+          {groupDisplayMode === 'groups' && (
+            <>
+              {onClusteringMethodChange != null && (
+                <div className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 p-1">
+                  <span className="px-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">Linkage</span>
+                  <div className="inline-flex rounded-md border border-gray-200 bg-white p-1">
+                    {LINKAGE_OPTIONS.map((option) => {
+                      const active = clusteringMethod === option.value;
+                      return (
+                        <Button
+                          key={option.value}
+                          type="button"
+                          variant={active ? 'primary' : 'ghost'}
+                          size="sm"
+                          onClick={() => onClusteringMethodChange(option.value)}
+                          className={`rounded-md px-3 py-1 text-xs font-medium min-h-0 ${
+                            active ? 'bg-teal-600 text-white hover:bg-teal-700' : 'text-gray-600 hover:bg-white hover:text-gray-900'
+                          }`}
+                        >
+                          {option.label}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 p-1">
+                <span className="px-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">Data</span>
+                <div className="inline-flex rounded-md border border-gray-200 bg-white p-1">
+                  {DATA_SOURCE_OPTIONS.map((option) => {
+                    const active = dataSource === option.value;
+                    return (
+                      <Button
+                        key={option.value}
+                        type="button"
+                        variant={active ? 'primary' : 'ghost'}
+                        size="sm"
+                        onClick={() => setDataSource(option.value)}
+                        className={`rounded-md px-3 py-1 text-xs font-medium min-h-0 ${
+                          active ? 'bg-teal-600 text-white hover:bg-teal-700' : 'text-gray-600 hover:bg-white hover:text-gray-900'
+                        }`}
+                      >
+                        {option.label}
+                      </Button>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          )}
+
           <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
             {CLUSTER_VIEW_OPTIONS.map((option) => {
               const active = viewMode === option.value;
@@ -208,22 +290,15 @@ export function ModelGroupsSection({
           <div>
             <p className="mb-1 font-semibold text-gray-800">How are the groups formed?</p>
             <p>
-              We use a method called UPGMA (Unweighted Pair Group Method with Arithmetic Mean). It builds
-              groups like a reverse tournament: start with every model alone, find the two most similar
-              models and merge them, repeat until you have 4 groups.
+              We use hierarchical clustering. Start with every model alone, find the two most similar
+              models and merge them, repeat until we have up to 4 groups.
             </p>
             <p className="mt-1">
-              Similarity is measured using cosine distance on the mean-centered scores. Think of each
-              model&apos;s 10 scores as an arrow pointing in a direction. Two models that rank values in a
-              similar order point in nearly the same direction - small distance. Models that disagree on
-              priorities point in different directions - large distance.
-            </p>
-            <p className="mt-1">
-              Use the group toggle above to compare clustered groups against individual models. The dot map
-              and bar chart show each value on a fixed scale from -2.5 to +2.5, with 0 in the middle.
-              Values are sorted from the ones the groups favor most on average to the ones they favor least.
-              The bar view shows the same scores as bars instead of dots, with shorter bars rendered on top
-              so they stay visible.
+              <strong>Linkage</strong> controls how cluster distance is measured: UPGMA averages distances
+              across all member pairs; Ward minimizes within-cluster variance.
+              <strong> Data</strong> controls what scores drive the distance: Log Odds uses the smoothed
+              log-odds ranking scores; Win Rate uses domain-local win rates.
+              The distance method comes from the Similarity Table selector below.
             </p>
           </div>
         </div>
@@ -233,7 +308,7 @@ export function ModelGroupsSection({
         {groupDisplayMode === 'groups' && !hasGroupedClusters ? (
           <div className="space-y-1 text-xs text-gray-500 italic">
             <p>Cluster analysis not available.</p>
-            {clusterAnalysis?.skipReason && <p>{clusterAnalysis.skipReason}</p>}
+            {activeClusterAnalysis?.skipReason != null && <p>{activeClusterAnalysis.skipReason}</p>}
           </div>
         ) : groupDisplayMode === 'individual' && models.length === 0 ? (
           <div className="space-y-1 text-xs text-gray-500 italic">
@@ -241,9 +316,9 @@ export function ModelGroupsSection({
           </div>
         ) : (
           <>
-            {viewMode === 'dot' && <ClusterDotPlot clusters={clusters} activeGroupIds={activeGroupIds} />}
-            {viewMode === 'bar' && <ClusterBarPlot clusters={clusters} activeGroupIds={activeGroupIds} />}
-            {viewMode === 'radar' && <ClusterRadarChart clusters={clusters} activeGroupIds={activeGroupIds} />}
+            {viewMode === 'dot' && <ClusterDotPlot clusters={clusters} activeGroupIds={activeGroupIds} dataSource={groupDisplayMode === 'groups' ? dataSource : 'log-odds'} />}
+            {viewMode === 'bar' && <ClusterBarPlot clusters={clusters} activeGroupIds={activeGroupIds} dataSource={groupDisplayMode === 'groups' ? dataSource : 'log-odds'} />}
+            {viewMode === 'radar' && <ClusterRadarChart clusters={clusters} activeGroupIds={activeGroupIds} dataSource={groupDisplayMode === 'groups' ? dataSource : 'log-odds'} />}
 
             <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
               {clusters.map((cluster, index) => {

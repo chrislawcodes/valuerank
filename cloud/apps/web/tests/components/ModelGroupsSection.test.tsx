@@ -69,7 +69,7 @@ describe('ModelGroupsSection', () => {
   });
 
   it('renders the plain model groups heading without numbering', () => {
-    render(<ModelGroupsSection clusterAnalysis={skippedClusterAnalysis} models={populatedModels} />);
+    render(<ModelGroupsSection clusterAnalysisByMethod={{ 'log-odds-euclidean-upgma': skippedClusterAnalysis }} models={populatedModels} />);
 
     expect(screen.getByRole('heading', { name: 'Model Groups' })).toBeInTheDocument();
     expect(screen.getByText(/cluster analysis not available/i)).toBeInTheDocument();
@@ -77,7 +77,7 @@ describe('ModelGroupsSection', () => {
   });
 
   it('offers group and individual views without heatmap', () => {
-    render(<ModelGroupsSection clusterAnalysis={populatedClusterAnalysis} models={populatedModels} />);
+    render(<ModelGroupsSection clusterAnalysisByMethod={{ 'log-odds-euclidean-upgma': populatedClusterAnalysis }} models={populatedModels} />);
 
     expect(screen.getByRole('button', { name: 'Groups' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Individual' })).toBeInTheDocument();
@@ -91,7 +91,7 @@ describe('ModelGroupsSection', () => {
   });
 
   it('lights up the selected legend item and fades the others', () => {
-    const { container } = render(<ModelGroupsSection clusterAnalysis={populatedClusterAnalysis} models={populatedModels} />);
+    const { container } = render(<ModelGroupsSection clusterAnalysisByMethod={{ 'log-odds-euclidean-upgma': populatedClusterAnalysis }} models={populatedModels} />);
 
     const legendButton = screen.getByRole('button', { name: 'Model A' });
     fireEvent.click(legendButton);
@@ -105,7 +105,7 @@ describe('ModelGroupsSection', () => {
   });
 
   it('allows multi-select in individual mode', () => {
-    const { container } = render(<ModelGroupsSection clusterAnalysis={populatedClusterAnalysis} models={populatedModels} />);
+    const { container } = render(<ModelGroupsSection clusterAnalysisByMethod={{ 'log-odds-euclidean-upgma': populatedClusterAnalysis }} models={populatedModels} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Individual' }));
 
@@ -134,7 +134,7 @@ describe('ModelGroupsSection', () => {
   it('shows a value tooltip with color rows and logit values on bar hover', () => {
     vi.useFakeTimers();
 
-    const { container } = render(<ModelGroupsSection clusterAnalysis={populatedClusterAnalysis} models={populatedModels} />);
+    const { container } = render(<ModelGroupsSection clusterAnalysisByMethod={{ 'log-odds-euclidean-upgma': populatedClusterAnalysis }} models={populatedModels} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Bar' }));
 
@@ -157,7 +157,7 @@ describe('ModelGroupsSection', () => {
   });
 
   it('shows the Schwartz category ring in radar view', () => {
-    render(<ModelGroupsSection clusterAnalysis={populatedClusterAnalysis} models={populatedModels} />);
+    render(<ModelGroupsSection clusterAnalysisByMethod={{ 'log-odds-euclidean-upgma': populatedClusterAnalysis }} models={populatedModels} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Radar' }));
 

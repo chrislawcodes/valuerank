@@ -8,9 +8,12 @@ import {
 } from './useDominanceGraph';
 import { getClusterVisualColor } from './clusterVisualizationUtils';
 
+type ClusterDataSource = 'log-odds' | 'win-rate';
+
 type ClusterRadarChartProps = {
   clusters: DomainCluster[];
   activeGroupIds?: string[];
+  dataSource?: ClusterDataSource;
 };
 
 const CHART_SIZE = 640;
@@ -23,6 +26,9 @@ const CATEGORY_LABEL_RADIUS = OUTER_RADIUS + 82;
 const RADAR_SCORE_MIN = -2.5;
 const RADAR_SCORE_MAX = 2.5;
 const RADAR_SCORE_RANGE = RADAR_SCORE_MAX - RADAR_SCORE_MIN;
+const RADAR_WIN_RATE_MIN = 0;
+const RADAR_WIN_RATE_MAX = 1;
+const RADAR_WIN_RATE_RANGE = RADAR_WIN_RATE_MAX - RADAR_WIN_RATE_MIN;
 
 function withAlpha(hexColor: string, alpha: number): string {
   const hex = hexColor.replace('#', '');
@@ -43,12 +49,16 @@ function getPoint(angle: number, radius: number) {
   };
 }
 
-function scoreToRadius(score: number): number {
+function scoreToRadius(score: number, dataSource: ClusterDataSource = 'log-odds'): number {
+  if (dataSource === 'win-rate') {
+    const clamped = Math.max(RADAR_WIN_RATE_MIN, Math.min(RADAR_WIN_RATE_MAX, score));
+    return ((clamped - RADAR_WIN_RATE_MIN) / RADAR_WIN_RATE_RANGE) * OUTER_RADIUS;
+  }
   const clamped = Math.max(RADAR_SCORE_MIN, Math.min(RADAR_SCORE_MAX, score));
   return ((clamped - RADAR_SCORE_MIN) / RADAR_SCORE_RANGE) * OUTER_RADIUS;
 }
 
-export function ClusterRadarChart({ clusters, activeGroupIds = [] }: ClusterRadarChartProps) {
+export function ClusterRadarChart({ clusters, activeGroupIds = [], dataSource = 'log-odds' }: ClusterRadarChartProps) {
   const valueAngles = useMemo(() => buildValueAngles(), []);
   const activeGroupSet = useMemo(() => new Set(activeGroupIds), [activeGroupIds]);
   const hasActiveSelection = activeGroupIds.length > 0;
@@ -64,12 +74,16 @@ export function ClusterRadarChart({ clusters, activeGroupIds = [] }: ClusterRada
     }),
     [activeGroupSet, clusters, hasActiveSelection],
   );
+  const radarMin = dataSource === 'win-rate' ? RADAR_WIN_RATE_MIN : RADAR_SCORE_MIN;
+  const radarMax = dataSource === 'win-rate' ? RADAR_WIN_RATE_MAX : RADAR_SCORE_MAX;
+  const radarRange = radarMax - radarMin;
+
   const hasClippedScores = useMemo(
     () => clusters.some((cluster) => DISPLAY_VALUES.some((valueKey) => {
       const score = cluster.centroid[valueKey] ?? 0;
-      return score < RADAR_SCORE_MIN || score > RADAR_SCORE_MAX;
+      return score < radarMin || score > radarMax;
     })),
-    [clusters],
+    [clusters, radarMin, radarMax],
   );
 
   if (clusters.length === 0) {
@@ -91,7 +105,10 @@ export function ClusterRadarChart({ clusters, activeGroupIds = [] }: ClusterRada
 
           {[0, 0.25, 0.5, 0.75, 1].map((fraction) => {
             const radius = OUTER_RADIUS * fraction;
-            const value = RADAR_SCORE_MIN + RADAR_SCORE_RANGE * fraction;
+            const value = radarMin + radarRange * fraction;
+            const label = dataSource === 'win-rate'
+              ? `${Math.round(value * 100)}%`
+              : value.toFixed(1);
             return (
               <g key={fraction}>
                 <circle cx={CENTER_X} cy={CENTER_Y} r={radius} fill="none" stroke="#e5e7eb" strokeWidth="1" />
@@ -109,7 +126,7 @@ export function ClusterRadarChart({ clusters, activeGroupIds = [] }: ClusterRada
                   y={CENTER_Y + 4}
                   className="fill-gray-400 text-[10px]"
                 >
-                  {value.toFixed(1)}
+                  {label}
                 </text>
               </g>
             );
@@ -189,7 +206,7 @@ export function ClusterRadarChart({ clusters, activeGroupIds = [] }: ClusterRada
             const points = orderedValues.map((valueKey) => {
               const angle = valueAngles.get(valueKey) ?? -Math.PI / 2;
               const score = cluster.centroid[valueKey] ?? 0;
-              return getPoint(angle, scoreToRadius(score));
+              return getPoint(angle, scoreToRadius(score, dataSource));
             });
 
             const path = points

@@ -378,7 +378,7 @@ describe('PressureSensitivity page', () => {
     }
     const pressureQueryArgs = pressureQueryCall[0] as { variables?: Record<string, unknown> };
     expect(pressureQueryArgs.variables).not.toHaveProperty('domainId');
-    expect(screen.getByRole('button', { name: /^All domains$/i })).toBeDefined();
+    expect(screen.getByRole('button', { name: /^Domain: All domains$/i })).toBeDefined();
     expect(screen.getByText(/^Models$/i)).toBeDefined();
     expect(screen.getByText(/^Default — 2 models$/i)).toBeDefined();
     expect(screen.queryByText('Provider')).toBeNull();

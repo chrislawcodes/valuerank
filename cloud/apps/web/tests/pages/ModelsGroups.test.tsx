@@ -20,6 +20,31 @@ const defaultSignatureData = {
   ],
 };
 
+const defaultClusterAnalysis = {
+  skipped: false,
+  skipReason: null,
+  defaultPair: null,
+  clusters: [
+    {
+      id: 'cluster-a',
+      name: 'Cluster A',
+      definingValues: ['Achievement'],
+      centroid: { Achievement: 1 },
+      members: [
+        {
+          model: 'model-a',
+          label: 'Model A',
+          silhouetteScore: 0.5,
+          isOutlier: false,
+          nearestClusterIds: null,
+          distancesToNearestClusters: null,
+        },
+      ],
+    },
+  ],
+  faultLinesByPair: {},
+};
+
 const defaultAnalysis = {
   domainAnalysis: {
     domainId: 'domain-a',
@@ -45,30 +70,8 @@ const defaultAnalysis = {
       },
     ],
     unavailableModels: [],
-    clusterAnalysis: {
-      skipped: false,
-      skipReason: null,
-      defaultPair: null,
-      clusters: [
-        {
-          id: 'cluster-a',
-          name: 'Cluster A',
-          definingValues: ['Achievement'],
-          centroid: { Achievement: 1 },
-          members: [
-            {
-              model: 'model-a',
-              label: 'Model A',
-              silhouetteScore: 0.5,
-              isOutlier: false,
-              nearestClusterIds: null,
-              distancesToNearestClusters: null,
-            },
-          ],
-        },
-      ],
-      faultLinesByPair: {},
-    },
+    clusterAnalysis: defaultClusterAnalysis,
+    clusterAnalysisByMethod: { 'log-odds-euclidean-upgma': defaultClusterAnalysis },
   },
 };
 
@@ -152,14 +155,14 @@ describe('ModelsGroups', () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByRole('heading', { name: 'Domain Selection' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /domain:/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Model Groups' })).toBeInTheDocument();
     expect(screen.getByText(/mock model groups section/i)).toBeInTheDocument();
 
     await waitFor(() => {
       expect(modelGroupsSectionMock).toHaveBeenCalledWith(
         expect.objectContaining({
-          clusterAnalysis: defaultAnalysis.domainAnalysis.clusterAnalysis,
+          clusterAnalysisByMethod: defaultAnalysis.domainAnalysis.clusterAnalysisByMethod,
           models: expect.arrayContaining([
             expect.objectContaining({
               model: 'model-a',

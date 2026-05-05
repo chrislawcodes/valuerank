@@ -5,33 +5,44 @@ import { Tooltip } from '../ui/Tooltip';
 import {
   DOT_BAR_CLUSTER_SCORE_MAX,
   DOT_BAR_CLUSTER_SCORE_MIN,
+  DOT_BAR_WIN_RATE_MAX,
+  DOT_BAR_WIN_RATE_MIN,
+  WIN_RATE_MIDPOINT,
   formatClusterScoreLabel,
+  formatWinRateLabel,
   getClusterScorePosition,
   getClusterValueOrder,
   getClusterVisualColor,
   isClusterScoreClipped,
 } from './clusterVisualizationUtils';
 
+type ClusterDataSource = 'log-odds' | 'win-rate';
+
 type ClusterBarPlotProps = {
   clusters: DomainCluster[];
   activeGroupIds?: string[];
+  dataSource?: ClusterDataSource;
 };
 
 function ClusterValueTooltip({
   clusters,
   valueKey,
   rankedClusters,
+  dataSource = 'log-odds',
 }: {
   clusters: DomainCluster[];
   valueKey: ValueKey;
   rankedClusters: DomainCluster[];
+  dataSource?: ClusterDataSource;
 }) {
+  const formatScore = dataSource === 'win-rate' ? formatWinRateLabel : formatClusterScoreLabel;
+  const columnLabel = dataSource === 'win-rate' ? 'Win Rate' : 'Logit';
   return (
     <div className="min-w-[220px] max-w-[280px] whitespace-normal">
       <div className="mb-2 text-xs font-semibold text-gray-900">{VALUE_LABELS[valueKey]}</div>
       <div className="mb-1 grid grid-cols-[auto_1fr] gap-x-3 text-[10px] font-medium uppercase tracking-wide text-gray-500">
         <span>Color</span>
-        <span>Logit</span>
+        <span>{columnLabel}</span>
       </div>
       <div className="space-y-1.5">
         {rankedClusters.map((cluster) => {
@@ -47,7 +58,7 @@ function ClusterValueTooltip({
                 className="h-2.5 w-2.5 shrink-0 rounded-full"
                 style={{ backgroundColor: color }}
               />
-              <span className="font-mono text-xs text-gray-900">{formatClusterScoreLabel(score)}</span>
+              <span className="font-mono text-xs text-gray-900">{formatScore(score)}</span>
             </div>
           );
         })}
@@ -66,10 +77,16 @@ function getClusterBarOrder(clusters: DomainCluster[], valueKey: ValueKey): Doma
   });
 }
 
-export function ClusterBarPlot({ clusters, activeGroupIds = [] }: ClusterBarPlotProps) {
+export function ClusterBarPlot({ clusters, activeGroupIds = [], dataSource = 'log-odds' }: ClusterBarPlotProps) {
   const sortedValues = useMemo(() => getClusterValueOrder(clusters), [clusters]);
   const activeGroupSet = useMemo(() => new Set(activeGroupIds), [activeGroupIds]);
   const hasActiveSelection = activeGroupIds.length > 0;
+
+  const isWinRate = dataSource === 'win-rate';
+  const axisMin = isWinRate ? DOT_BAR_WIN_RATE_MIN : DOT_BAR_CLUSTER_SCORE_MIN;
+  const axisMax = isWinRate ? DOT_BAR_WIN_RATE_MAX : DOT_BAR_CLUSTER_SCORE_MAX;
+  const axisMidpoint = isWinRate ? WIN_RATE_MIDPOINT : 0;
+  const formatScore = isWinRate ? formatWinRateLabel : formatClusterScoreLabel;
 
   if (clusters.length === 0) {
     return null;
@@ -81,7 +98,7 @@ export function ClusterBarPlot({ clusters, activeGroupIds = [] }: ClusterBarPlot
         <div className="mb-2 flex items-center justify-between gap-2 text-[11px] text-gray-500">
           <span>Values ordered by average favorability across the shown clusters.</span>
           <span>
-            Fixed axis: {formatClusterScoreLabel(DOT_BAR_CLUSTER_SCORE_MIN)} to {formatClusterScoreLabel(DOT_BAR_CLUSTER_SCORE_MAX)} with 0 at the midpoint.
+            Fixed axis: {formatScore(axisMin)} to {formatScore(axisMax)} with {formatScore(axisMidpoint)} at the midpoint.
           </span>
         </div>
 
@@ -93,19 +110,16 @@ export function ClusterBarPlot({ clusters, activeGroupIds = [] }: ClusterBarPlot
               <div className="absolute right-0 top-0 text-xs text-gray-400">favored →</div>
               <div
                 className="absolute top-0 text-xs font-semibold text-gray-500"
-                style={{
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                }}
+                style={{ left: '50%', transform: 'translateX(-50%)' }}
               >
-                50/50
+                {isWinRate ? '50%' : '50/50'}
               </div>
             </div>
           </div>
 
           {sortedValues.map((valueKey) => {
             const label = VALUE_LABELS[valueKey];
-            const midpoint = getClusterScorePosition(0, DOT_BAR_CLUSTER_SCORE_MIN, DOT_BAR_CLUSTER_SCORE_MAX);
+            const midpoint = getClusterScorePosition(axisMidpoint, axisMin, axisMax);
             const rankedClusters = getClusterBarOrder(clusters, valueKey);
 
             return (
@@ -118,20 +132,20 @@ export function ClusterBarPlot({ clusters, activeGroupIds = [] }: ClusterBarPlot
 
                   {rankedClusters.map((cluster, index) => {
                     const score = cluster.centroid[valueKey] ?? 0;
-                    const endPosition = getClusterScorePosition(score, DOT_BAR_CLUSTER_SCORE_MIN, DOT_BAR_CLUSTER_SCORE_MAX);
+                    const endPosition = getClusterScorePosition(score, axisMin, axisMax);
                     const left = Math.min(midpoint, endPosition);
                     const width = Math.max(Math.abs(endPosition - midpoint), 1);
                     const clusterIndex = clusters.findIndex((candidate) => candidate.id === cluster.id);
                     const safeClusterIndex = clusterIndex >= 0 ? clusterIndex : 0;
                     const color = getClusterVisualColor(safeClusterIndex);
-                    const clipped = isClusterScoreClipped(score, DOT_BAR_CLUSTER_SCORE_MIN, DOT_BAR_CLUSTER_SCORE_MAX);
+                    const clipped = isClusterScoreClipped(score, axisMin, axisMax);
                     const isActive = !hasActiveSelection || activeGroupSet.has(cluster.id);
                     const faded = hasActiveSelection && !isActive;
 
                     return (
                       <Tooltip
                         key={cluster.id}
-                        content={<ClusterValueTooltip clusters={clusters} valueKey={valueKey} rankedClusters={rankedClusters} />}
+                        content={<ClusterValueTooltip clusters={clusters} valueKey={valueKey} rankedClusters={rankedClusters} dataSource={dataSource} />}
                         position="top"
                         variant="light"
                         className="max-w-[300px] whitespace-normal"
@@ -167,21 +181,18 @@ export function ClusterBarPlot({ clusters, activeGroupIds = [] }: ClusterBarPlot
           <div className="flex items-center gap-2">
             <div className="w-32 shrink-0" />
             <div className="relative h-5 flex-1">
-              <div className="absolute left-0 top-0 text-xs text-gray-400">{formatClusterScoreLabel(DOT_BAR_CLUSTER_SCORE_MIN)}</div>
+              <div className="absolute left-0 top-0 text-xs text-gray-400">{formatScore(axisMin)}</div>
               <div
                 className="absolute top-0 text-xs font-semibold text-gray-500"
-                style={{
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                }}
+                style={{ left: '50%', transform: 'translateX(-50%)' }}
               >
-                0
+                {formatScore(axisMidpoint)}
               </div>
-              <div className="absolute right-0 top-0 text-xs text-gray-400">{formatClusterScoreLabel(DOT_BAR_CLUSTER_SCORE_MAX)}</div>
+              <div className="absolute right-0 top-0 text-xs text-gray-400">{formatScore(axisMax)}</div>
             </div>
           </div>
 
-          {clusters.some((cluster) => sortedValues.some((valueKey) => isClusterScoreClipped(cluster.centroid[valueKey] ?? 0, DOT_BAR_CLUSTER_SCORE_MIN, DOT_BAR_CLUSTER_SCORE_MAX))) && (
+          {clusters.some((cluster) => sortedValues.some((valueKey) => isClusterScoreClipped(cluster.centroid[valueKey] ?? 0, axisMin, axisMax))) && (
             <p className="px-2 pb-1 text-[11px] text-amber-700">
               Scores outside the fixed range are pinned to the edge.
             </p>

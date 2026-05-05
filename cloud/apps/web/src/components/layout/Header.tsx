@@ -260,7 +260,7 @@ export function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-20 border-b border-gray-800 bg-[#1A1A1A]">
+    <header className="sticky top-0 z-50 border-b border-gray-800 bg-[#1A1A1A]">
       <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-4">
         <div className="flex items-center gap-2 shrink-0">
           <MobileNav className="sm:hidden" />

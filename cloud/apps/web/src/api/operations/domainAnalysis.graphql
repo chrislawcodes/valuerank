@@ -81,6 +81,7 @@ query DomainAnalysis($domainId: ID!, $scope: String, $signature: String) {
       }
       faultLinesByPair
     }
+    clusterAnalysisByMethod
   }
 }
 

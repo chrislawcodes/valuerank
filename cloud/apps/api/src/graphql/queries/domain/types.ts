@@ -63,6 +63,7 @@ export type DomainAnalysisResult = {
   cacheStatus: DomainAnalysisCacheStatus;
   rankingShapeBenchmarks: RankingShapeBenchmarks;
   clusterAnalysis: ClusterAnalysis;
+  clusterAnalysisByMethod: Record<string, ClusterAnalysis>;
 };
 
 export const RankingShapeRef = builder.objectRef<RankingShape>('RankingShape');
@@ -279,6 +280,7 @@ builder.objectType(DomainAnalysisResultRef, {
       type: ClusterAnalysisRef,
       resolve: (parent) => parent.clusterAnalysis,
     }),
+    clusterAnalysisByMethod: t.expose('clusterAnalysisByMethod', { type: 'JSON' }),
   }),
 });
 
