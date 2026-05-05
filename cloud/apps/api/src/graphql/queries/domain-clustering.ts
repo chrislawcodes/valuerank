@@ -108,6 +108,8 @@ function avgLinkageDist(
   return total / (clusterA.length * clusterB.length);
 }
 
+export type ClusteringMethod = 'upgma' | 'ward';
+
 export type MergeStep = {
   height: number;
 };
@@ -154,6 +156,71 @@ export function upgma(distMatrix: number[][], n: number): UpgmaResult {
 
     mergeHeights.push(minDist);
     snapshots.push(clusters.map((c) => [...c]));
+  }
+
+  return { mergeHeights, snapshots };
+}
+
+/**
+ * Run Ward's minimum-variance clustering on an N×N distance matrix.
+ * Uses the Lance-Williams update formula to maintain inter-cluster distances.
+ * Returns the same UpgmaResult shape so it can share cutAtLargestGap.
+ */
+export function ward(distMatrix: number[][], n: number): UpgmaResult {
+  if (n === 0) return { mergeHeights: [], snapshots: [] };
+
+  const sizes: number[] = Array(n).fill(1) as number[];
+  const members: number[][] = Array.from({ length: n }, (_, i) => [i]);
+  const active: boolean[] = Array(n).fill(true) as boolean[];
+
+  // Working copy of the distance matrix — updated in place
+  const d: number[][] = distMatrix.map((row) => [...row]);
+
+  const mergeHeights: number[] = [];
+  const snapshots: number[][][] = [members.map((c) => [...c])];
+
+  for (let step = 0; step < n - 1; step++) {
+    let minDist = Infinity;
+    let minI = -1;
+    let minJ = -1;
+
+    for (let i = 0; i < n; i++) {
+      if (!active[i]) continue;
+      for (let j = i + 1; j < n; j++) {
+        if (!active[j]) continue;
+        if ((d[i]![j] ?? 0) < minDist) {
+          minDist = d[i]![j] ?? 0;
+          minI = i;
+          minJ = j;
+        }
+      }
+    }
+
+    if (minI < 0) break;
+
+    const nA = sizes[minI]!;
+    const nB = sizes[minJ]!;
+    const dAB = d[minI]![minJ] ?? 0;
+
+    // Update distances using Lance-Williams formula for Ward's method
+    for (let k = 0; k < n; k++) {
+      if (!active[k] || k === minI || k === minJ) continue;
+      const nC = sizes[k]!;
+      const dAC = d[minI]![k] ?? 0;
+      const dBC = d[minJ]![k] ?? 0;
+      const total = nA + nB + nC;
+      const newD = ((nA + nC) * dAC + (nB + nC) * dBC - nC * dAB) / total;
+      d[minI]![k] = Math.max(0, newD);
+      d[k]![minI] = Math.max(0, newD);
+    }
+
+    members[minI] = [...members[minI]!, ...members[minJ]!];
+    sizes[minI] = nA + nB;
+    active[minJ] = false;
+
+    mergeHeights.push(minDist);
+    const activeClusters = members.filter((_, i) => active[i]);
+    snapshots.push(activeClusters.map((c) => [...c]));
   }
 
   return { mergeHeights, snapshots };
@@ -294,7 +361,7 @@ export function nameCluster(
 /**
  * Main entry point. Compute full cluster analysis from model score vectors.
  */
-export function computeClusterAnalysis(models: ClusterModelInput[]): ClusterAnalysis {
+export function computeClusterAnalysis(models: ClusterModelInput[], method: ClusteringMethod = 'upgma'): ClusterAnalysis {
   const n = models.length;
 
   if (n < MIN_MODELS_FOR_CLUSTERING) {
@@ -317,7 +384,7 @@ export function computeClusterAnalysis(models: ClusterModelInput[]): ClusterAnal
   });
 
   const distMatrix = cosineDistanceMatrix(vectors);
-  const { mergeHeights, snapshots } = upgma(distMatrix, n);
+  const { mergeHeights, snapshots } = method === 'ward' ? ward(distMatrix, n) : upgma(distMatrix, n);
   const rawClusters = cutAtLargestGap(mergeHeights, snapshots, n);
 
   if (rawClusters.length === 1) {

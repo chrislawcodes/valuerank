@@ -9,7 +9,7 @@ import {
   computeSmoothedLogOddsScore,
 } from '../../graphql/queries/domain/shared.js';
 import { computeRankingShapes } from '../../graphql/queries/domain-shape.js';
-import { computeClusterAnalysis } from '../../graphql/queries/domain-clustering.js';
+import { computeClusterAnalysis, type ClusteringMethod } from '../../graphql/queries/domain-clustering.js';
 import type {
   DomainAnalysisModel,
   DomainAnalysisResult,
@@ -57,6 +57,7 @@ function buildDomainAnalysisResultFromSnapshot(params: {
   activeModels: Array<{ modelId: string; displayName: string; isDefault: boolean }>;
   generatedAt: Date;
   cacheStatus: DomainAnalysisCacheStatus;
+  clusteringMethod?: ClusteringMethod;
 }): DomainAnalysisResult {
   const activeModelLabelById = new Map(params.activeModels.map((model) => [model.modelId, model.displayName]));
 
@@ -94,7 +95,7 @@ function buildDomainAnalysisResultFromSnapshot(params: {
       label: model.label,
       scores: Object.fromEntries(model.values.map((value) => [value.valueKey, value.score])),
     }));
-  const clusterAnalysis = computeClusterAnalysis(clusterModels);
+  const clusterAnalysis = computeClusterAnalysis(clusterModels, params.clusteringMethod);
 
   const models: DomainAnalysisModel[] = modelsBase.map((model) => ({
     ...model,
@@ -202,6 +203,7 @@ export async function getDomainAnalysisResult(params: {
   scope: DomainAnalysisScope;
   domainId: string;
   requestedSignature: string | null;
+  clusteringMethod?: ClusteringMethod;
 }): Promise<DomainAnalysisResult> {
   const state = await prepareDomainAnalysisState({
     scope: params.scope,
@@ -247,6 +249,7 @@ export async function getDomainAnalysisResult(params: {
       activeModels,
       generatedAt: currentSnapshot.createdAt,
       cacheStatus: DOMAIN_ANALYSIS_CACHE_STATUS.FRESH,
+      clusteringMethod: params.clusteringMethod,
     });
   }
 
@@ -262,6 +265,7 @@ export async function getDomainAnalysisResult(params: {
       activeModels,
       generatedAt: currentSnapshot.createdAt,
       cacheStatus: queued ? DOMAIN_ANALYSIS_CACHE_STATUS.UPDATING : DOMAIN_ANALYSIS_CACHE_STATUS.OUT_OF_DATE,
+      clusteringMethod: params.clusteringMethod,
     });
   }
 
@@ -279,5 +283,6 @@ export async function getDomainAnalysisResult(params: {
     activeModels,
     generatedAt: refreshed.snapshot.createdAt,
     cacheStatus: DOMAIN_ANALYSIS_CACHE_STATUS.FRESH,
+    clusteringMethod: params.clusteringMethod,
   });
 }

@@ -24,10 +24,19 @@ const LEGEND_COLORS = [
   { border: 'border-yellow-500', text: 'text-yellow-700', light: 'bg-yellow-50', color: '#ca8a04' },
 ] as const;
 
+type ClusteringMethod = 'upgma' | 'ward';
+
+const CLUSTERING_METHOD_OPTIONS: Array<{ value: ClusteringMethod; label: string }> = [
+  { value: 'upgma', label: 'UPGMA' },
+  { value: 'ward', label: 'Ward' },
+];
+
 type ModelGroupsSectionProps = {
   clusterAnalysis?: ClusterAnalysis;
   models: ModelEntry[];
   selectedModelId?: string | null;
+  clusteringMethod?: ClusteringMethod;
+  onClusteringMethodChange?: (method: ClusteringMethod) => void;
 };
 
 type ClusterViewMode = 'dot' | 'bar' | 'radar';
@@ -56,6 +65,8 @@ export function ModelGroupsSection({
   clusterAnalysis,
   models,
   selectedModelId = null,
+  clusteringMethod = 'upgma',
+  onClusteringMethodChange,
 }: ModelGroupsSectionProps) {
   const summaryTableRef = useRef<HTMLDivElement>(null);
   const [showModelGroupsHelp, setShowModelGroupsHelp] = useState(false);
@@ -142,6 +153,28 @@ export function ModelGroupsSection({
               );
             })}
           </div>
+
+          {groupDisplayMode === 'groups' && onClusteringMethodChange != null && (
+            <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
+              {CLUSTERING_METHOD_OPTIONS.map((option) => {
+                const active = clusteringMethod === option.value;
+                return (
+                  <Button
+                    key={option.value}
+                    type="button"
+                    variant={active ? 'primary' : 'ghost'}
+                    size="sm"
+                    onClick={() => onClusteringMethodChange(option.value)}
+                    className={`rounded-md px-3 py-1 text-xs font-medium min-h-0 ${
+                      active ? 'bg-teal-600 text-white hover:bg-teal-700' : 'text-gray-600 hover:bg-white hover:text-gray-900'
+                    }`}
+                  >
+                    {option.label}
+                  </Button>
+                );
+              })}
+            </div>
+          )}
 
           <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
             {CLUSTER_VIEW_OPTIONS.map((option) => {
