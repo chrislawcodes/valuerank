@@ -2494,7 +2494,7 @@ type Query {
     withoutDomain: Boolean
   ): [Definition!]!
   domain(id: ID!): Domain
-  domainAnalysis(domainId: ID!, scope: String, signature: String): DomainAnalysisResult!
+  domainAnalysis(clusteringMethod: String, domainId: ID!, scope: String, signature: String): DomainAnalysisResult!
   domainAnalysisConditionTranscripts(definitionId: ID!, domainId: ID!, limit: Int, modelId: String!, scenarioId: ID, signature: String, valueKey: String!): [DomainAnalysisConditionTranscript!]!
   domainAnalysisValueDetail(domainId: ID!, modelId: String!, signature: String, valueKey: String!): DomainAnalysisValueDetailResult!
   domainAvailableSignatures(domainId: ID!, scope: String): [DomainAvailableSignature!]!

@@ -2926,6 +2926,7 @@ export type QueryDomainArgs = {
 
 
 export type QueryDomainAnalysisArgs = {
+  clusteringMethod?: InputMaybe<Scalars['String']['input']>;
   domainId: Scalars['ID']['input'];
   scope?: InputMaybe<Scalars['String']['input']>;
   signature?: InputMaybe<Scalars['String']['input']>;
@@ -4264,6 +4265,7 @@ export type DomainAnalysisQueryVariables = Exact<{
   domainId: Scalars['ID']['input'];
   scope?: InputMaybe<Scalars['String']['input']>;
   signature?: InputMaybe<Scalars['String']['input']>;
+  clusteringMethod?: InputMaybe<Scalars['String']['input']>;
 }>;
 
 
@@ -5951,8 +5953,13 @@ export function useDeleteDomainContextMutation() {
   return Urql.useMutation<DeleteDomainContextMutation, DeleteDomainContextMutationVariables>(DeleteDomainContextDocument);
 };
 export const DomainAnalysisDocument = gql`
-    query DomainAnalysis($domainId: ID!, $scope: String, $signature: String) {
-  domainAnalysis(domainId: $domainId, scope: $scope, signature: $signature) {
+    query DomainAnalysis($domainId: ID!, $scope: String, $signature: String, $clusteringMethod: String) {
+  domainAnalysis(
+    domainId: $domainId
+    scope: $scope
+    signature: $signature
+    clusteringMethod: $clusteringMethod
+  ) {
     domainId
     domainName
     contributionSummary {

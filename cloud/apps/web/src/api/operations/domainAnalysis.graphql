@@ -1,5 +1,5 @@
-query DomainAnalysis($domainId: ID!, $scope: String, $signature: String) {
-  domainAnalysis(domainId: $domainId, scope: $scope, signature: $signature) {
+query DomainAnalysis($domainId: ID!, $scope: String, $signature: String, $clusteringMethod: String) {
+  domainAnalysis(domainId: $domainId, scope: $scope, signature: $signature, clusteringMethod: $clusteringMethod) {
     domainId
     domainName
     contributionSummary {
