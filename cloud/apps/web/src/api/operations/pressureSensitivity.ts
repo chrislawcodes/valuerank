@@ -24,16 +24,9 @@ export type PressureSensitivityExcludedDefinition =
 
 export type PressureSensitivityValuePair = PressureSensitivityModel['valuePairs'][number];
 export type PressureSensitivityValueRate = PressureSensitivityModel['valueRates'][number];
-export type PressureSensitivityValueRateByDomain = {
-  domainId: string;
-  domainName: string;
-  rate: number | null;
-  pairsMeasured: number;
-};
+export type PressureSensitivityValueRateByDomain = PressureSensitivityValueRate['highPressureOnThisValueDomainRates'][number];
 
-export type PressureSensitivityValueRateAggregated = PressureSensitivityValueRate & {
-  highPressureOnThisValueDomainRates: PressureSensitivityValueRateByDomain[];
-};
+export type PressureSensitivityValueRateAggregated = PressureSensitivityValueRate;
 export type PressureSensitivityCell = PressureSensitivityValuePair['grid'][number];
 export type PressureResponse = NonNullable<PressureSensitivityValuePair['pressureResponse']>;
 export type PressureResponseSummary =

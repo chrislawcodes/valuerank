@@ -35,6 +35,12 @@ query PressureSensitivity(
         averageWinRate
         balancedWinRate
         highPressureOnThisValueWinRate
+        highPressureOnThisValueDomainRates {
+          domainId
+          domainName
+          rate
+          pairsMeasured
+        }
         highPressureOnOpposingValueWinRate
         pairsMeasured
       }

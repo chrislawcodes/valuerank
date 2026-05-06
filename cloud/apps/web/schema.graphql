@@ -2117,10 +2117,18 @@ type PressureSensitivityValuePair {
   unscoredCount: Int!
 }
 
+type HighPressureDomainRate {
+  domainId: String!
+  domainName: String!
+  pairsMeasured: Int!
+  rate: Float
+}
+
 type PressureSensitivityValueRate {
   averageWinRate: Float
   balancedWinRate: Float
   highPressureOnOpposingValueWinRate: Float
+  highPressureOnThisValueDomainRates: [HighPressureDomainRate!]!
   highPressureOnThisValueWinRate: Float
   pairsMeasured: Int!
   valueLabel: String!

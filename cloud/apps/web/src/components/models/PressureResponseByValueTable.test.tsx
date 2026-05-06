@@ -58,7 +58,7 @@ function createModel(
   };
 }
 
-function createTenValueRates(): PressureSensitivityValueRate[] {
+function createTenValueRates(): PressureSensitivityValueRateAggregated[] {
   return TEN_VALUE_LABELS.map((valueLabel, index) =>
     createValueRate(valueLabel, {
       averageWinRate: 0.4 + index * 0.01,
@@ -69,7 +69,7 @@ function createTenValueRates(): PressureSensitivityValueRate[] {
   );
 }
 
-function createSortFixture(): PressureSensitivityValueRate[] {
+function createSortFixture(): PressureSensitivityValueRateAggregated[] {
   return [
     createValueRate('Alpha', {
       averageWinRate: 0.3,
@@ -92,7 +92,7 @@ function createSortFixture(): PressureSensitivityValueRate[] {
   ];
 }
 
-function createMathFixture(): PressureSensitivityValueRate[] {
+function createMathFixture(): PressureSensitivityValueRateAggregated[] {
   return [
     createValueRate('Alpha', {
       averageWinRate: 0.6,
