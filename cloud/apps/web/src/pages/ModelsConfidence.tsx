@@ -16,6 +16,7 @@ import {
 import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/llm';
 import { ConfidenceHeatmap } from '../components/models/ConfidenceHeatmap';
 import { ConfidenceDomainBreakout } from '../components/models/ConfidenceDomainBreakout';
+import { ConfidenceModelDomainBreakout } from '../components/models/ConfidenceModelDomainBreakout';
 import {
   buildDomainShiftSignatureOptions,
   getDefaultDomainShiftSignature,
@@ -184,6 +185,16 @@ export function ModelsConfidence() {
 
       {domains.length > 0 && (
         <ConfidenceDomainBreakout
+          domains={domains}
+          signature={selectedSignature}
+          selectedModelIds={selectedModelIds}
+          defaultModelIds={defaultModelIds}
+          selectedDomainId={selectedDomainId}
+        />
+      )}
+
+      {domains.length > 0 && (
+        <ConfidenceModelDomainBreakout
           domains={domains}
           signature={selectedSignature}
           selectedModelIds={selectedModelIds}
