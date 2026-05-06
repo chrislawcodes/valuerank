@@ -50,6 +50,11 @@ query DomainAnalysis($domainId: ID!, $scope: String, $signature: String) {
         steepness
         dominanceZScore
       }
+      pairwiseWinRateModel {
+        valueOrder
+        winRateMatrix
+        trialCountMatrix
+      }
     }
     unavailableModels {
       model

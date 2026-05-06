@@ -13,7 +13,9 @@ import { computeClusterAnalysis, computeAllClusterAnalyses } from '../../graphql
 import type {
   DomainAnalysisModel,
   DomainAnalysisResult,
+  PairwiseWinRateModel,
 } from '../../graphql/queries/domain/types.js';
+import { SCHWARTZ_CIRCULAR_ORDER } from '@valuerank/shared/schwartz';
 import {
   DOMAIN_ANALYSIS_CACHE_STATUS,
   DOMAIN_ANALYSIS_SNAPSHOT_TYPE,
@@ -69,6 +71,30 @@ function extractWinRates(snapshotModel: DomainAnalysisSnapshotModel, valueKeys: 
   return result;
 }
 
+function buildPairwiseWinRateModel(pairwiseWins: Record<string, Record<string, number>>): PairwiseWinRateModel {
+  const order = [...SCHWARTZ_CIRCULAR_ORDER];
+  const n = order.length;
+  const winRateMatrix: Array<Array<number | null>> = [];
+  const trialCountMatrix: number[][] = [];
+  for (let i = 0; i < n; i++) {
+    const winRateRow: Array<number | null> = [];
+    const trialRow: number[] = [];
+    for (let j = 0; j < n; j++) {
+      if (i === j) { winRateRow.push(null); trialRow.push(0); continue; }
+      const keyI = order[i] as string;
+      const keyJ = order[j] as string;
+      const winsIJ = pairwiseWins[keyI]?.[keyJ] ?? 0;
+      const winsJI = pairwiseWins[keyJ]?.[keyI] ?? 0;
+      const total = winsIJ + winsJI;
+      winRateRow.push(total > 0 ? winsIJ / total : null);
+      trialRow.push(total);
+    }
+    winRateMatrix.push(winRateRow);
+    trialCountMatrix.push(trialRow);
+  }
+  return { valueOrder: order, winRateMatrix, trialCountMatrix };
+}
+
 function buildDomainAnalysisResultFromSnapshot(params: {
   snapshot: DomainAnalysisSnapshotOutput;
   activeModels: Array<{ modelId: string; displayName: string; isDefault: boolean }>;
@@ -99,6 +125,7 @@ function buildDomainAnalysisResultFromSnapshot(params: {
       model: model.model,
       label: activeModelLabelById.get(model.model) ?? model.model,
       values,
+      pairwiseWinRateModel: buildPairwiseWinRateModel(model.pairwiseWins),
     };
   });
 

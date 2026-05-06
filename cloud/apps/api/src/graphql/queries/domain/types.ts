@@ -37,11 +37,18 @@ export {
   DomainAnalysisValueDetailResultRef,
 } from './types-detail.js';
 
+export type PairwiseWinRateModel = {
+  valueOrder: string[];
+  winRateMatrix: Array<Array<number | null>>;
+  trialCountMatrix: number[][];
+};
+
 export type DomainAnalysisModel = {
   model: string;
   label: string;
   values: DomainAnalysisValueScore[];
   rankingShape: RankingShape;
+  pairwiseWinRateModel: PairwiseWinRateModel | null;
 };
 
 export type DomainAnalysisCacheStatus = 'FRESH' | 'UPDATING' | 'OUT_OF_DATE';
@@ -74,6 +81,7 @@ export const ValueFaultLineRef = builder.objectRef<ValueFaultLine>('ValueFaultLi
 export const ClusterPairFaultLinesRef = builder.objectRef<ClusterPairFaultLines>('ClusterPairFaultLines');
 export const ClusterAnalysisRef = builder.objectRef<ClusterAnalysis>('ClusterAnalysis');
 export const DomainAnalysisValueScoreRef = builder.objectRef<DomainAnalysisValueScore>('DomainAnalysisValueScore');
+export const PairwiseWinRateModelRef = builder.objectRef<PairwiseWinRateModel>('PairwiseWinRateModel');
 export const DomainAnalysisModelRef = builder.objectRef<DomainAnalysisModel>('DomainAnalysisModel');
 export const DomainAnalysisUnavailableModelRef = builder.objectRef<DomainAnalysisUnavailableModel>('DomainAnalysisUnavailableModel');
 export const DomainAnalysisMissingDefinitionRef = builder.objectRef<DomainAnalysisMissingDefinition>('DomainAnalysisMissingDefinition');
@@ -185,6 +193,20 @@ builder.objectType(DomainAnalysisValueScoreRef, {
   }),
 });
 
+builder.objectType(PairwiseWinRateModelRef, {
+  fields: (t) => ({
+    valueOrder: t.exposeStringList('valueOrder'),
+    winRateMatrix: t.field({
+      type: [t.listRef('Float', { nullable: true })],
+      resolve: (parent) => parent.winRateMatrix,
+    }),
+    trialCountMatrix: t.field({
+      type: [t.listRef('Int')],
+      resolve: (parent) => parent.trialCountMatrix,
+    }),
+  }),
+});
+
 builder.objectType(DomainAnalysisModelRef, {
   fields: (t) => ({
     model: t.exposeString('model'),
@@ -196,6 +218,11 @@ builder.objectType(DomainAnalysisModelRef, {
     rankingShape: t.field({
       type: RankingShapeRef,
       resolve: (parent) => parent.rankingShape,
+    }),
+    pairwiseWinRateModel: t.field({
+      type: PairwiseWinRateModelRef,
+      nullable: true,
+      resolve: (parent) => parent.pairwiseWinRateModel,
     }),
   }),
 });
