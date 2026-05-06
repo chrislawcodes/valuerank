@@ -4,10 +4,13 @@ import {
   type Run,
   type RunsQueryVariables,
   type RunsQueryResult,
-} from '../api/operations/runs';
+} from '../api/operations/runs.js';
+import { isNonSurveyRun } from '../lib/runClassification.js';
 
 type UseRunsOptions = {
   definitionId?: string;
+  hasAnalysis?: boolean;
+  analysisStatus?: 'CURRENT' | 'SUPERSEDED';
   status?: string;
   limit?: number;
   offset?: number;
@@ -25,13 +28,23 @@ type UseRunsResult = {
  * Hook to fetch list of runs with optional filtering.
  */
 export function useRuns(options: UseRunsOptions = {}): UseRunsResult {
-  const { definitionId, status, limit = 20, offset = 0, pause = false } = options;
+  const {
+    definitionId,
+    status,
+    limit = 20,
+    offset = 0,
+    pause = false,
+    hasAnalysis,
+    analysisStatus,
+  } = options;
 
   const variables: RunsQueryVariables = {
-    definitionId: definitionId || undefined,
-    status: status || undefined,
+    definitionId: definitionId ?? undefined,
+    status: status ?? undefined,
     limit,
     offset,
+    hasAnalysis: hasAnalysis ?? undefined,
+    analysisStatus: analysisStatus ?? undefined,
   };
 
   const [result, reexecuteQuery] = useQuery<RunsQueryResult, RunsQueryVariables>({
@@ -41,10 +54,13 @@ export function useRuns(options: UseRunsOptions = {}): UseRunsResult {
     requestPolicy: 'cache-and-network',
   });
 
+  const rawRuns = result.data?.runs ?? [];
+  const runs = hasAnalysis === true ? rawRuns.filter(isNonSurveyRun) : rawRuns;
+
   return {
-    runs: result.data?.runs ?? [],
+    runs,
     loading: result.fetching,
-    error: result.error ? new Error(result.error.message) : null,
+    error: result.error != null ? new Error(result.error.message) : null,
     refetch: () => reexecuteQuery({ requestPolicy: 'network-only' }),
   };
 }
