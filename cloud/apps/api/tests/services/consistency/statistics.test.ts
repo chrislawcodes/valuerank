@@ -15,8 +15,8 @@ describe('wilsonInterval', () => {
     expect(result.high).toBeCloseTo(0.9114, 3);
   });
 
-  it('returns zeros when there are no trials', () => {
-    expect(wilsonInterval(0, 0)).toEqual({ low: 0, high: 0, p: 0 });
+  it('returns null when there are no trials', () => {
+    expect(wilsonInterval(0, 0)).toBeNull();
   });
 });
 
@@ -24,11 +24,12 @@ describe('dersimonianLairdPool', () => {
   it('falls back to Wilson for a single scenario', () => {
     const single = dersimonianLairdPool([{ p: 0.8, n: 25 }]);
     const wilson = wilsonInterval(20, 25);
+    expect(wilson).not.toBeNull();
     expect(single.betweenSd).toBe(0);
     expect(single.tauSquared).toBe(0);
-    expect(single.estimate).toBeCloseTo(wilson.p, 6);
-    expect(single.ciLow).toBeCloseTo(wilson.low, 6);
-    expect(single.ciHigh).toBeCloseTo(wilson.high, 6);
+    expect(single.estimate).toBeCloseTo(wilson!.p, 6);
+    expect(single.ciLow).toBeCloseTo(wilson!.low, 6);
+    expect(single.ciHigh).toBeCloseTo(wilson!.high, 6);
   });
 
   it('pools heterogeneous studies with random effects', () => {
