@@ -205,6 +205,7 @@ export function ModelsConfidence() {
       {domains.length > 0 && (
         <ConfidenceModelDomainBreakout
           domains={domains}
+          referenceModels={models}
           signature={selectedSignature}
           selectedModelIds={selectedModelIds}
           defaultModelIds={defaultModelIds}
