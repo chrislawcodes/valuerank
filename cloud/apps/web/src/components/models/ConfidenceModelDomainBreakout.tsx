@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useClient } from 'urql';
 import gql from 'graphql-tag';
 import { Button } from '../ui/Button';
+import { ScreenshotButton } from '../ui/ScreenshotButton';
 import { cn } from '../../lib/utils';
 import {
   formatPercent,
@@ -314,6 +315,7 @@ export function ConfidenceModelDomainBreakout({
   const [displayMode, setDisplayMode] = useState<DomainShiftDisplayMode>('winRate');
   const [sort, setSort] = useState<ModelBreakoutSort>(DEFAULT_MODEL_SORT);
   const [domainStates, setDomainStates] = useState<Record<string, DomainQueryState>>({});
+  const sectionRef = useRef<HTMLElement>(null);
   const effectiveModelIds = selectedModelIds ?? defaultModelIds;
   const noModelsSelected = effectiveModelIds.length === 0;
 
@@ -413,13 +415,14 @@ export function ConfidenceModelDomainBreakout({
   }
 
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
+    <section ref={sectionRef} className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <h2 className="text-lg font-semibold text-gray-900">Confidence by Model &amp; Domain</h2>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <DisplayModeToggle displayMode={displayMode} onChange={setDisplayMode} />
+          <ScreenshotButton targetRef={sectionRef} label="confidence by model and domain report" />
         </div>
       </div>
 
