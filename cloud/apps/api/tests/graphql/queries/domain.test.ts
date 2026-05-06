@@ -759,6 +759,112 @@ describe('GraphQL Domain Query Registration', () => {
     );
   });
 
+  it('includes pending launches in the active evaluations query', async () => {
+    const domain = await db.domain.create({
+      data: {
+        name: 'Pending Evaluation Query Test',
+        normalizedName: `pending-evaluation-query-${Date.now()}`,
+      },
+    });
+    createdDomainIds.push(domain.id);
+
+    const definition = await db.definition.create({
+      data: {
+        name: 'Pending Evaluation Vignette',
+        domainId: domain.id,
+        version: 1,
+        content: { schema_version: 1, preamble: 'pending' },
+        createdByUserId: TEST_USER.id,
+      },
+    });
+    createdDefinitionIds.push(definition.id);
+
+    const pendingRun = await db.run.create({
+      data: {
+        definitionId: definition.id,
+        status: 'PENDING',
+        runCategory: 'PRODUCTION',
+        config: { models: ['test-domain-model'], temperature: null },
+        progress: { total: 1, completed: 0, failed: 0 },
+        createdByUserId: TEST_USER.id,
+      },
+    });
+    createdRunIds.push(pendingRun.id);
+
+    const evaluation = await db.domainEvaluation.create({
+      data: {
+        domainId: domain.id,
+        domainNameAtLaunch: domain.name,
+        scopeCategory: 'PRODUCTION',
+        status: 'PENDING',
+        configSnapshot: {
+          models: ['test-domain-model'],
+          projectedCostUsd: 0.5,
+          startedRuns: 1,
+          skippedForBudget: 0,
+        },
+        createdByUserId: TEST_USER.id,
+      },
+    });
+
+    await db.domainEvaluationRun.create({
+      data: {
+        domainEvaluationId: evaluation.id,
+        runId: pendingRun.id,
+        definitionIdAtLaunch: definition.id,
+        definitionNameAtLaunch: definition.name,
+        domainIdAtLaunch: domain.id,
+      },
+    });
+
+    const query = `
+      query ActiveEvaluations($domainId: ID) {
+        activeEvaluations(domainId: $domainId) {
+          id
+          domainId
+          status
+          memberCount
+          members {
+            runId
+            runStatus
+            runCategory
+          }
+        }
+      }
+    `;
+
+    const response = await request(app)
+      .post('/graphql')
+      .set('Authorization', getAuthHeader())
+      .send({
+        query,
+        variables: {
+          domainId: domain.id,
+        },
+      })
+      .expect(200);
+
+    expect(response.body.errors).toBeUndefined();
+
+    const activeEvaluations = response.body.data.activeEvaluations as Array<Record<string, unknown>>;
+    expect(activeEvaluations).toHaveLength(1);
+    expect(activeEvaluations[0]).toEqual(
+      expect.objectContaining({
+        id: evaluation.id,
+        domainId: domain.id,
+        status: 'RUNNING',
+        memberCount: 1,
+      }),
+    );
+    expect(activeEvaluations[0]?.members).toEqual([
+      expect.objectContaining({
+        runId: pendingRun.id,
+        runStatus: 'PENDING',
+        runCategory: 'PRODUCTION',
+      }),
+    ]);
+  });
+
   it('returns a domain evaluation cost estimate with fallback metadata and confidence', async () => {
     const provider = await db.llmProvider.create({
       data: {

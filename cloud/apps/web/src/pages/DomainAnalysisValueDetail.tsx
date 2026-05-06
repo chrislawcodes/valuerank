@@ -36,7 +36,7 @@ export function DomainAnalysisValueDetail() {
   const backParams = new URLSearchParams();
   if (domainId !== '') backParams.set('domainId', domainId);
   if (signature !== null && signature !== '') backParams.set('signature', signature);
-  const backLink = `/domains/analysis?${backParams.toString()}`;
+  const backLink = `/models/win-rate?${backParams.toString()}`;
   const [{ data: scoredData, fetching: scoredFetching, error: scoredError }] = useQuery<
     DomainAnalysisValueDetailQueryResult,
     DomainAnalysisValueDetailQueryVariables
@@ -123,9 +123,9 @@ export function DomainAnalysisValueDetail() {
   if (domainId === '' || modelId === '' || valueKey === '') {
     return (
       <div className="space-y-4">
-        <ErrorMessage message="Missing parameters. Open this page from a value cell in Domain Analysis." />
-        <Link to="/domains/analysis" className="inline-flex text-sm text-sky-700 hover:text-sky-900 hover:underline">
-          Back to Domain Analysis
+        <ErrorMessage message="Missing parameters. Open this page from a value cell in Win Rate." />
+        <Link to="/models/win-rate" className="inline-flex text-sm text-sky-700 hover:text-sky-900 hover:underline">
+          Back to Win Rate
         </Link>
       </div>
     );
@@ -137,7 +137,7 @@ export function DomainAnalysisValueDetail() {
       <div className="space-y-4">
         <ErrorMessage message={`Failed to load value detail: ${scoredError?.message ?? 'Unknown error'}`} />
         <Link to={backLink} className="inline-flex text-sm text-sky-700 hover:text-sky-900 hover:underline">
-          Back to Domain Analysis
+          Back to Win Rate
         </Link>
       </div>
     );
@@ -164,7 +164,7 @@ export function DomainAnalysisValueDetail() {
     <div className="space-y-6">
       <div className="space-y-2">
         <Link to={backLink} className="inline-flex text-sm text-sky-700 hover:text-sky-900 hover:underline">
-          ← Back to Domain Analysis
+          ← Back to Win Rate
         </Link>
         <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Value Score Detail</h1>
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">

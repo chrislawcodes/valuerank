@@ -26,7 +26,7 @@ function conditionMatrixUrl(args: { domainId: string; modelId: string; valueKey:
     valueKey: args.valueKey,
     signature: args.signature,
   });
-  return `/domains/analysis/value-detail?${params.toString()}`;
+  return `/models/win-rate/value-detail?${params.toString()}`;
 }
 
 type PerPair = ModelsConsistencyModel['coherence']['perPair'][number];

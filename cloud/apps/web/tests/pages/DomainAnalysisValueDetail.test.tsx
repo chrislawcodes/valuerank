@@ -233,7 +233,7 @@ function mockQueries(options: {
 
 function renderPage() {
   return render(
-    <MemoryRouter initialEntries={['/domains/analysis/value-detail?domainId=domain-a&modelId=gpt-4&valueKey=Achievement']}>
+    <MemoryRouter initialEntries={['/models/win-rate/value-detail?domainId=domain-a&modelId=gpt-4&valueKey=Achievement']}>
       <DomainAnalysisValueDetail />
     </MemoryRouter>,
   );

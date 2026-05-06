@@ -200,8 +200,8 @@ export function ModelValueDetailDrawer({
                     {domains.map((domain) => (
                       <tr key={domain.domainId} className="hover:bg-gray-50">
                         <td className="border-b border-gray-100 px-4 py-3">
-                          <Link
-                            to={`/domains/analysis/value-detail?domainId=${encodeURIComponent(domain.domainId)}&modelId=${encodeURIComponent(model.modelId)}&valueKey=${encodeURIComponent(value.valueKey)}`}
+                        <Link
+                            to={`/models/win-rate/value-detail?domainId=${encodeURIComponent(domain.domainId)}&modelId=${encodeURIComponent(model.modelId)}&valueKey=${encodeURIComponent(value.valueKey)}`}
                             className="font-medium text-teal-700 hover:text-teal-900 hover:underline"
                           >
                             {domain.domainName}
