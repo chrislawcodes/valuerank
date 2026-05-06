@@ -366,7 +366,7 @@ export function DomainValueShiftHeatmap() {
           <h2 className="text-base font-semibold text-amber-950">More domain coverage needed</h2>
           <p className="mt-2 text-sm text-amber-900">
             Domain-shift analysis needs at least one value with eligible win-rate data in two or more domains for the
-            selected model set. With only one domain for a value, the shift would be 0pp by definition and would
+            selected model set. With only one domain for a value, the shift would be 0 by definition and would
             not be meaningful.
           </p>
         </section>

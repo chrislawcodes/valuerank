@@ -7,7 +7,7 @@ export const SUMMARY_PRESSURE_RESPONSE_TOOLTIP =
   "Arithmetic mean of per-pair pressure responses across this model's measured pairs. The range in brackets is the spread of per-pair values. Positive = more pressure moved toward the model's own value; negative = more pressure moved away.";
 
 export const PAIR_PRESSURE_RESPONSE_TOOLTIP =
-  'Signed push-rate difference: Push toward first minus Push toward other, in percentage points. The CI is the Newcombe 95% confidence interval for the difference of two proportions.';
+  'Signed push-rate difference: Push toward first minus Push toward other. The CI is the Newcombe 95% confidence interval for the difference of two proportions.';
 
 export const BALANCED_TOOLTIP =
   'Win rate when own and opponent pressure are both at moderate levels. Used as the reference for the push columns.';
@@ -25,20 +25,20 @@ export function formatPercent(value: number): string {
   return `${(value * 100).toFixed(1)}%`;
 }
 
-/** Unsigned percentage-points string, one decimal place. */
+/** Unsigned raw difference string, one decimal place. */
 export function formatPoints(value: number): string {
-  return `${Math.abs(value * 100).toFixed(1)} pp`;
+  return `${Math.abs(value * 100).toFixed(1)}`;
 }
 
 /**
- * Signed percentage-points string, one decimal place.
+ * Signed raw difference string, one decimal place.
  * Exact zero renders without a sign per spec FR-xxx.
  */
 export function formatSignedPoints(value: number): string {
-  const pp = value * 100;
-  if (pp === 0) return '0.0 pp';
-  const sign = pp < 0 ? '−' : '+';
-  return `${sign}${Math.abs(pp).toFixed(1)} pp`;
+  const points = value * 100;
+  if (points === 0) return '0.0';
+  const sign = points < 0 ? '−' : '+';
+  return `${sign}${Math.abs(points).toFixed(1)}`;
 }
 
 /**

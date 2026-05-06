@@ -51,6 +51,14 @@ function createPressureData(
               averageWinRate: 0.4,
               balancedWinRate: 0.3,
               highPressureOnThisValueWinRate: 0.6,
+              highPressureOnThisValueDomainRates: [
+                {
+                  domainId: 'domain-a',
+                  domainName: 'Domain A',
+                  rate: 0.6,
+                  pairsMeasured: 1,
+                },
+              ],
               highPressureOnOpposingValueWinRate: 0.3,
               pairsMeasured: 1,
             },
@@ -99,6 +107,14 @@ function createPressureData(
               averageWinRate: 0.8,
               balancedWinRate: 0.5,
               highPressureOnThisValueWinRate: 0.9,
+              highPressureOnThisValueDomainRates: [
+                {
+                  domainId: 'domain-a',
+                  domainName: 'Domain A',
+                  rate: 0.9,
+                  pairsMeasured: 1,
+                },
+              ],
               highPressureOnOpposingValueWinRate: 0.2,
               pairsMeasured: 1,
             },
@@ -356,6 +372,7 @@ describe('PressureSensitivity page', () => {
     );
 
     expect(screen.getByText('Win Rate by Pressure Conditions by Value')).toBeDefined();
+    expect(screen.getByText('High Pressure on Value Win Rate by Domain by Value')).toBeDefined();
   });
 
   it('defaults to the shared bar and removes the provider filter copy', () => {
@@ -411,7 +428,12 @@ describe('PressureSensitivity page', () => {
       </MemoryRouter>,
     );
 
-    const valueRow = screen.getByText('Alpha').closest('tr');
+    const byValueSection = screen.getByRole('heading', { name: 'Win Rate by Pressure Conditions by Value' }).closest('section');
+    if (byValueSection == null) {
+      throw new Error('Missing by-value section');
+    }
+
+    const valueRow = within(byValueSection).getByText('Alpha').closest('tr');
     if (valueRow == null) {
       throw new Error('Missing Alpha row');
     }

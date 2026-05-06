@@ -59,7 +59,7 @@ function renderResponseCell(pair: PressureSensitivityValuePair): ReactNode {
   const halfWidth = Math.abs((ciHigh - ciLow) * 50);
   return (
     <span className={`font-mono ${textClass}`}>
-      {signed} ± {halfWidth.toFixed(1)} pp
+      {signed} ± {halfWidth.toFixed(1)}
     </span>
   );
 }
