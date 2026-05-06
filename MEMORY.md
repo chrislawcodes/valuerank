@@ -173,3 +173,19 @@ API and web verification passed on the targeted tests and workspace builds.
 Implementation complete for the current slice.
 Targeted API and web typechecks passed.
 Targeted API and web tests passed.
+
+---
+
+# Dedup Catalog Memory
+
+## Pointer
+Catalog: `docs/tech-debt/dedup-inventory.md`
+
+## Source
+Phase 1 audit on 2026-05-05 — three parallel inventory agents (workers, api+db, web+shared). 14 active duplicate-module clusters identified, plus 6 likely-dead-code candidates and a "demoted" list.
+
+## Update Rule
+When a PR resolves (or partially resolves) a cluster, edit `docs/tech-debt/dedup-inventory.md` in the same PR — move the row from Active to Resolved, link the PR, date it. Don't renumber the `DEDUP-<n>` IDs; they're stable references across sessions.
+
+## Status
+Phase 1 (catalog) complete. Phase 2 (triage + first PRs) not started. Recommended starting order is in the catalog file under "Phase 2 — recommended starting order".
