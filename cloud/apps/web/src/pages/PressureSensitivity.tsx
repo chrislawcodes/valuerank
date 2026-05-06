@@ -21,6 +21,7 @@ import {
 import { PressureDirectionalBreakdown } from '../components/models/PressureDirectionalBreakdown';
 import { PressureSensitivitySummary } from '../components/models/PressureSensitivitySummary';
 import { PressureResponseByValueTable } from '../components/models/PressureResponseByValueTable';
+import { PressureHighPressureByValueDomainTable } from '../components/models/PressureHighPressureByValueDomainTable';
 import { PressureSensitivityGridSection } from '../components/models/PressureSensitivityGridSection';
 import { PressureSensitivityCrossValueMap } from '../components/models/PressureSensitivityCrossValueMap';
 import { PressureSensitivitySanityCheck } from '../components/models/PressureSensitivitySanityCheck';
@@ -277,14 +278,6 @@ export function PressureSensitivity() {
         }}
       />
 
-      <div className="space-y-2">
-        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Pressure Sensitivity</h1>
-        <p className="max-w-3xl text-sm text-gray-600">
-          Compare how pressure changes model choices across value pairs. Use the bar above to scope the report by
-          domain, signature, and model set. The pair grid below needs exactly one model selected in the bar.
-        </p>
-      </div>
-
       {transcriptCapHit && (
         <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
           Coverage warning: this report scanned the maximum 500,000 transcripts and stopped before reaching the end of the data. Win rates and CIs may be biased toward earlier transcripts in the corpus.
@@ -330,6 +323,7 @@ export function PressureSensitivity() {
         <>
           <PressureDirectionalBreakdown models={models} />
           <PressureResponseByValueTable models={models} />
+          <PressureHighPressureByValueDomainTable models={models} />
 
           <PressureSensitivityGridSection models={models}>
             {({ selectedModelId, onSelectModel }) => (

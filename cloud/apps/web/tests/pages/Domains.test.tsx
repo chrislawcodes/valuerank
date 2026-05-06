@@ -66,6 +66,18 @@ describe('Domains page', () => {
           error: undefined,
         }];
       }
+      if (operationName === 'LlmModels') {
+        return [{
+          data: {
+            llmModels: [
+              { modelId: 'model-a', displayName: 'Model A', status: 'ACTIVE', isDefault: true },
+              { modelId: 'model-b', displayName: 'Model B', status: 'ACTIVE', isDefault: true },
+            ],
+          },
+          fetching: false,
+          error: undefined,
+        }];
+      }
       if (operationName === 'DomainValueCoverageLegacy' || operationName === 'DomainValueCoverage') {
         return [{
           data: {
@@ -95,16 +107,20 @@ describe('Domains page', () => {
     });
   });
 
-  it('shows the paired batch launch link for the selected domain', () => {
+  it('shows the paired batch launch link for the selected domain', async () => {
     renderDomainsPage();
 
-    const launchLink = screen.getByRole('link', { name: /add paired batches for all vignettes/i });
+    const launchLink = await screen.findByRole('link', { name: /add paired batches for all vignettes/i });
     expect(launchLink).toHaveAttribute('href', '/domains/start/domain-a');
   });
 
-  it('renders the coverage copy control beside the value coverage header', () => {
+  it('renders the coverage copy control beside the value coverage header', async () => {
     renderDomainsPage();
 
+    await screen.findByRole('button', { name: /domain: domain a/i });
+    expect(screen.getByRole('button', { name: /domain: domain a/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /signature: temp 0/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /models: default — 2 models/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /value coverage/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /copy coverage table as image/i })).toBeInTheDocument();
   });
@@ -113,7 +129,8 @@ describe('Domains page', () => {
     const user = userEvent.setup();
     renderDomainsPage();
 
-    await user.selectOptions(screen.getAllByRole('combobox')[0]!, 'domain-b');
+    await user.click(screen.getByRole('button', { name: /domain: domain a/i }));
+    await user.click(screen.getByRole('option', { name: 'Domain B' }));
 
     expect(screen.getByRole('link', { name: /add paired batches for all vignettes/i }))
       .toHaveAttribute('href', '/domains/start/domain-b');

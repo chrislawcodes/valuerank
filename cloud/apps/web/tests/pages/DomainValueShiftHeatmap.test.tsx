@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import {
@@ -8,6 +8,7 @@ import {
   buildDomainShiftModelOptions,
   formatEvidenceWeight,
   formatPointShift,
+  formatReportPointShift,
   formatPercent,
   getDefaultDomainShiftSignature,
   getDefaultModelId,
@@ -235,9 +236,12 @@ describe('DomainValueShiftHeatmap helpers', () => {
   });
 
   it('formats point shifts and unknown evidence without percent-change language', () => {
-    expect(formatPointShift(12.4)).toBe('+12pp');
-    expect(formatPointShift(-8.6)).toBe('-9pp');
-    expect(formatPointShift(0.2)).toBe('0pp');
+    expect(formatPointShift(12.4)).toBe('+12');
+    expect(formatPointShift(-8.6)).toBe('-9');
+    expect(formatPointShift(0.2)).toBe('0');
+    expect(formatReportPointShift(12.4)).toBe('+12.4');
+    expect(formatReportPointShift(-8.6)).toBe('-8.6');
+    expect(formatReportPointShift(0.2)).toBe('+0.2');
     expect(formatPercent(42.34)).toBe('42.3%');
     expect(formatEvidenceWeight(null)).toBe('—');
     expect(formatEvidenceWeight(0)).toBe('—');
@@ -368,20 +372,19 @@ describe('DomainValueShiftHeatmap page', () => {
 
     renderPage();
 
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Model A' })).toBeInTheDocument();
-    });
+    expect(await screen.findByRole('heading', { name: 'Win Rate by Domain by Value' })).toBeInTheDocument();
     expect(screen.getByRole('table')).toHaveClass('table-auto');
     await user.click(screen.getByRole('button', { name: /default — 1 model/i }));
     expect(screen.getByRole('button', { name: /default models/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /signature: latest @ default/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Sort by Avg Win Rate descending/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Sort by Value descending/i })).toHaveTextContent('Value↓');
-    expect(screen.getByLabelText(/Achievement in City Planning: raw win rate 80\.0%; shift \+20pp/i)).toHaveAccessibleName(
+    expect(screen.getByLabelText(/Achievement in City Planning: raw win rate 80\.0%; shift \+20\.0/i)).toHaveAccessibleName(
       /average 60\.0%; average evidence vignettes —/i,
     );
-    expect(screen.getByText('Metric:')).toBeInTheDocument();
-    expect(screen.getByText(/percentage-point shift, not percent change/i)).toBeInTheDocument();
+    expect(screen.getByText('Cell metric')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Copy Win Rate by Domain by Value as image/i })).toBeInTheDocument();
+    expect(screen.queryByText(/percentage-point shift, not percent change/i)).not.toBeInTheDocument();
 
     const firstDataRow = screen.getAllByRole('row')[1];
     expect(within(firstDataRow).getAllByRole('rowheader')[0]).toHaveTextContent('Achievement');
@@ -416,12 +419,12 @@ describe('DomainValueShiftHeatmap page', () => {
 
     renderPage();
 
-    expect(await screen.findByText('+20pp')).toBeInTheDocument();
+    expect(await screen.findByText('+20.0')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Raw win rate' }));
 
     expect(screen.getByRole('button', { name: 'Raw win rate' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByText('80.0%')).toBeInTheDocument();
-    expect(screen.getByText(/raw domain win rate/i)).toBeInTheDocument();
+    expect(screen.queryByText(/raw domain win rate/i)).not.toBeInTheDocument();
   });
 
   it('sorts table rows when a domain column header is clicked', async () => {
@@ -464,7 +467,7 @@ describe('DomainValueShiftHeatmap page', () => {
     await user.click(screen.getByRole('button', { name: /default — 2 models/i }));
     await user.click(screen.getByRole('button', { name: 'Alpha' }));
 
-    expect(screen.getByRole('heading', { name: 'Zulu' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /models: 1 of 2 selected/i })).toBeInTheDocument();
   });
 
   it('groups default models ahead of non-default models with a divider', async () => {

@@ -46,11 +46,11 @@ DEDUP-8 (`isRecord`) is independent of report output — pure type guard.
 | DEDUP-6 | Snapshot builder twin (domain-analysis vs pressure-sensitivity) | API | Medium | Large | Decision needed |
 | DEDUP-7 | `cloud/packages/db/src/queries/*` mostly orphaned | API/db | High | Medium | Decision needed |
 | ~~DEDUP-8~~ | ~~`isRecord` defined 9 times~~ | ~~API~~ | ~~Medium~~ | ~~Trivial~~ | **Resolved — PR #928** |
-| DEDUP-9 | `wilsonInterval` defined twice | API | Medium | Small | Open |
+| ~~DEDUP-9~~ | ~~`wilsonInterval` defined twice~~ | ~~API~~ | ~~Medium~~ | ~~Small~~ | **Resolved — PR #943** |
 | DEDUP-10 | Decision-summary utility sprawl | Web | Medium-High | Large | Decision needed |
-| DEDUP-11 | Shared `*-value-statements.ts` (4× boilerplate) | Shared | Medium | Small | Open |
+| ~~DEDUP-11~~ | ~~Shared `*-value-statements.ts` (4× boilerplate)~~ | ~~Shared~~ | ~~Medium~~ | ~~Small~~ | **Resolved — PR #955** |
 | DEDUP-12 | Run lifecycle / recovery sprawl | API | Medium-Low | Large | Decision needed |
-| DEDUP-13 | `validate_input` pattern across 5 workers | Workers | Low | Small | Open |
+| ~~DEDUP-13~~ | ~~`validate_input` pattern across 5 workers~~ | ~~Workers~~ | ~~Low~~ | ~~Small~~ | **Resolved — PR #TBD** |
 | DEDUP-14 | `DomainAnalysisLegacy` GraphQL query — alive, feeds Models + Domains pages | Web | Medium | Large (migration, not delete) | Decision needed |
 | ~~DEDUP-15~~ | ~~`runsWithAnalysis(ids:)` resolver and query unused~~ | ~~API + Web~~ | ~~Medium~~ | ~~Small (deletion)~~ | **Resolved — PR #936** |
 
@@ -157,6 +157,16 @@ Added `hasAnalysis?: boolean` and `analysisStatus?` params to `useRuns` and `use
 
 ### DEDUP-9 — `wilsonInterval` defined twice
 
+**Status: Resolved in PR #943 (2026-05-05).**
+
+Canonical implementation: `cloud/apps/api/src/services/statistics/wilson-interval.ts`.
+Signature: `wilsonInterval(matches, trials, z?) → { low, high, p } | null`.
+Default z = 1.96 (matching both prior implementations).
+
+**Boundary-contract decision:** Invalid inputs (trials ≤ 0, NaN, non-integer, etc.) now return `null` instead of throwing (was throwing in consistency) or returning zeros (was returning `{ low:0, high:0, p:0 }` for `trials=0` in consistency). This is the user-approved fail-loud contract. The `WilsonIntervalResult` type was deleted from `consistency/statistics.ts`.
+
+Both `aggregation.ts` and `consistency/statistics.ts` now re-export `wilsonInterval` from the canonical module — external consumers see no import-path change. The `wilsonIntervalFromProportion` private helper stays in `aggregation.ts` because `diffProportionCI` calls it directly with a proportion input. All callers updated to handle `null`. Consistency test updated to expect `null` for `wilsonInterval(0, 0)`.
+
 **Files:** `cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts:378`, `cloud/apps/api/src/services/consistency/statistics.ts:69`.
 **Shared:** Wilson confidence interval for a binomial proportion. Same math.
 **Differs:** Different signatures. Pressure-sensitivity takes `(successes, trials)` returning `{lo, hi}`. Consistency takes `(matches, trials, z)` returning `WilsonIntervalResult`. Pressure-sensitivity also has a private `wilsonIntervalFromProportion`.
@@ -173,6 +183,11 @@ Added `hasAnalysis?: boolean` and `analysisStatus?` params to `useRuns` and `use
 
 ### DEDUP-11 — Shared value-statements 4× boilerplate
 
+**Status: Resolved in PR #955 (2026-05-05).**
+
+Consolidated the four 52-LOC files into `cloud/packages/shared/src/value-statements.ts` (220 LOC). All exported symbol names (`JOB_CHOICE_VALUE_STATEMENTS`, `NATIONAL_PRIORITIES_VALUE_STATEMENTS`, `NEIGHBORHOOD_VALUE_STATEMENTS`, `SOFTWARE_APPROACH_VALUE_STATEMENTS` and the four getter functions) are preserved exactly. `cloud/packages/shared/src/index.ts` updated to `export * from './value-statements.js'`. Zero caller changes required — all callers import from `@valuerank/shared` via the package barrel. Lint, build (shared + api + web), and report snapshots all pass.
+
+**Original notes (for history):**
 **Files:** `cloud/packages/shared/src/{job-choice, national-priorities, neighborhood, software-approach}-value-statements.ts` (52 LOC each, 208 total).
 **Shared:** Same shape — a `[{token, body}]` array exported via `export *` from `index.ts`.
 **Differs:** Only the `body` strings per scenario.
@@ -188,6 +203,16 @@ Added `hasAnalysis?: boolean` and `analysisStatus?` params to `useRuns` and `use
 **Decision needed:** Probably needs a `services/run/lifecycle/` subdir merge, but no single canonical file today. Listed for completeness — fragmentation, not pure duplication.
 
 ### DEDUP-13 — `validate_input` pattern across 5 workers
+
+**Status: Resolved in PR #TBD (2026-05-05).**
+
+Extracted 4 helpers into `cloud/workers/common/validation.py`:
+- `require_fields(data, fields)` — missing-field loop with details (used by summarize, probe)
+- `require_field(data, name)` — single missing-field check (used by compute_token_stats, analyze_basic_aggregation, generate_scenarios)
+- `require_list(data, name)` — type check for list fields (used by compute_token_stats, analyze_basic_aggregation)
+- `require_dict(data, name)` — type check for dict fields (used by summarize, generate_scenarios)
+
+All 5 per-worker `validate_input` functions preserved (different required fields per worker). Per-worker inline checks that are domain-specific (nested field checks, string empty checks) kept inline. Error messages preserved exactly. Helpers re-exported from `common/__init__.py`. Test coverage added in `cloud/workers/tests/test_validation_helpers.py` (13 tests). 190 worker tests passed.
 
 **Files:** `cloud/workers/{summarize.py, compute_token_stats.py, probe.py, analyze_basic_aggregation.py, generate_scenarios.py}`.
 **Shared:** Each defines `def validate_input(data: dict[str, Any]) -> None` raising `ValidationError`. Same protocol, same error type.
@@ -266,6 +291,9 @@ Tracking infrastructure that protects against dedup-induced (or any) drift in us
 | DEDUP-3 | `useRuns` / `useRunsWithAnalysis` hook collapse | #934 | 2026-05-05 | Added `hasAnalysis` + `analysisStatus` params to `useRuns` and `useInfiniteRuns`. Deleted `useRunsWithAnalysis.ts` and `useInfiniteRunsWithAnalysis.ts`. `comparison.graphql:RunsWithAnalysis` left in place (different resolver). |
 | DEDUP-15 | `runsWithAnalysis(ids:)` resolver and web query deleted | #936 | 2026-05-05 | Zero consumers. Architecture decision at `cloud/specs/016-analysis-tab/plan.md` chose `runs(hasAnalysis:)` instead. ~250 LOC removed across API resolver, tests, web query, re-export, manual types. Schema snapshot and codegen regenerated. |
 | DEDUP-2 | `signaturePreference` fork web↔shared (partial) | #937 | 2026-05-06 | Deleted `cloud/apps/web/src/utils/signaturePreference.ts` (57 LOC). Updated 2 importers to use `@valuerank/shared`. `schwartz.ts` NOT deleted — not a true duplicate (exports different function). |
+| DEDUP-9 | `wilsonInterval` consolidation | #943 | 2026-05-05 | Canonical: `cloud/apps/api/src/services/statistics/wilson-interval.ts`. Invalid inputs now return `null` (fail-loud contract). `WilsonIntervalResult` type deleted. Both prior sites re-export from canonical. `wilsonIntervalFromProportion` stays local in `aggregation.ts` (used by `diffProportionCI`). |
+| DEDUP-11 | Shared `*-value-statements.ts` consolidation | #955 | 2026-05-05 | 4 files × 52 LOC → 1 file (220 LOC). All exported symbol names preserved; zero caller changes. Lint, build (shared + api + web), and report snapshots all pass. |
+| DEDUP-13 | `validate_input` helpers extracted to `workers/common/validation.py` | #TBD | 2026-05-05 | 4 helpers extracted (`require_fields`, `require_field`, `require_list`, `require_dict`). All 5 per-worker `validate_input` functions preserved; domain-specific checks kept inline. 13 new helper tests. 190 worker tests passed. ~30 LOC reduced across 5 workers. |
 
 ### Dead-code deletions
 
@@ -276,11 +304,7 @@ Tracking infrastructure that protects against dedup-induced (or any) drift in us
 
 ## Phase 2 — recommended starting order
 
-DEDUP-8, DEDUP-3, DEDUP-2 (partial), and DEDUP-1 are done. Suggested next picks:
-
-1. **DEDUP-9** (`wilsonInterval`) — small statistics-helper consolidation; 2 callsites, contract change is contained.
-
-Larger clusters (DEDUP-4, DEDUP-5, DEDUP-6, DEDUP-7, DEDUP-10, DEDUP-12, DEDUP-14) all need a direction call before implementation. The remaining 7 active clusters are all "Decision needed" — no purely mechanical dedup work remains in the queue.
+DEDUP-8, DEDUP-3, DEDUP-2 (partial), DEDUP-9, DEDUP-11, DEDUP-13, and DEDUP-1 are done. **All ready-to-do mechanical clusters are now resolved.** The remaining 7 clusters all need a direction call from the user before implementation can begin.
 
 Note: `cloud/apps/web/src/utils/schwartz.ts` was audited during DEDUP-2 and found NOT to be a duplicate. It exports `formatFullSchwartzValueName` which has no equivalent in shared. Remove the schwartz half of DEDUP-2 from any future planning.
 

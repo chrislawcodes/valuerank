@@ -34,6 +34,7 @@ import {
 } from './value-pair.js';
 import { buildPressureSensitivityDecisionSnapshot } from './decision-snapshot.js';
 import { aggregateValueWinRates } from '../analysis/value-win-rate-aggregation.js';
+import { mapHighPressureDomainRates } from './domain-rate-mapping.js';
 import type {
   ModelRow,
   TranscriptRow,
@@ -95,10 +96,6 @@ function strengthFromCanonical(strength: 'strong' | 'lean' | 'neutral' | 'unknow
   if (strength === 'strong') return 'strong';
   if (strength === 'lean') return 'lean';
   return null;
-}
-
-function formatValueLabel(token: string): string {
-  return token.replaceAll('_', ' ').trim();
 }
 
 function totalPressureConditionExclusions(breakdown: PressureConditionExclusionBreakdown): number {
@@ -551,9 +548,9 @@ export async function buildPressureSensitivitySnapshotOutput(
       valuePairs.push({
         pairKey: acc.pairKey,
         firstValueToken: acc.firstValueToken,
-        firstValueLabel: formatValueLabel(acc.firstValueToken),
+        firstValueLabel: acc.firstValueToken.replaceAll('_', ' ').trim(),
         secondValueToken: acc.secondValueToken,
-        secondValueLabel: formatValueLabel(acc.secondValueToken),
+        secondValueLabel: acc.secondValueToken.replaceAll('_', ' ').trim(),
         pressureResponse: {
           value: pressureResponse.value,
           ciLow: pressureResponse.ciLow,
@@ -638,11 +635,15 @@ export async function buildPressureSensitivitySnapshotOutput(
     const valueTokens = [...pairKeysByValue.keys()].sort((a, b) => a.localeCompare(b));
     const valueRates: PressureSensitivityValueRateShape[] = valueTokens.map((valueToken) => ({
       valueToken,
-      valueLabel: formatValueLabel(valueToken),
+      valueLabel: valueToken.replaceAll('_', ' ').trim(),
       averageWinRate: allValueRates.get(valueToken)?.crossDomainRate ?? null,
       balancedWinRate: balancedValueRates.get(valueToken)?.crossDomainRate ?? null,
       highPressureOnThisValueWinRate: highPressureOnValueRates.get(valueToken)?.crossDomainRate ?? null,
       highPressureOnOpposingValueWinRate: highPressureOnOpposingValueRates.get(valueToken)?.crossDomainRate ?? null,
+      highPressureOnThisValueDomainRates: mapHighPressureDomainRates(
+        highPressureOnValueRates.get(valueToken)?.domainRates,
+        domainNameById,
+      ),
       pairsMeasured: pairKeysByValue.get(valueToken)?.size ?? 0,
     }));
 

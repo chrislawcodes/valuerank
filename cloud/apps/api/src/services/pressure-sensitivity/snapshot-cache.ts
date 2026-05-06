@@ -27,12 +27,21 @@ const log = createLogger('pressure-sensitivity:cache');
 export function parseSnapshotOutput(raw: unknown): PressureSensitivityResultShape | null {
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const result = raw as PressureSensitivityResultShape;
-  // Snapshots written before v1.2.0 lack pushedEffectPairsUsed or domainPressureEffects.
+  // Snapshots written before v1.4.0 lack the domain-by-value high-pressure rates.
   // Return null so the caller falls through to synchronous recompute rather than
-  // serving stale data that renders the table incomplete.
+  // serving stale data that renders the new report incomplete.
   const missingNewFields = result.models.some((m) => {
-    const model = m as { pushedEffectPairsUsed?: unknown; domainPressureEffects?: unknown };
-    return model.pushedEffectPairsUsed == null || model.domainPressureEffects == null;
+    const model = m as {
+      pushedEffectPairsUsed?: unknown;
+      domainPressureEffects?: unknown;
+      valueRates?: Array<{ highPressureOnThisValueDomainRates?: unknown }>;
+    };
+    return (
+      model.pushedEffectPairsUsed == null
+      || model.domainPressureEffects == null
+      || model.valueRates == null
+      || model.valueRates.some((valueRate) => valueRate.highPressureOnThisValueDomainRates == null)
+    );
   });
   if (missingNewFields) return null;
   return result;

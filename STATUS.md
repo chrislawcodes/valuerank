@@ -37,6 +37,8 @@
 
 | Feature | Branch | Status | Notes |
 |---------|--------|--------|-------|
+| **win-rate-domain-shift-decimals** | `—` | 🟢 Done locally | Win Rate by Domain by Value now shows shift values with one decimal place in the report page and the shared report section. The shared whole-point formatter stays intact for the other model tables. |
+| **win-rate-report-cleanup** | `—` | 🟢 Done locally | Cleaned up the Win Rate pages: removed the extra intro copy, moved Export CSV into the freshness row, simplified the Win Rate by Domain by Value header, put Cell metric inline with its toggle, removed the percent-change note, and narrowed screenshot capture to the table only. |
 | **status-page-pending-launches** | `—` | 🟢 Done locally | Status page active-evaluation query now includes PENDING, RUNNING, PAUSED, and SUMMARIZING launches so stuck-but-working runs show up again. Added API regression coverage and updated the section copy to match. |
 | **pressure-response-by-value-direct-rates** | `codex/value-priorities-logit-toggle` | 🟢 Done locally | Pressure Response by Value now uses direct win rates for both sides of each pair, instead of flipping the first value's rate for the second value. The table also keeps the vignette-level weighting rule so repeated measurements do not overcount a vignette. |
 | **model-groups-visualization-toggle** | `codex/pressure-response-tooltip-grid` | 🟢 Done locally | Domain Analysis model groups now support radar, dot map, and heatmap views with a view toggle, shared cluster ordering, and a fixed symmetric dot-map axis. |
@@ -96,6 +98,7 @@ Once the above are resolved:
 - [x] Domain Shifts model picker now groups default models first and separates non-default models with `---` before alphabetical non-default options.
 - [x] Model Groups visualization now lives at `/models` under the Models dropdown first item, with the domain selection bar at the top of the page driving the report.
 - [x] Model Value Preference overview report updated at `/models`; screenshot capture is available, the title now matches the report, and model rows no longer repeat the model ID line.
+- [x] Confidence by Values by Model now sits inside a bordered report card with the new intro copy, and the report headers now include screenshot buttons on the far right.
 - [x] Domain Shifts by Value now has an `All models` aggregate view, one-decimal formatting throughout, and content-fit Value / Avg Win Rate columns in the local branch.
 - [x] Model Value Preference overview report updated at `/models`; screenshot capture is available, the title now matches the report, the all-domains value priorities table now includes stability circles, and the comparison table stays below it.
 - [x] `/models` reporting now uses the canonical equal-vignette methodology in both tables, with one-decimal display, vignette-weighted cross-domain pooling, and no silent fallback to pooled raw counts when vignette-aware data is missing.

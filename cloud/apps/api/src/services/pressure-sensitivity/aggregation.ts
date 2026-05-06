@@ -375,30 +375,7 @@ function wilsonIntervalFromProportion(
   };
 }
 
-export function wilsonInterval(
-  matches: number,
-  trials: number,
-  z = Z_95,
-): { p: number; low: number; high: number } | null {
-  if (
-    !Number.isFinite(matches)
-    || !Number.isFinite(trials)
-    || !Number.isFinite(z)
-    || !Number.isInteger(matches)
-    || !Number.isInteger(trials)
-    || matches < 0
-    || trials <= 0
-    || matches > trials
-  ) {
-    return null;
-  }
-
-  const result = wilsonIntervalFromProportion(matches / trials, trials, z);
-  if (result === null) return null;
-  if (matches === 0) result.low = 0;
-  if (matches === trials) result.high = 1;
-  return result;
-}
+export { wilsonInterval } from '../statistics/wilson-interval.js';
 
 /**
  * Compute Newcombe Method-10 confidence interval on the difference of two proportions.
