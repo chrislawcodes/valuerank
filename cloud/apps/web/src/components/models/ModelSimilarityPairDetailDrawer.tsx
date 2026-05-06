@@ -122,6 +122,12 @@ export function PairDetailDrawer({ open, metric, onClose }: PairDetailDrawerProp
                           <th className="px-4 py-3 text-right font-medium">diff²</th>
                           <th className="px-4 py-3 text-right font-medium">weight × diff²</th>
                         </>
+                      ) : metric.method === 'absolute-value' ? (
+                        <>
+                          <th className="px-4 py-3 text-right font-medium">diff</th>
+                          <th className="px-4 py-3 text-right font-medium">|diff|</th>
+                          <th className="px-4 py-3 text-right font-medium" />
+                        </>
                       ) : metric.method === 'cosine' ? (
                         <>
                           <th className="px-4 py-3 text-right font-medium">centered</th>
@@ -152,6 +158,14 @@ export function PairDetailDrawer({ open, metric, onClose }: PairDetailDrawerProp
                             <td className="px-4 py-3 text-right font-mono text-gray-900">
                               {step.weightedDiffSquared == null ? '—' : formatMetricNumber(step.weightedDiffSquared)}
                             </td>
+                          </>
+                        ) : metric.method === 'absolute-value' ? (
+                          <>
+                            <td className="px-4 py-3 text-right font-mono text-gray-900">{formatMetricNumber(step.diff)}</td>
+                            <td className="px-4 py-3 text-right font-mono text-gray-900">
+                              {step.diff == null ? '—' : formatMetricNumber(Math.abs(step.diff))}
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono text-gray-900">—</td>
                           </>
                         ) : metric.method === 'cosine' ? (
                           <>

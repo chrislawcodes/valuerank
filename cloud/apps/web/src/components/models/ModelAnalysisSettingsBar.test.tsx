@@ -22,11 +22,12 @@ describe('ModelAnalysisSettingsBar', () => {
     expect(screen.getByText('Affects all reports on this page.')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Log Odds' }).className.includes('bg-teal-600')).toBe(true);
     expect(screen.getByRole('button', { name: 'Weighted Euclidean' }).className.includes('bg-teal-600')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Absolute Value' })).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: 'Win Rate' }));
-    await user.click(screen.getByRole('button', { name: 'Kendall' }));
+    await user.click(screen.getByRole('button', { name: 'Absolute Value' }));
 
     expect(onDataSourceChange).toHaveBeenCalledWith('win-rate');
-    expect(onSimilarityMethodChange).toHaveBeenCalledWith('kendall');
+    expect(onSimilarityMethodChange).toHaveBeenCalledWith('absolute-value');
   });
 });

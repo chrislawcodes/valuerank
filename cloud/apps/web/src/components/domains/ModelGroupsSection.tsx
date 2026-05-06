@@ -172,26 +172,24 @@ export function ModelGroupsSection({
           {groupDisplayMode === 'groups' && (
             <>
               {onClusteringMethodChange != null && (
-                <div className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 p-1">
-                  <div className="inline-flex rounded-md border border-gray-200 bg-white p-1">
-                    {LINKAGE_OPTIONS.map((option) => {
-                      const active = clusteringMethod === option.value;
-                      return (
-                        <Button
-                          key={option.value}
-                          type="button"
-                          variant={active ? 'primary' : 'ghost'}
-                          size="sm"
-                          onClick={() => onClusteringMethodChange(option.value)}
-                          className={`rounded-md px-3 py-1 text-xs font-medium min-h-0 ${
-                            active ? 'bg-teal-600 text-white hover:bg-teal-700' : 'text-gray-600 hover:bg-white hover:text-gray-900'
-                          }`}
-                        >
-                          {option.label}
-                        </Button>
-                      );
-                    })}
-                  </div>
+                <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
+                  {LINKAGE_OPTIONS.map((option) => {
+                    const active = clusteringMethod === option.value;
+                    return (
+                      <Button
+                        key={option.value}
+                        type="button"
+                        variant={active ? 'primary' : 'ghost'}
+                        size="sm"
+                        onClick={() => onClusteringMethodChange(option.value)}
+                        className={`rounded-md px-3 py-1 text-xs font-medium min-h-0 ${
+                          active ? 'bg-teal-600 text-white hover:bg-teal-700' : 'text-gray-600 hover:bg-white hover:text-gray-900'
+                        }`}
+                      >
+                        {option.label}
+                      </Button>
+                    );
+                  })}
                 </div>
               )}
             </>
