@@ -51,14 +51,6 @@ function createPressureData(
               averageWinRate: 0.4,
               balancedWinRate: 0.3,
               highPressureOnThisValueWinRate: 0.6,
-              highPressureOnThisValueDomainRates: [
-                {
-                  domainId: 'domain-a',
-                  domainName: 'Domain A',
-                  rate: 0.6,
-                  pairsMeasured: 1,
-                },
-              ],
               highPressureOnOpposingValueWinRate: 0.3,
               pairsMeasured: 1,
             },
@@ -107,14 +99,6 @@ function createPressureData(
               averageWinRate: 0.8,
               balancedWinRate: 0.5,
               highPressureOnThisValueWinRate: 0.9,
-              highPressureOnThisValueDomainRates: [
-                {
-                  domainId: 'domain-a',
-                  domainName: 'Domain A',
-                  rate: 0.9,
-                  pairsMeasured: 1,
-                },
-              ],
               highPressureOnOpposingValueWinRate: 0.2,
               pairsMeasured: 1,
             },

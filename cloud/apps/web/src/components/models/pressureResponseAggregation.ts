@@ -1,7 +1,17 @@
 import type {
   PressureSensitivityModel,
   PressureSensitivityValueRate,
+  PressureSensitivityValueRateAggregated,
+  PressureSensitivityValueRateByDomain,
 } from '../../api/operations/pressureSensitivity';
+
+type InputValueRate = PressureSensitivityValueRate & {
+  highPressureOnThisValueDomainRates?: PressureSensitivityValueRateByDomain[];
+};
+
+type InputModel = Omit<PressureSensitivityModel, 'valueRates'> & {
+  valueRates: InputValueRate[];
+};
 
 type RateField =
   | 'averageWinRate'
@@ -38,8 +48,8 @@ function averageRate(sum: number, count: number): number | null {
 }
 
 export function averageValueRatesAcrossModels(
-  models: PressureSensitivityModel[],
-): PressureSensitivityValueRate[] {
+  models: InputModel[],
+): PressureSensitivityValueRateAggregated[] {
   if (models.length === 0) {
     return [];
   }
@@ -80,7 +90,7 @@ export function averageValueRatesAcrossModels(
         accumulator.counts[field] += 1;
       }
 
-      for (const domainRate of valueRate.highPressureOnThisValueDomainRates) {
+      for (const domainRate of valueRate.highPressureOnThisValueDomainRates ?? []) {
         if (domainRate.rate == null) {
           continue;
         }

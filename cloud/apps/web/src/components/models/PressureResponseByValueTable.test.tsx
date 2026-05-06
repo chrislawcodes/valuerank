@@ -3,7 +3,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { PressureResponseByValueTable } from './PressureResponseByValueTable';
 import type {
   PressureSensitivityModel,
-  PressureSensitivityValueRate,
+  PressureSensitivityValueRateAggregated,
 } from '../../api/operations/pressureSensitivity';
 
 const TEN_VALUE_LABELS = [
@@ -21,8 +21,8 @@ const TEN_VALUE_LABELS = [
 
 function createValueRate(
   valueLabel: string,
-  overrides: Partial<PressureSensitivityValueRate> = {},
-): PressureSensitivityValueRate {
+  overrides: Partial<PressureSensitivityValueRateAggregated> = {},
+): PressureSensitivityValueRateAggregated {
   return {
     valueToken: valueLabel.toLowerCase(),
     valueLabel,
@@ -38,7 +38,7 @@ function createValueRate(
 
 function createModel(
   modelId: string,
-  valueRates: PressureSensitivityValueRate[],
+  valueRates: PressureSensitivityValueRateAggregated[],
 ): PressureSensitivityModel {
   return {
     modelId,
