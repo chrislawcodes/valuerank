@@ -3,7 +3,7 @@ import { useQuery } from 'urql';
 import { AVAILABLE_SIGNATURES_QUERY, type AvailableSignature, type AvailableSignaturesQueryResult } from '../api/operations/available-signatures';
 import { isVnewSignature, parseVnewTemperature } from '@valuerank/shared/trial-signature';
 import { parseTemperatureFromSignature } from '../utils/domainAnalysisUtils';
-import { preferDefaultSignature, type PreferredSignatureOption } from '../utils/signaturePreference';
+import { preferDefaultSignature, type AvailableSignature as PreferredSignatureOption } from '@valuerank/shared';
 
 function toPreferredOption(signature: AvailableSignature): PreferredSignatureOption {
   const isVirtual = isVnewSignature(signature.signature);
