@@ -420,10 +420,6 @@ export function ConfidenceModelDomainBreakout({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <DisplayModeToggle displayMode={displayMode} onChange={setDisplayMode} />
-          <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
-            <span className="font-semibold text-gray-800">Metric:</span>{' '}
-            {displayMode === 'shift' ? 'shift from cross-domain avg' : 'raw Strong%'}
-          </div>
         </div>
       </div>
 
