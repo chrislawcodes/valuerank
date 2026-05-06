@@ -232,9 +232,11 @@ function SortableHeader({
         aria-label={`Sort by ${label} ${nextSort.direction === 'asc' ? 'ascending' : 'descending'}`}
       >
         <span className="whitespace-nowrap">{label}</span>
-        <span aria-hidden="true" className="text-[11px] leading-none text-gray-400">
-          {isActive ? (sort.direction === 'asc' ? '↑' : '↓') : '↕'}
-        </span>
+        {isActive && (
+          <span aria-hidden="true" className="text-[11px] leading-none text-teal-600">
+            {sort.direction === 'asc' ? '↑' : '↓'}
+          </span>
+        )}
       </Button>
     </th>
   );
@@ -248,13 +250,11 @@ export function DisplayModeToggle({
   onChange: (displayMode: DomainShiftDisplayMode) => void;
 }) {
   return (
-    <fieldset className="space-y-2">
-      <legend className="block text-sm font-medium text-gray-700">Cell metric</legend>
-      <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
-        {([
-          ['winRate', 'Strong%'],
-          ['shift', 'Shift vs avg'],
-        ] as const).map(([mode, label]) => (
+    <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
+      {([
+        ['winRate', '% Strongly Support'],
+        ['shift', 'Shift vs avg'],
+      ] as const).map(([mode, label]) => (
           <Button
             key={mode}
             type="button"
@@ -273,7 +273,6 @@ export function DisplayModeToggle({
           </Button>
         ))}
       </div>
-    </fieldset>
   );
 }
 
@@ -448,10 +447,6 @@ export function ConfidenceDomainBreakout({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <DisplayModeToggle displayMode={displayMode} onChange={setDisplayMode} />
-          <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
-            <span className="font-semibold text-gray-800">Metric:</span>{' '}
-            {displayMode === 'shift' ? 'shift from cross-domain avg' : 'raw Strong%'}
-          </div>
         </div>
       </div>
 
