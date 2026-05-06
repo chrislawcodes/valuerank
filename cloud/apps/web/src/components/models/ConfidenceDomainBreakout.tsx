@@ -291,12 +291,19 @@ export function ConfidenceDomainBreakout({
   const sectionRef = useRef<HTMLElement>(null);
   const effectiveModelIds = selectedModelIds ?? defaultModelIds;
   const selectedModelSet = useMemo(() => new Set(effectiveModelIds), [effectiveModelIds]);
+  const visibleDomains = useMemo(
+    () =>
+      selectedDomainId != null
+        ? domains.filter((domain) => domain.id === selectedDomainId)
+        : domains,
+    [domains, selectedDomainId],
+  );
   const noModelsSelected = effectiveModelIds.length === 0;
 
   useEffect(() => {
     let cancelled = false;
 
-    if (domains.length === 0) {
+    if (visibleDomains.length === 0) {
       setDomainStates({});
       return () => {
         cancelled = true;
@@ -305,14 +312,14 @@ export function ConfidenceDomainBreakout({
 
     setDomainStates(() => {
       const next: Record<string, DomainQueryState> = {};
-      for (const domain of domains) {
+      for (const domain of visibleDomains) {
         next[domain.id] = { status: 'loading', models: [], error: null };
       }
       return next;
     });
 
     void Promise.allSettled(
-      domains.map(async (domain) => {
+      visibleDomains.map(async (domain) => {
         try {
           const result = await client
             .query<ModelsConfidenceQueryResult, ConfidenceDomainBreakoutModelsConfidenceQueryVariables>(
@@ -360,7 +367,7 @@ export function ConfidenceDomainBreakout({
     return () => {
       cancelled = true;
     };
-  }, [client, domains, signature]);
+  }, [client, signature, visibleDomains]);
 
   const rows = useMemo<RowData[]>(() => {
     return VALUES.map((valueKey) => {
@@ -368,7 +375,7 @@ export function ConfidenceDomainBreakout({
       let pooledLean = 0;
       const cells = new Map<string, CellData>();
 
-      for (const domain of domains) {
+      for (const domain of visibleDomains) {
         const state = domainStates[domain.id];
         if (state == null || state.status === 'loading') {
           cells.set(domain.id, {
@@ -418,17 +425,17 @@ export function ConfidenceDomainBreakout({
         cells,
       };
     });
-  }, [domains, domainStates, selectedModelSet]);
+  }, [domainStates, selectedModelSet, visibleDomains]);
 
   const sortedRows = useMemo(
     () => sortRows(rows, sort, displayMode),
     [displayMode, rows, sort],
   );
 
-  if (domains.length === 0) {
+  if (visibleDomains.length === 0) {
     return (
       <section className="rounded-xl border border-gray-200 bg-white p-6">
-        <p className="text-sm text-gray-600">No domains are available yet.</p>
+        <p className="text-sm text-gray-600">No domains are available for the selected filters.</p>
       </section>
     );
   }
@@ -473,7 +480,7 @@ export function ConfidenceDomainBreakout({
                 align="right"
                 className="border-r-2 border-gray-300"
               />
-              {domains.map((domain) => {
+              {visibleDomains.map((domain) => {
                 const isSelected = selectedDomainId === domain.id;
                 const domainSortKey: BreakoutSortKey = `domain:${domain.id}`;
                 return (
@@ -499,7 +506,7 @@ export function ConfidenceDomainBreakout({
                   <td className="border-b border-r-2 border-gray-300 bg-white px-2 py-2 whitespace-nowrap text-right font-mono text-gray-700">
                     {formatPercent(row.averageStrongPct)}
                   </td>
-                  {domains.map((domain) => {
+                  {visibleDomains.map((domain) => {
                     const cell = row.cells.get(domain.id);
                     const isSelected = selectedDomainId === domain.id;
                     const isLoading = cell == null || cell.status === 'loading';
