@@ -444,7 +444,7 @@ type CostEstimate {
   total: Float!
 }
 
-type CoverageModelBreakdown {
+type CoverageModelCount {
   label: String!
   modelId: String!
   trialCount: Int!
@@ -453,6 +453,12 @@ type CoverageModelBreakdown {
 type CoverageModelOption {
   label: String!
   modelId: String!
+}
+
+type CoverageWeakestCondition {
+  conditionLabel: String!
+  modelCounts: [CoverageModelCount!]!
+  otherConditionsCount: Int
 }
 
 input CreateApiKeyInput {
@@ -643,6 +649,11 @@ type Definition {
   """
   overrides: DefinitionOverrides!
 
+  """
+  For paired vignettes, returns the companion vignette (same pair_key, same domain, mirrored value_first / value_second tokens). Returns null when this definition is not paired or when no companion exists. Reuses findPairedCompanion from utils/auto-pair so callers do not duplicate the companion-resolution logic.
+  """
+  pairedSibling: Definition
+
   """Parent definition in version tree"""
   parent: Definition
 
@@ -743,14 +754,6 @@ type DeprecateModelResult {
 
   """The new default model (if previous default was deprecated)"""
   newDefault: LlmModel
-}
-
-type DirectionalCoverage {
-  completeBatches: Int!
-  definitionIds: [String!]!
-  direction: String!
-  filledSlots: Int!
-  leftoverConditions: Int!
 }
 
 type DirectionalSanityCheck {
@@ -1085,6 +1088,12 @@ type DomainMutationResult {
   success: Boolean!
 }
 
+type DomainPressureEffect {
+  domainId: String!
+  domainName: String!
+  pushedForEffect: Float
+}
+
 type DomainRunSummary {
   cancelledEvaluations: Int!
   cancelledMemberRuns: Int!
@@ -1197,82 +1206,22 @@ type DomainTrialRunStatus {
   updatedAt: DateTime!
 }
 
-type CoverageModelCount {
-  label: String!
-  modelId: String!
-  trialCount: Int!
-}
-
-type CoverageWeakestCondition {
-  conditionLabel: String!
-  modelCounts: [CoverageModelCount!]!
-  otherConditionsCount: Int
-}
-
 type DomainValueCoverageCell {
   aFirstBatchEquivalent: Int!
-  """
-  Count of complete A-first runs for this value pair after model-set filtering. This is the filtered directional count for the first value in the pair.
-  """
-  aFirstBatchCount: Int!
   aFirstDefinitionName: String
   aggregateRunId: String
-
-  batchEquivalent: Int!
-  """
-  Count of complete B-first runs for this value pair after model-set filtering. This is the filtered directional count for the second value in the pair.
-  """
-  bFirstBatchCount: Int!
   bFirstBatchEquivalent: Int!
   bFirstDefinitionName: String
-
-  """
-  Count of fully-complete non-aggregate runs for this value pair. A run is complete when every selected model has at least one transcript at every (scenario × sampleIndex) slot. samplesPerScenario does not multiply this count -- a complete run contributes 1 regardless of how many samples per scenario were planned. Aggregate runs are excluded.
-  """
-  batchCount: Int!
+  batchEquivalent: Int!
 
   """
   Union of definition IDs that contribute data to this coverage cell, sorted alphabetically.
   """
   contributingDefinitionIds: [String!]!
   definitionId: String
-  definitionName: String
-
-  """
-  Per-direction condition coverage for this value pair, including complete batches, filled slots, leftover conditions from incomplete runs, and contributing definition IDs.
-  """
-  directionalCoverage: [DirectionalCoverage!]!
-
-  """
-  Count of non-aggregate runs that expect transcripts but are missing one or more (model × scenario × sampleIndex) slots. Per-run; samplesPerScenario does not multiply this count. Aggregate runs and runs with zero expected slots are excluded.
-  """
-  incompleteBatchCount: Int!
-  maxTrialCount: Int
-  minTrialCount: Int
-  modelBreakdown: [CoverageModelBreakdown!]
-  weakestCondition: CoverageWeakestCondition
-
-  """
-  Count of unmatched directional runs for this value pair, computed as max(complete A-first runs, complete B-first runs) - min(complete A-first runs, complete B-first runs). When both directions are equal this is 0; when only one direction has runs this is the count of that side. Runs without a recognizable direction token are excluded.
-  """
-  orphanedBatchCount: Int!
-
-  """
-  Count of unmatched condition slots across both directions, computed as the size of the symmetric difference of filled (scenarioId, modelId, sampleIndex) slots.
-  """
-  orphanedConditionCount: Int!
-
-  """
-  Count of pairable analysis-ready batches for this value pair, computed as min(complete A-first non-aggregate runs, complete B-first non-aggregate runs) where direction is read from config.jobChoiceValueFirst. A launch where only one direction completed contributes 0 here (the surviving complete run still appears in batchCount). Runs without a recognizable direction token are excluded from both sides. See docs/canonical-glossary.md "Paired Batch" for full semantic.
-  """
-  pairedBatchCount: Int!
-
-  """
-  Count of matched condition slots across both directions, computed as the size of the intersection of filled (scenarioId, modelId, sampleIndex) slots.
-  """
-  pairedConditionCount: Int!
   valueA: String!
   valueB: String!
+  weakestCondition: CoverageWeakestCondition
 }
 
 type DomainValueCoverageResult {
@@ -2111,12 +2060,6 @@ type PressureResponseSummary {
   rangeMin: Float
 }
 
-type DomainPressureEffect {
-  domainId: String!
-  domainName: String!
-  pushedForEffect: Float
-}
-
 type PressureSensitivityModel {
   domainPressureEffects: [DomainPressureEffect!]!
   label: String!
@@ -2653,7 +2596,7 @@ type Query {
 
   """List all preambles"""
   preambles: [Preamble!]!
-  pressureSensitivity(domainId: ID, modelIds: [String!], providerId: ID, signature: String!): PressureSensitivityResult!
+  pressureSensitivity(definitionId: ID, domainId: ID, modelIds: [String!], providerId: ID, signature: String!): PressureSensitivityResult!
 
   "\n      Get health status for all LLM providers.\n\n      Checks connectivity to each provider's API.\n      Results are cached for 5 minutes.\n\n      Use the `refresh` argument to force a fresh check.\n    "
   providerHealth(

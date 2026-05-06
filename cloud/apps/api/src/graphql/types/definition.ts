@@ -19,6 +19,7 @@ import {
   applyLevelPresetToDefinitionContent,
 } from '../../utils/definition-level-preset.js';
 import { normalizePairedDefinitionContent } from '../../utils/paired-definition.js';
+import { resolveDefinitionPairedSibling } from './definition-paired-sibling.js';
 
 // Re-export for backward compatibility
 export { DefinitionRef };
@@ -455,6 +456,15 @@ builder.objectType(DefinitionRef, {
       type: 'Boolean',
       description: 'Whether this definition is a fork (has a parent)',
       resolve: (definition) => definition.parentId !== null,
+    }),
+
+    // Computed: pairedSibling - the companion vignette in a paired pair
+    pairedSibling: t.field({
+      type: DefinitionRef,
+      nullable: true,
+      description:
+        'For paired vignettes, returns the companion vignette (same pair_key, same domain, mirrored value_first / value_second tokens). Returns null when this definition is not paired or when no companion exists. Reuses findPairedCompanion from utils/auto-pair so callers do not duplicate the companion-resolution logic.',
+      resolve: (definition) => resolveDefinitionPairedSibling(definition),
     }),
 
     // Computed: resolvedContent - full content with inheritance applied

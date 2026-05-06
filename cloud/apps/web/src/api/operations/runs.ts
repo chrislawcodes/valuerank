@@ -121,6 +121,7 @@ export type Run = Omit<
     content: unknown;
     tags: RunDefinitionTag[];
     domain?: { name: string } | null;
+    pairedSibling?: { id: string; name: string; content: unknown } | null;
   };
   name: string | null;
   startedAt: string | null;
