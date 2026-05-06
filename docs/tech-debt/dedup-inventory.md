@@ -48,7 +48,7 @@ DEDUP-8 (`isRecord`) is independent of report output — pure type guard.
 | ~~DEDUP-8~~ | ~~`isRecord` defined 9 times~~ | ~~API~~ | ~~Medium~~ | ~~Trivial~~ | **Resolved — PR #928** |
 | ~~DEDUP-9~~ | ~~`wilsonInterval` defined twice~~ | ~~API~~ | ~~Medium~~ | ~~Small~~ | **Resolved — PR #943** |
 | DEDUP-10 | Decision-summary utility sprawl | Web | Medium-High | Large | Decision needed |
-| DEDUP-11 | Shared `*-value-statements.ts` (4× boilerplate) | Shared | Medium | Small | Open |
+| ~~DEDUP-11~~ | ~~Shared `*-value-statements.ts` (4× boilerplate)~~ | ~~Shared~~ | ~~Medium~~ | ~~Small~~ | **Resolved — PR #TBD** |
 | DEDUP-12 | Run lifecycle / recovery sprawl | API | Medium-Low | Large | Decision needed |
 | DEDUP-13 | `validate_input` pattern across 5 workers | Workers | Low | Small | Open |
 | DEDUP-14 | `DomainAnalysisLegacy` GraphQL query — alive, feeds Models + Domains pages | Web | Medium | Large (migration, not delete) | Decision needed |
@@ -178,6 +178,11 @@ Both `aggregation.ts` and `consistency/statistics.ts` now re-export `wilsonInter
 
 ### DEDUP-11 — Shared value-statements 4× boilerplate
 
+**Status: Resolved in PR #TBD (2026-05-05).**
+
+Consolidated the four 52-LOC files into `cloud/packages/shared/src/value-statements.ts` (220 LOC). All exported symbol names (`JOB_CHOICE_VALUE_STATEMENTS`, `NATIONAL_PRIORITIES_VALUE_STATEMENTS`, `NEIGHBORHOOD_VALUE_STATEMENTS`, `SOFTWARE_APPROACH_VALUE_STATEMENTS` and the four getter functions) are preserved exactly. `cloud/packages/shared/src/index.ts` updated to `export * from './value-statements.js'`. Zero caller changes required — all callers import from `@valuerank/shared` via the package barrel. Lint, build (shared + api + web), and report snapshots all pass.
+
+**Original notes (for history):**
 **Files:** `cloud/packages/shared/src/{job-choice, national-priorities, neighborhood, software-approach}-value-statements.ts` (52 LOC each, 208 total).
 **Shared:** Same shape — a `[{token, body}]` array exported via `export *` from `index.ts`.
 **Differs:** Only the `body` strings per scenario.
@@ -271,6 +276,7 @@ Tracking infrastructure that protects against dedup-induced (or any) drift in us
 | DEDUP-15 | `runsWithAnalysis(ids:)` resolver and web query deleted | #936 | 2026-05-05 | Zero consumers. Architecture decision at `cloud/specs/016-analysis-tab/plan.md` chose `runs(hasAnalysis:)` instead. ~250 LOC removed across API resolver, tests, web query, re-export, manual types. Schema snapshot and codegen regenerated. |
 | DEDUP-2 | `signaturePreference` fork web↔shared (partial) | #937 | 2026-05-06 | Deleted `cloud/apps/web/src/utils/signaturePreference.ts` (57 LOC). Updated 2 importers to use `@valuerank/shared`. `schwartz.ts` NOT deleted — not a true duplicate (exports different function). |
 | DEDUP-9 | `wilsonInterval` consolidation | #943 | 2026-05-05 | Canonical: `cloud/apps/api/src/services/statistics/wilson-interval.ts`. Invalid inputs now return `null` (fail-loud contract). `WilsonIntervalResult` type deleted. Both prior sites re-export from canonical. `wilsonIntervalFromProportion` stays local in `aggregation.ts` (used by `diffProportionCI`). |
+| DEDUP-11 | Shared `*-value-statements.ts` consolidation | #TBD | 2026-05-05 | 4 files × 52 LOC → 1 file (220 LOC). All exported symbol names preserved; zero caller changes. Lint, build (shared + api + web), and report snapshots all pass. |
 
 ### Dead-code deletions
 
@@ -281,11 +287,10 @@ Tracking infrastructure that protects against dedup-induced (or any) drift in us
 
 ## Phase 2 — recommended starting order
 
-DEDUP-8, DEDUP-3, DEDUP-2 (partial), and DEDUP-9 are done. Suggested next picks:
+DEDUP-8, DEDUP-3, DEDUP-2 (partial), DEDUP-9, and DEDUP-11 are done. Suggested next picks:
 
-1. **DEDUP-11** (`*-value-statements.ts` boilerplate) — 4× identical shape; pure mechanical consolidation.
-2. **DEDUP-13** (`validate_input` in 5 workers) — small, self-contained, no contract changes.
-3. **DEDUP-1** (`pauseQueue`) — start with a design note, not code. The only active-bug cluster.
+1. **DEDUP-13** (`validate_input` in 5 workers) — small, self-contained, no contract changes.
+2. **DEDUP-1** (`pauseQueue`) — start with a design note, not code. The only active-bug cluster.
 
 Note: `cloud/apps/web/src/utils/schwartz.ts` was audited during DEDUP-2 and found NOT to be a duplicate. It exports `formatFullSchwartzValueName` which has no equivalent in shared. Remove the schwartz half of DEDUP-2 from any future planning.
 
