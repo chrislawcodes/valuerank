@@ -2247,9 +2247,14 @@ type ProviderHealthStatus {
 
 type Query {
   """
-  List DomainEvaluations that have at least one member run currently in RUNNING or SUMMARIZING status. Optional domainId filter scopes to one domain. Used by the cross-domain /status page.
+  List DomainEvaluations that have at least one member run currently in PENDING, RUNNING, PAUSED, or SUMMARIZING status. Optional domainId filter scopes to one domain. Used by the cross-domain /status page.
   """
   activeEvaluations(domainId: ID): [DomainEvaluation!]!
+
+  """
+  List runs in PENDING, RUNNING, PAUSED, or SUMMARIZING status that are not members of any DomainEvaluation. Used by the /status page to surface ad-hoc runs.
+  """
+  standaloneActiveRuns: [Run!]!
 
   """
   Get the average token statistics across all models. Used as fallback when model-specific stats are unavailable.
