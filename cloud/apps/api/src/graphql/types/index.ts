@@ -33,6 +33,7 @@ import './confidence-value-detail.js';
 import './models-consistency.js';
 import './pressure-sensitivity.js';
 import './circumplex.js';
+import './pairwise-win-rates.js';
 
 // LLM Provider types
 import './llm-provider.js';

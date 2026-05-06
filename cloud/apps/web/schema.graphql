@@ -2002,6 +2002,18 @@ type OrderEffect {
   samePct: Float!
 }
 
+type ModelPairwiseWinRates {
+  label: String!
+  modelId: String!
+  trialCountMatrix: [[Int!]!]!
+  valueOrder: [String!]!
+  winRateMatrix: [[Float]!]!
+}
+
+type PairwiseWinRatesResult {
+  models: [ModelPairwiseWinRates!]!
+}
+
 """A reusable preamble that can be prepended to scenarios"""
 type Preamble {
   createdAt: DateTime!
@@ -2595,6 +2607,9 @@ type Query {
   List anomalies that are currently open (resolvedAt IS NULL) across all runs. Optional filters: domainId scopes to anomalies whose run belongs to a definition in that domain; type scopes to a single RunAnomalyType.
   """
   openRunAnomalies(domainId: ID, type: RunAnomalyType): [RunAnomaly!]!
+
+  """Pairwise win rates per value pair per model, vignette-averaged"""
+  pairwiseWinRates(domainId: ID, signature: String): PairwiseWinRatesResult!
 
   """Get a specific preamble by ID"""
   preamble(id: ID!): Preamble

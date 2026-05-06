@@ -18,11 +18,13 @@ type RunRow = {
   config: unknown;
   status: string;
   deletedAt: Date | null;
+  definitionId: string;
 };
 
 type TranscriptRow = {
   runId: string;
   modelId: string;
+  scenarioId: string | null;
   decisionMetadata: unknown;
   definitionSnapshot: unknown;
   scenario: {
@@ -34,11 +36,15 @@ type TranscriptRow = {
 
 type CircumplexDb = Pick<typeof defaultDb, 'run' | 'transcript'>;
 
-type PairStats = {
-  pair: DomainAnalysisValuePair;
+type VignetteStats = {
   prioritizedA: number;
   prioritizedB: number;
   neutrals: number;
+};
+
+type PairStats = {
+  pair: DomainAnalysisValuePair;
+  vignettes: Map<string, VignetteStats>;
 };
 
 function createEmptyCell(): CircumplexPairCell {
@@ -61,24 +67,41 @@ function pairKey(pair: DomainAnalysisValuePair): string {
 }
 
 function buildOrderedCell(stats: PairStats | undefined, left: ValueKey): CircumplexPairCell {
-  if (stats == null) {
-    return createEmptyCell();
+  if (stats == null) return createEmptyCell();
+
+  const vignetteRates: number[] = [];
+  let totalTrials = 0;
+  let totalNeutrals = 0;
+
+  for (const vigStats of stats.vignettes.values()) {
+    const wins = left === stats.pair.valueA ? vigStats.prioritizedA : vigStats.prioritizedB;
+    const losses = left === stats.pair.valueA ? vigStats.prioritizedB : vigStats.prioritizedA;
+    const rate = computePairwiseWinRate(wins, losses, vigStats.neutrals);
+    if (rate !== null) {
+      vignetteRates.push(rate);
+    }
+    totalTrials += wins + losses + vigStats.neutrals;
+    totalNeutrals += vigStats.neutrals;
   }
 
-  const wins = left === stats.pair.valueA ? stats.prioritizedA : stats.prioritizedB;
-  const losses = left === stats.pair.valueA ? stats.prioritizedB : stats.prioritizedA;
-  const winRate = computePairwiseWinRate(wins, losses, stats.neutrals);
-  if (winRate === null) return createEmptyCell();
+  if (vignetteRates.length === 0) return createEmptyCell();
+
+  const winRate = vignetteRates.reduce((sum, r) => sum + r, 0) / vignetteRates.length;
   return {
     winRate,
-    trials: wins + losses + stats.neutrals,
-    neutrals: stats.neutrals,
+    trials: totalTrials,
+    neutrals: totalNeutrals,
   };
 }
 
 export async function aggregatePairwiseWinRates(args: {
   modelIds: string[];
   signature: string;
+  /**
+   * When provided, only transcripts from runs whose definition belongs to this
+   * domain are included. Resolve definition IDs for the domain before calling.
+   */
+  domainDefinitionIds?: Set<string> | null;
   db?: CircumplexDb;
 }): Promise<Map<string, CircumplexPairMatrix>> {
   const db = args.db ?? defaultDb;
@@ -111,15 +134,16 @@ export async function aggregatePairwiseWinRates(args: {
       config: true,
       status: true,
       deletedAt: true,
+      definitionId: true,
     },
   })) as RunRow[];
 
   const scopedRunIds = runs
     .filter((run) => {
       if (run.status !== 'COMPLETED' || run.deletedAt != null) return false;
-      // Skip aggregate-rollup runs — their transcripts (if any) duplicate source runs.
       const config = run.config as { isAggregate?: boolean } | null;
       if (config?.isAggregate === true) return false;
+      if (args.domainDefinitionIds != null && !args.domainDefinitionIds.has(run.definitionId)) return false;
       return runMatchesSignature(run.config, args.signature);
     })
     .map((run) => run.id);
@@ -147,6 +171,7 @@ export async function aggregatePairwiseWinRates(args: {
       select: {
         runId: true,
         modelId: true,
+        scenarioId: true,
         decisionMetadata: true,
         definitionSnapshot: true,
         deletedAt: true,
@@ -192,24 +217,29 @@ export async function aggregatePairwiseWinRates(args: {
         : { valueA: pair.valueB, valueB: pair.valueA };
 
       const key = pairKey(canonicalPair);
-      const stats = statsMap.get(key) ?? {
-        pair: canonicalPair,
-        prioritizedA: 0,
-        prioritizedB: 0,
-        neutrals: 0,
-      };
+      let stats = statsMap.get(key);
+      if (stats == null) {
+        stats = { pair: canonicalPair, vignettes: new Map() };
+        statsMap.set(key, stats);
+      }
+
+      // Group by vignette so each scenario contributes equally regardless of
+      // how many transcripts it produced. Legacy transcripts without a
+      // scenarioId are pooled into a single '__legacy__' bucket per pair.
+      const vignetteKey = transcript.scenarioId ?? '__legacy__';
+      const vigStats = stats.vignettes.get(vignetteKey) ?? { prioritizedA: 0, prioritizedB: 0, neutrals: 0 };
 
       if (resolved.canonical.direction === 'neutral') {
-        stats.neutrals += 1;
+        vigStats.neutrals += 1;
       } else if (resolved.canonical.favoredValueKey === canonicalPair.valueA) {
-        stats.prioritizedA += 1;
+        vigStats.prioritizedA += 1;
       } else if (resolved.canonical.favoredValueKey === canonicalPair.valueB) {
-        stats.prioritizedB += 1;
+        vigStats.prioritizedB += 1;
       } else {
         continue;
       }
 
-      statsMap.set(key, stats);
+      stats.vignettes.set(vignetteKey, vigStats);
     }
   }
 

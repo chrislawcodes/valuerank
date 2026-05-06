@@ -1483,6 +1483,15 @@ export type ModelCostEstimate = {
   totalCost: Scalars['Float']['output'];
 };
 
+export type ModelPairwiseWinRates = {
+  __typename?: 'ModelPairwiseWinRates';
+  label: Scalars['String']['output'];
+  modelId: Scalars['String']['output'];
+  trialCountMatrix: Array<Array<Scalars['Int']['output']>>;
+  valueOrder: Array<Scalars['String']['output']>;
+  winRateMatrix: Array<Array<Maybe<Scalars['Float']['output']>>>;
+};
+
 /** Token usage statistics for a model, used for cost prediction */
 export type ModelTokenStats = {
   __typename?: 'ModelTokenStats';
@@ -2304,6 +2313,11 @@ export type OrderEffect = {
   samePct: Scalars['Float']['output'];
 };
 
+export type PairwiseWinRatesResult = {
+  __typename?: 'PairwiseWinRatesResult';
+  models: Array<ModelPairwiseWinRates>;
+};
+
 /** A reusable preamble that can be prepended to scenarios */
 export type Preamble = {
   __typename?: 'Preamble';
@@ -2380,14 +2394,6 @@ export type PressureSensitivityModel = {
   valueRates: Array<PressureSensitivityValueRate>;
 };
 
-export type PressureSensitivityValueRateByDomain = {
-  __typename?: 'PressureSensitivityValueRateByDomain';
-  domainId: string;
-  domainName: string;
-  pairsMeasured: number;
-  rate?: Maybe<Scalars['Float']['output']>;
-};
-
 export type PressureSensitivityResult = {
   __typename?: 'PressureSensitivityResult';
   directionalSanityCheck: DirectionalSanityCheck;
@@ -2425,7 +2431,6 @@ export type PressureSensitivityValueRate = {
   __typename?: 'PressureSensitivityValueRate';
   averageWinRate?: Maybe<Scalars['Float']['output']>;
   balancedWinRate?: Maybe<Scalars['Float']['output']>;
-  highPressureOnThisValueDomainRates: Array<PressureSensitivityValueRateByDomain>;
   highPressureOnOpposingValueWinRate?: Maybe<Scalars['Float']['output']>;
   highPressureOnThisValueWinRate?: Maybe<Scalars['Float']['output']>;
   pairsMeasured: Scalars['Int']['output'];
@@ -2538,7 +2543,7 @@ export type ProviderHealthStatus = {
 
 export type Query = {
   __typename?: 'Query';
-  /** List DomainEvaluations that have at least one member run currently in RUNNING or SUMMARIZING status. Optional domainId filter scopes to one domain. Used by the cross-domain /status page. */
+  /** List DomainEvaluations that have at least one member run currently in PENDING, RUNNING, PAUSED, or SUMMARIZING status. Optional domainId filter scopes to one domain. Used by the cross-domain /status page. */
   activeEvaluations: Array<DomainEvaluation>;
   /** Get the average token statistics across all models. Used as fallback when model-specific stats are unavailable. */
   allModelTokenAverage?: Maybe<ModelTokenStats>;
@@ -2670,6 +2675,8 @@ export type Query = {
   modelsConsistency: ModelsConsistencyResult;
   /** List anomalies that are currently open (resolvedAt IS NULL) across all runs. Optional filters: domainId scopes to anomalies whose run belongs to a definition in that domain; type scopes to a single RunAnomalyType. */
   openRunAnomalies: Array<RunAnomaly>;
+  /** Pairwise win rates per value pair per model, vignette-averaged */
+  pairwiseWinRates: PairwiseWinRatesResult;
   /** Get a specific preamble by ID */
   preamble?: Maybe<Preamble>;
   /** List all preambles */
@@ -2727,12 +2734,12 @@ export type Query = {
    *
    */
   scenarios: Array<Scenario>;
+  /** List runs in PENDING, RUNNING, PAUSED, or SUMMARIZING status that are not members of any DomainEvaluation. Used by the /status page to surface ad-hoc runs. */
+  standaloneActiveRuns: Array<Run>;
   /** Fetch a survey by experiment ID. */
   survey?: Maybe<Experiment>;
   /** List surveys (stored as experiments with analysisPlan.kind="survey"). */
   surveys: Array<Experiment>;
-  /** List runs in PENDING, RUNNING, PAUSED, or SUMMARIZING status that are not members of any DomainEvaluation. Used by the /status page to surface ad-hoc runs. */
-  standaloneActiveRuns: Array<Run>;
   /**
    *
    *       Get combined health status for all system components.
@@ -3110,6 +3117,12 @@ export type QueryModelsConsistencyArgs = {
 export type QueryOpenRunAnomaliesArgs = {
   domainId?: InputMaybe<Scalars['ID']['input']>;
   type?: InputMaybe<RunAnomalyType>;
+};
+
+
+export type QueryPairwiseWinRatesArgs = {
+  domainId?: InputMaybe<Scalars['ID']['input']>;
+  signature?: InputMaybe<Scalars['String']['input']>;
 };
 
 
@@ -4657,6 +4670,14 @@ export type UpdatePairedVignetteMutationVariables = Exact<{
 
 export type UpdatePairedVignetteMutation = { __typename?: 'Mutation', updatePairedVignette: { __typename?: 'CreatePairedVignetteResult', definitionA: { __typename?: 'Definition', id: string, name: string }, definitionB: { __typename?: 'Definition', id: string, name: string } } };
 
+export type PairwiseWinRatesQueryVariables = Exact<{
+  domainId?: InputMaybe<Scalars['ID']['input']>;
+  signature?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type PairwiseWinRatesQuery = { __typename?: 'Query', pairwiseWinRates: { __typename?: 'PairwiseWinRatesResult', models: Array<{ __typename?: 'ModelPairwiseWinRates', modelId: string, label: string, valueOrder: Array<string>, winRateMatrix: Array<Array<number | null>>, trialCountMatrix: Array<Array<number>> }> } };
+
 export type PressureSensitivityQueryVariables = Exact<{
   domainId?: InputMaybe<Scalars['ID']['input']>;
   definitionId?: InputMaybe<Scalars['ID']['input']>;
@@ -4665,7 +4686,7 @@ export type PressureSensitivityQueryVariables = Exact<{
 }>;
 
 
-export type PressureSensitivityQuery = { __typename?: 'Query', pressureSensitivity: { __typename?: 'PressureSensitivityResult', pressureConditionExcludedCount: number, transcriptCapHit: boolean, models: Array<{ __typename?: 'PressureSensitivityModel', modelId: string, label: string, providerName: string, unscoredCount: number, pushedForEffect?: number | null, pushedAgainstEffect?: number | null, pushedEffectPairsUsed: number, domainPressureEffects: Array<{ __typename?: 'DomainPressureEffect', domainId: string, domainName: string, pushedForEffect?: number | null }>, pressureResponseSummary: { __typename?: 'PressureResponseSummary', mean?: number | null, rangeMin?: number | null, rangeMax?: number | null, pairsMeasured: number }, valueRates: Array<{ __typename?: 'PressureSensitivityValueRate', valueToken: string, valueLabel: string, averageWinRate?: number | null, balancedWinRate?: number | null, highPressureOnThisValueWinRate?: number | null, highPressureOnThisValueDomainRates: Array<{ __typename?: 'PressureSensitivityValueRateByDomain', domainId: string, domainName: string, rate?: number | null, pairsMeasured: number }>, highPressureOnOpposingValueWinRate?: number | null, pairsMeasured: number }>, valuePairs: Array<{ __typename?: 'PressureSensitivityValuePair', pairKey: string, firstValueToken: string, firstValueLabel: string, secondValueToken: string, secondValueLabel: string, n: number, unscoredCount: number, definitionsMeasured: number, directionBalancedWinRate?: number | null, directionBalancedOpponentWinRate?: number | null, directionBalancedBalancedWinRate?: number | null, directionBalancedBalancedOpponentWinRate?: number | null, directionBalancedHighPressureOwnWinRate?: number | null, directionBalancedHighPressureOwnOpponentWinRate?: number | null, directionBalancedHighPressureOpponentWinRate?: number | null, directionBalancedHighPressureOpponentOpponentWinRate?: number | null, pressureResponse: { __typename?: 'PressureResponse', value?: number | null, baselineRate?: number | null, pushTowardFirstRate?: number | null, pushTowardSecondRate?: number | null, qualifyingTrials: number, ciLow?: number | null, ciHigh?: number | null, reason?: string | null }, grid: Array<{ __typename?: 'SensitivityCell', ownLevel: number, opponentLevel: number, n: number, unscoredCount: number, winRate?: number | null, opponentWinRate?: number | null, conviction?: number | null, netScore?: number | null, lowData: boolean }> }> }>, insufficient: Array<{ __typename?: 'InsufficientPressureSensitivityModel', modelId: string, label: string, providerName: string, reason: string }>, excludedDefinitions: Array<{ __typename?: 'ExcludedDefinition', definitionId: string, name: string, reason: string }>, pressureConditionExclusionBreakdown: { __typename?: 'PressureConditionExclusionBreakdown', sourceRunMapping: number, definitionMetadata: number, missingScenario: number, invalidMetadata: number, levelAssignment: number }, directionalSanityCheck: { __typename?: 'DirectionalSanityCheck', positivePct: number, flatPct: number, negativePct: number, measuredCount: number, unmeasurableCount: number, breakdown: Array<{ __typename?: 'DirectionalSanityCheckEntry', modelId: string, pairKey: string, pressureResponse: number, classification: string }> } } };
+export type PressureSensitivityQuery = { __typename?: 'Query', pressureSensitivity: { __typename?: 'PressureSensitivityResult', pressureConditionExcludedCount: number, transcriptCapHit: boolean, models: Array<{ __typename?: 'PressureSensitivityModel', modelId: string, label: string, providerName: string, unscoredCount: number, pushedForEffect?: number | null, pushedAgainstEffect?: number | null, pushedEffectPairsUsed: number, domainPressureEffects: Array<{ __typename?: 'DomainPressureEffect', domainId: string, domainName: string, pushedForEffect?: number | null }>, pressureResponseSummary: { __typename?: 'PressureResponseSummary', mean?: number | null, rangeMin?: number | null, rangeMax?: number | null, pairsMeasured: number }, valueRates: Array<{ __typename?: 'PressureSensitivityValueRate', valueToken: string, valueLabel: string, averageWinRate?: number | null, balancedWinRate?: number | null, highPressureOnThisValueWinRate?: number | null, highPressureOnOpposingValueWinRate?: number | null, pairsMeasured: number }>, valuePairs: Array<{ __typename?: 'PressureSensitivityValuePair', pairKey: string, firstValueToken: string, firstValueLabel: string, secondValueToken: string, secondValueLabel: string, n: number, unscoredCount: number, definitionsMeasured: number, directionBalancedWinRate?: number | null, directionBalancedOpponentWinRate?: number | null, directionBalancedBalancedWinRate?: number | null, directionBalancedBalancedOpponentWinRate?: number | null, directionBalancedHighPressureOwnWinRate?: number | null, directionBalancedHighPressureOwnOpponentWinRate?: number | null, directionBalancedHighPressureOpponentWinRate?: number | null, directionBalancedHighPressureOpponentOpponentWinRate?: number | null, pressureResponse: { __typename?: 'PressureResponse', value?: number | null, baselineRate?: number | null, pushTowardFirstRate?: number | null, pushTowardSecondRate?: number | null, qualifyingTrials: number, ciLow?: number | null, ciHigh?: number | null, reason?: string | null }, grid: Array<{ __typename?: 'SensitivityCell', ownLevel: number, opponentLevel: number, n: number, unscoredCount: number, winRate?: number | null, opponentWinRate?: number | null, conviction?: number | null, netScore?: number | null, lowData: boolean }> }> }>, insufficient: Array<{ __typename?: 'InsufficientPressureSensitivityModel', modelId: string, label: string, providerName: string, reason: string }>, excludedDefinitions: Array<{ __typename?: 'ExcludedDefinition', definitionId: string, name: string, reason: string }>, pressureConditionExclusionBreakdown: { __typename?: 'PressureConditionExclusionBreakdown', sourceRunMapping: number, definitionMetadata: number, missingScenario: number, invalidMetadata: number, levelAssignment: number }, directionalSanityCheck: { __typename?: 'DirectionalSanityCheck', positivePct: number, flatPct: number, negativePct: number, measuredCount: number, unmeasurableCount: number, breakdown: Array<{ __typename?: 'DirectionalSanityCheckEntry', modelId: string, pairKey: string, pressureResponse: number, classification: string }> } } };
 
 export type OpenRunAnomaliesQueryVariables = Exact<{
   domainId?: InputMaybe<Scalars['ID']['input']>;
@@ -4832,17 +4853,17 @@ export type RunConditionGridQueryVariables = Exact<{
 
 export type RunConditionGridQuery = { __typename?: 'Query', runConditionGrid?: { __typename?: 'RunConditionGrid', attributeA: string, attributeB: string, rowLevels: Array<string>, colLevels: Array<string>, cells: Array<{ __typename?: 'RunConditionGridCell', rowLevel: string, colLevel: string, trialCount: number, scenarioCount: number, scenarioIds: Array<string> }> } | null };
 
+export type StandaloneActiveRunsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type StandaloneActiveRunsQuery = { __typename?: 'Query', standaloneActiveRuns: Array<{ __typename?: 'Run', id: string, status: string, createdAt: string, startedAt?: string | null, config: unknown, definition?: { __typename?: 'Definition', id: string, name: string } | null }> };
+
 export type SurveysQueryVariables = Exact<{
   search?: InputMaybe<Scalars['String']['input']>;
 }>;
 
 
 export type SurveysQuery = { __typename?: 'Query', surveys: Array<{ __typename?: 'Experiment', id: string, name: string, hypothesis?: string | null, analysisPlan?: unknown | null, createdAt: string, updatedAt: string, runCount: number }> };
-
-export type StandaloneActiveRunsQueryVariables = Exact<{ [key: string]: never; }>;
-
-
-export type StandaloneActiveRunsQuery = { __typename?: 'Query', standaloneActiveRuns: Array<{ __typename?: 'Run', id: string, status: string, createdAt: string, startedAt?: string | null, config: unknown, definition?: { __typename?: 'Definition', id: string, name: string } | null }> };
 
 export type CreateSurveyMutationVariables = Exact<{
   input: CreateSurveyInput;
@@ -7194,6 +7215,23 @@ export const UpdatePairedVignetteDocument = gql`
 export function useUpdatePairedVignetteMutation() {
   return Urql.useMutation<UpdatePairedVignetteMutation, UpdatePairedVignetteMutationVariables>(UpdatePairedVignetteDocument);
 };
+export const PairwiseWinRatesDocument = gql`
+    query PairwiseWinRates($domainId: ID, $signature: String) {
+  pairwiseWinRates(domainId: $domainId, signature: $signature) {
+    models {
+      modelId
+      label
+      valueOrder
+      winRateMatrix
+      trialCountMatrix
+    }
+  }
+}
+    `;
+
+export function usePairwiseWinRatesQuery(options?: Omit<Urql.UseQueryArgs<PairwiseWinRatesQueryVariables>, 'query'>) {
+  return Urql.useQuery<PairwiseWinRatesQuery, PairwiseWinRatesQueryVariables>({ query: PairwiseWinRatesDocument, ...options });
+};
 export const PressureSensitivityDocument = gql`
     query PressureSensitivity($domainId: ID, $definitionId: ID, $modelIds: [String!], $signature: String!) {
   pressureSensitivity(
@@ -7227,12 +7265,6 @@ export const PressureSensitivityDocument = gql`
         averageWinRate
         balancedWinRate
         highPressureOnThisValueWinRate
-        highPressureOnThisValueDomainRates {
-          domainId
-          domainName
-          rate
-          pairsMeasured
-        }
         highPressureOnOpposingValueWinRate
         pairsMeasured
       }
@@ -7628,23 +7660,6 @@ export const RunConditionGridDocument = gql`
 export function useRunConditionGridQuery(options: Omit<Urql.UseQueryArgs<RunConditionGridQueryVariables>, 'query'>) {
   return Urql.useQuery<RunConditionGridQuery, RunConditionGridQueryVariables>({ query: RunConditionGridDocument, ...options });
 };
-export const SurveysDocument = gql`
-    query Surveys($search: String) {
-  surveys(search: $search) {
-    id
-    name
-    hypothesis
-    analysisPlan
-    createdAt
-    updatedAt
-    runCount
-  }
-}
-    `;
-
-export function useSurveysQuery(options?: Omit<Urql.UseQueryArgs<SurveysQueryVariables>, 'query'>) {
-  return Urql.useQuery<SurveysQuery, SurveysQueryVariables>({ query: SurveysDocument, ...options });
-};
 export const StandaloneActiveRunsDocument = gql`
     query StandaloneActiveRuns {
   standaloneActiveRuns {
@@ -7663,6 +7678,23 @@ export const StandaloneActiveRunsDocument = gql`
 
 export function useStandaloneActiveRunsQuery(options?: Omit<Urql.UseQueryArgs<StandaloneActiveRunsQueryVariables>, 'query'>) {
   return Urql.useQuery<StandaloneActiveRunsQuery, StandaloneActiveRunsQueryVariables>({ query: StandaloneActiveRunsDocument, ...options });
+};
+export const SurveysDocument = gql`
+    query Surveys($search: String) {
+  surveys(search: $search) {
+    id
+    name
+    hypothesis
+    analysisPlan
+    createdAt
+    updatedAt
+    runCount
+  }
+}
+    `;
+
+export function useSurveysQuery(options?: Omit<Urql.UseQueryArgs<SurveysQueryVariables>, 'query'>) {
+  return Urql.useQuery<SurveysQuery, SurveysQueryVariables>({ query: SurveysDocument, ...options });
 };
 export const CreateSurveyDocument = gql`
     mutation CreateSurvey($input: CreateSurveyInput!) {

@@ -24,7 +24,12 @@ import {
   type ModelsAnalysisQueryVariables,
 } from '../api/operations/modelsAnalysis';
 import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/llm';
+import {
+  usePairwiseWinRatesQuery,
+  type PairwiseWinRatesQueryVariables,
+} from '../api/operations/pairwiseWinRates';
 import { DominanceSection } from '../components/domains/DominanceSection';
+import { PairwiseWinRateMatrix } from '../components/domains/PairwiseWinRateMatrix';
 import { ValuePrioritiesSection } from '../components/domains/ValuePrioritiesSection';
 import { DomainShiftsReportSection } from '../components/models/DomainShiftsReportSection';
 import {
@@ -160,6 +165,18 @@ export function DomainAnalysis() {
     variables: { status: 'ACTIVE' },
     requestPolicy: 'cache-and-network',
   });
+  const pairwiseVars = useMemo<PairwiseWinRatesQueryVariables>(
+    () => ({
+      ...(selectedScope === 'DOMAIN' && selectedDomainId !== '' ? { domainId: selectedDomainId } : {}),
+      ...(selectedSignature !== '' ? { signature: selectedSignature } : {}),
+    }),
+    [selectedDomainId, selectedScope, selectedSignature],
+  );
+  const [{ data: pairwiseData }] = usePairwiseWinRatesQuery({
+    variables: pairwiseVars,
+    requestPolicy: 'cache-and-network',
+  });
+
   const [{ fetching: refreshFetching }, refreshDomainAnalysis] = useMutation<
     RefreshDomainAnalysisMutationResult,
     RefreshDomainAnalysisMutationVariables
@@ -442,6 +459,9 @@ export function DomainAnalysis() {
           <DominanceSection
             models={models}
             defaultModelIds={defaultModelIds}
+          />
+          <PairwiseWinRateMatrix
+            models={pairwiseData?.pairwiseWinRates.models ?? []}
           />
           <DomainShiftsReportSection
             models={modelsAnalysisData?.modelsAnalysis.models ?? []}
