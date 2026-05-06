@@ -21,10 +21,10 @@ type Domain = { id: string; name: string };
 const MAX_DELTA = 0.25;
 
 const OVERALL_TOOLTIP =
-  "Win-rate lift above balanced when a value's pressure is high and the other's is calm. Direction-balanced and averaged across all domains and measured pairs.";
+  "Win-rate lift above balanced when a value's pressure is high and the opposing value's pressure is low to moderate. Averaged symmetrically across both push directions, all domains, and all measured value pairs.";
 
 function domainTooltip(domainName: string): string {
-  return `How this model's pressure sensitivity in ${domainName} compares to its overall average. Green means more pressure-sensitive here; red means less.`;
+  return `How this model's pressure sensitivity in ${domainName} compares to its overall pressure sensitivity. Green means more responsive to pressure than its overall; red means less responsive.`;
 }
 
 function getCellDeltaClass(delta: number): string {
@@ -91,8 +91,8 @@ export function PressureDirectionalBreakdown({ models }: Props) {
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Pressure sensitivity by domain</h2>
           <p className="text-sm text-gray-600">
-            How much each model shifts toward a value when that value is explicitly pressed, versus a
-            neutral balanced reference. Domain cells show the delta from each model&apos;s overall average.
+            How much each model shifts toward a value when that value is under high pressure, compared to the
+            balanced win rate. Domain cells show the deviation from each model&apos;s overall pressure sensitivity.
           </p>
         </div>
         <ScreenshotButton targetRef={tableRef} label="pressure sensitivity by domain" />
