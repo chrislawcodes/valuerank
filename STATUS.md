@@ -37,6 +37,7 @@
 
 | Feature | Branch | Status | Notes |
 |---------|--------|--------|-------|
+| **status-page-pending-launches** | `—` | 🟢 Done locally | Status page active-evaluation query now includes PENDING, RUNNING, PAUSED, and SUMMARIZING launches so stuck-but-working runs show up again. Added API regression coverage and updated the section copy to match. |
 | **pressure-response-by-value-direct-rates** | `codex/value-priorities-logit-toggle` | 🟢 Done locally | Pressure Response by Value now uses direct win rates for both sides of each pair, instead of flipping the first value's rate for the second value. The table also keeps the vignette-level weighting rule so repeated measurements do not overcount a vignette. |
 | **model-groups-visualization-toggle** | `codex/pressure-response-tooltip-grid` | 🟢 Done locally | Domain Analysis model groups now support radar, dot map, and heatmap views with a view toggle, shared cluster ordering, and a fixed symmetric dot-map axis. |
 | **pressure-sensitivity-coverage-fix** | `codex/pressure-sensitivity-coverage-fix` | 🟢 Done locally | Follow-up to PR #770. The pressure-sensitivity resolver now keeps a lightweight resolved Definition snapshot (`template`, `dimensions`, `components`) when resolving transcript decisions, instead of token-only stubs that made every transcript resolve as unknown/unscored and pushed all models below coverage. Focused API regression test added. |
