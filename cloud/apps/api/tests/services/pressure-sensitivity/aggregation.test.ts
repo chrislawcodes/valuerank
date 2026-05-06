@@ -33,6 +33,20 @@ function cell(partial: Partial<Cell> & { ownLevel: number; opponentLevel: number
   };
 }
 
+function observationsFor(params: {
+  ownPicked?: number;
+  opponentPicked?: number;
+  neutral?: number;
+  unscored?: number;
+}): Observation[] {
+  return [
+    ...Array.from({ length: params.ownPicked ?? 0 }, () => ({ outcome: 'own_picked' as const, strength: 'strong' as const })),
+    ...Array.from({ length: params.opponentPicked ?? 0 }, () => ({ outcome: 'opponent_picked' as const, strength: 'strong' as const })),
+    ...Array.from({ length: params.neutral ?? 0 }, () => ({ outcome: 'neutral' as const, strength: null })),
+    ...Array.from({ length: params.unscored ?? 0 }, () => ({ outcome: 'unscored' as const, strength: null })),
+  ];
+}
+
 describe('buildCellMetrics', () => {
   it('computes win rate, conviction, netScore, and successes for a typical mix', () => {
     const observations: Observation[] = [
@@ -717,6 +731,169 @@ describe('computeDirectionBalancedPairWinRates (second suite)', () => {
       authoredFirstTokenByDef: new Map([['def-a', 'alpha']]),
       domainByDef: new Map([['def-a', 'd1']]),
       cellFilter: (own, opp) => own >= 4 && opp <= 3,
+    });
+
+    expect(result.ownRate).toBeNull();
+    expect(result.opponentRate).toBeNull();
+  });
+
+  function makeMultiDefCell(
+    key: string,
+    obsMap: Record<string, Observation[]>,
+  ): [string, { observationsByDefinition: Map<string, Observation[]> }] {
+    return [key, { observationsByDefinition: new Map(Object.entries(obsMap)) }];
+  }
+
+  it('averages direction rates equally instead of pooling by trial count', () => {
+    const cells = new Map([
+      makeMultiDefCell('1::1', {
+        'def-a': observationsFor({ ownPicked: 80, opponentPicked: 20 }),
+        'def-b': observationsFor({ ownPicked: 5, opponentPicked: 5 }),
+      }),
+    ]);
+
+    const result = computeDirectionBalancedPairWinRates({
+      cells,
+      definitionsMeasured: new Set(['def-a', 'def-b']),
+      canonicalFirstValueToken: 'alpha',
+      authoredFirstTokenByDef: new Map([
+        ['def-a', 'alpha'],
+        ['def-b', 'beta'],
+      ]),
+      domainByDef: new Map([
+        ['def-a', 'domain-1'],
+        ['def-b', 'domain-1'],
+      ]),
+    });
+
+    expect(result.ownRate).toBeCloseTo(0.65, 10);
+    expect(result.opponentRate).toBeCloseTo(0.35, 10);
+  });
+
+  it('uses the surviving direction when the companion direction has no scored trials', () => {
+    const cells = new Map([
+      makeMultiDefCell('1::1', {
+        'def-a': observationsFor({ ownPicked: 80, opponentPicked: 20 }),
+        'def-b': observationsFor({ unscored: 10 }),
+      }),
+    ]);
+
+    const result = computeDirectionBalancedPairWinRates({
+      cells,
+      definitionsMeasured: new Set(['def-a', 'def-b']),
+      canonicalFirstValueToken: 'alpha',
+      authoredFirstTokenByDef: new Map([
+        ['def-a', 'alpha'],
+        ['def-b', 'beta'],
+      ]),
+      domainByDef: new Map([
+        ['def-a', 'domain-1'],
+        ['def-b', 'domain-1'],
+      ]),
+    });
+
+    expect(result.ownRate).toBeCloseTo(0.8, 10);
+    expect(result.opponentRate).toBeCloseTo(0.2, 10);
+  });
+
+  it('returns null when both directions have no scored trials', () => {
+    const cells = new Map([
+      makeMultiDefCell('1::1', {
+        'def-a': observationsFor({ unscored: 10 }),
+        'def-b': observationsFor({ unscored: 10 }),
+      }),
+    ]);
+
+    const result = computeDirectionBalancedPairWinRates({
+      cells,
+      definitionsMeasured: new Set(['def-a', 'def-b']),
+      canonicalFirstValueToken: 'alpha',
+      authoredFirstTokenByDef: new Map([
+        ['def-a', 'alpha'],
+        ['def-b', 'beta'],
+      ]),
+      domainByDef: new Map([
+        ['def-a', 'domain-1'],
+        ['def-b', 'domain-1'],
+      ]),
+    });
+
+    expect(result.ownRate).toBeNull();
+    expect(result.opponentRate).toBeNull();
+  });
+
+  it('averages equal trial counts directly by direction', () => {
+    const cells = new Map([
+      makeMultiDefCell('1::1', {
+        'def-a': observationsFor({ ownPicked: 6, opponentPicked: 4 }),
+        'def-b': observationsFor({ ownPicked: 2, opponentPicked: 8 }),
+      }),
+    ]);
+
+    const result = computeDirectionBalancedPairWinRates({
+      cells,
+      definitionsMeasured: new Set(['def-a', 'def-b']),
+      canonicalFirstValueToken: 'alpha',
+      authoredFirstTokenByDef: new Map([
+        ['def-a', 'alpha'],
+        ['def-b', 'beta'],
+      ]),
+      domainByDef: new Map([
+        ['def-a', 'domain-1'],
+        ['def-b', 'domain-1'],
+      ]),
+    });
+
+    expect(result.ownRate).toBeCloseTo(0.4, 10);
+    expect(result.opponentRate).toBeCloseTo(0.6, 10);
+  });
+
+  it('ignores a null win rate in one direction and returns the scored direction rate', () => {
+    const cells = new Map([
+      makeMultiDefCell('1::1', {
+        'def-a': observationsFor({ unscored: 10 }),
+        'def-b': observationsFor({ ownPicked: 5, opponentPicked: 5 }),
+      }),
+    ]);
+
+    const result = computeDirectionBalancedPairWinRates({
+      cells,
+      definitionsMeasured: new Set(['def-a', 'def-b']),
+      canonicalFirstValueToken: 'alpha',
+      authoredFirstTokenByDef: new Map([
+        ['def-a', 'alpha'],
+        ['def-b', 'beta'],
+      ]),
+      domainByDef: new Map([
+        ['def-a', 'domain-1'],
+        ['def-b', 'domain-1'],
+      ]),
+    });
+
+    expect(result.ownRate).toBeCloseTo(0.5, 10);
+    expect(result.opponentRate).toBeCloseTo(0.5, 10);
+  });
+
+  it('returns null when both direction win rates are null', () => {
+    const cells = new Map([
+      makeMultiDefCell('1::1', {
+        'def-a': observationsFor({ unscored: 10 }),
+        'def-b': observationsFor({ unscored: 10 }),
+      }),
+    ]);
+
+    const result = computeDirectionBalancedPairWinRates({
+      cells,
+      definitionsMeasured: new Set(['def-a', 'def-b']),
+      canonicalFirstValueToken: 'alpha',
+      authoredFirstTokenByDef: new Map([
+        ['def-a', 'alpha'],
+        ['def-b', 'beta'],
+      ]),
+      domainByDef: new Map([
+        ['def-a', 'domain-1'],
+        ['def-b', 'domain-1'],
+      ]),
     });
 
     expect(result.ownRate).toBeNull();
