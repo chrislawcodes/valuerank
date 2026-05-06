@@ -3131,6 +3131,7 @@ export type QueryOpenRunAnomaliesArgs = {
 
 export type QueryPairwiseWinRatesArgs = {
   domainId?: InputMaybe<Scalars['ID']['input']>;
+  modelIds?: InputMaybe<Array<Scalars['String']['input']>>;
   signature?: InputMaybe<Scalars['String']['input']>;
 };
 
@@ -4681,6 +4682,7 @@ export type UpdatePairedVignetteMutation = { __typename?: 'Mutation', updatePair
 
 export type PairwiseWinRatesQueryVariables = Exact<{
   domainId?: InputMaybe<Scalars['ID']['input']>;
+  modelIds?: InputMaybe<Array<Scalars['String']['input']> | Scalars['String']['input']>;
   signature?: InputMaybe<Scalars['String']['input']>;
 }>;
 
@@ -7225,8 +7227,12 @@ export function useUpdatePairedVignetteMutation() {
   return Urql.useMutation<UpdatePairedVignetteMutation, UpdatePairedVignetteMutationVariables>(UpdatePairedVignetteDocument);
 };
 export const PairwiseWinRatesDocument = gql`
-    query PairwiseWinRates($domainId: ID, $signature: String) {
-  pairwiseWinRates(domainId: $domainId, signature: $signature) {
+    query PairwiseWinRates($domainId: ID, $modelIds: [String!], $signature: String) {
+  pairwiseWinRates(
+    domainId: $domainId
+    modelIds: $modelIds
+    signature: $signature
+  ) {
     models {
       modelId
       label

@@ -1,5 +1,5 @@
-query PairwiseWinRates($domainId: ID, $signature: String) {
-  pairwiseWinRates(domainId: $domainId, signature: $signature) {
+query PairwiseWinRates($domainId: ID, $modelIds: [String!], $signature: String) {
+  pairwiseWinRates(domainId: $domainId, modelIds: $modelIds, signature: $signature) {
     models {
       modelId
       label

@@ -17,6 +17,10 @@ builder.queryField('pairwiseWinRates', (t) =>
         required: false,
         description: 'Batch signature to filter runs (e.g. vnewtd)',
       }),
+      modelIds: t.arg.stringList({
+        required: false,
+        description: 'Model IDs to include. Defaults to all active models when omitted.',
+      }),
     },
     resolve: async (_root, args) => {
       const domainId = args.domainId != null ? String(args.domainId) : null;
@@ -27,7 +31,11 @@ builder.queryField('pairwiseWinRates', (t) =>
         availableOnly: false,
       });
 
-      const modelIds = activeModels.map((m) => m.modelId);
+      const requestedIds = args.modelIds != null ? new Set(args.modelIds) : null;
+      const filteredModels = requestedIds != null
+        ? activeModels.filter((m) => requestedIds.has(m.modelId))
+        : activeModels;
+      const modelIds = filteredModels.map((m) => m.modelId);
 
       let domainDefinitionIds: Set<string> | null = null;
       if (domainId != null) {
@@ -48,7 +56,7 @@ builder.queryField('pairwiseWinRates', (t) =>
         domainDefinitionIds,
       });
 
-      const models = activeModels.map((model) => {
+      const models = filteredModels.map((model) => {
         const matrix = pairwiseMap.get(model.modelId);
         const winRateMatrix = (matrix ?? []).map((row) => row.map((cell) => cell.winRate));
         const trialCountMatrix = (matrix ?? []).map((row) => row.map((cell) => cell.trials));
