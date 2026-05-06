@@ -23,6 +23,7 @@ import {
 } from '../api/operations/modelsAnalysis';
 import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/llm';
 import { ModelGroupsSection } from '../components/domains/ModelGroupsSection';
+import { ModelAnalysisSettingsBar } from '../components/models/ModelAnalysisSettingsBar';
 import { ModelSimilarityTableSection } from '../components/models/ModelSimilarityTableSection';
 import { type CalculationMethod } from '../components/models/ModelSimilarityMetrics';
 import { useDomains } from '../hooks/useDomains';
@@ -79,7 +80,8 @@ export function ModelsGroups() {
   const [selectedSignature, setSelectedSignature] = useState<string>(searchParams.get('signature') ?? '');
   const [selectedModelIds, setSelectedModelIds] = useState<string[] | null>(null);
   const [useLegacyQuery, setUseLegacyQuery] = useState(false);
-  const [clusteringMethod, setClusteringMethod] = useState<'upgma' | 'ward'>('upgma');
+  const [clusteringMethod, setClusteringMethod] = useState<'upgma' | 'ward'>('ward');
+  const [dataSource, setDataSource] = useState<'log-odds' | 'win-rate'>('log-odds');
   const [similarityMethod, setSimilarityMethod] = useState<CalculationMethod>('weighted-euclidean');
 
   const [{ data: signatureData, fetching: signaturesLoading, error: signaturesError }] = useQuery<
@@ -280,21 +282,21 @@ export function ModelsGroups() {
         }}
       />
 
-      <div className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-teal-700">Models</p>
-        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Model Clusters</h1>
-        <p className="max-w-3xl text-sm text-gray-600">
-          Clustered model families for the selected domain and signature.
-        </p>
-        {cacheStatusCopy != null && (
-          <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
-            <span className={`inline-flex rounded-full border px-2.5 py-1 font-semibold ${cacheStatusCopy.badgeClassName}`}>
-              {cacheStatusCopy.badgeLabel}
-            </span>
-            <span>{cacheStatusCopy.detail}</span>
-          </div>
-        )}
-      </div>
+      {cacheStatusCopy != null && (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+          <span className={`inline-flex rounded-full border px-2.5 py-1 font-semibold ${cacheStatusCopy.badgeClassName}`}>
+            {cacheStatusCopy.badgeLabel}
+          </span>
+          <span>{cacheStatusCopy.detail}</span>
+        </div>
+      )}
+
+      <ModelAnalysisSettingsBar
+        dataSource={dataSource}
+        onDataSourceChange={setDataSource}
+        similarityMethod={similarityMethod}
+        onSimilarityMethodChange={setSimilarityMethod}
+      />
 
       {showPageLoader ? (
         <Loading size="lg" text="Loading model groups..." />
@@ -302,6 +304,7 @@ export function ModelsGroups() {
         <div className="space-y-6">
           <ModelGroupsSection
             clusterAnalysisByMethod={data?.domainAnalysis.clusterAnalysisByMethod}
+            dataSource={dataSource}
             distanceMethod={similarityMethod}
             models={filteredModels}
             clusteringMethod={clusteringMethod}
@@ -310,7 +313,6 @@ export function ModelsGroups() {
           <ModelSimilarityTableSection
             models={filteredModels}
             method={similarityMethod}
-            onMethodChange={setSimilarityMethod}
           />
         </div>
       )}

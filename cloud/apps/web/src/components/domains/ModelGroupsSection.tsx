@@ -33,13 +33,9 @@ const LINKAGE_OPTIONS: Array<{ value: ClusteringLinkage; label: string }> = [
   { value: 'ward', label: 'Ward' },
 ];
 
-const DATA_SOURCE_OPTIONS: Array<{ value: ClusterDataSource; label: string }> = [
-  { value: 'log-odds', label: 'Log Odds' },
-  { value: 'win-rate', label: 'Win Rate' },
-];
-
 type ModelGroupsSectionProps = {
   clusterAnalysisByMethod?: Record<string, ClusterAnalysis>;
+  dataSource?: ClusterDataSource;
   distanceMethod?: CalculationMethod;
   models: ModelEntry[];
   selectedModelId?: string | null;
@@ -77,10 +73,11 @@ function getGroupLabel(cluster: DomainCluster): string {
 
 export function ModelGroupsSection({
   clusterAnalysisByMethod,
+  dataSource = 'log-odds',
   distanceMethod,
   models,
   selectedModelId = null,
-  clusteringMethod = 'upgma',
+  clusteringMethod = 'ward',
   onClusteringMethodChange,
 }: ModelGroupsSectionProps) {
   const summaryTableRef = useRef<HTMLDivElement>(null);
@@ -88,7 +85,6 @@ export function ModelGroupsSection({
   const [viewMode, setViewMode] = useState<ClusterViewMode>('dot');
   const [groupDisplayMode, setGroupDisplayMode] = useState<GroupDisplayMode>('groups');
   const [activeGroupIds, setActiveGroupIds] = useState<string[]>([]);
-  const [dataSource, setDataSource] = useState<ClusterDataSource>('log-odds');
 
   const backendKey = `${dataSource}-${toBackendDistanceMethod(distanceMethod)}-${clusteringMethod}`;
   const activeClusterAnalysis = clusterAnalysisByMethod?.[backendKey] ?? null;
@@ -177,7 +173,6 @@ export function ModelGroupsSection({
             <>
               {onClusteringMethodChange != null && (
                 <div className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 p-1">
-                  <span className="px-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">Linkage</span>
                   <div className="inline-flex rounded-md border border-gray-200 bg-white p-1">
                     {LINKAGE_OPTIONS.map((option) => {
                       const active = clusteringMethod === option.value;
@@ -199,29 +194,6 @@ export function ModelGroupsSection({
                   </div>
                 </div>
               )}
-
-              <div className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 p-1">
-                <span className="px-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">Data</span>
-                <div className="inline-flex rounded-md border border-gray-200 bg-white p-1">
-                  {DATA_SOURCE_OPTIONS.map((option) => {
-                    const active = dataSource === option.value;
-                    return (
-                      <Button
-                        key={option.value}
-                        type="button"
-                        variant={active ? 'primary' : 'ghost'}
-                        size="sm"
-                        onClick={() => setDataSource(option.value)}
-                        className={`rounded-md px-3 py-1 text-xs font-medium min-h-0 ${
-                          active ? 'bg-teal-600 text-white hover:bg-teal-700' : 'text-gray-600 hover:bg-white hover:text-gray-900'
-                        }`}
-                      >
-                        {option.label}
-                      </Button>
-                    );
-                  })}
-                </div>
-              </div>
             </>
           )}
 
@@ -296,9 +268,10 @@ export function ModelGroupsSection({
             <p className="mt-1">
               <strong>Linkage</strong> controls how cluster distance is measured: UPGMA averages distances
               across all member pairs; Ward minimizes within-cluster variance.
-              <strong> Data</strong> controls what scores drive the distance: Log Odds uses the smoothed
-              log-odds ranking scores; Win Rate uses domain-local win rates.
-              The distance method comes from the Similarity Table selector below.
+            </p>
+            <p className="mt-1">
+              The <strong>data source</strong> and <strong>similarity method</strong> are set in the
+              Analysis settings bar above and affect both model reports.
             </p>
           </div>
         </div>
