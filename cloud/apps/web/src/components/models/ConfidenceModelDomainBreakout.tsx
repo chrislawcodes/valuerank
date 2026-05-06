@@ -327,7 +327,7 @@ export function ConfidenceModelDomainBreakout({
   const overallConfidenceByModelId = useMemo(
     () =>
       new Map<string, number | null>(
-        referenceModels.map((model) => [model.modelId, model.overallConfidence] as const),
+        referenceModels.map((model) => [model.modelId, model.overallConfidence ?? null] as const),
       ),
     [referenceModels],
   );
