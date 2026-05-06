@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from 'urql';
 import { useSearchParams } from 'react-router-dom';
 import { AnalysisContextBar } from '../components/analysis/AnalysisContextBar';
@@ -77,11 +77,10 @@ export function ModelsGroups() {
   );
   const [selectedDomainId, setSelectedDomainId] = useState<string>(initialDomainId);
   const [selectedSignature, setSelectedSignature] = useState<string>(searchParams.get('signature') ?? '');
+  const [selectedModelIds, setSelectedModelIds] = useState<string[] | null>(null);
   const [useLegacyQuery, setUseLegacyQuery] = useState(false);
   const [clusteringMethod, setClusteringMethod] = useState<'upgma' | 'ward'>('upgma');
   const [similarityMethod, setSimilarityMethod] = useState<CalculationMethod>('weighted-euclidean');
-  const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
-  const initializedModelSelection = useRef(false);
 
   const [{ data: signatureData, fetching: signaturesLoading, error: signaturesError }] = useQuery<
     DomainAvailableSignaturesQueryResult,
@@ -164,7 +163,7 @@ export function ModelsGroups() {
     pause: selectedScope === 'DOMAIN' && selectedDomainId === '',
     requestPolicy: 'cache-and-network',
   });
-  const [{ data: llmModelsData }] = useQuery<LlmModelsQueryResult>({
+  const [{ data: llmModelsData, error: llmModelsError }] = useQuery<LlmModelsQueryResult>({
     query: LLM_MODELS_QUERY,
     variables: { status: 'ACTIVE' },
     requestPolicy: 'cache-and-network',
@@ -187,9 +186,23 @@ export function ModelsGroups() {
   const data = activeUseLegacyQuery ? legacyData : scoredData;
   const fetching = activeUseLegacyQuery ? legacyFetching : scoredFetching;
   const error = activeUseLegacyQuery ? legacyError : scoredError;
+  const activeModels = useMemo(
+    () => (llmModelsData?.llmModels ?? []).filter((model) => model.status === 'ACTIVE'),
+    [llmModelsData],
+  );
+  const defaultModelIds = useMemo(
+    () => activeModels.filter((model) => model.isDefault).map((model) => model.modelId),
+    [activeModels],
+  );
+  useEffect(() => {
+    if (selectedModelIds === null && defaultModelIds.length > 0) {
+      setSelectedModelIds(defaultModelIds);
+    }
+  }, [defaultModelIds, selectedModelIds]);
+  const visibleModelIds = selectedModelIds ?? defaultModelIds;
   const transcriptCount = useMemo(
-    () => countAnalyzedTranscripts(data?.domainAnalysis.models ?? []),
-    [data?.domainAnalysis.models],
+    () => countAnalyzedTranscripts(data?.domainAnalysis.models ?? [], visibleModelIds),
+    [data?.domainAnalysis.models, visibleModelIds],
   );
   const cacheStatusCopy = useMemo(
     () => getCacheStatusCopy(data?.domainAnalysis.cacheStatus, data?.domainAnalysis.generatedAt, transcriptCount),
@@ -197,141 +210,110 @@ export function ModelsGroups() {
   );
   const showPageLoader = domainsLoading
     || (selectedDomainId !== '' && data?.domainAnalysis == null && fetching)
-    || (selectedDomainId !== '' && modelsAnalysisData == null && modelsAnalysisFetching);
+    || (selectedDomainId !== '' && modelsAnalysisData == null && modelsAnalysisFetching)
+    || llmModelsData == null;
   const models = useMemo(
     () => buildModelEntries(data?.domainAnalysis.models ?? [], modelsAnalysisData?.modelsAnalysis.models ?? []),
     [data?.domainAnalysis.models, modelsAnalysisData?.modelsAnalysis.models],
   );
-  const defaultModelIds = useMemo(
-    () => new Set((llmModelsData?.llmModels ?? []).filter((m) => m.isDefault).map((m) => m.modelId)),
-    [llmModelsData],
-  );
-  const defaultSelection = useMemo(() => {
-    const availableIds = models.map((model) => model.model);
-    const defaults = availableIds.filter((id) => defaultModelIds.has(id));
-    return defaults.length > 0 ? defaults : availableIds;
-  }, [models, defaultModelIds]);
   const modelOptions = useMemo(
-    () => models.map((model) => ({ value: model.model, label: model.label, isDefault: defaultSelection.includes(model.model) })),
-    [defaultSelection, models],
+    () => activeModels.map((model) => ({
+      value: model.modelId,
+      label: model.displayName,
+      isDefault: defaultModelIds.includes(model.modelId),
+    })),
+    [activeModels, defaultModelIds],
   );
-
-  useEffect(() => {
-    if (initializedModelSelection.current) return;
-    if (models.length === 0) return;
-    if (llmModelsData == null) return;
-    setSelectedModelIds(defaultSelection);
-    initializedModelSelection.current = true;
-  }, [models, llmModelsData, defaultSelection]);
-
-  useEffect(() => {
-    if (!initializedModelSelection.current) return;
-    setSelectedModelIds((current) => {
-      if (current.length === 0) return current;
-      const validIds = new Set(models.map((model) => model.model));
-      const next = current.filter((id) => validIds.has(id));
-      return next.length === current.length ? current : next;
-    });
-  }, [models]);
-
-  const visibleModels = useMemo(
-    () => selectedModelIds.length === 0 ? models : models.filter((model) => selectedModelIds.includes(model.model)),
-    [models, selectedModelIds],
+  const filteredModels = useMemo(
+    () => (visibleModelIds.length === 0 ? [] : models.filter((model) => visibleModelIds.includes(model.model))),
+    [models, visibleModelIds],
   );
-
   const isAllDomains = selectedScope === 'ALL_DOMAINS';
-  const contextBar = (
-    <AnalysisContextBar
-      domain={{
-        label: 'Domain',
-        value: isAllDomains ? ALL_DOMAINS_SCOPE : selectedDomainId,
-        options: [
-          { value: ALL_DOMAINS_SCOPE, label: 'All domains' },
-          ...domains.map((domain) => ({ value: domain.id, label: domain.name })),
-        ],
-        onChange: (value) => {
-          if (value === ALL_DOMAINS_SCOPE) {
-            setSelectedScope('ALL_DOMAINS');
-            return;
-          }
-          setSelectedScope('DOMAIN');
-          setSelectedDomainId(value);
-        },
-        disabled: domainsLoading || (domains.length === 0 && !isAllDomains),
-      }}
-      signature={{
-        label: 'Signature',
-        value: selectedSignature,
-        options:
-          signatureOptions.length === 0
-            ? [{ value: '', label: 'No signatures with completed runs', disabled: true }]
-            : signatureOptions.map((option) => ({
-              value: option.signature,
-              label: formatSignatureOptionLabel(option),
-            })),
-        onChange: (value) => setSelectedSignature(value),
-        disabled: signaturesLoading || signatureOptions.length === 0,
-      }}
-      models={{
-        label: 'Models',
-        selectedModelIds: selectedModelIds.length > 0 ? selectedModelIds : null,
-        defaultModelIds: defaultSelection,
-        options: modelOptions,
-        onChange: setSelectedModelIds,
-      }}
-    />
-  );
 
-  if (domainsError != null || signaturesError != null || error != null || modelsAnalysisError != null) {
+  if (domainsError != null || signaturesError != null || error != null || modelsAnalysisError != null || llmModelsError != null) {
     return (
-      <>
-        {contextBar}
-        <div className="space-y-6 px-4 py-6">
-          <ErrorMessage message={`Failed to load model groups report: ${(domainsError ?? signaturesError ?? error ?? modelsAnalysisError)?.message ?? 'Unknown error'}`} />
-        </div>
-      </>
+      <div className="space-y-6">
+        <ErrorMessage message={`Failed to load model groups report: ${(domainsError ?? signaturesError ?? error ?? modelsAnalysisError ?? llmModelsError)?.message ?? 'Unknown error'}`} />
+      </div>
     );
   }
 
   return (
-    <>
-      {contextBar}
-      <div className="space-y-6 px-4 py-6">
-        <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-teal-700">Models</p>
-          <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Model Groups</h1>
-          <p className="max-w-3xl text-sm text-gray-600">
-            Clustered model families for the selected domain and signature.
-          </p>
-          {cacheStatusCopy != null && (
-            <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
-              <span className={`inline-flex rounded-full border px-2.5 py-1 font-semibold ${cacheStatusCopy.badgeClassName}`}>
-                {cacheStatusCopy.badgeLabel}
-              </span>
-              <span>{cacheStatusCopy.detail}</span>
-            </div>
-          )}
-        </div>
+    <div className="space-y-6">
+      <AnalysisContextBar
+        domain={{
+          label: 'Domain',
+          value: isAllDomains ? ALL_DOMAINS_SCOPE : selectedDomainId,
+          options: [
+            { value: ALL_DOMAINS_SCOPE, label: 'All domains' },
+            ...domains.map((domain) => ({ value: domain.id, label: domain.name })),
+          ],
+          onChange: (value) => {
+            if (value === ALL_DOMAINS_SCOPE) {
+              setSelectedScope('ALL_DOMAINS');
+              return;
+            }
+            setSelectedScope('DOMAIN');
+            setSelectedDomainId(value);
+          },
+          disabled: domainsLoading || (domains.length === 0 && !isAllDomains),
+        }}
+        signature={{
+          label: 'Signature',
+          value: selectedSignature,
+          options:
+            signatureOptions.length === 0
+              ? [{ value: '', label: 'No signatures with completed runs', disabled: true }]
+              : signatureOptions.map((option) => ({
+                value: option.signature,
+                label: formatSignatureOptionLabel(option),
+              })),
+          onChange: (value) => setSelectedSignature(value),
+          disabled: signaturesLoading || signatureOptions.length === 0,
+        }}
+        models={{
+          label: 'Models',
+          selectedModelIds,
+          defaultModelIds,
+          options: modelOptions,
+          onChange: setSelectedModelIds,
+        }}
+      />
 
-        {showPageLoader ? (
-          <Loading size="lg" text="Loading model groups..." />
-        ) : (
-          <div className="space-y-6">
-            <ModelGroupsSection
-              clusterAnalysisByMethod={data?.domainAnalysis.clusterAnalysisByMethod}
-              distanceMethod={similarityMethod}
-              models={visibleModels}
-              clusteringMethod={clusteringMethod}
-              onClusteringMethodChange={setClusteringMethod}
-            />
-            <ModelSimilarityTableSection
-              models={visibleModels}
-              method={similarityMethod}
-              onMethodChange={setSimilarityMethod}
-            />
+      <div className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-teal-700">Models</p>
+        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Model Groups</h1>
+        <p className="max-w-3xl text-sm text-gray-600">
+          Clustered model families for the selected domain and signature.
+        </p>
+        {cacheStatusCopy != null && (
+          <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+            <span className={`inline-flex rounded-full border px-2.5 py-1 font-semibold ${cacheStatusCopy.badgeClassName}`}>
+              {cacheStatusCopy.badgeLabel}
+            </span>
+            <span>{cacheStatusCopy.detail}</span>
           </div>
         )}
       </div>
-    </>
+
+      {showPageLoader ? (
+        <Loading size="lg" text="Loading model groups..." />
+      ) : (
+        <div className="space-y-6">
+          <ModelGroupsSection
+            clusterAnalysisByMethod={data?.domainAnalysis.clusterAnalysisByMethod}
+            distanceMethod={similarityMethod}
+            models={filteredModels}
+            clusteringMethod={clusteringMethod}
+            onClusteringMethodChange={setClusteringMethod}
+          />
+          <ModelSimilarityTableSection
+            models={filteredModels}
+            method={similarityMethod}
+            onMethodChange={setSimilarityMethod}
+          />
+        </div>
+      )}
+    </div>
   );
 }

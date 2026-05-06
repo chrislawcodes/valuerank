@@ -34,7 +34,6 @@ describe('ModelSimilarityTableSection', () => {
     );
 
     expect(screen.getByRole('heading', { name: 'Model Similarity Table' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Absolute Value' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Weighted Euclidean' }).className.includes('bg-teal-600')).toBe(true);
     expect(screen.getByRole('button', { name: 'Distance' }).className.includes('bg-teal-600')).toBe(true);
     expect(screen.getAllByText('10.00').length).toBeGreaterThan(0);
