@@ -80,7 +80,7 @@ export function ModelGroupsSection({
   distanceMethod,
   models,
   selectedModelId = null,
-  clusteringMethod = 'upgma',
+  clusteringMethod = 'ward',
   onClusteringMethodChange,
 }: ModelGroupsSectionProps) {
   const summaryTableRef = useRef<HTMLDivElement>(null);
@@ -177,7 +177,6 @@ export function ModelGroupsSection({
             <>
               {onClusteringMethodChange != null && (
                 <div className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 p-1">
-                  <span className="px-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">Linkage</span>
                   <div className="inline-flex rounded-md border border-gray-200 bg-white p-1">
                     {LINKAGE_OPTIONS.map((option) => {
                       const active = clusteringMethod === option.value;
@@ -201,7 +200,6 @@ export function ModelGroupsSection({
               )}
 
               <div className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 p-1">
-                <span className="px-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">Data</span>
                 <div className="inline-flex rounded-md border border-gray-200 bg-white p-1">
                   {DATA_SOURCE_OPTIONS.map((option) => {
                     const active = dataSource === option.value;

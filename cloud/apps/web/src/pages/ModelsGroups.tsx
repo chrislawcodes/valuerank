@@ -79,7 +79,7 @@ export function ModelsGroups() {
   const [selectedSignature, setSelectedSignature] = useState<string>(searchParams.get('signature') ?? '');
   const [selectedModelIds, setSelectedModelIds] = useState<string[] | null>(null);
   const [useLegacyQuery, setUseLegacyQuery] = useState(false);
-  const [clusteringMethod, setClusteringMethod] = useState<'upgma' | 'ward'>('upgma');
+  const [clusteringMethod, setClusteringMethod] = useState<'upgma' | 'ward'>('ward');
   const [similarityMethod, setSimilarityMethod] = useState<CalculationMethod>('weighted-euclidean');
 
   const [{ data: signatureData, fetching: signaturesLoading, error: signaturesError }] = useQuery<
@@ -280,21 +280,14 @@ export function ModelsGroups() {
         }}
       />
 
-      <div className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-teal-700">Models</p>
-        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Model Clusters</h1>
-        <p className="max-w-3xl text-sm text-gray-600">
-          Clustered model families for the selected domain and signature.
-        </p>
-        {cacheStatusCopy != null && (
-          <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
-            <span className={`inline-flex rounded-full border px-2.5 py-1 font-semibold ${cacheStatusCopy.badgeClassName}`}>
-              {cacheStatusCopy.badgeLabel}
-            </span>
-            <span>{cacheStatusCopy.detail}</span>
-          </div>
-        )}
-      </div>
+      {cacheStatusCopy != null && (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+          <span className={`inline-flex rounded-full border px-2.5 py-1 font-semibold ${cacheStatusCopy.badgeClassName}`}>
+            {cacheStatusCopy.badgeLabel}
+          </span>
+          <span>{cacheStatusCopy.detail}</span>
+        </div>
+      )}
 
       {showPageLoader ? (
         <Loading size="lg" text="Loading model groups..." />

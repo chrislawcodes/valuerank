@@ -69,7 +69,10 @@ const defaultAnalysis = {
     ],
     unavailableModels: [],
     clusterAnalysis: defaultClusterAnalysis,
-    clusterAnalysisByMethod: { 'log-odds-euclidean-upgma': defaultClusterAnalysis },
+    clusterAnalysisByMethod: {
+      'log-odds-euclidean-upgma': defaultClusterAnalysis,
+      'log-odds-euclidean-ward': defaultClusterAnalysis,
+    },
   },
 };
 
@@ -170,7 +173,7 @@ describe('ModelsGroups', () => {
     );
 
     expect(await screen.findByRole('button', { name: /domain:/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Model Clusters', level: 1 })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Model Clusters', level: 1 })).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Model Clusters', level: 2 })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Similarity by Model' })).toBeInTheDocument();
   });
