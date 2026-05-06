@@ -82,8 +82,8 @@ function formatValueLabel(valueKey: string): string {
 export function formatPointShift(value: number | null): string {
   if (value == null || !Number.isFinite(value)) return 'n/a';
   const rounded = Math.round(value);
-  if (rounded === 0) return '0pp';
-  return `${rounded > 0 ? '+' : ''}${rounded}pp`;
+  if (rounded === 0) return '0';
+  return `${rounded > 0 ? '+' : ''}${rounded}`;
 }
 
 export function formatPercent(value: number | null): string {
