@@ -169,11 +169,13 @@ export function DomainAnalysis() {
     () => ({
       ...(selectedScope === 'DOMAIN' && selectedDomainId !== '' ? { domainId: selectedDomainId } : {}),
       ...(selectedSignature !== '' ? { signature: selectedSignature } : {}),
+      ...(selectedModelIds.length > 0 ? { modelIds: selectedModelIds } : {}),
     }),
-    [selectedDomainId, selectedScope, selectedSignature],
+    [selectedDomainId, selectedScope, selectedSignature, selectedModelIds],
   );
   const [{ data: pairwiseData }] = usePairwiseWinRatesQuery({
     variables: pairwiseVars,
+    pause: selectedModelIds.length === 0,
     requestPolicy: 'cache-and-network',
   });
 

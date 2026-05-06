@@ -2617,7 +2617,7 @@ type Query {
   openRunAnomalies(domainId: ID, type: RunAnomalyType): [RunAnomaly!]!
 
   """Pairwise win rates per value pair per model, vignette-averaged"""
-  pairwiseWinRates(domainId: ID, signature: String): PairwiseWinRatesResult!
+  pairwiseWinRates(domainId: ID, modelIds: [String!], signature: String): PairwiseWinRatesResult!
 
   """Get a specific preamble by ID"""
   preamble(id: ID!): Preamble
