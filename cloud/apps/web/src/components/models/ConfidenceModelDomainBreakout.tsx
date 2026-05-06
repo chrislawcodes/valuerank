@@ -6,7 +6,7 @@ import { ScreenshotButton } from '../ui/ScreenshotButton';
 import { cn } from '../../lib/utils';
 import {
   formatPercent,
-  formatPointShift,
+  formatReportPointShift,
   getCellTone,
   getWinRateTone,
   type DomainShiftDisplayMode,
@@ -24,7 +24,6 @@ type DomainOption = {
 
 export interface ConfidenceModelDomainBreakoutProps {
   domains: DomainOption[];
-  referenceModels: ModelsConfidenceModelResult[];
   signature: string;
   selectedModelIds: string[] | null;
   defaultModelIds: string[];
@@ -156,7 +155,6 @@ function buildModelRows(
   domains: DomainOption[],
   domainStates: Record<string, DomainQueryState>,
   effectiveModelIds: readonly string[],
-  overallConfidenceByModelId: ReadonlyMap<string, number | null>,
 ): ModelRowData[] {
   const modelLabels = new Map<string, string>();
 
@@ -172,6 +170,8 @@ function buildModelRows(
   }
 
   return effectiveModelIds.map((modelId) => {
+    let pooledStrong = 0;
+    let pooledLean = 0;
     const cells = new Map<string, ModelCellData>();
 
     for (const domain of domains) {
@@ -212,6 +212,8 @@ function buildModelRows(
 
       const total = model.overallStrongCount + model.overallLeanCount;
       const strongPct = total > 0 ? (model.overallStrongCount / total) * 100 : null;
+      pooledStrong += model.overallStrongCount;
+      pooledLean += model.overallLeanCount;
       cells.set(domain.id, {
         strongCount: model.overallStrongCount,
         leanCount: model.overallLeanCount,
@@ -221,7 +223,8 @@ function buildModelRows(
       });
     }
 
-    const averageStrongPct = overallConfidenceByModelId.get(modelId) ?? null;
+    const total = pooledStrong + pooledLean;
+    const averageStrongPct = total > 0 ? (pooledStrong / total) * 100 : null;
 
     for (const [domainId, cell] of cells.entries()) {
       if (cell.status !== 'ready' || cell.strongPct == null) continue;
@@ -243,7 +246,7 @@ function buildModelRows(
 function getCellValue(cell: ModelCellData, displayMode: DomainShiftDisplayMode): string {
   if (cell.status === 'loading') return '…';
   if (cell.status === 'error' || cell.strongPct == null) return '—';
-  if (displayMode === 'shift') return cell.shift == null ? '—' : formatPointShift(cell.shift);
+  if (displayMode === 'shift') return cell.shift == null ? '—' : formatReportPointShift(cell.shift);
   return formatPercent(cell.strongPct);
 }
 
@@ -305,7 +308,6 @@ function SortableHeader({
 
 export function ConfidenceModelDomainBreakout({
   domains,
-  referenceModels,
   signature,
   selectedModelIds,
   defaultModelIds,
@@ -323,13 +325,6 @@ export function ConfidenceModelDomainBreakout({
         ? domains.filter((domain) => domain.id === selectedDomainId)
         : domains,
     [domains, selectedDomainId],
-  );
-  const overallConfidenceByModelId = useMemo(
-    () =>
-      new Map<string, number | null>(
-        referenceModels.map((model) => [model.modelId, model.overallConfidence ?? null] as const),
-      ),
-    [referenceModels],
   );
   const noModelsSelected = effectiveModelIds.length === 0;
 
@@ -403,8 +398,8 @@ export function ConfidenceModelDomainBreakout({
   }, [client, signature, visibleDomains]);
 
   const rows = useMemo(
-    () => buildModelRows(visibleDomains, domainStates, effectiveModelIds, overallConfidenceByModelId),
-    [domainStates, effectiveModelIds, overallConfidenceByModelId, visibleDomains],
+    () => buildModelRows(visibleDomains, domainStates, effectiveModelIds),
+    [domainStates, effectiveModelIds, visibleDomains],
   );
 
   const sortedRows = useMemo(
