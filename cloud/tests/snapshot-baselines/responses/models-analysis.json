@@ -89,6 +89,12 @@
               "eligibleDomainCount": 4,
               "domains": [
                 {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 73.5111111111111,
+                  "evidenceWeight": 9
+                },
+                {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
                   "winRate": 37.47195767195768,
@@ -105,21 +111,21 @@
                   "domainName": "National Priorities",
                   "winRate": 94.44444444444444,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 73.5111111111111,
-                  "evidenceWeight": 9
                 }
               ]
             },
             {
               "valueKey": "Universalism_Nature",
-              "pooledWinRate": 53.466666666666676,
+              "pooledWinRate": 53.46666666666667,
               "stabilityScore": 72.57777777777778,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 26.04444444444445,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -137,21 +143,21 @@
                   "domainName": "National Priorities",
                   "winRate": 54.74074074074075,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 26.04444444444445,
-                  "evidenceWeight": 9
                 }
               ]
             },
             {
               "valueKey": "Benevolence_Dependability",
-              "pooledWinRate": 82.73888888888888,
+              "pooledWinRate": 82.7388888888889,
               "stabilityScore": 85.68518518518518,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 72.27407407407406,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -169,21 +175,21 @@
                   "domainName": "National Priorities",
                   "winRate": 85.25925925925925,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 72.27407407407406,
-                  "evidenceWeight": 9
                 }
               ]
             },
             {
               "valueKey": "Security_Personal",
-              "pooledWinRate": 82.27407407407408,
-              "stabilityScore": 80.39259259259259,
+              "pooledWinRate": 82.27407407407406,
+              "stabilityScore": 80.39259259259258,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 88.13333333333334,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -201,12 +207,6 @@
                   "domainName": "National Priorities",
                   "winRate": 84.96296296296296,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 88.13333333333334,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -216,6 +216,12 @@
               "stabilityScore": 93.64074074074074,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 0.9777777777777777,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -233,12 +239,6 @@
                   "domainName": "National Priorities",
                   "winRate": 2.222222222222222,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 0.9777777777777777,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -248,6 +248,12 @@
               "stabilityScore": 77.06349206349206,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 33.37671957671958,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -265,21 +271,21 @@
                   "domainName": "National Priorities",
                   "winRate": 34.37037037037037,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 33.37671957671958,
-                  "evidenceWeight": 9
                 }
               ]
             },
             {
               "valueKey": "Tradition",
               "pooledWinRate": 23.17407407407407,
-              "stabilityScore": 72.32962962962964,
+              "stabilityScore": 72.32962962962965,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 10.22222222222222,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -297,21 +303,21 @@
                   "domainName": "National Priorities",
                   "winRate": 18.44444444444444,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 10.22222222222222,
-                  "evidenceWeight": 9
                 }
               ]
             },
             {
               "valueKey": "Stimulation",
-              "pooledWinRate": 35.68201058201059,
-              "stabilityScore": 83.0153439153439,
+              "pooledWinRate": 35.682010582010584,
+              "stabilityScore": 83.01534391534392,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 52.66666666666667,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -329,21 +335,21 @@
                   "domainName": "National Priorities",
                   "winRate": 19.92592592592593,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 52.66666666666667,
-                  "evidenceWeight": 9
                 }
               ]
             },
             {
               "valueKey": "Hedonism",
-              "pooledWinRate": 48.61851851851853,
+              "pooledWinRate": 48.61851851851852,
               "stabilityScore": 85.1037037037037,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 58.8,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -361,12 +367,6 @@
                   "domainName": "National Priorities",
                   "winRate": 44,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 58.8,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -376,6 +376,12 @@
               "stabilityScore": 80.2994708994709,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 82.39365079365079,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -393,12 +399,6 @@
                   "domainName": "National Priorities",
                   "winRate": 61.62962962962963,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 82.39365079365079,
-                  "evidenceWeight": 9
                 }
               ]
             }
@@ -410,10 +410,16 @@
           "values": [
             {
               "valueKey": "Self_Direction_Action",
-              "pooledWinRate": 67.3388888888889,
-              "stabilityScore": 71.49814814814816,
+              "pooledWinRate": 67.30714285714286,
+              "stabilityScore": 71.5298941798942,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 76.83597883597884,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -431,12 +437,6 @@
                   "domainName": "National Priorities",
                   "winRate": 79.03703703703705,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 76.96296296296296,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -446,6 +446,12 @@
               "stabilityScore": 77.87407407407409,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 59.34814814814815,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -463,12 +469,6 @@
                   "domainName": "National Priorities",
                   "winRate": 58.07407407407408,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 59.34814814814815,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -478,6 +478,12 @@
               "stabilityScore": 84.72962962962963,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 70.75555555555555,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -495,21 +501,21 @@
                   "domainName": "National Priorities",
                   "winRate": 89.03703703703702,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 70.75555555555555,
-                  "evidenceWeight": 9
                 }
               ]
             },
             {
               "valueKey": "Security_Personal",
-              "pooledWinRate": 77.42592592592594,
+              "pooledWinRate": 77.42592592592592,
               "stabilityScore": 76.92592592592592,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 76.71111111111111,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -527,12 +533,6 @@
                   "domainName": "National Priorities",
                   "winRate": 86.5925925925926,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 76.71111111111111,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -542,6 +542,12 @@
               "stabilityScore": 80.58518518518518,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 1.155555555555556,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -559,21 +565,21 @@
                   "domainName": "National Priorities",
                   "winRate": 2,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 1.155555555555556,
-                  "evidenceWeight": 9
                 }
               ]
             },
             {
               "valueKey": "Achievement",
-              "pooledWinRate": 20.714814814814815,
+              "pooledWinRate": 20.71481481481482,
               "stabilityScore": 75.72592592592592,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 33.77777777777779,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -591,21 +597,21 @@
                   "domainName": "National Priorities",
                   "winRate": 31.92592592592592,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 33.77777777777779,
-                  "evidenceWeight": 9
                 }
               ]
             },
             {
               "valueKey": "Tradition",
-              "pooledWinRate": 37.43333333333333,
-              "stabilityScore": 78.0074074074074,
+              "pooledWinRate": 37.46507936507936,
+              "stabilityScore": 78.07089947089946,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 35.81587301587301,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -623,12 +629,6 @@
                   "domainName": "National Priorities",
                   "winRate": 42.14814814814815,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 35.68888888888889,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -638,6 +638,12 @@
               "stabilityScore": 72.83703703703704,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 55.15555555555556,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -655,12 +661,6 @@
                   "domainName": "National Priorities",
                   "winRate": 23.85185185185185,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 55.15555555555556,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -670,6 +670,12 @@
               "stabilityScore": 89.76851851851852,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 50.44444444444446,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -687,12 +693,6 @@
                   "domainName": "National Priorities",
                   "winRate": 35.03703703703704,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 50.44444444444446,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -702,6 +702,12 @@
               "stabilityScore": 73.4148148148148,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 38.22222222222222,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -719,12 +725,6 @@
                   "domainName": "National Priorities",
                   "winRate": 52.2962962962963,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 38.22222222222222,
-                  "evidenceWeight": 9
                 }
               ]
             }
@@ -736,10 +736,16 @@
           "values": [
             {
               "valueKey": "Self_Direction_Action",
-              "pooledWinRate": 67.86944444444444,
-              "stabilityScore": 68.85648148148148,
+              "pooledWinRate": 67.83637566137565,
+              "stabilityScore": 68.88955026455025,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 77.7862433862434,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -757,12 +763,6 @@
                   "domainName": "National Priorities",
                   "winRate": 76.96296296296296,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 77.91851851851852,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -772,6 +772,12 @@
               "stabilityScore": 78.18148148148148,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 47.38518518518519,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -789,12 +795,6 @@
                   "domainName": "National Priorities",
                   "winRate": 55.70370370370371,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 47.38518518518519,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -804,6 +804,12 @@
               "stabilityScore": 82.56296296296297,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 73.91111111111111,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -821,12 +827,6 @@
                   "domainName": "National Priorities",
                   "winRate": 74.51851851851852,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 73.91111111111111,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -836,6 +836,12 @@
               "stabilityScore": 80.3111111111111,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 75.15555555555555,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -853,12 +859,6 @@
                   "domainName": "National Priorities",
                   "winRate": 82.37037037037038,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 75.15555555555555,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -868,6 +868,12 @@
               "stabilityScore": 86.63518518518518,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 4.644444444444445,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -885,12 +891,6 @@
                   "domainName": "National Priorities",
                   "winRate": 8,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 4.644444444444445,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -900,6 +900,12 @@
               "stabilityScore": 69.79444444444445,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 44.46666666666667,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -917,21 +923,21 @@
                   "domainName": "National Priorities",
                   "winRate": 34.66666666666667,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 44.46666666666667,
-                  "evidenceWeight": 9
                 }
               ]
             },
             {
               "valueKey": "Tradition",
-              "pooledWinRate": 38.54444444444445,
-              "stabilityScore": 68.25925925925924,
+              "pooledWinRate": 38.5973544973545,
+              "stabilityScore": 68.36507936507935,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 28.3005291005291,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -949,12 +955,6 @@
                   "domainName": "National Priorities",
                   "winRate": 46.07407407407408,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 28.08888888888889,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -964,6 +964,12 @@
               "stabilityScore": 80.75925925925927,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 51.9037037037037,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -981,12 +987,6 @@
                   "domainName": "National Priorities",
                   "winRate": 28.74074074074074,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 51.9037037037037,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -996,6 +996,12 @@
               "stabilityScore": 92.81666666666666,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 43.15555555555555,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -1013,21 +1019,21 @@
                   "domainName": "National Priorities",
                   "winRate": 36.51851851851852,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 43.15555555555555,
-                  "evidenceWeight": 9
                 }
               ]
             },
             {
               "valueKey": "Conformity_Interpersonal",
-              "pooledWinRate": 56.574603174603176,
+              "pooledWinRate": 56.57460317460318,
               "stabilityScore": 76.70793650793651,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 42.65396825396826,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -1045,12 +1051,6 @@
                   "domainName": "National Priorities",
                   "winRate": 56.14814814814815,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 42.65396825396826,
-                  "evidenceWeight": 9
                 }
               ]
             }
@@ -1066,6 +1066,12 @@
               "stabilityScore": 81.22367724867725,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 64.19259259259259,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -1083,12 +1089,6 @@
                   "domainName": "National Priorities",
                   "winRate": 69.4814814814815,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 64.19259259259259,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -1098,6 +1098,12 @@
               "stabilityScore": 91.37037037037035,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 37.2,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -1115,21 +1121,21 @@
                   "domainName": "National Priorities",
                   "winRate": 50.51851851851853,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 37.2,
-                  "evidenceWeight": 9
                 }
               ]
             },
             {
               "valueKey": "Benevolence_Dependability",
-              "pooledWinRate": 63.083333333333336,
+              "pooledWinRate": 63.08333333333333,
               "stabilityScore": 93.87037037037037,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 58.03703703703703,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -1147,12 +1153,6 @@
                   "domainName": "National Priorities",
                   "winRate": 66.74074074074075,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 58.03703703703703,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -1162,6 +1162,12 @@
               "stabilityScore": 77.44074074074075,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 66.97037037037038,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -1179,12 +1185,6 @@
                   "domainName": "National Priorities",
                   "winRate": 77.4814814814815,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 66.97037037037038,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -1194,6 +1194,12 @@
               "stabilityScore": 85.14629629629628,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 35.16296296296296,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -1211,12 +1217,6 @@
                   "domainName": "National Priorities",
                   "winRate": 19.33333333333333,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 35.16296296296296,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -1226,6 +1226,12 @@
               "stabilityScore": 84.43571428571427,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 54.72486772486774,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -1243,12 +1249,6 @@
                   "domainName": "National Priorities",
                   "winRate": 40.81481481481482,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 54.72486772486774,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -1258,6 +1258,12 @@
               "stabilityScore": 85.74814814814815,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 37.73333333333333,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -1275,12 +1281,6 @@
                   "domainName": "National Priorities",
                   "winRate": 42.2962962962963,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 37.73333333333333,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -1290,6 +1290,12 @@
               "stabilityScore": 91.33994708994709,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 47.25185185185185,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -1307,21 +1313,21 @@
                   "domainName": "National Priorities",
                   "winRate": 32.2962962962963,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 47.25185185185185,
-                  "evidenceWeight": 9
                 }
               ]
             },
             {
               "valueKey": "Hedonism",
-              "pooledWinRate": 44.01203703703703,
-              "stabilityScore": 93.3638888888889,
+              "pooledWinRate": 44.01203703703704,
+              "stabilityScore": 93.36388888888888,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 40.56296296296296,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -1339,12 +1345,6 @@
                   "domainName": "National Priorities",
                   "winRate": 41.85185185185185,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 40.56296296296296,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -1354,6 +1354,12 @@
               "stabilityScore": 93.54656084656085,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 56.21587301587302,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -1371,12 +1377,6 @@
                   "domainName": "National Priorities",
                   "winRate": 57.11111111111111,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 56.21587301587302,
-                  "evidenceWeight": 9
                 }
               ]
             }
@@ -1393,16 +1393,16 @@
               "eligibleDomainCount": 2,
               "domains": [
                 {
-                  "domainId": "cmnn9r7200000a4yaye4uh16j",
-                  "domainName": "Software Approach Choice",
-                  "winRate": 76,
-                  "evidenceWeight": 2
-                },
-                {
                   "domainId": "cmmqi1urq0000e4y3ot8sfm06",
                   "domainName": "Job Choice",
                   "winRate": 62.48888888888889,
                   "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 76,
+                  "evidenceWeight": 2
                 }
               ]
             },
@@ -1497,16 +1497,16 @@
               "eligibleDomainCount": 2,
               "domains": [
                 {
-                  "domainId": "cmnn9r7200000a4yaye4uh16j",
-                  "domainName": "Software Approach Choice",
-                  "winRate": 26,
-                  "evidenceWeight": 1
-                },
-                {
                   "domainId": "cmmqi1urq0000e4y3ot8sfm06",
                   "domainName": "Job Choice",
                   "winRate": 45.64444444444445,
                   "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 26,
+                  "evidenceWeight": 1
                 }
               ]
             },
@@ -1517,16 +1517,16 @@
               "eligibleDomainCount": 2,
               "domains": [
                 {
-                  "domainId": "cmnn9r7200000a4yaye4uh16j",
-                  "domainName": "Software Approach Choice",
-                  "winRate": 20,
-                  "evidenceWeight": 1
-                },
-                {
                   "domainId": "cmmqi1urq0000e4y3ot8sfm06",
                   "domainName": "Job Choice",
                   "winRate": 47.26666666666667,
                   "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 20,
+                  "evidenceWeight": 1
                 }
               ]
             },
@@ -1552,10 +1552,16 @@
           "values": [
             {
               "valueKey": "Self_Direction_Action",
-              "pooledWinRate": 65.32962962962964,
+              "pooledWinRate": 65.32962962962962,
               "stabilityScore": 67.47407407407408,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 55.53333333333333,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -1573,12 +1579,6 @@
                   "domainName": "National Priorities",
                   "winRate": 88.22222222222223,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 55.53333333333333,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -1588,6 +1588,12 @@
               "stabilityScore": 86.1925925925926,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 60.44444444444446,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -1605,12 +1611,6 @@
                   "domainName": "National Priorities",
                   "winRate": 55.4074074074074,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 60.44444444444446,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -1620,6 +1620,12 @@
               "stabilityScore": 94.15555555555557,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 89.09629629629632,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -1637,12 +1643,6 @@
                   "domainName": "National Priorities",
                   "winRate": 86.96296296296295,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 89.09629629629632,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -1652,6 +1652,12 @@
               "stabilityScore": 73.49259259259257,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 65.26666666666667,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -1669,12 +1675,6 @@
                   "domainName": "National Priorities",
                   "winRate": 86,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 65.26666666666667,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -1684,6 +1684,12 @@
               "stabilityScore": 75.78703703703704,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 1.066666666666667,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -1701,12 +1707,6 @@
                   "domainName": "National Priorities",
                   "winRate": 3.851851851851852,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 1.066666666666667,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -1716,6 +1716,12 @@
               "stabilityScore": 86.49391534391533,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 50.31957671957673,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -1733,12 +1739,6 @@
                   "domainName": "National Priorities",
                   "winRate": 46.8888888888889,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 50.31957671957673,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -1748,6 +1748,12 @@
               "stabilityScore": 73.62962962962962,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 63.51111111111112,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -1765,21 +1771,21 @@
                   "domainName": "National Priorities",
                   "winRate": 49.1851851851852,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 63.51111111111112,
-                  "evidenceWeight": 9
                 }
               ]
             },
             {
               "valueKey": "Stimulation",
-              "pooledWinRate": 24.261111111111113,
+              "pooledWinRate": 24.26111111111111,
               "stabilityScore": 89.95,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 34.31111111111112,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -1797,21 +1803,21 @@
                   "domainName": "National Priorities",
                   "winRate": 21.7037037037037,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 34.31111111111112,
-                  "evidenceWeight": 9
                 }
               ]
             },
             {
               "valueKey": "Hedonism",
-              "pooledWinRate": 27.240740740740737,
+              "pooledWinRate": 27.24074074074074,
               "stabilityScore": 88.39259259259259,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 26.8,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -1829,12 +1835,6 @@
                   "domainName": "National Priorities",
                   "winRate": 16.07407407407407,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 26.8,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -1844,6 +1844,12 @@
               "stabilityScore": 74.62645502645502,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 53.65079365079365,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -1861,12 +1867,6 @@
                   "domainName": "National Priorities",
                   "winRate": 45.7037037037037,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 53.65079365079365,
-                  "evidenceWeight": 9
                 }
               ]
             }
@@ -1878,10 +1878,16 @@
           "values": [
             {
               "valueKey": "Self_Direction_Action",
-              "pooledWinRate": 56.088888888888896,
-              "stabilityScore": 84.75555555555555,
+              "pooledWinRate": 56.06375661375662,
+              "stabilityScore": 84.73042328042328,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 52.80317460317461,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -1899,12 +1905,6 @@
                   "domainName": "National Priorities",
                   "winRate": 71.33333333333334,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 52.90370370370371,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -1914,6 +1914,12 @@
               "stabilityScore": 95.85925925925926,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 71.52592592592592,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -1931,12 +1937,6 @@
                   "domainName": "National Priorities",
                   "winRate": 73.99999999999999,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 71.52592592592592,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -1946,6 +1946,12 @@
               "stabilityScore": 90.71851851851852,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 77.57037037037037,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -1963,12 +1969,6 @@
                   "domainName": "National Priorities",
                   "winRate": 92.07407407407408,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 77.57037037037037,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -1978,6 +1978,12 @@
               "stabilityScore": 76.91851851851852,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 57.2888888888889,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -1995,12 +2001,6 @@
                   "domainName": "National Priorities",
                   "winRate": 74.37037037037038,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 57.2888888888889,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -2010,6 +2010,12 @@
               "stabilityScore": 66.70370370370371,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 0.977777777777778,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -2027,12 +2033,6 @@
                   "domainName": "National Priorities",
                   "winRate": 1.259259259259259,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 0.977777777777778,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -2042,6 +2042,12 @@
               "stabilityScore": 88.0111111111111,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 52.54074074074073,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -2059,21 +2065,21 @@
                   "domainName": "National Priorities",
                   "winRate": 38.66666666666666,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 52.54074074074073,
-                  "evidenceWeight": 9
                 }
               ]
             },
             {
               "valueKey": "Tradition",
-              "pooledWinRate": 33.50555555555555,
-              "stabilityScore": 89.90185185185184,
+              "pooledWinRate": 33.53068783068783,
+              "stabilityScore": 89.87671957671957,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 34.87830687830688,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -2091,21 +2097,21 @@
                   "domainName": "National Priorities",
                   "winRate": 42.14814814814815,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 34.77777777777777,
-                  "evidenceWeight": 9
                 }
               ]
             },
             {
               "valueKey": "Stimulation",
-              "pooledWinRate": 41.199999999999996,
-              "stabilityScore": 86.8888888888889,
+              "pooledWinRate": 41.2,
+              "stabilityScore": 86.88888888888889,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 54.31111111111111,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -2123,21 +2129,21 @@
                   "domainName": "National Priorities",
                   "winRate": 33.4074074074074,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 54.31111111111111,
-                  "evidenceWeight": 9
                 }
               ]
             },
             {
               "valueKey": "Hedonism",
-              "pooledWinRate": 35.898148148148145,
+              "pooledWinRate": 35.89814814814815,
               "stabilityScore": 82.47222222222223,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 38.06666666666667,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -2155,21 +2161,21 @@
                   "domainName": "National Priorities",
                   "winRate": 18.37037037037037,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 38.06666666666667,
-                  "evidenceWeight": 9
                 }
               ]
             },
             {
               "valueKey": "Conformity_Interpersonal",
-              "pooledWinRate": 54.4037037037037,
+              "pooledWinRate": 54.403703703703705,
               "stabilityScore": 83.34074074074074,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 57.73333333333333,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -2186,12 +2192,6 @@
                   "domainId": "cmo4qe4lq0000wctzujwjgg1k",
                   "domainName": "National Priorities",
                   "winRate": 54.37037037037036,
-                  "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 57.73333333333333,
                   "evidenceWeight": 9
                 }
               ]
@@ -2502,10 +2502,16 @@
           "values": [
             {
               "valueKey": "Self_Direction_Action",
-              "pooledWinRate": 67.5116402116402,
-              "stabilityScore": 67.94920634920635,
+              "pooledWinRate": 67.51693121693121,
+              "stabilityScore": 67.95978835978836,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 62.37883597883598,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -2523,12 +2529,6 @@
                   "domainName": "National Priorities",
                   "winRate": 92.37037037037035,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 62.35767195767195,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -2538,6 +2538,12 @@
               "stabilityScore": 70.29021164021162,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 50.96825396825398,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -2555,12 +2561,6 @@
                   "domainName": "National Priorities",
                   "winRate": 61.18518518518519,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 50.96825396825398,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -2570,6 +2570,12 @@
               "stabilityScore": 77.78148148148148,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 52.77037037037037,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -2587,21 +2593,21 @@
                   "domainName": "National Priorities",
                   "winRate": 81.11111111111111,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 52.77037037037037,
-                  "evidenceWeight": 9
                 }
               ]
             },
             {
               "valueKey": "Security_Personal",
-              "pooledWinRate": 78.76296296296296,
-              "stabilityScore": 60.70370370370372,
+              "pooledWinRate": 78.76296296296294,
+              "stabilityScore": 60.7037037037037,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 88.17777777777776,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -2619,12 +2625,6 @@
                   "domainName": "National Priorities",
                   "winRate": 90.88888888888889,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 88.17777777777776,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -2634,6 +2634,12 @@
               "stabilityScore": 73.83888888888889,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 0.925925925925926,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -2651,21 +2657,21 @@
                   "domainName": "National Priorities",
                   "winRate": 2,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 0.925925925925926,
-                  "evidenceWeight": 9
                 }
               ]
             },
             {
               "valueKey": "Achievement",
-              "pooledWinRate": 28.728703703703705,
-              "stabilityScore": 93.69722222222222,
+              "pooledWinRate": 28.728703703703708,
+              "stabilityScore": 93.69722222222224,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 32.38518518518519,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -2683,21 +2689,21 @@
                   "domainName": "National Priorities",
                   "winRate": 31.03703703703703,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 32.38518518518519,
-                  "evidenceWeight": 9
                 }
               ]
             },
             {
               "valueKey": "Tradition",
-              "pooledWinRate": 18.17037037037037,
-              "stabilityScore": 94.77037037037037,
+              "pooledWinRate": 18.165079365079364,
+              "stabilityScore": 94.78095238095237,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 20.43809523809524,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -2715,21 +2721,21 @@
                   "domainName": "National Priorities",
                   "winRate": 21.11111111111111,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 20.45925925925926,
-                  "evidenceWeight": 9
                 }
               ]
             },
             {
               "valueKey": "Stimulation",
-              "pooledWinRate": 26.381481481481487,
+              "pooledWinRate": 26.381481481481483,
               "stabilityScore": 86.69259259259259,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 39.68888888888889,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -2747,12 +2753,6 @@
                   "domainName": "National Priorities",
                   "winRate": 19.48148148148148,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 39.68888888888889,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -2762,6 +2762,12 @@
               "stabilityScore": 88.25185185185185,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 60.88888888888888,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -2779,21 +2785,21 @@
                   "domainName": "National Priorities",
                   "winRate": 41.18518518518519,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 60.88888888888888,
-                  "evidenceWeight": 9
                 }
               ]
             },
             {
               "valueKey": "Conformity_Interpersonal",
-              "pooledWinRate": 71.0851851851852,
+              "pooledWinRate": 71.08518518518518,
               "stabilityScore": 73.01481481481481,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 91.37777777777778,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -2810,12 +2816,6 @@
                   "domainId": "cmo4qe4lq0000wctzujwjgg1k",
                   "domainName": "National Priorities",
                   "winRate": 59.62962962962963,
-                  "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 91.37777777777778,
                   "evidenceWeight": 9
                 }
               ]
@@ -2985,16 +2985,16 @@
               "eligibleDomainCount": 2,
               "domains": [
                 {
-                  "domainId": "cmnn9r7200000a4yaye4uh16j",
-                  "domainName": "Software Approach Choice",
-                  "winRate": 70.95454545454545,
-                  "evidenceWeight": 2
-                },
-                {
                   "domainId": "cmmqi1urq0000e4y3ot8sfm06",
                   "domainName": "Job Choice",
                   "winRate": 78.01058201058201,
                   "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 70.95454545454545,
+                  "evidenceWeight": 2
                 }
               ]
             },
@@ -3089,16 +3089,16 @@
               "eligibleDomainCount": 2,
               "domains": [
                 {
-                  "domainId": "cmnn9r7200000a4yaye4uh16j",
-                  "domainName": "Software Approach Choice",
-                  "winRate": 39,
-                  "evidenceWeight": 1
-                },
-                {
                   "domainId": "cmmqi1urq0000e4y3ot8sfm06",
                   "domainName": "Job Choice",
                   "winRate": 56.52275132275134,
                   "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 39,
+                  "evidenceWeight": 1
                 }
               ]
             },
@@ -3109,16 +3109,16 @@
               "eligibleDomainCount": 2,
               "domains": [
                 {
-                  "domainId": "cmnn9r7200000a4yaye4uh16j",
-                  "domainName": "Software Approach Choice",
-                  "winRate": 19.09090909090909,
-                  "evidenceWeight": 1
-                },
-                {
                   "domainId": "cmmqi1urq0000e4y3ot8sfm06",
                   "domainName": "Job Choice",
                   "winRate": 49.83703703703704,
                   "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 19.09090909090909,
+                  "evidenceWeight": 1
                 }
               ]
             },
@@ -3144,10 +3144,16 @@
           "values": [
             {
               "valueKey": "Self_Direction_Action",
-              "pooledWinRate": 77.88544973544974,
-              "stabilityScore": 69.9473544973545,
+              "pooledWinRate": 77.89338624338625,
+              "stabilityScore": 69.93941798941799,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 83.81481481481482,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -3165,12 +3171,6 @@
                   "domainName": "National Priorities",
                   "winRate": 95.4814814814815,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 83.7830687830688,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -3180,6 +3180,12 @@
               "stabilityScore": 87.86666666666666,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 33.25925925925926,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -3197,12 +3203,6 @@
                   "domainName": "National Priorities",
                   "winRate": 41.85185185185185,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 33.25925925925926,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -3212,6 +3212,12 @@
               "stabilityScore": 90.98333333333332,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 61.91851851851852,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -3229,12 +3235,6 @@
                   "domainName": "National Priorities",
                   "winRate": 73.4074074074074,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 61.91851851851852,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -3244,6 +3244,12 @@
               "stabilityScore": 71.96798941798941,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 79.37248677248677,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -3261,12 +3267,6 @@
                   "domainName": "National Priorities",
                   "winRate": 83.62962962962963,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 79.37248677248677,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -3276,6 +3276,12 @@
               "stabilityScore": 72.9787037037037,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 18.04444444444445,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -3293,12 +3299,6 @@
                   "domainName": "National Priorities",
                   "winRate": 11.85185185185185,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 18.04444444444445,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -3308,6 +3308,12 @@
               "stabilityScore": 84.35000000000001,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 58.09629629629629,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -3325,21 +3331,21 @@
                   "domainName": "National Priorities",
                   "winRate": 64.51851851851852,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 58.09629629629629,
-                  "evidenceWeight": 9
                 }
               ]
             },
             {
               "valueKey": "Tradition",
-              "pooledWinRate": 33.548148148148144,
-              "stabilityScore": 67.86666666666667,
+              "pooledWinRate": 33.54021164021164,
+              "stabilityScore": 67.85079365079366,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 15.74603174603175,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -3357,12 +3363,6 @@
                   "domainName": "National Priorities",
                   "winRate": 35.18518518518518,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 15.77777777777778,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -3372,6 +3372,12 @@
               "stabilityScore": 85.97142857142859,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 49.73333333333333,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -3389,21 +3395,21 @@
                   "domainName": "National Priorities",
                   "winRate": 28.96296296296297,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 49.73333333333333,
-                  "evidenceWeight": 9
                 }
               ]
             },
             {
               "valueKey": "Hedonism",
-              "pooledWinRate": 36.16111111111112,
+              "pooledWinRate": 36.16111111111111,
               "stabilityScore": 80.00370370370369,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 46.6888888888889,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -3421,12 +3427,6 @@
                   "domainName": "National Priorities",
                   "winRate": 19.11111111111111,
                   "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 46.6888888888889,
-                  "evidenceWeight": 9
                 }
               ]
             },
@@ -3436,6 +3436,12 @@
               "stabilityScore": 83.22539682539683,
               "eligibleDomainCount": 4,
               "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 51.16825396825397,
+                  "evidenceWeight": 9
+                },
                 {
                   "domainId": "cmnn9r7200000a4yaye4uh16j",
                   "domainName": "Software Approach Choice",
@@ -3452,12 +3458,6 @@
                   "domainId": "cmo4qe4lq0000wctzujwjgg1k",
                   "domainName": "National Priorities",
                   "winRate": 46,
-                  "evidenceWeight": 9
-                },
-                {
-                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
-                  "domainName": "Job Choice",
-                  "winRate": 51.16825396825397,
                   "evidenceWeight": 9
                 }
               ]

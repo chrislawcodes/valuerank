@@ -2722,6 +2722,8 @@ export type Query = {
   survey?: Maybe<Experiment>;
   /** List surveys (stored as experiments with analysisPlan.kind="survey"). */
   surveys: Array<Experiment>;
+  /** List runs in PENDING, RUNNING, PAUSED, or SUMMARIZING status that are not members of any DomainEvaluation. Used by the /status page to surface ad-hoc runs. */
+  standaloneActiveRuns: Array<Run>;
   /**
    *
    *       Get combined health status for all system components.
@@ -4827,6 +4829,11 @@ export type SurveysQueryVariables = Exact<{
 
 
 export type SurveysQuery = { __typename?: 'Query', surveys: Array<{ __typename?: 'Experiment', id: string, name: string, hypothesis?: string | null, analysisPlan?: unknown | null, createdAt: string, updatedAt: string, runCount: number }> };
+
+export type StandaloneActiveRunsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type StandaloneActiveRunsQuery = { __typename?: 'Query', standaloneActiveRuns: Array<{ __typename?: 'Run', id: string, status: string, createdAt: string, startedAt?: string | null, config: unknown, definition?: { __typename?: 'Definition', id: string, name: string } | null }> };
 
 export type CreateSurveyMutationVariables = Exact<{
   input: CreateSurveyInput;
@@ -7622,6 +7629,25 @@ export const SurveysDocument = gql`
 
 export function useSurveysQuery(options?: Omit<Urql.UseQueryArgs<SurveysQueryVariables>, 'query'>) {
   return Urql.useQuery<SurveysQuery, SurveysQueryVariables>({ query: SurveysDocument, ...options });
+};
+export const StandaloneActiveRunsDocument = gql`
+    query StandaloneActiveRuns {
+  standaloneActiveRuns {
+    id
+    status
+    createdAt
+    startedAt
+    config
+    definition {
+      id
+      name
+    }
+  }
+}
+    `;
+
+export function useStandaloneActiveRunsQuery(options?: Omit<Urql.UseQueryArgs<StandaloneActiveRunsQueryVariables>, 'query'>) {
+  return Urql.useQuery<StandaloneActiveRunsQuery, StandaloneActiveRunsQueryVariables>({ query: StandaloneActiveRunsDocument, ...options });
 };
 export const CreateSurveyDocument = gql`
     mutation CreateSurvey($input: CreateSurveyInput!) {

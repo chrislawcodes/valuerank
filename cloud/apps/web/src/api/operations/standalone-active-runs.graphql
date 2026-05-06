@@ -1,0 +1,13 @@
+query StandaloneActiveRuns {
+  standaloneActiveRuns {
+    id
+    status
+    createdAt
+    startedAt
+    config
+    definition {
+      id
+      name
+    }
+  }
+}

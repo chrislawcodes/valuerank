@@ -1,6 +1,7 @@
 import { useSearchParams } from 'react-router-dom';
 import { ActiveEvaluationsSection } from '../components/status/ActiveEvaluationsSection';
 import { OpenAnomaliesSection } from '../components/status/OpenAnomaliesSection';
+import { StandaloneActiveRunsSection } from '../components/status/StandaloneActiveRunsSection';
 import { StatusFilters } from '../components/status/StatusFilters';
 
 const POLL_MS = 5000;
@@ -17,6 +18,7 @@ export function Status() {
       <StatusFilters />
       <OpenAnomaliesSection domainId={normalizedDomainId} type={typeFilter} pollIntervalMs={POLL_MS} />
       <ActiveEvaluationsSection domainId={normalizedDomainId} pollIntervalMs={POLL_MS} />
+      <StandaloneActiveRunsSection pollIntervalMs={POLL_MS} />
     </div>
   );
 }
