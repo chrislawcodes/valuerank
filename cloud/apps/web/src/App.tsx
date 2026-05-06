@@ -31,7 +31,6 @@ import { Analysis } from './pages/Analysis';
 import { AnalysisDetail } from './pages/AnalysisDetail';
 import { AnalysisConditionDetail } from './pages/AnalysisConditionDetail';
 import { AnalysisTranscripts } from './pages/AnalysisTranscripts';
-import { VignettePairedAnalysis } from './pages/VignettePairedAnalysis';
 import { Survey } from './pages/Survey';
 import { SurveyResults } from './pages/SurveyResults';
 import { SettingsAccount } from './pages/SettingsAccount';
@@ -282,14 +281,6 @@ function App() {
               element={
                 <ProtectedLayout>
                   <AnalysisDetail />
-                </ProtectedLayout>
-              }
-            />
-            <Route
-              path="/vignette/:definitionId/paired"
-              element={
-                <ProtectedLayout>
-                  <VignettePairedAnalysis />
                 </ProtectedLayout>
               }
             />
