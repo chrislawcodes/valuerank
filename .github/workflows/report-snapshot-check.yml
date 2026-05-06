@@ -2,7 +2,7 @@ name: Report Snapshot Check
 
 # Verifies that the visible numeric output of every Models-nav report page
 # (at signature=vnewtd, all domains, default models) has not changed against
-# production. Fails loudly if any snapshot diverges.
+# production. Reports drift loudly, but does not block merges.
 #
 # Triggers:
 #   - push to main: catches changes introduced by merged PRs
@@ -18,7 +18,7 @@ on:
   push:
     branches: [main]
   schedule:
-    - cron: '0 */6 * * *'
+    - cron: "0 */6 * * *"
   workflow_dispatch:
 
 jobs:
@@ -40,8 +40,21 @@ jobs:
         run: npm ci
 
       - name: Verify snapshots
+        id: verify
         working-directory: cloud
         env:
           PROD_GRAPHQL_URL: https://api-production-8494.up.railway.app/graphql
           PROD_API_KEY: ${{ secrets.PROD_API_KEY }}
+        continue-on-error: true
         run: npm run verify:report-snapshots
+
+      - name: Flag snapshot drift
+        if: steps.verify.outcome == 'failure'
+        run: |
+          echo "::warning title=Report snapshot drift detected::The snapshot verification step failed, but this workflow is configured to stay non-blocking."
+          cat <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+          ## Snapshot drift detected
+          The report snapshot verification step failed, but the workflow stayed green so intentional report changes do not block merges.
+
+          Review the `Verify snapshots` step logs for the exact differences.
+          EOF
