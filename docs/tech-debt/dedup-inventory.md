@@ -52,6 +52,7 @@ DEDUP-8 (`isRecord`) is independent of report output — pure type guard.
 | DEDUP-12 | Run lifecycle / recovery sprawl | API | Medium-Low | Large | Decision needed |
 | DEDUP-13 | `validate_input` pattern across 5 workers | Workers | Low | Small | Open |
 | DEDUP-14 | `DomainAnalysisLegacy` GraphQL query — alive, feeds Models + Domains pages | Web | Medium | Large (migration, not delete) | Decision needed |
+| ~~DEDUP-15~~ | ~~`runsWithAnalysis(ids:)` resolver and query unused~~ | ~~API + Web~~ | ~~Medium~~ | ~~Small (deletion)~~ | **Resolved — PR #927** |
 
 Status values: `Open` (mechanical, ready to do) · `Decision needed` (needs a direction call before code) · `Investigate` (verify before deleting) · `In progress` (PR open) · `Blocked`
 
@@ -189,6 +190,22 @@ Added `hasAnalysis?: boolean` and `analysisStatus?` params to `useRuns` and `use
 
 **Decision needed:** Migration plan. Treat this as Large lift, paired with DEDUP-6 (snapshot builder twin) since both touch the domain-analysis pipeline.
 
+### DEDUP-15 — `runsWithAnalysis(ids:)` resolver and query unused
+
+**Status: Resolved in PR #927 (2026-05-05).**
+
+The `runsWithAnalysis(ids: [ID!]!)` GraphQL resolver and its paired web query had zero product consumers. The architecture decision documented at `cloud/specs/016-analysis-tab/plan.md` (lines 43–51) explicitly chose NOT to have this resolver, preferring the canonical `runs(hasAnalysis: true)` filter instead. Phase 1 grep across `cloud/` confirmed no files outside the deleted files themselves referenced the resolver or its generated types.
+
+**What was removed:**
+- `cloud/apps/web/src/api/operations/comparison.graphql` — `RunsWithAnalysis` query block (~9 lines)
+- `cloud/apps/web/src/api/operations/comparison.ts` — export + two manual query types (~15 lines)
+- `cloud/apps/api/src/graphql/queries/run.ts` — resolver, `MAX_COMPARISON_RUNS` constant, `ValidationError` import (~55 lines)
+- `cloud/apps/api/tests/graphql/queries/run.test.ts` — full `describe('runsWithAnalysis(ids)')` block (~226 lines)
+- `cloud/apps/web/schema.graphql` — `runsWithAnalysis` field removed from schema snapshot
+- `cloud/apps/web/src/generated/graphql.ts` — `RunsWithAnalysisDocument` and related codegen output removed
+
+Total: ~250 LOC removed. Lint, build, and report snapshots all passed clean post-deletion.
+
 ## Dead-code candidates (verified 2026-05-05)
 
 Phase 1 flagged six likely-dead files. Verification found four were **not** dead. Recording the audit trail so they don't get re-flagged.
@@ -230,6 +247,7 @@ Tracking infrastructure that protects against dedup-induced (or any) drift in us
 |---|---|---|---|---|
 | DEDUP-8 | `isRecord` consolidation | #928 | 2026-05-05 | 8 byte-identical sites consolidated to `cloud/apps/api/src/utils/isRecord.ts`. `isPlainJsonObject` renamed to `isRecord` in summarize handlers. `services/consistency/modelsConsistencyData.ts` narrowing variant intentionally left in place per Models-reports preserve constraint. |
 | DEDUP-3 | `useRuns` / `useRunsWithAnalysis` hook collapse | #934 | 2026-05-05 | Added `hasAnalysis` + `analysisStatus` params to `useRuns` and `useInfiniteRuns`. Deleted `useRunsWithAnalysis.ts` and `useInfiniteRunsWithAnalysis.ts`. `comparison.graphql:RunsWithAnalysis` left in place (different resolver). |
+| DEDUP-15 | `runsWithAnalysis(ids:)` resolver and web query deleted | #927 | 2026-05-05 | Zero consumers. Architecture decision at `cloud/specs/016-analysis-tab/plan.md` chose `runs(hasAnalysis:)` instead. ~250 LOC removed across API resolver, tests, web query, re-export, manual types. Schema snapshot and codegen regenerated. |
 
 ### Dead-code deletions
 
