@@ -4,6 +4,7 @@ import math
 from typing import Any
 
 from common.errors import ValidationError
+from common.validation import require_field, require_list
 from stats.decision_model import SIGNED_TO_BUCKET, resolve_transcript_signed_distance
 from stats.preference_stats import compute_two_step_by_value
 
@@ -28,8 +29,7 @@ _NEUTRAL_DIRECTION_BUCKETS: tuple[str, ...] = (
 
 def validate_input(data: dict[str, Any]) -> None:
     """Validate analyze basic input."""
-    if "runId" not in data:
-        raise ValidationError(message="Missing required field: runId")
+    require_field(data, "runId")
 
     if "transcripts" not in data:
         # Legacy format: transcriptIds only (for backwards compatibility)
@@ -38,8 +38,7 @@ def validate_input(data: dict[str, Any]) -> None:
             return
         raise ValidationError(message="Missing required field: transcripts")
 
-    if not isinstance(data["transcripts"], list):
-        raise ValidationError(message="transcripts must be an array")
+    require_list(data, "transcripts")
 
     if "emitVignetteSemantics" in data and not isinstance(data["emitVignetteSemantics"], bool):
         raise ValidationError(message="emitVignetteSemantics must be a boolean")

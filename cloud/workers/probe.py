@@ -85,6 +85,7 @@ from common.cost import CostSnapshot, create_cost_snapshot
 from common.errors import ErrorCode, LLMError, ValidationError, WorkerError, classify_exception
 from common.llm_adapters import LLMResponse, generate, infer_provider
 from common.logging import get_logger
+from common.validation import require_fields
 
 log = get_logger("probe")
 
@@ -232,13 +233,7 @@ def estimate_tokens(text: str, model: str) -> int:
 
 def validate_input(data: dict[str, Any]) -> None:
     """Validate probe worker input."""
-    required = ["runId", "scenarioId", "modelId", "scenario", "config"]
-    for field_name in required:
-        if field_name not in data:
-            raise ValidationError(
-                message=f"Missing required field: {field_name}",
-                details=f"Input must include: {', '.join(required)}",
-            )
+    require_fields(data, ["runId", "scenarioId", "modelId", "scenario", "config"])
 
     scenario = data["scenario"]
     if not isinstance(scenario, dict):
