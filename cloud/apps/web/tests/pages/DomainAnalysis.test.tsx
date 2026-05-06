@@ -170,6 +170,10 @@ vi.mock('../../src/components/domains/ValuePrioritiesSection', () => ({
   ValuePrioritiesSection: (props: unknown) => valuePrioritiesSectionMock(props),
 }));
 
+vi.mock('../../src/components/models/DomainShiftsReportSection', () => ({
+  DomainShiftsReportSection: () => <div>Mock domain shifts section</div>,
+}));
+
 describe('DomainAnalysis', () => {
   beforeEach(() => {
     useQueryMock.mockReset();
@@ -207,13 +211,11 @@ describe('DomainAnalysis', () => {
     const domainSelection = await screen.findByRole('button', { name: /all domains/i });
     const valuePriorities = screen.getByText(/mock value priorities section/i);
     const dominance = screen.getByText(/mock dominance section/i);
-    const similarity = screen.getByRole('heading', { name: 'Similarities and Differences' });
-    const domainShifts = screen.getByRole('heading', { name: 'No active models are available yet' });
+    const domainShifts = screen.getByText(/mock domain shifts section/i);
 
     expect(domainSelection.compareDocumentPosition(valuePriorities) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(valuePriorities.compareDocumentPosition(dominance) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(dominance.compareDocumentPosition(similarity) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(similarity.compareDocumentPosition(domainShifts) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(dominance.compareDocumentPosition(domainShifts) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('defaults the scope dropdown to all domains when no domain is selected', async () => {

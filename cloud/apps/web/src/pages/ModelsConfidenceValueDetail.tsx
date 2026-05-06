@@ -149,7 +149,7 @@ export function ModelsConfidenceValueDetail() {
           to="/models/confidence"
           className="inline-flex text-sm text-sky-700 hover:text-sky-900 hover:underline"
         >
-          Back to Confidence Heatmap
+          Back to Confidence by Values by Model
         </Link>
       </div>
     );
@@ -167,7 +167,7 @@ export function ModelsConfidenceValueDetail() {
           to={backLink}
           className="inline-flex text-sm text-sky-700 hover:text-sky-900 hover:underline"
         >
-          ← Back to Confidence Heatmap
+          ← Back to Confidence by Values by Model
         </Link>
       </div>
     );
@@ -180,7 +180,7 @@ export function ModelsConfidenceValueDetail() {
           to={backLink}
           className="inline-flex text-sm text-sky-700 hover:text-sky-900 hover:underline"
         >
-          ← Back to Confidence Heatmap
+          ← Back to Confidence by Values by Model
         </Link>
         <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Confidence Detail</h1>
         <p className="text-sm text-gray-600">

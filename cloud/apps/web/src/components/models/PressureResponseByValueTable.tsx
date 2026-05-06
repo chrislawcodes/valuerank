@@ -281,7 +281,7 @@ export function PressureResponseByValueTable({ models }: Props) {
     return (
       <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
         <div className="space-y-1">
-          <h2 className="text-lg font-semibold text-gray-900">Pressure Response by Value</h2>
+          <h2 className="text-lg font-semibold text-gray-900">Win Rate by Pressure Conditions by Value</h2>
           <p className="text-sm text-gray-600">No by-value data is available for the selected models.</p>
         </div>
       </section>
@@ -292,7 +292,7 @@ export function PressureResponseByValueTable({ models }: Props) {
     <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="space-y-1">
-          <h2 className="text-lg font-semibold text-gray-900">Pressure Response by Value</h2>
+          <h2 className="text-lg font-semibold text-gray-900">Win Rate by Pressure Conditions by Value</h2>
           <p className="text-sm text-gray-600">
             Averaged across {models.length} selected model{models.length === 1 ? '' : 's'} in the page filter.
           </p>
@@ -305,7 +305,7 @@ export function PressureResponseByValueTable({ models }: Props) {
             The pair rows are averaged equally across the 9 pairs containing this value.
           </p>
         </div>
-        <CopyVisualButton targetRef={tableRef} label="Pressure Response by Value" />
+        <CopyVisualButton targetRef={tableRef} label="Win Rate by Pressure Conditions by Value" />
       </div>
 
       <div ref={tableRef}>

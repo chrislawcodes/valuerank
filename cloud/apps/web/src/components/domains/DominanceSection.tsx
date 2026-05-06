@@ -132,7 +132,7 @@ export function DominanceSection({ models, defaultModelIds }: DominanceSectionPr
     <section className={`rounded-lg border p-4 ${THEME_COLORS.panelBorder} ${THEME_COLORS.panelBg}`}>
       <div className="mb-3 flex items-start justify-between gap-2">
         <div>
-          <h2 className={`text-base font-medium ${THEME_COLORS.panelText}`}>Ranking and Cycles</h2>
+          <h2 className={`text-base font-medium ${THEME_COLORS.panelText}`}>Dominance Graph</h2>
           <p className={`text-sm ${THEME_COLORS.panelMutedText}`}>
             Directed value graph for one selected AI: arrows point from stronger value to weaker value.
           </p>

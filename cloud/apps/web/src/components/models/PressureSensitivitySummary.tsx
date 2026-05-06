@@ -56,13 +56,13 @@ export function PressureSensitivitySummary({ models, selectedModelId, onSelectMo
     <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="space-y-1">
-          <h2 className="text-lg font-semibold text-gray-900">Pressure Response across models</h2>
+          <h2 className="text-lg font-semibold text-gray-900">Pressure Response by Model</h2>
           <p className="text-sm text-gray-600">
             This table ranks models by their mean pressure response — how much pressure moves their choice toward
             their own preferred value across measured pairs.
           </p>
         </div>
-        <CopyVisualButton targetRef={tableRef} label="Pressure Response across models" />
+        <CopyVisualButton targetRef={tableRef} label="Pressure Response by Model" />
       </div>
 
       <div ref={tableRef}>

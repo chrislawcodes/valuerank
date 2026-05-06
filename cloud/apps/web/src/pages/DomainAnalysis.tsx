@@ -25,7 +25,6 @@ import {
 } from '../api/operations/modelsAnalysis';
 import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/llm';
 import { DominanceSection } from '../components/domains/DominanceSection';
-import { SimilaritySection } from '../components/domains/SimilaritySection';
 import { ValuePrioritiesSection } from '../components/domains/ValuePrioritiesSection';
 import { DomainShiftsReportSection } from '../components/models/DomainShiftsReportSection';
 import {
@@ -449,7 +448,6 @@ export function DomainAnalysis() {
             models={models}
             defaultModelIds={defaultModelIds}
           />
-          <SimilaritySection models={visibleModels} />
           <DomainShiftsReportSection
             models={modelsAnalysisData?.modelsAnalysis.models ?? []}
             selectedModelIds={selectedModelIds}

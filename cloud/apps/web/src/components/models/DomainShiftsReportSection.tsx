@@ -263,7 +263,7 @@ export function DomainShiftsReportSection({
     <section className="space-y-6 rounded-xl border border-gray-200 bg-white p-4 md:p-5">
       <div className="space-y-2">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-teal-700">Models</p>
-        <h2 className="text-2xl font-serif font-medium text-[#1A1A1A]">Domain Shifts</h2>
+        <h2 className="text-2xl font-serif font-medium text-[#1A1A1A]">Win Rate by Domain by Value</h2>
         <p className="max-w-3xl text-sm text-gray-600">
           Exploratory heatmap for domain-associated value shifts, using the current Win Rate filters above.
         </p>
@@ -280,7 +280,7 @@ export function DomainShiftsReportSection({
               <span className="font-semibold text-gray-800">Metric:</span>{' '}
               {displayMode === 'shift' ? 'percentage-point shift, not percent change' : 'raw domain win rate'}
             </div>
-            <CopyVisualButton targetRef={tableRef} label="domain shifts table" />
+            <CopyVisualButton targetRef={tableRef} label="Win Rate by Domain by Value" />
           </div>
         </div>
 

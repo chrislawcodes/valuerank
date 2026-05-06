@@ -282,7 +282,7 @@ export function ModelsGroups() {
 
       <div className="space-y-2">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-teal-700">Models</p>
-        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Model Groups</h1>
+        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Model Clusters</h1>
         <p className="max-w-3xl text-sm text-gray-600">
           Clustered model families for the selected domain and signature.
         </p>

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { ModelsGroups } from '../../src/pages/ModelsGroups';
 import {
@@ -11,9 +11,6 @@ import { LLM_MODELS_QUERY } from '../../src/api/operations/llm';
 import { MODELS_ANALYSIS_QUERY } from '../../src/api/operations/modelsAnalysis';
 
 const useQueryMock = vi.fn();
-const modelGroupsSectionMock = vi.fn(() => <div>Mock model groups section</div>);
-const modelSimilarityTableSectionMock = vi.fn(() => <div>Mock model similarity table section</div>);
-
 const defaultSignatureData = {
   domainAvailableSignatures: [
     { signature: 'vnewtd', label: 'Latest @ default', isVirtual: true, temperature: null },
@@ -159,19 +156,9 @@ vi.mock('../../src/hooks/useDomains', () => ({
   }),
 }));
 
-vi.mock('../../src/components/domains/ModelGroupsSection', () => ({
-  ModelGroupsSection: (props: unknown) => modelGroupsSectionMock(props),
-}));
-
-vi.mock('../../src/components/models/ModelSimilarityTableSection', () => ({
-  ModelSimilarityTableSection: (props: unknown) => modelSimilarityTableSectionMock(props),
-}));
-
 describe('ModelsGroups', () => {
   beforeEach(() => {
     useQueryMock.mockReset();
-    modelGroupsSectionMock.mockClear();
-    modelSimilarityTableSectionMock.mockClear();
     installQueryResponses();
   });
 
@@ -183,56 +170,9 @@ describe('ModelsGroups', () => {
     );
 
     expect(await screen.findByRole('button', { name: /domain:/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Model Groups' })).toBeInTheDocument();
-    expect(screen.getByText(/mock model groups section/i)).toBeInTheDocument();
-
-    await waitFor(() => {
-      expect(modelGroupsSectionMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          clusterAnalysisByMethod: defaultAnalysis.domainAnalysis.clusterAnalysisByMethod,
-          models: expect.arrayContaining([
-            expect.objectContaining({
-              model: 'model-a',
-              label: 'Model A',
-              values: {
-                Self_Direction_Action: 0,
-                Universalism_Nature: 0,
-                Benevolence_Dependability: 0,
-                Security_Personal: 0,
-                Power_Dominance: 0,
-                Achievement: 1,
-                Tradition: 0,
-                Stimulation: 0,
-                Hedonism: -1,
-                Conformity_Interpersonal: 0,
-              },
-            }),
-          ]),
-        }),
-      );
-      expect(modelSimilarityTableSectionMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          models: expect.arrayContaining([
-            expect.objectContaining({
-              model: 'model-a',
-              label: 'Model A',
-              winRates: {
-                Self_Direction_Action: null,
-                Universalism_Nature: null,
-                Benevolence_Dependability: null,
-                Security_Personal: null,
-                Power_Dominance: null,
-                Achievement: 72.5,
-                Tradition: null,
-                Stimulation: null,
-                Hedonism: null,
-                Conformity_Interpersonal: null,
-              },
-            }),
-          ]),
-        }),
-      );
-    });
+    expect(screen.getByRole('heading', { name: 'Model Clusters', level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Model Clusters', level: 2 })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Similarity by Model' })).toBeInTheDocument();
   });
 
   it('shows the transcript count in the freshness line', async () => {

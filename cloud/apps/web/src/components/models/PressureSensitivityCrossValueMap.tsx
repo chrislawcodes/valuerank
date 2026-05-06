@@ -53,7 +53,7 @@ export function PressureSensitivityCrossValueMap({ models }: Props) {
   return (
     <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
       <div className="mb-3">
-        <h2 className="text-lg font-semibold text-gray-900">Pressure response by value pair</h2>
+        <h2 className="text-lg font-semibold text-gray-900">Pressure Response by Value Pair by Model</h2>
         <p className="text-sm text-gray-600">
           Is pressure response a model trait or value-specific? A row that is uniformly dark or light reads as a trait; a row that varies wildly reads as value-specific. Blue = positive response (pressure works with own value preference); red = negative.
         </p>
