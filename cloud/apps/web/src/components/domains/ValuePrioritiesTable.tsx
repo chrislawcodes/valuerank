@@ -22,8 +22,8 @@ type SortState = {
 const COLUMN_VALUES: ValueKey[] = [
   'Universalism_Nature',
   'Benevolence_Dependability',
-  'Conformity_Interpersonal',
   'Tradition',
+  'Conformity_Interpersonal',
   'Security_Personal',
   'Power_Dominance',
   'Achievement',
@@ -34,7 +34,7 @@ const COLUMN_VALUES: ValueKey[] = [
 
 const TOP_COLUMN_GROUPS: Array<{ label: string; values: ValueKey[] }> = [
   { label: 'Self-Transcendence', values: ['Universalism_Nature', 'Benevolence_Dependability'] },
-  { label: 'Conservation', values: ['Conformity_Interpersonal', 'Tradition', 'Security_Personal'] },
+  { label: 'Conservation', values: ['Tradition', 'Conformity_Interpersonal', 'Security_Personal'] },
   { label: 'Self-Enhancement', values: ['Power_Dominance', 'Achievement'] },
   { label: 'Openness to Change', values: ['Hedonism', 'Stimulation', 'Self_Direction_Action'] },
 ];
@@ -53,7 +53,7 @@ type ValuePrioritiesTableProps = {
 function hasGroupStartBorder(value: ValueKey): boolean {
   return (
     value === 'Universalism_Nature' ||
-    value === 'Conformity_Interpersonal' ||
+    value === 'Tradition' ||
     value === 'Power_Dominance'
   );
 }
