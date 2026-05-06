@@ -10,22 +10,22 @@ import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from 'urql';
 import { BarChart2, RefreshCw, Clock3 } from 'lucide-react';
-import { Button } from '../components/ui/Button';
-import { Loading } from '../components/ui/Loading';
-import { ErrorMessage } from '../components/ui/ErrorMessage';
+import { Button } from '../components/ui/Button.js';
+import { Loading } from '../components/ui/Loading.js';
+import { ErrorMessage } from '../components/ui/ErrorMessage.js';
 import {
   AnalysisListFilters,
   VirtualizedAnalysisList,
   VirtualizedAnalysisFolderView,
   type AnalysisFilterState,
-} from '../components/analysis';
-import { useInfiniteRunsWithAnalysis } from '../hooks/useInfiniteRunsWithAnalysis';
+} from '../components/analysis/index.js';
+import { useInfiniteRuns } from '../hooks/useInfiniteRuns.js';
 import {
   ANALYSIS_FOLDER_COUNTS_QUERY,
   type AnalysisFolderCountOverrides,
   type AnalysisFolderCountsQueryResult,
   type AnalysisFolderCountsQueryVariables,
-} from '../api/operations/runs';
+} from '../api/operations/runs.js';
 
 const defaultFilters: AnalysisFilterState = {
   analysisStatus: '',
@@ -36,12 +36,15 @@ const defaultFilters: AnalysisFilterState = {
 export function Analysis() {
   const navigate = useNavigate();
   const [filters, setFilters] = useState<AnalysisFilterState>(defaultFilters);
+  const analysisStatus = filters.analysisStatus !== ''
+    ? (filters.analysisStatus as 'CURRENT' | 'SUPERSEDED')
+    : undefined;
   const folderCountVariables = useMemo<AnalysisFolderCountsQueryVariables>(
     () => ({
-      analysisStatus: filters.analysisStatus || undefined,
+      analysisStatus,
       definitionTagIds: filters.tagIds.length > 0 ? filters.tagIds : undefined,
     }),
-    [filters.analysisStatus, filters.tagIds]
+    [analysisStatus, filters.tagIds]
   );
 
   // Use infinite scroll hook for efficient data loading
@@ -55,8 +58,9 @@ export function Analysis() {
     loadMore,
     refetch,
     softRefetch,
-  } = useInfiniteRunsWithAnalysis({
-    analysisStatus: filters.analysisStatus || undefined,
+  } = useInfiniteRuns({
+    hasAnalysis: true,
+    analysisStatus,
   });
 
   const [folderCountsResult] = useQuery<AnalysisFolderCountsQueryResult, AnalysisFolderCountsQueryVariables>({

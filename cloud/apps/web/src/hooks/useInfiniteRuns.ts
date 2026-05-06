@@ -13,8 +13,9 @@ import {
   type RunsQueryVariables,
   type RunsQueryResult,
   type RunCountQueryResult,
-} from '../api/operations/runs';
-import { useInfiniteQuery, type UseInfiniteQueryResult } from './useInfiniteQuery';
+} from '../api/operations/runs.js';
+import { useInfiniteQuery, type UseInfiniteQueryResult } from './useInfiniteQuery.js';
+import { isNonSurveyRun } from '../lib/runClassification.js';
 
 type UseInfiniteRunsOptions = {
   definitionId?: string;
@@ -22,6 +23,8 @@ type UseInfiniteRunsOptions = {
   status?: string;
   runCategory?: 'PILOT' | 'PRODUCTION' | 'REPLICATION' | 'VALIDATION' | 'UNKNOWN_LEGACY';
   runType?: 'nonSurvey' | 'survey' | 'all';
+  hasAnalysis?: boolean;
+  analysisStatus?: 'CURRENT' | 'SUPERSEDED';
   pageSize?: number;
   pause?: boolean;
 };
@@ -42,6 +45,8 @@ export function useInfiniteRuns(options: UseInfiniteRunsOptions = {}): UseInfini
     status,
     runCategory,
     runType = 'nonSurvey',
+    hasAnalysis,
+    analysisStatus,
     pageSize,
     pause = false,
   } = options;
@@ -54,25 +59,29 @@ export function useInfiniteRuns(options: UseInfiniteRunsOptions = {}): UseInfini
   // Build filters object
   const filters = useMemo(
     () => ({
-      definitionId: definitionId || undefined,
-      experimentId: experimentId || undefined,
-      status: status || undefined,
-      runCategory: runCategory || undefined,
+      definitionId: definitionId ?? undefined,
+      experimentId: experimentId ?? undefined,
+      status: status ?? undefined,
+      runCategory: runCategory ?? undefined,
       runType: runTypeFilter,
+      hasAnalysis: hasAnalysis ?? undefined,
+      analysisStatus: analysisStatus ?? undefined,
     }),
-    [definitionId, experimentId, status, runCategory, runTypeFilter]
+    [definitionId, experimentId, status, runCategory, runTypeFilter, hasAnalysis, analysisStatus]
   );
 
   // Count query variables
   const countVariables = useMemo(
     () => ({
-      definitionId: definitionId || undefined,
-      experimentId: experimentId || undefined,
-      status: status || undefined,
-      runCategory: runCategory || undefined,
+      definitionId: definitionId ?? undefined,
+      experimentId: experimentId ?? undefined,
+      status: status ?? undefined,
+      runCategory: runCategory ?? undefined,
       runType: runTypeFilter,
+      hasAnalysis: hasAnalysis ?? undefined,
+      analysisStatus: analysisStatus ?? undefined,
     }),
-    [definitionId, experimentId, status, runCategory, runTypeFilter]
+    [definitionId, experimentId, status, runCategory, runTypeFilter, hasAnalysis, analysisStatus]
   );
 
   // Extract runs from query result
@@ -97,8 +106,14 @@ export function useInfiniteRuns(options: UseInfiniteRunsOptions = {}): UseInfini
     pause,
   });
 
+  const items = useMemo(
+    () => (hasAnalysis === true ? result.items.filter(isNonSurveyRun) : result.items),
+    [result.items, hasAnalysis]
+  );
+
   return {
     ...result,
-    runs: result.items,
+    items,
+    runs: items,
   };
 }
