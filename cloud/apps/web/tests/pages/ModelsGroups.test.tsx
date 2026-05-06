@@ -7,6 +7,7 @@ import {
   DOMAIN_ANALYSIS_QUERY_LEGACY,
   DOMAIN_AVAILABLE_SIGNATURES_QUERY,
 } from '../../src/api/operations/domainAnalysis';
+import { LLM_MODELS_QUERY } from '../../src/api/operations/llm';
 import { MODELS_ANALYSIS_QUERY } from '../../src/api/operations/modelsAnalysis';
 
 const useQueryMock = vi.fn();
@@ -89,6 +90,25 @@ const defaultModelsAnalysis = {
   },
 };
 
+const defaultLlmModels = {
+  llmModels: [
+    {
+      id: 'llm-model-a',
+      providerId: 'provider-a',
+      modelId: 'model-a',
+      displayName: 'Model A',
+      costInputPerMillion: 0,
+      costOutputPerMillion: 0,
+      status: 'ACTIVE',
+      isDefault: true,
+      isAvailable: true,
+      apiConfig: null,
+      createdAt: '2026-03-15T12:00:00.000Z',
+      updatedAt: '2026-03-15T12:00:00.000Z',
+    },
+  ],
+};
+
 function installQueryResponses() {
   useQueryMock.mockImplementation((args: { query: unknown }) => {
     if (args.query === DOMAIN_AVAILABLE_SIGNATURES_QUERY) {
@@ -108,6 +128,13 @@ function installQueryResponses() {
     if (args.query === MODELS_ANALYSIS_QUERY) {
       return [{
         data: defaultModelsAnalysis,
+        fetching: false,
+        error: undefined,
+      }];
+    }
+    if (args.query === LLM_MODELS_QUERY) {
+      return [{
+        data: defaultLlmModels,
         fetching: false,
         error: undefined,
       }];
