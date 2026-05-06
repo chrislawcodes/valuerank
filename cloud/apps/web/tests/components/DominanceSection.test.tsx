@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import type {
   ModelEntry,
 } from '../../src/data/domainAnalysisData';
@@ -64,10 +64,8 @@ const models: ModelEntry[] = [
   },
 ];
 
-const defaultModelIds = new Set(['model-a', 'model-b']);
-
 describe('DominanceSection', () => {
-  it('renders shell, model picker, and updates summary when model changes', async () => {
+  it('renders shell with averaged model data and no model picker', async () => {
     vi.spyOn(window, 'matchMedia').mockImplementation(
       (query) =>
         ({
@@ -82,39 +80,21 @@ describe('DominanceSection', () => {
         }) as MediaQueryList,
     );
 
-    render(
-      <DominanceSection
-        models={models}
-        defaultModelIds={defaultModelIds}
-      />,
-    );
+    render(<DominanceSection models={models} />);
 
-    let container: HTMLElement;
     await act(async () => {
-      container = screen.getByRole('img', { name: 'Value dominance graph' }).parentElement!.parentElement!;
       await Promise.resolve();
     });
 
     expect(screen.getByRole('heading', { name: 'Dominance Graph' })).toBeInTheDocument();
     expect(
       screen.getByText(
-        'Directed value graph for one selected AI: arrows point from stronger value to weaker value.',
+        'Directed value graph averaged across selected models: arrows point from stronger value to weaker value.',
       ),
     ).toBeInTheDocument();
     expect(screen.getByRole('img', { name: 'Value dominance graph' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Most Contestable Value Pairs' })).toBeInTheDocument();
 
-    const picker = screen.getByLabelText('Model focus:');
-    expect(picker).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: 'All models (average)' })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: 'Model A' })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: 'Model B' })).toBeInTheDocument();
-
-    const summaryList = container!.querySelector('ol');
-    expect(summaryList?.textContent).toBeTruthy();
-    const initialSummary = summaryList?.textContent ?? '';
-
-    fireEvent.change(picker, { target: { value: 'model-a' } });
-    expect(summaryList?.textContent).not.toEqual(initialSummary);
+    expect(screen.queryByLabelText('Model focus:')).toBeNull();
   });
 });
