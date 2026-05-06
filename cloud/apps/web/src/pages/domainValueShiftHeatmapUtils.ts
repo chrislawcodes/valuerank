@@ -81,9 +81,9 @@ function formatValueLabel(valueKey: string): string {
 
 export function formatPointShift(value: number | null): string {
   if (value == null || !Number.isFinite(value)) return 'n/a';
-  const rounded = Math.round(value * 10) / 10;
-  if (rounded === 0) return '0.0 pts';
-  return `${rounded > 0 ? '+' : ''}${rounded.toFixed(1)} pts`;
+  const rounded = Math.round(value);
+  if (rounded === 0) return '0pp';
+  return `${rounded > 0 ? '+' : ''}${rounded}pp`;
 }
 
 export function formatPercent(value: number | null): string {
@@ -390,4 +390,33 @@ export function sortHeatmapRows(
       return numericComparison === 0 ? left.index - right.index : numericComparison * direction;
     })
     .map(({ row }) => row);
+}
+
+export const MAX_COLOR_SHIFT = 25;
+
+export function getCellTone(shift: number): string {
+  const clamped = Math.max(-MAX_COLOR_SHIFT, Math.min(MAX_COLOR_SHIFT, shift));
+  const intensity = Math.abs(clamped) / MAX_COLOR_SHIFT;
+  if (Math.abs(shift) < 0.5) {
+    return 'border-gray-200 bg-gray-50 text-gray-700';
+  }
+  if (shift > 0) {
+    return intensity > 0.66
+      ? 'border-emerald-300 bg-emerald-100 text-emerald-900'
+      : intensity > 0.33
+        ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+        : 'border-emerald-100 bg-emerald-50/60 text-emerald-700';
+  }
+  return intensity > 0.66
+    ? 'border-rose-300 bg-rose-100 text-rose-900'
+    : intensity > 0.33
+      ? 'border-rose-200 bg-rose-50 text-rose-800'
+      : 'border-rose-100 bg-rose-50/60 text-rose-700';
+}
+
+export function getWinRateTone(winRate: number): string {
+  if (winRate >= 75) return 'border-sky-300 bg-sky-100 text-sky-950';
+  if (winRate >= 50) return 'border-sky-200 bg-sky-50 text-sky-900';
+  if (winRate >= 25) return 'border-gray-200 bg-gray-50 text-gray-800';
+  return 'border-slate-200 bg-slate-50 text-slate-700';
 }
