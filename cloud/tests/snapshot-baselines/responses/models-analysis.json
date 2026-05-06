@@ -1,0 +1,3470 @@
+{
+  "data": {
+    "modelsAnalysis": {
+      "models": [
+        {
+          "modelId": "claude-haiku-4-5",
+          "label": "Claude Haiku 4.5",
+          "values": [
+            {
+              "valueKey": "Self_Direction_Action",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Universalism_Nature",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Benevolence_Dependability",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Security_Personal",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Power_Dominance",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Achievement",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Tradition",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Stimulation",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Hedonism",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Conformity_Interpersonal",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            }
+          ]
+        },
+        {
+          "modelId": "claude-sonnet-4-5",
+          "label": "Claude Sonnet 4.5",
+          "values": [
+            {
+              "valueKey": "Self_Direction_Action",
+              "pooledWinRate": 72.89391534391534,
+              "stabilityScore": 64.57804232804234,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 37.47195767195768,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 86.14814814814814,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 94.44444444444444,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 73.5111111111111,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Universalism_Nature",
+              "pooledWinRate": 53.466666666666676,
+              "stabilityScore": 72.57777777777778,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 78.48888888888888,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 54.5925925925926,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 54.74074074074075,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 26.04444444444445,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Benevolence_Dependability",
+              "pooledWinRate": 82.73888888888888,
+              "stabilityScore": 85.68518518518518,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 94.53333333333335,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 78.88888888888889,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 85.25925925925925,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 72.27407407407406,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Security_Personal",
+              "pooledWinRate": 82.27407407407408,
+              "stabilityScore": 80.39259259259259,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 62.66666666666667,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 93.33333333333333,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 84.96296296296296,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 88.13333333333334,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Power_Dominance",
+              "pooledWinRate": 4.77962962962963,
+              "stabilityScore": 93.64074074074074,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 6.622222222222224,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 9.296296296296298,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 2.222222222222222,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 0.9777777777777777,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Achievement",
+              "pooledWinRate": 22.405291005291005,
+              "stabilityScore": 77.06349206349206,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 9.911111111111111,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 11.96296296296296,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 34.37037037037037,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 33.37671957671958,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Tradition",
+              "pooledWinRate": 23.17407407407407,
+              "stabilityScore": 72.32962962962964,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 50.84444444444443,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 13.18518518518519,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 18.44444444444444,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 10.22222222222222,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Stimulation",
+              "pooledWinRate": 35.68201058201059,
+              "stabilityScore": 83.0153439153439,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 34.72804232804233,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 35.40740740740741,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 19.92592592592593,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 52.66666666666667,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Hedonism",
+              "pooledWinRate": 48.61851851851853,
+              "stabilityScore": 85.1037037037037,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 38.34074074074074,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 53.33333333333334,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 44,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 58.8,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Conformity_Interpersonal",
+              "pooledWinRate": 72.59100529100529,
+              "stabilityScore": 80.2994708994709,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 82.48888888888888,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 63.85185185185185,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 61.62962962962963,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 82.39365079365079,
+                  "evidenceWeight": 9
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "modelId": "deepseek-chat",
+          "label": "DeepSeek Chat",
+          "values": [
+            {
+              "valueKey": "Self_Direction_Action",
+              "pooledWinRate": 67.3388888888889,
+              "stabilityScore": 71.49814814814816,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 38.83703703703704,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 74.5185185185185,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 79.03703703703705,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 76.96296296296296,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Universalism_Nature",
+              "pooledWinRate": 69.77407407407408,
+              "stabilityScore": 77.87407407407409,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 87.82222222222222,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 73.85185185185185,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 58.07407407407408,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 59.34814814814815,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Benevolence_Dependability",
+              "pooledWinRate": 86.02592592592592,
+              "stabilityScore": 84.72962962962963,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 97.2,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 87.1111111111111,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 89.03703703703702,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 70.75555555555555,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Security_Personal",
+              "pooledWinRate": 77.42592592592594,
+              "stabilityScore": 76.92592592592592,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 55.06666666666668,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 91.33333333333334,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 86.5925925925926,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 76.71111111111111,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Power_Dominance",
+              "pooledWinRate": 11.285185185185187,
+              "stabilityScore": 80.58518518518518,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 26.13333333333334,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 15.85185185185185,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 2,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 1.155555555555556,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Achievement",
+              "pooledWinRate": 20.714814814814815,
+              "stabilityScore": 75.72592592592592,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 3.155555555555555,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 14,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 31.92592592592592,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 33.77777777777779,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Tradition",
+              "pooledWinRate": 37.43333333333333,
+              "stabilityScore": 78.0074074074074,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 54.71111111111111,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 17.18518518518518,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 42.14814814814815,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 35.68888888888889,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Stimulation",
+              "pooledWinRate": 37.9962962962963,
+              "stabilityScore": 72.83703703703704,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 24.97777777777778,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 48.00000000000001,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 23.85185185185185,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 55.15555555555556,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Hedonism",
+              "pooledWinRate": 40.21296296296296,
+              "stabilityScore": 89.76851851851852,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 35.51851851851852,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 39.85185185185185,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 35.03703703703704,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 50.44444444444446,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Conformity_Interpersonal",
+              "pooledWinRate": 51.14444444444444,
+              "stabilityScore": 73.4148148148148,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 76.57777777777777,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 37.48148148148147,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 52.2962962962963,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 38.22222222222222,
+                  "evidenceWeight": 9
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "modelId": "deepseek-reasoner",
+          "label": "DeepSeek Reasoner",
+          "values": [
+            {
+              "valueKey": "Self_Direction_Action",
+              "pooledWinRate": 67.86944444444444,
+              "stabilityScore": 68.85648148148148,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 36.72592592592593,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 79.87037037037037,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 76.96296296296296,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 77.91851851851852,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Universalism_Nature",
+              "pooledWinRate": 62.45370370370371,
+              "stabilityScore": 78.18148148148148,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 79.24444444444445,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 67.48148148148148,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 55.70370370370371,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 47.38518518518519,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Benevolence_Dependability",
+              "pooledWinRate": 82.93333333333332,
+              "stabilityScore": 82.56296296296297,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 97.15555555555555,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 86.14814814814812,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 74.51851851851852,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 73.91111111111111,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Security_Personal",
+              "pooledWinRate": 76.6,
+              "stabilityScore": 80.3111111111111,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 58.35555555555555,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 90.51851851851852,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 82.37037037037038,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 75.15555555555555,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Power_Dominance",
+              "pooledWinRate": 13.00462962962963,
+              "stabilityScore": 86.63518518518518,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 18.57777777777778,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 20.79629629629629,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 8,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 4.644444444444445,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Achievement",
+              "pooledWinRate": 24.46388888888889,
+              "stabilityScore": 69.79444444444445,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 10,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 8.722222222222221,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 34.66666666666667,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 44.46666666666667,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Tradition",
+              "pooledWinRate": 38.54444444444445,
+              "stabilityScore": 68.25925925925924,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 62.75555555555557,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 17.25925925925926,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 46.07407407407408,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 28.08888888888889,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Stimulation",
+              "pooledWinRate": 34.29444444444444,
+              "stabilityScore": 80.75925925925927,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 20.60740740740741,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 35.92592592592592,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 28.74074074074074,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 51.9037037037037,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Hedonism",
+              "pooledWinRate": 39.125,
+              "stabilityScore": 92.81666666666666,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 34.54814814814815,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 42.27777777777778,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 36.51851851851852,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 43.15555555555555,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Conformity_Interpersonal",
+              "pooledWinRate": 56.574603174603176,
+              "stabilityScore": 76.70793650793651,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 79.86666666666667,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 47.62962962962963,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 56.14814814814815,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 42.65396825396826,
+                  "evidenceWeight": 9
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "modelId": "gemini-2.5-flash",
+          "label": "Gemini 2.5 Flash",
+          "values": [
+            {
+              "valueKey": "Self_Direction_Action",
+              "pooledWinRate": 59.34246031746032,
+              "stabilityScore": 81.22367724867725,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 40.56613756613757,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 63.12962962962963,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 69.4814814814815,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 64.19259259259259,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Universalism_Nature",
+              "pooledWinRate": 44.092592592592595,
+              "stabilityScore": 91.37037037037035,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 42.35555555555555,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 46.2962962962963,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 50.51851851851853,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 37.2,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Benevolence_Dependability",
+              "pooledWinRate": 63.083333333333336,
+              "stabilityScore": 93.87037037037037,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 65.55555555555554,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 61.99999999999999,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 66.74074074074075,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 58.03703703703703,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Security_Personal",
+              "pooledWinRate": 70.05370370370372,
+              "stabilityScore": 77.44074074074075,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 50.57777777777779,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 85.18518518518519,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 77.4814814814815,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 66.97037037037038,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Power_Dominance",
+              "pooledWinRate": 33.84351851851852,
+              "stabilityScore": 85.14629629629628,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 47.37777777777779,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 33.5,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 19.33333333333333,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 35.16296296296296,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Achievement",
+              "pooledWinRate": 45.62473544973546,
+              "stabilityScore": 84.43571428571427,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 52.0888888888889,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 34.87037037037037,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 40.81481481481482,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 54.72486772486774,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Tradition",
+              "pooledWinRate": 41.511111111111106,
+              "stabilityScore": 85.74814814814815,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 54.97777777777777,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 31.03703703703703,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 42.2962962962963,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 37.73333333333333,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Stimulation",
+              "pooledWinRate": 38.59179894179895,
+              "stabilityScore": 91.33994708994709,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 38.22645502645503,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 36.5925925925926,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 32.2962962962963,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 47.25185185185185,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Hedonism",
+              "pooledWinRate": 44.01203703703703,
+              "stabilityScore": 93.3638888888889,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 42.98518518518519,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 50.64814814814815,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 41.85185185185185,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 40.56296296296296,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Conformity_Interpersonal",
+              "pooledWinRate": 58.56878306878307,
+              "stabilityScore": 93.54656084656085,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 65.02222222222223,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 55.92592592592592,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 57.11111111111111,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 56.21587301587302,
+                  "evidenceWeight": 9
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "modelId": "gemini-2.5-pro",
+          "label": "Gemini 2.5 Pro",
+          "values": [
+            {
+              "valueKey": "Self_Direction_Action",
+              "pooledWinRate": 69.24444444444444,
+              "stabilityScore": 86.48888888888888,
+              "eligibleDomainCount": 2,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 76,
+                  "evidenceWeight": 2
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 62.48888888888889,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Universalism_Nature",
+              "pooledWinRate": 39.94814814814815,
+              "stabilityScore": null,
+              "eligibleDomainCount": 1,
+              "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 39.94814814814815,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Benevolence_Dependability",
+              "pooledWinRate": 62.57777777777778,
+              "stabilityScore": null,
+              "eligibleDomainCount": 1,
+              "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 62.57777777777778,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Security_Personal",
+              "pooledWinRate": 70.31111111111112,
+              "stabilityScore": null,
+              "eligibleDomainCount": 1,
+              "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 70.31111111111112,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Power_Dominance",
+              "pooledWinRate": 29.2,
+              "stabilityScore": null,
+              "eligibleDomainCount": 1,
+              "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 29.2,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Achievement",
+              "pooledWinRate": 48.24973544973547,
+              "stabilityScore": null,
+              "eligibleDomainCount": 1,
+              "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 48.24973544973547,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Tradition",
+              "pooledWinRate": 27.52592592592593,
+              "stabilityScore": null,
+              "eligibleDomainCount": 1,
+              "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 27.52592592592593,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Stimulation",
+              "pooledWinRate": 35.82222222222222,
+              "stabilityScore": 80.35555555555554,
+              "eligibleDomainCount": 2,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 26,
+                  "evidenceWeight": 1
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 45.64444444444445,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Hedonism",
+              "pooledWinRate": 33.63333333333334,
+              "stabilityScore": 72.73333333333333,
+              "eligibleDomainCount": 2,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 20,
+                  "evidenceWeight": 1
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 47.26666666666667,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Conformity_Interpersonal",
+              "pooledWinRate": 65.76507936507936,
+              "stabilityScore": null,
+              "eligibleDomainCount": 1,
+              "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 65.76507936507936,
+                  "evidenceWeight": 9
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "modelId": "mistral-large-2512",
+          "label": "Mistral Large (Dec 2025)",
+          "values": [
+            {
+              "valueKey": "Self_Direction_Action",
+              "pooledWinRate": 65.32962962962964,
+              "stabilityScore": 67.47407407407408,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 42.6,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 74.96296296296295,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 88.22222222222223,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 55.53333333333333,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Universalism_Nature",
+              "pooledWinRate": 64.82962962962964,
+              "stabilityScore": 86.1925925925926,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 78.35555555555555,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 65.11111111111111,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 55.4074074074074,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 60.44444444444446,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Benevolence_Dependability",
+              "pooledWinRate": 90.5111111111111,
+              "stabilityScore": 94.15555555555557,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 96.35555555555555,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 89.62962962962962,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 86.96296296296295,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 89.09629629629632,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Security_Personal",
+              "pooledWinRate": 75.37592592592593,
+              "stabilityScore": 73.49259259259257,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 58.97777777777777,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 91.25925925925927,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 86,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 65.26666666666667,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Power_Dominance",
+              "pooledWinRate": 14.565740740740742,
+              "stabilityScore": 75.78703703703704,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 29.28888888888889,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 24.05555555555555,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 3.851851851851852,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 1.066666666666667,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Achievement",
+              "pooledWinRate": 41.85119047619048,
+              "stabilityScore": 86.49391534391533,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 37.28888888888888,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 32.9074074074074,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 46.8888888888889,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 50.31957671957673,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Tradition",
+              "pooledWinRate": 43.162962962962965,
+              "stabilityScore": 73.62962962962962,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 31.51111111111111,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 28.44444444444444,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 49.1851851851852,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 63.51111111111112,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Stimulation",
+              "pooledWinRate": 24.261111111111113,
+              "stabilityScore": 89.95,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 19.99259259259259,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 21.03703703703704,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 21.7037037037037,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 34.31111111111112,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Hedonism",
+              "pooledWinRate": 27.240740740740737,
+              "stabilityScore": 88.39259259259259,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 28.16296296296297,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 37.92592592592592,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 16.07407407407407,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 26.8,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Conformity_Interpersonal",
+              "pooledWinRate": 52.871957671957674,
+              "stabilityScore": 74.62645502645502,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 77.46666666666667,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 34.66666666666667,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 45.7037037037037,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 53.65079365079365,
+                  "evidenceWeight": 9
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "modelId": "mistral-small-2503",
+          "label": "Mistral Small",
+          "values": [
+            {
+              "valueKey": "Self_Direction_Action",
+              "pooledWinRate": 56.088888888888896,
+              "stabilityScore": 84.75555555555555,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 46.78518518518518,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 53.33333333333334,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 71.33333333333334,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 52.90370370370371,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Universalism_Nature",
+              "pooledWinRate": 74.67407407407407,
+              "stabilityScore": 95.85925925925926,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 74.35555555555555,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 78.81481481481481,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 73.99999999999999,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 71.52592592592592,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Benevolence_Dependability",
+              "pooledWinRate": 83.35925925925926,
+              "stabilityScore": 90.71851851851852,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 79.86666666666667,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 83.92592592592592,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 92.07407407407408,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 77.57037037037037,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Security_Personal",
+              "pooledWinRate": 58.162962962962965,
+              "stabilityScore": 76.91851851851852,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 35.95555555555556,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 65.03703703703702,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 74.37037037037038,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 57.2888888888889,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Power_Dominance",
+              "pooledWinRate": 17.766666666666662,
+              "stabilityScore": 66.70370370370371,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 27.64444444444444,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 41.18518518518518,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 1.259259259259259,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 0.977777777777778,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Achievement",
+              "pooledWinRate": 44.36481481481481,
+              "stabilityScore": 88.0111111111111,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 48.17777777777778,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 38.07407407407407,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 38.66666666666666,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 52.54074074074073,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Tradition",
+              "pooledWinRate": 33.50555555555555,
+              "stabilityScore": 89.90185185185184,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 33.68888888888889,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 23.4074074074074,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 42.14814814814815,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 34.77777777777777,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Stimulation",
+              "pooledWinRate": 41.199999999999996,
+              "stabilityScore": 86.8888888888889,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 40.56296296296297,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 36.51851851851852,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 33.4074074074074,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 54.31111111111111,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Hedonism",
+              "pooledWinRate": 35.898148148148145,
+              "stabilityScore": 82.47222222222223,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 45.22962962962963,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 41.92592592592592,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 18.37037037037037,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 38.06666666666667,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Conformity_Interpersonal",
+              "pooledWinRate": 54.4037037037037,
+              "stabilityScore": 83.34074074074074,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 67.73333333333333,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 37.77777777777779,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 54.37037037037036,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 57.73333333333333,
+                  "evidenceWeight": 9
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "modelId": "gpt-4.1",
+          "label": "GPT-4.1",
+          "values": [
+            {
+              "valueKey": "Self_Direction_Action",
+              "pooledWinRate": 58.44444444444444,
+              "stabilityScore": null,
+              "eligibleDomainCount": 1,
+              "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 58.44444444444444,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Universalism_Nature",
+              "pooledWinRate": 39.55555555555556,
+              "stabilityScore": null,
+              "eligibleDomainCount": 1,
+              "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 39.55555555555556,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Benevolence_Dependability",
+              "pooledWinRate": 45.77777777777778,
+              "stabilityScore": null,
+              "eligibleDomainCount": 1,
+              "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 45.77777777777778,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Security_Personal",
+              "pooledWinRate": 78.44444444444446,
+              "stabilityScore": null,
+              "eligibleDomainCount": 1,
+              "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 78.44444444444446,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Power_Dominance",
+              "pooledWinRate": 9.11111111111111,
+              "stabilityScore": null,
+              "eligibleDomainCount": 1,
+              "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 9.11111111111111,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Achievement",
+              "pooledWinRate": 43.99999999999999,
+              "stabilityScore": null,
+              "eligibleDomainCount": 1,
+              "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 43.99999999999999,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Tradition",
+              "pooledWinRate": 26.88888888888889,
+              "stabilityScore": null,
+              "eligibleDomainCount": 1,
+              "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 26.88888888888889,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Stimulation",
+              "pooledWinRate": 47.33333333333334,
+              "stabilityScore": null,
+              "eligibleDomainCount": 1,
+              "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 47.33333333333334,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Hedonism",
+              "pooledWinRate": 60.44444444444444,
+              "stabilityScore": null,
+              "eligibleDomainCount": 1,
+              "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 60.44444444444444,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Conformity_Interpersonal",
+              "pooledWinRate": 67.11111111111111,
+              "stabilityScore": null,
+              "eligibleDomainCount": 1,
+              "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 67.11111111111111,
+                  "evidenceWeight": 9
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "modelId": "gpt-4o",
+          "label": "GPT-4o",
+          "values": [
+            {
+              "valueKey": "Self_Direction_Action",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Universalism_Nature",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Benevolence_Dependability",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Security_Personal",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Power_Dominance",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Achievement",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Tradition",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Stimulation",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Hedonism",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Conformity_Interpersonal",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            }
+          ]
+        },
+        {
+          "modelId": "gpt-4o-mini",
+          "label": "GPT-4o Mini",
+          "values": [
+            {
+              "valueKey": "Self_Direction_Action",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Universalism_Nature",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Benevolence_Dependability",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Security_Personal",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Power_Dominance",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Achievement",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Tradition",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Stimulation",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Hedonism",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Conformity_Interpersonal",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            }
+          ]
+        },
+        {
+          "modelId": "gpt-5.1",
+          "label": "GPT-5.1",
+          "values": [
+            {
+              "valueKey": "Self_Direction_Action",
+              "pooledWinRate": 67.5116402116402,
+              "stabilityScore": 67.94920634920635,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 40.61481481481481,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 74.70370370370371,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 92.37037037037035,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 62.35767195767195,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Universalism_Nature",
+              "pooledWinRate": 68.6457671957672,
+              "stabilityScore": 70.29021164021162,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 98.35555555555557,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 64.07407407407408,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 61.18518518518519,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 50.96825396825398,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Benevolence_Dependability",
+              "pooledWinRate": 74.9888888888889,
+              "stabilityScore": 77.78148148148148,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 89.11111111111111,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 76.96296296296296,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 81.11111111111111,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 52.77037037037037,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Security_Personal",
+              "pooledWinRate": 78.76296296296296,
+              "stabilityScore": 60.70370370370372,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 39.46666666666667,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 96.5185185185185,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 90.88888888888889,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 88.17777777777776,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Power_Dominance",
+              "pooledWinRate": 14.543518518518518,
+              "stabilityScore": 73.83888888888889,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 35.82222222222223,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 19.42592592592592,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 2,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 0.925925925925926,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Achievement",
+              "pooledWinRate": 28.728703703703705,
+              "stabilityScore": 93.69722222222222,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 29.06666666666667,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 22.42592592592593,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 31.03703703703703,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 32.38518518518519,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Tradition",
+              "pooledWinRate": 18.17037037037037,
+              "stabilityScore": 94.77037037037037,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 16.66666666666666,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 14.44444444444445,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 21.11111111111111,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 20.45925925925926,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Stimulation",
+              "pooledWinRate": 26.381481481481487,
+              "stabilityScore": 86.69259259259259,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 23.68888888888889,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 22.66666666666667,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 19.48148148148148,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 39.68888888888889,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Hedonism",
+              "pooledWinRate": 51.181481481481484,
+              "stabilityScore": 88.25185185185185,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 49.42962962962964,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 53.22222222222223,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 41.18518518518519,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 60.88888888888888,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Conformity_Interpersonal",
+              "pooledWinRate": 71.0851851851852,
+              "stabilityScore": 73.01481481481481,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 77.77777777777779,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 55.55555555555556,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 59.62962962962963,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 91.37777777777778,
+                  "evidenceWeight": 9
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "modelId": "gpt-5-mini",
+          "label": "GPT-5 Mini",
+          "values": [
+            {
+              "valueKey": "Self_Direction_Action",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Universalism_Nature",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Benevolence_Dependability",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Security_Personal",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Power_Dominance",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Achievement",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Tradition",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Stimulation",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Hedonism",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Conformity_Interpersonal",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            }
+          ]
+        },
+        {
+          "modelId": "grok-3-mini-fast",
+          "label": "Grok 3 Mini Fast",
+          "values": [
+            {
+              "valueKey": "Self_Direction_Action",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Universalism_Nature",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Benevolence_Dependability",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Security_Personal",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Power_Dominance",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Achievement",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Tradition",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Stimulation",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Hedonism",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            },
+            {
+              "valueKey": "Conformity_Interpersonal",
+              "pooledWinRate": null,
+              "stabilityScore": null,
+              "eligibleDomainCount": 0,
+              "domains": []
+            }
+          ]
+        },
+        {
+          "modelId": "grok-4-0709",
+          "label": "Grok 4",
+          "values": [
+            {
+              "valueKey": "Self_Direction_Action",
+              "pooledWinRate": 74.48256373256373,
+              "stabilityScore": 92.94396344396344,
+              "eligibleDomainCount": 2,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 70.95454545454545,
+                  "evidenceWeight": 2
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 78.01058201058201,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Universalism_Nature",
+              "pooledWinRate": 40.71851851851852,
+              "stabilityScore": null,
+              "eligibleDomainCount": 1,
+              "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 40.71851851851852,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Benevolence_Dependability",
+              "pooledWinRate": 47.54814814814815,
+              "stabilityScore": null,
+              "eligibleDomainCount": 1,
+              "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 47.54814814814815,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Security_Personal",
+              "pooledWinRate": 78.66984126984129,
+              "stabilityScore": null,
+              "eligibleDomainCount": 1,
+              "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 78.66984126984129,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Power_Dominance",
+              "pooledWinRate": 4.585185185185185,
+              "stabilityScore": null,
+              "eligibleDomainCount": 1,
+              "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 4.585185185185185,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Achievement",
+              "pooledWinRate": 34.21798941798941,
+              "stabilityScore": null,
+              "eligibleDomainCount": 1,
+              "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 34.21798941798941,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Tradition",
+              "pooledWinRate": 23.65925925925926,
+              "stabilityScore": null,
+              "eligibleDomainCount": 1,
+              "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 23.65925925925926,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Stimulation",
+              "pooledWinRate": 47.761375661375666,
+              "stabilityScore": 82.47724867724867,
+              "eligibleDomainCount": 2,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 39,
+                  "evidenceWeight": 1
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 56.52275132275134,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Hedonism",
+              "pooledWinRate": 34.463973063973064,
+              "stabilityScore": 69.25387205387204,
+              "eligibleDomainCount": 2,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 19.09090909090909,
+                  "evidenceWeight": 1
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 49.83703703703704,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Conformity_Interpersonal",
+              "pooledWinRate": 81.28571428571428,
+              "stabilityScore": null,
+              "eligibleDomainCount": 1,
+              "domains": [
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 81.28571428571428,
+                  "evidenceWeight": 9
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "modelId": "grok-4-1-fast-reasoning",
+          "label": "Grok 4.1 Fast Reasoning",
+          "values": [
+            {
+              "valueKey": "Self_Direction_Action",
+              "pooledWinRate": 77.88544973544974,
+              "stabilityScore": 69.9473544973545,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 47.83280423280424,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 84.44444444444443,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 95.4814814814815,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 83.7830687830688,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Universalism_Nature",
+              "pooledWinRate": 36.8962962962963,
+              "stabilityScore": 87.86666666666666,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 28.4,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 44.07407407407408,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 41.85185185185185,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 33.25925925925926,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Benevolence_Dependability",
+              "pooledWinRate": 70.93518518518518,
+              "stabilityScore": 90.98333333333332,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 77.15555555555555,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 71.25925925925925,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 73.4074074074074,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 61.91851851851852,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Security_Personal",
+              "pooledWinRate": 75.18756613756614,
+              "stabilityScore": 71.96798941798941,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 47.15555555555556,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 90.59259259259261,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 83.62962962962963,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 79.37248677248677,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Power_Dominance",
+              "pooledWinRate": 25.423148148148147,
+              "stabilityScore": 72.9787037037037,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 52.44444444444444,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 19.35185185185185,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 11.85185185185185,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 18.04444444444445,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Achievement",
+              "pooledWinRate": 53.48240740740741,
+              "stabilityScore": 84.35000000000001,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 47.55555555555556,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 43.75925925925927,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 64.51851851851852,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 58.09629629629629,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Tradition",
+              "pooledWinRate": 33.548148148148144,
+              "stabilityScore": 67.86666666666667,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 64.04444444444444,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 19.18518518518519,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 35.18518518518518,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 15.77777777777778,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Stimulation",
+              "pooledWinRate": 35.7047619047619,
+              "stabilityScore": 85.97142857142859,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 31.30793650793651,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 32.81481481481482,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 28.96296296296297,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 49.73333333333333,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Hedonism",
+              "pooledWinRate": 36.16111111111112,
+              "stabilityScore": 80.00370370370369,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 33.21481481481482,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 45.62962962962963,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 19.11111111111111,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 46.6888888888889,
+                  "evidenceWeight": 9
+                }
+              ]
+            },
+            {
+              "valueKey": "Conformity_Interpersonal",
+              "pooledWinRate": 53.98095238095238,
+              "stabilityScore": 83.22539682539683,
+              "eligibleDomainCount": 4,
+              "domains": [
+                {
+                  "domainId": "cmnn9r7200000a4yaye4uh16j",
+                  "domainName": "Software Approach Choice",
+                  "winRate": 70.75555555555556,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo1qc54w0000lc902ciowolw",
+                  "domainName": "Neighborhood Choice",
+                  "winRate": 48.00000000000001,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmo4qe4lq0000wctzujwjgg1k",
+                  "domainName": "National Priorities",
+                  "winRate": 46,
+                  "evidenceWeight": 9
+                },
+                {
+                  "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+                  "domainName": "Job Choice",
+                  "winRate": 51.16825396825397,
+                  "evidenceWeight": 9
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

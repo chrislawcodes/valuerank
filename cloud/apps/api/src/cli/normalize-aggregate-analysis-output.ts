@@ -4,6 +4,7 @@ import { db } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 import type { Prisma } from '@valuerank/db';
 import { normalizeAnalysisArtifacts } from '../services/analysis/normalize-analysis-output.js';
+import { isRecord } from '../utils/isRecord.js';
 
 const log = createLogger('cli:normalize-aggregate-analysis-output');
 
@@ -21,10 +22,6 @@ function parseOptions(argv: string[]): CliOptions {
   return {
     dryRun: argv.includes('--dry-run'),
   };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
 async function main() {

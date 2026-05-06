@@ -12,6 +12,7 @@ import type {
   ParsedDecisionPath,
   CachedWinnerFirstDecision,
 } from './decision-model-types.js';
+import { isRecord } from '../../../utils/isRecord.js';
 
 export { JOB_CHOICE_VALUE_STATEMENTS };
 
@@ -85,10 +86,6 @@ export function isCachedWinnerFirstDecision(value: unknown): value is CachedWinn
   // refusal vs explicit parse-failure sentinel) without requiring any other
   // field to differ.
   return decision.favoredValueKey === null && decision.strength === 'unknown';
-}
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
 export function isValidDecisionPair(pair: DecisionPair | null | undefined): pair is DecisionPair {

@@ -6,6 +6,7 @@ import { createLogger } from '@valuerank/shared';
 import { prepareAggregateRunSnapshot } from '../services/analysis/aggregate/aggregate-run-workflow.js';
 import { updateAggregateRun } from '../services/analysis/aggregate.js';
 import { zRunConfig } from '../services/analysis/aggregate/contracts.js';
+import { isRecord } from '../utils/isRecord.js';
 
 const log = createLogger('cli:backfill-condition-weighted');
 const BATCH_SIZE = 50;
@@ -61,10 +62,6 @@ export function parseOptions(argv: string[]): CliOptions {
     definitionId: readOptionValue(argv, '--definition-id'),
     domainId: readOptionValue(argv, '--domain-id'),
   };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
 function hasConditionWeightedShape(output: unknown): boolean {

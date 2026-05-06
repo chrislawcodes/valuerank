@@ -3,16 +3,13 @@ import type { Prisma } from '@valuerank/db';
 import { NotFoundError, ValidationError } from '@valuerank/shared';
 import type { Context } from '../../context.js';
 import { findPairedCompanion, getComponentTokens } from '../../../utils/auto-pair.js';
+import { isRecord } from '../../../utils/isRecord.js';
 
 type DefinitionMethodology = {
   family?: string;
   response_scale?: string;
   pair_key?: string;
 };
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
 
 export function getDefinitionMethodology(content: unknown): DefinitionMethodology | null {
   if (content === null || content === undefined || typeof content !== 'object' || Array.isArray(content)) {

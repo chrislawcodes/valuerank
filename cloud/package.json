@@ -22,6 +22,7 @@
     "db:test:reset": "DATABASE_URL=postgresql://valuerank:valuerank@localhost:5433/valuerank_test DIRECT_URL=postgresql://valuerank:valuerank@localhost:5433/valuerank_test npx prisma migrate reset --schema=packages/db/prisma/schema.prisma --force --skip-generate --skip-seed",
     "audit:domain-coverage": "tsx scripts/audit-domain-coverage.ts",
     "audit:domain-coverage-completeness": "tsx scripts/audit-domain-coverage-completeness.ts",
+    "verify:report-snapshots": "tsx scripts/verify-report-snapshots.ts",
     "clean": "turbo clean && rm -rf node_modules"
   },
   "devDependencies": {
