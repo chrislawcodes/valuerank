@@ -1657,6 +1657,40 @@ type ModelsConsistencyResult {
   models: [ModelConsistency!]!
 }
 
+type ModelsStabilitySkippedVignette {
+  definitionId: String!
+  reason: String!
+  vignetteName: String!
+}
+
+type ModelsStabilityVignetteResult {
+  avgDirectionalAgreement: Float
+  classifiedConditionCount: Int!
+  definitionId: String!
+  softLeanShare: Float!
+  stableShare: Float!
+  tornShare: Float!
+  unstableShare: Float!
+  vignetteName: String!
+}
+
+type ModelsStabilityModelResult {
+  avgDirectionalAgreement: Float
+  label: String!
+  modelId: String!
+  qualifyingVignetteCount: Int!
+  softLeanShare: Float
+  stableShare: Float
+  tornShare: Float
+  unstableShare: Float
+  vignettes: [ModelsStabilityVignetteResult!]!
+}
+
+type ModelsStabilityResult {
+  models: [ModelsStabilityModelResult!]!
+  skippedVignettes: [ModelsStabilitySkippedVignette!]!
+}
+
 type Mutation {
   """Add a tag to a definition. No-op if tag is already assigned."""
   addTagToDefinition(
@@ -2617,6 +2651,7 @@ type Query {
   ): ModelsAnalysisResult!
   modelsConfidence(domainId: ID, signature: String): ModelsConfidenceResult!
   modelsConsistency(domainId: ID, minScenarios: Int, providerId: ID, signature: String!): ModelsConsistencyResult!
+  modelsWinRateStability(domainId: ID, signature: String): ModelsStabilityResult!
 
   """
   List anomalies that are currently open (resolvedAt IS NULL) across all runs. Optional filters: domainId scopes to anomalies whose run belongs to a definition in that domain; type scopes to a single RunAnomalyType.
