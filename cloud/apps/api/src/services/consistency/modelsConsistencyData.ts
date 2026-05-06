@@ -175,16 +175,17 @@ export function computeRepeatability(perScenario: ConsistencyParsedScenario[]) {
     betweenScenarioSd: pooled.betweenSd,
     scenariosMeasured: ordered.length,
     perDomain: [] as Array<{ domainId: string; domainName: string; value: number; ciLow: number; ciHigh: number; scenariosMeasured: number }>,
-    perScenario: ordered.map((scenario) => {
+    perScenario: ordered.flatMap((scenario) => {
       const interval = wilsonInterval(scenario.matches, scenario.trials);
-      return {
+      if (interval == null) return [];
+      return [{
         scenarioId: scenario.scenarioId,
         matches: scenario.matches,
         trials: scenario.trials,
         p: interval.p,
         ciLow: interval.low,
         ciHigh: interval.high,
-      };
+      }];
     }),
   };
 }

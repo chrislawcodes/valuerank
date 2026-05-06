@@ -1,5 +1,7 @@
 import { spearmanRankCorrelation } from '../statistics/spearman.js';
 export { spearmanRankCorrelation } from '../statistics/spearman.js';
+import { wilsonInterval } from '../statistics/wilson-interval.js';
+export { wilsonInterval } from '../statistics/wilson-interval.js';
 
 export type CanonicalAppealLevel =
   | 'strongly'
@@ -7,12 +9,6 @@ export type CanonicalAppealLevel =
   | 'neutral'
   | 'opponentSomewhat'
   | 'opponentStrongly';
-
-export type WilsonIntervalResult = {
-  low: number;
-  high: number;
-  p: number;
-};
 
 export type DlsScenarioStat = {
   p: number;
@@ -53,39 +49,8 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
-function validateProportion(matches: number, trials: number): void {
-  if (!Number.isInteger(matches) || !Number.isInteger(trials)) {
-    throw new RangeError('matches and trials must be integers');
-  }
-  if (matches < 0 || trials < 0 || matches > trials) {
-    throw new RangeError('matches must be between 0 and trials');
-  }
-}
-
 function scenarioMatchesFromProportion(p: number, n: number): number {
   return Math.max(0, Math.min(n, Math.round(p * n)));
-}
-
-export function wilsonInterval(matches: number, trials: number, z = Z_95): WilsonIntervalResult {
-  validateProportion(matches, trials);
-  if (trials === 0) {
-    return { low: 0, high: 0, p: 0 };
-  }
-
-  const p = matches / trials;
-  const zSquared = z * z;
-  const denominator = 1 + zSquared / trials;
-  const center = (p + zSquared / (2 * trials)) / denominator;
-  const margin = (
-    z
-    * Math.sqrt((p * (1 - p) + zSquared / (4 * trials)) / trials)
-  ) / denominator;
-
-  return {
-    p,
-    low: clamp01(center - margin),
-    high: clamp01(center + margin),
-  };
 }
 
 export function dersimonianLairdPool(scenarioStats: DlsScenarioStat[]): DlsPoolResult {
@@ -105,6 +70,9 @@ export function dersimonianLairdPool(scenarioStats: DlsScenarioStat[]): DlsPoolR
     const scenario = usable[0]!;
     const matches = scenarioMatchesFromProportion(scenario.p, scenario.n);
     const wilson = wilsonInterval(matches, scenario.n);
+    if (wilson == null) {
+      return { estimate: 0, ciLow: 0, ciHigh: 0, withinSd: 0, betweenSd: 0, tauSquared: 0 };
+    }
     const variance = Math.pow((wilson.high - wilson.low) / (2 * Z_95), 2);
     return {
       estimate: wilson.p,
@@ -116,15 +84,16 @@ export function dersimonianLairdPool(scenarioStats: DlsScenarioStat[]): DlsPoolR
     };
   }
 
-  const studies = usable.map((scenario) => {
+  const studies = usable.flatMap((scenario) => {
     const matches = scenarioMatchesFromProportion(scenario.p, scenario.n);
     const wilson = wilsonInterval(matches, scenario.n);
+    if (wilson == null) return [];
     const variance = Math.max(EPSILON, Math.pow((wilson.high - wilson.low) / (2 * Z_95), 2));
-    return {
+    return [{
       p: wilson.p,
       variance,
       weight: 1 / variance,
-    };
+    }];
   });
 
   const fixedWeightTotal = studies.reduce((sum, study) => sum + study.weight, 0);

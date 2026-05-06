@@ -46,7 +46,7 @@ DEDUP-8 (`isRecord`) is independent of report output — pure type guard.
 | DEDUP-6 | Snapshot builder twin (domain-analysis vs pressure-sensitivity) | API | Medium | Large | Decision needed |
 | DEDUP-7 | `cloud/packages/db/src/queries/*` mostly orphaned | API/db | High | Medium | Decision needed |
 | ~~DEDUP-8~~ | ~~`isRecord` defined 9 times~~ | ~~API~~ | ~~Medium~~ | ~~Trivial~~ | **Resolved — PR #928** |
-| DEDUP-9 | `wilsonInterval` defined twice | API | Medium | Small | Open |
+| ~~DEDUP-9~~ | ~~`wilsonInterval` defined twice~~ | ~~API~~ | ~~Medium~~ | ~~Small~~ | **Resolved — PR #943** |
 | DEDUP-10 | Decision-summary utility sprawl | Web | Medium-High | Large | Decision needed |
 | DEDUP-11 | Shared `*-value-statements.ts` (4× boilerplate) | Shared | Medium | Small | Open |
 | DEDUP-12 | Run lifecycle / recovery sprawl | API | Medium-Low | Large | Decision needed |
@@ -151,6 +151,16 @@ Added `hasAnalysis?: boolean` and `analysisStatus?` params to `useRuns` and `use
 - Body: `value !== null && typeof value === 'object' && !Array.isArray(value)`. `modelsConsistencyData.ts` narrowed to `RawRecord`.
 
 ### DEDUP-9 — `wilsonInterval` defined twice
+
+**Status: Resolved in PR #943 (2026-05-05).**
+
+Canonical implementation: `cloud/apps/api/src/services/statistics/wilson-interval.ts`.
+Signature: `wilsonInterval(matches, trials, z?) → { low, high, p } | null`.
+Default z = 1.96 (matching both prior implementations).
+
+**Boundary-contract decision:** Invalid inputs (trials ≤ 0, NaN, non-integer, etc.) now return `null` instead of throwing (was throwing in consistency) or returning zeros (was returning `{ low:0, high:0, p:0 }` for `trials=0` in consistency). This is the user-approved fail-loud contract. The `WilsonIntervalResult` type was deleted from `consistency/statistics.ts`.
+
+Both `aggregation.ts` and `consistency/statistics.ts` now re-export `wilsonInterval` from the canonical module — external consumers see no import-path change. The `wilsonIntervalFromProportion` private helper stays in `aggregation.ts` because `diffProportionCI` calls it directly with a proportion input. All callers updated to handle `null`. Consistency test updated to expect `null` for `wilsonInterval(0, 0)`.
 
 **Files:** `cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts:378`, `cloud/apps/api/src/services/consistency/statistics.ts:69`.
 **Shared:** Wilson confidence interval for a binomial proportion. Same math.
@@ -260,6 +270,7 @@ Tracking infrastructure that protects against dedup-induced (or any) drift in us
 | DEDUP-3 | `useRuns` / `useRunsWithAnalysis` hook collapse | #934 | 2026-05-05 | Added `hasAnalysis` + `analysisStatus` params to `useRuns` and `useInfiniteRuns`. Deleted `useRunsWithAnalysis.ts` and `useInfiniteRunsWithAnalysis.ts`. `comparison.graphql:RunsWithAnalysis` left in place (different resolver). |
 | DEDUP-15 | `runsWithAnalysis(ids:)` resolver and web query deleted | #936 | 2026-05-05 | Zero consumers. Architecture decision at `cloud/specs/016-analysis-tab/plan.md` chose `runs(hasAnalysis:)` instead. ~250 LOC removed across API resolver, tests, web query, re-export, manual types. Schema snapshot and codegen regenerated. |
 | DEDUP-2 | `signaturePreference` fork web↔shared (partial) | #937 | 2026-05-06 | Deleted `cloud/apps/web/src/utils/signaturePreference.ts` (57 LOC). Updated 2 importers to use `@valuerank/shared`. `schwartz.ts` NOT deleted — not a true duplicate (exports different function). |
+| DEDUP-9 | `wilsonInterval` consolidation | #943 | 2026-05-05 | Canonical: `cloud/apps/api/src/services/statistics/wilson-interval.ts`. Invalid inputs now return `null` (fail-loud contract). `WilsonIntervalResult` type deleted. Both prior sites re-export from canonical. `wilsonIntervalFromProportion` stays local in `aggregation.ts` (used by `diffProportionCI`). |
 
 ### Dead-code deletions
 
@@ -270,10 +281,11 @@ Tracking infrastructure that protects against dedup-induced (or any) drift in us
 
 ## Phase 2 — recommended starting order
 
-DEDUP-8, DEDUP-3, and DEDUP-2 (partial) are done. Suggested next picks:
+DEDUP-8, DEDUP-3, DEDUP-2 (partial), and DEDUP-9 are done. Suggested next picks:
 
-1. **DEDUP-9** (`wilsonInterval`) — small statistics-helper consolidation; 2 callsites, contract change is contained.
-2. **DEDUP-1** (`pauseQueue`) — start with a design note, not code. The only active-bug cluster.
+1. **DEDUP-11** (`*-value-statements.ts` boilerplate) — 4× identical shape; pure mechanical consolidation.
+2. **DEDUP-13** (`validate_input` in 5 workers) — small, self-contained, no contract changes.
+3. **DEDUP-1** (`pauseQueue`) — start with a design note, not code. The only active-bug cluster.
 
 Note: `cloud/apps/web/src/utils/schwartz.ts` was audited during DEDUP-2 and found NOT to be a duplicate. It exports `formatFullSchwartzValueName` which has no equivalent in shared. Remove the schwartz half of DEDUP-2 from any future planning.
 
