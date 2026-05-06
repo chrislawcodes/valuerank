@@ -1,0 +1,11 @@
+query PairwiseWinRates($domainId: ID, $signature: String) {
+  pairwiseWinRates(domainId: $domainId, signature: $signature) {
+    models {
+      modelId
+      label
+      valueOrder
+      winRateMatrix
+      trialCountMatrix
+    }
+  }
+}

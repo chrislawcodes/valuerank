@@ -1,7 +1,8 @@
 import type {
   PressureSensitivityModel,
-  PressureSensitivityValueRate,
+  PressureSensitivityValueRateAggregated,
 } from '../../api/operations/pressureSensitivity';
+
 
 type RateField =
   | 'averageWinRate'
@@ -39,7 +40,7 @@ function averageRate(sum: number, count: number): number | null {
 
 export function averageValueRatesAcrossModels(
   models: PressureSensitivityModel[],
-): PressureSensitivityValueRate[] {
+): PressureSensitivityValueRateAggregated[] {
   if (models.length === 0) {
     return [];
   }
