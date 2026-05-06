@@ -12,7 +12,7 @@
       "missingDefinitions": [],
       "definitionsWithAnalysis": 90,
       "cacheStatus": "FRESH",
-      "generatedAt": "2026-05-03T02:47:10.575Z",
+      "generatedAt": "2026-05-06T07:13:10.146Z",
       "models": [
         {
           "model": "claude-sonnet-4-5",
@@ -20,11 +20,11 @@
           "values": [
             {
               "valueKey": "Self_Direction_Action",
-              "score": 0.9822841010289086,
-              "prioritized": 1604,
+              "score": 0.9977403592656003,
+              "prioritized": 1629,
               "deprioritized": 600,
               "neutral": 0,
-              "totalComparisons": 2204
+              "totalComparisons": 2229
             },
             {
               "valueKey": "Universalism_Nature",
@@ -68,11 +68,11 @@
             },
             {
               "valueKey": "Tradition",
-              "score": -2.1418471078672656,
+              "score": -2.15447672762275,
               "prioritized": 230,
-              "deprioritized": 1966,
+              "deprioritized": 1991,
               "neutral": 29,
-              "totalComparisons": 2225
+              "totalComparisons": 2250
             },
             {
               "valueKey": "Stimulation",
@@ -103,10 +103,10 @@
             "topStructure": "strong_leader",
             "bottomStructure": "hard_no",
             "topGap": 0.41673164904226234,
-            "bottomGap": 2.408361737438132,
+            "bottomGap": 2.395732117682648,
             "spread": 6.55812232166595,
-            "steepness": 0.5024471063103492,
-            "dominanceZScore": 0.04363577937378766
+            "steepness": 0.5023842921218781,
+            "dominanceZScore": 0.04330599505712449
           }
         },
         {
@@ -115,11 +115,11 @@
           "values": [
             {
               "valueKey": "Self_Direction_Action",
-              "score": 1.1927995037278107,
-              "prioritized": 1690,
-              "deprioritized": 512,
+              "score": 1.1923447663308169,
+              "prioritized": 1709,
+              "deprioritized": 518,
               "neutral": 0,
-              "totalComparisons": 2202
+              "totalComparisons": 2227
             },
             {
               "valueKey": "Universalism_Nature",
@@ -163,11 +163,11 @@
             },
             {
               "valueKey": "Tradition",
-              "score": -0.5826215804800587,
-              "prioritized": 797,
-              "deprioritized": 1428,
+              "score": -0.5883393037666953,
+              "prioritized": 803,
+              "deprioritized": 1447,
               "neutral": 0,
-              "totalComparisons": 2225
+              "totalComparisons": 2250
             },
             {
               "valueKey": "Stimulation",
@@ -197,11 +197,11 @@
           "rankingShape": {
             "topStructure": "even_spread",
             "bottomStructure": "hard_no",
-            "topGap": 0.0795061605109153,
+            "topGap": 0.07996089790790917,
             "bottomGap": 3.761495722581222,
             "spread": 5.742800946900216,
-            "steepness": 0.33142705932272226,
-            "dominanceZScore": -0.8286499744110642
+            "steepness": 0.33156422511569184,
+            "dominanceZScore": -0.8273700823963852
           }
         },
         {
@@ -210,11 +210,11 @@
           "values": [
             {
               "valueKey": "Self_Direction_Action",
-              "score": 1.3031938221222599,
-              "prioritized": 1707,
-              "deprioritized": 463,
+              "score": 1.2960033438799048,
+              "prioritized": 1724,
+              "deprioritized": 471,
               "neutral": 31,
-              "totalComparisons": 2201
+              "totalComparisons": 2226
             },
             {
               "valueKey": "Universalism_Nature",
@@ -258,11 +258,11 @@
             },
             {
               "valueKey": "Tradition",
-              "score": -0.8198424639348488,
-              "prioritized": 632,
-              "deprioritized": 1436,
+              "score": -0.8190442011727946,
+              "prioritized": 640,
+              "deprioritized": 1453,
               "neutral": 157,
-              "totalComparisons": 2225
+              "totalComparisons": 2250
             },
             {
               "valueKey": "Stimulation",
@@ -290,13 +290,13 @@
             }
           ],
           "rankingShape": {
-            "topStructure": "tied_leaders",
+            "topStructure": "even_spread",
             "bottomStructure": "hard_no",
-            "topGap": 0.15307060105992654,
-            "bottomGap": 2.1498391324191997,
-            "spread": 4.272875418476309,
-            "steepness": 0.3100959482381322,
-            "dominanceZScore": -0.6383641992891452
+            "topGap": 0.14588012281757146,
+            "bottomGap": 2.1506373951812536,
+            "spread": 4.265684940233953,
+            "steepness": 0.3086401134171711,
+            "dominanceZScore": -0.656944675855592
           }
         },
         {
@@ -305,11 +305,11 @@
           "values": [
             {
               "valueKey": "Self_Direction_Action",
-              "score": 0.5471932679368655,
-              "prioritized": 1399,
-              "deprioritized": 809,
+              "score": 0.5494349030879333,
+              "prioritized": 1416,
+              "deprioritized": 817,
               "neutral": 0,
-              "totalComparisons": 2208
+              "totalComparisons": 2233
             },
             {
               "valueKey": "Universalism_Nature",
@@ -353,11 +353,11 @@
             },
             {
               "valueKey": "Tradition",
-              "score": -0.4621418369170143,
-              "prioritized": 845,
-              "deprioritized": 1342,
+              "score": -0.46530878494152783,
+              "prioritized": 853,
+              "deprioritized": 1359,
               "neutral": 38,
-              "totalComparisons": 2225
+              "totalComparisons": 2250
             },
             {
               "valueKey": "Stimulation",
@@ -387,11 +387,11 @@
           "rankingShape": {
             "topStructure": "tied_leaders",
             "bottomStructure": "mild_avoidance",
-            "topGap": 0.15723846648938444,
+            "topGap": 0.15499683133831665,
             "bottomGap": 0.08551698562640703,
             "spread": 1.2816138460795719,
-            "steepness": 0.15749455498764856,
-            "dominanceZScore": -0.6275833723307744
+            "steepness": 0.15751511749594732,
+            "dominanceZScore": -0.633374636036538
           }
         },
         {
@@ -486,7 +486,7 @@
             "bottomGap": 0.07210883526057321,
             "spread": 1.8295754840247342,
             "steepness": 0.19563813186776713,
-            "dominanceZScore": -0.5080879847940926
+            "dominanceZScore": -0.5081432542891138
           }
         },
         {
@@ -581,7 +581,7 @@
             "bottomGap": 1.314424360806623,
             "spread": 3.756332679415295,
             "steepness": 0.3463621650752305,
-            "dominanceZScore": 0.9092746207541196
+            "dominanceZScore": 0.9085141305161585
           }
         },
         {
@@ -590,11 +590,11 @@
           "values": [
             {
               "valueKey": "Self_Direction_Action",
-              "score": 0.491745223639248,
-              "prioritized": 1366,
-              "deprioritized": 835,
+              "score": 0.5060409256426543,
+              "prioritized": 1389,
+              "deprioritized": 837,
               "neutral": 0,
-              "totalComparisons": 2201
+              "totalComparisons": 2226
             },
             {
               "valueKey": "Universalism_Nature",
@@ -638,11 +638,11 @@
             },
             {
               "valueKey": "Tradition",
-              "score": -1.3513005100456004,
-              "prioritized": 457,
-              "deprioritized": 1768,
+              "score": -1.3598611040517352,
+              "prioritized": 459,
+              "deprioritized": 1791,
               "neutral": 0,
-              "totalComparisons": 2225
+              "totalComparisons": 2250
             },
             {
               "valueKey": "Stimulation",
@@ -673,10 +673,10 @@
             "topStructure": "strong_leader",
             "bottomStructure": "hard_no",
             "topGap": 0.3847065449835898,
-            "bottomGap": 3.2002854298083845,
+            "bottomGap": 3.19172483580225,
             "spread": 6.9439282136538445,
-            "steepness": 0.5692895004260946,
-            "dominanceZScore": -0.03920209315926903
+            "steepness": 0.5691620535817108,
+            "dominanceZScore": -0.039490660792366086
           }
         },
         {
@@ -771,7 +771,7 @@
             "bottomGap": 1.9782658441968923,
             "spread": 4.588814496803575,
             "steepness": 0.3572834357712905,
-            "dominanceZScore": -0.4775550196652155
+            "dominanceZScore": -0.4776254810950797
           }
         },
         {
@@ -780,11 +780,11 @@
           "values": [
             {
               "valueKey": "Self_Direction_Action",
-              "score": 1.6018415655421656,
-              "prioritized": 1835,
-              "deprioritized": 369,
+              "score": 1.6121297040998117,
+              "prioritized": 1859,
+              "deprioritized": 370,
               "neutral": 0,
-              "totalComparisons": 2204
+              "totalComparisons": 2229
             },
             {
               "valueKey": "Universalism_Nature",
@@ -828,11 +828,11 @@
             },
             {
               "valueKey": "Tradition",
-              "score": -1.6331762614390049,
-              "prioritized": 357,
-              "deprioritized": 1832,
+              "score": -1.643395172864427,
+              "prioritized": 358,
+              "deprioritized": 1856,
               "neutral": 36,
-              "totalComparisons": 2225
+              "totalComparisons": 2250
             },
             {
               "valueKey": "Stimulation",
@@ -862,11 +862,11 @@
           "rankingShape": {
             "topStructure": "tied_leaders",
             "bottomStructure": "hard_no",
-            "topGap": 0.26033896262501166,
-            "bottomGap": 0.16777089866657802,
-            "spread": 3.2350178269811707,
-            "steepness": 0.35906966514673583,
-            "dominanceZScore": -0.3608980325632319
+            "topGap": 0.27062710118265776,
+            "bottomGap": 0.1779898100920001,
+            "spread": 3.2555248769642384,
+            "steepness": 0.36135437977883,
+            "dominanceZScore": -0.3344279209674573
           }
         },
         {
@@ -875,11 +875,11 @@
           "values": [
             {
               "valueKey": "Self_Direction_Action",
-              "score": 0.12880095745862086,
+              "score": 0.10488781416001469,
               "prioritized": 1174,
-              "deprioritized": 1032,
+              "deprioritized": 1057,
               "neutral": 0,
-              "totalComparisons": 2206
+              "totalComparisons": 2231
             },
             {
               "valueKey": "Universalism_Nature",
@@ -923,11 +923,11 @@
             },
             {
               "valueKey": "Tradition",
-              "score": 0.6061358035703155,
-              "prioritized": 1440,
+              "score": 0.6233360900173902,
+              "prioritized": 1465,
               "deprioritized": 785,
               "neutral": 0,
-              "totalComparisons": 2225
+              "totalComparisons": 2250
             },
             {
               "valueKey": "Stimulation",
@@ -960,8 +960,8 @@
             "topGap": 1.4917659826660157,
             "bottomGap": 3.5077579218813604,
             "spread": 6.596951118108222,
-            "steepness": 0.5177753782412525,
-            "dominanceZScore": 2.8243779413424366
+            "steepness": 0.5179245528379534,
+            "dominanceZScore": 2.8226645752622135
           }
         },
         {
@@ -970,11 +970,11 @@
           "values": [
             {
               "valueKey": "Self_Direction_Action",
-              "score": 0.10670705813309532,
-              "prioritized": 1155,
-              "deprioritized": 1038,
+              "score": 0.1100207552014202,
+              "prioritized": 1170,
+              "deprioritized": 1048,
               "neutral": 7,
-              "totalComparisons": 2200
+              "totalComparisons": 2225
             },
             {
               "valueKey": "Universalism_Nature",
@@ -1018,11 +1018,11 @@
             },
             {
               "valueKey": "Tradition",
-              "score": -0.6129974924102438,
-              "prioritized": 778,
-              "deprioritized": 1437,
+              "score": -0.6106193427244087,
+              "prioritized": 788,
+              "deprioritized": 1452,
               "neutral": 10,
-              "totalComparisons": 2225
+              "totalComparisons": 2250
             },
             {
               "valueKey": "Stimulation",
@@ -1053,10 +1053,10 @@
             "topStructure": "strong_leader",
             "bottomStructure": "hard_no",
             "topGap": 0.2850621611443549,
-            "bottomGap": 3.9261257890249692,
+            "bottomGap": 3.9285039387108043,
             "spread": 5.760691847651529,
-            "steepness": 0.32611427797936027,
-            "dominanceZScore": -0.29694766525754945
+            "steepness": 0.3259877924959345,
+            "dominanceZScore": -0.2971079894029652
           }
         }
       ],
@@ -1088,8 +1088,8 @@
         }
       ],
       "rankingShapeBenchmarks": {
-        "domainMeanTopGap": 0.3998620659349804,
-        "domainStdTopGap": 0.3865997891953687,
+        "domainMeanTopGap": 0.3999812261678184,
+        "domainStdTopGap": 0.38679224094374554,
         "medianSpread": 4.588814496803575
       },
       "clusterAnalysis": {
@@ -1109,13 +1109,13 @@
               "Benevolence_Dependability"
             ],
             "centroid": {
-              "Self_Direction_Action": 1.2479966629250354,
+              "Self_Direction_Action": 1.2441740551053608,
               "Universalism_Nature": 0.1687193271005512,
               "Benevolence_Dependability": 0.9791455183262965,
               "Security_Personal": 1.2112144426505296,
               "Power_Dominance": -3.720088439507769,
               "Achievement": -0.48450312980255206,
-              "Tradition": -0.7012320222074537,
+              "Tradition": -0.703691752469745,
               "Stimulation": 0.19241512401412825,
               "Hedonism": -0.1136149601805886,
               "Conformity_Interpersonal": -0.336822761632476
@@ -1124,7 +1124,7 @@
               {
                 "model": "deepseek-chat",
                 "label": "DeepSeek Chat",
-                "silhouetteScore": 0.7068717763398437,
+                "silhouetteScore": 0.7121254706189651,
                 "isOutlier": false,
                 "nearestClusterIds": null,
                 "distancesToNearestClusters": null
@@ -1132,7 +1132,7 @@
               {
                 "model": "deepseek-reasoner",
                 "label": "DeepSeek Reasoner",
-                "silhouetteScore": 0.7841804902056604,
+                "silhouetteScore": 0.7872538654423529,
                 "isOutlier": false,
                 "nearestClusterIds": null,
                 "distancesToNearestClusters": null
@@ -1148,13 +1148,13 @@
               "Self_Direction_Action"
             ],
             "centroid": {
-              "Self_Direction_Action": 0.7370146623340783,
+              "Self_Direction_Action": 0.7518906424541274,
               "Universalism_Nature": -0.5170438114419239,
               "Benevolence_Dependability": 0.5156004136221809,
               "Security_Personal": 2.0077746025884116,
               "Power_Dominance": -4.550897392579691,
               "Achievement": -0.7748312605584409,
-              "Tradition": -1.746573808956433,
+              "Tradition": -1.7571689158372426,
               "Stimulation": -0.1566161327464366,
               "Hedonism": 0.38101577641125545,
               "Conformity_Interpersonal": 1.9917620505590752
@@ -1163,7 +1163,7 @@
               {
                 "model": "claude-sonnet-4-5",
                 "label": "Claude Sonnet 4.5",
-                "silhouetteScore": 0.591029487607624,
+                "silhouetteScore": 0.590055122506014,
                 "isOutlier": false,
                 "nearestClusterIds": null,
                 "distancesToNearestClusters": null
@@ -1171,7 +1171,7 @@
               {
                 "model": "gpt-5.1",
                 "label": "GPT-5.1",
-                "silhouetteScore": 0.7280649164285666,
+                "silhouetteScore": 0.7269814889015098,
                 "isOutlier": false,
                 "nearestClusterIds": null,
                 "distancesToNearestClusters": null
@@ -1187,13 +1187,13 @@
               "Security_Personal"
             ],
             "centroid": {
-              "Self_Direction_Action": 0.1177540077958581,
+              "Self_Direction_Action": 0.10745428468071744,
               "Universalism_Nature": 0.700305156095254,
               "Benevolence_Dependability": 1.6746991713998611,
               "Security_Personal": 0.47895738099221086,
               "Power_Dominance": -4.504122311480014,
               "Achievement": 0.014947151862826288,
-              "Tradition": -0.003430844419964163,
+              "Tradition": 0.006358373646490778,
               "Stimulation": -0.22738479288287472,
               "Hedonism": -0.7172198487201122,
               "Conformity_Interpersonal": 0.2249693783917756
@@ -1202,7 +1202,7 @@
               {
                 "model": "mistral-large-2512",
                 "label": "Mistral Large (Dec 2025)",
-                "silhouetteScore": 0.538744324961733,
+                "silhouetteScore": 0.5402027842131584,
                 "isOutlier": false,
                 "nearestClusterIds": null,
                 "distancesToNearestClusters": null
@@ -1210,7 +1210,7 @@
               {
                 "model": "mistral-small-2503",
                 "label": "Mistral Small",
-                "silhouetteScore": 0.331048343489261,
+                "silhouetteScore": 0.32161351862694953,
                 "isOutlier": false,
                 "nearestClusterIds": null,
                 "distancesToNearestClusters": null
@@ -1226,13 +1226,13 @@
               "Benevolence_Dependability"
             ],
             "centroid": {
-              "Self_Direction_Action": 1.0745174167395155,
+              "Self_Direction_Action": 1.0807823035938724,
               "Universalism_Nature": -0.5885933098601117,
               "Benevolence_Dependability": 0.4206963168548776,
               "Security_Personal": 1.022967168671702,
               "Power_Dominance": -1.0212937372128743,
               "Achievement": 0.20133110462234693,
-              "Tradition": -1.0476590491780096,
+              "Tradition": -1.0543519789029774,
               "Stimulation": -0.05396668858545114,
               "Hedonism": -0.24115651173413116,
               "Conformity_Interpersonal": 0.14182883650056538
@@ -1241,7 +1241,7 @@
               {
                 "model": "gemini-2.5-flash",
                 "label": "Gemini 2.5 Flash",
-                "silhouetteScore": 0.6786545631793771,
+                "silhouetteScore": 0.6779058935217307,
                 "isOutlier": false,
                 "nearestClusterIds": null,
                 "distancesToNearestClusters": null
@@ -1249,7 +1249,7 @@
               {
                 "model": "grok-4-1-fast-reasoning",
                 "label": "Grok 4.1 Fast Reasoning",
-                "silhouetteScore": 0.6241988861177776,
+                "silhouetteScore": 0.6260815683095284,
                 "isOutlier": false,
                 "nearestClusterIds": null,
                 "distancesToNearestClusters": null
@@ -1261,7 +1261,7 @@
           "cluster-1:cluster-2": {
             "clusterAId": "cluster-1",
             "clusterBId": "cluster-2",
-            "distance": 0.08068788684234254,
+            "distance": 0.08040657941383446,
             "faultLines": [
               {
                 "valueKey": "Conformity_Interpersonal",
@@ -1276,10 +1276,10 @@
                 "valueKey": "Tradition",
                 "clusterAId": "cluster-1",
                 "clusterBId": "cluster-2",
-                "clusterAScore": -0.7012320222074537,
-                "clusterBScore": -1.746573808956433,
-                "delta": 1.0453417867489794,
-                "absDelta": 1.0453417867489794
+                "clusterAScore": -0.703691752469745,
+                "clusterBScore": -1.7571689158372426,
+                "delta": 1.0534771633674975,
+                "absDelta": 1.0534771633674975
               },
               {
                 "valueKey": "Power_Dominance",
@@ -1295,16 +1295,16 @@
           "cluster-1:cluster-3": {
             "clusterAId": "cluster-1",
             "clusterBId": "cluster-3",
-            "distance": 0.06459244135457266,
+            "distance": 0.06499651568300512,
             "faultLines": [
               {
                 "valueKey": "Self_Direction_Action",
                 "clusterAId": "cluster-1",
                 "clusterBId": "cluster-3",
-                "clusterAScore": 1.2479966629250354,
-                "clusterBScore": 0.1177540077958581,
-                "delta": 1.1302426551291773,
-                "absDelta": 1.1302426551291773
+                "clusterAScore": 1.2441740551053608,
+                "clusterBScore": 0.10745428468071744,
+                "delta": 1.1367197704246434,
+                "absDelta": 1.1367197704246434
               },
               {
                 "valueKey": "Power_Dominance",
@@ -1329,7 +1329,7 @@
           "cluster-1:cluster-4": {
             "clusterAId": "cluster-1",
             "clusterBId": "cluster-4",
-            "distance": 0.13314161203454322,
+            "distance": 0.1334245839053163,
             "faultLines": [
               {
                 "valueKey": "Power_Dominance",
@@ -1363,7 +1363,7 @@
           "cluster-2:cluster-3": {
             "clusterAId": "cluster-2",
             "clusterBId": "cluster-3",
-            "distance": 0.12463129788005098,
+            "distance": 0.12538383421349936,
             "faultLines": [
               {
                 "valueKey": "Conformity_Interpersonal",
@@ -1378,10 +1378,10 @@
                 "valueKey": "Tradition",
                 "clusterAId": "cluster-2",
                 "clusterBId": "cluster-3",
-                "clusterAScore": -1.746573808956433,
-                "clusterBScore": -0.003430844419964163,
-                "delta": -1.7431429645364689,
-                "absDelta": 1.7431429645364689
+                "clusterAScore": -1.7571689158372426,
+                "clusterBScore": 0.006358373646490778,
+                "delta": -1.7635272894837333,
+                "absDelta": 1.7635272894837333
               },
               {
                 "valueKey": "Security_Personal",
@@ -1397,7 +1397,7 @@
           "cluster-2:cluster-4": {
             "clusterAId": "cluster-2",
             "clusterBId": "cluster-4",
-            "distance": 0.13009894469833355,
+            "distance": 0.12980272958755468,
             "faultLines": [
               {
                 "valueKey": "Power_Dominance",
@@ -1431,7 +1431,7 @@
           "cluster-3:cluster-4": {
             "clusterAId": "cluster-3",
             "clusterBId": "cluster-4",
-            "distance": 0.24613199828522891,
+            "distance": 0.24758611442107792,
             "faultLines": [
               {
                 "valueKey": "Power_Dominance",
@@ -1474,7 +1474,7 @@
                 {
                   "model": "deepseek-chat",
                   "label": "DeepSeek Chat",
-                  "silhouetteScore": 0.7068717763398437,
+                  "silhouetteScore": 0.7121254706189651,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -1482,20 +1482,20 @@
                 {
                   "model": "deepseek-reasoner",
                   "label": "DeepSeek Reasoner",
-                  "silhouetteScore": 0.7841804902056604,
+                  "silhouetteScore": 0.7872538654423529,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 1.2479966629250354,
+                "Self_Direction_Action": 1.2441740551053608,
                 "Universalism_Nature": 0.1687193271005512,
                 "Benevolence_Dependability": 0.9791455183262965,
                 "Security_Personal": 1.2112144426505296,
                 "Power_Dominance": -3.720088439507769,
                 "Achievement": -0.48450312980255206,
-                "Tradition": -0.7012320222074537,
+                "Tradition": -0.703691752469745,
                 "Stimulation": 0.19241512401412825,
                 "Hedonism": -0.1136149601805886,
                 "Conformity_Interpersonal": -0.336822761632476
@@ -1513,7 +1513,7 @@
                 {
                   "model": "claude-sonnet-4-5",
                   "label": "Claude Sonnet 4.5",
-                  "silhouetteScore": 0.591029487607624,
+                  "silhouetteScore": 0.590055122506014,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -1521,20 +1521,20 @@
                 {
                   "model": "gpt-5.1",
                   "label": "GPT-5.1",
-                  "silhouetteScore": 0.7280649164285666,
+                  "silhouetteScore": 0.7269814889015098,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.7370146623340783,
+                "Self_Direction_Action": 0.7518906424541274,
                 "Universalism_Nature": -0.5170438114419239,
                 "Benevolence_Dependability": 0.5156004136221809,
                 "Security_Personal": 2.0077746025884116,
                 "Power_Dominance": -4.550897392579691,
                 "Achievement": -0.7748312605584409,
-                "Tradition": -1.746573808956433,
+                "Tradition": -1.7571689158372426,
                 "Stimulation": -0.1566161327464366,
                 "Hedonism": 0.38101577641125545,
                 "Conformity_Interpersonal": 1.9917620505590752
@@ -1552,7 +1552,7 @@
                 {
                   "model": "mistral-large-2512",
                   "label": "Mistral Large (Dec 2025)",
-                  "silhouetteScore": 0.538744324961733,
+                  "silhouetteScore": 0.5402027842131584,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -1560,20 +1560,20 @@
                 {
                   "model": "mistral-small-2503",
                   "label": "Mistral Small",
-                  "silhouetteScore": 0.331048343489261,
+                  "silhouetteScore": 0.32161351862694953,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.1177540077958581,
+                "Self_Direction_Action": 0.10745428468071744,
                 "Universalism_Nature": 0.700305156095254,
                 "Benevolence_Dependability": 1.6746991713998611,
                 "Security_Personal": 0.47895738099221086,
                 "Power_Dominance": -4.504122311480014,
                 "Achievement": 0.014947151862826288,
-                "Tradition": -0.003430844419964163,
+                "Tradition": 0.006358373646490778,
                 "Stimulation": -0.22738479288287472,
                 "Hedonism": -0.7172198487201122,
                 "Conformity_Interpersonal": 0.2249693783917756
@@ -1591,7 +1591,7 @@
                 {
                   "model": "gemini-2.5-flash",
                   "label": "Gemini 2.5 Flash",
-                  "silhouetteScore": 0.6786545631793771,
+                  "silhouetteScore": 0.6779058935217307,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -1599,20 +1599,20 @@
                 {
                   "model": "grok-4-1-fast-reasoning",
                   "label": "Grok 4.1 Fast Reasoning",
-                  "silhouetteScore": 0.6241988861177776,
+                  "silhouetteScore": 0.6260815683095284,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 1.0745174167395155,
+                "Self_Direction_Action": 1.0807823035938724,
                 "Universalism_Nature": -0.5885933098601117,
                 "Benevolence_Dependability": 0.4206963168548776,
                 "Security_Personal": 1.022967168671702,
                 "Power_Dominance": -1.0212937372128743,
                 "Achievement": 0.20133110462234693,
-                "Tradition": -1.0476590491780096,
+                "Tradition": -1.0543519789029774,
                 "Stimulation": -0.05396668858545114,
                 "Hedonism": -0.24115651173413116,
                 "Conformity_Interpersonal": 0.14182883650056538
@@ -1628,7 +1628,7 @@
             "cluster-1:cluster-2": {
               "clusterAId": "cluster-1",
               "clusterBId": "cluster-2",
-              "distance": 0.08068788684234254,
+              "distance": 0.08040657941383446,
               "faultLines": [
                 {
                   "valueKey": "Conformity_Interpersonal",
@@ -1643,10 +1643,10 @@
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-2",
-                  "clusterAScore": -0.7012320222074537,
-                  "clusterBScore": -1.746573808956433,
-                  "delta": 1.0453417867489794,
-                  "absDelta": 1.0453417867489794
+                  "clusterAScore": -0.703691752469745,
+                  "clusterBScore": -1.7571689158372426,
+                  "delta": 1.0534771633674975,
+                  "absDelta": 1.0534771633674975
                 },
                 {
                   "valueKey": "Power_Dominance",
@@ -1662,16 +1662,16 @@
             "cluster-1:cluster-3": {
               "clusterAId": "cluster-1",
               "clusterBId": "cluster-3",
-              "distance": 0.06459244135457266,
+              "distance": 0.06499651568300512,
               "faultLines": [
                 {
                   "valueKey": "Self_Direction_Action",
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-3",
-                  "clusterAScore": 1.2479966629250354,
-                  "clusterBScore": 0.1177540077958581,
-                  "delta": 1.1302426551291773,
-                  "absDelta": 1.1302426551291773
+                  "clusterAScore": 1.2441740551053608,
+                  "clusterBScore": 0.10745428468071744,
+                  "delta": 1.1367197704246434,
+                  "absDelta": 1.1367197704246434
                 },
                 {
                   "valueKey": "Power_Dominance",
@@ -1696,7 +1696,7 @@
             "cluster-1:cluster-4": {
               "clusterAId": "cluster-1",
               "clusterBId": "cluster-4",
-              "distance": 0.13314161203454322,
+              "distance": 0.1334245839053163,
               "faultLines": [
                 {
                   "valueKey": "Power_Dominance",
@@ -1730,7 +1730,7 @@
             "cluster-2:cluster-3": {
               "clusterAId": "cluster-2",
               "clusterBId": "cluster-3",
-              "distance": 0.12463129788005098,
+              "distance": 0.12538383421349936,
               "faultLines": [
                 {
                   "valueKey": "Conformity_Interpersonal",
@@ -1745,10 +1745,10 @@
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-2",
                   "clusterBId": "cluster-3",
-                  "clusterAScore": -1.746573808956433,
-                  "clusterBScore": -0.003430844419964163,
-                  "delta": -1.7431429645364689,
-                  "absDelta": 1.7431429645364689
+                  "clusterAScore": -1.7571689158372426,
+                  "clusterBScore": 0.006358373646490778,
+                  "delta": -1.7635272894837333,
+                  "absDelta": 1.7635272894837333
                 },
                 {
                   "valueKey": "Security_Personal",
@@ -1764,7 +1764,7 @@
             "cluster-2:cluster-4": {
               "clusterAId": "cluster-2",
               "clusterBId": "cluster-4",
-              "distance": 0.13009894469833355,
+              "distance": 0.12980272958755468,
               "faultLines": [
                 {
                   "valueKey": "Power_Dominance",
@@ -1798,7 +1798,7 @@
             "cluster-3:cluster-4": {
               "clusterAId": "cluster-3",
               "clusterBId": "cluster-4",
-              "distance": 0.24613199828522891,
+              "distance": 0.24758611442107792,
               "faultLines": [
                 {
                   "valueKey": "Power_Dominance",
@@ -1846,7 +1846,7 @@
                 {
                   "model": "claude-sonnet-4-5",
                   "label": "Claude Sonnet 4.5",
-                  "silhouetteScore": 0.591029487607624,
+                  "silhouetteScore": 0.590055122506014,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -1854,20 +1854,20 @@
                 {
                   "model": "gpt-5.1",
                   "label": "GPT-5.1",
-                  "silhouetteScore": 0.7280649164285666,
+                  "silhouetteScore": 0.7269814889015098,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.7370146623340783,
+                "Self_Direction_Action": 0.7518906424541274,
                 "Universalism_Nature": -0.5170438114419239,
                 "Benevolence_Dependability": 0.5156004136221809,
                 "Security_Personal": 2.0077746025884116,
                 "Power_Dominance": -4.550897392579691,
                 "Achievement": -0.7748312605584409,
-                "Tradition": -1.746573808956433,
+                "Tradition": -1.7571689158372426,
                 "Stimulation": -0.1566161327464366,
                 "Hedonism": 0.38101577641125545,
                 "Conformity_Interpersonal": 1.9917620505590752
@@ -1885,7 +1885,7 @@
                 {
                   "model": "deepseek-chat",
                   "label": "DeepSeek Chat",
-                  "silhouetteScore": 0.7068717763398437,
+                  "silhouetteScore": 0.7121254706189651,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -1893,20 +1893,20 @@
                 {
                   "model": "deepseek-reasoner",
                   "label": "DeepSeek Reasoner",
-                  "silhouetteScore": 0.7841804902056604,
+                  "silhouetteScore": 0.7872538654423529,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 1.2479966629250354,
+                "Self_Direction_Action": 1.2441740551053608,
                 "Universalism_Nature": 0.1687193271005512,
                 "Benevolence_Dependability": 0.9791455183262965,
                 "Security_Personal": 1.2112144426505296,
                 "Power_Dominance": -3.720088439507769,
                 "Achievement": -0.48450312980255206,
-                "Tradition": -0.7012320222074537,
+                "Tradition": -0.703691752469745,
                 "Stimulation": 0.19241512401412825,
                 "Hedonism": -0.1136149601805886,
                 "Conformity_Interpersonal": -0.336822761632476
@@ -1924,7 +1924,7 @@
                 {
                   "model": "gemini-2.5-flash",
                   "label": "Gemini 2.5 Flash",
-                  "silhouetteScore": 0.6786545631793771,
+                  "silhouetteScore": 0.6779058935217307,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -1932,20 +1932,20 @@
                 {
                   "model": "grok-4-1-fast-reasoning",
                   "label": "Grok 4.1 Fast Reasoning",
-                  "silhouetteScore": 0.6241988861177776,
+                  "silhouetteScore": 0.6260815683095284,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 1.0745174167395155,
+                "Self_Direction_Action": 1.0807823035938724,
                 "Universalism_Nature": -0.5885933098601117,
                 "Benevolence_Dependability": 0.4206963168548776,
                 "Security_Personal": 1.022967168671702,
                 "Power_Dominance": -1.0212937372128743,
                 "Achievement": 0.20133110462234693,
-                "Tradition": -1.0476590491780096,
+                "Tradition": -1.0543519789029774,
                 "Stimulation": -0.05396668858545114,
                 "Hedonism": -0.24115651173413116,
                 "Conformity_Interpersonal": 0.14182883650056538
@@ -1963,7 +1963,7 @@
                 {
                   "model": "mistral-large-2512",
                   "label": "Mistral Large (Dec 2025)",
-                  "silhouetteScore": 0.538744324961733,
+                  "silhouetteScore": 0.5402027842131584,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -1971,20 +1971,20 @@
                 {
                   "model": "mistral-small-2503",
                   "label": "Mistral Small",
-                  "silhouetteScore": 0.331048343489261,
+                  "silhouetteScore": 0.32161351862694953,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.1177540077958581,
+                "Self_Direction_Action": 0.10745428468071744,
                 "Universalism_Nature": 0.700305156095254,
                 "Benevolence_Dependability": 1.6746991713998611,
                 "Security_Personal": 0.47895738099221086,
                 "Power_Dominance": -4.504122311480014,
                 "Achievement": 0.014947151862826288,
-                "Tradition": -0.003430844419964163,
+                "Tradition": 0.006358373646490778,
                 "Stimulation": -0.22738479288287472,
                 "Hedonism": -0.7172198487201122,
                 "Conformity_Interpersonal": 0.2249693783917756
@@ -2000,7 +2000,7 @@
             "cluster-1:cluster-2": {
               "clusterAId": "cluster-1",
               "clusterBId": "cluster-2",
-              "distance": 0.08068788684234254,
+              "distance": 0.08040657941383446,
               "faultLines": [
                 {
                   "valueKey": "Conformity_Interpersonal",
@@ -2015,10 +2015,10 @@
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-2",
-                  "clusterAScore": -1.746573808956433,
-                  "clusterBScore": -0.7012320222074537,
-                  "delta": -1.0453417867489794,
-                  "absDelta": 1.0453417867489794
+                  "clusterAScore": -1.7571689158372426,
+                  "clusterBScore": -0.703691752469745,
+                  "delta": -1.0534771633674975,
+                  "absDelta": 1.0534771633674975
                 },
                 {
                   "valueKey": "Power_Dominance",
@@ -2034,7 +2034,7 @@
             "cluster-1:cluster-3": {
               "clusterAId": "cluster-1",
               "clusterBId": "cluster-3",
-              "distance": 0.13009894469833355,
+              "distance": 0.12980272958755468,
               "faultLines": [
                 {
                   "valueKey": "Power_Dominance",
@@ -2068,7 +2068,7 @@
             "cluster-1:cluster-4": {
               "clusterAId": "cluster-1",
               "clusterBId": "cluster-4",
-              "distance": 0.12463129788005098,
+              "distance": 0.12538383421349936,
               "faultLines": [
                 {
                   "valueKey": "Conformity_Interpersonal",
@@ -2083,10 +2083,10 @@
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-4",
-                  "clusterAScore": -1.746573808956433,
-                  "clusterBScore": -0.003430844419964163,
-                  "delta": -1.7431429645364689,
-                  "absDelta": 1.7431429645364689
+                  "clusterAScore": -1.7571689158372426,
+                  "clusterBScore": 0.006358373646490778,
+                  "delta": -1.7635272894837333,
+                  "absDelta": 1.7635272894837333
                 },
                 {
                   "valueKey": "Security_Personal",
@@ -2102,7 +2102,7 @@
             "cluster-2:cluster-3": {
               "clusterAId": "cluster-2",
               "clusterBId": "cluster-3",
-              "distance": 0.13314161203454322,
+              "distance": 0.1334245839053163,
               "faultLines": [
                 {
                   "valueKey": "Power_Dominance",
@@ -2136,16 +2136,16 @@
             "cluster-2:cluster-4": {
               "clusterAId": "cluster-2",
               "clusterBId": "cluster-4",
-              "distance": 0.06459244135457266,
+              "distance": 0.06499651568300512,
               "faultLines": [
                 {
                   "valueKey": "Self_Direction_Action",
                   "clusterAId": "cluster-2",
                   "clusterBId": "cluster-4",
-                  "clusterAScore": 1.2479966629250354,
-                  "clusterBScore": 0.1177540077958581,
-                  "delta": 1.1302426551291773,
-                  "absDelta": 1.1302426551291773
+                  "clusterAScore": 1.2441740551053608,
+                  "clusterBScore": 0.10745428468071744,
+                  "delta": 1.1367197704246434,
+                  "absDelta": 1.1367197704246434
                 },
                 {
                   "valueKey": "Power_Dominance",
@@ -2170,7 +2170,7 @@
             "cluster-3:cluster-4": {
               "clusterAId": "cluster-3",
               "clusterBId": "cluster-4",
-              "distance": 0.24613199828522891,
+              "distance": 0.24758611442107792,
               "faultLines": [
                 {
                   "valueKey": "Power_Dominance",
@@ -2218,7 +2218,7 @@
                 {
                   "model": "deepseek-chat",
                   "label": "DeepSeek Chat",
-                  "silhouetteScore": 0.2678499970254345,
+                  "silhouetteScore": 0.2711909459533208,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -2226,20 +2226,20 @@
                 {
                   "model": "deepseek-reasoner",
                   "label": "DeepSeek Reasoner",
-                  "silhouetteScore": 0.3001512982942429,
+                  "silhouetteScore": 0.3012708136573539,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 1.2479966629250354,
+                "Self_Direction_Action": 1.2441740551053608,
                 "Universalism_Nature": 0.1687193271005512,
                 "Benevolence_Dependability": 0.9791455183262965,
                 "Security_Personal": 1.2112144426505296,
                 "Power_Dominance": -3.720088439507769,
                 "Achievement": -0.48450312980255206,
-                "Tradition": -0.7012320222074537,
+                "Tradition": -0.703691752469745,
                 "Stimulation": 0.19241512401412825,
                 "Hedonism": -0.1136149601805886,
                 "Conformity_Interpersonal": -0.336822761632476
@@ -2257,7 +2257,7 @@
                 {
                   "model": "mistral-large-2512",
                   "label": "Mistral Large (Dec 2025)",
-                  "silhouetteScore": 0.3187231086368767,
+                  "silhouetteScore": 0.31955975337895154,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -2265,26 +2265,26 @@
                 {
                   "model": "mistral-small-2503",
                   "label": "Mistral Small",
-                  "silhouetteScore": 0.14403588133868492,
+                  "silhouetteScore": 0.13842553967557628,
                   "isOutlier": true,
                   "nearestClusterIds": [
                     "cluster-1",
                     "cluster-3"
                   ],
                   "distancesToNearestClusters": [
-                    0.703097939759512,
-                    1.116357718890137
+                    0.7019726345919264,
+                    1.1184052482643807
                   ]
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.1177540077958581,
+                "Self_Direction_Action": 0.10745428468071744,
                 "Universalism_Nature": 0.700305156095254,
                 "Benevolence_Dependability": 1.6746991713998611,
                 "Security_Personal": 0.47895738099221086,
                 "Power_Dominance": -4.504122311480014,
                 "Achievement": 0.014947151862826288,
-                "Tradition": -0.003430844419964163,
+                "Tradition": 0.006358373646490778,
                 "Stimulation": -0.22738479288287472,
                 "Hedonism": -0.7172198487201122,
                 "Conformity_Interpersonal": 0.2249693783917756
@@ -2302,7 +2302,7 @@
                 {
                   "model": "claude-sonnet-4-5",
                   "label": "Claude Sonnet 4.5",
-                  "silhouetteScore": 0.38355370807991956,
+                  "silhouetteScore": 0.3835021101269545,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -2310,20 +2310,20 @@
                 {
                   "model": "gpt-5.1",
                   "label": "GPT-5.1",
-                  "silhouetteScore": 0.44723390380736555,
+                  "silhouetteScore": 0.44620206408861257,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.7370146623340783,
+                "Self_Direction_Action": 0.7518906424541274,
                 "Universalism_Nature": -0.5170438114419239,
                 "Benevolence_Dependability": 0.5156004136221809,
                 "Security_Personal": 2.0077746025884116,
                 "Power_Dominance": -4.550897392579691,
                 "Achievement": -0.7748312605584409,
-                "Tradition": -1.746573808956433,
+                "Tradition": -1.7571689158372426,
                 "Stimulation": -0.1566161327464366,
                 "Hedonism": 0.38101577641125545,
                 "Conformity_Interpersonal": 1.9917620505590752
@@ -2341,7 +2341,7 @@
                 {
                   "model": "gemini-2.5-flash",
                   "label": "Gemini 2.5 Flash",
-                  "silhouetteScore": 0.4433675931597755,
+                  "silhouetteScore": 0.44070665612973536,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -2349,20 +2349,20 @@
                 {
                   "model": "grok-4-1-fast-reasoning",
                   "label": "Grok 4.1 Fast Reasoning",
-                  "silhouetteScore": 0.2991210937142118,
+                  "silhouetteScore": 0.29730006093869255,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 1.0745174167395155,
+                "Self_Direction_Action": 1.0807823035938724,
                 "Universalism_Nature": -0.5885933098601117,
                 "Benevolence_Dependability": 0.4206963168548776,
                 "Security_Personal": 1.022967168671702,
                 "Power_Dominance": -1.0212937372128743,
                 "Achievement": 0.20133110462234693,
-                "Tradition": -1.0476590491780096,
+                "Tradition": -1.0543519789029774,
                 "Stimulation": -0.05396668858545114,
                 "Hedonism": -0.24115651173413116,
                 "Conformity_Interpersonal": 0.14182883650056538
@@ -2378,16 +2378,16 @@
             "cluster-1:cluster-2": {
               "clusterAId": "cluster-1",
               "clusterBId": "cluster-2",
-              "distance": 0.7932391372467136,
+              "distance": 0.7954057184222164,
               "faultLines": [
                 {
                   "valueKey": "Self_Direction_Action",
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-2",
-                  "clusterAScore": 1.2479966629250354,
-                  "clusterBScore": 0.1177540077958581,
-                  "delta": 1.1302426551291773,
-                  "absDelta": 1.1302426551291773
+                  "clusterAScore": 1.2441740551053608,
+                  "clusterBScore": 0.10745428468071744,
+                  "delta": 1.1367197704246434,
+                  "absDelta": 1.1367197704246434
                 },
                 {
                   "valueKey": "Power_Dominance",
@@ -2412,7 +2412,7 @@
             "cluster-1:cluster-3": {
               "clusterAId": "cluster-1",
               "clusterBId": "cluster-3",
-              "distance": 1.0406419180070625,
+              "distance": 1.0406502328993734,
               "faultLines": [
                 {
                   "valueKey": "Conformity_Interpersonal",
@@ -2427,10 +2427,10 @@
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-3",
-                  "clusterAScore": -0.7012320222074537,
-                  "clusterBScore": -1.746573808956433,
-                  "delta": 1.0453417867489794,
-                  "absDelta": 1.0453417867489794
+                  "clusterAScore": -0.703691752469745,
+                  "clusterBScore": -1.7571689158372426,
+                  "delta": 1.0534771633674975,
+                  "absDelta": 1.0534771633674975
                 },
                 {
                   "valueKey": "Power_Dominance",
@@ -2446,7 +2446,7 @@
             "cluster-1:cluster-4": {
               "clusterAId": "cluster-1",
               "clusterBId": "cluster-4",
-              "distance": 1.005948688108223,
+              "distance": 1.006439763376293,
               "faultLines": [
                 {
                   "valueKey": "Power_Dominance",
@@ -2480,7 +2480,7 @@
             "cluster-2:cluster-3": {
               "clusterAId": "cluster-2",
               "clusterBId": "cluster-3",
-              "distance": 1.2339482927665784,
+              "distance": 1.2383210928732713,
               "faultLines": [
                 {
                   "valueKey": "Conformity_Interpersonal",
@@ -2495,10 +2495,10 @@
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-2",
                   "clusterBId": "cluster-3",
-                  "clusterAScore": -0.003430844419964163,
-                  "clusterBScore": -1.746573808956433,
-                  "delta": 1.7431429645364689,
-                  "absDelta": 1.7431429645364689
+                  "clusterAScore": 0.006358373646490778,
+                  "clusterBScore": -1.7571689158372426,
+                  "delta": 1.7635272894837333,
+                  "absDelta": 1.7635272894837333
                 },
                 {
                   "valueKey": "Security_Personal",
@@ -2514,7 +2514,7 @@
             "cluster-2:cluster-4": {
               "clusterAId": "cluster-2",
               "clusterBId": "cluster-4",
-              "distance": 1.4070650402648206,
+              "distance": 1.4099554428991072,
               "faultLines": [
                 {
                   "valueKey": "Power_Dominance",
@@ -2548,7 +2548,7 @@
             "cluster-3:cluster-4": {
               "clusterAId": "cluster-3",
               "clusterBId": "cluster-4",
-              "distance": 1.431427827535212,
+              "distance": 1.431731541330355,
               "faultLines": [
                 {
                   "valueKey": "Power_Dominance",
@@ -2596,7 +2596,7 @@
                 {
                   "model": "claude-sonnet-4-5",
                   "label": "Claude Sonnet 4.5",
-                  "silhouetteScore": 0.38355370807991956,
+                  "silhouetteScore": 0.3835021101269545,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -2604,20 +2604,20 @@
                 {
                   "model": "gpt-5.1",
                   "label": "GPT-5.1",
-                  "silhouetteScore": 0.44723390380736555,
+                  "silhouetteScore": 0.44620206408861257,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.7370146623340783,
+                "Self_Direction_Action": 0.7518906424541274,
                 "Universalism_Nature": -0.5170438114419239,
                 "Benevolence_Dependability": 0.5156004136221809,
                 "Security_Personal": 2.0077746025884116,
                 "Power_Dominance": -4.550897392579691,
                 "Achievement": -0.7748312605584409,
-                "Tradition": -1.746573808956433,
+                "Tradition": -1.7571689158372426,
                 "Stimulation": -0.1566161327464366,
                 "Hedonism": 0.38101577641125545,
                 "Conformity_Interpersonal": 1.9917620505590752
@@ -2635,7 +2635,7 @@
                 {
                   "model": "deepseek-chat",
                   "label": "DeepSeek Chat",
-                  "silhouetteScore": 0.2678499970254345,
+                  "silhouetteScore": 0.2711909459533208,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -2643,20 +2643,20 @@
                 {
                   "model": "deepseek-reasoner",
                   "label": "DeepSeek Reasoner",
-                  "silhouetteScore": 0.3001512982942429,
+                  "silhouetteScore": 0.3012708136573539,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 1.2479966629250354,
+                "Self_Direction_Action": 1.2441740551053608,
                 "Universalism_Nature": 0.1687193271005512,
                 "Benevolence_Dependability": 0.9791455183262965,
                 "Security_Personal": 1.2112144426505296,
                 "Power_Dominance": -3.720088439507769,
                 "Achievement": -0.48450312980255206,
-                "Tradition": -0.7012320222074537,
+                "Tradition": -0.703691752469745,
                 "Stimulation": 0.19241512401412825,
                 "Hedonism": -0.1136149601805886,
                 "Conformity_Interpersonal": -0.336822761632476
@@ -2674,7 +2674,7 @@
                 {
                   "model": "gemini-2.5-flash",
                   "label": "Gemini 2.5 Flash",
-                  "silhouetteScore": 0.4433675931597755,
+                  "silhouetteScore": 0.44070665612973536,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -2682,20 +2682,20 @@
                 {
                   "model": "grok-4-1-fast-reasoning",
                   "label": "Grok 4.1 Fast Reasoning",
-                  "silhouetteScore": 0.2991210937142118,
+                  "silhouetteScore": 0.29730006093869255,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 1.0745174167395155,
+                "Self_Direction_Action": 1.0807823035938724,
                 "Universalism_Nature": -0.5885933098601117,
                 "Benevolence_Dependability": 0.4206963168548776,
                 "Security_Personal": 1.022967168671702,
                 "Power_Dominance": -1.0212937372128743,
                 "Achievement": 0.20133110462234693,
-                "Tradition": -1.0476590491780096,
+                "Tradition": -1.0543519789029774,
                 "Stimulation": -0.05396668858545114,
                 "Hedonism": -0.24115651173413116,
                 "Conformity_Interpersonal": 0.14182883650056538
@@ -2713,7 +2713,7 @@
                 {
                   "model": "mistral-large-2512",
                   "label": "Mistral Large (Dec 2025)",
-                  "silhouetteScore": 0.3187231086368767,
+                  "silhouetteScore": 0.31955975337895154,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -2721,26 +2721,26 @@
                 {
                   "model": "mistral-small-2503",
                   "label": "Mistral Small",
-                  "silhouetteScore": 0.14403588133868492,
+                  "silhouetteScore": 0.13842553967557628,
                   "isOutlier": true,
                   "nearestClusterIds": [
                     "cluster-2",
                     "cluster-1"
                   ],
                   "distancesToNearestClusters": [
-                    0.703097939759512,
-                    1.116357718890137
+                    0.7019726345919264,
+                    1.1184052482643807
                   ]
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.1177540077958581,
+                "Self_Direction_Action": 0.10745428468071744,
                 "Universalism_Nature": 0.700305156095254,
                 "Benevolence_Dependability": 1.6746991713998611,
                 "Security_Personal": 0.47895738099221086,
                 "Power_Dominance": -4.504122311480014,
                 "Achievement": 0.014947151862826288,
-                "Tradition": -0.003430844419964163,
+                "Tradition": 0.006358373646490778,
                 "Stimulation": -0.22738479288287472,
                 "Hedonism": -0.7172198487201122,
                 "Conformity_Interpersonal": 0.2249693783917756
@@ -2756,7 +2756,7 @@
             "cluster-1:cluster-2": {
               "clusterAId": "cluster-1",
               "clusterBId": "cluster-2",
-              "distance": 1.0406419180070627,
+              "distance": 1.0406502328993734,
               "faultLines": [
                 {
                   "valueKey": "Conformity_Interpersonal",
@@ -2771,10 +2771,10 @@
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-2",
-                  "clusterAScore": -1.746573808956433,
-                  "clusterBScore": -0.7012320222074537,
-                  "delta": -1.0453417867489794,
-                  "absDelta": 1.0453417867489794
+                  "clusterAScore": -1.7571689158372426,
+                  "clusterBScore": -0.703691752469745,
+                  "delta": -1.0534771633674975,
+                  "absDelta": 1.0534771633674975
                 },
                 {
                   "valueKey": "Power_Dominance",
@@ -2790,7 +2790,7 @@
             "cluster-1:cluster-3": {
               "clusterAId": "cluster-1",
               "clusterBId": "cluster-3",
-              "distance": 1.431427827535212,
+              "distance": 1.431731541330355,
               "faultLines": [
                 {
                   "valueKey": "Power_Dominance",
@@ -2824,7 +2824,7 @@
             "cluster-1:cluster-4": {
               "clusterAId": "cluster-1",
               "clusterBId": "cluster-4",
-              "distance": 1.2339482927665784,
+              "distance": 1.2383210928732713,
               "faultLines": [
                 {
                   "valueKey": "Conformity_Interpersonal",
@@ -2839,10 +2839,10 @@
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-4",
-                  "clusterAScore": -1.746573808956433,
-                  "clusterBScore": -0.003430844419964163,
-                  "delta": -1.7431429645364689,
-                  "absDelta": 1.7431429645364689
+                  "clusterAScore": -1.7571689158372426,
+                  "clusterBScore": 0.006358373646490778,
+                  "delta": -1.7635272894837333,
+                  "absDelta": 1.7635272894837333
                 },
                 {
                   "valueKey": "Security_Personal",
@@ -2858,7 +2858,7 @@
             "cluster-2:cluster-3": {
               "clusterAId": "cluster-2",
               "clusterBId": "cluster-3",
-              "distance": 1.005948688108223,
+              "distance": 1.006439763376293,
               "faultLines": [
                 {
                   "valueKey": "Power_Dominance",
@@ -2892,16 +2892,16 @@
             "cluster-2:cluster-4": {
               "clusterAId": "cluster-2",
               "clusterBId": "cluster-4",
-              "distance": 0.7932391372467136,
+              "distance": 0.7954057184222164,
               "faultLines": [
                 {
                   "valueKey": "Self_Direction_Action",
                   "clusterAId": "cluster-2",
                   "clusterBId": "cluster-4",
-                  "clusterAScore": 1.2479966629250354,
-                  "clusterBScore": 0.1177540077958581,
-                  "delta": 1.1302426551291773,
-                  "absDelta": 1.1302426551291773
+                  "clusterAScore": 1.2441740551053608,
+                  "clusterBScore": 0.10745428468071744,
+                  "delta": 1.1367197704246434,
+                  "absDelta": 1.1367197704246434
                 },
                 {
                   "valueKey": "Power_Dominance",
@@ -2926,7 +2926,7 @@
             "cluster-3:cluster-4": {
               "clusterAId": "cluster-3",
               "clusterBId": "cluster-4",
-              "distance": 1.4070650402648206,
+              "distance": 1.4099554428991072,
               "faultLines": [
                 {
                   "valueKey": "Power_Dominance",
@@ -2974,7 +2974,7 @@
                 {
                   "model": "deepseek-chat",
                   "label": "DeepSeek Chat",
-                  "silhouetteScore": 0.41864692866427144,
+                  "silhouetteScore": 0.4223798933444527,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -2982,20 +2982,20 @@
                 {
                   "model": "deepseek-reasoner",
                   "label": "DeepSeek Reasoner",
-                  "silhouetteScore": 0.3716777769026473,
+                  "silhouetteScore": 0.374800504095212,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 1.2479966629250354,
+                "Self_Direction_Action": 1.2441740551053608,
                 "Universalism_Nature": 0.1687193271005512,
                 "Benevolence_Dependability": 0.9791455183262965,
                 "Security_Personal": 1.2112144426505296,
                 "Power_Dominance": -3.720088439507769,
                 "Achievement": -0.48450312980255206,
-                "Tradition": -0.7012320222074537,
+                "Tradition": -0.703691752469745,
                 "Stimulation": 0.19241512401412825,
                 "Hedonism": -0.1136149601805886,
                 "Conformity_Interpersonal": -0.336822761632476
@@ -3013,7 +3013,7 @@
                 {
                   "model": "mistral-large-2512",
                   "label": "Mistral Large (Dec 2025)",
-                  "silhouetteScore": 0.4068195108927279,
+                  "silhouetteScore": 0.4101008737250564,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -3021,26 +3021,26 @@
                 {
                   "model": "mistral-small-2503",
                   "label": "Mistral Small",
-                  "silhouetteScore": 0.17477392260122512,
+                  "silhouetteScore": 0.1736230617345382,
                   "isOutlier": true,
                   "nearestClusterIds": [
                     "cluster-1",
                     "cluster-4"
                   ],
                   "distancesToNearestClusters": [
-                    0.5605183691676898,
-                    0.8866315448010653
+                    0.5594789393764553,
+                    0.8872792619497141
                   ]
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.1177540077958581,
+                "Self_Direction_Action": 0.10745428468071744,
                 "Universalism_Nature": 0.700305156095254,
                 "Benevolence_Dependability": 1.6746991713998611,
                 "Security_Personal": 0.47895738099221086,
                 "Power_Dominance": -4.504122311480014,
                 "Achievement": 0.014947151862826288,
-                "Tradition": -0.003430844419964163,
+                "Tradition": 0.006358373646490778,
                 "Stimulation": -0.22738479288287472,
                 "Hedonism": -0.7172198487201122,
                 "Conformity_Interpersonal": 0.2249693783917756
@@ -3058,7 +3058,7 @@
                 {
                   "model": "claude-sonnet-4-5",
                   "label": "Claude Sonnet 4.5",
-                  "silhouetteScore": 0.3668830499774818,
+                  "silhouetteScore": 0.3653927858830638,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -3066,20 +3066,20 @@
                 {
                   "model": "gpt-5.1",
                   "label": "GPT-5.1",
-                  "silhouetteScore": 0.4387108740446881,
+                  "silhouetteScore": 0.43727185302468186,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.7370146623340783,
+                "Self_Direction_Action": 0.7518906424541274,
                 "Universalism_Nature": -0.5170438114419239,
                 "Benevolence_Dependability": 0.5156004136221809,
                 "Security_Personal": 2.0077746025884116,
                 "Power_Dominance": -4.550897392579691,
                 "Achievement": -0.7748312605584409,
-                "Tradition": -1.746573808956433,
+                "Tradition": -1.7571689158372426,
                 "Stimulation": -0.1566161327464366,
                 "Hedonism": 0.38101577641125545,
                 "Conformity_Interpersonal": 1.9917620505590752
@@ -3097,7 +3097,7 @@
                 {
                   "model": "gemini-2.5-flash",
                   "label": "Gemini 2.5 Flash",
-                  "silhouetteScore": 0.36639642375008546,
+                  "silhouetteScore": 0.36385985146885536,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -3105,20 +3105,20 @@
                 {
                   "model": "grok-4-1-fast-reasoning",
                   "label": "Grok 4.1 Fast Reasoning",
-                  "silhouetteScore": 0.2495135203953667,
+                  "silhouetteScore": 0.24971636647089424,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 1.0745174167395155,
+                "Self_Direction_Action": 1.0807823035938724,
                 "Universalism_Nature": -0.5885933098601117,
                 "Benevolence_Dependability": 0.4206963168548776,
                 "Security_Personal": 1.022967168671702,
                 "Power_Dominance": -1.0212937372128743,
                 "Achievement": 0.20133110462234693,
-                "Tradition": -1.0476590491780096,
+                "Tradition": -1.0543519789029774,
                 "Stimulation": -0.05396668858545114,
                 "Hedonism": -0.24115651173413116,
                 "Conformity_Interpersonal": 0.14182883650056538
@@ -3134,16 +3134,16 @@
             "cluster-1:cluster-2": {
               "clusterAId": "cluster-1",
               "clusterBId": "cluster-2",
-              "distance": 0.6701526348845691,
+              "distance": 0.6716204475983667,
               "faultLines": [
                 {
                   "valueKey": "Self_Direction_Action",
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-2",
-                  "clusterAScore": 1.2479966629250354,
-                  "clusterBScore": 0.1177540077958581,
-                  "delta": 1.1302426551291773,
-                  "absDelta": 1.1302426551291773
+                  "clusterAScore": 1.2441740551053608,
+                  "clusterBScore": 0.10745428468071744,
+                  "delta": 1.1367197704246434,
+                  "absDelta": 1.1367197704246434
                 },
                 {
                   "valueKey": "Power_Dominance",
@@ -3168,7 +3168,7 @@
             "cluster-1:cluster-3": {
               "clusterAId": "cluster-1",
               "clusterBId": "cluster-3",
-              "distance": 0.7860813929851611,
+              "distance": 0.7850250718530406,
               "faultLines": [
                 {
                   "valueKey": "Conformity_Interpersonal",
@@ -3183,10 +3183,10 @@
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-3",
-                  "clusterAScore": -0.7012320222074537,
-                  "clusterBScore": -1.746573808956433,
-                  "delta": 1.0453417867489794,
-                  "absDelta": 1.0453417867489794
+                  "clusterAScore": -0.703691752469745,
+                  "clusterBScore": -1.7571689158372426,
+                  "delta": 1.0534771633674975,
+                  "absDelta": 1.0534771633674975
                 },
                 {
                   "valueKey": "Power_Dominance",
@@ -3202,7 +3202,7 @@
             "cluster-1:cluster-4": {
               "clusterAId": "cluster-1",
               "clusterBId": "cluster-4",
-              "distance": 0.7054751426389063,
+              "distance": 0.7062300659792808,
               "faultLines": [
                 {
                   "valueKey": "Power_Dominance",
@@ -3236,7 +3236,7 @@
             "cluster-2:cluster-3": {
               "clusterAId": "cluster-2",
               "clusterBId": "cluster-3",
-              "distance": 1.0388982265021798,
+              "distance": 1.043454229320425,
               "faultLines": [
                 {
                   "valueKey": "Conformity_Interpersonal",
@@ -3251,10 +3251,10 @@
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-2",
                   "clusterBId": "cluster-3",
-                  "clusterAScore": -0.003430844419964163,
-                  "clusterBScore": -1.746573808956433,
-                  "delta": 1.7431429645364689,
-                  "absDelta": 1.7431429645364689
+                  "clusterAScore": 0.006358373646490778,
+                  "clusterBScore": -1.7571689158372426,
+                  "delta": 1.7635272894837333,
+                  "absDelta": 1.7635272894837333
                 },
                 {
                   "valueKey": "Security_Personal",
@@ -3270,7 +3270,7 @@
             "cluster-2:cluster-4": {
               "clusterAId": "cluster-2",
               "clusterBId": "cluster-4",
-              "distance": 0.9866440304954998,
+              "distance": 0.9896714513860744,
               "faultLines": [
                 {
                   "valueKey": "Power_Dominance",
@@ -3304,7 +3304,7 @@
             "cluster-3:cluster-4": {
               "clusterAId": "cluster-3",
               "clusterBId": "cluster-4",
-              "distance": 1.0584673033224354,
+              "distance": 1.058740058736696,
               "faultLines": [
                 {
                   "valueKey": "Power_Dominance",
@@ -3352,7 +3352,7 @@
                 {
                   "model": "claude-sonnet-4-5",
                   "label": "Claude Sonnet 4.5",
-                  "silhouetteScore": 0.3668830499774818,
+                  "silhouetteScore": 0.3653927858830638,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -3360,20 +3360,20 @@
                 {
                   "model": "gpt-5.1",
                   "label": "GPT-5.1",
-                  "silhouetteScore": 0.4387108740446881,
+                  "silhouetteScore": 0.43727185302468186,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.7370146623340783,
+                "Self_Direction_Action": 0.7518906424541274,
                 "Universalism_Nature": -0.5170438114419239,
                 "Benevolence_Dependability": 0.5156004136221809,
                 "Security_Personal": 2.0077746025884116,
                 "Power_Dominance": -4.550897392579691,
                 "Achievement": -0.7748312605584409,
-                "Tradition": -1.746573808956433,
+                "Tradition": -1.7571689158372426,
                 "Stimulation": -0.1566161327464366,
                 "Hedonism": 0.38101577641125545,
                 "Conformity_Interpersonal": 1.9917620505590752
@@ -3391,7 +3391,7 @@
                 {
                   "model": "deepseek-chat",
                   "label": "DeepSeek Chat",
-                  "silhouetteScore": 0.41864692866427144,
+                  "silhouetteScore": 0.4223798933444527,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -3399,20 +3399,20 @@
                 {
                   "model": "deepseek-reasoner",
                   "label": "DeepSeek Reasoner",
-                  "silhouetteScore": 0.3716777769026473,
+                  "silhouetteScore": 0.374800504095212,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 1.2479966629250354,
+                "Self_Direction_Action": 1.2441740551053608,
                 "Universalism_Nature": 0.1687193271005512,
                 "Benevolence_Dependability": 0.9791455183262965,
                 "Security_Personal": 1.2112144426505296,
                 "Power_Dominance": -3.720088439507769,
                 "Achievement": -0.48450312980255206,
-                "Tradition": -0.7012320222074537,
+                "Tradition": -0.703691752469745,
                 "Stimulation": 0.19241512401412825,
                 "Hedonism": -0.1136149601805886,
                 "Conformity_Interpersonal": -0.336822761632476
@@ -3430,7 +3430,7 @@
                 {
                   "model": "gemini-2.5-flash",
                   "label": "Gemini 2.5 Flash",
-                  "silhouetteScore": 0.36639642375008546,
+                  "silhouetteScore": 0.36385985146885536,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -3438,20 +3438,20 @@
                 {
                   "model": "grok-4-1-fast-reasoning",
                   "label": "Grok 4.1 Fast Reasoning",
-                  "silhouetteScore": 0.2495135203953667,
+                  "silhouetteScore": 0.24971636647089424,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 1.0745174167395155,
+                "Self_Direction_Action": 1.0807823035938724,
                 "Universalism_Nature": -0.5885933098601117,
                 "Benevolence_Dependability": 0.4206963168548776,
                 "Security_Personal": 1.022967168671702,
                 "Power_Dominance": -1.0212937372128743,
                 "Achievement": 0.20133110462234693,
-                "Tradition": -1.0476590491780096,
+                "Tradition": -1.0543519789029774,
                 "Stimulation": -0.05396668858545114,
                 "Hedonism": -0.24115651173413116,
                 "Conformity_Interpersonal": 0.14182883650056538
@@ -3469,7 +3469,7 @@
                 {
                   "model": "mistral-large-2512",
                   "label": "Mistral Large (Dec 2025)",
-                  "silhouetteScore": 0.4068195108927279,
+                  "silhouetteScore": 0.4101008737250564,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -3477,26 +3477,26 @@
                 {
                   "model": "mistral-small-2503",
                   "label": "Mistral Small",
-                  "silhouetteScore": 0.17477392260122512,
+                  "silhouetteScore": 0.1736230617345382,
                   "isOutlier": true,
                   "nearestClusterIds": [
                     "cluster-2",
                     "cluster-3"
                   ],
                   "distancesToNearestClusters": [
-                    0.5605183691676898,
-                    0.8866315448010653
+                    0.5594789393764553,
+                    0.8872792619497141
                   ]
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.1177540077958581,
+                "Self_Direction_Action": 0.10745428468071744,
                 "Universalism_Nature": 0.700305156095254,
                 "Benevolence_Dependability": 1.6746991713998611,
                 "Security_Personal": 0.47895738099221086,
                 "Power_Dominance": -4.504122311480014,
                 "Achievement": 0.014947151862826288,
-                "Tradition": -0.003430844419964163,
+                "Tradition": 0.006358373646490778,
                 "Stimulation": -0.22738479288287472,
                 "Hedonism": -0.7172198487201122,
                 "Conformity_Interpersonal": 0.2249693783917756
@@ -3512,7 +3512,7 @@
             "cluster-1:cluster-2": {
               "clusterAId": "cluster-1",
               "clusterBId": "cluster-2",
-              "distance": 0.7860813929851611,
+              "distance": 0.7850250718530406,
               "faultLines": [
                 {
                   "valueKey": "Conformity_Interpersonal",
@@ -3527,10 +3527,10 @@
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-2",
-                  "clusterAScore": -1.746573808956433,
-                  "clusterBScore": -0.7012320222074537,
-                  "delta": -1.0453417867489794,
-                  "absDelta": 1.0453417867489794
+                  "clusterAScore": -1.7571689158372426,
+                  "clusterBScore": -0.703691752469745,
+                  "delta": -1.0534771633674975,
+                  "absDelta": 1.0534771633674975
                 },
                 {
                   "valueKey": "Power_Dominance",
@@ -3546,7 +3546,7 @@
             "cluster-1:cluster-3": {
               "clusterAId": "cluster-1",
               "clusterBId": "cluster-3",
-              "distance": 1.0584673033224354,
+              "distance": 1.058740058736696,
               "faultLines": [
                 {
                   "valueKey": "Power_Dominance",
@@ -3580,7 +3580,7 @@
             "cluster-1:cluster-4": {
               "clusterAId": "cluster-1",
               "clusterBId": "cluster-4",
-              "distance": 1.0388982265021798,
+              "distance": 1.043454229320425,
               "faultLines": [
                 {
                   "valueKey": "Conformity_Interpersonal",
@@ -3595,10 +3595,10 @@
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-4",
-                  "clusterAScore": -1.746573808956433,
-                  "clusterBScore": -0.003430844419964163,
-                  "delta": -1.7431429645364689,
-                  "absDelta": 1.7431429645364689
+                  "clusterAScore": -1.7571689158372426,
+                  "clusterBScore": 0.006358373646490778,
+                  "delta": -1.7635272894837333,
+                  "absDelta": 1.7635272894837333
                 },
                 {
                   "valueKey": "Security_Personal",
@@ -3614,7 +3614,7 @@
             "cluster-2:cluster-3": {
               "clusterAId": "cluster-2",
               "clusterBId": "cluster-3",
-              "distance": 0.7054751426389063,
+              "distance": 0.7062300659792808,
               "faultLines": [
                 {
                   "valueKey": "Power_Dominance",
@@ -3648,16 +3648,16 @@
             "cluster-2:cluster-4": {
               "clusterAId": "cluster-2",
               "clusterBId": "cluster-4",
-              "distance": 0.6701526348845691,
+              "distance": 0.6716204475983667,
               "faultLines": [
                 {
                   "valueKey": "Self_Direction_Action",
                   "clusterAId": "cluster-2",
                   "clusterBId": "cluster-4",
-                  "clusterAScore": 1.2479966629250354,
-                  "clusterBScore": 0.1177540077958581,
-                  "delta": 1.1302426551291773,
-                  "absDelta": 1.1302426551291773
+                  "clusterAScore": 1.2441740551053608,
+                  "clusterBScore": 0.10745428468071744,
+                  "delta": 1.1367197704246434,
+                  "absDelta": 1.1367197704246434
                 },
                 {
                   "valueKey": "Power_Dominance",
@@ -3682,7 +3682,7 @@
             "cluster-3:cluster-4": {
               "clusterAId": "cluster-3",
               "clusterBId": "cluster-4",
-              "distance": 0.9866440304954998,
+              "distance": 0.9896714513860743,
               "faultLines": [
                 {
                   "valueKey": "Power_Dominance",
@@ -3737,13 +3737,13 @@
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.12880095745862086,
+                "Self_Direction_Action": 0.10488781416001469,
                 "Universalism_Nature": 0.46410390711854727,
                 "Benevolence_Dependability": 2.1278297765834067,
                 "Security_Personal": 0.6360637939173909,
                 "Power_Dominance": -4.469121341524815,
                 "Achievement": -0.04831857727080768,
-                "Tradition": 0.6061358035703155,
+                "Tradition": 0.6233360900173902,
                 "Stimulation": -0.6471167010993129,
                 "Hedonism": -0.9613634196434546,
                 "Conformity_Interpersonal": 0.14139154586780858
@@ -3768,13 +3768,13 @@
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.10670705813309532,
+                "Self_Direction_Action": 0.1100207552014202,
                 "Universalism_Nature": 0.9365064050719607,
                 "Benevolence_Dependability": 1.2215685662163156,
                 "Security_Personal": 0.3218509680670308,
                 "Power_Dominance": -4.539123281435213,
                 "Achievement": 0.07821288099646026,
-                "Tradition": -0.6129974924102438,
+                "Tradition": -0.6106193427244087,
                 "Stimulation": 0.1923471153335634,
                 "Hedonism": -0.47307627779676975,
                 "Conformity_Interpersonal": 0.30854721091574266
@@ -3807,13 +3807,13 @@
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 1.2479966629250354,
+                "Self_Direction_Action": 1.2441740551053608,
                 "Universalism_Nature": 0.1687193271005512,
                 "Benevolence_Dependability": 0.9791455183262965,
                 "Security_Personal": 1.2112144426505296,
                 "Power_Dominance": -3.720088439507769,
                 "Achievement": -0.48450312980255206,
-                "Tradition": -0.7012320222074537,
+                "Tradition": -0.703691752469745,
                 "Stimulation": 0.19241512401412825,
                 "Hedonism": -0.1136149601805886,
                 "Conformity_Interpersonal": -0.336822761632476
@@ -3862,13 +3862,13 @@
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.905766039536797,
+                "Self_Direction_Action": 0.916336473024,
                 "Universalism_Nature": -0.5528185606510179,
                 "Benevolence_Dependability": 0.46814836523852926,
                 "Security_Personal": 1.5153708856300567,
                 "Power_Dominance": -2.786095564896283,
                 "Achievement": -0.28675007796804697,
-                "Tradition": -1.3971164290672213,
+                "Tradition": -1.40576044737011,
                 "Stimulation": -0.10529141066594387,
                 "Hedonism": 0.06992963233856214,
                 "Conformity_Interpersonal": 1.0667954435298204
@@ -3890,10 +3890,10 @@
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-2",
-                  "clusterAScore": 0.6061358035703155,
-                  "clusterBScore": -0.6129974924102438,
-                  "delta": 1.2191332959805594,
-                  "absDelta": 1.2191332959805594
+                  "clusterAScore": 0.6233360900173902,
+                  "clusterBScore": -0.6106193427244087,
+                  "delta": 1.2339554327417988,
+                  "absDelta": 1.2339554327417988
                 },
                 {
                   "valueKey": "Benevolence_Dependability",
@@ -3924,10 +3924,10 @@
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-3",
-                  "clusterAScore": 0.6061358035703155,
-                  "clusterBScore": -0.7012320222074537,
-                  "delta": 1.3073678257777692,
-                  "absDelta": 1.3073678257777692
+                  "clusterAScore": 0.6233360900173902,
+                  "clusterBScore": -0.703691752469745,
+                  "delta": 1.3270278424871353,
+                  "absDelta": 1.3270278424871353
                 },
                 {
                   "valueKey": "Benevolence_Dependability",
@@ -3942,10 +3942,10 @@
                   "valueKey": "Self_Direction_Action",
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-3",
-                  "clusterAScore": 0.12880095745862086,
-                  "clusterBScore": 1.2479966629250354,
-                  "delta": -1.1191957054664146,
-                  "absDelta": 1.1191957054664146
+                  "clusterAScore": 0.10488781416001469,
+                  "clusterBScore": 1.2441740551053608,
+                  "delta": -1.1392862409453461,
+                  "absDelta": 1.1392862409453461
                 }
               ]
             },
@@ -3958,10 +3958,10 @@
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-4",
-                  "clusterAScore": 0.6061358035703155,
-                  "clusterBScore": -1.3971164290672213,
-                  "delta": 2.0032522326375366,
-                  "absDelta": 2.0032522326375366
+                  "clusterAScore": 0.6233360900173902,
+                  "clusterBScore": -1.40576044737011,
+                  "delta": 2.0290965373875003,
+                  "absDelta": 2.0290965373875003
                 },
                 {
                   "valueKey": "Power_Dominance",
@@ -3992,10 +3992,10 @@
                   "valueKey": "Self_Direction_Action",
                   "clusterAId": "cluster-2",
                   "clusterBId": "cluster-3",
-                  "clusterAScore": 0.10670705813309532,
-                  "clusterBScore": 1.2479966629250354,
-                  "delta": -1.14128960479194,
-                  "absDelta": 1.14128960479194
+                  "clusterAScore": 0.1100207552014202,
+                  "clusterBScore": 1.2441740551053608,
+                  "delta": -1.1341532999039405,
+                  "absDelta": 1.1341532999039405
                 },
                 {
                   "valueKey": "Security_Personal",
@@ -4117,13 +4117,13 @@
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.7370146623340783,
+                "Self_Direction_Action": 0.7518906424541274,
                 "Universalism_Nature": -0.5170438114419239,
                 "Benevolence_Dependability": 0.5156004136221809,
                 "Security_Personal": 2.0077746025884116,
                 "Power_Dominance": -4.550897392579691,
                 "Achievement": -0.7748312605584409,
-                "Tradition": -1.746573808956433,
+                "Tradition": -1.7571689158372426,
                 "Stimulation": -0.1566161327464366,
                 "Hedonism": 0.38101577641125545,
                 "Conformity_Interpersonal": 1.9917620505590752
@@ -4156,13 +4156,13 @@
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 1.2479966629250354,
+                "Self_Direction_Action": 1.2441740551053608,
                 "Universalism_Nature": 0.1687193271005512,
                 "Benevolence_Dependability": 0.9791455183262965,
                 "Security_Personal": 1.2112144426505296,
                 "Power_Dominance": -3.720088439507769,
                 "Achievement": -0.48450312980255206,
-                "Tradition": -0.7012320222074537,
+                "Tradition": -0.703691752469745,
                 "Stimulation": 0.19241512401412825,
                 "Hedonism": -0.1136149601805886,
                 "Conformity_Interpersonal": -0.336822761632476
@@ -4195,13 +4195,13 @@
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 1.0745174167395155,
+                "Self_Direction_Action": 1.0807823035938724,
                 "Universalism_Nature": -0.5885933098601117,
                 "Benevolence_Dependability": 0.4206963168548776,
                 "Security_Personal": 1.022967168671702,
                 "Power_Dominance": -1.0212937372128743,
                 "Achievement": 0.20133110462234693,
-                "Tradition": -1.0476590491780096,
+                "Tradition": -1.0543519789029774,
                 "Stimulation": -0.05396668858545114,
                 "Hedonism": -0.24115651173413116,
                 "Conformity_Interpersonal": 0.14182883650056538
@@ -4240,13 +4240,13 @@
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.1177540077958581,
+                "Self_Direction_Action": 0.10745428468071744,
                 "Universalism_Nature": 0.700305156095254,
                 "Benevolence_Dependability": 1.6746991713998611,
                 "Security_Personal": 0.47895738099221086,
                 "Power_Dominance": -4.504122311480014,
                 "Achievement": 0.014947151862826288,
-                "Tradition": -0.003430844419964163,
+                "Tradition": 0.006358373646490778,
                 "Stimulation": -0.22738479288287472,
                 "Hedonism": -0.7172198487201122,
                 "Conformity_Interpersonal": 0.2249693783917756
@@ -4277,10 +4277,10 @@
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-2",
-                  "clusterAScore": -1.746573808956433,
-                  "clusterBScore": -0.7012320222074537,
-                  "delta": -1.0453417867489794,
-                  "absDelta": 1.0453417867489794
+                  "clusterAScore": -1.7571689158372426,
+                  "clusterBScore": -0.703691752469745,
+                  "delta": -1.0534771633674975,
+                  "absDelta": 1.0534771633674975
                 },
                 {
                   "valueKey": "Power_Dominance",
@@ -4345,10 +4345,10 @@
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-4",
-                  "clusterAScore": -1.746573808956433,
-                  "clusterBScore": -0.003430844419964163,
-                  "delta": -1.7431429645364689,
-                  "absDelta": 1.7431429645364689
+                  "clusterAScore": -1.7571689158372426,
+                  "clusterBScore": 0.006358373646490778,
+                  "delta": -1.7635272894837333,
+                  "absDelta": 1.7635272894837333
                 },
                 {
                   "valueKey": "Security_Personal",
@@ -4404,10 +4404,10 @@
                   "valueKey": "Self_Direction_Action",
                   "clusterAId": "cluster-2",
                   "clusterBId": "cluster-4",
-                  "clusterAScore": 1.2479966629250354,
-                  "clusterBScore": 0.1177540077958581,
-                  "delta": 1.1302426551291773,
-                  "absDelta": 1.1302426551291773
+                  "clusterAScore": 1.2441740551053608,
+                  "clusterBScore": 0.10745428468071744,
+                  "delta": 1.1367197704246434,
+                  "absDelta": 1.1367197704246434
                 },
                 {
                   "valueKey": "Power_Dominance",
@@ -4495,13 +4495,13 @@
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.1177540077958581,
+                "Self_Direction_Action": 0.10745428468071744,
                 "Universalism_Nature": 0.700305156095254,
                 "Benevolence_Dependability": 1.6746991713998611,
                 "Security_Personal": 0.47895738099221086,
                 "Power_Dominance": -4.504122311480014,
                 "Achievement": 0.014947151862826288,
-                "Tradition": -0.003430844419964163,
+                "Tradition": 0.006358373646490778,
                 "Stimulation": -0.22738479288287472,
                 "Hedonism": -0.7172198487201122,
                 "Conformity_Interpersonal": 0.2249693783917756
@@ -4566,13 +4566,13 @@
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 1.019842913999543,
+                "Self_Direction_Action": 1.02561566705112,
                 "Universalism_Nature": -0.3123059314004948,
                 "Benevolence_Dependability": 0.6384807496011183,
                 "Security_Personal": 1.413985404636881,
                 "Power_Dominance": -3.0974265231001112,
                 "Achievement": -0.35266776191288196,
-                "Tradition": -1.1651549601139655,
+                "Tradition": -1.1717375490699884,
                 "Stimulation": -0.0060558991059198285,
                 "Hedonism": 0.00874810149884523,
                 "Conformity_Interpersonal": 0.5989227084757215
@@ -4603,10 +4603,10 @@
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-2",
-                  "clusterAScore": -0.003430844419964163,
-                  "clusterBScore": -1.1651549601139655,
-                  "delta": 1.1617241156940012,
-                  "absDelta": 1.1617241156940012
+                  "clusterAScore": 0.006358373646490778,
+                  "clusterBScore": -1.1717375490699884,
+                  "delta": 1.1780959227164791,
+                  "absDelta": 1.1780959227164791
                 },
                 {
                   "valueKey": "Benevolence_Dependability",
@@ -4651,13 +4651,13 @@
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.7370146623340783,
+                "Self_Direction_Action": 0.7518906424541274,
                 "Universalism_Nature": -0.5170438114419239,
                 "Benevolence_Dependability": 0.5156004136221809,
                 "Security_Personal": 2.0077746025884116,
                 "Power_Dominance": -4.550897392579691,
                 "Achievement": -0.7748312605584409,
-                "Tradition": -1.746573808956433,
+                "Tradition": -1.7571689158372426,
                 "Stimulation": -0.1566161327464366,
                 "Hedonism": 0.38101577641125545,
                 "Conformity_Interpersonal": 1.9917620505590752
@@ -4690,13 +4690,13 @@
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 1.2479966629250354,
+                "Self_Direction_Action": 1.2441740551053608,
                 "Universalism_Nature": 0.1687193271005512,
                 "Benevolence_Dependability": 0.9791455183262965,
                 "Security_Personal": 1.2112144426505296,
                 "Power_Dominance": -3.720088439507769,
                 "Achievement": -0.48450312980255206,
-                "Tradition": -0.7012320222074537,
+                "Tradition": -0.703691752469745,
                 "Stimulation": 0.19241512401412825,
                 "Hedonism": -0.1136149601805886,
                 "Conformity_Interpersonal": -0.336822761632476
@@ -4729,13 +4729,13 @@
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 1.0745174167395155,
+                "Self_Direction_Action": 1.0807823035938724,
                 "Universalism_Nature": -0.5885933098601117,
                 "Benevolence_Dependability": 0.4206963168548776,
                 "Security_Personal": 1.022967168671702,
                 "Power_Dominance": -1.0212937372128743,
                 "Achievement": 0.20133110462234693,
-                "Tradition": -1.0476590491780096,
+                "Tradition": -1.0543519789029774,
                 "Stimulation": -0.05396668858545114,
                 "Hedonism": -0.24115651173413116,
                 "Conformity_Interpersonal": 0.14182883650056538
@@ -4774,13 +4774,13 @@
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.1177540077958581,
+                "Self_Direction_Action": 0.10745428468071744,
                 "Universalism_Nature": 0.700305156095254,
                 "Benevolence_Dependability": 1.6746991713998611,
                 "Security_Personal": 0.47895738099221086,
                 "Power_Dominance": -4.504122311480014,
                 "Achievement": 0.014947151862826288,
-                "Tradition": -0.003430844419964163,
+                "Tradition": 0.006358373646490778,
                 "Stimulation": -0.22738479288287472,
                 "Hedonism": -0.7172198487201122,
                 "Conformity_Interpersonal": 0.2249693783917756
@@ -4811,10 +4811,10 @@
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-2",
-                  "clusterAScore": -1.746573808956433,
-                  "clusterBScore": -0.7012320222074537,
-                  "delta": -1.0453417867489794,
-                  "absDelta": 1.0453417867489794
+                  "clusterAScore": -1.7571689158372426,
+                  "clusterBScore": -0.703691752469745,
+                  "delta": -1.0534771633674975,
+                  "absDelta": 1.0534771633674975
                 },
                 {
                   "valueKey": "Power_Dominance",
@@ -4879,10 +4879,10 @@
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-4",
-                  "clusterAScore": -1.746573808956433,
-                  "clusterBScore": -0.003430844419964163,
-                  "delta": -1.7431429645364689,
-                  "absDelta": 1.7431429645364689
+                  "clusterAScore": -1.7571689158372426,
+                  "clusterBScore": 0.006358373646490778,
+                  "delta": -1.7635272894837333,
+                  "absDelta": 1.7635272894837333
                 },
                 {
                   "valueKey": "Security_Personal",
@@ -4938,10 +4938,10 @@
                   "valueKey": "Self_Direction_Action",
                   "clusterAId": "cluster-2",
                   "clusterBId": "cluster-4",
-                  "clusterAScore": 1.2479966629250354,
-                  "clusterBScore": 0.1177540077958581,
-                  "delta": 1.1302426551291773,
-                  "absDelta": 1.1302426551291773
+                  "clusterAScore": 1.2441740551053608,
+                  "clusterBScore": 0.10745428468071744,
+                  "delta": 1.1367197704246434,
+                  "absDelta": 1.1367197704246434
                 },
                 {
                   "valueKey": "Power_Dominance",
@@ -5014,7 +5014,7 @@
                 {
                   "model": "deepseek-chat",
                   "label": "DeepSeek Chat",
-                  "silhouetteScore": 0.8398549686100882,
+                  "silhouetteScore": 0.8397380830058351,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -5022,20 +5022,20 @@
                 {
                   "model": "deepseek-reasoner",
                   "label": "DeepSeek Reasoner",
-                  "silhouetteScore": 0.7012828310278006,
+                  "silhouetteScore": 0.7028950003290625,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.7744074074074074,
+                "Self_Direction_Action": 0.7731111111111112,
                 "Universalism_Nature": 0.5336666666666667,
                 "Benevolence_Dependability": 0.7233333333333334,
                 "Security_Personal": 0.7593333333333333,
                 "Power_Dominance": 0.029000000000000005,
                 "Achievement": 0.39122222222222236,
-                "Tradition": 0.3188888888888889,
+                "Tradition": 0.3205820105820105,
                 "Stimulation": 0.5352962962962963,
                 "Hedonism": 0.4680000000000001,
                 "Conformity_Interpersonal": 0.4043809523809524
@@ -5053,7 +5053,7 @@
                 {
                   "model": "gemini-2.5-flash",
                   "label": "Gemini 2.5 Flash",
-                  "silhouetteScore": 0.7286863673833957,
+                  "silhouetteScore": 0.7282909044604255,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -5061,20 +5061,20 @@
                 {
                   "model": "grok-4-1-fast-reasoning",
                   "label": "Grok 4.1 Fast Reasoning",
-                  "silhouetteScore": 0.6156808108861563,
+                  "silhouetteScore": 0.6175016680198396,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.739878306878307,
+                "Self_Direction_Action": 0.740037037037037,
                 "Universalism_Nature": 0.35229629629629633,
                 "Benevolence_Dependability": 0.5997777777777777,
                 "Security_Personal": 0.7317142857142858,
                 "Power_Dominance": 0.26603703703703707,
                 "Achievement": 0.5641058201058202,
-                "Tradition": 0.26755555555555555,
+                "Tradition": 0.2673968253968254,
                 "Stimulation": 0.4849259259259259,
                 "Hedonism": 0.4362592592592593,
                 "Conformity_Interpersonal": 0.536920634920635
@@ -5092,7 +5092,7 @@
                 {
                   "model": "claude-sonnet-4-5",
                   "label": "Claude Sonnet 4.5",
-                  "silhouetteScore": 0.4104276890194361,
+                  "silhouetteScore": 0.41094866010138476,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -5100,20 +5100,20 @@
                 {
                   "model": "gpt-5.1",
                   "label": "GPT-5.1",
-                  "silhouetteScore": 0.7086867772473845,
+                  "silhouetteScore": 0.7087931192335556,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.6793439153439153,
+                "Self_Direction_Action": 0.6794497354497354,
                 "Universalism_Nature": 0.3850634920634922,
                 "Benevolence_Dependability": 0.6252222222222221,
                 "Security_Personal": 0.8815555555555555,
                 "Power_Dominance": 0.00951851851851852,
                 "Achievement": 0.3288095238095239,
-                "Tradition": 0.15340740740740738,
+                "Tradition": 0.1533015873015873,
                 "Stimulation": 0.46177777777777784,
                 "Hedonism": 0.5984444444444443,
                 "Conformity_Interpersonal": 0.8688571428571429
@@ -5131,7 +5131,7 @@
                 {
                   "model": "mistral-large-2512",
                   "label": "Mistral Large (Dec 2025)",
-                  "silhouetteScore": 0.4299856302678303,
+                  "silhouetteScore": 0.4293098437538805,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -5139,20 +5139,20 @@
                 {
                   "model": "mistral-small-2503",
                   "label": "Mistral Small",
-                  "silhouetteScore": 0.2010644124065934,
+                  "silhouetteScore": 0.2043753504089142,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.5421851851851852,
+                "Self_Direction_Action": 0.5416825396825398,
                 "Universalism_Nature": 0.6598518518518519,
                 "Benevolence_Dependability": 0.8333333333333335,
                 "Security_Personal": 0.6127777777777779,
                 "Power_Dominance": 0.010222222222222226,
                 "Achievement": 0.5143015873015873,
-                "Tradition": 0.49144444444444446,
+                "Tradition": 0.49194708994709,
                 "Stimulation": 0.4431111111111111,
                 "Hedonism": 0.32433333333333336,
                 "Conformity_Interpersonal": 0.5569206349206348
@@ -5168,7 +5168,7 @@
             "cluster-1:cluster-2": {
               "clusterAId": "cluster-1",
               "clusterBId": "cluster-2",
-              "distance": 0.109262240090565,
+              "distance": 0.10965416351880977,
               "faultLines": [
                 {
                   "valueKey": "Power_Dominance",
@@ -5202,7 +5202,7 @@
             "cluster-1:cluster-3": {
               "clusterAId": "cluster-1",
               "clusterBId": "cluster-3",
-              "distance": 0.1377091008413116,
+              "distance": 0.13784114412018078,
               "faultLines": [
                 {
                   "valueKey": "Conformity_Interpersonal",
@@ -5217,10 +5217,10 @@
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-3",
-                  "clusterAScore": 0.3188888888888889,
-                  "clusterBScore": 0.15340740740740738,
-                  "delta": 0.1654814814814815,
-                  "absDelta": 0.1654814814814815
+                  "clusterAScore": 0.3205820105820105,
+                  "clusterBScore": 0.1533015873015873,
+                  "delta": 0.16728042328042322,
+                  "absDelta": 0.16728042328042322
                 },
                 {
                   "valueKey": "Universalism_Nature",
@@ -5236,25 +5236,25 @@
             "cluster-1:cluster-4": {
               "clusterAId": "cluster-1",
               "clusterBId": "cluster-4",
-              "distance": 0.13109426055581655,
+              "distance": 0.1308301986378489,
               "faultLines": [
                 {
                   "valueKey": "Self_Direction_Action",
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-4",
-                  "clusterAScore": 0.7744074074074074,
-                  "clusterBScore": 0.5421851851851852,
-                  "delta": 0.23222222222222222,
-                  "absDelta": 0.23222222222222222
+                  "clusterAScore": 0.7731111111111112,
+                  "clusterBScore": 0.5416825396825398,
+                  "delta": 0.23142857142857143,
+                  "absDelta": 0.23142857142857143
                 },
                 {
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-4",
-                  "clusterAScore": 0.3188888888888889,
-                  "clusterBScore": 0.49144444444444446,
-                  "delta": -0.17255555555555557,
-                  "absDelta": 0.17255555555555557
+                  "clusterAScore": 0.3205820105820105,
+                  "clusterBScore": 0.49194708994709,
+                  "delta": -0.1713650793650795,
+                  "absDelta": 0.1713650793650795
                 },
                 {
                   "valueKey": "Conformity_Interpersonal",
@@ -5270,7 +5270,7 @@
             "cluster-2:cluster-3": {
               "clusterAId": "cluster-2",
               "clusterBId": "cluster-3",
-              "distance": 0.11770780858372688,
+              "distance": 0.11769480910446849,
               "faultLines": [
                 {
                   "valueKey": "Conformity_Interpersonal",
@@ -5304,7 +5304,7 @@
             "cluster-2:cluster-4": {
               "clusterAId": "cluster-2",
               "clusterBId": "cluster-4",
-              "distance": 0.24614839871415384,
+              "distance": 0.24647610815308235,
               "faultLines": [
                 {
                   "valueKey": "Universalism_Nature",
@@ -5338,16 +5338,16 @@
             "cluster-3:cluster-4": {
               "clusterAId": "cluster-3",
               "clusterBId": "cluster-4",
-              "distance": 0.23266706850124005,
+              "distance": 0.23284279812776232,
               "faultLines": [
                 {
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-3",
                   "clusterBId": "cluster-4",
-                  "clusterAScore": 0.15340740740740738,
-                  "clusterBScore": 0.49144444444444446,
-                  "delta": -0.3380370370370371,
-                  "absDelta": 0.3380370370370371
+                  "clusterAScore": 0.1533015873015873,
+                  "clusterBScore": 0.49194708994709,
+                  "delta": -0.33864550264550275,
+                  "absDelta": 0.33864550264550275
                 },
                 {
                   "valueKey": "Conformity_Interpersonal",
@@ -5386,7 +5386,7 @@
                 {
                   "model": "claude-sonnet-4-5",
                   "label": "Claude Sonnet 4.5",
-                  "silhouetteScore": 0.4104276890194361,
+                  "silhouetteScore": 0.41094866010138476,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -5394,20 +5394,20 @@
                 {
                   "model": "gpt-5.1",
                   "label": "GPT-5.1",
-                  "silhouetteScore": 0.7086867772473845,
+                  "silhouetteScore": 0.7087931192335556,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.6793439153439153,
+                "Self_Direction_Action": 0.6794497354497354,
                 "Universalism_Nature": 0.3850634920634922,
                 "Benevolence_Dependability": 0.6252222222222221,
                 "Security_Personal": 0.8815555555555555,
                 "Power_Dominance": 0.00951851851851852,
                 "Achievement": 0.3288095238095239,
-                "Tradition": 0.15340740740740738,
+                "Tradition": 0.1533015873015873,
                 "Stimulation": 0.46177777777777784,
                 "Hedonism": 0.5984444444444443,
                 "Conformity_Interpersonal": 0.8688571428571429
@@ -5425,7 +5425,7 @@
                 {
                   "model": "deepseek-chat",
                   "label": "DeepSeek Chat",
-                  "silhouetteScore": 0.8398549686100882,
+                  "silhouetteScore": 0.8397380830058351,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -5433,20 +5433,20 @@
                 {
                   "model": "deepseek-reasoner",
                   "label": "DeepSeek Reasoner",
-                  "silhouetteScore": 0.7012828310278006,
+                  "silhouetteScore": 0.7028950003290625,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.7744074074074074,
+                "Self_Direction_Action": 0.7731111111111112,
                 "Universalism_Nature": 0.5336666666666667,
                 "Benevolence_Dependability": 0.7233333333333334,
                 "Security_Personal": 0.7593333333333333,
                 "Power_Dominance": 0.029000000000000005,
                 "Achievement": 0.39122222222222236,
-                "Tradition": 0.3188888888888889,
+                "Tradition": 0.3205820105820105,
                 "Stimulation": 0.5352962962962963,
                 "Hedonism": 0.4680000000000001,
                 "Conformity_Interpersonal": 0.4043809523809524
@@ -5464,7 +5464,7 @@
                 {
                   "model": "gemini-2.5-flash",
                   "label": "Gemini 2.5 Flash",
-                  "silhouetteScore": 0.7286863673833957,
+                  "silhouetteScore": 0.7282909044604255,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -5472,20 +5472,20 @@
                 {
                   "model": "grok-4-1-fast-reasoning",
                   "label": "Grok 4.1 Fast Reasoning",
-                  "silhouetteScore": 0.6156808108861563,
+                  "silhouetteScore": 0.6175016680198396,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.739878306878307,
+                "Self_Direction_Action": 0.740037037037037,
                 "Universalism_Nature": 0.35229629629629633,
                 "Benevolence_Dependability": 0.5997777777777777,
                 "Security_Personal": 0.7317142857142858,
                 "Power_Dominance": 0.26603703703703707,
                 "Achievement": 0.5641058201058202,
-                "Tradition": 0.26755555555555555,
+                "Tradition": 0.2673968253968254,
                 "Stimulation": 0.4849259259259259,
                 "Hedonism": 0.4362592592592593,
                 "Conformity_Interpersonal": 0.536920634920635
@@ -5503,7 +5503,7 @@
                 {
                   "model": "mistral-large-2512",
                   "label": "Mistral Large (Dec 2025)",
-                  "silhouetteScore": 0.4299856302678303,
+                  "silhouetteScore": 0.4293098437538805,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -5511,20 +5511,20 @@
                 {
                   "model": "mistral-small-2503",
                   "label": "Mistral Small",
-                  "silhouetteScore": 0.2010644124065934,
+                  "silhouetteScore": 0.2043753504089142,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.5421851851851852,
+                "Self_Direction_Action": 0.5416825396825398,
                 "Universalism_Nature": 0.6598518518518519,
                 "Benevolence_Dependability": 0.8333333333333335,
                 "Security_Personal": 0.6127777777777779,
                 "Power_Dominance": 0.010222222222222226,
                 "Achievement": 0.5143015873015873,
-                "Tradition": 0.49144444444444446,
+                "Tradition": 0.49194708994709,
                 "Stimulation": 0.4431111111111111,
                 "Hedonism": 0.32433333333333336,
                 "Conformity_Interpersonal": 0.5569206349206348
@@ -5540,7 +5540,7 @@
             "cluster-1:cluster-2": {
               "clusterAId": "cluster-1",
               "clusterBId": "cluster-2",
-              "distance": 0.1377091008413116,
+              "distance": 0.13784114412018078,
               "faultLines": [
                 {
                   "valueKey": "Conformity_Interpersonal",
@@ -5555,10 +5555,10 @@
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-2",
-                  "clusterAScore": 0.15340740740740738,
-                  "clusterBScore": 0.3188888888888889,
-                  "delta": -0.1654814814814815,
-                  "absDelta": 0.1654814814814815
+                  "clusterAScore": 0.1533015873015873,
+                  "clusterBScore": 0.3205820105820105,
+                  "delta": -0.16728042328042322,
+                  "absDelta": 0.16728042328042322
                 },
                 {
                   "valueKey": "Universalism_Nature",
@@ -5574,7 +5574,7 @@
             "cluster-1:cluster-3": {
               "clusterAId": "cluster-1",
               "clusterBId": "cluster-3",
-              "distance": 0.11770780858372688,
+              "distance": 0.11769480910446849,
               "faultLines": [
                 {
                   "valueKey": "Conformity_Interpersonal",
@@ -5608,16 +5608,16 @@
             "cluster-1:cluster-4": {
               "clusterAId": "cluster-1",
               "clusterBId": "cluster-4",
-              "distance": 0.23266706850124005,
+              "distance": 0.23284279812776232,
               "faultLines": [
                 {
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-4",
-                  "clusterAScore": 0.15340740740740738,
-                  "clusterBScore": 0.49144444444444446,
-                  "delta": -0.3380370370370371,
-                  "absDelta": 0.3380370370370371
+                  "clusterAScore": 0.1533015873015873,
+                  "clusterBScore": 0.49194708994709,
+                  "delta": -0.33864550264550275,
+                  "absDelta": 0.33864550264550275
                 },
                 {
                   "valueKey": "Conformity_Interpersonal",
@@ -5642,7 +5642,7 @@
             "cluster-2:cluster-3": {
               "clusterAId": "cluster-2",
               "clusterBId": "cluster-3",
-              "distance": 0.109262240090565,
+              "distance": 0.10965416351880977,
               "faultLines": [
                 {
                   "valueKey": "Power_Dominance",
@@ -5676,25 +5676,25 @@
             "cluster-2:cluster-4": {
               "clusterAId": "cluster-2",
               "clusterBId": "cluster-4",
-              "distance": 0.13109426055581655,
+              "distance": 0.1308301986378489,
               "faultLines": [
                 {
                   "valueKey": "Self_Direction_Action",
                   "clusterAId": "cluster-2",
                   "clusterBId": "cluster-4",
-                  "clusterAScore": 0.7744074074074074,
-                  "clusterBScore": 0.5421851851851852,
-                  "delta": 0.23222222222222222,
-                  "absDelta": 0.23222222222222222
+                  "clusterAScore": 0.7731111111111112,
+                  "clusterBScore": 0.5416825396825398,
+                  "delta": 0.23142857142857143,
+                  "absDelta": 0.23142857142857143
                 },
                 {
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-2",
                   "clusterBId": "cluster-4",
-                  "clusterAScore": 0.3188888888888889,
-                  "clusterBScore": 0.49144444444444446,
-                  "delta": -0.17255555555555557,
-                  "absDelta": 0.17255555555555557
+                  "clusterAScore": 0.3205820105820105,
+                  "clusterBScore": 0.49194708994709,
+                  "delta": -0.1713650793650795,
+                  "absDelta": 0.1713650793650795
                 },
                 {
                   "valueKey": "Conformity_Interpersonal",
@@ -5710,7 +5710,7 @@
             "cluster-3:cluster-4": {
               "clusterAId": "cluster-3",
               "clusterBId": "cluster-4",
-              "distance": 0.24614839871415384,
+              "distance": 0.24647610815308235,
               "faultLines": [
                 {
                   "valueKey": "Universalism_Nature",
@@ -5758,7 +5758,7 @@
                 {
                   "model": "claude-sonnet-4-5",
                   "label": "Claude Sonnet 4.5",
-                  "silhouetteScore": 0.3335848927647808,
+                  "silhouetteScore": 0.3340975244103353,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -5766,20 +5766,20 @@
                 {
                   "model": "gpt-5.1",
                   "label": "GPT-5.1",
-                  "silhouetteScore": 0.3951521284333411,
+                  "silhouetteScore": 0.3953412384509112,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.6793439153439153,
+                "Self_Direction_Action": 0.6794497354497354,
                 "Universalism_Nature": 0.3850634920634922,
                 "Benevolence_Dependability": 0.6252222222222221,
                 "Security_Personal": 0.8815555555555555,
                 "Power_Dominance": 0.00951851851851852,
                 "Achievement": 0.3288095238095239,
-                "Tradition": 0.15340740740740738,
+                "Tradition": 0.1533015873015873,
                 "Stimulation": 0.46177777777777784,
                 "Hedonism": 0.5984444444444443,
                 "Conformity_Interpersonal": 0.8688571428571429
@@ -5797,7 +5797,7 @@
                 {
                   "model": "mistral-large-2512",
                   "label": "Mistral Large (Dec 2025)",
-                  "silhouetteScore": 0.33694285880060026,
+                  "silhouetteScore": 0.33724600035323515,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -5805,20 +5805,20 @@
                 {
                   "model": "mistral-small-2503",
                   "label": "Mistral Small",
-                  "silhouetteScore": 0.20317691929366907,
+                  "silhouetteScore": 0.20467887384842873,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.5421851851851852,
+                "Self_Direction_Action": 0.5416825396825398,
                 "Universalism_Nature": 0.6598518518518519,
                 "Benevolence_Dependability": 0.8333333333333335,
                 "Security_Personal": 0.6127777777777779,
                 "Power_Dominance": 0.010222222222222226,
                 "Achievement": 0.5143015873015873,
-                "Tradition": 0.49144444444444446,
+                "Tradition": 0.49194708994709,
                 "Stimulation": 0.4431111111111111,
                 "Hedonism": 0.32433333333333336,
                 "Conformity_Interpersonal": 0.5569206349206348
@@ -5836,21 +5836,21 @@
                 {
                   "model": "deepseek-chat",
                   "label": "DeepSeek Chat",
-                  "silhouetteScore": 0.19285739882833622,
+                  "silhouetteScore": 0.19171995165689304,
                   "isOutlier": true,
                   "nearestClusterIds": [
                     "cluster-2",
                     "cluster-1"
                   ],
                   "distancesToNearestClusters": [
-                    0.16092682265800679,
-                    0.2009288571899287
+                    0.1607310610770174,
+                    0.20100255938492856
                   ]
                 },
                 {
                   "model": "deepseek-reasoner",
                   "label": "DeepSeek Reasoner",
-                  "silhouetteScore": 0.348133651175123,
+                  "silhouetteScore": 0.3465838129889733,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -5858,7 +5858,7 @@
                 {
                   "model": "gemini-2.5-flash",
                   "label": "Gemini 2.5 Flash",
-                  "silhouetteScore": 0.21844004053983773,
+                  "silhouetteScore": 0.21903405561646616,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -5866,20 +5866,20 @@
                 {
                   "model": "grok-4-1-fast-reasoning",
                   "label": "Grok 4.1 Fast Reasoning",
-                  "silhouetteScore": 0.29493208579791846,
+                  "silhouetteScore": 0.29347697477598816,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.7571428571428571,
+                "Self_Direction_Action": 0.7565740740740742,
                 "Universalism_Nature": 0.44298148148148153,
                 "Benevolence_Dependability": 0.6615555555555556,
                 "Security_Personal": 0.7455238095238095,
                 "Power_Dominance": 0.14751851851851852,
                 "Achievement": 0.47766402116402124,
-                "Tradition": 0.2932222222222222,
+                "Tradition": 0.29398941798941797,
                 "Stimulation": 0.5101111111111111,
                 "Hedonism": 0.45212962962962966,
                 "Conformity_Interpersonal": 0.4706507936507937
@@ -5895,16 +5895,16 @@
             "cluster-1:cluster-2": {
               "clusterAId": "cluster-1",
               "clusterBId": "cluster-2",
-              "distance": 0.24601124655303588,
+              "distance": 0.24610398562876365,
               "faultLines": [
                 {
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-2",
-                  "clusterAScore": 0.15340740740740738,
-                  "clusterBScore": 0.49144444444444446,
-                  "delta": -0.3380370370370371,
-                  "absDelta": 0.3380370370370371
+                  "clusterAScore": 0.1533015873015873,
+                  "clusterBScore": 0.49194708994709,
+                  "delta": -0.33864550264550275,
+                  "absDelta": 0.33864550264550275
                 },
                 {
                   "valueKey": "Conformity_Interpersonal",
@@ -5929,7 +5929,7 @@
             "cluster-1:cluster-3": {
               "clusterAId": "cluster-1",
               "clusterBId": "cluster-3",
-              "distance": 0.1921842998117932,
+              "distance": 0.19222764129335113,
               "faultLines": [
                 {
                   "valueKey": "Conformity_Interpersonal",
@@ -5963,7 +5963,7 @@
             "cluster-2:cluster-3": {
               "clusterAId": "cluster-2",
               "clusterBId": "cluster-3",
-              "distance": 0.1801542089019504,
+              "distance": 0.18007622415708763,
               "faultLines": [
                 {
                   "valueKey": "Universalism_Nature",
@@ -5978,19 +5978,19 @@
                   "valueKey": "Self_Direction_Action",
                   "clusterAId": "cluster-2",
                   "clusterBId": "cluster-3",
-                  "clusterAScore": 0.5421851851851852,
-                  "clusterBScore": 0.7571428571428571,
-                  "delta": -0.2149576719576719,
-                  "absDelta": 0.2149576719576719
+                  "clusterAScore": 0.5416825396825398,
+                  "clusterBScore": 0.7565740740740742,
+                  "delta": -0.2148915343915344,
+                  "absDelta": 0.2148915343915344
                 },
                 {
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-2",
                   "clusterBId": "cluster-3",
-                  "clusterAScore": 0.49144444444444446,
-                  "clusterBScore": 0.2932222222222222,
-                  "delta": 0.19822222222222224,
-                  "absDelta": 0.19822222222222224
+                  "clusterAScore": 0.49194708994709,
+                  "clusterBScore": 0.29398941798941797,
+                  "delta": 0.19795767195767205,
+                  "absDelta": 0.19795767195767205
                 }
               ]
             }
@@ -6011,7 +6011,7 @@
                 {
                   "model": "claude-sonnet-4-5",
                   "label": "Claude Sonnet 4.5",
-                  "silhouetteScore": 0.3270688136901123,
+                  "silhouetteScore": 0.32729180082005144,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -6019,20 +6019,20 @@
                 {
                   "model": "gpt-5.1",
                   "label": "GPT-5.1",
-                  "silhouetteScore": 0.39336150978128526,
+                  "silhouetteScore": 0.39351112564112356,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.6793439153439153,
+                "Self_Direction_Action": 0.6794497354497354,
                 "Universalism_Nature": 0.3850634920634922,
                 "Benevolence_Dependability": 0.6252222222222221,
                 "Security_Personal": 0.8815555555555555,
                 "Power_Dominance": 0.00951851851851852,
                 "Achievement": 0.3288095238095239,
-                "Tradition": 0.15340740740740738,
+                "Tradition": 0.1533015873015873,
                 "Stimulation": 0.46177777777777784,
                 "Hedonism": 0.5984444444444443,
                 "Conformity_Interpersonal": 0.8688571428571429
@@ -6050,7 +6050,7 @@
                 {
                   "model": "deepseek-chat",
                   "label": "DeepSeek Chat",
-                  "silhouetteScore": 0.5954065730817552,
+                  "silhouetteScore": 0.5955304506488406,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -6058,20 +6058,20 @@
                 {
                   "model": "deepseek-reasoner",
                   "label": "DeepSeek Reasoner",
-                  "silhouetteScore": 0.45709341909693385,
+                  "silhouetteScore": 0.45820200369302033,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.7744074074074074,
+                "Self_Direction_Action": 0.7731111111111112,
                 "Universalism_Nature": 0.5336666666666667,
                 "Benevolence_Dependability": 0.7233333333333334,
                 "Security_Personal": 0.7593333333333333,
                 "Power_Dominance": 0.029000000000000005,
                 "Achievement": 0.39122222222222236,
-                "Tradition": 0.3188888888888889,
+                "Tradition": 0.3205820105820105,
                 "Stimulation": 0.5352962962962963,
                 "Hedonism": 0.4680000000000001,
                 "Conformity_Interpersonal": 0.4043809523809524
@@ -6089,7 +6089,7 @@
                 {
                   "model": "gemini-2.5-flash",
                   "label": "Gemini 2.5 Flash",
-                  "silhouetteScore": 0.23699161504600982,
+                  "silhouetteScore": 0.23535109073875635,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -6097,26 +6097,26 @@
                 {
                   "model": "grok-4-1-fast-reasoning",
                   "label": "Grok 4.1 Fast Reasoning",
-                  "silhouetteScore": 0.05166176802262151,
+                  "silhouetteScore": 0.053342237216396776,
                   "isOutlier": true,
                   "nearestClusterIds": [
                     "cluster-2",
                     "cluster-1"
                   ],
                   "distancesToNearestClusters": [
-                    0.12582398314367962,
-                    0.17538341698710108
+                    0.12616413738241675,
+                    0.17539533817029454
                   ]
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.739878306878307,
+                "Self_Direction_Action": 0.740037037037037,
                 "Universalism_Nature": 0.35229629629629633,
                 "Benevolence_Dependability": 0.5997777777777777,
                 "Security_Personal": 0.7317142857142858,
                 "Power_Dominance": 0.26603703703703707,
                 "Achievement": 0.5641058201058202,
-                "Tradition": 0.26755555555555555,
+                "Tradition": 0.2673968253968254,
                 "Stimulation": 0.4849259259259259,
                 "Hedonism": 0.4362592592592593,
                 "Conformity_Interpersonal": 0.536920634920635
@@ -6134,7 +6134,7 @@
                 {
                   "model": "mistral-large-2512",
                   "label": "Mistral Large (Dec 2025)",
-                  "silhouetteScore": 0.259695564168388,
+                  "silhouetteScore": 0.258832209331216,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -6142,26 +6142,26 @@
                 {
                   "model": "mistral-small-2503",
                   "label": "Mistral Small",
-                  "silhouetteScore": 0.07342956844669656,
+                  "silhouetteScore": 0.07435112863437097,
                   "isOutlier": true,
                   "nearestClusterIds": [
                     "cluster-2",
                     "cluster-3"
                   ],
                   "distancesToNearestClusters": [
-                    0.14073159467097868,
-                    0.1865624749031213
+                    0.14065496613773742,
+                    0.18675268437286807
                   ]
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.5421851851851852,
+                "Self_Direction_Action": 0.5416825396825398,
                 "Universalism_Nature": 0.6598518518518519,
                 "Benevolence_Dependability": 0.8333333333333335,
                 "Security_Personal": 0.6127777777777779,
                 "Power_Dominance": 0.010222222222222226,
                 "Achievement": 0.5143015873015873,
-                "Tradition": 0.49144444444444446,
+                "Tradition": 0.49194708994709,
                 "Stimulation": 0.4431111111111111,
                 "Hedonism": 0.32433333333333336,
                 "Conformity_Interpersonal": 0.5569206349206348
@@ -6177,7 +6177,7 @@
             "cluster-1:cluster-2": {
               "clusterAId": "cluster-1",
               "clusterBId": "cluster-2",
-              "distance": 0.19277233739037658,
+              "distance": 0.1928491364060919,
               "faultLines": [
                 {
                   "valueKey": "Conformity_Interpersonal",
@@ -6192,10 +6192,10 @@
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-2",
-                  "clusterAScore": 0.15340740740740738,
-                  "clusterBScore": 0.3188888888888889,
-                  "delta": -0.1654814814814815,
-                  "absDelta": 0.1654814814814815
+                  "clusterAScore": 0.1533015873015873,
+                  "clusterBScore": 0.3205820105820105,
+                  "delta": -0.16728042328042322,
+                  "absDelta": 0.16728042328042322
                 },
                 {
                   "valueKey": "Universalism_Nature",
@@ -6211,7 +6211,7 @@
             "cluster-1:cluster-3": {
               "clusterAId": "cluster-1",
               "clusterBId": "cluster-3",
-              "distance": 0.19159626223320977,
+              "distance": 0.19160614618061036,
               "faultLines": [
                 {
                   "valueKey": "Conformity_Interpersonal",
@@ -6245,16 +6245,16 @@
             "cluster-1:cluster-4": {
               "clusterAId": "cluster-1",
               "clusterBId": "cluster-4",
-              "distance": 0.24601124655303588,
+              "distance": 0.24610398562876365,
               "faultLines": [
                 {
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-4",
-                  "clusterAScore": 0.15340740740740738,
-                  "clusterBScore": 0.49144444444444446,
-                  "delta": -0.3380370370370371,
-                  "absDelta": 0.3380370370370371
+                  "clusterAScore": 0.1533015873015873,
+                  "clusterBScore": 0.49194708994709,
+                  "delta": -0.33864550264550275,
+                  "absDelta": 0.33864550264550275
                 },
                 {
                   "valueKey": "Conformity_Interpersonal",
@@ -6279,7 +6279,7 @@
             "cluster-2:cluster-3": {
               "clusterAId": "cluster-2",
               "clusterBId": "cluster-3",
-              "distance": 0.14110490272970597,
+              "distance": 0.14117951877019413,
               "faultLines": [
                 {
                   "valueKey": "Power_Dominance",
@@ -6313,25 +6313,25 @@
             "cluster-2:cluster-4": {
               "clusterAId": "cluster-2",
               "clusterBId": "cluster-4",
-              "distance": 0.15843614251786864,
+              "distance": 0.15815989584808945,
               "faultLines": [
                 {
                   "valueKey": "Self_Direction_Action",
                   "clusterAId": "cluster-2",
                   "clusterBId": "cluster-4",
-                  "clusterAScore": 0.7744074074074074,
-                  "clusterBScore": 0.5421851851851852,
-                  "delta": 0.23222222222222222,
-                  "absDelta": 0.23222222222222222
+                  "clusterAScore": 0.7731111111111112,
+                  "clusterBScore": 0.5416825396825398,
+                  "delta": 0.23142857142857143,
+                  "absDelta": 0.23142857142857143
                 },
                 {
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-2",
                   "clusterBId": "cluster-4",
-                  "clusterAScore": 0.3188888888888889,
-                  "clusterBScore": 0.49144444444444446,
-                  "delta": -0.17255555555555557,
-                  "absDelta": 0.17255555555555557
+                  "clusterAScore": 0.3205820105820105,
+                  "clusterBScore": 0.49194708994709,
+                  "delta": -0.1713650793650795,
+                  "absDelta": 0.1713650793650795
                 },
                 {
                   "valueKey": "Conformity_Interpersonal",
@@ -6347,7 +6347,7 @@
             "cluster-3:cluster-4": {
               "clusterAId": "cluster-3",
               "clusterBId": "cluster-4",
-              "distance": 0.20187227528603216,
+              "distance": 0.20199255246608577,
               "faultLines": [
                 {
                   "valueKey": "Universalism_Nature",
@@ -6395,7 +6395,7 @@
                 {
                   "model": "deepseek-chat",
                   "label": "DeepSeek Chat",
-                  "silhouetteScore": 0.5997663505909383,
+                  "silhouetteScore": 0.6000545691956888,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -6403,20 +6403,20 @@
                 {
                   "model": "deepseek-reasoner",
                   "label": "DeepSeek Reasoner",
-                  "silhouetteScore": 0.47951018919904365,
+                  "silhouetteScore": 0.48052894838095594,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.7744074074074074,
+                "Self_Direction_Action": 0.7731111111111112,
                 "Universalism_Nature": 0.5336666666666667,
                 "Benevolence_Dependability": 0.7233333333333334,
                 "Security_Personal": 0.7593333333333333,
                 "Power_Dominance": 0.029000000000000005,
                 "Achievement": 0.39122222222222236,
-                "Tradition": 0.3188888888888889,
+                "Tradition": 0.3205820105820105,
                 "Stimulation": 0.5352962962962963,
                 "Hedonism": 0.4680000000000001,
                 "Conformity_Interpersonal": 0.4043809523809524
@@ -6434,7 +6434,7 @@
                 {
                   "model": "claude-sonnet-4-5",
                   "label": "Claude Sonnet 4.5",
-                  "silhouetteScore": 0.3000403099386396,
+                  "silhouetteScore": 0.30057963463479787,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -6442,20 +6442,20 @@
                 {
                   "model": "gpt-5.1",
                   "label": "GPT-5.1",
-                  "silhouetteScore": 0.40113635967769473,
+                  "silhouetteScore": 0.4015714026998037,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.6793439153439153,
+                "Self_Direction_Action": 0.6794497354497354,
                 "Universalism_Nature": 0.3850634920634922,
                 "Benevolence_Dependability": 0.6252222222222221,
                 "Security_Personal": 0.8815555555555555,
                 "Power_Dominance": 0.00951851851851852,
                 "Achievement": 0.3288095238095239,
-                "Tradition": 0.15340740740740738,
+                "Tradition": 0.1533015873015873,
                 "Stimulation": 0.46177777777777784,
                 "Hedonism": 0.5984444444444443,
                 "Conformity_Interpersonal": 0.8688571428571429
@@ -6473,7 +6473,7 @@
                 {
                   "model": "gemini-2.5-flash",
                   "label": "Gemini 2.5 Flash",
-                  "silhouetteScore": 0.28781051233799154,
+                  "silhouetteScore": 0.2857536598234468,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -6481,26 +6481,26 @@
                 {
                   "model": "grok-4-1-fast-reasoning",
                   "label": "Grok 4.1 Fast Reasoning",
-                  "silhouetteScore": 0.11764849039430378,
+                  "silhouetteScore": 0.11999844762680978,
                   "isOutlier": true,
                   "nearestClusterIds": [
                     "cluster-1",
                     "cluster-2"
                   ],
                   "distancesToNearestClusters": [
-                    0.10870423280423282,
-                    0.14963386243386245
+                    0.10906666666666665,
+                    0.14964444444444444
                   ]
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.739878306878307,
+                "Self_Direction_Action": 0.740037037037037,
                 "Universalism_Nature": 0.35229629629629633,
                 "Benevolence_Dependability": 0.5997777777777777,
                 "Security_Personal": 0.7317142857142858,
                 "Power_Dominance": 0.26603703703703707,
                 "Achievement": 0.5641058201058202,
-                "Tradition": 0.26755555555555555,
+                "Tradition": 0.2673968253968254,
                 "Stimulation": 0.4849259259259259,
                 "Hedonism": 0.4362592592592593,
                 "Conformity_Interpersonal": 0.536920634920635
@@ -6518,7 +6518,7 @@
                 {
                   "model": "mistral-large-2512",
                   "label": "Mistral Large (Dec 2025)",
-                  "silhouetteScore": 0.3510873349350085,
+                  "silhouetteScore": 0.3498211004738425,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -6526,26 +6526,26 @@
                 {
                   "model": "mistral-small-2503",
                   "label": "Mistral Small",
-                  "silhouetteScore": 0.12141873760354656,
+                  "silhouetteScore": 0.1208648547679088,
                   "isOutlier": true,
                   "nearestClusterIds": [
                     "cluster-1",
                     "cluster-3"
                   ],
                   "distancesToNearestClusters": [
-                    0.1133730158730158,
-                    0.14674814814814813
+                    0.11330158730158725,
+                    0.14688042328042325
                   ]
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.5421851851851852,
+                "Self_Direction_Action": 0.5416825396825398,
                 "Universalism_Nature": 0.6598518518518519,
                 "Benevolence_Dependability": 0.8333333333333335,
                 "Security_Personal": 0.6127777777777779,
                 "Power_Dominance": 0.010222222222222226,
                 "Achievement": 0.5143015873015873,
-                "Tradition": 0.49144444444444446,
+                "Tradition": 0.49194708994709,
                 "Stimulation": 0.4431111111111111,
                 "Hedonism": 0.32433333333333336,
                 "Conformity_Interpersonal": 0.5569206349206348
@@ -6561,7 +6561,7 @@
             "cluster-1:cluster-2": {
               "clusterAId": "cluster-1",
               "clusterBId": "cluster-2",
-              "distance": 0.1409137566137566,
+              "distance": 0.14095343915343916,
               "faultLines": [
                 {
                   "valueKey": "Conformity_Interpersonal",
@@ -6576,10 +6576,10 @@
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-2",
-                  "clusterAScore": 0.3188888888888889,
-                  "clusterBScore": 0.15340740740740738,
-                  "delta": 0.1654814814814815,
-                  "absDelta": 0.1654814814814815
+                  "clusterAScore": 0.3205820105820105,
+                  "clusterBScore": 0.1533015873015873,
+                  "delta": 0.16728042328042322,
+                  "absDelta": 0.16728042328042322
                 },
                 {
                   "valueKey": "Universalism_Nature",
@@ -6595,7 +6595,7 @@
             "cluster-1:cluster-3": {
               "clusterAId": "cluster-1",
               "clusterBId": "cluster-3",
-              "distance": 0.12169047619047618,
+              "distance": 0.12172222222222222,
               "faultLines": [
                 {
                   "valueKey": "Power_Dominance",
@@ -6629,25 +6629,25 @@
             "cluster-1:cluster-4": {
               "clusterAId": "cluster-1",
               "clusterBId": "cluster-4",
-              "distance": 0.13343597883597882,
+              "distance": 0.13325079365079365,
               "faultLines": [
                 {
                   "valueKey": "Self_Direction_Action",
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-4",
-                  "clusterAScore": 0.7744074074074074,
-                  "clusterBScore": 0.5421851851851852,
-                  "delta": 0.23222222222222222,
-                  "absDelta": 0.23222222222222222
+                  "clusterAScore": 0.7731111111111112,
+                  "clusterBScore": 0.5416825396825398,
+                  "delta": 0.23142857142857143,
+                  "absDelta": 0.23142857142857143
                 },
                 {
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-4",
-                  "clusterAScore": 0.3188888888888889,
-                  "clusterBScore": 0.49144444444444446,
-                  "delta": -0.17255555555555557,
-                  "absDelta": 0.17255555555555557
+                  "clusterAScore": 0.3205820105820105,
+                  "clusterBScore": 0.49194708994709,
+                  "delta": -0.1713650793650795,
+                  "absDelta": 0.1713650793650795
                 },
                 {
                   "valueKey": "Conformity_Interpersonal",
@@ -6663,7 +6663,7 @@
             "cluster-2:cluster-3": {
               "clusterAId": "cluster-2",
               "clusterBId": "cluster-3",
-              "distance": 0.16674867724867726,
+              "distance": 0.16675396825396827,
               "faultLines": [
                 {
                   "valueKey": "Conformity_Interpersonal",
@@ -6697,16 +6697,16 @@
             "cluster-2:cluster-4": {
               "clusterAId": "cluster-2",
               "clusterBId": "cluster-4",
-              "distance": 0.20991164021164016,
+              "distance": 0.2100333333333333,
               "faultLines": [
                 {
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-2",
                   "clusterBId": "cluster-4",
-                  "clusterAScore": 0.15340740740740738,
-                  "clusterBScore": 0.49144444444444446,
-                  "delta": -0.3380370370370371,
-                  "absDelta": 0.3380370370370371
+                  "clusterAScore": 0.1533015873015873,
+                  "clusterBScore": 0.49194708994709,
+                  "delta": -0.33864550264550275,
+                  "absDelta": 0.33864550264550275
                 },
                 {
                   "valueKey": "Conformity_Interpersonal",
@@ -6731,7 +6731,7 @@
             "cluster-3:cluster-4": {
               "clusterAId": "cluster-3",
               "clusterBId": "cluster-4",
-              "distance": 0.16467777777777778,
+              "distance": 0.16475978835978836,
               "faultLines": [
                 {
                   "valueKey": "Universalism_Nature",
@@ -6779,7 +6779,7 @@
                 {
                   "model": "claude-sonnet-4-5",
                   "label": "Claude Sonnet 4.5",
-                  "silhouetteScore": 0.3000403099386396,
+                  "silhouetteScore": 0.30057963463479787,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -6787,20 +6787,20 @@
                 {
                   "model": "gpt-5.1",
                   "label": "GPT-5.1",
-                  "silhouetteScore": 0.40113635967769473,
+                  "silhouetteScore": 0.4015714026998037,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.6793439153439153,
+                "Self_Direction_Action": 0.6794497354497354,
                 "Universalism_Nature": 0.3850634920634922,
                 "Benevolence_Dependability": 0.6252222222222221,
                 "Security_Personal": 0.8815555555555555,
                 "Power_Dominance": 0.00951851851851852,
                 "Achievement": 0.3288095238095239,
-                "Tradition": 0.15340740740740738,
+                "Tradition": 0.1533015873015873,
                 "Stimulation": 0.46177777777777784,
                 "Hedonism": 0.5984444444444443,
                 "Conformity_Interpersonal": 0.8688571428571429
@@ -6818,7 +6818,7 @@
                 {
                   "model": "deepseek-chat",
                   "label": "DeepSeek Chat",
-                  "silhouetteScore": 0.5997663505909383,
+                  "silhouetteScore": 0.6000545691956888,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -6826,20 +6826,20 @@
                 {
                   "model": "deepseek-reasoner",
                   "label": "DeepSeek Reasoner",
-                  "silhouetteScore": 0.47951018919904365,
+                  "silhouetteScore": 0.48052894838095594,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.7744074074074074,
+                "Self_Direction_Action": 0.7731111111111112,
                 "Universalism_Nature": 0.5336666666666667,
                 "Benevolence_Dependability": 0.7233333333333334,
                 "Security_Personal": 0.7593333333333333,
                 "Power_Dominance": 0.029000000000000005,
                 "Achievement": 0.39122222222222236,
-                "Tradition": 0.3188888888888889,
+                "Tradition": 0.3205820105820105,
                 "Stimulation": 0.5352962962962963,
                 "Hedonism": 0.4680000000000001,
                 "Conformity_Interpersonal": 0.4043809523809524
@@ -6857,7 +6857,7 @@
                 {
                   "model": "gemini-2.5-flash",
                   "label": "Gemini 2.5 Flash",
-                  "silhouetteScore": 0.28781051233799154,
+                  "silhouetteScore": 0.2857536598234468,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -6865,26 +6865,26 @@
                 {
                   "model": "grok-4-1-fast-reasoning",
                   "label": "Grok 4.1 Fast Reasoning",
-                  "silhouetteScore": 0.11764849039430378,
+                  "silhouetteScore": 0.11999844762680978,
                   "isOutlier": true,
                   "nearestClusterIds": [
                     "cluster-2",
                     "cluster-1"
                   ],
                   "distancesToNearestClusters": [
-                    0.10870423280423282,
-                    0.14963386243386245
+                    0.10906666666666665,
+                    0.14964444444444444
                   ]
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.739878306878307,
+                "Self_Direction_Action": 0.740037037037037,
                 "Universalism_Nature": 0.35229629629629633,
                 "Benevolence_Dependability": 0.5997777777777777,
                 "Security_Personal": 0.7317142857142858,
                 "Power_Dominance": 0.26603703703703707,
                 "Achievement": 0.5641058201058202,
-                "Tradition": 0.26755555555555555,
+                "Tradition": 0.2673968253968254,
                 "Stimulation": 0.4849259259259259,
                 "Hedonism": 0.4362592592592593,
                 "Conformity_Interpersonal": 0.536920634920635
@@ -6902,7 +6902,7 @@
                 {
                   "model": "mistral-large-2512",
                   "label": "Mistral Large (Dec 2025)",
-                  "silhouetteScore": 0.3510873349350085,
+                  "silhouetteScore": 0.3498211004738425,
                   "isOutlier": false,
                   "nearestClusterIds": null,
                   "distancesToNearestClusters": null
@@ -6910,26 +6910,26 @@
                 {
                   "model": "mistral-small-2503",
                   "label": "Mistral Small",
-                  "silhouetteScore": 0.12141873760354656,
+                  "silhouetteScore": 0.1208648547679088,
                   "isOutlier": true,
                   "nearestClusterIds": [
                     "cluster-2",
                     "cluster-3"
                   ],
                   "distancesToNearestClusters": [
-                    0.1133730158730158,
-                    0.14674814814814813
+                    0.11330158730158725,
+                    0.14688042328042325
                   ]
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.5421851851851852,
+                "Self_Direction_Action": 0.5416825396825398,
                 "Universalism_Nature": 0.6598518518518519,
                 "Benevolence_Dependability": 0.8333333333333335,
                 "Security_Personal": 0.6127777777777779,
                 "Power_Dominance": 0.010222222222222226,
                 "Achievement": 0.5143015873015873,
-                "Tradition": 0.49144444444444446,
+                "Tradition": 0.49194708994709,
                 "Stimulation": 0.4431111111111111,
                 "Hedonism": 0.32433333333333336,
                 "Conformity_Interpersonal": 0.5569206349206348
@@ -6945,7 +6945,7 @@
             "cluster-1:cluster-2": {
               "clusterAId": "cluster-1",
               "clusterBId": "cluster-2",
-              "distance": 0.1409137566137566,
+              "distance": 0.14095343915343916,
               "faultLines": [
                 {
                   "valueKey": "Conformity_Interpersonal",
@@ -6960,10 +6960,10 @@
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-2",
-                  "clusterAScore": 0.15340740740740738,
-                  "clusterBScore": 0.3188888888888889,
-                  "delta": -0.1654814814814815,
-                  "absDelta": 0.1654814814814815
+                  "clusterAScore": 0.1533015873015873,
+                  "clusterBScore": 0.3205820105820105,
+                  "delta": -0.16728042328042322,
+                  "absDelta": 0.16728042328042322
                 },
                 {
                   "valueKey": "Universalism_Nature",
@@ -6979,7 +6979,7 @@
             "cluster-1:cluster-3": {
               "clusterAId": "cluster-1",
               "clusterBId": "cluster-3",
-              "distance": 0.16674867724867726,
+              "distance": 0.16675396825396827,
               "faultLines": [
                 {
                   "valueKey": "Conformity_Interpersonal",
@@ -7013,16 +7013,16 @@
             "cluster-1:cluster-4": {
               "clusterAId": "cluster-1",
               "clusterBId": "cluster-4",
-              "distance": 0.20991164021164016,
+              "distance": 0.2100333333333333,
               "faultLines": [
                 {
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-4",
-                  "clusterAScore": 0.15340740740740738,
-                  "clusterBScore": 0.49144444444444446,
-                  "delta": -0.3380370370370371,
-                  "absDelta": 0.3380370370370371
+                  "clusterAScore": 0.1533015873015873,
+                  "clusterBScore": 0.49194708994709,
+                  "delta": -0.33864550264550275,
+                  "absDelta": 0.33864550264550275
                 },
                 {
                   "valueKey": "Conformity_Interpersonal",
@@ -7047,7 +7047,7 @@
             "cluster-2:cluster-3": {
               "clusterAId": "cluster-2",
               "clusterBId": "cluster-3",
-              "distance": 0.12169047619047618,
+              "distance": 0.12172222222222222,
               "faultLines": [
                 {
                   "valueKey": "Power_Dominance",
@@ -7081,25 +7081,25 @@
             "cluster-2:cluster-4": {
               "clusterAId": "cluster-2",
               "clusterBId": "cluster-4",
-              "distance": 0.13343597883597882,
+              "distance": 0.13325079365079365,
               "faultLines": [
                 {
                   "valueKey": "Self_Direction_Action",
                   "clusterAId": "cluster-2",
                   "clusterBId": "cluster-4",
-                  "clusterAScore": 0.7744074074074074,
-                  "clusterBScore": 0.5421851851851852,
-                  "delta": 0.23222222222222222,
-                  "absDelta": 0.23222222222222222
+                  "clusterAScore": 0.7731111111111112,
+                  "clusterBScore": 0.5416825396825398,
+                  "delta": 0.23142857142857143,
+                  "absDelta": 0.23142857142857143
                 },
                 {
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-2",
                   "clusterBId": "cluster-4",
-                  "clusterAScore": 0.3188888888888889,
-                  "clusterBScore": 0.49144444444444446,
-                  "delta": -0.17255555555555557,
-                  "absDelta": 0.17255555555555557
+                  "clusterAScore": 0.3205820105820105,
+                  "clusterBScore": 0.49194708994709,
+                  "delta": -0.1713650793650795,
+                  "absDelta": 0.1713650793650795
                 },
                 {
                   "valueKey": "Conformity_Interpersonal",
@@ -7115,7 +7115,7 @@
             "cluster-3:cluster-4": {
               "clusterAId": "cluster-3",
               "clusterBId": "cluster-4",
-              "distance": 0.16467777777777778,
+              "distance": 0.16475978835978836,
               "faultLines": [
                 {
                   "valueKey": "Universalism_Nature",
@@ -7201,13 +7201,13 @@
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.5290370370370371,
+                "Self_Direction_Action": 0.5280317460317461,
                 "Universalism_Nature": 0.7152592592592592,
                 "Benevolence_Dependability": 0.7757037037037037,
                 "Security_Personal": 0.572888888888889,
                 "Power_Dominance": 0.00977777777777778,
                 "Achievement": 0.5254074074074073,
-                "Tradition": 0.34777777777777774,
+                "Tradition": 0.3487830687830688,
                 "Stimulation": 0.5431111111111111,
                 "Hedonism": 0.3806666666666667,
                 "Conformity_Interpersonal": 0.5773333333333333
@@ -7240,13 +7240,13 @@
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.7744074074074074,
+                "Self_Direction_Action": 0.7731111111111112,
                 "Universalism_Nature": 0.5336666666666667,
                 "Benevolence_Dependability": 0.7233333333333334,
                 "Security_Personal": 0.7593333333333333,
                 "Power_Dominance": 0.029000000000000005,
                 "Achievement": 0.39122222222222236,
-                "Tradition": 0.3188888888888889,
+                "Tradition": 0.3205820105820105,
                 "Stimulation": 0.5352962962962963,
                 "Hedonism": 0.4680000000000001,
                 "Conformity_Interpersonal": 0.4043809523809524
@@ -7295,13 +7295,13 @@
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.7096111111111112,
+                "Self_Direction_Action": 0.7097433862433863,
                 "Universalism_Nature": 0.3686798941798943,
                 "Benevolence_Dependability": 0.6124999999999999,
                 "Security_Personal": 0.8066349206349206,
                 "Power_Dominance": 0.13777777777777778,
                 "Achievement": 0.446457671957672,
-                "Tradition": 0.21048148148148146,
+                "Tradition": 0.21034920634920634,
                 "Stimulation": 0.4733518518518519,
                 "Hedonism": 0.5173518518518518,
                 "Conformity_Interpersonal": 0.7028888888888889
@@ -7324,9 +7324,9 @@
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-2",
                   "clusterAScore": 0.6351111111111112,
-                  "clusterBScore": 0.34777777777777774,
-                  "delta": 0.28733333333333344,
-                  "absDelta": 0.28733333333333344
+                  "clusterBScore": 0.3487830687830688,
+                  "delta": 0.2863280423280424,
+                  "absDelta": 0.2863280423280424
                 },
                 {
                   "valueKey": "Stimulation",
@@ -7358,18 +7358,18 @@
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-3",
                   "clusterAScore": 0.6351111111111112,
-                  "clusterBScore": 0.3188888888888889,
-                  "delta": 0.3162222222222223,
-                  "absDelta": 0.3162222222222223
+                  "clusterBScore": 0.3205820105820105,
+                  "delta": 0.31452910052910066,
+                  "absDelta": 0.31452910052910066
                 },
                 {
                   "valueKey": "Self_Direction_Action",
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-3",
                   "clusterAScore": 0.5553333333333333,
-                  "clusterBScore": 0.7744074074074074,
-                  "delta": -0.2190740740740741,
-                  "absDelta": 0.2190740740740741
+                  "clusterBScore": 0.7731111111111112,
+                  "delta": -0.21777777777777785,
+                  "absDelta": 0.21777777777777785
                 },
                 {
                   "valueKey": "Hedonism",
@@ -7392,9 +7392,9 @@
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-4",
                   "clusterAScore": 0.6351111111111112,
-                  "clusterBScore": 0.21048148148148146,
-                  "delta": 0.4246296296296297,
-                  "absDelta": 0.4246296296296297
+                  "clusterBScore": 0.21034920634920634,
+                  "delta": 0.42476190476190484,
+                  "absDelta": 0.42476190476190484
                 },
                 {
                   "valueKey": "Benevolence_Dependability",
@@ -7425,10 +7425,10 @@
                   "valueKey": "Self_Direction_Action",
                   "clusterAId": "cluster-2",
                   "clusterBId": "cluster-3",
-                  "clusterAScore": 0.5290370370370371,
-                  "clusterBScore": 0.7744074074074074,
-                  "delta": -0.24537037037037035,
-                  "absDelta": 0.24537037037037035
+                  "clusterAScore": 0.5280317460317461,
+                  "clusterBScore": 0.7731111111111112,
+                  "delta": -0.24507936507936512,
+                  "absDelta": 0.24507936507936512
                 },
                 {
                   "valueKey": "Security_Personal",
@@ -7477,10 +7477,10 @@
                   "valueKey": "Self_Direction_Action",
                   "clusterAId": "cluster-2",
                   "clusterBId": "cluster-4",
-                  "clusterAScore": 0.5290370370370371,
-                  "clusterBScore": 0.7096111111111112,
-                  "delta": -0.1805740740740741,
-                  "absDelta": 0.1805740740740741
+                  "clusterAScore": 0.5280317460317461,
+                  "clusterBScore": 0.7097433862433863,
+                  "delta": -0.1817116402116402,
+                  "absDelta": 0.1817116402116402
                 }
               ]
             },
@@ -7566,13 +7566,13 @@
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.7096111111111112,
+                "Self_Direction_Action": 0.7097433862433863,
                 "Universalism_Nature": 0.3686798941798943,
                 "Benevolence_Dependability": 0.6124999999999999,
                 "Security_Personal": 0.8066349206349206,
                 "Power_Dominance": 0.13777777777777778,
                 "Achievement": 0.446457671957672,
-                "Tradition": 0.21048148148148146,
+                "Tradition": 0.21034920634920634,
                 "Stimulation": 0.4733518518518519,
                 "Hedonism": 0.5173518518518518,
                 "Conformity_Interpersonal": 0.7028888888888889
@@ -7605,13 +7605,13 @@
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.7744074074074074,
+                "Self_Direction_Action": 0.7731111111111112,
                 "Universalism_Nature": 0.5336666666666667,
                 "Benevolence_Dependability": 0.7233333333333334,
                 "Security_Personal": 0.7593333333333333,
                 "Power_Dominance": 0.029000000000000005,
                 "Achievement": 0.39122222222222236,
-                "Tradition": 0.3188888888888889,
+                "Tradition": 0.3205820105820105,
                 "Stimulation": 0.5352962962962963,
                 "Hedonism": 0.4680000000000001,
                 "Conformity_Interpersonal": 0.4043809523809524
@@ -7656,13 +7656,13 @@
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.5421851851851852,
+                "Self_Direction_Action": 0.5416825396825398,
                 "Universalism_Nature": 0.6598518518518519,
                 "Benevolence_Dependability": 0.8333333333333335,
                 "Security_Personal": 0.6127777777777779,
                 "Power_Dominance": 0.010222222222222226,
                 "Achievement": 0.5143015873015873,
-                "Tradition": 0.49144444444444446,
+                "Tradition": 0.49194708994709,
                 "Stimulation": 0.4431111111111111,
                 "Hedonism": 0.32433333333333336,
                 "Conformity_Interpersonal": 0.5569206349206348
@@ -7727,10 +7727,10 @@
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-3",
-                  "clusterAScore": 0.21048148148148146,
-                  "clusterBScore": 0.49144444444444446,
-                  "delta": -0.28096296296296297,
-                  "absDelta": 0.28096296296296297
+                  "clusterAScore": 0.21034920634920634,
+                  "clusterBScore": 0.49194708994709,
+                  "delta": -0.2815978835978837,
+                  "absDelta": 0.2815978835978837
                 },
                 {
                   "valueKey": "Benevolence_Dependability",
@@ -7752,19 +7752,19 @@
                   "valueKey": "Self_Direction_Action",
                   "clusterAId": "cluster-2",
                   "clusterBId": "cluster-3",
-                  "clusterAScore": 0.7744074074074074,
-                  "clusterBScore": 0.5421851851851852,
-                  "delta": 0.23222222222222222,
-                  "absDelta": 0.23222222222222222
+                  "clusterAScore": 0.7731111111111112,
+                  "clusterBScore": 0.5416825396825398,
+                  "delta": 0.23142857142857143,
+                  "absDelta": 0.23142857142857143
                 },
                 {
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-2",
                   "clusterBId": "cluster-3",
-                  "clusterAScore": 0.3188888888888889,
-                  "clusterBScore": 0.49144444444444446,
-                  "delta": -0.17255555555555557,
-                  "absDelta": 0.17255555555555557
+                  "clusterAScore": 0.3205820105820105,
+                  "clusterBScore": 0.49194708994709,
+                  "delta": -0.1713650793650795,
+                  "absDelta": 0.1713650793650795
                 },
                 {
                   "valueKey": "Conformity_Interpersonal",
@@ -7832,13 +7832,13 @@
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.5290370370370371,
+                "Self_Direction_Action": 0.5280317460317461,
                 "Universalism_Nature": 0.7152592592592592,
                 "Benevolence_Dependability": 0.7757037037037037,
                 "Security_Personal": 0.572888888888889,
                 "Power_Dominance": 0.00977777777777778,
                 "Achievement": 0.5254074074074073,
-                "Tradition": 0.34777777777777774,
+                "Tradition": 0.3487830687830688,
                 "Stimulation": 0.5431111111111111,
                 "Hedonism": 0.3806666666666667,
                 "Conformity_Interpersonal": 0.5773333333333333
@@ -7871,13 +7871,13 @@
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.7744074074074074,
+                "Self_Direction_Action": 0.7731111111111112,
                 "Universalism_Nature": 0.5336666666666667,
                 "Benevolence_Dependability": 0.7233333333333334,
                 "Security_Personal": 0.7593333333333333,
                 "Power_Dominance": 0.029000000000000005,
                 "Achievement": 0.39122222222222236,
-                "Tradition": 0.3188888888888889,
+                "Tradition": 0.3205820105820105,
                 "Stimulation": 0.5352962962962963,
                 "Hedonism": 0.4680000000000001,
                 "Conformity_Interpersonal": 0.4043809523809524
@@ -7932,13 +7932,13 @@
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.7096111111111112,
+                "Self_Direction_Action": 0.7097433862433863,
                 "Universalism_Nature": 0.3686798941798943,
                 "Benevolence_Dependability": 0.6124999999999999,
                 "Security_Personal": 0.8066349206349206,
                 "Power_Dominance": 0.13777777777777778,
                 "Achievement": 0.446457671957672,
-                "Tradition": 0.21048148148148146,
+                "Tradition": 0.21034920634920634,
                 "Stimulation": 0.4733518518518519,
                 "Hedonism": 0.5173518518518518,
                 "Conformity_Interpersonal": 0.7028888888888889
@@ -7961,9 +7961,9 @@
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-2",
                   "clusterAScore": 0.6351111111111112,
-                  "clusterBScore": 0.34777777777777774,
-                  "delta": 0.28733333333333344,
-                  "absDelta": 0.28733333333333344
+                  "clusterBScore": 0.3487830687830688,
+                  "delta": 0.2863280423280424,
+                  "absDelta": 0.2863280423280424
                 },
                 {
                   "valueKey": "Stimulation",
@@ -7995,18 +7995,18 @@
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-3",
                   "clusterAScore": 0.6351111111111112,
-                  "clusterBScore": 0.3188888888888889,
-                  "delta": 0.3162222222222223,
-                  "absDelta": 0.3162222222222223
+                  "clusterBScore": 0.3205820105820105,
+                  "delta": 0.31452910052910066,
+                  "absDelta": 0.31452910052910066
                 },
                 {
                   "valueKey": "Self_Direction_Action",
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-3",
                   "clusterAScore": 0.5553333333333333,
-                  "clusterBScore": 0.7744074074074074,
-                  "delta": -0.2190740740740741,
-                  "absDelta": 0.2190740740740741
+                  "clusterBScore": 0.7731111111111112,
+                  "delta": -0.21777777777777785,
+                  "absDelta": 0.21777777777777785
                 },
                 {
                   "valueKey": "Hedonism",
@@ -8029,9 +8029,9 @@
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-4",
                   "clusterAScore": 0.6351111111111112,
-                  "clusterBScore": 0.21048148148148146,
-                  "delta": 0.4246296296296297,
-                  "absDelta": 0.4246296296296297
+                  "clusterBScore": 0.21034920634920634,
+                  "delta": 0.42476190476190484,
+                  "absDelta": 0.42476190476190484
                 },
                 {
                   "valueKey": "Benevolence_Dependability",
@@ -8062,10 +8062,10 @@
                   "valueKey": "Self_Direction_Action",
                   "clusterAId": "cluster-2",
                   "clusterBId": "cluster-3",
-                  "clusterAScore": 0.5290370370370371,
-                  "clusterBScore": 0.7744074074074074,
-                  "delta": -0.24537037037037035,
-                  "absDelta": 0.24537037037037035
+                  "clusterAScore": 0.5280317460317461,
+                  "clusterBScore": 0.7731111111111112,
+                  "delta": -0.24507936507936512,
+                  "absDelta": 0.24507936507936512
                 },
                 {
                   "valueKey": "Security_Personal",
@@ -8114,10 +8114,10 @@
                   "valueKey": "Self_Direction_Action",
                   "clusterAId": "cluster-2",
                   "clusterBId": "cluster-4",
-                  "clusterAScore": 0.5290370370370371,
-                  "clusterBScore": 0.7096111111111112,
-                  "delta": -0.1805740740740741,
-                  "absDelta": 0.1805740740740741
+                  "clusterAScore": 0.5280317460317461,
+                  "clusterBScore": 0.7097433862433863,
+                  "delta": -0.1817116402116402,
+                  "absDelta": 0.1817116402116402
                 }
               ]
             },
@@ -8187,13 +8187,13 @@
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.6793439153439153,
+                "Self_Direction_Action": 0.6794497354497354,
                 "Universalism_Nature": 0.3850634920634922,
                 "Benevolence_Dependability": 0.6252222222222221,
                 "Security_Personal": 0.8815555555555555,
                 "Power_Dominance": 0.00951851851851852,
                 "Achievement": 0.3288095238095239,
-                "Tradition": 0.15340740740740738,
+                "Tradition": 0.1533015873015873,
                 "Stimulation": 0.46177777777777784,
                 "Hedonism": 0.5984444444444443,
                 "Conformity_Interpersonal": 0.8688571428571429
@@ -8226,13 +8226,13 @@
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.7744074074074074,
+                "Self_Direction_Action": 0.7731111111111112,
                 "Universalism_Nature": 0.5336666666666667,
                 "Benevolence_Dependability": 0.7233333333333334,
                 "Security_Personal": 0.7593333333333333,
                 "Power_Dominance": 0.029000000000000005,
                 "Achievement": 0.39122222222222236,
-                "Tradition": 0.3188888888888889,
+                "Tradition": 0.3205820105820105,
                 "Stimulation": 0.5352962962962963,
                 "Hedonism": 0.4680000000000001,
                 "Conformity_Interpersonal": 0.4043809523809524
@@ -8265,13 +8265,13 @@
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.739878306878307,
+                "Self_Direction_Action": 0.740037037037037,
                 "Universalism_Nature": 0.35229629629629633,
                 "Benevolence_Dependability": 0.5997777777777777,
                 "Security_Personal": 0.7317142857142858,
                 "Power_Dominance": 0.26603703703703707,
                 "Achievement": 0.5641058201058202,
-                "Tradition": 0.26755555555555555,
+                "Tradition": 0.2673968253968254,
                 "Stimulation": 0.4849259259259259,
                 "Hedonism": 0.4362592592592593,
                 "Conformity_Interpersonal": 0.536920634920635
@@ -8310,13 +8310,13 @@
                 }
               ],
               "centroid": {
-                "Self_Direction_Action": 0.5421851851851852,
+                "Self_Direction_Action": 0.5416825396825398,
                 "Universalism_Nature": 0.6598518518518519,
                 "Benevolence_Dependability": 0.8333333333333335,
                 "Security_Personal": 0.6127777777777779,
                 "Power_Dominance": 0.010222222222222226,
                 "Achievement": 0.5143015873015873,
-                "Tradition": 0.49144444444444446,
+                "Tradition": 0.49194708994709,
                 "Stimulation": 0.4431111111111111,
                 "Hedonism": 0.32433333333333336,
                 "Conformity_Interpersonal": 0.5569206349206348
@@ -8347,10 +8347,10 @@
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-2",
-                  "clusterAScore": 0.15340740740740738,
-                  "clusterBScore": 0.3188888888888889,
-                  "delta": -0.1654814814814815,
-                  "absDelta": 0.1654814814814815
+                  "clusterAScore": 0.1533015873015873,
+                  "clusterBScore": 0.3205820105820105,
+                  "delta": -0.16728042328042322,
+                  "absDelta": 0.16728042328042322
                 },
                 {
                   "valueKey": "Universalism_Nature",
@@ -8406,10 +8406,10 @@
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-1",
                   "clusterBId": "cluster-4",
-                  "clusterAScore": 0.15340740740740738,
-                  "clusterBScore": 0.49144444444444446,
-                  "delta": -0.3380370370370371,
-                  "absDelta": 0.3380370370370371
+                  "clusterAScore": 0.1533015873015873,
+                  "clusterBScore": 0.49194708994709,
+                  "delta": -0.33864550264550275,
+                  "absDelta": 0.33864550264550275
                 },
                 {
                   "valueKey": "Conformity_Interpersonal",
@@ -8474,19 +8474,19 @@
                   "valueKey": "Self_Direction_Action",
                   "clusterAId": "cluster-2",
                   "clusterBId": "cluster-4",
-                  "clusterAScore": 0.7744074074074074,
-                  "clusterBScore": 0.5421851851851852,
-                  "delta": 0.23222222222222222,
-                  "absDelta": 0.23222222222222222
+                  "clusterAScore": 0.7731111111111112,
+                  "clusterBScore": 0.5416825396825398,
+                  "delta": 0.23142857142857143,
+                  "absDelta": 0.23142857142857143
                 },
                 {
                   "valueKey": "Tradition",
                   "clusterAId": "cluster-2",
                   "clusterBId": "cluster-4",
-                  "clusterAScore": 0.3188888888888889,
-                  "clusterBScore": 0.49144444444444446,
-                  "delta": -0.17255555555555557,
-                  "absDelta": 0.17255555555555557
+                  "clusterAScore": 0.3205820105820105,
+                  "clusterBScore": 0.49194708994709,
+                  "delta": -0.1713650793650795,
+                  "absDelta": 0.1713650793650795
                 },
                 {
                   "valueKey": "Conformity_Interpersonal",

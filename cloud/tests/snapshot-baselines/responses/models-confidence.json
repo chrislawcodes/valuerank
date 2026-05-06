@@ -76,13 +76,13 @@
           "label": "Claude Sonnet 4.5",
           "overallConfidence": 28.814303276121418,
           "overallStrongCount": 9853,
-          "overallLeanCount": 26141,
+          "overallLeanCount": 26166,
           "values": [
             {
               "valueKey": "Self_Direction_Action",
               "confidence": 24.627325837742507,
               "strongCount": 1535,
-              "leanCount": 5679
+              "leanCount": 5704
             },
             {
               "valueKey": "Universalism_Nature",
@@ -118,7 +118,7 @@
               "valueKey": "Tradition",
               "confidence": 15.182608695652174,
               "strongCount": 1042,
-              "leanCount": 6094
+              "leanCount": 6119
             },
             {
               "valueKey": "Stimulation",
@@ -143,14 +143,14 @@
         {
           "modelId": "deepseek-chat",
           "label": "DeepSeek Chat",
-          "overallConfidence": 82.43327475221359,
-          "overallStrongCount": 29316,
+          "overallConfidence": 82.46660808554691,
+          "overallStrongCount": 29341,
           "overallLeanCount": 6745,
           "values": [
             {
               "valueKey": "Self_Direction_Action",
-              "confidence": 87.08950617283953,
-              "strongCount": 6256,
+              "confidence": 87.25617283950619,
+              "strongCount": 6281,
               "leanCount": 1021
             },
             {
@@ -185,8 +185,8 @@
             },
             {
               "valueKey": "Tradition",
-              "confidence": 69.95185185185186,
-              "strongCount": 4901,
+              "confidence": 70.11851851851851,
+              "strongCount": 4926,
               "leanCount": 2274
             },
             {
@@ -212,15 +212,15 @@
         {
           "modelId": "deepseek-reasoner",
           "label": "DeepSeek Reasoner",
-          "overallConfidence": 88.98149768482786,
-          "overallStrongCount": 31820,
-          "overallLeanCount": 3942,
+          "overallConfidence": 88.99114274655626,
+          "overallStrongCount": 31840,
+          "overallLeanCount": 3947,
           "values": [
             {
               "valueKey": "Self_Direction_Action",
-              "confidence": 93.43935090422387,
-              "strongCount": 6743,
-              "leanCount": 490
+              "confidence": 93.48757621286585,
+              "strongCount": 6763,
+              "leanCount": 495
             },
             {
               "valueKey": "Universalism_Nature",
@@ -254,9 +254,9 @@
             },
             {
               "valueKey": "Tradition",
-              "confidence": 80.91647029966578,
-              "strongCount": 5669,
-              "leanCount": 1331
+              "confidence": 80.96469560830776,
+              "strongCount": 5689,
+              "leanCount": 1336
             },
             {
               "valueKey": "Stimulation",
@@ -281,15 +281,15 @@
         {
           "modelId": "gemini-2.5-flash",
           "label": "Gemini 2.5 Flash",
-          "overallConfidence": 92.74317017109323,
-          "overallStrongCount": 33318,
-          "overallLeanCount": 2720,
+          "overallConfidence": 92.74264107056412,
+          "overallStrongCount": 33340,
+          "overallLeanCount": 2723,
           "values": [
             {
               "valueKey": "Self_Direction_Action",
-              "confidence": 94.4931995693982,
-              "strongCount": 6882,
-              "leanCount": 405
+              "confidence": 94.49055406675268,
+              "strongCount": 6904,
+              "leanCount": 408
             },
             {
               "valueKey": "Universalism_Nature",
@@ -323,9 +323,9 @@
             },
             {
               "valueKey": "Tradition",
-              "confidence": 88.88997303471352,
-              "strongCount": 6326,
-              "leanCount": 801
+              "confidence": 88.88732753206801,
+              "strongCount": 6348,
+              "leanCount": 804
             },
             {
               "valueKey": "Stimulation",
@@ -419,15 +419,15 @@
         {
           "modelId": "mistral-large-2512",
           "label": "Mistral Large (Dec 2025)",
-          "overallConfidence": 65.74271661788805,
-          "overallStrongCount": 23514,
-          "overallLeanCount": 12605,
+          "overallConfidence": 65.7429811681526,
+          "overallStrongCount": 23516,
+          "overallLeanCount": 12628,
           "values": [
             {
               "valueKey": "Self_Direction_Action",
-              "confidence": 75.46852191018858,
-              "strongCount": 5503,
-              "leanCount": 1779
+              "confidence": 75.46984466151135,
+              "strongCount": 5505,
+              "leanCount": 1802
             },
             {
               "valueKey": "Universalism_Nature",
@@ -461,9 +461,9 @@
             },
             {
               "valueKey": "Tradition",
-              "confidence": 45.09444444444445,
-              "strongCount": 3125,
-              "leanCount": 4050
+              "confidence": 45.095767195767195,
+              "strongCount": 3127,
+              "leanCount": 4073
             },
             {
               "valueKey": "Stimulation",
@@ -488,15 +488,15 @@
         {
           "modelId": "mistral-small-2503",
           "label": "Mistral Small",
-          "overallConfidence": 64.92324760819402,
-          "overallStrongCount": 21977,
-          "overallLeanCount": 14070,
+          "overallConfidence": 64.92245395740038,
+          "overallStrongCount": 21980,
+          "overallLeanCount": 14092,
           "values": [
             {
               "valueKey": "Self_Direction_Action",
-              "confidence": 66.33339610797239,
-              "strongCount": 4528,
-              "leanCount": 2740
+              "confidence": 66.32942785400414,
+              "strongCount": 4531,
+              "leanCount": 2762
             },
             {
               "valueKey": "Universalism_Nature",
@@ -530,9 +530,9 @@
             },
             {
               "valueKey": "Tradition",
-              "confidence": 49.795833333333334,
-              "strongCount": 3238,
-              "leanCount": 3927
+              "confidence": 49.79186507936509,
+              "strongCount": 3241,
+              "leanCount": 3949
             },
             {
               "valueKey": "Stimulation",
@@ -764,15 +764,15 @@
         {
           "modelId": "gpt-5.1",
           "label": "GPT-5.1",
-          "overallConfidence": 49.734311995492874,
-          "overallStrongCount": 17238,
-          "overallLeanCount": 18867,
+          "overallConfidence": 49.73325379443467,
+          "overallStrongCount": 17243,
+          "overallLeanCount": 18887,
           "values": [
             {
               "valueKey": "Self_Direction_Action",
-              "confidence": 51.966439784155014,
-              "strongCount": 3570,
-              "leanCount": 3706
+              "confidence": 51.96114877886402,
+              "strongCount": 3575,
+              "leanCount": 3726
             },
             {
               "valueKey": "Universalism_Nature",
@@ -806,9 +806,9 @@
             },
             {
               "valueKey": "Tradition",
-              "confidence": 42.32592592592594,
-              "strongCount": 2919,
-              "leanCount": 4256
+              "confidence": 42.32063492063492,
+              "strongCount": 2924,
+              "leanCount": 4276
             },
             {
               "valueKey": "Stimulation",
@@ -1040,14 +1040,14 @@
         {
           "modelId": "grok-4-1-fast-reasoning",
           "label": "Grok 4.1 Fast Reasoning",
-          "overallConfidence": 96.66624012780845,
-          "overallStrongCount": 34787,
+          "overallConfidence": 96.66676922833753,
+          "overallStrongCount": 34812,
           "overallLeanCount": 1266,
           "values": [
             {
               "valueKey": "Self_Direction_Action",
-              "confidence": 98.94720016058598,
-              "strongCount": 7194,
+              "confidence": 98.94984566323149,
+              "strongCount": 7219,
               "leanCount": 91
             },
             {
@@ -1082,8 +1082,8 @@
             },
             {
               "valueKey": "Tradition",
-              "confidence": 93.89790874272221,
-              "strongCount": 6683,
+              "confidence": 93.9005542453677,
+              "strongCount": 6708,
               "leanCount": 451
             },
             {

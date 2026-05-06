@@ -8,7 +8,7 @@
           "providerName": "Google",
           "unscoredCount": 0,
           "pushedForEffect": 0.277620701058201,
-          "pushedAgainstEffect": 0.3251626984126984,
+          "pushedAgainstEffect": 0.3251362433862434,
           "pushedEffectPairsUsed": 45,
           "domainPressureEffects": [
             {
@@ -97,7 +97,7 @@
               "valueToken": "self_direction_action",
               "valueLabel": "self direction action",
               "averageWinRate": 0.5934246031746031,
-              "balancedWinRate": 0.6299999999999999,
+              "balancedWinRate": 0.6298677248677248,
               "highPressureOnThisValueWinRate": 0.8397376543209877,
               "highPressureOnOpposingValueWinRate": 0.3356095679012345,
               "pairsMeasured": 9
@@ -115,7 +115,7 @@
               "valueToken": "tradition",
               "valueLabel": "tradition",
               "averageWinRate": 0.4151111111111112,
-              "balancedWinRate": 0.3224074074074074,
+              "balancedWinRate": 0.3225396825396826,
               "highPressureOnThisValueWinRate": 0.7712962962962964,
               "highPressureOnOpposingValueWinRate": 0.1401234567901234,
               "pairsMeasured": 9
@@ -12342,15 +12342,15 @@
               "definitionsMeasured": 8,
               "directionBalancedWinRate": 0.636,
               "directionBalancedOpponentWinRate": 0.3606666666666667,
-              "directionBalancedBalancedWinRate": 0.76,
-              "directionBalancedBalancedOpponentWinRate": 0.24,
+              "directionBalancedBalancedWinRate": 0.7588095238095238,
+              "directionBalancedBalancedOpponentWinRate": 0.2411904761904762,
               "directionBalancedHighPressureOwnWinRate": 0.8569444444444445,
               "directionBalancedHighPressureOwnOpponentWinRate": 0.1291666666666667,
               "directionBalancedHighPressureOpponentWinRate": 0.3124999999999999,
               "directionBalancedHighPressureOpponentOpponentWinRate": 0.6875,
               "pressureResponse": {
                 "value": 0.5444444444444444,
-                "baselineRate": 0.76,
+                "baselineRate": 0.7588095238095238,
                 "pushTowardFirstRate": 0.8569444444444444,
                 "pushTowardSecondRate": 0.3125,
                 "qualifyingTrials": 136,
@@ -12375,10 +12375,10 @@
                   "opponentLevel": 2,
                   "n": 8,
                   "unscoredCount": 0,
-                  "winRate": 0.7458333333333333,
-                  "opponentWinRate": 0.2541666666666667,
+                  "winRate": 0.7607142857142857,
+                  "opponentWinRate": 0.2392857142857143,
                   "conviction": 2,
-                  "netScore": 0.9833333333333334,
+                  "netScore": 1.042857142857143,
                   "lowData": false
                 },
                 {
@@ -12386,10 +12386,10 @@
                   "opponentLevel": 1,
                   "n": 8,
                   "unscoredCount": 0,
-                  "winRate": 0.8125,
-                  "opponentWinRate": 0.1875,
+                  "winRate": 0.8035714285714286,
+                  "opponentWinRate": 0.1964285714285714,
                   "conviction": 2,
-                  "netScore": 1.25,
+                  "netScore": 1.214285714285714,
                   "lowData": false
                 },
                 {
@@ -12397,10 +12397,10 @@
                   "opponentLevel": 2,
                   "n": 8,
                   "unscoredCount": 0,
-                  "winRate": 0.6666666666666666,
-                  "opponentWinRate": 0.3333333333333333,
+                  "winRate": 0.6726190476190476,
+                  "opponentWinRate": 0.3273809523809523,
                   "conviction": 2,
-                  "netScore": 0.6666666666666666,
+                  "netScore": 0.6904761904761905,
                   "lowData": false
                 },
                 {
@@ -12408,10 +12408,10 @@
                   "opponentLevel": 1,
                   "n": 8,
                   "unscoredCount": 0,
-                  "winRate": 0.8833333333333333,
-                  "opponentWinRate": 0.1166666666666667,
+                  "winRate": 0.8714285714285714,
+                  "opponentWinRate": 0.1285714285714286,
                   "conviction": 2,
-                  "netScore": 1.533333333333333,
+                  "netScore": 1.485714285714286,
                   "lowData": false
                 },
                 {
@@ -12509,8 +12509,8 @@
                   "unscoredCount": 0,
                   "winRate": 0.75,
                   "opponentWinRate": 0.25,
-                  "conviction": 1.666666666666667,
-                  "netScore": 0.75,
+                  "conviction": 1.658730158730159,
+                  "netScore": 0.7440476190476191,
                   "lowData": false
                 },
                 {
@@ -13863,14 +13863,14 @@
           "label": "Mistral Small",
           "providerName": "Mistral",
           "unscoredCount": 0,
-          "pushedForEffect": 0.2057947530864198,
-          "pushedAgainstEffect": 0.2189783950617283,
+          "pushedForEffect": 0.2057671957671958,
+          "pushedAgainstEffect": 0.218989417989418,
           "pushedEffectPairsUsed": 45,
           "domainPressureEffects": [
             {
               "domainId": "cmmqi1urq0000e4y3ot8sfm06",
               "domainName": "Job Choice",
-              "pushedForEffect": 0.2417592592592593
+              "pushedForEffect": 0.2416490299823634
             },
             {
               "domainId": "cmnn9r7200000a4yaye4uh16j",
@@ -13889,7 +13889,7 @@
             }
           ],
           "pressureResponseSummary": {
-            "mean": 0.4115895061728396,
+            "mean": 0.4115343915343916,
             "rangeMin": 0,
             "rangeMax": 0.8659722222222221,
             "pairsMeasured": 45
@@ -13952,10 +13952,10 @@
             {
               "valueToken": "self_direction_action",
               "valueLabel": "self direction action",
-              "averageWinRate": 0.5608888888888889,
+              "averageWinRate": 0.5606375661375662,
               "balancedWinRate": 0.6327777777777779,
-              "highPressureOnThisValueWinRate": 0.7171296296296297,
-              "highPressureOnOpposingValueWinRate": 0.333179012345679,
+              "highPressureOnThisValueWinRate": 0.7167989417989418,
+              "highPressureOnOpposingValueWinRate": 0.3331238977072311,
               "pairsMeasured": 9
             },
             {
@@ -13970,10 +13970,10 @@
             {
               "valueToken": "tradition",
               "valueLabel": "tradition",
-              "averageWinRate": 0.3350555555555556,
+              "averageWinRate": 0.3353068783068783,
               "balancedWinRate": 0.2440740740740741,
-              "highPressureOnThisValueWinRate": 0.6306327160493828,
-              "highPressureOnOpposingValueWinRate": 0.1251543209876543,
+              "highPressureOnThisValueWinRate": 0.6306878306878306,
+              "highPressureOnOpposingValueWinRate": 0.1254850088183422,
               "pairsMeasured": 9
             },
             {
@@ -26196,22 +26196,22 @@
               "n": 200,
               "unscoredCount": 0,
               "definitionsMeasured": 8,
-              "directionBalancedWinRate": 0.6975,
-              "directionBalancedOpponentWinRate": 0.3025,
+              "directionBalancedWinRate": 0.6952380952380952,
+              "directionBalancedOpponentWinRate": 0.3047619047619048,
               "directionBalancedBalancedWinRate": 0.85,
               "directionBalancedBalancedOpponentWinRate": 0.15,
-              "directionBalancedHighPressureOwnWinRate": 0.8125,
-              "directionBalancedHighPressureOwnOpponentWinRate": 0.1875,
-              "directionBalancedHighPressureOpponentWinRate": 0.4201388888888889,
-              "directionBalancedHighPressureOpponentOpponentWinRate": 0.579861111111111,
+              "directionBalancedHighPressureOwnWinRate": 0.8095238095238095,
+              "directionBalancedHighPressureOwnOpponentWinRate": 0.1904761904761905,
+              "directionBalancedHighPressureOpponentWinRate": 0.4196428571428572,
+              "directionBalancedHighPressureOpponentOpponentWinRate": 0.5803571428571428,
               "pressureResponse": {
-                "value": 0.3923611111111112,
+                "value": 0.3898809523809525,
                 "baselineRate": 0.85,
-                "pushTowardFirstRate": 0.8125,
-                "pushTowardSecondRate": 0.4201388888888888,
+                "pushTowardFirstRate": 0.8095238095238096,
+                "pushTowardSecondRate": 0.4196428571428572,
                 "qualifyingTrials": 136,
-                "ciLow": -0.1292805668049376,
-                "ciHigh": 0.7092534739813285,
+                "ciLow": -0.1315988923525619,
+                "ciHigh": 0.7075174405097897,
                 "reason": null
               },
               "grid": [
@@ -26231,10 +26231,10 @@
                   "opponentLevel": 3,
                   "n": 8,
                   "unscoredCount": 0,
-                  "winRate": 0.625,
-                  "opponentWinRate": 0.375,
+                  "winRate": 0.6071428571428572,
+                  "opponentWinRate": 0.3928571428571428,
                   "conviction": 1.266666666666667,
-                  "netScore": 0.2083333333333333,
+                  "netScore": 0.1726190476190476,
                   "lowData": false
                 },
                 {
@@ -26319,10 +26319,10 @@
                   "opponentLevel": 1,
                   "n": 8,
                   "unscoredCount": 0,
-                  "winRate": 0.625,
-                  "opponentWinRate": 0.375,
+                  "winRate": 0.6071428571428572,
+                  "opponentWinRate": 0.3928571428571428,
                   "conviction": 1.6,
-                  "netScore": 0.4166666666666666,
+                  "netScore": 0.3809523809523809,
                   "lowData": false
                 },
                 {
@@ -26352,10 +26352,10 @@
                   "opponentLevel": 4,
                   "n": 8,
                   "unscoredCount": 0,
-                  "winRate": 0.5625,
-                  "opponentWinRate": 0.4375,
+                  "winRate": 0.5595238095238095,
+                  "opponentWinRate": 0.4404761904761905,
                   "conviction": 1.166666666666667,
-                  "netScore": 0.25,
+                  "netScore": 0.244047619047619,
                   "lowData": false
                 },
                 {
@@ -26365,8 +26365,8 @@
                   "unscoredCount": 0,
                   "winRate": 0.875,
                   "opponentWinRate": 0.125,
-                  "conviction": 1.642857142857143,
-                  "netScore": 1.3125,
+                  "conviction": 1.63265306122449,
+                  "netScore": 1.303571428571429,
                   "lowData": false
                 },
                 {
@@ -26409,8 +26409,8 @@
                   "unscoredCount": 0,
                   "winRate": 0.75,
                   "opponentWinRate": 0.25,
-                  "conviction": 1.694444444444445,
-                  "netScore": 0.8958333333333334,
+                  "conviction": 1.69047619047619,
+                  "netScore": 0.8928571428571428,
                   "lowData": false
                 },
                 {
@@ -26420,8 +26420,8 @@
                   "unscoredCount": 0,
                   "winRate": 0.875,
                   "opponentWinRate": 0.125,
-                  "conviction": 1.69047619047619,
-                  "netScore": 1.354166666666667,
+                  "conviction": 1.693877551020408,
+                  "netScore": 1.357142857142857,
                   "lowData": false
                 },
                 {
@@ -26451,10 +26451,10 @@
                   "opponentLevel": 2,
                   "n": 8,
                   "unscoredCount": 0,
-                  "winRate": 0.625,
-                  "opponentWinRate": 0.375,
+                  "winRate": 0.6071428571428572,
+                  "opponentWinRate": 0.3928571428571428,
                   "conviction": 1.6,
-                  "netScore": 0.4583333333333334,
+                  "netScore": 0.4226190476190477,
                   "lowData": false
                 },
                 {
@@ -27719,14 +27719,14 @@
           "label": "Grok 4.1 Fast Reasoning",
           "providerName": "xAI",
           "unscoredCount": 0,
-          "pushedForEffect": 0.1421257716049382,
-          "pushedAgainstEffect": 0.1601179453262786,
+          "pushedForEffect": 0.142131283068783,
+          "pushedAgainstEffect": 0.1601289682539682,
           "pushedEffectPairsUsed": 45,
           "domainPressureEffects": [
             {
               "domainId": "cmmqi1urq0000e4y3ot8sfm06",
               "domainName": "Job Choice",
-              "pushedForEffect": 0.1659744268077601
+              "pushedForEffect": 0.1659964726631393
             },
             {
               "domainId": "cmnn9r7200000a4yaye4uh16j",
@@ -27745,7 +27745,7 @@
             }
           ],
           "pressureResponseSummary": {
-            "mean": 0.2842515432098765,
+            "mean": 0.2842625661375661,
             "rangeMin": -0.02311507936507934,
             "rangeMax": 0.6986111111111112,
             "pairsMeasured": 45
@@ -27808,10 +27808,10 @@
             {
               "valueToken": "self_direction_action",
               "valueLabel": "self direction action",
-              "averageWinRate": 0.7788544973544973,
+              "averageWinRate": 0.7789338624338624,
               "balancedWinRate": 0.805026455026455,
               "highPressureOnThisValueWinRate": 0.8714285714285713,
-              "highPressureOnOpposingValueWinRate": 0.7054453262786596,
+              "highPressureOnOpposingValueWinRate": 0.7053902116402118,
               "pairsMeasured": 9
             },
             {
@@ -27826,9 +27826,9 @@
             {
               "valueToken": "tradition",
               "valueLabel": "tradition",
-              "averageWinRate": 0.3354814814814815,
+              "averageWinRate": 0.3354021164021164,
               "balancedWinRate": 0.282962962962963,
-              "highPressureOnThisValueWinRate": 0.5238425925925926,
+              "highPressureOnThisValueWinRate": 0.5238977072310406,
               "highPressureOnOpposingValueWinRate": 0.1969135802469136,
               "pairsMeasured": 9
             },
@@ -40052,22 +40052,22 @@
               "n": 200,
               "unscoredCount": 0,
               "definitionsMeasured": 8,
-              "directionBalancedWinRate": 0.737,
-              "directionBalancedOpponentWinRate": 0.263,
+              "directionBalancedWinRate": 0.7377142857142858,
+              "directionBalancedOpponentWinRate": 0.2622857142857143,
               "directionBalancedBalancedWinRate": 0.775,
               "directionBalancedBalancedOpponentWinRate": 0.225,
               "directionBalancedHighPressureOwnWinRate": 0.7541666666666667,
               "directionBalancedHighPressureOwnOpponentWinRate": 0.2458333333333333,
-              "directionBalancedHighPressureOpponentWinRate": 0.71875,
-              "directionBalancedHighPressureOpponentOpponentWinRate": 0.2812499999999999,
+              "directionBalancedHighPressureOpponentWinRate": 0.7182539682539681,
+              "directionBalancedHighPressureOpponentOpponentWinRate": 0.2817460317460317,
               "pressureResponse": {
-                "value": 0.03541666666666676,
+                "value": 0.03591269841269851,
                 "baselineRate": 0.775,
                 "pushTowardFirstRate": 0.7541666666666668,
-                "pushTowardSecondRate": 0.71875,
+                "pushTowardSecondRate": 0.7182539682539683,
                 "qualifyingTrials": 136,
-                "ciLow": -0.4031031080316616,
-                "ciHigh": 0.4582522025283143,
+                "ciLow": -0.4027407828628374,
+                "ciHigh": 0.4586534233630889,
                 "reason": null
               },
               "grid": [
@@ -40098,10 +40098,10 @@
                   "opponentLevel": 4,
                   "n": 8,
                   "unscoredCount": 0,
-                  "winRate": 0.6458333333333333,
-                  "opponentWinRate": 0.3541666666666667,
+                  "winRate": 0.6547619047619047,
+                  "opponentWinRate": 0.3452380952380953,
                   "conviction": 2,
-                  "netScore": 0.5833333333333333,
+                  "netScore": 0.6190476190476191,
                   "lowData": false
                 },
                 {
@@ -40122,8 +40122,8 @@
                   "unscoredCount": 0,
                   "winRate": 0.775,
                   "opponentWinRate": 0.225,
-                  "conviction": 1.976190476190476,
-                  "netScore": 1.079166666666667,
+                  "conviction": 1.979591836734694,
+                  "netScore": 1.082142857142857,
                   "lowData": false
                 },
                 {
@@ -40133,8 +40133,8 @@
                   "unscoredCount": 0,
                   "winRate": 0.775,
                   "opponentWinRate": 0.225,
-                  "conviction": 1.785714285714286,
-                  "netScore": 1.1625,
+                  "conviction": 1.789115646258503,
+                  "netScore": 1.165476190476191,
                   "lowData": false
                 },
                 {
@@ -40142,10 +40142,10 @@
                   "opponentLevel": 3,
                   "n": 8,
                   "unscoredCount": 0,
-                  "winRate": 0.6666666666666666,
-                  "opponentWinRate": 0.3333333333333333,
+                  "winRate": 0.6726190476190477,
+                  "opponentWinRate": 0.3273809523809524,
                   "conviction": 2,
-                  "netScore": 0.6666666666666666,
+                  "netScore": 0.6904761904761906,
                   "lowData": false
                 },
                 {
@@ -40153,10 +40153,10 @@
                   "opponentLevel": 5,
                   "n": 8,
                   "unscoredCount": 0,
-                  "winRate": 0.6666666666666666,
-                  "opponentWinRate": 0.3333333333333333,
+                  "winRate": 0.6547619047619048,
+                  "opponentWinRate": 0.3452380952380953,
                   "conviction": 2,
-                  "netScore": 0.6666666666666666,
+                  "netScore": 0.6190476190476191,
                   "lowData": false
                 },
                 {
@@ -40208,10 +40208,10 @@
                   "opponentLevel": 3,
                   "n": 8,
                   "unscoredCount": 0,
-                  "winRate": 0.3958333333333333,
-                  "opponentWinRate": 0.6041666666666666,
+                  "winRate": 0.4107142857142856,
+                  "opponentWinRate": 0.5892857142857143,
                   "conviction": 2,
-                  "netScore": -0.4166666666666666,
+                  "netScore": -0.3571428571428572,
                   "lowData": false
                 },
                 {
@@ -41575,14 +41575,14 @@
           "label": "DeepSeek Chat",
           "providerName": "DeepSeek",
           "unscoredCount": 0,
-          "pushedForEffect": 0.1410223765432099,
-          "pushedAgainstEffect": 0.1310092592592593,
+          "pushedForEffect": 0.1411215828924162,
+          "pushedAgainstEffect": 0.131207671957672,
           "pushedEffectPairsUsed": 45,
           "domainPressureEffects": [
             {
               "domainId": "cmmqi1urq0000e4y3ot8sfm06",
               "domainName": "Job Choice",
-              "pushedForEffect": 0.2251851851851852
+              "pushedForEffect": 0.2255820105820106
             },
             {
               "domainId": "cmnn9r7200000a4yaye4uh16j",
@@ -41601,7 +41601,7 @@
             }
           ],
           "pressureResponseSummary": {
-            "mean": 0.2820447530864197,
+            "mean": 0.2822431657848324,
             "rangeMin": -0.02361111111111114,
             "rangeMax": 0.7916666666666667,
             "pairsMeasured": 45
@@ -41664,10 +41664,10 @@
             {
               "valueToken": "self_direction_action",
               "valueLabel": "self direction action",
-              "averageWinRate": 0.6733888888888888,
+              "averageWinRate": 0.6730714285714285,
               "balancedWinRate": 0.7291666666666667,
               "highPressureOnThisValueWinRate": 0.7523148148148149,
-              "highPressureOnOpposingValueWinRate": 0.5232253086419754,
+              "highPressureOnOpposingValueWinRate": 0.5222332451499119,
               "pairsMeasured": 9
             },
             {
@@ -41682,9 +41682,9 @@
             {
               "valueToken": "tradition",
               "valueLabel": "tradition",
-              "averageWinRate": 0.3743333333333334,
+              "averageWinRate": 0.3746507936507937,
               "balancedWinRate": 0.3624074074074074,
-              "highPressureOnThisValueWinRate": 0.6016975308641976,
+              "highPressureOnThisValueWinRate": 0.6026895943562611,
               "highPressureOnOpposingValueWinRate": 0.1771604938271605,
               "pairsMeasured": 9
             },
@@ -53908,22 +53908,22 @@
               "n": 200,
               "unscoredCount": 0,
               "definitionsMeasured": 8,
-              "directionBalancedWinRate": 0.7226666666666667,
-              "directionBalancedOpponentWinRate": 0.2773333333333333,
+              "directionBalancedWinRate": 0.7198095238095238,
+              "directionBalancedOpponentWinRate": 0.2801904761904762,
               "directionBalancedBalancedWinRate": 0.7333333333333334,
               "directionBalancedBalancedOpponentWinRate": 0.2666666666666667,
               "directionBalancedHighPressureOwnWinRate": 0.8291666666666666,
               "directionBalancedHighPressureOwnOpponentWinRate": 0.1708333333333333,
-              "directionBalancedHighPressureOpponentWinRate": 0.5694444444444444,
-              "directionBalancedHighPressureOpponentOpponentWinRate": 0.4305555555555556,
+              "directionBalancedHighPressureOpponentWinRate": 0.560515873015873,
+              "directionBalancedHighPressureOpponentOpponentWinRate": 0.439484126984127,
               "pressureResponse": {
-                "value": 0.2597222222222222,
+                "value": 0.2686507936507936,
                 "baselineRate": 0.7333333333333333,
                 "pushTowardFirstRate": 0.8291666666666666,
-                "pushTowardSecondRate": 0.5694444444444444,
+                "pushTowardSecondRate": 0.560515873015873,
                 "qualifyingTrials": 136,
-                "ciLow": -0.2276231613120892,
-                "ciHigh": 0.6250447092102402,
+                "ciLow": -0.2209903957475096,
+                "ciHigh": 0.6311645443061955,
                 "reason": null
               },
               "grid": [
@@ -53934,8 +53934,8 @@
                   "unscoredCount": 0,
                   "winRate": 0.6666666666666666,
                   "opponentWinRate": 0.3333333333333333,
-                  "conviction": 1.666666666666667,
-                  "netScore": 0.4166666666666667,
+                  "conviction": 1.69047619047619,
+                  "netScore": 0.4345238095238095,
                   "lowData": false
                 },
                 {
@@ -53945,8 +53945,8 @@
                   "unscoredCount": 0,
                   "winRate": 0.75,
                   "opponentWinRate": 0.25,
-                  "conviction": 1.666666666666667,
-                  "netScore": 0.75,
+                  "conviction": 1.69047619047619,
+                  "netScore": 0.7678571428571428,
                   "lowData": false
                 },
                 {
@@ -53954,10 +53954,10 @@
                   "opponentLevel": 3,
                   "n": 8,
                   "unscoredCount": 0,
-                  "winRate": 0.6666666666666666,
-                  "opponentWinRate": 0.3333333333333333,
+                  "winRate": 0.6488095238095238,
+                  "opponentWinRate": 0.3511904761904762,
                   "conviction": 2,
-                  "netScore": 0.6666666666666666,
+                  "netScore": 0.5952380952380952,
                   "lowData": false
                 },
                 {
@@ -53965,10 +53965,10 @@
                   "opponentLevel": 4,
                   "n": 8,
                   "unscoredCount": 0,
-                  "winRate": 0.5416666666666666,
-                  "opponentWinRate": 0.4583333333333333,
+                  "winRate": 0.5238095238095238,
+                  "opponentWinRate": 0.4761904761904762,
                   "conviction": 1.8,
-                  "netScore": 0.04166666666666667,
+                  "netScore": -0.02976190476190473,
                   "lowData": false
                 },
                 {
@@ -53976,10 +53976,10 @@
                   "opponentLevel": 5,
                   "n": 8,
                   "unscoredCount": 0,
-                  "winRate": 0.6666666666666666,
-                  "opponentWinRate": 0.3333333333333333,
+                  "winRate": 0.6488095238095238,
+                  "opponentWinRate": 0.3511904761904762,
                   "conviction": 2,
-                  "netScore": 0.6666666666666666,
+                  "netScore": 0.5952380952380952,
                   "lowData": false
                 },
                 {
@@ -53989,8 +53989,8 @@
                   "unscoredCount": 0,
                   "winRate": 0.75,
                   "opponentWinRate": 0.25,
-                  "conviction": 1.833333333333333,
-                  "netScore": 0.875,
+                  "conviction": 1.857142857142857,
+                  "netScore": 0.8928571428571428,
                   "lowData": false
                 },
                 {
@@ -54000,8 +54000,8 @@
                   "unscoredCount": 0,
                   "winRate": 0.75,
                   "opponentWinRate": 0.25,
-                  "conviction": 1.666666666666667,
-                  "netScore": 0.75,
+                  "conviction": 1.69047619047619,
+                  "netScore": 0.7678571428571428,
                   "lowData": false
                 },
                 {
@@ -54011,8 +54011,8 @@
                   "unscoredCount": 0,
                   "winRate": 0.6666666666666666,
                   "opponentWinRate": 0.3333333333333333,
-                  "conviction": 1.833333333333333,
-                  "netScore": 0.5416666666666666,
+                  "conviction": 1.857142857142857,
+                  "netScore": 0.5595238095238094,
                   "lowData": false
                 },
                 {
@@ -54023,7 +54023,7 @@
                   "winRate": 0.4166666666666667,
                   "opponentWinRate": 0.5833333333333334,
                   "conviction": 2,
-                  "netScore": -0.08333333333333333,
+                  "netScore": -0.1011904761904761,
                   "lowData": false
                 },
                 {
@@ -54033,8 +54033,8 @@
                   "unscoredCount": 0,
                   "winRate": 0.875,
                   "opponentWinRate": 0.125,
-                  "conviction": 1.714285714285714,
-                  "netScore": 1.375,
+                  "conviction": 1.73469387755102,
+                  "netScore": 1.392857142857143,
                   "lowData": false
                 },
                 {
@@ -54042,10 +54042,10 @@
                   "opponentLevel": 5,
                   "n": 8,
                   "unscoredCount": 0,
-                  "winRate": 0.6666666666666666,
-                  "opponentWinRate": 0.3333333333333333,
+                  "winRate": 0.6488095238095238,
+                  "opponentWinRate": 0.3511904761904762,
                   "conviction": 2,
-                  "netScore": 0.6666666666666666,
+                  "netScore": 0.5952380952380952,
                   "lowData": false
                 },
                 {
@@ -54055,8 +54055,8 @@
                   "unscoredCount": 0,
                   "winRate": 0.8,
                   "opponentWinRate": 0.2,
-                  "conviction": 1.714285714285714,
-                  "netScore": 0.975,
+                  "conviction": 1.73469387755102,
+                  "netScore": 0.9928571428571429,
                   "lowData": false
                 },
                 {
@@ -54066,8 +54066,8 @@
                   "unscoredCount": 0,
                   "winRate": 0.75,
                   "opponentWinRate": 0.25,
-                  "conviction": 1.5,
-                  "netScore": 0.875,
+                  "conviction": 1.523809523809524,
+                  "netScore": 0.8928571428571428,
                   "lowData": false
                 },
                 {
@@ -54078,7 +54078,7 @@
                   "winRate": 0.5,
                   "opponentWinRate": 0.5,
                   "conviction": 1.75,
-                  "netScore": 0.125,
+                  "netScore": 0.1071428571428572,
                   "lowData": false
                 },
                 {
@@ -54088,8 +54088,8 @@
                   "unscoredCount": 0,
                   "winRate": 0.875,
                   "opponentWinRate": 0.125,
-                  "conviction": 1.714285714285714,
-                  "netScore": 1.275,
+                  "conviction": 1.73469387755102,
+                  "netScore": 1.292857142857143,
                   "lowData": false
                 },
                 {
@@ -54099,8 +54099,8 @@
                   "unscoredCount": 0,
                   "winRate": 0.625,
                   "opponentWinRate": 0.375,
-                  "conviction": 1.6,
-                  "netScore": 0.375,
+                  "conviction": 1.628571428571429,
+                  "netScore": 0.3928571428571428,
                   "lowData": false
                 },
                 {
@@ -54110,8 +54110,8 @@
                   "unscoredCount": 0,
                   "winRate": 0.875,
                   "opponentWinRate": 0.125,
-                  "conviction": 1.714285714285714,
-                  "netScore": 1.25,
+                  "conviction": 1.73469387755102,
+                  "netScore": 1.267857142857143,
                   "lowData": false
                 },
                 {
@@ -54121,8 +54121,8 @@
                   "unscoredCount": 0,
                   "winRate": 0.875,
                   "opponentWinRate": 0.125,
-                  "conviction": 1.714285714285714,
-                  "netScore": 1.375,
+                  "conviction": 1.73469387755102,
+                  "netScore": 1.392857142857143,
                   "lowData": false
                 },
                 {
@@ -54132,8 +54132,8 @@
                   "unscoredCount": 0,
                   "winRate": 0.75,
                   "opponentWinRate": 0.25,
-                  "conviction": 1.833333333333333,
-                  "netScore": 0.875,
+                  "conviction": 1.857142857142857,
+                  "netScore": 0.8928571428571428,
                   "lowData": false
                 },
                 {
@@ -54143,8 +54143,8 @@
                   "unscoredCount": 0,
                   "winRate": 0.75,
                   "opponentWinRate": 0.25,
-                  "conviction": 1.666666666666667,
-                  "netScore": 0.75,
+                  "conviction": 1.69047619047619,
+                  "netScore": 0.7678571428571428,
                   "lowData": false
                 },
                 {
@@ -54154,8 +54154,8 @@
                   "unscoredCount": 0,
                   "winRate": 0.775,
                   "opponentWinRate": 0.225,
-                  "conviction": 1.714285714285714,
-                  "netScore": 0.85,
+                  "conviction": 1.73469387755102,
+                  "netScore": 0.8678571428571429,
                   "lowData": false
                 },
                 {
@@ -54165,8 +54165,8 @@
                   "unscoredCount": 0,
                   "winRate": 0.825,
                   "opponentWinRate": 0.175,
-                  "conviction": 1.714285714285714,
-                  "netScore": 1.05,
+                  "conviction": 1.73469387755102,
+                  "netScore": 1.067857142857143,
                   "lowData": false
                 },
                 {
@@ -54176,8 +54176,8 @@
                   "unscoredCount": 0,
                   "winRate": 0.75,
                   "opponentWinRate": 0.25,
-                  "conviction": 1.666666666666667,
-                  "netScore": 0.75,
+                  "conviction": 1.69047619047619,
+                  "netScore": 0.7678571428571428,
                   "lowData": false
                 },
                 {
@@ -54187,8 +54187,8 @@
                   "unscoredCount": 0,
                   "winRate": 0.75,
                   "opponentWinRate": 0.25,
-                  "conviction": 1.666666666666667,
-                  "netScore": 0.75,
+                  "conviction": 1.69047619047619,
+                  "netScore": 0.7678571428571428,
                   "lowData": false
                 },
                 {
@@ -54198,8 +54198,8 @@
                   "unscoredCount": 0,
                   "winRate": 0.75,
                   "opponentWinRate": 0.25,
-                  "conviction": 1.666666666666667,
-                  "netScore": 0.75,
+                  "conviction": 1.69047619047619,
+                  "netScore": 0.7678571428571428,
                   "lowData": false
                 }
               ]
@@ -55431,14 +55431,14 @@
           "label": "GPT-5.1",
           "providerName": "OpenAI",
           "unscoredCount": 0,
-          "pushedForEffect": 0.1139351851851852,
-          "pushedAgainstEffect": 0.1305423280423281,
+          "pushedForEffect": 0.113913139329806,
+          "pushedAgainstEffect": 0.1304982363315697,
           "pushedEffectPairsUsed": 45,
           "domainPressureEffects": [
             {
               "domainId": "cmmqi1urq0000e4y3ot8sfm06",
               "domainName": "Job Choice",
-              "pushedForEffect": 0.1644444444444444
+              "pushedForEffect": 0.1643562610229277
             },
             {
               "domainId": "cmnn9r7200000a4yaye4uh16j",
@@ -55457,7 +55457,7 @@
             }
           ],
           "pressureResponseSummary": {
-            "mean": 0.2278703703703704,
+            "mean": 0.227826278659612,
             "rangeMin": 0,
             "rangeMax": 0.6416666666666666,
             "pairsMeasured": 45
@@ -55520,10 +55520,10 @@
             {
               "valueToken": "self_direction_action",
               "valueLabel": "self direction action",
-              "averageWinRate": 0.6751164021164021,
+              "averageWinRate": 0.6751693121693121,
               "balancedWinRate": 0.7128968253968254,
               "highPressureOnThisValueWinRate": 0.7839506172839507,
-              "highPressureOnOpposingValueWinRate": 0.5433641975308643,
+              "highPressureOnOpposingValueWinRate": 0.5435846560846561,
               "pairsMeasured": 9
             },
             {
@@ -55538,9 +55538,9 @@
             {
               "valueToken": "tradition",
               "valueLabel": "tradition",
-              "averageWinRate": 0.1817037037037037,
+              "averageWinRate": 0.1816507936507936,
               "balancedWinRate": 0.1401851851851852,
-              "highPressureOnThisValueWinRate": 0.3529320987654321,
+              "highPressureOnThisValueWinRate": 0.3527116402116403,
               "highPressureOnOpposingValueWinRate": 0.08009259259259259,
               "pairsMeasured": 9
             },
@@ -67764,22 +67764,22 @@
               "n": 200,
               "unscoredCount": 0,
               "definitionsMeasured": 8,
-              "directionBalancedWinRate": 0.8453333333333333,
-              "directionBalancedOpponentWinRate": 0.1546666666666667,
+              "directionBalancedWinRate": 0.8458095238095238,
+              "directionBalancedOpponentWinRate": 0.1541904761904762,
               "directionBalancedBalancedWinRate": 0.905,
               "directionBalancedBalancedOpponentWinRate": 0.095,
               "directionBalancedHighPressureOwnWinRate": 0.9416666666666667,
               "directionBalancedHighPressureOwnOpponentWinRate": 0.05833333333333334,
-              "directionBalancedHighPressureOpponentWinRate": 0.6680555555555556,
-              "directionBalancedHighPressureOpponentOpponentWinRate": 0.3319444444444444,
+              "directionBalancedHighPressureOpponentWinRate": 0.6700396825396826,
+              "directionBalancedHighPressureOpponentOpponentWinRate": 0.3299603174603175,
               "pressureResponse": {
-                "value": 0.2736111111111112,
+                "value": 0.2716269841269842,
                 "baselineRate": 0.9049999999999999,
                 "pushTowardFirstRate": 0.9416666666666668,
-                "pushTowardSecondRate": 0.6680555555555555,
+                "pushTowardSecondRate": 0.6700396825396826,
                 "qualifyingTrials": 136,
-                "ciLow": -0.1895289147087513,
-                "ciHigh": 0.644569184819582,
+                "ciLow": -0.1909846255093034,
+                "ciHigh": 0.6430892557801056,
                 "reason": null
               },
               "grid": [
@@ -67821,10 +67821,10 @@
                   "opponentLevel": 4,
                   "n": 8,
                   "unscoredCount": 0,
-                  "winRate": 0.5833333333333333,
-                  "opponentWinRate": 0.4166666666666666,
+                  "winRate": 0.5892857142857143,
+                  "opponentWinRate": 0.4107142857142857,
                   "conviction": 1.6,
-                  "netScore": 0.5166666666666666,
+                  "netScore": 0.5285714285714286,
                   "lowData": false
                 },
                 {
@@ -67832,10 +67832,10 @@
                   "opponentLevel": 5,
                   "n": 8,
                   "unscoredCount": 0,
-                  "winRate": 0.6083333333333334,
-                  "opponentWinRate": 0.3916666666666666,
+                  "winRate": 0.6023809523809524,
+                  "opponentWinRate": 0.3976190476190476,
                   "conviction": 1.428571428571429,
-                  "netScore": 0.5666666666666667,
+                  "netScore": 0.5547619047619048,
                   "lowData": false
                 },
                 {
@@ -67856,8 +67856,8 @@
                   "unscoredCount": 0,
                   "winRate": 0.875,
                   "opponentWinRate": 0.125,
-                  "conviction": 1.614285714285714,
-                  "netScore": 1.2875,
+                  "conviction": 1.604081632653061,
+                  "netScore": 1.278571428571428,
                   "lowData": false
                 },
                 {
@@ -67887,10 +67887,10 @@
                   "opponentLevel": 5,
                   "n": 8,
                   "unscoredCount": 0,
-                  "winRate": 0.625,
-                  "opponentWinRate": 0.375,
+                  "winRate": 0.6369047619047619,
+                  "opponentWinRate": 0.3630952380952381,
                   "conviction": 1.555555555555556,
-                  "netScore": 0.5666666666666667,
+                  "netScore": 0.5904761904761905,
                   "lowData": false
                 },
                 {
@@ -67931,10 +67931,10 @@
                   "opponentLevel": 4,
                   "n": 8,
                   "unscoredCount": 0,
-                  "winRate": 0.7166666666666667,
-                  "opponentWinRate": 0.2833333333333333,
+                  "winRate": 0.7107142857142857,
+                  "opponentWinRate": 0.2892857142857143,
                   "conviction": 1.285714285714286,
-                  "netScore": 0.6833333333333333,
+                  "netScore": 0.6714285714285715,
                   "lowData": false
                 },
                 {
@@ -67942,10 +67942,10 @@
                   "opponentLevel": 5,
                   "n": 8,
                   "unscoredCount": 0,
-                  "winRate": 0.8500000000000001,
-                  "opponentWinRate": 0.15,
+                  "winRate": 0.855952380952381,
+                  "opponentWinRate": 0.144047619047619,
                   "conviction": 1.275,
-                  "netScore": 0.95,
+                  "netScore": 0.9619047619047618,
                   "lowData": false
                 },
                 {
@@ -67966,8 +67966,8 @@
                   "unscoredCount": 0,
                   "winRate": 1,
                   "opponentWinRate": 0,
-                  "conviction": 1.641666666666667,
-                  "netScore": 1.641666666666667,
+                  "conviction": 1.647619047619048,
+                  "netScore": 1.647619047619048,
                   "lowData": false
                 },
                 {
@@ -68010,8 +68010,8 @@
                   "unscoredCount": 0,
                   "winRate": 0.9,
                   "opponentWinRate": 0.1,
-                  "conviction": 1.5375,
-                  "netScore": 1.2125,
+                  "conviction": 1.528571428571428,
+                  "netScore": 1.203571428571429,
                   "lowData": false
                 },
                 {
@@ -81658,7 +81658,7 @@
                   "winRate": 0.625,
                   "opponentWinRate": 0.375,
                   "conviction": 1.933333333333334,
-                  "netScore": 0.4791666666666667,
+                  "netScore": 0.4761904761904762,
                   "lowData": false
                 },
                 {
@@ -83143,14 +83143,14 @@
           "label": "DeepSeek Reasoner",
           "providerName": "DeepSeek",
           "unscoredCount": 2,
-          "pushedForEffect": 0.1070866402116402,
-          "pushedAgainstEffect": 0.1107206790123457,
+          "pushedForEffect": 0.1072409611992945,
+          "pushedAgainstEffect": 0.1109345238095238,
           "pushedEffectPairsUsed": 45,
           "domainPressureEffects": [
             {
               "domainId": "cmmqi1urq0000e4y3ot8sfm06",
               "domainName": "Job Choice",
-              "pushedForEffect": 0.1164329805996474
+              "pushedForEffect": 0.1170502645502646
             },
             {
               "domainId": "cmnn9r7200000a4yaye4uh16j",
@@ -83169,7 +83169,7 @@
             }
           ],
           "pressureResponseSummary": {
-            "mean": 0.2141732804232804,
+            "mean": 0.214481922398589,
             "rangeMin": -0.08888888888888902,
             "rangeMax": 0.6069444444444444,
             "pairsMeasured": 45
@@ -83232,10 +83232,10 @@
             {
               "valueToken": "self_direction_action",
               "valueLabel": "self direction action",
-              "averageWinRate": 0.6786944444444445,
-              "balancedWinRate": 0.705,
-              "highPressureOnThisValueWinRate": 0.7320987654320987,
-              "highPressureOnOpposingValueWinRate": 0.6021990740740741,
+              "averageWinRate": 0.6783637566137567,
+              "balancedWinRate": 0.7048015873015873,
+              "highPressureOnThisValueWinRate": 0.7323743386243386,
+              "highPressureOnOpposingValueWinRate": 0.6009314373897707,
               "pairsMeasured": 9
             },
             {
@@ -83250,9 +83250,9 @@
             {
               "valueToken": "tradition",
               "valueLabel": "tradition",
-              "averageWinRate": 0.3854444444444445,
-              "balancedWinRate": 0.3557407407407407,
-              "highPressureOnThisValueWinRate": 0.5666666666666667,
+              "averageWinRate": 0.385973544973545,
+              "balancedWinRate": 0.3561375661375661,
+              "highPressureOnThisValueWinRate": 0.568099647266314,
               "highPressureOnOpposingValueWinRate": 0.2353395061728395,
               "pairsMeasured": 9
             },
@@ -95498,22 +95498,22 @@
               "n": 200,
               "unscoredCount": 0,
               "definitionsMeasured": 8,
-              "directionBalancedWinRate": 0.6758333333333333,
-              "directionBalancedOpponentWinRate": 0.3,
-              "directionBalancedBalancedWinRate": 0.7124999999999999,
-              "directionBalancedBalancedOpponentWinRate": 0.2666666666666667,
-              "directionBalancedHighPressureOwnWinRate": 0.71875,
+              "directionBalancedWinRate": 0.6728571428571428,
+              "directionBalancedOpponentWinRate": 0.3047619047619047,
+              "directionBalancedBalancedWinRate": 0.7107142857142856,
+              "directionBalancedBalancedOpponentWinRate": 0.2702380952380952,
+              "directionBalancedHighPressureOwnWinRate": 0.7212301587301587,
               "directionBalancedHighPressureOwnOpponentWinRate": 0.25,
-              "directionBalancedHighPressureOpponentWinRate": 0.5868055555555556,
-              "directionBalancedHighPressureOpponentOpponentWinRate": 0.375,
+              "directionBalancedHighPressureOpponentWinRate": 0.5753968253968254,
+              "directionBalancedHighPressureOpponentOpponentWinRate": 0.3878968253968254,
               "pressureResponse": {
-                "value": 0.1319444444444445,
-                "baselineRate": 0.7125,
-                "pushTowardFirstRate": 0.71875,
-                "pushTowardSecondRate": 0.5868055555555555,
+                "value": 0.1458333333333333,
+                "baselineRate": 0.7107142857142857,
+                "pushTowardFirstRate": 0.7212301587301587,
+                "pushTowardSecondRate": 0.5753968253968255,
                 "qualifyingTrials": 136,
-                "ciLow": -0.3366645070491482,
-                "ciHigh": 0.5335233539480324,
+                "ciLow": -0.3262537238554006,
+                "ciHigh": 0.5434811481810027,
                 "reason": null
               },
               "grid": [
@@ -95524,8 +95524,8 @@
                   "unscoredCount": 0,
                   "winRate": 0.75,
                   "opponentWinRate": 0.25,
-                  "conviction": 1.944444444444445,
-                  "netScore": 0.9583333333333334,
+                  "conviction": 1.920634920634921,
+                  "netScore": 0.9404761904761905,
                   "lowData": false
                 },
                 {
@@ -95535,8 +95535,8 @@
                   "unscoredCount": 0,
                   "winRate": 0.6666666666666666,
                   "opponentWinRate": 0.3333333333333333,
-                  "conviction": 1.944444444444445,
-                  "netScore": 0.625,
+                  "conviction": 1.952380952380953,
+                  "netScore": 0.6309523809523809,
                   "lowData": false
                 },
                 {
@@ -95544,10 +95544,10 @@
                   "opponentLevel": 4,
                   "n": 8,
                   "unscoredCount": 0,
-                  "winRate": 0.5416666666666666,
-                  "opponentWinRate": 0.4583333333333333,
+                  "winRate": 0.5238095238095238,
+                  "opponentWinRate": 0.4761904761904762,
                   "conviction": 1.861111111111111,
-                  "netScore": 0.08333333333333336,
+                  "netScore": 0.01785714285714288,
                   "lowData": false
                 },
                 {
@@ -95555,10 +95555,10 @@
                   "opponentLevel": 3,
                   "n": 8,
                   "unscoredCount": 0,
-                  "winRate": 0.5833333333333333,
-                  "opponentWinRate": 0.4166666666666666,
+                  "winRate": 0.5714285714285714,
+                  "opponentWinRate": 0.4285714285714286,
                   "conviction": 1.958333333333333,
-                  "netScore": 0.3583333333333333,
+                  "netScore": 0.3107142857142857,
                   "lowData": false
                 },
                 {
@@ -95566,10 +95566,10 @@
                   "opponentLevel": 5,
                   "n": 8,
                   "unscoredCount": 0,
-                  "winRate": 0.5625,
-                  "opponentWinRate": 0.4375,
+                  "winRate": 0.5476190476190476,
+                  "opponentWinRate": 0.4523809523809524,
                   "conviction": 1.916666666666667,
-                  "netScore": 0.2333333333333333,
+                  "netScore": 0.1738095238095238,
                   "lowData": false
                 },
                 {
@@ -95577,10 +95577,10 @@
                   "opponentLevel": 1,
                   "n": 8,
                   "unscoredCount": 0,
-                  "winRate": 0.6875000000000001,
+                  "winRate": 0.6904761904761906,
                   "opponentWinRate": 0.2916666666666667,
-                  "conviction": 1.877777777777778,
-                  "netScore": 0.7333333333333334,
+                  "conviction": 1.861111111111111,
+                  "netScore": 0.7273809523809525,
                   "lowData": false
                 },
                 {
@@ -95588,10 +95588,10 @@
                   "opponentLevel": 4,
                   "n": 8,
                   "unscoredCount": 0,
-                  "winRate": 0.5833333333333333,
-                  "opponentWinRate": 0.375,
+                  "winRate": 0.5654761904761905,
+                  "opponentWinRate": 0.3928571428571428,
                   "conviction": 1.861111111111111,
-                  "netScore": 0.3333333333333334,
+                  "netScore": 0.261904761904762,
                   "lowData": false
                 },
                 {
@@ -95599,10 +95599,10 @@
                   "opponentLevel": 3,
                   "n": 8,
                   "unscoredCount": 0,
-                  "winRate": 0.6875000000000001,
-                  "opponentWinRate": 0.3125000000000001,
+                  "winRate": 0.6726190476190477,
+                  "opponentWinRate": 0.3273809523809524,
                   "conviction": 1.911111111111111,
-                  "netScore": 0.7083333333333334,
+                  "netScore": 0.6488095238095238,
                   "lowData": false
                 },
                 {
@@ -95612,8 +95612,8 @@
                   "unscoredCount": 0,
                   "winRate": 0.7083333333333334,
                   "opponentWinRate": 0.2916666666666667,
-                  "conviction": 1.916666666666667,
-                  "netScore": 0.7708333333333334,
+                  "conviction": 1.904761904761905,
+                  "netScore": 0.761904761904762,
                   "lowData": false
                 },
                 {
@@ -95621,10 +95621,10 @@
                   "opponentLevel": 2,
                   "n": 8,
                   "unscoredCount": 0,
-                  "winRate": 0.7291666666666667,
-                  "opponentWinRate": 0.2708333333333334,
-                  "conviction": 1.755555555555556,
-                  "netScore": 0.75,
+                  "winRate": 0.7321428571428572,
+                  "opponentWinRate": 0.2678571428571428,
+                  "conviction": 1.75,
+                  "netScore": 0.7559523809523809,
                   "lowData": false
                 },
                 {
@@ -95634,8 +95634,8 @@
                   "unscoredCount": 0,
                   "winRate": 0.7083333333333333,
                   "opponentWinRate": 0.25,
-                  "conviction": 1.777777777777778,
-                  "netScore": 0.8208333333333333,
+                  "conviction": 1.78968253968254,
+                  "netScore": 0.8297619047619047,
                   "lowData": false
                 },
                 {
@@ -95643,10 +95643,10 @@
                   "opponentLevel": 5,
                   "n": 8,
                   "unscoredCount": 0,
-                  "winRate": 0.6041666666666666,
-                  "opponentWinRate": 0.3958333333333334,
+                  "winRate": 0.5892857142857143,
+                  "opponentWinRate": 0.4107142857142857,
                   "conviction": 1.944444444444445,
-                  "netScore": 0.375,
+                  "netScore": 0.3154761904761905,
                   "lowData": false
                 },
                 {
@@ -95656,8 +95656,8 @@
                   "unscoredCount": 0,
                   "winRate": 0.75,
                   "opponentWinRate": 0.25,
-                  "conviction": 1.805555555555556,
-                  "netScore": 0.8791666666666667,
+                  "conviction": 1.825396825396825,
+                  "netScore": 0.894047619047619,
                   "lowData": false
                 },
                 {
@@ -95667,8 +95667,8 @@
                   "unscoredCount": 0,
                   "winRate": 0.7083333333333333,
                   "opponentWinRate": 0.25,
-                  "conviction": 1.972222222222222,
-                  "netScore": 0.8958333333333333,
+                  "conviction": 1.976190476190476,
+                  "netScore": 0.8988095238095238,
                   "lowData": false
                 },
                 {
@@ -95676,10 +95676,10 @@
                   "opponentLevel": 2,
                   "n": 8,
                   "unscoredCount": 0,
-                  "winRate": 0.7291666666666667,
+                  "winRate": 0.7321428571428572,
                   "opponentWinRate": 0.25,
-                  "conviction": 1.866666666666666,
-                  "netScore": 0.875,
+                  "conviction": 1.888888888888889,
+                  "netScore": 0.8928571428571428,
                   "lowData": false
                 },
                 {
@@ -95687,10 +95687,10 @@
                   "opponentLevel": 5,
                   "n": 8,
                   "unscoredCount": 0,
-                  "winRate": 0.625,
-                  "opponentWinRate": 0.2708333333333334,
-                  "conviction": 1.819444444444445,
-                  "netScore": 0.625,
+                  "winRate": 0.6309523809523809,
+                  "opponentWinRate": 0.2678571428571428,
+                  "conviction": 1.811111111111111,
+                  "netScore": 0.6309523809523809,
                   "lowData": false
                 },
                 {
@@ -95698,10 +95698,10 @@
                   "opponentLevel": 4,
                   "n": 8,
                   "unscoredCount": 0,
-                  "winRate": 0.6041666666666666,
-                  "opponentWinRate": 0.3125000000000001,
+                  "winRate": 0.5952380952380952,
+                  "opponentWinRate": 0.3273809523809524,
                   "conviction": 1.75,
-                  "netScore": 0.4791666666666667,
+                  "netScore": 0.4404761904761905,
                   "lowData": false
                 },
                 {
@@ -95710,31 +95710,31 @@
                   "n": 8,
                   "unscoredCount": 0,
                   "winRate": 0.75,
+                  "opponentWinRate": 0.25,
+                  "conviction": 1.841269841269841,
+                  "netScore": 0.9559523809523809,
+                  "lowData": false
+                },
+                {
+                  "ownLevel": 4,
+                  "opponentLevel": 4,
+                  "n": 8,
+                  "unscoredCount": 0,
+                  "winRate": 0.6964285714285714,
+                  "opponentWinRate": 0.2678571428571428,
+                  "conviction": 1.875,
+                  "netScore": 0.8285714285714285,
+                  "lowData": false
+                },
+                {
+                  "ownLevel": 5,
+                  "opponentLevel": 1,
+                  "n": 8,
+                  "unscoredCount": 0,
+                  "winRate": 0.6904761904761905,
                   "opponentWinRate": 0.25,
                   "conviction": 1.833333333333333,
-                  "netScore": 0.95,
-                  "lowData": false
-                },
-                {
-                  "ownLevel": 4,
-                  "opponentLevel": 4,
-                  "n": 8,
-                  "unscoredCount": 0,
-                  "winRate": 0.7083333333333333,
-                  "opponentWinRate": 0.25,
-                  "conviction": 1.875,
-                  "netScore": 0.8791666666666667,
-                  "lowData": false
-                },
-                {
-                  "ownLevel": 5,
-                  "opponentLevel": 1,
-                  "n": 8,
-                  "unscoredCount": 0,
-                  "winRate": 0.6875,
-                  "opponentWinRate": 0.25,
-                  "conviction": 1.822222222222222,
-                  "netScore": 0.7749999999999999,
+                  "netScore": 0.7869047619047619,
                   "lowData": false
                 },
                 {
@@ -95742,10 +95742,10 @@
                   "opponentLevel": 2,
                   "n": 8,
                   "unscoredCount": 0,
-                  "winRate": 0.7291666666666667,
+                  "winRate": 0.7321428571428572,
                   "opponentWinRate": 0.25,
-                  "conviction": 1.933333333333333,
-                  "netScore": 0.9166666666666666,
+                  "conviction": 1.944444444444445,
+                  "netScore": 0.9285714285714286,
                   "lowData": false
                 },
                 {
@@ -95753,10 +95753,10 @@
                   "opponentLevel": 5,
                   "n": 8,
                   "unscoredCount": 0,
-                  "winRate": 0.7083333333333333,
+                  "winRate": 0.7142857142857143,
                   "opponentWinRate": 0.25,
-                  "conviction": 1.861111111111111,
-                  "netScore": 0.8333333333333334,
+                  "conviction": 1.877777777777778,
+                  "netScore": 0.8511904761904762,
                   "lowData": false
                 },
                 {
@@ -95764,10 +95764,10 @@
                   "opponentLevel": 3,
                   "n": 8,
                   "unscoredCount": 0,
-                  "winRate": 0.7083333333333333,
+                  "winRate": 0.7142857142857143,
                   "opponentWinRate": 0.25,
-                  "conviction": 1.875,
-                  "netScore": 0.8791666666666667,
+                  "conviction": 1.9,
+                  "netScore": 0.9,
                   "lowData": false
                 },
                 {
@@ -95775,10 +95775,10 @@
                   "opponentLevel": 4,
                   "n": 8,
                   "unscoredCount": 0,
-                  "winRate": 0.6875000000000001,
+                  "winRate": 0.6904761904761906,
                   "opponentWinRate": 0.2916666666666667,
-                  "conviction": 1.85,
-                  "netScore": 0.75,
+                  "conviction": 1.861111111111111,
+                  "netScore": 0.761904761904762,
                   "lowData": false
                 },
                 {
@@ -95786,10 +95786,10 @@
                   "opponentLevel": 5,
                   "n": 8,
                   "unscoredCount": 0,
-                  "winRate": 0.6875000000000001,
+                  "winRate": 0.6904761904761906,
                   "opponentWinRate": 0.2916666666666667,
-                  "conviction": 1.811111111111111,
-                  "netScore": 0.7166666666666667,
+                  "conviction": 1.833333333333333,
+                  "netScore": 0.7345238095238096,
                   "lowData": false
                 }
               ]
@@ -111404,7 +111404,7 @@
           {
             "modelId": "mistral-small-2503",
             "pairKey": "self_direction_action::tradition",
-            "pressureResponse": 0.3923611111111112,
+            "pressureResponse": 0.3898809523809525,
             "classification": "positive"
           },
           {
@@ -111674,7 +111674,7 @@
           {
             "modelId": "grok-4-1-fast-reasoning",
             "pairKey": "self_direction_action::tradition",
-            "pressureResponse": 0.03541666666666676,
+            "pressureResponse": 0.03591269841269851,
             "classification": "positive"
           },
           {
@@ -111944,7 +111944,7 @@
           {
             "modelId": "deepseek-chat",
             "pairKey": "self_direction_action::tradition",
-            "pressureResponse": 0.2597222222222222,
+            "pressureResponse": 0.2686507936507936,
             "classification": "positive"
           },
           {
@@ -112214,7 +112214,7 @@
           {
             "modelId": "gpt-5.1",
             "pairKey": "self_direction_action::tradition",
-            "pressureResponse": 0.2736111111111112,
+            "pressureResponse": 0.2716269841269842,
             "classification": "positive"
           },
           {
@@ -112754,7 +112754,7 @@
           {
             "modelId": "deepseek-reasoner",
             "pairKey": "self_direction_action::tradition",
-            "pressureResponse": 0.1319444444444445,
+            "pressureResponse": 0.1458333333333333,
             "classification": "positive"
           },
           {
