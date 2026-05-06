@@ -364,23 +364,8 @@ export function DomainAnalysis() {
         }}
       />
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="space-y-2">
-          <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Win Rate</h1>
-          <p className="text-sm text-gray-600">
-            Structured win-rate interpretation across priorities, ranking behavior, and similarity for the selected domain.
-          </p>
-        </div>
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          onClick={handleExport}
-          disabled={selectedDomainId === '' || exportLoading || isAllDomains}
-          title={isAllDomains ? 'CSV export is unavailable in All domains mode' : undefined}
-        >
-          {exportLoading ? 'Exporting…' : 'Export CSV'}
-        </Button>
+      <div className="space-y-2">
+        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Win Rate</h1>
       </div>
 
       {exportError !== null && <p className="mt-1 text-xs text-amber-700">{exportError}</p>}
@@ -423,6 +408,16 @@ export function DomainAnalysis() {
                 {refreshFetching ? 'Refreshing\u2026' : 'Refresh now'}
               </Button>
             )}
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={handleExport}
+              disabled={selectedDomainId === '' || exportLoading || isAllDomains}
+              title={isAllDomains ? 'CSV export is unavailable in All domains mode' : undefined}
+            >
+              {exportLoading ? 'Exporting…' : 'Export CSV'}
+            </Button>
           </div>
           {refreshNotice !== null && <p className="text-green-700">{refreshNotice}</p>}
           {refreshError !== null && <p className="text-amber-700">{refreshError}</p>}

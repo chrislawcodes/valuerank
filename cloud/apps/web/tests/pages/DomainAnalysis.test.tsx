@@ -199,6 +199,7 @@ describe('DomainAnalysis', () => {
     expect(await screen.findByText(/^Fresh$/)).toBeInTheDocument();
     expect(screen.getByText(/updated 3\/15\/2026/i)).toBeInTheDocument();
     expect(screen.getByText(/0 transcripts analyzed/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /export csv/i })).toBeInTheDocument();
   });
 
   it('renders the report sections in the requested order', async () => {
