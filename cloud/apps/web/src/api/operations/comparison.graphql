@@ -44,15 +44,6 @@ fragment ComparisonRunFullFields on Run {
   }
 }
 
-query RunsWithAnalysis($ids: [ID!]!) {
-  runsWithAnalysis(ids: $ids) {
-    ...ComparisonRunFullFields
-    analysis {
-      ...AnalysisResultFields
-    }
-  }
-}
-
 query ComparisonRunsList(
   $definitionId: String
   $analysisStatus: String

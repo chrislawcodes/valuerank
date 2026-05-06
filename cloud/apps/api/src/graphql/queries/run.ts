@@ -2,7 +2,6 @@ import { builder } from '../builder.js';
 import { db } from '@valuerank/db';
 import { RunRef } from '../types/run.js';
 import { trackRunAccess } from '../../middleware/access-tracking.js';
-import { ValidationError } from '@valuerank/shared';
 import {
   buildRunWhere,
   parseAnalysisStatus,
@@ -13,7 +12,6 @@ import {
 
 const MAX_LIMIT = 100;
 const DEFAULT_LIMIT = 20;
-const MAX_COMPARISON_RUNS = 10;
 
 // Query: run(id: ID!) - Fetch single run by ID
 builder.queryField('run', (t) =>
@@ -145,59 +143,6 @@ builder.queryField('runs', (t) =>
 
       ctx.log.debug({ count: runs.length }, 'Runs fetched');
       return runs;
-    },
-  })
-);
-
-// Query: runsWithAnalysis(ids: [ID!]!) - Fetch multiple runs for comparison
-builder.queryField('runsWithAnalysis', (t) =>
-  t.field({
-    type: [RunRef],
-    description: `Fetch multiple runs by IDs for cross-run comparison. Limited to ${MAX_COMPARISON_RUNS} runs maximum. Returns runs with their analysis data.`,
-    args: {
-      ids: t.arg.idList({
-        required: true,
-        description: `Array of run IDs to fetch (max ${MAX_COMPARISON_RUNS})`,
-      }),
-    },
-    resolve: async (_root, args, ctx) => {
-      const ids = args.ids.map(String);
-
-      // Validate maximum runs for comparison
-      if (ids.length > MAX_COMPARISON_RUNS) {
-        throw new ValidationError(
-          `Maximum ${MAX_COMPARISON_RUNS} runs can be compared at once. Received ${ids.length}.`
-        );
-      }
-
-      if (ids.length === 0) {
-        return [];
-      }
-
-      ctx.log.debug({ runIds: ids, count: ids.length }, 'Fetching runs for comparison');
-
-      // Fetch all runs (excluding soft-deleted)
-      const runs = await db.run.findMany({
-        where: {
-          id: { in: ids },
-          deletedAt: null,
-        },
-      });
-
-      // Track access for each run before returning so the access timestamp is
-      // committed before callers read back the rows.
-      for (const run of runs) {
-        await trackRunAccess(run.id);
-      }
-
-      ctx.log.debug(
-        { requestedCount: ids.length, foundCount: runs.length },
-        'Runs fetched for comparison'
-      );
-
-      // Return in the same order as requested IDs for consistent display
-      const runMap = new Map(runs.map((r) => [r.id, r]));
-      return ids.map((id) => runMap.get(id)).filter((r): r is NonNullable<typeof r> => r != null);
     },
   })
 );
