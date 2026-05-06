@@ -157,6 +157,8 @@ function createRun(
     id,
     name,
     createdAt: id === 'run-1' ? '2026-03-10T10:00:00Z' : '2026-03-10T10:05:00Z',
+    status: 'COMPLETED',
+    isAggregate: false,
     analysisStatus: 'completed',
     config: {
       jobChoiceLaunchMode: 'PAIRED_BATCH',
@@ -293,7 +295,7 @@ describe('AnalysisConditionDetail', () => {
     expect(screen.getByText('Condition Detail')).toBeInTheDocument();
     expect(screen.getByText('Freedom = High, Harmony = Low')).toBeInTheDocument();
     expect(screen.getByText('model1')).toBeInTheDocument();
-    expect(screen.getByText('Pooled')).toBeInTheDocument();
+    expect(screen.getByText('Both directions combined')).toBeInTheDocument();
     expect(screen.getByText('Freedom -> Harmony')).toBeInTheDocument();
     expect(screen.getByText('Harmony -> Freedom')).toBeInTheDocument();
     expect(screen.getByText('Strongly favors Freedom')).toBeInTheDocument();
@@ -304,7 +306,7 @@ describe('AnalysisConditionDetail', () => {
     expect(screen.getByText('Unknown Count')).toBeInTheDocument();
     expect(screen.queryByText('Mean')).not.toBeInTheDocument();
     expect(screen.getByText('Canonical transcript counts by decision label. Click any non-zero count to open the matching transcripts.')).toBeInTheDocument();
-    const row = screen.getByText('Pooled').closest('tr');
+    const row = screen.getByText('Both directions combined').closest('tr');
     expect(row).not.toBeNull();
     expect(within(row as HTMLElement).getAllByRole('button').length).toBeGreaterThan(0);
   });
@@ -475,9 +477,9 @@ describe('AnalysisConditionDetail', () => {
     ]);
   });
 
-  it('routes a pooled row count click to the matching transcript slice', () => {
+  it('routes a combined row count click to the matching transcript slice', () => {
     renderPage('/analysis/run-1/conditions/High%7C%7CLow?rowDim=Freedom&colDim=Harmony&modelId=model1&mode=paired');
-    const row = screen.getByText('Pooled').closest('tr');
+    const row = screen.getByText('Both directions combined').closest('tr');
     expect(row).not.toBeNull();
 
     const buttons = within(row as HTMLElement).getAllByRole('button');
@@ -695,7 +697,7 @@ describe('AnalysisConditionDetail', () => {
       renderPage('/analysis/run-1/conditions/High%7C%7CLow?rowDim=Freedom&colDim=Harmony&modelId=model1&mode=paired');
 
       // Paired rows must appear (companion was resolved via direct link)
-      expect(screen.getByText('Pooled')).toBeInTheDocument();
+      expect(screen.getByText('Both directions combined')).toBeInTheDocument();
       expect(screen.getByText('Freedom -> Harmony')).toBeInTheDocument();
       expect(screen.getByText('Harmony -> Freedom')).toBeInTheDocument();
 
@@ -745,7 +747,7 @@ describe('AnalysisConditionDetail', () => {
       renderPage('/analysis/run-1/conditions/High%7C%7CLow?rowDim=Freedom&colDim=Harmony&modelId=model1&mode=paired');
 
       // Paired rows must appear (companion resolved via pairedSibling -> sibling runs)
-      expect(screen.getByText('Pooled')).toBeInTheDocument();
+      expect(screen.getByText('Both directions combined')).toBeInTheDocument();
       expect(screen.getByText('Freedom -> Harmony')).toBeInTheDocument();
       expect(screen.getByText('Harmony -> Freedom')).toBeInTheDocument();
 
@@ -756,6 +758,72 @@ describe('AnalysisConditionDetail', () => {
           ([args]) => args?.pause === false && args?.definitionId === 'def-run-2',
         ),
       ).toBe(true);
+    });
+
+    it('matches the aggregate-kind of the current run when picking from sibling runs', () => {
+      const baseCurrent = createRun('run-1', 'A_first', [
+        createTranscript('tx-1', 's1', 'A_first', '5'),
+      ]);
+      const currentRun = {
+        ...baseCurrent,
+        isAggregate: true,
+        definition: {
+          ...baseCurrent.definition,
+          pairedSibling: { id: 'def-run-2', name: 'Harmony -> Freedom', content: {} },
+        },
+      };
+      const aggregateSibling = {
+        ...createRun('run-agg', 'B_first', [
+          createTranscript('tx-agg', 's2', 'B_first', '1'),
+        ]),
+        isAggregate: true,
+        completedAt: '2026-04-30T10:00:00Z',
+      };
+      const nonAggregateSibling = {
+        ...createRun('run-solo', 'B_first', [
+          createTranscript('tx-solo', 's3', 'B_first', '1'),
+        ]),
+        completedAt: '2026-04-03T10:00:00Z',
+      };
+
+      mockUseRun.mockImplementation((args?: { id?: string }) => {
+        if (args?.id === 'run-agg') {
+          return { run: aggregateSibling, loading: false, error: null, refetch: vi.fn() };
+        }
+        if (args?.id === 'run-solo') {
+          return { run: nonAggregateSibling, loading: false, error: null, refetch: vi.fn() };
+        }
+        return { run: currentRun, loading: false, error: null, refetch: vi.fn() };
+      });
+
+      mockUseRuns.mockImplementation((args?: { definitionId?: string; pause?: boolean }) => {
+        if (args?.pause === false && args?.definitionId === 'def-run-2') {
+          return {
+            runs: [nonAggregateSibling, aggregateSibling],
+            loading: false,
+            error: null,
+            refetch: vi.fn(),
+          };
+        }
+        return { runs: [], loading: false, error: null, refetch: vi.fn() };
+      });
+
+      mockUseAnalysis.mockImplementation((args?: { runId?: string; pause?: boolean }) => {
+        if (args?.pause) return { analysis: null, loading: false, error: null, refetch: vi.fn(), recompute: vi.fn(), recomputing: false };
+        if (args?.runId === 'run-agg') return { analysis: createAnalysis('run-agg', 's2'), loading: false, error: null, refetch: vi.fn(), recompute: vi.fn(), recomputing: false };
+        if (args?.runId === 'run-solo') return { analysis: createAnalysis('run-solo', 's3'), loading: false, error: null, refetch: vi.fn(), recompute: vi.fn(), recomputing: false };
+        return { analysis: createAnalysis('run-1', 's1'), loading: false, error: null, refetch: vi.fn(), recompute: vi.fn(), recomputing: false };
+      });
+
+      renderPage('/analysis/run-1/conditions/High%7C%7CLow?rowDim=Freedom&colDim=Harmony&modelId=model1&mode=paired');
+
+      expect(screen.getByText('Both directions combined')).toBeInTheDocument();
+      expect(
+        (mockUseRun.mock.calls as Array<[{ id?: string }]>).some(([args]) => args?.id === 'run-agg'),
+      ).toBe(true);
+      expect(
+        (mockUseRun.mock.calls as Array<[{ id?: string }]>).some(([args]) => args?.id === 'run-solo'),
+      ).toBe(false);
     });
   });
 });
