@@ -25,9 +25,28 @@ vi.mock('../../../src/queue/boss.js', () => ({
   isBossRunning: vi.fn().mockReturnValue(true),
 }));
 
+// Mock the orchestrator so pauseQueue/resumeQueue work in tests
+// without requiring a live PgBoss instance.
+// vi.hoisted ensures _orchState is available when vi.mock factory runs
+// (vi.mock calls are hoisted before all other statements).
+const _orchState = vi.hoisted(() => ({ isPaused: false }));
+vi.mock('../../../src/queue/orchestrator.js', () => ({
+  pauseQueue: vi.fn(async () => { _orchState.isPaused = true; }),
+  resumeQueue: vi.fn(async () => { _orchState.isPaused = false; }),
+  isQueuePaused: vi.fn(() => _orchState.isPaused),
+  getOrchestratorState: vi.fn(() => ({ isRunning: true, isPaused: _orchState.isPaused })),
+  isOrchestratorRunning: vi.fn(() => true),
+  startOrchestrator: vi.fn().mockResolvedValue(undefined),
+  stopOrchestrator: vi.fn().mockResolvedValue(undefined),
+}));
+
 const app = createServer();
 
 describe('Queue Control Mutations', () => {
+  beforeEach(() => {
+    _orchState.isPaused = false;
+  });
+
   describe('pauseQueue mutation', () => {
     const pauseMutation = `
       mutation PauseQueue {
