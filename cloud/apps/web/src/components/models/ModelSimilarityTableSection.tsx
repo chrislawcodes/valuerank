@@ -4,7 +4,6 @@ import { type ModelEntry } from '../../data/domainAnalysisData';
 import { Button } from '../ui/Button';
 import { CopyVisualButton } from '../ui/CopyVisualButton';
 import {
-  CALCULATION_METHODS,
   type CalculationMethod,
   type MetricView,
   type PairMetric,
@@ -19,18 +18,12 @@ import { PairDetailDrawer } from './ModelSimilarityPairDetailDrawer';
 type ModelSimilarityTableSectionProps = {
   models: ModelEntry[];
   method?: CalculationMethod;
-  onMethodChange?: (method: CalculationMethod) => void;
 };
 
-export function ModelSimilarityTableSection({ models, method: methodProp, onMethodChange }: ModelSimilarityTableSectionProps) {
+export function ModelSimilarityTableSection({ models, method: methodProp }: ModelSimilarityTableSectionProps) {
   const tableRef = useRef<HTMLDivElement>(null);
   const [showHelp, setShowHelp] = useState(false);
-  const [internalMethod, setInternalMethod] = useState<CalculationMethod>('weighted-euclidean');
-  const method = methodProp ?? internalMethod;
-  const setMethod = (m: CalculationMethod) => {
-    setInternalMethod(m);
-    onMethodChange?.(m);
-  };
+  const method = methodProp ?? 'weighted-euclidean';
   const [view, setView] = useState<MetricView>('distance');
   const [activePair, setActivePair] = useState<{ left: string; right: string } | null>(null);
 
@@ -97,29 +90,6 @@ export function ModelSimilarityTableSection({ models, method: methodProp, onMeth
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 p-1">
-            <span className="px-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">Method</span>
-            <div className="inline-flex rounded-md border border-gray-200 bg-white p-1">
-              {CALCULATION_METHODS.map((option) => {
-                const active = method === option.value;
-                return (
-                  <Button
-                    key={option.value}
-                    type="button"
-                    variant={active ? 'primary' : 'ghost'}
-                    size="sm"
-                    onClick={() => setMethod(option.value)}
-                    className={`rounded-md px-3 py-1 text-xs font-medium min-h-0 ${
-                      active ? 'bg-teal-600 text-white hover:bg-teal-700' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                    }`}
-                  >
-                    {option.label}
-                  </Button>
-                );
-              })}
-            </div>
-          </div>
-
           <div className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 p-1">
             <span className="px-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">View</span>
             <div className="inline-flex rounded-md border border-gray-200 bg-white p-1">

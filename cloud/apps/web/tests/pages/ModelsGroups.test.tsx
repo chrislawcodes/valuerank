@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { ModelsGroups } from '../../src/pages/ModelsGroups';
 import {
@@ -39,6 +40,22 @@ const defaultClusterAnalysis = {
         },
       ],
     },
+    {
+      id: 'cluster-b',
+      name: 'Cluster B',
+      definingValues: ['Hedonism'],
+      centroid: { Hedonism: -1 },
+      members: [
+        {
+          model: 'model-b',
+          label: 'Model B',
+          silhouetteScore: 0.5,
+          isOutlier: false,
+          nearestClusterIds: null,
+          distancesToNearestClusters: null,
+        },
+      ],
+    },
   ],
   faultLinesByPair: {},
 };
@@ -66,6 +83,14 @@ const defaultAnalysis = {
           { valueKey: 'Hedonism', score: -1 },
         ],
       },
+      {
+        model: 'model-b',
+        label: 'Model B',
+        values: [
+          { valueKey: 'Achievement', score: 0.5 },
+          { valueKey: 'Hedonism', score: -0.5 },
+        ],
+      },
     ],
     unavailableModels: [],
     clusterAnalysis: defaultClusterAnalysis,
@@ -86,6 +111,13 @@ const defaultModelsAnalysis = {
           { valueKey: 'Achievement', pooledWinRate: 72.5, stabilityScore: 91.2, eligibleDomainCount: 2, domains: [] },
         ],
       },
+      {
+        modelId: 'model-b',
+        label: 'Model B',
+        values: [
+          { valueKey: 'Achievement', pooledWinRate: 62.5, stabilityScore: 88.1, eligibleDomainCount: 2, domains: [] },
+        ],
+      },
     ],
   },
 };
@@ -97,6 +129,20 @@ const defaultLlmModels = {
       providerId: 'provider-a',
       modelId: 'model-a',
       displayName: 'Model A',
+      costInputPerMillion: 0,
+      costOutputPerMillion: 0,
+      status: 'ACTIVE',
+      isDefault: true,
+      isAvailable: true,
+      apiConfig: null,
+      createdAt: '2026-03-15T12:00:00.000Z',
+      updatedAt: '2026-03-15T12:00:00.000Z',
+    },
+    {
+      id: 'llm-model-b',
+      providerId: 'provider-a',
+      modelId: 'model-b',
+      displayName: 'Model B',
       costInputPerMillion: 0,
       costOutputPerMillion: 0,
       status: 'ACTIVE',
@@ -166,6 +212,7 @@ describe('ModelsGroups', () => {
   });
 
   it('renders the domain selection bar and model groups visualization', async () => {
+    const user = userEvent.setup();
     render(
       <MemoryRouter initialEntries={['/models?domainId=domain-a&signature=vnewtd']}>
         <ModelsGroups />
@@ -173,9 +220,16 @@ describe('ModelsGroups', () => {
     );
 
     expect(await screen.findByRole('button', { name: /domain:/i })).toBeInTheDocument();
+    expect(screen.getByText('Analysis settings')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Model Clusters', level: 1 })).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Model Clusters', level: 2 })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Similarity by Model' })).toBeInTheDocument();
+    expect(screen.getAllByText('10.00').length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole('button', { name: 'Spearman' }));
+    await user.click(screen.getByRole('button', { name: 'Similarity' }));
+
+    expect(screen.queryByText('10.00')).not.toBeInTheDocument();
   });
 
   it('shows the transcript count in the freshness line', async () => {
