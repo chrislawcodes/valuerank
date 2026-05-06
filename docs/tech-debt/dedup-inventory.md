@@ -39,7 +39,7 @@ DEDUP-8 (`isRecord`) is independent of report output — pure type guard.
 | ID | Cluster | Slice | Severity | Lift | Status |
 |---|---|---|---|---|---|
 | DEDUP-1 | `pauseQueue` / `resumeQueue` — two implementations | API | High (bug risk) | Medium | Decision needed |
-| DEDUP-2 | Schwartz + signature-preference forked web↔shared | Web/Shared | High | Small | Open |
+| ~~DEDUP-2~~ | ~~Schwartz + signature-preference forked web↔shared~~ | ~~Web/Shared~~ | ~~High~~ | ~~Small~~ | **Resolved (partial) — PR #937** |
 | ~~DEDUP-3~~ | ~~`useRuns` vs `useRunsWithAnalysis` (and infinite variants)~~ | ~~Web~~ | ~~High~~ | ~~Small~~ | **Resolved — PR #934** |
 | DEDUP-4 | Run vs Analysis list/card/folder views | Web | High | Large | Decision needed |
 | DEDUP-5 | `analysis-v2/` stalled migration | Web | High | Large | Decision needed |
@@ -70,15 +70,26 @@ Status values: `Open` (mechanical, ready to do) · `Decision needed` (needs a di
 
 ### DEDUP-2 — Schwartz + signature-preference forked web↔shared
 
-**Files:**
-- `cloud/apps/web/src/utils/schwartz.ts` (18) ↔ `cloud/packages/shared/src/schwartz.ts` (33)
-- `cloud/apps/web/src/utils/signaturePreference.ts` (57) ↔ `cloud/packages/shared/src/signature-preference.ts` (57)
+**Status: Resolved (partial) in PR #937 (2026-05-06).**
 
-**Shared:** Same algorithm; web `signaturePreference.ts` is line-for-line near-identical to the shared one.
-**Differs:** Web copy renames `AvailableSignature` → `PreferredSignatureOption` and uses `!= null` instead of truthy checks.
-**Callers:** Web `utils/schwartz.ts` → 3 importers (Circumplex/Confidence components). Web `utils/signaturePreference.ts` → 2 importers (`useAvailableSignatures.ts`, `coverageMatrixHelpers.ts`). Shared versions already exported and `useAvailableSignatures.ts` already imports from `@valuerank/shared`.
-**Canonical:** Shared. Library code re-implemented in the consumer is the cardinal sin per AGENTS.md.
-**Plan:** Delete web copies, update 5 importers to use `@valuerank/shared`.
+`cloud/apps/web/src/utils/signaturePreference.ts` (57 LOC) deleted. Both importers
+(`useAvailableSignatures.ts`, `coverageMatrixHelpers.ts`) updated to import
+`preferDefaultSignature` and `AvailableSignature` directly from `@valuerank/shared`.
+Type rename (`AvailableSignature` → `PreferredSignatureOption`) handled with an import
+alias at each consumer site.
+
+`cloud/apps/web/src/utils/schwartz.ts` was NOT deleted — Phase 1 audit description was
+inaccurate. The web file exports `formatFullSchwartzValueName` (using the web-local
+`ValueKey` from `data/domainAnalysisData.ts`) which has no equivalent in the shared
+package. It is not a duplicate. Its 4 importers (CircumplexMatrix, CircumplexMdsScatter,
+ConfidenceDomainBreakout, ConfidenceHeatmap) were left untouched.
+
+**Original notes (for history):**
+- Files: `cloud/apps/web/src/utils/schwartz.ts` (18) ↔ `cloud/packages/shared/src/schwartz.ts` (33)
+- Files: `cloud/apps/web/src/utils/signaturePreference.ts` (57) ↔ `cloud/packages/shared/src/signature-preference.ts` (57)
+- Shared: Same algorithm; web `signaturePreference.ts` is line-for-line near-identical to the shared one.
+- Differs: Web copy renames `AvailableSignature` → `PreferredSignatureOption` and uses `!= null` instead of truthy checks.
+- Callers: Web `utils/signaturePreference.ts` → 2 importers (`useAvailableSignatures.ts`, `coverageMatrixHelpers.ts`).
 
 ### DEDUP-3 — `useRuns` / `useRunsWithAnalysis` twin hooks
 
@@ -248,6 +259,7 @@ Tracking infrastructure that protects against dedup-induced (or any) drift in us
 | DEDUP-8 | `isRecord` consolidation | #928 | 2026-05-05 | 8 byte-identical sites consolidated to `cloud/apps/api/src/utils/isRecord.ts`. `isPlainJsonObject` renamed to `isRecord` in summarize handlers. `services/consistency/modelsConsistencyData.ts` narrowing variant intentionally left in place per Models-reports preserve constraint. |
 | DEDUP-3 | `useRuns` / `useRunsWithAnalysis` hook collapse | #934 | 2026-05-05 | Added `hasAnalysis` + `analysisStatus` params to `useRuns` and `useInfiniteRuns`. Deleted `useRunsWithAnalysis.ts` and `useInfiniteRunsWithAnalysis.ts`. `comparison.graphql:RunsWithAnalysis` left in place (different resolver). |
 | DEDUP-15 | `runsWithAnalysis(ids:)` resolver and web query deleted | #936 | 2026-05-05 | Zero consumers. Architecture decision at `cloud/specs/016-analysis-tab/plan.md` chose `runs(hasAnalysis:)` instead. ~250 LOC removed across API resolver, tests, web query, re-export, manual types. Schema snapshot and codegen regenerated. |
+| DEDUP-2 | `signaturePreference` fork web↔shared (partial) | #937 | 2026-05-06 | Deleted `cloud/apps/web/src/utils/signaturePreference.ts` (57 LOC). Updated 2 importers to use `@valuerank/shared`. `schwartz.ts` NOT deleted — not a true duplicate (exports different function). |
 
 ### Dead-code deletions
 
@@ -258,10 +270,11 @@ Tracking infrastructure that protects against dedup-induced (or any) drift in us
 
 ## Phase 2 — recommended starting order
 
-DEDUP-8 and DEDUP-3 are done. Suggested next picks:
+DEDUP-8, DEDUP-3, and DEDUP-2 (partial) are done. Suggested next picks:
 
 1. **DEDUP-9** (`wilsonInterval`) — small statistics-helper consolidation; 2 callsites, contract change is contained.
-2. **DEDUP-2** (Schwartz / signature-preference) — already half-migrated; finishing it removes a fork.
-3. **DEDUP-1** (`pauseQueue`) — start with a design note, not code. The only active-bug cluster.
+2. **DEDUP-1** (`pauseQueue`) — start with a design note, not code. The only active-bug cluster.
+
+Note: `cloud/apps/web/src/utils/schwartz.ts` was audited during DEDUP-2 and found NOT to be a duplicate. It exports `formatFullSchwartzValueName` which has no equivalent in shared. Remove the schwartz half of DEDUP-2 from any future planning.
 
 Larger clusters (DEDUP-4, DEDUP-5, DEDUP-6, DEDUP-7, DEDUP-10, DEDUP-12, DEDUP-14) need a direction call before any implementation. DEDUP-14 is now paired with DEDUP-6 since both touch the domain-analysis pipeline and feed Preserve surfaces.
