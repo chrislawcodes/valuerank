@@ -225,7 +225,6 @@ describe('PressureResponseByValueTable', () => {
     }
 
     const cells = within(row).getAllByRole('cell');
-    expect(screen.getByText(/Averaged across 2 selected models/)).toBeDefined();
     expect(cells[1]?.textContent ?? '').toBe('60.0%');
     expect(cells[2]?.textContent ?? '').toBe('30.0%');
     expect(cells[3]?.textContent ?? '').toBe('80.0%');

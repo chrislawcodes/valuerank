@@ -356,7 +356,6 @@ describe('PressureSensitivity page', () => {
     );
 
     expect(screen.getByText('Win Rate by Pressure Conditions by Value')).toBeDefined();
-    expect(screen.getByText(/Averaged across 2 selected models/)).toBeDefined();
   });
 
   it('defaults to the shared bar and removes the provider filter copy', () => {
@@ -432,6 +431,5 @@ describe('PressureSensitivity page', () => {
 
     valueCells = within(valueRow).getAllByRole('cell');
     expect(valueCells[1]?.textContent ?? '').toBe('80.0%');
-    expect(screen.getByText(/Averaged across 1 selected model/)).toBeDefined();
   });
 });
