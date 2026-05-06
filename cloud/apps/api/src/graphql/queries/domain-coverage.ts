@@ -281,15 +281,6 @@ builder.queryField('domainValueCoverage', (t) =>
             continue;
           }
 
-          const models = Array.isArray(config.models)
-            ? config.models.filter((model): model is string => typeof model === 'string' && model.length > 0)
-            : null;
-          const matchesEffectiveModelSet = activeModelFilter.length === 0
-            || (models !== null && activeModelFilter.every((id) => models.includes(id)));
-          if (!matchesEffectiveModelSet) {
-            continue;
-          }
-
           const direction = getCoverageDirection(run.config);
           if (direction === null) {
             continue;
