@@ -50,7 +50,7 @@ DEDUP-8 (`isRecord`) is independent of report output — pure type guard.
 | DEDUP-10 | Decision-summary utility sprawl | Web | Medium-High | Large | Decision needed |
 | ~~DEDUP-11~~ | ~~Shared `*-value-statements.ts` (4× boilerplate)~~ | ~~Shared~~ | ~~Medium~~ | ~~Small~~ | **Resolved — PR #955** |
 | DEDUP-12 | Run lifecycle / recovery sprawl | API | Medium-Low | Large | Decision needed |
-| DEDUP-13 | `validate_input` pattern across 5 workers | Workers | Low | Small | Open |
+| ~~DEDUP-13~~ | ~~`validate_input` pattern across 5 workers~~ | ~~Workers~~ | ~~Low~~ | ~~Small~~ | **Resolved — PR #TBD** |
 | DEDUP-14 | `DomainAnalysisLegacy` GraphQL query — alive, feeds Models + Domains pages | Web | Medium | Large (migration, not delete) | Decision needed |
 | ~~DEDUP-15~~ | ~~`runsWithAnalysis(ids:)` resolver and query unused~~ | ~~API + Web~~ | ~~Medium~~ | ~~Small (deletion)~~ | **Resolved — PR #936** |
 
@@ -199,6 +199,16 @@ Consolidated the four 52-LOC files into `cloud/packages/shared/src/value-stateme
 
 ### DEDUP-13 — `validate_input` pattern across 5 workers
 
+**Status: Resolved in PR #TBD (2026-05-05).**
+
+Extracted 4 helpers into `cloud/workers/common/validation.py`:
+- `require_fields(data, fields)` — missing-field loop with details (used by summarize, probe)
+- `require_field(data, name)` — single missing-field check (used by compute_token_stats, analyze_basic_aggregation, generate_scenarios)
+- `require_list(data, name)` — type check for list fields (used by compute_token_stats, analyze_basic_aggregation)
+- `require_dict(data, name)` — type check for dict fields (used by summarize, generate_scenarios)
+
+All 5 per-worker `validate_input` functions preserved (different required fields per worker). Per-worker inline checks that are domain-specific (nested field checks, string empty checks) kept inline. Error messages preserved exactly. Helpers re-exported from `common/__init__.py`. Test coverage added in `cloud/workers/tests/test_validation_helpers.py` (13 tests). 190 worker tests passed.
+
 **Files:** `cloud/workers/{summarize.py, compute_token_stats.py, probe.py, analyze_basic_aggregation.py, generate_scenarios.py}`.
 **Shared:** Each defines `def validate_input(data: dict[str, Any]) -> None` raising `ValidationError`. Same protocol, same error type.
 **Differs:** Bodies are domain-specific (different required keys per worker).
@@ -277,6 +287,7 @@ Tracking infrastructure that protects against dedup-induced (or any) drift in us
 | DEDUP-2 | `signaturePreference` fork web↔shared (partial) | #937 | 2026-05-06 | Deleted `cloud/apps/web/src/utils/signaturePreference.ts` (57 LOC). Updated 2 importers to use `@valuerank/shared`. `schwartz.ts` NOT deleted — not a true duplicate (exports different function). |
 | DEDUP-9 | `wilsonInterval` consolidation | #943 | 2026-05-05 | Canonical: `cloud/apps/api/src/services/statistics/wilson-interval.ts`. Invalid inputs now return `null` (fail-loud contract). `WilsonIntervalResult` type deleted. Both prior sites re-export from canonical. `wilsonIntervalFromProportion` stays local in `aggregation.ts` (used by `diffProportionCI`). |
 | DEDUP-11 | Shared `*-value-statements.ts` consolidation | #955 | 2026-05-05 | 4 files × 52 LOC → 1 file (220 LOC). All exported symbol names preserved; zero caller changes. Lint, build (shared + api + web), and report snapshots all pass. |
+| DEDUP-13 | `validate_input` helpers extracted to `workers/common/validation.py` | #TBD | 2026-05-05 | 4 helpers extracted (`require_fields`, `require_field`, `require_list`, `require_dict`). All 5 per-worker `validate_input` functions preserved; domain-specific checks kept inline. 13 new helper tests. 190 worker tests passed. ~30 LOC reduced across 5 workers. |
 
 ### Dead-code deletions
 
@@ -287,10 +298,9 @@ Tracking infrastructure that protects against dedup-induced (or any) drift in us
 
 ## Phase 2 — recommended starting order
 
-DEDUP-8, DEDUP-3, DEDUP-2 (partial), DEDUP-9, and DEDUP-11 are done. Suggested next picks:
+DEDUP-8, DEDUP-3, DEDUP-2 (partial), DEDUP-9, DEDUP-11, and DEDUP-13 are done. **All ready-to-do mechanical clusters are now resolved.** The remaining 8 clusters all need a direction call from the user before implementation can begin.
 
-1. **DEDUP-13** (`validate_input` in 5 workers) — small, self-contained, no contract changes.
-2. **DEDUP-1** (`pauseQueue`) — start with a design note, not code. The only active-bug cluster.
+1. **DEDUP-1** (`pauseQueue`) — start with a design note, not code. The only active-bug cluster.
 
 Note: `cloud/apps/web/src/utils/schwartz.ts` was audited during DEDUP-2 and found NOT to be a duplicate. It exports `formatFullSchwartzValueName` which has no equivalent in shared. Remove the schwartz half of DEDUP-2 from any future planning.
 
