@@ -1,5 +1,5 @@
 import { db } from '@valuerank/db';
-import { createLogger } from '@valuerank/shared';
+import { AppError, createLogger } from '@valuerank/shared';
 import { getBoss, isBossRunning } from '../../queue/boss.js';
 import { DEFAULT_JOB_OPTIONS } from '../../queue/types.js';
 import type {
@@ -14,6 +14,9 @@ import {
   PRESSURE_SENSITIVITY_SNAPSHOT_TYPE,
 } from './snapshot-types.js';
 import {
+  emptyPressureConditionExclusionBreakdown,
+  PAIR_KEY_COMPANION_COLLISION,
+  PAIR_KEY_COMPANION_MIRROR_FAILURE,
   preparePressureSensitivityState,
   writeSnapshot,
 } from './snapshot-builder.js';
@@ -95,6 +98,34 @@ function filterResult(
   };
 }
 
+async function buildCompanionFailureResult(
+  definitionId: string,
+  reason: string,
+): Promise<PressureSensitivityResultShape> {
+  const definition = await db.definition.findUnique({
+    where: { id: definitionId },
+    select: { name: true },
+  });
+
+  const name = definition?.name ?? definitionId;
+  return {
+    models: [],
+    insufficient: [],
+    excludedDefinitions: [{ definitionId, name, reason }],
+    pressureConditionExcludedCount: 0,
+    pressureConditionExclusionBreakdown: emptyPressureConditionExclusionBreakdown(),
+    directionalSanityCheck: {
+      positivePct: 0,
+      flatPct: 0,
+      negativePct: 0,
+      measuredCount: 0,
+      unmeasurableCount: 0,
+      breakdown: [],
+    },
+    transcriptCapHit: false,
+  };
+}
+
 export async function queuePressureSensitivityRefresh(params: {
   domainId: string | null;
   signature: string;
@@ -140,7 +171,36 @@ export async function getPressureSensitivityResult(params: {
   modelIds: string[] | null;
   providerId: string | null;
   signature: string;
+  definitionId?: string | null;
 }): Promise<PressureSensitivityResultShape> {
+  if (params.definitionId != null) {
+    const startMs = Date.now();
+    let state: Awaited<ReturnType<typeof preparePressureSensitivityState>>;
+    try {
+      state = await preparePressureSensitivityState({
+        domainId: params.domainId,
+        signature: params.signature,
+        definitionId: params.definitionId,
+      });
+    } catch (err) {
+      if (
+        err instanceof AppError &&
+        (err.code === PAIR_KEY_COMPANION_COLLISION || err.code === PAIR_KEY_COMPANION_MIRROR_FAILURE)
+      ) {
+        log.warn({ definitionId: params.definitionId, code: err.code }, 'Vignette-paired companion expansion failed');
+        return buildCompanionFailureResult(params.definitionId, err.code);
+      }
+      throw err;
+    }
+    const output = await buildPressureSensitivitySnapshotOutput(state);
+    const durationMs = Date.now() - startMs;
+    log.info(
+      { definitionId: params.definitionId, runCount: state.eligibleRuns.length, durationMs },
+      'Vignette-paired pressure sensitivity computed',
+    );
+    return filterResult(output, params.modelIds, params.providerId);
+  }
+
   const state = await preparePressureSensitivityState({
     domainId: params.domainId,
     signature: params.signature,

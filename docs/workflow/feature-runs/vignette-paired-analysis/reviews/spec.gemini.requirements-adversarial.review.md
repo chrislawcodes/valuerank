@@ -1,0 +1,52 @@
+---
+reviewer: "gemini"
+lens: "requirements-adversarial"
+stage: "spec"
+artifact_path: "docs/workflow/feature-runs/vignette-paired-analysis/spec.md"
+artifact_sha256: "6f578c0a2da5e111c03f9ba4bf3c1ded5e0e8fe1f203d0ae283e9de1f9ad457d"
+repo_root: "."
+git_head_sha: "3cba76c6b06a907df7d2daf6b766e4127962c0f3"
+git_base_ref: "origin/main"
+git_base_sha: "3cba76c6b06a907df7d2daf6b766e4127962c0f3"
+generation_method: "gemini-cli"
+resolution_status: "accepted"
+resolution_note: "Cap reached. Findings addressed iteratively in spec.md."
+raw_output_path: "docs/workflow/feature-runs/vignette-paired-analysis/reviews/spec.gemini.requirements-adversarial.review.md.json"
+narrowed_artifact_path: ""
+narrowed_artifact_sha256: ""
+coverage_status: "full"
+coverage_note: ""
+---
+
+# Review: spec requirements-adversarial
+
+## Findings
+
+| Severity | ID | Finding |
+|---|---|---|
+| **HIGH** | F-01 | **Default signature logic can lead to a confusing "missing data" state.** The spec mandates using the signature from the most recently completed run across both vignettes in a pair. This assumes the chosen signature is applicable to both. If the most recent run (e.g., for Vignette A) uses a signature that has no corresponding runs for its companion (Vignette B), the page will load with that signature and silently show no data for Vignette B. This makes the page appear to be a single-direction analysis, which is confusing because the user expects a paired view. The fallback to a default signature only occurs if *neither* vignette has completed runs, not if one side is missing data for the *selected* signature. |
+| **MEDIUM** | F-02 | **Preserving legacy logic creates a "technical debt island" that complicates maintenance.** The plan moves the flawed, run-proximity-based `findCompanionPairedRun` heuristic into a new `legacyCompanionPairedRun.ts` file solely to support the `AnalysisConditionDetail.tsx` page. While pragmatic, this knowingly preserves a buggy implementation and creates a maintenance trap. The `@deprecated` tag discourages use, but if a security or data-integrity issue is found in this logic, it will require fixing code in a file that is explicitly considered obsolete, creating process friction. It also means two different companion-finding logics will coexist in production, increasing cognitive load for developers trying to understand the system. [UNVERIFIED] |
+| **MEDIUM** | F-03 | **The "no caching" decision is a significant performance gamble without a clear contingency.** The spec defers caching for the new vignette-scoped query, assuming synchronous computation will meet the 3-second SLO (SC-002). While a performance test is planned, this is a reactive measure. If a vignette pair has accumulated thousands of runs, the synchronous data aggregation could easily exceed the budget, leading to a poor user experience on day one. The plan to "add caching as a follow-up" is not a concrete strategy, leaving the feature vulnerable to performance issues at scale. |
+| **LOW** | F-04 | **The resolution path for `pair_key` collisions is a dead end for support.** The spec correctly identifies `pair_key` collisions as a data integrity violation and surfaces a "Contact support" message. However, for a support engineer to resolve this, they need to know *which* definitions are in conflict. The spec proposes throwing an `AppError` with the `pairKey` and the *input* `definitionId`. This is insufficient. The error payload should also include the list of all candidate `definitionId`s that were found to be in conflict. Without this, the support task is a manual, time-consuming investigation. |
+| **LOW** | F-05 | **Alert message for orphaned runs could be more actionable.** The legacy URL redirect logic for an orphaned run (definition is missing) correctly shows an alert. However, the message "Search for the vignette by name..." is generic. The run object likely still contains the `methodology.pair_key` in its metadata. The alert could be more helpful by displaying this key, e.g., "Search for vignettes with pair key: `[pair_key]`." This provides a specific, unique identifier for the user to search with, increasing their chance of finding the correct new page. [UNVERIFIED] |
+
+## Residual Risks
+
+Even if all findings are addressed, the following risks remain inherent to the proposed design and should be monitored after launch:
+
+1.  **Ongoing Data Hygiene Debt:** The feature's core logic depends on the integrity of `pair_key` metadata, but the spec explicitly defers database-level uniqueness enforcement. While the `pair_key_companion_collision` error provides a guardrail, the project remains exposed to data quality issues that can disable functionality for affected vignettes. The lack of preventative enforcement means data hygiene will continue to be a reactive, manual process.
+
+2.  **Performance Degradation Over Time:** The decision to skip caching for vignette-paired analysis is a bet on current and near-future data volume. As the number of runs and transcripts per vignette grows, the synchronous query time will inevitably increase. The risk is not just a day-one failure of the 3-second SLO, but a slow, silent degradation of page load times over months, which may not be prioritized for a fix until it becomes a persistent user complaint.
+
+3.  **Coexistence of Divergent Logics:** The conscious decision to preserve the legacy run-proximity heuristic for `AnalysisConditionDetail.tsx` means two different business logics for "finding a companion" will coexist indefinitely. This creates a trap for future developers who may not understand why two different implementations are needed. It increases the risk of inconsistent behavior and makes future refactoring in this area more complex, as any changes will need to consider both the "correct" server-side logic and the "legacy" client-side logic.
+
+## Token Stats
+
+- total_input=21291
+- total_output=1071
+- total_tokens=25302
+- `gemini-2.5-pro`: input=21291, output=1071, total=25302
+
+## Resolution
+- status: accepted
+- note: Cap reached. Findings addressed iteratively in spec.md.

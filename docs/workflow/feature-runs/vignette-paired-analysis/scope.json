@@ -1,0 +1,30 @@
+{
+  "paths": [
+    "cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts",
+    "cloud/apps/api/src/services/pressure-sensitivity/snapshot-builder.ts",
+    "cloud/apps/api/src/services/pressure-sensitivity/snapshot-cache.ts",
+    "cloud/apps/web/src/App.tsx",
+    "cloud/apps/web/src/api/operations/pressureSensitivity.graphql",
+    "cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx",
+    "cloud/apps/web/src/components/analysis/tabs/OverviewSummaryTable.tsx",
+    "cloud/apps/web/src/pages/AnalysisConditionDetail.tsx",
+    "cloud/apps/web/src/pages/AnalysisDetail.tsx",
+    "cloud/apps/web/src/pages/VignettePairedAnalysis.tsx",
+    "cloud/apps/web/src/utils/legacyCompanionPairedRun.ts",
+    "docs/workflow/feature-runs/vignette-paired-analysis"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts",
+    "cloud/apps/api/src/services/pressure-sensitivity/snapshot-builder.ts",
+    "cloud/apps/api/src/services/pressure-sensitivity/snapshot-cache.ts",
+    "cloud/apps/web/src/App.tsx",
+    "cloud/apps/web/src/api/operations/pressureSensitivity.graphql",
+    "cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx",
+    "cloud/apps/web/src/components/analysis/tabs/OverviewSummaryTable.tsx",
+    "cloud/apps/web/src/pages/AnalysisConditionDetail.tsx",
+    "cloud/apps/web/src/pages/AnalysisDetail.tsx",
+    "cloud/apps/web/src/pages/VignettePairedAnalysis.tsx",
+    "cloud/apps/web/src/utils/legacyCompanionPairedRun.ts",
+    "docs/workflow/feature-runs/vignette-paired-analysis"
+  ]
+}

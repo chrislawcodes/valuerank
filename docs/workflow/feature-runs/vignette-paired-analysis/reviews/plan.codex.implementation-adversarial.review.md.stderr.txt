@@ -1,0 +1,205 @@
+Reading additional input from stdin...
+OpenAI Codex v0.128.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/strange-shtern-32c78d
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019df9fd-2c34-7611-8924-e4bf88f127d4
+--------
+user
+Review this plan artifact using a implementation-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: plan.md
+# Plan — vignette-paired-analysis
+
+Slug: `vignette-paired-analysis`
+Workflow: Feature Factory
+Spec: `spec.md`
+
+## 0. Reading order
+
+This plan assumes the reviewer has read `spec.md`, especially §"Affected surfaces" and §"User decisions already made". Slice rows below cite spec subsections in parentheses.
+
+## 1. Architecture decisions
+
+| # | Decision | Source |
+|---|---|---|
+| A1 | Reuse the existing `pressureSensitivity` query and pipeline by adding a single optional **`definitionId: ID`** argument (singular, not list — supersedes spec's plural form per Gemini plan F-3 finding; the v1 contract supports exactly one definition, so `t.arg.id()` is simpler than a list-of-one with validation). Future multi-pair scoping can be added additively. No new GraphQL types. | Spec §"What Is Genuinely New After Collapse"; revised by Gemini plan F-3 |
+| A2 | `expandToCompanionDefinition` lives in `cloud/apps/api/src/services/pressure-sensitivity/snapshot-builder.ts`. Imports `findPairedCompanion` directly from `cloud/apps/api/src/utils/auto-pair.ts`. | Spec service-layer row, Codex round 1 |
+| A3 | Companion lookup query: `db.definition.findMany({ where: { domainId, content path pair_key, deletedAt: null, id != input } })`. Multi-candidate match throws `AppError('pair_key_companion_collision')`. | Spec decision #2 + #10 |
+| A4 | Collision response shape: resolver catches the AppError, returns `{ models: [], insufficient: [], excludedDefinitions: [{ definitionId, name, reason: 'pair_key_companion_collision' }] }`. The `reason` field is free-form string (`pressure-sensitivity.ts:285-290`) — no schema change. | Spec decision #10 |
+| A5 | Cache: skipped when `definitionId` non-null. Synchronous compute. Telemetry timer wraps the compute path; alert threshold = SC-002's 3-second budget. | Spec non-goals + verification step #10 |
+| A6 | Frontend page: `cloud/apps/web/src/pages/VignettePairedAnalysis.tsx`, ~120 lines, composes `PressureSensitivityDetail`, `PressureSensitivityLimitations` from `components/models/`. URL idempotency via `setSearchParams` mirroring `PressureSensitivity.tsx:173-180`. | Spec §"Frontend — new page" |
+| A7 | Signature derivation spans both vignettes' completed runs. Fallback to `vnewtd` when neither side has runs. | Spec decision #8 |
+| A8 | Legacy heuristic preservation: extract `findCompanionPairedRun` + helpers to a new `cloud/apps/web/src/utils/legacyCompanionPairedRun.ts` with `@deprecated` header. `AnalysisConditionDetail.tsx` imports from there; `PairedRunComparisonCard.tsx` deleted in full. | Spec §"AnalysisConditionDetail.tsx stays as-is" |
+| A9 | Legacy `?mode=paired` URL: 3-branch fallback (no pair_key → single-mode; pair_key + def id → redirect; pair_key without def id → single-mode + alert). | Spec §"Legacy ?mode=paired URL handling" |
+
+## 2. Slice map
+
+Four slices. All land in one PR. Slices 1 and 2 build the new path; slice 3 cuts the old path; slice 4 verifies.
+
+| # | Slice | Files touched | Why this order |
+|---|---|---|---|
+| **1** | **Backend: `definitionId` arg + companion resolution + telemetry** | `pressure-sensitivity.ts` resolver, `snapshot-cache.ts`, `snapshot-builder.ts` | Backend ships first so the frontend can query against a real schema. |
+| **2** | **Frontend new path: GraphQL op + codegen + new page + route** | `pressureSensitivity.graphql`, regenerated `.ts` + `generated/graphql.ts`, new `VignettePairedAnalysis.tsx`, `App.tsx` route | New page must exist before old one links to it. |
+| **3** | **Frontend cleanup: link, redirect, deletion, prop cascade** | `AnalysisDetail.tsx`, `AnalysisPanel.tsx`, `OverviewTab.tsx`, `OverviewSummaryTable.tsx`, new `legacyCompanionPairedRun.ts`, `AnalysisConditionDetail.tsx` (import-only), **deleted** `PairedRunComparisonCard.tsx` | Deletion must come after the new page exists and the link is wired, so users always have a path forward. |
+| **4** | **Verification: regression tests + deletion grep + redirect tests** | API tests for snapshot-compute + snapshot-builder + resolver validation, web test for redirect, repo grep | Tests last so they exercise final shipped behavior. |
+
+**Cross-slice rule.** Slices 2 and 3 share file-touch overlap only via `App.tsx` (route addition in slice 2, no edits in slice 3). All other files are disjoint.
+
+**Intermediate build state.** Every slice must leave the repo lint-clean and build-clean. Slice 3 is the only slice that deletes; the build must pass after the deletion before slice 4 starts.
+
+[CHECKPOINT]
+
+---
+
+## 3. Slice 1 — Backend
+
+**Goal.** Accept `definitionId: ID` on `pressureSensitivity`. Resolve companion via `findPairedCompanion`. Skip cache when scoped. Emit telemetry.
+
+**Estimated diff.** ~150 lines added, 0 deleted.
+
+**Files:**
+
+| File | Change |
+|---|---|
+| `cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts` | Add `definitionId: t.arg.id({ required: false })` (singular). Validation: reject `domainId` + `definitionId` combinations (mutually exclusive). Throws `ValidationError`. |
+| `cloud/apps/api/src/services/pressure-sensitivity/snapshot-cache.ts` | `getPressureSensitivityResult` accepts `definitionIds: string[] \| null`. When non-null: skip snapshot read/write. Wrap compute path in a structured timer; log `{ definitionId, runCount, durationMs }` at `info` level. Catch `AppError('pair_key_companion_collision')` and convert to `excludedDefinitions[]` per A4. Continue to call `filterResult`. |
+| `cloud/apps/api/src/services/pressure-sensitivity/snapshot-builder.ts` | New private async `expandToCompanionDefinition(definitionId)` per spec service-layer row. `preparePressureSensitivityState` accepts optional `definitionId`; when provided, calls the helper (which already filters companion candidates by `domainId === input.domainId`), then adds `definitionId: { in: expandedIds }` to the `db.run.findMany` `where`. **Domain safety (per Codex plan round 2 finding):** the runs query does not need an explicit `domainId` filter on this path because both `expandedIds` are constrained to the same domain by the helper's candidate query — the helper enforces single-domain integrity at companion-resolution time. The plan does NOT drop the domain filter in a way that could cross domains. Cross-domain `pair_key` reuse is explicitly safe. |
+
+**Expected build state.** Lint, test, build all pass for `@valuerank/api`. New argument is unused by callers until slice 2.
+
+[CHECKPOINT]
+
+---
+
+## 4. Slice 2 — Frontend new path
+
+**Goal.** New page renders from the existing pipeline. URL is shareable.
+
+**Estimated diff.** ~250 lines added, 0 deleted.
+
+**Files:**
+
+| File | Change |
+|---|---|
+| `cloud/apps/web/src/api/operations/pressureSensitivity.graphql` | Add `$definitionId: ID` parameter and pass to the field. Run `npm run codegen --workspace @valuerank/web` from `cloud/`. |
+| `cloud/apps/web/src/api/operations/pressureSensitivity.ts` (regenerated) | Codegen output. Verify export shape includes `definitionId`. |
+| `cloud/apps/web/src/generated/graphql.ts` (regenerated) | Codegen output. |
+| `cloud/apps/web/src/pages/VignettePairedAnalysis.tsx` | New file. Composes `useDefinition`, `useQuery(PRESSURE_SENSITIVITY_QUERY, { definitionIds: [id], signature })`, `getPairedOrientationLabels`, `<PressureSensitivityDetail>`, `<PressureSensitivityLimitations>`, loading/error/empty/collision states, signature URL rewrite per A6. Companion-missing banner is a thin local component. Auth via `<ProtectedLayout>`. |
+| `cloud/apps/web/src/App.tsx` | Add `<Route path="/vignette/:definitionId/paired" element={<ProtectedLayout><VignettePairedAnalysis /></ProtectedLayout>} />` near line 280. |
+
+**Expected build state.** Lint, test, build all pass for `@valuerank/web`. New page reachable but no link points at it yet.
+
+**Manual smoke test before slice 3.** Navigate to `/vignette/<paired-vignette-id>/paired` in dev. Confirm page loads with both directions' data.
+
+[CHECKPOINT]
+
+---
+
+## 5. Slice 3 — Frontend cleanup
+
+**Goal.** Cut the run-centric paired path. Preserve legacy condition URLs via the deprecated tombstone utility.
+
+**Estimated diff.** ~250 lines added (legacy utility + redirect + cascade cleanup), ~700 lines deleted (PairedRunComparisonCard 645 lines + companion props through 4 files). Net negative.
+
+**Files:**
+
+| File | Change |
+|---|---|
+| `cloud/apps/web/src/utils/legacyCompanionPairedRun.ts` | NEW. Move `findCompanionPairedRun`, `getRunConfigBatchGroupId`, `getDefinitionPairKey` verbatim from `PairedRunComparisonCard.tsx`. Add `@deprecated` JSDoc header pointing at the follow-up cleanup ticket. |
+| `cloud/apps/web/src/pages/AnalysisConditionDetail.tsx` | Update import on line 7 to `../utils/legacyCompanionPairedRun`. No behavior change. |
+| `cloud/apps/web/src/pages/AnalysisDetail.tsx` | Delete legacy companion-search effect block (lines 173-223), `findCompanionPairedRun` import (line 16), mode toggle plumbing. Add "View paired analysis" link near `launchModeLabel`. Add 4-branch redirect logic (per A9 + Codex M4): (a) no `pair_key` AND no `companionRunId` → single-mode silent; (b) `pair_key` + `definition.id` → redirect to `/vignette/<defId>/paired`; (c) `pair_key` present but `definition.id` missing → single-mode + alert with search link; (d) **`companionRunId` present but `pair_key` absent** → single-mode + amber notice "Legacy paired analysis URLs without canonical pair metadata are deprecated. Search for this vignette by name on the new paired analysis page." Branch (d) preserves visibility of the deprecation rather than silently dropping the paired view. Pass `companionAnalysis={null}`, `companionRun={null}` to `<AnalysisPanel>` until cascade cleanup. |
+| `cloud/apps/web/src/components/analysis/AnalysisPanel.tsx` | Remove `companionAnalysis`, `companionRun`, `analysisMode`, `onAnalysisModeChange` props. Remove Single/Paired mode toggle UI. |
+| `cloud/apps/web/src/components/analysis/tabs/OverviewTab.tsx` | Remove `companionAnalysis`, `companionRun` props and pass-throughs. |
+| `cloud/apps/web/src/components/analysis/tabs/OverviewSummaryTable.tsx` | Remove `companionAnalysis`, `companionRun` props, `companionConditionRows` memo, paired-merge variance branch, paired-row rendering. Add inline "View paired analysis" link in table header when `methodology.pair_key` is present. |
+| `cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx` | **DELETE** the entire file. |
+
+**Expected build state after this slice.** `npm run build --workspace @valuerank/web` must pass. TypeScript catches any importer of deleted symbols. After build passes, `grep -rn 'PairedRunComparisonCard' cloud/apps/web/src/` returns zero matches.
+
+[CHECKPOINT]
+
+---
+
+## 6. Slice 4 — Verification
+
+**Goal.** Lock in equal-weight as a regression guard. Verify redirect flows. Confirm orphan-export cleanup.
+
+**Estimated diff.** ~150 lines of test code, no production changes.
+
+**Files:**
+
+| File | Change |
+|---|---|
+| `cloud/apps/api/src/services/pressure-sensitivity/snapshot-compute.test.ts` (new test cases) | Test fixture: two definitions sharing `pair_key`, one with 100 trials in direction A and the other with 10 trials in direction B. Run through `buildPressureSensitivitySnapshotOutput`. Assert `directionBalancedWinRate ≈ (rateA + rateB) / 2`. (Verification step #4.) |
+| `cloud/apps/api/src/services/pressure-sensitivity/snapshot-builder.test.ts` (new) | `expandToCompanionDefinition`: single companion → `[selfId, companionId]`; multi-candidate → throws `AppError`; no candidate → `[selfId]`; missing `pair_key` → `[selfId]`. (Verification step #2.) |
+| `cloud/apps/api/src/graphql/queries/pressure-sensitivity.test.ts` (new) | Resolver-level validation: `definitionIds: []` → ValidationError; `[a, b]` → ValidationError; `domainId + definitionIds` → ValidationError. (Verification step #12.) |
+| `cloud/apps/web/src/pages/AnalysisDetail.test.tsx` | 3-branch legacy `?mode=paired` redirect logic per A9. (Verification step #11.) Extended branches per Codex M4: a fourth case where `companionRunId` is present without `pair_key` — this previously enabled paired analysis via the legacy companion-search path; the redirect logic must check `pair_key` first AND warn when a `companionRunId` is present but `pair_key` is absent (indicates legacy data without canonical pair metadata). |
+| `cloud/apps/web/src/pages/VignettePairedAnalysis.test.tsx` (new — addresses Gemini F-1/F-2) | Automated tests for the new page: (a) loading state renders `<Loading>`; (b) error state renders `<ErrorMessage>`; (c) empty result renders empty banner; (d) collision case (`excludedDefinitions[].reason === 'pair_key_companion_collision'`) renders the non-dismissible alert; (e) success case renders `<PressureSensitivityDetail>` per model; (f) signature URL rewrite fires when `?signature=` is missing. Use the existing test harness pattern from other page tests (`PressureSensitivity.test.tsx`). |
+| Edge-case fixtures (per Gemini F-6 round 1, T-1 round 2) | Extend the equal-weight regression test in slice 4 with: (i) zero trials in one direction, (ii) zero trials in both directions, (iii) equal trial counts, **(iv) null win rate in one direction** (e.g., all trials are unscored/refusal — `winRate === null`), **(v) null win rate in both directions**. Confirm `directionBalancedWinRate` is null in (ii) and (v), equals the non-null direction's rate in (i) and (iv) (NOT NaN, NOT 0), and equals the average in (iii). The averaging primitive `averageNonNull` at `aggregation.ts:201-212` already handles null-skip; this test pins that contract. |
+| Resolver happy-path test (per Gemini T-3) | Add a positive test in `pressure-sensitivity.test.ts`: passing a valid `definitionId: <id>` returns a result with one models entry (or an empty list if no completed runs), confirming the argument is wired through. |
+| Final grep | Run `grep -rn 'PairedRunComparisonCard\|buildComparisonRows' --include='*.ts' --include='*.tsx' --include='*.md'` from repo root. Expected: zero matches. |
+
+**Pre-merge manual verification.** Navigate to `/vignette/<id>/paired` for: (a) vignette with both directions complete, (b) vignette with only one direction complete, (c) vignette with a `pair_key` collision (set up in dev fixture). Confirm each renders the expected state.
+
+---
+
+## 7. Residual risks (each MUST have a verification line)
+
+| ID | Risk | verification |
+|---|---|---|
+| RR-1 | Synchronous compute exceeds 3-second SLA (SC-002) for high-volume vignette pairs | Slice 1 emits structured `{ definitionId, durationMs, runCount }` telemetry. Pre-merge: query the dev DB for the vignette pair with the most completed runs and time the new page; if > 3s in dev, treat as a blocker and add caching before merge. Post-merge: monitor for one week; if >5% breach, file follow-up F-1. |
+| RR-2 | `pair_key` data-hygiene incident causes hard-fail for an active pair | Hard-fail surfaces as `excludedDefinitions[]` + UI alert (visible degradation, not silent corruption). Pre-merge: smoke-test against a dev fixture with two duplicate definitions and confirm the alert renders. Post-merge: `pair_key_companion_collision` AppError logs at `error` level; existing alerting picks it up. |
+| RR-3 | Legacy heuristic in `legacyCompanionPairedRun.ts` is never removed (deprecation indefinite) | At PR delivery time, file follow-up F-3 ticket titled "Remove legacyCompanionPairedRun tombstone" linked from the file's `@deprecated` header. Pre-merge: grep that the linked ticket URL exists in the file. Without a tracked ticket, this risk has no exit path; do not merge slice 3 until the ticket exists. |
+| RR-4 | Codegen drift from `pressureSensitivity.graphql` | Slice 2 mandates codegen; preflight runs lint+build for `@valuerank/web`, which surface stale-types failures. Pre-merge: confirm regenerated files include `definitionId` in `PressureSensitivityQueryVariables`. |
+| RR-5 | `?mode=paired` redirect fails for orphaned runs (missing `definition.id`) | Slice 3 branch (c) renders the alert with a search-by-name link. Slice 4 includes a unit test for this branch. Pre-merge: run the unit test and confirm it covers the orphaned-run case. |
+| RR-6 | PR #923 lands during this feature's implementation, causing rebase conflict in `snapshot-compute.ts` | Spec prerequisite already calls this out. Pre-merge: rebase onto main after PR #923 lands, re-run preflight, confirm `pushedForEffect` shape is unchanged in our query selection. |
+| RR-7 | Cross-vignette signature mismatch silently shows one-direction data | Slice 2's signature derivation queries both vignettes' completed runs and picks the most-recent. **Per Codex M3 + Gemini F-2:** when the most-recent signatures disagree across the two vignettes, the page renders an additional info banner: "The two directions of this vignette were last analyzed under different signatures (`<sig-A>` vs `<sig-B>`); showing data for `<chosen-sig>` only." Slice 4 includes a unit test for this case. |
+| RR-8 | "Not paired" vs "paired but companion missing" indistinguishable in helper output (per Codex M2) | `expandToCompanionDefinition` returns `[selfId]` in both cases today. Update slice 1: helper returns `{ ids: string[], status: 'not_paired' \| 'companion_missing' \| 'paired' \| 'collision' }` so the resolver can attach a structured exclusion entry. Verification: slice 4 adds tests for each `status` value and asserts the page's banner copy differs accordingly ("This vignette is not part of a paired analysis." vs "Companion vignette has no completed runs yet."). |
+| RR-9 | Magic-string brittleness on `pair_key_companion_collision` reason code (per Gemini F-5) | Define the constant `PAIR_KEY_COMPANION_COLLISION = 'pair_key_companion_collision'` as a named export from `cloud/apps/api/src/services/pressure-sensitivity/snapshot-builder.ts` and re-export from `cloud/packages/shared/src/index.ts` so both API and web import the same symbol. Verification: slice 4 tests reference the constant rather than a literal string. |
+
+## 8. Wave / parallelization analysis
+
+This feature is one wave, not multiple. The four slices have a strict order: backend → frontend new path → frontend cleanup → verification. No safe parallel split exists because slice 3 depends on slice 2, and slice 4 depends on the production code from slices 1-3.
+
+## 9. Out-of-scope follow-ups (filed at delivery)
+
+- F-1: Per-pair snapshot caching, if RR-1 telemetry shows breaches.
+- F-2: JSONB GIN index on `methodology.pair_key`, if companion lookup latency becomes measurable.
+- F-3: Remove `legacyCompanionPairedRun.ts` after a vignette-centric `AnalysisConditionDetail` ships.
+- F-4: DB-level uniqueness constraint on `(domainId, methodology.pair_key, components.value_first.token)` for active definitions.
+- F-5: Trim dead exports from `cloud/apps/web/src/utils/pairedScopeAdapter.ts` once it has no callers.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+## Findings
+- **Medium**: The scoped-argument contract is inconsistent throughout the plan. A1 switches the API to `definitionId`, but Slice 1 still describes `getPressureSensitivityResult(definitionIds: string[] | null)`, Slice 2 calls the query with `definitionIds: [id]`, and Slice 4 tests `definitionIds` again. That is not a naming nit. It leaves the backend, client, and tests without one agreed shape.
+
+- **Medium**: The plan does not define a complete result-state model for paired lookup. The main slices only expose `models`, `insufficient`, and `excludedDefinitions`, but Slice 4 and RR-8 require the UI to distinguish `not_paired`, `companion_missing`, `paired`, and `collision`. Without an explicit status in the backend contract, the page cannot reliably render the different banners the plan asks for.
+
+- **Medium**: Signature divergence is still underspecified. Slice 2 says the new page derives a signature from both vignettes’ completed runs, while RR-7 says mismatched signatures must show an extra banner. The core slices never define the mismatch branch, so the shipped page can silently pick one signature and hide that the two directions were analyzed under different snapshots.
+
+## Residual Risks
+- The uncached scoped backend path still depends on a manual dev timing check. If dev data is smaller than production data, the 3-second budget check can miss a real regression.
+
+- The legacy redirect path has several branches and only one explicit unit-test file. Mixed query-param cases and odd legacy URLs can still fall through unless the fixtures are very complete.
+
+- The tombstone utility for legacy paired-run heuristics is intentionally deferred to a follow-up ticket. If that ticket is not tracked tightly, the deprecated path can linger longer than intended.
+tokens used
+14,712

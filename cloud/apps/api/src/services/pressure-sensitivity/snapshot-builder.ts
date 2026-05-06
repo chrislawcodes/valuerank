@@ -1,7 +1,9 @@
 import { db } from '@valuerank/db';
+import { AppError, NotFoundError } from '@valuerank/shared';
 import { runMatchesSignature } from '../../graphql/queries/domain-coverage-gql-types.js';
 import type { DefinitionDimension } from '../../graphql/queries/scenarios-utils.js';
 import type { PressureSensitivityResultShape } from '../../graphql/types/pressure-sensitivity.js';
+import { findPairedCompanion } from '../../utils/auto-pair.js';
 import { type PressureSensitivityDecisionSnapshot } from './decision-snapshot.js';
 import { computeAggregateFingerprint } from '../analysis/aggregate/aggregate-helpers.js';
 import {
@@ -11,6 +13,16 @@ import {
 } from './snapshot-types.js';
 
 const TRANSCRIPT_FETCH_LIMIT = 500_000;
+
+export const PAIR_KEY_COMPANION_COLLISION = 'pair_key_companion_collision';
+export const PAIR_KEY_COMPANION_MIRROR_FAILURE = 'pair_key_companion_mirror_failure';
+
+export type CompanionExpansionStatus = 'paired' | 'companion_missing' | 'not_paired';
+
+export type CompanionExpansionResult = {
+  ids: string[];
+  status: CompanionExpansionStatus;
+};
 
 export type ModelRow = {
   id: string;
@@ -185,13 +197,26 @@ export function buildEmptyResult(
 export async function preparePressureSensitivityState(params: {
   domainId: string | null;
   signature: string;
-}): Promise<PressureSensitivityPreparedState> {
+  definitionId?: string | null;
+}): Promise<PressureSensitivityPreparedState & { companionStatus?: CompanionExpansionStatus }> {
+  let expandedDefinitionIds: string[] | null = null;
+  let companionStatus: CompanionExpansionStatus | undefined;
+  if (params.definitionId != null) {
+    const expanded = await expandToCompanionDefinition(params.definitionId);
+    expandedDefinitionIds = expanded.ids;
+    companionStatus = expanded.status;
+  }
+
   const runs = (await db.run.findMany({
     where: {
       status: 'COMPLETED',
       deletedAt: null,
       tags: { none: { tag: { name: 'Aggregate' } } },
-      ...(params.domainId != null ? { definition: { domainId: params.domainId } } : {}),
+      ...(expandedDefinitionIds != null
+        ? { definitionId: { in: expandedDefinitionIds } }
+        : params.domainId != null
+          ? { definition: { domainId: params.domainId } }
+          : {}),
     },
     include: { definition: { select: { id: true, name: true, domainId: true } } },
     orderBy: { id: 'asc' },
@@ -219,7 +244,76 @@ export async function preparePressureSensitivityState(params: {
       .sort((a, b) => a.id.localeCompare(b.id)),
   }).slice(0, 16);
 
-  return { domainId: params.domainId, signature: params.signature, eligibleRuns, inputHash };
+  return companionStatus == null
+    ? { domainId: params.domainId, signature: params.signature, eligibleRuns, inputHash }
+    : { domainId: params.domainId, signature: params.signature, eligibleRuns, inputHash, companionStatus };
+}
+
+export async function expandToCompanionDefinition(definitionId: string): Promise<CompanionExpansionResult> {
+  const definition = await db.definition.findUnique({
+    where: { id: definitionId },
+    select: { id: true, domainId: true, content: true, deletedAt: true },
+  });
+
+  if (definition === null || definition.deletedAt !== null) {
+    throw new NotFoundError('Definition', definitionId);
+  }
+
+  const content = definition.content as Record<string, unknown> | null;
+  const methodology =
+    content !== null && typeof content === 'object' && !Array.isArray(content)
+      ? (content.methodology as Record<string, unknown> | null)
+      : null;
+  const pairKey =
+    methodology !== null && typeof methodology.pair_key === 'string' && methodology.pair_key.length > 0
+      ? methodology.pair_key
+      : null;
+
+  if (pairKey === null) {
+    return { ids: [definitionId], status: 'not_paired' };
+  }
+
+  const candidates = await db.definition.findMany({
+    where: {
+      id: { not: definitionId },
+      domainId: definition.domainId,
+      deletedAt: null,
+      content: {
+        path: ['methodology', 'pair_key'],
+        equals: pairKey,
+      },
+    },
+    select: { id: true, content: true },
+  });
+
+  if (candidates.length > 1) {
+    throw new AppError(
+      'Multiple companion vignettes share this pair_key',
+      PAIR_KEY_COMPANION_COLLISION,
+      500,
+      { pairKey, definitionId, candidateCount: candidates.length },
+    );
+  }
+
+  if (candidates.length === 0) {
+    return { ids: [definitionId], status: 'companion_missing' };
+  }
+
+  const companion = findPairedCompanion(
+    { id: definition.id, content: definition.content },
+    candidates,
+  );
+
+  if (companion === null || companion === undefined) {
+    throw new AppError(
+      'Paired vignette companion mirroring failed',
+      PAIR_KEY_COMPANION_MIRROR_FAILURE,
+      500,
+      { pairKey, definitionId },
+    );
+  }
+
+  return { ids: [definitionId, companion.id], status: 'paired' };
 }
 
 export async function writeSnapshot(params: {
