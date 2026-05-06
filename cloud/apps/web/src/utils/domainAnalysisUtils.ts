@@ -8,6 +8,8 @@ type TranscriptCountModel = {
   }>;
 };
 
+const transcriptCountFormatter = new Intl.NumberFormat('en-US');
+
 export function parseTemperatureFromSignature(signature: string): number | null {
   if (signature.trim() === '') return null;
   if (isVnewSignature(signature)) {
@@ -47,7 +49,7 @@ export function countAnalyzedTranscripts(
   models: TranscriptCountModel[],
   selectedModelIds?: string[],
 ): number {
-  const selectedModels = selectedModelIds != null && selectedModelIds.length > 0
+  const selectedModels = selectedModelIds != null
     ? models.filter((model) => selectedModelIds.includes(model.model))
     : models;
 
@@ -59,7 +61,7 @@ export function countAnalyzedTranscripts(
 }
 
 function formatTranscriptCount(transcriptCount: number): string {
-  return `${transcriptCount} transcript${transcriptCount === 1 ? '' : 's'} analyzed.`;
+  return `${transcriptCountFormatter.format(transcriptCount)} transcript${transcriptCount === 1 ? '' : 's'} analyzed.`;
 }
 
 export function getCacheStatusCopy(
