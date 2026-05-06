@@ -137,7 +137,26 @@ describe('DomainCoverage Page', () => {
         }];
       }
       if (operationName === 'LlmModels') {
-        return [{ data: { llmModels: [] }, fetching: false, error: undefined }];
+        return [{
+          data: {
+            llmModels: [
+              {
+                modelId: 'model-a',
+                displayName: 'Model A',
+                status: 'ACTIVE',
+                isDefault: true,
+              },
+              {
+                modelId: 'model-b',
+                displayName: 'Model B',
+                status: 'ACTIVE',
+                isDefault: true,
+              },
+            ],
+          },
+          fetching: false,
+          error: undefined,
+        }];
       }
       if (operationName === 'DomainValueCoverageLegacy') {
         const legacyCoverage = coverageByDomain[args.variables.domainId];
@@ -155,9 +174,10 @@ describe('DomainCoverage Page', () => {
     });
 
     await waitFor(() => {
+      expect(screen.getByRole('button', { name: /domain: domain a/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /signature: temp 0/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /models: default — 2 models/i })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /copy coverage table as image/i })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Model A' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Model B' })).toBeInTheDocument();
     });
   });
 
@@ -167,8 +187,18 @@ describe('DomainCoverage Page', () => {
       renderCoveragePage();
     });
 
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /signature: temp 0/i })).toBeInTheDocument();
+    });
+
     await act(async () => {
-      await user.selectOptions(screen.getByRole('combobox', { name: 'Batch Signature' }), 'vnewt0.7');
+      await user.click(screen.getByRole('button', { name: /signature: temp 0/i }));
+    });
+
+    const signatureOption = await screen.findByRole('option', { name: 'Temp 0.7' });
+
+    await act(async () => {
+      await user.click(signatureOption);
     });
 
     await waitFor(() => {
@@ -177,6 +207,7 @@ describe('DomainCoverage Page', () => {
           variables: expect.objectContaining({
             domainId: 'domain-a',
             signature: 'vnewt0.7',
+            modelIds: ['model-a', 'model-b'],
           }),
         }),
       );
@@ -197,6 +228,7 @@ describe('DomainCoverage Page', () => {
           variables: expect.objectContaining({
             domainId: 'domain-a',
             signature: 'vnewt0',
+            modelIds: ['model-a', 'model-b'],
           }),
         }),
       );
@@ -210,6 +242,28 @@ describe('DomainCoverage Page', () => {
       if (operationName === 'DomainAvailableSignatures') {
         return [{
           data: { domainAvailableSignatures: signaturesByDomain[args.variables.domainId] },
+          fetching: false,
+          error: undefined,
+        }];
+      }
+      if (operationName === 'LlmModels') {
+        return [{
+          data: {
+            llmModels: [
+              {
+                modelId: 'model-a',
+                displayName: 'Model A',
+                status: 'ACTIVE',
+                isDefault: true,
+              },
+              {
+                modelId: 'model-b',
+                displayName: 'Model B',
+                status: 'ACTIVE',
+                isDefault: true,
+              },
+            ],
+          },
           fetching: false,
           error: undefined,
         }];
@@ -228,8 +282,18 @@ describe('DomainCoverage Page', () => {
       renderCoveragePage();
     });
 
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /signature: temp 0/i })).toBeInTheDocument();
+    });
+
     await act(async () => {
-      await user.selectOptions(screen.getByRole('combobox', { name: 'Batch Signature' }), 'vnewt0.7');
+      await user.click(screen.getByRole('button', { name: /signature: temp 0/i }));
+    });
+
+    const fallbackSignatureOption = await screen.findByRole('option', { name: 'Temp 0.7' });
+
+    await act(async () => {
+      await user.click(fallbackSignatureOption);
     });
 
     await waitFor(() => {
