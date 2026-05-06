@@ -210,6 +210,14 @@ Recorded so future audits don't re-flag these.
 | `Cluster{Bar, Dot, Heatmap, Radar}*Plot.tsx` | Alternative views fed into a `viewMode` switch in `ModelGroupsSection.tsx`. |
 | `mutations/run.ts`, `mutations/definition.ts`, `queries/domain.ts` (1–6 line files) | Intentional re-export barrels next to `*/index.ts`. |
 
+## Infrastructure
+
+Tracking infrastructure that protects against dedup-induced (or any) drift in user-facing report output.
+
+| ID | Project | Status | Notes |
+|---|---|---|---|
+| DEDUP-INFRA-1 | Report snapshot check | Live in PR #928 | Locks the GraphQL responses for every Models-nav page at `signature=vnewtd`, all domains, default models. CI runs on every push to `main` and on a 6h cron. Required repo secret: `PROD_API_KEY`. Fixtures in `cloud/tests/snapshot-baselines/`. Verify locally with `npm run verify:report-snapshots` from `cloud/`. |
+
 ## Resolved
 
 ### Cluster consolidations
