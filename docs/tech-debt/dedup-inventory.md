@@ -17,6 +17,23 @@ When a PR resolves (or partially resolves) a cluster:
 
 If you find a new cluster, add it as a new `DEDUP-<n>` row at the bottom of Active Inventory and write a detail section. Don't renumber existing rows — the IDs are stable references.
 
+## Preserve — do not regress
+
+These user-facing surfaces must not change as a side effect of any dedup PR. If a cluster is suspected to feed these surfaces, snapshot the output before the change and verify byte-equivalent output after.
+
+- **Models reports** — visible output unchanged
+- **Domains reports** — visible output unchanged
+
+Clusters in this catalog that likely touch these surfaces (cross-check before scoping a PR):
+
+- DEDUP-6 — snapshot builder twin (domain-analysis side)
+- DEDUP-14 — `DomainAnalysisLegacy` GraphQL query
+- DEDUP-10 — decision-summary utility sprawl
+- DEDUP-5 — `analysis-v2/` stalled migration (depending on which pages consume v2)
+- DEDUP-4 — Run / Analysis component family (if Models / Domains share these primitives)
+
+DEDUP-8 (`isRecord`) is independent of report output — pure type guard.
+
 ## Active Inventory
 
 | ID | Cluster | Slice | Severity | Lift | Status |
