@@ -456,8 +456,8 @@ export function DomainValueShiftHeatmap() {
                           cell == null
                             ? 'border-gray-100 bg-gray-50 text-gray-400'
                             : displayMode === 'shift'
-                              ? getCellToneClass(cell.shift)
-                              : getWinRateToneClass(cell.winRate),
+                              ? getCellTone(cell.shift)
+                              : getWinRateTone(cell.winRate),
                         );
 
                         return (
