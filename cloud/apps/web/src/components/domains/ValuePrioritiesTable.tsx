@@ -162,7 +162,7 @@ export function ValuePrioritiesTable({
       valueKey,
     });
     if (selectedSignature !== null) params.set('signature', selectedSignature);
-    navigate(`/domains/analysis/value-detail?${params.toString()}`);
+    navigate(`/models/win-rate/value-detail?${params.toString()}`);
   };
 
   return (

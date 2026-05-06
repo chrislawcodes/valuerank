@@ -24,8 +24,7 @@ const navItems: NavItem[] = [
     activateWithChildren: true,
     children: [
       { name: 'Model Groups', path: '/models', icon: Cpu, match: 'exact' },
-      { name: 'Domain Analysis', path: '/domains/analysis', icon: BarChart2 },
-      { name: 'Domain Shifts', path: '/models/domain-shifts', icon: BarChart2 },
+      { name: 'Win Rate', path: '/models/win-rate', icon: BarChart2 },
       { name: 'Pressure Sensitivity', path: '/models/pressure-sensitivity', icon: BarChart2 },
     ],
   },

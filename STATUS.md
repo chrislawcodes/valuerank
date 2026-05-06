@@ -90,7 +90,7 @@ Once the above are resolved:
 
 ### Analysis Reports
 - [x] Model Groups page now includes a win-rate similarity table with method toggles for weighted Euclidean, cosine, Spearman, and Kendall, plus a distance/similarity view toggle and per-pair detail drawer.
-- [x] Domain Shifts by Value heatmap implemented at `/models/domain-shifts`; focused tests and web preflight pass.
+- [x] Win Rate page now includes the Domain Shifts report at the bottom of `/models/win-rate`; focused tests and web preflight pass.
 - [x] Domain Shifts readability controls added locally: cells can toggle between shift and raw win rate, and table columns are sortable.
 - [x] Domain Shifts model picker now groups default models first and separates non-default models with `---` before alphabetical non-default options.
 - [x] Model Groups visualization now lives at `/models` under the Models dropdown first item, with the domain selection bar at the top of the page driving the report.
@@ -98,7 +98,7 @@ Once the above are resolved:
 - [x] Domain Shifts by Value now has an `All models` aggregate view, one-decimal formatting throughout, and content-fit Value / Avg Win Rate columns in the local branch.
 - [x] Model Value Preference overview report updated at `/models`; screenshot capture is available, the title now matches the report, the all-domains value priorities table now includes stability circles, and the comparison table stays below it.
 - [x] `/models` reporting now uses the canonical equal-vignette methodology in both tables, with one-decimal display, vignette-weighted cross-domain pooling, and no silent fallback to pooled raw counts when vignette-aware data is missing.
-- [x] Domain Analysis findings controls now live at the top of the page, and the model focus selector applies across the model groups, value priorities, dominance, and similarity sections.
+- [x] Win Rate findings controls now live at the top of the page, and the model focus selector applies across the model groups, value priorities, dominance, similarity, and embedded Domain Shifts sections.
 - [x] Value Priorities now uses win rate only, with the retired Full BT toggle removed and the cell dots rendered under the numbers.
 - [x] Pressure Sensitivity page now includes a **Pressure Directional Breakdown** cross-model table showing pushed-for effect, pushed-against effect, gap, and pairs per model. Answers: "Does pressure work equally in both directions?" PR #834.
 - [x] Pressure Sensitivity now uses the standard default-model multi-select, keeps the tooltip anchored while scrolling, and moves the cross-model response table to the bottom of the report.
