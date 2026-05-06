@@ -459,8 +459,7 @@ export function DomainAnalysis() {
             showStabilityDots
           />
           <DominanceSection
-            models={models}
-            defaultModelIds={defaultModelIds}
+            models={visibleModels}
           />
           <PairwiseWinRateMatrix
             models={pairwiseData?.pairwiseWinRates.models ?? []}
