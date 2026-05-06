@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional
 
 from common.errors import ErrorCode, ValidationError, classify_exception
 from common.logging import get_logger
+from common.validation import require_dict, require_field
 
 log = get_logger("generate_scenarios")
 
@@ -161,15 +162,14 @@ def generate_scenario_name(combination: List[Dict[str, Any]]) -> str:
 
 def validate_input(data: Dict[str, Any]) -> None:
     """Validate worker input."""
-    if "definitionId" not in data:
-        raise ValidationError("Missing required field: definitionId")
-    
+    require_field(data, "definitionId")
+
     content = data.get("content")
     if not isinstance(content, dict):
-        raise ValidationError("content must be an object")
+        raise ValidationError(message="content must be an object")
 
     if "template" not in content:
-        raise ValidationError("content.template is required")
+        raise ValidationError(message="content.template is required")
 
 
 def run_generation(data: Dict[str, Any]) -> Dict[str, Any]:

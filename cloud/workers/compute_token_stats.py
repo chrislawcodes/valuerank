@@ -70,6 +70,7 @@ from typing import Any
 
 from common.errors import ErrorCode, ValidationError
 from common.logging import get_logger
+from common.validation import require_field, require_list
 
 log = get_logger("compute_token_stats")
 
@@ -79,14 +80,9 @@ EMA_ALPHA = 0.3
 
 def validate_input(data: dict[str, Any]) -> None:
     """Validate compute token stats input."""
-    if "runId" not in data:
-        raise ValidationError(message="Missing required field: runId")
-
-    if "probeResults" not in data:
-        raise ValidationError(message="Missing required field: probeResults")
-
-    if not isinstance(data["probeResults"], list):
-        raise ValidationError(message="probeResults must be an array")
+    require_field(data, "runId")
+    require_field(data, "probeResults")
+    require_list(data, "probeResults")
 
     # existingStats is optional, defaults to empty dict
 
