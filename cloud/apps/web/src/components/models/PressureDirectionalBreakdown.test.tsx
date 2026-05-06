@@ -186,4 +186,12 @@ describe('PressureDirectionalBreakdown', () => {
     expect(screen.getByRole('tooltip').textContent ?? '').toContain('Ethics');
     fireEvent.blur(ethicsTrigger);
   });
+
+  it('renders the standard copy button for the report capture control', () => {
+    renderBreakdown([createModel('alpha', 'Alpha', 0.2, DOMAINS)]);
+
+    expect(
+      screen.getByRole('button', { name: /copy pressure sensitivity by domain as image/i }),
+    ).toBeDefined();
+  });
 });

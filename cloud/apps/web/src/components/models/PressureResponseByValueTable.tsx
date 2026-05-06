@@ -159,7 +159,7 @@ function SortHeaderContent({
   tooltip,
   numeric,
 }: {
-  label: string;
+  label: ReactNode;
   ariaLabel: string;
   sortKey: SortKey;
   activeSortKey: SortKey;
@@ -195,7 +195,7 @@ function SortHeaderContent({
 }
 
 function SortHeaderCell(props: {
-  label: string;
+  label: ReactNode;
   ariaLabel: string;
   sortKey: SortKey;
   activeSortKey: SortKey;
@@ -233,6 +233,15 @@ function EffectCell({ value }: { value: number | null }) {
     <TableCell className="text-right text-sm">
       <span className={`font-mono ${colorClass}`}>{formatSignedPoints(value)}</span>
     </TableCell>
+  );
+}
+
+function WrappedHighPressureLabel({ suffix }: { suffix: string }) {
+  return (
+    <span className="inline-flex flex-col items-end leading-tight text-right">
+      <span className="whitespace-nowrap">High pressure</span>
+      <span>{suffix}</span>
+    </span>
   );
 }
 
@@ -280,10 +289,7 @@ export function PressureResponseByValueTable({ models }: Props) {
   if (models.length === 0) {
     return (
       <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
-        <div className="space-y-1">
-          <h2 className="text-lg font-semibold text-gray-900">Win Rate by Pressure Conditions by Value</h2>
-          <p className="text-sm text-gray-600">No by-value data is available for the selected models.</p>
-        </div>
+        <h2 className="text-lg font-semibold text-gray-900">Win Rate by Pressure Conditions by Value</h2>
       </section>
     );
   }
@@ -293,13 +299,6 @@ export function PressureResponseByValueTable({ models }: Props) {
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="space-y-1">
           <h2 className="text-lg font-semibold text-gray-900">Win Rate by Pressure Conditions by Value</h2>
-          <p className="text-sm text-gray-600">
-            Averaged across {models.length} selected model{models.length === 1 ? '' : 's'} in the page filter.
-          </p>
-          <p className="text-sm text-gray-600">
-            Each row is one value. The columns show how often the selected model set picks that value across
-            its 9 pairings, broken down by what the prompt was doing.
-          </p>
           <p className="text-xs text-gray-500">
             Each pressure cell is pooled from its vignette-level observations, then counted once in the row summary.
             The pair rows are averaged equally across the 9 pairs containing this value.
@@ -364,7 +363,7 @@ export function PressureResponseByValueTable({ models }: Props) {
                 numeric
               />
               <SortHeaderCell
-                label="High pressure on value"
+                label={<WrappedHighPressureLabel suffix="on value" />}
                 ariaLabel="High pressure on value win rate"
                 sortKey="highPressureOnThisValue"
                 activeSortKey={sortKey}
@@ -380,7 +379,7 @@ export function PressureResponseByValueTable({ models }: Props) {
                 numeric
               />
               <SortHeaderCell
-                label="High pressure on value effect"
+                label={<WrappedHighPressureLabel suffix="on value effect" />}
                 ariaLabel="High pressure on value effect"
                 sortKey="highPressureOnValueEffect"
                 activeSortKey={sortKey}
@@ -389,7 +388,7 @@ export function PressureResponseByValueTable({ models }: Props) {
                 numeric
               />
               <SortHeaderCell
-                label="High pressure on opposing value"
+                label={<WrappedHighPressureLabel suffix="on opposing value" />}
                 ariaLabel="High pressure on opposing value win rate"
                 sortKey="highPressureOnOpposingValue"
                 activeSortKey={sortKey}
@@ -405,7 +404,7 @@ export function PressureResponseByValueTable({ models }: Props) {
                 numeric
               />
               <SortHeaderCell
-                label="High pressure on opposing value effect"
+                label={<WrappedHighPressureLabel suffix="on opposing value effect" />}
                 ariaLabel="High pressure on opposing value effect"
                 sortKey="highPressureOnOpposingValueEffect"
                 activeSortKey={sortKey}
@@ -433,10 +432,7 @@ export function PressureResponseByValueTable({ models }: Props) {
 
       <div className="mt-4 space-y-3 text-sm text-gray-600">
         <h3 className="text-sm font-semibold text-gray-900">Reading this table</h3>
-        <p>
-          Each row is one value. The columns show how often the selected model set picks that value across its
-          9 pairings, broken down by what the prompt was doing.
-        </p>
+        <p>Compare the average, balanced, and pressure-skewed rates to see where the selected models shift most.</p>
         <p>
           The two push columns are most informative when compared against the balanced rate. If &quot;high pressure on
           value&quot; is well above balanced, the prompt successfully pushes the model toward this value. If
