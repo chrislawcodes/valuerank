@@ -24,6 +24,7 @@ import {
 import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/llm';
 import { ModelGroupsSection } from '../components/domains/ModelGroupsSection';
 import { ModelSimilarityTableSection } from '../components/models/ModelSimilarityTableSection';
+import { type CalculationMethod } from '../components/models/ModelSimilarityMetrics';
 import { useDomains } from '../hooks/useDomains';
 import { VALUES, type ModelEntry, type ValueKey } from '../data/domainAnalysisData';
 import {
@@ -78,6 +79,8 @@ export function ModelsGroups() {
   const [selectedSignature, setSelectedSignature] = useState<string>(searchParams.get('signature') ?? '');
   const [selectedModelIds, setSelectedModelIds] = useState<string[] | null>(null);
   const [useLegacyQuery, setUseLegacyQuery] = useState(false);
+  const [clusteringMethod, setClusteringMethod] = useState<'upgma' | 'ward'>('upgma');
+  const [similarityMethod, setSimilarityMethod] = useState<CalculationMethod>('weighted-euclidean');
 
   const [{ data: signatureData, fetching: signaturesLoading, error: signaturesError }] = useQuery<
     DomainAvailableSignaturesQueryResult,
@@ -298,10 +301,17 @@ export function ModelsGroups() {
       ) : (
         <div className="space-y-6">
           <ModelGroupsSection
-            clusterAnalysis={data?.domainAnalysis.clusterAnalysis}
+            clusterAnalysisByMethod={data?.domainAnalysis.clusterAnalysisByMethod}
+            distanceMethod={similarityMethod}
             models={filteredModels}
+            clusteringMethod={clusteringMethod}
+            onClusteringMethodChange={setClusteringMethod}
           />
-          <ModelSimilarityTableSection models={filteredModels} />
+          <ModelSimilarityTableSection
+            models={filteredModels}
+            method={similarityMethod}
+            onMethodChange={setSimilarityMethod}
+          />
         </div>
       )}
     </div>

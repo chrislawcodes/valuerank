@@ -18,12 +18,19 @@ import { PairDetailDrawer } from './ModelSimilarityPairDetailDrawer';
 
 type ModelSimilarityTableSectionProps = {
   models: ModelEntry[];
+  method?: CalculationMethod;
+  onMethodChange?: (method: CalculationMethod) => void;
 };
 
-export function ModelSimilarityTableSection({ models }: ModelSimilarityTableSectionProps) {
+export function ModelSimilarityTableSection({ models, method: methodProp, onMethodChange }: ModelSimilarityTableSectionProps) {
   const tableRef = useRef<HTMLDivElement>(null);
   const [showHelp, setShowHelp] = useState(false);
-  const [method, setMethod] = useState<CalculationMethod>('weighted-euclidean');
+  const [internalMethod, setInternalMethod] = useState<CalculationMethod>('weighted-euclidean');
+  const method = methodProp ?? internalMethod;
+  const setMethod = (m: CalculationMethod) => {
+    setInternalMethod(m);
+    onMethodChange?.(m);
+  };
   const [view, setView] = useState<MetricView>('distance');
   const [activePair, setActivePair] = useState<{ left: string; right: string } | null>(null);
 
@@ -38,9 +45,20 @@ export function ModelSimilarityTableSection({ models }: ModelSimilarityTableSect
       rows.set(left.model, row);
     }
 
-    return { rows };
-  }, [models, method]);
+    const similarities: number[] = [];
+    for (const row of rows.values()) {
+      for (const metric of row.values()) {
+        if (metric != null && metric.usedValueCount > 0 && metric.similarity != null) {
+          similarities.push(metric.similarity);
+        }
+      }
+    }
 
+    const minSimilarity = similarities.length > 0 ? Math.min(...similarities) : 0;
+    const maxSimilarity = similarities.length > 0 ? Math.max(...similarities) : 1;
+
+    return { rows, minSimilarity, maxSimilarity };
+  }, [models, method]);
   const activeMetric = useMemo(() => {
     if (activePair == null) return null;
     const left = models.find((model) => model.model === activePair.left) ?? null;
@@ -171,7 +189,11 @@ export function ModelSimilarityTableSection({ models }: ModelSimilarityTableSect
                     const isSelf = rowModel.model === colModel.model;
                     const isUnavailable = metric == null || metric.usedValueCount === 0;
                     const displayValue = formatViewValue(metric, view);
-                    const intensity = getCellIntensity(metric);
+                    const rawIntensity = getCellIntensity(metric);
+                    const { minSimilarity, maxSimilarity } = matrix;
+                    const intensity = maxSimilarity === minSimilarity
+                      ? rawIntensity
+                      : (rawIntensity - minSimilarity) / (maxSimilarity - minSimilarity);
                     return (
                       <td
                         key={colModel.model}
