@@ -355,7 +355,7 @@ describe('PressureSensitivity page', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText('Pressure Response by Value')).toBeDefined();
+    expect(screen.getByText('Win Rate by Pressure Conditions by Value')).toBeDefined();
     expect(screen.getByText(/Averaged across 2 selected models/)).toBeDefined();
   });
 

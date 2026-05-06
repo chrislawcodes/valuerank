@@ -43,7 +43,7 @@ describe('PressureSensitivityCrossValueMap', () => {
   it('uses pressureResponse for the cell title and label', () => {
     render(<PressureSensitivityCrossValueMap models={[createModel(0.4)]} />);
 
-    expect(screen.getByText('Pressure response by value pair')).toBeDefined();
+    expect(screen.getByText('Pressure Response by Value Pair by Model')).toBeDefined();
     expect(screen.getByTitle('Model A alpha::beta: Pressure response = 0.400')).toBeDefined();
     expect(screen.getByText('0.40')).toBeDefined();
   });

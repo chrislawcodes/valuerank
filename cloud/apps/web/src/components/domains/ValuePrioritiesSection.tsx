@@ -29,7 +29,7 @@ export function ValuePrioritiesSection({
       <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <div className="flex items-center gap-1.5">
-            <h2 className="text-base font-medium text-gray-900">Value Priorities</h2>
+            <h2 className="text-base font-medium text-gray-900">Win Rate by Values by Model</h2>
             <Button
               variant="ghost"
               size="icon"

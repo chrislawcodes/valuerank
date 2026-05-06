@@ -95,7 +95,7 @@ describe('DominanceSection', () => {
       await Promise.resolve();
     });
 
-    expect(screen.getByRole('heading', { name: 'Ranking and Cycles' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Dominance Graph' })).toBeInTheDocument();
     expect(
       screen.getByText(
         'Directed value graph for one selected AI: arrows point from stronger value to weaker value.',

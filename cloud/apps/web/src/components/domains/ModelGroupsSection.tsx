@@ -140,7 +140,7 @@ export function ModelGroupsSection({
     <section className="rounded-lg border border-gray-200 bg-white p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-1.5">
-          <h2 className="text-base font-medium text-gray-900">Model Groups</h2>
+          <h2 className="text-base font-medium text-gray-900">Model Clusters</h2>
           <Button
             variant="ghost"
             size="icon"

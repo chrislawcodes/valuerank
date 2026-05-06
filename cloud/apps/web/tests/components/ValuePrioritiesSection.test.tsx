@@ -32,7 +32,7 @@ describe('ValuePrioritiesSection', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('heading', { name: 'Value Priorities' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Win Rate by Values by Model' })).toBeInTheDocument();
     expect(screen.queryByText(/model groups/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /full bt/i })).not.toBeInTheDocument();
   });

@@ -144,7 +144,7 @@ describe('PressureResponseByValueTable', () => {
     render(<PressureResponseByValueTable models={[createModel('Model A', createSortFixture())]} />);
 
     expect(
-      screen.getByRole('button', { name: /copy pressure response by value as image/i }),
+      screen.getByRole('button', { name: /copy win rate by pressure conditions by value as image/i }),
     ).toBeDefined();
   });
 

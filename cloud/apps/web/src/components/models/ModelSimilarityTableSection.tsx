@@ -84,7 +84,7 @@ export function ModelSimilarityTableSection({ models, method: methodProp, onMeth
     <section className="rounded-lg border border-gray-200 bg-white p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-1.5">
-          <h2 className="text-base font-medium text-gray-900">Model Similarity Table</h2>
+          <h2 className="text-base font-medium text-gray-900">Similarity by Model</h2>
           <Button
             variant="ghost"
             size="icon"
