@@ -17,7 +17,7 @@ import {
   buildDomainShiftSignatureOptions,
   formatEvidenceWeight,
   formatPercent,
-  formatPointShift,
+  formatReportPointShift,
   getCellTone,
   getDefaultDomainShiftSignature,
   getNextDomainShiftSort,
@@ -34,6 +34,7 @@ export {
   formatEvidenceWeight,
   formatPercent,
   formatPointShift,
+  formatReportPointShift,
   getDefaultDomainShiftSignature,
   sortHeatmapRows,
 } from './domainValueShiftHeatmapUtils';
@@ -151,8 +152,8 @@ function Cell({
     return <span className="inline-flex w-full justify-center text-xs font-semibold text-gray-400">n/a</span>;
   }
 
-  const detail = `${valueLabel} in ${cell.domainName}: raw win rate ${formatPercent(cell.winRate)}; shift ${formatPointShift(cell.shift)} versus this value's equal-domain average; average ${formatPercent(cell.averageWinRate)}; ${evidenceLabel} ${formatEvidenceWeight(cell.evidenceWeight)}.`;
-  const visibleValue = displayMode === 'shift' ? formatPointShift(cell.shift) : formatPercent(cell.winRate);
+  const detail = `${valueLabel} in ${cell.domainName}: raw win rate ${formatPercent(cell.winRate)}; shift ${formatReportPointShift(cell.shift)} versus this value's equal-domain average; average ${formatPercent(cell.averageWinRate)}; ${evidenceLabel} ${formatEvidenceWeight(cell.evidenceWeight)}.`;
+  const visibleValue = displayMode === 'shift' ? formatReportPointShift(cell.shift) : formatPercent(cell.winRate);
 
   return (
     <span className="inline-flex w-full justify-center text-xs font-semibold" title={detail} aria-label={detail}>

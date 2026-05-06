@@ -8,6 +8,7 @@ import {
   buildDomainShiftModelOptions,
   formatEvidenceWeight,
   formatPointShift,
+  formatReportPointShift,
   formatPercent,
   getDefaultDomainShiftSignature,
   getDefaultModelId,
@@ -238,6 +239,9 @@ describe('DomainValueShiftHeatmap helpers', () => {
     expect(formatPointShift(12.4)).toBe('+12');
     expect(formatPointShift(-8.6)).toBe('-9');
     expect(formatPointShift(0.2)).toBe('0');
+    expect(formatReportPointShift(12.4)).toBe('+12.4');
+    expect(formatReportPointShift(-8.6)).toBe('-8.6');
+    expect(formatReportPointShift(0.2)).toBe('+0.2');
     expect(formatPercent(42.34)).toBe('42.3%');
     expect(formatEvidenceWeight(null)).toBe('—');
     expect(formatEvidenceWeight(0)).toBe('—');
@@ -375,7 +379,7 @@ describe('DomainValueShiftHeatmap page', () => {
     expect(screen.getByRole('button', { name: /signature: latest @ default/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Sort by Avg Win Rate descending/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Sort by Value descending/i })).toHaveTextContent('Value↓');
-    expect(screen.getByLabelText(/Achievement in City Planning: raw win rate 80\.0%; shift \+20/i)).toHaveAccessibleName(
+    expect(screen.getByLabelText(/Achievement in City Planning: raw win rate 80\.0%; shift \+20\.0/i)).toHaveAccessibleName(
       /average 60\.0%; average evidence vignettes —/i,
     );
     expect(screen.getByText('Cell metric')).toBeInTheDocument();
@@ -415,7 +419,7 @@ describe('DomainValueShiftHeatmap page', () => {
 
     renderPage();
 
-    expect(await screen.findByText('+20')).toBeInTheDocument();
+    expect(await screen.findByText('+20.0')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Raw win rate' }));
 
     expect(screen.getByRole('button', { name: 'Raw win rate' })).toHaveAttribute('aria-pressed', 'true');
