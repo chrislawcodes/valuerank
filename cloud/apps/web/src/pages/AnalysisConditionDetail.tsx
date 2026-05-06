@@ -115,7 +115,8 @@ export function AnalysisConditionDetail() {
   // (Definition.pairedSibling) over the legacy run-proximity heuristic. Order:
   //   1. ?companionRunId= URL hint (caller already picked a run)
   //   2. run.companionRunId (run config has a direct link)
-  //   3. The most-recent COMPLETED non-aggregate run of run.definition.pairedSibling
+  //   3. The most-recent COMPLETED run of run.definition.pairedSibling,
+  //      preferring the same aggregate kind when possible
   const directCompanionRunId = run?.companionRunId ?? null;
   const pairedSiblingDefinitionId = run?.definition?.pairedSibling?.id ?? null;
   const hasExplicitCompanionId = companionRunIdHint != null || directCompanionRunId != null;
@@ -130,18 +131,31 @@ export function AnalysisConditionDetail() {
 
   const siblingFallbackRunId = useMemo(() => {
     if (siblingRuns == null || siblingRuns.length === 0) return null;
-    const completedNonAggregate = siblingRuns.filter(
-      (candidate) => candidate.status === 'COMPLETED'
-        && candidate.id !== run?.id
-        && !candidate.tags?.some((tag) => tag.name === 'Aggregate'),
+    const currentIsAggregate = run?.isAggregate === true
+      || run?.tags?.some((tag) => tag.name === 'Aggregate') === true;
+    const isAggregateKind = (candidate: Run) => (
+      candidate.isAggregate === true
+      || candidate.tags?.some((tag) => tag.name === 'Aggregate') === true
     );
-    const pool = completedNonAggregate.length > 0 ? completedNonAggregate : siblingRuns;
-    const sorted = [...pool].sort((left, right) => (
-      new Date(right.completedAt ?? right.createdAt).getTime()
-      - new Date(left.completedAt ?? left.createdAt).getTime()
-    ));
+    const completedSiblingRuns = siblingRuns.filter(
+      (candidate) => candidate.status === 'COMPLETED' && candidate.id !== run?.id,
+    );
+    const sameKindRuns = completedSiblingRuns.filter(
+      (candidate) => isAggregateKind(candidate) === currentIsAggregate,
+    );
+    const pool = sameKindRuns.length > 0
+      ? sameKindRuns
+      : completedSiblingRuns;
+    const sorted = [...pool].sort((left, right) => {
+      const leftMatchesCurrentKind = isAggregateKind(left) === currentIsAggregate;
+      const rightMatchesCurrentKind = isAggregateKind(right) === currentIsAggregate;
+
+      return Number(rightMatchesCurrentKind) - Number(leftMatchesCurrentKind)
+        || new Date(right.completedAt ?? right.createdAt).getTime()
+        - new Date(left.completedAt ?? left.createdAt).getTime();
+    });
     return sorted[0]?.id ?? null;
-  }, [run?.id, siblingRuns]);
+  }, [run?.id, run?.isAggregate, run?.tags, siblingRuns]);
 
   const resolvedCompanionRunId = companionRunIdHint ?? directCompanionRunId ?? siblingFallbackRunId ?? null;
 
@@ -233,7 +247,7 @@ export function AnalysisConditionDetail() {
 
       rows.push(buildDetailRow(
         'pooled',
-        'Pooled',
+        'Both directions combined',
         pooledTranscripts,
         makeBaseSearch({
           companionRunId,
