@@ -223,17 +223,6 @@ export function Domains() {
         <Loading size="lg" text="Loading domains page..." />
       ) : (
         <div className="space-y-6">
-          {selectedDomain != null && (
-            <div className="flex items-center justify-end">
-              <Link
-                to={`/domains/start/${selectedDomain.id}`}
-                className="inline-flex items-center justify-center rounded-lg border border-teal-600 bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2"
-              >
-                Add Paired Batches for all Vignettes
-              </Link>
-            </div>
-          )}
-
           {selectedDomain != null ? (
             <section className="rounded-lg border border-gray-200 bg-white p-4">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -243,7 +232,15 @@ export function Domains() {
                     Batch density across Schwartz value pairs.
                   </p>
                 </div>
-                <CopyVisualButton targetRef={coverageRef} label="coverage table" />
+                <div className="flex flex-wrap items-center gap-2">
+                  <Link
+                    to={`/domains/start/${selectedDomain.id}`}
+                    className="inline-flex items-center justify-center rounded-lg border border-teal-600 bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2"
+                  >
+                    Add Paired Batches for all Vignettes
+                  </Link>
+                  <CopyVisualButton targetRef={coverageRef} label="coverage table" />
+                </div>
               </div>
               <CoverageMatrix
                 ref={coverageRef}
