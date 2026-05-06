@@ -202,7 +202,7 @@ describe('OverviewTab', () => {
     );
 
     expect(screen.getByText('Paired Run Comparison')).toBeInTheDocument();
-    expect(screen.getByText(/Paired analysis has moved/i)).toBeInTheDocument();
+    expect(screen.getByText(/only available in Paired vignettes mode/i)).toBeInTheDocument();
   });
 
   it('keeps one decimal for non-integer summary percentages', () => {

@@ -5,7 +5,7 @@
  */
 
 import { useEffect, useMemo } from 'react';
-import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from 'urql';
 import { ArrowLeft } from 'lucide-react';
 import { formatTrialSignature } from '@valuerank/shared/trial-signature';
@@ -13,7 +13,9 @@ import { Button } from '../components/ui/Button';
 import { Loading } from '../components/ui/Loading';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { AnalysisPanel } from '../components/analysis/AnalysisPanel';
+import { findCompanionPairedRun } from '../components/analysis/PairedRunComparisonCard';
 import { useAnalysis } from '../hooks/useAnalysis';
+import { useInfiniteRuns } from '../hooks/useInfiniteRuns';
 import { useRun } from '../hooks/useRun';
 import { getRunDefinitionContent } from '../utils/runDefinitionContent';
 import type { AnalysisTab } from '../components/analysis/tabs';
@@ -127,6 +129,20 @@ export function AnalysisDetail() {
     });
   };
 
+  const handleModeChange = (mode: AnalysisDetailMode) => {
+    if (mode === analysisMode) {
+      return;
+    }
+
+    const next = buildAnalysisDetailParams(searchParams, activeTab, mode, {
+      preserveCoverageContext: true,
+    });
+    navigate({
+      pathname: buildAnalysisDetailPath(ANALYSIS_BASE_PATH, id || ''),
+      search: next.toString().length > 0 ? `?${next.toString()}` : '',
+    });
+  };
+
   const { run, loading, error } = useRun({
     id: id || '',
     pause: !id,
@@ -154,27 +170,57 @@ export function AnalysisDetail() {
     enablePolling: false,
     analysisStatus: run?.analysisStatus ?? null,
   });
-  // Paired analysis has its own page at /vignette/:definitionId/paired.
-  // We keep companionAnalysis/companionRun as null here so AnalysisPanel
-  // never enters paired-mode rendering on the run-centric view.
-  const companionAnalysis = null;
-  const companionRun = null;
-
-  // Legacy ?mode=paired URL handling — paired analysis lives at /vignette/:definitionId/paired now.
-  // Run as effect (always called, regardless of run state) to satisfy hook ordering rules.
-  const earlyDefinitionContent = run != null ? getRunDefinitionContent(run) : null;
-  const earlyMethodology = earlyDefinitionContent != null ? getDefinitionMethodology(earlyDefinitionContent) : null;
-  const earlyPairedDefinitionId =
-    earlyMethodology?.pair_key != null ? run?.definition?.id ?? null : null;
-  const requestedPairedMode = analysisMode === 'paired';
+  const hasDirectCompanionRunId = typeof run?.companionRunId === 'string' && run.companionRunId.trim().length > 0;
+  const { run: directCompanionRun, loading: directCompanionLoading } = useRun({
+    id: run?.companionRunId ?? '',
+    pause: !hasDirectCompanionRunId,
+    enablePolling: true,
+  });
+  const directCompanionResolved = directCompanionRun?.id === run?.id ? null : directCompanionRun;
+  const shouldUseLegacyCompanionSearch = run != null && (
+    !hasDirectCompanionRunId
+    || (!directCompanionLoading && directCompanionResolved == null)
+  );
+  const legacyCompanionSearch = useInfiniteRuns({
+    runCategory: run?.runCategory,
+    runType: 'all',
+    pause: !shouldUseLegacyCompanionSearch,
+  });
+  const legacyCompanionRun = run == null || !shouldUseLegacyCompanionSearch
+    ? null
+    : findCompanionPairedRun(run, legacyCompanionSearch.runs);
   useEffect(() => {
-    if (!requestedPairedMode) {
+    if (!shouldUseLegacyCompanionSearch) {
       return;
     }
-    if (earlyPairedDefinitionId != null) {
-      navigate(`/vignette/${earlyPairedDefinitionId}/paired`, { replace: true });
+    if (legacyCompanionRun != null) {
+      return;
     }
-  }, [navigate, earlyPairedDefinitionId, requestedPairedMode]);
+    if (!legacyCompanionSearch.hasNextPage || legacyCompanionSearch.loadingMore) {
+      return;
+    }
+    legacyCompanionSearch.loadMore();
+  }, [
+    legacyCompanionRun,
+    legacyCompanionSearch.hasNextPage,
+    legacyCompanionSearch.loadingMore,
+    legacyCompanionSearch.loadMore,
+    shouldUseLegacyCompanionSearch,
+  ]);
+  const companionRun = directCompanionResolved ?? legacyCompanionRun;
+  const { analysis: companionAnalysis } = useAnalysis({
+    runId: companionRun?.id ?? '',
+    pause: analysisMode !== 'paired' || companionRun == null,
+    enablePolling: false,
+    analysisStatus: companionRun?.analysisStatus ?? null,
+  });
+  // Load companion run with full transcript data so the conditions matrix can
+  // score both vignette orientations (the list query omits transcripts).
+  const { run: companionRunWithTranscripts } = useRun({
+    id: companionRun?.id ?? '',
+    pause: analysisMode !== 'paired' || companionRun == null,
+    enablePolling: false,
+  });
 
   // Loading state
   if (loading && !run) {
@@ -257,13 +303,8 @@ export function AnalysisDetail() {
   );
   const methodology = getDefinitionMethodology(definitionContent);
   const runLaunchMode = run.config?.jobChoiceLaunchMode;
+  const isPairedBatch = runLaunchMode === 'PAIRED_BATCH';
   const launchModeLabel = methodology?.pair_key != null ? formatLaunchModeLabel(runLaunchMode) : null;
-  const pairedDefinitionId = methodology?.pair_key != null ? run.definition?.id ?? null : null;
-  const legacyCompanionRunId = typeof run.companionRunId === 'string' && run.companionRunId.length > 0
-    ? run.companionRunId
-    : (typeof run.config?.companionRunId === 'string' && run.config.companionRunId.length > 0
-      ? run.config.companionRunId
-      : null);
   const handleSingleVignetteChange = (nextRunId: string) => {
     if (!nextRunId || nextRunId === run.id) {
       return;
@@ -278,11 +319,6 @@ export function AnalysisDetail() {
     });
   };
 
-  const showOrphanedPairedAlert =
-    requestedPairedMode && methodology?.pair_key != null && pairedDefinitionId == null;
-  const showLegacyCompanionRunAlert =
-    requestedPairedMode && methodology?.pair_key == null && legacyCompanionRunId != null;
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -296,37 +332,6 @@ export function AnalysisDetail() {
           currentSignature={trialSignature}
         />
       </div>
-      {pairedDefinitionId != null && (
-        <div className="rounded-lg border border-teal-200 bg-teal-50 px-4 py-3">
-          <p className="text-sm text-teal-900">
-            Paired analysis for this vignette has moved to its own page.{' '}
-            <Link
-              to={`/vignette/${pairedDefinitionId}/paired`}
-              className="font-medium text-teal-700 underline hover:text-teal-900"
-            >
-              View paired analysis
-            </Link>
-            .
-          </p>
-        </div>
-      )}
-      {showOrphanedPairedAlert && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3">
-          <p className="text-sm text-amber-900">
-            A paired analysis for this run may exist, but this run is not linked to a vignette,
-            so we cannot navigate there automatically. Search for the vignette by name on the
-            vignettes page to open the paired view.
-          </p>
-        </div>
-      )}
-      {showLegacyCompanionRunAlert && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3">
-          <p className="text-sm text-amber-900">
-            Legacy paired analysis URLs without canonical pair metadata are deprecated. The new
-            paired report is organized by vignette — search for this vignette by name to open it.
-          </p>
-        </div>
-      )}
 
       {!run.analysisStatus ? (
         <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
@@ -347,12 +352,13 @@ export function AnalysisDetail() {
             analysisMode={analysisMode}
             coverageBatchCount={coverageBatchCount}
             coveragePairedBatchCount={coveragePairedBatchCount}
+            onAnalysisModeChange={handleModeChange}
             activeTab={activeTab}
             onTabChange={handleTabChange}
             onSingleVignetteChange={handleSingleVignetteChange}
-            companionAnalysis={companionAnalysis}
+            companionAnalysis={analysisMode === 'paired' ? companionAnalysis : null}
             currentRun={run}
-            companionRun={companionRun}
+            companionRun={isPairedBatch ? (companionRunWithTranscripts ?? companionRun) : null}
             definitionContent={definitionContent}
             transcripts={run.transcripts}
             isOldVersion={isOldVersion}
