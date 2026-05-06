@@ -123,8 +123,8 @@ function DisplayModeToggle({
   onChange: (displayMode: DomainShiftDisplayMode) => void;
 }) {
   return (
-    <fieldset className="space-y-2">
-      <legend className="block text-sm font-medium text-gray-700">Cell metric</legend>
+    <div className="flex flex-wrap items-center gap-3">
+      <span className="text-sm font-medium text-gray-700">Cell metric</span>
       <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
         {([
           ['shift', 'Shift vs avg'],
@@ -148,7 +148,7 @@ function DisplayModeToggle({
           </Button>
         ))}
       </div>
-    </fieldset>
+    </div>
   );
 }
 
@@ -208,11 +208,6 @@ export function DomainShiftsReportSection({
     () => sortHeatmapRows(heatmap.rows, sort, displayMode),
     [displayMode, heatmap.rows, sort],
   );
-  const selectedModelsLabel = useMemo(() => {
-    if (selectedModels.length === 0) return 'No models selected';
-    if (selectedModels.length === 1) return selectedModels[0]?.label ?? 'Selected model';
-    return isDefaultSelection ? 'Default models' : `${selectedModels.length} selected models`;
-  }, [isDefaultSelection, selectedModels]);
 
   if (errorMessage != null) {
     return <ErrorMessage message={`Failed to load domain shifts: ${errorMessage}`} />;
@@ -261,29 +256,21 @@ export function DomainShiftsReportSection({
 
   return (
     <section className="space-y-6 rounded-xl border border-gray-200 bg-white p-4 md:p-5">
-      <div className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-teal-700">Models</p>
-        <h2 className="text-2xl font-serif font-medium text-[#1A1A1A]">Win Rate by Domain by Value</h2>
-        <p className="max-w-3xl text-sm text-gray-600">
-          Exploratory heatmap for domain-associated value shifts, using the current Win Rate filters above.
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-2">
+          <h2 className="text-lg font-semibold text-gray-900">Win Rate by Domain by Value</h2>
+          <p className="max-w-3xl text-sm text-gray-600">
+            Exploratory heatmap for domain-associated value shifts, using the current Win Rate filters above.
+          </p>
+        </div>
+        <CopyVisualButton targetRef={tableRef} label="Win Rate by Domain by Value" />
       </div>
 
-      <div ref={tableRef} className="space-y-4">
-        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">{selectedModelsLabel}</h3>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <DisplayModeToggle displayMode={displayMode} onChange={setDisplayMode} />
-            <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
-              <span className="font-semibold text-gray-800">Metric:</span>{' '}
-              {displayMode === 'shift' ? 'percentage-point shift, not percent change' : 'raw domain win rate'}
-            </div>
-            <CopyVisualButton targetRef={tableRef} label="Win Rate by Domain by Value" />
-          </div>
-        </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <DisplayModeToggle displayMode={displayMode} onChange={setDisplayMode} />
+      </div>
 
+      <div ref={tableRef}>
         <div className="overflow-x-auto rounded border border-gray-100 bg-white p-2">
           <table className="w-full table-auto border-collapse text-xs">
             <colgroup>

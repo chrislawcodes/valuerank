@@ -107,8 +107,8 @@ function DisplayModeToggle({
   onChange: (displayMode: DomainShiftDisplayMode) => void;
 }) {
   return (
-    <fieldset className="space-y-2">
-      <legend className="block text-sm font-medium text-gray-700">Cell metric</legend>
+    <div className="flex flex-wrap items-center gap-3">
+      <span className="text-sm font-medium text-gray-700">Cell metric</span>
       <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
         {([
           ['shift', 'Shift vs avg'],
@@ -132,7 +132,7 @@ function DisplayModeToggle({
           </Button>
         ))}
       </div>
-    </fieldset>
+    </div>
   );
 }
 
@@ -289,11 +289,6 @@ export function DomainValueShiftHeatmap() {
     () => [{ value: 'all', label: 'All domains' }, ...domains.map((domain) => ({ value: domain.id, label: domain.name }))],
     [domains],
   );
-  const selectedModelsLabel = selectedModels.length === 1
-    ? selectedModels[0]?.label ?? 'Selected model'
-    : isDefaultSelection
-      ? 'Default models'
-      : `${selectedModels.length} selected models`;
 
   if (domainsError != null || signatureError != null || llmModelsError != null || error != null) {
     return (
@@ -345,7 +340,6 @@ export function DomainValueShiftHeatmap() {
       />
 
       <div className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-teal-700">Models</p>
         <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Domain shifts</h1>
         <p className="max-w-3xl text-sm text-gray-600">
           Exploratory heatmap for domain-associated value shifts. Toggle between percentage-point shifts and raw win
@@ -377,105 +371,111 @@ export function DomainValueShiftHeatmap() {
           </p>
         </section>
       ) : (
-        <section ref={tableRef} className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
+        <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
           <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">{selectedModelsLabel}</h2>
+            <div className="space-y-2">
+              <h2 className="text-lg font-semibold text-gray-900">Win Rate by Domain by Value</h2>
+              <p className="max-w-3xl text-sm text-gray-600">
+                Exploratory heatmap for domain-associated value shifts. Toggle between percentage-point shifts and raw win
+                rates, then click any column header to sort.
+              </p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <DisplayModeToggle displayMode={displayMode} onChange={setDisplayMode} />
-              <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
-                <span className="font-semibold text-gray-800">Metric:</span>{' '}
-                {displayMode === 'shift' ? 'percentage-point shift, not percent change' : 'raw domain win rate'}
-              </div>
-              <CopyVisualButton targetRef={tableRef} label="domain shifts table" />
-            </div>
+            <CopyVisualButton targetRef={tableRef} label="Win Rate by Domain by Value" />
           </div>
 
-          <div className="overflow-x-auto rounded border border-gray-100 bg-white p-2">
-            <table className="w-full table-auto border-collapse text-xs">
-              <colgroup>
-                <col className="w-max" />
-                <col className="w-max" />
-                {heatmap.columns.map((domain) => (
-                  <col key={domain.domainId} style={{ width: domainColumnWidth }} />
-                ))}
-              </colgroup>
-              <thead>
-                <tr className="border-b border-gray-200 text-gray-600">
-                  <SortableHeader
-                    label="Value"
-                    sortKey="value"
-                    sort={sort}
-                    onSort={setSort}
-                    align="left"
-                    className="border-r-2 border-gray-300"
-                  />
-                  <SortableHeader
-                    label="Avg Win Rate"
-                    sortKey="average"
-                    sort={sort}
-                    onSort={setSort}
-                    align="right"
-                    className="border-r-2 border-gray-300"
-                  />
-                  {heatmap.columns.map((domain) => {
-                    const domainSortKey: DomainShiftSortKey = `domain:${domain.domainId}`;
-                    return (
-                      <SortableHeader
-                        key={domain.domainId}
-                        label={domain.domainName}
-                        sortKey={domainSortKey}
-                        sort={sort}
-                        onSort={setSort}
-                      />
-                    );
-                  })}
-                </tr>
-              </thead>
-              <tbody>
-                {sortedRows.map((row) => (
-                  <tr key={row.valueKey} className="border-b border-gray-100">
-                    <th scope="row" className="border-b border-r-2 border-gray-300 bg-white px-2 py-2 whitespace-nowrap text-left font-medium text-gray-900">
-                      {row.valueLabel}
-                    </th>
-                    <td className="border-b border-r-2 border-gray-300 bg-white px-2 py-2 whitespace-nowrap text-right font-mono text-gray-700">
-                      {formatPercent(row.averageWinRate)}
-                      {row.averageMatchesPooled === false && (
-                        <span
-                          className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-sans text-amber-800"
-                          title="Computed average differs from the API pooled win rate by more than the allowed tolerance."
-                        >
-                          check
-                        </span>
-                      )}
-                    </td>
-                    {heatmap.columns.map((domain) => {
-                      const cell = row.cells.get(domain.domainId) ?? null;
-                      const tdClassName = cn(
-                        'border-b border-gray-100 px-2 py-2 text-center align-middle transition-colors',
-                        cell == null
-                          ? 'border-gray-100 bg-gray-50 text-gray-400'
-                          : displayMode === 'shift'
-                            ? getCellTone(cell.shift)
-                            : getWinRateTone(cell.winRate),
-                      );
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <DisplayModeToggle displayMode={displayMode} onChange={setDisplayMode} />
+          </div>
 
+          <div ref={tableRef}>
+            <div className="overflow-x-auto rounded border border-gray-100 bg-white p-2">
+              <table className="w-full table-auto border-collapse text-xs">
+                <colgroup>
+                  <col className="w-max" />
+                  <col className="w-max" />
+                  {heatmap.columns.map((domain) => (
+                    <col key={domain.domainId} style={{ width: domainColumnWidth }} />
+                  ))}
+                </colgroup>
+                <thead>
+                  <tr className="border-b border-gray-200 text-gray-600">
+                    <SortableHeader
+                      label="Value"
+                      sortKey="value"
+                      sort={sort}
+                      onSort={setSort}
+                      align="left"
+                      className="border-r-2 border-gray-300"
+                    />
+                    <SortableHeader
+                      label="Avg Win Rate"
+                      sortKey="average"
+                      sort={sort}
+                      onSort={setSort}
+                      align="right"
+                      className="border-r-2 border-gray-300"
+                    />
+                    {heatmap.columns.map((domain) => {
+                      const domainSortKey: DomainShiftSortKey = `domain:${domain.domainId}`;
                       return (
-                        <td key={domain.domainId} className={tdClassName}>
-                          <Cell
-                            cell={cell}
-                            valueLabel={row.valueLabel}
-                            displayMode={displayMode}
-                            evidenceLabel={isDefaultSelection ? 'average evidence vignettes' : 'evidence vignettes'}
-                          />
-                        </td>
+                        <SortableHeader
+                          key={domain.domainId}
+                          label={domain.domainName}
+                          sortKey={domainSortKey}
+                          sort={sort}
+                          onSort={setSort}
+                        />
                       );
                     })}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {sortedRows.map((row) => (
+                    <tr key={row.valueKey} className="border-b border-gray-100">
+                      <th
+                        scope="row"
+                        className="border-b border-r-2 border-gray-300 bg-white px-2 py-2 whitespace-nowrap text-left font-medium text-gray-900"
+                      >
+                        {row.valueLabel}
+                      </th>
+                      <td className="border-b border-r-2 border-gray-300 bg-white px-2 py-2 whitespace-nowrap text-right font-mono text-gray-700">
+                        {formatPercent(row.averageWinRate)}
+                        {row.averageMatchesPooled === false && (
+                          <span
+                            className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-sans text-amber-800"
+                            title="Computed average differs from the API pooled win rate by more than the allowed tolerance."
+                          >
+                            check
+                          </span>
+                        )}
+                      </td>
+                      {heatmap.columns.map((domain) => {
+                        const cell = row.cells.get(domain.domainId) ?? null;
+                        const tdClassName = cn(
+                          'border-b border-gray-100 px-2 py-2 text-center align-middle transition-colors',
+                          cell == null
+                            ? 'border-gray-100 bg-gray-50 text-gray-400'
+                            : displayMode === 'shift'
+                              ? getCellTone(cell.shift)
+                              : getWinRateTone(cell.winRate),
+                        );
+
+                        return (
+                          <td key={domain.domainId} className={tdClassName}>
+                            <Cell
+                              cell={cell}
+                              valueLabel={row.valueLabel}
+                              displayMode={displayMode}
+                              evidenceLabel={isDefaultSelection ? 'average evidence vignettes' : 'evidence vignettes'}
+                            />
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </section>
       )}

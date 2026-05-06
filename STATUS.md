@@ -37,6 +37,7 @@
 
 | Feature | Branch | Status | Notes |
 |---------|--------|--------|-------|
+| **win-rate-report-cleanup** | `—` | 🟢 Done locally | Cleaned up the Win Rate pages: removed the extra intro copy, moved Export CSV into the freshness row, simplified the Win Rate by Domain by Value header, put Cell metric inline with its toggle, removed the percent-change note, and narrowed screenshot capture to the table only. |
 | **status-page-pending-launches** | `—` | 🟢 Done locally | Status page active-evaluation query now includes PENDING, RUNNING, PAUSED, and SUMMARIZING launches so stuck-but-working runs show up again. Added API regression coverage and updated the section copy to match. |
 | **pressure-response-by-value-direct-rates** | `codex/value-priorities-logit-toggle` | 🟢 Done locally | Pressure Response by Value now uses direct win rates for both sides of each pair, instead of flipping the first value's rate for the second value. The table also keeps the vignette-level weighting rule so repeated measurements do not overcount a vignette. |
 | **model-groups-visualization-toggle** | `codex/pressure-response-tooltip-grid` | 🟢 Done locally | Domain Analysis model groups now support radar, dot map, and heatmap views with a view toggle, shared cluster ordering, and a fixed symmetric dot-map axis. |

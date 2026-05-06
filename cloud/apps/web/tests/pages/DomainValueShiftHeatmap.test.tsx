@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import {
@@ -368,9 +368,7 @@ describe('DomainValueShiftHeatmap page', () => {
 
     renderPage();
 
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Model A' })).toBeInTheDocument();
-    });
+    expect(await screen.findByRole('heading', { name: 'Win Rate by Domain by Value' })).toBeInTheDocument();
     expect(screen.getByRole('table')).toHaveClass('table-auto');
     await user.click(screen.getByRole('button', { name: /default — 1 model/i }));
     expect(screen.getByRole('button', { name: /default models/i })).toBeInTheDocument();
@@ -380,8 +378,9 @@ describe('DomainValueShiftHeatmap page', () => {
     expect(screen.getByLabelText(/Achievement in City Planning: raw win rate 80\.0%; shift \+20pp/i)).toHaveAccessibleName(
       /average 60\.0%; average evidence vignettes —/i,
     );
-    expect(screen.getByText('Metric:')).toBeInTheDocument();
-    expect(screen.getByText(/percentage-point shift, not percent change/i)).toBeInTheDocument();
+    expect(screen.getByText('Cell metric')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Copy Win Rate by Domain by Value as image/i })).toBeInTheDocument();
+    expect(screen.queryByText(/percentage-point shift, not percent change/i)).not.toBeInTheDocument();
 
     const firstDataRow = screen.getAllByRole('row')[1];
     expect(within(firstDataRow).getAllByRole('rowheader')[0]).toHaveTextContent('Achievement');
@@ -421,7 +420,7 @@ describe('DomainValueShiftHeatmap page', () => {
 
     expect(screen.getByRole('button', { name: 'Raw win rate' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByText('80.0%')).toBeInTheDocument();
-    expect(screen.getByText(/raw domain win rate/i)).toBeInTheDocument();
+    expect(screen.queryByText(/raw domain win rate/i)).not.toBeInTheDocument();
   });
 
   it('sorts table rows when a domain column header is clicked', async () => {
@@ -464,7 +463,7 @@ describe('DomainValueShiftHeatmap page', () => {
     await user.click(screen.getByRole('button', { name: /default — 2 models/i }));
     await user.click(screen.getByRole('button', { name: 'Alpha' }));
 
-    expect(screen.getByRole('heading', { name: 'Zulu' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /models: 1 of 2 selected/i })).toBeInTheDocument();
   });
 
   it('groups default models ahead of non-default models with a divider', async () => {
