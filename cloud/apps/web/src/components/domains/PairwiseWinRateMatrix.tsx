@@ -1,4 +1,4 @@
-import { useRef, useState, useMemo } from 'react';
+import { useRef, useMemo } from 'react';
 import { VALUE_LABELS, VALUE_DESCRIPTIONS, type ValueKey } from '../../data/domainAnalysisData';
 import { CopyVisualButton } from '../ui/CopyVisualButton';
 import { Tooltip } from '../ui/Tooltip';
@@ -47,40 +47,53 @@ type PairwiseWinRateMatrixProps = {
 
 export function PairwiseWinRateMatrix({ models }: PairwiseWinRateMatrixProps) {
   const tableRef = useRef<HTMLDivElement>(null);
-  const [pickedModelId, setPickedModelId] = useState<string>('');
 
-  const effectiveModelId =
-    pickedModelId !== '' && models.some((m) => m.modelId === pickedModelId)
-      ? pickedModelId
-      : (models[0]?.modelId ?? '');
-
-  const selectedModel = useMemo(
-    () => models.find((m) => m.modelId === effectiveModelId) ?? null,
-    [models, effectiveModelId],
-  );
-
+  const firstModel = models[0];
   const valueIndexMap = useMemo<Map<string, number>>(
     () =>
-      selectedModel != null
-        ? new Map(selectedModel.valueOrder.map((key, i) => [key, i]))
+      firstModel != null
+        ? new Map(firstModel.valueOrder.map((key, i) => [key, i]))
         : new Map(),
-    [selectedModel],
+    [firstModel],
   );
 
+  const averagedMatrix = useMemo<(number | null)[][]>(() => {
+    if (models.length === 0 || firstModel == null) return [];
+    const n = firstModel.valueOrder.length;
+    return Array.from({ length: n }, (_, r) =>
+      Array.from({ length: n }, (_, c) => {
+        const rates = models
+          .map((m) => m.winRateMatrix[r]?.[c] ?? null)
+          .filter((v): v is number => v != null);
+        return rates.length > 0 ? rates.reduce((a, b) => a + b, 0) / rates.length : null;
+      }),
+    );
+  }, [models, firstModel]);
+
+  const totalTrialMatrix = useMemo<number[][]>(() => {
+    if (models.length === 0 || firstModel == null) return [];
+    const n = firstModel.valueOrder.length;
+    return Array.from({ length: n }, (_, r) =>
+      Array.from({ length: n }, (_, c) =>
+        models.reduce((sum, m) => sum + (m.trialCountMatrix[r]?.[c] ?? 0), 0),
+      ),
+    );
+  }, [models, firstModel]);
+
   function getCellWinRate(rowKey: ValueKey, colKey: ValueKey): number | null {
-    if (selectedModel == null || rowKey === colKey) return null;
+    if (rowKey === colKey) return null;
     const rowIdx = valueIndexMap.get(rowKey);
     const colIdx = valueIndexMap.get(colKey);
     if (rowIdx == null || colIdx == null) return null;
-    return selectedModel.winRateMatrix[rowIdx]?.[colIdx] ?? null;
+    return averagedMatrix[rowIdx]?.[colIdx] ?? null;
   }
 
   function getCellTrials(rowKey: ValueKey, colKey: ValueKey): number {
-    if (selectedModel == null || rowKey === colKey) return 0;
+    if (rowKey === colKey) return 0;
     const rowIdx = valueIndexMap.get(rowKey);
     const colIdx = valueIndexMap.get(colKey);
     if (rowIdx == null || colIdx == null) return 0;
-    return selectedModel.trialCountMatrix[rowIdx]?.[colIdx] ?? 0;
+    return totalTrialMatrix[rowIdx]?.[colIdx] ?? 0;
   }
 
   return (
@@ -89,32 +102,14 @@ export function PairwiseWinRateMatrix({ models }: PairwiseWinRateMatrixProps) {
         <div>
           <h2 className="text-base font-medium text-gray-900">Pairwise Win Rate Matrix</h2>
           <p className="text-sm text-gray-600">
-            Win rate of the row value over the column value, averaged across vignettes.
+            Win rate of the row value over the column value, averaged across vignettes and selected models.
             Green = row wins more often; red = row loses more often. Centered at 50%.
           </p>
         </div>
         <CopyVisualButton targetRef={tableRef} label="pairwise win rate matrix" />
       </div>
 
-      <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
-        <label htmlFor="pairwise-model-picker" className="font-medium text-gray-600">
-          Model:
-        </label>
-        <select
-          id="pairwise-model-picker"
-          className="rounded border border-gray-300 px-1.5 py-0.5 text-xs text-gray-800"
-          value={effectiveModelId}
-          onChange={(e) => setPickedModelId(e.target.value)}
-        >
-          {models.map((m) => (
-            <option key={m.modelId} value={m.modelId}>
-              {m.label}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {selectedModel == null ? (
+      {models.length === 0 ? (
         <p className="text-xs text-gray-500">No pairwise data available.</p>
       ) : (
         <div ref={tableRef} className="overflow-x-auto">
