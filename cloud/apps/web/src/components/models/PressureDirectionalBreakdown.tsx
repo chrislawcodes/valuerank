@@ -1,7 +1,7 @@
 import { useMemo, useRef } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/Table';
 import { HeaderTooltip } from '../ui/HeaderTooltip';
-import { ScreenshotButton } from '../ui/ScreenshotButton';
+import { CopyVisualButton } from '../ui/CopyVisualButton';
 import type { PressureSensitivityModel } from '../../api/operations/pressureSensitivity';
 import { formatSignedPoints } from './pressureSensitivityFormatting';
 
@@ -95,7 +95,7 @@ export function PressureDirectionalBreakdown({ models }: Props) {
             balanced win rate. Domain cells show the deviation from each model&apos;s overall pressure sensitivity.
           </p>
         </div>
-        <ScreenshotButton targetRef={tableRef} label="pressure sensitivity by domain" />
+        <CopyVisualButton targetRef={tableRef} label="pressure sensitivity by domain" />
       </div>
       <Table variant="bordered">
         <TableHeader variant="bordered">

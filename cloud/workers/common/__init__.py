@@ -11,6 +11,7 @@ Includes:
 from .errors import WorkerError, LLMError, RetryableError, ValidationError
 from .logging import get_logger
 from .config import Config
+from .validation import require_dict, require_field, require_fields, require_list
 
 __all__ = [
     "WorkerError",
@@ -19,4 +20,8 @@ __all__ = [
     "ValidationError",
     "get_logger",
     "Config",
+    "require_dict",
+    "require_field",
+    "require_fields",
+    "require_list",
 ]

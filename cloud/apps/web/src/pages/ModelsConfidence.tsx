@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from 'urql';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
@@ -17,6 +17,7 @@ import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/l
 import { ConfidenceHeatmap } from '../components/models/ConfidenceHeatmap';
 import { ConfidenceDomainBreakout } from '../components/models/ConfidenceDomainBreakout';
 import { ConfidenceModelDomainBreakout } from '../components/models/ConfidenceModelDomainBreakout';
+import { ScreenshotButton } from '../components/ui/ScreenshotButton';
 import {
   buildDomainShiftSignatureOptions,
   getDefaultDomainShiftSignature,
@@ -27,6 +28,7 @@ export function ModelsConfidence() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const signatureParam = searchParams.get('signature');
+  const reportRef = useRef<HTMLDivElement>(null);
 
   const { domains } = useDomains();
   const [selectedDomainId, setSelectedDomainId] = useState<string | null>(null);
@@ -163,25 +165,32 @@ export function ModelsConfidence() {
         }}
       />
 
-      <div className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-teal-700">Models</p>
-        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Confidence by Values by Model</h1>
-        <p className="max-w-3xl text-sm text-gray-600">
-          How often each model responds with strong conviction vs. a lean.
-          Strong% = strongly support / (strongly support + somewhat support).
-        </p>
-      </div>
-
       {error != null && <ErrorMessage message={error.message} />}
-      {loading ? (
-        <Loading />
-      ) : (
-        <ConfidenceHeatmap
-          models={models}
-          selectedModelIds={filteredModelIds ?? undefined}
-          onCellClick={handleCellClick}
-        />
-      )}
+
+      <section ref={reportRef} className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div className="min-w-0 space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-teal-700">Models</p>
+            <h1 className="text-lg font-semibold text-gray-900">
+              Confidence by Values by Model
+            </h1>
+            <p className="max-w-3xl text-sm text-gray-600">
+              Shows how often each model responds with strong conviction when it picks a value.
+            </p>
+          </div>
+          <ScreenshotButton targetRef={reportRef} label="confidence by values by model report" />
+        </div>
+
+        {loading ? (
+          <Loading />
+        ) : (
+          <ConfidenceHeatmap
+            models={models}
+            selectedModelIds={filteredModelIds ?? undefined}
+            onCellClick={handleCellClick}
+          />
+        )}
+      </section>
 
       {domains.length > 0 && (
         <ConfidenceDomainBreakout

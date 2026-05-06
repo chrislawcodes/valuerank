@@ -9,6 +9,7 @@ from typing import Any, Optional
 from common.errors import ErrorCode, LLMError, ValidationError, WorkerError, classify_exception
 from common.logging import get_logger
 from common.llm_adapters import generate as llm_generate
+from common.validation import require_dict, require_fields
 from summarize_extract import (
     PARSER_VERSION,
     collect_scale_labels,
@@ -54,18 +55,10 @@ def _validation_error(message: str, details: str | None = None) -> dict[str, Any
 
 def validate_input(data: dict[str, Any]) -> None:
     """Validate summarize worker input."""
-    required = ["transcriptId", "transcriptContent"]
-    for field_name in required:
-        if field_name not in data:
-            raise ValidationError(
-                message=f"Missing required field: {field_name}",
-                details=f"Input must include: {', '.join(required)}",
-            )
+    require_fields(data, ["transcriptId", "transcriptContent"])
+    require_dict(data, "transcriptContent")
 
     content = data["transcriptContent"]
-    if not isinstance(content, dict):
-        raise ValidationError(message="transcriptContent must be an object")
-
     if "turns" not in content or not isinstance(content["turns"], list):
         raise ValidationError(message="transcriptContent.turns must be an array")
 
