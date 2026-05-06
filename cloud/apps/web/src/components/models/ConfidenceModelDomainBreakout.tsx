@@ -24,6 +24,7 @@ type DomainOption = {
 
 export interface ConfidenceModelDomainBreakoutProps {
   domains: DomainOption[];
+  referenceModels: ModelsConfidenceModelResult[];
   signature: string;
   selectedModelIds: string[] | null;
   defaultModelIds: string[];
@@ -155,6 +156,7 @@ function buildModelRows(
   domains: DomainOption[],
   domainStates: Record<string, DomainQueryState>,
   effectiveModelIds: readonly string[],
+  overallConfidenceByModelId: ReadonlyMap<string, number | null>,
 ): ModelRowData[] {
   const modelLabels = new Map<string, string>();
 
@@ -170,8 +172,6 @@ function buildModelRows(
   }
 
   return effectiveModelIds.map((modelId) => {
-    let pooledStrong = 0;
-    let pooledLean = 0;
     const cells = new Map<string, ModelCellData>();
 
     for (const domain of domains) {
@@ -212,8 +212,6 @@ function buildModelRows(
 
       const total = model.overallStrongCount + model.overallLeanCount;
       const strongPct = total > 0 ? (model.overallStrongCount / total) * 100 : null;
-      pooledStrong += model.overallStrongCount;
-      pooledLean += model.overallLeanCount;
       cells.set(domain.id, {
         strongCount: model.overallStrongCount,
         leanCount: model.overallLeanCount,
@@ -223,8 +221,7 @@ function buildModelRows(
       });
     }
 
-    const total = pooledStrong + pooledLean;
-    const averageStrongPct = total > 0 ? (pooledStrong / total) * 100 : null;
+    const averageStrongPct = overallConfidenceByModelId.get(modelId) ?? null;
 
     for (const [domainId, cell] of cells.entries()) {
       if (cell.status !== 'ready' || cell.strongPct == null) continue;
@@ -296,9 +293,11 @@ function SortableHeader({
         aria-label={`Sort by ${label} ${nextSort.direction === 'asc' ? 'ascending' : 'descending'}`}
       >
         <span className="whitespace-nowrap">{label}</span>
-        <span aria-hidden="true" className="text-[11px] leading-none text-gray-400">
-          {isActive ? (sort.direction === 'asc' ? '↑' : '↓') : '↕'}
-        </span>
+        {isActive && (
+          <span aria-hidden="true" className="text-[11px] leading-none text-gray-400">
+            {sort.direction === 'asc' ? '↑' : '↓'}
+          </span>
+        )}
       </Button>
     </th>
   );
@@ -306,6 +305,7 @@ function SortableHeader({
 
 export function ConfidenceModelDomainBreakout({
   domains,
+  referenceModels,
   signature,
   selectedModelIds,
   defaultModelIds,
@@ -323,6 +323,13 @@ export function ConfidenceModelDomainBreakout({
         ? domains.filter((domain) => domain.id === selectedDomainId)
         : domains,
     [domains, selectedDomainId],
+  );
+  const overallConfidenceByModelId = useMemo(
+    () =>
+      new Map<string, number | null>(
+        referenceModels.map((model) => [model.modelId, model.overallConfidence ?? null] as const),
+      ),
+    [referenceModels],
   );
   const noModelsSelected = effectiveModelIds.length === 0;
 
@@ -396,8 +403,8 @@ export function ConfidenceModelDomainBreakout({
   }, [client, signature, visibleDomains]);
 
   const rows = useMemo(
-    () => buildModelRows(domains, domainStates, effectiveModelIds),
-    [domains, domainStates, effectiveModelIds],
+    () => buildModelRows(visibleDomains, domainStates, effectiveModelIds, overallConfidenceByModelId),
+    [domainStates, effectiveModelIds, overallConfidenceByModelId, visibleDomains],
   );
 
   const sortedRows = useMemo(
