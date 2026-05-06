@@ -46,7 +46,7 @@ DEDUP-8 (`isRecord`) is independent of report output — pure type guard.
 | DEDUP-6 | Snapshot builder twin (domain-analysis vs pressure-sensitivity) | API | Medium | Large | Decision needed |
 | DEDUP-7 | `cloud/packages/db/src/queries/*` mostly orphaned | API/db | High | Medium | Decision needed |
 | ~~DEDUP-8~~ | ~~`isRecord` defined 9 times~~ | ~~API~~ | ~~Medium~~ | ~~Trivial~~ | **Resolved — PR #928** |
-| ~~DEDUP-9~~ | ~~`wilsonInterval` defined twice~~ | ~~API~~ | ~~Medium~~ | ~~Small~~ | **Resolved — PR #TBD** |
+| ~~DEDUP-9~~ | ~~`wilsonInterval` defined twice~~ | ~~API~~ | ~~Medium~~ | ~~Small~~ | **Resolved — PR #943** |
 | DEDUP-10 | Decision-summary utility sprawl | Web | Medium-High | Large | Decision needed |
 | DEDUP-11 | Shared `*-value-statements.ts` (4× boilerplate) | Shared | Medium | Small | Open |
 | DEDUP-12 | Run lifecycle / recovery sprawl | API | Medium-Low | Large | Decision needed |
@@ -152,7 +152,7 @@ Added `hasAnalysis?: boolean` and `analysisStatus?` params to `useRuns` and `use
 
 ### DEDUP-9 — `wilsonInterval` defined twice
 
-**Status: Resolved in PR #TBD (2026-05-05).**
+**Status: Resolved in PR #943 (2026-05-05).**
 
 Canonical implementation: `cloud/apps/api/src/services/statistics/wilson-interval.ts`.
 Signature: `wilsonInterval(matches, trials, z?) → { low, high, p } | null`.
@@ -270,7 +270,7 @@ Tracking infrastructure that protects against dedup-induced (or any) drift in us
 | DEDUP-3 | `useRuns` / `useRunsWithAnalysis` hook collapse | #934 | 2026-05-05 | Added `hasAnalysis` + `analysisStatus` params to `useRuns` and `useInfiniteRuns`. Deleted `useRunsWithAnalysis.ts` and `useInfiniteRunsWithAnalysis.ts`. `comparison.graphql:RunsWithAnalysis` left in place (different resolver). |
 | DEDUP-15 | `runsWithAnalysis(ids:)` resolver and web query deleted | #936 | 2026-05-05 | Zero consumers. Architecture decision at `cloud/specs/016-analysis-tab/plan.md` chose `runs(hasAnalysis:)` instead. ~250 LOC removed across API resolver, tests, web query, re-export, manual types. Schema snapshot and codegen regenerated. |
 | DEDUP-2 | `signaturePreference` fork web↔shared (partial) | #937 | 2026-05-06 | Deleted `cloud/apps/web/src/utils/signaturePreference.ts` (57 LOC). Updated 2 importers to use `@valuerank/shared`. `schwartz.ts` NOT deleted — not a true duplicate (exports different function). |
-| DEDUP-9 | `wilsonInterval` consolidation | #TBD | 2026-05-05 | Canonical: `cloud/apps/api/src/services/statistics/wilson-interval.ts`. Invalid inputs now return `null` (fail-loud contract). `WilsonIntervalResult` type deleted. Both prior sites re-export from canonical. `wilsonIntervalFromProportion` stays local in `aggregation.ts` (used by `diffProportionCI`). |
+| DEDUP-9 | `wilsonInterval` consolidation | #943 | 2026-05-05 | Canonical: `cloud/apps/api/src/services/statistics/wilson-interval.ts`. Invalid inputs now return `null` (fail-loud contract). `WilsonIntervalResult` type deleted. Both prior sites re-export from canonical. `wilsonIntervalFromProportion` stays local in `aggregation.ts` (used by `diffProportionCI`). |
 
 ### Dead-code deletions
 
