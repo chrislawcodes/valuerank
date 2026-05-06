@@ -44,8 +44,8 @@ export function ValuePrioritiesSection({
           {showSectionHelp && <ValuePrioritiesHelpPanel />}
         </div>
         <div className="flex flex-col items-start gap-2 md:items-end">
-          <fieldset className="space-y-2">
-            <legend className="block text-xs font-medium text-gray-500">Cell metric</legend>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-gray-500">Cell metric</span>
             <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
               {DISPLAY_METRICS.map((metric) => (
                 <Button
@@ -65,10 +65,7 @@ export function ValuePrioritiesSection({
                 </Button>
               ))}
             </div>
-          </fieldset>
-          <p className="text-xs text-gray-500">
-            Click a column heading to sort by the selected metric.
-          </p>
+          </div>
         </div>
       </div>
 

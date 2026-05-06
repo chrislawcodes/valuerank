@@ -106,7 +106,7 @@ export function buildValueAngles(): Map<ValueKey, number> {
   });
 
   const conservation = QUADRANT_ARCS[1];
-  ['Conformity_Interpersonal', 'Tradition', 'Security_Personal'].forEach((value, index) => {
+  ['Tradition', 'Conformity_Interpersonal', 'Security_Personal'].forEach((value, index) => {
     const t = (index + 0.5) / 3;
     result.set(
       value as ValueKey,

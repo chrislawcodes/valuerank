@@ -1,6 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+
+vi.mock('urql', async () => {
+  const actual = await vi.importActual<typeof import('urql')>('urql');
+  return {
+    ...actual,
+    useQuery: vi.fn(() => [{ data: undefined, fetching: false, error: null }, vi.fn()]),
+  };
+});
+
 import { OverviewTab } from '../../../src/components/analysis/tabs/OverviewTab';
 import {
   createCompanionAnalysis,
@@ -315,9 +324,7 @@ describe('OverviewTab', () => {
     expect(screen.queryByText(/Paired vignette scope/i)).not.toBeInTheDocument();
   });
 
-  // Skipped: PairedRunComparisonCard was deleted in slice 3 of vignette-paired-analysis.
-  // The paired comparison now lives at /vignette/:definitionId/paired.
-  it.skip('shows pooled paired summary context without duplicating the condition table', () => {
+  it('shows pooled paired summary context without duplicating the condition table', () => {
     const currentAnalysis: AnalysisResult = {
       ...createCompanionAnalysis(),
       runId: 'run-b',

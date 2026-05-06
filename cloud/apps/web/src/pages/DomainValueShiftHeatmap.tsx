@@ -18,16 +18,16 @@ import {
   formatEvidenceWeight,
   formatPercent,
   formatPointShift,
+  getCellTone,
   getDefaultDomainShiftSignature,
   getNextDomainShiftSort,
+  getWinRateTone,
   sortHeatmapRows,
   type DomainShiftCell,
   type DomainShiftDisplayMode,
   type DomainShiftSort,
   type DomainShiftSortKey,
 } from './domainValueShiftHeatmapUtils';
-
-const MAX_COLOR_SHIFT = 25;
 
 export {
   buildDomainShiftHeatmap,
@@ -37,33 +37,6 @@ export {
   getDefaultDomainShiftSignature,
   sortHeatmapRows,
 } from './domainValueShiftHeatmapUtils';
-
-function getCellToneClass(shift: number): string {
-  const clamped = Math.max(-MAX_COLOR_SHIFT, Math.min(MAX_COLOR_SHIFT, shift));
-  const intensity = Math.abs(clamped) / MAX_COLOR_SHIFT;
-  if (Math.abs(shift) < 0.5) {
-    return 'border-gray-200 bg-gray-50 text-gray-700';
-  }
-  if (shift > 0) {
-    return intensity > 0.66
-      ? 'border-emerald-300 bg-emerald-100 text-emerald-900'
-      : intensity > 0.33
-        ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-        : 'border-emerald-100 bg-emerald-50/60 text-emerald-700';
-  }
-  return intensity > 0.66
-    ? 'border-rose-300 bg-rose-100 text-rose-900'
-    : intensity > 0.33
-      ? 'border-rose-200 bg-rose-50 text-rose-800'
-      : 'border-rose-100 bg-rose-50/60 text-rose-700';
-}
-
-function getWinRateToneClass(winRate: number): string {
-  if (winRate >= 75) return 'border-sky-300 bg-sky-100 text-sky-950';
-  if (winRate >= 50) return 'border-sky-200 bg-sky-50 text-sky-900';
-  if (winRate >= 25) return 'border-gray-200 bg-gray-50 text-gray-800';
-  return 'border-slate-200 bg-slate-50 text-slate-700';
-}
 
 function getSortDirectionLabel(direction: DomainShiftSort['direction']): 'ascending' | 'descending' {
   return direction === 'asc' ? 'ascending' : 'descending';
@@ -399,7 +372,7 @@ export function DomainValueShiftHeatmap() {
           <h2 className="text-base font-semibold text-amber-950">More domain coverage needed</h2>
           <p className="mt-2 text-sm text-amber-900">
             Domain-shift analysis needs at least one value with eligible win-rate data in two or more domains for the
-            selected model set. With only one domain for a value, the shift would be 0.0 pts by definition and would
+            selected model set. With only one domain for a value, the shift would be 0pp by definition and would
             not be meaningful.
           </p>
         </section>
@@ -484,8 +457,8 @@ export function DomainValueShiftHeatmap() {
                         cell == null
                           ? 'border-gray-100 bg-gray-50 text-gray-400'
                           : displayMode === 'shift'
-                            ? getCellToneClass(cell.shift)
-                            : getWinRateToneClass(cell.winRate),
+                            ? getCellTone(cell.shift)
+                            : getWinRateTone(cell.winRate),
                       );
 
                       return (

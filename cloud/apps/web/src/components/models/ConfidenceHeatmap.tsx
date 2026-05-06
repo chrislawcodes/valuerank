@@ -29,6 +29,7 @@ type ConfidenceHeatmapProps = {
   /** When provided, only rows whose modelId is in this list are shown. */
   selectedModelIds?: string[];
   onCellClick?: (modelId: string, modelLabel: string, valueKey: string) => void;
+  emptyMessage?: string;
 };
 
 type ConfidenceSortDirection = 'asc' | 'desc';
@@ -103,7 +104,7 @@ function SortableHeader({
   );
 }
 
-export function ConfidenceHeatmap({ models, selectedModelIds, onCellClick }: ConfidenceHeatmapProps) {
+export function ConfidenceHeatmap({ models, selectedModelIds, onCellClick, emptyMessage = 'No data' }: ConfidenceHeatmapProps) {
   const [sortState, setSortState] = useState<{ key: ConfidenceSortKey; direction: ConfidenceSortDirection }>({
     key: 'average',
     direction: 'desc',
@@ -144,7 +145,7 @@ export function ConfidenceHeatmap({ models, selectedModelIds, onCellClick }: Con
   }, [sortState, visibleModels]);
 
   if (visibleModels.length === 0) {
-    return <p className="text-sm text-gray-500">No data</p>;
+    return <p className="text-sm text-gray-500">{emptyMessage}</p>;
   }
 
   return (
