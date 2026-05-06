@@ -22,7 +22,6 @@ import { resolveTranscriptDecisionModel } from '../../graphql/queries/domain/sha
 import type { SummarizeTranscriptJobData } from '../types.js';
 import {
   computeTranscriptResponseSha256,
-  isPlainJsonObject,
   isSummaryCache,
   type WinnerFirstSummaryCache,
 } from './summarize-types.js';
@@ -33,6 +32,7 @@ import {
   persistSummarizeFailure,
   persistSuccessfulSummary,
 } from './summarize-persistence.js';
+import { isRecord } from '../../utils/isRecord.js';
 
 const log = createLogger('queue:summarize-transcript');
 let batchCounter = 0;
@@ -207,7 +207,7 @@ async function resolveSummarizeJob(
 
   const isTerminal = transcript.summarizedAt !== null || transcript.summarizeFailedAt !== null;
   const responseSha256 = computeTranscriptResponseSha256(transcript.content);
-  const transcriptDecisionMetadata = isPlainJsonObject(transcript.decisionMetadata)
+  const transcriptDecisionMetadata = isRecord(transcript.decisionMetadata)
     ? transcript.decisionMetadata
     : null;
   const hasSummaryCacheField = transcriptDecisionMetadata !== null && 'summaryCache' in transcriptDecisionMetadata;

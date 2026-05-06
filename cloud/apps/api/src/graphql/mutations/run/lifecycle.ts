@@ -18,11 +18,11 @@ import { parseRunCategory } from '../../../services/run/query.js';
 import { StartRunPayload } from './payloads.js';
 import { extractValuePair } from '../../queries/domain-coverage-utils.js';
 import {
-  isRecord,
   loadRunForResult,
   persistPairedCompanionRunIds,
   resolvePairedDefinition,
 } from './lifecycle-helpers.js';
+import { isRecord } from '../../../utils/isRecord.js';
 
 export { persistPairedCompanionRunIds } from './lifecycle-helpers.js';
 

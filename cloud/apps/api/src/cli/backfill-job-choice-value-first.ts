@@ -17,6 +17,7 @@
 import { fileURLToPath } from 'url';
 import { db } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
+import { isRecord } from '../utils/isRecord.js';
 
 const log = createLogger('cli:backfill-job-choice-value-first');
 const BATCH_SIZE = 100;
@@ -29,10 +30,6 @@ type RunRow = {
   id: string;
   config: unknown;
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
 
 export function parseOptions(argv: string[]): CliOptions {
   return { dryRun: argv.includes('--dry-run') };

@@ -1,7 +1,6 @@
 import { extractValuePair } from '../domain-analysis-values.js';
 import {
   isValidDecisionPair,
-  isRecord,
   isValueKey,
   parseDecisionPath,
   isJobChoiceDecisionPath,
@@ -17,6 +16,7 @@ import {
   extractLabelPrefixFromSnapshot,
   JOB_CHOICE_VALUE_STATEMENTS,
 } from './decision-model-helpers.js';
+import { isRecord } from '../../../utils/isRecord.js';
 
 // Re-export all types for backward compatibility
 export type {
@@ -303,4 +303,3 @@ export function resolveDecisionModel(input: DecisionModelInput): DecisionModelRe
     canonical,
   };
 }
-

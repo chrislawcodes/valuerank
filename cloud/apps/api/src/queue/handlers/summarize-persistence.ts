@@ -7,11 +7,11 @@ import { maybeAdvanceRunStatus } from '../../services/run/index.js';
 import { deductSingleTranscriptBalance } from '../../services/budget/deduct.js';
 import {
   buildDecisionMetadataForPersist,
-  isPlainJsonObject,
   type SummarizeTranscriptJobData,
   type WinnerFirstSummaryCache,
 } from './summarize-types.js';
 import { buildRawDecisionEvidence } from '../../graphql/queries/domain/shared.js';
+import { isRecord } from '../../utils/isRecord.js';
 
 const log = createLogger('queue:summarize-transcript');
 
@@ -25,7 +25,7 @@ export function buildSummaryCacheRecord(
   parserVersion: string,
   modelId: string,
 ): SummaryCache | null {
-  if (!isPlainJsonObject(summary.decisionMetadata)) {
+  if (!isRecord(summary.decisionMetadata)) {
     return null;
   }
 

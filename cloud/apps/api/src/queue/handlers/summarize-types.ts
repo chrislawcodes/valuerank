@@ -1,14 +1,11 @@
 import crypto from 'crypto';
 import { Prisma, type SummaryCache } from '@valuerank/db';
+import { isRecord } from '../../utils/isRecord.js';
 
 export type { SummarizeTranscriptJobData } from '../types.js';
 
 export type WinnerFirstSummaryCache = NonNullable<SummaryCache['summary']['canonicalDecision']>;
 export type SummaryCacheRecord = SummaryCache;
-
-export function isPlainJsonObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
 
 export function buildDecisionMetadataForPersist(
   decisionMetadata: unknown,
@@ -19,7 +16,7 @@ export function buildDecisionMetadataForPersist(
     return Prisma.DbNull;
   }
 
-  if (!isPlainJsonObject(decisionMetadata)) {
+  if (!isRecord(decisionMetadata)) {
     return decisionMetadata as Prisma.InputJsonValue;
   }
 
@@ -33,7 +30,7 @@ export function buildDecisionMetadataForPersist(
 }
 
 export function getTranscriptResponseText(transcriptContent: unknown): string {
-  if (!isPlainJsonObject(transcriptContent)) {
+  if (!isRecord(transcriptContent)) {
     return '';
   }
 
@@ -44,7 +41,7 @@ export function getTranscriptResponseText(transcriptContent: unknown): string {
 
   const responses: string[] = [];
   for (const turn of turns) {
-    if (!isPlainJsonObject(turn)) {
+    if (!isRecord(turn)) {
       continue;
     }
 
@@ -67,7 +64,7 @@ export function computeTranscriptResponseSha256(transcriptContent: unknown): str
 }
 
 export function isWinnerFirstSummaryCache(value: unknown): value is WinnerFirstSummaryCache {
-  if (!isPlainJsonObject(value)) {
+  if (!isRecord(value)) {
     return false;
   }
 
@@ -107,7 +104,7 @@ export function isWinnerFirstSummaryCache(value: unknown): value is WinnerFirstS
 }
 
 export function isSummaryCacheSummary(value: unknown): value is SummaryCache['summary'] {
-  if (!isPlainJsonObject(value)) {
+  if (!isRecord(value)) {
     return false;
   }
 
@@ -117,14 +114,14 @@ export function isSummaryCacheSummary(value: unknown): value is SummaryCache['su
   // decision signal.
   return (
     (typeof value.decisionText === 'string' || value.decisionText === null) &&
-    isPlainJsonObject(value.decisionMetadata) &&
+    isRecord(value.decisionMetadata) &&
     (!('canonicalDecision' in value) || isWinnerFirstSummaryCache(value.canonicalDecision)) &&
     !('summaryCache' in value)
   );
 }
 
 export function isSummaryCache(value: unknown): value is SummaryCache {
-  if (!isPlainJsonObject(value)) {
+  if (!isRecord(value)) {
     return false;
   }
 

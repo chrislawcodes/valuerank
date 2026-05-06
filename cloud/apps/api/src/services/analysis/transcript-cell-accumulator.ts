@@ -11,6 +11,7 @@ import {
   canonicalOwnOpponent,
   type AssignedOutcome,
 } from '../pressure-sensitivity/value-pair.js';
+import { isRecord } from '../../utils/isRecord.js';
 
 export type CellKey = {
   definitionId: string;
@@ -73,10 +74,6 @@ export type TranscriptForAccumulation = {
     deletedAt: Date | null;
   } | null;
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
 
 function isDomainAnalysisValueKey(value: string): value is DomainAnalysisValueKey {
   return (DOMAIN_ANALYSIS_VALUE_KEYS as readonly string[]).includes(value);

@@ -5,6 +5,7 @@ import { db } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 import { updateAggregateRun } from '../services/analysis/aggregate.js';
 import { zRunConfig } from '../services/analysis/aggregate/contracts.js';
+import { isRecord } from '../utils/isRecord.js';
 
 const log = createLogger('cli:backfill-aggregate-consistency');
 const BATCH_SIZE = 100;
@@ -50,10 +51,6 @@ export function parseOptions(argv: string[]): CliOptions {
     definitionId: readOptionValue(argv, '--definition-id'),
     domainId: readOptionValue(argv, '--domain-id'),
   };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
 function hasUpgradedReliabilityShape(output: unknown): boolean {
