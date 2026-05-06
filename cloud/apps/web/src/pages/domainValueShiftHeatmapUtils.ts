@@ -86,6 +86,13 @@ export function formatPointShift(value: number | null): string {
   return `${rounded > 0 ? '+' : ''}${rounded}`;
 }
 
+export function formatReportPointShift(value: number | null): string {
+  if (value == null || !Number.isFinite(value)) return 'n/a';
+  const rounded = Math.round(value * 10) / 10;
+  if (rounded === 0) return '0.0';
+  return `${rounded > 0 ? '+' : ''}${rounded.toFixed(1)}`;
+}
+
 export function formatPercent(value: number | null): string {
   if (value == null || !Number.isFinite(value)) return '—';
   return `${(Math.round(value * 10) / 10).toFixed(1)}%`;
