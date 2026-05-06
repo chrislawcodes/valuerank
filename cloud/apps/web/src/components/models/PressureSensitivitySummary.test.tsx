@@ -41,7 +41,7 @@ describe('PressureSensitivitySummary', () => {
       createModel('alpha', 'Alpha', 0.05, 0.01, 0.09, 2),
     ]);
 
-    expect(screen.getByText('Pressure Response across models')).toBeDefined();
+    expect(screen.getByText('Pressure Response by Model')).toBeDefined();
     expect(screen.getByText('Pressure response')).toBeDefined();
     expect(screen.getByText('Model')).toBeDefined();
     expect(screen.queryByText('Win Rate')).toBeNull();
@@ -94,7 +94,7 @@ describe('PressureSensitivitySummary', () => {
     renderSummary([createModel('alpha', 'Alpha', 0.05, 0.01, 0.09, 2)]);
 
     expect(
-      screen.getByRole('button', { name: /copy pressure response across models as image/i }),
+      screen.getByRole('button', { name: /copy pressure response by model as image/i }),
     ).toBeDefined();
   });
 });

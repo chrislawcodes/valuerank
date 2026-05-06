@@ -71,7 +71,7 @@ describe('ModelGroupsSection', () => {
   it('renders the plain model groups heading without numbering', () => {
     render(<ModelGroupsSection clusterAnalysisByMethod={{ 'log-odds-euclidean-upgma': skippedClusterAnalysis }} models={populatedModels} />);
 
-    expect(screen.getByRole('heading', { name: 'Model Groups' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Model Clusters' })).toBeInTheDocument();
     expect(screen.getByText(/cluster analysis not available/i)).toBeInTheDocument();
     expect(screen.queryByText(/^1\./i)).not.toBeInTheDocument();
   });

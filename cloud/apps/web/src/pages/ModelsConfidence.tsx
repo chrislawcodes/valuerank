@@ -165,7 +165,7 @@ export function ModelsConfidence() {
 
       <div className="space-y-2">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-teal-700">Models</p>
-        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Confidence Heatmap</h1>
+        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Confidence by Values by Model</h1>
         <p className="max-w-3xl text-sm text-gray-600">
           How often each model responds with strong conviction vs. a lean.
           Strong% = strongly support / (strongly support + somewhat support).
