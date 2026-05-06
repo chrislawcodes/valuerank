@@ -3,8 +3,6 @@ import { useClient } from 'urql';
 import gql from 'graphql-tag';
 import { Button } from '../ui/Button';
 import { cn } from '../../lib/utils';
-import { VALUES, VALUE_LABELS } from '../../data/domainAnalysisData';
-import { formatFullSchwartzValueName } from '../../utils/schwartz';
 import {
   formatPercent,
   formatPointShift,
@@ -12,6 +10,7 @@ import {
   getWinRateTone,
   type DomainShiftDisplayMode,
 } from '../../pages/domainValueShiftHeatmapUtils';
+import { DisplayModeToggle } from './ConfidenceDomainBreakout';
 import {
   type ModelsConfidenceQueryResult,
   type ModelsConfidenceModelResult,
@@ -22,13 +21,13 @@ type DomainOption = {
   name: string;
 };
 
-type ConfidenceDomainBreakoutProps = {
+export interface ConfidenceModelDomainBreakoutProps {
   domains: DomainOption[];
   signature: string;
   selectedModelIds: string[] | null;
   defaultModelIds: string[];
   selectedDomainId: string | null;
-};
+}
 
 type DomainQueryState =
   | {
@@ -47,37 +46,36 @@ type DomainQueryState =
       error: string;
     };
 
-type BreakoutSortKey = 'value' | 'average' | `domain:${string}`;
-type BreakoutSortDirection = 'asc' | 'desc';
+type ModelBreakoutSortKey = 'model' | 'average' | `domain:${string}`;
+type ModelBreakoutSortDirection = 'asc' | 'desc';
 
-type BreakoutSort = {
-  key: BreakoutSortKey;
-  direction: BreakoutSortDirection;
+type ModelBreakoutSort = {
+  key: ModelBreakoutSortKey;
+  direction: ModelBreakoutSortDirection;
 };
 
-type CellData = {
+type ModelCellData = {
   strongCount: number;
   leanCount: number;
   strongPct: number | null;
   shift: number | null;
   status: 'ready' | 'loading' | 'error';
-  error: string | null;
 };
 
-type RowData = {
-  valueKey: string;
-  valueLabel: string;
+type ModelRowData = {
+  modelId: string;
+  modelLabel: string;
   averageStrongPct: number | null;
-  cells: Map<string, CellData>;
+  cells: Map<string, ModelCellData>;
 };
 
-const DEFAULT_SORT: BreakoutSort = {
-  key: 'value',
+const DEFAULT_MODEL_SORT: ModelBreakoutSort = {
+  key: 'model',
   direction: 'asc',
 };
 
 const MODELS_CONFIDENCE_BY_DOMAIN_QUERY = gql`
-  query ConfidenceDomainBreakoutModelsConfidence($signature: String, $domainId: ID!) {
+  query ConfidenceModelBreakoutModelsConfidence($signature: String, $domainId: ID!) {
     modelsConfidence(signature: $signature, domainId: $domainId) {
       models {
         modelId
@@ -96,16 +94,16 @@ const MODELS_CONFIDENCE_BY_DOMAIN_QUERY = gql`
   }
 `;
 
-type ConfidenceDomainBreakoutModelsConfidenceQueryVariables = {
+type ConfidenceModelBreakoutModelsConfidenceQueryVariables = {
   signature?: string | null;
   domainId: string;
 };
 
-function getSortDirectionLabel(direction: BreakoutSortDirection): 'ascending' | 'descending' {
+function getSortDirectionLabel(direction: ModelBreakoutSortDirection): 'ascending' | 'descending' {
   return direction === 'asc' ? 'ascending' : 'descending';
 }
 
-function getNextSort(sort: BreakoutSort, key: BreakoutSortKey): BreakoutSort {
+function getNextSort(sort: ModelBreakoutSort, key: ModelBreakoutSortKey): ModelBreakoutSort {
   if (sort.key === key) {
     return {
       key,
@@ -115,16 +113,16 @@ function getNextSort(sort: BreakoutSort, key: BreakoutSortKey): BreakoutSort {
 
   return {
     key,
-    direction: key === 'value' ? 'asc' : 'desc',
+    direction: key === 'model' ? 'asc' : 'desc',
   };
 }
 
-function sortRows(rows: RowData[], sort: BreakoutSort, displayMode: DomainShiftDisplayMode): RowData[] {
+function sortRows(rows: ModelRowData[], sort: ModelBreakoutSort, displayMode: DomainShiftDisplayMode): ModelRowData[] {
   return [...rows]
     .map((row, index) => ({ row, index }))
     .sort((left, right) => {
-      const getSortValue = (row: RowData): string | number | null => {
-        if (sort.key === 'value') return row.valueLabel;
+      const getSortValue = (row: ModelRowData): string | number | null => {
+        if (sort.key === 'model') return row.modelLabel;
         if (sort.key === 'average') return row.averageStrongPct;
 
         const domainId = sort.key.slice('domain:'.length);
@@ -142,48 +140,113 @@ function sortRows(rows: RowData[], sort: BreakoutSort, displayMode: DomainShiftD
 
       const direction = sort.direction === 'asc' ? 1 : -1;
       if (typeof leftValue === 'string' && typeof rightValue === 'string') {
-        const labelComparison = leftValue.localeCompare(rightValue);
-        return labelComparison === 0 ? left.index - right.index : labelComparison * direction;
+        const comparison = leftValue.localeCompare(rightValue);
+        return comparison === 0 ? left.index - right.index : comparison * direction;
       }
 
-      const numericComparison = Number(leftValue) - Number(rightValue);
-      return numericComparison === 0 ? left.index - right.index : numericComparison * direction;
+      const comparison = Number(leftValue) - Number(rightValue);
+      return comparison === 0 ? left.index - right.index : comparison * direction;
     })
     .map(({ row }) => row);
 }
 
-function buildCell(models: ModelsConfidenceModelResult[], selectedModelIds: ReadonlySet<string>, valueKey: string): CellData {
-  let strongCount = 0;
-  let leanCount = 0;
+function buildModelRows(
+  domains: DomainOption[],
+  domainStates: Record<string, DomainQueryState>,
+  effectiveModelIds: readonly string[],
+): ModelRowData[] {
+  const modelLabels = new Map<string, string>();
 
-  for (const model of models) {
-    if (!selectedModelIds.has(model.modelId)) continue;
-    const value = model.values.find((entry) => entry.valueKey === valueKey) ?? null;
-    if (value == null) continue;
-    strongCount += value.strongCount;
-    leanCount += value.leanCount;
+  for (const domain of domains) {
+    const state = domainStates[domain.id];
+    if (state == null || state.status !== 'ready') continue;
+
+    for (const model of state.models) {
+      if (!modelLabels.has(model.modelId)) {
+        modelLabels.set(model.modelId, model.label);
+      }
+    }
   }
 
-  const total = strongCount + leanCount;
-  if (total === 0) {
+  return effectiveModelIds.map((modelId) => {
+    let pooledStrong = 0;
+    let pooledLean = 0;
+    const cells = new Map<string, ModelCellData>();
+
+    for (const domain of domains) {
+      const state = domainStates[domain.id];
+      if (state == null || state.status === 'loading') {
+        cells.set(domain.id, {
+          strongCount: 0,
+          leanCount: 0,
+          strongPct: null,
+          shift: null,
+          status: 'loading',
+        });
+        continue;
+      }
+
+      if (state.status === 'error') {
+        cells.set(domain.id, {
+          strongCount: 0,
+          leanCount: 0,
+          strongPct: null,
+          shift: null,
+          status: 'error',
+        });
+        continue;
+      }
+
+      const model = state.models.find((entry) => entry.modelId === modelId) ?? null;
+      if (model == null) {
+        cells.set(domain.id, {
+          strongCount: 0,
+          leanCount: 0,
+          strongPct: null,
+          shift: null,
+          status: 'ready',
+        });
+        continue;
+      }
+
+      const total = model.overallStrongCount + model.overallLeanCount;
+      const strongPct = total > 0 ? (model.overallStrongCount / total) * 100 : null;
+      pooledStrong += model.overallStrongCount;
+      pooledLean += model.overallLeanCount;
+      cells.set(domain.id, {
+        strongCount: model.overallStrongCount,
+        leanCount: model.overallLeanCount,
+        strongPct,
+        shift: null,
+        status: 'ready',
+      });
+    }
+
+    const total = pooledStrong + pooledLean;
+    const averageStrongPct = total > 0 ? (pooledStrong / total) * 100 : null;
+
+    for (const [domainId, cell] of cells.entries()) {
+      if (cell.status !== 'ready' || cell.strongPct == null) continue;
+      cells.set(domainId, {
+        ...cell,
+        shift: averageStrongPct == null ? null : cell.strongPct - averageStrongPct,
+      });
+    }
+
     return {
-      strongCount,
-      leanCount,
-      strongPct: null,
-      shift: null,
-      status: 'ready',
-      error: null,
+      modelId,
+      modelLabel: modelLabels.get(modelId) ?? modelId,
+      averageStrongPct,
+      cells,
     };
-  }
+  });
+}
 
-  return {
-    strongCount,
-    leanCount,
-    strongPct: (strongCount / total) * 100,
-    shift: null,
-    status: 'ready',
-    error: null,
-  };
+function getCellValue(cell: ModelCellData, displayMode: DomainShiftDisplayMode): string {
+  if (cell.status === 'loading') return '…';
+  if (cell.status === 'error' || cell.strongPct == null) return '—';
+  if (displayMode === 'shift') return cell.shift == null ? '—' : formatPointShift(cell.shift);
+  return formatPercent(cell.strongPct);
 }
 
 function SortableHeader({
@@ -195,9 +258,9 @@ function SortableHeader({
   className,
 }: {
   label: string;
-  sortKey: BreakoutSortKey;
-  sort: BreakoutSort;
-  onSort: (sort: BreakoutSort) => void;
+  sortKey: ModelBreakoutSortKey;
+  sort: ModelBreakoutSort;
+  onSort: (sort: ModelBreakoutSort) => void;
   align?: 'left' | 'center' | 'right';
   className?: string;
 }) {
@@ -240,56 +303,18 @@ function SortableHeader({
   );
 }
 
-export function DisplayModeToggle({
-  displayMode,
-  onChange,
-}: {
-  displayMode: DomainShiftDisplayMode;
-  onChange: (displayMode: DomainShiftDisplayMode) => void;
-}) {
-  return (
-    <fieldset className="space-y-2">
-      <legend className="block text-sm font-medium text-gray-700">Cell metric</legend>
-      <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
-        {([
-          ['winRate', 'Strong%'],
-          ['shift', 'Shift vs avg'],
-        ] as const).map(([mode, label]) => (
-          <Button
-            key={mode}
-            type="button"
-            variant="ghost"
-            size="sm"
-            aria-pressed={displayMode === mode}
-            onClick={() => onChange(mode)}
-            className={cn(
-              'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
-              displayMode === mode
-                ? 'bg-white text-teal-800 shadow-sm ring-1 ring-teal-200'
-                : 'text-gray-600 hover:text-gray-900',
-            )}
-          >
-            {label}
-          </Button>
-        ))}
-      </div>
-    </fieldset>
-  );
-}
-
-export function ConfidenceDomainBreakout({
+export function ConfidenceModelDomainBreakout({
   domains,
   signature,
   selectedModelIds,
   defaultModelIds,
   selectedDomainId,
-}: ConfidenceDomainBreakoutProps) {
+}: ConfidenceModelDomainBreakoutProps) {
   const client = useClient();
   const [displayMode, setDisplayMode] = useState<DomainShiftDisplayMode>('winRate');
-  const [sort, setSort] = useState<BreakoutSort>(DEFAULT_SORT);
+  const [sort, setSort] = useState<ModelBreakoutSort>(DEFAULT_MODEL_SORT);
   const [domainStates, setDomainStates] = useState<Record<string, DomainQueryState>>({});
   const effectiveModelIds = selectedModelIds ?? defaultModelIds;
-  const selectedModelSet = useMemo(() => new Set(effectiveModelIds), [effectiveModelIds]);
   const noModelsSelected = effectiveModelIds.length === 0;
 
   useEffect(() => {
@@ -314,7 +339,7 @@ export function ConfidenceDomainBreakout({
       domains.map(async (domain) => {
         try {
           const result = await client
-            .query<ModelsConfidenceQueryResult, ConfidenceDomainBreakoutModelsConfidenceQueryVariables>(
+            .query<ModelsConfidenceQueryResult, ConfidenceModelBreakoutModelsConfidenceQueryVariables>(
               MODELS_CONFIDENCE_BY_DOMAIN_QUERY,
               { signature, domainId: domain.id },
             )
@@ -361,63 +386,10 @@ export function ConfidenceDomainBreakout({
     };
   }, [client, domains, signature]);
 
-  const rows = useMemo<RowData[]>(() => {
-    return VALUES.map((valueKey) => {
-      let pooledStrong = 0;
-      let pooledLean = 0;
-      const cells = new Map<string, CellData>();
-
-      for (const domain of domains) {
-        const state = domainStates[domain.id];
-        if (state == null || state.status === 'loading') {
-          cells.set(domain.id, {
-            strongCount: 0,
-            leanCount: 0,
-            strongPct: null,
-            shift: null,
-            status: 'loading',
-            error: null,
-          });
-          continue;
-        }
-
-        if (state.status === 'error') {
-          cells.set(domain.id, {
-            strongCount: 0,
-            leanCount: 0,
-            strongPct: null,
-            shift: null,
-            status: 'error',
-            error: state.error,
-          });
-          continue;
-        }
-
-        const cell = buildCell(state.models, selectedModelSet, valueKey);
-        pooledStrong += cell.strongCount;
-        pooledLean += cell.leanCount;
-        cells.set(domain.id, cell);
-      }
-
-      const total = pooledStrong + pooledLean;
-      const averageStrongPct = total > 0 ? (pooledStrong / total) * 100 : null;
-
-      for (const [domainId, cell] of cells.entries()) {
-        if (cell.status !== 'ready') continue;
-        cells.set(domainId, {
-          ...cell,
-          shift: cell.strongPct != null && averageStrongPct != null ? cell.strongPct - averageStrongPct : null,
-        });
-      }
-
-      return {
-        valueKey,
-        valueLabel: VALUE_LABELS[valueKey as keyof typeof VALUE_LABELS] ?? formatFullSchwartzValueName(valueKey as Parameters<typeof formatFullSchwartzValueName>[0]),
-        averageStrongPct,
-        cells,
-      };
-    });
-  }, [domains, domainStates, selectedModelSet]);
+  const rows = useMemo(
+    () => buildModelRows(domains, domainStates, effectiveModelIds),
+    [domains, domainStates, effectiveModelIds],
+  );
 
   const sortedRows = useMemo(
     () => sortRows(rows, sort, displayMode),
@@ -444,7 +416,7 @@ export function ConfidenceDomainBreakout({
     <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">Confidence by Value &amp; Domain</h2>
+          <h2 className="text-lg font-semibold text-gray-900">Confidence by Model &amp; Domain</h2>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <DisplayModeToggle displayMode={displayMode} onChange={setDisplayMode} />
@@ -460,8 +432,8 @@ export function ConfidenceDomainBreakout({
           <thead>
             <tr className="border-b border-gray-200 text-gray-600">
               <SortableHeader
-                label="Value"
-                sortKey="value"
+                label="Model"
+                sortKey="model"
                 sort={sort}
                 onSort={setSort}
                 align="left"
@@ -477,7 +449,7 @@ export function ConfidenceDomainBreakout({
               />
               {domains.map((domain) => {
                 const isSelected = selectedDomainId === domain.id;
-                const domainSortKey: BreakoutSortKey = `domain:${domain.id}`;
+                const domainSortKey: ModelBreakoutSortKey = `domain:${domain.id}`;
                 return (
                   <SortableHeader
                     key={domain.id}
@@ -494,9 +466,9 @@ export function ConfidenceDomainBreakout({
           <tbody>
             {sortedRows.map((row) => {
               return (
-                <tr key={row.valueKey} className="border-b border-gray-100">
+                <tr key={row.modelId} className="border-b border-gray-100">
                   <th scope="row" className="border-b border-r-2 border-gray-300 bg-white px-2 py-2 whitespace-nowrap text-left font-medium text-gray-900">
-                    {row.valueLabel}
+                    {row.modelLabel}
                   </th>
                   <td className="border-b border-r-2 border-gray-300 bg-white px-2 py-2 whitespace-nowrap text-right font-mono text-gray-700">
                     {formatPercent(row.averageStrongPct)}
@@ -517,10 +489,11 @@ export function ConfidenceDomainBreakout({
                             ? getCellTone(cell.shift ?? 0)
                             : getWinRateTone(cell.strongPct),
                     );
+
                     return (
                       <td key={domain.id} className={tdClassName}>
                         <span className="inline-flex min-w-[64px] justify-center tabular-nums">
-                          {isLoading ? '…' : isError || cell == null ? '—' : displayMode === 'shift' ? (cell.shift == null ? '—' : formatPointShift(cell.shift)) : formatPercent(cell.strongPct)}
+                          {cell == null ? '…' : getCellValue(cell, displayMode)}
                         </span>
                       </td>
                     );
