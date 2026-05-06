@@ -1,0 +1,92 @@
+query PressureSensitivity(
+  $domainId: ID
+  $definitionId: ID
+  $modelIds: [String!]
+  $signature: String!
+) {
+  pressureSensitivity(
+    domainId: $domainId
+    definitionId: $definitionId
+    modelIds: $modelIds
+    signature: $signature
+  ) {
+    models {
+      modelId
+      label
+      providerName
+      unscoredCount
+      pushedForEffect
+      pushedAgainstEffect
+      pushedEffectPairsUsed
+      domainPressureEffects { domainId domainName pushedForEffect }
+      pressureResponseSummary { mean rangeMin rangeMax pairsMeasured }
+      valueRates {
+        valueToken
+        valueLabel
+        averageWinRate
+        balancedWinRate
+        highPressureOnThisValueWinRate
+        highPressureOnOpposingValueWinRate
+        pairsMeasured
+      }
+      valuePairs {
+        pairKey
+        firstValueToken
+        firstValueLabel
+        secondValueToken
+        secondValueLabel
+        n
+        unscoredCount
+        definitionsMeasured
+        directionBalancedWinRate
+        directionBalancedOpponentWinRate
+        directionBalancedBalancedWinRate
+        directionBalancedBalancedOpponentWinRate
+        directionBalancedHighPressureOwnWinRate
+        directionBalancedHighPressureOwnOpponentWinRate
+        directionBalancedHighPressureOpponentWinRate
+        directionBalancedHighPressureOpponentOpponentWinRate
+        pressureResponse {
+          value
+          baselineRate
+          pushTowardFirstRate
+          pushTowardSecondRate
+          qualifyingTrials
+          ciLow
+          ciHigh
+          reason
+        }
+        grid {
+          ownLevel
+          opponentLevel
+          n
+          unscoredCount
+          winRate
+          opponentWinRate
+          conviction
+          netScore
+          lowData
+        }
+      }
+    }
+    insufficient { modelId label providerName reason }
+    excludedDefinitions { definitionId name reason }
+    pressureConditionExcludedCount
+    pressureConditionExclusionBreakdown {
+      sourceRunMapping
+      definitionMetadata
+      missingScenario
+      invalidMetadata
+      levelAssignment
+    }
+    transcriptCapHit
+    directionalSanityCheck {
+      positivePct
+      flatPct
+      negativePct
+      measuredCount
+      unmeasurableCount
+      breakdown { modelId pairKey pressureResponse classification }
+    }
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "description": "Locked snapshots of every result-bearing GraphQL query that drives the Models nav pages. The verify script replays each query against production and fails if the response differs, after stripping volatile fields. Update fixtures only via an explicit, reviewed PR — never silently.",
+  "filterContext": {
+    "signature": "vnewtd",
+    "domainScope": "ALL_DOMAINS",
+    "modelSelection": "LLM models with isDefault=true at capture time (8 models)"
+  },
+  "capturedAt": "2026-05-05",
+  "snapshots": [
+    {
+      "name": "domain-analysis",
+      "queryFile": "queries/domain-analysis.graphql",
+      "responseFile": "responses/domain-analysis.json",
+      "variables": {
+        "domainId": "cmmqi1urq0000e4y3ot8sfm06",
+        "scope": "ALL_DOMAINS",
+        "signature": "vnewtd"
+      },
+      "volatileFields": [
+        "data.domainAnalysis.cacheStatus",
+        "data.domainAnalysis.generatedAt"
+      ],
+      "drivesPages": ["Model Groups", "Domain Analysis"]
+    },
+    {
+      "name": "models-analysis",
+      "queryFile": "queries/models-analysis.graphql",
+      "responseFile": "responses/models-analysis.json",
+      "variables": {
+        "domainId": null,
+        "signature": "vnewtd"
+      },
+      "volatileFields": [],
+      "drivesPages": ["Model Groups", "Domain Analysis", "Domain Shifts"]
+    },
+    {
+      "name": "pressure-sensitivity",
+      "queryFile": "queries/pressure-sensitivity.graphql",
+      "responseFile": "responses/pressure-sensitivity.json",
+      "variables": {
+        "domainId": null,
+        "definitionId": null,
+        "modelIds": [
+          "claude-sonnet-4-5",
+          "deepseek-chat",
+          "deepseek-reasoner",
+          "gemini-2.5-flash",
+          "gpt-5.1",
+          "grok-4-1-fast-reasoning",
+          "mistral-large-2512",
+          "mistral-small-2503"
+        ],
+        "signature": "vnewtd"
+      },
+      "volatileFields": [],
+      "drivesPages": ["Pressure Sensitivity"]
+    },
+    {
+      "name": "models-confidence",
+      "queryFile": "queries/models-confidence.graphql",
+      "responseFile": "responses/models-confidence.json",
+      "variables": {
+        "signature": "vnewtd",
+        "domainId": null
+      },
+      "volatileFields": [],
+      "drivesPages": ["Confidence"]
+    },
+    {
+      "name": "llm-models",
+      "queryFile": "queries/llm-models.graphql",
+      "responseFile": "responses/llm-models.json",
+      "variables": {},
+      "volatileFields": [],
+      "drivesPages": ["all (controls Default Models set)"],
+      "note": "Locks the isDefault flag set. If the default model list changes, the report's default-models view will silently shift unless this snapshot fires."
+    }
+  ]
+}

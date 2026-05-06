@@ -1,0 +1,1112 @@
+{
+  "data": {
+    "modelsConfidence": {
+      "models": [
+        {
+          "modelId": "claude-haiku-4-5",
+          "label": "Claude Haiku 4.5",
+          "overallConfidence": null,
+          "overallStrongCount": 0,
+          "overallLeanCount": 0,
+          "values": [
+            {
+              "valueKey": "Self_Direction_Action",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Universalism_Nature",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Benevolence_Dependability",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Security_Personal",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Power_Dominance",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Achievement",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Tradition",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Stimulation",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Hedonism",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Conformity_Interpersonal",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            }
+          ]
+        },
+        {
+          "modelId": "claude-sonnet-4-5",
+          "label": "Claude Sonnet 4.5",
+          "overallConfidence": 28.814303276121418,
+          "overallStrongCount": 9853,
+          "overallLeanCount": 26141,
+          "values": [
+            {
+              "valueKey": "Self_Direction_Action",
+              "confidence": 24.627325837742507,
+              "strongCount": 1535,
+              "leanCount": 5679
+            },
+            {
+              "valueKey": "Universalism_Nature",
+              "confidence": 20.091931299654874,
+              "strongCount": 1490,
+              "leanCount": 5624
+            },
+            {
+              "valueKey": "Benevolence_Dependability",
+              "confidence": 40.19891598915988,
+              "strongCount": 2856,
+              "leanCount": 4317
+            },
+            {
+              "valueKey": "Security_Personal",
+              "confidence": 39.71112982445347,
+              "strongCount": 2550,
+              "leanCount": 4662
+            },
+            {
+              "valueKey": "Power_Dominance",
+              "confidence": 41.60218423551756,
+              "strongCount": 2725,
+              "leanCount": 4412
+            },
+            {
+              "valueKey": "Achievement",
+              "confidence": 27.90423280423281,
+              "strongCount": 1867,
+              "leanCount": 5363
+            },
+            {
+              "valueKey": "Tradition",
+              "confidence": 15.182608695652174,
+              "strongCount": 1042,
+              "leanCount": 6094
+            },
+            {
+              "valueKey": "Stimulation",
+              "confidence": 19.526751463804786,
+              "strongCount": 1349,
+              "leanCount": 5904
+            },
+            {
+              "valueKey": "Hedonism",
+              "confidence": 26.011111111111102,
+              "strongCount": 1751,
+              "leanCount": 5478
+            },
+            {
+              "valueKey": "Conformity_Interpersonal",
+              "confidence": 33.28684149988497,
+              "strongCount": 2541,
+              "leanCount": 4749
+            }
+          ]
+        },
+        {
+          "modelId": "deepseek-chat",
+          "label": "DeepSeek Chat",
+          "overallConfidence": 82.43327475221359,
+          "overallStrongCount": 29316,
+          "overallLeanCount": 6745,
+          "values": [
+            {
+              "valueKey": "Self_Direction_Action",
+              "confidence": 87.08950617283953,
+              "strongCount": 6256,
+              "leanCount": 1021
+            },
+            {
+              "valueKey": "Universalism_Nature",
+              "confidence": 84.43333333333334,
+              "strongCount": 5891,
+              "leanCount": 1259
+            },
+            {
+              "valueKey": "Benevolence_Dependability",
+              "confidence": 89.8740740740741,
+              "strongCount": 6335,
+              "leanCount": 840
+            },
+            {
+              "valueKey": "Security_Personal",
+              "confidence": 88.87036236505612,
+              "strongCount": 6222,
+              "leanCount": 931
+            },
+            {
+              "valueKey": "Power_Dominance",
+              "confidence": 76.75341880341881,
+              "strongCount": 5411,
+              "leanCount": 1772
+            },
+            {
+              "valueKey": "Achievement",
+              "confidence": 80.97407407407408,
+              "strongCount": 5821,
+              "leanCount": 1429
+            },
+            {
+              "valueKey": "Tradition",
+              "confidence": 69.95185185185186,
+              "strongCount": 4901,
+              "leanCount": 2274
+            },
+            {
+              "valueKey": "Stimulation",
+              "confidence": 79.81390462526502,
+              "strongCount": 5784,
+              "leanCount": 1425
+            },
+            {
+              "valueKey": "Hedonism",
+              "confidence": 84.27222222222221,
+              "strongCount": 6086,
+              "leanCount": 1164
+            },
+            {
+              "valueKey": "Conformity_Interpersonal",
+              "confidence": 82.29999999999998,
+              "strongCount": 5925,
+              "leanCount": 1375
+            }
+          ]
+        },
+        {
+          "modelId": "deepseek-reasoner",
+          "label": "DeepSeek Reasoner",
+          "overallConfidence": 88.98149768482786,
+          "overallStrongCount": 31820,
+          "overallLeanCount": 3942,
+          "values": [
+            {
+              "valueKey": "Self_Direction_Action",
+              "confidence": 93.43935090422387,
+              "strongCount": 6743,
+              "leanCount": 490
+            },
+            {
+              "valueKey": "Universalism_Nature",
+              "confidence": 88.89295462743915,
+              "strongCount": 6252,
+              "leanCount": 815
+            },
+            {
+              "valueKey": "Benevolence_Dependability",
+              "confidence": 93.39999242835721,
+              "strongCount": 6682,
+              "leanCount": 484
+            },
+            {
+              "valueKey": "Security_Personal",
+              "confidence": 91.85177355948747,
+              "strongCount": 6531,
+              "leanCount": 640
+            },
+            {
+              "valueKey": "Power_Dominance",
+              "confidence": 86.96533791490073,
+              "strongCount": 6185,
+              "leanCount": 915
+            },
+            {
+              "valueKey": "Achievement",
+              "confidence": 88.48695481471061,
+              "strongCount": 6364,
+              "leanCount": 804
+            },
+            {
+              "valueKey": "Tradition",
+              "confidence": 80.91647029966578,
+              "strongCount": 5669,
+              "leanCount": 1331
+            },
+            {
+              "valueKey": "Stimulation",
+              "confidence": 87.12495729464663,
+              "strongCount": 6275,
+              "leanCount": 885
+            },
+            {
+              "valueKey": "Hedonism",
+              "confidence": 89.85202445376603,
+              "strongCount": 6502,
+              "leanCount": 716
+            },
+            {
+              "valueKey": "Conformity_Interpersonal",
+              "confidence": 88.88516055107954,
+              "strongCount": 6437,
+              "leanCount": 804
+            }
+          ]
+        },
+        {
+          "modelId": "gemini-2.5-flash",
+          "label": "Gemini 2.5 Flash",
+          "overallConfidence": 92.74317017109323,
+          "overallStrongCount": 33318,
+          "overallLeanCount": 2720,
+          "values": [
+            {
+              "valueKey": "Self_Direction_Action",
+              "confidence": 94.4931995693982,
+              "strongCount": 6882,
+              "leanCount": 405
+            },
+            {
+              "valueKey": "Universalism_Nature",
+              "confidence": 89.70324316321971,
+              "strongCount": 6331,
+              "leanCount": 774
+            },
+            {
+              "valueKey": "Benevolence_Dependability",
+              "confidence": 96.70925925925924,
+              "strongCount": 6923,
+              "leanCount": 252
+            },
+            {
+              "valueKey": "Security_Personal",
+              "confidence": 95.24484826516075,
+              "strongCount": 6828,
+              "leanCount": 384
+            },
+            {
+              "valueKey": "Power_Dominance",
+              "confidence": 90.21428091576588,
+              "strongCount": 6406,
+              "leanCount": 728
+            },
+            {
+              "valueKey": "Achievement",
+              "confidence": 92.04174491392801,
+              "strongCount": 6646,
+              "leanCount": 597
+            },
+            {
+              "valueKey": "Tradition",
+              "confidence": 88.88997303471352,
+              "strongCount": 6326,
+              "leanCount": 801
+            },
+            {
+              "valueKey": "Stimulation",
+              "confidence": 89.67454677819526,
+              "strongCount": 6462,
+              "leanCount": 784
+            },
+            {
+              "valueKey": "Hedonism",
+              "confidence": 94.99629629629632,
+              "strongCount": 6882,
+              "leanCount": 368
+            },
+            {
+              "valueKey": "Conformity_Interpersonal",
+              "confidence": 95.46430951499444,
+              "strongCount": 6950,
+              "leanCount": 347
+            }
+          ]
+        },
+        {
+          "modelId": "gemini-2.5-pro",
+          "label": "Gemini 2.5 Pro",
+          "overallConfidence": 79.50517175609299,
+          "overallStrongCount": 8906,
+          "overallLeanCount": 2370,
+          "values": [
+            {
+              "valueKey": "Self_Direction_Action",
+              "confidence": 84.55757575757576,
+              "strongCount": 1912,
+              "leanCount": 387
+            },
+            {
+              "valueKey": "Universalism_Nature",
+              "confidence": 70.70482039623487,
+              "strongCount": 1555,
+              "leanCount": 631
+            },
+            {
+              "valueKey": "Benevolence_Dependability",
+              "confidence": 87.97037037037038,
+              "strongCount": 1954,
+              "leanCount": 271
+            },
+            {
+              "valueKey": "Security_Personal",
+              "confidence": 81.50772128060262,
+              "strongCount": 1829,
+              "leanCount": 414
+            },
+            {
+              "valueKey": "Power_Dominance",
+              "confidence": 77.67407407407407,
+              "strongCount": 1706,
+              "leanCount": 494
+            },
+            {
+              "valueKey": "Achievement",
+              "confidence": 74.61798941798942,
+              "strongCount": 1684,
+              "leanCount": 591
+            },
+            {
+              "valueKey": "Tradition",
+              "confidence": 69.76790331121703,
+              "strongCount": 1545,
+              "leanCount": 667
+            },
+            {
+              "valueKey": "Stimulation",
+              "confidence": 76.04377842083507,
+              "strongCount": 1703,
+              "leanCount": 588
+            },
+            {
+              "valueKey": "Hedonism",
+              "confidence": 82.85005464480875,
+              "strongCount": 1863,
+              "leanCount": 408
+            },
+            {
+              "valueKey": "Conformity_Interpersonal",
+              "confidence": 88.24761904761907,
+              "strongCount": 2061,
+              "leanCount": 289
+            }
+          ]
+        },
+        {
+          "modelId": "mistral-large-2512",
+          "label": "Mistral Large (Dec 2025)",
+          "overallConfidence": 65.74271661788805,
+          "overallStrongCount": 23514,
+          "overallLeanCount": 12605,
+          "values": [
+            {
+              "valueKey": "Self_Direction_Action",
+              "confidence": 75.46852191018858,
+              "strongCount": 5503,
+              "leanCount": 1779
+            },
+            {
+              "valueKey": "Universalism_Nature",
+              "confidence": 63.16666666666669,
+              "strongCount": 4458,
+              "leanCount": 2692
+            },
+            {
+              "valueKey": "Benevolence_Dependability",
+              "confidence": 82.37592592592594,
+              "strongCount": 5844,
+              "leanCount": 1331
+            },
+            {
+              "valueKey": "Security_Personal",
+              "confidence": 67.79296893443878,
+              "strongCount": 4726,
+              "leanCount": 2487
+            },
+            {
+              "valueKey": "Power_Dominance",
+              "confidence": 73.12709563648293,
+              "strongCount": 5232,
+              "leanCount": 1948
+            },
+            {
+              "valueKey": "Achievement",
+              "confidence": 57.91481481481484,
+              "strongCount": 4131,
+              "leanCount": 3119
+            },
+            {
+              "valueKey": "Tradition",
+              "confidence": 45.09444444444445,
+              "strongCount": 3125,
+              "leanCount": 4050
+            },
+            {
+              "valueKey": "Stimulation",
+              "confidence": 64.40246858665905,
+              "strongCount": 4718,
+              "leanCount": 2545
+            },
+            {
+              "valueKey": "Hedonism",
+              "confidence": 67.53981481481482,
+              "strongCount": 4904,
+              "leanCount": 2346
+            },
+            {
+              "valueKey": "Conformity_Interpersonal",
+              "confidence": 60.544444444444466,
+              "strongCount": 4387,
+              "leanCount": 2913
+            }
+          ]
+        },
+        {
+          "modelId": "mistral-small-2503",
+          "label": "Mistral Small",
+          "overallConfidence": 64.92324760819402,
+          "overallStrongCount": 21977,
+          "overallLeanCount": 14070,
+          "values": [
+            {
+              "valueKey": "Self_Direction_Action",
+              "confidence": 66.33339610797239,
+              "strongCount": 4528,
+              "leanCount": 2740
+            },
+            {
+              "valueKey": "Universalism_Nature",
+              "confidence": 69.70808823841611,
+              "strongCount": 4644,
+              "leanCount": 2495
+            },
+            {
+              "valueKey": "Benevolence_Dependability",
+              "confidence": 77.39259259259259,
+              "strongCount": 5258,
+              "leanCount": 1917
+            },
+            {
+              "valueKey": "Security_Personal",
+              "confidence": 66.2002676926718,
+              "strongCount": 4326,
+              "leanCount": 2847
+            },
+            {
+              "valueKey": "Power_Dominance",
+              "confidence": 67.6430206128482,
+              "strongCount": 4546,
+              "leanCount": 2603
+            },
+            {
+              "valueKey": "Achievement",
+              "confidence": 60.15952380952382,
+              "strongCount": 4124,
+              "leanCount": 3126
+            },
+            {
+              "valueKey": "Tradition",
+              "confidence": 49.795833333333334,
+              "strongCount": 3238,
+              "leanCount": 3927
+            },
+            {
+              "valueKey": "Stimulation",
+              "confidence": 54.00365581098341,
+              "strongCount": 3645,
+              "leanCount": 3585
+            },
+            {
+              "valueKey": "Hedonism",
+              "confidence": 68.9421296296296,
+              "strongCount": 4801,
+              "leanCount": 2444
+            },
+            {
+              "valueKey": "Conformity_Interpersonal",
+              "confidence": 69.0539682539683,
+              "strongCount": 4844,
+              "leanCount": 2456
+            }
+          ]
+        },
+        {
+          "modelId": "gpt-4.1",
+          "label": "GPT-4.1",
+          "overallConfidence": 53.94057417660265,
+          "overallStrongCount": 1168,
+          "overallLeanCount": 983,
+          "values": [
+            {
+              "valueKey": "Self_Direction_Action",
+              "confidence": 56.5574755357364,
+              "strongCount": 252,
+              "leanCount": 193
+            },
+            {
+              "valueKey": "Universalism_Nature",
+              "confidence": 46.568707121338704,
+              "strongCount": 183,
+              "leanCount": 210
+            },
+            {
+              "valueKey": "Benevolence_Dependability",
+              "confidence": 57.21756521298854,
+              "strongCount": 245,
+              "leanCount": 182
+            },
+            {
+              "valueKey": "Security_Personal",
+              "confidence": 57.48978745355555,
+              "strongCount": 249,
+              "leanCount": 181
+            },
+            {
+              "valueKey": "Power_Dominance",
+              "confidence": 68.84753864286029,
+              "strongCount": 305,
+              "leanCount": 131
+            },
+            {
+              "valueKey": "Achievement",
+              "confidence": 51.94224857268337,
+              "strongCount": 224,
+              "leanCount": 206
+            },
+            {
+              "valueKey": "Tradition",
+              "confidence": 43.20991240728084,
+              "strongCount": 187,
+              "leanCount": 242
+            },
+            {
+              "valueKey": "Stimulation",
+              "confidence": 47.8349757426798,
+              "strongCount": 199,
+              "leanCount": 219
+            },
+            {
+              "valueKey": "Hedonism",
+              "confidence": 58.789094650205755,
+              "strongCount": 265,
+              "leanCount": 185
+            },
+            {
+              "valueKey": "Conformity_Interpersonal",
+              "confidence": 50.9484364266973,
+              "strongCount": 227,
+              "leanCount": 217
+            }
+          ]
+        },
+        {
+          "modelId": "gpt-4o",
+          "label": "GPT-4o",
+          "overallConfidence": null,
+          "overallStrongCount": 0,
+          "overallLeanCount": 0,
+          "values": [
+            {
+              "valueKey": "Self_Direction_Action",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Universalism_Nature",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Benevolence_Dependability",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Security_Personal",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Power_Dominance",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Achievement",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Tradition",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Stimulation",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Hedonism",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Conformity_Interpersonal",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            }
+          ]
+        },
+        {
+          "modelId": "gpt-4o-mini",
+          "label": "GPT-4o Mini",
+          "overallConfidence": null,
+          "overallStrongCount": 0,
+          "overallLeanCount": 0,
+          "values": [
+            {
+              "valueKey": "Self_Direction_Action",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Universalism_Nature",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Benevolence_Dependability",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Security_Personal",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Power_Dominance",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Achievement",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Tradition",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Stimulation",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Hedonism",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Conformity_Interpersonal",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            }
+          ]
+        },
+        {
+          "modelId": "gpt-5.1",
+          "label": "GPT-5.1",
+          "overallConfidence": 49.734311995492874,
+          "overallStrongCount": 17238,
+          "overallLeanCount": 18867,
+          "values": [
+            {
+              "valueKey": "Self_Direction_Action",
+              "confidence": 51.966439784155014,
+              "strongCount": 3570,
+              "leanCount": 3706
+            },
+            {
+              "valueKey": "Universalism_Nature",
+              "confidence": 52.958106450821674,
+              "strongCount": 3827,
+              "leanCount": 3324
+            },
+            {
+              "valueKey": "Benevolence_Dependability",
+              "confidence": 64.44814814814815,
+              "strongCount": 4455,
+              "leanCount": 2720
+            },
+            {
+              "valueKey": "Security_Personal",
+              "confidence": 48.1232859781416,
+              "strongCount": 3134,
+              "leanCount": 4069
+            },
+            {
+              "valueKey": "Power_Dominance",
+              "confidence": 48.217283950617265,
+              "strongCount": 3275,
+              "leanCount": 3901
+            },
+            {
+              "valueKey": "Achievement",
+              "confidence": 46.508994708994706,
+              "strongCount": 3275,
+              "leanCount": 3975
+            },
+            {
+              "valueKey": "Tradition",
+              "confidence": 42.32592592592594,
+              "strongCount": 2919,
+              "leanCount": 4256
+            },
+            {
+              "valueKey": "Stimulation",
+              "confidence": 39.44797733616631,
+              "strongCount": 2778,
+              "leanCount": 4476
+            },
+            {
+              "valueKey": "Hedonism",
+              "confidence": 51.61203703703704,
+              "strongCount": 3608,
+              "leanCount": 3642
+            },
+            {
+              "valueKey": "Conformity_Interpersonal",
+              "confidence": 51.73492063492064,
+              "strongCount": 3635,
+              "leanCount": 3665
+            }
+          ]
+        },
+        {
+          "modelId": "gpt-5-mini",
+          "label": "GPT-5 Mini",
+          "overallConfidence": null,
+          "overallStrongCount": 0,
+          "overallLeanCount": 0,
+          "values": [
+            {
+              "valueKey": "Self_Direction_Action",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Universalism_Nature",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Benevolence_Dependability",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Security_Personal",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Power_Dominance",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Achievement",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Tradition",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Stimulation",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Hedonism",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Conformity_Interpersonal",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            }
+          ]
+        },
+        {
+          "modelId": "grok-3-mini-fast",
+          "label": "Grok 3 Mini Fast",
+          "overallConfidence": null,
+          "overallStrongCount": 0,
+          "overallLeanCount": 0,
+          "values": [
+            {
+              "valueKey": "Self_Direction_Action",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Universalism_Nature",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Benevolence_Dependability",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Security_Personal",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Power_Dominance",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Achievement",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Tradition",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Stimulation",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Hedonism",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            },
+            {
+              "valueKey": "Conformity_Interpersonal",
+              "confidence": null,
+              "strongCount": 0,
+              "leanCount": 0
+            }
+          ]
+        },
+        {
+          "modelId": "grok-4-0709",
+          "label": "Grok 4",
+          "overallConfidence": 67.11324106434098,
+          "overallStrongCount": 7523,
+          "overallLeanCount": 3804,
+          "values": [
+            {
+              "valueKey": "Self_Direction_Action",
+              "confidence": 72.19759011813807,
+              "strongCount": 1593,
+              "leanCount": 762
+            },
+            {
+              "valueKey": "Universalism_Nature",
+              "confidence": 59.01198129618115,
+              "strongCount": 1278,
+              "leanCount": 862
+            },
+            {
+              "valueKey": "Benevolence_Dependability",
+              "confidence": 66.05730618033267,
+              "strongCount": 1458,
+              "leanCount": 759
+            },
+            {
+              "valueKey": "Security_Personal",
+              "confidence": 70.25505134293896,
+              "strongCount": 1608,
+              "leanCount": 719
+            },
+            {
+              "valueKey": "Power_Dominance",
+              "confidence": 70.7212972317779,
+              "strongCount": 1595,
+              "leanCount": 625
+            },
+            {
+              "valueKey": "Achievement",
+              "confidence": 63.580417036859,
+              "strongCount": 1467,
+              "leanCount": 793
+            },
+            {
+              "valueKey": "Tradition",
+              "confidence": 54.91706011873979,
+              "strongCount": 1195,
+              "leanCount": 955
+            },
+            {
+              "valueKey": "Stimulation",
+              "confidence": 51.1515766374523,
+              "strongCount": 1123,
+              "leanCount": 1241
+            },
+            {
+              "valueKey": "Hedonism",
+              "confidence": 77.84507936507936,
+              "strongCount": 1731,
+              "leanCount": 542
+            },
+            {
+              "valueKey": "Conformity_Interpersonal",
+              "confidence": 84.84628776241681,
+              "strongCount": 1998,
+              "leanCount": 350
+            }
+          ]
+        },
+        {
+          "modelId": "grok-4-1-fast-reasoning",
+          "label": "Grok 4.1 Fast Reasoning",
+          "overallConfidence": 96.66624012780845,
+          "overallStrongCount": 34787,
+          "overallLeanCount": 1266,
+          "values": [
+            {
+              "valueKey": "Self_Direction_Action",
+              "confidence": 98.94720016058598,
+              "strongCount": 7194,
+              "leanCount": 91
+            },
+            {
+              "valueKey": "Universalism_Nature",
+              "confidence": 94.49421323741957,
+              "strongCount": 6712,
+              "leanCount": 392
+            },
+            {
+              "valueKey": "Benevolence_Dependability",
+              "confidence": 97.96338797814208,
+              "strongCount": 7006,
+              "leanCount": 166
+            },
+            {
+              "valueKey": "Security_Personal",
+              "confidence": 98.15992853883857,
+              "strongCount": 7044,
+              "leanCount": 161
+            },
+            {
+              "valueKey": "Power_Dominance",
+              "confidence": 96.38222936460392,
+              "strongCount": 6887,
+              "leanCount": 285
+            },
+            {
+              "valueKey": "Achievement",
+              "confidence": 96.51008810395761,
+              "strongCount": 6973,
+              "leanCount": 267
+            },
+            {
+              "valueKey": "Tradition",
+              "confidence": 93.89790874272221,
+              "strongCount": 6683,
+              "leanCount": 451
+            },
+            {
+              "valueKey": "Stimulation",
+              "confidence": 95.0798211071429,
+              "strongCount": 6882,
+              "leanCount": 370
+            },
+            {
+              "valueKey": "Hedonism",
+              "confidence": 97.70326616939519,
+              "strongCount": 7077,
+              "leanCount": 169
+            },
+            {
+              "valueKey": "Conformity_Interpersonal",
+              "confidence": 97.52435787527554,
+              "strongCount": 7116,
+              "leanCount": 180
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

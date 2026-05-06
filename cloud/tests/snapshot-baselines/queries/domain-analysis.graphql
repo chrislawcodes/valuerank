@@ -1,0 +1,38 @@
+query DomainAnalysis($domainId: ID!, $scope: String, $signature: String) {
+  domainAnalysis(domainId: $domainId, scope: $scope, signature: $signature) {
+    domainId
+    domainName
+    contributionSummary { domainId domainName rawTrialCount share }
+    excludedDataSummary { domainId domainName reasonCode count }
+    totalDefinitions
+    targetedDefinitions
+    coveredDefinitions
+    missingDefinitionIds
+    missingDefinitions { definitionId definitionName reasonCode reasonLabel missingAllModels missingModelIds missingModelLabels }
+    definitionsWithAnalysis
+    cacheStatus
+    generatedAt
+    models {
+      model
+      label
+      values { valueKey score prioritized deprioritized neutral totalComparisons }
+      rankingShape { topStructure bottomStructure topGap bottomGap spread steepness dominanceZScore }
+    }
+    unavailableModels { model label reason }
+    rankingShapeBenchmarks { domainMeanTopGap domainStdTopGap medianSpread }
+    clusterAnalysis {
+      skipped
+      skipReason
+      defaultPair
+      clusters {
+        id
+        name
+        definingValues
+        centroid
+        members { model label silhouetteScore isOutlier nearestClusterIds distancesToNearestClusters }
+      }
+      faultLinesByPair
+    }
+    clusterAnalysisByMethod
+  }
+}

@@ -1,0 +1,45 @@
+name: Report Snapshot Check
+
+# Verifies that the visible numeric output of every Models-nav report page
+# (at signature=vnewtd, all domains, default models) has not changed against
+# production. Fails loudly if any snapshot diverges.
+#
+# Triggers:
+#   - push to main: catches changes introduced by merged PRs
+#   - 6-hour cron: catches drift that did not come from a merge
+#     (data ingest, model deprecation, ops-side recompute)
+#   - workflow_dispatch: manual run from the Actions UI
+#
+# Required repository secret: PROD_API_KEY
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+jobs:
+  verify:
+    name: Verify report snapshots vs production
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: cloud/package-lock.json
+
+      - name: Install workspace deps
+        working-directory: cloud
+        run: npm ci
+
+      - name: Verify snapshots
+        working-directory: cloud
+        env:
+          PROD_GRAPHQL_URL: https://api-production-8494.up.railway.app/graphql
+          PROD_API_KEY: ${{ secrets.PROD_API_KEY }}
+        run: npm run verify:report-snapshots

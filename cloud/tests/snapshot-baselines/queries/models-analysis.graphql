@@ -1,0 +1,15 @@
+query ModelsAnalysis($domainId: ID, $signature: String) {
+  modelsAnalysis(domainId: $domainId, signature: $signature) {
+    models {
+      modelId
+      label
+      values {
+        valueKey
+        pooledWinRate
+        stabilityScore
+        eligibleDomainCount
+        domains { domainId domainName winRate evidenceWeight }
+      }
+    }
+  }
+}
