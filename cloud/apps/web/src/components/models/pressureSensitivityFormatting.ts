@@ -36,9 +36,9 @@ export function formatPoints(value: number): string {
  */
 export function formatSignedPoints(value: number): string {
   const pp = value * 100;
-  if (pp === 0) return '0.0 pp';
+  if (pp === 0) return '0.0';
   const sign = pp < 0 ? '−' : '+';
-  return `${sign}${Math.abs(pp).toFixed(1)} pp`;
+  return `${sign}${Math.abs(pp).toFixed(1)}`;
 }
 
 /**

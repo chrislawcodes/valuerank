@@ -29,6 +29,7 @@ function createValueRate(
     averageWinRate: 0.5,
     balancedWinRate: 0.5,
     highPressureOnThisValueWinRate: 0.5,
+    highPressureOnThisValueDomainRates: [],
     highPressureOnOpposingValueWinRate: 0.5,
     pairsMeasured: 9,
     ...overrides,
@@ -160,9 +161,9 @@ describe('PressureResponseByValueTable', () => {
     expect(cells[1]?.textContent ?? '').toBe('60.0%');
     expect(cells[2]?.textContent ?? '').toBe('40.0%');
     expect(cells[3]?.textContent ?? '').toBe('80.0%');
-    expect(cells[4]?.textContent ?? '').toBe('+40.0 pp');
+    expect(cells[4]?.textContent ?? '').toBe('+40.0');
     expect(cells[5]?.textContent ?? '').toBe('30.0%');
-    expect(cells[6]?.textContent ?? '').toBe('−10.0 pp');
+    expect(cells[6]?.textContent ?? '').toBe('−10.0');
   });
 
   it('shows dashes for null rates instead of a numeric value', () => {
@@ -192,7 +193,7 @@ describe('PressureResponseByValueTable', () => {
     expect(cells[3]?.textContent ?? '').toBe('—');
     expect(cells[4]?.textContent ?? '').toBe('—');
     expect(cells[5]?.textContent ?? '').toBe('30.0%');
-    expect(cells[6]?.textContent ?? '').toBe('−10.0 pp');
+    expect(cells[6]?.textContent ?? '').toBe('−10.0');
   });
 
   it('averages rates across all selected models', () => {
@@ -228,8 +229,8 @@ describe('PressureResponseByValueTable', () => {
     expect(cells[1]?.textContent ?? '').toBe('60.0%');
     expect(cells[2]?.textContent ?? '').toBe('30.0%');
     expect(cells[3]?.textContent ?? '').toBe('80.0%');
-    expect(cells[4]?.textContent ?? '').toBe('+50.0 pp');
+    expect(cells[4]?.textContent ?? '').toBe('+50.0');
     expect(cells[5]?.textContent ?? '').toBe('20.0%');
-    expect(cells[6]?.textContent ?? '').toBe('−10.0 pp');
+    expect(cells[6]?.textContent ?? '').toBe('−10.0');
   });
 });

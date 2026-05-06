@@ -15,6 +15,15 @@ type MutableRateAccumulator = {
   counts: Record<RateField, number>;
   valueLabel: string;
   valueToken: string;
+  domainRates: Map<string, MutableDomainRateAccumulator>;
+};
+
+type MutableDomainRateAccumulator = {
+  domainId: string;
+  domainName: string;
+  pairsMeasured: number;
+  sum: number;
+  count: number;
 };
 
 const RATE_FIELDS: RateField[] = [
@@ -56,6 +65,7 @@ export function averageValueRatesAcrossModels(
         },
         valueLabel: valueRate.valueLabel,
         valueToken: valueRate.valueToken,
+        domainRates: new Map(),
       };
 
       // pairsMeasured should be structural per value, but keep the max if older data varies.
@@ -68,6 +78,26 @@ export function averageValueRatesAcrossModels(
         }
         accumulator.sums[field] += rate;
         accumulator.counts[field] += 1;
+      }
+
+      for (const domainRate of valueRate.highPressureOnThisValueDomainRates) {
+        if (domainRate.rate == null) {
+          continue;
+        }
+
+        const existingDomainRate = accumulator.domainRates.get(domainRate.domainId);
+        const domainAccumulator = existingDomainRate ?? {
+          domainId: domainRate.domainId,
+          domainName: domainRate.domainName,
+          pairsMeasured: domainRate.pairsMeasured,
+          sum: 0,
+          count: 0,
+        };
+        domainAccumulator.domainName = domainRate.domainName;
+        domainAccumulator.pairsMeasured = Math.max(domainAccumulator.pairsMeasured, domainRate.pairsMeasured);
+        domainAccumulator.sum += domainRate.rate;
+        domainAccumulator.count += 1;
+        accumulator.domainRates.set(domainRate.domainId, domainAccumulator);
       }
 
       if (existing == null) {
@@ -89,6 +119,14 @@ export function averageValueRatesAcrossModels(
       rate.sums.highPressureOnOpposingValueWinRate,
       rate.counts.highPressureOnOpposingValueWinRate,
     ),
+    highPressureOnThisValueDomainRates: [...rate.domainRates.values()]
+      .sort((left, right) => left.domainName.localeCompare(right.domainName) || left.domainId.localeCompare(right.domainId))
+      .map((domainRate) => ({
+        domainId: domainRate.domainId,
+        domainName: domainRate.domainName,
+        rate: averageRate(domainRate.sum, domainRate.count),
+        pairsMeasured: domainRate.pairsMeasured,
+      })),
     pairsMeasured: rate.pairsMeasured,
   }));
 }

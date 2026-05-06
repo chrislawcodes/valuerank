@@ -21,6 +21,7 @@ import {
 import { PressureDirectionalBreakdown } from '../components/models/PressureDirectionalBreakdown';
 import { PressureSensitivitySummary } from '../components/models/PressureSensitivitySummary';
 import { PressureResponseByValueTable } from '../components/models/PressureResponseByValueTable';
+import { PressureHighPressureByValueDomainTable } from '../components/models/PressureHighPressureByValueDomainTable';
 import { PressureSensitivityGridSection } from '../components/models/PressureSensitivityGridSection';
 import { PressureSensitivityCrossValueMap } from '../components/models/PressureSensitivityCrossValueMap';
 import { PressureSensitivitySanityCheck } from '../components/models/PressureSensitivitySanityCheck';
@@ -322,6 +323,7 @@ export function PressureSensitivity() {
         <>
           <PressureDirectionalBreakdown models={models} />
           <PressureResponseByValueTable models={models} />
+          <PressureHighPressureByValueDomainTable models={models} />
 
           <PressureSensitivityGridSection models={models}>
             {({ selectedModelId, onSelectModel }) => (

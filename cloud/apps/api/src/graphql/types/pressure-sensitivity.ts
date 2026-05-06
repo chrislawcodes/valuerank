@@ -58,6 +58,13 @@ export type PressureSensitivityValuePairShape = {
   directionBalancedHighPressureOpponentOpponentWinRate: number | null;
 };
 
+export type PressureSensitivityValueRateByDomainShape = {
+  domainId: string;
+  domainName: string;
+  rate: number | null;
+  pairsMeasured: number;
+};
+
 export type PressureSensitivityValueRateShape = {
   valueToken: string;
   valueLabel: string;
@@ -65,6 +72,7 @@ export type PressureSensitivityValueRateShape = {
   balancedWinRate: number | null;
   highPressureOnThisValueWinRate: number | null;
   highPressureOnOpposingValueWinRate: number | null;
+  highPressureOnThisValueDomainRates: PressureSensitivityValueRateByDomainShape[];
   pairsMeasured: number;
 };
 
@@ -146,6 +154,9 @@ const PressureSensitivityValuePairRef = builder.objectRef<PressureSensitivityVal
 const PressureSensitivityValueRateRef = builder.objectRef<PressureSensitivityValueRateShape>(
   'PressureSensitivityValueRate',
 );
+const PressureSensitivityValueRateByDomainRef = builder.objectRef<
+  PressureSensitivityValueRateByDomainShape
+>('PressureSensitivityValueRateByDomain');
 const DomainPressureEffectRef = builder.objectRef<DomainPressureEffectShape>('DomainPressureEffect');
 const PressureSensitivityModelRef = builder.objectRef<PressureSensitivityModelShape>(
   'PressureSensitivityModel',
@@ -242,6 +253,18 @@ builder.objectType(PressureSensitivityValueRateRef, {
       'highPressureOnOpposingValueWinRate',
       { nullable: true },
     ),
+    highPressureOnThisValueDomainRates: t.expose('highPressureOnThisValueDomainRates', {
+      type: [PressureSensitivityValueRateByDomainRef],
+    }),
+    pairsMeasured: t.exposeInt('pairsMeasured'),
+  }),
+});
+
+builder.objectType(PressureSensitivityValueRateByDomainRef, {
+  fields: (t) => ({
+    domainId: t.exposeString('domainId'),
+    domainName: t.exposeString('domainName'),
+    rate: t.exposeFloat('rate', { nullable: true }),
     pairsMeasured: t.exposeInt('pairsMeasured'),
   }),
 });

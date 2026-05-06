@@ -643,6 +643,12 @@ export async function buildPressureSensitivitySnapshotOutput(
       balancedWinRate: balancedValueRates.get(valueToken)?.crossDomainRate ?? null,
       highPressureOnThisValueWinRate: highPressureOnValueRates.get(valueToken)?.crossDomainRate ?? null,
       highPressureOnOpposingValueWinRate: highPressureOnOpposingValueRates.get(valueToken)?.crossDomainRate ?? null,
+      highPressureOnThisValueDomainRates: (highPressureOnValueRates.get(valueToken)?.domainRates ?? []).map((domainRate) => ({
+        domainId: domainRate.domainId,
+        domainName: domainNameById.get(domainRate.domainId) ?? domainRate.domainId,
+        rate: domainRate.rate,
+        pairsMeasured: domainRate.pairsCounted,
+      })),
       pairsMeasured: pairKeysByValue.get(valueToken)?.size ?? 0,
     }));
 

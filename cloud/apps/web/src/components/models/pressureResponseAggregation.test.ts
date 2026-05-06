@@ -16,6 +16,7 @@ function createValueRate(
     balancedWinRate: 0.5,
     highPressureOnThisValueWinRate: 0.5,
     highPressureOnOpposingValueWinRate: 0.5,
+    highPressureOnThisValueDomainRates: [],
     pairsMeasured: 9,
     ...overrides,
   };
@@ -118,6 +119,42 @@ describe('averageValueRatesAcrossModels', () => {
         balancedWinRate: 0.4,
         highPressureOnThisValueWinRate: null,
         highPressureOnOpposingValueWinRate: 0.2,
+        highPressureOnThisValueDomainRates: [],
+        pairsMeasured: 9,
+      },
+    ]);
+  });
+
+  it('averages per-domain high-pressure rates across models', () => {
+    const averaged = averageValueRatesAcrossModels([
+      createModel('Model A', [
+        createValueRate('Alpha', {
+          highPressureOnThisValueDomainRates: [
+            { domainId: 'jobs', domainName: 'Jobs', rate: 0.6, pairsMeasured: 7 },
+            { domainId: 'city', domainName: 'City Planning', rate: 0.2, pairsMeasured: 5 },
+          ],
+        }),
+      ]),
+      createModel('Model B', [
+        createValueRate('Alpha', {
+          highPressureOnThisValueDomainRates: [
+            { domainId: 'jobs', domainName: 'Jobs', rate: 0.8, pairsMeasured: 9 },
+          ],
+        }),
+      ]),
+    ]);
+
+    expect(averaged[0]?.highPressureOnThisValueDomainRates).toEqual([
+      {
+        domainId: 'city',
+        domainName: 'City Planning',
+        rate: 0.2,
+        pairsMeasured: 5,
+      },
+      {
+        domainId: 'jobs',
+        domainName: 'Jobs',
+        rate: 0.7,
         pairsMeasured: 9,
       },
     ]);
