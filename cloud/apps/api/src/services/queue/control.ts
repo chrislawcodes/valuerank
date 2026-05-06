@@ -1,23 +1,34 @@
 /**
  * Queue Control Service
  *
- * Provides global queue pause/resume functionality.
+ * Thin adapter over the queue orchestrator for pause/resume operations.
+ * The orchestrator is the single source of truth for queue pause state.
  */
 
 import { createLogger } from '@valuerank/shared';
-import { stopBoss, startBoss, isBossRunning } from '../../queue/boss.js';
+import { isBossRunning } from '../../queue/boss.js';
+import {
+  pauseQueue as orchestratorPause,
+  resumeQueue as orchestratorResume,
+  isQueuePaused as orchestratorIsPaused,
+  getOrchestratorState,
+} from '../../queue/orchestrator.js';
 
 const log = createLogger('services:queue:control');
 
-// In-memory state for queue pause status
-// This could be persisted to database for multi-instance deployments
-let queuePaused = false;
+function getDerivedQueueState(): { isRunning: boolean; isPaused: boolean } {
+  const state = getOrchestratorState();
+  return {
+    isRunning: isBossRunning() && !state.isPaused,
+    isPaused: state.isPaused,
+  };
+}
 
 /**
  * Checks if the queue is currently paused.
  */
 export function isQueuePaused(): boolean {
-  return queuePaused;
+  return orchestratorIsPaused();
 }
 
 /**
@@ -30,23 +41,11 @@ export async function pauseQueue(): Promise<{
   isRunning: boolean;
   isPaused: boolean;
 }> {
-  log.info('Pausing global queue');
-
-  if (queuePaused) {
-    log.debug('Queue already paused');
-    return { isRunning: false, isPaused: true };
-  }
-
-  try {
-    await stopBoss();
-    queuePaused = true;
-
-    log.info('Global queue paused');
-    return { isRunning: false, isPaused: true };
-  } catch (error) {
-    log.error({ error }, 'Failed to pause queue');
-    throw error;
-  }
+  log.info({}, 'Pausing global queue');
+  await orchestratorPause();
+  const state = getDerivedQueueState();
+  log.info({ isRunning: state.isRunning, isPaused: state.isPaused }, 'Global queue paused');
+  return state;
 }
 
 /**
@@ -56,31 +55,16 @@ export async function resumeQueue(): Promise<{
   isRunning: boolean;
   isPaused: boolean;
 }> {
-  log.info('Resuming global queue');
-
-  if (!queuePaused) {
-    log.debug('Queue not paused');
-    return { isRunning: isBossRunning(), isPaused: false };
-  }
-
-  try {
-    await startBoss();
-    queuePaused = false;
-
-    log.info('Global queue resumed');
-    return { isRunning: true, isPaused: false };
-  } catch (error) {
-    log.error({ error }, 'Failed to resume queue');
-    throw error;
-  }
+  log.info({}, 'Resuming global queue');
+  await orchestratorResume();
+  const state = getDerivedQueueState();
+  log.info({ isRunning: state.isRunning, isPaused: state.isPaused }, 'Global queue resumed');
+  return state;
 }
 
 /**
  * Gets current queue running/paused state.
  */
 export function getQueueState(): { isRunning: boolean; isPaused: boolean } {
-  return {
-    isRunning: isBossRunning() && !queuePaused,
-    isPaused: queuePaused,
-  };
+  return getDerivedQueueState();
 }
