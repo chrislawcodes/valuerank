@@ -40,7 +40,7 @@ DEDUP-8 (`isRecord`) is independent of report output — pure type guard.
 |---|---|---|---|---|---|
 | DEDUP-1 | `pauseQueue` / `resumeQueue` — two implementations | API | High (bug risk) | Medium | Decision needed |
 | DEDUP-2 | Schwartz + signature-preference forked web↔shared | Web/Shared | High | Small | Open |
-| ~~DEDUP-3~~ | ~~`useRuns` vs `useRunsWithAnalysis` (and infinite variants)~~ | ~~Web~~ | ~~High~~ | ~~Small~~ | **Resolved — PR #929** |
+| ~~DEDUP-3~~ | ~~`useRuns` vs `useRunsWithAnalysis` (and infinite variants)~~ | ~~Web~~ | ~~High~~ | ~~Small~~ | **Resolved — PR #934** |
 | DEDUP-4 | Run vs Analysis list/card/folder views | Web | High | Large | Decision needed |
 | DEDUP-5 | `analysis-v2/` stalled migration | Web | High | Large | Decision needed |
 | DEDUP-6 | Snapshot builder twin (domain-analysis vs pressure-sensitivity) | API | Medium | Large | Decision needed |
@@ -81,7 +81,7 @@ Status values: `Open` (mechanical, ready to do) · `Decision needed` (needs a di
 
 ### DEDUP-3 — `useRuns` / `useRunsWithAnalysis` twin hooks
 
-**Status: Resolved in PR #929 (2026-05-05).**
+**Status: Resolved in PR #934 (2026-05-05).**
 
 Added `hasAnalysis?: boolean` and `analysisStatus?` params to `useRuns` and `useInfiniteRuns`. When `hasAnalysis: true`, both hooks pass the flag to the query and apply `.filter(isNonSurveyRun)` on the result. `Analysis.tsx` (the only `useInfiniteRunsWithAnalysis` caller) updated to `useInfiniteRuns({ hasAnalysis: true })`. `useRunsWithAnalysis` had no page-level callers (only a barrel re-export); barrel updated. Both wrapper files deleted. `comparison.graphql:RunsWithAnalysis` left untouched — it calls a different resolver (`runsWithAnalysis(ids: [ID!]!)`) and is unrelated.
 
@@ -229,7 +229,7 @@ Tracking infrastructure that protects against dedup-induced (or any) drift in us
 | ID | Cluster | PR | Date | Notes |
 |---|---|---|---|---|
 | DEDUP-8 | `isRecord` consolidation | #928 | 2026-05-05 | 8 byte-identical sites consolidated to `cloud/apps/api/src/utils/isRecord.ts`. `isPlainJsonObject` renamed to `isRecord` in summarize handlers. `services/consistency/modelsConsistencyData.ts` narrowing variant intentionally left in place per Models-reports preserve constraint. |
-| DEDUP-3 | `useRuns` / `useRunsWithAnalysis` hook collapse | #929 | 2026-05-05 | Added `hasAnalysis` + `analysisStatus` params to `useRuns` and `useInfiniteRuns`. Deleted `useRunsWithAnalysis.ts` and `useInfiniteRunsWithAnalysis.ts`. `comparison.graphql:RunsWithAnalysis` left in place (different resolver). |
+| DEDUP-3 | `useRuns` / `useRunsWithAnalysis` hook collapse | #934 | 2026-05-05 | Added `hasAnalysis` + `analysisStatus` params to `useRuns` and `useInfiniteRuns`. Deleted `useRunsWithAnalysis.ts` and `useInfiniteRunsWithAnalysis.ts`. `comparison.graphql:RunsWithAnalysis` left in place (different resolver). |
 
 ### Dead-code deletions
 
