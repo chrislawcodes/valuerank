@@ -4,7 +4,7 @@ import { CopyVisualButton } from '../ui/CopyVisualButton';
 import { TooltipIcon } from '../ui/TooltipIcon';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/Table';
 import type { PressureSensitivityModel } from '../../api/operations/pressureSensitivity';
-import { formatPercent } from './pressureSensitivityFormatting';
+import { formatPercent, formatSignedPoints } from './pressureSensitivityFormatting';
 import { averageValueRatesAcrossModels } from './pressureResponseAggregation';
 
 type Props = {
@@ -18,7 +18,8 @@ type SortKey =
   | 'balancedWinRate'
   | 'highPressureOnThisValue'
   | 'highPressureOnOpposingValue'
-  | 'responsiveness';
+  | 'highPressureOnValueEffect'
+  | 'highPressureOnOpposingValueEffect';
 
 type CountGridPattern =
   | 'average'
@@ -32,7 +33,8 @@ type ValueRow = {
   balancedWinRate: number | null;
   highPressureOnThisValue: number | null;
   highPressureOnOpposingValue: number | null;
-  responsiveness: number | null;
+  highPressureOnValueEffect: number | null;
+  highPressureOnOpposingValueEffect: number | null;
 };
 
 const GRID_LABELS = [1, 2, 3, 4, 5];
@@ -218,9 +220,25 @@ function RateCell({ value }: { value: number | null }) {
   return <TableCell className="text-right text-sm">{formatRate(value)}</TableCell>;
 }
 
+function EffectCell({ value }: { value: number | null }) {
+  if (value == null) {
+    return (
+      <TableCell className="text-right text-sm">
+        <span className="font-mono text-gray-500">—</span>
+      </TableCell>
+    );
+  }
+  const colorClass = value > 0 ? 'text-emerald-700' : value < 0 ? 'text-red-700' : 'text-gray-700';
+  return (
+    <TableCell className="text-right text-sm">
+      <span className={`font-mono ${colorClass}`}>{formatSignedPoints(value)}</span>
+    </TableCell>
+  );
+}
+
 export function PressureResponseByValueTable({ models }: Props) {
   const tableRef = useRef<HTMLDivElement>(null);
-  const [sortKey, setSortKey] = useState<SortKey>('responsiveness');
+  const [sortKey, setSortKey] = useState<SortKey>('highPressureOnValueEffect');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const valueRates = useMemo(() => averageValueRatesAcrossModels(models), [models]);
 
@@ -232,9 +250,13 @@ export function PressureResponseByValueTable({ models }: Props) {
         balancedWinRate: vr.balancedWinRate ?? null,
         highPressureOnThisValue: vr.highPressureOnThisValueWinRate ?? null,
         highPressureOnOpposingValue: vr.highPressureOnOpposingValueWinRate ?? null,
-        responsiveness:
+        highPressureOnValueEffect:
           vr.highPressureOnThisValueWinRate != null && vr.balancedWinRate != null
             ? vr.highPressureOnThisValueWinRate - vr.balancedWinRate
+            : null,
+        highPressureOnOpposingValueEffect:
+          vr.highPressureOnOpposingValueWinRate != null && vr.balancedWinRate != null
+            ? vr.highPressureOnOpposingValueWinRate - vr.balancedWinRate
             : null,
       })),
     [valueRates],
@@ -304,7 +326,7 @@ export function PressureResponseByValueTable({ models }: Props) {
                   onSort={handleSort}
                 />
               </TableHead>
-              <TableHead colSpan={4} className="text-center text-xs uppercase tracking-wide text-gray-700">
+              <TableHead colSpan={6} className="text-center text-xs uppercase tracking-wide text-gray-700">
                 Win rate
               </TableHead>
             </TableRow>
@@ -358,6 +380,15 @@ export function PressureResponseByValueTable({ models }: Props) {
                 numeric
               />
               <SortHeaderCell
+                label="High pressure on value effect"
+                ariaLabel="High pressure on value effect"
+                sortKey="highPressureOnValueEffect"
+                activeSortKey={sortKey}
+                direction={sortDirection}
+                onSort={handleSort}
+                numeric
+              />
+              <SortHeaderCell
                 label="High pressure on opposing value"
                 ariaLabel="High pressure on opposing value win rate"
                 sortKey="highPressureOnOpposingValue"
@@ -373,6 +404,15 @@ export function PressureResponseByValueTable({ models }: Props) {
                 }
                 numeric
               />
+              <SortHeaderCell
+                label="High pressure on opposing value effect"
+                ariaLabel="High pressure on opposing value effect"
+                sortKey="highPressureOnOpposingValueEffect"
+                activeSortKey={sortKey}
+                direction={sortDirection}
+                onSort={handleSort}
+                numeric
+              />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -382,7 +422,9 @@ export function PressureResponseByValueTable({ models }: Props) {
                 <RateCell value={row.averageWinRate} />
                 <RateCell value={row.balancedWinRate} />
                 <RateCell value={row.highPressureOnThisValue} />
+                <EffectCell value={row.highPressureOnValueEffect} />
                 <RateCell value={row.highPressureOnOpposingValue} />
+                <EffectCell value={row.highPressureOnOpposingValueEffect} />
               </TableRow>
             ))}
           </TableBody>

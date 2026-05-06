@@ -117,7 +117,7 @@ describe('PressureResponseByValueTable', () => {
     expect(screen.getByText('Win rate')).toBeDefined();
   });
 
-  it('sorts by responsiveness by default and re-sorts when a header is clicked', () => {
+  it('sorts by high pressure on value effect by default and re-sorts when a header is clicked', () => {
     render(<PressureResponseByValueTable models={[createModel('Model A', createSortFixture())]} />);
 
     const rows = screen.getAllByRole('row');
@@ -148,7 +148,7 @@ describe('PressureResponseByValueTable', () => {
     ).toBeDefined();
   });
 
-  it('renders the averaged value-rate inputs and responsiveness math', () => {
+  it('renders the averaged value-rate inputs and effect columns', () => {
     render(<PressureResponseByValueTable models={[createModel('Model A', createMathFixture())]} />);
 
     const row = screen.getByText('Alpha').closest('tr');
@@ -160,7 +160,9 @@ describe('PressureResponseByValueTable', () => {
     expect(cells[1]?.textContent ?? '').toBe('60.0%');
     expect(cells[2]?.textContent ?? '').toBe('40.0%');
     expect(cells[3]?.textContent ?? '').toBe('80.0%');
-    expect(cells[4]?.textContent ?? '').toBe('30.0%');
+    expect(cells[4]?.textContent ?? '').toBe('+40.0 pp');
+    expect(cells[5]?.textContent ?? '').toBe('30.0%');
+    expect(cells[6]?.textContent ?? '').toBe('−10.0 pp');
   });
 
   it('shows dashes for null rates instead of a numeric value', () => {
@@ -188,7 +190,9 @@ describe('PressureResponseByValueTable', () => {
     expect(cells[1]?.textContent ?? '').toBe('—');
     expect(cells[2]?.textContent ?? '').toBe('40.0%');
     expect(cells[3]?.textContent ?? '').toBe('—');
-    expect(cells[4]?.textContent ?? '').toBe('30.0%');
+    expect(cells[4]?.textContent ?? '').toBe('—');
+    expect(cells[5]?.textContent ?? '').toBe('30.0%');
+    expect(cells[6]?.textContent ?? '').toBe('−10.0 pp');
   });
 
   it('averages rates across all selected models', () => {
@@ -225,6 +229,8 @@ describe('PressureResponseByValueTable', () => {
     expect(cells[1]?.textContent ?? '').toBe('60.0%');
     expect(cells[2]?.textContent ?? '').toBe('30.0%');
     expect(cells[3]?.textContent ?? '').toBe('80.0%');
-    expect(cells[4]?.textContent ?? '').toBe('20.0%');
+    expect(cells[4]?.textContent ?? '').toBe('+50.0 pp');
+    expect(cells[5]?.textContent ?? '').toBe('20.0%');
+    expect(cells[6]?.textContent ?? '').toBe('−10.0 pp');
   });
 });
