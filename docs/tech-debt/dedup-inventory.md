@@ -38,7 +38,7 @@ DEDUP-8 (`isRecord`) is independent of report output — pure type guard.
 
 | ID | Cluster | Slice | Severity | Lift | Status |
 |---|---|---|---|---|---|
-| DEDUP-1 | `pauseQueue` / `resumeQueue` — two implementations | API | High (bug risk) | Medium | Decision needed |
+| ~~DEDUP-1~~ | ~~`pauseQueue` / `resumeQueue` — two implementations~~ | ~~API~~ | ~~High (bug risk)~~ | ~~Medium~~ | **Resolved — PR #TBD** |
 | ~~DEDUP-2~~ | ~~Schwartz + signature-preference forked web↔shared~~ | ~~Web/Shared~~ | ~~High~~ | ~~Small~~ | **Resolved (partial) — PR #937** |
 | ~~DEDUP-3~~ | ~~`useRuns` vs `useRunsWithAnalysis` (and infinite variants)~~ | ~~Web~~ | ~~High~~ | ~~Small~~ | **Resolved — PR #934** |
 | DEDUP-4 | Run vs Analysis list/card/folder views | Web | High | Large | Decision needed |
@@ -60,13 +60,18 @@ Status values: `Open` (mechanical, ready to do) · `Decision needed` (needs a di
 
 ### DEDUP-1 — `pauseQueue` / `resumeQueue` two implementations
 
-**Files:** `cloud/apps/api/src/services/queue/control.ts` (86 LOC), `cloud/apps/api/src/queue/orchestrator.ts` (140 LOC)
-**Shared:** Both export `pauseQueue`, `resumeQueue`, `isQueuePaused`, `getQueueState` / `getOrchestratorState`.
-**Differs:** `services/queue/control.ts` calls `stopBoss` / `startBoss`. `queue/orchestrator.ts` uses `boss.offWork` + `registerHandlers`. Different in-memory state vars. Both alive.
-**Callers:** GraphQL mutations + queries layer (`mutations/queue.ts`, `queries/queue.ts`) → `services/queue/control.ts`. Server bootstrap (`index.ts`) → `queue/orchestrator.ts`.
-**Canonical guess:** `services/queue/control.ts` (cleaner, used by GraphQL). Orchestrator's pause/resume looks like an older mechanism.
-**Why it matters:** Pausing via GraphQL leaves `getOrchestratorState().isPaused === false`. Real bug surface — the only cluster in this audit with active-bug risk.
-**Decision needed:** What's the intended semantics of "queue paused"? Should there be one source of truth, or do these track different things (admin pause vs runtime pause)?
+**Status: Resolved in PR #TBD (2026-05-05). Option A — semantically equivalent duplicates; orchestrator is canonical.**
+
+Investigation confirmed both implementations intended the same semantics (stop processing new jobs, accumulate them, resume later). The implementations differed in mechanism: `control.ts` called `stopBoss()`/`startBoss()` (hard stop — destroys the PgBoss singleton), while `orchestrator.ts` used `boss.offWork()`/`registerHandlers()` (soft stop — PgBoss stays alive, workers unsubscribed). The orchestrator's approach is correct: resume re-registers handlers so jobs start flowing again. `control.ts`'s approach was broken: `resumeQueue` called `startBoss()` but never re-registered handlers, silently leaving workers unsubscribed after resume.
+
+**Fix:** `control.ts` rewritten as a thin adapter delegating to the orchestrator's `pauseQueue`/`resumeQueue`/`isQueuePaused`/`getOrchestratorState`. The public API shape of `services/queue/index.ts` is unchanged — GraphQL mutations still import from there. The orchestrator remains the single source of truth for pause state. GraphQL mutation test updated to mock the orchestrator (the old mock only covered `boss.js` which the adapter no longer calls directly).
+
+**Original notes (for history):**
+- Files: `cloud/apps/api/src/services/queue/control.ts` (86 LOC), `cloud/apps/api/src/queue/orchestrator.ts` (140 LOC)
+- Shared: Both export `pauseQueue`, `resumeQueue`, `isQueuePaused`, `getQueueState` / `getOrchestratorState`.
+- Differs: `services/queue/control.ts` calls `stopBoss` / `startBoss`. `queue/orchestrator.ts` uses `boss.offWork` + `registerHandlers`. Different in-memory state vars. Both alive.
+- Callers: GraphQL mutations + queries layer (`mutations/queue.ts`, `queries/queue.ts`) → `services/queue/control.ts`. Server bootstrap (`index.ts`) → `queue/orchestrator.ts`.
+- Why it matters: Pausing via GraphQL leaves `getOrchestratorState().isPaused === false`. Real bug surface — the only cluster in this audit with active-bug risk.
 
 ### DEDUP-2 — Schwartz + signature-preference forked web↔shared
 
@@ -256,6 +261,7 @@ Tracking infrastructure that protects against dedup-induced (or any) drift in us
 
 | ID | Cluster | PR | Date | Notes |
 |---|---|---|---|---|
+| DEDUP-1 | `pauseQueue` / `resumeQueue` unification | #TBD | 2026-05-05 | `control.ts` rewritten as thin adapter delegating to orchestrator. Fixes bug: GraphQL pause no longer leaves `getOrchestratorState().isPaused === false`. GraphQL mutation test updated to mock orchestrator. |
 | DEDUP-8 | `isRecord` consolidation | #928 | 2026-05-05 | 8 byte-identical sites consolidated to `cloud/apps/api/src/utils/isRecord.ts`. `isPlainJsonObject` renamed to `isRecord` in summarize handlers. `services/consistency/modelsConsistencyData.ts` narrowing variant intentionally left in place per Models-reports preserve constraint. |
 | DEDUP-3 | `useRuns` / `useRunsWithAnalysis` hook collapse | #934 | 2026-05-05 | Added `hasAnalysis` + `analysisStatus` params to `useRuns` and `useInfiniteRuns`. Deleted `useRunsWithAnalysis.ts` and `useInfiniteRunsWithAnalysis.ts`. `comparison.graphql:RunsWithAnalysis` left in place (different resolver). |
 | DEDUP-15 | `runsWithAnalysis(ids:)` resolver and web query deleted | #936 | 2026-05-05 | Zero consumers. Architecture decision at `cloud/specs/016-analysis-tab/plan.md` chose `runs(hasAnalysis:)` instead. ~250 LOC removed across API resolver, tests, web query, re-export, manual types. Schema snapshot and codegen regenerated. |
@@ -270,10 +276,11 @@ Tracking infrastructure that protects against dedup-induced (or any) drift in us
 
 ## Phase 2 — recommended starting order
 
-DEDUP-8, DEDUP-3, and DEDUP-2 (partial) are done. Suggested next picks:
+DEDUP-8, DEDUP-3, DEDUP-2 (partial), and DEDUP-1 are done. Suggested next picks:
 
 1. **DEDUP-9** (`wilsonInterval`) — small statistics-helper consolidation; 2 callsites, contract change is contained.
-2. **DEDUP-1** (`pauseQueue`) — start with a design note, not code. The only active-bug cluster.
+
+Larger clusters (DEDUP-4, DEDUP-5, DEDUP-6, DEDUP-7, DEDUP-10, DEDUP-12, DEDUP-14) all need a direction call before implementation. The remaining 7 active clusters are all "Decision needed" — no purely mechanical dedup work remains in the queue.
 
 Note: `cloud/apps/web/src/utils/schwartz.ts` was audited during DEDUP-2 and found NOT to be a duplicate. It exports `formatFullSchwartzValueName` which has no equivalent in shared. Remove the schwartz half of DEDUP-2 from any future planning.
 
