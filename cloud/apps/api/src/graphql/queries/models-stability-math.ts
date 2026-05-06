@@ -49,18 +49,22 @@ export function resolveDimensionKeys(
   if (entries.length === 0) return null;
 
   // Get the sorted key set from the first entry
-  const firstKeys = Object.keys(entries[0]).sort();
+  const firstEntry = entries[0];
+  if (firstEntry === undefined) return null;
+  const firstKeys = Object.keys(firstEntry).sort();
   if (firstKeys.length !== 2) return null;
+  const [keyA, keyB] = firstKeys;
+  if (keyA === undefined || keyB === undefined) return null;
 
   // Check all entries share the same two keys
   for (const dims of entries) {
     const keys = Object.keys(dims).sort();
-    if (keys.length !== 2 || keys[0] !== firstKeys[0] || keys[1] !== firstKeys[1]) {
+    if (keys.length !== 2 || keys[0] !== keyA || keys[1] !== keyB) {
       return { inconsistent: true };
     }
   }
 
-  return { keys: [firstKeys[0], firstKeys[1]], inconsistent: false };
+  return { keys: [keyA, keyB], inconsistent: false };
 }
 
 export function buildConditionGroups(

@@ -380,13 +380,13 @@ describe('computeVignetteStability', () => {
       },
     );
 
-    expect(stability).toEqual({
+    expect(stability).not.toBeNull();
+    expect(stability).toMatchObject({
       classifiedCount: 2,
       stableShare: 0.5,
       softLeanShare: 0,
       tornShare: 0,
       unstableShare: 0.5,
-      avgDirectionalAgreement: stability?.avgDirectionalAgreement ?? null,
     });
     expect(stability?.avgDirectionalAgreement).toBeCloseTo(0.6, 10);
   });
