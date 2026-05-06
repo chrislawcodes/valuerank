@@ -2704,8 +2704,6 @@ export type Query = {
   runCount: Scalars['Int']['output'];
   /** List runs with optional filtering and pagination. */
   runs: Array<Run>;
-  /** Fetch multiple runs by IDs for cross-run comparison. Limited to 10 runs maximum. Returns runs with their analysis data. */
-  runsWithAnalysis: Array<Run>;
   /** Fetch a single scenario by ID with full content. */
   scenario?: Maybe<Scenario>;
   /** Get the count of scenarios for a definition. */
@@ -3157,11 +3155,6 @@ export type QueryRunsArgs = {
   runCategory?: InputMaybe<Scalars['String']['input']>;
   runType?: InputMaybe<Scalars['String']['input']>;
   status?: InputMaybe<Scalars['String']['input']>;
-};
-
-
-export type QueryRunsWithAnalysisArgs = {
-  ids: Array<Scalars['ID']['input']>;
 };
 
 
@@ -4047,13 +4040,6 @@ export type CircumplexAnalysisQuery = { __typename?: 'Query', circumplexAnalysis
 export type ComparisonRunListFieldsFragment = { __typename?: 'Run', id: string, name?: string | null, definitionId: string, status: string, config: unknown, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, transcriptCount: number, analysisStatus?: string | null, definition?: { __typename?: 'Definition', id: string, name: string, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null };
 
 export type ComparisonRunFullFieldsFragment = { __typename?: 'Run', id: string, name?: string | null, definitionId: string, status: string, config: unknown, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, transcriptCount: number, analysisStatus?: string | null, definition?: { __typename?: 'Definition', id: string, name: string, parentId?: string | null, resolvedContent: unknown, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null };
-
-export type RunsWithAnalysisQueryVariables = Exact<{
-  ids: Array<Scalars['ID']['input']> | Scalars['ID']['input'];
-}>;
-
-
-export type RunsWithAnalysisQuery = { __typename?: 'Query', runsWithAnalysis: Array<{ __typename?: 'Run', id: string, name?: string | null, definitionId: string, status: string, config: unknown, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, transcriptCount: number, analysisStatus?: string | null, analysis?: { __typename?: 'AnalysisResult', id: string, runId: string, analysisType: string, status: string, codeVersion: string, inputHash: string, createdAt: string, computedAt?: string | null, durationMs?: number | null, perModel: unknown, modelAgreement: unknown, dimensionAnalysis?: unknown | null, visualizationData?: unknown | null, varianceAnalysis?: unknown | null, methodsUsed: unknown, preferenceSummary?: { __typename?: 'PreferenceSummary', perModel: unknown } | null, reliabilitySummary?: { __typename?: 'ReliabilitySummary', perModel: unknown } | null, aggregateMetadata?: { __typename?: 'AggregateMetadata', aggregateEligibility: string, aggregateIneligibilityReason?: string | null, sourceRunCount: number, sourceRunIds: Array<string>, conditionCoverage: unknown, perModelRepeatCoverage: unknown, perModelDrift: unknown } | null, mostContestedScenarios: Array<{ __typename?: 'ContestedScenario', scenarioId: string, scenarioName: string, variance: number, modelScores: unknown }>, warnings: Array<{ __typename?: 'AnalysisWarning', code: string, message: string, recommendation: string }> } | null, definition?: { __typename?: 'Definition', id: string, name: string, parentId?: string | null, resolvedContent: unknown, tags: Array<{ __typename?: 'Tag', id: string, name: string }> } | null }> };
 
 export type ComparisonRunsListQueryVariables = Exact<{
   definitionId?: InputMaybe<Scalars['String']['input']>;
@@ -5416,21 +5402,6 @@ export const CircumplexAnalysisDocument = gql`
 
 export function useCircumplexAnalysisQuery(options: Omit<Urql.UseQueryArgs<CircumplexAnalysisQueryVariables>, 'query'>) {
   return Urql.useQuery<CircumplexAnalysisQuery, CircumplexAnalysisQueryVariables>({ query: CircumplexAnalysisDocument, ...options });
-};
-export const RunsWithAnalysisDocument = gql`
-    query RunsWithAnalysis($ids: [ID!]!) {
-  runsWithAnalysis(ids: $ids) {
-    ...ComparisonRunFullFields
-    analysis {
-      ...AnalysisResultFields
-    }
-  }
-}
-    ${ComparisonRunFullFieldsFragmentDoc}
-${AnalysisResultFieldsFragmentDoc}`;
-
-export function useRunsWithAnalysisQuery(options: Omit<Urql.UseQueryArgs<RunsWithAnalysisQueryVariables>, 'query'>) {
-  return Urql.useQuery<RunsWithAnalysisQuery, RunsWithAnalysisQueryVariables>({ query: RunsWithAnalysisDocument, ...options });
 };
 export const ComparisonRunsListDocument = gql`
     query ComparisonRunsList($definitionId: String, $analysisStatus: String, $limit: Int, $offset: Int) {

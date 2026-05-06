@@ -2693,14 +2693,6 @@ type Query {
     status: String
   ): [Run!]!
 
-  """
-  Fetch multiple runs by IDs for cross-run comparison. Limited to 10 runs maximum. Returns runs with their analysis data.
-  """
-  runsWithAnalysis(
-    """Array of run IDs to fetch (max 10)"""
-    ids: [ID!]!
-  ): [Run!]!
-
   """Fetch a single scenario by ID with full content."""
   scenario(
     """Scenario ID"""

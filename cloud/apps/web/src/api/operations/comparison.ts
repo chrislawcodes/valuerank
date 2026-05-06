@@ -22,9 +22,9 @@ export type ResolvedContent = {
 export type ComparisonRunDefinition = {
   id: string;
   name: string;
-  /** Only available from runsWithAnalysis query - contains preamble/template */
+  /** Contains preamble/template from resolvedContent JSON */
   resolvedContent?: ResolvedContent;
-  /** Only available from runsWithAnalysis query */
+  /** Parent definition ID, when present */
   parentId?: string | null;
   tags: {
     id: string;
@@ -68,20 +68,11 @@ export {
 // QUERIES
 // ============================================================================
 
-export { RunsWithAnalysisDocument as RUNS_WITH_ANALYSIS_QUERY } from '../../generated/graphql';
 export { ComparisonRunsListDocument as COMPARISON_RUNS_LIST_QUERY } from '../../generated/graphql';
 
 // ============================================================================
 // QUERY TYPES (manual — preserves app-level types without __typename)
 // ============================================================================
-
-export type RunsWithAnalysisQueryVariables = {
-  ids: string[];
-};
-
-export type RunsWithAnalysisQueryResult = {
-  runsWithAnalysis: ComparisonRun[];
-};
 
 export type ComparisonRunsListQueryVariables = {
   definitionId?: string;
