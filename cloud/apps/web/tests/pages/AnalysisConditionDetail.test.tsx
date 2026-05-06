@@ -706,11 +706,18 @@ describe('AnalysisConditionDetail', () => {
       ).toBe(true);
     });
 
-    it('falls back to heuristic search when companionRunId is absent from the run', () => {
-      // currentRun has NO companionRunId — legacy run scenario
-      const currentRun = createRun('run-1', 'A_first', [
+    it('uses pairedSibling on the run definition to resolve the companion when companionRunId is absent', () => {
+      // currentRun has NO companionRunId — paired-sibling lookup picks up the slack
+      const baseCurrent = createRun('run-1', 'A_first', [
         createTranscript('tx-1', 's1', 'A_first', '5'),
       ]);
+      const currentRun = {
+        ...baseCurrent,
+        definition: {
+          ...baseCurrent.definition,
+          pairedSibling: { id: 'def-run-2', name: 'Harmony -> Freedom', content: {} },
+        },
+      };
       const companionRun = createRun('run-2', 'B_first', [
         createTranscript('tx-2', 's2', 'B_first', '1'),
       ]);
@@ -728,18 +735,26 @@ describe('AnalysisConditionDetail', () => {
         return { analysis: createAnalysis('run-1', 's1'), loading: false, error: null, refetch: vi.fn(), recompute: vi.fn(), recomputing: false };
       });
 
-      // No companionRunId in URL and none on run — must use heuristic
+      mockUseRuns.mockImplementation((args?: { definitionId?: string; pause?: boolean }) => {
+        if (args?.pause === false && args?.definitionId === 'def-run-2') {
+          return { runs: [companionRun], loading: false, error: null, refetch: vi.fn() };
+        }
+        return { runs: [], loading: false, error: null, refetch: vi.fn() };
+      });
+
       renderPage('/analysis/run-1/conditions/High%7C%7CLow?rowDim=Freedom&colDim=Harmony&modelId=model1&mode=paired');
 
-      // Paired rows must appear (companion found by heuristic via batchGroupId)
+      // Paired rows must appear (companion resolved via pairedSibling -> sibling runs)
       expect(screen.getByText('Pooled')).toBeInTheDocument();
       expect(screen.getByText('Freedom -> Harmony')).toBeInTheDocument();
       expect(screen.getByText('Harmony -> Freedom')).toBeInTheDocument();
 
-      // useRuns must NOT have been fully paused — heuristic search must run
+      // useRuns must have been called with the sibling definition id
       expect(mockUseRuns).toHaveBeenCalled();
       expect(
-        (mockUseRuns.mock.calls as Array<[{ pause?: boolean }]>).some(([args]) => args?.pause !== true),
+        (mockUseRuns.mock.calls as Array<[{ definitionId?: string; pause?: boolean }]>).some(
+          ([args]) => args?.pause === false && args?.definitionId === 'def-run-2',
+        ),
       ).toBe(true);
     });
   });

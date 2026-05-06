@@ -457,6 +457,49 @@ builder.objectType(DefinitionRef, {
       resolve: (definition) => definition.parentId !== null,
     }),
 
+    // Computed: pairedSibling - the companion vignette in a paired pair
+    pairedSibling: t.field({
+      type: DefinitionRef,
+      nullable: true,
+      description:
+        'For paired vignettes, returns the companion vignette (same pair_key, same domain, mirrored value_first / value_second tokens). Returns null when this definition is not paired or when no companion exists. Reuses findPairedCompanion from utils/auto-pair so callers do not duplicate the companion-resolution logic.',
+      resolve: async (definition) => {
+        const contentRecord =
+          definition.content !== null && typeof definition.content === 'object' && !Array.isArray(definition.content)
+            ? (definition.content as Record<string, unknown>)
+            : null;
+        const methodology =
+          contentRecord?.methodology !== null && typeof contentRecord?.methodology === 'object' && !Array.isArray(contentRecord?.methodology)
+            ? (contentRecord.methodology as Record<string, unknown>)
+            : null;
+        const pairKey = typeof methodology?.pair_key === 'string' ? methodology.pair_key : null;
+        if (pairKey === null || pairKey.trim() === '') return null;
+
+        const candidates = await db.definition.findMany({
+          where: {
+            id: { not: definition.id },
+            domainId: definition.domainId,
+            deletedAt: null,
+            content: {
+              path: ['methodology', 'pair_key'],
+              equals: pairKey,
+            },
+          },
+        });
+
+        if (candidates.length === 0) return null;
+
+        const { findPairedCompanion } = await import('../../utils/auto-pair.js');
+        const companion = findPairedCompanion(
+          { id: definition.id, content: definition.content },
+          candidates.map((row) => ({ id: row.id, content: row.content })),
+        );
+        if (companion === null || companion === undefined) return null;
+
+        return candidates.find((row) => row.id === companion.id) ?? null;
+      },
+    }),
+
     // Computed: resolvedContent - full content with inheritance applied
     resolvedContent: t.field({
       type: 'JSON',

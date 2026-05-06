@@ -59,6 +59,11 @@ fragment RunFields on Run {
       name
     }
     content
+    pairedSibling {
+      id
+      name
+      content
+    }
   }
   definitionSnapshot
 }

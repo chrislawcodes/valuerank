@@ -4,7 +4,6 @@ import { ChevronRight } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Loading } from '../components/ui/Loading';
-import { findCompanionPairedRun } from '../utils/legacyCompanionPairedRun';
 import { useAnalysis } from '../hooks/useAnalysis';
 import { useRun } from '../hooks/useRun';
 import { useRuns } from '../hooks/useRuns';
@@ -112,22 +111,39 @@ export function AnalysisConditionDetail() {
     analysisStatus: run?.analysisStatus ?? null,
   });
 
-  // Prefer: URL hint → direct companionRunId on the run → legacy heuristic search.
+  // Companion resolution prefers the server-resolved paired sibling
+  // (Definition.pairedSibling) over the legacy run-proximity heuristic. Order:
+  //   1. ?companionRunId= URL hint (caller already picked a run)
+  //   2. run.companionRunId (run config has a direct link)
+  //   3. The most-recent COMPLETED non-aggregate run of run.definition.pairedSibling
   const directCompanionRunId = run?.companionRunId ?? null;
-  const hasResolvedCompanionId = companionRunIdHint != null || directCompanionRunId != null;
+  const pairedSiblingDefinitionId = run?.definition?.pairedSibling?.id ?? null;
+  const hasExplicitCompanionId = companionRunIdHint != null || directCompanionRunId != null;
 
-  // Only load the full runs list when neither a URL hint nor a direct link is available.
-  const { runs: candidatePairedRuns } = useRuns({
-    limit: 1000,
-    pause: analysisMode !== 'paired' || !run || hasResolvedCompanionId,
+  // When neither URL nor run-config gave us a companion run, look up runs of
+  // the paired sibling vignette and pick a representative one.
+  const { runs: siblingRuns } = useRuns({
+    definitionId: pairedSiblingDefinitionId ?? undefined,
+    limit: 100,
+    pause: analysisMode !== 'paired' || hasExplicitCompanionId || pairedSiblingDefinitionId == null,
   });
 
-  const companionRunSummary = useMemo(
-    () => (run == null ? null : findCompanionPairedRun(run, candidatePairedRuns)),
-    [run, candidatePairedRuns],
-  );
+  const siblingFallbackRunId = useMemo(() => {
+    if (siblingRuns == null || siblingRuns.length === 0) return null;
+    const completedNonAggregate = siblingRuns.filter(
+      (candidate) => candidate.status === 'COMPLETED'
+        && candidate.id !== run?.id
+        && !candidate.tags?.some((tag) => tag.name === 'Aggregate'),
+    );
+    const pool = completedNonAggregate.length > 0 ? completedNonAggregate : siblingRuns;
+    const sorted = [...pool].sort((left, right) => (
+      new Date(right.completedAt ?? right.createdAt).getTime()
+      - new Date(left.completedAt ?? left.createdAt).getTime()
+    ));
+    return sorted[0]?.id ?? null;
+  }, [run?.id, siblingRuns]);
 
-  const resolvedCompanionRunId = companionRunIdHint ?? directCompanionRunId ?? companionRunSummary?.id ?? null;
+  const resolvedCompanionRunId = companionRunIdHint ?? directCompanionRunId ?? siblingFallbackRunId ?? null;
 
   const { run: companionRun } = useRun({
     id: resolvedCompanionRunId ?? '',
@@ -139,7 +155,7 @@ export function AnalysisConditionDetail() {
     runId: resolvedCompanionRunId ?? '',
     pause: analysisMode !== 'paired' || resolvedCompanionRunId == null,
     enablePolling: false,
-    analysisStatus: companionRun?.analysisStatus ?? companionRunSummary?.analysisStatus ?? null,
+    analysisStatus: companionRun?.analysisStatus ?? null,
   });
 
   const breadcrumbSearch = useMemo(
