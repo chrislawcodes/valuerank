@@ -45,13 +45,13 @@ DEDUP-8 (`isRecord`) is independent of report output — pure type guard.
 | DEDUP-5 | `analysis-v2/` stalled migration | Web | High | Large | Decision needed |
 | DEDUP-6 | Snapshot builder twin (domain-analysis vs pressure-sensitivity) | API | Medium | Large | Decision needed |
 | DEDUP-7 | `cloud/packages/db/src/queries/*` mostly orphaned | API/db | High | Medium | Decision needed |
-| DEDUP-8 | `isRecord` defined 9 times | API | Medium | Trivial | Open |
+| ~~DEDUP-8~~ | ~~`isRecord` defined 9 times~~ | ~~API~~ | ~~Medium~~ | ~~Trivial~~ | **Resolved — PR #928** |
 | DEDUP-9 | `wilsonInterval` defined twice | API | Medium | Small | Open |
 | DEDUP-10 | Decision-summary utility sprawl | Web | Medium-High | Large | Decision needed |
 | DEDUP-11 | Shared `*-value-statements.ts` (4× boilerplate) | Shared | Medium | Small | Open |
 | DEDUP-12 | Run lifecycle / recovery sprawl | API | Medium-Low | Large | Decision needed |
 | DEDUP-13 | `validate_input` pattern across 5 workers | Workers | Low | Small | Open |
-| DEDUP-14 | `DomainAnalysisLegacy` GraphQL query | Web | Medium | Trivial (if dead) | Investigate |
+| DEDUP-14 | `DomainAnalysisLegacy` GraphQL query — alive, feeds Models + Domains pages | Web | Medium | Large (migration, not delete) | Decision needed |
 
 Status values: `Open` (mechanical, ready to do) · `Decision needed` (needs a direction call before code) · `Investigate` (verify before deleting) · `In progress` (PR open) · `Blocked`
 
@@ -127,11 +127,12 @@ Status values: `Open` (mechanical, ready to do) · `Decision needed` (needs a di
 
 ### DEDUP-8 — `isRecord` defined 9 times
 
-**Files (exported):** `mutations/run/lifecycle-helpers.ts`, `queries/domain/decision-model-helpers.ts`, `queue/handlers/summarize-types.ts` (as `isPlainJsonObject`).
-**Files (private):** `cli/normalize-aggregate-analysis-output.ts`, `cli/backfill-aggregate-consistency.ts`, `cli/backfill-job-choice-value-first.ts`, `cli/backfill-condition-weighted.ts`, `services/analysis/transcript-cell-accumulator.ts`, `services/consistency/modelsConsistencyData.ts`. `start-helpers.ts` adds an `asRecord` variant.
-**Body (everywhere):** `value !== null && typeof value === 'object' && !Array.isArray(value)`. One file (`modelsConsistencyData.ts`) narrows the return to `RawRecord`. Otherwise byte-identical.
-**Canonical:** A single `isRecord` in `@valuerank/shared` (or `apps/api/src/utils/`).
-**Plan:** Define once, import everywhere. Easiest mechanical win in the catalog.
+**Status: Resolved in PR #928 (2026-05-05).** 8 byte-identical sites consolidated to `cloud/apps/api/src/utils/isRecord.ts`. The narrowing variant in `services/consistency/modelsConsistencyData.ts` was intentionally left in place per the Models-reports preserve constraint. `isPlainJsonObject` (queue/handlers/summarize-types.ts and 2 importers) was renamed to `isRecord` as part of the consolidation.
+
+**Original notes (for history):**
+- Files (exported): `mutations/run/lifecycle-helpers.ts`, `queries/domain/decision-model-helpers.ts`, `queue/handlers/summarize-types.ts` (as `isPlainJsonObject`).
+- Files (private): `cli/normalize-aggregate-analysis-output.ts`, `cli/backfill-aggregate-consistency.ts`, `cli/backfill-job-choice-value-first.ts`, `cli/backfill-condition-weighted.ts`, `services/analysis/transcript-cell-accumulator.ts`, `services/consistency/modelsConsistencyData.ts`. `start-helpers.ts` has a different `asRecord`.
+- Body: `value !== null && typeof value === 'object' && !Array.isArray(value)`. `modelsConsistencyData.ts` narrowed to `RawRecord`.
 
 ### DEDUP-9 — `wilsonInterval` defined twice
 
@@ -175,19 +176,27 @@ Status values: `Open` (mechanical, ready to do) · `Decision needed` (needs a di
 ### DEDUP-14 — `DomainAnalysisLegacy` GraphQL query
 
 **Files:** `cloud/apps/web/src/api/operations/domainAnalysis.graphql` defines both `DomainAnalysis` and `DomainAnalysisLegacy`. Web hook re-exports both as `DOMAIN_ANALYSIS_QUERY` and `DOMAIN_ANALYSIS_QUERY_LEGACY`.
-**Status:** Search showed re-export only — caller of legacy not located in Phase 1 scan.
-**Plan:** Confirm callers. If dead, retire `DomainAnalysisLegacy`. Worth a 5-minute follow-up trace before removal.
+**Verified callers (2026-05-05):**
+- `cloud/apps/web/src/pages/ModelsGroups.tsx` (line 173) — feeds the **Models** report
+- `cloud/apps/web/src/pages/DomainAnalysis.tsx` (line 141) — feeds the **Domains** report
+- `cloud/apps/web/tests/pages/ModelsGroups.test.tsx` — tests for the same surface
 
-## Likely dead code (verify before deleting)
+**Reclassified:** Not dead. This query is alive and feeds two surfaces explicitly named in the Preserve list. Cannot be deleted. Resolution is a migration: pick a canonical shape (likely converging `DomainAnalysisLegacy` into `DomainAnalysis`), update the two pages and the test, and verify byte-equivalent report output for both Models and Domains.
 
-| File | Notes |
-|---|---|
-| `cloud/apps/web/src/utils/decisionBuckets.ts` (123 LOC) | 0 external importers in Phase 1 scan |
-| `cloud/apps/web/src/utils/displayLabels.ts` (4 LOC) | Tiny, suspicious |
-| `cloud/workers/temp_zero_report.py` | No callers in `cloud/apps/`; standalone analyst script |
-| `cloud/workers/canary_runner.py` | No callers in `cloud/apps/`; standalone analyst script |
-| `cloud/workers/summarize_batch.py` | Only reachable via circular import from `summarize.py`'s `__main__` |
-| GraphQL `DomainAnalysisLegacy` | See DEDUP-14 |
+**Decision needed:** Migration plan. Treat this as Large lift, paired with DEDUP-6 (snapshot builder twin) since both touch the domain-analysis pipeline.
+
+## Dead-code candidates (verified 2026-05-05)
+
+Phase 1 flagged six likely-dead files. Verification found four were **not** dead. Recording the audit trail so they don't get re-flagged.
+
+| File | Verdict | Notes |
+|---|---|---|
+| `cloud/workers/temp_zero_report.py` | **Deleted (PR #928)** | No callers anywhere in `cloud/`. Confirmed standalone analyst script. |
+| `cloud/workers/canary_runner.py` | **Deleted (PR #928)** | Same. |
+| `cloud/apps/web/src/utils/decisionBuckets.ts` | Alive — keep | Imported by `analysisTranscriptFilters.ts:7` (`collectScenarioIdsForDecisionBucket`). Phase 1 missed this caller. |
+| `cloud/apps/web/src/utils/displayLabels.ts` | Alive — keep | 17 importers across pages and components (`formatDisplayLabel`). Tiny utility but heavily used. |
+| `cloud/workers/summarize_batch.py` | Alive — keep | Active batch-mode entry point. Reached via circular import from `summarize.py:__main__`. Not a deletion target — at most a refactor (fold into `summarize.py`). |
+| GraphQL `DomainAnalysisLegacy` | Alive — see DEDUP-14 | Used by `pages/ModelsGroups.tsx` and `pages/DomainAnalysis.tsx` — Preserve surfaces. Reclassified as a migration cluster. |
 
 ## Demoted: looked duplicate, isn't
 
@@ -203,17 +212,26 @@ Recorded so future audits don't re-flag these.
 
 ## Resolved
 
-_Empty. Add rows here when PRs close clusters above. Format:_
+### Cluster consolidations
 
 | ID | Cluster | PR | Date | Notes |
 |---|---|---|---|---|
+| DEDUP-8 | `isRecord` consolidation | #928 | 2026-05-05 | 8 byte-identical sites consolidated to `cloud/apps/api/src/utils/isRecord.ts`. `isPlainJsonObject` renamed to `isRecord` in summarize handlers. `services/consistency/modelsConsistencyData.ts` narrowing variant intentionally left in place per Models-reports preserve constraint. |
+
+### Dead-code deletions
+
+| File | PR | Date | Notes |
+|---|---|---|---|
+| `cloud/workers/temp_zero_report.py` | #928 | 2026-05-05 | Standalone analyst script; no callers in `cloud/`. |
+| `cloud/workers/canary_runner.py` | #928 | 2026-05-05 | Same. |
 
 ## Phase 2 — recommended starting order
 
-1. **DEDUP-8** (`isRecord`) — trivial, mechanical, builds momentum.
-2. **DEDUP-2** (Schwartz / signature-preference) — already half-migrated; finishing it removes a fork.
-3. **DEDUP-3** (`useRuns` hooks) — small and contained.
-4. **DEDUP-1** (`pauseQueue`) — start with a design note, not code. The only active-bug cluster.
-5. Verify the **Likely dead code** list — every file deleted is one less thing to dedup.
+DEDUP-8 was completed in PR #928 along with two confirmed-dead worker scripts. Suggested next picks:
 
-Larger clusters (DEDUP-4, DEDUP-5, DEDUP-6, DEDUP-7, DEDUP-10, DEDUP-12) need a direction call before any implementation.
+1. **DEDUP-2** (Schwartz / signature-preference) — already half-migrated; finishing it removes a fork.
+2. **DEDUP-3** (`useRuns` hooks) — small and contained.
+3. **DEDUP-9** (`wilsonInterval`) — small statistics-helper consolidation; 2 callsites, contract change is contained.
+4. **DEDUP-1** (`pauseQueue`) — start with a design note, not code. The only active-bug cluster.
+
+Larger clusters (DEDUP-4, DEDUP-5, DEDUP-6, DEDUP-7, DEDUP-10, DEDUP-12, DEDUP-14) need a direction call before any implementation. DEDUP-14 is now paired with DEDUP-6 since both touch the domain-analysis pipeline and feed Preserve surfaces.
