@@ -3,7 +3,18 @@ import { VALUE_LABELS, VALUE_DESCRIPTIONS, type ValueKey } from '../../data/doma
 import { CopyVisualButton } from '../ui/CopyVisualButton';
 import { Tooltip } from '../ui/Tooltip';
 import { getHeatmapColor } from './domainAnalysisColors';
-import type { ModelPairwiseWinRates } from '../../api/operations/pairwiseWinRates';
+
+type PairwiseWinRateModelData = {
+  valueOrder: Array<string>;
+  winRateMatrix: Array<Array<number | null>>;
+  trialCountMatrix: Array<Array<number>>;
+};
+
+export type PairwiseMatrixModel = {
+  model: string;
+  label: string;
+  pairwiseWinRateModel?: PairwiseWinRateModelData | null;
+};
 
 const COLUMN_VALUES: ValueKey[] = [
   'Universalism_Nature',
@@ -42,43 +53,50 @@ function winRateCellColor(winRate: number): string {
 }
 
 type PairwiseWinRateMatrixProps = {
-  models: ModelPairwiseWinRates[];
+  models: PairwiseMatrixModel[];
 };
 
 export function PairwiseWinRateMatrix({ models }: PairwiseWinRateMatrixProps) {
   const tableRef = useRef<HTMLDivElement>(null);
 
-  const firstModel = models[0];
+  const modelsWithData = useMemo(
+    () => models.filter((m): m is PairwiseMatrixModel & { pairwiseWinRateModel: PairwiseWinRateModelData } =>
+      m.pairwiseWinRateModel != null,
+    ),
+    [models],
+  );
+
+  const firstModel = modelsWithData[0];
   const valueIndexMap = useMemo<Map<string, number>>(
     () =>
       firstModel != null
-        ? new Map(firstModel.valueOrder.map((key, i) => [key, i]))
+        ? new Map(firstModel.pairwiseWinRateModel.valueOrder.map((key, i) => [key, i]))
         : new Map(),
     [firstModel],
   );
 
   const averagedMatrix = useMemo<(number | null)[][]>(() => {
-    if (models.length === 0 || firstModel == null) return [];
-    const n = firstModel.valueOrder.length;
+    if (modelsWithData.length === 0 || firstModel == null) return [];
+    const n = firstModel.pairwiseWinRateModel.valueOrder.length;
     return Array.from({ length: n }, (_, r) =>
       Array.from({ length: n }, (_, c) => {
-        const rates = models
-          .map((m) => m.winRateMatrix[r]?.[c] ?? null)
+        const rates = modelsWithData
+          .map((m) => m.pairwiseWinRateModel.winRateMatrix[r]?.[c] ?? null)
           .filter((v): v is number => v != null);
         return rates.length > 0 ? rates.reduce((a, b) => a + b, 0) / rates.length : null;
       }),
     );
-  }, [models, firstModel]);
+  }, [modelsWithData, firstModel]);
 
   const totalTrialMatrix = useMemo<number[][]>(() => {
-    if (models.length === 0 || firstModel == null) return [];
-    const n = firstModel.valueOrder.length;
+    if (modelsWithData.length === 0 || firstModel == null) return [];
+    const n = firstModel.pairwiseWinRateModel.valueOrder.length;
     return Array.from({ length: n }, (_, r) =>
       Array.from({ length: n }, (_, c) =>
-        models.reduce((sum, m) => sum + (m.trialCountMatrix[r]?.[c] ?? 0), 0),
+        modelsWithData.reduce((sum, m) => sum + (m.pairwiseWinRateModel.trialCountMatrix[r]?.[c] ?? 0), 0),
       ),
     );
-  }, [models, firstModel]);
+  }, [modelsWithData, firstModel]);
 
   function getCellWinRate(rowKey: ValueKey, colKey: ValueKey): number | null {
     if (rowKey === colKey) return null;
@@ -109,7 +127,7 @@ export function PairwiseWinRateMatrix({ models }: PairwiseWinRateMatrixProps) {
         <CopyVisualButton targetRef={tableRef} label="pairwise win rate matrix" />
       </div>
 
-      {models.length === 0 ? (
+      {modelsWithData.length === 0 ? (
         <p className="text-xs text-gray-500">No pairwise data available.</p>
       ) : (
         <div ref={tableRef} className="overflow-x-auto">

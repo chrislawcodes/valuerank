@@ -848,8 +848,15 @@ type DomainAnalysisMissingDefinition {
 type DomainAnalysisModel {
   label: String!
   model: String!
+  pairwiseWinRateModel: PairwiseWinRateModel
   rankingShape: RankingShape!
   values: [DomainAnalysisValueScore!]!
+}
+
+type PairwiseWinRateModel {
+  trialCountMatrix: [[Int!]!]!
+  valueOrder: [String!]!
+  winRateMatrix: [[Float]!]!
 }
 
 type DomainAnalysisRefreshResult {

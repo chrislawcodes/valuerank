@@ -25,6 +25,7 @@ import {
 } from '../api/operations/modelsAnalysis';
 import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/llm';
 import { DominanceSection } from '../components/domains/DominanceSection';
+import { PairwiseWinRateMatrix } from '../components/domains/PairwiseWinRateMatrix';
 import { ValuePrioritiesSection } from '../components/domains/ValuePrioritiesSection';
 import { DomainShiftsReportSection } from '../components/models/DomainShiftsReportSection';
 import {
@@ -272,6 +273,13 @@ export function DomainAnalysis() {
     [models, selectedModelIds],
   );
 
+  const visiblePairwiseModels = useMemo(() => {
+    const sourceModels = data?.domainAnalysis.models ?? [];
+    return selectedModelIds.length === 0
+      ? sourceModels
+      : sourceModels.filter((m) => selectedModelIds.includes(m.model));
+  }, [data?.domainAnalysis.models, selectedModelIds]);
+
   const missingDefinitionCount = data?.domainAnalysis.missingDefinitions?.length ?? 0;
   const allMissingDefinitionIds = useMemo(
     () => (data?.domainAnalysis.missingDefinitions ?? []).map((m) => m.definitionId),
@@ -442,6 +450,7 @@ export function DomainAnalysis() {
           <DominanceSection
             models={visibleModels}
           />
+          <PairwiseWinRateMatrix models={visiblePairwiseModels} />
           <DomainShiftsReportSection
             models={modelsAnalysisData?.modelsAnalysis.models ?? []}
             selectedModelIds={selectedModelIds}
