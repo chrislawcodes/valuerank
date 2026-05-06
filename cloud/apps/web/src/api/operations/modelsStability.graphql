@@ -1,0 +1,19 @@
+query ModelsWinRateStability($signature: String, $domainId: ID) {
+  modelsWinRateStability(signature: $signature, domainId: $domainId) {
+    models {
+      modelId
+      label
+      qualifyingVignetteCount
+      avgDirectionalAgreement
+      stableShare
+      softLeanShare
+      tornShare
+      unstableShare
+    }
+    skippedVignettes {
+      definitionId
+      vignetteName
+      reason
+    }
+  }
+}
