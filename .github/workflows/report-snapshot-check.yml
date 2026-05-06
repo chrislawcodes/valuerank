@@ -13,6 +13,8 @@ name: Report Snapshot Check
 # Required repository secret: PROD_API_KEY
 
 on:
+  pull_request:
+    branches: [main]
   push:
     branches: [main]
   schedule:
