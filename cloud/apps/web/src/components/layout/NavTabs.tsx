@@ -36,8 +36,7 @@ const domainMenuItems: MenuItem[] = [
 
 const modelsMenuItems: MenuItem[] = [
   { name: 'Model Groups', path: '/models', match: 'exact' },
-  { name: 'Domain Analysis', path: '/domains/analysis' },
-  { name: 'Domain Shifts', path: '/models/domain-shifts' },
+  { name: 'Win Rate', path: '/models/win-rate' },
   { name: 'Pressure Sensitivity', path: '/models/pressure-sensitivity' },
   { name: 'Confidence', path: '/models/confidence' },
 ];

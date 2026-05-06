@@ -16,7 +16,6 @@ import { DomainStatus } from './pages/DomainStatus';
 import { DomainAnalysis } from './pages/DomainAnalysis';
 import { DomainCoverage } from './pages/DomainCoverage';
 import { DomainAnalysisValueDetail } from './pages/DomainAnalysisValueDetail';
-import { DomainValueShiftHeatmap } from './pages/DomainValueShiftHeatmap';
 import { ModelsGroups } from './pages/ModelsGroups';
 import { ModelsConsistency } from './pages/ModelsConsistency';
 import { PressureSensitivity } from './pages/PressureSensitivity';
@@ -81,7 +80,7 @@ function App() {
             <Route path="/login" element={<Login />} />
 
             {/* Protected routes with layout */}
-            <Route path="/" element={<Navigate to="/domains/analysis" replace />} />
+            <Route path="/" element={<Navigate to="/models/win-rate" replace />} />
             <Route
               path="/status"
               element={
@@ -155,7 +154,7 @@ function App() {
               }
             />
             <Route
-              path="/domains/analysis"
+              path="/models/win-rate"
               element={
                 <ProtectedLayout>
                   <DomainAnalysis />
@@ -175,14 +174,6 @@ function App() {
               element={
                 <ProtectedLayout>
                   <ModelsGroups />
-                </ProtectedLayout>
-              }
-            />
-            <Route
-              path="/models/domain-shifts"
-              element={
-                <ProtectedLayout>
-                  <DomainValueShiftHeatmap />
                 </ProtectedLayout>
               }
             />
@@ -229,7 +220,7 @@ function App() {
               }
             />
             <Route
-              path="/domains/analysis/value-detail"
+              path="/models/win-rate/value-detail"
               element={
                 <ProtectedLayout fullWidth>
                   <DomainAnalysisValueDetail />

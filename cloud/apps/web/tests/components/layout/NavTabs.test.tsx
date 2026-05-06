@@ -48,7 +48,7 @@ describe('NavTabs Component', () => {
   });
 
   it('keeps the model report links available from the models menu', async () => {
-    renderNavTabs('/models/domain-shifts');
+    renderNavTabs('/models/win-rate');
     const toggle = screen.getByRole('button', { name: 'Toggle Models menu' });
     const menuRoot = toggle.closest('.relative');
     if (menuRoot === null) {
@@ -62,18 +62,16 @@ describe('NavTabs Component', () => {
     });
     expect(screen.getByRole('link', { name: 'Models' })).toHaveAttribute('href', '/models');
     expect(screen.getByRole('link', { name: 'Model Groups' })).toHaveAttribute('href', '/models');
-    expect(screen.getByRole('link', { name: 'Domain Analysis' })).toHaveAttribute('href', '/domains/analysis');
-    expect(screen.getByRole('link', { name: 'Domain Shifts' })).toHaveAttribute('href', '/models/domain-shifts');
+    expect(screen.getByRole('link', { name: 'Win Rate' })).toHaveAttribute('href', '/models/win-rate');
   });
 
-  it('highlights only Domain Shifts inside the models menu on the domain shifts route', async () => {
-    renderNavTabs('/models/domain-shifts');
+  it('highlights only Win Rate inside the models menu on the win rate route', async () => {
+    renderNavTabs('/models/win-rate');
     await openMenu('Models');
 
     expect(screen.getByRole('link', { name: 'Models' }).parentElement?.className).toContain('border-teal-500');
     expect(screen.getByRole('link', { name: 'Model Groups' }).className).not.toContain('bg-teal-600/20');
-    expect(screen.getByRole('link', { name: 'Domain Analysis' }).className).not.toContain('bg-teal-600/20');
-    expect(screen.getByRole('link', { name: 'Domain Shifts' }).className).toContain('bg-teal-600/20');
+    expect(screen.getByRole('link', { name: 'Win Rate' }).className).toContain('bg-teal-600/20');
     expect(screen.getByRole('link', { name: 'Consistency' }).className).not.toContain('bg-teal-600/20');
     expect(screen.getByRole('link', { name: 'Circumplex' }).className).not.toContain('bg-teal-600/20');
   });

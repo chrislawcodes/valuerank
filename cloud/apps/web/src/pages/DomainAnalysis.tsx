@@ -25,7 +25,9 @@ import {
 } from '../api/operations/modelsAnalysis';
 import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/llm';
 import { DominanceSection } from '../components/domains/DominanceSection';
+import { SimilaritySection } from '../components/domains/SimilaritySection';
 import { ValuePrioritiesSection } from '../components/domains/ValuePrioritiesSection';
+import { DomainShiftsReportSection } from '../components/models/DomainShiftsReportSection';
 import {
   VALUES,
   type ModelEntry,
@@ -142,7 +144,10 @@ export function DomainAnalysis() {
     pause: selectedDomainId === '' || !activeUseLegacyQuery,
     requestPolicy: 'cache-and-network',
   });
-  const [{ data: modelsAnalysisData }] = useQuery<ModelsAnalysisQueryResult, ModelsAnalysisQueryVariables>({
+  const [{ data: modelsAnalysisData, fetching: modelsAnalysisFetching, error: modelsAnalysisError }] = useQuery<
+    ModelsAnalysisQueryResult,
+    ModelsAnalysisQueryVariables
+  >({
     query: MODELS_ANALYSIS_QUERY,
     variables: {
       ...(selectedScope === 'DOMAIN' && selectedDomainId !== '' ? { domainId: selectedDomainId } : {}),
@@ -362,9 +367,9 @@ export function DomainAnalysis() {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="space-y-2">
-          <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Findings</h1>
+          <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Win Rate</h1>
           <p className="text-sm text-gray-600">
-            Structured domain interpretation across priorities, ranking behavior, and similarity for the selected domain.
+            Structured win-rate interpretation across priorities, ranking behavior, and similarity for the selected domain.
           </p>
         </div>
         <Button
@@ -426,11 +431,11 @@ export function DomainAnalysis() {
       )}
 
       {(domainsError != null || signaturesError != null || error != null) && (
-        <ErrorMessage message={`Failed to load domain analysis: ${(domainsError ?? signaturesError ?? error)?.message ?? 'Unknown error'}`} />
+        <ErrorMessage message={`Failed to load win rate page: ${(domainsError ?? signaturesError ?? error)?.message ?? 'Unknown error'}`} />
       )}
 
       {showPageLoader ? (
-        <Loading size="lg" text="Loading domain analysis..." />
+        <Loading size="lg" text="Loading win rate page..." />
       ) : (
         <>
           <ValuePrioritiesSection
@@ -443,6 +448,14 @@ export function DomainAnalysis() {
           <DominanceSection
             models={models}
             defaultModelIds={defaultModelIds}
+          />
+          <SimilaritySection models={visibleModels} />
+          <DomainShiftsReportSection
+            models={modelsAnalysisData?.modelsAnalysis.models ?? []}
+            selectedModelIds={selectedModelIds}
+            defaultModelIds={defaultSelection}
+            fetching={modelsAnalysisFetching}
+            errorMessage={modelsAnalysisError?.message ?? null}
           />
         </>
       )}

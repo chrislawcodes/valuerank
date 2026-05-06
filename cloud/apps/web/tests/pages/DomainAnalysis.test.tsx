@@ -262,7 +262,7 @@ describe('DomainAnalysis', () => {
 
   it('preserves the all-domains scope and disables domain-only actions', async () => {
     render(
-      <MemoryRouter initialEntries={['/domains/analysis?scope=all-domains&signature=vnewtd']}>
+      <MemoryRouter initialEntries={['/models/win-rate?scope=all-domains&signature=vnewtd']}>
         <DomainAnalysis />
       </MemoryRouter>,
     );

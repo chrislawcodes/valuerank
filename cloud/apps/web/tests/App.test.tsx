@@ -11,8 +11,8 @@ vi.mock('../src/api/client', () => ({
   },
 }));
 
-vi.mock('../src/pages/DomainValueShiftHeatmap', () => ({
-  DomainValueShiftHeatmap: () => <div>Domain shifts route smoke</div>,
+vi.mock('../src/pages/DomainAnalysis', () => ({
+  DomainAnalysis: () => <div>Win rate route smoke</div>,
 }));
 
 vi.mock('../src/pages/ModelsGroups', () => ({
@@ -58,7 +58,37 @@ describe('App Routing', () => {
     });
   });
 
-  it('should render the protected domain shifts route when authenticated', async () => {
+  it('should render the protected win rate route when authenticated', async () => {
+    localStorage.setItem('valuerank_token', 'test-token');
+    window.history.pushState({}, '', '/models/win-rate');
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 'user-1', email: 'researcher@example.com', name: 'Researcher' }),
+    } as Response);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Win rate route smoke')).toBeInTheDocument();
+    });
+  });
+
+  it('should 404 the old domain analysis route when authenticated', async () => {
+    localStorage.setItem('valuerank_token', 'test-token');
+    window.history.pushState({}, '', '/domains/analysis');
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 'user-1', email: 'researcher@example.com', name: 'Researcher' }),
+    } as Response);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /page not found/i })).toBeInTheDocument();
+    });
+  });
+
+  it('should 404 the old domain shifts route when authenticated', async () => {
     localStorage.setItem('valuerank_token', 'test-token');
     window.history.pushState({}, '', '/models/domain-shifts');
     vi.mocked(fetch).mockResolvedValue({
@@ -69,7 +99,7 @@ describe('App Routing', () => {
     render(<App />);
 
     await waitFor(() => {
-      expect(screen.getByText('Domain shifts route smoke')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /page not found/i })).toBeInTheDocument();
     });
   });
 

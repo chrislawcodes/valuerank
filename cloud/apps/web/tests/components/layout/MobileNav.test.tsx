@@ -37,19 +37,19 @@ describe('MobileNav Component', () => {
     expect(screen.getByRole('link', { name: 'Domains' })).toHaveAttribute('href', '/domains');
     expect(screen.getByRole('link', { name: 'Models' })).toHaveAttribute('href', '/models');
     expect(screen.getByRole('link', { name: 'Model Groups' })).toHaveAttribute('href', '/models');
-    expect(screen.getByRole('link', { name: 'Domain Shifts' })).toHaveAttribute('href', '/models/domain-shifts');
+    expect(screen.getByRole('link', { name: 'Win Rate' })).toHaveAttribute('href', '/models/win-rate');
     expect(screen.getByRole('link', { name: 'Consistency' })).toHaveAttribute('href', '/archive/consistency');
     expect(screen.getByRole('link', { name: 'Circumplex' })).toHaveAttribute('href', '/archive/circumplex');
     expect(screen.getByRole('link', { name: 'Archive' })).toHaveAttribute('href', '/archive');
     expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings/account');
   });
 
-  it('highlights Models and Domain Shifts on the domain shifts route', async () => {
-    await renderMobileNav('/models/domain-shifts');
+  it('highlights Models and Win Rate on the win rate route', async () => {
+    await renderMobileNav('/models/win-rate');
 
     expect(screen.getByRole('link', { name: 'Models' }).className).toContain('border-teal-500');
     expect(screen.getByRole('link', { name: 'Model Groups' }).className).not.toContain('border-teal-500');
-    expect(screen.getByRole('link', { name: 'Domain Shifts' }).className).toContain('border-teal-500');
+    expect(screen.getByRole('link', { name: 'Win Rate' }).className).toContain('border-teal-500');
     expect(screen.getByRole('link', { name: 'Consistency' }).className).not.toContain('border-teal-500');
     expect(screen.getByRole('link', { name: 'Circumplex' }).className).not.toContain('border-teal-500');
   });
@@ -59,7 +59,7 @@ describe('MobileNav Component', () => {
 
     expect(screen.getByRole('link', { name: 'Vignettes' })).toHaveAttribute('href', '/definitions');
     expect(screen.getByRole('link', { name: 'Model Groups' })).toHaveAttribute('href', '/models');
-    expect(screen.getByRole('link', { name: 'Domain Analysis' })).toHaveAttribute('href', '/domains/analysis');
+    expect(screen.getByRole('link', { name: 'Win Rate' })).toHaveAttribute('href', '/models/win-rate');
     expect(screen.getByRole('link', { name: 'Manage Domains' })).toHaveAttribute('href', '/domains/manage');
     expect(screen.queryByRole('link', { name: 'Coverage' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Runs' })).toHaveAttribute('href', '/runs');
@@ -90,9 +90,9 @@ describe('MobileNav Component', () => {
   });
 
   it('keeps the mobile menu escape behavior after Models gains children', async () => {
-    await renderMobileNav('/models/domain-shifts');
+    await renderMobileNav('/models/win-rate');
 
-    expect(screen.getByRole('link', { name: 'Domain Shifts' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Win Rate' })).toBeInTheDocument();
     await user.keyboard('{Escape}');
     expect(screen.getByRole('button', { name: /open navigation menu/i })).toHaveAttribute('aria-expanded', 'false');
   });
