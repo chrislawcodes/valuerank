@@ -102,7 +102,7 @@ export function PressureDirectionalBreakdown({ models }: Props) {
           <TableRow>
             <TableHead className="text-xs uppercase tracking-wide text-gray-500">Model</TableHead>
             <TableHead className="text-xs uppercase tracking-wide text-gray-500">
-              <HeaderTooltip label="Overall" content={OVERALL_TOOLTIP} />
+              <HeaderTooltip label="High Pressure on Value Effect" content={OVERALL_TOOLTIP} />
             </TableHead>
             {domains.map((domain) => (
               <TableHead key={domain.id} className="text-xs uppercase tracking-wide text-gray-500">

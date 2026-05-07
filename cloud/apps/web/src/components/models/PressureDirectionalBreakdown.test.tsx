@@ -51,20 +51,20 @@ describe('PressureDirectionalBreakdown', () => {
     renderBreakdown([createModel('alpha', 'Alpha', 0.2, DOMAINS)]);
 
     expect(screen.getByText('Pressure sensitivity by domain')).toBeDefined();
-    expect(screen.getByText('Overall')).toBeDefined();
+    expect(screen.getByText('High Pressure on Value Effect')).toBeDefined();
     expect(screen.getByText('Ethics')).toBeDefined();
     expect(screen.getByText('Politics')).toBeDefined();
   });
 
   it('displays overall effect and domain deltas (domain minus overall)', () => {
-    // DOMAINS: Ethics=0.3, Politics=0.1; overall=0.2
+    // DOMAINS: Ethics=0.3, Politics=0.1; value effect=0.2
     // Ethics delta: 0.3 - 0.2 = +0.1
     // Politics delta: 0.1 - 0.2 = -0.1
     renderBreakdown([createModel('alpha', 'Alpha', 0.2, DOMAINS)]);
 
     const row = getRowByLabel('Alpha');
     const cells = getCells(row);
-    expect(cells[1]?.textContent ?? '').toBe(formatSignedPoints(0.2));   // Overall unchanged
+    expect(cells[1]?.textContent ?? '').toBe(formatSignedPoints(0.2));   // Value effect unchanged
     expect(cells[2]?.textContent ?? '').toBe(formatSignedPoints(0.1));   // Ethics delta
     expect(cells[3]?.textContent ?? '').toBe(formatSignedPoints(-0.1));  // Politics delta
   });
@@ -173,13 +173,15 @@ describe('PressureDirectionalBreakdown', () => {
     expect(artIdx).toBeLessThan(zooIdx);
   });
 
-  it('shows overall and domain tooltips', () => {
+  it('shows the value effect and domain tooltips', () => {
     renderBreakdown([createModel('alpha', 'Alpha', 0.2, DOMAINS)]);
 
-    const overallTrigger = screen.getByRole('button', { name: /show overall help/i });
-    fireEvent.focus(overallTrigger);
+    const valueEffectTrigger = screen.getByRole('button', {
+      name: /show high pressure on value effect help/i,
+    });
+    fireEvent.focus(valueEffectTrigger);
     expect(screen.getByRole('tooltip').textContent ?? '').toContain('Win-rate lift above balanced');
-    fireEvent.blur(overallTrigger);
+    fireEvent.blur(valueEffectTrigger);
 
     const ethicsTrigger = screen.getByRole('button', { name: /show ethics help/i });
     fireEvent.focus(ethicsTrigger);
