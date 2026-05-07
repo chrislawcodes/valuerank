@@ -5,10 +5,11 @@ import { Tooltip } from './Tooltip';
 type Props = {
   label: ReactNode;
   content: string | ReactNode;
+  ariaLabel?: string;
 };
 
-export function HeaderTooltip({ label, content }: Props) {
-  const labelText = typeof label === 'string' || typeof label === 'number' ? String(label) : 'header';
+export function HeaderTooltip({ label, content, ariaLabel }: Props) {
+  const labelText = ariaLabel ?? (typeof label === 'string' || typeof label === 'number' ? String(label) : 'header');
 
   return (
     <span className="inline-flex items-center gap-1">

@@ -23,6 +23,15 @@ const MAX_DELTA = 0.25;
 const OVERALL_TOOLTIP =
   "Win-rate lift above balanced when a value's pressure is high and the opposing value's pressure is low to moderate. Averaged symmetrically across both push directions, all domains, and all measured value pairs.";
 
+function WrappedHighPressureLabel({ suffix }: { suffix: string }) {
+  return (
+    <span className="inline-flex flex-col items-end leading-tight text-right">
+      <span className="whitespace-nowrap">High pressure</span>
+      <span>{suffix}</span>
+    </span>
+  );
+}
+
 function domainTooltip(domainName: string): string {
   return `How this model's pressure sensitivity in ${domainName} compares to its overall pressure sensitivity. Green means more responsive to pressure than its overall; red means less responsive.`;
 }
@@ -100,12 +109,16 @@ export function PressureDirectionalBreakdown({ models }: Props) {
       <Table variant="bordered">
         <TableHeader variant="bordered">
           <TableRow>
-            <TableHead className="text-xs uppercase tracking-wide text-gray-500">Model</TableHead>
-            <TableHead className="text-xs uppercase tracking-wide text-gray-500">
-              <HeaderTooltip label="High Pressure on Value Effect" content={OVERALL_TOOLTIP} />
+            <TableHead className="text-left text-xs uppercase tracking-wide text-gray-700">Model</TableHead>
+            <TableHead className="text-right text-xs uppercase tracking-wide text-gray-700">
+              <HeaderTooltip
+                label={<WrappedHighPressureLabel suffix="on value effect" />}
+                ariaLabel="High pressure on value effect"
+                content={OVERALL_TOOLTIP}
+              />
             </TableHead>
             {domains.map((domain) => (
-              <TableHead key={domain.id} className="text-xs uppercase tracking-wide text-gray-500">
+              <TableHead key={domain.id} className="text-right text-xs uppercase tracking-wide text-gray-700">
                 <HeaderTooltip label={domain.name} content={domainTooltip(domain.name)} />
               </TableHead>
             ))}
@@ -115,8 +128,12 @@ export function PressureDirectionalBreakdown({ models }: Props) {
           {rows.map((row) => (
             <TableRow key={row.modelId}>
               <TableCell className="font-medium text-gray-900">{row.label}</TableCell>
-              <TableCell className={`font-mono ${row.overallEffect < 0 ? 'text-red-700' : 'text-gray-900'}`}>
-                {formatSignedPoints(row.overallEffect)}
+              <TableCell
+                className={`text-right text-sm ${row.overallEffect < 0 ? 'text-red-700' : 'text-gray-900'}`}
+              >
+                <span className="font-mono">
+                  {formatSignedPoints(row.overallEffect)}
+                </span>
               </TableCell>
               {domains.map((domain) => {
                 const effect = row.domainEffects.get(domain.id) ?? null;
@@ -124,13 +141,13 @@ export function PressureDirectionalBreakdown({ models }: Props) {
                 return (
                   <TableCell
                     key={domain.id}
-                    className={`text-center text-xs font-semibold transition-colors ${
+                    className={`text-right text-sm font-semibold transition-colors ${
                       delta != null
                         ? getCellDeltaClass(delta)
                         : 'border-gray-100 bg-gray-50 text-gray-400'
                     }`}
                   >
-                    {delta != null ? formatSignedPoints(delta) : '—'}
+                    <span className="font-mono">{delta != null ? formatSignedPoints(delta) : '—'}</span>
                   </TableCell>
                 );
               })}
