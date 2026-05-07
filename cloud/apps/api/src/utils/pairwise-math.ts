@@ -3,8 +3,6 @@
  * neutral outcomes in the denominator. Returns null when there are no
  * observations.
  */
-const EPSILON = 1e-6;
-
 export function computePairwiseWinRate(
   wins: number,
   losses: number,
@@ -16,68 +14,48 @@ export function computePairwiseWinRate(
 }
 
 /**
- * I² heterogeneity index for a set of per-vignette win-rate estimates.
- * Returns a number in [0, 100], or null when fewer than 2 valid estimates remain after filtering.
+ * Population standard deviation of per-vignette win-rate estimates,
+ * with each scenario counted equally regardless of trial count.
  *
- * Algorithm (per spec FR-011):
+ * ValueRank treats every vignette as a designed stimulus in a revealed-
+ * preference study; differences in trial count reflect data-collection
+ * choices, not differences in scenario importance. Weighting by trial count
+ * (as in textbook inverse-variance heterogeneity) would overrepresent
+ * heavily-sampled scenarios in the spread measure and contradict the
+ * unweighted arithmetic mean reported as `pooledMean`.
+ *
+ * `totalTrials` is used ONLY as a filter (drop zero-trial vignettes); it does
+ * NOT enter the spread calculation itself.
+ *
+ * Returns SD in [0, 1] (i.e., proportion units, the same unit as `winRate`),
+ * or null when fewer than 2 valid estimates remain after filtering.
+ *
+ * Algorithm:
  *   1. Filter out any input where totalTrials === 0 OR winRate === null
  *   2. If fewer than 2 valid estimates remain, return null
- *   3. For each estimate i:
- *        vi = max(p_i * (1 - p_i) / n_i, EPSILON)  with EPSILON = 1e-6
- *        wi = 1 / vi
- *   4. ybar_w = sum(wi * p_i) / sum(wi)
- *   5. Q = sum(wi * (p_i - ybar_w)^2)
- *   6. df = k - 1  where k = number of valid estimates
- *   7. If Q === 0 return 0
- *   8. Return max(0, (Q - df) / Q) * 100
+ *   3. mean = unweighted arithmetic mean of the per-vignette win rates
+ *   4. variance = sum((p_i - mean)^2) / k        (population variance, divisor k)
+ *   5. Return sqrt(variance)
  */
-export function computeISquared(
+export function computePerVignetteStdDev(
   estimates: Array<{ winRate: number | null; totalTrials: number }>,
 ): number | null {
-  const validEstimates = estimates.filter(
-    (
-      estimate,
-    ): estimate is {
-      winRate: number;
-      totalTrials: number;
-    } => estimate.totalTrials > 0 && estimate.winRate !== null,
-  );
+  const validRates = estimates
+    .filter(
+      (estimate) => estimate.totalTrials > 0 && estimate.winRate !== null,
+    )
+    .map((estimate) => estimate.winRate as number);
 
-  if (validEstimates.length < 2) {
+  if (validRates.length < 2) {
     return null;
   }
 
-  const weightedEstimates = validEstimates.map((estimate) => {
-    const variance = Math.max(
-      (estimate.winRate * (1 - estimate.winRate)) / estimate.totalTrials,
-      EPSILON,
-    );
-
-    return {
-      winRate: estimate.winRate,
-      weight: 1 / variance,
-    };
-  });
-
-  const totalWeight = weightedEstimates.reduce(
-    (sum, estimate) => sum + estimate.weight,
+  const mean =
+    validRates.reduce((sum, rate) => sum + rate, 0) / validRates.length;
+  const sumSquaredDeviations = validRates.reduce(
+    (sum, rate) => sum + (rate - mean) ** 2,
     0,
   );
-  const weightedMean =
-    weightedEstimates.reduce(
-      (sum, estimate) => sum + estimate.weight * estimate.winRate,
-      0,
-    ) / totalWeight;
-  const q = weightedEstimates.reduce(
-    (sum, estimate) =>
-      sum + estimate.weight * (estimate.winRate - weightedMean) ** 2,
-    0,
-  );
-
-  if (q === 0) {
-    return 0;
-  }
-
-  const degreesOfFreedom = validEstimates.length - 1;
-  return Math.max(0, (q - degreesOfFreedom) / q) * 100;
+  const variance = sumSquaredDeviations / validRates.length;
+  return Math.sqrt(variance);
 }

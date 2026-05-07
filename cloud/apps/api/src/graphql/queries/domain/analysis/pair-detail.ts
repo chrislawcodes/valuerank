@@ -10,14 +10,13 @@ import {
   resolveValuePairsInChunks,
   selectLatestDefinitionPerLineage,
 } from '../shared.js';
-import { computeISquared, computePairwiseWinRate } from '../../../../utils/pairwise-math.js';
+import { computePerVignetteStdDev, computePairwiseWinRate } from '../../../../utils/pairwise-math.js';
 import { wilsonCI95 } from '../../../../utils/binomial-ci.js';
 import {
   DomainAnalysisPairDetailResultRef,
   type DomainAnalysisPairDetailResult,
   type DomainAnalysisPairFramingDirection,
   type DomainAnalysisPairVignetteDetail,
-  MultipleVignettesPerDirectionError,
   PooledMeanDivergenceError,
 } from './pair-detail-types.js';
 
@@ -123,7 +122,7 @@ builder.queryField('domainAnalysisPairDetail', (t) =>
           pooledMin: null,
           pooledMean: null,
           pooledMax: null,
-          iSquared: null,
+          pooledStdDev: null,
           vignetteCount: 0,
           validEstimateCount: 0,
         };
@@ -164,10 +163,15 @@ builder.queryField('domainAnalysisPairDetail', (t) =>
 
       for (const [direction, definitionIds] of definitionIdsByDirection.entries()) {
         if (definitionIds.length > 1) {
-          throw new MultipleVignettesPerDirectionError(
-            canonicalRequestedPairKey,
-            direction,
-            definitionIds,
+          ctx.log.warn(
+            {
+              pairKey: canonicalRequestedPairKey,
+              direction,
+              definitionIds,
+              modelId,
+              domainId,
+            },
+            'Multiple vignettes found for (pair, direction); aggregating across them. Original spec assumed 1:1 mapping; production data has cases where it does not hold.',
           );
         }
       }
@@ -184,7 +188,7 @@ builder.queryField('domainAnalysisPairDetail', (t) =>
           pooledMin: null,
           pooledMean: null,
           pooledMax: null,
-          iSquared: null,
+          pooledStdDev: null,
           vignetteCount: 0,
           validEstimateCount: 0,
         };
@@ -300,7 +304,7 @@ builder.queryField('domainAnalysisPairDetail', (t) =>
         validEstimateCount === 0
           ? null
           : Math.max(...validVignettes.map((vignette) => vignette.selectedValueWinRate));
-      const iSquared = computeISquared(
+      const pooledStdDev = computePerVignetteStdDev(
         validVignettes.map((vignette) => ({
           winRate: vignette.selectedValueWinRate,
           totalTrials: vignette.totalTrials,
@@ -356,7 +360,7 @@ builder.queryField('domainAnalysisPairDetail', (t) =>
         pooledMin,
         pooledMean,
         pooledMax,
-        iSquared,
+        pooledStdDev,
         vignetteCount: vignettes.length,
         validEstimateCount,
       };
