@@ -11,10 +11,12 @@ export type ModelGroupingSignificanceRowShape = {
   modelBId: string;
   modelBLabel: string;
   n: number;
-  meanDifference: number | null;
+  agreementRate: number;
+  discordantAtoB: number;
+  discordantBtoA: number;
   rawPValue: number | null;
   holmCorrectedPValue: number | null;
-  effectSize: number | null;
+  oddsRatio: number | null;
   effectLabel: 'Weak' | 'Strong';
   confidenceIntervalLow: number | null;
   confidenceIntervalHigh: number | null;
@@ -51,10 +53,12 @@ builder.objectType(ModelGroupingSignificanceRowRef, {
     modelBId: t.exposeString('modelBId'),
     modelBLabel: t.exposeString('modelBLabel'),
     n: t.exposeInt('n'),
-    meanDifference: t.exposeFloat('meanDifference', { nullable: true }),
+    agreementRate: t.exposeFloat('agreementRate'),
+    discordantAtoB: t.exposeInt('discordantAtoB'),
+    discordantBtoA: t.exposeInt('discordantBtoA'),
     rawPValue: t.exposeFloat('rawPValue', { nullable: true }),
     holmCorrectedPValue: t.exposeFloat('holmCorrectedPValue', { nullable: true }),
-    effectSize: t.exposeFloat('effectSize', { nullable: true }),
+    oddsRatio: t.exposeFloat('oddsRatio', { nullable: true }),
     effectLabel: t.exposeString('effectLabel'),
     confidenceIntervalLow: t.exposeFloat('confidenceIntervalLow', { nullable: true }),
     confidenceIntervalHigh: t.exposeFloat('confidenceIntervalHigh', { nullable: true }),

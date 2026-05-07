@@ -88,7 +88,7 @@ export function formatClusterScoreLabel(score: number): string {
 }
 
 export function formatWinRateLabel(rate: number): string {
-  return `${Math.round(rate * 100)}%`;
+  return `${(rate * 100).toFixed(1)}%`;
 }
 
 export function clampClusterScore(score: number, min = CLUSTER_SCORE_MIN, max = CLUSTER_SCORE_MAX): number {

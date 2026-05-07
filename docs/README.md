@@ -12,6 +12,7 @@ ValueRank presents each model with scenarios where two moral values conflict (e.
 | [Data Model](./architecture/data-model.md) | Database schema and relationships |
 | [Tech Stack](./architecture/tech-stack.md) | Technologies and rationale |
 | [Canonical Glossary](./canonical-glossary.md) | Terminology (Definition↔Vignette, Dimension↔Attribute, …) |
+| [Methodology Notes](./methodology.md) | Current experimental design and how to read repeatability vs ambiguity |
 | [GraphQL API](./api/graphql-schema.md) | Types, queries, mutations |
 | [MCP Tools](./api/mcp-tools.md) | AI-agent tool reference |
 | [REST Endpoints](./api/rest-endpoints.md) | Auth, export, import, OData |
@@ -123,6 +124,7 @@ See `MEMORY.md` → "Dev Account" for local login credentials.
 docs/
 ├── README.md                    # This file
 ├── canonical-glossary.md        # Terminology source of truth
+├── methodology.md               # Working notes on experimental design and interpretation
 ├── architecture/
 │   ├── overview.md              # System architecture
 │   ├── data-model.md            # Database schema

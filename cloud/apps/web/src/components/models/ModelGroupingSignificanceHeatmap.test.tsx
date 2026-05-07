@@ -14,7 +14,7 @@ function createModel(modelId: string, label: string): ModelGroupingSignificanceM
   };
 }
 
-function createRow(overrides: Partial<ModelGroupingSignificanceRow>): ModelGroupingSignificanceRow {
+function createRow(overrides: Partial<ModelGroupingSignificanceRow> = {}): ModelGroupingSignificanceRow {
   return {
     __typename: 'ModelGroupingSignificanceRow',
     modelAId: 'alpha',
@@ -22,57 +22,87 @@ function createRow(overrides: Partial<ModelGroupingSignificanceRow>): ModelGroup
     modelBId: 'beta',
     modelBLabel: 'Beta',
     n: 10,
-    meanDifference: 0.5,
-    rawPValue: 0.01,
-    holmCorrectedPValue: 0.03,
-    effectSize: 0.8,
-    effectLabel: 'Strong',
-    confidenceIntervalLow: 0.2,
-    confidenceIntervalHigh: 0.8,
-    verdict: 'Significant',
+    agreementRate: 0.8,
+    discordantAtoB: 1,
+    discordantBtoA: 1,
+    oddsRatio: 1,
+    rawPValue: 0.5,
+    holmCorrectedPValue: 0.5,
+    effectLabel: 'Weak',
+    confidenceIntervalLow: null,
+    confidenceIntervalHigh: null,
+    verdict: 'Not significant',
     ...overrides,
   };
 }
 
 describe('ModelGroupingSignificanceHeatmap', () => {
-  it('renders the diagonal placeholder and cell titles', () => {
+  it('renders the diagonal placeholder', () => {
     render(
       <ModelGroupingSignificanceHeatmap
-        models={[createModel('alpha', 'Alpha'), createModel('beta', 'Beta'), createModel('gamma', 'Gamma')]}
-        rows={[
-          createRow({ modelBId: 'beta', modelBLabel: 'Beta', meanDifference: 0.5, effectSize: 0.8, verdict: 'Significant' }),
-          createRow({ modelBId: 'gamma', modelBLabel: 'Gamma', meanDifference: -0.2, effectSize: 0.2, verdict: 'Weak' }),
-          createRow({
-            modelAId: 'beta',
-            modelALabel: 'Beta',
-            modelBId: 'gamma',
-            modelBLabel: 'Gamma',
-            meanDifference: 0,
-            effectSize: null,
-            rawPValue: 0.5,
-            holmCorrectedPValue: 0.5,
-            effectLabel: 'Weak',
-            verdict: 'Not significant',
-            confidenceIntervalLow: -0.1,
-            confidenceIntervalHigh: 0.1,
-          }),
-        ]}
+        models={[createModel('alpha', 'Alpha'), createModel('beta', 'Beta')]}
+        rows={[createRow()]}
       />,
     );
 
     expect(screen.getByTitle('Alpha compared with itself')).toBeDefined();
     expect(screen.getByTitle('Beta compared with itself')).toBeDefined();
-    expect(screen.getByTitle('Gamma compared with itself')).toBeDefined();
+  });
+
+  it('renders hover title with agreement rate and discordant counts', () => {
+    render(
+      <ModelGroupingSignificanceHeatmap
+        models={[createModel('alpha', 'Alpha'), createModel('beta', 'Beta')]}
+        rows={[
+          createRow({
+            agreementRate: 0.8,
+            discordantAtoB: 1,
+            discordantBtoA: 3,
+            verdict: 'Weak',
+          }),
+        ]}
+      />,
+    );
+
     expect(
-      screen.getByTitle(
-        /Alpha vs Beta: mean difference \+0\.5 pp, effect size \+0\.80, verdict Significant/,
-      ),
+      screen.getByTitle('Alpha vs Beta: agreement 80%, discordant A→B 1, B→A 3, verdict Weak'),
     ).toBeDefined();
     expect(
-      screen.getByTitle(
-        /Alpha vs Gamma: mean difference -0\.2 pp, effect size \+0\.20, verdict Weak/,
-      ),
+      screen.getByTitle('Beta vs Alpha: agreement 80%, discordant A→B 3, B→A 1, verdict Weak'),
     ).toBeDefined();
+  });
+
+  it('shows S badge for Significant rows and W badge for Weak rows', () => {
+    render(
+      <ModelGroupingSignificanceHeatmap
+        models={[createModel('alpha', 'Alpha'), createModel('beta', 'Beta'), createModel('gamma', 'Gamma')]}
+        rows={[
+          createRow({
+            modelAId: 'alpha',
+            modelALabel: 'Alpha',
+            modelBId: 'beta',
+            modelBLabel: 'Beta',
+            verdict: 'Significant',
+            effectLabel: 'Strong',
+          }),
+          createRow({
+            modelAId: 'alpha',
+            modelALabel: 'Alpha',
+            modelBId: 'gamma',
+            modelBLabel: 'Gamma',
+            verdict: 'Weak',
+          }),
+          createRow({
+            modelAId: 'beta',
+            modelALabel: 'Beta',
+            modelBId: 'gamma',
+            modelBLabel: 'Gamma',
+            verdict: 'Not significant',
+          }),
+        ]}
+      />,
+    );
+
     expect(screen.getAllByText('S')).toHaveLength(2);
     expect(screen.getAllByText('W')).toHaveLength(2);
   });

@@ -58,7 +58,7 @@ export function ClusterDotPlot({ clusters, activeGroupIds = [], dataSource = 'lo
                 className="absolute top-0 text-xs font-semibold text-gray-500"
                 style={{ left: '50%', transform: 'translateX(-50%)' }}
               >
-                {isWinRate ? '50%' : '50/50'}
+                {isWinRate ? formatWinRateLabel(0.5) : '50/50'}
               </div>
             </div>
           </div>

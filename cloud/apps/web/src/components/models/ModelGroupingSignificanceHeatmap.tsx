@@ -1,37 +1,22 @@
 import type { ModelGroupingSignificanceModel, ModelGroupingSignificanceRow } from '../../api/operations/modelGroupingSignificance';
 import { cn } from '../../lib/utils';
 
-function formatEffectSize(value: number | null): string {
+function formatAgreementRate(value: number | null): string {
   if (value == null || !Number.isFinite(value)) return '—';
-  const sign = value > 0 ? '+' : '';
-  return `${sign}${value.toFixed(2)}`;
+  return `${Math.round(value * 100)}%`;
 }
 
-function formatDifference(value: number | null): string {
-  if (value == null || !Number.isFinite(value)) return '—';
-  const sign = value > 0 ? '+' : '';
-  return `${sign}${value.toFixed(1)} pp`;
-}
-
-function getTone(effectSize: number | null): string {
-  if (effectSize == null || !Number.isFinite(effectSize)) {
+function getAgreementTone(agreementRate: number | null): string {
+  if (agreementRate == null || !Number.isFinite(agreementRate)) {
     return 'bg-gray-50 text-gray-400';
   }
-  const magnitude = Math.min(Math.abs(effectSize) / 1.5, 1);
-  if (Math.abs(effectSize) < 0.12) {
-    return 'bg-gray-50 text-gray-600';
+  if (agreementRate >= 0.9) {
+    return 'bg-teal-100 text-teal-900';
   }
-  return effectSize > 0
-    ? magnitude > 0.66
-      ? 'bg-teal-200 text-teal-950'
-      : magnitude > 0.33
-        ? 'bg-teal-100 text-teal-900'
-        : 'bg-teal-50 text-teal-800'
-    : magnitude > 0.66
-      ? 'bg-rose-200 text-rose-950'
-      : magnitude > 0.33
-        ? 'bg-rose-100 text-rose-900'
-        : 'bg-rose-50 text-rose-800';
+  if (agreementRate >= 0.7) {
+    return 'bg-gray-50 text-gray-700';
+  }
+  return 'bg-rose-50 text-rose-800';
 }
 
 function getVerdictRing(verdict: ModelGroupingSignificanceRow['verdict']): string {
@@ -72,7 +57,7 @@ export function ModelGroupingSignificanceHeatmap({
   return (
     <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white p-3">
       <div className="mb-2 flex items-center justify-between gap-3 text-xs text-gray-500">
-        <span>Color shows effect size. Border shows Holm-Bonferroni significance.</span>
+        <span>Color shows agreement rate. Border shows Holm-Bonferroni significance.</span>
         <span>S = Significant, W = Weak</span>
       </div>
       <table className="min-w-full border-collapse text-xs">
@@ -99,20 +84,23 @@ export function ModelGroupingSignificanceHeatmap({
                 const sourceRow = upper
                   ? rowByPair.get(`${rowModel.modelId}::${colModel.modelId}`) ?? null
                   : rowByPair.get(`${colModel.modelId}::${rowModel.modelId}`) ?? null;
-                const sourceEffectSize = sourceRow?.effectSize ?? null;
-                const sourceMeanDifference = sourceRow?.meanDifference ?? null;
-                const effectSize = sourceRow != null
-                  ? (upper ? sourceEffectSize : (sourceEffectSize == null ? null : -sourceEffectSize))
-                  : null;
-                const meanDifference = sourceRow != null
-                  ? (upper ? sourceMeanDifference : (sourceMeanDifference == null ? null : -sourceMeanDifference))
-                  : null;
+                const agreementRate = sourceRow?.agreementRate ?? null;
+                const discordantAtoB = sourceRow == null
+                  ? null
+                  : upper
+                    ? sourceRow.discordantAtoB
+                    : sourceRow.discordantBtoA;
+                const discordantBtoA = sourceRow == null
+                  ? null
+                  : upper
+                    ? sourceRow.discordantBtoA
+                    : sourceRow.discordantAtoB;
                 const verdict = sourceRow?.verdict ?? 'Not significant';
                 const title = sameCell
                   ? `${rowModel.label} compared with itself`
                   : sourceRow == null
                     ? `${rowModel.label} and ${colModel.label}: no data`
-                    : `${rowModel.label} vs ${colModel.label}: mean difference ${formatDifference(meanDifference)}, effect size ${formatEffectSize(effectSize)}, verdict ${verdict}`;
+                    : `${rowModel.label} vs ${colModel.label}: agreement ${formatAgreementRate(agreementRate)}, discordant A→B ${discordantAtoB}, B→A ${discordantBtoA}, verdict ${verdict}`;
 
                 return (
                   <td key={colModel.modelId} className="px-1 py-1 text-right" title={title}>
@@ -128,7 +116,7 @@ export function ModelGroupingSignificanceHeatmap({
                       <div
                         className={cn(
                           'relative inline-flex h-14 w-14 items-center justify-center rounded-md border px-2 py-2 text-xs font-semibold tabular-nums shadow-sm transition',
-                          getTone(effectSize),
+                          getAgreementTone(agreementRate),
                           getVerdictRing(verdict),
                         )}
                       >
@@ -145,7 +133,7 @@ export function ModelGroupingSignificanceHeatmap({
                             {getVerdictBadge(verdict)}
                           </span>
                         )}
-                        <span>{formatEffectSize(effectSize)}</span>
+                        <span>{formatAgreementRate(agreementRate)}</span>
                       </div>
                     )}
                   </td>

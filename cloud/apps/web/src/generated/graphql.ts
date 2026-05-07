@@ -1542,17 +1542,19 @@ export type ModelGroupingSignificanceResult = {
 
 export type ModelGroupingSignificanceRow = {
   __typename?: 'ModelGroupingSignificanceRow';
+  agreementRate: Scalars['Float']['output'];
   confidenceIntervalHigh?: Maybe<Scalars['Float']['output']>;
   confidenceIntervalLow?: Maybe<Scalars['Float']['output']>;
+  discordantAtoB: Scalars['Int']['output'];
+  discordantBtoA: Scalars['Int']['output'];
   effectLabel: Scalars['String']['output'];
-  effectSize?: Maybe<Scalars['Float']['output']>;
   holmCorrectedPValue?: Maybe<Scalars['Float']['output']>;
-  meanDifference?: Maybe<Scalars['Float']['output']>;
   modelAId: Scalars['String']['output'];
   modelALabel: Scalars['String']['output'];
   modelBId: Scalars['String']['output'];
   modelBLabel: Scalars['String']['output'];
   n: Scalars['Int']['output'];
+  oddsRatio?: Maybe<Scalars['Float']['output']>;
   rawPValue?: Maybe<Scalars['Float']['output']>;
   verdict: Scalars['String']['output'];
 };
@@ -4799,7 +4801,7 @@ export type ModelGroupingSignificanceQueryVariables = Exact<{
 }>;
 
 
-export type ModelGroupingSignificanceQuery = { __typename?: 'Query', modelGroupingSignificance: { __typename?: 'ModelGroupingSignificanceResult', models: Array<{ __typename?: 'ModelGroupingSignificanceModel', modelId: string, label: string }>, rows: Array<{ __typename?: 'ModelGroupingSignificanceRow', modelAId: string, modelALabel: string, modelBId: string, modelBLabel: string, n: number, meanDifference?: number | null, rawPValue?: number | null, holmCorrectedPValue?: number | null, effectSize?: number | null, effectLabel: string, confidenceIntervalLow?: number | null, confidenceIntervalHigh?: number | null, verdict: string }> } };
+export type ModelGroupingSignificanceQuery = { __typename?: 'Query', modelGroupingSignificance: { __typename?: 'ModelGroupingSignificanceResult', models: Array<{ __typename?: 'ModelGroupingSignificanceModel', modelId: string, label: string }>, rows: Array<{ __typename?: 'ModelGroupingSignificanceRow', modelAId: string, modelALabel: string, modelBId: string, modelBLabel: string, n: number, rawPValue?: number | null, holmCorrectedPValue?: number | null, agreementRate: number, discordantAtoB: number, discordantBtoA: number, oddsRatio?: number | null, effectLabel: string, confidenceIntervalLow?: number | null, confidenceIntervalHigh?: number | null, verdict: string }> } };
 
 export type AvailableModelsQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -7281,10 +7283,12 @@ export const ModelGroupingSignificanceDocument = gql`
       modelBId
       modelBLabel
       n
-      meanDifference
       rawPValue
       holmCorrectedPValue
-      effectSize
+      agreementRate
+      discordantAtoB
+      discordantBtoA
+      oddsRatio
       effectLabel
       confidenceIntervalLow
       confidenceIntervalHigh
@@ -7559,6 +7563,12 @@ export const PressureSensitivityDocument = gql`
         averageWinRate
         balancedWinRate
         highPressureOnThisValueWinRate
+        highPressureOnThisValueDomainRates {
+          domainId
+          domainName
+          rate
+          pairsMeasured
+        }
         highPressureOnOpposingValueWinRate
         highPressureOnThisValueDomainRates {
           domainId

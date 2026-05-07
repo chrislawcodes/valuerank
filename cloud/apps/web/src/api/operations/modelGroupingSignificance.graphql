@@ -10,10 +10,12 @@ query ModelGroupingSignificance($modelIds: [String!]!, $domainId: ID, $scope: St
       modelBId
       modelBLabel
       n
-      meanDifference
       rawPValue
       holmCorrectedPValue
-      effectSize
+      agreementRate
+      discordantAtoB
+      discordantBtoA
+      oddsRatio
       effectLabel
       confidenceIntervalLow
       confidenceIntervalHigh
