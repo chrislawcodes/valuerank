@@ -1,0 +1,263 @@
+# Forest Plot for Pairwise Win Rate Matrix Drawer
+
+**Feature**: forest-plot-pairwise-drawer
+**Status**: spec
+**Branch**: claude/unruffled-thompson-930258
+**Created**: 2026-05-06
+
+## Context
+
+ValueRank shows a Pairwise Win Rate Matrix (rows × columns = values × values; each cell = how often the row value was prioritized over the column value, averaged across vignettes for the selected model). Today the cells are static. An AAPOR researcher asked whether ValueRank's results are statistically valid; the cell numbers ship with no uncertainty, no per-vignette breakdown, and no methodology disclosure.
+
+This wave makes one focused change: clicking a Pairwise cell opens a drawer containing a forest plot of the underlying per-vignette response rates, with per-vignette Wilson CIs, an I² heterogeneity index, and a min/mean/max summary band.
+
+ValueRank is a **revealed-preference / discrete-choice study** of one subject (an AI model) across designed stimuli. Per-vignette Wilson CIs are inferential and represent precision on each individual scenario. The cell-mean is a descriptive summary statistic of N specific scenarios — there is no bootstrap-over-vignettes pooled CI.
+
+## User Scenarios & Testing
+
+### User Story 1 — Drill into a Pairwise cell to see how scenarios disagree (P1)
+
+As a researcher viewing the Pairwise Win Rate Matrix, I want to click a cell and see the per-scenario breakdown so I can judge whether the cell mean hides scenario-level disagreement (bimodality, framing effects, etc.).
+
+**Why P1**: This is the entire purpose of Wave 1. Without the drawer, the cell is a single number with no way to interrogate it.
+
+**Independent test**: Open the Pairwise matrix on the Domains page, select a single model, click any non-diagonal cell, verify the drawer opens with a forest plot. By default the plot shows pair-averaged rows (one per other-value pair); toggling "Split by direction" shows per-vignette rows each with their own Wilson CI bar.
+
+**Acceptance scenarios**:
+1. **Given** the Pairwise matrix is rendered for a single model, **When** the user clicks a non-diagonal cell, **Then** a drawer opens showing the forest plot for that value pair, defaulting to pair-averaged view.
+2. **Given** the drawer is open in pair-averaged view, **When** the user looks at the forest plot, **Then** each row corresponds to one value-pair and shows a point estimate (square) and either a direction-spread bracket (when both framing directions exist with non-trivial gap) or a Wilson CI bar (when only one direction exists), plus a vertical reference line at 50%.
+3. **Given** the drawer is open in pair-averaged view, **When** the user toggles "Split by direction", **Then** each surviving vignette is shown as a separate row with its own Wilson CI bar.
+4. **Given** the drawer is open, **When** the user closes it, **Then** the drawer collapses and the matrix remains in its previous state.
+
+### User Story 2 — Toggle between pair-averaged and split-by-direction views (P2)
+
+As a researcher, I want to switch between a "pair-averaged" view (default; one row per vignette with the two framing directions averaged) and a "split by direction" view (one row per vignette × framing direction) so I can inspect framing effects in detail when needed without cluttering the default visualization.
+
+**Why P2**: The averaged view matches the cell mean and stays clean; the split view is needed for diagnosing framing/order effects but is too dense for everyday scanning.
+
+**Independent test**: With the drawer open, toggle "Split by direction" and verify the row count doubles (every vignette splits into its two direction-specific rows when both directions exist). Toggle back and verify return to averaged rows.
+
+**Acceptance scenarios**:
+1. **Given** the drawer is open in the default averaged view, **When** the user toggles "Split by direction", **Then** the rows expand to one per (value-pair × direction).
+2. **Given** any pair has a direction-gap > 5pp, **When** the averaged view is shown, **Then** that row displays direction-bracket markers.
+3. **Given** any pair has a direction-gap > 15pp, **When** the averaged view is shown, **Then** that row displays a warning flag (⚠ icon) next to the pair label.
+
+### User Story 3 — Read summary statistics (mean, range, heterogeneity) at a glance (P2)
+
+As a researcher, I want a single summary row at the bottom of the forest plot showing the cell mean, min, and max of per-vignette rates, plus an I² heterogeneity index, so I can quickly assess how spread out the underlying scenarios are.
+
+**Why P2**: Surfaces the heterogeneity story directly, instead of leaving the user to compute it visually.
+
+**Independent test**: Open the drawer; verify the summary band displays a horizontal range from min to max with a mean-notch, labeled with N and the mean rate; verify an "I² = X%" label is visible.
+
+**Acceptance scenarios**:
+1. **Given** the drawer is open, **When** the user looks at the summary band, **Then** the band's left/right ends sit at the min and max of per-vignette rates and a triangle marks the mean.
+2. **Given** the cell has at least 2 vignettes, **When** I² is computed, **Then** the value is displayed as "I² = X%" below the summary band.
+3. **Given** the cell has only 1 vignette, **When** the summary band would be drawn, **Then** the band is suppressed and "n = 1, treat with caution" is shown instead.
+
+### User Story 4 — Drill into a specific vignette (P3)
+
+As a researcher inspecting a single suspicious row, I want clicking a row to either expand it (for pair-averaged rows that aggregate two directions, where the row is not yet a single vignette) or navigate to the vignette's detail page (for split or single-direction rows that map 1:1 to a vignette). This matches a "drill down" mental model: each click takes me one step deeper, never skipping a level.
+
+**Why P3**: Useful but not blocking — the forest plot's data alone tells the story for most analysis.
+
+**Independent test**: In pair-averaged view, click a row that aggregates two directions and verify it expands to two split rows in place (no navigation). Click one of the resulting split rows and verify it navigates to that vignette's detail page.
+
+**Acceptance scenarios**:
+1. **Given** the drawer is open in pair-averaged view, **When** the user clicks a row that aggregates two direction-specific vignettes, **Then** that row expands in place into its two split rows; no navigation occurs.
+2. **Given** the drawer is open and a row corresponds to exactly one vignette (split view, or pair-averaged view with only one direction), **When** the user clicks the row, **Then** the app navigates to the existing per-vignette detail page for that vignette.
+
+## Edge Cases
+
+- **Loading state**: while the GraphQL query is in flight, the drawer MUST render a skeleton placeholder (e.g., a row of pulsing rectangles where the forest plot will appear) so the user gets immediate feedback that data is loading. A blank drawer is not acceptable.
+- **Toggle precedence**: the global "Split by direction" toggle (FR-005) and per-row click-to-expand (US 4) interact as follows: the global toggle is the source of truth. When the toggle is ON (split view), all rows are split per-vignette and click-to-expand is a no-op. When the toggle is OFF (pair-averaged view), individual 2-direction rows can be expanded in place via click; turning the toggle ON resets all per-row expansion state (everything is split). Turning the toggle back OFF collapses everything back to the pair-averaged default (no expanded rows).
+- **Cell with 1 valid vignette**: render a single-row forest plot, suppress the summary band, show "n = 1, treat with caution" warning.
+- **Cell with `vignetteCount > 0` but `validEstimateCount === 0`** (every vignette had zero trials or a null rate): render the drawer header but show "No usable scenarios for this pair — all vignettes had zero trials." Do not render an empty forest plot or summary band.
+- **Cell with 0 vignettes** (empty signature/model combination): drawer opens but shows "No data available for this pair under the current selection." Do not render an empty forest plot.
+- **All vignettes at 100% or all at 0%**: render normally; the visually flat result IS the finding. Do not auto-zoom or rescale.
+- **Vignettes with high refusal counts**: Wilson CI is by definition bounded to [0, 1] so visual clamping is not needed. The tooltip MUST show the numeric bounds with at least 3-decimal precision (e.g., "95% CI: 0.553 – 0.716") so the user can read the true precision. Mark the row with a small refusal-rate annotation when `refusalRate > 0.05`.
+- **Diagonal cells** (same value on both axes): are not clickable — the matrix already renders them as `—`.
+- **Multi-model selection**: cells MUST be non-interactive (no click handler attached). No drawer can open in this state.
+- **ALL_DOMAINS scope** (no specific domain selected): cells MUST be non-interactive in Wave 1 — same treatment as multi-model. The cross-domain forest plot variant is deferred to a later wave.
+
+## Functional Requirements
+
+### Frontend
+
+- **FR-001**: Cells in `PairwiseWinRateMatrix.tsx` MUST be clickable when ALL of: (a) the current selection is a single model, (b) the cell is non-diagonal, (c) a specific `domainId` is selected (i.e., not in ALL_DOMAINS scope), (d) the active `signature` is non-null. In any other case the cell MUST NOT be clickable.
+- **FR-002**: Clicking a clickable cell MUST open a new drawer component (`PairwiseCellDrawer.tsx`) containing the forest plot. Closing the drawer MUST restore the matrix view. The drawer MUST close automatically when any of `selectedModelId`, `domainId`, or `signature` changes while it is open (the displayed data would otherwise become stale or mismatched with the current selection). The drawer MUST NOT attempt to refetch and rebind itself to a new selection silently — closing on selection change is the simpler, less-surprising lifecycle.
+- **FR-003**: The new `ForestPlot.tsx` component MUST render: row labels (left), point-estimate squares, horizontal Wilson CI bars (in split-by-direction view) or direction-spread brackets (in pair-averaged view per FR-005), a dashed vertical reference line at 50%, a summary band at the bottom showing min/mean/max with a mean notch, and an I² label. The 50% reference line marks where the model picked the row's value as often as not (across all trials, including neutrals, given the win-rate denominator in FR-013/FR-020). It is not a "tie point" between the two values — when neutrals exist, a true preference tie sits below 50%; the methodology footer (FR-020) MUST clarify this for the AAPOR audience.
+- **FR-004**: The point-estimate square size MUST be proportional to sqrt(totalTrials), clamped to 4–12 px side length.
+- **FR-005**: The default forest plot view MUST be pair-averaged. Algorithm for pair-averaging:
+  1. Group vignettes by their `(otherValueKey)` — i.e., which value is paired against the cell's selected value.
+  2. Within each group, the row's `pointEstimate` is the **unweighted mean** of the per-vignette `selectedValueWinRate` across the (at most 2) directions in that group, after filtering out null-rate vignettes.
+  3. **No CI bar is shown on pair-averaged rows.** Instead, the row displays a horizontal bracket spanning from the lower to the higher of the two direction-specific point estimates (when both directions exist). This is a *range marker*, not a confidence interval, and it directly visualizes within-pair framing variation. (CI bars belong to the split-by-direction view, where each row corresponds to one Wilson-measurable vignette.)
+  4. The row's `directionGap` is `|rate_A_to_B - rate_B_to_A|` in percentage points when both directions exist with non-null rates; null otherwise.
+  5. The row's `pairWarn` is true when `directionGap !== null && directionGap > 15`.
+  6. If only one direction exists with a non-null rate, the pair-averaged row uses that single direction's stats directly (no averaging, no range bracket), `directionGap = null`, and `pairWarn = false`. The CI bar from that single direction MUST be shown in this case (it is a real per-vignette Wilson CI and shows the user's actual precision on the only available scenario).
+  A toggle MUST switch to split-by-direction view (one row per surviving vignette, with per-row Wilson CI bars).
+- **FR-006**: In pair-averaged view, when the gap between A→B and B→A directions exceeds 5pp for a pair, that row MUST display direction-spread brackets. When the gap is ≤5pp, the row shows only the point-estimate square — no bracket and no Wilson CI bar (the row is genuinely "averaged" with negligible spread). When the gap exceeds 15pp, the row MUST also display a warning flag (⚠ icon) next to the pair label, with a `title` attribute / accessible tooltip reading "Large framing-direction gap: [X]pp between A→B and B→A. The cell mean averages over this disagreement." Brackets MUST be visually distinct from Wilson CI bars (e.g., open square endcaps and a dashed line for brackets, vs. solid round-cap line for CI bars) so the user is not misled into reading the bracket as a confidence interval.
+- **FR-007**: Hovering a row MUST show a tooltip with: definitionName(s), otherValueKey, framing direction (or "averaged" for pair-rows), prioritized / totalTrials count, refusal rate, and (in split-by-direction view) the unrounded numeric Wilson CI bounds (e.g., "95% CI: 0.553 – 0.716"). For pair-averaged rows that span two directions, the tooltip MUST instead show the two direction-specific point estimates explicitly (e.g., "A→B: 8.8% · B→A: 100%").
+- **FR-008**: Clicking a row MUST navigate to the existing per-vignette detail page when the row corresponds to a single vignette — i.e. in split-by-direction view, or in pair-averaged view when only one direction exists for that pair. In pair-averaged view where the row aggregates two vignettes, clicking the row MUST instead expand that pair into its two split rows in place (no navigation). Each `ForestPlotRow` MUST carry the relevant `definitionId(s)` to support this routing.
+- **FR-009**: Refusal-rate annotation MUST be displayed under any row where the row's `refusalRate > 0.05`. The threshold is evaluated on the row as displayed: in split-by-direction view, on the per-vignette `refusalRate`; in pair-averaged view (when 2 directions are aggregated into one row), on the **maximum** of the two directions' `refusalRate` values (so a high-refusal direction surfaces even when the other direction is clean). Document this rule in the methodology footer if the annotation appears.
+
+### Backend
+
+- **FR-010**: A new utility `cloud/apps/api/src/utils/binomial-ci.ts` MUST export `wilsonCI95(successes: number, n: number): [number, number] | null`. Returns the standard 95% Wilson score interval; null when n === 0.
+- **FR-011**: `cloud/apps/api/src/utils/pairwise-math.ts` MUST export `computeISquared(estimates: Array<{ winRate: number | null; totalTrials: number }>): number | null`. Algorithm:
+  1. Filter out any input where `totalTrials === 0` or `winRate === null`.
+  2. If fewer than 2 valid estimates remain, return null.
+  3. For each estimate, compute the binomial variance `vi = max(p*(1-p)/n, EPSILON)` with `EPSILON = 1e-6` to avoid division by zero when `p ∈ {0, 1}`.
+  4. Compute inverse-variance weights `wi = 1 / vi`.
+  5. Compute weighted mean `ybar_w = sum(wi * pi) / sum(wi)`.
+  6. Compute Cochran's Q: `Q = sum(wi * (pi - ybar_w)^2)`.
+  7. Compute degrees of freedom `df = k - 1` where k is the number of valid estimates.
+  8. Return `I² = max(0, (Q - df) / Q) * 100`. If Q === 0, return 0.
+- **FR-012**: A new GraphQL resolver `domainAnalysisPairDetail(valueA: String!, valueB: String!, modelId: String!, domainId: ID, signature: String): DomainAnalysisPairDetailResult` MUST return the per-vignette breakdown for a single value pair (both framing directions). This is distinct from the existing `domainAnalysisValueDetail` (which is keyed by one value vs all opponents) — using `domainAnalysisValueDetail` for the drawer would over-fetch by ~9x. The new resolver internally reuses the same data-loading logic but filters to vignettes where `(valueA, valueB)` is the tested pair in either direction. The resolver MUST throw a typed error (`MultipleVignettesPerDirectionError`) if it encounters more than one vignette for any single (pair, direction) combination — the data model assumption (Assumption 0) is enforced as a hard runtime invariant, not a soft documented constraint.
+- **FR-013**: Each vignette in `domainAnalysisPairDetail.vignettes` MUST include: `definitionId`, `definitionName`, `prioritized`, `deprioritized`, `neutral`, `totalTrials`, `selectedValueWinRate` (Float | null), `winRateCI95Low` (Float | null), `winRateCI95High` (Float | null), `refusalRate` (Float | null — derived as `neutral / totalTrials` on the backend; null when totalTrials===0), `framingDirection` (enum `A_TO_B | B_TO_A`). The Wilson CI MUST be computed from `prioritized / totalTrials` — i.e. the same denominator as `selectedValueWinRate`, which is `wins / (wins + losses + neutral)`.
+- **FR-014**: `domainAnalysisPairDetail` MUST also return cell-level `pooledMin`, `pooledMean`, `pooledMax` (Float | null) and `iSquared` (Float | null). These MUST be computed AFTER filtering out vignettes where `totalTrials === 0` or `selectedValueWinRate === null`. `pooledMean` MUST be the **unweighted arithmetic mean** of the per-vignette `selectedValueWinRate` values across the surviving vignettes. This matches how the existing Pairwise Win Rate Matrix cell computes its displayed value (verified against `computePairwiseWinRate` aggregation in `aggregation.ts`); the drawer's `pooledMean` and the matrix cell value MUST be identical when the same model and signature are selected. The resolver MUST verify this equivalence by computing the matrix-side cell value via the same shared aggregation function and asserting equality (within 1e-9). If they diverge, the resolver MUST throw a typed error (`PooledMeanDivergenceError`) — this is a data-consistency bug, not a recoverable warning, and surfacing it as an error prevents shipping conflicting numbers in the UI. `pooledMin` and `pooledMax` are the simple min/max over the same surviving rates.
+- **FR-015**: `framingDirection` MUST be inferred from each vignette's stored value-pair ordering (the resolver already tracks valueA/valueB in `valuePairByDefinition`). `A_TO_B` means the vignette presents the input pair as `(valueA, valueB)` in the order requested by the query; `B_TO_A` means the vignette presents it in reverse. This lets the frontend group vignettes into pair-averaged rows.
+- **FR-016**: GraphQL codegen MUST be re-run after the schema changes; generated types in `cloud/apps/web/src/generated/` must reflect the new resolver and fields.
+
+### Frontend integration
+
+- **FR-017**: `PairwiseWinRateMatrix.tsx` MUST accept new props: `selectedModelId: string | null`, `domainId: string | null`, `signature: string | null`, `onCellClick: (rowValueKey: ValueKey, columnValueKey: ValueKey) => void`. A cell MUST be rendered as interactive (cursor pointer, click handler wired, `onCellClick` called on click) ONLY when ALL of the following hold: (a) `selectedModelId !== null`, (b) `domainId !== null`, (c) `signature !== null`, (d) the cell is non-diagonal. In any other case the cell MUST be non-interactive: no cursor pointer, no click handler attached, no `onCellClick` invocation. (This is the same rule as FR-001; FR-001 is the user-visible behavior, FR-017 is the props contract.)
+- **FR-018**: `PairwiseWinRateMatrix.tsx`'s parent (currently `DomainAnalysis.tsx` or its child wrapper that hosts the matrix) MUST pass `selectedModelId` (the single selected model's modelId, or null when multiple are selected), the active `domainId`, and the active `signature`. It MUST also own the drawer state (which row/column pair is open) and render `<PairwiseCellDrawer>` accordingly.
+- **FR-019**: For Wave 1, no visible affordance is shown to explain why a non-interactive cell is non-interactive. This is a known usability gap (see Residual Risks); Wave 2 may add a small tooltip explaining the disabled state.
+
+### Methodology / Documentation
+
+- **FR-020**: The drawer MUST include a small methodology footer with the following text (multi-sentence): "Win rate = wins / (wins + losses + neutral); neutral responses count in the denominator, so a true preference tie between two values lies BELOW 50% by the neutral rate. The 50% reference line marks where the model picks this value at least as often as it does anything else combined — not where the two values tie. Per-vignette Wilson 95% CIs measure precision on each scenario; the cell mean is the unweighted mean of those scenarios — there is no pooled CI on the cell. I² heterogeneity is computed using inverse-variance weights and may not be centered on the same value as the displayed mean; it measures whether scenarios disagree more than chance, not where the center is."
+
+## Success Criteria
+
+- **SC-001**: A researcher can open the Pairwise matrix, select a single model, click any non-diagonal cell, and see a forest plot of the underlying vignettes within 2 seconds (drawer open + plot rendered).
+- **SC-002**: For a known cell with prioritized=80, totalTrials=125, the displayed Wilson CI matches manual calculation: low ≈ 0.553, high ≈ 0.716.
+- **SC-003**: A cell with bimodal scenarios (e.g., 16 at 100%, 1 at 9%) visually communicates the bimodality through the spread of forest-plot rows — measured by user testing or by inspection of the live UI.
+- **SC-004**: Toggling between averaged (9 rows) and split (18 rows) views completes in under 100 ms (no re-fetch; pure client-side re-render).
+- **SC-005**: Wilson CI utility unit tests cover: n=0 → null; n>0 with successes=0 (lower bound near 0); n>0 with successes=n (upper bound near 1); n=125, successes=80 → CI matches the SC-002 reference calculation.
+- **SC-006**: I² utility unit tests cover: k=1 → null; k=2 with identical estimates → 0; k≥2 with substantial spread → > 50.
+
+## Key Entities
+
+```ts
+// Backend addition — NEW resolver types (do NOT modify the existing
+// DomainAnalysisValueDetailResult; this is a separate pair-scoped resolver).
+type DomainAnalysisPairDetailResult = {
+  rowValueKey: string;
+  columnValueKey: string;
+  modelId: string;
+  modelLabel: string;
+  domainId: string | null;
+  domainName: string | null;
+  vignettes: DomainAnalysisPairVignetteDetail[];
+  pooledMin: number | null;        // min of per-vignette rates (0–1) AFTER filtering null/zero-trial
+  pooledMean: number | null;       // mean of per-vignette rates (0–1) AFTER filtering
+  pooledMax: number | null;        // max of per-vignette rates (0–1) AFTER filtering
+  iSquared: number | null;         // heterogeneity index (0–100); null if < 2 valid estimates
+  vignetteCount: number;            // total vignettes returned (including filtered ones)
+  validEstimateCount: number;       // count after null/zero-trial filtering
+};
+
+type DomainAnalysisPairVignetteDetail = {
+  definitionId: string;
+  definitionName: string;
+  prioritized: number;
+  deprioritized: number;
+  neutral: number;
+  totalTrials: number;
+  selectedValueWinRate: number | null;   // wins / (wins + losses + neutral); null if totalTrials === 0
+  winRateCI95Low: number | null;          // Wilson lower (computed from prioritized / totalTrials); null if totalTrials === 0
+  winRateCI95High: number | null;         // Wilson upper; null if totalTrials === 0
+  refusalRate: number | null;             // neutral / totalTrials; null if totalTrials === 0
+  framingDirection: 'A_TO_B' | 'B_TO_A'; // direction of (valueA, valueB) presentation in this vignette
+};
+
+// Frontend additions (component contracts)
+type ForestPlotRow = {
+  pairKey: string;                          // value-pair grouping key
+  label: string;                            // row label (other value name, plus direction in split view)
+  framingDirection: 'A_TO_B' | 'B_TO_A' | 'AVERAGED'; // 'AVERAGED' = pair-averaged row in default view
+  pointEstimate: number;                    // 0–1; row is omitted from display if backend rate is null
+  ciLow: number | null;                     // 0–1; null on AVERAGED rows that aggregate 2 directions (no pooled CI)
+  ciHigh: number | null;                    // 0–1; null on AVERAGED rows that aggregate 2 directions
+  // Direction-spread bracket (AVERAGED rows only when both directions exist):
+  bracketLow: number | null;                // 0–1; lower of the two direction point estimates
+  bracketHigh: number | null;               // 0–1; higher of the two direction point estimates
+  totalTrials: number;                      // sum across rows in the group (for sizing the square only)
+  prioritized: number;                      // sum across rows in the group (for tooltip display only)
+  refusalRate: number;                      // 0–1; for split rows = neutral/totalTrials of that vignette; for pair-averaged rows that span both directions = the MAX of the two directions' refusalRate (mirrors the FR-009 threshold rule); for single-direction averaged rows = that direction's refusalRate
+  definitionIds: string[];                  // 1 entry for split or single-direction rows; 2 entries for pair-averaged rows that span both directions
+  // For pair-averaged view only:
+  directionGap: number | null;              // pp difference between A→B and B→A; null in split view or when only one direction exists
+  pairWarn: boolean;                        // true when |directionGap| > 15pp
+};
+
+type ForestPlotProps = {
+  rows: ForestPlotRow[];
+  pooledMin: number | null;
+  pooledMean: number | null;
+  pooledMax: number | null;
+  iSquared: number | null;
+  splitByDirection: boolean;
+  onToggleSplit: () => void;
+  onRowClick: (row: ForestPlotRow) => void;
+  onRowHover?: (row: ForestPlotRow | null) => void;
+};
+
+type PairwiseCellDrawerProps = {
+  open: boolean;
+  rowValueKey: ValueKey | null;
+  columnValueKey: ValueKey | null;
+  modelId: string | null;           // single-model only; null when multi-select
+  domainId: string | null;
+  signature: string | null;
+  onClose: () => void;
+};
+```
+
+## Files Touched
+
+| File | Change |
+|---|---|
+| `cloud/apps/api/src/utils/binomial-ci.ts` | NEW — Wilson CI utility |
+| `cloud/apps/api/src/utils/pairwise-math.ts` | EXTEND — add `computeISquared` |
+| `cloud/apps/api/src/graphql/queries/domain/shared.ts` | EXTEND — add new fields to type definitions |
+| `cloud/apps/api/src/graphql/queries/domain/types-detail.ts` | EXTEND — expose new fields in Pothos types |
+| `cloud/apps/api/src/graphql/queries/domain/analysis/pair-detail.ts` | NEW — `domainAnalysisPairDetail` resolver (pair-scoped; reuses data-loading logic from value-detail.ts) |
+| `cloud/apps/api/src/graphql/queries/domain/analysis/pair-detail-types.ts` | NEW — Pothos object types and TypeScript types for pair-detail result |
+| `cloud/apps/api/src/graphql/queries/index.ts` | EXTEND — import the new pair-detail resolver (queries register as side effect) |
+| `cloud/apps/web/src/api/operations/domainAnalysis.ts` | EXTEND — add NEW `DOMAIN_ANALYSIS_PAIR_DETAIL_QUERY` (do not extend the existing value-detail query for this purpose) |
+| `cloud/apps/web/src/components/domains/ForestPlot.tsx` | NEW — forest plot component (SVG-based) |
+| `cloud/apps/web/src/components/domains/PairwiseCellDrawer.tsx` | NEW — drawer component for Pairwise cells |
+| `cloud/apps/web/src/components/domains/PairwiseWinRateMatrix.tsx` | EXTEND — make non-diagonal cells clickable; wire drawer state |
+| `cloud/apps/web/src/generated/graphql.ts` | REGENERATED via `npm run codegen --workspace @valuerank/web` |
+| `cloud/apps/api/src/utils/__tests__/binomial-ci.test.ts` | NEW — unit tests for Wilson CI |
+| `cloud/apps/api/src/utils/__tests__/pairwise-math.test.ts` | EXTEND — unit tests for `computeISquared` |
+
+## Assumptions
+
+0. **At most one vignette per (value-pair, framing-direction) per domain.** Inspection of the production data (e.g., the Software Approach Choice domain) shows each pair-direction has exactly one vignette definition (e.g., one "Achievement → Benevolence Dependability" vignette, one "Benevolence Dependability → Achievement" vignette). The forest-plot grouping logic in FR-005 and the navigation logic in FR-008 assume this 1:1 mapping. If the data model ever permits multiple vignettes per pair-direction, the grouping logic must be revisited (possible Wave 2+ work).
+1. The drawer queries the **new** `domainAnalysisPairDetail` resolver — pair-scoped — not the existing `domainAnalysisValueDetail` (which would over-fetch ~9x). The new resolver internally reuses the same data-loading logic.
+2. The drawer pattern from `ModelValueDetailDrawer.tsx` is the design reference for `PairwiseCellDrawer.tsx`.
+3. Null / zero-trial vignettes are **filtered out** of pooled summary stats (pooledMin/Mean/Max/iSquared) but are still returned in the `vignettes` array so the frontend can render them as "no data" rows if desired (Wave 2 polish; for Wave 1 the frontend can simply skip them).
+4. `framingDirection` is derived from the existing `valueA`/`valueB` ordering already tracked in `valuePairByDefinition` in `value-win-rate-aggregation.ts`. No schema migration is needed.
+5. Codex implements; Sonnet orchestrates and reconciles review findings.
+6. All preflight gates (lint, test, build) per the cloud CLAUDE.md must pass before delivery.
+
+## Residual Risks
+
+- **Cognitive load on users**: The methodology footer (FR-020) is dense and asks the user to internalize multiple statistical nuances (win-rate denominator, 50% reference meaning, weighted-vs-unweighted center for I²). **Verification**: After Wave 1 ships, sit with one AAPOR researcher (or comparable methodologist) for a 15-minute walkthrough; if they cannot correctly answer "where does a true tie sit on this plot?" without re-reading the footer, file a follow-up to add an explicit tie-line annotation in Wave 2.
+- **Magic-number thresholds**: 5pp / 15pp direction-gap thresholds (FR-006), 5% refusal-rate annotation threshold (FR-009), and `EPSILON = 1e-6` in I² (FR-011) are working defaults, not literature-derived. **Verification**: After Wave 1 ships, run a one-time analysis script counting how many cells in the production database hit each threshold; if any threshold flags > 30% of cells (over-noisy) or < 1% (under-sensitive), open a follow-up to recalibrate. Document the chosen values in the methodology footer or a linked methodology page.
+- **Disabled-state usability gap**: Cells that are non-interactive (multi-model, ALL_DOMAINS) give no feedback explaining why. **Verification**: First Wave 2 user test should ask any researcher who lands on this page in those scopes whether they understood why cells didn't open. If two researchers in a row don't, prioritize adding a tooltip or status badge.
+- **`pooledMean` vs matrix cell value drift**: FR-014 requires equivalence with the existing matrix aggregation. **Verification**: Add an integration test that fetches a cell value from `pairwiseWinRates` (matrix source) and `domainAnalysisPairDetail.pooledMean` for the same model + signature + pair and asserts they match within 1e-9. If the test ever fails, the resolver-side warning log (also required by FR-014) provides the diagnostic data.
+- **I² center-of-mass mismatch**: I² is computed using inverse-variance-weighted mean while the visual mean is unweighted. **Verification**: Acknowledged in FR-020; no further verification action since this is a transparently disclosed methodological choice rather than a bug.
+
+## Out of Scope (deferred to later waves)
+
+- Trust signal corner flags on matrix cells (Wave 2)
+- Sparkline previews in matrix tooltips (Wave 2)
+- Page-level AAPOR methodology disclosure block (Wave 2)
+- Forest plot in the Win Rate by Values by Model drawer (Wave 3)
+- Multi-model and ALL_DOMAINS forest plot variants
+- Cell-level bootstrap CIs (intentionally excluded; conflicts with revealed-preference framing)

@@ -1,0 +1,19 @@
+{
+  "paths": [
+    "cloud/apps/api/src/graphql/queries/domain/analysis",
+    "cloud/apps/api/src/services/circumplex",
+    "cloud/apps/api/src/utils",
+    "cloud/apps/web/src/api/operations",
+    "cloud/apps/web/src/components/circumplex",
+    "cloud/apps/web/src/components/domains"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/api/src/graphql/queries/domain/analysis",
+    "cloud/apps/api/src/services/circumplex",
+    "cloud/apps/api/src/utils",
+    "cloud/apps/web/src/api/operations",
+    "cloud/apps/web/src/components/circumplex",
+    "cloud/apps/web/src/components/domains",
+    "docs/workflow/feature-runs/forest-plot-pairwise-drawer"
+  ]
+}
