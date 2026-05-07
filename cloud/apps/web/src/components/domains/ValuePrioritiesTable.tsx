@@ -207,12 +207,6 @@ export function ValuePrioritiesTable({
                   {sortState.key === 'model' ? (sortState.direction === 'asc' ? '↑' : '↓') : ''}
                 </Button>
               </th>
-              <th
-                className="border-r-2 border-gray-300 px-2 py-2 text-right font-medium"
-                rowSpan={2}
-              >
-                Total
-              </th>
               {TOP_COLUMN_GROUPS.map((group, groupIndex) => {
                 const isOpennessGroup = group.label === 'Openness to Change';
                 return (
@@ -235,6 +229,12 @@ export function ValuePrioritiesTable({
                   </th>
                 );
               })}
+              <th
+                className="border-l-2 border-gray-300 px-2 py-2 text-right font-medium"
+                rowSpan={2}
+              >
+                Total
+              </th>
             </tr>
             <tr className="border-b border-gray-200 text-gray-600">
               {COLUMN_VALUES.map((value) => (
@@ -306,9 +306,6 @@ export function ValuePrioritiesTable({
                 <td className="border-r-2 border-gray-300 px-2 py-2">
                   <div className="font-medium text-gray-900">{model.label}</div>
                 </td>
-                <td className="border-r-2 border-gray-300 px-2 py-2 text-right font-medium text-gray-700 tabular-nums">
-                  {formatTrialCount(model.totalTrials)}
-                </td>
                 {COLUMN_VALUES.map((value) => {
                   const cellValue = getMetricValue(model, value, displayMetric);
                   const stabilityScore = model.stabilityScores?.[value] ?? null;
@@ -360,15 +357,15 @@ export function ValuePrioritiesTable({
                     </td>
                   );
                 })}
+                <td className="border-l-2 border-gray-300 px-2 py-2 text-right text-xs text-gray-800 tabular-nums">
+                  {formatTrialCount(model.totalTrials)}
+                </td>
               </tr>
             ))}
             {models.length > 1 && (
               <tr className="border-t-2 border-gray-300">
                 <td className="border-r-2 border-gray-300 px-2 py-2">
                   <div className="text-xs font-medium italic text-gray-500">Avg</div>
-                </td>
-                <td className="border-r-2 border-gray-300 px-2 py-2 text-right text-xs text-gray-500">
-                  —
                 </td>
                 {COLUMN_VALUES.map((value) => {
                   const avg = avgMetricValues[value];
@@ -392,6 +389,9 @@ export function ValuePrioritiesTable({
                     </td>
                   );
                 })}
+                <td className="border-l-2 border-gray-300 px-2 py-2 text-right text-xs text-gray-500">
+                  —
+                </td>
               </tr>
             )}
           </tbody>
