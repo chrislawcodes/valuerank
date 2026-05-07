@@ -795,12 +795,12 @@ export type DomainAnalysisPairDetailResult = {
   columnValueKey: Scalars['String']['output'];
   domainId?: Maybe<Scalars['ID']['output']>;
   domainName?: Maybe<Scalars['String']['output']>;
-  iSquared?: Maybe<Scalars['Float']['output']>;
   modelId: Scalars['String']['output'];
   modelLabel: Scalars['String']['output'];
   pooledMax?: Maybe<Scalars['Float']['output']>;
   pooledMean?: Maybe<Scalars['Float']['output']>;
   pooledMin?: Maybe<Scalars['Float']['output']>;
+  pooledStdDev?: Maybe<Scalars['Float']['output']>;
   rowValueKey: Scalars['String']['output'];
   validEstimateCount: Scalars['Int']['output'];
   vignetteCount: Scalars['Int']['output'];
@@ -4388,7 +4388,7 @@ export type DomainAnalysisPairDetailQueryVariables = Exact<{
 }>;
 
 
-export type DomainAnalysisPairDetailQuery = { __typename?: 'Query', domainAnalysisPairDetail: { __typename?: 'DomainAnalysisPairDetailResult', rowValueKey: string, columnValueKey: string, modelId: string, modelLabel: string, domainId?: string | null, domainName?: string | null, pooledMin?: number | null, pooledMean?: number | null, pooledMax?: number | null, iSquared?: number | null, vignetteCount: number, validEstimateCount: number, vignettes: Array<{ __typename?: 'DomainAnalysisPairVignetteDetail', definitionId: string, definitionName: string, prioritized: number, deprioritized: number, neutral: number, totalTrials: number, selectedValueWinRate?: number | null, winRateCI95Low?: number | null, winRateCI95High?: number | null, refusalRate?: number | null, framingDirection: DomainAnalysisPairFramingDirection }> } };
+export type DomainAnalysisPairDetailQuery = { __typename?: 'Query', domainAnalysisPairDetail: { __typename?: 'DomainAnalysisPairDetailResult', rowValueKey: string, columnValueKey: string, modelId: string, modelLabel: string, domainId?: string | null, domainName?: string | null, pooledMin?: number | null, pooledMean?: number | null, pooledMax?: number | null, pooledStdDev?: number | null, vignetteCount: number, validEstimateCount: number, vignettes: Array<{ __typename?: 'DomainAnalysisPairVignetteDetail', definitionId: string, definitionName: string, prioritized: number, deprioritized: number, neutral: number, totalTrials: number, selectedValueWinRate?: number | null, winRateCI95Low?: number | null, winRateCI95High?: number | null, refusalRate?: number | null, framingDirection: DomainAnalysisPairFramingDirection }> } };
 
 export type DomainAnalysisConditionTranscriptsQueryVariables = Exact<{
   domainId: Scalars['ID']['input'];
@@ -6289,7 +6289,7 @@ export const DomainAnalysisPairDetailDocument = gql`
     pooledMin
     pooledMean
     pooledMax
-    iSquared
+    pooledStdDev
     vignetteCount
     validEstimateCount
   }
@@ -7469,6 +7469,12 @@ export const PressureSensitivityDocument = gql`
         averageWinRate
         balancedWinRate
         highPressureOnThisValueWinRate
+        highPressureOnThisValueDomainRates {
+          domainId
+          domainName
+          rate
+          pairsMeasured
+        }
         highPressureOnOpposingValueWinRate
         pairsMeasured
       }

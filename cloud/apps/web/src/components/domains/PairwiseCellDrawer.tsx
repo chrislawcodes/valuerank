@@ -349,7 +349,7 @@ export function PairwiseCellDrawer({
           pooledMin={detail.pooledMin ?? null}
           pooledMean={detail.pooledMean ?? null}
           pooledMax={detail.pooledMax ?? null}
-          iSquared={detail.iSquared ?? null}
+          pooledStdDev={detail.pooledStdDev ?? null}
           splitByDirection={splitByDirection}
           onToggleSplit={handleToggleSplit}
           onRowClick={handleRowClick}

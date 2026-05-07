@@ -10,7 +10,7 @@ import {
   resolveValuePairsInChunks,
   selectLatestDefinitionPerLineage,
 } from '../shared.js';
-import { computeISquared, computePairwiseWinRate } from '../../../../utils/pairwise-math.js';
+import { computePerVignetteStdDev, computePairwiseWinRate } from '../../../../utils/pairwise-math.js';
 import { wilsonCI95 } from '../../../../utils/binomial-ci.js';
 import {
   DomainAnalysisPairDetailResultRef,
@@ -122,7 +122,7 @@ builder.queryField('domainAnalysisPairDetail', (t) =>
           pooledMin: null,
           pooledMean: null,
           pooledMax: null,
-          iSquared: null,
+          pooledStdDev: null,
           vignetteCount: 0,
           validEstimateCount: 0,
         };
@@ -188,7 +188,7 @@ builder.queryField('domainAnalysisPairDetail', (t) =>
           pooledMin: null,
           pooledMean: null,
           pooledMax: null,
-          iSquared: null,
+          pooledStdDev: null,
           vignetteCount: 0,
           validEstimateCount: 0,
         };
@@ -304,7 +304,7 @@ builder.queryField('domainAnalysisPairDetail', (t) =>
         validEstimateCount === 0
           ? null
           : Math.max(...validVignettes.map((vignette) => vignette.selectedValueWinRate));
-      const iSquared = computeISquared(
+      const pooledStdDev = computePerVignetteStdDev(
         validVignettes.map((vignette) => ({
           winRate: vignette.selectedValueWinRate,
           totalTrials: vignette.totalTrials,
@@ -360,7 +360,7 @@ builder.queryField('domainAnalysisPairDetail', (t) =>
         pooledMin,
         pooledMean,
         pooledMax,
-        iSquared,
+        pooledStdDev,
         vignetteCount: vignettes.length,
         validEstimateCount,
       };

@@ -26,7 +26,7 @@ export type ForestPlotProps = {
   pooledMin: number | null;
   pooledMean: number | null;
   pooledMax: number | null;
-  iSquared: number | null;
+  pooledStdDev: number | null;
   splitByDirection: boolean;
   onToggleSplit: () => void;
   onRowClick: (row: ForestPlotRow) => void;
@@ -183,7 +183,7 @@ export function ForestPlot({
   pooledMin,
   pooledMean,
   pooledMax,
-  iSquared,
+  pooledStdDev,
   splitByDirection,
   onToggleSplit,
   onRowClick,
@@ -199,7 +199,7 @@ export function ForestPlot({
   const rowsHeight = rows.length * ROW_HEIGHT;
   const summaryTop = rowsTop + rowsHeight + 10;
   const axisY = summaryTop + (summaryVisible ? SUMMARY_HEIGHT : 6);
-  const svgHeight = axisY + (iSquared != null ? 42 : 26);
+  const svgHeight = axisY + (pooledStdDev != null ? 42 : 26);
   const referenceLineBottom = summaryVisible ? summaryTop + 12 : rowsTop + rowsHeight - 4;
 
   return (
@@ -316,13 +316,13 @@ export function ForestPlot({
           </g>
         )}
 
-        {iSquared != null && (
+        {pooledStdDev != null && (
           <text
             x={PLOT_START_X}
             y={summaryTop + (summaryVisible ? 34 : 18)}
             className="fill-gray-600 text-[11px]"
           >
-            {`I² = ${Math.round(iSquared)}%`}
+            {`SD = ${(pooledStdDev * 100).toFixed(1)} pp`}
           </text>
         )}
 

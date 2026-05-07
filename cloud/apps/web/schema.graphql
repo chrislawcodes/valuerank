@@ -900,12 +900,12 @@ type DomainAnalysisPairDetailResult {
   columnValueKey: String!
   domainId: ID
   domainName: String
-  iSquared: Float
   modelId: String!
   modelLabel: String!
   pooledMax: Float
   pooledMean: Float
   pooledMin: Float
+  pooledStdDev: Float
   rowValueKey: String!
   validEstimateCount: Int!
   vignetteCount: Int!
