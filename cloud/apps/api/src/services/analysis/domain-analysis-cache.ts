@@ -344,3 +344,21 @@ export async function getDomainAnalysisResult(params: {
     cacheStatus: DOMAIN_ANALYSIS_CACHE_STATUS.FRESH,
   });
 }
+
+/**
+ * Read the pre-computed per-(definitionId::modelId) vote counts from the current
+ * domain-analysis snapshot. Returns null if no CURRENT snapshot exists or if the
+ * snapshot pre-dates v1.10.0 (i.e. does not include `definitionModelVotes`).
+ *
+ * Used by the significance resolver to avoid a separate transcript scan.
+ */
+export async function readDefinitionModelVotesFromSnapshot(
+  scope: DomainAnalysisScope,
+  domainId: string,
+  configSignature: string,
+): Promise<Record<string, { wins: number; losses: number }> | null> {
+  const snapshot = await getCurrentSnapshot(db, scope, domainId, configSignature);
+  if (snapshot == null) return null;
+  const parsed = parseSnapshotOutput(snapshot.output);
+  return parsed?.definitionModelVotes ?? null;
+}

@@ -17,7 +17,7 @@ export type DomainAnalysisCacheStatus =
   (typeof DOMAIN_ANALYSIS_CACHE_STATUS)[keyof typeof DOMAIN_ANALYSIS_CACHE_STATUS];
 
 export const DOMAIN_ANALYSIS_SNAPSHOT_TYPE = 'domain_overview';
-export const DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION = '1.9.0';
+export const DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION = '1.10.0';
 export const DOMAIN_ANALYSIS_ASSUMPTION_PREFIX = 'domain-analysis';
 export const DOMAIN_ANALYSIS_NONE_SIGNATURE = '__none__';
 
@@ -62,6 +62,10 @@ export type DomainAnalysisSnapshotOutput = {
   models: DomainAnalysisSnapshotModel[];
   contributionSummary: DomainAnalysisContributionSummary[];
   excludedDataSummary: DomainAnalysisExcludedDataSummary[];
+  // Per-(definitionId::modelId) win/loss vote counts, derived from the cellMap before
+  // domain-level aggregation. Used by the significance resolver to avoid a separate
+  // transcript scan. Optional for backward compatibility with pre-v1.10.0 snapshots.
+  definitionModelVotes?: Record<string, { wins: number; losses: number }>;
 };
 
 export type AnalysisFingerprintRow = {
