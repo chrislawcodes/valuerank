@@ -19,17 +19,6 @@ import { assignOwnOpponent } from '../../services/pressure-sensitivity/value-pai
 import type { DomainAnalysisScope } from '../../services/analysis/domain-analysis-scope.js';
 
 const ALL_DOMAINS_SCOPE_ID = 'all-domains';
-const TRANSCRIPT_BATCH_SIZE = 500;
-
-type TranscriptRecord = {
-  id: string;
-  runId: string;
-  modelId: string;
-  decisionMetadata: unknown;
-  definitionSnapshot: unknown;
-  deletedAt: Date | null;
-  scenario: { id: string; orientationFlipped: boolean; deletedAt: Date | null } | null;
-};
 type ModelSummary = { modelId: string; label: string };
 type WinLossCounts = { wins: number; losses: number };
 
@@ -117,92 +106,69 @@ builder.queryField('modelGroupingSignificance', (t) =>
         );
       }
 
-      // resolveSignatureRuns returns ALL matching runs per definition (sorted newest-first).
-      // For McNemar we only need one binary choice per definition, so cap at the most
-      // recent run per definition to keep the IN clause small.
-      const latestRunIdByDefinition = new Map<string, string>();
-      for (const [runId, definitionId] of resolvedSignatureRuns.filteredSourceRunDefinitionById) {
-        if (!latestRunIdByDefinition.has(definitionId)) {
-          latestRunIdByDefinition.set(definitionId, runId);
-        }
-      }
-      const dedupedRunIds = [...latestRunIdByDefinition.values()];
-      const dedupedDefinitionById = new Map(
-        [...latestRunIdByDefinition.entries()].map(([definitionId, runId]) => [runId, definitionId] as const),
-      );
-
       const selectedModelIdSet = new Set(sortedModels.map((model) => model.modelId));
+      const allRunIds = resolvedSignatureRuns.filteredSourceRunIds;
+
+      // Query 1: one row per run to extract the value pair from the definition snapshot.
+      // Using distinct avoids fetching the large snapshot field for every transcript.
+      const runSnapshotRows = await db.transcript.findMany({
+        where: { runId: { in: allRunIds }, deletedAt: null },
+        select: { runId: true, definitionSnapshot: true },
+        distinct: ['runId'],
+      });
+      const valuePairByRunId = new Map<string, NonNullable<ReturnType<typeof getSnapshotValuePair>>>();
+      for (const row of runSnapshotRows) {
+        const pair = getSnapshotValuePair(row.definitionSnapshot);
+        if (pair != null) valuePairByRunId.set(row.runId, pair);
+      }
+
+      // Query 2: all transcripts for the selected models across all matching runs.
+      // Excludes definitionSnapshot (already extracted above) to keep the payload small.
+      const allTranscripts = await db.transcript.findMany({
+        where: {
+          runId: { in: allRunIds },
+          modelId: { in: [...selectedModelIdSet] },
+          deletedAt: null,
+        },
+        select: {
+          runId: true,
+          modelId: true,
+          decisionMetadata: true,
+          scenario: {
+            select: { orientationFlipped: true, deletedAt: true },
+          },
+        },
+      });
+
       const countsByDefinitionModel = new Map<string, WinLossCounts>();
-      let offset = 0;
-      let hasMoreTranscripts = true;
+      for (const transcript of allTranscripts) {
+        if (transcript.scenario == null || transcript.scenario.deletedAt != null) continue;
+        const definitionId = resolvedSignatureRuns.filteredSourceRunDefinitionById.get(transcript.runId);
+        if (definitionId === undefined) continue;
+        const valuePair = valuePairByRunId.get(transcript.runId);
+        if (valuePair == null) continue;
+        const firstValueToken = valuePair[0];
+        const secondValueToken = valuePair[1];
 
-      while (hasMoreTranscripts) {
-        const transcripts: TranscriptRecord[] = await db.transcript.findMany({
-          where: {
-            runId: { in: dedupedRunIds },
-            modelId: { in: [...selectedModelIdSet] },
-            deletedAt: null,
-          },
-          select: {
-            id: true,
-            runId: true,
-            modelId: true,
-            decisionMetadata: true,
-            definitionSnapshot: true,
-            deletedAt: true,
-            scenario: {
-              select: {
-                id: true,
-                orientationFlipped: true,
-                deletedAt: true,
-              },
-            },
-          },
-          orderBy: { id: 'asc' },
-          take: TRANSCRIPT_BATCH_SIZE,
-          skip: offset,
+        const resolved = resolveTranscriptDecisionModel({
+          decisionMetadata: transcript.decisionMetadata,
+          definitionSnapshot: null,
+          orientationFlipped: transcript.scenario.orientationFlipped,
+          pairOverride: { valueA: firstValueToken, valueB: secondValueToken },
         });
+        if (resolved.canonical.direction === 'unknown') continue;
 
-        if (transcripts.length === 0) {
-          hasMoreTranscripts = false;
-          continue;
+        const outcome = assignOwnOpponent(firstValueToken, secondValueToken, resolved.canonical.direction);
+        if (outcome === 'unscored' || outcome === 'neutral') continue;
+
+        const key = encodeDefinitionModelKey(definitionId, transcript.modelId);
+        const counts = countsByDefinitionModel.get(key) ?? { wins: 0, losses: 0 };
+        if (outcome === 'own_picked') {
+          counts.wins += 1;
+        } else {
+          counts.losses += 1;
         }
-
-        for (const transcript of transcripts) {
-          if (!selectedModelIdSet.has(transcript.modelId)) continue;
-          if (transcript.deletedAt != null) continue;
-          if (transcript.scenario == null || transcript.scenario.deletedAt != null) continue;
-
-          const definitionId = dedupedDefinitionById.get(transcript.runId);
-          if (definitionId === undefined) continue;
-
-          const valuePair = getSnapshotValuePair(transcript.definitionSnapshot);
-          if (valuePair == null) continue;
-          const [firstValueToken, secondValueToken] = valuePair;
-
-          const resolved = resolveTranscriptDecisionModel({
-            decisionMetadata: transcript.decisionMetadata,
-            definitionSnapshot: transcript.definitionSnapshot,
-            orientationFlipped: transcript.scenario.orientationFlipped,
-            pairOverride: { valueA: firstValueToken, valueB: secondValueToken },
-          });
-          if (resolved.canonical.direction === 'unknown') continue;
-
-          const outcome = assignOwnOpponent(firstValueToken, secondValueToken, resolved.canonical.direction);
-          if (outcome === 'unscored' || outcome === 'neutral') continue;
-
-          const key = encodeDefinitionModelKey(definitionId, transcript.modelId);
-          const counts = countsByDefinitionModel.get(key) ?? { wins: 0, losses: 0 };
-          if (outcome === 'own_picked') {
-            counts.wins += 1;
-          } else {
-            counts.losses += 1;
-          }
-          countsByDefinitionModel.set(key, counts);
-        }
-
-        offset += transcripts.length;
-        hasMoreTranscripts = transcripts.length === TRANSCRIPT_BATCH_SIZE;
+        countsByDefinitionModel.set(key, counts);
       }
 
       const coverageByModel = new Map(sortedModels.map((model) => [model.modelId, new Set<string>()] as const));
