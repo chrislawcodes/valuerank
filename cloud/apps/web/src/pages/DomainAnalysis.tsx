@@ -254,12 +254,14 @@ export function DomainAnalysis() {
         acc[valueKey] = stabilityScoresByModel.get(model.model)?.get(valueKey) ?? null;
         return acc;
       }, {} as Record<ValueKey, number | null>);
+      const totalComparisons = model.values.reduce((sum, value) => sum + value.totalComparisons, 0);
       return {
         model: model.model,
         label: model.label,
         values,
         winRates,
         stabilityScores,
+        totalTrials: Math.round(totalComparisons / 2),
       };
     });
   }, [data, modelsAnalysisData]);

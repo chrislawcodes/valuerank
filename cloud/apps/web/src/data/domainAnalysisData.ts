@@ -16,6 +16,7 @@ export type ModelEntry = {
   values: Record<ValueKey, number>;
   winRates?: Record<ValueKey, number | null>;
   stabilityScores?: Record<ValueKey, number | null>;
+  totalTrials?: number;
 };
 
 export type DomainAnalysisModelAvailability = {

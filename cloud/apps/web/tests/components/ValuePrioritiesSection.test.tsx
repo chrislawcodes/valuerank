@@ -17,6 +17,7 @@ function buildModel(label: string): ModelEntry {
     label,
     values,
     winRates,
+    totalTrials: 123,
   };
 }
 
@@ -32,8 +33,10 @@ describe('ValuePrioritiesSection', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('heading', { name: 'Win Rate by Values by Model' })).toBeInTheDocument();
-    expect(screen.queryByText(/model groups/i)).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /full bt/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Win Rate by Values by Model' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'Total' })).toBeTruthy();
+    expect(screen.getByText('123')).toBeTruthy();
+    expect(screen.queryByText(/model groups/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /full bt/i })).toBeNull();
   });
 });
