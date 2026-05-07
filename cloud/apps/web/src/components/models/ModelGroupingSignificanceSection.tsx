@@ -51,6 +51,17 @@ export function ModelGroupingSignificanceSection({
     );
   }
 
+  if (report.pending) {
+    return (
+      <section className="rounded-lg border border-gray-200 bg-white p-4 md:p-5">
+        <h2 className="text-lg font-semibold text-gray-900">Statistical Differences in Value Preferences</h2>
+        <p className="mt-2 text-sm text-gray-600">
+          Computing for the first time — this takes about a minute. Refresh the page to see the results.
+        </p>
+      </section>
+    );
+  }
+
   return (
     <section className="rounded-lg border border-gray-200 bg-white p-4 md:p-5">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">

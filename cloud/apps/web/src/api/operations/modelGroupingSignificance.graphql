@@ -1,5 +1,6 @@
 query ModelGroupingSignificance($modelIds: [String!]!, $domainId: ID, $scope: String!, $signature: String!) {
   modelGroupingSignificance(modelIds: $modelIds, domainId: $domainId, scope: $scope, signature: $signature) {
+    pending
     models {
       modelId
       label

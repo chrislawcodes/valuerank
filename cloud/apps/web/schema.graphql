@@ -1624,6 +1624,7 @@ type ModelGroupingSignificanceModel {
 
 type ModelGroupingSignificanceResult {
   models: [ModelGroupingSignificanceModel!]!
+  pending: Boolean!
   rows: [ModelGroupingSignificanceRow!]!
 }
 

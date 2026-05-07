@@ -1,4 +1,3 @@
-import { db } from '@valuerank/db';
 import { ValidationError } from '@valuerank/shared';
 import { builder } from '../builder.js';
 import { getModelsFromDatabase } from '../../config/models.js';
@@ -13,10 +12,10 @@ import {
 } from '../../services/model-grouping-significance/math.js';
 import { resolveDomainAnalysisScopeDefinitions } from '../../services/analysis/domain-analysis-scope-loader.js';
 import { resolveSignatureRuns } from '../queries/domain/shared.js';
-import { getSnapshotValuePair } from '../../services/analysis/transcript-cell-accumulator.js';
-import { resolveTranscriptDecisionModel } from '../queries/domain/decision-model.js';
-import { assignOwnOpponent } from '../../services/pressure-sensitivity/value-pair.js';
-import { readDefinitionModelVotesFromSnapshot } from '../../services/analysis/domain-analysis-cache.js';
+import {
+  readDefinitionModelVotesFromSnapshot,
+  queueDomainAnalysisRefresh,
+} from '../../services/analysis/domain-analysis-cache.js';
 import type { DomainAnalysisScope } from '../../services/analysis/domain-analysis-scope.js';
 
 const ALL_DOMAINS_SCOPE_ID = 'all-domains';
@@ -120,79 +119,29 @@ builder.queryField('modelGroupingSignificance', (t) =>
 
       const countsByDefinitionModel = new Map<string, WinLossCounts>();
 
-      if (snapshotVotes != null) {
-        // Snapshot fast path: populate counts directly, no transcript queries needed.
-        for (const [key, votes] of Object.entries(snapshotVotes)) {
-          const parts = key.split('::');
-          const modelId = parts[1];
-          if (modelId !== undefined && selectedModelIdSet.has(modelId)) {
-            countsByDefinitionModel.set(key, { wins: votes.wins, losses: votes.losses });
-          }
-        }
-        ctx.log.debug({ scope, domainId, signature }, 'Significance: used domain-analysis snapshot (fast path)');
-      } else {
-        // Slow fallback: fetch transcripts directly. Used until the domain-analysis
-        // snapshot is rebuilt with v1.10.0.
-        const allRunIds = resolvedSignatureRuns.filteredSourceRunIds;
-
-        const runSnapshotRows = await db.transcript.findMany({
-          where: { runId: { in: allRunIds }, deletedAt: null },
-          select: { runId: true, definitionSnapshot: true },
-          distinct: ['runId'],
+      if (snapshotVotes == null) {
+        // Snapshot not yet available for this scope/signature. Queue a rebuild of
+        // the domain-analysis snapshot (which will populate definitionModelVotes)
+        // and return a pending result immediately so the client can retry.
+        await queueDomainAnalysisRefresh({
+          scope,
+          domainId: domainId ?? ALL_DOMAINS_SCOPE_ID,
+          signature,
+          reason: 'significance-page-load-missing',
         });
-        const valuePairByRunId = new Map<string, NonNullable<ReturnType<typeof getSnapshotValuePair>>>();
-        for (const row of runSnapshotRows) {
-          const pair = getSnapshotValuePair(row.definitionSnapshot);
-          if (pair != null) valuePairByRunId.set(row.runId, pair);
-        }
-
-        const allTranscripts = await db.transcript.findMany({
-          where: {
-            runId: { in: allRunIds },
-            modelId: { in: [...selectedModelIdSet] },
-            deletedAt: null,
-          },
-          select: {
-            runId: true,
-            modelId: true,
-            decisionMetadata: true,
-            scenario: {
-              select: { orientationFlipped: true, deletedAt: true },
-            },
-          },
-        });
-
-        for (const transcript of allTranscripts) {
-          if (transcript.scenario == null || transcript.scenario.deletedAt != null) continue;
-          const definitionId = resolvedSignatureRuns.filteredSourceRunDefinitionById.get(transcript.runId);
-          if (definitionId === undefined) continue;
-          const valuePair = valuePairByRunId.get(transcript.runId);
-          if (valuePair == null) continue;
-          const firstValueToken = valuePair[0];
-          const secondValueToken = valuePair[1];
-
-          const resolved = resolveTranscriptDecisionModel({
-            decisionMetadata: transcript.decisionMetadata,
-            definitionSnapshot: null,
-            orientationFlipped: transcript.scenario.orientationFlipped,
-            pairOverride: { valueA: firstValueToken, valueB: secondValueToken },
-          });
-          if (resolved.canonical.direction === 'unknown') continue;
-
-          const outcome = assignOwnOpponent(firstValueToken, secondValueToken, resolved.canonical.direction);
-          if (outcome === 'unscored' || outcome === 'neutral') continue;
-
-          const key = encodeDefinitionModelKey(definitionId, transcript.modelId);
-          const counts = countsByDefinitionModel.get(key) ?? { wins: 0, losses: 0 };
-          if (outcome === 'own_picked') {
-            counts.wins += 1;
-          } else {
-            counts.losses += 1;
-          }
-          countsByDefinitionModel.set(key, counts);
-        }
-        ctx.log.debug({ scope, domainId, signature }, 'Significance: used transcript scan (slow path — snapshot not yet available)');
+        ctx.log.info({ scope, domainId, signature }, 'Significance: snapshot not ready — rebuild queued, returning pending');
+        return { models: [], rows: [], pending: true };
       }
+
+      // Snapshot fast path: populate counts directly, no transcript queries needed.
+      for (const [key, votes] of Object.entries(snapshotVotes)) {
+        const parts = key.split('::');
+        const modelId = parts[1];
+        if (modelId !== undefined && selectedModelIdSet.has(modelId)) {
+          countsByDefinitionModel.set(key, { wins: votes.wins, losses: votes.losses });
+        }
+      }
+      ctx.log.debug({ scope, domainId, signature }, 'Significance: used domain-analysis snapshot (fast path)');
 
       const coverageByModel = new Map(sortedModels.map((model) => [model.modelId, new Set<string>()] as const));
       for (const [key, counts] of countsByDefinitionModel.entries()) {
@@ -294,6 +243,7 @@ builder.queryField('modelGroupingSignificance', (t) =>
       return {
         models: sortedModels,
         rows: sortedRows,
+        pending: false,
       };
     },
   }),

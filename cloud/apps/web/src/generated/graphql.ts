@@ -1537,6 +1537,7 @@ export type ModelGroupingSignificanceModel = {
 export type ModelGroupingSignificanceResult = {
   __typename?: 'ModelGroupingSignificanceResult';
   models: Array<ModelGroupingSignificanceModel>;
+  pending: Scalars['Boolean']['output'];
   rows: Array<ModelGroupingSignificanceRow>;
 };
 
@@ -4801,7 +4802,7 @@ export type ModelGroupingSignificanceQueryVariables = Exact<{
 }>;
 
 
-export type ModelGroupingSignificanceQuery = { __typename?: 'Query', modelGroupingSignificance: { __typename?: 'ModelGroupingSignificanceResult', models: Array<{ __typename?: 'ModelGroupingSignificanceModel', modelId: string, label: string }>, rows: Array<{ __typename?: 'ModelGroupingSignificanceRow', modelAId: string, modelALabel: string, modelBId: string, modelBLabel: string, n: number, rawPValue?: number | null, holmCorrectedPValue?: number | null, agreementRate: number, discordantAtoB: number, discordantBtoA: number, oddsRatio?: number | null, effectLabel: string, confidenceIntervalLow?: number | null, confidenceIntervalHigh?: number | null, verdict: string }> } };
+export type ModelGroupingSignificanceQuery = { __typename?: 'Query', modelGroupingSignificance: { __typename?: 'ModelGroupingSignificanceResult', pending: boolean, models: Array<{ __typename?: 'ModelGroupingSignificanceModel', modelId: string, label: string }>, rows: Array<{ __typename?: 'ModelGroupingSignificanceRow', modelAId: string, modelALabel: string, modelBId: string, modelBLabel: string, n: number, rawPValue?: number | null, holmCorrectedPValue?: number | null, agreementRate: number, discordantAtoB: number, discordantBtoA: number, oddsRatio?: number | null, effectLabel: string, confidenceIntervalLow?: number | null, confidenceIntervalHigh?: number | null, verdict: string }> } };
 
 export type AvailableModelsQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -7273,6 +7274,7 @@ export const ModelGroupingSignificanceDocument = gql`
     scope: $scope
     signature: $signature
   ) {
+    pending
     models {
       modelId
       label
