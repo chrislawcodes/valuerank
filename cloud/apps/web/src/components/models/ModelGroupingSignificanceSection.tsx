@@ -58,8 +58,8 @@ export function ModelGroupingSignificanceSection({
           <div>
             <h2 className="text-lg font-semibold text-gray-900">Statistical Differences in Value Preferences</h2>
             <p className="mt-1 text-sm text-gray-600">
-              This report compares the selected models one pair at a time. Each vignette counts once.
-              Holm-Bonferroni correction is applied across every pair in view.
+              For each vignette, each model&apos;s binary side choice is derived from its transcripts (majority wins).
+              McNemar&apos;s test compares each pair of models on these binary choices, corrected for multiple comparisons using Holm-Bonferroni.
             </p>
           </div>
 
