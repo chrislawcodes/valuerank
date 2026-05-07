@@ -13,6 +13,7 @@ export type CellWeightedDomainModel = {
   model: string;
   counts: Record<string, DomainAnalysisValueCounts>;
   pairwiseWins: Record<string, Record<string, number>>;
+  pairwiseNeutrals: Record<string, Record<string, number>>;
   valueWinRates: Record<string, number>;
   vignetteCount: Record<string, number>;
 };
@@ -48,6 +49,20 @@ function addPairwiseWin(
   pairwiseWins.set(winner, winnerMap);
 }
 
+// Adds neutral counts for pair (valueA, valueB). Only called from the valueA side of each
+// vignette to avoid double-counting — a neutral outcome is shared by both values in the pair.
+function addPairwiseNeutral(
+  pairwiseNeutrals: Map<DomainAnalysisValueKey, Map<DomainAnalysisValueKey, number>>,
+  valueA: DomainAnalysisValueKey,
+  valueB: DomainAnalysisValueKey,
+  count: number,
+): void {
+  if (count <= 0) return;
+  const aMap = pairwiseNeutrals.get(valueA) ?? new Map<DomainAnalysisValueKey, number>();
+  aMap.set(valueB, (aMap.get(valueB) ?? 0) + count);
+  pairwiseNeutrals.set(valueA, aMap);
+}
+
 function getOrCreateCounts(
   countsByModel: Map<string, Map<DomainAnalysisValueKey, DomainAnalysisValueCounts>>,
   modelId: string,
@@ -80,6 +95,7 @@ export function computeCellWeightedDomainRates(params: {
 }): { models: CellWeightedDomainModel[]; analyzedDefinitionIds: Set<string> } {
   const countsByModel = new Map<string, Map<DomainAnalysisValueKey, DomainAnalysisValueCounts>>();
   const pairwiseWinsByModel = new Map<string, Map<DomainAnalysisValueKey, Map<DomainAnalysisValueKey, number>>>();
+  const pairwiseNeutralsByModel = new Map<string, Map<DomainAnalysisValueKey, Map<DomainAnalysisValueKey, number>>>();
   const ratesByModelDefinitionValue = new Map<string, Map<string, Map<DomainAnalysisValueKey, number[]>>>();
   const analyzedDefinitionIds = new Set<string>();
   const modelsById = new Set<string>();
@@ -116,8 +132,13 @@ export function computeCellWeightedDomainRates(params: {
     rates.push(rate);
     valueRatesByDefinition.set(decoded.valueKey, rates);
 
-    if (counts.wins <= 0) continue;
     const pair = params.definitionValuePairById.get(decoded.definitionId);
+    if (pair != null && decoded.valueKey === pair.valueA && counts.neutrals > 0) {
+      const pairwiseNeutrals = getOrCreatePairwise(pairwiseNeutralsByModel, decoded.modelId);
+      addPairwiseNeutral(pairwiseNeutrals, pair.valueA, pair.valueB, counts.neutrals);
+    }
+
+    if (counts.wins <= 0) continue;
     if (pair == null) continue;
 
     const pairwiseWins = getOrCreatePairwise(pairwiseWinsByModel, decoded.modelId);
@@ -167,6 +188,7 @@ export function computeCellWeightedDomainRates(params: {
         model: modelId,
         counts: toCountsRecord(valueCounts),
         pairwiseWins: toPairwiseRecord(pairwiseWinsByModel.get(modelId) ?? new Map<DomainAnalysisValueKey, Map<DomainAnalysisValueKey, number>>()),
+        pairwiseNeutrals: toPairwiseRecord(pairwiseNeutralsByModel.get(modelId) ?? new Map<DomainAnalysisValueKey, Map<DomainAnalysisValueKey, number>>()),
         valueWinRates,
         vignetteCount,
       };
