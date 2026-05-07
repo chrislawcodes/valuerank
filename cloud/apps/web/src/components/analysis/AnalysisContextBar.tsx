@@ -172,7 +172,7 @@ export function AnalysisContextBar({
                   ref={modelMenuRef}
                   className="absolute right-0 top-full z-50 mt-2 w-[min(32rem,calc(100vw-2rem))] rounded-lg border border-gray-200 bg-white p-3 shadow-xl"
                 >
-                  <div className="flex flex-wrap gap-1.5">
+                  <div className="flex flex-wrap gap-1.5 pb-2 mb-2 border-b border-gray-200">
                     <Button
                       type="button"
                       variant="ghost"
@@ -186,6 +186,19 @@ export function AnalysisContextBar({
                     >
                       Default Models
                     </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => models.onChange([])}
+                      disabled={currentModelIds.length === 0}
+                      className="rounded-full border border-gray-300 bg-white px-3 py-1 text-xs font-medium text-gray-700 transition-colors min-h-0 hover:border-teal-400 hover:text-teal-700 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Clear all
+                    </Button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5">
                     {models.options.map((model) => {
                       const isSelected = currentModelIds.includes(model.value);
                       return (
