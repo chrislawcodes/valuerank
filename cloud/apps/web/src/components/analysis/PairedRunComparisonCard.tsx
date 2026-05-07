@@ -119,7 +119,7 @@ function formatSignedPoints(value: number | null | undefined): string {
   const pp = value * 100;
   const rounded = Math.round(pp * 10) / 10;
   const sign = rounded > 0 ? '+' : '';
-  return `${sign}${Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(1)}`;
+  return `${sign}${Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(1)} pp`;
 }
 
 function buildAnalysisHref(
@@ -270,7 +270,7 @@ export function PairedRunComparisonCard({
                     {secondValueLabel}
                   </th>
                   <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
-                    Shift to first value
+                    Pressure response
                   </th>
                   <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
                     Trials
@@ -309,8 +309,8 @@ export function PairedRunComparisonCard({
               </tbody>
             </table>
             <p className="mt-2 text-xs text-gray-600">
-              Win rates are direction-balanced (each direction counts once before averaging). Shift to first value is
-              the shift toward the canonical first value when that value is under pressure.
+              Win rates are direction-balanced (each direction counts once before averaging). Pressure response is
+              the percentage-point shift toward the canonical first value when that value is under pressure.
               {'"'}Directions measured{'"'} shows whether both A-first and B-first contributed; 1/2 means only one
               direction had completed runs.
             </p>
