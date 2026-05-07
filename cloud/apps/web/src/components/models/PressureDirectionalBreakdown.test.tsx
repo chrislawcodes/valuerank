@@ -51,7 +51,8 @@ describe('PressureDirectionalBreakdown', () => {
     renderBreakdown([createModel('alpha', 'Alpha', 0.2, DOMAINS)]);
 
     expect(screen.getByText('Pressure sensitivity by domain')).toBeDefined();
-    expect(screen.getByText('High Pressure on Value Effect')).toBeDefined();
+    expect(screen.getByText('High pressure')).toBeDefined();
+    expect(screen.getByText('on value effect')).toBeDefined();
     expect(screen.getByText('Ethics')).toBeDefined();
     expect(screen.getByText('Politics')).toBeDefined();
   });
