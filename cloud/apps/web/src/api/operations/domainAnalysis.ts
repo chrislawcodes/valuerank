@@ -1,6 +1,8 @@
 import type {
   DomainAnalysisQueryVariables as GeneratedDomainAnalysisQueryVariables,
   RefreshDomainAnalysisMutationVariables as GeneratedRefreshDomainAnalysisMutationVariables,
+  DomainAnalysisPairDetailQuery as GeneratedDomainAnalysisPairDetailQuery,
+  DomainAnalysisPairDetailQueryVariables as GeneratedDomainAnalysisPairDetailQueryVariables,
   DomainAnalysisValueDetailQueryVariables as GeneratedDomainAnalysisValueDetailQueryVariables,
   DomainAnalysisConditionTranscriptsQueryVariables as GeneratedDomainAnalysisConditionTranscriptsQueryVariables,
   DomainAvailableSignaturesQueryVariables as GeneratedDomainAvailableSignaturesQueryVariables,
@@ -16,6 +18,7 @@ import type { TranscriptDecisionModelV2 } from './runs';
 export { DomainAnalysisDocument as DOMAIN_ANALYSIS_QUERY } from '../../generated/graphql';
 export { RefreshDomainAnalysisDocument as REFRESH_DOMAIN_ANALYSIS_MUTATION } from '../../generated/graphql';
 export { DomainAnalysisLegacyDocument as DOMAIN_ANALYSIS_QUERY_LEGACY } from '../../generated/graphql';
+export { DomainAnalysisPairDetailDocument as DOMAIN_ANALYSIS_PAIR_DETAIL_QUERY } from '../../generated/graphql';
 export { DomainAnalysisValueDetailDocument as DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY } from '../../generated/graphql';
 export { DomainAnalysisConditionTranscriptsDocument as DOMAIN_ANALYSIS_CONDITION_TRANSCRIPTS_QUERY } from '../../generated/graphql';
 export { DomainAvailableSignaturesDocument as DOMAIN_AVAILABLE_SIGNATURES_QUERY } from '../../generated/graphql';
@@ -248,6 +251,11 @@ export type DomainAnalysisValueDetailQueryResult = {
 };
 
 export type DomainAnalysisValueDetailQueryVariables = GeneratedDomainAnalysisValueDetailQueryVariables;
+
+export type DomainAnalysisPairDetailQueryResult = GeneratedDomainAnalysisPairDetailQuery;
+export type DomainAnalysisPairDetailQueryVariables = GeneratedDomainAnalysisPairDetailQueryVariables;
+export type DomainAnalysisPairDetailResult = GeneratedDomainAnalysisPairDetailQuery['domainAnalysisPairDetail'];
+export type DomainAnalysisPairVignetteDetail = DomainAnalysisPairDetailResult['vignettes'][number];
 
 export type DomainAnalysisConditionTranscript = {
   id: string;

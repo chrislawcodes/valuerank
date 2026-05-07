@@ -172,6 +172,48 @@ query DomainAnalysisValueDetail($domainId: ID!, $modelId: String!, $valueKey: St
   }
 }
 
+query DomainAnalysisPairDetail(
+  $valueA: String!
+  $valueB: String!
+  $modelId: String!
+  $domainId: ID
+  $signature: String
+) {
+  domainAnalysisPairDetail(
+    valueA: $valueA
+    valueB: $valueB
+    modelId: $modelId
+    domainId: $domainId
+    signature: $signature
+  ) {
+    rowValueKey
+    columnValueKey
+    modelId
+    modelLabel
+    domainId
+    domainName
+    vignettes {
+      definitionId
+      definitionName
+      prioritized
+      deprioritized
+      neutral
+      totalTrials
+      selectedValueWinRate
+      winRateCI95Low
+      winRateCI95High
+      refusalRate
+      framingDirection
+    }
+    pooledMin
+    pooledMean
+    pooledMax
+    iSquared
+    vignetteCount
+    validEstimateCount
+  }
+}
+
 query DomainAnalysisConditionTranscripts(
   $domainId: ID!
   $modelId: String!

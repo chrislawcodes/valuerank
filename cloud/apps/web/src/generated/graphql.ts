@@ -790,6 +790,42 @@ export type DomainAnalysisModel = {
   values: Array<DomainAnalysisValueScore>;
 };
 
+export type DomainAnalysisPairDetailResult = {
+  __typename?: 'DomainAnalysisPairDetailResult';
+  columnValueKey: Scalars['String']['output'];
+  domainId?: Maybe<Scalars['ID']['output']>;
+  domainName?: Maybe<Scalars['String']['output']>;
+  iSquared?: Maybe<Scalars['Float']['output']>;
+  modelId: Scalars['String']['output'];
+  modelLabel: Scalars['String']['output'];
+  pooledMax?: Maybe<Scalars['Float']['output']>;
+  pooledMean?: Maybe<Scalars['Float']['output']>;
+  pooledMin?: Maybe<Scalars['Float']['output']>;
+  rowValueKey: Scalars['String']['output'];
+  validEstimateCount: Scalars['Int']['output'];
+  vignetteCount: Scalars['Int']['output'];
+  vignettes: Array<DomainAnalysisPairVignetteDetail>;
+};
+
+export type DomainAnalysisPairFramingDirection =
+  | 'A_TO_B'
+  | 'B_TO_A';
+
+export type DomainAnalysisPairVignetteDetail = {
+  __typename?: 'DomainAnalysisPairVignetteDetail';
+  definitionId: Scalars['ID']['output'];
+  definitionName: Scalars['String']['output'];
+  deprioritized: Scalars['Int']['output'];
+  framingDirection: DomainAnalysisPairFramingDirection;
+  neutral: Scalars['Int']['output'];
+  prioritized: Scalars['Int']['output'];
+  refusalRate?: Maybe<Scalars['Float']['output']>;
+  selectedValueWinRate?: Maybe<Scalars['Float']['output']>;
+  totalTrials: Scalars['Int']['output'];
+  winRateCI95High?: Maybe<Scalars['Float']['output']>;
+  winRateCI95Low?: Maybe<Scalars['Float']['output']>;
+};
+
 export type DomainAnalysisRefreshResult = {
   __typename?: 'DomainAnalysisRefreshResult';
   message: Scalars['String']['output'];
@@ -2658,6 +2694,7 @@ export type Query = {
   domain?: Maybe<Domain>;
   domainAnalysis: DomainAnalysisResult;
   domainAnalysisConditionTranscripts: Array<DomainAnalysisConditionTranscript>;
+  domainAnalysisPairDetail: DomainAnalysisPairDetailResult;
   domainAnalysisValueDetail: DomainAnalysisValueDetailResult;
   domainAvailableSignatures: Array<DomainAvailableSignature>;
   domainConfigSnapshots: Array<DomainConfigSnapshotSummary>;
@@ -2977,6 +3014,15 @@ export type QueryDomainAnalysisConditionTranscriptsArgs = {
   scenarioId?: InputMaybe<Scalars['ID']['input']>;
   signature?: InputMaybe<Scalars['String']['input']>;
   valueKey: Scalars['String']['input'];
+};
+
+
+export type QueryDomainAnalysisPairDetailArgs = {
+  domainId?: InputMaybe<Scalars['ID']['input']>;
+  modelId: Scalars['String']['input'];
+  signature?: InputMaybe<Scalars['String']['input']>;
+  valueA: Scalars['String']['input'];
+  valueB: Scalars['String']['input'];
 };
 
 
@@ -4332,6 +4378,17 @@ export type DomainAnalysisValueDetailQueryVariables = Exact<{
 
 
 export type DomainAnalysisValueDetailQuery = { __typename?: 'Query', domainAnalysisValueDetail: { __typename?: 'DomainAnalysisValueDetailResult', domainId: string, domainName: string, modelId: string, modelLabel: string, valueKey: string, score: number, prioritized: number, deprioritized: number, neutral: number, totalTrials: number, targetedDefinitions: number, coveredDefinitions: number, missingDefinitionIds: Array<string>, generatedAt: string, vignettes: Array<{ __typename?: 'DomainAnalysisVignetteDetail', definitionId: string, definitionName: string, definitionVersion: number, aggregateRunId?: string | null, otherValueKey: string, prioritized: number, deprioritized: number, neutral: number, totalTrials: number, selectedValueWinRate?: number | null, conditions: Array<{ __typename?: 'DomainAnalysisConditionDetail', scenarioId?: string | null, conditionName: string, dimensions?: unknown | null, prioritized: number, deprioritized: number, neutral: number, totalTrials: number, selectedValueWinRate?: number | null, strongly: number, somewhat: number, opponentSomewhat: number, opponentStrongly: number, unknownCount: number }> }> } };
+
+export type DomainAnalysisPairDetailQueryVariables = Exact<{
+  valueA: Scalars['String']['input'];
+  valueB: Scalars['String']['input'];
+  modelId: Scalars['String']['input'];
+  domainId?: InputMaybe<Scalars['ID']['input']>;
+  signature?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type DomainAnalysisPairDetailQuery = { __typename?: 'Query', domainAnalysisPairDetail: { __typename?: 'DomainAnalysisPairDetailResult', rowValueKey: string, columnValueKey: string, modelId: string, modelLabel: string, domainId?: string | null, domainName?: string | null, pooledMin?: number | null, pooledMean?: number | null, pooledMax?: number | null, iSquared?: number | null, vignetteCount: number, validEstimateCount: number, vignettes: Array<{ __typename?: 'DomainAnalysisPairVignetteDetail', definitionId: string, definitionName: string, prioritized: number, deprioritized: number, neutral: number, totalTrials: number, selectedValueWinRate?: number | null, winRateCI95Low?: number | null, winRateCI95High?: number | null, refusalRate?: number | null, framingDirection: DomainAnalysisPairFramingDirection }> } };
 
 export type DomainAnalysisConditionTranscriptsQueryVariables = Exact<{
   domainId: Scalars['ID']['input'];
@@ -6200,6 +6257,47 @@ export const DomainAnalysisValueDetailDocument = gql`
 
 export function useDomainAnalysisValueDetailQuery(options: Omit<Urql.UseQueryArgs<DomainAnalysisValueDetailQueryVariables>, 'query'>) {
   return Urql.useQuery<DomainAnalysisValueDetailQuery, DomainAnalysisValueDetailQueryVariables>({ query: DomainAnalysisValueDetailDocument, ...options });
+};
+export const DomainAnalysisPairDetailDocument = gql`
+    query DomainAnalysisPairDetail($valueA: String!, $valueB: String!, $modelId: String!, $domainId: ID, $signature: String) {
+  domainAnalysisPairDetail(
+    valueA: $valueA
+    valueB: $valueB
+    modelId: $modelId
+    domainId: $domainId
+    signature: $signature
+  ) {
+    rowValueKey
+    columnValueKey
+    modelId
+    modelLabel
+    domainId
+    domainName
+    vignettes {
+      definitionId
+      definitionName
+      prioritized
+      deprioritized
+      neutral
+      totalTrials
+      selectedValueWinRate
+      winRateCI95Low
+      winRateCI95High
+      refusalRate
+      framingDirection
+    }
+    pooledMin
+    pooledMean
+    pooledMax
+    iSquared
+    vignetteCount
+    validEstimateCount
+  }
+}
+    `;
+
+export function useDomainAnalysisPairDetailQuery(options: Omit<Urql.UseQueryArgs<DomainAnalysisPairDetailQueryVariables>, 'query'>) {
+  return Urql.useQuery<DomainAnalysisPairDetailQuery, DomainAnalysisPairDetailQueryVariables>({ query: DomainAnalysisPairDetailDocument, ...options });
 };
 export const DomainAnalysisConditionTranscriptsDocument = gql`
     query DomainAnalysisConditionTranscripts($domainId: ID!, $modelId: String!, $valueKey: String!, $definitionId: ID!, $scenarioId: ID, $limit: Int, $signature: String) {

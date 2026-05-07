@@ -36,7 +36,7 @@ type TranscriptRow = {
 
 type CircumplexDb = Pick<typeof defaultDb, 'run' | 'transcript'>;
 
-type VignetteStats = {
+export type PairwiseVignetteStats = {
   prioritizedA: number;
   prioritizedB: number;
   neutrals: number;
@@ -44,7 +44,7 @@ type VignetteStats = {
 
 type PairStats = {
   pair: DomainAnalysisValuePair;
-  vignettes: Map<string, VignetteStats>;
+  vignettes: Map<string, PairwiseVignetteStats>;
 };
 
 function createEmptyCell(): CircumplexPairCell {
@@ -66,16 +66,18 @@ function pairKey(pair: DomainAnalysisValuePair): string {
   return `${first}::${second}`;
 }
 
-function buildOrderedCell(stats: PairStats | undefined, left: ValueKey): CircumplexPairCell {
-  if (stats == null) return createEmptyCell();
-
+export function buildOrderedPairCell(args: {
+  pair: DomainAnalysisValuePair;
+  left: ValueKey;
+  vignettes: Iterable<PairwiseVignetteStats>;
+}): CircumplexPairCell {
   const vignetteRates: number[] = [];
   let totalTrials = 0;
   let totalNeutrals = 0;
 
-  for (const vigStats of stats.vignettes.values()) {
-    const wins = left === stats.pair.valueA ? vigStats.prioritizedA : vigStats.prioritizedB;
-    const losses = left === stats.pair.valueA ? vigStats.prioritizedB : vigStats.prioritizedA;
+  for (const vigStats of args.vignettes) {
+    const wins = args.left === args.pair.valueA ? vigStats.prioritizedA : vigStats.prioritizedB;
+    const losses = args.left === args.pair.valueA ? vigStats.prioritizedB : vigStats.prioritizedA;
     const rate = computePairwiseWinRate(wins, losses, vigStats.neutrals);
     if (rate !== null) {
       vignetteRates.push(rate);
@@ -92,6 +94,15 @@ function buildOrderedCell(stats: PairStats | undefined, left: ValueKey): Circump
     trials: totalTrials,
     neutrals: totalNeutrals,
   };
+}
+
+function buildOrderedCell(stats: PairStats | undefined, left: ValueKey): CircumplexPairCell {
+  if (stats == null) return createEmptyCell();
+  return buildOrderedPairCell({
+    pair: stats.pair,
+    left,
+    vignettes: stats.vignettes.values(),
+  });
 }
 
 export async function aggregatePairwiseWinRates(args: {
