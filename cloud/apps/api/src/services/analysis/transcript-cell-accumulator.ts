@@ -89,7 +89,7 @@ function getStringToken(value: unknown): string | null {
   return typeof value === 'string' && value.trim() !== '' ? value.trim() : null;
 }
 
-function getSnapshotValuePair(definitionSnapshot: unknown): [string, string] | null {
+export function getSnapshotValuePair(definitionSnapshot: unknown): [DomainAnalysisValueKey, DomainAnalysisValueKey] | null {
   if (!isRecord(definitionSnapshot)) return null;
   const components = definitionSnapshot.components;
   if (!isRecord(components)) return null;
@@ -101,7 +101,9 @@ function getSnapshotValuePair(definitionSnapshot: unknown): [string, string] | n
   const valueFirstToken = normalizeToDomainAnalysisValueKey(valueFirstRaw);
   const valueSecondToken = normalizeToDomainAnalysisValueKey(valueSecondRaw);
   if (valueFirstToken === null || valueSecondToken === null) return null;
-  return canonicalOwnOpponent(valueFirstToken, valueSecondToken);
+  const [ownToken, opponentToken] = canonicalOwnOpponent(valueFirstToken, valueSecondToken);
+  if (!isDomainAnalysisValueKey(ownToken) || !isDomainAnalysisValueKey(opponentToken)) return null;
+  return [ownToken, opponentToken];
 }
 
 function isDimensionMatch(dimension: unknown, token: string): dimension is DefinitionDimension {

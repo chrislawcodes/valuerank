@@ -6,7 +6,7 @@ import {
   QUADRANT_ARCS,
   buildValueAngles,
 } from './useDominanceGraph';
-import { getClusterVisualColor } from './clusterVisualizationUtils';
+import { formatWinRateLabel, getClusterVisualColor } from './clusterVisualizationUtils';
 
 type ClusterDataSource = 'log-odds' | 'win-rate';
 
@@ -107,7 +107,7 @@ export function ClusterRadarChart({ clusters, activeGroupIds = [], dataSource = 
             const radius = OUTER_RADIUS * fraction;
             const value = radarMin + radarRange * fraction;
             const label = dataSource === 'win-rate'
-              ? `${Math.round(value * 100)}%`
+              ? formatWinRateLabel(value)
               : value.toFixed(1);
             return (
               <g key={fraction}>
