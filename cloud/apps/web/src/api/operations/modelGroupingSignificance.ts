@@ -11,8 +11,4 @@ export type ModelGroupingSignificanceQueryVariables = GeneratedModelGroupingSign
 export type ModelGroupingSignificanceResult =
   GeneratedModelGroupingSignificanceQuery['modelGroupingSignificance'];
 export type ModelGroupingSignificanceModel = ModelGroupingSignificanceResult['models'][number];
-// Temporary compatibility for Slice C consumers that still read the legacy fields.
-export type ModelGroupingSignificanceRow = ModelGroupingSignificanceResult['rows'][number] & {
-  meanDifference?: number | null;
-  effectSize?: number | null;
-};
+export type ModelGroupingSignificanceRow = ModelGroupingSignificanceResult['rows'][number];
