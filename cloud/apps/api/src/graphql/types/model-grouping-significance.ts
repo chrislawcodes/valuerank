@@ -26,6 +26,10 @@ export type ModelGroupingSignificanceRowShape = {
 export type ModelGroupingSignificanceResultShape = {
   models: ModelGroupingSignificanceModelShape[];
   rows: ModelGroupingSignificanceRowShape[];
+  // True when the underlying domain-analysis snapshot has not yet been built for
+  // this scope/signature. The rebuild is queued automatically; the client should
+  // show a "computing" state and retry after a short delay.
+  pending: boolean;
 };
 
 const ModelGroupingSignificanceModelRef = builder.objectRef<ModelGroupingSignificanceModelShape>(
@@ -70,5 +74,6 @@ builder.objectType(ModelGroupingSignificanceResultRef, {
   fields: (t) => ({
     models: t.expose('models', { type: [ModelGroupingSignificanceModelRef] }),
     rows: t.expose('rows', { type: [ModelGroupingSignificanceRowRef] }),
+    pending: t.exposeBoolean('pending'),
   }),
 });
