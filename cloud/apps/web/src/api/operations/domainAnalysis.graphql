@@ -208,7 +208,7 @@ query DomainAnalysisPairDetail(
     pooledMin
     pooledMean
     pooledMax
-    iSquared
+    pooledStdDev
     vignetteCount
     validEstimateCount
   }

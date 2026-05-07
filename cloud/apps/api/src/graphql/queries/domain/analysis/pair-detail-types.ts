@@ -27,25 +27,10 @@ export type DomainAnalysisPairDetailResult = {
   pooledMin: number | null;
   pooledMean: number | null;
   pooledMax: number | null;
-  iSquared: number | null;
+  pooledStdDev: number | null;
   vignetteCount: number;
   validEstimateCount: number;
 };
-
-export class MultipleVignettesPerDirectionError extends Error {
-  readonly code = 'MULTIPLE_VIGNETTES_PER_DIRECTION';
-
-  constructor(
-    public readonly pairKey: string,
-    public readonly direction: DomainAnalysisPairFramingDirection,
-    public readonly definitionIds: string[],
-  ) {
-    super(
-      `Multiple vignettes found for pair ${pairKey} direction ${direction}: ${definitionIds.join(', ')}. The data model assumes one vignette per (pair, direction); this is a hard invariant.`,
-    );
-    this.name = 'MultipleVignettesPerDirectionError';
-  }
-}
 
 export class PooledMeanDivergenceError extends Error {
   readonly code = 'POOLED_MEAN_DIVERGENCE';
@@ -106,7 +91,7 @@ builder.objectType(DomainAnalysisPairDetailResultRef, {
     pooledMin: t.exposeFloat('pooledMin', { nullable: true }),
     pooledMean: t.exposeFloat('pooledMean', { nullable: true }),
     pooledMax: t.exposeFloat('pooledMax', { nullable: true }),
-    iSquared: t.exposeFloat('iSquared', { nullable: true }),
+    pooledStdDev: t.exposeFloat('pooledStdDev', { nullable: true }),
     vignetteCount: t.exposeInt('vignetteCount'),
     validEstimateCount: t.exposeInt('validEstimateCount'),
   }),

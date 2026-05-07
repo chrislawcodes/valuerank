@@ -26,7 +26,7 @@ function createResult(): DomainAnalysisPairDetailQueryResult {
       pooledMin: 0.4,
       pooledMean: 0.55,
       pooledMax: 0.7,
-      iSquared: 73,
+      pooledStdDev: 0.12,
       vignetteCount: 2,
       validEstimateCount: 2,
       vignettes: [
