@@ -1528,6 +1528,35 @@ export type ModelCostEstimate = {
   totalCost: Scalars['Float']['output'];
 };
 
+export type ModelGroupingSignificanceModel = {
+  __typename?: 'ModelGroupingSignificanceModel';
+  label: Scalars['String']['output'];
+  modelId: Scalars['String']['output'];
+};
+
+export type ModelGroupingSignificanceResult = {
+  __typename?: 'ModelGroupingSignificanceResult';
+  models: Array<ModelGroupingSignificanceModel>;
+  rows: Array<ModelGroupingSignificanceRow>;
+};
+
+export type ModelGroupingSignificanceRow = {
+  __typename?: 'ModelGroupingSignificanceRow';
+  confidenceIntervalHigh?: Maybe<Scalars['Float']['output']>;
+  confidenceIntervalLow?: Maybe<Scalars['Float']['output']>;
+  effectLabel: Scalars['String']['output'];
+  effectSize?: Maybe<Scalars['Float']['output']>;
+  holmCorrectedPValue?: Maybe<Scalars['Float']['output']>;
+  meanDifference?: Maybe<Scalars['Float']['output']>;
+  modelAId: Scalars['String']['output'];
+  modelALabel: Scalars['String']['output'];
+  modelBId: Scalars['String']['output'];
+  modelBLabel: Scalars['String']['output'];
+  n: Scalars['Int']['output'];
+  rawPValue?: Maybe<Scalars['Float']['output']>;
+  verdict: Scalars['String']['output'];
+};
+
 export type ModelPairwiseWinRates = {
   __typename?: 'ModelPairwiseWinRates';
   label: Scalars['String']['output'];
@@ -2522,11 +2551,19 @@ export type PressureSensitivityValueRate = {
   averageWinRate?: Maybe<Scalars['Float']['output']>;
   balancedWinRate?: Maybe<Scalars['Float']['output']>;
   highPressureOnOpposingValueWinRate?: Maybe<Scalars['Float']['output']>;
-  highPressureOnThisValueDomainRates: Array<HighPressureDomainRate>;
+  highPressureOnThisValueDomainRates: Array<PressureSensitivityValueRateByDomain>;
   highPressureOnThisValueWinRate?: Maybe<Scalars['Float']['output']>;
   pairsMeasured: Scalars['Int']['output'];
   valueLabel: Scalars['String']['output'];
   valueToken: Scalars['String']['output'];
+};
+
+export type PressureSensitivityValueRateByDomain = {
+  __typename?: 'PressureSensitivityValueRateByDomain';
+  domainId: Scalars['String']['output'];
+  domainName: Scalars['String']['output'];
+  pairsMeasured: Scalars['Int']['output'];
+  rate?: Maybe<Scalars['Float']['output']>;
 };
 
 /** Result of a probe job execution */
@@ -2760,6 +2797,7 @@ export type Query = {
    *
    */
   me?: Maybe<User>;
+  modelGroupingSignificance: ModelGroupingSignificanceResult;
   /** Get token statistics for specific models. Useful for understanding prediction quality. */
   modelTokenStats: Array<ModelTokenStats>;
   modelsAnalysis: ModelsAnalysisResult;
@@ -3188,6 +3226,14 @@ export type QueryLlmProviderArgs = {
 export type QueryLlmProvidersArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
   offset?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryModelGroupingSignificanceArgs = {
+  domainId?: InputMaybe<Scalars['ID']['input']>;
+  modelIds: Array<Scalars['String']['input']>;
+  scope: Scalars['String']['input'];
+  signature: Scalars['String']['input'];
 };
 
 
@@ -4745,6 +4791,16 @@ export type SetProviderBalanceMutationVariables = Exact<{
 
 export type SetProviderBalanceMutation = { __typename?: 'Mutation', setProviderBalance: { __typename?: 'LlmProvider', id: string, name: string, displayName: string, maxParallelRequests: number, requestsPerMinute: number, isEnabled: boolean, balance?: number | null, createdAt: string, updatedAt: string } };
 
+export type ModelGroupingSignificanceQueryVariables = Exact<{
+  modelIds: Array<Scalars['String']['input']> | Scalars['String']['input'];
+  domainId?: InputMaybe<Scalars['ID']['input']>;
+  scope: Scalars['String']['input'];
+  signature: Scalars['String']['input'];
+}>;
+
+
+export type ModelGroupingSignificanceQuery = { __typename?: 'Query', modelGroupingSignificance: { __typename?: 'ModelGroupingSignificanceResult', models: Array<{ __typename?: 'ModelGroupingSignificanceModel', modelId: string, label: string }>, rows: Array<{ __typename?: 'ModelGroupingSignificanceRow', modelAId: string, modelALabel: string, modelBId: string, modelBLabel: string, n: number, meanDifference?: number | null, rawPValue?: number | null, holmCorrectedPValue?: number | null, effectSize?: number | null, effectLabel: string, confidenceIntervalLow?: number | null, confidenceIntervalHigh?: number | null, verdict: string }> } };
+
 export type AvailableModelsQueryVariables = Exact<{ [key: string]: never; }>;
 
 
@@ -4815,7 +4871,7 @@ export type PressureSensitivityQueryVariables = Exact<{
 }>;
 
 
-export type PressureSensitivityQuery = { __typename?: 'Query', pressureSensitivity: { __typename?: 'PressureSensitivityResult', pressureConditionExcludedCount: number, transcriptCapHit: boolean, models: Array<{ __typename?: 'PressureSensitivityModel', modelId: string, label: string, providerName: string, unscoredCount: number, pushedForEffect?: number | null, pushedAgainstEffect?: number | null, pushedEffectPairsUsed: number, domainPressureEffects: Array<{ __typename?: 'DomainPressureEffect', domainId: string, domainName: string, pushedForEffect?: number | null }>, pressureResponseSummary: { __typename?: 'PressureResponseSummary', mean?: number | null, rangeMin?: number | null, rangeMax?: number | null, pairsMeasured: number }, valueRates: Array<{ __typename?: 'PressureSensitivityValueRate', valueToken: string, valueLabel: string, averageWinRate?: number | null, balancedWinRate?: number | null, highPressureOnThisValueWinRate?: number | null, highPressureOnOpposingValueWinRate?: number | null, pairsMeasured: number, highPressureOnThisValueDomainRates: Array<{ __typename?: 'HighPressureDomainRate', domainId: string, domainName: string, rate?: number | null, pairsMeasured: number }> }>, valuePairs: Array<{ __typename?: 'PressureSensitivityValuePair', pairKey: string, firstValueToken: string, firstValueLabel: string, secondValueToken: string, secondValueLabel: string, n: number, unscoredCount: number, definitionsMeasured: number, directionBalancedWinRate?: number | null, directionBalancedOpponentWinRate?: number | null, directionBalancedBalancedWinRate?: number | null, directionBalancedBalancedOpponentWinRate?: number | null, directionBalancedHighPressureOwnWinRate?: number | null, directionBalancedHighPressureOwnOpponentWinRate?: number | null, directionBalancedHighPressureOpponentWinRate?: number | null, directionBalancedHighPressureOpponentOpponentWinRate?: number | null, pressureResponse: { __typename?: 'PressureResponse', value?: number | null, baselineRate?: number | null, pushTowardFirstRate?: number | null, pushTowardSecondRate?: number | null, qualifyingTrials: number, ciLow?: number | null, ciHigh?: number | null, reason?: string | null }, grid: Array<{ __typename?: 'SensitivityCell', ownLevel: number, opponentLevel: number, n: number, unscoredCount: number, winRate?: number | null, opponentWinRate?: number | null, conviction?: number | null, netScore?: number | null, lowData: boolean }> }> }>, insufficient: Array<{ __typename?: 'InsufficientPressureSensitivityModel', modelId: string, label: string, providerName: string, reason: string }>, excludedDefinitions: Array<{ __typename?: 'ExcludedDefinition', definitionId: string, name: string, reason: string }>, pressureConditionExclusionBreakdown: { __typename?: 'PressureConditionExclusionBreakdown', sourceRunMapping: number, definitionMetadata: number, missingScenario: number, invalidMetadata: number, levelAssignment: number }, directionalSanityCheck: { __typename?: 'DirectionalSanityCheck', positivePct: number, flatPct: number, negativePct: number, measuredCount: number, unmeasurableCount: number, breakdown: Array<{ __typename?: 'DirectionalSanityCheckEntry', modelId: string, pairKey: string, pressureResponse: number, classification: string }> } } };
+export type PressureSensitivityQuery = { __typename?: 'Query', pressureSensitivity: { __typename?: 'PressureSensitivityResult', pressureConditionExcludedCount: number, transcriptCapHit: boolean, models: Array<{ __typename?: 'PressureSensitivityModel', modelId: string, label: string, providerName: string, unscoredCount: number, pushedForEffect?: number | null, pushedAgainstEffect?: number | null, pushedEffectPairsUsed: number, domainPressureEffects: Array<{ __typename?: 'DomainPressureEffect', domainId: string, domainName: string, pushedForEffect?: number | null }>, pressureResponseSummary: { __typename?: 'PressureResponseSummary', mean?: number | null, rangeMin?: number | null, rangeMax?: number | null, pairsMeasured: number }, valueRates: Array<{ __typename?: 'PressureSensitivityValueRate', valueToken: string, valueLabel: string, averageWinRate?: number | null, balancedWinRate?: number | null, highPressureOnThisValueWinRate?: number | null, highPressureOnOpposingValueWinRate?: number | null, pairsMeasured: number, highPressureOnThisValueDomainRates: Array<{ __typename?: 'PressureSensitivityValueRateByDomain', domainId: string, domainName: string, rate?: number | null, pairsMeasured: number }> }>, valuePairs: Array<{ __typename?: 'PressureSensitivityValuePair', pairKey: string, firstValueToken: string, firstValueLabel: string, secondValueToken: string, secondValueLabel: string, n: number, unscoredCount: number, definitionsMeasured: number, directionBalancedWinRate?: number | null, directionBalancedOpponentWinRate?: number | null, directionBalancedBalancedWinRate?: number | null, directionBalancedBalancedOpponentWinRate?: number | null, directionBalancedHighPressureOwnWinRate?: number | null, directionBalancedHighPressureOwnOpponentWinRate?: number | null, directionBalancedHighPressureOpponentWinRate?: number | null, directionBalancedHighPressureOpponentOpponentWinRate?: number | null, pressureResponse: { __typename?: 'PressureResponse', value?: number | null, baselineRate?: number | null, pushTowardFirstRate?: number | null, pushTowardSecondRate?: number | null, qualifyingTrials: number, ciLow?: number | null, ciHigh?: number | null, reason?: string | null }, grid: Array<{ __typename?: 'SensitivityCell', ownLevel: number, opponentLevel: number, n: number, unscoredCount: number, winRate?: number | null, opponentWinRate?: number | null, conviction?: number | null, netScore?: number | null, lowData: boolean }> }> }>, insufficient: Array<{ __typename?: 'InsufficientPressureSensitivityModel', modelId: string, label: string, providerName: string, reason: string }>, excludedDefinitions: Array<{ __typename?: 'ExcludedDefinition', definitionId: string, name: string, reason: string }>, pressureConditionExclusionBreakdown: { __typename?: 'PressureConditionExclusionBreakdown', sourceRunMapping: number, definitionMetadata: number, missingScenario: number, invalidMetadata: number, levelAssignment: number }, directionalSanityCheck: { __typename?: 'DirectionalSanityCheck', positivePct: number, flatPct: number, negativePct: number, measuredCount: number, unmeasurableCount: number, breakdown: Array<{ __typename?: 'DirectionalSanityCheckEntry', modelId: string, pairKey: string, pressureResponse: number, classification: string }> } } };
 
 export type OpenRunAnomaliesQueryVariables = Exact<{
   domainId?: InputMaybe<Scalars['ID']['input']>;
@@ -7207,6 +7263,40 @@ export const SetProviderBalanceDocument = gql`
 export function useSetProviderBalanceMutation() {
   return Urql.useMutation<SetProviderBalanceMutation, SetProviderBalanceMutationVariables>(SetProviderBalanceDocument);
 };
+export const ModelGroupingSignificanceDocument = gql`
+    query ModelGroupingSignificance($modelIds: [String!]!, $domainId: ID, $scope: String!, $signature: String!) {
+  modelGroupingSignificance(
+    modelIds: $modelIds
+    domainId: $domainId
+    scope: $scope
+    signature: $signature
+  ) {
+    models {
+      modelId
+      label
+    }
+    rows {
+      modelAId
+      modelALabel
+      modelBId
+      modelBLabel
+      n
+      meanDifference
+      rawPValue
+      holmCorrectedPValue
+      effectSize
+      effectLabel
+      confidenceIntervalLow
+      confidenceIntervalHigh
+      verdict
+    }
+  }
+}
+    `;
+
+export function useModelGroupingSignificanceQuery(options: Omit<Urql.UseQueryArgs<ModelGroupingSignificanceQueryVariables>, 'query'>) {
+  return Urql.useQuery<ModelGroupingSignificanceQuery, ModelGroupingSignificanceQueryVariables>({ query: ModelGroupingSignificanceDocument, ...options });
+};
 export const AvailableModelsDocument = gql`
     query AvailableModels {
   availableModels {
@@ -7469,13 +7559,13 @@ export const PressureSensitivityDocument = gql`
         averageWinRate
         balancedWinRate
         highPressureOnThisValueWinRate
+        highPressureOnOpposingValueWinRate
         highPressureOnThisValueDomainRates {
           domainId
           domainName
           rate
           pairsMeasured
         }
-        highPressureOnOpposingValueWinRate
         pairsMeasured
       }
       valuePairs {

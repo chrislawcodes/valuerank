@@ -38,6 +38,9 @@
 | Feature | Branch | Status | Notes |
 |---------|--------|--------|-------|
 | **forest-plot-pairwise-drawer** | `—` | 🟢 Done locally | Pairwise Win Rate Matrix cells now open a right-side drawer for single-model, single-domain, signed selections. The drawer fetches pair detail data, renders a forest plot with split-by-direction toggle, summary band, I² label, inline expansion for averaged rows, and loading/error/empty states. Focused web test added; local web lint, full vitest, and build checks pass. |
+| **model-grouping-pairwise-significance-tasks** | `—` | 🟢 Done locally | Added the implementation task list for the bottom-of-page `/models` pairwise significance report, with backend-owned paired permutation tests, page-scope wiring, and heatmap/table UI slices. |
+| **model-grouping-pairwise-significance-plan** | `—` | 🟢 Done locally | Drafted the implementation plan for the new bottom-of-page `/models` pairwise significance report, with backend-owned paired permutation tests, Holm-Bonferroni correction, and a heatmap + sortable table UI. |
+| **model-grouping-pairwise-significance-spec** | `—` | 🟢 Done locally | Drafted the spec for a bottom-of-page `/models` report that compares selected models pairwise with paired permutation tests, Holm-Bonferroni correction, a scan heatmap, and a sortable source-of-truth table. |
 | **win-rate-domain-shift-decimals** | `—` | 🟢 Done locally | Win Rate by Domain by Value now shows shift values with one decimal place in the report page and the shared report section. The shared whole-point formatter stays intact for the other model tables. |
 | **win-rate-report-cleanup** | `—` | 🟢 Done locally | Cleaned up the Win Rate pages: removed the extra intro copy, moved Export CSV into the freshness row, simplified the Win Rate by Domain by Value header, put Cell metric inline with its toggle, removed the percent-change note, and narrowed screenshot capture to the table only. |
 | **status-page-pending-launches** | `—` | 🟢 Done locally | Status page active-evaluation query now includes PENDING, RUNNING, PAUSED, and SUMMARIZING launches so stuck-but-working runs show up again. Added API regression coverage and updated the section copy to match. |
@@ -107,6 +110,7 @@ Once the above are resolved:
 - [x] Win Rate findings controls now live at the top of the page, and the model focus selector applies across the model groups, value priorities, dominance, similarity, and embedded Domain Shifts sections.
 - [x] Value Priorities now uses win rate only, with the retired Full BT toggle removed and the cell dots rendered under the numbers.
 - [x] Pressure Sensitivity page now includes a **Pressure Directional Breakdown** cross-model table showing pushed-for effect, pushed-against effect, gap, and pairs per model. Answers: "Does pressure work equally in both directions?" PR #834.
+- [x] Pressure Directional Breakdown now labels the overall column as **High Pressure on Value Effect** for consistency with the pressure value tables.
 - [x] Pressure Sensitivity now uses the standard default-model multi-select, keeps the tooltip anchored while scrolling, and moves the cross-model response table to the bottom of the report.
 - [x] Pressure Response by Value now weights each vignette once and uses pooled directional coverage, so sparse cells no longer trip the "below coverage thresholds" error when the report has enough total vignette coverage.
 - [ ] Review the new pairwise forest drawer copy and capture screenshots for the AAPOR deck now that the drilldown is available.

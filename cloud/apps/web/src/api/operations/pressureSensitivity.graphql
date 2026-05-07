@@ -42,6 +42,12 @@ query PressureSensitivity(
           pairsMeasured
         }
         highPressureOnOpposingValueWinRate
+        highPressureOnThisValueDomainRates {
+          domainId
+          domainName
+          rate
+          pairsMeasured
+        }
         pairsMeasured
       }
       valuePairs {

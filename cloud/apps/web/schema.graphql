@@ -1617,6 +1617,32 @@ type ModelCostEstimate {
   totalCost: Float!
 }
 
+type ModelGroupingSignificanceModel {
+  label: String!
+  modelId: String!
+}
+
+type ModelGroupingSignificanceResult {
+  models: [ModelGroupingSignificanceModel!]!
+  rows: [ModelGroupingSignificanceRow!]!
+}
+
+type ModelGroupingSignificanceRow {
+  confidenceIntervalHigh: Float
+  confidenceIntervalLow: Float
+  effectLabel: String!
+  effectSize: Float
+  holmCorrectedPValue: Float
+  meanDifference: Float
+  modelAId: String!
+  modelALabel: String!
+  modelBId: String!
+  modelBLabel: String!
+  n: Int!
+  rawPValue: Float
+  verdict: String!
+}
+
 """Token usage statistics for a model, used for cost prediction"""
 type ModelTokenStats {
   """Average input tokens per probe based on historical data"""
@@ -2204,11 +2230,18 @@ type PressureSensitivityValueRate {
   averageWinRate: Float
   balancedWinRate: Float
   highPressureOnOpposingValueWinRate: Float
-  highPressureOnThisValueDomainRates: [HighPressureDomainRate!]!
+  highPressureOnThisValueDomainRates: [PressureSensitivityValueRateByDomain!]!
   highPressureOnThisValueWinRate: Float
   pairsMeasured: Int!
   valueLabel: String!
   valueToken: String!
+}
+
+type PressureSensitivityValueRateByDomain {
+  domainId: String!
+  domainName: String!
+  pairsMeasured: Int!
+  rate: Float
 }
 
 """Result of a probe job execution"""
@@ -2346,11 +2379,6 @@ type Query {
   List DomainEvaluations that have at least one member run currently in PENDING, RUNNING, PAUSED, or SUMMARIZING status. Optional domainId filter scopes to one domain. Used by the cross-domain /status page.
   """
   activeEvaluations(domainId: ID): [DomainEvaluation!]!
-
-  """
-  List runs in PENDING, RUNNING, PAUSED, or SUMMARIZING status that are not members of any DomainEvaluation. Used by the /status page to surface ad-hoc runs.
-  """
-  standaloneActiveRuns: [Run!]!
 
   """
   Get the average token statistics across all models. Used as fallback when model-specific stats are unavailable.
@@ -2670,6 +2698,7 @@ type Query {
 
   "\n      Get the currently authenticated user.\n      Returns null if not authenticated.\n    "
   me: User
+  modelGroupingSignificance(domainId: ID, modelIds: [String!]!, scope: String!, signature: String!): ModelGroupingSignificanceResult!
 
   """
   Get token statistics for specific models. Useful for understanding prediction quality.
@@ -2822,6 +2851,11 @@ type Query {
     """Number of results to skip for pagination (default: 0)"""
     offset: Int
   ): [Scenario!]!
+
+  """
+  List runs in PENDING, RUNNING, PAUSED, or SUMMARIZING status that are not members of any DomainEvaluation. Used by the /status page to surface ad-hoc runs.
+  """
+  standaloneActiveRuns: [Run!]!
 
   """Fetch a survey by experiment ID."""
   survey(

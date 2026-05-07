@@ -21,10 +21,16 @@ import {
   type ModelsAnalysisQueryResult,
   type ModelsAnalysisQueryVariables,
 } from '../api/operations/modelsAnalysis';
+import {
+  MODEL_GROUPING_SIGNIFICANCE_QUERY,
+  type ModelGroupingSignificanceQueryResult,
+  type ModelGroupingSignificanceQueryVariables,
+} from '../api/operations/modelGroupingSignificance';
 import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/llm';
 import { ModelGroupsSection } from '../components/domains/ModelGroupsSection';
 import { ModelAnalysisSettingsBar } from '../components/models/ModelAnalysisSettingsBar';
 import { ModelSimilarityTableSection } from '../components/models/ModelSimilarityTableSection';
+import { ModelGroupingSignificanceSection } from '../components/models/ModelGroupingSignificanceSection';
 import { type CalculationMethod } from '../components/models/ModelSimilarityMetrics';
 import { useDomains } from '../hooks/useDomains';
 import { VALUES, type ModelEntry, type ValueKey } from '../data/domainAnalysisData';
@@ -230,7 +236,29 @@ export function ModelsGroups() {
     () => (visibleModelIds.length === 0 ? [] : models.filter((model) => visibleModelIds.includes(model.model))),
     [models, visibleModelIds],
   );
+  const [{ data: groupingSignificanceData, fetching: groupingSignificanceFetching, error: groupingSignificanceError }] = useQuery<
+    ModelGroupingSignificanceQueryResult,
+    ModelGroupingSignificanceQueryVariables
+  >({
+    query: MODEL_GROUPING_SIGNIFICANCE_QUERY,
+    variables: {
+      modelIds: visibleModelIds,
+      ...(selectedScope === 'DOMAIN' && selectedDomainId !== '' ? { domainId: selectedDomainId } : {}),
+      scope: selectedScope,
+      signature: selectedSignature,
+    },
+    pause:
+      selectedSignature === ''
+      || visibleModelIds.length < 2
+      || (selectedScope === 'DOMAIN' && selectedDomainId === '')
+      || llmModelsData == null,
+    requestPolicy: 'cache-and-network',
+  });
   const isAllDomains = selectedScope === 'ALL_DOMAINS';
+  const selectedDomainLabel = isAllDomains
+    ? 'All domains'
+    : (domains.find((domain) => domain.id === selectedDomainId)?.name ?? selectedDomainId);
+  const significanceScopeLabel = `${selectedDomainLabel} · ${selectedSignature || 'No signature selected'}`;
 
   if (domainsError != null || signaturesError != null || error != null || modelsAnalysisError != null || llmModelsError != null) {
     return (
@@ -313,6 +341,13 @@ export function ModelsGroups() {
           <ModelSimilarityTableSection
             models={filteredModels}
             method={similarityMethod}
+          />
+          <ModelGroupingSignificanceSection
+            report={groupingSignificanceData?.modelGroupingSignificance ?? null}
+            selectedModelCount={visibleModelIds.length}
+            scopeLabel={significanceScopeLabel}
+            loading={groupingSignificanceFetching}
+            errorMessage={groupingSignificanceError?.message ?? null}
           />
         </div>
       )}
