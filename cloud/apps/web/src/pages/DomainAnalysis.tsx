@@ -261,6 +261,8 @@ export function DomainAnalysis() {
         values,
         winRates,
         stabilityScores,
+        // `totalComparisons` counts each transcript once per value in the pair.
+        // Divide by 2 to get the unique trial total for this model row.
         totalTrials: Math.round(totalComparisons / 2),
       };
     });

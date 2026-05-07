@@ -1,0 +1,62 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": false,
+    "complete": true,
+    "question_count": 0,
+    "asked_count": 0,
+    "questions": [],
+    "assumptions": [],
+    "summary": "",
+    "updated_at": 0,
+    "answers": {},
+    "non_goals": [],
+    "acceptance_criteria": [],
+    "unresolved": []
+  },
+  "delivery": {},
+  "dirty_overrides": {},
+  "checkpoint_fallback": {},
+  "parallel_analysis": {
+    "reviewed": false,
+    "found": false,
+    "note": "",
+    "updated_at": 0
+  },
+  "init_head_sha": "",
+  "token_usage": [
+    {
+      "stage": "spec",
+      "round": 0,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "lens": "requirements-adversarial",
+      "prompt_chars": 75138,
+      "prompt_cap": 200000,
+      "input_tokens": 30342,
+      "output_tokens": 1268,
+      "cost_usd_estimate": 0.0442675,
+      "timestamp": "2026-05-07T18:02:59.387842Z",
+      "started_at": "2026-05-07T18:01:17.517606Z",
+      "ended_at": "2026-05-07T18:02:59.387842Z",
+      "duration_seconds": 101.869352,
+      "agent_id": null,
+      "artifact_sha_at_time": null
+    }
+  ],
+  "command_telemetry": [],
+  "stages": {},
+  "invariant_warnings": [],
+  "schema_version": 1
+}
