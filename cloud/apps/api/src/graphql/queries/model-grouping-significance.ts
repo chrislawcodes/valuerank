@@ -126,6 +126,7 @@ builder.queryField('modelGroupingSignificance', (t) =>
         const transcripts: TranscriptRecord[] = await db.transcript.findMany({
           where: {
             runId: { in: resolvedSignatureRuns.filteredSourceRunIds },
+            modelId: { in: [...selectedModelIdSet] },
             deletedAt: null,
           },
           select: {
