@@ -17,7 +17,6 @@ import {
   type DomainAnalysisPairDetailResult,
   type DomainAnalysisPairFramingDirection,
   type DomainAnalysisPairVignetteDetail,
-  MultipleVignettesPerDirectionError,
   PooledMeanDivergenceError,
 } from './pair-detail-types.js';
 
@@ -164,10 +163,15 @@ builder.queryField('domainAnalysisPairDetail', (t) =>
 
       for (const [direction, definitionIds] of definitionIdsByDirection.entries()) {
         if (definitionIds.length > 1) {
-          throw new MultipleVignettesPerDirectionError(
-            canonicalRequestedPairKey,
-            direction,
-            definitionIds,
+          ctx.log.warn(
+            {
+              pairKey: canonicalRequestedPairKey,
+              direction,
+              definitionIds,
+              modelId,
+              domainId,
+            },
+            'Multiple vignettes found for (pair, direction); aggregating across them. Original spec assumed 1:1 mapping; production data has cases where it does not hold.',
           );
         }
       }
