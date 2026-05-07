@@ -16,6 +16,7 @@ import { resolveSignatureRuns } from '../queries/domain/shared.js';
 import { getSnapshotValuePair } from '../../services/analysis/transcript-cell-accumulator.js';
 import { resolveTranscriptDecisionModel } from '../queries/domain/decision-model.js';
 import { assignOwnOpponent } from '../../services/pressure-sensitivity/value-pair.js';
+import { readDefinitionModelVotesFromSnapshot } from '../../services/analysis/domain-analysis-cache.js';
 import type { DomainAnalysisScope } from '../../services/analysis/domain-analysis-scope.js';
 
 const ALL_DOMAINS_SCOPE_ID = 'all-domains';
@@ -107,68 +108,90 @@ builder.queryField('modelGroupingSignificance', (t) =>
       }
 
       const selectedModelIdSet = new Set(sortedModels.map((model) => model.modelId));
-      const allRunIds = resolvedSignatureRuns.filteredSourceRunIds;
 
-      // Query 1: one row per run to extract the value pair from the definition snapshot.
-      // Using distinct avoids fetching the large snapshot field for every transcript.
-      const runSnapshotRows = await db.transcript.findMany({
-        where: { runId: { in: allRunIds }, deletedAt: null },
-        select: { runId: true, definitionSnapshot: true },
-        distinct: ['runId'],
-      });
-      const valuePairByRunId = new Map<string, NonNullable<ReturnType<typeof getSnapshotValuePair>>>();
-      for (const row of runSnapshotRows) {
-        const pair = getSnapshotValuePair(row.definitionSnapshot);
-        if (pair != null) valuePairByRunId.set(row.runId, pair);
-      }
-
-      // Query 2: all transcripts for the selected models across all matching runs.
-      // Excludes definitionSnapshot (already extracted above) to keep the payload small.
-      const allTranscripts = await db.transcript.findMany({
-        where: {
-          runId: { in: allRunIds },
-          modelId: { in: [...selectedModelIdSet] },
-          deletedAt: null,
-        },
-        select: {
-          runId: true,
-          modelId: true,
-          decisionMetadata: true,
-          scenario: {
-            select: { orientationFlipped: true, deletedAt: true },
-          },
-        },
-      });
+      // Fast path: read pre-computed per-(definitionId::modelId) vote counts from the
+      // domain-analysis snapshot (built by v1.10.0+). Falls back to the two-query DB
+      // scan when the snapshot is absent or pre-dates v1.10.0.
+      const snapshotVotes = await readDefinitionModelVotesFromSnapshot(
+        scope,
+        domainId ?? ALL_DOMAINS_SCOPE_ID,
+        signature,
+      );
 
       const countsByDefinitionModel = new Map<string, WinLossCounts>();
-      for (const transcript of allTranscripts) {
-        if (transcript.scenario == null || transcript.scenario.deletedAt != null) continue;
-        const definitionId = resolvedSignatureRuns.filteredSourceRunDefinitionById.get(transcript.runId);
-        if (definitionId === undefined) continue;
-        const valuePair = valuePairByRunId.get(transcript.runId);
-        if (valuePair == null) continue;
-        const firstValueToken = valuePair[0];
-        const secondValueToken = valuePair[1];
 
-        const resolved = resolveTranscriptDecisionModel({
-          decisionMetadata: transcript.decisionMetadata,
-          definitionSnapshot: null,
-          orientationFlipped: transcript.scenario.orientationFlipped,
-          pairOverride: { valueA: firstValueToken, valueB: secondValueToken },
-        });
-        if (resolved.canonical.direction === 'unknown') continue;
-
-        const outcome = assignOwnOpponent(firstValueToken, secondValueToken, resolved.canonical.direction);
-        if (outcome === 'unscored' || outcome === 'neutral') continue;
-
-        const key = encodeDefinitionModelKey(definitionId, transcript.modelId);
-        const counts = countsByDefinitionModel.get(key) ?? { wins: 0, losses: 0 };
-        if (outcome === 'own_picked') {
-          counts.wins += 1;
-        } else {
-          counts.losses += 1;
+      if (snapshotVotes != null) {
+        // Snapshot fast path: populate counts directly, no transcript queries needed.
+        for (const [key, votes] of Object.entries(snapshotVotes)) {
+          const parts = key.split('::');
+          const modelId = parts[1];
+          if (modelId !== undefined && selectedModelIdSet.has(modelId)) {
+            countsByDefinitionModel.set(key, { wins: votes.wins, losses: votes.losses });
+          }
         }
-        countsByDefinitionModel.set(key, counts);
+        ctx.log.debug({ scope, domainId, signature }, 'Significance: used domain-analysis snapshot (fast path)');
+      } else {
+        // Slow fallback: fetch transcripts directly. Used until the domain-analysis
+        // snapshot is rebuilt with v1.10.0.
+        const allRunIds = resolvedSignatureRuns.filteredSourceRunIds;
+
+        const runSnapshotRows = await db.transcript.findMany({
+          where: { runId: { in: allRunIds }, deletedAt: null },
+          select: { runId: true, definitionSnapshot: true },
+          distinct: ['runId'],
+        });
+        const valuePairByRunId = new Map<string, NonNullable<ReturnType<typeof getSnapshotValuePair>>>();
+        for (const row of runSnapshotRows) {
+          const pair = getSnapshotValuePair(row.definitionSnapshot);
+          if (pair != null) valuePairByRunId.set(row.runId, pair);
+        }
+
+        const allTranscripts = await db.transcript.findMany({
+          where: {
+            runId: { in: allRunIds },
+            modelId: { in: [...selectedModelIdSet] },
+            deletedAt: null,
+          },
+          select: {
+            runId: true,
+            modelId: true,
+            decisionMetadata: true,
+            scenario: {
+              select: { orientationFlipped: true, deletedAt: true },
+            },
+          },
+        });
+
+        for (const transcript of allTranscripts) {
+          if (transcript.scenario == null || transcript.scenario.deletedAt != null) continue;
+          const definitionId = resolvedSignatureRuns.filteredSourceRunDefinitionById.get(transcript.runId);
+          if (definitionId === undefined) continue;
+          const valuePair = valuePairByRunId.get(transcript.runId);
+          if (valuePair == null) continue;
+          const firstValueToken = valuePair[0];
+          const secondValueToken = valuePair[1];
+
+          const resolved = resolveTranscriptDecisionModel({
+            decisionMetadata: transcript.decisionMetadata,
+            definitionSnapshot: null,
+            orientationFlipped: transcript.scenario.orientationFlipped,
+            pairOverride: { valueA: firstValueToken, valueB: secondValueToken },
+          });
+          if (resolved.canonical.direction === 'unknown') continue;
+
+          const outcome = assignOwnOpponent(firstValueToken, secondValueToken, resolved.canonical.direction);
+          if (outcome === 'unscored' || outcome === 'neutral') continue;
+
+          const key = encodeDefinitionModelKey(definitionId, transcript.modelId);
+          const counts = countsByDefinitionModel.get(key) ?? { wins: 0, losses: 0 };
+          if (outcome === 'own_picked') {
+            counts.wins += 1;
+          } else {
+            counts.losses += 1;
+          }
+          countsByDefinitionModel.set(key, counts);
+        }
+        ctx.log.debug({ scope, domainId, signature }, 'Significance: used transcript scan (slow path — snapshot not yet available)');
       }
 
       const coverageByModel = new Map(sortedModels.map((model) => [model.modelId, new Set<string>()] as const));

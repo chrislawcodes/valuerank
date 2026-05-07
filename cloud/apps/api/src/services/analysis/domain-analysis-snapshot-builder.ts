@@ -180,6 +180,19 @@ export async function buildSnapshotOutput(
       offset += fetchedCount;
     }
   }
+  // Derive per-(definitionId::modelId) vote counts from the cellMap before it is
+  // aggregated into domain-level rates. These are stored in the snapshot so the
+  // significance resolver can run McNemar without a separate transcript scan.
+  const definitionModelVotes: Record<string, { wins: number; losses: number }> = {};
+  for (const [key, counts] of cellMap.entries()) {
+    const parts = key.split('::');
+    const combinedKey = `${parts[0]}::${parts[1]}`; // definitionId::modelId
+    const entry = definitionModelVotes[combinedKey] ?? { wins: 0, losses: 0 };
+    entry.wins += counts.wins;
+    entry.losses += counts.losses;
+    definitionModelVotes[combinedKey] = entry;
+  }
+
   const { models, analyzedDefinitionIds } = computeCellWeightedDomainRates({
     cellMap,
     filteredSourceRunDefinitionById: state.resolvedSignatureRuns.filteredSourceRunDefinitionById,
@@ -219,6 +232,7 @@ export async function buildSnapshotOutput(
     models,
     contributionSummary: [],
     excludedDataSummary: [],
+    definitionModelVotes,
   };
 }
 
