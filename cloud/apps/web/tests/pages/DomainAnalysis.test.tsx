@@ -10,6 +10,7 @@ import {
 } from '../../src/api/operations/domainAnalysis';
 import { MODELS_ANALYSIS_QUERY } from '../../src/api/operations/modelsAnalysis';
 import { LLM_MODELS_QUERY } from '../../src/api/operations/llm';
+import { MODELS_STABILITY_QUERY } from '../../src/api/operations/modelsStability';
 
 const useQueryMock = vi.fn();
 const useMutationMock = vi.fn();
@@ -80,6 +81,13 @@ const defaultModelsAnalysis = {
 
 const valuePrioritiesSectionMock = vi.fn(() => <div>Mock value priorities section</div>);
 
+const defaultModelsStability = {
+  modelsWinRateStability: {
+    models: [],
+    skippedVignettes: [],
+  },
+};
+
 function installQueryResponses(options?: {
   findingsData?: typeof defaultFindingsEligibility | undefined;
   findingsFetching?: boolean;
@@ -91,6 +99,7 @@ function installQueryResponses(options?: {
   analysisFetching?: boolean;
   analysisError?: Error | undefined;
   modelsAnalysisData?: typeof defaultModelsAnalysis | undefined;
+  modelsStabilityData?: typeof defaultModelsStability | undefined;
   llmModelsData?: { llmModels: Array<{ modelId: string; isDefault: boolean }> } | undefined;
 }) {
   const findingsData = options && 'findingsData' in options ? options.findingsData : defaultFindingsEligibility;
@@ -103,6 +112,7 @@ function installQueryResponses(options?: {
   const analysisFetching = options?.analysisFetching ?? false;
   const analysisError = options?.analysisError;
   const modelsAnalysisData = options && 'modelsAnalysisData' in options ? options.modelsAnalysisData : defaultModelsAnalysis;
+  const modelsStabilityData = options && 'modelsStabilityData' in options ? options.modelsStabilityData : defaultModelsStability;
   const llmModelsData = options && 'llmModelsData' in options ? options.llmModelsData : { llmModels: [] };
 
   useQueryMock.mockImplementation((args: { query: unknown }) => {
@@ -130,6 +140,13 @@ function installQueryResponses(options?: {
     if (args.query === MODELS_ANALYSIS_QUERY) {
       return [{
         data: modelsAnalysisData,
+        fetching: false,
+        error: undefined,
+      }];
+    }
+    if (args.query === MODELS_STABILITY_QUERY) {
+      return [{
+        data: modelsStabilityData,
         fetching: false,
         error: undefined,
       }];
@@ -174,6 +191,10 @@ vi.mock('../../src/components/models/DomainShiftsReportSection', () => ({
   DomainShiftsReportSection: () => <div>Mock domain shifts section</div>,
 }));
 
+vi.mock('../../src/components/models/WinRateStabilitySection', () => ({
+  WinRateStabilitySection: () => <div>Mock win rate stability section</div>,
+}));
+
 describe('DomainAnalysis', () => {
   beforeEach(() => {
     useQueryMock.mockReset();
@@ -213,10 +234,12 @@ describe('DomainAnalysis', () => {
     const valuePriorities = screen.getByText(/mock value priorities section/i);
     const dominance = screen.getByText(/mock dominance section/i);
     const domainShifts = screen.getByText(/mock domain shifts section/i);
+    const winRateStability = screen.getByText(/mock win rate stability section/i);
 
     expect(domainSelection.compareDocumentPosition(valuePriorities) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(valuePriorities.compareDocumentPosition(dominance) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(dominance.compareDocumentPosition(domainShifts) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(domainShifts.compareDocumentPosition(winRateStability) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('defaults the scope dropdown to all domains when no domain is selected', async () => {
@@ -359,6 +382,26 @@ describe('DomainAnalysis', () => {
         }),
       }),
     ]);
+  });
+
+  it('issues the stability query with domainId and signature variables', async () => {
+    render(
+      <MemoryRouter initialEntries={['/models/win-rate?domainId=domain-a&signature=vnewt0']}>
+        <DomainAnalysis />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(useQueryMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          query: MODELS_STABILITY_QUERY,
+          variables: expect.objectContaining({
+            domainId: 'domain-a',
+            signature: 'vnewt0',
+          }),
+        }),
+      );
+    });
   });
 
   it('does not fall back to pooled counts when canonical models-analysis data is missing', async () => {

@@ -1,0 +1,56 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": false,
+    "complete": true,
+    "question_count": 0,
+    "asked_count": 0,
+    "questions": [],
+    "assumptions": [],
+    "summary": "",
+    "updated_at": 0,
+    "answers": {},
+    "non_goals": [],
+    "acceptance_criteria": [],
+    "unresolved": []
+  },
+  "delivery": {},
+  "dirty_overrides": {},
+  "checkpoint_fallback": {},
+  "parallel_analysis": {
+    "reviewed": false,
+    "found": false,
+    "note": "",
+    "updated_at": 0
+  },
+  "init_head_sha": "",
+  "token_usage": [],
+  "command_telemetry": [
+    {
+      "command": "checkpoint",
+      "stage": "spec",
+      "ts": "2026-05-06T20:18:07Z",
+      "wall_seconds": 0.021,
+      "input_bytes_read": 2565,
+      "output_bytes_written": 2565,
+      "files_read": 3,
+      "files_written": 3,
+      "subprocess_invocations": 2,
+      "ttl_crossed": false
+    }
+  ],
+  "stages": {},
+  "invariant_warnings": [],
+  "schema_version": 1
+}

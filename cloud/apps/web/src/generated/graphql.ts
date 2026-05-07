@@ -1581,6 +1581,44 @@ export type ModelsConsistencyResult = {
   models: Array<ModelConsistency>;
 };
 
+export type ModelsStabilityModelResult = {
+  __typename?: 'ModelsStabilityModelResult';
+  avgDirectionalAgreement?: Maybe<Scalars['Float']['output']>;
+  label: Scalars['String']['output'];
+  modelId: Scalars['String']['output'];
+  qualifyingVignetteCount: Scalars['Int']['output'];
+  softLeanShare?: Maybe<Scalars['Float']['output']>;
+  stableShare?: Maybe<Scalars['Float']['output']>;
+  tornShare?: Maybe<Scalars['Float']['output']>;
+  unstableShare?: Maybe<Scalars['Float']['output']>;
+  vignettes: Array<ModelsStabilityVignetteResult>;
+};
+
+export type ModelsStabilityResult = {
+  __typename?: 'ModelsStabilityResult';
+  models: Array<ModelsStabilityModelResult>;
+  skippedVignettes: Array<ModelsStabilitySkippedVignette>;
+};
+
+export type ModelsStabilitySkippedVignette = {
+  __typename?: 'ModelsStabilitySkippedVignette';
+  definitionId: Scalars['String']['output'];
+  reason: Scalars['String']['output'];
+  vignetteName: Scalars['String']['output'];
+};
+
+export type ModelsStabilityVignetteResult = {
+  __typename?: 'ModelsStabilityVignetteResult';
+  avgDirectionalAgreement?: Maybe<Scalars['Float']['output']>;
+  classifiedConditionCount: Scalars['Int']['output'];
+  definitionId: Scalars['String']['output'];
+  softLeanShare: Scalars['Float']['output'];
+  stableShare: Scalars['Float']['output'];
+  tornShare: Scalars['Float']['output'];
+  unstableShare: Scalars['Float']['output'];
+  vignetteName: Scalars['String']['output'];
+};
+
 export type Mutation = {
   __typename?: 'Mutation';
   /** Add a tag to a definition. No-op if tag is already assigned. */
@@ -2690,6 +2728,7 @@ export type Query = {
   modelsAnalysis: ModelsAnalysisResult;
   modelsConfidence: ModelsConfidenceResult;
   modelsConsistency: ModelsConsistencyResult;
+  modelsWinRateStability: ModelsStabilityResult;
   /** List anomalies that are currently open (resolvedAt IS NULL) across all runs. Optional filters: domainId scopes to anomalies whose run belongs to a definition in that domain; type scopes to a single RunAnomalyType. */
   openRunAnomalies: Array<RunAnomaly>;
   /** Pairwise win rates per value pair per model, vignette-averaged */
@@ -3128,6 +3167,12 @@ export type QueryModelsConsistencyArgs = {
   minScenarios?: InputMaybe<Scalars['Int']['input']>;
   providerId?: InputMaybe<Scalars['ID']['input']>;
   signature: Scalars['String']['input'];
+};
+
+
+export type QueryModelsWinRateStabilityArgs = {
+  domainId?: InputMaybe<Scalars['ID']['input']>;
+  signature?: InputMaybe<Scalars['String']['input']>;
 };
 
 
@@ -4673,6 +4718,14 @@ export type ModelsConsistencyQueryVariables = Exact<{
 
 
 export type ModelsConsistencyQuery = { __typename?: 'Query', modelsConsistency: { __typename?: 'ModelsConsistencyResult', models: Array<{ __typename?: 'ModelConsistency', modelId: string, label: string, providerName: string, repeatability: { __typename?: 'Repeatability', value: number, ciLow: number, ciHigh: number, withinScenarioSd: number, betweenScenarioSd: number, scenariosMeasured: number, perDomain: Array<{ __typename?: 'ConsistencyPerDomain', domainId: string, domainName: string, value: number, ciLow: number, ciHigh: number, scenariosMeasured: number }>, perScenario: Array<{ __typename?: 'ConsistencyPerScenario', scenarioId: string, matches: number, trials: number, p: number, ciLow: number, ciHigh: number }> }, coherence: { __typename?: 'Coherence', value: number, coherentPairs: number, determinatePairs: number, indeterminatePairs: number, perPair: Array<{ __typename?: 'ConsistencyPerPair', domainId: string, valueKey: string, rho?: number | null, pValue?: number | null, coherent: boolean, determinate: boolean, targetAnalysisRunId?: string | null, targetCompanionRunId?: string | null, primaryConditionIds: Array<string>, companionConditionIds: Array<string>, perCondition: Array<{ __typename?: 'ConsistencyPerCondition', scenarioId: string, netPressureRank: number, winRate?: number | null, matches: number, trials: number }> }> }, orderEffect: { __typename?: 'OrderEffect', samePct: number, flippedPct: number, noisyPct: number, notApplicable: boolean } }>, insufficient: Array<{ __typename?: 'InsufficientModel', modelId: string, label: string, providerName: string, reason: string }> } };
+
+export type ModelsWinRateStabilityQueryVariables = Exact<{
+  signature?: InputMaybe<Scalars['String']['input']>;
+  domainId?: InputMaybe<Scalars['ID']['input']>;
+}>;
+
+
+export type ModelsWinRateStabilityQuery = { __typename?: 'Query', modelsWinRateStability: { __typename?: 'ModelsStabilityResult', models: Array<{ __typename?: 'ModelsStabilityModelResult', modelId: string, label: string, qualifyingVignetteCount: number, avgDirectionalAgreement?: number | null, stableShare?: number | null, softLeanShare?: number | null, tornShare?: number | null, unstableShare?: number | null }>, skippedVignettes: Array<{ __typename?: 'ModelsStabilitySkippedVignette', definitionId: string, vignetteName: string, reason: string }> } };
 
 export type CreatePairedVignetteMutationVariables = Exact<{
   input: CreatePairedVignetteInput;
@@ -7203,6 +7256,31 @@ export const ModelsConsistencyDocument = gql`
 export function useModelsConsistencyQuery(options: Omit<Urql.UseQueryArgs<ModelsConsistencyQueryVariables>, 'query'>) {
   return Urql.useQuery<ModelsConsistencyQuery, ModelsConsistencyQueryVariables>({ query: ModelsConsistencyDocument, ...options });
 };
+export const ModelsWinRateStabilityDocument = gql`
+    query ModelsWinRateStability($signature: String, $domainId: ID) {
+  modelsWinRateStability(signature: $signature, domainId: $domainId) {
+    models {
+      modelId
+      label
+      qualifyingVignetteCount
+      avgDirectionalAgreement
+      stableShare
+      softLeanShare
+      tornShare
+      unstableShare
+    }
+    skippedVignettes {
+      definitionId
+      vignetteName
+      reason
+    }
+  }
+}
+    `;
+
+export function useModelsWinRateStabilityQuery(options?: Omit<Urql.UseQueryArgs<ModelsWinRateStabilityQueryVariables>, 'query'>) {
+  return Urql.useQuery<ModelsWinRateStabilityQuery, ModelsWinRateStabilityQueryVariables>({ query: ModelsWinRateStabilityDocument, ...options });
+};
 export const CreatePairedVignetteDocument = gql`
     mutation CreatePairedVignette($input: CreatePairedVignetteInput!) {
   createPairedVignette(input: $input) {
@@ -7293,12 +7371,6 @@ export const PressureSensitivityDocument = gql`
         averageWinRate
         balancedWinRate
         highPressureOnThisValueWinRate
-        highPressureOnThisValueDomainRates {
-          domainId
-          domainName
-          rate
-          pairsMeasured
-        }
         highPressureOnOpposingValueWinRate
         pairsMeasured
       }

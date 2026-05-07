@@ -24,10 +24,16 @@ import {
   type ModelsAnalysisQueryVariables,
 } from '../api/operations/modelsAnalysis';
 import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/llm';
+import {
+  MODELS_STABILITY_QUERY,
+  type ModelsStabilityQueryResult,
+  type ModelsStabilityQueryVariables,
+} from '../api/operations/modelsStability';
 import { DominanceSection } from '../components/domains/DominanceSection';
 import { PairwiseWinRateMatrix } from '../components/domains/PairwiseWinRateMatrix';
 import { ValuePrioritiesSection } from '../components/domains/ValuePrioritiesSection';
 import { DomainShiftsReportSection } from '../components/models/DomainShiftsReportSection';
+import { WinRateStabilitySection } from '../components/models/WinRateStabilitySection';
 import {
   VALUES,
   type ModelEntry,
@@ -159,6 +165,18 @@ export function DomainAnalysis() {
   const [{ data: llmModelsData }] = useQuery<LlmModelsQueryResult>({
     query: LLM_MODELS_QUERY,
     variables: { status: 'ACTIVE' },
+    requestPolicy: 'cache-and-network',
+  });
+  const [{ data: modelsStabilityData, fetching: modelsStabilityFetching, error: modelsStabilityError }] = useQuery<
+    ModelsStabilityQueryResult,
+    ModelsStabilityQueryVariables
+  >({
+    query: MODELS_STABILITY_QUERY,
+    variables: {
+      ...(selectedScope === 'DOMAIN' && selectedDomainId !== '' ? { domainId: selectedDomainId } : {}),
+      ...(selectedSignature !== '' ? { signature: selectedSignature } : {}),
+    },
+    pause: selectedScope === 'DOMAIN' && selectedDomainId === '',
     requestPolicy: 'cache-and-network',
   });
   const [{ fetching: refreshFetching }, refreshDomainAnalysis] = useMutation<
@@ -457,6 +475,12 @@ export function DomainAnalysis() {
             defaultModelIds={defaultSelection}
             fetching={modelsAnalysisFetching}
             errorMessage={modelsAnalysisError?.message ?? null}
+          />
+          <WinRateStabilitySection
+            models={modelsStabilityData?.modelsWinRateStability.models ?? []}
+            skippedVignettes={modelsStabilityData?.modelsWinRateStability.skippedVignettes ?? []}
+            fetching={modelsStabilityFetching}
+            errorMessage={modelsStabilityError?.message ?? null}
           />
         </>
       )}
