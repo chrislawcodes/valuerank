@@ -52,6 +52,10 @@ function winRateCellColor(winRate: number): string {
   return getHeatmapColor((winRate - 0.5) * 2);
 }
 
+function formatWinRatePercent(winRate: number): string {
+  return `${(winRate * 100).toFixed(1)}%`;
+}
+
 type PairwiseWinRateMatrixProps = {
   models: PairwiseMatrixModel[];
   selectedModelId: string | null;
@@ -225,14 +229,14 @@ export function PairwiseWinRateMatrix({
                           isDiagonal
                             ? undefined
                             : winRate != null
-                              ? `${Math.round(winRate * 100)}% (${trials} trial${trials === 1 ? '' : 's'})`
+                              ? `${formatWinRatePercent(winRate)} (${trials} trial${trials === 1 ? '' : 's'})`
                               : 'No data'
                         }
                       >
                         {isDiagonal
                           ? '—'
                           : winRate != null
-                            ? `${Math.round(winRate * 100)}%`
+                            ? formatWinRatePercent(winRate)
                             : '—'}
                       </td>
                     );
