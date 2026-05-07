@@ -17,7 +17,7 @@ export type DomainAnalysisCacheStatus =
   (typeof DOMAIN_ANALYSIS_CACHE_STATUS)[keyof typeof DOMAIN_ANALYSIS_CACHE_STATUS];
 
 export const DOMAIN_ANALYSIS_SNAPSHOT_TYPE = 'domain_overview';
-export const DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION = '1.8.0';
+export const DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION = '1.9.0';
 export const DOMAIN_ANALYSIS_ASSUMPTION_PREFIX = 'domain-analysis';
 export const DOMAIN_ANALYSIS_NONE_SIGNATURE = '__none__';
 
@@ -27,6 +27,9 @@ export type DomainAnalysisSnapshotModel = {
   model: string;
   counts: Record<string, DomainAnalysisValueCounts>;
   pairwiseWins: Record<string, Record<string, number>>;
+  // Per-pair neutral counts keyed by [winner][loser] (only stored from valueA side to avoid
+  // double-counting). Optional for backward compat with snapshots built before v1.9.0.
+  pairwiseNeutrals?: Record<string, Record<string, number>>;
   // Equal-weight per-vignette win rates (0–100) and vignette counts per value key.
   // Optional for backward compatibility with snapshots built before v1.3.0.
   valueWinRates?: Record<string, number>;

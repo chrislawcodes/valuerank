@@ -71,7 +71,10 @@ function extractWinRates(snapshotModel: DomainAnalysisSnapshotModel, valueKeys: 
   return result;
 }
 
-function buildPairwiseWinRateModel(pairwiseWins: Record<string, Record<string, number>>): PairwiseWinRateModel {
+function buildPairwiseWinRateModel(
+  pairwiseWins: Record<string, Record<string, number>>,
+  pairwiseNeutrals?: Record<string, Record<string, number>>,
+): PairwiseWinRateModel {
   const order = [...SCHWARTZ_CIRCULAR_ORDER];
   const n = order.length;
   const winRateMatrix: Array<Array<number | null>> = [];
@@ -85,7 +88,12 @@ function buildPairwiseWinRateModel(pairwiseWins: Record<string, Record<string, n
       const keyJ = order[j] as string;
       const winsIJ = pairwiseWins[keyI]?.[keyJ] ?? 0;
       const winsJI = pairwiseWins[keyJ]?.[keyI] ?? 0;
-      const total = winsIJ + winsJI;
+      // Neutrals are stored from the valueA side only: keyI vs keyJ → neutrals[keyI][keyJ] when keyI < keyJ alphabetically is NOT guaranteed,
+      // so check both directions and take whichever has data.
+      const neutralsIJ = pairwiseNeutrals != null
+        ? (pairwiseNeutrals[keyI]?.[keyJ] ?? pairwiseNeutrals[keyJ]?.[keyI] ?? 0)
+        : 0;
+      const total = winsIJ + winsJI + neutralsIJ;
       winRateRow.push(total > 0 ? winsIJ / total : null);
       trialRow.push(total);
     }
@@ -125,7 +133,7 @@ function buildDomainAnalysisResultFromSnapshot(params: {
       model: model.model,
       label: activeModelLabelById.get(model.model) ?? model.model,
       values,
-      pairwiseWinRateModel: buildPairwiseWinRateModel(model.pairwiseWins),
+      pairwiseWinRateModel: buildPairwiseWinRateModel(model.pairwiseWins, model.pairwiseNeutrals),
     };
   });
 
