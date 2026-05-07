@@ -52,6 +52,19 @@ import {
 
 const ALL_DOMAINS_SCOPE = 'all-domains';
 
+export function filterSelectedModels<T>(
+  models: T[],
+  selectedModelIds: string[],
+  getModelId: (model: T) => string,
+): T[] {
+  if (selectedModelIds.length === 0) {
+    return [];
+  }
+
+  const selected = new Set(selectedModelIds);
+  return models.filter((model) => selected.has(getModelId(model)));
+}
+
 export function DomainAnalysis() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -288,8 +301,8 @@ export function DomainAnalysis() {
     [defaultSelection, models],
   );
 
-  const visibleModels = useMemo(
-    () => selectedModelIds.length === 0 ? models : models.filter((model) => selectedModelIds.includes(model.model)),
+  const selectedModels = useMemo(
+    () => filterSelectedModels(models, selectedModelIds, (model) => model.model),
     [models, selectedModelIds],
   );
   const selectedModelId = selectedModelIds.length === 1 ? (selectedModelIds[0] ?? null) : null;
@@ -300,12 +313,14 @@ export function DomainAnalysis() {
     setOpenPair(null);
   }, [selectedDomainIdForDrawer, selectedModelId, selectedSignatureForDrawer]);
 
-  const visiblePairwiseModels = useMemo(() => {
-    const sourceModels = data?.domainAnalysis.models ?? [];
-    return selectedModelIds.length === 0
-      ? sourceModels
-      : sourceModels.filter((m) => selectedModelIds.includes(m.model));
-  }, [data?.domainAnalysis.models, selectedModelIds]);
+  const visiblePairwiseModels = useMemo(
+    () => filterSelectedModels(data?.domainAnalysis.models ?? [], selectedModelIds, (model) => model.model),
+    [data?.domainAnalysis.models, selectedModelIds],
+  );
+  const visibleStabilityModels = useMemo(
+    () => filterSelectedModels(modelsStabilityData?.modelsWinRateStability.models ?? [], selectedModelIds, (model) => model.modelId),
+    [modelsStabilityData?.modelsWinRateStability.models, selectedModelIds],
+  );
 
   const missingDefinitionCount = data?.domainAnalysis.missingDefinitions?.length ?? 0;
   const allMissingDefinitionIds = useMemo(
@@ -468,14 +483,14 @@ export function DomainAnalysis() {
       ) : (
         <>
           <ValuePrioritiesSection
-            models={visibleModels}
+            models={selectedModels}
             selectedDomainId={selectedDomainId}
             selectedSignature={selectedSignature === '' ? null : selectedSignature}
             isReadOnly={isAllDomains}
             showStabilityDots
           />
           <DominanceSection
-            models={visibleModels}
+            models={selectedModels}
           />
           <PairwiseWinRateMatrix
             models={visiblePairwiseModels}
@@ -493,7 +508,7 @@ export function DomainAnalysis() {
             errorMessage={modelsAnalysisError?.message ?? null}
           />
           <WinRateStabilitySection
-            models={modelsStabilityData?.modelsWinRateStability.models ?? []}
+            models={visibleStabilityModels}
             skippedVignettes={modelsStabilityData?.modelsWinRateStability.skippedVignettes ?? []}
             fetching={modelsStabilityFetching}
             errorMessage={modelsStabilityError?.message ?? null}
