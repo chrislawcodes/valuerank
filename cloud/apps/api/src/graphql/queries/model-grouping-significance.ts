@@ -117,6 +117,20 @@ builder.queryField('modelGroupingSignificance', (t) =>
         );
       }
 
+      // resolveSignatureRuns returns ALL matching runs per definition (sorted newest-first).
+      // For McNemar we only need one binary choice per definition, so cap at the most
+      // recent run per definition to keep the IN clause small.
+      const latestRunIdByDefinition = new Map<string, string>();
+      for (const [runId, definitionId] of resolvedSignatureRuns.filteredSourceRunDefinitionById) {
+        if (!latestRunIdByDefinition.has(definitionId)) {
+          latestRunIdByDefinition.set(definitionId, runId);
+        }
+      }
+      const dedupedRunIds = [...latestRunIdByDefinition.values()];
+      const dedupedDefinitionById = new Map(
+        [...latestRunIdByDefinition.entries()].map(([definitionId, runId]) => [runId, definitionId] as const),
+      );
+
       const selectedModelIdSet = new Set(sortedModels.map((model) => model.modelId));
       const countsByDefinitionModel = new Map<string, WinLossCounts>();
       let offset = 0;
@@ -125,7 +139,7 @@ builder.queryField('modelGroupingSignificance', (t) =>
       while (hasMoreTranscripts) {
         const transcripts: TranscriptRecord[] = await db.transcript.findMany({
           where: {
-            runId: { in: resolvedSignatureRuns.filteredSourceRunIds },
+            runId: { in: dedupedRunIds },
             modelId: { in: [...selectedModelIdSet] },
             deletedAt: null,
           },
@@ -159,7 +173,7 @@ builder.queryField('modelGroupingSignificance', (t) =>
           if (transcript.deletedAt != null) continue;
           if (transcript.scenario == null || transcript.scenario.deletedAt != null) continue;
 
-          const definitionId = resolvedSignatureRuns.filteredSourceRunDefinitionById.get(transcript.runId);
+          const definitionId = dedupedDefinitionById.get(transcript.runId);
           if (definitionId === undefined) continue;
 
           const valuePair = getSnapshotValuePair(transcript.definitionSnapshot);
