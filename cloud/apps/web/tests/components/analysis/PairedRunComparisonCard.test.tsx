@@ -144,7 +144,7 @@ describe('PairedRunComparisonCard', () => {
     expect(screen.getByText('GPT-4')).toBeInTheDocument();
     expect(screen.getByText('65%')).toBeInTheDocument();
     expect(screen.getByText('35%')).toBeInTheDocument();
-    expect(screen.getByText('+20 pp')).toBeInTheDocument();
+    expect(screen.getByText('+20')).toBeInTheDocument();
     expect(screen.getByText('2 / 2')).toBeInTheDocument();
   });
 
