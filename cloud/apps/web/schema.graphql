@@ -891,6 +891,41 @@ type DomainAnalysisUnavailableModel {
   reason: String!
 }
 
+enum DomainAnalysisPairFramingDirection {
+  A_TO_B
+  B_TO_A
+}
+
+type DomainAnalysisPairDetailResult {
+  columnValueKey: String!
+  domainId: ID
+  domainName: String
+  iSquared: Float
+  modelId: String!
+  modelLabel: String!
+  pooledMax: Float
+  pooledMean: Float
+  pooledMin: Float
+  rowValueKey: String!
+  validEstimateCount: Int!
+  vignetteCount: Int!
+  vignettes: [DomainAnalysisPairVignetteDetail!]!
+}
+
+type DomainAnalysisPairVignetteDetail {
+  definitionId: ID!
+  definitionName: String!
+  deprioritized: Int!
+  framingDirection: DomainAnalysisPairFramingDirection!
+  neutral: Int!
+  prioritized: Int!
+  refusalRate: Float
+  selectedValueWinRate: Float
+  totalTrials: Int!
+  winRateCI95High: Float
+  winRateCI95Low: Float
+}
+
 type DomainAnalysisValueDetailResult {
   coveredDefinitions: Int!
   deprioritized: Int!
@@ -2506,6 +2541,7 @@ type Query {
   domain(id: ID!): Domain
   domainAnalysis(domainId: ID!, scope: String, signature: String): DomainAnalysisResult!
   domainAnalysisConditionTranscripts(definitionId: ID!, domainId: ID!, limit: Int, modelId: String!, scenarioId: ID, signature: String, valueKey: String!): [DomainAnalysisConditionTranscript!]!
+  domainAnalysisPairDetail(domainId: ID, modelId: String!, signature: String, valueA: String!, valueB: String!): DomainAnalysisPairDetailResult!
   domainAnalysisValueDetail(domainId: ID!, modelId: String!, signature: String, valueKey: String!): DomainAnalysisValueDetailResult!
   domainAvailableSignatures(domainId: ID!, scope: String): [DomainAvailableSignature!]!
   domainConfigSnapshots(domainId: ID!, limit: Int): [DomainConfigSnapshotSummary!]!

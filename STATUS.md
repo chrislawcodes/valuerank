@@ -37,6 +37,7 @@
 
 | Feature | Branch | Status | Notes |
 |---------|--------|--------|-------|
+| **forest-plot-pairwise-drawer** | `—` | 🟢 Done locally | Pairwise Win Rate Matrix cells now open a right-side drawer for single-model, single-domain, signed selections. The drawer fetches pair detail data, renders a forest plot with split-by-direction toggle, summary band, I² label, inline expansion for averaged rows, and loading/error/empty states. Focused web test added; local web lint, full vitest, and build checks pass. |
 | **win-rate-domain-shift-decimals** | `—` | 🟢 Done locally | Win Rate by Domain by Value now shows shift values with one decimal place in the report page and the shared report section. The shared whole-point formatter stays intact for the other model tables. |
 | **win-rate-report-cleanup** | `—` | 🟢 Done locally | Cleaned up the Win Rate pages: removed the extra intro copy, moved Export CSV into the freshness row, simplified the Win Rate by Domain by Value header, put Cell metric inline with its toggle, removed the percent-change note, and narrowed screenshot capture to the table only. |
 | **status-page-pending-launches** | `—` | 🟢 Done locally | Status page active-evaluation query now includes PENDING, RUNNING, PAUSED, and SUMMARIZING launches so stuck-but-working runs show up again. Added API regression coverage and updated the section copy to match. |
@@ -92,6 +93,7 @@ Once the above are resolved:
 - [ ] Review with Ari
 
 ### Analysis Reports
+- [x] Pairwise Win Rate Matrix now opens a pair-detail drawer with a forest plot, split-by-direction toggle, summary band, I² label, and inline row expansion for framing comparisons.
 - [x] Model Groups page now includes a win-rate similarity table with method toggles for weighted Euclidean, cosine, Spearman, and Kendall, plus a distance/similarity view toggle and per-pair detail drawer.
 - [x] Win Rate page now includes the Domain Shifts report at the bottom of `/models/win-rate`; focused tests and web preflight pass.
 - [x] Domain Shifts readability controls added locally: cells can toggle between shift and raw win rate, and table columns are sortable.
@@ -107,6 +109,7 @@ Once the above are resolved:
 - [x] Pressure Sensitivity page now includes a **Pressure Directional Breakdown** cross-model table showing pushed-for effect, pushed-against effect, gap, and pairs per model. Answers: "Does pressure work equally in both directions?" PR #834.
 - [x] Pressure Sensitivity now uses the standard default-model multi-select, keeps the tooltip anchored while scrolling, and moves the cross-model response table to the bottom of the report.
 - [x] Pressure Response by Value now weights each vignette once and uses pooled directional coverage, so sparse cells no longer trip the "below coverage thresholds" error when the report has enough total vignette coverage.
+- [ ] Review the new pairwise forest drawer copy and capture screenshots for the AAPOR deck now that the drilldown is available.
 
 ---
 
