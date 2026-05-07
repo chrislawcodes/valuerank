@@ -119,7 +119,7 @@ function formatSignedPoints(value: number | null | undefined): string {
   const pp = value * 100;
   const rounded = Math.round(pp * 10) / 10;
   const sign = rounded > 0 ? '+' : '';
-  return `${sign}${Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(1)} pp`;
+  return `${sign}${Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(1)}`;
 }
 
 function buildAnalysisHref(
