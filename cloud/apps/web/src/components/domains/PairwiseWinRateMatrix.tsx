@@ -54,9 +54,19 @@ function winRateCellColor(winRate: number): string {
 
 type PairwiseWinRateMatrixProps = {
   models: PairwiseMatrixModel[];
+  selectedModelId: string | null;
+  domainId: string | null;
+  signature: string | null;
+  onCellClick: (rowValueKey: ValueKey, columnValueKey: ValueKey) => void;
 };
 
-export function PairwiseWinRateMatrix({ models }: PairwiseWinRateMatrixProps) {
+export function PairwiseWinRateMatrix({
+  models,
+  selectedModelId,
+  domainId,
+  signature,
+  onCellClick,
+}: PairwiseWinRateMatrixProps) {
   const tableRef = useRef<HTMLDivElement>(null);
 
   const modelsWithData = useMemo(
@@ -172,6 +182,11 @@ export function PairwiseWinRateMatrix({ models }: PairwiseWinRateMatrixProps) {
                   </td>
                   {COLUMN_VALUES.map((colValue) => {
                     const isDiagonal = rowValue === colValue;
+                    const isInteractive =
+                      selectedModelId !== null &&
+                      domainId !== null &&
+                      signature !== null &&
+                      !isDiagonal;
                     const winRate = getCellWinRate(rowValue, colValue);
                     const trials = getCellTrials(rowValue, colValue);
                     const bg = isDiagonal
@@ -184,8 +199,28 @@ export function PairwiseWinRateMatrix({ models }: PairwiseWinRateMatrixProps) {
                         key={colValue}
                         className={`px-2 py-2 text-right text-gray-800 ${
                           hasGroupStart(colValue) ? 'border-l-2 border-gray-300' : ''
-                        } ${hasGroupEnd(colValue) ? 'border-r-2 border-gray-300' : ''}`}
+                        } ${hasGroupEnd(colValue) ? 'border-r-2 border-gray-300' : ''} ${
+                          isInteractive ? 'cursor-pointer' : ''
+                        }`}
                         style={{ background: bg }}
+                        role={isInteractive ? 'button' : undefined}
+                        tabIndex={isInteractive ? 0 : undefined}
+                        aria-label={
+                          isInteractive
+                            ? `Open drilldown for ${VALUE_LABELS[rowValue]} vs ${VALUE_LABELS[colValue]}`
+                            : undefined
+                        }
+                        onClick={isInteractive ? () => onCellClick(rowValue, colValue) : undefined}
+                        onKeyDown={
+                          isInteractive
+                            ? (event) => {
+                                if (event.key === 'Enter' || event.key === ' ') {
+                                  event.preventDefault();
+                                  onCellClick(rowValue, colValue);
+                                }
+                              }
+                            : undefined
+                        }
                         title={
                           isDiagonal
                             ? undefined

@@ -30,6 +30,7 @@ import {
   type ModelsStabilityQueryVariables,
 } from '../api/operations/modelsStability';
 import { DominanceSection } from '../components/domains/DominanceSection';
+import { PairwiseCellDrawer } from '../components/domains/PairwiseCellDrawer';
 import { PairwiseWinRateMatrix } from '../components/domains/PairwiseWinRateMatrix';
 import { ValuePrioritiesSection } from '../components/domains/ValuePrioritiesSection';
 import { DomainShiftsReportSection } from '../components/models/DomainShiftsReportSection';
@@ -68,6 +69,7 @@ export function DomainAnalysis() {
   const [exportError, setExportError] = useState<string | null>(null);
   const [refreshNotice, setRefreshNotice] = useState<string | null>(null);
   const [refreshError, setRefreshError] = useState<string | null>(null);
+  const [openPair, setOpenPair] = useState<{ row: ValueKey; column: ValueKey } | null>(null);
 
   const [{ data: signatureData, fetching: signaturesLoading, error: signaturesError }] = useQuery<
     DomainAvailableSignaturesQueryResult, DomainAvailableSignaturesQueryVariables
@@ -290,6 +292,13 @@ export function DomainAnalysis() {
     () => selectedModelIds.length === 0 ? models : models.filter((model) => selectedModelIds.includes(model.model)),
     [models, selectedModelIds],
   );
+  const selectedModelId = selectedModelIds.length === 1 ? (selectedModelIds[0] ?? null) : null;
+  const selectedDomainIdForDrawer = !isAllDomains && selectedDomainId !== '' ? selectedDomainId : null;
+  const selectedSignatureForDrawer = selectedSignature !== '' ? selectedSignature : null;
+
+  useEffect(() => {
+    setOpenPair(null);
+  }, [selectedDomainIdForDrawer, selectedModelId, selectedSignatureForDrawer]);
 
   const visiblePairwiseModels = useMemo(() => {
     const sourceModels = data?.domainAnalysis.models ?? [];
@@ -468,7 +477,14 @@ export function DomainAnalysis() {
           <DominanceSection
             models={visibleModels}
           />
-          <PairwiseWinRateMatrix models={visiblePairwiseModels} />
+          <PairwiseWinRateMatrix
+            models={visiblePairwiseModels}
+            selectedModelId={selectedModelId}
+            domainId={selectedDomainIdForDrawer}
+            signature={selectedSignatureForDrawer}
+            onCellClick={(row, column) => setOpenPair({ row, column })}
+          />
+
           <DomainShiftsReportSection
             models={modelsAnalysisData?.modelsAnalysis.models ?? []}
             selectedModelIds={selectedModelIds}
@@ -484,6 +500,16 @@ export function DomainAnalysis() {
           />
         </>
       )}
+
+      <PairwiseCellDrawer
+        open={openPair !== null}
+        rowValueKey={openPair?.row ?? null}
+        columnValueKey={openPair?.column ?? null}
+        modelId={selectedModelId}
+        domainId={selectedDomainIdForDrawer}
+        signature={selectedSignatureForDrawer}
+        onClose={() => setOpenPair(null)}
+      />
 
     </div>
   );
