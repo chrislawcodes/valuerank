@@ -1,7 +1,7 @@
 import { Button } from '../ui/Button';
 import { CALCULATION_METHODS, type CalculationMethod } from './ModelSimilarityMetrics';
 
-type DataSource = 'log-odds' | 'win-rate';
+type DataSource = 'log-odds' | 'win-rate' | 'kappa-agreement';
 
 type ModelAnalysisSettingsBarProps = {
   dataSource: DataSource;
@@ -13,6 +13,7 @@ type ModelAnalysisSettingsBarProps = {
 const DATA_SOURCE_OPTIONS: Array<{ value: DataSource; label: string }> = [
   { value: 'log-odds', label: 'Log Odds' },
   { value: 'win-rate', label: 'Win Rate' },
+  { value: 'kappa-agreement', label: 'Kappa Agreement' },
 ];
 
 export function ModelAnalysisSettingsBar({

@@ -62,7 +62,7 @@ export type ClusterModelInput = {
 
 export type ClusteringMethod = 'upgma' | 'ward';
 export type ClusterDistanceMethod = 'cosine' | 'euclidean' | 'absolute-value' | 'spearman' | 'kendall';
-export type ClusterDataSource = 'log-odds' | 'win-rate';
+export type ClusterDataSource = 'log-odds' | 'win-rate' | 'kappa-agreement';
 
 // --- Calibration constants ---
 const OUTLIER_SILHOUETTE_THRESHOLD = 0.2;
@@ -567,4 +567,51 @@ export function computeClusterAnalysis(models: ClusterModelInput[], method: Clus
     return v.map((x) => x - mean);
   });
   return runClusteringFromDistMatrix(models, cosineDistanceMatrix(vectors), valueKeys, method);
+}
+
+/**
+ * Build a hierarchical-clustering distance matrix from a kappa matrix.
+ *
+ * Maps Cohen's kappa from [-1, 1] to a distance in [0, 1]:
+ *   kappa =  1   →  distance = 0    (perfect agreement, identical players)
+ *   kappa =  0   →  distance = 0.5  (chance agreement, no signal)
+ *   kappa = -1   →  distance = 1    (worse than chance, opposite players)
+ *
+ * Null kappa entries (no overlap or degenerate marginals) are mapped to
+ * 0.5 — the same as "no signal" — which avoids breaking the distance
+ * matrix while not pretending we know more than we do.
+ */
+export function kappaDistanceMatrix(kappaMatrix: ReadonlyArray<ReadonlyArray<number | null>>): number[][] {
+  const n = kappaMatrix.length;
+  const matrix: number[][] = Array.from({ length: n }, () => new Array<number>(n).fill(0));
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const k = kappaMatrix[i]?.[j];
+      const dist = k == null ? 0.5 : Math.max(0, Math.min(1, (1 - k) / 2));
+      matrix[i]![j] = dist;
+      matrix[j]![i] = dist;
+    }
+  }
+  return matrix;
+}
+
+/**
+ * Cluster models by behavioral agreement (Cohen's kappa) rather than by
+ * value-score similarity. The grouping is driven by which models make the
+ * same choices on the same scenarios; the per-cluster centroids are still
+ * computed from the models' log-odds scores so the resulting centroids and
+ * fault lines describe what each behaviorally-similar group tends to value.
+ */
+export function computeKappaClusterAnalysis(
+  models: ClusterModelInput[],
+  kappaMatrix: ReadonlyArray<ReadonlyArray<number | null>>,
+  method: ClusteringMethod = 'upgma',
+): ClusterAnalysis {
+  if (models.length === 0) {
+    return { clusters: [], faultLinesByPair: {}, defaultPair: null, skipped: true,
+      skipReason: 'No models provided.' };
+  }
+  const valueKeys = Object.keys(models[0]!.scores);
+  const distMatrix = kappaDistanceMatrix(kappaMatrix);
+  return runClusteringFromDistMatrix(models, distMatrix, valueKeys, method, 'log-odds');
 }

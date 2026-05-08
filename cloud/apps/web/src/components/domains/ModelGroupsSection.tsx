@@ -26,7 +26,7 @@ const LEGEND_COLORS = [
 ] as const;
 
 type ClusteringLinkage = 'upgma' | 'ward';
-type ClusterDataSource = 'log-odds' | 'win-rate';
+type ClusterDataSource = 'log-odds' | 'win-rate' | 'kappa-agreement';
 
 const LINKAGE_OPTIONS: Array<{ value: ClusteringLinkage; label: string }> = [
   { value: 'upgma', label: 'UPGMA' },
@@ -35,6 +35,14 @@ const LINKAGE_OPTIONS: Array<{ value: ClusteringLinkage; label: string }> = [
 
 type ModelGroupsSectionProps = {
   clusterAnalysisByMethod?: Record<string, ClusterAnalysis>;
+  /**
+   * When dataSource === 'kappa-agreement', this prop supplies the cluster
+   * analysis derived from pairwise Cohen's kappa instead of the precomputed
+   * `clusterAnalysisByMethod` map (which only covers score-based variants).
+   */
+  kappaClusterAnalysis?: ClusterAnalysis | null;
+  kappaClusterLoading?: boolean;
+  kappaClusterError?: string | null;
   dataSource?: ClusterDataSource;
   distanceMethod?: CalculationMethod;
   models: ModelEntry[];
@@ -73,6 +81,9 @@ function getGroupLabel(cluster: DomainCluster): string {
 
 export function ModelGroupsSection({
   clusterAnalysisByMethod,
+  kappaClusterAnalysis = null,
+  kappaClusterLoading = false,
+  kappaClusterError = null,
   dataSource = 'log-odds',
   distanceMethod,
   models,
@@ -87,7 +98,9 @@ export function ModelGroupsSection({
   const [activeGroupIds, setActiveGroupIds] = useState<string[]>([]);
 
   const backendKey = `${dataSource}-${toBackendDistanceMethod(distanceMethod)}-${clusteringMethod}`;
-  const activeClusterAnalysis = clusterAnalysisByMethod?.[backendKey] ?? null;
+  const activeClusterAnalysis = dataSource === 'kappa-agreement'
+    ? kappaClusterAnalysis
+    : (clusterAnalysisByMethod?.[backendKey] ?? null);
 
   const hasGroupedClusters = activeClusterAnalysis != null && !activeClusterAnalysis.skipped;
   const groupedClusters = useMemo(() => activeClusterAnalysis?.clusters ?? [], [activeClusterAnalysis]);
@@ -132,8 +145,27 @@ export function ModelGroupsSection({
     viewMode === 'dot' ? 'dot map' : viewMode === 'bar' ? 'bar chart' : 'radar chart'
   }`;
 
+  const showKappaLoader = dataSource === 'kappa-agreement' && kappaClusterAnalysis == null && kappaClusterLoading && kappaClusterError == null;
+  const showKappaError = dataSource === 'kappa-agreement' && kappaClusterError != null;
+
   return (
     <section className="rounded-lg border border-gray-200 bg-white p-4">
+      {dataSource === 'kappa-agreement' ? (
+        <p className="mb-3 rounded-md border border-teal-200 bg-teal-50 px-3 py-2 text-xs text-teal-900">
+          Models are grouped by behavioral agreement (Cohen&apos;s kappa on shared scenarios). Per-cluster centroids and
+          fault lines are still labeled with each group&apos;s average log-odds value scores.
+        </p>
+      ) : null}
+      {showKappaError ? (
+        <p className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-900">
+          Could not load kappa-based clustering: {kappaClusterError}
+        </p>
+      ) : null}
+      {showKappaLoader ? (
+        <p className="mb-3 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-700">
+          Loading kappa-based clustering…
+        </p>
+      ) : null}
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-1.5">
           <h2 className="text-base font-medium text-gray-900">Model Clusters</h2>
@@ -287,9 +319,20 @@ export function ModelGroupsSection({
           </div>
         ) : (
           <>
-            {viewMode === 'dot' && <ClusterDotPlot clusters={clusters} activeGroupIds={activeGroupIds} dataSource={groupDisplayMode === 'groups' ? dataSource : 'log-odds'} />}
-            {viewMode === 'bar' && <ClusterBarPlot clusters={clusters} activeGroupIds={activeGroupIds} dataSource={groupDisplayMode === 'groups' ? dataSource : 'log-odds'} />}
-            {viewMode === 'radar' && <ClusterRadarChart clusters={clusters} activeGroupIds={activeGroupIds} dataSource={groupDisplayMode === 'groups' ? dataSource : 'log-odds'} />}
+            {(() => {
+              // Plot dataSource only controls how centroids are scaled. Under
+              // 'kappa-agreement' the grouping is by kappa but centroids are
+              // still log-odds, so the plots use 'log-odds' for scaling.
+              const plotDataSource: 'log-odds' | 'win-rate' =
+                dataSource === 'win-rate' && groupDisplayMode === 'groups' ? 'win-rate' : 'log-odds';
+              return (
+                <>
+                  {viewMode === 'dot' && <ClusterDotPlot clusters={clusters} activeGroupIds={activeGroupIds} dataSource={plotDataSource} />}
+                  {viewMode === 'bar' && <ClusterBarPlot clusters={clusters} activeGroupIds={activeGroupIds} dataSource={plotDataSource} />}
+                  {viewMode === 'radar' && <ClusterRadarChart clusters={clusters} activeGroupIds={activeGroupIds} dataSource={plotDataSource} />}
+                </>
+              );
+            })()}
 
             <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
               {clusters.map((cluster, index) => {

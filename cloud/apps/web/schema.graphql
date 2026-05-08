@@ -2721,6 +2721,7 @@ type Query {
 
   "\n      Get the currently authenticated user.\n      Returns null if not authenticated.\n    "
   me: User
+  modelAgreementClusterAnalysis(domainId: ID, method: String!, modelIds: [ID!]!, scope: String!, signature: String!): ClusterAnalysis!
   modelAgreementOnTradeoffs(domainId: ID, modelIds: [ID!]!, scope: String!, signature: String!): ModelAgreementResult!
   modelPairDivergenceBreakdown(domainId: ID, modelAId: ID!, modelBId: ID!, scope: String!, signature: String!): PairDivergenceBreakdown!
 
