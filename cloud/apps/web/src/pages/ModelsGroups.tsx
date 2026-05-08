@@ -212,9 +212,10 @@ export function ModelsGroups() {
     [data?.domainAnalysis.cacheStatus, data?.domainAnalysis.generatedAt, transcriptCount],
   );
   const showPageLoader = domainsLoading
-    || (selectedDomainId !== '' && data?.domainAnalysis == null && fetching)
-    || (selectedDomainId !== '' && modelsAnalysisData == null && modelsAnalysisFetching)
-    || llmModelsData == null;
+    || (selectedDomainId !== '' && data?.domainAnalysis == null && fetching && error == null)
+    || (selectedDomainId !== '' && modelsAnalysisData == null && modelsAnalysisFetching && modelsAnalysisError == null)
+    || (signatureData == null && signaturesLoading && signaturesError == null)
+    || (llmModelsData == null && llmModelsError == null);
   const models = useMemo(
     () => buildModelEntries(data?.domainAnalysis.models ?? [], modelsAnalysisData?.modelsAnalysis.models ?? []),
     [data?.domainAnalysis.models, modelsAnalysisData?.modelsAnalysis.models],
@@ -232,22 +233,21 @@ export function ModelsGroups() {
     [models, visibleModelIds],
   );
   const isAllDomains = selectedScope === 'ALL_DOMAINS';
+  const pageError = domainsError ?? signaturesError ?? error ?? modelsAnalysisError ?? llmModelsError;
   const showAgreementSection =
     selectedSignature !== ''
     && visibleModelIds.length >= 2
     && !(selectedScope === 'DOMAIN' && selectedDomainId === '')
     && llmModelsData != null;
 
-  if (domainsError != null || signaturesError != null || error != null || modelsAnalysisError != null || llmModelsError != null) {
-    return (
-      <div className="space-y-6">
-        <ErrorMessage message={`Failed to load model groups report: ${(domainsError ?? signaturesError ?? error ?? modelsAnalysisError ?? llmModelsError)?.message ?? 'Unknown error'}`} />
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
+      {pageError != null && (
+        <ErrorMessage
+          message={`Some model groups data failed to load: ${pageError.message ?? 'Unknown error'}`}
+        />
+      )}
+
       <AnalysisContextBar
         domain={{
           label: 'Domain',

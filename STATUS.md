@@ -37,6 +37,7 @@
 
 | Feature | Branch | Status | Notes |
 |---------|--------|--------|-------|
+| **model-groups-resilient-error-handling** | `codex/model-groups-resilient-error-handling` | 🟢 Done locally | Model Groups now shows an inline warning when one GraphQL request fails, but keeps rendering the rest of the report instead of replacing the whole page with a fatal error. Added a regression test for partial query failure and verified the web build. |
 | **forest-plot-pairwise-drawer** | `—` | 🟢 Done locally | Pairwise Win Rate Matrix cells now open a right-side drawer for single-model, single-domain, signed selections. The drawer fetches pair detail data, renders a forest plot with split-by-direction toggle, summary band, I² label, inline expansion for averaged rows, and loading/error/empty states. Focused web test added; local web lint, full vitest, and build checks pass. |
 | **model-grouping-pairwise-significance-tasks** | `—` | 🟢 Done locally | Added the implementation task list for the bottom-of-page `/models` pairwise significance report, with backend-owned paired permutation tests, page-scope wiring, and heatmap/table UI slices. |
 | **model-grouping-pairwise-significance-plan** | `—` | 🟢 Done locally | Drafted the implementation plan for the new bottom-of-page `/models` pairwise significance report, with backend-owned paired permutation tests, Holm-Bonferroni correction, and a heatmap + sortable table UI. |
