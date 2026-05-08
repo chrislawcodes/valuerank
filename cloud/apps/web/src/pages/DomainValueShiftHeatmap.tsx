@@ -10,6 +10,7 @@ import { Loading } from '../components/ui/Loading';
 import { AnalysisContextBar } from '../components/analysis/AnalysisContextBar';
 import { cn } from '../lib/utils';
 import { useDomains } from '../hooks/useDomains';
+import { formatQueryError } from '../utils/urqlError';
 import {
   DEFAULT_DOMAIN_SHIFT_SORT,
   DEFAULT_DOMAIN_SHIFT_SIGNATURE,
@@ -290,11 +291,29 @@ export function DomainValueShiftHeatmap() {
     () => [{ value: 'all', label: 'All domains' }, ...domains.map((domain) => ({ value: domain.id, label: domain.name }))],
     [domains],
   );
+  const selectedModelCount = selectedModelIds?.length ?? defaultModelIds.length;
 
   if (domainsError != null || signatureError != null || llmModelsError != null || error != null) {
+    const pageErrorMessage = domainsError != null
+      ? domainsError.message
+      : signatureError != null
+        ? formatQueryError('Domain shifts available signatures query', signatureError, {
+          domainId: selectedDomainId ?? 'all',
+          signature: selectedSignature,
+        })
+        : llmModelsError != null
+          ? formatQueryError('Domain shifts active LLM models query', llmModelsError, {
+            status: 'ACTIVE',
+          })
+          : formatQueryError('Domain shifts analysis query', error, {
+            domainId: selectedDomainId ?? 'all',
+            signature: selectedSignature,
+            selectedModelCount,
+          });
+
     return (
       <ErrorMessage
-        message={`Failed to load domain shifts: ${(domainsError ?? signatureError ?? llmModelsError ?? error)?.message ?? 'Unknown error'}`}
+        message={`Failed to load domain shifts: ${pageErrorMessage}`}
       />
     );
   }

@@ -19,6 +19,7 @@ import { ConsistencyScatter } from '../components/models/ConsistencyScatter';
 import { ConsistencyTable } from '../components/models/ConsistencyTable';
 import { ConsistencyDrill } from '../components/models/ConsistencyDrill';
 import { InsufficientCoverageFooter } from '../components/models/InsufficientCoverageFooter';
+import { formatQueryError } from '../utils/urqlError';
 
 const DEFAULT_SIGNATURE = 'vnewtd';
 
@@ -162,8 +163,22 @@ export function ModelsConsistency() {
   // Order matters: surface errors and empty-domain state BEFORE the loading
   // spinner so a failed useDomains() or an empty domain list does not leave
   // the page stuck on an infinite loading state.
-  if (domainsError != null || error != null) {
-    return <ErrorMessage message={`Failed to load consistency report: ${(domainsError ?? error)?.message ?? 'Unknown error'}`} />;
+  if (domainsError != null || signatureError != null || error != null) {
+    const pageErrorMessage = domainsError != null
+      ? domainsError.message
+      : signatureError != null
+        ? formatQueryError('Consistency available signatures query', signatureError, {
+          domainId: urlDomainId ?? 'all',
+          scope: hasExplicitDomain ? 'domain' : 'all',
+        })
+      : formatQueryError('Consistency report query', error, {
+        domainId: urlDomainId ?? 'all',
+        providerId: providerId ?? '(all)',
+        signature: selectedSignature,
+        minScenarios,
+      });
+
+    return <ErrorMessage message={`Failed to load consistency report: ${pageErrorMessage}`} />;
   }
 
   if (!domainsLoading && domains.length === 0 && !hasDomainParam) {

@@ -18,6 +18,7 @@ import { CircumplexMethodologyPanel } from '../components/models/CircumplexMetho
 import { CircumplexMdsScatter } from '../components/models/CircumplexMdsScatter';
 import { CircumplexModelCard } from '../components/models/CircumplexModelCard';
 import { CircumplexLoadingProgress } from '../components/models/CircumplexLoadingProgress';
+import { formatQueryError } from '../utils/urqlError';
 
 function parseCommaList(value: string | null): string[] {
   if (value == null || value.trim() === '') return [];
@@ -210,9 +211,23 @@ export function ModelsCircumplex() {
   };
 
   if (signaturesError != null || rosterError != null || circumplexError != null) {
+    const pageErrorMessage = signaturesError != null
+      ? formatQueryError('Circumplex signatures query', signaturesError, {
+        signature: selectedSignature,
+      })
+      : rosterError != null
+        ? formatQueryError('Circumplex model roster query', rosterError, {
+          status: 'ACTIVE',
+        })
+        : formatQueryError('Circumplex analysis query', circumplexError, {
+          signature: selectedSignature,
+          modelCount: rosterIds.length,
+          threshold,
+        });
+
     return (
       <ErrorMessage
-        message={`Failed to load circumplex report: ${(signaturesError ?? rosterError ?? circumplexError)?.message ?? 'Unknown error'}`}
+        message={`Failed to load circumplex report: ${pageErrorMessage}`}
       />
     );
   }

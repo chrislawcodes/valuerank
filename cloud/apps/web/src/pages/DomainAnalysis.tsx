@@ -49,6 +49,7 @@ import {
   getSignaturePriority,
   parseTemperatureFromSignature,
 } from '../utils/domainAnalysisUtils';
+import { formatQueryError } from '../utils/urqlError';
 
 const ALL_DOMAINS_SCOPE = 'all-domains';
 
@@ -339,7 +340,10 @@ export function DomainAnalysis() {
     try {
       await exportDomainTranscriptsAsCSV(selectedDomainId, selectedSignature !== '' ? selectedSignature : undefined);
     } catch (err) {
-      setExportError(err instanceof Error ? err.message : 'Export failed');
+      setExportError(formatQueryError('Export domain transcripts', err, {
+        domainId: selectedDomainId,
+        signature: selectedSignature === '' ? '(none)' : selectedSignature,
+      }));
     } finally {
       setExportLoading(false);
     }
@@ -356,7 +360,12 @@ export function DomainAnalysis() {
     });
 
     if (result.error != null) {
-      setRefreshError(result.error.message);
+      setRefreshError(
+        formatQueryError('Refresh domain analysis mutation', result.error, {
+          domainId: selectedDomainId,
+          signature: selectedSignature === '' ? '(none)' : selectedSignature,
+        }),
+      );
       return;
     }
 
@@ -479,7 +488,21 @@ export function DomainAnalysis() {
       )}
 
       {(domainsError != null || signaturesError != null || error != null) && (
-        <ErrorMessage message={`Failed to load win rate page: ${(domainsError ?? signaturesError ?? error)?.message ?? 'Unknown error'}`} />
+        <ErrorMessage
+          message={`Failed to load win rate page: ${
+            domainsError != null
+              ? formatQueryError('Win rate domains query', domainsError, { domainId: selectedDomainId })
+              : signaturesError != null
+                ? formatQueryError('Win rate signatures query', signaturesError, {
+                  domainId: selectedDomainId,
+                  signature: selectedSignature === '' ? '(none)' : selectedSignature,
+                })
+                : formatQueryError('Win rate analysis query', error, {
+                  domainId: selectedDomainId,
+                  signature: selectedSignature === '' ? '(none)' : selectedSignature,
+                })
+          }`}
+        />
       )}
 
       {showPageLoader ? (
@@ -509,13 +532,23 @@ export function DomainAnalysis() {
             selectedModelIds={selectedModelIds}
             defaultModelIds={defaultSelection}
             fetching={modelsAnalysisFetching}
-            errorMessage={modelsAnalysisError?.message ?? null}
+            errorMessage={modelsAnalysisError != null
+              ? formatQueryError('Win rate domain shifts query', modelsAnalysisError, {
+                domainId: selectedDomainId,
+                signature: selectedSignature === '' ? '(none)' : selectedSignature,
+              })
+              : null}
           />
           <WinRateStabilitySection
             models={visibleStabilityModels}
             skippedVignettes={modelsStabilityData?.modelsWinRateStability.skippedVignettes ?? []}
             fetching={modelsStabilityFetching}
-            errorMessage={modelsStabilityError?.message ?? null}
+            errorMessage={modelsStabilityError != null
+              ? formatQueryError('Win rate consistency query', modelsStabilityError, {
+                domainId: selectedDomainId,
+                signature: selectedSignature === '' ? '(none)' : selectedSignature,
+              })
+              : null}
           />
         </>
       )}

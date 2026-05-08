@@ -26,6 +26,7 @@ import { PressureSensitivityGridSection } from '../components/models/PressureSen
 import { PressureSensitivityCrossValueMap } from '../components/models/PressureSensitivityCrossValueMap';
 import { PressureSensitivitySanityCheck } from '../components/models/PressureSensitivitySanityCheck';
 import { PressureSensitivityLimitations } from '../components/models/PressureSensitivityLimitations';
+import { formatQueryError } from '../utils/urqlError';
 
 const DEFAULT_SIGNATURE = 'vnewtd';
 
@@ -229,10 +230,27 @@ export function PressureSensitivity() {
     setSelectedModelIds(value);
   };
 
-  if (domainsError != null || error != null) {
+  if (domainsError != null || signatureError != null || llmModelsError != null || error != null) {
+    const pageErrorMessage = domainsError != null
+      ? domainsError.message
+      : signatureError != null
+        ? formatQueryError('Pressure sensitivity signatures query', signatureError, {
+          domainId: urlDomainId ?? 'all',
+          scope: hasExplicitDomain ? 'domain' : 'all',
+        })
+        : llmModelsError != null
+          ? formatQueryError('Pressure sensitivity active LLM models query', llmModelsError, {
+            status: 'ACTIVE',
+          })
+          : formatQueryError('Pressure sensitivity report query', error, {
+            domainId: urlDomainId ?? 'all',
+            signature: selectedSignature,
+            modelCount: selectedModelIds?.length ?? defaultModelIds.length,
+          });
+
     return (
       <ErrorMessage
-        message={`Failed to load pressure sensitivity report: ${(domainsError ?? llmModelsError ?? error)?.message ?? 'Unknown error'}`}
+        message={`Failed to load pressure sensitivity report: ${pageErrorMessage}`}
       />
     );
   }

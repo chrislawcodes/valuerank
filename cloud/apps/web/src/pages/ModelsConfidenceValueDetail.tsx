@@ -20,6 +20,7 @@ import {
   type ConfidenceTranscriptsQueryVariables,
 } from '../api/operations/confidenceTranscripts';
 import { VALUE_LABELS, type ValueKey } from '../data/domainAnalysisData';
+import { formatQueryError } from '../utils/urqlError';
 
 function mapToTranscript(t: ConfidenceTranscript): Transcript {
   return {
@@ -158,10 +159,24 @@ export function ModelsConfidenceValueDetail() {
   if (fetching && data == null) return <Loading size="lg" text="Loading detail…" />;
 
   if (error != null || detail == null) {
+    const pageErrorMessage = error != null
+      ? formatQueryError('Confidence detail query', error, {
+        modelId,
+        valueKey,
+        signature: signature === '' ? '(none)' : signature,
+        domainId: domainId ?? 'all',
+      })
+      : formatQueryError('Confidence detail query', new Error('No confidence detail data returned'), {
+        modelId,
+        valueKey,
+        signature: signature === '' ? '(none)' : signature,
+        domainId: domainId ?? 'all',
+      });
+
     return (
       <div className="space-y-4">
         <ErrorMessage
-          message={`Failed to load confidence detail: ${error?.message ?? 'Unknown error'}`}
+          message={`Failed to load confidence detail: ${pageErrorMessage}`}
         />
         <Link
           to={backLink}
@@ -250,7 +265,15 @@ export function ModelsConfidenceValueDetail() {
                       )}
                       {transcriptsError != null && (
                         <ErrorMessage
-                          message={`Failed to load transcripts: ${transcriptsError.message}`}
+                          message={formatQueryError('Confidence transcripts query', transcriptsError, {
+                            modelId,
+                            valueKey,
+                            signature: signature === '' ? '(none)' : signature,
+                            domainId: domainId ?? 'all',
+                            definitionId: selectedCondition.definitionId,
+                            conditionName: selectedCondition.conditionName,
+                            scenarioId: selectedCondition.scenarioId ?? '(unknown)',
+                          })}
                         />
                       )}
                       {!transcriptsFetching &&
