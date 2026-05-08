@@ -495,10 +495,16 @@ describe('model-agreement-on-tradeoffs GraphQL queries', () => {
     });
   });
 
-  it('includes tied cells as their own category in kappa and divergence', async () => {
+  it('TIED is treated as a soft disagreement, not a hard one, under weighted kappa', async () => {
     // Model A is exactly 50/50 (TIED). Model B picks canonicalA always.
-    // With 3-category coding the cell counts as a disagreement (one TIED, one A).
-    // Mean abs divergence = |0.5 - 1.0| = 0.5.
+    // Under weighted kappa: A vs TIED is a one-step disagreement (weight 0.5),
+    // not a hard disagreement (weight 0). Mean abs divergence = |0.5 - 1.0| = 0.5.
+    //
+    // Weighted math:
+    //   P_observed_weighted = 0.5 (single cell: TIED vs A → weight 0.5)
+    //   Marginals: pAx=0, pTx=1, pBx=0; pAy=1, pTy=0, pBy=0
+    //   P_chance_weighted = pTx*pAy*0.5 = 0.5
+    //   kappa = (0.5 - 0.5) / (1 - 0.5) = 0
     mocks.readModelAgreementSnapshotStateFromSnapshot.mockResolvedValue({
       cellLevelOutcomes: snapshot({
         'def-1::model-a::Achievement::Tradition::1::2': { aChoices: 3, bChoices: 3, neutrals: 0 },
@@ -520,6 +526,7 @@ describe('model-agreement-on-tradeoffs GraphQL queries', () => {
         totalCells: number;
         percentAgreement: number | null;
         cohensKappa: number | null;
+        kappaInterpretation: string | null;
         meanAbsoluteDivergence: number | null;
       }>;
       trialConsistency: Array<{
@@ -538,8 +545,11 @@ describe('model-agreement-on-tradeoffs GraphQL queries', () => {
       modelBId: 'model-b',
       // totalCells INCLUDES the tied cell now
       totalCells: 1,
-      // Disagreement (TIED vs A) → percentAgreement = 0
+      // Binary same-category agreement: 0 (TIED ≠ A)
       percentAgreement: 0,
+      // Weighted kappa = 0 (P_observed = P_chance = 0.5 in this degenerate single-cell case)
+      cohensKappa: 0,
+      kappaInterpretation: 'Slight',
       // Mean abs divergence INCLUDES the tied cell: |0.5 - 1.0| = 0.5
       meanAbsoluteDivergence: 0.5,
     });
@@ -556,6 +566,99 @@ describe('model-agreement-on-tradeoffs GraphQL queries', () => {
       meanTrialConsistency: 1,
       noisy: false,
     });
+  });
+
+  it('treats neutral trials as half-votes between A and B in cell categorization', async () => {
+    // model-a: aChoices=4, neutrals=2. New proportionA = (4 + 0.5*2) / 6 = 5/6 ≈ 0.833 → A
+    // model-b: aChoices=3, neutrals=3. New proportionA = (3 + 0.5*3) / 6 = 4.5/6 = 0.75 → A
+    // Both categories are A → agrees. But proportions differ, so divergence = 5/6 - 3/4 = 1/12.
+    // Under the old rule (neutrals excluded):
+    //   model-a: 4/4 = 1.0 → A; model-b: 3/3 = 1.0 → A. divergence = 0.
+    // The new rule shows the real difference in lean strength.
+    mocks.readModelAgreementSnapshotStateFromSnapshot.mockResolvedValue({
+      cellLevelOutcomes: snapshot({
+        'def-1::model-a::Achievement::Tradition::1::2': { aChoices: 4, bChoices: 0, neutrals: 2 },
+        'def-1::model-b::Achievement::Tradition::1::2': { aChoices: 3, bChoices: 0, neutrals: 3 },
+      }),
+      buildProgress: null,
+      inputHash: 'hash-neutral-half-votes',
+    });
+
+    const response = await graphqlRequest(agreementQuery, {
+      modelIds: ['model-a', 'model-b'],
+      scope: 'ALL_DOMAINS',
+      signature: 'sig-1',
+    });
+
+    const agreement = response.body.data.modelAgreementOnTradeoffs as {
+      pairwiseAgreementMatrix: Array<{
+        totalCells: number;
+        percentAgreement: number | null;
+        meanAbsoluteDivergence: number | null;
+      }>;
+    };
+
+    expect(agreement.pairwiseAgreementMatrix).toHaveLength(1);
+    expect(agreement.pairwiseAgreementMatrix[0]).toMatchObject({
+      totalCells: 1,
+      // Both classified A → agree
+      percentAgreement: 1,
+    });
+    // divergence = |5/6 - 3/4| = |10/12 - 9/12| = 1/12
+    expect(agreement.pairwiseAgreementMatrix[0]?.meanAbsoluteDivergence).toBeCloseTo(1 / 12, 6);
+  });
+
+  it('classifies an all-neutral cell as TIED (no longer dropped)', async () => {
+    // model-a: all neutral (aChoices=0, bChoices=0, neutrals=6).
+    // Old rule: proportionA = null (no decisive trials) → cell dropped, totalCells = 0.
+    // New rule: proportionA = (0 + 0.5*6) / 6 = 0.5 → TIED. Cell is kept.
+    // model-b picks A always. TIED vs A = soft disagreement.
+    //
+    // Weighted math:
+    //   P_observed_weighted = 0.5 (TIED vs A → weight 0.5)
+    //   Marginals: pAx=0, pTx=1, pBx=0; pAy=1, pTy=0, pBy=0
+    //   P_chance_weighted = pTx*pAy*0.5 = 0.5
+    //   kappa = (0.5 - 0.5) / (1 - 0.5) = 0
+    mocks.readModelAgreementSnapshotStateFromSnapshot.mockResolvedValue({
+      cellLevelOutcomes: snapshot({
+        'def-1::model-a::Achievement::Tradition::1::2': { aChoices: 0, bChoices: 0, neutrals: 6 },
+        'def-1::model-b::Achievement::Tradition::1::2': { aChoices: 6, bChoices: 0, neutrals: 0 },
+      }),
+      buildProgress: null,
+      inputHash: 'hash-all-neutral',
+    });
+
+    const response = await graphqlRequest(agreementQuery, {
+      modelIds: ['model-a', 'model-b'],
+      scope: 'ALL_DOMAINS',
+      signature: 'sig-1',
+    });
+
+    const agreement = response.body.data.modelAgreementOnTradeoffs as {
+      tiedCells: number;
+      pairwiseAgreementMatrix: Array<{
+        totalCells: number;
+        percentAgreement: number | null;
+        cohensKappa: number | null;
+        kappaInterpretation: string | null;
+        meanAbsoluteDivergence: number | null;
+      }>;
+    };
+
+    // Cell is now kept (not dropped): totalCells = 1
+    expect(agreement.pairwiseAgreementMatrix).toHaveLength(1);
+    expect(agreement.pairwiseAgreementMatrix[0]).toMatchObject({
+      totalCells: 1,
+      // TIED ≠ A: binary agreement = 0
+      percentAgreement: 0,
+      // Soft disagreement: kappa = 0
+      cohensKappa: 0,
+      kappaInterpretation: 'Slight',
+      // |0.5 - 1.0| = 0.5
+      meanAbsoluteDivergence: 0.5,
+    });
+    // model-a's all-neutral cell is counted as tied
+    expect(agreement.tiedCells).toBe(1);
   });
 
   it('equal-weights value pairs in the headline kappa (no over-tested-pair bias)', async () => {
