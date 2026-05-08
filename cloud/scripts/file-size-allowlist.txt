@@ -5,6 +5,10 @@
 
 # Production components / pages over 700
 cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx
+# Clustering algorithms: UPGMA, Ward, 5 distance-matrix builders, silhouettes,
+# dendrogram helpers. All tightly coupled math — splitting adds indirection
+# without reducing complexity. Extract stat helpers when the file hits 900+.
+cloud/apps/api/src/graphql/queries/domain-clustering.ts
 # Pressure sensitivity resolver: inline helper fns (buildSourceRunToDefIdMap,
 # fetchTranscriptsFromSourceRuns, buildEmptyResult) exported for tests.
 # Split into resolver-helpers.ts when convenient.
