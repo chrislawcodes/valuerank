@@ -127,45 +127,41 @@ export async function buildSnapshotOutput(
 ): Promise<DomainAnalysisSnapshotOutput> {
   const valuePairByDefinition = await resolveValuePairsInChunks(state.latestDefinitionIds);
 
-  const TRANSCRIPT_BATCH_SIZE = 500;
   const cellMap = new Map<string, CellCounts>();
 
   if (state.resolvedSignatureRuns.filteredSourceRunIds.length > 0) {
-    let offset = 0;
-    let fetchedCount = TRANSCRIPT_BATCH_SIZE;
-
-    while (fetchedCount >= TRANSCRIPT_BATCH_SIZE) {
-      const batch = await db.transcript.findMany({
-        where: {
-          runId: { in: state.resolvedSignatureRuns.filteredSourceRunIds },
-          deletedAt: null,
-        },
-        select: {
-          id: true,
-          runId: true,
-          modelId: true,
-          decisionMetadata: true,
-          definitionSnapshot: true,
-          deletedAt: true,
-          scenario: {
-            select: {
-              id: true,
-              content: true,
-              orientationFlipped: true,
-              deletedAt: true,
+    // Fetch all transcripts for every run in parallel. Each run has a bounded
+    // transcript count (definitions × models × scenarios), so no per-run
+    // pagination is needed. This replaces the old sequential offset-pagination
+    // loop, cutting build time from O(total_batches) to O(1 round-trip).
+    const perRunTranscripts = await Promise.all(
+      state.resolvedSignatureRuns.filteredSourceRunIds.map((runId) =>
+        db.transcript.findMany({
+          where: { runId, deletedAt: null },
+          select: {
+            id: true,
+            runId: true,
+            modelId: true,
+            decisionMetadata: true,
+            definitionSnapshot: true,
+            deletedAt: true,
+            scenario: {
+              select: {
+                id: true,
+                content: true,
+                orientationFlipped: true,
+                deletedAt: true,
+              },
             },
           },
-        },
-        orderBy: { id: 'asc' },
-        take: TRANSCRIPT_BATCH_SIZE,
-        skip: offset,
-      });
+          orderBy: { id: 'asc' },
+        }),
+      ),
+    );
 
-      fetchedCount = batch.length;
-      if (fetchedCount === 0) break;
-
+    for (const runTranscripts of perRunTranscripts) {
       const batchCellMap = accumulateTranscriptCells({
-        transcripts: batch,
+        transcripts: runTranscripts,
         filteredSourceRunDefinitionById: state.resolvedSignatureRuns.filteredSourceRunDefinitionById,
       });
 
@@ -176,8 +172,6 @@ export async function buildSnapshotOutput(
         existing.neutrals += counts.neutrals;
         cellMap.set(key, existing);
       }
-
-      offset += fetchedCount;
     }
   }
   // Derive per-(canonicalValueA::canonicalValueB::modelId) vote counts so the significance
