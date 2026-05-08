@@ -1,5 +1,11 @@
-import { describe, expect, it } from 'vitest';
-import { accumulateTranscriptCells, encodeCellKey, type TranscriptForAccumulation } from '../../../src/services/analysis/transcript-cell-accumulator.js';
+import { ValidationError } from '@valuerank/shared';
+import { describe, expect, it, vi } from 'vitest';
+import * as decisionModelModule from '../../../src/graphql/queries/domain/decision-model.js';
+import {
+  accumulateTranscriptCells,
+  encodeCellKey,
+  type TranscriptForAccumulation,
+} from '../../../src/services/analysis/transcript-cell-accumulator.js';
 
 const FIRST_VALUE = 'Achievement';
 const SECOND_VALUE = 'Security_Personal';
@@ -266,5 +272,58 @@ describe('accumulateTranscriptCells', () => {
       ownLevel: 2,
       opponentLevel: 1,
     }))).toEqual({ wins: 0, losses: 1, neutrals: 0 });
+  });
+
+  it('throws a validation error with transcript context when accumulation fails', () => {
+    const spy = vi.spyOn(decisionModelModule, 'resolveTranscriptDecisionModel').mockImplementation(() => {
+      throw new Error('boom');
+    });
+
+    expect(() =>
+      accumulateTranscriptCells({
+        transcripts: [
+          buildTranscript({
+            id: 'transcript-bad',
+            runId: 'run-bad',
+            modelId: 'model-a',
+            decisionMetadata: { throw: true },
+          }),
+        ],
+        filteredSourceRunDefinitionById: new Map([
+          ['run-bad', 'definition-a'],
+        ]),
+      }),
+    ).toThrowError(ValidationError);
+
+    try {
+      accumulateTranscriptCells({
+        transcripts: [
+          buildTranscript({
+            id: 'transcript-bad',
+            runId: 'run-bad',
+            modelId: 'model-a',
+            decisionMetadata: { throw: true },
+          }),
+        ],
+        filteredSourceRunDefinitionById: new Map([
+          ['run-bad', 'definition-a'],
+        ]),
+      });
+    } catch (error) {
+      expect(error).toBeInstanceOf(ValidationError);
+      expect(error).toMatchObject({
+        message: 'Failed to accumulate transcript for domain analysis',
+        context: {
+          details: {
+            transcriptId: 'transcript-bad',
+            runId: 'run-bad',
+            modelId: 'model-a',
+            cause: 'boom',
+          },
+        },
+      });
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
