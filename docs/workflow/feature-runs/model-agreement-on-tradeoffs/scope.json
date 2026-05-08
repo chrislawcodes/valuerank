@@ -1,0 +1,31 @@
+{
+  "paths": [
+    "cloud/apps/api/src/graphql/queries/model-grouping-significance.ts",
+    "cloud/apps/api/src/graphql/types/model-grouping-significance.ts",
+    "cloud/apps/api/src/services/analysis/domain-analysis-cache-types.ts",
+    "cloud/apps/api/src/services/analysis/domain-analysis-cache.ts",
+    "cloud/apps/api/src/services/analysis/domain-analysis-snapshot-builder.ts",
+    "cloud/apps/api/src/services/model-grouping-significance",
+    "cloud/apps/web/src/api/operations/modelGroupingSignificance.graphql",
+    "cloud/apps/web/src/api/operations/modelGroupingSignificance.ts",
+    "cloud/apps/web/src/components/models/ModelGroupingSignificanceHeatmap.tsx",
+    "cloud/apps/web/src/components/models/ModelGroupingSignificanceSection.tsx",
+    "cloud/apps/web/src/components/models/ModelGroupingSignificanceTable.tsx",
+    "cloud/apps/web/src/pages/ModelsGroups.tsx"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/api/src/graphql/queries/model-grouping-significance.ts",
+    "cloud/apps/api/src/graphql/types/model-grouping-significance.ts",
+    "cloud/apps/api/src/services/analysis/domain-analysis-cache-types.ts",
+    "cloud/apps/api/src/services/analysis/domain-analysis-cache.ts",
+    "cloud/apps/api/src/services/analysis/domain-analysis-snapshot-builder.ts",
+    "cloud/apps/api/src/services/model-grouping-significance",
+    "cloud/apps/web/src/api/operations/modelGroupingSignificance.graphql",
+    "cloud/apps/web/src/api/operations/modelGroupingSignificance.ts",
+    "cloud/apps/web/src/components/models/ModelGroupingSignificanceHeatmap.tsx",
+    "cloud/apps/web/src/components/models/ModelGroupingSignificanceSection.tsx",
+    "cloud/apps/web/src/components/models/ModelGroupingSignificanceTable.tsx",
+    "cloud/apps/web/src/pages/ModelsGroups.tsx",
+    "docs/workflow/feature-runs/model-agreement-on-tradeoffs"
+  ]
+}

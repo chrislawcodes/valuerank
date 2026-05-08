@@ -1,0 +1,311 @@
+Reading additional input from stdin...
+OpenAI Codex v0.129.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019e065f-f4eb-7f23-a46c-01426fe78f17
+--------
+user
+Review this plan artifact using a implementation-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: plan.md
+# Plan
+
+## Architecture summary
+
+The feature replaces a Wilcoxon-based pairwise-significance section with a Cohen's-kappa-based agreement section on `/models`. The replacement runs in one PR — both backend and frontend ship together so no stale GraphQL shape is ever served to a deployed client.
+
+**Three layers of work:**
+
+1. **Snapshot data model** — extend the domain-analysis snapshot output to include cell-level outcomes (`cellLevelOutcomes`) alongside the existing `valuePairModelVotes`. Bump the snapshot code version `1.11.0 → 1.12.0` to force rebuilds.
+2. **API resolver** — replace `modelGroupingSignificance` with `modelAgreementOnTradeoffs` (matrix + trial consistency) and a separate `modelPairDivergenceBreakdown` (drilldown). New math library for kappa / percent agreement / trial-consistency aggregation.
+3. **Web UI** — replace `ModelGroupingSignificanceSection` with `ModelAgreementSection` containing three stacked sub-reports. Reuse the existing heatmap component (renamed and recolored). Delete the table component and significance-specific operations.
+
+**Data flow (no change):**
+
+```
+Transcripts → cellMap (5-tuple keys) → snapshot output
+                                         ↓
+                                  cellLevelOutcomes  →  resolver
+                                                          ↓
+                                                  Pothos GraphQL
+                                                          ↓
+                                                       UI
+```
+
+The transcript ingestion and `cellMap` accumulation are unchanged. The new code lives in the path from `cellMap` → `cellLevelOutcomes` and downstream of that.
+
+---
+
+## Architecture decisions
+
+### A1. Two queries vs. one (drilldown)
+
+**Decision:** two top-level queries — `modelAgreementOnTradeoffs` (matrix + consistency) and `modelPairDivergenceBreakdown` (drilldown for one pair).
+
+**Rationale:** the drilldown payload grows as M*(M-1)/2 if nested in every matrix row. With 8+ models that's 28+ pair entries each carrying 6 value-pair breakdowns. A separate query that the UI fires only when a pair is selected keeps the matrix payload lean. Both queries read the same snapshot — the second query is fast because the snapshot is already in DB cache after the first.
+
+**Alternative considered:** a single nested query. Rejected because of the M^2 payload growth (Gemini round-1 H2).
+
+### A2. Cell-level outcomes derived from existing `cellMap`
+
+**Decision:** the new `cellLevelOutcomes` field is computed inside `buildSnapshotOutput` by collapsing `cellMap`'s two valueKey entries per physical cell into a single canonical-direction entry. No changes to `accumulateTranscriptCells`.
+
+**Algorithm — explicit pseudocode (addressing Gemini plan H1):**
+
+```
+# cellMap key: definitionId::modelId::valueKey::ownLevel::opponentLevel
+# For each physical cell, cellMap has TWO entries — one per valueKey in the pair.
+# We want one cellLevelOutcomes entry per physical cell with canonical direction.
+
+groups: Map<(definitionId, modelId, ownLevel, opponentLevel), Map<valueKey, CellCounts>>
+
+for each (key, counts) in cellMap:
+    parse key → (defId, modelId, valueKey, ownLevel, oppLevel)
+    groupKey = (defId, modelId, ownLevel, oppLevel)
+    groups[groupKey][valueKey] = counts
+
+for each (groupKey, byValueKey) in groups:
+    if size of byValueKey != 2: skip   # non-binary value pair, see § Non-binary cells
+    sortedKeys = sort(keys of byValueKey)   # alphabetical
+    canonicalA, canonicalB = sortedKeys[0], sortedKeys[1]
+    aCell = byValueKey[canonicalA]
+    bCell = byValueKey[canonicalB]
+    # In cellMap, "wins" for valueKey X = times the model chose X.
+    # So aChoices = aCell.wins (times model chose canonicalA)
+    # And bChoices = bCell.wins (times model chose canonicalB)
+    # Sanity invariant: aCell.wins == bCell.losses, aCell.losses == bCell.wins
+    outKey = `${defId}::${modelId}::${canonicalA}::${canonicalB}::${ownLevel}::${oppLevel}`
+    cellLevelOutcomes[outKey] = { aChoices: aCell.wins, bChoices: bCell.wins, neutrals: aCell.neutrals }
+```
+
+**Rationale:** `cellMap` already carries `(definitionId, modelId, valueKey, ownLevel, opponentLevel)` keys per `transcript-cell-accumulator.ts:30-32`. The grouping key for the new pass is `(definitionId, modelId, ownLevel, opponentLevel)` (drops `valueKey`) so both value-key perspectives of the same physical cell land in the same group; canonical direction is then determined by sorting valueKeys within the group.
+
+**Why alphabetical-first is safe.** ValueKeys are drawn from `DOMAIN_ANALYSIS_VALUE_KEYS` (`cloud/apps/api/src/graphql/queries/domain-analysis-values.ts`), a fixed const-array of well-formed Schwartz value names (lowercase, no whitespace, no unicode). The TypeScript `Array.prototype.sort()` default lexicographic order is deterministic for these inputs. Kappa and absolute divergence are both **invariant under canonical-direction choice** — kappa is unchanged if you swap A and B labels for both models simultaneously; absolute divergence is symmetric. So the alphabetical convention is purely a labeling choice with no statistical effect.
+
+**Alternative considered:** modify `accumulateTranscriptCells` to write canonical-direction entries directly. Rejected — couples this feature to the upstream accumulator and risks breaking other consumers of `cellMap` (the existing `valuePairModelVotes` and `computeCellWeightedDomainRates` both read it).
+
+### A3. Both fields written by new builder for one release
+
+**Decision:** the new builder writes BOTH `valuePairModelVotes` (legacy) and `cellLevelOutcomes` (new). The legacy two-pass loop is not removed in this PR.
+
+**Rationale:** during the deploy window, an old web client (cached JS bundle) may still call the old `modelGroupingSignificance` resolver; if that resolver is already deleted, the call 404s — that's expected. But if the OLD resolver is briefly still deployed (pre-rollout) and reads a NEW snapshot, it would return empty data without `valuePairModelVotes`. Dual-write removes that gap. The legacy field is removed in a follow-up PR after `1.12.0` snapshots are universal.
+
+**Verification:** unit test asserts both `valuePairModelVotes` and `cellLevelOutcomes` are present on the snapshot output object after `buildSnapshotOutput` runs.
+
+### A4. Tied cells excluded from BOTH kappa and divergence (revised after Codex plan M3)
+
+**Decision:** when either model has `proportionA` within `±epsilon` of `0.5` on a cell (`epsilon = 1e-9` to defeat floating-point drift — Gemini plan M3), that cell is excluded from BOTH kappa and `meanAbsoluteDivergence` for that pair. The cell IS counted in the model's own Trial Consistency calculation (where the tie itself is the data point — a 50/50 cell tells you about model decisiveness).
+
+**Rationale (revised from spec):** the original spec said exclude from kappa, include in divergence. Codex correctly pointed out that this means heatmap and drilldown measure different cell populations and can disagree confusingly. Excluding from both is cleaner; the user gets one consistent denominator across the report.
+
+**Verification:** 
+- Unit test: a 3/3 cell (`proportionA == 0.5`) is excluded from kappa AND divergence.
+- Unit test: cells with `proportionA = 0.5000000001`, `1/2`, `2/4`, `3/6` all detected as ties via `Math.abs(proportionA - 0.5) < 1e-9`.
+- The `excludedTiedCells` count is exposed in the schema (added during reconciliation — see Wave 2). Updates to spec § Output schema also required.
+
+### A5. Trial Consistency naming and caveats
+
+**Decision:** the metric `max(proportionA, 1 − proportionA)` is named "Trial Consistency" (NOT "Run-to-run Reliability" or "Self-consistency"). Hard UI requirements: info-icon tooltip on the column header + footnote below the table explaining what the metric measures and what it doesn't.
+
+**Rationale:** the snapshot aggregates across all trials in scope and discards run identity. Multiple trials of the same cell come from multiple runs in practice, but they could also reflect orientation flips. Calling it "Run-to-run Reliability" overclaims; calling it "Trial Consistency" is honest.
+
+**Verification:** UI snapshot test asserts the tooltip and footnote are rendered. Lint rule (custom or comment-based) flags any rename to "self-consistency" / "reliability."
+
+### A6b. Trial Consistency support requirement (added after Codex plan M2)
+
+**Decision:** a cell with `aChoices + bChoices < MIN_TRIALS_FOR_CONSISTENCY` (set to `2`) is excluded from the Trial Consistency calculation. The threshold is exposed as a const at the top of the resolver for easy adjustment.
+
+**Rationale:** with only one trial, `max(proportionA, 1 - proportionA)` is always `1.0` regardless of underlying noise, so the metric is meaningless on single-trial cells. Setting `MIN_TRIALS_FOR_CONSISTENCY = 2` means we only count cells that actually had the chance to disagree with themselves.
+
+**Verification:** unit test: cell with 1 decisive trial is excluded from `cellsObserved`. Cell with 2 decisive trials (1/1) IS included.
+
+### A6c. Default drilldown selection (added after Codex plan M5)
+
+**Decision:** the UI's default selected pair for the drilldown is the matrix row with the highest `meanAbsoluteDivergence` AMONG rows with `totalCells >= MIN_DRILLDOWN_DEFAULT_CELLS` (set to `10`). If no row meets the support threshold, the default is the row with the most `totalCells`. If the matrix is empty, no drilldown is rendered.
+
+**Rationale:** without a support filter, a sparse pair with 1 wildly-divergent cell would be the default, which is the noisiest possible choice.
+
+**Verification:** UI snapshot test: matrix with one high-divergence/low-support row + one moderate-divergence/high-support row → default selection is the high-support row.
+
+### A7. No-overlap and empty-model handling
+
+**Decision:**
+- A model pair with zero cells in the comparison set returns a row with `totalCells: 0` and all metrics null. UI renders "no overlap."
+- A model with zero cells anywhere in scope appears in `unavailableModels`, NOT in the matrix.
+
+**Rationale:** the current resolver hard-fails when any selected model has no coverage. The new resolver tolerates this gracefully — a single empty model shouldn't blank the whole report. This is a deliberate, documented divergence from current behavior.
+
+**Verification:** integration test with one fully-empty model + two normal models asserts `unavailableModels` contains the empty model and the matrix has 1 row (the two normal models).
+
+---
+
+## Wave breakdown
+
+The feature ships in one PR with five internal waves separated by `[CHECKPOINT]` markers. Each wave is independently buildable and testable; only the final wave makes the user-visible UI change.
+
+### Wave 1 — Snapshot infrastructure (~150 lines)
+
+Files: `domain-analysis-cache-types.ts`, `domain-analysis-snapshot-builder.ts`, `domain-analysis-cache.ts`.
+
+- Add `cellLevelOutcomes` field to `DomainAnalysisSnapshotOutput` type with full TS-level definition.
+- Bump `DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION` from `'1.11.0'` to `'1.12.0'`.
+- Add cell-level derivation pass after `cellMap` is built in `buildSnapshotOutput`. The new pass iterates `cellMap`, groups entries by `(definitionId, modelId, ownLevel, opponentLevel)`, and emits one canonical-direction entry per group. Legacy `valuePairModelVotes` loop stays.
+- Add `readCellLevelOutcomesFromSnapshot()` to `domain-analysis-cache.ts`. Mirrors the existing `readValuePairModelVotesFromSnapshot` pattern.
+
+[CHECKPOINT] — diff review
+
+### Wave 2 — Math library + resolver scaffolding (~250 lines)
+
+Files: `cloud/apps/api/src/services/model-agreement/math.ts`, `cloud/apps/api/tests/services/model-agreement/math.test.ts`, `cloud/apps/api/src/graphql/types/model-agreement-on-tradeoffs.ts`.
+
+- Create `cloud/apps/api/src/services/model-agreement/math.ts` with:
+  - `cohensKappa(observed, chance)` (returns `null` when `chance == 1` degenerate case OR `totalCells == 0`)
+  - `kappaInterpretation(kappa)` (returns `null` when kappa is `null`)
+  - `percentAgreement(matchedCells, totalCells)` — **returns `null` when `totalCells == 0`** (Gemini plan L2 fix)
+  - `equalWeightAggregate(values: Record<vignetteId, number[]>): number | null` — mean over vignettes of mean over cells; returns `null` if no vignettes have any cells
+  - `isTied(proportionA: number, epsilon: number = 1e-9): boolean` — `Math.abs(proportionA - 0.5) < epsilon` (Gemini plan M3 fix)
+  - `MIN_TRIALS_FOR_CONSISTENCY = 2` const exported for use in resolver
+- Add `excludedTiedCells: Int!` to the `ModelAgreementResult` type (revised from spec — Codex plan M3 reconciliation).
+- Pothos type definitions for `ModelAgreementResult`, `PairwiseAgreementRow`, `ModelTrialConsistency`, `ModelInfo`, `UnavailableModelInfo`, `PairDivergenceBreakdown`, `ValuePairDivergence`.
+- Unit tests for math library covering all anchors in spec § Verification plan PLUS:
+  - `percentAgreement(0, 0) === null` (Gemini plan L2)
+  - `cohensKappa(0, 0)` for empty comparison set returns `null`
+  - `isTied(0.5)`, `isTied(0.5000000001)`, `isTied(1/2)`, `isTied(2/4)`, `isTied(3/6)` all return `true`
+  - `isTied(0.49)` returns `false`
+
+[CHECKPOINT] — diff review
+
+### Wave 3 — Resolver implementation (~200 lines)
+
+Files: `cloud/apps/api/src/graphql/queries/model-agreement-on-tradeoffs.ts`, `cloud/apps/api/src/graphql/queries/index.ts`.
+
+- Build the two query resolvers. Both:
+  - Validate scope, signature, modelIds (reuse existing patterns from the soon-to-be-deleted significance resolver).
+  - Read `cellLevelOutcomes` via `readCellLevelOutcomesFromSnapshot`.
+  - If null, queue `refresh_domain_analysis_snapshot` and return `pending: true`.
+  - Compute the metrics with equal-weight aggregation (see Methodology section in spec).
+- Update `cloud/apps/api/src/graphql/queries/index.ts` to import the new resolver file (registers the GraphQL fields).
+- Integration test: synthetic snapshot with two perfectly-disagreeing models → kappa = -1.0, percent agreement = 0, mean absolute divergence = 1.0.
+- Integration test: snapshot lacks `cellLevelOutcomes` → resolver queues refresh and returns `pending: true`. Then manually fail the queued job in the test and assert the resolver continues to return `pending: true` on subsequent calls (Gemini plan M4 — async failure mode). The current behavior is acceptable: the user retries by reloading; the snapshot rebuilds when the job is retried by the queue's normal retry policy. Documented as known behavior.
+
+[CHECKPOINT] — diff review
+
+### Wave 4 — Frontend new components (~400 lines)
+
+Files: `ModelAgreementHeatmap.tsx` (renamed from `ModelGroupingSignificanceHeatmap.tsx`), `ModelAgreementSection.tsx`, `PairwiseAgreementMatrixReport.tsx`, `ModelTrialConsistencyReport.tsx`, `PairwiseDivergenceDrilldownReport.tsx`, `modelAgreementOnTradeoffs.graphql`, plus `.test.tsx` for each.
+
+- `git mv ModelGroupingSignificanceHeatmap.tsx ModelAgreementHeatmap.tsx`. Change input type from p-value matrix to kappa matrix; change color scale to red→white→green for negative→zero→positive kappa. Update tooltips.
+- New section component with three stacked sub-reports (no tabs).
+- Drilldown component fires its own `modelPairDivergenceBreakdown` query when the selected pair changes. Default selection: pair with the highest `meanAbsoluteDivergence`.
+- Trial consistency component: must include info-icon tooltip on column header + footnote below table (hard requirement from Gemini round-2 M2).
+- Run `npm run codegen --workspace @valuerank/web` to regenerate `graphql.ts` after the new operations file is added (mandatory per MEMORY.md).
+
+[CHECKPOINT] — diff review
+
+### Wave 5 — Wire-up and delete old (~50 lines net deletion)
+
+Files: `cloud/apps/web/src/pages/ModelsGroups.tsx`, plus all delete-list files from spec § Affected surfaces.
+
+- Replace `ModelGroupingSignificanceSection` import and usage in `ModelsGroups.tsx` with `ModelAgreementSection`. Replace the `useQuery` hook accordingly. Other parts of the page are unchanged.
+- Delete from API: `model-grouping-significance.ts` (resolver), `model-grouping-significance.ts` (types), `model-grouping-significance/math.ts`, `model-grouping-significance/math.test.ts`, parent folder if empty.
+- Delete from web: `modelGroupingSignificance.ts`, `modelGroupingSignificance.graphql`, `ModelGroupingSignificanceTable.tsx`, `ModelGroupingSignificanceTable.test.tsx`, `ModelGroupingSignificanceSection.tsx`.
+- Verification (pre-merge): `rg "modelGroupingSignificance|ModelGroupingSignificance" cloud/` returns zero matches in the production codebase (excluding generated files; codegen will rebuild `graphql.ts` clean).
+- Run preflight gate.
+
+[CHECKPOINT] — diff review
+
+---
+
+## Out-of-scope follow-up PRs (recorded for closeout)
+
+1. After `1.12.0` snapshots are universal (next deploy cycle), remove the legacy `valuePairModelVotes` loop from `domain-analysis-snapshot-builder.ts` and the legacy field from `domain-analysis-cache-types.ts`.
+2. Bootstrap CI on kappa values (resampled at vignette level).
+3. Kappa-based clustering as an alternative to current cluster analysis.
+4. Cross-signature reliability comparison.
+5. CSV export of the agreement matrix.
+
+---
+
+## Reviewer findings (resolved into plan above)
+
+### Codex (implementation-adversarial) — 2026-05-08
+
+| # | Severity | Finding | Resolution |
+|---|----------|---------|------------|
+| 1 | High | "Alphabetical valueKey ordering is arbitrary, not canonical — could encode wrong winner direction" | **Accepted with clarification.** A2 now explains: kappa and absolute divergence are both invariant under canonical-direction choice, so the alphabetical convention is purely a labeling choice with no statistical effect. Inline pseudocode added showing the two-perspective collapse. |
+| 2 | Medium | "Trial Consistency not support-aware: 1-trial cell returns 1.0" | **Accepted.** Added A6b: `MIN_TRIALS_FOR_CONSISTENCY = 2` const; cells with fewer trials excluded from the consistency calculation. Unit test anchor added. |
+| 3 | Medium | "Tied cells excluded from kappa but included in divergence — different cell populations are confusing" | **Accepted (revised from spec).** A4 now excludes tied cells from BOTH kappa and divergence. `excludedTiedCells: Int!` added to schema for transparency. |
+| 4 | Medium [UNVERIFIED] | "Atomic deploy assumption is too strong" | **Accepted.** § Risks now explicitly documents that the dual-write protects against the in-flight stale-snapshot read window, but a true rollback is multi-PR. Operational mitigation: deploy backend first (so snapshot has the new field) then frontend (which calls the new resolver). Both are in the same PR but Railway sequences them. |
+| 5 | Medium | "Default drilldown selects highest-divergence pair, could be noisy/low-support" | **Accepted.** A6c added: default selection is highest divergence among rows with `totalCells >= MIN_DRILLDOWN_DEFAULT_CELLS = 10`. Falls back to most-cells row if none meet threshold. UI snapshot test verifies. |
+
+### Gemini (testability-adversarial) — 2026-05-08
+
+| # | Severity | Finding | Resolution |
+|---|----------|---------|------------|
+| 1 | High | "Wave 1 grouping key is missing valueKey, but A2 needs valueKey for canonical-direction logic — un-implementable as described" | **Accepted.** A2 now has explicit pseudocode showing: group by `(definitionId, modelId, ownLevel, opponentLevel)` (drops valueKey), then within each group access both valueKey perspectives by reading `byValueKey[valueKey]`. The grouping key is the physical-cell identity; valueKey ordering happens within the group. |
+| 2 | Medium | "'Noisy' badge heuristic is untestable" | **Rejected — finding is wrong.** Spec already specifies `meanTrialConsistency < 0.7 AND cellsObserved >= 5` as the rule. That IS deterministic. Spec § Verification plan has a unit-test anchor for it. The "manual sanity check" Gemini quoted was about confirming production data behavior, not the rule itself. |
+| 3 | Medium | "Floating-point equality `proportionA == 0.5` is brittle" | **Accepted.** A4 now mandates `Math.abs(proportionA - 0.5) < 1e-9` via a new `isTied` helper. Unit-test anchors added for `0.5`, `1/2`, `2/4`, `3/6`, `0.5000000001`. |
+| 4 | Medium | "Async refresh job failure is untested" | **Accepted.** Wave 3 integration test added that simulates a failed refresh job and asserts the resolver continues to return `pending: true` (graceful degradation; user retries by reloading). |
+| 5 | Low [UNVERIFIED] | "Alphabetical sort edge cases unverified" | **Resolved by citation.** A2 now cites `DOMAIN_ANALYSIS_VALUE_KEYS` constant — fixed lowercase ASCII strings, no unicode/whitespace. |
+| 6 | Low | "percentAgreement division-by-zero" | **Accepted.** Wave 2 now requires `percentAgreement(0, 0) === null`. Unit-test anchor added. |
+
+---
+
+## Residual risks (each with verifiable pre-merge check)
+
+| # | Risk | Verification (pre-merge) |
+|---|------|---------------------------|
+| 1 | Snapshot rebuild on `1.12.0` causes 30+ s `pending` window for first user post-deploy. Same as 1.10→1.11 transition. | Manual test: load `/models` against staging immediately after deploy with a fresh signature, time the pending → loaded transition. Document the duration in the PR description. |
+| 2 | Old `modelGroupingSignificance` field references in unrelated code surface. | `rg "modelGroupingSignificance|ModelGroupingSignificance" cloud/` excluding generated `graphql.ts` returns zero matches. Run as part of Wave 5 verification. |
+| 3 | Production smoke test fails (resolver returns no data despite snapshot existing). | Run `mcp__valuerank__graphql_query` with `{modelIds: [claude-sonnet-4-5, deepseek-chat, grok-4-1-fast-reasoning], scope: ALL_DOMAINS, signature: vnewt0}` after deploy. Assert `pairwiseAgreementMatrix.length == 3`, all `cohensKappa` values non-null, all `meanAbsoluteDivergence` values non-zero. |
+| 4 | Equal-weight aggregation regression: a sparse vignette dominates output. | Unit test: vignette with 1 cell at divergence 1.0 + vignette with 25 cells at divergence 0.0 → mean = 0.5 (each vignette contributes 50%). Asserts the aggregator does NOT do `total/total` cell-weighted math. |
+| 5 | Tied-cell exclusion drops more data than expected when one model is highly indecisive. | Add `excludedTiedCells: Int!` to schema (out-of-scope for round-1 spec but added here as a residual mitigation). Skip — defer to follow-up if production data shows widespread ties. |
+| 6 | Frontend codegen runs but produces stale types. | After Wave 4: `npm run codegen --workspace @valuerank/web && git diff cloud/apps/web/src/generated/graphql.ts` — diff must include the new operations and exclude the old ones. |
+| 7 | Heatmap kappa colors confuse users (red could mean either "bad" or "negative"). | UI snapshot test with synthetic data covering kappa values: `-0.5` (red), `0` (white), `0.5` (light green), `0.9` (deep green). Confirm visually the gradient is intuitive. |
+| 8 | The `noisy` badge labels too many models as noisy on small-coverage signatures. | Pre-merge production smoke test: query with 5+ models on `vnewt0` and confirm `noisy: true` is returned only for models that are genuinely flipping their answers (manual sanity check vs the `meanTrialConsistency` value). |
+
+---
+
+## Parallel work analysis
+
+Waves 2 and 3 are sequential — wave 3 depends on wave 2's math library and types.
+Waves 1 and 4 ARE parallelizable in principle (different files, no overlap), but the integration in wave 5 needs both. Implementing them in sequence keeps mental load lower and avoids merge conflicts on `domain-analysis-snapshot-builder.ts` between concurrent slices. Recommended: ship sequentially within one PR.
+
+---
+
+## Test database setup (per repo convention)
+
+Wave 3's integration tests require the test database (`db:test:setup`). Wave 4 frontend tests use vitest only (no DB). The full preflight gate from `cloud/CLAUDE.md` runs at the end of wave 5.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+## Findings
+- High: Wave 2's `cohensKappa(observed, chance)` contract is incomplete. It says the helper must return `null` when `totalCells == 0`, but `totalCells` is not an input. That makes the empty-set rule impossible to enforce inside the helper and leaves room for `NaN`/`Infinity` bugs unless every caller adds a separate guard.
+- Medium [UNVERIFIED]: Wave 1/A2 silently `skip`s any grouped cell map entry whose physical cell does not collapse to exactly two value-key entries. If the current snapshot can contain malformed, partial, or non-binary groups, those cells will disappear from the new metrics with no warning. That is a data-loss path, not just a cleanup path.
+- Medium: The plan never defines whether `totalCells` and the support thresholds are based on raw cells or cells remaining after tie and low-trial exclusions. That is a problem because `totalCells >= 10`, `no overlap`, `excludedTiedCells`, and the default drilldown selection all depend on the same count. Right now the matrix, drilldown, and tooltip logic can end up speaking about different denominators.
+- Medium [UNVERIFIED]: The rollout still assumes a safe deploy order even though Wave 5 deletes the old GraphQL field and resolver in the same change that introduces the new client path. If backend/frontend deployment order or rollback order is not exactly controlled, cached old clients will still hit the removed field and fail hard. The plan does not include a compatibility shim or feature flag.
+
+## Residual Risks
+- The `1.12.0` snapshot bump will still create a rebuild window on first access. The first `/models` request after deploy may stay pending until the refresh job finishes.
+- The new exclusions for tied and low-trial cells may reduce usable data more than the synthetic tests suggest. Real signatures with many indecisive cells could end up with sparse or null matrix rows.
+- The separate drilldown query adds another failure mode at selection time. If the matrix loads but the drilldown request fails or stays pending, the section can look partially broken unless the UI handles that state explicitly.
+tokens used
+36,916
