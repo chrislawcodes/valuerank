@@ -7,12 +7,13 @@ import type { ModelGroupingSignificanceRow } from '../../api/operations/modelGro
 type SortKey =
   | 'modelA'
   | 'modelB'
-  | 'agreementRate'
-  | 'discordantAtoB'
-  | 'discordantBtoA'
+  | 'winRateA'
+  | 'winRateB'
+  | 'meanDifference'
+  | 'effectSize'
+  | 'maxOrderEffect'
   | 'rawPValue'
   | 'holmCorrectedPValue'
-  | 'oddsRatio'
   | 'effectLabel'
   | 'confidenceInterval';
 
@@ -34,18 +35,17 @@ function formatPValue(value: number | null): string {
   return value.toFixed(3);
 }
 
-function formatAgreementRate(value: number): string {
-  return `${Math.round(value * 100)}%`;
-}
-
-function formatOddsRatio(value: number | null): string {
+function formatRate(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return '—';
-  return `×${value.toFixed(2)}`;
+  const sign = value >= 0 ? '+' : '';
+  return `${sign}${(value * 100).toFixed(1)}%`;
 }
 
-function formatOddsRatioInterval(low: number | null, high: number | null): string {
+function formatDiffCI(low: number | null | undefined, high: number | null | undefined): string {
   if (low == null || high == null || !Number.isFinite(low) || !Number.isFinite(high)) return '—';
-  return `[×${low.toFixed(2)}, ×${high.toFixed(2)}]`;
+  const lowSign = low >= 0 ? '+' : '';
+  const highSign = high >= 0 ? '+' : '';
+  return `[${lowSign}${(low * 100).toFixed(1)}%, ${highSign}${(high * 100).toFixed(1)}%]`;
 }
 
 function getVerdictClass(verdict: ModelGroupingSignificanceRow['verdict']): string {
@@ -85,24 +85,26 @@ function sortRows(rows: ModelGroupingSignificanceRow[], sort: SortState): ModelG
           return row.modelALabel;
         case 'modelB':
           return row.modelBLabel;
-        case 'agreementRate':
-          return row.agreementRate;
-        case 'discordantAtoB':
-          return row.discordantAtoB;
-        case 'discordantBtoA':
-          return row.discordantBtoA;
+        case 'winRateA':
+          return row.winRateA;
+        case 'winRateB':
+          return row.winRateB;
+        case 'meanDifference':
+          return row.meanDifference;
+        case 'effectSize':
+          return row.effectSize;
+        case 'maxOrderEffect':
+          return row.maxOrderEffect;
         case 'rawPValue':
           return row.rawPValue ?? null;
         case 'holmCorrectedPValue':
           return row.holmCorrectedPValue ?? null;
-        case 'oddsRatio':
-          return row.oddsRatio ?? null;
         case 'effectLabel':
           return row.effectLabel;
         case 'confidenceInterval':
-          return row.oddsRatio ?? ((row.confidenceIntervalLow != null && row.confidenceIntervalHigh != null)
-            ? ((row.confidenceIntervalLow + row.confidenceIntervalHigh) / 2)
-            : null);
+          return row.confidenceIntervalLow != null && row.confidenceIntervalHigh != null
+            ? (row.confidenceIntervalLow + row.confidenceIntervalHigh) / 2
+            : null;
       }
     };
 
@@ -182,14 +184,15 @@ export function ModelGroupingSignificanceTable({ rows }: { rows: ModelGroupingSi
           <TableRow>
             <SortableHeader label="Model A" sortKey="modelA" sortState={sort} onSort={(key) => setSort((current) => getNextSort(current, key))} />
             <SortableHeader label="Model B" sortKey="modelB" sortState={sort} onSort={(key) => setSort((current) => getNextSort(current, key))} />
-            <SortableHeader label="agreement rate" sortKey="agreementRate" sortState={sort} onSort={(key) => setSort((current) => getNextSort(current, key))} align="right" />
-            <SortableHeader label="discordant A→B" sortKey="discordantAtoB" sortState={sort} onSort={(key) => setSort((current) => getNextSort(current, key))} align="right" />
-            <SortableHeader label="discordant B→A" sortKey="discordantBtoA" sortState={sort} onSort={(key) => setSort((current) => getNextSort(current, key))} align="right" />
+            <SortableHeader label="Win rate A" sortKey="winRateA" sortState={sort} onSort={(key) => setSort((current) => getNextSort(current, key))} align="right" />
+            <SortableHeader label="Win rate B" sortKey="winRateB" sortState={sort} onSort={(key) => setSort((current) => getNextSort(current, key))} align="right" />
+            <SortableHeader label="Mean diff" sortKey="meanDifference" sortState={sort} onSort={(key) => setSort((current) => getNextSort(current, key))} align="right" />
+            <SortableHeader label="Effect size" sortKey="effectSize" sortState={sort} onSort={(key) => setSort((current) => getNextSort(current, key))} align="right" />
+            <SortableHeader label="Max order effect" sortKey="maxOrderEffect" sortState={sort} onSort={(key) => setSort((current) => getNextSort(current, key))} align="right" />
             <SortableHeader label="raw p-value" sortKey="rawPValue" sortState={sort} onSort={(key) => setSort((current) => getNextSort(current, key))} align="right" />
             <SortableHeader label="Holm-corrected p-value" sortKey="holmCorrectedPValue" sortState={sort} onSort={(key) => setSort((current) => getNextSort(current, key))} align="right" />
-            <SortableHeader label="odds ratio" sortKey="oddsRatio" sortState={sort} onSort={(key) => setSort((current) => getNextSort(current, key))} align="right" />
-            <SortableHeader label="effect label" sortKey="effectLabel" sortState={sort} onSort={(key) => setSort((current) => getNextSort(current, key))} />
-            <SortableHeader label="confidence interval" sortKey="confidenceInterval" sortState={sort} onSort={(key) => setSort((current) => getNextSort(current, key))} align="right" />
+            <SortableHeader label="Effect label" sortKey="effectLabel" sortState={sort} onSort={(key) => setSort((current) => getNextSort(current, key))} />
+            <SortableHeader label="Confidence interval" sortKey="confidenceInterval" sortState={sort} onSort={(key) => setSort((current) => getNextSort(current, key))} align="right" />
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -198,22 +201,25 @@ export function ModelGroupingSignificanceTable({ rows }: { rows: ModelGroupingSi
               <TableCell className="font-medium text-gray-900">{row.modelALabel}</TableCell>
               <TableCell className="font-medium text-gray-900">{row.modelBLabel}</TableCell>
               <TableCell className="text-right font-mono tabular-nums text-gray-800">
-                {formatAgreementRate(row.agreementRate)}
+                {formatRate(row.winRateA)}
               </TableCell>
               <TableCell className="text-right font-mono tabular-nums text-gray-800">
-                {row.discordantAtoB.toString()}
+                {formatRate(row.winRateB)}
               </TableCell>
               <TableCell className="text-right font-mono tabular-nums text-gray-800">
-                {row.discordantBtoA.toString()}
+                {formatRate(row.meanDifference)}
+              </TableCell>
+              <TableCell className="text-right font-mono tabular-nums text-gray-800">
+                {row.effectSize != null && Number.isFinite(row.effectSize) ? `${row.effectSize >= 0 ? '+' : ''}${row.effectSize.toFixed(3)}` : '—'}
+              </TableCell>
+              <TableCell className="text-right font-mono tabular-nums text-gray-800">
+                {formatRate(row.maxOrderEffect)}
               </TableCell>
               <TableCell className="text-right font-mono tabular-nums text-gray-800">
                 {formatPValue(row.rawPValue ?? null)}
               </TableCell>
               <TableCell className="text-right font-mono tabular-nums text-gray-800">
                 {formatPValue(row.holmCorrectedPValue ?? null)}
-              </TableCell>
-              <TableCell className="text-right font-mono tabular-nums text-gray-800">
-                {formatOddsRatio(row.oddsRatio ?? null)}
               </TableCell>
               <TableCell>
                 <div className="space-y-1">
@@ -224,7 +230,7 @@ export function ModelGroupingSignificanceTable({ rows }: { rows: ModelGroupingSi
                 </div>
               </TableCell>
               <TableCell className="text-right font-mono tabular-nums text-gray-800">
-                {formatOddsRatioInterval(row.confidenceIntervalLow ?? null, row.confidenceIntervalHigh ?? null)}
+                {formatDiffCI(row.confidenceIntervalLow ?? null, row.confidenceIntervalHigh ?? null)}
               </TableCell>
             </TableRow>
           ))}

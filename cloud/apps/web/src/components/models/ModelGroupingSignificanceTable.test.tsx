@@ -11,10 +11,11 @@ function createRow(overrides: Partial<ModelGroupingSignificanceRow> = {}): Model
     modelBId: 'model-b',
     modelBLabel: 'Model B',
     n: 10,
-    agreementRate: 0.7,
-    discordantAtoB: 2,
-    discordantBtoA: 1,
-    oddsRatio: 0.5,
+    winRateA: 0.7,
+    winRateB: 0.6,
+    meanDifference: 0.1,
+    effectSize: 0.5,
+    maxOrderEffect: 0.2,
     rawPValue: 0.5,
     holmCorrectedPValue: 0.5,
     effectLabel: 'Weak',
@@ -31,7 +32,7 @@ describe('ModelGroupingSignificanceTable', () => {
       <ModelGroupingSignificanceTable
         rows={[
           createRow({ modelAId: 'b', modelALabel: 'Model B', modelBId: 'c', modelBLabel: 'Model C', rawPValue: 0.5, holmCorrectedPValue: 0.5 }),
-          createRow({ modelAId: 'a', modelALabel: 'Model A', modelBId: 'c', modelBLabel: 'Model C', rawPValue: 0.01, holmCorrectedPValue: 0.03, oddsRatio: 2, effectLabel: 'Strong', verdict: 'Significant' }),
+          createRow({ modelAId: 'a', modelALabel: 'Model A', modelBId: 'c', modelBLabel: 'Model C', rawPValue: 0.01, holmCorrectedPValue: 0.03, effectSize: 2, effectLabel: 'Strong', verdict: 'Significant' }),
           createRow({ modelAId: 'a', modelALabel: 'Model A', modelBId: 'b', modelBLabel: 'Model B', rawPValue: 0.2, holmCorrectedPValue: 0.4 }),
         ]}
       />,
@@ -71,28 +72,32 @@ describe('ModelGroupingSignificanceTable', () => {
     expect(rawPValueHeader.getAttribute('aria-sort')).toBe('ascending');
   });
 
-  it('shows the agreement rate column with percent format', () => {
+  it('shows the win rate columns with percent format', () => {
     render(
       <ModelGroupingSignificanceTable
-        rows={[createRow({ agreementRate: 0.73 })]}
+        rows={[createRow({ winRateA: 0.73, winRateB: 0.54 })]}
       />,
     );
 
-    expect(screen.getByRole('columnheader', { name: /agreement rate/i })).toBeDefined();
-    expect(screen.getByText('73%')).toBeDefined();
+    expect(screen.getByRole('columnheader', { name: /win rate a/i })).toBeDefined();
+    expect(screen.getByRole('columnheader', { name: /win rate b/i })).toBeDefined();
+    expect(screen.getByText('+73.0%')).toBeDefined();
+    expect(screen.getByText('+54.0%')).toBeDefined();
   });
 
-  it('shows the discordant A→B and B→A columns as integers', () => {
+  it('shows the mean diff, effect size, and max order effect columns', () => {
     render(
       <ModelGroupingSignificanceTable
-        rows={[createRow({ discordantAtoB: 4, discordantBtoA: 7 })]}
+        rows={[createRow({ meanDifference: -0.125, effectSize: 0.456, maxOrderEffect: -0.05 })]}
       />,
     );
 
-    expect(screen.getByRole('columnheader', { name: /discordant A→B/i })).toBeDefined();
-    expect(screen.getByRole('columnheader', { name: /discordant B→A/i })).toBeDefined();
-    expect(screen.getByText('4')).toBeDefined();
-    expect(screen.getByText('7')).toBeDefined();
+    expect(screen.getByRole('columnheader', { name: /mean diff/i })).toBeDefined();
+    expect(screen.getByRole('columnheader', { name: /effect size/i })).toBeDefined();
+    expect(screen.getByRole('columnheader', { name: /max order effect/i })).toBeDefined();
+    expect(screen.getByText('-12.5%')).toBeDefined();
+    expect(screen.getByText('+0.456')).toBeDefined();
+    expect(screen.getByText('-5.0%')).toBeDefined();
   });
 
   it('shows verdict badges', () => {
@@ -122,14 +127,14 @@ describe('ModelGroupingSignificanceTable', () => {
     expect(screen.queryByText('↕')).toBeNull();
   });
 
-  it('shows the odds ratio column header', () => {
+  it('shows the confidence interval column header', () => {
     render(
       <ModelGroupingSignificanceTable
-        rows={[createRow({ oddsRatio: 1.25 })]}
+        rows={[createRow({ confidenceIntervalLow: -0.1, confidenceIntervalHigh: 0.2 })]}
       />,
     );
 
-    expect(screen.getByRole('columnheader', { name: /odds ratio/i })).toBeDefined();
-    expect(screen.queryByRole('columnheader', { name: /effect size/i })).toBeNull();
+    expect(screen.getByRole('columnheader', { name: /confidence interval/i })).toBeDefined();
+    expect(screen.getByText('[-10.0%, +20.0%]')).toBeDefined();
   });
 });

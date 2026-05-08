@@ -1543,21 +1543,22 @@ export type ModelGroupingSignificanceResult = {
 
 export type ModelGroupingSignificanceRow = {
   __typename?: 'ModelGroupingSignificanceRow';
-  agreementRate: Scalars['Float']['output'];
   confidenceIntervalHigh?: Maybe<Scalars['Float']['output']>;
   confidenceIntervalLow?: Maybe<Scalars['Float']['output']>;
-  discordantAtoB: Scalars['Int']['output'];
-  discordantBtoA: Scalars['Int']['output'];
   effectLabel: Scalars['String']['output'];
+  effectSize: Scalars['Float']['output'];
   holmCorrectedPValue?: Maybe<Scalars['Float']['output']>;
+  maxOrderEffect: Scalars['Float']['output'];
+  meanDifference: Scalars['Float']['output'];
   modelAId: Scalars['String']['output'];
   modelALabel: Scalars['String']['output'];
   modelBId: Scalars['String']['output'];
   modelBLabel: Scalars['String']['output'];
   n: Scalars['Int']['output'];
-  oddsRatio?: Maybe<Scalars['Float']['output']>;
   rawPValue?: Maybe<Scalars['Float']['output']>;
   verdict: Scalars['String']['output'];
+  winRateA: Scalars['Float']['output'];
+  winRateB: Scalars['Float']['output'];
 };
 
 export type ModelPairwiseWinRates = {
@@ -4802,7 +4803,7 @@ export type ModelGroupingSignificanceQueryVariables = Exact<{
 }>;
 
 
-export type ModelGroupingSignificanceQuery = { __typename?: 'Query', modelGroupingSignificance: { __typename?: 'ModelGroupingSignificanceResult', pending: boolean, models: Array<{ __typename?: 'ModelGroupingSignificanceModel', modelId: string, label: string }>, rows: Array<{ __typename?: 'ModelGroupingSignificanceRow', modelAId: string, modelALabel: string, modelBId: string, modelBLabel: string, n: number, rawPValue?: number | null, holmCorrectedPValue?: number | null, agreementRate: number, discordantAtoB: number, discordantBtoA: number, oddsRatio?: number | null, effectLabel: string, confidenceIntervalLow?: number | null, confidenceIntervalHigh?: number | null, verdict: string }> } };
+export type ModelGroupingSignificanceQuery = { __typename?: 'Query', modelGroupingSignificance: { __typename?: 'ModelGroupingSignificanceResult', pending: boolean, models: Array<{ __typename?: 'ModelGroupingSignificanceModel', modelId: string, label: string }>, rows: Array<{ __typename?: 'ModelGroupingSignificanceRow', modelAId: string, modelALabel: string, modelBId: string, modelBLabel: string, n: number, rawPValue?: number | null, holmCorrectedPValue?: number | null, effectSize: number, maxOrderEffect: number, meanDifference: number, winRateA: number, winRateB: number, effectLabel: string, confidenceIntervalLow?: number | null, confidenceIntervalHigh?: number | null, verdict: string }> } };
 
 export type AvailableModelsQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -7287,10 +7288,11 @@ export const ModelGroupingSignificanceDocument = gql`
       n
       rawPValue
       holmCorrectedPValue
-      agreementRate
-      discordantAtoB
-      discordantBtoA
-      oddsRatio
+      effectSize
+      maxOrderEffect
+      meanDifference
+      winRateA
+      winRateB
       effectLabel
       confidenceIntervalLow
       confidenceIntervalHigh
