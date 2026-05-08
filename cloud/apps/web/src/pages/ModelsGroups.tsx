@@ -95,7 +95,7 @@ export function ModelsGroups() {
       scope: selectedScope === 'ALL_DOMAINS' ? ALL_DOMAINS_SCOPE : undefined,
     },
     pause: selectedDomainId === '',
-    requestPolicy: 'cache-and-network',
+    requestPolicy: 'network-only',
   });
 
   const signatureOptions = useMemo<DomainAvailableSignature[]>(() => {
@@ -152,7 +152,7 @@ export function ModelsGroups() {
       signature: selectedSignature === '' ? undefined : selectedSignature,
     },
     pause: selectedDomainId === '' || activeUseLegacyQuery,
-    requestPolicy: 'cache-and-network',
+    requestPolicy: 'network-only',
   });
   const [{ data: modelsAnalysisData, fetching: modelsAnalysisFetching, error: modelsAnalysisError }] = useQuery<
     ModelsAnalysisQueryResult,
@@ -164,18 +164,18 @@ export function ModelsGroups() {
       ...(selectedSignature !== '' ? { signature: selectedSignature } : {}),
     },
     pause: selectedScope === 'DOMAIN' && selectedDomainId === '',
-    requestPolicy: 'cache-and-network',
+    requestPolicy: 'network-only',
   });
   const [{ data: llmModelsData, error: llmModelsError }] = useQuery<LlmModelsQueryResult>({
     query: LLM_MODELS_QUERY,
     variables: { status: 'ACTIVE' },
-    requestPolicy: 'cache-and-network',
+    requestPolicy: 'network-only',
   });
   const [{ data: legacyData, fetching: legacyFetching, error: legacyError }] = useQuery<DomainAnalysisQueryResult, { domainId: string }>({
     query: DOMAIN_ANALYSIS_QUERY_LEGACY,
     variables: { domainId: selectedDomainId },
     pause: selectedDomainId === '' || !activeUseLegacyQuery,
-    requestPolicy: 'cache-and-network',
+    requestPolicy: 'network-only',
   });
 
   useEffect(() => {
@@ -240,14 +240,18 @@ export function ModelsGroups() {
     && !(selectedScope === 'DOMAIN' && selectedDomainId === '')
     && llmModelsData != null;
 
+  if (pageError != null) {
+    return (
+      <div className="space-y-6">
+        <ErrorMessage
+          message={`Failed to load model groups report: ${pageError.message ?? 'Unknown error'}`}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      {pageError != null && (
-        <ErrorMessage
-          message={`Some model groups data failed to load: ${pageError.message ?? 'Unknown error'}`}
-        />
-      )}
-
       <AnalysisContextBar
         domain={{
           label: 'Domain',
