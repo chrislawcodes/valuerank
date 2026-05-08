@@ -270,7 +270,19 @@ describe('ModelsGroups', () => {
         return [{
           data: defaultLlmModels,
           fetching: false,
-          error: new Error('GraphQL Unexpected error occurred'),
+          error: {
+            message: '[GraphQL] Unexpected error occurred.',
+            graphQLErrors: [
+              {
+                message: 'Active models resolver failed.',
+                path: ['llmModels'],
+                extensions: {
+                  code: 'INTERNAL_SERVER_ERROR',
+                  errorId: 'vr-1234abcd',
+                },
+              },
+            ],
+          },
         }];
       }
       return [{ data: undefined, fetching: false, error: undefined }];
@@ -282,7 +294,9 @@ describe('ModelsGroups', () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText(/Failed to load model groups report/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Model Groups active LLM models query failed/i)).toBeInTheDocument();
+    expect(screen.getByText(/errorId=vr-1234abcd/i)).toBeInTheDocument();
+    expect(screen.getByText(/path=llmModels/i)).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Model Clusters', level: 2 })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Similarity by Model' })).not.toBeInTheDocument();
     expect(screen.queryByText('Model Agreement on Value Tradeoffs')).not.toBeInTheDocument();

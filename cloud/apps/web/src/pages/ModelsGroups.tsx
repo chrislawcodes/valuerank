@@ -29,6 +29,7 @@ import { ModelAgreementSection } from '../components/models/ModelAgreementSectio
 import { type CalculationMethod } from '../components/models/ModelSimilarityMetrics';
 import { useDomains } from '../hooks/useDomains';
 import { VALUES, type ModelEntry, type ValueKey } from '../data/domainAnalysisData';
+import { formatQueryError } from '../utils/urqlError';
 import {
   countAnalyzedTranscripts,
   formatSignatureOptionLabel,
@@ -233,18 +234,44 @@ export function ModelsGroups() {
     [models, visibleModelIds],
   );
   const isAllDomains = selectedScope === 'ALL_DOMAINS';
-  const pageError = domainsError ?? signaturesError ?? error ?? modelsAnalysisError ?? llmModelsError;
+  const pageErrorMessage = domainsError != null
+    ? domainsError.message
+    : signaturesError != null
+      ? formatQueryError('Model Groups available signatures query', signaturesError, {
+        domainId: selectedDomainId === '' ? domains[0]?.id ?? '' : selectedDomainId,
+        scope: selectedScope,
+      })
+      : error != null
+        ? formatQueryError(
+          activeUseLegacyQuery ? 'Model Groups legacy domain analysis query' : 'Model Groups domain analysis query',
+          error,
+          {
+            domainId: selectedDomainId === '' ? domains[0]?.id ?? '' : selectedDomainId,
+            scope: selectedScope,
+            signature: selectedSignature === '' ? '(none)' : selectedSignature,
+          },
+        )
+        : modelsAnalysisError != null
+          ? formatQueryError('Model Groups models analysis query', modelsAnalysisError, {
+            domainId: selectedScope === 'DOMAIN' && selectedDomainId !== '' ? selectedDomainId : ALL_DOMAINS_SCOPE,
+            signature: selectedSignature === '' ? '(none)' : selectedSignature,
+          })
+          : llmModelsError != null
+            ? formatQueryError('Model Groups active LLM models query', llmModelsError, {
+              status: 'ACTIVE',
+            })
+            : null;
   const showAgreementSection =
     selectedSignature !== ''
     && visibleModelIds.length >= 2
     && !(selectedScope === 'DOMAIN' && selectedDomainId === '')
     && llmModelsData != null;
 
-  if (pageError != null) {
+  if (pageErrorMessage != null) {
     return (
       <div className="space-y-6">
         <ErrorMessage
-          message={`Failed to load model groups report: ${pageError.message ?? 'Unknown error'}`}
+          message={`Failed to load model groups report: ${pageErrorMessage}`}
         />
       </div>
     );

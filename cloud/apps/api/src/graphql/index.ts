@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { createYoga, type Plugin, createGraphQLError } from 'graphql-yoga';
 import type { Request, Response } from 'express';
 import { graphql, type ExecutionResult, getOperationAST, type DocumentNode, Kind } from 'graphql';
@@ -127,6 +128,10 @@ function getOriginalError(value: unknown): unknown {
   return maybeOriginal ?? null;
 }
 
+function createErrorReferenceId(): string {
+  return `vr-${randomUUID().slice(0, 8)}`;
+}
+
 const [{ queriesReady }, { mutationsReady }] = await Promise.all([
   import('./queries/index.js'),
   import('./mutations/index.js'),
@@ -188,9 +193,12 @@ export const yoga = createYoga<{
       }
 
       if (appError !== null) {
+        const errorId = createErrorReferenceId();
+        log.error({ errorId, err: appError }, 'GraphQL app error');
         return createGraphQLError(appError.message, {
           extensions: {
             code: appError.code || 'APP_ERROR',
+            errorId,
             http: {
               status: appError.statusCode || 400,
             },
@@ -198,9 +206,12 @@ export const yoga = createYoga<{
         });
       }
       // Mask other errors with generic message
+      const errorId = createErrorReferenceId();
+      log.error({ errorId, err: error }, 'GraphQL unhandled error');
       return createGraphQLError('Unexpected error occurred.', {
         extensions: {
           code: 'INTERNAL_SERVER_ERROR',
+          errorId,
           http: {
             status: 500,
           },
