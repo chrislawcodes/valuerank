@@ -111,12 +111,12 @@ export function parseCellLevelOutcomeKey(key: string): {
 }
 
 export function computeProportionA(outcome: CellOutcome): number | null {
-  const total = outcome.aChoices + outcome.bChoices;
+  const total = outcome.aChoices + outcome.bChoices + outcome.neutrals;
   if (total <= 0) {
     return null;
   }
 
-  return outcome.aChoices / total;
+  return (outcome.aChoices + 0.5 * outcome.neutrals) / total;
 }
 
 export function buildSelectedModels(
@@ -261,16 +261,21 @@ function aggregateNested(map: NestedCellValues): number | null {
 }
 
 /**
- * Three-category Cohen's kappa over A / TIED / B with three-level equal-weight
- * aggregation.
+ * Weighted Cohen's kappa over A / TIED / B with linear ordinal weights and
+ * three-level equal-weight aggregation.
  *
  * Aggregation chain: cell → vignette → value-pair → headline. Each level is
  * equal-weighted, so neither cells-per-vignette nor vignettes-per-value-pair
  * bias the headline. A value pair tested by many vignettes contributes the
  * same to the cross-pair number as one tested by few.
  *
- * Both models tied counts as agreement; one tied + one decided counts as
- * disagreement. P_chance = sum over categories of pX(k) * pY(k).
+ * Ordinal weights over A < TIED < B:
+ *   same category → weight 1 (full agreement)
+ *   one step apart (A↔TIED or TIED↔B) → weight 0.5 (soft disagreement)
+ *   two steps apart (A↔B) → weight 0 (hard disagreement)
+ *
+ * percentAgreement stays as the unweighted binary same-category rate —
+ * useful as a diagnostic alongside the weighted kappa.
  */
 export function summarizePairCells(cells: ReadonlyArray<ComparableCell>): PairMetrics {
   if (cells.length === 0) {
@@ -284,6 +289,7 @@ export function summarizePairCells(cells: ReadonlyArray<ComparableCell>): PairMe
   }
 
   const agreement: NestedCellValues = new Map();
+  const weightedAgreement: NestedCellValues = new Map();
   const divergence: NestedCellValues = new Map();
   const indicatorAx: NestedCellValues = new Map();
   const indicatorTx: NestedCellValues = new Map();
@@ -293,7 +299,24 @@ export function summarizePairCells(cells: ReadonlyArray<ComparableCell>): PairMe
   const indicatorBy: NestedCellValues = new Map();
 
   for (const cell of cells) {
+    // Binary same-category agreement (for percentAgreement diagnostic)
     pushNested(agreement, cell.valuePairKey, cell.definitionId, cell.agrees ? 1 : 0);
+
+    // Weighted agreement: same=1, one-step-apart=0.5, two-steps-apart=0
+    let cellWeightedAgreement: number;
+    if (cell.modelAChoice === cell.modelBChoice) {
+      cellWeightedAgreement = 1.0;
+    } else if (
+      (cell.modelAChoice === 'A' && cell.modelBChoice === 'B')
+      || (cell.modelAChoice === 'B' && cell.modelBChoice === 'A')
+    ) {
+      cellWeightedAgreement = 0.0;
+    } else {
+      // One of {A↔TIED, TIED↔A, TIED↔B, B↔TIED}
+      cellWeightedAgreement = 0.5;
+    }
+    pushNested(weightedAgreement, cell.valuePairKey, cell.definitionId, cellWeightedAgreement);
+
     pushNested(divergence, cell.valuePairKey, cell.definitionId, cell.divergence);
     pushNested(indicatorAx, cell.valuePairKey, cell.definitionId, cell.modelAChoice === 'A' ? 1 : 0);
     pushNested(indicatorTx, cell.valuePairKey, cell.definitionId, cell.modelAChoice === 'TIED' ? 1 : 0);
@@ -304,6 +327,7 @@ export function summarizePairCells(cells: ReadonlyArray<ComparableCell>): PairMe
   }
 
   const percentAgreementValue = aggregateNested(agreement);
+  const pObservedWeighted = aggregateNested(weightedAgreement);
   const meanAbsoluteDivergence = aggregateNested(divergence);
 
   const pAx = aggregateNested(indicatorAx);
@@ -313,12 +337,20 @@ export function summarizePairCells(cells: ReadonlyArray<ComparableCell>): PairMe
   const pTy = aggregateNested(indicatorTy);
   const pBy = aggregateNested(indicatorBy);
 
+  // Weighted chance agreement:
+  //   P_chance_w = pAx*pAy*1 + pAx*pTy*0.5 + pAx*pBy*0
+  //              + pTx*pAy*0.5 + pTx*pTy*1 + pTx*pBy*0.5
+  //              + pBx*pAy*0 + pBx*pTy*0.5 + pBx*pBy*1
+  // Simplified: pAx*pAy + pTx*pTy + pBx*pBy
+  //           + 0.5 * (pAx*pTy + pTx*pAy + pTx*pBy + pBx*pTy)
   const chanceAgreement = pAx != null && pTx != null && pBx != null
     && pAy != null && pTy != null && pBy != null
     ? (pAx * pAy) + (pTx * pTy) + (pBx * pBy)
+      + 0.5 * ((pAx * pTy) + (pTx * pAy) + (pTx * pBy) + (pBx * pTy))
     : null;
-  const kappa = percentAgreementValue != null && chanceAgreement != null
-    ? cohensKappa(percentAgreementValue, chanceAgreement)
+
+  const kappa = pObservedWeighted != null && chanceAgreement != null
+    ? cohensKappa(pObservedWeighted, chanceAgreement)
     : null;
 
   return {
