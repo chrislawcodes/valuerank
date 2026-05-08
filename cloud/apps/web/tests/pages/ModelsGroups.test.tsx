@@ -242,4 +242,49 @@ describe('ModelsGroups', () => {
     expect(await screen.findByText(/^Fresh$/)).toBeInTheDocument();
     expect(screen.getByText(/0 transcripts analyzed/i)).toBeInTheDocument();
   });
+
+  it('keeps rendering when one query fails with cached data', async () => {
+    useQueryMock.mockImplementation((args: { query: unknown }) => {
+      if (args.query === DOMAIN_AVAILABLE_SIGNATURES_QUERY) {
+        return [{
+          data: defaultSignatureData,
+          fetching: false,
+          error: undefined,
+        }];
+      }
+      if (args.query === DOMAIN_ANALYSIS_QUERY || args.query === DOMAIN_ANALYSIS_QUERY_LEGACY) {
+        return [{
+          data: defaultAnalysis,
+          fetching: false,
+          error: undefined,
+        }];
+      }
+      if (args.query === MODELS_ANALYSIS_QUERY) {
+        return [{
+          data: defaultModelsAnalysis,
+          fetching: false,
+          error: undefined,
+        }];
+      }
+      if (args.query === LLM_MODELS_QUERY) {
+        return [{
+          data: defaultLlmModels,
+          fetching: false,
+          error: new Error('GraphQL Unexpected error occurred'),
+        }];
+      }
+      return [{ data: undefined, fetching: false, error: undefined }];
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/models?domainId=domain-a&signature=vnewtd']}>
+        <ModelsGroups />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText(/Some model groups data failed to load/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Model Clusters', level: 2 })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Similarity by Model' })).toBeInTheDocument();
+    expect(screen.getByText('Model Agreement on Value Tradeoffs')).toBeInTheDocument();
+  });
 });
