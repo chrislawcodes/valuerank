@@ -73,4 +73,42 @@ describe('PairwiseDivergenceDrilldownReport', () => {
 
     expect(reexecuteQuery).toHaveBeenCalledWith({ requestPolicy: 'network-only' });
   });
+
+  it('shows a traceable query error message when the divergence query fails', () => {
+    mockedUseModelPairDivergenceBreakdownQuery.mockReturnValue([
+      {
+        data: undefined,
+        fetching: false,
+        error: {
+          message: 'Request failed',
+          graphQLErrors: [
+            {
+              message: 'Pairwise divergence query failed',
+              path: ['modelPairDivergenceBreakdown'],
+              extensions: {
+                code: 'INTERNAL_SERVER_ERROR',
+                errorId: 'err-456',
+              },
+            },
+          ],
+        },
+      },
+      vi.fn(),
+    ] as unknown as ReturnType<typeof useModelPairDivergenceBreakdownQuery>);
+
+    render(
+      <PairwiseDivergenceDrilldownReport
+        selectedPair={{ modelAId: 'alpha', modelBId: 'beta' }}
+        scope="ALL_DOMAINS"
+        domainId={null}
+        signature="vnewtd"
+      />,
+    );
+
+    expect(
+      screen.getByText((content) =>
+        content.includes('Pairwise divergence query failed (scope=ALL_DOMAINS, domainId=all, signature=vnewtd, modelAId=alpha, modelBId=beta): Request failed (path=modelPairDivergenceBreakdown, code=INTERNAL_SERVER_ERROR, errorId=err-456)'),
+      ),
+    ).toBeTruthy();
+  });
 });

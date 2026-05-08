@@ -15,6 +15,7 @@ import {
   type ConfidenceTranscriptsQueryVariables,
 } from '../../api/operations/confidenceTranscripts';
 import { VALUE_LABELS, type ValueKey } from '../../data/domainAnalysisData';
+import { formatQueryError } from '../../utils/urqlError';
 
 type ConfidenceTranscriptsDrawerProps = {
   open: boolean;
@@ -119,7 +120,14 @@ export function ConfidenceTranscriptsDrawer({
           {fetching && data == null ? (
             <Loading />
           ) : error != null ? (
-            <ErrorMessage message={error.message} />
+            <ErrorMessage
+              message={formatQueryError('Confidence transcripts query', error, {
+                modelId,
+                modelLabel,
+                valueKey: valueKey ?? '(none)',
+                signature,
+              })}
+            />
           ) : transcripts.length === 0 ? (
             <p className="text-sm text-gray-500">No transcripts found.</p>
           ) : (

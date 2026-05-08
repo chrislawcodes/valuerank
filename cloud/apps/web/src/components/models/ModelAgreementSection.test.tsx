@@ -74,4 +74,42 @@ describe('ModelAgreementSection', () => {
 
     expect(reexecuteQuery).toHaveBeenCalledWith({ requestPolicy: 'network-only' });
   });
+
+  it('shows a traceable query error message when the agreement query fails', () => {
+    mockedUseModelAgreementOnTradeoffsQuery.mockReturnValue([
+      {
+        data: undefined,
+        fetching: false,
+        error: {
+          message: 'Request failed',
+          graphQLErrors: [
+            {
+              message: 'Model agreement query failed',
+              path: ['modelAgreementOnTradeoffs'],
+              extensions: {
+                code: 'BAD_USER_INPUT',
+                errorId: 'err-123',
+              },
+            },
+          ],
+        },
+      },
+      vi.fn(),
+    ] as unknown as ReturnType<typeof useModelAgreementOnTradeoffsQuery>);
+
+    render(
+      <ModelAgreementSection
+        modelIds={['model-a', 'model-b']}
+        scope="ALL_DOMAINS"
+        domainId={null}
+        signature="vnewtd"
+      />,
+    );
+
+    expect(
+      screen.getByText((content) =>
+        content.includes('Model agreement query failed (scope=ALL_DOMAINS, domainId=all, signature=vnewtd, modelCount=2): Request failed (path=modelAgreementOnTradeoffs, code=BAD_USER_INPUT, errorId=err-123)'),
+      ),
+    ).toBeTruthy();
+  });
 });

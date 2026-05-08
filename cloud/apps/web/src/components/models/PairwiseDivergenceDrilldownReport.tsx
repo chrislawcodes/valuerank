@@ -3,6 +3,7 @@ import { ErrorMessage } from '../ui/ErrorMessage';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/Table';
 import type { ModelPairDivergenceBreakdownQuery } from '../../generated/graphql';
 import { useModelPairDivergenceBreakdownQuery } from '../../generated/graphql';
+import { formatQueryError } from '../../utils/urqlError';
 
 type SelectedPair = {
   modelAId: string;
@@ -110,7 +111,17 @@ export function PairwiseDivergenceDrilldownReport({ selectedPair, scope, domainI
   }
 
   if (error != null) {
-    return <ErrorMessage message={error.message} />;
+    return (
+      <ErrorMessage
+        message={formatQueryError('Pairwise divergence query', error, {
+          scope,
+          domainId: domainId ?? 'all',
+          signature,
+          modelAId: selectedPair.modelAId,
+          modelBId: selectedPair.modelBId,
+        })}
+      />
+    );
   }
 
   if (fetching && drilldown == null) {

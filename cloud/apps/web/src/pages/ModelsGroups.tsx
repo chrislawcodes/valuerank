@@ -235,7 +235,10 @@ export function ModelsGroups() {
   );
   const isAllDomains = selectedScope === 'ALL_DOMAINS';
   const pageErrorMessage = domainsError != null
-    ? domainsError.message
+    ? formatQueryError('Model Groups domains query', domainsError, {
+      scope: selectedScope,
+      domainId: selectedDomainId === '' ? '(auto)' : selectedDomainId,
+    })
     : signaturesError != null
       ? formatQueryError('Model Groups available signatures query', signaturesError, {
         domainId: selectedDomainId === '' ? domains[0]?.id ?? '' : selectedDomainId,

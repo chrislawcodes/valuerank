@@ -28,25 +28,12 @@ import { NotFoundError, ValidationError } from '@valuerank/shared';
 
 describe('definition queries', () => {
   const createdDefinitionIds: string[] = [];
-  const createdRunIds: string[] = [];
 
   afterEach(async () => {
-    // Clean up runs first
-    if (createdRunIds.length > 0) {
-      await db.run.deleteMany({
-        where: { id: { in: createdRunIds } },
-      });
-      createdRunIds.length = 0;
-    }
-
-    // Hard delete definitions for test cleanup (cascade tags, scenarios)
+    // Delete only the definitions we created. The schema cascades to child
+    // runs, scenarios, tags, and transcript data, so we do not need to issue
+    // separate cleanup queries for each table.
     if (createdDefinitionIds.length > 0) {
-      await db.definitionTag.deleteMany({
-        where: { definitionId: { in: createdDefinitionIds } },
-      });
-      await db.scenario.deleteMany({
-        where: { definitionId: { in: createdDefinitionIds } },
-      });
       await db.definition.deleteMany({
         where: { id: { in: createdDefinitionIds } },
       });
@@ -737,7 +724,7 @@ describe('definition queries', () => {
           progress: { total: 10, completed: 5, failed: 0 },
         },
       });
-      createdRunIds.push(run.id);
+      expect(run.id).toBeDefined();
 
       await expect(softDeleteDefinition(def.id)).rejects.toThrow(ValidationError);
     });

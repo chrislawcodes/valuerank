@@ -23,6 +23,7 @@ import {
   getDefaultDomainShiftSignature,
 } from './domainValueShiftHeatmapUtils';
 import { useDomains } from '../hooks/useDomains';
+import { formatQueryError } from '../utils/urqlError';
 
 export function ModelsConfidence() {
   const navigate = useNavigate();
@@ -30,10 +31,10 @@ export function ModelsConfidence() {
   const signatureParam = searchParams.get('signature');
   const reportRef = useRef<HTMLDivElement>(null);
 
-  const { domains } = useDomains();
+  const { domains, error: domainsError } = useDomains();
   const [selectedDomainId, setSelectedDomainId] = useState<string | null>(null);
 
-  const [{ data: signatureData }] = useQuery<AvailableSignaturesQueryResult>({
+  const [{ data: signatureData, error: signatureError }] = useQuery<AvailableSignaturesQueryResult>({
     query: AVAILABLE_SIGNATURES_QUERY,
     variables: {},
     requestPolicy: 'cache-and-network',
@@ -83,7 +84,7 @@ export function ModelsConfidence() {
     requestPolicy: 'cache-and-network',
   });
 
-  const [{ data: llmModelsData }] = useQuery<LlmModelsQueryResult>({
+  const [{ data: llmModelsData, error: llmModelsError }] = useQuery<LlmModelsQueryResult>({
     query: LLM_MODELS_QUERY,
     variables: { status: 'ACTIVE' },
     requestPolicy: 'cache-and-network',
@@ -110,6 +111,22 @@ export function ModelsConfidence() {
 
   const models = useMemo(() => data?.modelsConfidence.models ?? [], [data]);
   const loading = fetching && data == null;
+  const pageErrorMessage = domainsError != null
+    ? domainsError.message
+    : signatureError != null
+      ? formatQueryError('Models confidence signatures query', signatureError, {
+        signature: selectedSignature,
+      })
+      : llmModelsError != null
+        ? formatQueryError('Models confidence active LLM models query', llmModelsError, {
+          status: 'ACTIVE',
+        })
+        : error != null
+          ? formatQueryError('Models confidence report query', error, {
+            domainId: selectedDomainId ?? 'all',
+            signature: selectedSignature,
+          })
+          : null;
 
   const filteredModelIds = selectedModelIds ?? defaultModelIds;
 
@@ -165,7 +182,9 @@ export function ModelsConfidence() {
         }}
       />
 
-      {error != null && <ErrorMessage message={error.message} />}
+      {pageErrorMessage != null && (
+        <ErrorMessage message={`Failed to load confidence report: ${pageErrorMessage}`} />
+      )}
 
       <section ref={reportRef} className="rounded-xl border border-gray-200 bg-white p-4 md:p-5">
         <div className="mb-4 flex items-start justify-between gap-3">

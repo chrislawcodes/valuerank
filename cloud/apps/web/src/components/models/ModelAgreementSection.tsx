@@ -5,6 +5,7 @@ import { PairwiseAgreementMatrixReport } from './PairwiseAgreementMatrixReport';
 import { ModelTrialConsistencyReport } from './ModelTrialConsistencyReport';
 import { PairwiseDivergenceDrilldownReport } from './PairwiseDivergenceDrilldownReport';
 import type { ModelAgreementOnTradeoffsQuery } from '../../generated/graphql';
+import { formatQueryError } from '../../utils/urqlError';
 
 type PairwiseAgreementRow = ModelAgreementOnTradeoffsQuery['modelAgreementOnTradeoffs']['pairwiseAgreementMatrix'][number];
 
@@ -213,7 +214,16 @@ export function ModelAgreementSection({ modelIds, scope, domainId, signature }: 
   }, [rows, selectedPair, selectedPairKey]);
 
   if (error != null) {
-    return <ErrorMessage message={error.message} />;
+    return (
+      <ErrorMessage
+        message={formatQueryError('Model agreement query', error, {
+          scope,
+          domainId: domainId ?? 'all',
+          signature,
+          modelCount: modelIds.length,
+        })}
+      />
+    );
   }
 
   if (fetching && agreement == null) {

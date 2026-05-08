@@ -16,6 +16,7 @@ import {
   type ModelsConfidenceQueryResult,
   type ModelsConfidenceModelResult,
 } from '../../api/operations/modelsConfidence';
+import { formatQueryError } from '../../utils/urqlError';
 
 type DomainOption = {
   id: string;
@@ -62,6 +63,7 @@ type ModelCellData = {
   strongPct: number | null;
   shift: number | null;
   status: 'ready' | 'loading' | 'error';
+  error: string | null;
 };
 
 type ModelRowData = {
@@ -183,6 +185,7 @@ function buildModelRows(
           strongPct: null,
           shift: null,
           status: 'loading',
+          error: null,
         });
         continue;
       }
@@ -194,6 +197,7 @@ function buildModelRows(
           strongPct: null,
           shift: null,
           status: 'error',
+          error: state.error,
         });
         continue;
       }
@@ -206,6 +210,7 @@ function buildModelRows(
           strongPct: null,
           shift: null,
           status: 'ready',
+          error: null,
         });
         continue;
       }
@@ -218,6 +223,7 @@ function buildModelRows(
         strongPct,
         shift: null,
         status: 'ready',
+        error: null,
       });
     }
 
@@ -369,7 +375,11 @@ export function ConfidenceModelDomainBreakout({
               [domain.id]: {
                 status: 'error',
                 models: [],
-                error: result.error?.message ?? 'Failed to load domain data',
+                error: formatQueryError('Confidence by model query', result.error, {
+                  domainId: domain.id,
+                  signature,
+                  selectedModels: effectiveModelIds.length,
+                }),
               },
             }));
             return;
@@ -390,7 +400,11 @@ export function ConfidenceModelDomainBreakout({
             [domain.id]: {
               status: 'error',
               models: [],
-              error: error instanceof Error ? error.message : 'Failed to load domain data',
+              error: formatQueryError('Confidence by model query', error, {
+                domainId: domain.id,
+                signature,
+                selectedModels: effectiveModelIds.length,
+              }),
             },
           }));
         }
@@ -491,6 +505,7 @@ export function ConfidenceModelDomainBreakout({
                     const isSelected = selectedDomainId === domain.id;
                     const isLoading = cell == null || cell.status === 'loading';
                     const isError = cell?.status === 'error';
+                    const errorTitle = isError ? cell?.error ?? 'Failed to load domain data' : undefined;
                     const tdClassName = cn(
                       'border-b border-gray-100 px-2 py-2 text-center align-middle transition-colors',
                       isSelected && 'ring-1 ring-inset ring-teal-200 bg-teal-50/30',
@@ -504,7 +519,7 @@ export function ConfidenceModelDomainBreakout({
                     );
 
                     return (
-                      <td key={domain.id} className={tdClassName}>
+                      <td key={domain.id} className={tdClassName} title={errorTitle} aria-label={errorTitle}>
                         <span className="inline-flex min-w-[64px] justify-center tabular-nums">
                           {cell == null ? '…' : getCellValue(cell, displayMode)}
                         </span>
