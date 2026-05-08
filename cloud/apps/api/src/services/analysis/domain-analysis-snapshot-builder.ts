@@ -180,17 +180,54 @@ export async function buildSnapshotOutput(
       offset += fetchedCount;
     }
   }
-  // Derive per-(definitionId::modelId) vote counts from the cellMap before it is
-  // aggregated into domain-level rates. These are stored in the snapshot so the
-  // significance resolver can run McNemar without a separate transcript scan.
-  const definitionModelVotes: Record<string, { wins: number; losses: number }> = {};
+  // Derive per-(canonicalValueA::canonicalValueB::modelId) vote counts so the significance
+  // resolver can compute a true per-model preference score for each value pair.
+  //
+  // Key format:  canonicalValueA::canonicalValueB::modelId
+  //   where canonicalValueA < canonicalValueB alphabetically.
+  // wins  = total times model chose canonicalValueA across ALL definitions in this pair
+  //         (both presentation directions combined).
+  // losses = total times model chose canonicalValueB.
+  //
+  // wins/(wins+losses) is the model's real preference score for canonicalValueA, free of
+  // the 50/50 cancellation that happened when summing both value-key cells per definition.
+  const valuePairModelVotes: Record<string, { wins: number; losses: number }> = {};
+
+  // First pass: group cells by (definitionId::modelId) and accumulate per-value-key counts.
+  type ValueKeyCounts = { wins: number; losses: number };
+  const defModelCells = new Map<string, Map<string, ValueKeyCounts>>();
   for (const [key, counts] of cellMap.entries()) {
     const parts = key.split('::');
-    const combinedKey = `${parts[0]}::${parts[1]}`; // definitionId::modelId
-    const entry = definitionModelVotes[combinedKey] ?? { wins: 0, losses: 0 };
-    entry.wins += counts.wins;
-    entry.losses += counts.losses;
-    definitionModelVotes[combinedKey] = entry;
+    const definitionId = parts[0];
+    const modelId = parts[1];
+    const valueKey = parts[2];
+    if (definitionId === undefined || modelId === undefined || valueKey === undefined) continue;
+    const defModelKey = `${definitionId}::${modelId}`;
+    let byValueKey = defModelCells.get(defModelKey);
+    if (byValueKey === undefined) {
+      byValueKey = new Map<string, ValueKeyCounts>();
+      defModelCells.set(defModelKey, byValueKey);
+    }
+    const existing = byValueKey.get(valueKey) ?? { wins: 0, losses: 0 };
+    existing.wins += counts.wins;
+    existing.losses += counts.losses;
+    byValueKey.set(valueKey, existing);
+  }
+
+  // Second pass: for each (definition, model), form the canonical pair key and accumulate
+  // wins for canonicalValueA (alphabetically first) across all definitions in the pair.
+  for (const [defModelKey, byValueKey] of defModelCells.entries()) {
+    const modelId = defModelKey.split('::')[1];
+    if (modelId === undefined) continue;
+    const sortedValueKeys = [...byValueKey.keys()].sort();
+    if (sortedValueKeys.length !== 2) continue;
+    const [canonicalA, canonicalB] = sortedValueKeys as [string, string];
+    const pairKey = `${canonicalA}::${canonicalB}::${modelId}`;
+    const aCell = byValueKey.get(canonicalA) ?? { wins: 0, losses: 0 };
+    const entry = valuePairModelVotes[pairKey] ?? { wins: 0, losses: 0 };
+    entry.wins += aCell.wins;
+    entry.losses += aCell.losses;
+    valuePairModelVotes[pairKey] = entry;
   }
 
   const { models, analyzedDefinitionIds } = computeCellWeightedDomainRates({
@@ -232,7 +269,7 @@ export async function buildSnapshotOutput(
     models,
     contributionSummary: [],
     excludedDataSummary: [],
-    definitionModelVotes,
+    valuePairModelVotes,
   };
 }
 

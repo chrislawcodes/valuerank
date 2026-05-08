@@ -17,7 +17,7 @@ export type DomainAnalysisCacheStatus =
   (typeof DOMAIN_ANALYSIS_CACHE_STATUS)[keyof typeof DOMAIN_ANALYSIS_CACHE_STATUS];
 
 export const DOMAIN_ANALYSIS_SNAPSHOT_TYPE = 'domain_overview';
-export const DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION = '1.10.0';
+export const DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION = '1.11.0';
 export const DOMAIN_ANALYSIS_ASSUMPTION_PREFIX = 'domain-analysis';
 export const DOMAIN_ANALYSIS_NONE_SIGNATURE = '__none__';
 
@@ -62,10 +62,15 @@ export type DomainAnalysisSnapshotOutput = {
   models: DomainAnalysisSnapshotModel[];
   contributionSummary: DomainAnalysisContributionSummary[];
   excludedDataSummary: DomainAnalysisExcludedDataSummary[];
-  // Per-(definitionId::modelId) win/loss vote counts, derived from the cellMap before
-  // domain-level aggregation. Used by the significance resolver to avoid a separate
-  // transcript scan. Optional for backward compatibility with pre-v1.10.0 snapshots.
+  // Per-(definitionId::modelId) win/loss vote counts. Deprecated — superseded by
+  // valuePairModelVotes in v1.11.0. Kept as optional for backward compatibility.
   definitionModelVotes?: Record<string, { wins: number; losses: number }>;
+  // Per-(canonicalValueA::canonicalValueB::modelId) vote counts, where wins = number of times
+  // the model chose canonicalValueA (alphabetically first value key) across ALL definitions
+  // in this value pair (both directions combined). Produced from v1.11.0 onwards.
+  // wins/(wins+losses) gives the model's true preference score for canonicalValueA,
+  // free of the 50/50 cancellation that occurred with per-definition aggregation.
+  valuePairModelVotes?: Record<string, { wins: number; losses: number }>;
 };
 
 export type AnalysisFingerprintRow = {
