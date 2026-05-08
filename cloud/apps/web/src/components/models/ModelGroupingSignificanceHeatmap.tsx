@@ -1,22 +1,23 @@
 import type { ModelGroupingSignificanceModel, ModelGroupingSignificanceRow } from '../../api/operations/modelGroupingSignificance';
 import { cn } from '../../lib/utils';
 
-function formatAgreementRate(value: number | null): string {
+function formatMeanDiff(value: number | null): string {
   if (value == null || !Number.isFinite(value)) return '—';
-  return `${Math.round(value * 100)}%`;
+  const sign = value >= 0 ? '+' : '';
+  return `${sign}${(value * 100).toFixed(1)}%`;
 }
 
-function getAgreementTone(agreementRate: number | null): string {
-  if (agreementRate == null || !Number.isFinite(agreementRate)) {
+function getMeanDiffTone(absDiff: number | null): string {
+  if (absDiff == null || !Number.isFinite(absDiff)) {
     return 'bg-gray-50 text-gray-400';
   }
-  if (agreementRate >= 0.9) {
-    return 'bg-teal-100 text-teal-900';
+  if (absDiff >= 0.2) {
+    return 'bg-rose-100 text-rose-900';
   }
-  if (agreementRate >= 0.7) {
-    return 'bg-gray-50 text-gray-700';
+  if (absDiff >= 0.1) {
+    return 'bg-amber-50 text-amber-900';
   }
-  return 'bg-rose-50 text-rose-800';
+  return 'bg-gray-50 text-gray-700';
 }
 
 function getVerdictRing(verdict: ModelGroupingSignificanceRow['verdict']): string {
@@ -57,7 +58,7 @@ export function ModelGroupingSignificanceHeatmap({
   return (
     <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white p-3">
       <div className="mb-2 flex items-center justify-between gap-3 text-xs text-gray-500">
-        <span>Color shows agreement rate. Border shows Holm-Bonferroni significance.</span>
+        <span>Color shows |mean win-rate difference|. Border shows Holm-Bonferroni significance.</span>
         <span>S = Significant, W = Weak</span>
       </div>
       <table className="min-w-full border-collapse text-xs">
@@ -84,23 +85,13 @@ export function ModelGroupingSignificanceHeatmap({
                 const sourceRow = upper
                   ? rowByPair.get(`${rowModel.modelId}::${colModel.modelId}`) ?? null
                   : rowByPair.get(`${colModel.modelId}::${rowModel.modelId}`) ?? null;
-                const agreementRate = sourceRow?.agreementRate ?? null;
-                const discordantAtoB = sourceRow == null
-                  ? null
-                  : upper
-                    ? sourceRow.discordantAtoB
-                    : sourceRow.discordantBtoA;
-                const discordantBtoA = sourceRow == null
-                  ? null
-                  : upper
-                    ? sourceRow.discordantBtoA
-                    : sourceRow.discordantAtoB;
+                const meanDifference = sourceRow?.meanDifference ?? null;
                 const verdict = sourceRow?.verdict ?? 'Not significant';
                 const title = sameCell
                   ? `${rowModel.label} compared with itself`
                   : sourceRow == null
                     ? `${rowModel.label} and ${colModel.label}: no data`
-                    : `${rowModel.label} vs ${colModel.label}: agreement ${formatAgreementRate(agreementRate)}, discordant A→B ${discordantAtoB}, B→A ${discordantBtoA}, verdict ${verdict}`;
+                    : `${rowModel.label} vs ${colModel.label}: mean diff ${formatMeanDiff(meanDifference)}, verdict ${verdict}`;
 
                 return (
                   <td key={colModel.modelId} className="px-1 py-1 text-right" title={title}>
@@ -116,7 +107,7 @@ export function ModelGroupingSignificanceHeatmap({
                       <div
                         className={cn(
                           'relative inline-flex h-14 w-14 items-center justify-center rounded-md border px-2 py-2 text-xs font-semibold tabular-nums shadow-sm transition',
-                          getAgreementTone(agreementRate),
+                          getMeanDiffTone(meanDifference != null ? Math.abs(meanDifference) : null),
                           getVerdictRing(verdict),
                         )}
                       >
@@ -133,7 +124,7 @@ export function ModelGroupingSignificanceHeatmap({
                             {getVerdictBadge(verdict)}
                           </span>
                         )}
-                        <span>{formatAgreementRate(agreementRate)}</span>
+                        <span>{formatMeanDiff(meanDifference)}</span>
                       </div>
                     )}
                   </td>

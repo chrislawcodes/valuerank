@@ -1629,20 +1629,21 @@ type ModelGroupingSignificanceResult {
 }
 
 type ModelGroupingSignificanceRow {
-  agreementRate: Float!
   confidenceIntervalHigh: Float
   confidenceIntervalLow: Float
-  discordantAtoB: Int!
-  discordantBtoA: Int!
   effectLabel: String!
+  effectSize: Float!
   holmCorrectedPValue: Float
+  maxOrderEffect: Float!
+  meanDifference: Float!
   modelAId: String!
   modelALabel: String!
   modelBId: String!
   modelBLabel: String!
   n: Int!
-  oddsRatio: Float
   rawPValue: Float
+  winRateA: Float!
+  winRateB: Float!
   verdict: String!
 }
 

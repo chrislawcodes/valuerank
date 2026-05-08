@@ -1,14 +1,18 @@
 import { ValidationError } from '@valuerank/shared';
+import { db } from '@valuerank/db';
 import { builder } from '../builder.js';
 import { getModelsFromDatabase } from '../../config/models.js';
-import { ModelGroupingSignificanceResultRef } from '../types/model-grouping-significance.js';
+import {
+  ModelGroupingSignificanceResultRef,
+  type ModelGroupingSignificanceRowShape,
+} from '../types/model-grouping-significance.js';
 import {
   classifyEffectSize,
   classifyVerdict,
-  exactMcNemar,
   holmBonferroni,
-  matchedPairsOddsRatio,
-  oddsRatioCI,
+  bootstrapMeanDiffCI,
+  rankBiserialCorrelation,
+  wilcoxonSignedRank,
 } from '../../services/model-grouping-significance/math.js';
 import { resolveDomainAnalysisScopeDefinitions } from '../../services/analysis/domain-analysis-scope-loader.js';
 import { resolveSignatureRuns } from '../queries/domain/shared.js';
@@ -35,7 +39,12 @@ function sortModels(models: ReadonlyArray<ModelSummary>): ModelSummary[] {
 }
 
 function encodeDefinitionModelKey(definitionId: string, modelId: string): string { return `${definitionId}::${modelId}`; }
-function getChoice(counts: WinLossCounts | undefined): 0 | 1 { return counts != null && counts.wins > counts.losses ? 1 : 0; }
+
+function computeWinRate(wins: number, losses: number): number | undefined {
+  const total = wins + losses;
+  if (total === 0) return undefined;
+  return wins / total;
+}
 
 function intersectCoveredDefinitions(models: ReadonlyArray<ModelSummary>, coverageByModel: Map<string, Set<string>>): Set<string> {
   const firstCoverage = coverageByModel.get(models[0]!.modelId) ?? new Set<string>();
@@ -165,42 +174,115 @@ builder.queryField('modelGroupingSignificance', (t) =>
         );
       }
 
-      const rows = [];
+      // Fetch definition names for pairing
+      const coveredIdsArray = [...coveredDefinitionIds];
+      const definitionRows = await db.definition.findMany({
+        where: { id: { in: coveredIdsArray }, deletedAt: null },
+        select: { id: true, name: true },
+      });
+      const nameById = new Map(definitionRows.map((def) => [def.id, def.name]));
+
+      // Pair definitions: "A -> B" pairs with "B -> A"
+      type ValuePair = { ids: [string] | [string, string] };
+      const valuePairs: ValuePair[] = [];
+      const paired = new Set<string>();
+
+      for (const idA of coveredIdsArray) {
+        if (paired.has(idA)) continue;
+        const nameA = nameById.get(idA);
+        if (nameA == null) {
+          valuePairs.push({ ids: [idA] });
+          paired.add(idA);
+          continue;
+        }
+        const parts = nameA.split(' -> ');
+        const reversedName =
+          parts.length === 2 ? `${parts[1]!.trim()} -> ${parts[0]!.trim()}` : null;
+
+        let partnerId: string | undefined;
+        if (reversedName != null) {
+          partnerId = coveredIdsArray.find(
+            (idB) => !paired.has(idB) && idB !== idA && nameById.get(idB) === reversedName,
+          );
+        }
+
+        if (partnerId != null) {
+          valuePairs.push({ ids: [idA, partnerId] });
+          paired.add(idA);
+          paired.add(partnerId);
+        } else {
+          valuePairs.push({ ids: [idA] });
+          paired.add(idA);
+        }
+      }
+
+      // Compute avgWinRate per (valuePair, model) and track maxOrderEffect
+      let maxOrderEffect = 0;
+      const avgWinRateByPair: Array<Map<string, number | undefined>> = valuePairs.map((pair) => {
+        const byModel = new Map<string, number | undefined>();
+        for (const model of sortedModels) {
+          if (pair.ids.length === 1) {
+            const counts = countsByDefinitionModel.get(encodeDefinitionModelKey(pair.ids[0], model.modelId));
+            byModel.set(model.modelId, counts != null ? computeWinRate(counts.wins, counts.losses) : undefined);
+          } else {
+            const [idA, idB] = pair.ids as [string, string];
+            const countsA = countsByDefinitionModel.get(encodeDefinitionModelKey(idA, model.modelId));
+            const countsB = countsByDefinitionModel.get(encodeDefinitionModelKey(idB, model.modelId));
+            const wrA = countsA != null ? computeWinRate(countsA.wins, countsA.losses) : undefined;
+            const wrB = countsB != null ? computeWinRate(countsB.wins, countsB.losses) : undefined;
+            if (wrA !== undefined && wrB !== undefined) {
+              byModel.set(model.modelId, (wrA + wrB) / 2);
+              const orderEffect = Math.abs(wrA - wrB);
+              if (orderEffect > maxOrderEffect) maxOrderEffect = orderEffect;
+            } else {
+              byModel.set(model.modelId, undefined);
+            }
+          }
+        }
+        return byModel;
+      });
+
+      const rows: ModelGroupingSignificanceRowShape[] = [];
       for (let leftIndex = 0; leftIndex < sortedModels.length; leftIndex += 1) {
         for (let rightIndex = leftIndex + 1; rightIndex < sortedModels.length; rightIndex += 1) {
           const modelA = sortedModels[leftIndex]!;
           const modelB = sortedModels[rightIndex]!;
-          let discordantAtoB = 0;
-          let discordantBtoA = 0;
 
-          for (const definitionId of coveredDefinitionIds) {
-            const choiceA = getChoice(countsByDefinitionModel.get(encodeDefinitionModelKey(definitionId, modelA.modelId)));
-            const choiceB = getChoice(countsByDefinitionModel.get(encodeDefinitionModelKey(definitionId, modelB.modelId)));
-            if (choiceA === 1 && choiceB === 0) {
-              discordantAtoB += 1;
-            } else if (choiceA === 0 && choiceB === 1) {
-              discordantBtoA += 1;
+          const differences: number[] = [];
+          const winRatesA: number[] = [];
+          const winRatesB: number[] = [];
+          for (const pairMap of avgWinRateByPair) {
+            const wrA = pairMap.get(modelA.modelId);
+            const wrB = pairMap.get(modelB.modelId);
+            if (wrA !== undefined && wrB !== undefined) {
+              differences.push(wrA - wrB);
+              winRatesA.push(wrA);
+              winRatesB.push(wrB);
             }
           }
 
-          const n = coveredDefinitionIds.size;
-          const concordant = n - discordantAtoB - discordantBtoA;
-          const rawPValue = exactMcNemar(discordantAtoB, discordantBtoA);
-          const oddsRatio = matchedPairsOddsRatio(discordantAtoB, discordantBtoA);
-          const { low, high } = oddsRatioCI(discordantAtoB, discordantBtoA, 0.05);
+          const n = differences.length;
+          const { statistic, pValue: rawPValue, nEff } = wilcoxonSignedRank(differences);
+          const effectSize = nEff > 0 ? rankBiserialCorrelation(statistic, nEff) : 0;
+          const { low, high } = bootstrapMeanDiffCI(differences);
+          const meanDifference = n > 0 ? differences.reduce((sum, d) => sum + d, 0) / n : 0;
+          const winRateA = winRatesA.length > 0 ? winRatesA.reduce((sum, v) => sum + v, 0) / winRatesA.length : 0;
+          const winRateB = winRatesB.length > 0 ? winRatesB.reduce((sum, v) => sum + v, 0) / winRatesB.length : 0;
+
           rows.push({
             modelAId: modelA.modelId,
             modelALabel: modelA.label,
             modelBId: modelB.modelId,
             modelBLabel: modelB.label,
             n,
-            agreementRate: n > 0 ? concordant / n : 0,
-            discordantAtoB,
-            discordantBtoA,
             rawPValue,
             holmCorrectedPValue: null,
-            oddsRatio,
-            effectLabel: classifyEffectSize(oddsRatio),
+            meanDifference,
+            effectSize,
+            effectLabel: classifyEffectSize(effectSize),
+            winRateA,
+            winRateB,
+            maxOrderEffect,
             confidenceIntervalLow: low,
             confidenceIntervalHigh: high,
             verdict: 'Not significant' as const,
@@ -217,7 +299,7 @@ builder.queryField('modelGroupingSignificance', (t) =>
             holmCorrectedPValue,
             verdict: classifyVerdict({
               correctedPValue: holmCorrectedPValue,
-              oddsRatio: row.oddsRatio,
+              effectSize: row.effectSize,
               alpha: 0.05,
             }),
           };
@@ -236,6 +318,8 @@ builder.queryField('modelGroupingSignificance', (t) =>
           modelCount: sortedModels.length,
           pairCount: sortedRows.length,
           coveredDefinitionCount: coveredDefinitionIds.size,
+          valuePairCount: valuePairs.length,
+          maxOrderEffect,
         },
         'Computed model grouping significance report',
       );

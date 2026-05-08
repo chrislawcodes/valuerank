@@ -22,10 +22,11 @@ function createRow(overrides: Partial<ModelGroupingSignificanceRow> = {}): Model
     modelBId: 'beta',
     modelBLabel: 'Beta',
     n: 10,
-    agreementRate: 0.8,
-    discordantAtoB: 1,
-    discordantBtoA: 1,
-    oddsRatio: 1,
+    winRateA: 0.8,
+    winRateB: 0.7,
+    meanDifference: 0.1,
+    effectSize: 1,
+    maxOrderEffect: 0.05,
     rawPValue: 0.5,
     holmCorrectedPValue: 0.5,
     effectLabel: 'Weak',
@@ -49,27 +50,21 @@ describe('ModelGroupingSignificanceHeatmap', () => {
     expect(screen.getByTitle('Beta compared with itself')).toBeDefined();
   });
 
-  it('renders hover title with agreement rate and discordant counts', () => {
+  it('renders hover title with mean diff', () => {
     render(
       <ModelGroupingSignificanceHeatmap
         models={[createModel('alpha', 'Alpha'), createModel('beta', 'Beta')]}
         rows={[
           createRow({
-            agreementRate: 0.8,
-            discordantAtoB: 1,
-            discordantBtoA: 3,
+            meanDifference: 0.08,
             verdict: 'Weak',
           }),
         ]}
       />,
     );
 
-    expect(
-      screen.getByTitle('Alpha vs Beta: agreement 80%, discordant A→B 1, B→A 3, verdict Weak'),
-    ).toBeDefined();
-    expect(
-      screen.getByTitle('Beta vs Alpha: agreement 80%, discordant A→B 3, B→A 1, verdict Weak'),
-    ).toBeDefined();
+    expect(screen.getByTitle('Alpha vs Beta: mean diff +8.0%, verdict Weak')).toBeDefined();
+    expect(screen.getByTitle('Beta vs Alpha: mean diff +8.0%, verdict Weak')).toBeDefined();
   });
 
   it('shows S badge for Significant rows and W badge for Weak rows', () => {
