@@ -298,5 +298,69 @@ class ActionableFindingShapesManifestTests(unittest.TestCase):
         self.assertGreaterEqual(len(FRS.ACTIONABLE_FINDING_SHAPES), 10)
 
 
+class CountFindingsBySeverityTests(unittest.TestCase):
+    """Tests for the _count_findings_by_severity helper."""
+
+    def _scan(self, text: str) -> dict[str, int]:
+        """Run the same pre-processing pipeline as _print_findings_summary."""
+        processed = FRS._strip_non_finding_markdown(FRS._findings_scan_text(text)).lower()
+        return FRS._count_findings_by_severity(processed)
+
+    def test_counts_each_severity_correctly(self) -> None:
+        body = (
+            "- critical: data loss risk\n"
+            "- high: missing index\n"
+            "- medium: stale cache\n"
+            "- low: minor typo\n"
+        )
+        counts = self._scan(body)
+        self.assertEqual(counts["CRITICAL"], 1)
+        self.assertEqual(counts["HIGH"], 1)
+        self.assertEqual(counts["MEDIUM"], 1)
+        self.assertEqual(counts["LOW"], 1)
+
+    def test_returns_zero_for_absent_severities(self) -> None:
+        body = "- high: only one finding\n"
+        counts = self._scan(body)
+        self.assertEqual(counts["CRITICAL"], 0)
+        self.assertEqual(counts["MEDIUM"], 0)
+        self.assertEqual(counts["LOW"], 0)
+
+    def test_empty_file_returns_all_zeros(self) -> None:
+        counts = self._scan("")
+        self.assertEqual(counts, {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0})
+
+    def test_prose_mention_of_high_without_finding_shape_not_counted(self) -> None:
+        body = "This would be a HIGH severity issue in production.\n"
+        counts = self._scan(body)
+        self.assertEqual(counts["HIGH"], 0)
+
+    def test_multiple_high_findings_are_counted_correctly(self) -> None:
+        body = (
+            "- high: first issue\n"
+            "- high: second issue\n"
+            "- medium: one medium\n"
+        )
+        counts = self._scan(body)
+        self.assertEqual(counts["HIGH"], 2)
+        self.assertEqual(counts["MEDIUM"], 1)
+
+    def test_fenced_code_block_not_counted(self) -> None:
+        body = (
+            "Example:\n"
+            "```\n"
+            "- HIGH: example finding\n"
+            "```\n"
+            "No real findings here.\n"
+        )
+        counts = self._scan(body)
+        self.assertEqual(counts["HIGH"], 0)
+
+    def test_inline_severity_field_form_counted(self) -> None:
+        body = "**Severity**: HIGH\nsome detail\n"
+        counts = self._scan(body)
+        self.assertEqual(counts["HIGH"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -156,6 +156,30 @@ def detect_actionable_findings(review_path: Path) -> bool:
     return bool(_ACTIONABLE_FINDING_RE.search(text))
 
 
+_SEVERITY_EXTRACT_RE = re.compile(r"\b(critical|high|medium|low)\b")
+
+_SEVERITY_ORDER = ("CRITICAL", "HIGH", "MEDIUM", "LOW")
+
+
+def _count_findings_by_severity(text: str) -> dict[str, int]:
+    """Count actionable findings by severity in review text.
+
+    Uses _ACTIONABLE_FINDING_RE to find genuine finding lines, then extracts
+    the severity word from each match. Returns a dict with counts for CRITICAL,
+    HIGH, MEDIUM, LOW (uppercase keys). Lines that match the finding shape but
+    contain no severity word are ignored.
+
+    Callers should pass pre-processed text (lowercased, non-finding markdown
+    stripped) to match the contract used by detect_actionable_findings.
+    """
+    counts: dict[str, int] = {sev: 0 for sev in ("CRITICAL", "HIGH", "MEDIUM", "LOW")}
+    for match in _ACTIONABLE_FINDING_RE.finditer(text):
+        sev_match = _SEVERITY_EXTRACT_RE.search(match.group(0))
+        if sev_match:
+            counts[sev_match.group(0).upper()] += 1
+    return counts
+
+
 def trim_detail(text: str, limit: int = 240) -> str:
     stripped = " ".join(text.split())
     if len(stripped) <= limit:
