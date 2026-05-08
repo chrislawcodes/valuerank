@@ -807,6 +807,7 @@ export type DomainAnalysisPairDetailResult = {
   vignettes: Array<DomainAnalysisPairVignetteDetail>;
 };
 
+/** Whether the vignette presents the queried pair in the requested order or reversed. */
 export type DomainAnalysisPairFramingDirection =
   | 'A_TO_B'
   | 'B_TO_A';
@@ -1358,14 +1359,6 @@ export type ForkDefinitionInput = {
   parentId: Scalars['String']['input'];
 };
 
-export type HighPressureDomainRate = {
-  __typename?: 'HighPressureDomainRate';
-  domainId: Scalars['String']['output'];
-  domainName: Scalars['String']['output'];
-  pairsMeasured: Scalars['Int']['output'];
-  rate?: Maybe<Scalars['Float']['output']>;
-};
-
 export type InsufficientModel = {
   __typename?: 'InsufficientModel';
   label: Scalars['String']['output'];
@@ -1489,6 +1482,17 @@ export type LlmProvider = {
   updatedAt: Scalars['DateTime']['output'];
 };
 
+export type ModelAgreementResult = {
+  __typename?: 'ModelAgreementResult';
+  excludedNonBinaryCells: Scalars['Int']['output'];
+  excludedTiedCells: Scalars['Int']['output'];
+  models: Array<ModelInfo>;
+  pairwiseAgreementMatrix: Array<PairwiseAgreementRow>;
+  pending: Scalars['Boolean']['output'];
+  trialConsistency: Array<ModelTrialConsistency>;
+  unavailableModels: Array<UnavailableModelInfo>;
+};
+
 export type ModelConsistency = {
   __typename?: 'ModelConsistency';
   coherence: Coherence;
@@ -1528,37 +1532,10 @@ export type ModelCostEstimate = {
   totalCost: Scalars['Float']['output'];
 };
 
-export type ModelGroupingSignificanceModel = {
-  __typename?: 'ModelGroupingSignificanceModel';
+export type ModelInfo = {
+  __typename?: 'ModelInfo';
   label: Scalars['String']['output'];
-  modelId: Scalars['String']['output'];
-};
-
-export type ModelGroupingSignificanceResult = {
-  __typename?: 'ModelGroupingSignificanceResult';
-  models: Array<ModelGroupingSignificanceModel>;
-  pending: Scalars['Boolean']['output'];
-  rows: Array<ModelGroupingSignificanceRow>;
-};
-
-export type ModelGroupingSignificanceRow = {
-  __typename?: 'ModelGroupingSignificanceRow';
-  confidenceIntervalHigh?: Maybe<Scalars['Float']['output']>;
-  confidenceIntervalLow?: Maybe<Scalars['Float']['output']>;
-  effectLabel: Scalars['String']['output'];
-  effectSize: Scalars['Float']['output'];
-  holmCorrectedPValue?: Maybe<Scalars['Float']['output']>;
-  maxOrderEffect: Scalars['Float']['output'];
-  meanDifference: Scalars['Float']['output'];
-  modelAId: Scalars['String']['output'];
-  modelALabel: Scalars['String']['output'];
-  modelBId: Scalars['String']['output'];
-  modelBLabel: Scalars['String']['output'];
-  n: Scalars['Int']['output'];
-  rawPValue?: Maybe<Scalars['Float']['output']>;
-  verdict: Scalars['String']['output'];
-  winRateA: Scalars['Float']['output'];
-  winRateB: Scalars['Float']['output'];
+  modelId: Scalars['ID']['output'];
 };
 
 export type ModelPairwiseWinRates = {
@@ -1583,6 +1560,15 @@ export type ModelTokenStats = {
   modelId: Scalars['ID']['output'];
   /** Number of probes used to compute these averages */
   sampleCount: Scalars['Int']['output'];
+};
+
+export type ModelTrialConsistency = {
+  __typename?: 'ModelTrialConsistency';
+  cellsObserved: Scalars['Int']['output'];
+  meanTrialConsistency?: Maybe<Scalars['Float']['output']>;
+  modelId: Scalars['ID']['output'];
+  modelLabel: Scalars['String']['output'];
+  noisy: Scalars['Boolean']['output'];
 };
 
 /** A domain-level contribution for a model/value pair */
@@ -2429,6 +2415,29 @@ export type OrderEffect = {
   samePct: Scalars['Float']['output'];
 };
 
+export type PairDivergenceBreakdown = {
+  __typename?: 'PairDivergenceBreakdown';
+  modelAId: Scalars['ID']['output'];
+  modelALabel: Scalars['String']['output'];
+  modelBId: Scalars['ID']['output'];
+  modelBLabel: Scalars['String']['output'];
+  pending: Scalars['Boolean']['output'];
+  perValuePair: Array<ValuePairDivergence>;
+};
+
+export type PairwiseAgreementRow = {
+  __typename?: 'PairwiseAgreementRow';
+  cohensKappa?: Maybe<Scalars['Float']['output']>;
+  kappaInterpretation?: Maybe<Scalars['String']['output']>;
+  meanAbsoluteDivergence?: Maybe<Scalars['Float']['output']>;
+  modelAId: Scalars['ID']['output'];
+  modelALabel: Scalars['String']['output'];
+  modelBId: Scalars['ID']['output'];
+  modelBLabel: Scalars['String']['output'];
+  percentAgreement?: Maybe<Scalars['Float']['output']>;
+  totalCells: Scalars['Int']['output'];
+};
+
 export type PairwiseWinRateModel = {
   __typename?: 'PairwiseWinRateModel';
   trialCountMatrix: Array<Array<Scalars['Int']['output']>>;
@@ -2801,7 +2810,8 @@ export type Query = {
    *
    */
   me?: Maybe<User>;
-  modelGroupingSignificance: ModelGroupingSignificanceResult;
+  modelAgreementOnTradeoffs: ModelAgreementResult;
+  modelPairDivergenceBreakdown: PairDivergenceBreakdown;
   /** Get token statistics for specific models. Useful for understanding prediction quality. */
   modelTokenStats: Array<ModelTokenStats>;
   modelsAnalysis: ModelsAnalysisResult;
@@ -2810,7 +2820,6 @@ export type Query = {
   modelsWinRateStability: ModelsStabilityResult;
   /** List anomalies that are currently open (resolvedAt IS NULL) across all runs. Optional filters: domainId scopes to anomalies whose run belongs to a definition in that domain; type scopes to a single RunAnomalyType. */
   openRunAnomalies: Array<RunAnomaly>;
-  /** Pairwise win rates per value pair per model, vignette-averaged */
   pairwiseWinRates: PairwiseWinRatesResult;
   /** Get a specific preamble by ID */
   preamble?: Maybe<Preamble>;
@@ -3233,9 +3242,18 @@ export type QueryLlmProvidersArgs = {
 };
 
 
-export type QueryModelGroupingSignificanceArgs = {
+export type QueryModelAgreementOnTradeoffsArgs = {
   domainId?: InputMaybe<Scalars['ID']['input']>;
-  modelIds: Array<Scalars['String']['input']>;
+  modelIds: Array<Scalars['ID']['input']>;
+  scope: Scalars['String']['input'];
+  signature: Scalars['String']['input'];
+};
+
+
+export type QueryModelPairDivergenceBreakdownArgs = {
+  domainId?: InputMaybe<Scalars['ID']['input']>;
+  modelAId: Scalars['ID']['input'];
+  modelBId: Scalars['ID']['input'];
   scope: Scalars['String']['input'];
   signature: Scalars['String']['input'];
 };
@@ -3953,6 +3971,13 @@ export type TriggerRecoveryPayload = {
   recovered: Scalars['Int']['output'];
 };
 
+export type UnavailableModelInfo = {
+  __typename?: 'UnavailableModelInfo';
+  label: Scalars['String']['output'];
+  modelId: Scalars['ID']['output'];
+  reason: Scalars['String']['output'];
+};
+
 export type UnresolvableByModel = {
   __typename?: 'UnresolvableByModel';
   count: Scalars['Int']['output'];
@@ -4097,6 +4122,16 @@ export type ValueFaultLine = {
   clusterBScore: Scalars['Float']['output'];
   delta: Scalars['Float']['output'];
   valueKey: Scalars['String']['output'];
+};
+
+export type ValuePairDivergence = {
+  __typename?: 'ValuePairDivergence';
+  cellsCompared: Scalars['Int']['output'];
+  meanAbsoluteDivergence?: Maybe<Scalars['Float']['output']>;
+  modelAProportionA?: Maybe<Scalars['Float']['output']>;
+  modelBProportionA?: Maybe<Scalars['Float']['output']>;
+  valueA: Scalars['String']['output'];
+  valueB: Scalars['String']['output'];
 };
 
 /** A value statement keyed by (domainId, token), used in Job Choice vignette assembly */
@@ -4795,15 +4830,26 @@ export type SetProviderBalanceMutationVariables = Exact<{
 
 export type SetProviderBalanceMutation = { __typename?: 'Mutation', setProviderBalance: { __typename?: 'LlmProvider', id: string, name: string, displayName: string, maxParallelRequests: number, requestsPerMinute: number, isEnabled: boolean, balance?: number | null, createdAt: string, updatedAt: string } };
 
-export type ModelGroupingSignificanceQueryVariables = Exact<{
-  modelIds: Array<Scalars['String']['input']> | Scalars['String']['input'];
+export type ModelAgreementOnTradeoffsQueryVariables = Exact<{
+  modelIds: Array<Scalars['ID']['input']> | Scalars['ID']['input'];
   domainId?: InputMaybe<Scalars['ID']['input']>;
   scope: Scalars['String']['input'];
   signature: Scalars['String']['input'];
 }>;
 
 
-export type ModelGroupingSignificanceQuery = { __typename?: 'Query', modelGroupingSignificance: { __typename?: 'ModelGroupingSignificanceResult', pending: boolean, models: Array<{ __typename?: 'ModelGroupingSignificanceModel', modelId: string, label: string }>, rows: Array<{ __typename?: 'ModelGroupingSignificanceRow', modelAId: string, modelALabel: string, modelBId: string, modelBLabel: string, n: number, rawPValue?: number | null, holmCorrectedPValue?: number | null, effectSize: number, maxOrderEffect: number, meanDifference: number, winRateA: number, winRateB: number, effectLabel: string, confidenceIntervalLow?: number | null, confidenceIntervalHigh?: number | null, verdict: string }> } };
+export type ModelAgreementOnTradeoffsQuery = { __typename?: 'Query', modelAgreementOnTradeoffs: { __typename?: 'ModelAgreementResult', pending: boolean, excludedNonBinaryCells: number, excludedTiedCells: number, models: Array<{ __typename?: 'ModelInfo', modelId: string, label: string }>, unavailableModels: Array<{ __typename?: 'UnavailableModelInfo', modelId: string, label: string, reason: string }>, pairwiseAgreementMatrix: Array<{ __typename?: 'PairwiseAgreementRow', modelAId: string, modelALabel: string, modelBId: string, modelBLabel: string, totalCells: number, percentAgreement?: number | null, cohensKappa?: number | null, kappaInterpretation?: string | null, meanAbsoluteDivergence?: number | null }>, trialConsistency: Array<{ __typename?: 'ModelTrialConsistency', modelId: string, modelLabel: string, cellsObserved: number, meanTrialConsistency?: number | null, noisy: boolean }> } };
+
+export type ModelPairDivergenceBreakdownQueryVariables = Exact<{
+  modelAId: Scalars['ID']['input'];
+  modelBId: Scalars['ID']['input'];
+  domainId?: InputMaybe<Scalars['ID']['input']>;
+  scope: Scalars['String']['input'];
+  signature: Scalars['String']['input'];
+}>;
+
+
+export type ModelPairDivergenceBreakdownQuery = { __typename?: 'Query', modelPairDivergenceBreakdown: { __typename?: 'PairDivergenceBreakdown', pending: boolean, modelAId: string, modelALabel: string, modelBId: string, modelBLabel: string, perValuePair: Array<{ __typename?: 'ValuePairDivergence', valueA: string, valueB: string, cellsCompared: number, meanAbsoluteDivergence?: number | null, modelAProportionA?: number | null, modelBProportionA?: number | null }> } };
 
 export type AvailableModelsQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -7267,43 +7313,79 @@ export const SetProviderBalanceDocument = gql`
 export function useSetProviderBalanceMutation() {
   return Urql.useMutation<SetProviderBalanceMutation, SetProviderBalanceMutationVariables>(SetProviderBalanceDocument);
 };
-export const ModelGroupingSignificanceDocument = gql`
-    query ModelGroupingSignificance($modelIds: [String!]!, $domainId: ID, $scope: String!, $signature: String!) {
-  modelGroupingSignificance(
+export const ModelAgreementOnTradeoffsDocument = gql`
+    query ModelAgreementOnTradeoffs($modelIds: [ID!]!, $domainId: ID, $scope: String!, $signature: String!) {
+  modelAgreementOnTradeoffs(
     modelIds: $modelIds
     domainId: $domainId
     scope: $scope
     signature: $signature
   ) {
     pending
+    excludedNonBinaryCells
+    excludedTiedCells
     models {
       modelId
       label
     }
-    rows {
+    unavailableModels {
+      modelId
+      label
+      reason
+    }
+    pairwiseAgreementMatrix {
       modelAId
       modelALabel
       modelBId
       modelBLabel
-      n
-      rawPValue
-      holmCorrectedPValue
-      effectSize
-      maxOrderEffect
-      meanDifference
-      winRateA
-      winRateB
-      effectLabel
-      confidenceIntervalLow
-      confidenceIntervalHigh
-      verdict
+      totalCells
+      percentAgreement
+      cohensKappa
+      kappaInterpretation
+      meanAbsoluteDivergence
+    }
+    trialConsistency {
+      modelId
+      modelLabel
+      cellsObserved
+      meanTrialConsistency
+      noisy
     }
   }
 }
     `;
 
-export function useModelGroupingSignificanceQuery(options: Omit<Urql.UseQueryArgs<ModelGroupingSignificanceQueryVariables>, 'query'>) {
-  return Urql.useQuery<ModelGroupingSignificanceQuery, ModelGroupingSignificanceQueryVariables>({ query: ModelGroupingSignificanceDocument, ...options });
+export function useModelAgreementOnTradeoffsQuery(options: Omit<Urql.UseQueryArgs<ModelAgreementOnTradeoffsQueryVariables>, 'query'>) {
+  return Urql.useQuery<ModelAgreementOnTradeoffsQuery, ModelAgreementOnTradeoffsQueryVariables>({ query: ModelAgreementOnTradeoffsDocument, ...options });
+};
+export const ModelPairDivergenceBreakdownDocument = gql`
+    query ModelPairDivergenceBreakdown($modelAId: ID!, $modelBId: ID!, $domainId: ID, $scope: String!, $signature: String!) {
+  modelPairDivergenceBreakdown(
+    modelAId: $modelAId
+    modelBId: $modelBId
+    domainId: $domainId
+    scope: $scope
+    signature: $signature
+  ) {
+    pending
+    modelAId
+    modelALabel
+    modelBId
+    modelBLabel
+    perValuePair {
+      valueA
+      valueB
+      cellsCompared
+      meanAbsoluteDivergence
+      modelAProportionA
+      modelBProportionA
+    }
+  }
+}
+    `;
+
+export function useModelPairDivergenceBreakdownQuery(options: Omit<Urql.UseQueryArgs<ModelPairDivergenceBreakdownQueryVariables>, 'query'>) {
+  return Urql.useQuery<ModelPairDivergenceBreakdownQuery, ModelPairDivergenceBreakdownQueryVariables>({ query: ModelPairDivergenceBreakdownDocument, ...options });
 };
 export const AvailableModelsDocument = gql`
     query AvailableModels {

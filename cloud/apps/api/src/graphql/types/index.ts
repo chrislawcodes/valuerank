@@ -32,7 +32,7 @@ import './models-confidence.js';
 import './confidence-value-detail.js';
 import './models-consistency.js';
 import './models-stability.js';
-import './model-grouping-significance.js';
+import './model-agreement-on-tradeoffs.js';
 import './pressure-sensitivity.js';
 import './circumplex.js';
 import './pairwise-win-rates.js';

@@ -1,0 +1,74 @@
+query ModelAgreementOnTradeoffs(
+  $modelIds: [ID!]!
+  $domainId: ID
+  $scope: String!
+  $signature: String!
+) {
+  modelAgreementOnTradeoffs(
+    modelIds: $modelIds
+    domainId: $domainId
+    scope: $scope
+    signature: $signature
+  ) {
+    pending
+    excludedNonBinaryCells
+    excludedTiedCells
+    models {
+      modelId
+      label
+    }
+    unavailableModels {
+      modelId
+      label
+      reason
+    }
+    pairwiseAgreementMatrix {
+      modelAId
+      modelALabel
+      modelBId
+      modelBLabel
+      totalCells
+      percentAgreement
+      cohensKappa
+      kappaInterpretation
+      meanAbsoluteDivergence
+    }
+    trialConsistency {
+      modelId
+      modelLabel
+      cellsObserved
+      meanTrialConsistency
+      noisy
+    }
+  }
+}
+
+query ModelPairDivergenceBreakdown(
+  $modelAId: ID!
+  $modelBId: ID!
+  $domainId: ID
+  $scope: String!
+  $signature: String!
+) {
+  modelPairDivergenceBreakdown(
+    modelAId: $modelAId
+    modelBId: $modelBId
+    domainId: $domainId
+    scope: $scope
+    signature: $signature
+  ) {
+    pending
+    modelAId
+    modelALabel
+    modelBId
+    modelBLabel
+    perValuePair {
+      valueA
+      valueB
+      cellsCompared
+      meanAbsoluteDivergence
+      modelAProportionA
+      modelBProportionA
+    }
+  }
+}
