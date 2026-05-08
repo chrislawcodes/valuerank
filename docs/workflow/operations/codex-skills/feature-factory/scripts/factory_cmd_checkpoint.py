@@ -74,6 +74,13 @@ from factory_review import (  # noqa: E402
     _extract_file_paths_from_artifact,
 )
 
+from factory_review_specs import (  # noqa: E402
+    _count_findings_by_severity,
+    _strip_non_finding_markdown,
+    _findings_scan_text,
+    _SEVERITY_ORDER,
+)
+
 from factory_emit import _emit_next_action  # noqa: E402
 from factory_heartbeat import HeartbeatEmitter, set_activity as heartbeat_set_activity  # noqa: E402
 from factory_next_action import recommended_next_action  # noqa: E402
@@ -136,6 +143,53 @@ def _rollback_adversarial_round(slug: str, stage: str) -> None:
         stage,
         {"adversarial_rounds": max(current_rounds - 1, 0)},
     )
+
+
+def _print_findings_summary(slug: str, stage: str, reviews_ran: list[dict] | None) -> None:
+    """Print a non-blocking findings summary to stderr after a successful checkpoint.
+
+    When no reviews were configured for the stage, prints a single informational
+    line. When reviews ran, scans each review file for actionable findings and
+    prints per-file severity counts. Files with zero findings across all
+    severities are omitted. The inspect section lists full repo-relative paths
+    so the operator can copy-paste directly into cat or an editor.
+    """
+    print(f"[ff] checkpoint completed for stage={stage}", file=sys.stderr)
+
+    if reviews_ran is None or len(reviews_ran) == 0:
+        print(f"[ff] no default reviews configured for this stage", file=sys.stderr)
+        return
+
+    rev_dir = reviews_dir(slug)
+    # Glob review files for this stage (not .raw.txt / .stderr.txt etc.)
+    review_files = sorted(rev_dir.glob(f"{stage}.*.review.md"))
+    if not review_files:
+        print("[ff] reviews ran, no actionable findings raised", file=sys.stderr)
+        return
+
+    files_with_findings: list[tuple[Path, dict[str, int]]] = []
+    for review_path in review_files:
+        try:
+            raw = _strip_non_finding_markdown(_findings_scan_text(review_path.read_text(encoding="utf-8"))).lower()
+        except OSError:
+            continue
+        counts = _count_findings_by_severity(raw)
+        if any(v > 0 for v in counts.values()):
+            files_with_findings.append((review_path, counts))
+
+    if not files_with_findings:
+        print("[ff] reviews ran, no actionable findings raised", file=sys.stderr)
+        return
+
+    print("[ff] findings raised:", file=sys.stderr)
+    for review_path, counts in files_with_findings:
+        parts = [f"{counts[sev]} {sev}" for sev in _SEVERITY_ORDER if counts.get(sev, 0) > 0]
+        print(f"[ff]   {review_path.name}: {' · '.join(parts)}", file=sys.stderr)
+
+    print("[ff] inspect:", file=sys.stderr)
+    for review_path, _ in files_with_findings:
+        repo_rel = f"docs/workflow/feature-runs/{slug}/reviews/{review_path.name}"
+        print(f"[ff]   {repo_rel}", file=sys.stderr)
 
 
 def _prior_stage_for_checkpoint(stage: str) -> str | None:
@@ -517,6 +571,7 @@ def command_checkpoint(args: argparse.Namespace) -> int:
                 payload = _checkpoint_next_action_payload(args.slug, post_state, args.stage)
                 _persist_last_action_result(args.slug, payload)
                 heartbeat_set_activity("all reviews complete")
+                _print_findings_summary(args.slug, args.stage, reviews_arg)
                 if args.json:
                     print(json.dumps(payload))
                 else:
@@ -549,6 +604,7 @@ def command_checkpoint(args: argparse.Namespace) -> int:
         payload = _checkpoint_next_action_payload(args.slug, post_state, args.stage)
         _persist_last_action_result(args.slug, payload)
         heartbeat_set_activity("all reviews complete")
+        _print_findings_summary(args.slug, args.stage, reviews_arg)
         if args.json:
             print(json.dumps(payload))
         else:
