@@ -1566,22 +1566,22 @@ type LlmProvider {
   updatedAt: DateTime!
 }
 
-type ModelAgreementResult {
-  buildProgress: ModelAgreementBuildProgress
-  excludedNonBinaryCells: Int!
-  excludedTiedCells: Int!
-  models: [ModelInfo!]!
-  pairwiseAgreementMatrix: [PairwiseAgreementRow!]!
-  pending: Boolean!
-  trialConsistency: [ModelTrialConsistency!]!
-  unavailableModels: [UnavailableModelInfo!]!
-}
-
 type ModelAgreementBuildProgress {
   completedRuns: Int!
   currentRunId: String
   totalRuns: Int!
   updatedAt: String!
+}
+
+type ModelAgreementResult {
+  buildProgress: ModelAgreementBuildProgress
+  excludedNonBinaryCells: Int!
+  models: [ModelInfo!]!
+  pairwiseAgreementMatrix: [PairwiseAgreementRow!]!
+  pending: Boolean!
+  tiedCells: Int!
+  trialConsistency: [ModelTrialConsistency!]!
+  unavailableModels: [UnavailableModelInfo!]!
 }
 
 type ModelConsistency {

@@ -173,7 +173,7 @@ const agreementQuery = `
       models { modelId label }
       unavailableModels { modelId label reason }
       excludedNonBinaryCells
-      excludedTiedCells
+      tiedCells
       pairwiseAgreementMatrix {
         modelAId
         modelALabel
@@ -348,7 +348,7 @@ describe('model-agreement-on-tradeoffs GraphQL queries', () => {
       models: [],
       unavailableModels: [],
       excludedNonBinaryCells: 0,
-      excludedTiedCells: 0,
+      tiedCells: 0,
       pairwiseAgreementMatrix: [],
       trialConsistency: [],
     });
@@ -372,7 +372,7 @@ describe('model-agreement-on-tradeoffs GraphQL queries', () => {
       models: [],
       unavailableModels: [],
       excludedNonBinaryCells: 0,
-      excludedTiedCells: 0,
+      tiedCells: 0,
       pairwiseAgreementMatrix: [],
       trialConsistency: [],
     });
@@ -451,7 +451,7 @@ describe('model-agreement-on-tradeoffs GraphQL queries', () => {
       models: [],
       unavailableModels: [],
       excludedNonBinaryCells: 0,
-      excludedTiedCells: 0,
+      tiedCells: 0,
       pairwiseAgreementMatrix: [],
       trialConsistency: [],
     });
@@ -495,7 +495,10 @@ describe('model-agreement-on-tradeoffs GraphQL queries', () => {
     });
   });
 
-  it('excludes tied cells from both kappa and divergence, while keeping trial consistency', async () => {
+  it('includes tied cells as their own category in kappa and divergence', async () => {
+    // Model A is exactly 50/50 (TIED). Model B picks canonicalA always.
+    // With 3-category coding the cell counts as a disagreement (one TIED, one A).
+    // Mean abs divergence = |0.5 - 1.0| = 0.5.
     mocks.readModelAgreementSnapshotStateFromSnapshot.mockResolvedValue({
       cellLevelOutcomes: snapshot({
         'def-1::model-a::Achievement::Tradition::1::2': { aChoices: 3, bChoices: 3, neutrals: 0 },
@@ -512,7 +515,7 @@ describe('model-agreement-on-tradeoffs GraphQL queries', () => {
     });
 
     const agreement = response.body.data.modelAgreementOnTradeoffs as {
-      excludedTiedCells: number;
+      tiedCells: number;
       pairwiseAgreementMatrix: Array<{
         totalCells: number;
         percentAgreement: number | null;
@@ -527,15 +530,18 @@ describe('model-agreement-on-tradeoffs GraphQL queries', () => {
       }>;
     };
 
-    expect(agreement.excludedTiedCells).toBe(1);
+    // tiedCells = 1 (cell where at least one model was tied — informational, no longer "excluded")
+    expect(agreement.tiedCells).toBe(1);
     expect(agreement.pairwiseAgreementMatrix).toHaveLength(1);
     expect(agreement.pairwiseAgreementMatrix[0]).toMatchObject({
       modelAId: 'model-a',
       modelBId: 'model-b',
-      totalCells: 0,
-      percentAgreement: null,
-      cohensKappa: null,
-      meanAbsoluteDivergence: null,
+      // totalCells INCLUDES the tied cell now
+      totalCells: 1,
+      // Disagreement (TIED vs A) → percentAgreement = 0
+      percentAgreement: 0,
+      // Mean abs divergence INCLUDES the tied cell: |0.5 - 1.0| = 0.5
+      meanAbsoluteDivergence: 0.5,
     });
     expect(agreement.trialConsistency).toHaveLength(2);
     expect(agreement.trialConsistency[0]).toMatchObject({

@@ -44,7 +44,7 @@ export type ModelAgreementResultShape = {
   models: ModelInfoShape[];
   unavailableModels: UnavailableModelInfoShape[];
   excludedNonBinaryCells: number;
-  excludedTiedCells: number;
+  tiedCells: number;
   pairwiseAgreementMatrix: PairwiseAgreementRowShape[];
   trialConsistency: ModelTrialConsistencyShape[];
 };
@@ -132,7 +132,7 @@ builder.objectType(ModelAgreementResultRef, {
     models: t.expose('models', { type: [ModelInfoRef] }),
     unavailableModels: t.expose('unavailableModels', { type: [UnavailableModelInfoRef] }),
     excludedNonBinaryCells: t.exposeInt('excludedNonBinaryCells'),
-    excludedTiedCells: t.exposeInt('excludedTiedCells'),
+    tiedCells: t.exposeInt('tiedCells'),
     pairwiseAgreementMatrix: t.expose('pairwiseAgreementMatrix', { type: [PairwiseAgreementRowRef] }),
     trialConsistency: t.expose('trialConsistency', { type: [ModelTrialConsistencyRef] }),
   }),
