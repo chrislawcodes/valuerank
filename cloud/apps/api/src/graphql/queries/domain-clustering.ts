@@ -45,12 +45,21 @@ export type DomainCluster = {
   definingValues: string[];        // top 3 centroid valueKeys
 };
 
+export type DendrogramMerge = {
+  leftMemberIds: string[];   // model IDs in the left subtree (flat list)
+  rightMemberIds: string[];  // model IDs in the right subtree (flat list)
+  height: number;             // distance at which they merged
+};
+
 export type ClusterAnalysis = {
   clusters: DomainCluster[];
   faultLinesByPair: Record<string, ClusterPairFaultLines>;
   defaultPair: [string, string] | null;
   skipped: boolean;
   skipReason: string | null;
+  dendrogram?: DendrogramMerge[];
+  leafOrder?: string[];
+  clusterIdByModelId?: Record<string, string>;
 };
 
 export type ClusterModelInput = {
@@ -569,6 +578,82 @@ export function computeClusterAnalysis(models: ClusterModelInput[], method: Clus
   return runClusteringFromDistMatrix(models, cosineDistanceMatrix(vectors), valueKeys, method);
 }
 
+// ---------------------------------------------------------------------------
+// Dendrogram helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Derive the merge tree from UPGMA/Ward snapshots and merge heights.
+ *
+ * At step k, snapshot[k] → snapshot[k+1] identifies which two clusters
+ * merged. The merged cluster is the one in snapshot[k+1] that is a
+ * superset of two distinct clusters from snapshot[k].
+ */
+export function deriveDendrogram(
+  snapshots: number[][][],
+  mergeHeights: number[],
+  models: ClusterModelInput[],
+): DendrogramMerge[] {
+  const merges: DendrogramMerge[] = [];
+  for (let step = 0; step < mergeHeights.length; step++) {
+    const before = snapshots[step]!;
+    const after = snapshots[step + 1]!;
+    const height = mergeHeights[step]!;
+
+    // Find the cluster in `after` that grew (its size > any single cluster in `before`)
+    for (const newCluster of after) {
+      // How many clusters from `before` are subsets of newCluster?
+      const parentClusters = before.filter((oldCluster) =>
+        oldCluster.every((idx) => newCluster.includes(idx)),
+      );
+      if (parentClusters.length < 2) continue;
+
+      // The two largest parent clusters that combined to form newCluster
+      // In practice there will be exactly 2 at each step
+      const sorted = [...parentClusters].sort((a, b) => b.length - a.length);
+      const left = sorted[0]!;
+      const right = sorted[1]!;
+
+      merges.push({
+        leftMemberIds: left.map((idx) => models[idx]!.model),
+        rightMemberIds: right.map((idx) => models[idx]!.model),
+        height,
+      });
+      break;
+    }
+  }
+  return merges;
+}
+
+/**
+ * Derive leaf order from the merge tree by doing a depth-first left-to-right
+ * traversal of the binary merge tree.
+ */
+export function deriveLeafOrder(merges: DendrogramMerge[], allModelIds: string[]): string[] {
+  if (merges.length === 0) return [...allModelIds];
+
+  // Build a lookup: set of model IDs → the merge that produced them
+  // We represent sets as sorted joined strings for lookup
+  const mergeByKey = new Map<string, DendrogramMerge>();
+  for (const merge of merges) {
+    const combined = [...merge.leftMemberIds, ...merge.rightMemberIds].sort().join('|');
+    mergeByKey.set(combined, merge);
+  }
+
+  function walkSubtree(memberIds: string[]): string[] {
+    if (memberIds.length === 1) return [memberIds[0]!];
+    const key = [...memberIds].sort().join('|');
+    const merge = mergeByKey.get(key);
+    if (merge == null) return memberIds; // fallback
+    return [...walkSubtree(merge.leftMemberIds), ...walkSubtree(merge.rightMemberIds)];
+  }
+
+  // The root merge is the last merge (merges are in ascending height order)
+  const root = merges[merges.length - 1]!;
+  const rootMembers = [...root.leftMemberIds, ...root.rightMemberIds];
+  return walkSubtree(rootMembers);
+}
+
 /**
  * Build a hierarchical-clustering distance matrix from a kappa matrix.
  *
@@ -601,6 +686,9 @@ export function kappaDistanceMatrix(kappaMatrix: ReadonlyArray<ReadonlyArray<num
  * same choices on the same scenarios; the per-cluster centroids are still
  * computed from the models' log-odds scores so the resulting centroids and
  * fault lines describe what each behaviorally-similar group tends to value.
+ *
+ * Also exposes dendrogram, leafOrder, and clusterIdByModelId for the
+ * dual-chart frontend visualization.
  */
 export function computeKappaClusterAnalysis(
   models: ClusterModelInput[],
@@ -613,5 +701,27 @@ export function computeKappaClusterAnalysis(
   }
   const valueKeys = Object.keys(models[0]!.scores);
   const distMatrix = kappaDistanceMatrix(kappaMatrix);
-  return runClusteringFromDistMatrix(models, distMatrix, valueKeys, method, 'log-odds');
+  const n = models.length;
+  const { mergeHeights, snapshots } = method === 'ward' ? ward(distMatrix, n) : upgma(distMatrix, n);
+
+  const analysis = runClusteringFromDistMatrix(models, distMatrix, valueKeys, method, 'log-odds');
+
+  // Derive dendrogram, leaf order, and per-model cluster ID mapping
+  const dendrogram = deriveDendrogram(snapshots, mergeHeights, models);
+  const allModelIds = models.map((m) => m.model);
+  const leafOrder = deriveLeafOrder(dendrogram, allModelIds);
+
+  const clusterIdByModelId: Record<string, string> = {};
+  for (const cluster of analysis.clusters) {
+    for (const member of cluster.members) {
+      clusterIdByModelId[member.model] = cluster.id;
+    }
+  }
+
+  return {
+    ...analysis,
+    dendrogram,
+    leafOrder,
+    clusterIdByModelId,
+  };
 }

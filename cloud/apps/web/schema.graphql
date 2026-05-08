@@ -321,10 +321,30 @@ type CircumplexResult {
 
 type ClusterAnalysis {
   clusters: [DomainCluster!]!
+  clusterIdByModelId: JSON
   defaultPair: [String!]
+  dendrogram: [DendrogramMerge!]
   faultLinesByPair: JSON!
+  leafOrder: [String!]
   skipReason: String
   skipped: Boolean!
+}
+
+type DendrogramMerge {
+  height: Float!
+  leftMemberIds: [String!]!
+  rightMemberIds: [String!]!
+}
+
+type KappaClusterPayload {
+  clusterAnalysis: ClusterAnalysis!
+  kappaPairs: [KappaPair!]!
+}
+
+type KappaPair {
+  kappa: Float
+  modelAId: String!
+  modelBId: String!
 }
 
 type ClusterMember {
@@ -2721,7 +2741,7 @@ type Query {
 
   "\n      Get the currently authenticated user.\n      Returns null if not authenticated.\n    "
   me: User
-  modelAgreementClusterAnalysis(domainId: ID, method: String!, modelIds: [ID!]!, scope: String!, signature: String!): ClusterAnalysis!
+  modelAgreementClusterAnalysis(domainId: ID, method: String!, modelIds: [ID!]!, scope: String!, signature: String!): KappaClusterPayload!
   modelAgreementOnTradeoffs(domainId: ID, modelIds: [ID!]!, scope: String!, signature: String!): ModelAgreementResult!
   modelPairDivergenceBreakdown(domainId: ID, modelAId: ID!, modelBId: ID!, scope: String!, signature: String!): PairDivergenceBreakdown!
 

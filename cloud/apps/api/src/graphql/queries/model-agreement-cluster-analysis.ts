@@ -1,13 +1,13 @@
 import { ValidationError } from '@valuerank/shared';
 import { builder } from '../builder.js';
 import { getModelsFromDatabase } from '../../config/models.js';
-import { ClusterAnalysisRef } from './domain/types.js';
+import { KappaClusterPayloadRef } from './domain/types.js';
 import {
   computeKappaClusterAnalysis,
-  type ClusterAnalysis,
   type ClusteringMethod,
   type ClusterModelInput,
 } from './domain-clustering.js';
+import type { KappaClusterPayload, KappaPair } from './domain/types.js';
 import {
   buildPositionCells,
   buildSelectedModels,
@@ -28,13 +28,16 @@ import type { Context } from '../context.js';
 const ALL_DOMAINS_SCOPE_ID = 'all-domains';
 const REFRESH_REASON = 'model-agreement-cluster-analysis-page-load-missing';
 
-function emptyClusterAnalysis(reason: string): ClusterAnalysis {
+function emptyPayload(reason: string): KappaClusterPayload {
   return {
-    clusters: [],
-    faultLinesByPair: {},
-    defaultPair: null,
-    skipped: true,
-    skipReason: reason,
+    clusterAnalysis: {
+      clusters: [],
+      faultLinesByPair: {},
+      defaultPair: null,
+      skipped: true,
+      skipReason: reason,
+    },
+    kappaPairs: [],
   };
 }
 
@@ -121,7 +124,7 @@ export async function resolveModelAgreementClusterAnalysis(
     method: string;
   },
   ctx: Context,
-): Promise<ClusterAnalysis> {
+): Promise<KappaClusterPayload> {
   const scopeValue = String(args.scope);
   if (scopeValue !== 'DOMAIN' && scopeValue !== 'ALL_DOMAINS') {
     throw new ValidationError(`Unsupported scope: ${scopeValue}`);
@@ -146,7 +149,7 @@ export async function resolveModelAgreementClusterAnalysis(
 
   const selectedModelIds = normalizeModelIds(args.modelIds.map(String));
   if (selectedModelIds.length < 3) {
-    return emptyClusterAnalysis('Kappa clustering requires at least 3 distinct modelIds.');
+    return emptyPayload('Kappa clustering requires at least 3 distinct modelIds.');
   }
 
   const activeModels = await getModelsFromDatabase({ activeOnly: true, availableOnly: false });
@@ -158,17 +161,17 @@ export async function resolveModelAgreementClusterAnalysis(
 
   const snapshotState = await readAgreementSnapshot({ scope, domainId, signature, ctx });
   if (snapshotState == null) {
-    return emptyClusterAnalysis('Kappa cluster analysis is rebuilding — try again in a moment.');
+    return emptyPayload('Kappa cluster analysis is rebuilding — try again in a moment.');
   }
 
   const cellLevelOutcomes = snapshotState.cellLevelOutcomes;
   if (cellLevelOutcomes == null) {
-    return emptyClusterAnalysis('Kappa cluster analysis is rebuilding — try again in a moment.');
+    return emptyPayload('Kappa cluster analysis is rebuilding — try again in a moment.');
   }
   const { positionCells, cellsObservedByModelId } = buildPositionCells(cellLevelOutcomes, selectedModelIdSet);
   const availableModels = selectedModels.filter((model) => (cellsObservedByModelId.get(model.modelId) ?? 0) > 0);
   if (availableModels.length < 3) {
-    return emptyClusterAnalysis('Kappa clustering requires at least 3 models with cell-level data in the selected scope.');
+    return emptyPayload('Kappa clustering requires at least 3 models with cell-level data in the selected scope.');
   }
 
   // Pull log-odds scores from the domain-analysis result so the cluster centroids
@@ -188,7 +191,7 @@ export async function resolveModelAgreementClusterAnalysis(
   // has the same set of values, so pull from the first model that has data.
   const sampleValueScores = scoresByModelId.values().next().value;
   if (sampleValueScores == null) {
-    return emptyClusterAnalysis('Kappa cluster analysis could not be computed because the domain-analysis snapshot has no model scores.');
+    return emptyPayload('Kappa cluster analysis could not be computed because the domain-analysis snapshot has no model scores.');
   }
   const valueKeys = Object.keys(sampleValueScores);
   const zeroScores: Record<string, number> = Object.fromEntries(valueKeys.map((vk) => [vk, 0]));
@@ -202,12 +205,27 @@ export async function resolveModelAgreementClusterAnalysis(
   const orderedModelIds = clusterInputs.map((entry) => entry.model);
   const kappaMatrix = await buildKappaMatrix({ positionCells, modelIds: orderedModelIds });
 
-  return computeKappaClusterAnalysis(clusterInputs, kappaMatrix, method);
+  const clusterAnalysis = computeKappaClusterAnalysis(clusterInputs, kappaMatrix, method);
+
+  // Build flat kappa pairs list for the frontend heatmap
+  const n = orderedModelIds.length;
+  const kappaPairs: KappaPair[] = [];
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      kappaPairs.push({
+        modelAId: orderedModelIds[i]!,
+        modelBId: orderedModelIds[j]!,
+        kappa: kappaMatrix[i]![j] ?? null,
+      });
+    }
+  }
+
+  return { clusterAnalysis, kappaPairs };
 }
 
 builder.queryField('modelAgreementClusterAnalysis', (t) =>
   t.field({
-    type: ClusterAnalysisRef,
+    type: KappaClusterPayloadRef,
     args: {
       modelIds: t.arg.idList({ required: true }),
       domainId: t.arg.id({ required: false }),
