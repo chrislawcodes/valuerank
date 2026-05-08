@@ -131,19 +131,24 @@ export async function buildSnapshotOutput(
 ): Promise<DomainAnalysisSnapshotOutput> {
   const valuePairByDefinition = await resolveValuePairsInChunks(state.latestDefinitionIds);
 
+  const TRANSCRIPT_BATCH_SIZE = 500;
   const cellMap = new Map<string, CellCounts>();
   const totalRuns = state.resolvedSignatureRuns.filteredSourceRunIds.length;
   let completedRuns = 0;
 
   if (state.resolvedSignatureRuns.filteredSourceRunIds.length > 0) {
-    // Fetch all transcripts for every run in parallel. Each run has a bounded
-    // transcript count (definitions × models × scenarios), so no per-run
-    // pagination is needed. This replaces the old sequential offset-pagination
-    // loop, cutting build time from O(total_batches) to O(1 round-trip).
-    const perRunTranscripts = await Promise.all(
-      state.resolvedSignatureRuns.filteredSourceRunIds.map((runId) =>
-        db.transcript.findMany({
-          where: { runId, deletedAt: null },
+    // Keep each transcript read bounded so large domains do not exhaust memory
+    // or the Prisma bridge. Aggregate each batch into the shared cell map.
+    for (const runId of state.resolvedSignatureRuns.filteredSourceRunIds) {
+      let offset = 0;
+      let fetchedCount = TRANSCRIPT_BATCH_SIZE;
+
+      while (fetchedCount >= TRANSCRIPT_BATCH_SIZE) {
+        const batch = await db.transcript.findMany({
+          where: {
+            runId,
+            deletedAt: null,
+          },
           select: {
             id: true,
             runId: true,
@@ -161,23 +166,27 @@ export async function buildSnapshotOutput(
             },
           },
           orderBy: { id: 'asc' },
-        }),
-      ),
-    );
+          take: TRANSCRIPT_BATCH_SIZE,
+          skip: offset,
+        });
 
-    for (const runTranscripts of perRunTranscripts) {
-      const runId = state.resolvedSignatureRuns.filteredSourceRunIds[completedRuns] ?? null;
-      const batchCellMap = accumulateTranscriptCells({
-        transcripts: runTranscripts,
-        filteredSourceRunDefinitionById: state.resolvedSignatureRuns.filteredSourceRunDefinitionById,
-      });
+        fetchedCount = batch.length;
+        if (fetchedCount === 0) break;
 
-      for (const [key, counts] of batchCellMap.entries()) {
-        const existing = cellMap.get(key) ?? { wins: 0, losses: 0, neutrals: 0 };
-        existing.wins += counts.wins;
-        existing.losses += counts.losses;
-        existing.neutrals += counts.neutrals;
-        cellMap.set(key, existing);
+        const batchCellMap = accumulateTranscriptCells({
+          transcripts: batch,
+          filteredSourceRunDefinitionById: state.resolvedSignatureRuns.filteredSourceRunDefinitionById,
+        });
+
+        for (const [key, counts] of batchCellMap.entries()) {
+          const existing = cellMap.get(key) ?? { wins: 0, losses: 0, neutrals: 0 };
+          existing.wins += counts.wins;
+          existing.losses += counts.losses;
+          existing.neutrals += counts.neutrals;
+          cellMap.set(key, existing);
+        }
+
+        offset += fetchedCount;
       }
 
       completedRuns += 1;

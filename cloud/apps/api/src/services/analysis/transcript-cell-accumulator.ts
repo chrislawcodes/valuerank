@@ -152,70 +152,79 @@ export function accumulateTranscriptCells(params: {
   const cellMap = new Map<string, CellCounts>();
 
   for (const transcript of params.transcripts) {
-    if (transcript.deletedAt != null) continue;
-    if (transcript.scenario == null || transcript.scenario.deletedAt != null) continue;
+    try {
+      if (transcript.deletedAt != null) continue;
+      if (transcript.scenario == null || transcript.scenario.deletedAt != null) continue;
 
-    const definitionId = params.filteredSourceRunDefinitionById.get(transcript.runId);
-    if (definitionId === undefined) continue;
+      const definitionId = params.filteredSourceRunDefinitionById.get(transcript.runId);
+      if (definitionId === undefined) continue;
 
-    const valuePair = getSnapshotValuePair(transcript.definitionSnapshot);
-    if (valuePair == null) continue;
-    const [firstValueToken, secondValueToken] = valuePair;
-    if (!isDomainAnalysisValueKey(firstValueToken) || !isDomainAnalysisValueKey(secondValueToken)) continue;
+      const valuePair = getSnapshotValuePair(transcript.definitionSnapshot);
+      if (valuePair == null) continue;
+      const [firstValueToken, secondValueToken] = valuePair;
+      if (!isDomainAnalysisValueKey(firstValueToken) || !isDomainAnalysisValueKey(secondValueToken)) continue;
 
-    const dimensions = getDefinitionDimensions(transcript.definitionSnapshot, firstValueToken, secondValueToken);
-    if (dimensions == null || dimensions.ownDimension == null || dimensions.opponentDimension == null) continue;
+      const dimensions = getDefinitionDimensions(transcript.definitionSnapshot, firstValueToken, secondValueToken);
+      if (dimensions == null || dimensions.ownDimension == null || dimensions.opponentDimension == null) continue;
 
-    const ownLookup = buildSafeLevelLookup(dimensions.ownDimension);
-    const opponentLookup = buildSafeLevelLookup(dimensions.opponentDimension);
-    if (ownLookup.exclusionReason != null || opponentLookup.exclusionReason != null) continue;
+      const ownLookup = buildSafeLevelLookup(dimensions.ownDimension);
+      const opponentLookup = buildSafeLevelLookup(dimensions.opponentDimension);
+      if (ownLookup.exclusionReason != null || opponentLookup.exclusionReason != null) continue;
 
-    const scenarioContent = transcript.scenario.content;
-    if (!isRecord(scenarioContent)) continue;
-    // Production scenarios use snake_case `dimension_values`; test/newer data uses camelCase `dimensionValues`.
-    const dimensionValues = scenarioContent.dimensionValues ?? scenarioContent.dimension_values;
-    if (!isRecord(dimensionValues)) continue;
+      const scenarioContent = transcript.scenario.content;
+      if (!isRecord(scenarioContent)) continue;
+      // Production scenarios use snake_case `dimension_values`; test/newer data uses camelCase `dimensionValues`.
+      const dimensionValues = scenarioContent.dimensionValues ?? scenarioContent.dimension_values;
+      if (!isRecord(dimensionValues)) continue;
 
-    const levels = assignOwnOpponentLevels(
-      dimensions.dimensions,
-      dimensionValues,
-      ownLookup.lookup,
-      opponentLookup.lookup,
-      firstValueToken,
-      secondValueToken,
-    );
-    if (levels == null) continue;
+      const levels = assignOwnOpponentLevels(
+        dimensions.dimensions,
+        dimensionValues,
+        ownLookup.lookup,
+        opponentLookup.lookup,
+        firstValueToken,
+        secondValueToken,
+      );
+      if (levels == null) continue;
 
-    const resolved = resolveTranscriptDecisionModel({
-      decisionMetadata: transcript.decisionMetadata,
-      definitionSnapshot: transcript.definitionSnapshot,
-      orientationFlipped: transcript.scenario.orientationFlipped,
-      pairOverride: { valueA: firstValueToken, valueB: secondValueToken },
-    });
-    if (resolved.canonical.direction === 'unknown') continue;
+      const resolved = resolveTranscriptDecisionModel({
+        decisionMetadata: transcript.decisionMetadata,
+        definitionSnapshot: transcript.definitionSnapshot,
+        orientationFlipped: transcript.scenario.orientationFlipped,
+        pairOverride: { valueA: firstValueToken, valueB: secondValueToken },
+      });
+      if (resolved.canonical.direction === 'unknown') continue;
 
-    const outcome = assignOwnOpponent(firstValueToken, secondValueToken, resolved.canonical.direction);
-    if (outcome === 'unscored') continue;
+      const outcome = assignOwnOpponent(firstValueToken, secondValueToken, resolved.canonical.direction);
+      if (outcome === 'unscored') continue;
 
-    const firstKey = encodeCellKey({
-      definitionId,
-      modelId: transcript.modelId,
-      valueKey: firstValueToken,
-      ownLevel: levels.ownLevel,
-      opponentLevel: levels.opponentLevel,
-    });
-    const secondKey = encodeCellKey({
-      definitionId,
-      modelId: transcript.modelId,
-      valueKey: secondValueToken,
-      ownLevel: levels.opponentLevel,
-      opponentLevel: levels.ownLevel,
-    });
+      const firstKey = encodeCellKey({
+        definitionId,
+        modelId: transcript.modelId,
+        valueKey: firstValueToken,
+        ownLevel: levels.ownLevel,
+        opponentLevel: levels.opponentLevel,
+      });
+      const secondKey = encodeCellKey({
+        definitionId,
+        modelId: transcript.modelId,
+        valueKey: secondValueToken,
+        ownLevel: levels.opponentLevel,
+        opponentLevel: levels.ownLevel,
+      });
 
-    addCellCounts(cellMap, firstKey, outcome);
-    const mirroredOutcome: AssignedOutcome =
-      outcome === 'own_picked' ? 'opponent_picked' : outcome === 'opponent_picked' ? 'own_picked' : outcome;
-    addCellCounts(cellMap, secondKey, mirroredOutcome);
+      addCellCounts(cellMap, firstKey, outcome);
+      const mirroredOutcome: AssignedOutcome =
+        outcome === 'own_picked' ? 'opponent_picked' : outcome === 'opponent_picked' ? 'own_picked' : outcome;
+      addCellCounts(cellMap, secondKey, mirroredOutcome);
+    } catch (error) {
+      throw new ValidationError('Failed to accumulate transcript for domain analysis', {
+        transcriptId: transcript.id,
+        runId: transcript.runId,
+        modelId: transcript.modelId,
+        cause: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   return cellMap;
