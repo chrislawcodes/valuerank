@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CopyVisualButton } from '../ui/CopyVisualButton';
 import { ErrorMessage } from '../ui/ErrorMessage';
 import { Loading } from '../ui/Loading';
@@ -22,6 +22,19 @@ export function ModelGroupingSignificanceSection({
   errorMessage = null,
 }: Props) {
   const reportRef = useRef<HTMLDivElement>(null);
+
+  // Track elapsed seconds while pending. Hooks must be before any early returns.
+  const isPending = report?.pending === true;
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  useEffect(() => {
+    if (!isPending) {
+      setElapsedSeconds(0);
+      return;
+    }
+    setElapsedSeconds(0);
+    const interval = setInterval(() => setElapsedSeconds((s) => s + 1), 1000);
+    return () => clearInterval(interval);
+  }, [isPending]);
 
   if (errorMessage != null) {
     return <ErrorMessage message={`Failed to load statistical differences report: ${errorMessage}`} />;
@@ -51,13 +64,25 @@ export function ModelGroupingSignificanceSection({
     );
   }
 
-  if (report.pending) {
+  if (isPending) {
+    // Cap display at 90% — we don't know exact completion, only that it takes ~90s.
+    const progressPct = Math.min(90, Math.round((elapsedSeconds / 90) * 100));
     return (
       <section className="rounded-lg border border-gray-200 bg-white p-4 md:p-5">
         <h2 className="text-lg font-semibold text-gray-900">Statistical Differences in Value Preferences</h2>
-        <p className="mt-2 text-sm text-gray-600">
-          Computing for the first time — this takes about a minute. Refresh the page to see the results.
-        </p>
+        <p className="mt-2 text-sm text-gray-600">Computing for the first time — checking for results every 5 seconds.</p>
+        <div className="mt-4 space-y-1">
+          <div className="flex items-center justify-between text-xs text-gray-500">
+            <span>Building report…</span>
+            <span>{progressPct}%</span>
+          </div>
+          <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
+            <div
+              className="h-full rounded-full bg-teal-500 transition-all duration-1000"
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
+        </div>
       </section>
     );
   }

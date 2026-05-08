@@ -236,7 +236,7 @@ export function ModelsGroups() {
     () => (visibleModelIds.length === 0 ? [] : models.filter((model) => visibleModelIds.includes(model.model))),
     [models, visibleModelIds],
   );
-  const [{ data: groupingSignificanceData, fetching: groupingSignificanceFetching, error: groupingSignificanceError }] = useQuery<
+  const [{ data: groupingSignificanceData, fetching: groupingSignificanceFetching, error: groupingSignificanceError }, reexecuteGroupingSignificance] = useQuery<
     ModelGroupingSignificanceQueryResult,
     ModelGroupingSignificanceQueryVariables
   >({
@@ -254,6 +254,15 @@ export function ModelsGroups() {
       || llmModelsData == null,
     requestPolicy: 'cache-and-network',
   });
+
+  const isSignificancePending = groupingSignificanceData?.modelGroupingSignificance?.pending === true;
+  useEffect(() => {
+    if (!isSignificancePending) return;
+    const interval = setInterval(() => {
+      reexecuteGroupingSignificance({ requestPolicy: 'network-only' });
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [isSignificancePending, reexecuteGroupingSignificance]);
   const isAllDomains = selectedScope === 'ALL_DOMAINS';
   const selectedDomainLabel = isAllDomains
     ? 'All domains'
