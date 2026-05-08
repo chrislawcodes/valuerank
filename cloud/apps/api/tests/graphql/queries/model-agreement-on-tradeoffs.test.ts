@@ -557,4 +557,71 @@ describe('model-agreement-on-tradeoffs GraphQL queries', () => {
       noisy: false,
     });
   });
+
+  it('equal-weights value pairs in the headline kappa (no over-tested-pair bias)', async () => {
+    // Setup: two value pairs of very different sizes.
+    //
+    // Pair 1 (Achievement vs Tradition, 1 vignette, 2 cells): models PERFECTLY DISAGREE.
+    //   Both pick canonicalA at fractions that produce kappa near -1 within the pair.
+    //
+    // Pair 2 (Hedonism vs Stimulation, 1 vignette, 4 cells): models PERFECTLY AGREE.
+    //   Both pick canonicalA on every cell.
+    //
+    // Cell counts differ (2 vs 4). Under the OLD aggregation (vignette equal-weight,
+    // value-pair NOT equal-weight) the cells-per-vignette didn't bias things, but
+    // vignettes-per-pair did — and with 1 vignette each here the old and new
+    // approaches would coincide. To prove value-pair equal-weighting matters, we
+    // need different vignette counts per pair.
+    //
+    // So: pair 1 has 2 vignettes (disagreeing); pair 2 has 1 vignette (agreeing).
+    // Old aggregation: 3 vignette slots (2 disagree + 1 agree) → headline leans
+    //   toward disagree.
+    // New aggregation: 2 value-pair slots (1 disagree + 1 agree) → headline lands
+    //   in the middle.
+    mocks.readModelAgreementSnapshotStateFromSnapshot.mockResolvedValue({
+      cellLevelOutcomes: snapshot({
+        // Pair 1, vignette 1: A picks canonicalA, B picks canonicalB
+        'def-1::model-a::Achievement::Tradition::1::1': { aChoices: 6, bChoices: 0, neutrals: 0 },
+        'def-1::model-b::Achievement::Tradition::1::1': { aChoices: 0, bChoices: 6, neutrals: 0 },
+        'def-1::model-a::Achievement::Tradition::2::2': { aChoices: 0, bChoices: 6, neutrals: 0 },
+        'def-1::model-b::Achievement::Tradition::2::2': { aChoices: 6, bChoices: 0, neutrals: 0 },
+        // Pair 1, vignette 2: same disagreement pattern
+        'def-2::model-a::Achievement::Tradition::1::1': { aChoices: 6, bChoices: 0, neutrals: 0 },
+        'def-2::model-b::Achievement::Tradition::1::1': { aChoices: 0, bChoices: 6, neutrals: 0 },
+        'def-2::model-a::Achievement::Tradition::2::2': { aChoices: 0, bChoices: 6, neutrals: 0 },
+        'def-2::model-b::Achievement::Tradition::2::2': { aChoices: 6, bChoices: 0, neutrals: 0 },
+        // Pair 2, vignette 3: both pick canonicalA always (perfect agreement)
+        'def-3::model-a::Hedonism::Stimulation::1::1': { aChoices: 6, bChoices: 0, neutrals: 0 },
+        'def-3::model-b::Hedonism::Stimulation::1::1': { aChoices: 6, bChoices: 0, neutrals: 0 },
+      }),
+      buildProgress: null,
+      inputHash: 'hash-equal-weight',
+    });
+
+    const response = await graphqlRequest(agreementQuery, {
+      modelIds: ['model-a', 'model-b'],
+      scope: 'ALL_DOMAINS',
+      signature: 'sig-1',
+    });
+
+    const agreement = response.body.data.modelAgreementOnTradeoffs as {
+      pairwiseAgreementMatrix: Array<{
+        percentAgreement: number | null;
+        meanAbsoluteDivergence: number | null;
+      }>;
+    };
+
+    // With value-pair equal-weighting:
+    //   Pair 1 percent-agreement = 0 (every cell disagrees)
+    //   Pair 2 percent-agreement = 1 (every cell agrees)
+    //   Headline percent-agreement = (0 + 1) / 2 = 0.5
+    expect(agreement.pairwiseAgreementMatrix).toHaveLength(1);
+    expect(agreement.pairwiseAgreementMatrix[0]?.percentAgreement).toBeCloseTo(0.5, 6);
+
+    // Same logic for divergence:
+    //   Pair 1 mean abs divergence = 1 (each cell |1 - 0| = 1)
+    //   Pair 2 mean abs divergence = 0 (each cell |1 - 1| = 0)
+    //   Headline = (1 + 0) / 2 = 0.5
+    expect(agreement.pairwiseAgreementMatrix[0]?.meanAbsoluteDivergence).toBeCloseTo(0.5, 6);
+  });
 });

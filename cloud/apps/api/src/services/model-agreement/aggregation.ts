@@ -1,10 +1,8 @@
 import {
   cohensKappa,
-  equalWeightAggregate,
   isTied,
   kappaInterpretation,
   MIN_TRIALS_FOR_CONSISTENCY,
-  percentAgreement,
 } from './math.js';
 import type {
   ModelAgreementBuildProgressShape,
@@ -75,14 +73,6 @@ export function sortModels(models: ReadonlyArray<ModelSummary>): ModelSummary[] 
     const labelDelta = left.label.localeCompare(right.label);
     return labelDelta !== 0 ? labelDelta : left.modelId.localeCompare(right.modelId);
   });
-}
-
-function mean(values: ReadonlyArray<number>): number | null {
-  if (values.length === 0) {
-    return null;
-  }
-
-  return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
 export function parseCellLevelOutcomeKey(key: string): {
@@ -227,14 +217,60 @@ export function collectComparableCells(params: {
   return { cells, tiedCells };
 }
 
+type NestedCellValues = Map<string /* valuePairKey */, Map<string /* definitionId */, number[]>>;
+
+function pushNested(
+  map: NestedCellValues,
+  valuePairKey: string,
+  definitionId: string,
+  value: number,
+): void {
+  let byVignette = map.get(valuePairKey);
+  if (byVignette == null) {
+    byVignette = new Map<string, number[]>();
+    map.set(valuePairKey, byVignette);
+  }
+  const bucket = byVignette.get(definitionId) ?? [];
+  bucket.push(value);
+  byVignette.set(definitionId, bucket);
+}
+
 /**
- * Three-category Cohen's kappa over A / TIED / B.
+ * Three-level equal-weight aggregation: cell → vignette → value-pair → headline.
  *
- * Per-vignette aggregation: for each vignette compute the fraction of cells
- * in each category for each model, then equal-weight average those fractions
- * across vignettes. P_chance = sum over categories of pX(k) * pY(k). Both
- * models tied counts as agreement; one tied + one decided counts as
- * disagreement.
+ * Each vignette is the equal-weighted mean of its cells. Each value pair is the
+ * equal-weighted mean of its vignettes. The headline is the equal-weighted mean
+ * of all value pairs. A value pair backed by 6 vignettes contributes the same
+ * to the headline as one backed by 1 vignette.
+ *
+ * Returns null if there is no data at any level.
+ */
+function aggregateNested(map: NestedCellValues): number | null {
+  const valuePairAverages: number[] = [];
+  for (const byVignette of map.values()) {
+    const vignetteAverages: number[] = [];
+    for (const cellValues of byVignette.values()) {
+      if (cellValues.length === 0) continue;
+      vignetteAverages.push(cellValues.reduce((sum, value) => sum + value, 0) / cellValues.length);
+    }
+    if (vignetteAverages.length === 0) continue;
+    valuePairAverages.push(vignetteAverages.reduce((sum, value) => sum + value, 0) / vignetteAverages.length);
+  }
+  if (valuePairAverages.length === 0) return null;
+  return valuePairAverages.reduce((sum, value) => sum + value, 0) / valuePairAverages.length;
+}
+
+/**
+ * Three-category Cohen's kappa over A / TIED / B with three-level equal-weight
+ * aggregation.
+ *
+ * Aggregation chain: cell → vignette → value-pair → headline. Each level is
+ * equal-weighted, so neither cells-per-vignette nor vignettes-per-value-pair
+ * bias the headline. A value pair tested by many vignettes contributes the
+ * same to the cross-pair number as one tested by few.
+ *
+ * Both models tied counts as agreement; one tied + one decided counts as
+ * disagreement. P_chance = sum over categories of pX(k) * pY(k).
  */
 export function summarizePairCells(cells: ReadonlyArray<ComparableCell>): PairMetrics {
   if (cells.length === 0) {
@@ -247,63 +283,35 @@ export function summarizePairCells(cells: ReadonlyArray<ComparableCell>): PairMe
     };
   }
 
-  const perVignetteAgreementRates = new Map<string, { matchedCells: number; totalCells: number }>();
-  const perVignetteDivergences = new Map<string, number[]>();
-  const perVignetteFractionsAByModel: Record<'A' | 'B', Map<string, number[]>> = {
-    A: new Map<string, number[]>(),
-    B: new Map<string, number[]>(),
-  };
-  const perVignetteFractionsTiedByModel: Record<'A' | 'B', Map<string, number[]>> = {
-    A: new Map<string, number[]>(),
-    B: new Map<string, number[]>(),
-  };
-  const perVignetteFractionsBByModel: Record<'A' | 'B', Map<string, number[]>> = {
-    A: new Map<string, number[]>(),
-    B: new Map<string, number[]>(),
-  };
-
-  function pushChoiceIndicator(
-    map: Map<string, number[]>,
-    definitionId: string,
-    indicator: number,
-  ): void {
-    const bucket = map.get(definitionId) ?? [];
-    bucket.push(indicator);
-    map.set(definitionId, bucket);
-  }
+  const agreement: NestedCellValues = new Map();
+  const divergence: NestedCellValues = new Map();
+  const indicatorAx: NestedCellValues = new Map();
+  const indicatorTx: NestedCellValues = new Map();
+  const indicatorBx: NestedCellValues = new Map();
+  const indicatorAy: NestedCellValues = new Map();
+  const indicatorTy: NestedCellValues = new Map();
+  const indicatorBy: NestedCellValues = new Map();
 
   for (const cell of cells) {
-    const agreementBucket = perVignetteAgreementRates.get(cell.definitionId) ?? { matchedCells: 0, totalCells: 0 };
-    agreementBucket.totalCells += 1;
-    if (cell.agrees) {
-      agreementBucket.matchedCells += 1;
-    }
-    perVignetteAgreementRates.set(cell.definitionId, agreementBucket);
-
-    const divergenceBucket = perVignetteDivergences.get(cell.definitionId) ?? [];
-    divergenceBucket.push(cell.divergence);
-    perVignetteDivergences.set(cell.definitionId, divergenceBucket);
-
-    pushChoiceIndicator(perVignetteFractionsAByModel.A, cell.definitionId, cell.modelAChoice === 'A' ? 1 : 0);
-    pushChoiceIndicator(perVignetteFractionsTiedByModel.A, cell.definitionId, cell.modelAChoice === 'TIED' ? 1 : 0);
-    pushChoiceIndicator(perVignetteFractionsBByModel.A, cell.definitionId, cell.modelAChoice === 'B' ? 1 : 0);
-    pushChoiceIndicator(perVignetteFractionsAByModel.B, cell.definitionId, cell.modelBChoice === 'A' ? 1 : 0);
-    pushChoiceIndicator(perVignetteFractionsTiedByModel.B, cell.definitionId, cell.modelBChoice === 'TIED' ? 1 : 0);
-    pushChoiceIndicator(perVignetteFractionsBByModel.B, cell.definitionId, cell.modelBChoice === 'B' ? 1 : 0);
+    pushNested(agreement, cell.valuePairKey, cell.definitionId, cell.agrees ? 1 : 0);
+    pushNested(divergence, cell.valuePairKey, cell.definitionId, cell.divergence);
+    pushNested(indicatorAx, cell.valuePairKey, cell.definitionId, cell.modelAChoice === 'A' ? 1 : 0);
+    pushNested(indicatorTx, cell.valuePairKey, cell.definitionId, cell.modelAChoice === 'TIED' ? 1 : 0);
+    pushNested(indicatorBx, cell.valuePairKey, cell.definitionId, cell.modelAChoice === 'B' ? 1 : 0);
+    pushNested(indicatorAy, cell.valuePairKey, cell.definitionId, cell.modelBChoice === 'A' ? 1 : 0);
+    pushNested(indicatorTy, cell.valuePairKey, cell.definitionId, cell.modelBChoice === 'TIED' ? 1 : 0);
+    pushNested(indicatorBy, cell.valuePairKey, cell.definitionId, cell.modelBChoice === 'B' ? 1 : 0);
   }
 
-  const agreementRates = Array.from(perVignetteAgreementRates.values())
-    .map((bucket) => percentAgreement(bucket.matchedCells, bucket.totalCells))
-    .filter((value): value is number => value != null);
-  const percentAgreementValue = mean(agreementRates);
-  const meanAbsoluteDivergence = equalWeightAggregate(Array.from(perVignetteDivergences.values()));
+  const percentAgreementValue = aggregateNested(agreement);
+  const meanAbsoluteDivergence = aggregateNested(divergence);
 
-  const pAx = equalWeightAggregate(Array.from(perVignetteFractionsAByModel.A.values()));
-  const pTx = equalWeightAggregate(Array.from(perVignetteFractionsTiedByModel.A.values()));
-  const pBx = equalWeightAggregate(Array.from(perVignetteFractionsBByModel.A.values()));
-  const pAy = equalWeightAggregate(Array.from(perVignetteFractionsAByModel.B.values()));
-  const pTy = equalWeightAggregate(Array.from(perVignetteFractionsTiedByModel.B.values()));
-  const pBy = equalWeightAggregate(Array.from(perVignetteFractionsBByModel.B.values()));
+  const pAx = aggregateNested(indicatorAx);
+  const pTx = aggregateNested(indicatorTx);
+  const pBx = aggregateNested(indicatorBx);
+  const pAy = aggregateNested(indicatorAy);
+  const pTy = aggregateNested(indicatorTy);
+  const pBy = aggregateNested(indicatorBy);
 
   const chanceAgreement = pAx != null && pTx != null && pBx != null
     && pAy != null && pTy != null && pBy != null
@@ -322,6 +330,12 @@ export function summarizePairCells(cells: ReadonlyArray<ComparableCell>): PairMe
   };
 }
 
+/**
+ * Trial consistency for a single model with three-level equal-weight
+ * aggregation (cell → vignette → value-pair → headline). Each value pair
+ * contributes equally to the headline regardless of how many vignettes
+ * back it.
+ */
 export function summarizeTrialConsistency(params: {
   positionCells: ReadonlyMap<string, PositionCell>;
   modelId: string;
@@ -329,7 +343,7 @@ export function summarizeTrialConsistency(params: {
   cellsObserved: number;
   meanTrialConsistency: number | null;
 } {
-  const perVignetteConsistencies = new Map<string, number[]>();
+  const consistency: NestedCellValues = new Map();
   let cellsObserved = 0;
 
   for (const position of params.positionCells.values()) {
@@ -348,16 +362,14 @@ export function summarizeTrialConsistency(params: {
       continue;
     }
 
-    const consistency = Math.max(proportionA, 1 - proportionA);
-    const bucket = perVignetteConsistencies.get(position.definitionId) ?? [];
-    bucket.push(consistency);
-    perVignetteConsistencies.set(position.definitionId, bucket);
+    const valuePairKey = `${position.canonicalA}::${position.canonicalB}`;
+    pushNested(consistency, valuePairKey, position.definitionId, Math.max(proportionA, 1 - proportionA));
     cellsObserved += 1;
   }
 
   return {
     cellsObserved,
-    meanTrialConsistency: equalWeightAggregate(Array.from(perVignetteConsistencies.values())),
+    meanTrialConsistency: aggregateNested(consistency),
   };
 }
 
