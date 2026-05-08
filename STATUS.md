@@ -113,6 +113,7 @@ Once the above are resolved:
 - [x] Pressure Directional Breakdown now labels the overall column as **High Pressure on Value Effect** for consistency with the pressure value tables.
 - [x] Pressure Sensitivity now uses the standard default-model multi-select, keeps the tooltip anchored while scrolling, and moves the cross-model response table to the bottom of the report.
 - [x] Pressure Response by Value now weights each vignette once and uses pooled directional coverage, so sparse cells no longer trip the "below coverage thresholds" error when the report has enough total vignette coverage.
+- [x] Model Agreement on Value Tradeoffs now shows live source-run progress counts and a progress bar while the report is building, so users can see how close it is to finishing.
 - [ ] Review the new pairwise forest drawer copy and capture screenshots for the AAPOR deck now that the drilldown is available.
 
 ---

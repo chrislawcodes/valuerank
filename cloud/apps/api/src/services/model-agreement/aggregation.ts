@@ -7,6 +7,7 @@ import {
   percentAgreement,
 } from './math.js';
 import type {
+  ModelAgreementBuildProgressShape,
   ModelAgreementResultShape,
   PairDivergenceBreakdownShape,
   UnavailableModelInfoShape,
@@ -311,9 +312,13 @@ export function buildUnavailableModelInfo(model: ModelSummary): UnavailableModel
   };
 }
 
-export function buildEmptyAgreementResult(): ModelAgreementResultShape {
+export function buildEmptyAgreementResult(
+  pending = true,
+  buildProgress: ModelAgreementBuildProgressShape | null = null,
+): ModelAgreementResultShape {
   return {
-    pending: true,
+    pending,
+    buildProgress,
     models: [],
     unavailableModels: [],
     excludedNonBinaryCells: 0,
@@ -328,9 +333,11 @@ export function buildEmptyPairBreakdown(
   modelALabel: string,
   modelBId: string,
   modelBLabel: string,
+  buildProgress: ModelAgreementBuildProgressShape | null = null,
 ): PairDivergenceBreakdownShape {
   return {
-    pending: false,
+    pending: buildProgress != null,
+    buildProgress,
     modelAId,
     modelALabel,
     modelBId,

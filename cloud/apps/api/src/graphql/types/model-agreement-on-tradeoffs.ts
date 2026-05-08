@@ -31,8 +31,16 @@ export type ModelTrialConsistencyShape = {
   noisy: boolean;
 };
 
+export type ModelAgreementBuildProgressShape = {
+  completedRuns: number;
+  totalRuns: number;
+  currentRunId: string | null;
+  updatedAt: string;
+};
+
 export type ModelAgreementResultShape = {
   pending: boolean;
+  buildProgress: ModelAgreementBuildProgressShape | null;
   models: ModelInfoShape[];
   unavailableModels: UnavailableModelInfoShape[];
   excludedNonBinaryCells: number;
@@ -52,6 +60,7 @@ export type ValuePairDivergenceShape = {
 
 export type PairDivergenceBreakdownShape = {
   pending: boolean;
+  buildProgress: ModelAgreementBuildProgressShape | null;
   modelAId: string;
   modelALabel: string;
   modelBId: string;
@@ -63,6 +72,7 @@ const ModelInfoRef = builder.objectRef<ModelInfoShape>('ModelInfo');
 const UnavailableModelInfoRef = builder.objectRef<UnavailableModelInfoShape>('UnavailableModelInfo');
 const PairwiseAgreementRowRef = builder.objectRef<PairwiseAgreementRowShape>('PairwiseAgreementRow');
 const ModelTrialConsistencyRef = builder.objectRef<ModelTrialConsistencyShape>('ModelTrialConsistency');
+const ModelAgreementBuildProgressRef = builder.objectRef<ModelAgreementBuildProgressShape>('ModelAgreementBuildProgress');
 export const ModelAgreementResultRef = builder.objectRef<ModelAgreementResultShape>('ModelAgreementResult');
 const ValuePairDivergenceRef = builder.objectRef<ValuePairDivergenceShape>('ValuePairDivergence');
 export const PairDivergenceBreakdownRef = builder.objectRef<PairDivergenceBreakdownShape>('PairDivergenceBreakdown');
@@ -106,9 +116,19 @@ builder.objectType(ModelTrialConsistencyRef, {
   }),
 });
 
+builder.objectType(ModelAgreementBuildProgressRef, {
+  fields: (t) => ({
+    completedRuns: t.exposeInt('completedRuns'),
+    totalRuns: t.exposeInt('totalRuns'),
+    currentRunId: t.exposeString('currentRunId', { nullable: true }),
+    updatedAt: t.exposeString('updatedAt'),
+  }),
+});
+
 builder.objectType(ModelAgreementResultRef, {
   fields: (t) => ({
     pending: t.exposeBoolean('pending'),
+    buildProgress: t.expose('buildProgress', { type: ModelAgreementBuildProgressRef, nullable: true }),
     models: t.expose('models', { type: [ModelInfoRef] }),
     unavailableModels: t.expose('unavailableModels', { type: [UnavailableModelInfoRef] }),
     excludedNonBinaryCells: t.exposeInt('excludedNonBinaryCells'),
@@ -132,6 +152,7 @@ builder.objectType(ValuePairDivergenceRef, {
 builder.objectType(PairDivergenceBreakdownRef, {
   fields: (t) => ({
     pending: t.exposeBoolean('pending'),
+    buildProgress: t.expose('buildProgress', { type: ModelAgreementBuildProgressRef, nullable: true }),
     modelAId: t.exposeID('modelAId'),
     modelALabel: t.exposeString('modelALabel'),
     modelBId: t.exposeID('modelBId'),

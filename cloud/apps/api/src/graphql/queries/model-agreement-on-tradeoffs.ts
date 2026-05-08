@@ -32,7 +32,7 @@ import { resolveDomainAnalysisScopeDefinitions } from '../../services/analysis/d
 import { resolveSignatureRuns } from '../queries/domain/shared.js';
 import {
   queueDomainAnalysisRefresh,
-  readCellLevelOutcomesFromSnapshot,
+  readModelAgreementSnapshotStateFromSnapshot,
 } from '../../services/analysis/domain-analysis-cache.js';
 import type { DomainAnalysisScope } from '../../services/analysis/domain-analysis-scope.js';
 import type { Context } from '../context.js';
@@ -74,27 +74,47 @@ async function readAgreementSnapshot(params: {
   signature: string;
   refreshReason: string;
   ctx: Context;
-}): Promise<Record<string, CellOutcome> | null> {
-  const snapshot = await readCellLevelOutcomesFromSnapshot(
+}): Promise<{
+  snapshot: Record<string, CellOutcome> | null;
+  buildProgress: {
+    completedRuns: number;
+    totalRuns: number;
+    currentRunId: string | null;
+    updatedAt: string;
+  } | null;
+  queued: boolean;
+}> {
+  const snapshotState = await readModelAgreementSnapshotStateFromSnapshot(
     params.scope,
     params.domainId ?? ALL_DOMAINS_SCOPE_ID,
     params.signature,
   );
-  if (snapshot != null) {
-    return snapshot;
+  if (snapshotState != null) {
+    return {
+      snapshot: snapshotState.cellLevelOutcomes,
+      buildProgress: snapshotState.buildProgress,
+      queued: true,
+    };
   }
 
-  await queueDomainAnalysisRefresh({
+  const queued = await queueDomainAnalysisRefresh({
     scope: params.scope,
     domainId: params.domainId ?? ALL_DOMAINS_SCOPE_ID,
     signature: params.signature,
     reason: params.refreshReason,
   });
-  params.ctx.log.info(
-    { scope: params.scope, domainId: params.domainId, signature: params.signature },
-    'Model agreement snapshot not ready - rebuild queued, returning pending',
-  );
-  return null;
+  if (queued) {
+    params.ctx.log.info(
+      { scope: params.scope, domainId: params.domainId, signature: params.signature },
+      'Model agreement snapshot not ready - rebuild queued, returning pending',
+    );
+  } else {
+    params.ctx.log.warn(
+      { scope: params.scope, domainId: params.domainId, signature: params.signature },
+      'Model agreement snapshot not ready and rebuild could not be queued',
+    );
+  }
+  return { snapshot: null, buildProgress: null, queued };
 }
 
 export async function resolveModelAgreementOnTradeoffs(
@@ -139,18 +159,18 @@ export async function resolveModelAgreementOnTradeoffs(
     signature,
   });
 
-  const snapshot = await readAgreementSnapshot({
+  const snapshotResult = await readAgreementSnapshot({
     scope,
     domainId,
     signature,
     refreshReason: AGREEMENT_REFRESH_REASON,
     ctx,
   });
-  if (snapshot == null) {
-    return buildEmptyAgreementResult();
+  if (snapshotResult.snapshot == null) {
+    return buildEmptyAgreementResult(snapshotResult.queued, snapshotResult.buildProgress);
   }
 
-  const { positionCells, cellsObservedByModelId } = buildPositionCells(snapshot, selectedModelIdSet);
+  const { positionCells, cellsObservedByModelId } = buildPositionCells(snapshotResult.snapshot, selectedModelIdSet);
   const unavailableModels = selectedModels
     .filter((model) => (cellsObservedByModelId.get(model.modelId) ?? 0) === 0)
     .map(buildUnavailableModelInfo);
@@ -228,6 +248,7 @@ export async function resolveModelAgreementOnTradeoffs(
 
   return {
     pending: false,
+    buildProgress: null,
     models: availableModels,
     unavailableModels,
     excludedNonBinaryCells: NON_BINARY_CELL_FALLBACK_COUNT,
@@ -284,19 +305,19 @@ export async function resolveModelPairDivergenceBreakdown(
     signature,
   });
 
-  const snapshot = await readAgreementSnapshot({
+  const snapshotResult = await readAgreementSnapshot({
     scope,
     domainId,
     signature,
     refreshReason: DRILLDOWN_REFRESH_REASON,
     ctx,
   });
-  if (snapshot == null) {
-    return buildEmptyPairBreakdown(modelAId, modelALabel, modelBId, modelBLabel);
+  if (snapshotResult.snapshot == null) {
+    return buildEmptyPairBreakdown(modelAId, modelALabel, modelBId, modelBLabel, snapshotResult.buildProgress);
   }
 
   const selectedModelIdSet = new Set([modelAId, modelBId]);
-  const { positionCells, cellsObservedByModelId } = buildPositionCells(snapshot, selectedModelIdSet);
+  const { positionCells, cellsObservedByModelId } = buildPositionCells(snapshotResult.snapshot, selectedModelIdSet);
   if ((cellsObservedByModelId.get(modelAId) ?? 0) === 0 || (cellsObservedByModelId.get(modelBId) ?? 0) === 0) {
     return buildEmptyPairBreakdown(modelAId, modelALabel, modelBId, modelBLabel);
   }
@@ -383,6 +404,7 @@ export async function resolveModelPairDivergenceBreakdown(
 
   return {
     pending: false,
+    buildProgress: null,
     modelAId,
     modelALabel,
     modelBId,

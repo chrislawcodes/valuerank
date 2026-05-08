@@ -11,6 +11,12 @@ query ModelAgreementOnTradeoffs(
     signature: $signature
   ) {
     pending
+    buildProgress {
+      completedRuns
+      totalRuns
+      currentRunId
+      updatedAt
+    }
     excludedNonBinaryCells
     excludedTiedCells
     models {
@@ -58,6 +64,12 @@ query ModelPairDivergenceBreakdown(
     signature: $signature
   ) {
     pending
+    buildProgress {
+      completedRuns
+      totalRuns
+      currentRunId
+      updatedAt
+    }
     modelAId
     modelALabel
     modelBId
