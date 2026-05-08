@@ -578,5 +578,39 @@
     "blockers": []
   },
   "plan_adversarial_rounds": 2,
-  "tasks_adversarial_rounds": 1
+  "tasks_adversarial_rounds": 1,
+  "codex_dispatches": [
+    {
+      "head_sha": "2524e3c2a9915c6d82eb497d4681a2a0195dc735",
+      "ts": "20260508T070244_445273Z",
+      "prompt_path": "docs/workflow/orchestrator-prompts/ff-model-agreement-slice1.md",
+      "prompt_sha256": "643ee924f881ef44c843dbd0f56e2e7b19c96e68318f692c370037206f05818f",
+      "model": "gpt-5.4-mini",
+      "exit_code": 0,
+      "stdout_path": "docs/workflow/feature-runs/model-agreement-on-tradeoffs/codex-dispatches/20260508T070244_445273Z/stdout.txt",
+      "stderr_path": "docs/workflow/feature-runs/model-agreement-on-tradeoffs/codex-dispatches/20260508T070244_445273Z/stderr.txt",
+      "branch_base_sha": "9c48754bdcf18289e4acbb9d6a4d74de0a47187e",
+      "lines_added_at_dispatch_time": 81,
+      "auto_commit": {
+        "skipped": true,
+        "reason": "no codex-introduced changes"
+      }
+    },
+    {
+      "head_sha": "cc083fbca1019dd3a65850956caebbbd9d6d2749",
+      "ts": "20260508T070529_658080Z",
+      "prompt_path": "docs/workflow/orchestrator-prompts/ff-model-agreement-slice2.md",
+      "prompt_sha256": "01e4aafc6a08102b88659cda24ca3963760f1757d833bb1cfb920180a4d69570",
+      "model": "gpt-5.4-mini",
+      "exit_code": 0,
+      "stdout_path": "docs/workflow/feature-runs/model-agreement-on-tradeoffs/codex-dispatches/20260508T070529_658080Z/stdout.txt",
+      "stderr_path": "docs/workflow/feature-runs/model-agreement-on-tradeoffs/codex-dispatches/20260508T070529_658080Z/stderr.txt",
+      "branch_base_sha": "9c48754bdcf18289e4acbb9d6a4d74de0a47187e",
+      "lines_added_at_dispatch_time": 335,
+      "auto_commit": {
+        "skipped": true,
+        "reason": "no codex-introduced changes"
+      }
+    }
+  ]
 }
