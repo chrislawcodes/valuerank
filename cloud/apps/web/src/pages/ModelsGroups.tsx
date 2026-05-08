@@ -22,6 +22,12 @@ import {
   type ModelsAnalysisQueryVariables,
 } from '../api/operations/modelsAnalysis';
 import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/llm';
+import { type ClusterAnalysis } from '../api/operations/domainAnalysis';
+import {
+  ModelAgreementClusterAnalysisDocument,
+  type ModelAgreementClusterAnalysisQuery,
+  type ModelAgreementClusterAnalysisQueryVariables,
+} from '../generated/graphql';
 import { ModelGroupsSection } from '../components/domains/ModelGroupsSection';
 import { ModelAnalysisSettingsBar } from '../components/models/ModelAnalysisSettingsBar';
 import { ModelSimilarityTableSection } from '../components/models/ModelSimilarityTableSection';
@@ -83,7 +89,7 @@ export function ModelsGroups() {
   const [selectedModelIds, setSelectedModelIds] = useState<string[] | null>(null);
   const [useLegacyQuery, setUseLegacyQuery] = useState(false);
   const [clusteringMethod, setClusteringMethod] = useState<'upgma' | 'ward'>('ward');
-  const [dataSource, setDataSource] = useState<'log-odds' | 'win-rate'>('log-odds');
+  const [dataSource, setDataSource] = useState<'log-odds' | 'win-rate' | 'kappa-agreement'>('log-odds');
   const [similarityMethod, setSimilarityMethod] = useState<CalculationMethod>('weighted-euclidean');
 
   const [{ data: signatureData, fetching: signaturesLoading, error: signaturesError }] = useQuery<
@@ -204,6 +210,41 @@ export function ModelsGroups() {
     }
   }, [defaultModelIds, selectedModelIds]);
   const visibleModelIds = selectedModelIds ?? defaultModelIds;
+
+  const isKappaClusterMode = dataSource === 'kappa-agreement';
+  const [{ data: kappaClusterData, fetching: kappaClusterFetching, error: kappaClusterError }] = useQuery<
+    ModelAgreementClusterAnalysisQuery,
+    ModelAgreementClusterAnalysisQueryVariables
+  >({
+    query: ModelAgreementClusterAnalysisDocument,
+    variables: {
+      modelIds: visibleModelIds,
+      ...(selectedScope === 'DOMAIN' && selectedDomainId !== '' ? { domainId: selectedDomainId } : {}),
+      scope: selectedScope,
+      signature: selectedSignature,
+      method: clusteringMethod,
+    },
+    pause:
+      !isKappaClusterMode
+      || selectedSignature === ''
+      || visibleModelIds.length < 3
+      || (selectedScope === 'DOMAIN' && selectedDomainId === '')
+      || llmModelsData == null,
+    requestPolicy: 'cache-and-network',
+  });
+
+  // Bridge codegen's optional-nullable fields to ClusterAnalysis's strict-nullable fields.
+  const kappaClusterAnalysis = useMemo<ClusterAnalysis | null>(() => {
+    const raw = kappaClusterData?.modelAgreementClusterAnalysis;
+    if (raw == null) return null;
+    return {
+      skipped: raw.skipped,
+      skipReason: raw.skipReason ?? null,
+      defaultPair: raw.defaultPair ?? null,
+      clusters: raw.clusters as ClusterAnalysis['clusters'],
+      faultLinesByPair: (raw.faultLinesByPair ?? {}) as ClusterAnalysis['faultLinesByPair'],
+    };
+  }, [kappaClusterData]);
   const transcriptCount = useMemo(
     () => countAnalyzedTranscripts(data?.domainAnalysis.models ?? [], visibleModelIds),
     [data?.domainAnalysis.models, visibleModelIds],
@@ -344,6 +385,9 @@ export function ModelsGroups() {
         <div className="space-y-6">
           <ModelGroupsSection
             clusterAnalysisByMethod={data?.domainAnalysis.clusterAnalysisByMethod}
+            kappaClusterAnalysis={kappaClusterAnalysis}
+            kappaClusterLoading={kappaClusterFetching}
+            kappaClusterError={kappaClusterError?.message ?? null}
             dataSource={dataSource}
             distanceMethod={similarityMethod}
             models={filteredModels}

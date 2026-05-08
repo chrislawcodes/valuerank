@@ -1,0 +1,34 @@
+query ModelAgreementClusterAnalysis(
+  $modelIds: [ID!]!
+  $domainId: ID
+  $scope: String!
+  $signature: String!
+  $method: String!
+) {
+  modelAgreementClusterAnalysis(
+    modelIds: $modelIds
+    domainId: $domainId
+    scope: $scope
+    signature: $signature
+    method: $method
+  ) {
+    skipped
+    skipReason
+    defaultPair
+    clusters {
+      id
+      name
+      definingValues
+      centroid
+      members {
+        model
+        label
+        silhouetteScore
+        isOutlier
+        nearestClusterIds
+        distancesToNearestClusters
+      }
+    }
+    faultLinesByPair
+  }
+}

@@ -2820,6 +2820,7 @@ export type Query = {
    *
    */
   me?: Maybe<User>;
+  modelAgreementClusterAnalysis: ClusterAnalysis;
   modelAgreementOnTradeoffs: ModelAgreementResult;
   modelPairDivergenceBreakdown: PairDivergenceBreakdown;
   /** Get token statistics for specific models. Useful for understanding prediction quality. */
@@ -3249,6 +3250,15 @@ export type QueryLlmProviderArgs = {
 export type QueryLlmProvidersArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
   offset?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryModelAgreementClusterAnalysisArgs = {
+  domainId?: InputMaybe<Scalars['ID']['input']>;
+  method: Scalars['String']['input'];
+  modelIds: Array<Scalars['ID']['input']>;
+  scope: Scalars['String']['input'];
+  signature: Scalars['String']['input'];
 };
 
 
@@ -4839,6 +4849,17 @@ export type SetProviderBalanceMutationVariables = Exact<{
 
 
 export type SetProviderBalanceMutation = { __typename?: 'Mutation', setProviderBalance: { __typename?: 'LlmProvider', id: string, name: string, displayName: string, maxParallelRequests: number, requestsPerMinute: number, isEnabled: boolean, balance?: number | null, createdAt: string, updatedAt: string } };
+
+export type ModelAgreementClusterAnalysisQueryVariables = Exact<{
+  modelIds: Array<Scalars['ID']['input']> | Scalars['ID']['input'];
+  domainId?: InputMaybe<Scalars['ID']['input']>;
+  scope: Scalars['String']['input'];
+  signature: Scalars['String']['input'];
+  method: Scalars['String']['input'];
+}>;
+
+
+export type ModelAgreementClusterAnalysisQuery = { __typename?: 'Query', modelAgreementClusterAnalysis: { __typename?: 'ClusterAnalysis', skipped: boolean, skipReason?: string | null, defaultPair?: Array<string> | null, faultLinesByPair: unknown, clusters: Array<{ __typename?: 'DomainCluster', id: string, name: string, definingValues: Array<string>, centroid: unknown, members: Array<{ __typename?: 'ClusterMember', model: string, label: string, silhouetteScore: number, isOutlier: boolean, nearestClusterIds?: Array<string> | null, distancesToNearestClusters?: Array<number> | null }> }> } };
 
 export type ModelAgreementOnTradeoffsQueryVariables = Exact<{
   modelIds: Array<Scalars['ID']['input']> | Scalars['ID']['input'];
@@ -7322,6 +7343,40 @@ export const SetProviderBalanceDocument = gql`
 
 export function useSetProviderBalanceMutation() {
   return Urql.useMutation<SetProviderBalanceMutation, SetProviderBalanceMutationVariables>(SetProviderBalanceDocument);
+};
+export const ModelAgreementClusterAnalysisDocument = gql`
+    query ModelAgreementClusterAnalysis($modelIds: [ID!]!, $domainId: ID, $scope: String!, $signature: String!, $method: String!) {
+  modelAgreementClusterAnalysis(
+    modelIds: $modelIds
+    domainId: $domainId
+    scope: $scope
+    signature: $signature
+    method: $method
+  ) {
+    skipped
+    skipReason
+    defaultPair
+    clusters {
+      id
+      name
+      definingValues
+      centroid
+      members {
+        model
+        label
+        silhouetteScore
+        isOutlier
+        nearestClusterIds
+        distancesToNearestClusters
+      }
+    }
+    faultLinesByPair
+  }
+}
+    `;
+
+export function useModelAgreementClusterAnalysisQuery(options: Omit<Urql.UseQueryArgs<ModelAgreementClusterAnalysisQueryVariables>, 'query'>) {
+  return Urql.useQuery<ModelAgreementClusterAnalysisQuery, ModelAgreementClusterAnalysisQueryVariables>({ query: ModelAgreementClusterAnalysisDocument, ...options });
 };
 export const ModelAgreementOnTradeoffsDocument = gql`
     query ModelAgreementOnTradeoffs($modelIds: [ID!]!, $domainId: ID, $scope: String!, $signature: String!) {
