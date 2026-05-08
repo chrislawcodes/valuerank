@@ -89,6 +89,7 @@ describe('ModelGroupingSignificanceTable', () => {
     render(
       <ModelGroupingSignificanceTable
         rows={[createRow({ meanDifference: -0.125, effectSize: 0.456, maxOrderEffect: -0.05 })]}
+
       />,
     );
 
