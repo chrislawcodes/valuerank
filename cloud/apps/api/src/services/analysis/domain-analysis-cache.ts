@@ -365,3 +365,22 @@ export async function readValuePairModelVotesFromSnapshot(
   const parsed = parseSnapshotOutput(snapshot.output);
   return parsed?.valuePairModelVotes ?? null;
 }
+
+/**
+ * Read the pre-computed per-(definitionId::modelId::canonicalA::canonicalB::ownLevel::opponentLevel)
+ * cell-level outcomes from the current domain-analysis snapshot. Returns null if no CURRENT
+ * snapshot exists or if the snapshot pre-dates v1.12.0 (i.e. does not include `cellLevelOutcomes`).
+ *
+ * Used by the modelAgreementOnTradeoffs resolver to compute Cohen's kappa, percent
+ * agreement, and divergence metrics with equal-weight aggregation.
+ */
+export async function readCellLevelOutcomesFromSnapshot(
+  scope: DomainAnalysisScope,
+  domainId: string,
+  configSignature: string,
+): Promise<Record<string, { aChoices: number; bChoices: number; neutrals: number }> | null> {
+  const snapshot = await getCurrentSnapshot(db, scope, domainId, configSignature);
+  if (snapshot == null) return null;
+  const parsed = parseSnapshotOutput(snapshot.output);
+  return parsed?.cellLevelOutcomes ?? null;
+}

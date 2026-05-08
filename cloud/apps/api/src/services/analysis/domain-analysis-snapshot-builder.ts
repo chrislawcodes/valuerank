@@ -224,6 +224,58 @@ export async function buildSnapshotOutput(
     valuePairModelVotes[pairKey] = entry;
   }
 
+  // Derive per-(definitionId::modelId::canonicalA::canonicalB::ownLevel::opponentLevel)
+  // cell outcomes so the agreement resolver can work from canonical binary cell counts.
+  type CellLevelCounts = { aChoices: number; bChoices: number; neutrals: number };
+  const cellsByGroup = new Map<string, Map<string, CellCounts>>();
+  for (const [key, counts] of cellMap.entries()) {
+    const parts = key.split('::');
+    if (parts.length !== 5) continue;
+    const [definitionId, modelId, valueKey, ownLevel, opponentLevel] = parts;
+    if (
+      definitionId === undefined
+      || modelId === undefined
+      || valueKey === undefined
+      || ownLevel === undefined
+      || opponentLevel === undefined
+    ) {
+      continue;
+    }
+    const groupKey = `${definitionId}::${modelId}::${ownLevel}::${opponentLevel}`;
+    let byValueKey = cellsByGroup.get(groupKey);
+    if (byValueKey === undefined) {
+      byValueKey = new Map<string, CellCounts>();
+      cellsByGroup.set(groupKey, byValueKey);
+    }
+    byValueKey.set(valueKey, counts);
+  }
+
+  const cellLevelOutcomes: Record<string, CellLevelCounts> = {};
+  for (const [groupKey, byValueKey] of cellsByGroup.entries()) {
+    if (byValueKey.size !== 2) continue;
+    const sortedKeys = [...byValueKey.keys()].sort();
+    const [canonicalA, canonicalB] = sortedKeys;
+    if (canonicalA === undefined || canonicalB === undefined) continue;
+    const aCell = byValueKey.get(canonicalA);
+    const bCell = byValueKey.get(canonicalB);
+    if (aCell === undefined || bCell === undefined) continue;
+    const [definitionId, modelId, ownLevel, opponentLevel] = groupKey.split('::');
+    if (
+      definitionId === undefined
+      || modelId === undefined
+      || ownLevel === undefined
+      || opponentLevel === undefined
+    ) {
+      continue;
+    }
+    const outKey = `${definitionId}::${modelId}::${canonicalA}::${canonicalB}::${ownLevel}::${opponentLevel}`;
+    cellLevelOutcomes[outKey] = {
+      aChoices: aCell.wins,
+      bChoices: bCell.wins,
+      neutrals: aCell.neutrals,
+    };
+  }
+
   const { models, analyzedDefinitionIds } = computeCellWeightedDomainRates({
     cellMap,
     filteredSourceRunDefinitionById: state.resolvedSignatureRuns.filteredSourceRunDefinitionById,
@@ -264,6 +316,7 @@ export async function buildSnapshotOutput(
     contributionSummary: [],
     excludedDataSummary: [],
     valuePairModelVotes,
+    cellLevelOutcomes,
   };
 }
 

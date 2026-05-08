@@ -853,10 +853,42 @@ type DomainAnalysisModel {
   values: [DomainAnalysisValueScore!]!
 }
 
-type PairwiseWinRateModel {
-  trialCountMatrix: [[Int!]!]!
-  valueOrder: [String!]!
-  winRateMatrix: [[Float]!]!
+type DomainAnalysisPairDetailResult {
+  columnValueKey: String!
+  domainId: ID
+  domainName: String
+  modelId: String!
+  modelLabel: String!
+  pooledMax: Float
+  pooledMean: Float
+  pooledMin: Float
+  pooledStdDev: Float
+  rowValueKey: String!
+  validEstimateCount: Int!
+  vignetteCount: Int!
+  vignettes: [DomainAnalysisPairVignetteDetail!]!
+}
+
+"""
+Whether the vignette presents the queried pair in the requested order or reversed.
+"""
+enum DomainAnalysisPairFramingDirection {
+  A_TO_B
+  B_TO_A
+}
+
+type DomainAnalysisPairVignetteDetail {
+  definitionId: ID!
+  definitionName: String!
+  deprioritized: Int!
+  framingDirection: DomainAnalysisPairFramingDirection!
+  neutral: Int!
+  prioritized: Int!
+  refusalRate: Float
+  selectedValueWinRate: Float
+  totalTrials: Int!
+  winRateCI95High: Float
+  winRateCI95Low: Float
 }
 
 type DomainAnalysisRefreshResult {
@@ -889,41 +921,6 @@ type DomainAnalysisUnavailableModel {
   label: String!
   model: String!
   reason: String!
-}
-
-enum DomainAnalysisPairFramingDirection {
-  A_TO_B
-  B_TO_A
-}
-
-type DomainAnalysisPairDetailResult {
-  columnValueKey: String!
-  domainId: ID
-  domainName: String
-  modelId: String!
-  modelLabel: String!
-  pooledMax: Float
-  pooledMean: Float
-  pooledMin: Float
-  pooledStdDev: Float
-  rowValueKey: String!
-  validEstimateCount: Int!
-  vignetteCount: Int!
-  vignettes: [DomainAnalysisPairVignetteDetail!]!
-}
-
-type DomainAnalysisPairVignetteDetail {
-  definitionId: ID!
-  definitionName: String!
-  deprioritized: Int!
-  framingDirection: DomainAnalysisPairFramingDirection!
-  neutral: Int!
-  prioritized: Int!
-  refusalRate: Float
-  selectedValueWinRate: Float
-  totalTrials: Int!
-  winRateCI95High: Float
-  winRateCI95Low: Float
 }
 
 type DomainAnalysisValueDetailResult {
@@ -1569,6 +1566,16 @@ type LlmProvider {
   updatedAt: DateTime!
 }
 
+type ModelAgreementResult {
+  excludedNonBinaryCells: Int!
+  excludedTiedCells: Int!
+  models: [ModelInfo!]!
+  pairwiseAgreementMatrix: [PairwiseAgreementRow!]!
+  pending: Boolean!
+  trialConsistency: [ModelTrialConsistency!]!
+  unavailableModels: [UnavailableModelInfo!]!
+}
+
 type ModelConsistency {
   coherence: Coherence!
   label: String!
@@ -1617,34 +1624,17 @@ type ModelCostEstimate {
   totalCost: Float!
 }
 
-type ModelGroupingSignificanceModel {
+type ModelInfo {
+  label: String!
+  modelId: ID!
+}
+
+type ModelPairwiseWinRates {
   label: String!
   modelId: String!
-}
-
-type ModelGroupingSignificanceResult {
-  models: [ModelGroupingSignificanceModel!]!
-  pending: Boolean!
-  rows: [ModelGroupingSignificanceRow!]!
-}
-
-type ModelGroupingSignificanceRow {
-  confidenceIntervalHigh: Float
-  confidenceIntervalLow: Float
-  effectLabel: String!
-  effectSize: Float!
-  holmCorrectedPValue: Float
-  maxOrderEffect: Float!
-  meanDifference: Float!
-  modelAId: String!
-  modelALabel: String!
-  modelBId: String!
-  modelBLabel: String!
-  n: Int!
-  rawPValue: Float
-  winRateA: Float!
-  winRateB: Float!
-  verdict: String!
+  trialCountMatrix: [[Int!]!]!
+  valueOrder: [String!]!
+  winRateMatrix: [[Float]!]!
 }
 
 """Token usage statistics for a model, used for cost prediction"""
@@ -1663,6 +1653,14 @@ type ModelTokenStats {
 
   """Number of probes used to compute these averages"""
   sampleCount: Int!
+}
+
+type ModelTrialConsistency {
+  cellsObserved: Int!
+  meanTrialConsistency: Float
+  modelId: ID!
+  modelLabel: String!
+  noisy: Boolean!
 }
 
 """A domain-level contribution for a model/value pair"""
@@ -1722,23 +1720,6 @@ type ModelsConsistencyResult {
   models: [ModelConsistency!]!
 }
 
-type ModelsStabilitySkippedVignette {
-  definitionId: String!
-  reason: String!
-  vignetteName: String!
-}
-
-type ModelsStabilityVignetteResult {
-  avgDirectionalAgreement: Float
-  classifiedConditionCount: Int!
-  definitionId: String!
-  softLeanShare: Float!
-  stableShare: Float!
-  tornShare: Float!
-  unstableShare: Float!
-  vignetteName: String!
-}
-
 type ModelsStabilityModelResult {
   avgDirectionalAgreement: Float
   label: String!
@@ -1754,6 +1735,23 @@ type ModelsStabilityModelResult {
 type ModelsStabilityResult {
   models: [ModelsStabilityModelResult!]!
   skippedVignettes: [ModelsStabilitySkippedVignette!]!
+}
+
+type ModelsStabilitySkippedVignette {
+  definitionId: String!
+  reason: String!
+  vignetteName: String!
+}
+
+type ModelsStabilityVignetteResult {
+  avgDirectionalAgreement: Float
+  classifiedConditionCount: Int!
+  definitionId: String!
+  softLeanShare: Float!
+  stableShare: Float!
+  tornShare: Float!
+  unstableShare: Float!
+  vignetteName: String!
 }
 
 type Mutation {
@@ -2108,9 +2106,28 @@ type OrderEffect {
   samePct: Float!
 }
 
-type ModelPairwiseWinRates {
-  label: String!
-  modelId: String!
+type PairDivergenceBreakdown {
+  modelAId: ID!
+  modelALabel: String!
+  modelBId: ID!
+  modelBLabel: String!
+  pending: Boolean!
+  perValuePair: [ValuePairDivergence!]!
+}
+
+type PairwiseAgreementRow {
+  cohensKappa: Float
+  kappaInterpretation: String
+  meanAbsoluteDivergence: Float
+  modelAId: ID!
+  modelALabel: String!
+  modelBId: ID!
+  modelBLabel: String!
+  percentAgreement: Float
+  totalCells: Int!
+}
+
+type PairwiseWinRateModel {
   trialCountMatrix: [[Int!]!]!
   valueOrder: [String!]!
   winRateMatrix: [[Float]!]!
@@ -2221,13 +2238,6 @@ type PressureSensitivityValuePair {
   secondValueLabel: String!
   secondValueToken: String!
   unscoredCount: Int!
-}
-
-type HighPressureDomainRate {
-  domainId: String!
-  domainName: String!
-  pairsMeasured: Int!
-  rate: Float
 }
 
 type PressureSensitivityValueRate {
@@ -2702,7 +2712,8 @@ type Query {
 
   "\n      Get the currently authenticated user.\n      Returns null if not authenticated.\n    "
   me: User
-  modelGroupingSignificance(domainId: ID, modelIds: [String!]!, scope: String!, signature: String!): ModelGroupingSignificanceResult!
+  modelAgreementOnTradeoffs(domainId: ID, modelIds: [ID!]!, scope: String!, signature: String!): ModelAgreementResult!
+  modelPairDivergenceBreakdown(domainId: ID, modelAId: ID!, modelBId: ID!, scope: String!, signature: String!): PairDivergenceBreakdown!
 
   """
   Get token statistics for specific models. Useful for understanding prediction quality.
@@ -2726,9 +2737,16 @@ type Query {
   List anomalies that are currently open (resolvedAt IS NULL) across all runs. Optional filters: domainId scopes to anomalies whose run belongs to a definition in that domain; type scopes to a single RunAnomalyType.
   """
   openRunAnomalies(domainId: ID, type: RunAnomalyType): [RunAnomaly!]!
+  pairwiseWinRates(
+    """Optional domain ID to scope results to a single domain"""
+    domainId: ID
 
-  """Pairwise win rates per value pair per model, vignette-averaged"""
-  pairwiseWinRates(domainId: ID, modelIds: [String!], signature: String): PairwiseWinRatesResult!
+    """Model IDs to include. Defaults to all active models when omitted."""
+    modelIds: [String!]
+
+    """Batch signature to filter runs (e.g. vnewtd)"""
+    signature: String
+  ): PairwiseWinRatesResult!
 
   """Get a specific preamble by ID"""
   preamble(id: ID!): Preamble
@@ -3598,6 +3616,12 @@ type TriggerRecoveryPayload {
   recovered: Int!
 }
 
+type UnavailableModelInfo {
+  label: String!
+  modelId: ID!
+  reason: String!
+}
+
 type UnresolvableByModel {
   count: Int!
   modelId: String!
@@ -3764,6 +3788,15 @@ type ValueFaultLine {
   clusterBScore: Float!
   delta: Float!
   valueKey: String!
+}
+
+type ValuePairDivergence {
+  cellsCompared: Int!
+  meanAbsoluteDivergence: Float
+  modelAProportionA: Float
+  modelBProportionA: Float
+  valueA: String!
+  valueB: String!
 }
 
 """

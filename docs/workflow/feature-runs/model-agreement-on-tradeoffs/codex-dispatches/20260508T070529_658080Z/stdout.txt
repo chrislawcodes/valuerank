@@ -1,0 +1,15 @@
+Slice 2 is complete and committed as `cc083fbc` with the requested message.
+
+| File | What changed |
+|---|---|
+| [math.ts](/Users/chrislaw/valuerank/cloud/apps/api/src/services/model-agreement/math.ts#L1) | Added pure agreement math: `MIN_TRIALS_FOR_CONSISTENCY`, `KAPPA_TIE_EPSILON`, `isTied`, `cohensKappa`, `kappaInterpretation`, `percentAgreement`, `equalWeightAggregate`. |
+| [math.test.ts](/Users/chrislaw/valuerank/cloud/apps/api/tests/services/model-agreement/math.test.ts#L1) | Added Vitest coverage for the kappa edge cases, tie detection, percent agreement, and equal-weight aggregation. |
+| [model-agreement-on-tradeoffs.ts](/Users/chrislaw/valuerank/cloud/apps/api/src/graphql/types/model-agreement-on-tradeoffs.ts#L1) | Added Pothos refs and object types for `ModelAgreementResult`, `PairwiseAgreementRow`, `ModelTrialConsistency`, `ModelInfo`, `UnavailableModelInfo`, `PairDivergenceBreakdown`, and `ValuePairDivergence`. |
+
+| Verification | Result |
+|---|---|
+| `npm run build --workspace @valuerank/api` | Passed |
+| `npm run lint --workspace @valuerank/api` | Passed; output still has pre-existing warnings in unrelated files, but none from the new slice-2 source files |
+| `npm run test --workspace @valuerank/api -- math.test` | Passed |
+
+The worktree still has unrelated Feature Factory artifacts under `docs/workflow/...`; I left those untouched.
