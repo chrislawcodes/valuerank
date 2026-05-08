@@ -12,6 +12,10 @@ import {
   computeSilhouettes,
   nameCluster,
   computeClusterAnalysis,
+  computeKappaClusterAnalysis,
+  deriveDendrogram,
+  deriveLeafOrder,
+  kappaDistanceMatrix,
   type ClusterModelInput,
 } from '../../../src/graphql/queries/domain-clustering.js';
 
@@ -474,5 +478,137 @@ describe('computeClusterAnalysis', () => {
         expect(member.silhouetteScore).toBeLessThanOrEqual(1 + 1e-10);
       }
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// deriveDendrogram and deriveLeafOrder
+// ---------------------------------------------------------------------------
+
+describe('deriveDendrogram', () => {
+  const models: ClusterModelInput[] = [
+    { model: 'm1', label: 'M1', scores: { A: 1.0, B: 0.0, C: 0.0 } },
+    { model: 'm2', label: 'M2', scores: { A: 0.9, B: 0.1, C: 0.0 } },
+    { model: 'm3', label: 'M3', scores: { A: 0.0, B: 0.0, C: 1.0 } },
+    { model: 'm4', label: 'M4', scores: { A: 0.0, B: 0.1, C: 0.9 } },
+  ];
+
+  it('produces N-1 merges for N models', () => {
+    const dist = cosineDistanceMatrix([[1, 0, 0], [0.9, 0.1, 0], [0, 0, 1], [0, 0.1, 0.9]]);
+    const { mergeHeights, snapshots } = upgma(dist, 4);
+    const merges = deriveDendrogram(snapshots, mergeHeights, models);
+    expect(merges).toHaveLength(models.length - 1);
+  });
+
+  it('each merge has valid leftMemberIds and rightMemberIds', () => {
+    const dist = cosineDistanceMatrix([[1, 0, 0], [0.9, 0.1, 0], [0, 0, 1], [0, 0.1, 0.9]]);
+    const { mergeHeights, snapshots } = upgma(dist, 4);
+    const merges = deriveDendrogram(snapshots, mergeHeights, models);
+    const modelIds = new Set(models.map((m) => m.model));
+    for (const merge of merges) {
+      expect(merge.leftMemberIds.length).toBeGreaterThanOrEqual(1);
+      expect(merge.rightMemberIds.length).toBeGreaterThanOrEqual(1);
+      for (const id of [...merge.leftMemberIds, ...merge.rightMemberIds]) {
+        expect(modelIds.has(id)).toBe(true);
+      }
+    }
+  });
+
+  it('merge heights are non-decreasing', () => {
+    const dist = cosineDistanceMatrix([[1, 0, 0], [0.9, 0.1, 0], [0, 0, 1], [0, 0.1, 0.9]]);
+    const { mergeHeights, snapshots } = upgma(dist, 4);
+    const merges = deriveDendrogram(snapshots, mergeHeights, models);
+    for (let i = 1; i < merges.length; i++) {
+      expect(merges[i]!.height).toBeGreaterThanOrEqual(merges[i - 1]!.height - 1e-10);
+    }
+  });
+});
+
+describe('deriveLeafOrder', () => {
+  const models: ClusterModelInput[] = [
+    { model: 'm1', label: 'M1', scores: { A: 1.0, B: 0.0, C: 0.0 } },
+    { model: 'm2', label: 'M2', scores: { A: 0.9, B: 0.1, C: 0.0 } },
+    { model: 'm3', label: 'M3', scores: { A: 0.0, B: 0.0, C: 1.0 } },
+    { model: 'm4', label: 'M4', scores: { A: 0.0, B: 0.1, C: 0.9 } },
+  ];
+
+  it('leafOrder.length equals N', () => {
+    const dist = cosineDistanceMatrix([[1, 0, 0], [0.9, 0.1, 0], [0, 0, 1], [0, 0.1, 0.9]]);
+    const { mergeHeights, snapshots } = upgma(dist, 4);
+    const merges = deriveDendrogram(snapshots, mergeHeights, models);
+    const allModelIds = models.map((m) => m.model);
+    const leafOrder = deriveLeafOrder(merges, allModelIds);
+    expect(leafOrder).toHaveLength(models.length);
+  });
+
+  it('leafOrder contains each model exactly once', () => {
+    const dist = cosineDistanceMatrix([[1, 0, 0], [0.9, 0.1, 0], [0, 0, 1], [0, 0.1, 0.9]]);
+    const { mergeHeights, snapshots } = upgma(dist, 4);
+    const merges = deriveDendrogram(snapshots, mergeHeights, models);
+    const allModelIds = models.map((m) => m.model);
+    const leafOrder = deriveLeafOrder(merges, allModelIds);
+    expect([...new Set(leafOrder)].sort()).toEqual([...allModelIds].sort());
+  });
+
+  it('returns all model IDs unchanged when no merges', () => {
+    const allModelIds = ['m1', 'm2', 'm3'];
+    const leafOrder = deriveLeafOrder([], allModelIds);
+    expect(leafOrder).toEqual(allModelIds);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// computeKappaClusterAnalysis — dendrogram/leafOrder/clusterIdByModelId
+// ---------------------------------------------------------------------------
+
+describe('computeKappaClusterAnalysis — kappa-specific fields', () => {
+  const models: ClusterModelInput[] = [
+    { model: 'm1', label: 'M1', scores: { A: 1.0, B: 0.0, C: 0.0 } },
+    { model: 'm2', label: 'M2', scores: { A: 0.9, B: 0.1, C: 0.0 } },
+    { model: 'm3', label: 'M3', scores: { A: 0.0, B: 0.0, C: 1.0 } },
+    { model: 'm4', label: 'M4', scores: { A: 0.0, B: 0.1, C: 0.9 } },
+  ];
+
+  // Kappa matrix: m1&m2 agree, m3&m4 agree, pairs across groups disagree
+  const kappaMatrix: Array<Array<number | null>> = [
+    [1,    0.85, 0.05, 0.1],
+    [0.85, 1,    0.1,  0.05],
+    [0.05, 0.1,  1,    0.8],
+    [0.1,  0.05, 0.8,  1],
+  ];
+
+  it('populates dendrogram with N-1 merges', () => {
+    const result = computeKappaClusterAnalysis(models, kappaMatrix);
+    expect(result.dendrogram).toBeDefined();
+    expect(result.dendrogram).toHaveLength(models.length - 1);
+  });
+
+  it('populates leafOrder with N entries', () => {
+    const result = computeKappaClusterAnalysis(models, kappaMatrix);
+    expect(result.leafOrder).toBeDefined();
+    expect(result.leafOrder).toHaveLength(models.length);
+  });
+
+  it('leafOrder contains each model exactly once', () => {
+    const result = computeKappaClusterAnalysis(models, kappaMatrix);
+    const allIds = models.map((m) => m.model);
+    expect([...(result.leafOrder ?? [])].sort()).toEqual([...allIds].sort());
+  });
+
+  it('populates clusterIdByModelId for each model when not skipped', () => {
+    const result = computeKappaClusterAnalysis(models, kappaMatrix);
+    if (result.skipped) return;
+    expect(result.clusterIdByModelId).toBeDefined();
+    for (const model of models) {
+      expect(result.clusterIdByModelId?.[model.model]).toBeDefined();
+    }
+  });
+
+  it('kappaDistanceMatrix maps kappa 1 to distance 0 and kappa -1 to distance 1', () => {
+    const km: Array<Array<number | null>> = [[1, -1], [-1, 1]];
+    const dist = kappaDistanceMatrix(km);
+    expect(dist[0]![1]).toBeCloseTo(1);
+    expect(dist[1]![0]).toBeCloseTo(1);
+    expect(dist[0]![0]).toBeCloseTo(0);
   });
 });

@@ -235,7 +235,7 @@ export function ModelsGroups() {
 
   // Bridge codegen's optional-nullable fields to ClusterAnalysis's strict-nullable fields.
   const kappaClusterAnalysis = useMemo<ClusterAnalysis | null>(() => {
-    const raw = kappaClusterData?.modelAgreementClusterAnalysis;
+    const raw = kappaClusterData?.modelAgreementClusterAnalysis?.clusterAnalysis;
     if (raw == null) return null;
     return {
       skipped: raw.skipped,
@@ -244,6 +244,24 @@ export function ModelsGroups() {
       clusters: raw.clusters as ClusterAnalysis['clusters'],
       faultLinesByPair: (raw.faultLinesByPair ?? {}) as ClusterAnalysis['faultLinesByPair'],
     };
+  }, [kappaClusterData]);
+
+  const kappaDendrogram = useMemo(() => {
+    return kappaClusterData?.modelAgreementClusterAnalysis?.clusterAnalysis?.dendrogram ?? null;
+  }, [kappaClusterData]);
+
+  const kappaLeafOrder = useMemo(() => {
+    return kappaClusterData?.modelAgreementClusterAnalysis?.clusterAnalysis?.leafOrder ?? null;
+  }, [kappaClusterData]);
+
+  const kappaClusterIdByModelId = useMemo(() => {
+    const raw = kappaClusterData?.modelAgreementClusterAnalysis?.clusterAnalysis?.clusterIdByModelId;
+    if (raw == null) return null;
+    return raw as Record<string, string>;
+  }, [kappaClusterData]);
+
+  const kappaKappaPairs = useMemo(() => {
+    return kappaClusterData?.modelAgreementClusterAnalysis?.kappaPairs ?? null;
   }, [kappaClusterData]);
   const transcriptCount = useMemo(
     () => countAnalyzedTranscripts(data?.domainAnalysis.models ?? [], visibleModelIds),
@@ -386,6 +404,10 @@ export function ModelsGroups() {
           <ModelGroupsSection
             clusterAnalysisByMethod={data?.domainAnalysis.clusterAnalysisByMethod}
             kappaClusterAnalysis={kappaClusterAnalysis}
+            kappaDendrogram={kappaDendrogram}
+            kappaLeafOrder={kappaLeafOrder}
+            kappaClusterIdByModelId={kappaClusterIdByModelId}
+            kappaKappaPairs={kappaKappaPairs}
             kappaClusterLoading={kappaClusterFetching}
             kappaClusterError={kappaClusterError?.message ?? null}
             dataSource={dataSource}

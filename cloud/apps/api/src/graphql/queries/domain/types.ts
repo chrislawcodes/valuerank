@@ -9,6 +9,7 @@ import {
   type ClusterMember,
   type ValueFaultLine,
   type ClusterPairFaultLines,
+  type DendrogramMerge,
 } from '../domain-clustering.js';
 import type {
   DomainAnalysisMissingDefinition,
@@ -36,6 +37,17 @@ export {
   DomainAnalysisConditionTranscriptRef,
   DomainAnalysisValueDetailResultRef,
 } from './types-detail.js';
+
+export type KappaPair = {
+  modelAId: string;
+  modelBId: string;
+  kappa: number | null;
+};
+
+export type KappaClusterPayload = {
+  clusterAnalysis: ClusterAnalysis;
+  kappaPairs: KappaPair[];
+};
 
 export type PairwiseWinRateModel = {
   valueOrder: string[];
@@ -80,6 +92,9 @@ export const DomainClusterRef = builder.objectRef<DomainCluster>('DomainCluster'
 export const ValueFaultLineRef = builder.objectRef<ValueFaultLine>('ValueFaultLine');
 export const ClusterPairFaultLinesRef = builder.objectRef<ClusterPairFaultLines>('ClusterPairFaultLines');
 export const ClusterAnalysisRef = builder.objectRef<ClusterAnalysis>('ClusterAnalysis');
+export const DendrogramMergeRef = builder.objectRef<DendrogramMerge>('DendrogramMerge');
+export const KappaPairRef = builder.objectRef<KappaPair>('KappaPair');
+export const KappaClusterPayloadRef = builder.objectRef<KappaClusterPayload>('KappaClusterPayload');
 export const DomainAnalysisValueScoreRef = builder.objectRef<DomainAnalysisValueScore>('DomainAnalysisValueScore');
 export const PairwiseWinRateModelRef = builder.objectRef<PairwiseWinRateModel>('PairwiseWinRateModel');
 export const DomainAnalysisModelRef = builder.objectRef<DomainAnalysisModel>('DomainAnalysisModel');
@@ -179,6 +194,42 @@ builder.objectType(ClusterAnalysisRef, {
     defaultPair: t.exposeStringList('defaultPair', { nullable: true }),
     skipped: t.exposeBoolean('skipped'),
     skipReason: t.exposeString('skipReason', { nullable: true }),
+    dendrogram: t.field({
+      type: [DendrogramMergeRef],
+      nullable: true,
+      resolve: (parent) => parent.dendrogram ?? null,
+    }),
+    leafOrder: t.exposeStringList('leafOrder', { nullable: true }),
+    clusterIdByModelId: t.expose('clusterIdByModelId', { type: 'JSON', nullable: true }),
+  }),
+});
+
+builder.objectType(DendrogramMergeRef, {
+  fields: (t) => ({
+    leftMemberIds: t.exposeStringList('leftMemberIds'),
+    rightMemberIds: t.exposeStringList('rightMemberIds'),
+    height: t.exposeFloat('height'),
+  }),
+});
+
+builder.objectType(KappaPairRef, {
+  fields: (t) => ({
+    modelAId: t.exposeString('modelAId'),
+    modelBId: t.exposeString('modelBId'),
+    kappa: t.exposeFloat('kappa', { nullable: true }),
+  }),
+});
+
+builder.objectType(KappaClusterPayloadRef, {
+  fields: (t) => ({
+    clusterAnalysis: t.field({
+      type: ClusterAnalysisRef,
+      resolve: (parent) => parent.clusterAnalysis,
+    }),
+    kappaPairs: t.field({
+      type: [KappaPairRef],
+      resolve: (parent) => parent.kappaPairs,
+    }),
   }),
 });
 

@@ -9,6 +9,8 @@ import { ClusterBarPlot } from './ClusterBarPlot';
 import { ClusterDotPlot } from './ClusterDotPlot';
 import { ClusterRadarChart } from './ClusterRadarChart';
 import { buildIndividualClusters, getClusterMemberLabelText } from './clusterVisualizationUtils';
+import { ClusterDendrogram, type DendrogramMerge } from './ClusterDendrogram';
+import { ClusterOrderedKappaHeatmap, type KappaPairInput } from './ClusterOrderedKappaHeatmap';
 
 const LEGEND_COLORS = [
   { border: 'border-blue-500', text: 'text-blue-700', light: 'bg-blue-50', color: '#2563eb' },
@@ -41,6 +43,14 @@ type ModelGroupsSectionProps = {
    * `clusterAnalysisByMethod` map (which only covers score-based variants).
    */
   kappaClusterAnalysis?: ClusterAnalysis | null;
+  /** Dendrogram merges from the kappa cluster payload (kappa mode only). */
+  kappaDendrogram?: DendrogramMerge[] | null;
+  /** Leaf order for the kappa dendrogram/heatmap. */
+  kappaLeafOrder?: string[] | null;
+  /** Flat per-model cluster ID map (kappa mode only). */
+  kappaClusterIdByModelId?: Record<string, string> | null;
+  /** Flat kappa pair list for the heatmap (kappa mode only). */
+  kappaKappaPairs?: KappaPairInput[] | null;
   kappaClusterLoading?: boolean;
   kappaClusterError?: string | null;
   dataSource?: ClusterDataSource;
@@ -82,6 +92,10 @@ function getGroupLabel(cluster: DomainCluster): string {
 export function ModelGroupsSection({
   clusterAnalysisByMethod,
   kappaClusterAnalysis = null,
+  kappaDendrogram = null,
+  kappaLeafOrder = null,
+  kappaClusterIdByModelId = null,
+  kappaKappaPairs = null,
   kappaClusterLoading = false,
   kappaClusterError = null,
   dataSource = 'log-odds',
@@ -140,6 +154,14 @@ export function ModelGroupsSection({
       return current.length === 1 && current[0] === clusterId ? [] : [clusterId];
     });
   };
+
+  const modelLabels = useMemo<Record<string, string>>(() => {
+    const result: Record<string, string> = {};
+    for (const model of models) {
+      result[model.model] = model.label;
+    }
+    return result;
+  }, [models]);
 
   const copyLabel = `${groupDisplayMode} model groups ${
     viewMode === 'dot' ? 'dot map' : viewMode === 'bar' ? 'bar chart' : 'radar chart'
@@ -227,25 +249,27 @@ export function ModelGroupsSection({
             </>
           )}
 
-          <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
-            {CLUSTER_VIEW_OPTIONS.map((option) => {
-              const active = viewMode === option.value;
-              return (
-                <Button
-                  key={option.value}
-                  type="button"
-                  variant={active ? 'primary' : 'ghost'}
-                  size="sm"
-                  onClick={() => setViewMode(option.value)}
-                  className={`rounded-md px-3 py-1 text-xs font-medium min-h-0 ${
-                    active ? 'bg-teal-600 text-white hover:bg-teal-700' : 'text-gray-600 hover:bg-white hover:text-gray-900'
-                  }`}
-                >
-                  {option.label}
-                </Button>
-              );
-            })}
-          </div>
+          {dataSource !== 'kappa-agreement' && (
+            <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
+              {CLUSTER_VIEW_OPTIONS.map((option) => {
+                const active = viewMode === option.value;
+                return (
+                  <Button
+                    key={option.value}
+                    type="button"
+                    variant={active ? 'primary' : 'ghost'}
+                    size="sm"
+                    onClick={() => setViewMode(option.value)}
+                    className={`rounded-md px-3 py-1 text-xs font-medium min-h-0 ${
+                      active ? 'bg-teal-600 text-white hover:bg-teal-700' : 'text-gray-600 hover:bg-white hover:text-gray-900'
+                    }`}
+                  >
+                    {option.label}
+                  </Button>
+                );
+              })}
+            </div>
+          )}
 
           <CopyVisualButton targetRef={summaryTableRef} label={copyLabel} />
         </div>
@@ -319,20 +343,49 @@ export function ModelGroupsSection({
           </div>
         ) : (
           <>
-            {(() => {
-              // Plot dataSource only controls how centroids are scaled. Under
-              // 'kappa-agreement' the grouping is by kappa but centroids are
-              // still log-odds, so the plots use 'log-odds' for scaling.
-              const plotDataSource: 'log-odds' | 'win-rate' =
-                dataSource === 'win-rate' && groupDisplayMode === 'groups' ? 'win-rate' : 'log-odds';
-              return (
-                <>
-                  {viewMode === 'dot' && <ClusterDotPlot clusters={clusters} activeGroupIds={activeGroupIds} dataSource={plotDataSource} />}
-                  {viewMode === 'bar' && <ClusterBarPlot clusters={clusters} activeGroupIds={activeGroupIds} dataSource={plotDataSource} />}
-                  {viewMode === 'radar' && <ClusterRadarChart clusters={clusters} activeGroupIds={activeGroupIds} dataSource={plotDataSource} />}
-                </>
-              );
-            })()}
+            {dataSource === 'kappa-agreement' && groupDisplayMode === 'groups' ? (
+              // In kappa mode, show the dendrogram and cluster-ordered heatmap
+              <div className="space-y-6">
+                {kappaDendrogram != null && kappaLeafOrder != null ? (
+                  <div>
+                    <p className="mb-2 text-xs font-semibold text-gray-700">Merge tree (dendrogram)</p>
+                    <ClusterDendrogram
+                      merges={kappaDendrogram}
+                      leafOrder={kappaLeafOrder}
+                      modelLabels={modelLabels}
+                      clusterIdByModelId={kappaClusterIdByModelId ?? {}}
+                    />
+                  </div>
+                ) : null}
+                {kappaLeafOrder != null && kappaKappaPairs != null ? (
+                  <div>
+                    <p className="mb-2 text-xs font-semibold text-gray-700">Cluster-ordered kappa heatmap</p>
+                    <ClusterOrderedKappaHeatmap
+                      leafOrder={kappaLeafOrder}
+                      modelLabels={modelLabels}
+                      kappaPairs={kappaKappaPairs}
+                      clusterIdByModelId={kappaClusterIdByModelId ?? {}}
+                    />
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              // Score modes: show the existing value-profile chart
+              (() => {
+                // Plot dataSource only controls how centroids are scaled. Under
+                // 'kappa-agreement' the grouping is by kappa but centroids are
+                // still log-odds, so the plots use 'log-odds' for scaling.
+                const plotDataSource: 'log-odds' | 'win-rate' =
+                  dataSource === 'win-rate' && groupDisplayMode === 'groups' ? 'win-rate' : 'log-odds';
+                return (
+                  <>
+                    {viewMode === 'dot' && <ClusterDotPlot clusters={clusters} activeGroupIds={activeGroupIds} dataSource={plotDataSource} />}
+                    {viewMode === 'bar' && <ClusterBarPlot clusters={clusters} activeGroupIds={activeGroupIds} dataSource={plotDataSource} />}
+                    {viewMode === 'radar' && <ClusterRadarChart clusters={clusters} activeGroupIds={activeGroupIds} dataSource={plotDataSource} />}
+                  </>
+                );
+              })()
+            )}
 
             <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
               {clusters.map((cluster, index) => {

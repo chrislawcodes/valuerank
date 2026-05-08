@@ -305,9 +305,12 @@ export type CircumplexResult = {
 
 export type ClusterAnalysis = {
   __typename?: 'ClusterAnalysis';
+  clusterIdByModelId?: Maybe<Scalars['JSON']['output']>;
   clusters: Array<DomainCluster>;
   defaultPair?: Maybe<Array<Scalars['String']['output']>>;
+  dendrogram?: Maybe<Array<DendrogramMerge>>;
   faultLinesByPair: Scalars['JSON']['output'];
+  leafOrder?: Maybe<Array<Scalars['String']['output']>>;
   skipReason?: Maybe<Scalars['String']['output']>;
   skipped: Scalars['Boolean']['output'];
 };
@@ -673,6 +676,13 @@ export type DeleteTagResult = {
   affectedDefinitions: Scalars['Int']['output'];
   /** Whether deletion was successful */
   success: Scalars['Boolean']['output'];
+};
+
+export type DendrogramMerge = {
+  __typename?: 'DendrogramMerge';
+  height: Scalars['Float']['output'];
+  leftMemberIds: Array<Scalars['String']['output']>;
+  rightMemberIds: Array<Scalars['String']['output']>;
 };
 
 /** Result of deprecating a model */
@@ -1388,6 +1398,19 @@ export type JobTypeStatus = {
   pending: Scalars['Int']['output'];
   /** Job type name (e.g., probe_scenario) */
   type: Scalars['String']['output'];
+};
+
+export type KappaClusterPayload = {
+  __typename?: 'KappaClusterPayload';
+  clusterAnalysis: ClusterAnalysis;
+  kappaPairs: Array<KappaPair>;
+};
+
+export type KappaPair = {
+  __typename?: 'KappaPair';
+  kappa?: Maybe<Scalars['Float']['output']>;
+  modelAId: Scalars['String']['output'];
+  modelBId: Scalars['String']['output'];
 };
 
 /** A named level preset defining the 5-word intensity scale for job-choice conditions */
@@ -2820,7 +2843,7 @@ export type Query = {
    *
    */
   me?: Maybe<User>;
-  modelAgreementClusterAnalysis: ClusterAnalysis;
+  modelAgreementClusterAnalysis: KappaClusterPayload;
   modelAgreementOnTradeoffs: ModelAgreementResult;
   modelPairDivergenceBreakdown: PairDivergenceBreakdown;
   /** Get token statistics for specific models. Useful for understanding prediction quality. */
@@ -4859,7 +4882,7 @@ export type ModelAgreementClusterAnalysisQueryVariables = Exact<{
 }>;
 
 
-export type ModelAgreementClusterAnalysisQuery = { __typename?: 'Query', modelAgreementClusterAnalysis: { __typename?: 'ClusterAnalysis', skipped: boolean, skipReason?: string | null, defaultPair?: Array<string> | null, faultLinesByPair: unknown, clusters: Array<{ __typename?: 'DomainCluster', id: string, name: string, definingValues: Array<string>, centroid: unknown, members: Array<{ __typename?: 'ClusterMember', model: string, label: string, silhouetteScore: number, isOutlier: boolean, nearestClusterIds?: Array<string> | null, distancesToNearestClusters?: Array<number> | null }> }> } };
+export type ModelAgreementClusterAnalysisQuery = { __typename?: 'Query', modelAgreementClusterAnalysis: { __typename?: 'KappaClusterPayload', clusterAnalysis: { __typename?: 'ClusterAnalysis', skipped: boolean, skipReason?: string | null, defaultPair?: Array<string> | null, faultLinesByPair: unknown, leafOrder?: Array<string> | null, clusterIdByModelId?: unknown | null, clusters: Array<{ __typename?: 'DomainCluster', id: string, name: string, definingValues: Array<string>, centroid: unknown, members: Array<{ __typename?: 'ClusterMember', model: string, label: string, silhouetteScore: number, isOutlier: boolean, nearestClusterIds?: Array<string> | null, distancesToNearestClusters?: Array<number> | null }> }>, dendrogram?: Array<{ __typename?: 'DendrogramMerge', leftMemberIds: Array<string>, rightMemberIds: Array<string>, height: number }> | null }, kappaPairs: Array<{ __typename?: 'KappaPair', modelAId: string, modelBId: string, kappa?: number | null }> } };
 
 export type ModelAgreementOnTradeoffsQueryVariables = Exact<{
   modelIds: Array<Scalars['ID']['input']> | Scalars['ID']['input'];
@@ -7353,24 +7376,38 @@ export const ModelAgreementClusterAnalysisDocument = gql`
     signature: $signature
     method: $method
   ) {
-    skipped
-    skipReason
-    defaultPair
-    clusters {
-      id
-      name
-      definingValues
-      centroid
-      members {
-        model
-        label
-        silhouetteScore
-        isOutlier
-        nearestClusterIds
-        distancesToNearestClusters
+    clusterAnalysis {
+      skipped
+      skipReason
+      defaultPair
+      clusters {
+        id
+        name
+        definingValues
+        centroid
+        members {
+          model
+          label
+          silhouetteScore
+          isOutlier
+          nearestClusterIds
+          distancesToNearestClusters
+        }
       }
+      faultLinesByPair
+      dendrogram {
+        leftMemberIds
+        rightMemberIds
+        height
+      }
+      leafOrder
+      clusterIdByModelId
     }
-    faultLinesByPair
+    kappaPairs {
+      modelAId
+      modelBId
+      kappa
+    }
   }
 }
     `;

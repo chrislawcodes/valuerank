@@ -12,23 +12,37 @@ query ModelAgreementClusterAnalysis(
     signature: $signature
     method: $method
   ) {
-    skipped
-    skipReason
-    defaultPair
-    clusters {
-      id
-      name
-      definingValues
-      centroid
-      members {
-        model
-        label
-        silhouetteScore
-        isOutlier
-        nearestClusterIds
-        distancesToNearestClusters
+    clusterAnalysis {
+      skipped
+      skipReason
+      defaultPair
+      clusters {
+        id
+        name
+        definingValues
+        centroid
+        members {
+          model
+          label
+          silhouetteScore
+          isOutlier
+          nearestClusterIds
+          distancesToNearestClusters
+        }
       }
+      faultLinesByPair
+      dendrogram {
+        leftMemberIds
+        rightMemberIds
+        height
+      }
+      leafOrder
+      clusterIdByModelId
     }
-    faultLinesByPair
+    kappaPairs {
+      modelAId
+      modelBId
+      kappa
+    }
   }
 }
