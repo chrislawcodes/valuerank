@@ -1494,10 +1494,10 @@ export type ModelAgreementResult = {
   __typename?: 'ModelAgreementResult';
   buildProgress?: Maybe<ModelAgreementBuildProgress>;
   excludedNonBinaryCells: Scalars['Int']['output'];
-  excludedTiedCells: Scalars['Int']['output'];
   models: Array<ModelInfo>;
   pairwiseAgreementMatrix: Array<PairwiseAgreementRow>;
   pending: Scalars['Boolean']['output'];
+  tiedCells: Scalars['Int']['output'];
   trialConsistency: Array<ModelTrialConsistency>;
   unavailableModels: Array<UnavailableModelInfo>;
 };
@@ -4848,7 +4848,7 @@ export type ModelAgreementOnTradeoffsQueryVariables = Exact<{
 }>;
 
 
-export type ModelAgreementOnTradeoffsQuery = { __typename?: 'Query', modelAgreementOnTradeoffs: { __typename?: 'ModelAgreementResult', pending: boolean, excludedNonBinaryCells: number, excludedTiedCells: number, buildProgress?: { __typename?: 'ModelAgreementBuildProgress', completedRuns: number, totalRuns: number, currentRunId?: string | null, updatedAt: string } | null, models: Array<{ __typename?: 'ModelInfo', modelId: string, label: string }>, unavailableModels: Array<{ __typename?: 'UnavailableModelInfo', modelId: string, label: string, reason: string }>, pairwiseAgreementMatrix: Array<{ __typename?: 'PairwiseAgreementRow', modelAId: string, modelALabel: string, modelBId: string, modelBLabel: string, totalCells: number, percentAgreement?: number | null, cohensKappa?: number | null, kappaInterpretation?: string | null, meanAbsoluteDivergence?: number | null }>, trialConsistency: Array<{ __typename?: 'ModelTrialConsistency', modelId: string, modelLabel: string, cellsObserved: number, meanTrialConsistency?: number | null, noisy: boolean }> } };
+export type ModelAgreementOnTradeoffsQuery = { __typename?: 'Query', modelAgreementOnTradeoffs: { __typename?: 'ModelAgreementResult', pending: boolean, excludedNonBinaryCells: number, tiedCells: number, buildProgress?: { __typename?: 'ModelAgreementBuildProgress', completedRuns: number, totalRuns: number, currentRunId?: string | null, updatedAt: string } | null, models: Array<{ __typename?: 'ModelInfo', modelId: string, label: string }>, unavailableModels: Array<{ __typename?: 'UnavailableModelInfo', modelId: string, label: string, reason: string }>, pairwiseAgreementMatrix: Array<{ __typename?: 'PairwiseAgreementRow', modelAId: string, modelALabel: string, modelBId: string, modelBLabel: string, totalCells: number, percentAgreement?: number | null, cohensKappa?: number | null, kappaInterpretation?: string | null, meanAbsoluteDivergence?: number | null }>, trialConsistency: Array<{ __typename?: 'ModelTrialConsistency', modelId: string, modelLabel: string, cellsObserved: number, meanTrialConsistency?: number | null, noisy: boolean }> } };
 
 export type ModelPairDivergenceBreakdownQueryVariables = Exact<{
   modelAId: Scalars['ID']['input'];
@@ -7339,7 +7339,7 @@ export const ModelAgreementOnTradeoffsDocument = gql`
       updatedAt
     }
     excludedNonBinaryCells
-    excludedTiedCells
+    tiedCells
     models {
       modelId
       label

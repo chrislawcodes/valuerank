@@ -23,6 +23,7 @@ import {
   summarizeTrialConsistency,
   type CellOutcome,
   type ComparableCell,
+  type CellChoice,
 } from '../../services/model-agreement/aggregation.js';
 import {
   equalWeightAggregate,
@@ -177,18 +178,18 @@ export async function resolveModelAgreementOnTradeoffs(
   const availableModels = selectedModels.filter((model) => (cellsObservedByModelId.get(model.modelId) ?? 0) > 0);
 
   const pairwiseAgreementMatrix: PairwiseAgreementRowShape[] = [];
-  let excludedTiedCells = 0;
+  let tiedCells = 0;
 
   for (let leftIndex = 0; leftIndex < availableModels.length; leftIndex += 1) {
     for (let rightIndex = leftIndex + 1; rightIndex < availableModels.length; rightIndex += 1) {
       const modelA = availableModels[leftIndex]!;
       const modelB = availableModels[rightIndex]!;
-      const { cells, excludedTiedCells: pairExcludedTiedCells } = collectComparableCells({
+      const { cells, tiedCells: pairTiedCells } = collectComparableCells({
         positionCells,
         modelAId: modelA.modelId,
         modelBId: modelB.modelId,
       });
-      excludedTiedCells += pairExcludedTiedCells;
+      tiedCells += pairTiedCells;
       const metrics = summarizePairCells(cells);
 
       pairwiseAgreementMatrix.push({
@@ -252,7 +253,7 @@ export async function resolveModelAgreementOnTradeoffs(
     models: availableModels,
     unavailableModels,
     excludedNonBinaryCells: NON_BINARY_CELL_FALLBACK_COUNT,
-    excludedTiedCells,
+    tiedCells,
     pairwiseAgreementMatrix,
     trialConsistency,
   };
@@ -332,19 +333,22 @@ export async function resolveModelPairDivergenceBreakdown(
 
     const proportionA = computeProportionA(outcomeA);
     const proportionB = computeProportionA(outcomeB);
-    if (proportionA == null || proportionB == null || isTied(proportionA) || isTied(proportionB)) {
+    if (proportionA == null || proportionB == null) {
       continue;
     }
+
+    const modelAChoice: CellChoice = isTied(proportionA) ? 'TIED' : (proportionA > 0.5 ? 'A' : 'B');
+    const modelBChoice: CellChoice = isTied(proportionB) ? 'TIED' : (proportionB > 0.5 ? 'A' : 'B');
 
     const cell: ComparableCell = {
       definitionId: position.definitionId,
       valuePairKey: `${position.canonicalA}::${position.canonicalB}`,
       modelAProportionA: proportionA,
       modelBProportionA: proportionB,
+      modelAChoice,
+      modelBChoice,
       divergence: Math.abs(proportionA - proportionB),
-      agreesBinary:
-        (proportionA > 0.5 && proportionB > 0.5)
-        || (proportionA < 0.5 && proportionB < 0.5),
+      agrees: modelAChoice === modelBChoice,
     };
 
     const byDefinition = cellsByValuePair.get(cell.valuePairKey) ?? new Map<string, ComparableCell[]>();

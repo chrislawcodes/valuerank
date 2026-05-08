@@ -33,13 +33,28 @@ export type PositionCell = {
   byModelId: Map<string, CellOutcome>;
 };
 
+/**
+ * Three-category coding for a model's choice on a cell:
+ * - 'A' = the model picked canonical-A more than canonical-B
+ * - 'B' = the model picked canonical-B more
+ * - 'TIED' = the model split 50/50 (within KAPPA_TIE_EPSILON)
+ *
+ * Tied cells are real data (the model is genuinely undecided) and are kept in
+ * every metric. For Cohen's kappa we use a 3-category coding where "both tied"
+ * counts as agreement. This is the standard variant used in content-coding
+ * reliability work when raters are allowed a "neutral" / "unclear" label.
+ */
+export type CellChoice = 'A' | 'TIED' | 'B';
+
 export type ComparableCell = {
   definitionId: string;
   valuePairKey: string;
   modelAProportionA: number;
   modelBProportionA: number;
+  modelAChoice: CellChoice;
+  modelBChoice: CellChoice;
   divergence: number;
-  agreesBinary: boolean;
+  agrees: boolean;
 };
 
 export type PairMetrics = {
@@ -161,16 +176,21 @@ export function buildPositionCells(
   return { positionCells, cellsObservedByModelId };
 }
 
+function classifyChoice(proportionA: number): CellChoice {
+  if (isTied(proportionA)) return 'TIED';
+  return proportionA > 0.5 ? 'A' : 'B';
+}
+
 export function collectComparableCells(params: {
   positionCells: ReadonlyMap<string, PositionCell>;
   modelAId: string;
   modelBId: string;
 }): {
   cells: ComparableCell[];
-  excludedTiedCells: number;
+  tiedCells: number;
 } {
   const cells: ComparableCell[] = [];
-  let excludedTiedCells = 0;
+  let tiedCells = 0;
 
   for (const position of params.positionCells.values()) {
     const outcomeA = position.byModelId.get(params.modelAId);
@@ -185,9 +205,11 @@ export function collectComparableCells(params: {
       continue;
     }
 
-    if (isTied(proportionA) || isTied(proportionB)) {
-      excludedTiedCells += 1;
-      continue;
+    const modelAChoice = classifyChoice(proportionA);
+    const modelBChoice = classifyChoice(proportionB);
+
+    if (modelAChoice === 'TIED' || modelBChoice === 'TIED') {
+      tiedCells += 1;
     }
 
     cells.push({
@@ -195,16 +217,25 @@ export function collectComparableCells(params: {
       valuePairKey: `${position.canonicalA}::${position.canonicalB}`,
       modelAProportionA: proportionA,
       modelBProportionA: proportionB,
+      modelAChoice,
+      modelBChoice,
       divergence: Math.abs(proportionA - proportionB),
-      agreesBinary:
-        (proportionA > 0.5 && proportionB > 0.5)
-        || (proportionA < 0.5 && proportionB < 0.5),
+      agrees: modelAChoice === modelBChoice,
     });
   }
 
-  return { cells, excludedTiedCells };
+  return { cells, tiedCells };
 }
 
+/**
+ * Three-category Cohen's kappa over A / TIED / B.
+ *
+ * Per-vignette aggregation: for each vignette compute the fraction of cells
+ * in each category for each model, then equal-weight average those fractions
+ * across vignettes. P_chance = sum over categories of pX(k) * pY(k). Both
+ * models tied counts as agreement; one tied + one decided counts as
+ * disagreement.
+ */
 export function summarizePairCells(cells: ReadonlyArray<ComparableCell>): PairMetrics {
   if (cells.length === 0) {
     return {
@@ -218,13 +249,33 @@ export function summarizePairCells(cells: ReadonlyArray<ComparableCell>): PairMe
 
   const perVignetteAgreementRates = new Map<string, { matchedCells: number; totalCells: number }>();
   const perVignetteDivergences = new Map<string, number[]>();
-  const perVignetteModelAProportions = new Map<string, number[]>();
-  const perVignetteModelBProportions = new Map<string, number[]>();
+  const perVignetteFractionsAByModel: Record<'A' | 'B', Map<string, number[]>> = {
+    A: new Map<string, number[]>(),
+    B: new Map<string, number[]>(),
+  };
+  const perVignetteFractionsTiedByModel: Record<'A' | 'B', Map<string, number[]>> = {
+    A: new Map<string, number[]>(),
+    B: new Map<string, number[]>(),
+  };
+  const perVignetteFractionsBByModel: Record<'A' | 'B', Map<string, number[]>> = {
+    A: new Map<string, number[]>(),
+    B: new Map<string, number[]>(),
+  };
+
+  function pushChoiceIndicator(
+    map: Map<string, number[]>,
+    definitionId: string,
+    indicator: number,
+  ): void {
+    const bucket = map.get(definitionId) ?? [];
+    bucket.push(indicator);
+    map.set(definitionId, bucket);
+  }
 
   for (const cell of cells) {
     const agreementBucket = perVignetteAgreementRates.get(cell.definitionId) ?? { matchedCells: 0, totalCells: 0 };
     agreementBucket.totalCells += 1;
-    if (cell.agreesBinary) {
+    if (cell.agrees) {
       agreementBucket.matchedCells += 1;
     }
     perVignetteAgreementRates.set(cell.definitionId, agreementBucket);
@@ -233,24 +284,30 @@ export function summarizePairCells(cells: ReadonlyArray<ComparableCell>): PairMe
     divergenceBucket.push(cell.divergence);
     perVignetteDivergences.set(cell.definitionId, divergenceBucket);
 
-    const modelABucket = perVignetteModelAProportions.get(cell.definitionId) ?? [];
-    modelABucket.push(cell.modelAProportionA);
-    perVignetteModelAProportions.set(cell.definitionId, modelABucket);
-
-    const modelBBucket = perVignetteModelBProportions.get(cell.definitionId) ?? [];
-    modelBBucket.push(cell.modelBProportionA);
-    perVignetteModelBProportions.set(cell.definitionId, modelBBucket);
+    pushChoiceIndicator(perVignetteFractionsAByModel.A, cell.definitionId, cell.modelAChoice === 'A' ? 1 : 0);
+    pushChoiceIndicator(perVignetteFractionsTiedByModel.A, cell.definitionId, cell.modelAChoice === 'TIED' ? 1 : 0);
+    pushChoiceIndicator(perVignetteFractionsBByModel.A, cell.definitionId, cell.modelAChoice === 'B' ? 1 : 0);
+    pushChoiceIndicator(perVignetteFractionsAByModel.B, cell.definitionId, cell.modelBChoice === 'A' ? 1 : 0);
+    pushChoiceIndicator(perVignetteFractionsTiedByModel.B, cell.definitionId, cell.modelBChoice === 'TIED' ? 1 : 0);
+    pushChoiceIndicator(perVignetteFractionsBByModel.B, cell.definitionId, cell.modelBChoice === 'B' ? 1 : 0);
   }
 
   const agreementRates = Array.from(perVignetteAgreementRates.values())
     .map((bucket) => percentAgreement(bucket.matchedCells, bucket.totalCells))
     .filter((value): value is number => value != null);
   const percentAgreementValue = mean(agreementRates);
-  const modelAProportionA = equalWeightAggregate(Array.from(perVignetteModelAProportions.values()));
-  const modelBProportionA = equalWeightAggregate(Array.from(perVignetteModelBProportions.values()));
   const meanAbsoluteDivergence = equalWeightAggregate(Array.from(perVignetteDivergences.values()));
-  const chanceAgreement = modelAProportionA != null && modelBProportionA != null
-    ? (modelAProportionA * modelBProportionA) + ((1 - modelAProportionA) * (1 - modelBProportionA))
+
+  const pAx = equalWeightAggregate(Array.from(perVignetteFractionsAByModel.A.values()));
+  const pTx = equalWeightAggregate(Array.from(perVignetteFractionsTiedByModel.A.values()));
+  const pBx = equalWeightAggregate(Array.from(perVignetteFractionsBByModel.A.values()));
+  const pAy = equalWeightAggregate(Array.from(perVignetteFractionsAByModel.B.values()));
+  const pTy = equalWeightAggregate(Array.from(perVignetteFractionsTiedByModel.B.values()));
+  const pBy = equalWeightAggregate(Array.from(perVignetteFractionsBByModel.B.values()));
+
+  const chanceAgreement = pAx != null && pTx != null && pBx != null
+    && pAy != null && pTy != null && pBy != null
+    ? (pAx * pAy) + (pTx * pTy) + (pBx * pBy)
     : null;
   const kappa = percentAgreementValue != null && chanceAgreement != null
     ? cohensKappa(percentAgreementValue, chanceAgreement)
@@ -322,7 +379,7 @@ export function buildEmptyAgreementResult(
     models: [],
     unavailableModels: [],
     excludedNonBinaryCells: 0,
-    excludedTiedCells: 0,
+    tiedCells: 0,
     pairwiseAgreementMatrix: [],
     trialConsistency: [],
   };

@@ -66,18 +66,19 @@ function pickDefaultPair(rows: readonly PairwiseAgreementRow[]): SelectedPair | 
   return next == null ? null : { modelAId: next.modelAId, modelBId: next.modelBId };
 }
 
-function buildExclusionNote(excludedNonBinaryCells: number, excludedTiedCells: number): string | null {
+function buildExclusionNote(excludedNonBinaryCells: number, tiedCells: number): string | null {
   const parts: string[] = [];
   if (excludedNonBinaryCells > 0) {
-    parts.push(`${excludedNonBinaryCells} non-binary cell${excludedNonBinaryCells === 1 ? '' : 's'}`);
+    parts.push(
+      `Excluded ${excludedNonBinaryCells} non-binary cell${excludedNonBinaryCells === 1 ? '' : 's'} from the agreement matrix.`,
+    );
   }
-  if (excludedTiedCells > 0) {
-    parts.push(`${excludedTiedCells} tied cell${excludedTiedCells === 1 ? '' : 's'}`);
+  if (tiedCells > 0) {
+    parts.push(
+      `${tiedCells} cell${tiedCells === 1 ? '' : 's'} had at least one model split 50/50 (counted as a third category in kappa, not excluded).`,
+    );
   }
-  if (parts.length === 0) {
-    return null;
-  }
-  return `Excluded ${parts.join(' and ')} from the agreement matrix.`;
+  return parts.length === 0 ? null : parts.join(' ');
 }
 
 function buildUnavailableModelsNotice(
@@ -255,7 +256,7 @@ export function ModelAgreementSection({ modelIds, scope, domainId, signature }: 
     );
   }
 
-  const exclusionNote = buildExclusionNote(agreement.excludedNonBinaryCells, agreement.excludedTiedCells);
+  const exclusionNote = buildExclusionNote(agreement.excludedNonBinaryCells, agreement.tiedCells);
   const unavailableModelsNotice = buildUnavailableModelsNotice(agreement.unavailableModels);
 
   return (

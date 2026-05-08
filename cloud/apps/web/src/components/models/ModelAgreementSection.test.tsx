@@ -44,7 +44,7 @@ describe('ModelAgreementSection', () => {
               updatedAt: '2026-05-08T15:00:00.000Z',
             },
             excludedNonBinaryCells: 0,
-            excludedTiedCells: 0,
+            tiedCells: 0,
             models: [],
             unavailableModels: [],
             pairwiseAgreementMatrix: [],
