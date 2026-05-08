@@ -243,7 +243,7 @@ describe('ModelsGroups', () => {
     expect(screen.getByText(/0 transcripts analyzed/i)).toBeInTheDocument();
   });
 
-  it('keeps rendering when one query fails with cached data', async () => {
+  it('shows a full-page error when one query fails', async () => {
     useQueryMock.mockImplementation((args: { query: unknown }) => {
       if (args.query === DOMAIN_AVAILABLE_SIGNATURES_QUERY) {
         return [{
@@ -282,9 +282,9 @@ describe('ModelsGroups', () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText(/Some model groups data failed to load/i)).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Model Clusters', level: 2 })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Similarity by Model' })).toBeInTheDocument();
-    expect(screen.getByText('Model Agreement on Value Tradeoffs')).toBeInTheDocument();
+    expect(await screen.findByText(/Failed to load model groups report/i)).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Model Clusters', level: 2 })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Similarity by Model' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Model Agreement on Value Tradeoffs')).not.toBeInTheDocument();
   });
 });
