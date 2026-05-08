@@ -24,6 +24,7 @@ import {
   type RunTrialsForDomainMutationResult,
   type RunTrialsForDomainMutationVariables,
 } from '../api/operations/domains';
+import { formatQueryError } from '../utils/urqlError';
 
 type RunTrialsForDomainResult = RunTrialsForDomainMutationResult['runTrialsForDomain'];
 type CreatedDomainResult = CreateDomainMutationResult['createDomain'];
@@ -74,21 +75,21 @@ export function useDomains(): UseDomainsResult {
 
   const createDomain = async (name: string): Promise<CreatedDomainResult | null> => {
     const result = await createMutation({ name });
-    if (result.error) throw new Error(result.error.message);
+    if (result.error) throw new Error(formatQueryError('Create domain mutation', result.error, { name }));
     refetch();
     return result.data?.createDomain ?? null;
   };
 
   const renameDomain = async (id: string, name: string): Promise<RenamedDomainResult | null> => {
     const result = await renameMutation({ id, name });
-    if (result.error) throw new Error(result.error.message);
+    if (result.error) throw new Error(formatQueryError('Rename domain mutation', result.error, { id, name }));
     refetch();
     return result.data?.renameDomain ?? null;
   };
 
   const deleteDomain = async (id: string): Promise<DomainMutationResult | null> => {
     const result = await deleteMutation({ id });
-    if (result.error) throw new Error(result.error.message);
+    if (result.error) throw new Error(formatQueryError('Delete domain mutation', result.error, { id }));
     refetch();
     return result.data?.deleteDomain ?? null;
   };
@@ -98,7 +99,12 @@ export function useDomains(): UseDomainsResult {
     domainId: string | null
   ): Promise<DomainMutationResult | null> => {
     const result = await assignIdsMutation({ definitionIds, domainId });
-    if (result.error) throw new Error(result.error.message);
+    if (result.error) {
+      throw new Error(formatQueryError('Assign domain to definitions mutation', result.error, {
+        domainId: domainId ?? '(none)',
+        definitionCount: definitionIds.length,
+      }));
+    }
     return result.data?.assignDomainToDefinitions ?? null;
   };
 
@@ -116,7 +122,16 @@ export function useDomains(): UseDomainsResult {
       domainId: input.domainId,
       sourceDomainId: input.sourceDomainId ?? undefined,
     });
-    if (result.error) throw new Error(result.error.message);
+    if (result.error) {
+      throw new Error(formatQueryError('Assign domain by filter mutation', result.error, {
+        domainId: input.domainId ?? '(none)',
+        rootOnly: input.rootOnly ?? false,
+        search: input.search ?? '(none)',
+        hasRuns: input.hasRuns ?? '(any)',
+        sourceDomainId: input.sourceDomainId ?? '(none)',
+        withoutDomain: input.withoutDomain ?? false,
+      }));
+    }
     return result.data?.assignDomainToDefinitionsByFilter ?? null;
   };
 
@@ -125,7 +140,12 @@ export function useDomains(): UseDomainsResult {
     temperature?: number
   ): Promise<RunTrialsForDomainResult | null> => {
     const result = await runTrialsMutation({ domainId, temperature });
-    if (result.error) throw new Error(result.error.message);
+    if (result.error) {
+      throw new Error(formatQueryError('Run trials for domain mutation', result.error, {
+        domainId,
+        temperature: temperature ?? '(default)',
+      }));
+    }
     const payload = result.data?.runTrialsForDomain ?? null;
     if (payload && payload.failedDefinitions > 0) {
       throw new Error(
@@ -153,7 +173,7 @@ export function useDomains(): UseDomainsResult {
     assigningByIds: assignIdsResult.fetching,
     assigningByFilter: assignFilterResult.fetching,
     runningDomainTrials: runTrialsResult.fetching,
-    error: queryResult.error ? new Error(queryResult.error.message) : null,
+    error: queryResult.error ? new Error(formatQueryError('Domains query', queryResult.error, { limit: 500, offset: 0 })) : null,
     refetch,
     createDomain,
     renameDomain,
