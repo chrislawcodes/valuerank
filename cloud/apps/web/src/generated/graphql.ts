@@ -1482,8 +1482,17 @@ export type LlmProvider = {
   updatedAt: Scalars['DateTime']['output'];
 };
 
+export type ModelAgreementBuildProgress = {
+  __typename?: 'ModelAgreementBuildProgress';
+  completedRuns: Scalars['Int']['output'];
+  currentRunId?: Maybe<Scalars['String']['output']>;
+  totalRuns: Scalars['Int']['output'];
+  updatedAt: Scalars['String']['output'];
+};
+
 export type ModelAgreementResult = {
   __typename?: 'ModelAgreementResult';
+  buildProgress?: Maybe<ModelAgreementBuildProgress>;
   excludedNonBinaryCells: Scalars['Int']['output'];
   excludedTiedCells: Scalars['Int']['output'];
   models: Array<ModelInfo>;
@@ -2417,6 +2426,7 @@ export type OrderEffect = {
 
 export type PairDivergenceBreakdown = {
   __typename?: 'PairDivergenceBreakdown';
+  buildProgress?: Maybe<ModelAgreementBuildProgress>;
   modelAId: Scalars['ID']['output'];
   modelALabel: Scalars['String']['output'];
   modelBId: Scalars['ID']['output'];
@@ -4838,7 +4848,7 @@ export type ModelAgreementOnTradeoffsQueryVariables = Exact<{
 }>;
 
 
-export type ModelAgreementOnTradeoffsQuery = { __typename?: 'Query', modelAgreementOnTradeoffs: { __typename?: 'ModelAgreementResult', pending: boolean, excludedNonBinaryCells: number, excludedTiedCells: number, models: Array<{ __typename?: 'ModelInfo', modelId: string, label: string }>, unavailableModels: Array<{ __typename?: 'UnavailableModelInfo', modelId: string, label: string, reason: string }>, pairwiseAgreementMatrix: Array<{ __typename?: 'PairwiseAgreementRow', modelAId: string, modelALabel: string, modelBId: string, modelBLabel: string, totalCells: number, percentAgreement?: number | null, cohensKappa?: number | null, kappaInterpretation?: string | null, meanAbsoluteDivergence?: number | null }>, trialConsistency: Array<{ __typename?: 'ModelTrialConsistency', modelId: string, modelLabel: string, cellsObserved: number, meanTrialConsistency?: number | null, noisy: boolean }> } };
+export type ModelAgreementOnTradeoffsQuery = { __typename?: 'Query', modelAgreementOnTradeoffs: { __typename?: 'ModelAgreementResult', pending: boolean, excludedNonBinaryCells: number, excludedTiedCells: number, buildProgress?: { __typename?: 'ModelAgreementBuildProgress', completedRuns: number, totalRuns: number, currentRunId?: string | null, updatedAt: string } | null, models: Array<{ __typename?: 'ModelInfo', modelId: string, label: string }>, unavailableModels: Array<{ __typename?: 'UnavailableModelInfo', modelId: string, label: string, reason: string }>, pairwiseAgreementMatrix: Array<{ __typename?: 'PairwiseAgreementRow', modelAId: string, modelALabel: string, modelBId: string, modelBLabel: string, totalCells: number, percentAgreement?: number | null, cohensKappa?: number | null, kappaInterpretation?: string | null, meanAbsoluteDivergence?: number | null }>, trialConsistency: Array<{ __typename?: 'ModelTrialConsistency', modelId: string, modelLabel: string, cellsObserved: number, meanTrialConsistency?: number | null, noisy: boolean }> } };
 
 export type ModelPairDivergenceBreakdownQueryVariables = Exact<{
   modelAId: Scalars['ID']['input'];
@@ -4849,7 +4859,7 @@ export type ModelPairDivergenceBreakdownQueryVariables = Exact<{
 }>;
 
 
-export type ModelPairDivergenceBreakdownQuery = { __typename?: 'Query', modelPairDivergenceBreakdown: { __typename?: 'PairDivergenceBreakdown', pending: boolean, modelAId: string, modelALabel: string, modelBId: string, modelBLabel: string, perValuePair: Array<{ __typename?: 'ValuePairDivergence', valueA: string, valueB: string, cellsCompared: number, meanAbsoluteDivergence?: number | null, modelAProportionA?: number | null, modelBProportionA?: number | null }> } };
+export type ModelPairDivergenceBreakdownQuery = { __typename?: 'Query', modelPairDivergenceBreakdown: { __typename?: 'PairDivergenceBreakdown', pending: boolean, modelAId: string, modelALabel: string, modelBId: string, modelBLabel: string, buildProgress?: { __typename?: 'ModelAgreementBuildProgress', completedRuns: number, totalRuns: number, currentRunId?: string | null, updatedAt: string } | null, perValuePair: Array<{ __typename?: 'ValuePairDivergence', valueA: string, valueB: string, cellsCompared: number, meanAbsoluteDivergence?: number | null, modelAProportionA?: number | null, modelBProportionA?: number | null }> } };
 
 export type AvailableModelsQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -7322,6 +7332,12 @@ export const ModelAgreementOnTradeoffsDocument = gql`
     signature: $signature
   ) {
     pending
+    buildProgress {
+      completedRuns
+      totalRuns
+      currentRunId
+      updatedAt
+    }
     excludedNonBinaryCells
     excludedTiedCells
     models {
@@ -7368,6 +7384,12 @@ export const ModelPairDivergenceBreakdownDocument = gql`
     signature: $signature
   ) {
     pending
+    buildProgress {
+      completedRuns
+      totalRuns
+      currentRunId
+      updatedAt
+    }
     modelAId
     modelALabel
     modelBId

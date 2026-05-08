@@ -6,6 +6,7 @@ import {
   DOMAIN_ANALYSIS_NONE_SIGNATURE,
   DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION,
   DOMAIN_ANALYSIS_SNAPSHOT_TYPE,
+  type DomainAnalysisBuildProgress,
   type AnalysisFingerprintRow,
   type DomainAnalysisPreparedState,
   type DomainAnalysisSnapshotOutput,
@@ -124,10 +125,15 @@ export async function prepareDomainAnalysisState(params: {
 
 export async function buildSnapshotOutput(
   state: DomainAnalysisPreparedState,
+  options?: {
+    onProgress?: (progress: DomainAnalysisBuildProgress) => Promise<void> | void;
+  },
 ): Promise<DomainAnalysisSnapshotOutput> {
   const valuePairByDefinition = await resolveValuePairsInChunks(state.latestDefinitionIds);
 
   const cellMap = new Map<string, CellCounts>();
+  const totalRuns = state.resolvedSignatureRuns.filteredSourceRunIds.length;
+  let completedRuns = 0;
 
   if (state.resolvedSignatureRuns.filteredSourceRunIds.length > 0) {
     // Fetch all transcripts for every run in parallel. Each run has a bounded
@@ -160,6 +166,7 @@ export async function buildSnapshotOutput(
     );
 
     for (const runTranscripts of perRunTranscripts) {
+      const runId = state.resolvedSignatureRuns.filteredSourceRunIds[completedRuns] ?? null;
       const batchCellMap = accumulateTranscriptCells({
         transcripts: runTranscripts,
         filteredSourceRunDefinitionById: state.resolvedSignatureRuns.filteredSourceRunDefinitionById,
@@ -171,6 +178,16 @@ export async function buildSnapshotOutput(
         existing.losses += counts.losses;
         existing.neutrals += counts.neutrals;
         cellMap.set(key, existing);
+      }
+
+      completedRuns += 1;
+      if (options?.onProgress != null) {
+        await options.onProgress({
+          completedRuns,
+          totalRuns,
+          currentRunId: runId,
+          updatedAt: new Date().toISOString(),
+        });
       }
     }
   }

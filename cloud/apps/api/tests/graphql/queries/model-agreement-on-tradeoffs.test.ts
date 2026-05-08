@@ -19,7 +19,7 @@ const mocks = vi.hoisted(() => ({
   getModelsFromDatabase: vi.fn(),
   resolveDomainAnalysisScopeDefinitions: vi.fn(),
   resolveSignatureRuns: vi.fn(),
-  readCellLevelOutcomesFromSnapshot: vi.fn(),
+  readModelAgreementSnapshotStateFromSnapshot: vi.fn(),
   queueDomainAnalysisRefresh: vi.fn(),
 }));
 
@@ -36,7 +36,7 @@ vi.mock('../../../src/graphql/queries/domain/shared.js', () => ({
 }));
 
 vi.mock('../../../src/services/analysis/domain-analysis-cache.js', () => ({
-  readCellLevelOutcomesFromSnapshot: mocks.readCellLevelOutcomesFromSnapshot,
+  readModelAgreementSnapshotStateFromSnapshot: mocks.readModelAgreementSnapshotStateFromSnapshot,
   queueDomainAnalysisRefresh: mocks.queueDomainAnalysisRefresh,
 }));
 
@@ -164,6 +164,12 @@ const agreementQuery = `
   query ModelAgreement($modelIds: [ID!]!, $scope: String!, $signature: String!, $domainId: ID) {
     modelAgreementOnTradeoffs(modelIds: $modelIds, scope: $scope, signature: $signature, domainId: $domainId) {
       pending
+      buildProgress {
+        completedRuns
+        totalRuns
+        currentRunId
+        updatedAt
+      }
       models { modelId label }
       unavailableModels { modelId label reason }
       excludedNonBinaryCells
@@ -194,6 +200,12 @@ const drilldownQuery = `
   query PairDivergence($modelAId: ID!, $modelBId: ID!, $scope: String!, $signature: String!, $domainId: ID) {
     modelPairDivergenceBreakdown(modelAId: $modelAId, modelBId: $modelBId, scope: $scope, signature: $signature, domainId: $domainId) {
       pending
+      buildProgress {
+        completedRuns
+        totalRuns
+        currentRunId
+        updatedAt
+      }
       modelAId
       modelALabel
       modelBId
@@ -224,10 +236,14 @@ describe('model-agreement-on-tradeoffs GraphQL queries', () => {
   });
 
   it('returns perfect disagreement metrics and drilldown divergence', async () => {
-    mocks.readCellLevelOutcomesFromSnapshot.mockResolvedValue(snapshot({
-      'def-1::model-a::Achievement::Tradition::1::2': { aChoices: 6, bChoices: 0, neutrals: 0 },
-      'def-1::model-b::Achievement::Tradition::1::2': { aChoices: 0, bChoices: 6, neutrals: 0 },
-    }));
+    mocks.readModelAgreementSnapshotStateFromSnapshot.mockResolvedValue({
+      cellLevelOutcomes: snapshot({
+        'def-1::model-a::Achievement::Tradition::1::2': { aChoices: 6, bChoices: 0, neutrals: 0 },
+        'def-1::model-b::Achievement::Tradition::1::2': { aChoices: 0, bChoices: 6, neutrals: 0 },
+      }),
+      buildProgress: null,
+      inputHash: 'hash-1',
+    });
 
     const agreementResponse = await graphqlRequest(agreementQuery, {
       modelIds: ['model-a', 'model-b'],
@@ -238,6 +254,7 @@ describe('model-agreement-on-tradeoffs GraphQL queries', () => {
     expect(agreementResponse.body.errors).toBeUndefined();
     const agreement = agreementResponse.body.data.modelAgreementOnTradeoffs as {
       pending: boolean;
+      buildProgress: null;
       pairwiseAgreementMatrix: Array<{
         totalCells: number;
         percentAgreement: number | null;
@@ -316,7 +333,7 @@ describe('model-agreement-on-tradeoffs GraphQL queries', () => {
   });
 
   it('returns pending while a missing snapshot queues a refresh', async () => {
-    mocks.readCellLevelOutcomesFromSnapshot.mockResolvedValue(null);
+    mocks.readModelAgreementSnapshotStateFromSnapshot.mockResolvedValue(null);
 
     const response = await graphqlRequest(agreementQuery, {
       modelIds: ['model-a', 'model-b'],
@@ -327,6 +344,31 @@ describe('model-agreement-on-tradeoffs GraphQL queries', () => {
     expect(response.body.errors).toBeUndefined();
     expect(response.body.data.modelAgreementOnTradeoffs).toEqual({
       pending: true,
+      buildProgress: null,
+      models: [],
+      unavailableModels: [],
+      excludedNonBinaryCells: 0,
+      excludedTiedCells: 0,
+      pairwiseAgreementMatrix: [],
+      trialConsistency: [],
+    });
+    expect(mocks.queueDomainAnalysisRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns a non-pending empty result when the refresh queue is unavailable', async () => {
+    mocks.readModelAgreementSnapshotStateFromSnapshot.mockResolvedValue(null);
+    mocks.queueDomainAnalysisRefresh.mockResolvedValue(false);
+
+    const response = await graphqlRequest(agreementQuery, {
+      modelIds: ['model-a', 'model-b'],
+      scope: 'ALL_DOMAINS',
+      signature: 'sig-1',
+    });
+
+    expect(response.body.errors).toBeUndefined();
+    expect(response.body.data.modelAgreementOnTradeoffs).toEqual({
+      pending: false,
+      buildProgress: null,
       models: [],
       unavailableModels: [],
       excludedNonBinaryCells: 0,
@@ -338,10 +380,14 @@ describe('model-agreement-on-tradeoffs GraphQL queries', () => {
   });
 
   it('lists a model with no cell-level outcomes as unavailable and keeps it out of the matrix', async () => {
-    mocks.readCellLevelOutcomesFromSnapshot.mockResolvedValue(snapshot({
-      'def-1::model-a::Achievement::Tradition::1::2': { aChoices: 6, bChoices: 0, neutrals: 0 },
-      'def-1::model-b::Achievement::Tradition::1::2': { aChoices: 0, bChoices: 6, neutrals: 0 },
-    }));
+    mocks.readModelAgreementSnapshotStateFromSnapshot.mockResolvedValue({
+      cellLevelOutcomes: snapshot({
+        'def-1::model-a::Achievement::Tradition::1::2': { aChoices: 6, bChoices: 0, neutrals: 0 },
+        'def-1::model-b::Achievement::Tradition::1::2': { aChoices: 0, bChoices: 6, neutrals: 0 },
+      }),
+      buildProgress: null,
+      inputHash: 'hash-2',
+    });
 
     const response = await graphqlRequest(agreementQuery, {
       modelIds: ['model-a', 'model-b', 'model-c'],
@@ -375,11 +421,51 @@ describe('model-agreement-on-tradeoffs GraphQL queries', () => {
     expect(drilldownResponse.body.data.modelPairDivergenceBreakdown.perValuePair).toEqual([]);
   });
 
+  it('surfaces build progress while the report is still rebuilding', async () => {
+    mocks.readModelAgreementSnapshotStateFromSnapshot.mockResolvedValue({
+      cellLevelOutcomes: null,
+      buildProgress: {
+        completedRuns: 4,
+        totalRuns: 10,
+        currentRunId: 'run-4',
+        updatedAt: '2026-05-08T15:00:00.000Z',
+      },
+      inputHash: 'hash-3',
+    });
+
+    const response = await graphqlRequest(agreementQuery, {
+      modelIds: ['model-a', 'model-b'],
+      scope: 'ALL_DOMAINS',
+      signature: 'sig-1',
+    });
+
+    expect(response.body.errors).toBeUndefined();
+    expect(response.body.data.modelAgreementOnTradeoffs).toEqual({
+      pending: true,
+      buildProgress: {
+        completedRuns: 4,
+        totalRuns: 10,
+        currentRunId: 'run-4',
+        updatedAt: '2026-05-08T15:00:00.000Z',
+      },
+      models: [],
+      unavailableModels: [],
+      excludedNonBinaryCells: 0,
+      excludedTiedCells: 0,
+      pairwiseAgreementMatrix: [],
+      trialConsistency: [],
+    });
+  });
+
   it('returns a zero-overlap row with null metrics when two models never share a cell', async () => {
-    mocks.readCellLevelOutcomesFromSnapshot.mockResolvedValue(snapshot({
-      'def-1::model-a::Achievement::Tradition::1::2': { aChoices: 6, bChoices: 0, neutrals: 0 },
-      'def-2::model-b::Achievement::Tradition::1::2': { aChoices: 0, bChoices: 6, neutrals: 0 },
-    }));
+    mocks.readModelAgreementSnapshotStateFromSnapshot.mockResolvedValue({
+      cellLevelOutcomes: snapshot({
+        'def-1::model-a::Achievement::Tradition::1::2': { aChoices: 6, bChoices: 0, neutrals: 0 },
+        'def-2::model-b::Achievement::Tradition::1::2': { aChoices: 0, bChoices: 6, neutrals: 0 },
+      }),
+      buildProgress: null,
+      inputHash: 'hash-4',
+    });
 
     const response = await graphqlRequest(agreementQuery, {
       modelIds: ['model-a', 'model-b'],
@@ -410,10 +496,14 @@ describe('model-agreement-on-tradeoffs GraphQL queries', () => {
   });
 
   it('excludes tied cells from both kappa and divergence, while keeping trial consistency', async () => {
-    mocks.readCellLevelOutcomesFromSnapshot.mockResolvedValue(snapshot({
-      'def-1::model-a::Achievement::Tradition::1::2': { aChoices: 3, bChoices: 3, neutrals: 0 },
-      'def-1::model-b::Achievement::Tradition::1::2': { aChoices: 6, bChoices: 0, neutrals: 0 },
-    }));
+    mocks.readModelAgreementSnapshotStateFromSnapshot.mockResolvedValue({
+      cellLevelOutcomes: snapshot({
+        'def-1::model-a::Achievement::Tradition::1::2': { aChoices: 3, bChoices: 3, neutrals: 0 },
+        'def-1::model-b::Achievement::Tradition::1::2': { aChoices: 6, bChoices: 0, neutrals: 0 },
+      }),
+      buildProgress: null,
+      inputHash: 'hash-5',
+    });
 
     const response = await graphqlRequest(agreementQuery, {
       modelIds: ['model-a', 'model-b'],

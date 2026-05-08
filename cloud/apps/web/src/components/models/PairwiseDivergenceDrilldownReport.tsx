@@ -1,6 +1,5 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { ErrorMessage } from '../ui/ErrorMessage';
-import { Loading } from '../ui/Loading';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/Table';
 import type { ModelPairDivergenceBreakdownQuery } from '../../generated/graphql';
 import { useModelPairDivergenceBreakdownQuery } from '../../generated/graphql';
@@ -11,6 +10,7 @@ type SelectedPair = {
 };
 
 type ValuePairDivergence = ModelPairDivergenceBreakdownQuery['modelPairDivergenceBreakdown']['perValuePair'][number];
+const DRILLDOWN_POLL_INTERVAL_MS = 5000;
 
 type Props = {
   selectedPair: SelectedPair | null;
@@ -43,8 +43,29 @@ function sortRows(rows: ValuePairDivergence[]): ValuePairDivergence[] {
   });
 }
 
+function formatProgressLabel(progress: {
+  completedRuns: number;
+  totalRuns: number;
+  currentRunId?: string | null;
+  updatedAt: string;
+}): string {
+  const completedRuns = Math.min(progress.completedRuns, progress.totalRuns);
+  const currentRunNote = progress.currentRunId != null ? ` Currently on ${progress.currentRunId.slice(-8)}.` : '';
+  return `${completedRuns.toLocaleString()} of ${progress.totalRuns.toLocaleString()} source runs processed.${currentRunNote}`;
+}
+
+function getProgressPercent(progress: {
+  completedRuns: number;
+  totalRuns: number;
+}): number {
+  if (progress.totalRuns <= 0) {
+    return 0;
+  }
+  return Math.min(100, Math.round((Math.min(progress.completedRuns, progress.totalRuns) / progress.totalRuns) * 100));
+}
+
 export function PairwiseDivergenceDrilldownReport({ selectedPair, scope, domainId, signature }: Props) {
-  const [{ data, fetching, error }] = useModelPairDivergenceBreakdownQuery({
+  const [{ data, fetching, error }, reexecuteQuery] = useModelPairDivergenceBreakdownQuery({
     variables: {
       modelAId: selectedPair?.modelAId ?? '',
       modelBId: selectedPair?.modelBId ?? '',
@@ -58,6 +79,27 @@ export function PairwiseDivergenceDrilldownReport({ selectedPair, scope, domainI
 
   const drilldown = data?.modelPairDivergenceBreakdown ?? null;
   const rows = useMemo(() => sortRows(drilldown?.perValuePair ?? []), [drilldown?.perValuePair]);
+  const isFetchingRef = useRef(fetching);
+
+  useEffect(() => {
+    isFetchingRef.current = fetching;
+  }, [fetching]);
+
+  useEffect(() => {
+    if (drilldown == null || !drilldown.pending) {
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      if (!isFetchingRef.current) {
+        reexecuteQuery({ requestPolicy: 'network-only' });
+      }
+    }, DRILLDOWN_POLL_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [drilldown, reexecuteQuery]);
 
   if (selectedPair == null) {
     return (
@@ -72,11 +114,40 @@ export function PairwiseDivergenceDrilldownReport({ selectedPair, scope, domainI
   }
 
   if (fetching && drilldown == null) {
-    return <Loading size="md" text="Loading pairwise divergence breakdown..." />;
+    return (
+      <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-600">
+        Preparing the pairwise divergence breakdown.
+      </div>
+    );
   }
 
   if (drilldown == null || drilldown.pending) {
-    return <Loading size="md" text="Loading pairwise divergence breakdown..." />;
+    const progress = drilldown?.buildProgress ?? null;
+    const percent = progress != null ? getProgressPercent(progress) : null;
+
+    return (
+      <div className="space-y-3 rounded-lg border border-gray-200 bg-white p-4">
+        <div className="space-y-1">
+          <h3 className="text-base font-semibold text-gray-900">Pairwise divergence breakdown</h3>
+          <p className="text-sm text-gray-700">
+            {progress != null ? formatProgressLabel(progress) : 'The pairwise divergence breakdown is building.'}
+          </p>
+        </div>
+        {progress != null ? (
+          <>
+            <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+              <div
+                className="h-full rounded-full bg-teal-500 transition-[width] duration-300"
+                style={{ width: `${percent ?? 0}%` }}
+              />
+            </div>
+            <p className="text-xs text-gray-500">
+              Last updated {new Date(progress.updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.
+            </p>
+          </>
+        ) : null}
+      </div>
+    );
   }
 
   if (rows.length === 0) {

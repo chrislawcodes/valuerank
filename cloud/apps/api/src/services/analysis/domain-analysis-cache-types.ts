@@ -23,6 +23,13 @@ export const DOMAIN_ANALYSIS_NONE_SIGNATURE = '__none__';
 
 export type SnapshotClient = Prisma.TransactionClient;
 
+export type DomainAnalysisBuildProgress = {
+  completedRuns: number;
+  totalRuns: number;
+  currentRunId: string | null;
+  updatedAt: string;
+};
+
 export type DomainAnalysisSnapshotModel = {
   model: string;
   counts: Record<string, DomainAnalysisValueCounts>;
@@ -79,6 +86,7 @@ export type DomainAnalysisSnapshotOutput = {
   // `neutrals` = trials with no decisive choice.
   // Used by the modelAgreementOnTradeoffs resolver (v1.12.0+).
   cellLevelOutcomes?: Record<string, { aChoices: number; bChoices: number; neutrals: number }>;
+  buildProgress?: DomainAnalysisBuildProgress;
 };
 
 export type AnalysisFingerprintRow = {

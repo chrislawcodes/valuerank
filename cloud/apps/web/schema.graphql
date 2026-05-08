@@ -1567,6 +1567,7 @@ type LlmProvider {
 }
 
 type ModelAgreementResult {
+  buildProgress: ModelAgreementBuildProgress
   excludedNonBinaryCells: Int!
   excludedTiedCells: Int!
   models: [ModelInfo!]!
@@ -1574,6 +1575,13 @@ type ModelAgreementResult {
   pending: Boolean!
   trialConsistency: [ModelTrialConsistency!]!
   unavailableModels: [UnavailableModelInfo!]!
+}
+
+type ModelAgreementBuildProgress {
+  completedRuns: Int!
+  currentRunId: String
+  totalRuns: Int!
+  updatedAt: String!
 }
 
 type ModelConsistency {
@@ -2107,6 +2115,7 @@ type OrderEffect {
 }
 
 type PairDivergenceBreakdown {
+  buildProgress: ModelAgreementBuildProgress
   modelAId: ID!
   modelALabel: String!
   modelBId: ID!

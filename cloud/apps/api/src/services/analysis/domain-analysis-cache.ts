@@ -18,8 +18,10 @@ import type {
 import { SCHWARTZ_CIRCULAR_ORDER } from '@valuerank/shared/schwartz';
 import {
   DOMAIN_ANALYSIS_CACHE_STATUS,
+  DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION,
   DOMAIN_ANALYSIS_SNAPSHOT_TYPE,
   type DomainAnalysisCacheStatus,
+  type DomainAnalysisBuildProgress,
   type DomainAnalysisSnapshotOutput,
   type DomainAnalysisSnapshotModel,
   type SnapshotClient,
@@ -30,7 +32,6 @@ import {
   parseSnapshotOutput,
   prepareDomainAnalysisState,
   buildSnapshotOutput,
-  writeSnapshot,
 } from './domain-analysis-snapshot-builder.js';
 import type { DomainAnalysisScope } from './domain-analysis-scope.js';
 import { DOMAIN_ANALYSIS_ALL_DOMAINS_SCOPE } from './domain-analysis-scope.js';
@@ -101,6 +102,34 @@ function buildPairwiseWinRateModel(
     trialCountMatrix.push(trialRow);
   }
   return { valueOrder: order, winRateMatrix, trialCountMatrix };
+}
+
+function parseBuildProgress(raw: unknown): DomainAnalysisBuildProgress | null {
+  if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) {
+    return null;
+  }
+
+  const candidate = raw as { buildProgress?: unknown };
+  const progress = candidate.buildProgress;
+  if (progress == null || typeof progress !== 'object' || Array.isArray(progress)) {
+    return null;
+  }
+
+  const progressCandidate = progress as Partial<DomainAnalysisBuildProgress>;
+  if (
+    typeof progressCandidate.completedRuns !== 'number'
+    || typeof progressCandidate.totalRuns !== 'number'
+    || typeof progressCandidate.updatedAt !== 'string'
+  ) {
+    return null;
+  }
+
+  return {
+    completedRuns: progressCandidate.completedRuns,
+    totalRuns: progressCandidate.totalRuns,
+    currentRunId: typeof progressCandidate.currentRunId === 'string' ? progressCandidate.currentRunId : null,
+    updatedAt: progressCandidate.updatedAt,
+  };
 }
 
 function buildDomainAnalysisResultFromSnapshot(params: {
@@ -244,20 +273,82 @@ export async function refreshDomainAnalysisSnapshot(params: {
     domainId: params.domainId,
     requestedSignature: params.requestedSignature,
   });
-  const output = await buildSnapshotOutput(state);
-  const snapshot = await db.$transaction((tx) => writeSnapshot({
-    client: tx,
-    scope: state.scope,
-    domainId: state.domain.id,
-    configSignature: state.configSignature,
-    inputHash: state.inputHash,
-    output,
-  }));
-  return {
-    snapshot,
-    selectedSignature: state.selectedSignature,
-    configSignature: state.configSignature,
-  };
+  const totalRuns = state.resolvedSignatureRuns.filteredSourceRunIds.length;
+  await db.assumptionAnalysisSnapshot.updateMany({
+    where: {
+      assumptionKey: buildAssumptionKey(state.scope, state.domain.id),
+      analysisType: DOMAIN_ANALYSIS_SNAPSHOT_TYPE,
+      status: 'CURRENT',
+      deletedAt: null,
+      OR: [
+        { configSignature: state.configSignature },
+        { inputHash: state.inputHash },
+      ],
+    },
+    data: {
+      status: 'SUPERSEDED',
+    },
+  });
+
+  const progressSnapshot = await db.assumptionAnalysisSnapshot.create({
+    data: {
+      assumptionKey: buildAssumptionKey(state.scope, state.domain.id),
+      analysisType: DOMAIN_ANALYSIS_SNAPSHOT_TYPE,
+      inputHash: state.inputHash,
+      codeVersion: DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION,
+      configSignature: state.configSignature,
+      config: {
+        scope: state.scope,
+        domainId: state.domain.id,
+        signature: state.configSignature,
+      },
+      output: {
+        buildProgress: {
+          completedRuns: 0,
+          totalRuns,
+          currentRunId: null,
+          updatedAt: new Date().toISOString(),
+        } satisfies DomainAnalysisBuildProgress,
+      },
+      status: 'CURRENT',
+    },
+  });
+
+  try {
+    const output = await buildSnapshotOutput(state, {
+      onProgress: async (buildProgress) => {
+        await db.assumptionAnalysisSnapshot.update({
+          where: { id: progressSnapshot.id },
+          data: {
+            output: {
+              buildProgress,
+            },
+          },
+        });
+      },
+    });
+
+    const snapshot = await db.assumptionAnalysisSnapshot.update({
+      where: { id: progressSnapshot.id },
+      data: {
+        output,
+      },
+    });
+
+    return {
+      snapshot,
+      selectedSignature: state.selectedSignature,
+      configSignature: state.configSignature,
+    };
+  } catch (error) {
+    await db.assumptionAnalysisSnapshot.update({
+      where: { id: progressSnapshot.id },
+      data: {
+        status: 'SUPERSEDED',
+      },
+    });
+    throw error;
+  }
 }
 
 export async function getDomainAnalysisResult(params: {
@@ -383,4 +474,34 @@ export async function readCellLevelOutcomesFromSnapshot(
   if (snapshot == null) return null;
   const parsed = parseSnapshotOutput(snapshot.output);
   return parsed?.cellLevelOutcomes ?? null;
+}
+
+export async function readModelAgreementSnapshotStateFromSnapshot(
+  scope: DomainAnalysisScope,
+  domainId: string,
+  configSignature: string,
+): Promise<{
+  cellLevelOutcomes: Record<string, { aChoices: number; bChoices: number; neutrals: number }> | null;
+  buildProgress: DomainAnalysisBuildProgress | null;
+  inputHash: string | null;
+} | null> {
+  const snapshot = await getCurrentSnapshot(db, scope, domainId, configSignature);
+  if (snapshot == null) {
+    return null;
+  }
+
+  const parsed = parseSnapshotOutput(snapshot.output);
+  if (parsed?.cellLevelOutcomes != null) {
+    return {
+      cellLevelOutcomes: parsed.cellLevelOutcomes,
+      buildProgress: null,
+      inputHash: snapshot.inputHash,
+    };
+  }
+
+  return {
+    cellLevelOutcomes: null,
+    buildProgress: parseBuildProgress(snapshot.output),
+    inputHash: snapshot.inputHash,
+  };
 }

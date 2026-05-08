@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ErrorMessage } from '../ui/ErrorMessage';
-import { Loading } from '../ui/Loading';
 import { useModelAgreementOnTradeoffsQuery } from '../../generated/graphql';
 import { PairwiseAgreementMatrixReport } from './PairwiseAgreementMatrixReport';
 import { ModelTrialConsistencyReport } from './ModelTrialConsistencyReport';
@@ -22,6 +21,7 @@ type SelectedPair = {
 };
 
 const MIN_DRILLDOWN_DEFAULT_CELLS = 10;
+const AGREEMENT_POLL_INTERVAL_MS = 5000;
 const EMPTY_PAIRWISE_ROWS: PairwiseAgreementRow[] = [];
 
 function formatSelectedPair(pair: SelectedPair | null): string | null {
@@ -89,8 +89,70 @@ function buildUnavailableModelsNotice(
   return `Unavailable models: ${unavailableModels.map((model) => `${model.label} (${model.reason})`).join(', ')}.`;
 }
 
+function formatProgressLabel(progress: {
+  completedRuns: number;
+  totalRuns: number;
+  currentRunId?: string | null;
+  updatedAt: string;
+}): string {
+  const totalRuns = progress.totalRuns;
+  const completedRuns = Math.min(progress.completedRuns, totalRuns);
+  const currentRunNote = progress.currentRunId != null ? ` Currently on ${progress.currentRunId.slice(-8)}.` : '';
+  return `${completedRuns.toLocaleString()} of ${totalRuns.toLocaleString()} source runs processed.${currentRunNote}`;
+}
+
+function getProgressPercent(progress: {
+  completedRuns: number;
+  totalRuns: number;
+}): number {
+  if (progress.totalRuns <= 0) {
+    return 0;
+  }
+  return Math.min(100, Math.round((Math.min(progress.completedRuns, progress.totalRuns) / progress.totalRuns) * 100));
+}
+
+function BuildStatusCard({
+  title,
+  message,
+  progress,
+}: {
+  title: string;
+  message: string;
+  progress: {
+    completedRuns: number;
+    totalRuns: number;
+    currentRunId?: string | null;
+    updatedAt: string;
+  } | null;
+}): JSX.Element {
+  const percent = progress != null ? getProgressPercent(progress) : null;
+
+  return (
+    <section className="space-y-4 rounded-lg border border-gray-200 bg-white p-4 md:p-5">
+      <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
+      <div className="space-y-2">
+        <p className="text-sm text-gray-700">{message}</p>
+        {progress != null ? (
+          <>
+            <p className="text-sm font-medium text-gray-900">{formatProgressLabel(progress)}</p>
+            <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+              <div
+                className="h-full rounded-full bg-teal-500 transition-[width] duration-300"
+                style={{ width: `${percent ?? 0}%` }}
+              />
+            </div>
+            <p className="text-xs text-gray-500">
+              Last updated {new Date(progress.updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.
+            </p>
+          </>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
 export function ModelAgreementSection({ modelIds, scope, domainId, signature }: Props): JSX.Element {
-  const [{ data, fetching, error }] = useModelAgreementOnTradeoffsQuery({
+  const [{ data, fetching, error }, reexecuteQuery] = useModelAgreementOnTradeoffsQuery({
     variables: {
       modelIds,
       domainId: domainId ?? undefined,
@@ -105,6 +167,27 @@ export function ModelAgreementSection({ modelIds, scope, domainId, signature }: 
   const rows = agreement?.pairwiseAgreementMatrix ?? EMPTY_PAIRWISE_ROWS;
   const [selectedPair, setSelectedPair] = useState<SelectedPair | null>(null);
   const selectedPairKey = formatSelectedPair(selectedPair);
+  const isFetchingRef = useRef(fetching);
+
+  useEffect(() => {
+    isFetchingRef.current = fetching;
+  }, [fetching]);
+
+  useEffect(() => {
+    if (agreement == null || !agreement.pending) {
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      if (!isFetchingRef.current) {
+        reexecuteQuery({ requestPolicy: 'network-only' });
+      }
+    }, AGREEMENT_POLL_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [agreement, reexecuteQuery]);
 
   useEffect(() => {
     if (rows.length === 0) {
@@ -134,7 +217,13 @@ export function ModelAgreementSection({ modelIds, scope, domainId, signature }: 
   }
 
   if (fetching && agreement == null) {
-    return <Loading size="lg" text="Loading model agreement report..." />;
+    return (
+      <BuildStatusCard
+        title="Model Agreement on Value Tradeoffs"
+        message="Preparing the model agreement report."
+        progress={null}
+      />
+    );
   }
 
   if (agreement == null) {
@@ -147,7 +236,13 @@ export function ModelAgreementSection({ modelIds, scope, domainId, signature }: 
   }
 
   if (agreement.pending) {
-    return <Loading size="lg" text="Model agreement report is building..." />;
+    return (
+      <BuildStatusCard
+        title="Model Agreement on Value Tradeoffs"
+        message="The model agreement report is building."
+        progress={agreement.buildProgress ?? null}
+      />
+    );
   }
 
   const exclusionNote = buildExclusionNote(agreement.excludedNonBinaryCells, agreement.excludedTiedCells);
