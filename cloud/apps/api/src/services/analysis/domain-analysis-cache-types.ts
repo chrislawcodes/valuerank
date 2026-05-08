@@ -17,7 +17,7 @@ export type DomainAnalysisCacheStatus =
   (typeof DOMAIN_ANALYSIS_CACHE_STATUS)[keyof typeof DOMAIN_ANALYSIS_CACHE_STATUS];
 
 export const DOMAIN_ANALYSIS_SNAPSHOT_TYPE = 'domain_overview';
-export const DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION = '1.11.0';
+export const DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION = '1.12.0';
 export const DOMAIN_ANALYSIS_ASSUMPTION_PREFIX = 'domain-analysis';
 export const DOMAIN_ANALYSIS_NONE_SIGNATURE = '__none__';
 
@@ -71,6 +71,14 @@ export type DomainAnalysisSnapshotOutput = {
   // wins/(wins+losses) gives the model's true preference score for canonicalValueA,
   // free of the 50/50 cancellation that occurred with per-definition aggregation.
   valuePairModelVotes?: Record<string, { wins: number; losses: number }>;
+  // Per-(definitionId, modelId, canonicalA, canonicalB, ownLevel, opponentLevel) outcome.
+  // Key format: `${definitionId}::${modelId}::${canonicalA}::${canonicalB}::${ownLevel}::${opponentLevel}`
+  // where canonicalA < canonicalB alphabetically.
+  // `aChoices` = number of trials where the model chose canonicalA.
+  // `bChoices` = number of trials where the model chose canonicalB.
+  // `neutrals` = trials with no decisive choice.
+  // Used by the modelAgreementOnTradeoffs resolver (v1.12.0+).
+  cellLevelOutcomes?: Record<string, { aChoices: number; bChoices: number; neutrals: number }>;
 };
 
 export type AnalysisFingerprintRow = {
