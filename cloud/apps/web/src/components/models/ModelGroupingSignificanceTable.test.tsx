@@ -88,7 +88,7 @@ describe('ModelGroupingSignificanceTable', () => {
   it('shows the mean diff, effect size, and max order effect columns', () => {
     render(
       <ModelGroupingSignificanceTable
-        rows={[createRow({ meanDifference: -0.125, effectSize: 1.2345, maxOrderEffect: -0.05 })]}
+        rows={[createRow({ meanDifference: -0.125, effectSize: 0.456, maxOrderEffect: -0.05 })]}
       />,
     );
 
@@ -96,7 +96,7 @@ describe('ModelGroupingSignificanceTable', () => {
     expect(screen.getByRole('columnheader', { name: /effect size/i })).toBeDefined();
     expect(screen.getByRole('columnheader', { name: /max order effect/i })).toBeDefined();
     expect(screen.getByText('-12.5%')).toBeDefined();
-    expect(screen.getByText('+1.235')).toBeDefined();
+    expect(screen.getByText('+0.456')).toBeDefined();
     expect(screen.getByText('-5.0%')).toBeDefined();
   });
 
