@@ -112,6 +112,23 @@ export function ModelGroupsSection({
     ? kappaClusterAnalysis
     : (clusterAnalysisByMethod?.[backendKey] ?? null);
 
+  // Derive the dendrogram cut-line height from where the algorithm decided
+  // to split. With N models there are N-1 merges. If the algorithm produced
+  // K clusters, the first N-K merges happened *within* clusters and the rest
+  // happened *between* clusters. The cut line sits at the midpoint between
+  // the last within-cluster merge and the first between-cluster merge.
+  const kappaCutLineHeight = useMemo<number | null>(() => {
+    if (kappaDendrogram == null || kappaDendrogram.length === 0) return null;
+    const clusterCount = kappaClusterAnalysis?.clusters.length ?? 0;
+    const totalMerges = kappaDendrogram.length;
+    const withinClusterMergeCount = totalMerges - clusterCount + 1;
+    if (withinClusterMergeCount <= 0 || withinClusterMergeCount > totalMerges) return null;
+    const lastWithin = kappaDendrogram[withinClusterMergeCount - 1]?.height;
+    const firstBetween = kappaDendrogram[withinClusterMergeCount]?.height;
+    if (lastWithin == null || firstBetween == null) return null;
+    return (lastWithin + firstBetween) / 2;
+  }, [kappaDendrogram, kappaClusterAnalysis]);
+
   const hasGroupedClusters = activeClusterAnalysis != null && !activeClusterAnalysis.skipped;
   const groupedClusters = useMemo(() => activeClusterAnalysis?.clusters ?? [], [activeClusterAnalysis]);
   const individualClusters = useMemo(() => buildIndividualClusters(models), [models]);
@@ -350,6 +367,7 @@ export function ModelGroupsSection({
                       leafOrder={kappaLeafOrder}
                       modelLabels={modelLabels}
                       clusterIdByModelId={kappaClusterIdByModelId ?? {}}
+                      cutLineHeight={kappaCutLineHeight ?? undefined}
                     />
                   </div>
                 ) : null}
