@@ -39,10 +39,5 @@ query ModelAgreementClusterAnalysis(
       leafOrder
       clusterIdByModelId
     }
-    kappaPairs {
-      modelAId
-      modelBId
-      kappa
-    }
   }
 }

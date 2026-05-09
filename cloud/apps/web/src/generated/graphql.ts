@@ -4882,7 +4882,7 @@ export type ModelAgreementClusterAnalysisQueryVariables = Exact<{
 }>;
 
 
-export type ModelAgreementClusterAnalysisQuery = { __typename?: 'Query', modelAgreementClusterAnalysis: { __typename?: 'KappaClusterPayload', clusterAnalysis: { __typename?: 'ClusterAnalysis', skipped: boolean, skipReason?: string | null, defaultPair?: Array<string> | null, faultLinesByPair: unknown, leafOrder?: Array<string> | null, clusterIdByModelId?: unknown | null, clusters: Array<{ __typename?: 'DomainCluster', id: string, name: string, definingValues: Array<string>, centroid: unknown, members: Array<{ __typename?: 'ClusterMember', model: string, label: string, silhouetteScore: number, isOutlier: boolean, nearestClusterIds?: Array<string> | null, distancesToNearestClusters?: Array<number> | null }> }>, dendrogram?: Array<{ __typename?: 'DendrogramMerge', leftMemberIds: Array<string>, rightMemberIds: Array<string>, height: number }> | null }, kappaPairs: Array<{ __typename?: 'KappaPair', modelAId: string, modelBId: string, kappa?: number | null }> } };
+export type ModelAgreementClusterAnalysisQuery = { __typename?: 'Query', modelAgreementClusterAnalysis: { __typename?: 'KappaClusterPayload', clusterAnalysis: { __typename?: 'ClusterAnalysis', skipped: boolean, skipReason?: string | null, defaultPair?: Array<string> | null, faultLinesByPair: unknown, leafOrder?: Array<string> | null, clusterIdByModelId?: unknown | null, clusters: Array<{ __typename?: 'DomainCluster', id: string, name: string, definingValues: Array<string>, centroid: unknown, members: Array<{ __typename?: 'ClusterMember', model: string, label: string, silhouetteScore: number, isOutlier: boolean, nearestClusterIds?: Array<string> | null, distancesToNearestClusters?: Array<number> | null }> }>, dendrogram?: Array<{ __typename?: 'DendrogramMerge', leftMemberIds: Array<string>, rightMemberIds: Array<string>, height: number }> | null } } };
 
 export type ModelAgreementOnTradeoffsQueryVariables = Exact<{
   modelIds: Array<Scalars['ID']['input']> | Scalars['ID']['input'];
@@ -7402,11 +7402,6 @@ export const ModelAgreementClusterAnalysisDocument = gql`
       }
       leafOrder
       clusterIdByModelId
-    }
-    kappaPairs {
-      modelAId
-      modelBId
-      kappa
     }
   }
 }

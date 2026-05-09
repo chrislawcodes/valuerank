@@ -10,7 +10,6 @@ import { ClusterDotPlot } from './ClusterDotPlot';
 import { ClusterRadarChart } from './ClusterRadarChart';
 import { buildIndividualClusters, getClusterMemberLabelText } from './clusterVisualizationUtils';
 import { ClusterDendrogram, type DendrogramMerge } from './ClusterDendrogram';
-import { ClusterOrderedKappaHeatmap, type KappaPairInput } from './ClusterOrderedKappaHeatmap';
 
 const LEGEND_COLORS = [
   { border: 'border-blue-500', text: 'text-blue-700', light: 'bg-blue-50', color: '#2563eb' },
@@ -49,8 +48,6 @@ type ModelGroupsSectionProps = {
   kappaLeafOrder?: string[] | null;
   /** Flat per-model cluster ID map (kappa mode only). */
   kappaClusterIdByModelId?: Record<string, string> | null;
-  /** Flat kappa pair list for the heatmap (kappa mode only). */
-  kappaKappaPairs?: KappaPairInput[] | null;
   kappaClusterLoading?: boolean;
   kappaClusterError?: string | null;
   dataSource?: ClusterDataSource;
@@ -95,7 +92,6 @@ export function ModelGroupsSection({
   kappaDendrogram = null,
   kappaLeafOrder = null,
   kappaClusterIdByModelId = null,
-  kappaKappaPairs = null,
   kappaClusterLoading = false,
   kappaClusterError = null,
   dataSource = 'log-odds',
@@ -344,7 +340,7 @@ export function ModelGroupsSection({
         ) : (
           <>
             {dataSource === 'kappa-agreement' && groupDisplayMode === 'groups' ? (
-              // In kappa mode, show the dendrogram and cluster-ordered heatmap
+              // In kappa mode, show the dendrogram
               <div className="space-y-6">
                 {kappaDendrogram != null && kappaLeafOrder != null ? (
                   <div>
@@ -353,17 +349,6 @@ export function ModelGroupsSection({
                       merges={kappaDendrogram}
                       leafOrder={kappaLeafOrder}
                       modelLabels={modelLabels}
-                      clusterIdByModelId={kappaClusterIdByModelId ?? {}}
-                    />
-                  </div>
-                ) : null}
-                {kappaLeafOrder != null && kappaKappaPairs != null ? (
-                  <div>
-                    <p className="mb-2 text-xs font-semibold text-gray-700">Cluster-ordered kappa heatmap</p>
-                    <ClusterOrderedKappaHeatmap
-                      leafOrder={kappaLeafOrder}
-                      modelLabels={modelLabels}
-                      kappaPairs={kappaKappaPairs}
                       clusterIdByModelId={kappaClusterIdByModelId ?? {}}
                     />
                   </div>

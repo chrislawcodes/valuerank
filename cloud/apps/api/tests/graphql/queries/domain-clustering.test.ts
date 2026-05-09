@@ -555,6 +555,32 @@ describe('deriveLeafOrder', () => {
     const leafOrder = deriveLeafOrder([], allModelIds);
     expect(leafOrder).toEqual(allModelIds);
   });
+
+  it('tightest pair (smallest merge height) appears at the top of leafOrder', () => {
+    // 4 models: A↔B merge at distance 0.1 (tightest), C↔D merge at 0.4
+    // We construct the kappa matrix directly so we fully control merge heights.
+    // kappa(A,B) = 0.9  → distance = 0.1   (tightest pair)
+    // kappa(C,D) = 0.6  → distance = 0.4
+    // all cross-group pairs have kappa = 0  → distance = 1
+    const kappaModels: ClusterModelInput[] = [
+      { model: 'A', label: 'A', scores: { v: 1.0, w: 0.0 } },
+      { model: 'B', label: 'B', scores: { v: 0.9, w: 0.1 } },
+      { model: 'C', label: 'C', scores: { v: 0.0, w: 1.0 } },
+      { model: 'D', label: 'D', scores: { v: 0.1, w: 0.9 } },
+    ];
+    const km: Array<Array<number | null>> = [
+      [1,   0.9, 0,   0  ],
+      [0.9, 1,   0,   0  ],
+      [0,   0,   1,   0.6],
+      [0,   0,   0.6, 1  ],
+    ];
+    const result = computeKappaClusterAnalysis(kappaModels, km);
+    expect(result.leafOrder).toBeDefined();
+    // The first two leaves must be A and B (the tightest pair)
+    expect(result.leafOrder!.slice(0, 2).sort()).toEqual(['A', 'B']);
+    // The last two leaves must be C and D
+    expect(result.leafOrder!.slice(2).sort()).toEqual(['C', 'D']);
+  });
 });
 
 // ---------------------------------------------------------------------------
