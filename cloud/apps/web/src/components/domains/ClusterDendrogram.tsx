@@ -215,17 +215,39 @@ export function ClusterDendrogram({
           {/* Dendrogram lines */}
           {lines}
 
-          {/* Cut line — vertical when oriented horizontally */}
+          {/* Cut line — vertical when oriented horizontally. Marks where the
+              clustering algorithm split into the displayed clusters. */}
           {cutLineHeight != null && (
-            <line
-              x1={heightToX(cutLineHeight)}
-              y1={0}
-              x2={heightToX(cutLineHeight)}
-              y2={innerHeight}
-              stroke="#0d9488"
-              strokeWidth={1.5}
-              strokeDasharray="5,3"
-            />
+            <g>
+              <line
+                x1={heightToX(cutLineHeight)}
+                y1={0}
+                x2={heightToX(cutLineHeight)}
+                y2={innerHeight}
+                stroke="#0d9488"
+                strokeWidth={1.5}
+                strokeDasharray="5,3"
+              />
+              <text
+                x={heightToX(cutLineHeight) + 4}
+                y={-4}
+                textAnchor="start"
+                fontSize={9}
+                fill="#0d9488"
+                fontWeight={600}
+              >
+                cluster cut
+              </text>
+              <text
+                x={heightToX(cutLineHeight) + 4}
+                y={6}
+                textAnchor="start"
+                fontSize={9}
+                fill="#0d9488"
+              >
+                {cutLineHeight.toFixed(2)}
+              </text>
+            </g>
           )}
 
           {/* Leaf nodes and labels (on the left side, label reads naturally) */}
