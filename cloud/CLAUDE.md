@@ -76,7 +76,11 @@ Enforced mechanically — do not treat these as soft guidance.
 
 Grandfathered files live in the allowlists next to each script. See
 [`docs/tech-debt/file-structure.md`](../docs/tech-debt/file-structure.md)
-for what to collapse when touching the area.
+for what to collapse when touching the area, and
+[`docs/tech-debt/dedup-inventory.md`](../docs/tech-debt/dedup-inventory.md)
+for the curated catalog of duplicate-module clusters (DEDUP-N IDs,
+triage status, PR refs). Check the dedup catalog before adding a new
+component or utility — the duplicate may already be tracked there.
 
 Guidance when the size warning fires: do not split just to silence it. Ask
 whether the file has one responsibility. If yes, keep it. If no, split by
