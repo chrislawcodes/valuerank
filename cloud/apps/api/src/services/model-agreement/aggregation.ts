@@ -413,6 +413,103 @@ export function buildUnavailableModelInfo(model: ModelSummary): UnavailableModel
   };
 }
 
+/**
+ * Symmetry tolerance: if the upper-distance from the point estimate and the
+ * lower-distance differ by at most this amount, the CI is considered symmetric.
+ * Defined here so tests can import it.
+ */
+export const KAPPA_CI_SYMMETRY_TOLERANCE = 0.01;
+
+/**
+ * Wide-CI threshold: a confidence interval is considered "wide" (data too thin
+ * to constrain the estimate) when its width exceeds this value or when it
+ * crosses zero (low < 0).
+ */
+export const KAPPA_CI_WIDE_THRESHOLD = 0.30;
+
+export type KappaConfidenceInterval = {
+  /** 2.5th percentile of bootstrap distribution, or null if not computable. */
+  low: number | null;
+  /** 97.5th percentile of bootstrap distribution, or null if not computable. */
+  high: number | null;
+  /** True when |upper-distance - lower-distance| ≤ KAPPA_CI_SYMMETRY_TOLERANCE. */
+  isSymmetric: boolean;
+};
+
+/**
+ * Groups a flat array of ComparableCell[] by definitionId (vignette).
+ * The returned Map keys are vignette IDs; values are the cells that belong to
+ * that vignette for this pair.
+ */
+export function groupCellsByVignette(cells: ReadonlyArray<ComparableCell>): Map<string, ComparableCell[]> {
+  const map = new Map<string, ComparableCell[]>();
+  for (const cell of cells) {
+    const bucket = map.get(cell.definitionId) ?? [];
+    bucket.push(cell);
+    map.set(cell.definitionId, bucket);
+  }
+  return map;
+}
+
+/**
+ * Bootstrap 95% confidence interval for Cohen's kappa by resampling whole
+ * vignettes with replacement (1000 iterations by default).
+ *
+ * Resampling at the vignette level (not cell level) respects the clustering
+ * structure — cells within a vignette share context and aren't independent.
+ *
+ * Returns { low: null, high: null, isSymmetric: true } when:
+ *   - The point estimate is null (no data to resample).
+ *   - There are no vignettes (empty input).
+ *   - Fewer than 100 valid bootstrap samples were produced (degenerate case).
+ */
+export function bootstrapKappaConfidence(
+  cellsByVignette: Map<string, ComparableCell[]>,
+  pointEstimateKappa: number | null,
+  iterations: number = 1000,
+): KappaConfidenceInterval {
+  if (pointEstimateKappa == null || cellsByVignette.size === 0) {
+    return { low: null, high: null, isSymmetric: true };
+  }
+
+  const vignetteIds = Array.from(cellsByVignette.keys());
+  const n = vignetteIds.length;
+  const kappaSamples: number[] = [];
+
+  for (let iter = 0; iter < iterations; iter += 1) {
+    // Resample vignettes WITH REPLACEMENT
+    const resampledCells: ComparableCell[] = [];
+    for (let i = 0; i < n; i += 1) {
+      const idx = Math.floor(Math.random() * n);
+      const id = vignetteIds[idx]!;
+      const cellsForVignette = cellsByVignette.get(id) ?? [];
+      resampledCells.push(...cellsForVignette);
+    }
+    const sampleKappa = summarizePairCells(resampledCells).cohensKappa;
+    if (sampleKappa != null && Number.isFinite(sampleKappa)) {
+      kappaSamples.push(sampleKappa);
+    }
+  }
+
+  // Too few valid samples to make a meaningful CI
+  if (kappaSamples.length < 100) {
+    return { low: null, high: null, isSymmetric: true };
+  }
+
+  kappaSamples.sort((a, b) => a - b);
+  const lowIdx = Math.floor(kappaSamples.length * 0.025);
+  const highIdx = Math.floor(kappaSamples.length * 0.975);
+  const low = kappaSamples[lowIdx]!;
+  const high = kappaSamples[highIdx]!;
+
+  // Symmetry check: upper-distance from point estimate vs lower-distance.
+  const upperDist = high - pointEstimateKappa;
+  const lowerDist = pointEstimateKappa - low;
+  const isSymmetric = Math.abs(upperDist - lowerDist) <= KAPPA_CI_SYMMETRY_TOLERANCE;
+
+  return { low, high, isSymmetric };
+}
+
 export function buildEmptyAgreementResult(
   pending = true,
   buildProgress: ModelAgreementBuildProgressShape | null = null,

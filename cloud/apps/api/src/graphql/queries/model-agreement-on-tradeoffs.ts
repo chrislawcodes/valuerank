@@ -11,6 +11,7 @@ import {
   type ValuePairDivergenceShape,
 } from '../types/model-agreement-on-tradeoffs.js';
 import {
+  bootstrapKappaConfidence,
   buildEmptyAgreementResult,
   buildEmptyPairBreakdown,
   buildPositionCells,
@@ -18,6 +19,7 @@ import {
   buildUnavailableModelInfo,
   collectComparableCells,
   computeProportionA,
+  groupCellsByVignette,
   normalizeModelIds,
   summarizePairCells,
   summarizeTrialConsistency,
@@ -42,6 +44,7 @@ const ALL_DOMAINS_SCOPE_ID = 'all-domains';
 const AGREEMENT_REFRESH_REASON = 'model-agreement-on-tradeoffs-page-load-missing';
 const DRILLDOWN_REFRESH_REASON = 'model-pair-divergence-breakdown-missing';
 const NON_BINARY_CELL_FALLBACK_COUNT = 0;
+const KAPPA_BOOTSTRAP_ITERATIONS = 1000;
 
 
 async function resolveAgreementScope(params: {
@@ -191,6 +194,8 @@ export async function resolveModelAgreementOnTradeoffs(
       });
       tiedCells += pairTiedCells;
       const metrics = summarizePairCells(cells);
+      const cellsByVignette = groupCellsByVignette(cells);
+      const ci = bootstrapKappaConfidence(cellsByVignette, metrics.cohensKappa, KAPPA_BOOTSTRAP_ITERATIONS);
 
       pairwiseAgreementMatrix.push({
         modelAId: modelA.modelId,
@@ -202,6 +207,9 @@ export async function resolveModelAgreementOnTradeoffs(
         cohensKappa: metrics.cohensKappa,
         kappaInterpretation: metrics.kappaInterpretation,
         meanAbsoluteDivergence: metrics.meanAbsoluteDivergence,
+        cohensKappaConfidenceLow: ci.low,
+        cohensKappaConfidenceHigh: ci.high,
+        cohensKappaConfidenceIsSymmetric: ci.isSymmetric,
       });
     }
   }

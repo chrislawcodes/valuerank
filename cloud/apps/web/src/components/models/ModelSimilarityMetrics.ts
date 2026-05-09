@@ -38,6 +38,20 @@ export type PairMetric = {
   summaryLabel: string;
   summaryNote: string;
   summaryRows: Array<{ label: string; value: number | null }>;
+  confidenceLow?: number | null;
+  confidenceHigh?: number | null;
+  confidenceIsSymmetric?: boolean;
+};
+
+/**
+ * Extended kappa entry that carries the point estimate plus bootstrap CI fields.
+ * The Map passed to computePairMetric uses this shape when CI data is available.
+ */
+export type PairwiseKappaEntry = {
+  kappa: number;
+  confidenceLow: number | null;
+  confidenceHigh: number | null;
+  confidenceIsSymmetric: boolean;
 };
 
 export const CALCULATION_METHODS: Array<{ value: CalculationMethod; label: string }> = [
@@ -257,15 +271,24 @@ export function computePairMetric(
   left: ModelEntry,
   right: ModelEntry,
   method: CalculationMethod,
-  pairwiseKappa?: Map<string, Map<string, number>>,
+  pairwiseKappa?: Map<string, Map<string, number | PairwiseKappaEntry>>,
 ): PairMetric {
   if (method === 'kappa') {
     const copy = getMethodCopy(method);
     // Try both directions since the matrix is symmetric.
-    const kappaValue =
+    const rawEntry =
       pairwiseKappa?.get(left.model)?.get(right.model) ??
       pairwiseKappa?.get(right.model)?.get(left.model) ??
       null;
+
+    // Accept both plain-number entries (legacy) and PairwiseKappaEntry objects.
+    const kappaValue: number | null =
+      rawEntry == null ? null
+      : typeof rawEntry === 'number' ? rawEntry
+      : rawEntry.kappa;
+
+    const ciEntry: PairwiseKappaEntry | null =
+      rawEntry != null && typeof rawEntry === 'object' ? rawEntry : null;
 
     if (kappaValue == null) {
       return {
@@ -301,6 +324,9 @@ export function computePairMetric(
         { label: "Cohen's kappa", value: clamped },
         { label: 'Distance (1 − kappa)', value: 1 - clamped },
       ],
+      confidenceLow: ciEntry?.confidenceLow ?? null,
+      confidenceHigh: ciEntry?.confidenceHigh ?? null,
+      confidenceIsSymmetric: ciEntry?.confidenceIsSymmetric ?? true,
     };
   }
 

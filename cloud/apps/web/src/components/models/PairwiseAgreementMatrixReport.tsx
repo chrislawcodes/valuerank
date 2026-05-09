@@ -11,7 +11,10 @@ type SelectedPair = {
   modelBId: string;
 };
 
-type SortKey = 'modelA' | 'modelB' | 'cells' | 'kappa' | 'interpretation' | 'agreement' | 'divergence';
+/** CI width threshold above which a row is flagged as wide/uncertain. */
+const KAPPA_CI_WIDE_THRESHOLD = 0.30;
+
+type SortKey = 'modelA' | 'modelB' | 'cells' | 'kappa' | 'ci' | 'interpretation' | 'agreement' | 'divergence';
 type SortDirection = 'asc' | 'desc';
 
 type SortState = {
@@ -30,6 +33,17 @@ function formatKappa(value: number | null): string {
   }
   const sign = value >= 0 ? '+' : '';
   return `${sign}${value.toFixed(2)}`;
+}
+
+function formatCIBound(value: number | null): string {
+  if (value == null || !Number.isFinite(value)) return '—';
+  const sign = value >= 0 ? '+' : '';
+  return `${sign}${value.toFixed(2)}`;
+}
+
+function isCIWide(low: number | null | undefined, high: number | null | undefined): boolean {
+  if (low == null || high == null) return false;
+  return (high - low) > KAPPA_CI_WIDE_THRESHOLD || low < 0;
 }
 
 function formatPercent(value: number | null): string {
@@ -70,11 +84,20 @@ function sortRows(rows: PairwiseAgreementRow[], sort: SortState): PairwiseAgreem
             ? compareNullableNumbers(left.totalCells, right.totalCells, direction)
             : sort.key === 'kappa'
               ? compareNullableNumbers(left.cohensKappa ?? null, right.cohensKappa ?? null, direction)
-              : sort.key === 'interpretation'
-                ? compareNullableStrings(left.kappaInterpretation ?? null, right.kappaInterpretation ?? null, direction)
-                : sort.key === 'agreement'
-                  ? compareNullableNumbers(left.percentAgreement ?? null, right.percentAgreement ?? null, direction)
-                  : compareNullableNumbers(left.meanAbsoluteDivergence ?? null, right.meanAbsoluteDivergence ?? null, direction);
+              : sort.key === 'ci'
+                ? (() => {
+                  // Sort by CI lower bound first, then upper bound.
+                  const lLow = left.cohensKappaConfidenceLow ?? null;
+                  const rLow = right.cohensKappaConfidenceLow ?? null;
+                  const lowDelta = compareNullableNumbers(lLow, rLow, direction);
+                  if (lowDelta !== 0) return lowDelta;
+                  return compareNullableNumbers(left.cohensKappaConfidenceHigh ?? null, right.cohensKappaConfidenceHigh ?? null, direction);
+                })()
+                : sort.key === 'interpretation'
+                  ? compareNullableStrings(left.kappaInterpretation ?? null, right.kappaInterpretation ?? null, direction)
+                  : sort.key === 'agreement'
+                    ? compareNullableNumbers(left.percentAgreement ?? null, right.percentAgreement ?? null, direction)
+                    : compareNullableNumbers(left.meanAbsoluteDivergence ?? null, right.meanAbsoluteDivergence ?? null, direction);
 
     return value === 0 ? leftLabel.localeCompare(rightLabel) : value;
   });
@@ -191,6 +214,7 @@ export function PairwiseAgreementMatrixReport({ rows, selectedPair, onPairSelect
               <SortableHeader label="Model B" sortKey="modelB" sortState={sort} onSort={(key) => setSort((current) => getNextSort(current, key))} />
               <SortableHeader label="Cells" sortKey="cells" sortState={sort} onSort={(key) => setSort((current) => getNextSort(current, key))} align="right" />
               <SortableHeader label="Kappa" sortKey="kappa" sortState={sort} onSort={(key) => setSort((current) => getNextSort(current, key))} align="right" />
+              <SortableHeader label="95% CI" sortKey="ci" sortState={sort} onSort={(key) => setSort((current) => getNextSort(current, key))} align="right" />
               <SortableHeader label="Interpretation" sortKey="interpretation" sortState={sort} onSort={(key) => setSort((current) => getNextSort(current, key))} />
               <SortableHeader label="% Agreement" sortKey="agreement" sortState={sort} onSort={(key) => setSort((current) => getNextSort(current, key))} align="right" />
               <SortableHeader label="Mean Abs Divergence" sortKey="divergence" sortState={sort} onSort={(key) => setSort((current) => getNextSort(current, key))} align="right" />
@@ -213,6 +237,26 @@ export function PairwiseAgreementMatrixReport({ rows, selectedPair, onPairSelect
                   </TableCell>
                   <TableCell align="right" className="font-mono tabular-nums text-gray-800">
                     {getMetricText(row, 'kappa')}
+                  </TableCell>
+                  <TableCell
+                    align="right"
+                    className={cn(
+                      'font-mono tabular-nums text-gray-800',
+                      isCIWide(row.cohensKappaConfidenceLow, row.cohensKappaConfidenceHigh) && 'bg-pink-50',
+                    )}
+                  >
+                    {row.cohensKappaConfidenceLow == null || row.cohensKappaConfidenceHigh == null ? (
+                      <span className="text-gray-400">—</span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1">
+                        <span>
+                          [{formatCIBound(row.cohensKappaConfidenceLow)}, {formatCIBound(row.cohensKappaConfidenceHigh)}]
+                        </span>
+                        {isCIWide(row.cohensKappaConfidenceLow, row.cohensKappaConfidenceHigh) && (
+                          <span aria-label="Wide confidence interval" title="Wide CI — insufficient data to constrain estimate">⚠</span>
+                        )}
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell className="text-gray-700">
                     {row.totalCells === 0 ? 'no overlap' : row.kappaInterpretation ?? '—'}

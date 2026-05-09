@@ -184,6 +184,9 @@ const agreementQuery = `
         cohensKappa
         kappaInterpretation
         meanAbsoluteDivergence
+        cohensKappaConfidenceLow
+        cohensKappaConfidenceHigh
+        cohensKappaConfidenceIsSymmetric
       }
       trialConsistency {
         modelId
@@ -659,6 +662,59 @@ describe('model-agreement-on-tradeoffs GraphQL queries', () => {
     });
     // model-a's all-neutral cell is counted as tied
     expect(agreement.tiedCells).toBe(1);
+  });
+
+  it('populates cohensKappaConfidenceLow/High that bracket the point estimate', async () => {
+    // Build enough vignettes that bootstrap produces a real CI (>= 100 valid samples).
+    // 20 vignettes: model-a always picks canonicalA, model-b alternates A/B.
+    const cellLevelOutcomes: Record<string, CellOutcome> = {};
+    for (let i = 1; i <= 20; i += 1) {
+      cellLevelOutcomes[`def-${i}::model-a::Achievement::Tradition::1::2`] = { aChoices: 6, bChoices: 0, neutrals: 0 };
+      // model-b alternates: even → A, odd → B
+      const bA = i % 2 === 0 ? 6 : 0;
+      const bB = i % 2 === 0 ? 0 : 6;
+      cellLevelOutcomes[`def-${i}::model-b::Achievement::Tradition::1::2`] = { aChoices: bA, bChoices: bB, neutrals: 0 };
+    }
+
+    // Also register def-1 through def-20 in the scope data (latestDefinitionIds).
+    const extendedScopeData = {
+      ...scopeData(),
+      latestDefinitionIds: Array.from({ length: 20 }, (_, i) => `def-${i + 1}`),
+    };
+    mocks.resolveDomainAnalysisScopeDefinitions.mockResolvedValue(extendedScopeData);
+    mocks.readModelAgreementSnapshotStateFromSnapshot.mockResolvedValue({
+      cellLevelOutcomes: snapshot(cellLevelOutcomes),
+      buildProgress: null,
+      inputHash: 'hash-ci-test',
+    });
+
+    const response = await graphqlRequest(agreementQuery, {
+      modelIds: ['model-a', 'model-b'],
+      scope: 'ALL_DOMAINS',
+      signature: 'sig-1',
+    });
+
+    expect(response.body.errors).toBeUndefined();
+    const matrix = response.body.data.modelAgreementOnTradeoffs.pairwiseAgreementMatrix as Array<{
+      cohensKappa: number | null;
+      cohensKappaConfidenceLow: number | null;
+      cohensKappaConfidenceHigh: number | null;
+      cohensKappaConfidenceIsSymmetric: boolean;
+    }>;
+
+    expect(matrix).toHaveLength(1);
+    const row = matrix[0]!;
+
+    // The CI should be populated (20 vignettes → well above 100-sample threshold).
+    expect(row.cohensKappaConfidenceLow).not.toBeNull();
+    expect(row.cohensKappaConfidenceHigh).not.toBeNull();
+    expect(typeof row.cohensKappaConfidenceIsSymmetric).toBe('boolean');
+
+    if (row.cohensKappa != null && row.cohensKappaConfidenceLow != null && row.cohensKappaConfidenceHigh != null) {
+      // CI must bracket the point estimate (within floating-point tolerance).
+      expect(row.cohensKappaConfidenceLow).toBeLessThanOrEqual(row.cohensKappa + 0.01);
+      expect(row.cohensKappaConfidenceHigh).toBeGreaterThanOrEqual(row.cohensKappa - 0.01);
+    }
   });
 
   it('equal-weights value pairs in the headline kappa (no over-tested-pair bias)', async () => {
