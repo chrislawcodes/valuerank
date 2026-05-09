@@ -50,6 +50,7 @@ Canonical source: `docs/canonical-glossary.md`
 - Follow the Preflight Gate in `cloud/CLAUDE.md` before any `git push` or PR creation.
 - Invoked delivery actions (Feature Factory `deliver`, `/ship`, explicit "push and open the PR" instructions) do not need re-confirmation. The invocation is the consent. See `cloud/CLAUDE.md` for the full rule.
 - To merge a PR, invoke the `/ship` skill — not direct `gh pr merge` or passive "watch CI." `/ship` rebases onto main first, runs preflight, watches CI to completion, and squash-merges. Skipping the rebase step is the most common cause of stuck "CI failing on stale base" loops.
+- Before building a new component, service, or utility that may already exist, check `docs/tech-debt/dedup-inventory.md` — the curated catalog of known duplicate-module clusters with severity × lift triage. New duplicates discovered during work should be added there as new `DEDUP-N` entries (in the same PR that finds them).
 - One feature per branch. Do not stack new work on top of an open feature PR unless the human asks.
 - Fix the root cause when CI fails. Do not retry blindly.
 

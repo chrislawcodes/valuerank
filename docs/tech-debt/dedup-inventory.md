@@ -38,7 +38,7 @@ DEDUP-8 (`isRecord`) is independent of report output — pure type guard.
 
 | ID | Cluster | Slice | Severity | Lift | Status |
 |---|---|---|---|---|---|
-| ~~DEDUP-1~~ | ~~`pauseQueue` / `resumeQueue` — two implementations~~ | ~~API~~ | ~~High (bug risk)~~ | ~~Medium~~ | **Resolved — PR #TBD** |
+| ~~DEDUP-1~~ | ~~`pauseQueue` / `resumeQueue` — two implementations~~ | ~~API~~ | ~~High (bug risk)~~ | ~~Medium~~ | **Resolved — PR #963** |
 | ~~DEDUP-2~~ | ~~Schwartz + signature-preference forked web↔shared~~ | ~~Web/Shared~~ | ~~High~~ | ~~Small~~ | **Resolved (partial) — PR #937** |
 | ~~DEDUP-3~~ | ~~`useRuns` vs `useRunsWithAnalysis` (and infinite variants)~~ | ~~Web~~ | ~~High~~ | ~~Small~~ | **Resolved — PR #934** |
 | DEDUP-4 | Run vs Analysis list/card/folder views | Web | High | Large | Decision needed |
@@ -50,7 +50,7 @@ DEDUP-8 (`isRecord`) is independent of report output — pure type guard.
 | DEDUP-10 | Decision-summary utility sprawl | Web | Medium-High | Large | Decision needed |
 | ~~DEDUP-11~~ | ~~Shared `*-value-statements.ts` (4× boilerplate)~~ | ~~Shared~~ | ~~Medium~~ | ~~Small~~ | **Resolved — PR #955** |
 | DEDUP-12 | Run lifecycle / recovery sprawl | API | Medium-Low | Large | Decision needed |
-| ~~DEDUP-13~~ | ~~`validate_input` pattern across 5 workers~~ | ~~Workers~~ | ~~Low~~ | ~~Small~~ | **Resolved — PR #TBD** |
+| ~~DEDUP-13~~ | ~~`validate_input` pattern across 5 workers~~ | ~~Workers~~ | ~~Low~~ | ~~Small~~ | **Resolved — PR #957** |
 | DEDUP-14 | `DomainAnalysisLegacy` GraphQL query — alive, feeds Models + Domains pages | Web | Medium | Large (migration, not delete) | Decision needed |
 | ~~DEDUP-15~~ | ~~`runsWithAnalysis(ids:)` resolver and query unused~~ | ~~API + Web~~ | ~~Medium~~ | ~~Small (deletion)~~ | **Resolved — PR #936** |
 
@@ -60,7 +60,7 @@ Status values: `Open` (mechanical, ready to do) · `Decision needed` (needs a di
 
 ### DEDUP-1 — `pauseQueue` / `resumeQueue` two implementations
 
-**Status: Resolved in PR #TBD (2026-05-05). Option A — semantically equivalent duplicates; orchestrator is canonical.**
+**Status: Resolved in PR #963 (2026-05-06). Option A — semantically equivalent duplicates; orchestrator is canonical.**
 
 Investigation confirmed both implementations intended the same semantics (stop processing new jobs, accumulate them, resume later). The implementations differed in mechanism: `control.ts` called `stopBoss()`/`startBoss()` (hard stop — destroys the PgBoss singleton), while `orchestrator.ts` used `boss.offWork()`/`registerHandlers()` (soft stop — PgBoss stays alive, workers unsubscribed). The orchestrator's approach is correct: resume re-registers handlers so jobs start flowing again. `control.ts`'s approach was broken: `resumeQueue` called `startBoss()` but never re-registered handlers, silently leaving workers unsubscribed after resume.
 
@@ -204,7 +204,7 @@ Consolidated the four 52-LOC files into `cloud/packages/shared/src/value-stateme
 
 ### DEDUP-13 — `validate_input` pattern across 5 workers
 
-**Status: Resolved in PR #TBD (2026-05-05).**
+**Status: Resolved in PR #957 (2026-05-06).**
 
 Extracted 4 helpers into `cloud/workers/common/validation.py`:
 - `require_fields(data, fields)` — missing-field loop with details (used by summarize, probe)
