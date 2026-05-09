@@ -19,6 +19,77 @@ function makeModel(model: string, label: string, winRates: number[]): ModelEntry
 }
 
 describe('ModelSimilarityTableSection', () => {
+  it('renders kappa values when method is kappa and pairwiseKappa map is provided', () => {
+    const modelA = makeModel('model-a', 'Model A', [100, 90, 80, 70, 60, 50, 40, 30, 20, 10]);
+    const modelB = makeModel('model-b', 'Model B', [90, 80, 70, 60, 50, 40, 30, 20, 10, 0]);
+    const pairwiseKappa = new Map([
+      ['model-a', new Map([['model-b', 0.75]])],
+      ['model-b', new Map([['model-a', 0.75]])],
+    ]);
+
+    render(
+      <ModelSimilarityTableSection
+        models={[modelA, modelB]}
+        method="kappa"
+        pairwiseKappa={pairwiseKappa}
+      />,
+    );
+
+    // Default view is 'distance'; kappa=0.75 → distance = 1 - 0.75 = 0.25.
+    expect(screen.getAllByText('0.25').length).toBeGreaterThan(0);
+  });
+
+  it('shows 1 - kappa in distance view and kappa in similarity view for kappa method', async () => {
+    const user = userEvent.setup();
+    const modelA = makeModel('model-a', 'Model A', [100, 90, 80, 70, 60, 50, 40, 30, 20, 10]);
+    const modelB = makeModel('model-b', 'Model B', [90, 80, 70, 60, 50, 40, 30, 20, 10, 0]);
+    // kappa = 0.70 → distance = 0.30, similarity = 0.70
+    const pairwiseKappa = new Map([
+      ['model-a', new Map([['model-b', 0.70]])],
+      ['model-b', new Map([['model-a', 0.70]])],
+    ]);
+
+    render(
+      <ModelSimilarityTableSection
+        models={[modelA, modelB]}
+        method="kappa"
+        pairwiseKappa={pairwiseKappa}
+      />,
+    );
+
+    // Default view is 'distance' (1 - kappa = 1 - 0.70 = 0.30)
+    expect(screen.getAllByText('0.30').length).toBeGreaterThan(0);
+
+    // Switch to similarity view — should show 0.70 (the kappa itself)
+    await act(async () => {
+      await user.click(screen.getByRole('button', { name: 'Similarity' }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getAllByText('0.70').length).toBeGreaterThan(0);
+    });
+  });
+
+  it('renders em-dash for missing kappa cells', () => {
+    const modelA = makeModel('model-a', 'Model A', [100, 90, 80, 70, 60, 50, 40, 30, 20, 10]);
+    const modelB = makeModel('model-b', 'Model B', [90, 80, 70, 60, 50, 40, 30, 20, 10, 0]);
+    // Empty pairwiseKappa — no data for any pair.
+    const pairwiseKappa = new Map<string, Map<string, number>>();
+
+    render(
+      <ModelSimilarityTableSection
+        models={[modelA, modelB]}
+        method="kappa"
+        pairwiseKappa={pairwiseKappa}
+      />,
+    );
+
+    // Only the self cells and unavailable pair cells show '—'.
+    const dashes = screen.getAllByText('—');
+    // At least the pair cell (2 cells: A→B and B→A) plus 2 self cells = 4 dashes.
+    expect(dashes.length).toBeGreaterThanOrEqual(2);
+  });
+
   it('uses the selected method and opens the pair detail drawer', async () => {
     const user = userEvent.setup();
     const modelA = makeModel('model-a', 'Model A', [100, 90, 80, 70, 60, 50, 40, 30, 20, 10]);

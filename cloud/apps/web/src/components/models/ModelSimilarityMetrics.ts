@@ -1,6 +1,6 @@
 import { type ModelEntry, VALUES, VALUE_LABELS, type ValueKey } from '../../data/domainAnalysisData';
 
-export type CalculationMethod = 'weighted-euclidean' | 'absolute-value' | 'cosine' | 'spearman' | 'kendall';
+export type CalculationMethod = 'weighted-euclidean' | 'absolute-value' | 'cosine' | 'spearman' | 'kendall' | 'kappa';
 export type MetricView = 'distance' | 'similarity';
 
 export type PairStep = {
@@ -46,6 +46,7 @@ export const CALCULATION_METHODS: Array<{ value: CalculationMethod; label: strin
   { value: 'cosine', label: 'Cosine' },
   { value: 'spearman', label: 'Spearman' },
   { value: 'kendall', label: 'Kendall' },
+  { value: 'kappa', label: 'Kappa Agreement' },
 ];
 
 function clamp01(value: number): number {
@@ -80,6 +81,33 @@ export function getHeatColor(intensity: number): string {
   return `rgba(${r}, ${g}, ${b}, 0.24)`;
 }
 
+/**
+ * Diverging color for kappa values in [-1, 1].
+ * Matches the palette used by the deleted ModelAgreementHeatmap:
+ *   red (#dc2626) at -1 → white (#ffffff) at 0 → green (#15803d) at +1.
+ * Returns an rgba string with 0.24 alpha so the table background shows through.
+ */
+export function getKappaDivergingColor(kappa: number): string {
+  const clamped = Math.max(-1, Math.min(1, kappa));
+  let r: number;
+  let g: number;
+  let b: number;
+  if (clamped <= 0) {
+    const t = clamped + 1; // 0 at kappa=-1, 1 at kappa=0
+    // red (220,38,38) → white (255,255,255)
+    r = Math.round(220 + (255 - 220) * t);
+    g = Math.round(38 + (255 - 38) * t);
+    b = Math.round(38 + (255 - 38) * t);
+  } else {
+    const t = clamped; // 0 at kappa=0, 1 at kappa=+1
+    // white (255,255,255) → green (21,128,61)
+    r = Math.round(255 + (21 - 255) * t);
+    g = Math.round(255 + (128 - 255) * t);
+    b = Math.round(255 + (61 - 255) * t);
+  }
+  return `rgba(${r}, ${g}, ${b}, 0.24)`;
+}
+
 export function formatViewValue(metric: PairMetric | null, view: MetricView): string {
   if (metric == null || metric.usedValueCount === 0) return '—';
   return view === 'similarity'
@@ -90,6 +118,15 @@ export function formatViewValue(metric: PairMetric | null, view: MetricView): st
 export function getCellIntensity(metric: PairMetric | null): number {
   if (metric == null || metric.usedValueCount === 0) return 0;
   return metric.similarity ?? 0;
+}
+
+/**
+ * For kappa cells, returns the raw kappa value (range [-1, 1]) so callers
+ * can use getKappaDivergingColor instead of getHeatColor.
+ */
+export function getKappaCellValue(metric: PairMetric | null): number | null {
+  if (metric == null || metric.usedValueCount === 0 || metric.method !== 'kappa') return null;
+  return metric.rawScore;
 }
 
 export function getMethodCopy(method: CalculationMethod) {
@@ -123,6 +160,12 @@ export function getMethodCopy(method: CalculationMethod) {
         summaryLabel: 'Kendall tau-b',
         summaryNote: 'Bigger means the two models are closer.',
         helpCopy: 'We compare every pair of values and count how often the two models keep the same order.',
+      };
+    case 'kappa':
+      return {
+        summaryLabel: "Cohen's kappa",
+        summaryNote: 'Bigger means the two models agree more often.',
+        helpCopy: "Cohen's kappa on shared cell-level outcomes. Range: -1 (perfect anti-correlation) to +1 (perfect agreement). Distance is 1 − kappa.",
       };
   }
 }
@@ -210,7 +253,57 @@ function buildDisplayScores(rawScore: number | null, method: CalculationMethod):
   };
 }
 
-export function computePairMetric(left: ModelEntry, right: ModelEntry, method: CalculationMethod): PairMetric {
+export function computePairMetric(
+  left: ModelEntry,
+  right: ModelEntry,
+  method: CalculationMethod,
+  pairwiseKappa?: Map<string, Map<string, number>>,
+): PairMetric {
+  if (method === 'kappa') {
+    const copy = getMethodCopy(method);
+    // Try both directions since the matrix is symmetric.
+    const kappaValue =
+      pairwiseKappa?.get(left.model)?.get(right.model) ??
+      pairwiseKappa?.get(right.model)?.get(left.model) ??
+      null;
+
+    if (kappaValue == null) {
+      return {
+        left,
+        right,
+        method,
+        steps: [],
+        kendallSteps: [],
+        usedValueCount: 0,
+        rawScore: null,
+        distance: null,
+        similarity: null,
+        summaryLabel: copy.summaryLabel,
+        summaryNote: copy.summaryNote,
+        summaryRows: [],
+      };
+    }
+
+    const clamped = Math.max(-1, Math.min(1, kappaValue));
+    return {
+      left,
+      right,
+      method,
+      steps: [],
+      kendallSteps: [],
+      usedValueCount: 1,
+      rawScore: clamped,
+      distance: 1 - clamped,
+      similarity: clamped,
+      summaryLabel: copy.summaryLabel,
+      summaryNote: copy.summaryNote,
+      summaryRows: [
+        { label: "Cohen's kappa", value: clamped },
+        { label: 'Distance (1 − kappa)', value: 1 - clamped },
+      ],
+    };
+  }
+
   const comparableValues = VALUES.map((valueKey) => {
     const valueLabel = VALUE_LABELS[valueKey];
     const leftWinRate = left.winRates?.[valueKey] ?? null;

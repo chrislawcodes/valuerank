@@ -27,6 +27,7 @@ import {
   ModelAgreementClusterAnalysisDocument,
   type ModelAgreementClusterAnalysisQuery,
   type ModelAgreementClusterAnalysisQueryVariables,
+  useModelAgreementOnTradeoffsQuery,
 } from '../generated/graphql';
 import { ModelGroupsSection } from '../components/domains/ModelGroupsSection';
 import { ModelAnalysisSettingsBar } from '../components/models/ModelAnalysisSettingsBar';
@@ -91,6 +92,9 @@ export function ModelsGroups() {
   const [clusteringMethod, setClusteringMethod] = useState<'upgma' | 'ward'>('ward');
   const [dataSource, setDataSource] = useState<'log-odds' | 'win-rate' | 'kappa-agreement'>('log-odds');
   const [similarityMethod, setSimilarityMethod] = useState<CalculationMethod>('weighted-euclidean');
+  // Track whether the user has explicitly chosen a similarity method.
+  // When false, switching data source to kappa-agreement auto-defaults to 'kappa'.
+  const [similarityMethodExplicit, setSimilarityMethodExplicit] = useState(false);
 
   const [{ data: signatureData, fetching: signaturesLoading, error: signaturesError }] = useQuery<
     DomainAvailableSignaturesQueryResult,
@@ -192,6 +196,14 @@ export function ModelsGroups() {
       || message.includes('Unknown field');
     if (isFieldError && !useLegacyQuery && selectedScope !== 'ALL_DOMAINS') setUseLegacyQuery(true);
   }, [scoredError, selectedScope, useLegacyQuery]);
+
+  // Auto-default similarity method to 'kappa' when switching to kappa-agreement data source,
+  // unless the user has already made an explicit choice.
+  useEffect(() => {
+    if (dataSource === 'kappa-agreement' && !similarityMethodExplicit) {
+      setSimilarityMethod('kappa');
+    }
+  }, [dataSource, similarityMethodExplicit]);
 
   const data = activeUseLegacyQuery ? legacyData : scoredData;
   const fetching = activeUseLegacyQuery ? legacyFetching : scoredFetching;
@@ -326,6 +338,34 @@ export function ModelsGroups() {
     && !(selectedScope === 'DOMAIN' && selectedDomainId === '')
     && llmModelsData != null;
 
+  // Fire the agreement query here too so we can extract the kappa matrix for
+  // the similarity table. Urql will deduplicate/cache against the same query
+  // fired inside ModelAgreementSection.
+  const [{ data: agreementData }] = useModelAgreementOnTradeoffsQuery({
+    variables: {
+      modelIds: visibleModelIds,
+      domainId: selectedScope === 'DOMAIN' && selectedDomainId !== '' ? selectedDomainId : undefined,
+      scope: selectedScope,
+      signature: selectedSignature,
+    },
+    requestPolicy: 'cache-and-network',
+    pause: !showAgreementSection,
+  });
+
+  const pairwiseKappaMap = useMemo(() => {
+    const rows = agreementData?.modelAgreementOnTradeoffs?.pairwiseAgreementMatrix;
+    if (rows == null || rows.length === 0) return undefined;
+    const map = new Map<string, Map<string, number>>();
+    for (const row of rows) {
+      if (row.cohensKappa == null || row.totalCells === 0) continue;
+      if (!map.has(row.modelAId)) map.set(row.modelAId, new Map());
+      if (!map.has(row.modelBId)) map.set(row.modelBId, new Map());
+      map.get(row.modelAId)!.set(row.modelBId, row.cohensKappa);
+      map.get(row.modelBId)!.set(row.modelAId, row.cohensKappa);
+    }
+    return map.size === 0 ? undefined : map;
+  }, [agreementData]);
+
   if (pageErrorMessage != null) {
     return (
       <div className="space-y-6">
@@ -391,7 +431,10 @@ export function ModelsGroups() {
         dataSource={dataSource}
         onDataSourceChange={setDataSource}
         similarityMethod={similarityMethod}
-        onSimilarityMethodChange={setSimilarityMethod}
+        onSimilarityMethodChange={(method) => {
+          setSimilarityMethodExplicit(true);
+          setSimilarityMethod(method);
+        }}
       />
 
       {showPageLoader ? (
@@ -415,6 +458,7 @@ export function ModelsGroups() {
           <ModelSimilarityTableSection
             models={filteredModels}
             method={similarityMethod}
+            pairwiseKappa={pairwiseKappaMap}
           />
           {showAgreementSection ? (
             <ModelAgreementSection

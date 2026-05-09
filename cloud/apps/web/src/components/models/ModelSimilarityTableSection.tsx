@@ -11,6 +11,8 @@ import {
   formatViewValue,
   getCellIntensity,
   getHeatColor,
+  getKappaCellValue,
+  getKappaDivergingColor,
   getMethodCopy,
 } from './ModelSimilarityMetrics';
 import { PairDetailDrawer } from './ModelSimilarityPairDetailDrawer';
@@ -18,9 +20,10 @@ import { PairDetailDrawer } from './ModelSimilarityPairDetailDrawer';
 type ModelSimilarityTableSectionProps = {
   models: ModelEntry[];
   method?: CalculationMethod;
+  pairwiseKappa?: Map<string, Map<string, number>>;
 };
 
-export function ModelSimilarityTableSection({ models, method: methodProp }: ModelSimilarityTableSectionProps) {
+export function ModelSimilarityTableSection({ models, method: methodProp, pairwiseKappa }: ModelSimilarityTableSectionProps) {
   const tableRef = useRef<HTMLDivElement>(null);
   const [showHelp, setShowHelp] = useState(false);
   const method = methodProp ?? 'weighted-euclidean';
@@ -33,7 +36,7 @@ export function ModelSimilarityTableSection({ models, method: methodProp }: Mode
     for (const left of models) {
       const row = new Map<string, PairMetric | null>();
       for (const right of models) {
-        row.set(right.model, left.model === right.model ? null : computePairMetric(left, right, method));
+        row.set(right.model, left.model === right.model ? null : computePairMetric(left, right, method, pairwiseKappa));
       }
       rows.set(left.model, row);
     }
@@ -57,13 +60,18 @@ export function ModelSimilarityTableSection({ models, method: methodProp }: Mode
     const left = models.find((model) => model.model === activePair.left) ?? null;
     const right = models.find((model) => model.model === activePair.right) ?? null;
     if (left == null || right == null) return null;
-    return computePairMetric(left, right, method);
-  }, [activePair, method, models]);
+    return computePairMetric(left, right, method, pairwiseKappa);
+  }, [activePair, method, models, pairwiseKappa]);
 
   const methodCopy = getMethodCopy(method);
-  const helpCopy = view === 'distance'
-    ? 'Distance is the selected method flipped into a closer/farther view. For correlation-style methods, that distance is normalized to a 0-1 scale.'
-    : 'Similarity is the selected method shown on a closer-is-better scale.';
+  const isKappaMethod = method === 'kappa';
+  const helpCopy = isKappaMethod
+    ? view === 'distance'
+      ? 'Distance is 1 − kappa. Range: 0 (perfect agreement) to 2 (perfect anti-correlation).'
+      : "Similarity shows Cohen's kappa directly. Range: -1 (perfect anti-correlation) to +1 (perfect agreement)."
+    : view === 'distance'
+      ? 'Distance is the selected method flipped into a closer/farther view. For correlation-style methods, that distance is normalized to a 0-1 scale.'
+      : 'Similarity is the selected method shown on a closer-is-better scale.';
 
   if (models.length === 0) {
     return (
@@ -133,7 +141,7 @@ export function ModelSimilarityTableSection({ models, method: methodProp }: Mode
       <div ref={tableRef} className="rounded border border-gray-100 bg-white p-2">
         <div className="mb-2 flex items-center justify-between gap-2 text-xs text-gray-600">
           <span>{helpCopy}</span>
-          <span>{view === 'distance' ? 'Green = closer' : 'Green = more similar'}</span>
+          <span>{isKappaMethod ? 'Red = disagree · White = chance · Green = agree' : view === 'distance' ? 'Green = closer' : 'Green = more similar'}</span>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full border-collapse text-xs">
@@ -159,22 +167,36 @@ export function ModelSimilarityTableSection({ models, method: methodProp }: Mode
                     const isSelf = rowModel.model === colModel.model;
                     const isUnavailable = metric == null || metric.usedValueCount === 0;
                     const displayValue = formatViewValue(metric, view);
-                    const rawIntensity = getCellIntensity(metric);
-                    const { minSimilarity, maxSimilarity } = matrix;
-                    const intensity = maxSimilarity === minSimilarity
-                      ? rawIntensity
-                      : (rawIntensity - minSimilarity) / (maxSimilarity - minSimilarity);
+
+                    let cellBackground: string | undefined;
+                    if (!isSelf) {
+                      if (isKappaMethod) {
+                        const kappaVal = getKappaCellValue(metric);
+                        cellBackground = kappaVal != null ? getKappaDivergingColor(kappaVal) : undefined;
+                      } else {
+                        const rawIntensity = getCellIntensity(metric);
+                        const { minSimilarity, maxSimilarity } = matrix;
+                        const intensity = maxSimilarity === minSimilarity
+                          ? rawIntensity
+                          : (rawIntensity - minSimilarity) / (maxSimilarity - minSimilarity);
+                        cellBackground = getHeatColor(intensity);
+                      }
+                    }
+
+                    // Kappa cells don't open a detail drawer (no step-by-step data).
+                    const canOpenDetail = !isKappaMethod && !isUnavailable && !isSelf;
+
                     return (
                       <td
                         key={colModel.model}
                         className="px-1 py-1 text-right text-gray-800"
-                        style={{ background: isSelf ? undefined : getHeatColor(intensity) }}
+                        style={{ background: cellBackground }}
                       >
                         {isSelf ? (
                           <span className="block rounded-md px-2 py-2 text-center font-mono text-gray-400">—</span>
                         ) : isUnavailable ? (
                           <span className="block rounded-md px-2 py-2 text-center font-mono text-gray-400">—</span>
-                        ) : (
+                        ) : canOpenDetail ? (
                           <Button
                             type="button"
                             variant="ghost"
@@ -186,6 +208,8 @@ export function ModelSimilarityTableSection({ models, method: methodProp }: Mode
                             <span>{displayValue}</span>
                             <Info className="h-3.5 w-3.5 shrink-0 text-gray-600" />
                           </Button>
+                        ) : (
+                          <span className="block rounded-md px-2 py-2 text-right font-mono text-gray-900">{displayValue}</span>
                         )}
                       </td>
                     );

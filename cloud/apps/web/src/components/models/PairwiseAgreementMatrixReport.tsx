@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react';
 import { Button } from '../ui/Button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/Table';
 import { cn } from '../../lib/utils';
-import { ModelAgreementHeatmap } from './ModelAgreementHeatmap';
 import type { ModelAgreementOnTradeoffsQuery } from '../../generated/graphql';
 
 type PairwiseAgreementRow = ModelAgreementOnTradeoffsQuery['modelAgreementOnTradeoffs']['pairwiseAgreementMatrix'][number];
@@ -184,10 +183,6 @@ export function PairwiseAgreementMatrixReport({ rows, selectedPair, onPairSelect
 
   return (
     <div className="space-y-3">
-      <div className="overflow-x-auto">
-        <ModelAgreementHeatmap kappaMatrix={rows} />
-      </div>
-
       <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
         <Table variant="bordered" className="min-w-full">
           <TableHeader variant="bordered">
