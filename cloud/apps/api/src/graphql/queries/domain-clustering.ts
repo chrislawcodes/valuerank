@@ -626,18 +626,38 @@ export function deriveDendrogram(
 }
 
 /**
- * Derive leaf order from the merge tree by doing a depth-first left-to-right
- * traversal of the binary merge tree.
+ * Derive leaf order from the merge tree so the tightest-merging pair sits at
+ * the top. At every internal node, the subtree whose minimum merge height is
+ * smaller is placed first (top); the subtree with the larger minimum merge
+ * height is placed second (bottom). For leaf nodes (single models) the
+ * implicit merge height is 0. When two subtrees have the same minimum merge
+ * height, the tie is broken by alphabetical order of the subtree's first
+ * model ID in the original input order.
  */
 export function deriveLeafOrder(merges: DendrogramMerge[], allModelIds: string[]): string[] {
   if (merges.length === 0) return [...allModelIds];
 
-  // Build a lookup: set of model IDs → the merge that produced them
-  // We represent sets as sorted joined strings for lookup
+  // Build a lookup: sorted-joined model IDs → the merge that produced them
   const mergeByKey = new Map<string, DendrogramMerge>();
   for (const merge of merges) {
     const combined = [...merge.leftMemberIds, ...merge.rightMemberIds].sort().join('|');
     mergeByKey.set(combined, merge);
+  }
+
+  /**
+   * Return the minimum merge height anywhere in the subtree rooted at
+   * `memberIds`. For a leaf (single model) this is 0.
+   */
+  function subtreeMinHeight(memberIds: string[]): number {
+    if (memberIds.length === 1) return 0;
+    const key = [...memberIds].sort().join('|');
+    const merge = mergeByKey.get(key);
+    if (merge == null) return 0;
+    return Math.min(
+      merge.height,
+      subtreeMinHeight(merge.leftMemberIds),
+      subtreeMinHeight(merge.rightMemberIds),
+    );
   }
 
   function walkSubtree(memberIds: string[]): string[] {
@@ -645,7 +665,30 @@ export function deriveLeafOrder(merges: DendrogramMerge[], allModelIds: string[]
     const key = [...memberIds].sort().join('|');
     const merge = mergeByKey.get(key);
     if (merge == null) return memberIds; // fallback
-    return [...walkSubtree(merge.leftMemberIds), ...walkSubtree(merge.rightMemberIds)];
+
+    const leftMin = subtreeMinHeight(merge.leftMemberIds);
+    const rightMin = subtreeMinHeight(merge.rightMemberIds);
+
+    // Put the tighter subtree (smaller min height) first.
+    // Tiebreak: prefer whichever subtree's first model comes earlier in allModelIds.
+    let first = merge.leftMemberIds;
+    let second = merge.rightMemberIds;
+    if (rightMin < leftMin) {
+      first = merge.rightMemberIds;
+      second = merge.leftMemberIds;
+    } else if (rightMin === leftMin) {
+      // Alphabetical tiebreak on the first model ID in input order
+      const leftFirst = merge.leftMemberIds.find((id) => allModelIds.includes(id)) ?? merge.leftMemberIds[0]!;
+      const rightFirst = merge.rightMemberIds.find((id) => allModelIds.includes(id)) ?? merge.rightMemberIds[0]!;
+      const leftIdx = allModelIds.indexOf(leftFirst);
+      const rightIdx = allModelIds.indexOf(rightFirst);
+      if (rightIdx < leftIdx) {
+        first = merge.rightMemberIds;
+        second = merge.leftMemberIds;
+      }
+    }
+
+    return [...walkSubtree(first), ...walkSubtree(second)];
   }
 
   // The root merge is the last merge (merges are in ascending height order)

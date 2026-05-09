@@ -260,9 +260,6 @@ export function ModelsGroups() {
     return raw as Record<string, string>;
   }, [kappaClusterData]);
 
-  const kappaKappaPairs = useMemo(() => {
-    return kappaClusterData?.modelAgreementClusterAnalysis?.kappaPairs ?? null;
-  }, [kappaClusterData]);
   const transcriptCount = useMemo(
     () => countAnalyzedTranscripts(data?.domainAnalysis.models ?? [], visibleModelIds),
     [data?.domainAnalysis.models, visibleModelIds],
@@ -407,7 +404,6 @@ export function ModelsGroups() {
             kappaDendrogram={kappaDendrogram}
             kappaLeafOrder={kappaLeafOrder}
             kappaClusterIdByModelId={kappaClusterIdByModelId}
-            kappaKappaPairs={kappaKappaPairs}
             kappaClusterLoading={kappaClusterFetching}
             kappaClusterError={kappaClusterError?.message ?? null}
             dataSource={dataSource}
