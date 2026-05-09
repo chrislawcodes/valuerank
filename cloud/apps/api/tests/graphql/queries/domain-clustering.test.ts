@@ -604,11 +604,25 @@ describe('computeKappaClusterAnalysis — kappa-specific fields', () => {
     }
   });
 
-  it('kappaDistanceMatrix maps kappa 1 to distance 0 and kappa -1 to distance 1', () => {
-    const km: Array<Array<number | null>> = [[1, -1], [-1, 1]];
+  it('kappaDistanceMatrix maps kappa directly via 1 - kappa (range [0, 2])', () => {
+    const km: Array<Array<number | null>> = [
+      [1, -1, 0],
+      [-1, 1, null],
+      [0, null, 1],
+    ];
     const dist = kappaDistanceMatrix(km);
-    expect(dist[0]![1]).toBeCloseTo(1);
-    expect(dist[1]![0]).toBeCloseTo(1);
+    // kappa = 1 → distance = 0
     expect(dist[0]![0]).toBeCloseTo(0);
+    expect(dist[1]![1]).toBeCloseTo(0);
+    expect(dist[2]![2]).toBeCloseTo(0);
+    // kappa = -1 → distance = 2
+    expect(dist[0]![1]).toBeCloseTo(2);
+    expect(dist[1]![0]).toBeCloseTo(2);
+    // kappa = 0 → distance = 1
+    expect(dist[0]![2]).toBeCloseTo(1);
+    expect(dist[2]![0]).toBeCloseTo(1);
+    // null kappa → distance = 1 (treated as no signal)
+    expect(dist[1]![2]).toBeCloseTo(1);
+    expect(dist[2]![1]).toBeCloseTo(1);
   });
 });

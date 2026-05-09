@@ -657,14 +657,19 @@ export function deriveLeafOrder(merges: DendrogramMerge[], allModelIds: string[]
 /**
  * Build a hierarchical-clustering distance matrix from a kappa matrix.
  *
- * Maps Cohen's kappa from [-1, 1] to a distance in [0, 1]:
- *   kappa =  1   →  distance = 0    (perfect agreement, identical players)
- *   kappa =  0   →  distance = 0.5  (chance agreement, no signal)
- *   kappa = -1   →  distance = 1    (worse than chance, opposite players)
+ * Maps Cohen's kappa from [-1, 1] directly to a distance in [0, 2]:
+ *   kappa =  1   →  distance = 0   (perfect agreement, identical players)
+ *   kappa =  0   →  distance = 1   (chance agreement, no signal)
+ *   kappa = -1   →  distance = 2   (worse than chance, opposite players)
+ *
+ * Reading: distance = 1 - kappa, so subtracting any merge's distance from 1
+ * recovers the kappa value directly. Hierarchical clustering is scale-
+ * invariant for the merge structure, so keeping the un-normalized form
+ * doesn't change which clusters form — only the dendrogram axis labels.
  *
  * Null kappa entries (no overlap or degenerate marginals) are mapped to
- * 0.5 — the same as "no signal" — which avoids breaking the distance
- * matrix while not pretending we know more than we do.
+ * distance = 1 — the same as "no signal" (kappa = 0) — which avoids
+ * breaking the distance matrix while not pretending we know more than we do.
  */
 export function kappaDistanceMatrix(kappaMatrix: ReadonlyArray<ReadonlyArray<number | null>>): number[][] {
   const n = kappaMatrix.length;
@@ -672,7 +677,7 @@ export function kappaDistanceMatrix(kappaMatrix: ReadonlyArray<ReadonlyArray<num
   for (let i = 0; i < n; i++) {
     for (let j = i + 1; j < n; j++) {
       const k = kappaMatrix[i]?.[j];
-      const dist = k == null ? 0.5 : Math.max(0, Math.min(1, (1 - k) / 2));
+      const dist = k == null ? 1 : Math.max(0, Math.min(2, 1 - k));
       matrix[i]![j] = dist;
       matrix[j]![i] = dist;
     }
