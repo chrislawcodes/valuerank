@@ -33,7 +33,7 @@ import { ModelGroupsSection } from '../components/domains/ModelGroupsSection';
 import { ModelAnalysisSettingsBar } from '../components/models/ModelAnalysisSettingsBar';
 import { ModelSimilarityTableSection } from '../components/models/ModelSimilarityTableSection';
 import { ModelAgreementSection } from '../components/models/ModelAgreementSection';
-import { type CalculationMethod } from '../components/models/ModelSimilarityMetrics';
+import { type CalculationMethod, type PairwiseKappaEntry } from '../components/models/ModelSimilarityMetrics';
 import { useDomains } from '../hooks/useDomains';
 import { VALUES, type ModelEntry, type ValueKey } from '../data/domainAnalysisData';
 import { formatQueryError } from '../utils/urqlError';
@@ -355,13 +355,19 @@ export function ModelsGroups() {
   const pairwiseKappaMap = useMemo(() => {
     const rows = agreementData?.modelAgreementOnTradeoffs?.pairwiseAgreementMatrix;
     if (rows == null || rows.length === 0) return undefined;
-    const map = new Map<string, Map<string, number>>();
+    const map = new Map<string, Map<string, PairwiseKappaEntry>>();
     for (const row of rows) {
       if (row.cohensKappa == null || row.totalCells === 0) continue;
+      const entry: PairwiseKappaEntry = {
+        kappa: row.cohensKappa,
+        confidenceLow: row.cohensKappaConfidenceLow ?? null,
+        confidenceHigh: row.cohensKappaConfidenceHigh ?? null,
+        confidenceIsSymmetric: row.cohensKappaConfidenceIsSymmetric,
+      };
       if (!map.has(row.modelAId)) map.set(row.modelAId, new Map());
       if (!map.has(row.modelBId)) map.set(row.modelBId, new Map());
-      map.get(row.modelAId)!.set(row.modelBId, row.cohensKappa);
-      map.get(row.modelBId)!.set(row.modelAId, row.cohensKappa);
+      map.get(row.modelAId)!.set(row.modelBId, entry);
+      map.get(row.modelBId)!.set(row.modelAId, entry);
     }
     return map.size === 0 ? undefined : map;
   }, [agreementData]);

@@ -21,6 +21,9 @@ export type PairwiseAgreementRowShape = {
   cohensKappa: number | null;
   kappaInterpretation: string | null;
   meanAbsoluteDivergence: number | null;
+  cohensKappaConfidenceLow: number | null;
+  cohensKappaConfidenceHigh: number | null;
+  cohensKappaConfidenceIsSymmetric: boolean;
 };
 
 export type ModelTrialConsistencyShape = {
@@ -103,6 +106,9 @@ builder.objectType(PairwiseAgreementRowRef, {
     cohensKappa: t.exposeFloat('cohensKappa', { nullable: true }),
     kappaInterpretation: t.exposeString('kappaInterpretation', { nullable: true }),
     meanAbsoluteDivergence: t.exposeFloat('meanAbsoluteDivergence', { nullable: true }),
+    cohensKappaConfidenceLow: t.exposeFloat('cohensKappaConfidenceLow', { nullable: true }),
+    cohensKappaConfidenceHigh: t.exposeFloat('cohensKappaConfidenceHigh', { nullable: true }),
+    cohensKappaConfidenceIsSymmetric: t.exposeBoolean('cohensKappaConfidenceIsSymmetric'),
   }),
 });
 

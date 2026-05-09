@@ -7,6 +7,7 @@ import {
   type CalculationMethod,
   type MetricView,
   type PairMetric,
+  type PairwiseKappaEntry,
   computePairMetric,
   formatViewValue,
   getCellIntensity,
@@ -17,10 +18,18 @@ import {
 } from './ModelSimilarityMetrics';
 import { PairDetailDrawer } from './ModelSimilarityPairDetailDrawer';
 
+/** Wide-CI threshold matches the backend constant. */
+const KAPPA_CI_WIDE_THRESHOLD = 0.30;
+
+function isCIWide(low: number | null | undefined, high: number | null | undefined): boolean {
+  if (low == null || high == null) return false;
+  return (high - low) > KAPPA_CI_WIDE_THRESHOLD || low < 0;
+}
+
 type ModelSimilarityTableSectionProps = {
   models: ModelEntry[];
   method?: CalculationMethod;
-  pairwiseKappa?: Map<string, Map<string, number>>;
+  pairwiseKappa?: Map<string, Map<string, number | PairwiseKappaEntry>>;
 };
 
 export function ModelSimilarityTableSection({ models, method: methodProp, pairwiseKappa }: ModelSimilarityTableSectionProps) {
@@ -186,11 +195,34 @@ export function ModelSimilarityTableSection({ models, method: methodProp, pairwi
                     // Kappa cells don't open a detail drawer (no step-by-step data).
                     const canOpenDetail = !isKappaMethod && !isUnavailable && !isSelf;
 
+                    // CI rendering for kappa method.
+                    const ciLow = isKappaMethod ? metric?.confidenceLow : undefined;
+                    const ciHigh = isKappaMethod ? metric?.confidenceHigh : undefined;
+                    const ciIsSymmetric = isKappaMethod ? (metric?.confidenceIsSymmetric ?? true) : true;
+                    const ciIsWide = isKappaMethod && isCIWide(ciLow, ciHigh);
+                    const hasCi = ciLow != null && ciHigh != null;
+
+                    // Build the CI second line.
+                    let ciLine: string | null = null;
+                    if (isKappaMethod && hasCi && ciLow != null && ciHigh != null) {
+                      if (ciIsSymmetric) {
+                        const halfWidth = (ciHigh - ciLow) / 2;
+                        ciLine = `± ${halfWidth.toFixed(2)}`;
+                      } else {
+                        const lowStr = ciLow >= 0 ? `+${ciLow.toFixed(2)}` : ciLow.toFixed(2);
+                        const highStr = ciHigh >= 0 ? `+${ciHigh.toFixed(2)}` : ciHigh.toFixed(2);
+                        ciLine = `[${lowStr}, ${highStr}]`;
+                      }
+                    }
+
                     return (
                       <td
                         key={colModel.model}
                         className="px-1 py-1 text-right text-gray-800"
-                        style={{ background: cellBackground }}
+                        style={{
+                          background: cellBackground,
+                          ...(ciIsWide ? { outline: '1.5px dashed #f9a8d4', outlineOffset: '-1px' } : {}),
+                        }}
                       >
                         {isSelf ? (
                           <span className="block rounded-md px-2 py-2 text-center font-mono text-gray-400">—</span>
@@ -209,7 +241,21 @@ export function ModelSimilarityTableSection({ models, method: methodProp, pairwi
                             <Info className="h-3.5 w-3.5 shrink-0 text-gray-600" />
                           </Button>
                         ) : (
-                          <span className="block rounded-md px-2 py-2 text-right font-mono text-gray-900">{displayValue}</span>
+                          <span className="relative block rounded-md px-2 py-1 text-right font-mono text-gray-900">
+                            <span className="block">{displayValue}</span>
+                            {ciLine != null && (
+                              <span className="block text-[10px] leading-tight text-gray-500">{ciLine}</span>
+                            )}
+                            {ciIsWide && (
+                              <span
+                                className="absolute right-1 top-1 text-[9px] leading-none text-pink-500"
+                                aria-label="Wide confidence interval"
+                                title="Wide CI — insufficient data to constrain estimate"
+                              >
+                                ⚠
+                              </span>
+                            )}
+                          </span>
                         )}
                       </td>
                     );

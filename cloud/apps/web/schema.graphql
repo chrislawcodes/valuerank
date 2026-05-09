@@ -2146,6 +2146,9 @@ type PairDivergenceBreakdown {
 
 type PairwiseAgreementRow {
   cohensKappa: Float
+  cohensKappaConfidenceHigh: Float
+  cohensKappaConfidenceIsSymmetric: Boolean!
+  cohensKappaConfidenceLow: Float
   kappaInterpretation: String
   meanAbsoluteDivergence: Float
   modelAId: ID!
