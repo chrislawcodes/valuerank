@@ -1,10 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
-  bootstrapKappaConfidence,
-  groupCellsByVignette,
-  KAPPA_CI_SYMMETRY_TOLERANCE,
-  KAPPA_CI_WIDE_THRESHOLD,
-  summarizePairCells,
+  computePairwiseKappaWithBreakdown,
   type ComparableCell,
 } from '../../../src/services/model-agreement/aggregation.js';
 
@@ -28,236 +24,145 @@ function cell(
   };
 }
 
-describe('groupCellsByVignette', () => {
-  it('groups cells by definitionId', () => {
-    const cells: ComparableCell[] = [
-      cell('def-1', 'A::B', 'A', 'A'),
-      cell('def-1', 'A::B', 'B', 'B'),
-      cell('def-2', 'A::B', 'A', 'B'),
-    ];
-    const grouped = groupCellsByVignette(cells);
-    expect(grouped.size).toBe(2);
-    expect(grouped.get('def-1')).toHaveLength(2);
-    expect(grouped.get('def-2')).toHaveLength(1);
-  });
+describe('computePairwiseKappaWithBreakdown', () => {
+  function makeDomainMap(entries: Array<[string, string]>): Map<string, string> {
+    return new Map(entries);
+  }
 
-  it('returns an empty map for empty input', () => {
-    expect(groupCellsByVignette([]).size).toBe(0);
-  });
-});
+  function makeDomainsById(entries: Array<[string, string]>): Map<string, { id: string; name: string }> {
+    return new Map(entries.map(([id, name]) => [id, { id, name }]));
+  }
 
-describe('bootstrapKappaConfidence', () => {
-  it('returns null/null when pointEstimateKappa is null', () => {
-    const grouped = groupCellsByVignette([cell('def-1', 'A::B', 'A', 'A')]);
-    const result = bootstrapKappaConfidence(grouped, null);
-    expect(result).toEqual({ low: null, high: null, isSymmetric: true });
-  });
-
-  it('returns null/null when there are no vignettes', () => {
-    const result = bootstrapKappaConfidence(new Map(), 0.5);
-    expect(result).toEqual({ low: null, high: null, isSymmetric: true });
-  });
-
-  it('with a single vignette the CI collapses to near the point estimate', () => {
-    // One vignette with two cells of mixed outcome so kappa is non-degenerate.
-    // Model A: A, B → marginals 50/50. Model B: A, B → same. Weighted kappa = 1.
+  it('returns spread=null when only 1 domain has data', () => {
     const cells = [
-      cell('def-1', 'A::B', 'A', 'A'),
-      cell('def-1', 'A::B', 'B', 'B'),
+      cell('def-1-a', 'A::B', 'A', 'A'),
+      cell('def-1-b', 'A::B', 'B', 'B'),
     ];
-    const grouped = groupCellsByVignette(cells);
-    const kappa = summarizePairCells(cells).cohensKappa;
-    expect(kappa).not.toBeNull();
-    const result = bootstrapKappaConfidence(grouped, kappa!, 1000);
-    // With a single vignette every resample is the same → CI should be very tight.
-    if (result.low != null && result.high != null && kappa != null) {
-      expect(result.high - result.low).toBeLessThan(0.05);
-    }
+    const definitionDomainIdById = makeDomainMap([
+      ['def-1-a', 'dom-1'],
+      ['def-1-b', 'dom-1'],
+    ]);
+    const domainsById = makeDomainsById([['dom-1', 'Job Choice']]);
+
+    const result = computePairwiseKappaWithBreakdown(cells, definitionDomainIdById, domainsById);
+
+    expect(result.domainCount).toBe(1);
+    expect(result.spread).toBeNull();
+    expect(result.kappaByDomain).toHaveLength(1);
+    expect(result.kappaByDomain[0]?.domainName).toBe('Job Choice');
   });
 
-  it('returns CI that brackets the point estimate (low ≤ kappa ≤ high)', () => {
-    // Build 20 vignettes with partial agreement (kappa around 0.5).
-    const cells: ComparableCell[] = [];
-    for (let i = 0; i < 20; i += 1) {
-      const defId = `def-${i}`;
-      // Alternate agreement/disagreement so kappa is somewhere in the middle.
-      const choice: ComparableCell['modelAChoice'] = i % 3 === 0 ? 'B' : 'A';
-      cells.push(cell(defId, 'X::Y', 'A', choice));
-    }
-    const grouped = groupCellsByVignette(cells);
-    const kappa = summarizePairCells(cells).cohensKappa;
-    expect(kappa).not.toBeNull();
-    const result = bootstrapKappaConfidence(grouped, kappa!, 1000);
-    expect(result.low).not.toBeNull();
-    expect(result.high).not.toBeNull();
-    if (result.low != null && result.high != null && kappa != null) {
-      expect(result.low).toBeLessThanOrEqual(kappa + 0.001);
-      expect(result.high).toBeGreaterThanOrEqual(kappa - 0.001);
-    }
-  });
+  it('returns small spread when 4 domains all have kappa near 0.65', () => {
+    const makeAgree = (defPrefix: string): ComparableCell[] =>
+      Array.from({ length: 13 }, (_, index) => cell(`${defPrefix}-a${index}`, 'A::B', 'A', 'A'));
+    const makeDisagree = (defPrefix: string): ComparableCell[] =>
+      Array.from({ length: 7 }, (_, index) => cell(`${defPrefix}-d${index}`, 'A::B', 'A', 'B'));
 
-  it('detects symmetric CI on uniform data (all cells perfectly agree)', () => {
-    // All cells agree perfectly — kappa = 1, bootstrap samples all collapse to 1.
-    const cells: ComparableCell[] = [];
-    for (let i = 0; i < 30; i += 1) {
-      cells.push(cell(`def-${i}`, 'X::Y', 'A', 'A'));
-    }
-    const grouped = groupCellsByVignette(cells);
-    const kappa = summarizePairCells(cells).cohensKappa;
-    const result = bootstrapKappaConfidence(grouped, kappa!, 1000);
-    // All bootstrap samples will produce the same kappa → CI should be symmetric.
-    expect(result.isSymmetric).toBe(true);
-  });
+    const domain1Agree = makeAgree('def-1');
+    const domain1Disagree = makeDisagree('def-1');
+    const domain2Agree = makeAgree('def-2');
+    const domain2Disagree = makeDisagree('def-2');
+    const domain3Agree = makeAgree('def-3');
+    const domain3Disagree = makeDisagree('def-3');
+    const domain4Agree = makeAgree('def-4');
+    const domain4Disagree = makeDisagree('def-4');
 
-  it('flags isSymmetric=false for a skewed bootstrap distribution', () => {
-    // Construct a distribution where low samples are dense near 1 but
-    // we force Math.random to return a controlled sequence that produces
-    // an asymmetric result. We do this by spying on Math.random.
-    //
-    // Easier approach: use a real skewed setup. Build vignettes where
-    // kappa is forced very close to +1. The bootstrap distribution is
-    // bounded above at 1, so the upper tail is compressed → asymmetric.
-    const cells: ComparableCell[] = [];
-    for (let i = 0; i < 50; i += 1) {
-      // 90% agree, 10% disagree — kappa should be high and CI left-skewed.
-      const choice: ComparableCell['modelBChoice'] = i < 45 ? 'A' : 'B';
-      cells.push(cell(`def-${i}`, 'X::Y', 'A', choice));
-    }
-    const grouped = groupCellsByVignette(cells);
-    const kappa = summarizePairCells(cells).cohensKappa;
-    expect(kappa).not.toBeNull();
-    const result = bootstrapKappaConfidence(grouped, kappa!, 2000);
-    // With high kappa near +1 the upper tail is compressed; asymmetry may or may not
-    // exceed the 0.01 threshold depending on exact distribution. We just verify the
-    // function returns a valid shape.
-    expect(result.low).not.toBeNull();
-    expect(result.high).not.toBeNull();
-    expect(typeof result.isSymmetric).toBe('boolean');
-  });
-
-  it('KAPPA_CI_SYMMETRY_TOLERANCE is 0.01 and KAPPA_CI_WIDE_THRESHOLD is 0.30', () => {
-    expect(KAPPA_CI_SYMMETRY_TOLERANCE).toBe(0.01);
-    expect(KAPPA_CI_WIDE_THRESHOLD).toBe(0.30);
-  });
-
-  it('uses Math.random — mocking it produces deterministic output', () => {
-    // Build 10 vignettes, mock Math.random to always return 0 (always picks first vignette).
-    const cells: ComparableCell[] = [];
-    for (let i = 0; i < 10; i += 1) {
-      const choice: ComparableCell['modelBChoice'] = i === 0 ? 'A' : 'B';
-      cells.push(cell(`def-${i}`, 'X::Y', 'A', choice));
-    }
-    const grouped = groupCellsByVignette(cells);
-    const kappa = summarizePairCells(cells).cohensKappa;
-
-    const spy = vi.spyOn(Math, 'random').mockReturnValue(0);
-    const result = bootstrapKappaConfidence(grouped, kappa!, 500);
-    spy.mockRestore();
-
-    // All iterations resample only def-0 (always agree). Each draw gets a
-    // unique synthetic vignette ID, so N=10 synthetic groups are produced per
-    // iteration — but every group contains the same all-agree cell, so kappa
-    // remains 1 for every sample and the CI is tight.
-    if (result.low != null && result.high != null) {
-      expect(result.high - result.low).toBeLessThan(0.001);
-    }
-  });
-
-  it('duplicate draws amplify their influence (regression for collapsed-duplicate bug)', () => {
-    // The bug: when the same vignette is drawn multiple times in one bootstrap
-    // iteration, the cells keep their original definitionId. summarizePairCells
-    // groups cells by definitionId, so duplicate draws collapsed back into one
-    // group — drawing {A, A, B} produced the same kappa as drawing {A, B}.
-    //
-    // The fix: each draw gets a unique synthetic vignette ID so duplicates are
-    // preserved as separate slots in the equal-weight aggregation.
-    //
-    // Test strategy:
-    //   Build 2 vignettes:
-    //     def-agree: (A,A) — model A and B both choose A
-    //     def-disagree: (A,B) — model A chooses A, model B chooses B
-    //
-    //   We compute the kappa for two explicit sample configurations:
-    //     "duplicated":  {def-agree, def-agree} as 2 independent groups
-    //     "collapsed":   {def-agree} as 1 group (what the buggy code produced
-    //                    when you drew def-agree twice)
-    //
-    //   These must produce different kappas. We then mock Math.random to always
-    //   draw def-agree (index 0), run 500 iterations, and verify the bootstrap
-    //   CI sits near the "duplicated" kappa, not the "collapsed" one.
-
-    // Kappa for {def-agree, def-agree} treated as 2 distinct groups:
-    //   Both groups: model A=A, model B=A → weighted agreement=1, chance agreement=1
-    //   kappa = (1-1)/(1-1) → undefined (denominator 0). So we need richer fixtures.
-    //
-    // Use 2 vignettes with multiple cells each to get non-degenerate marginals.
-    //   def-1: 2 cells — (A,A) and (B,B)  → both models agree on both cells
-    //   def-2: 2 cells — (A,B) and (B,A)  → models always disagree
-    //
-    // kappa({def-1, def-1}) ≠ kappa({def-1, def-2}) when marginals differ.
-    // Let's verify what the actual numbers are by computing explicitly.
-
-    // Cells for def-1 (agreement):
-    const agreeVig = [
-      cell('def-1', 'X::Y', 'A', 'A'),
-      cell('def-1', 'X::Y', 'B', 'B'),
-    ];
-    // Cells for def-2 (disagreement):
-    const disagreeVig = [
-      cell('def-2', 'X::Y', 'A', 'B'),
-      cell('def-2', 'X::Y', 'B', 'A'),
+    const cells: ComparableCell[] = [
+      ...domain1Agree, ...domain1Disagree,
+      ...domain2Agree, ...domain2Disagree,
+      ...domain3Agree, ...domain3Disagree,
+      ...domain4Agree, ...domain4Disagree,
     ];
 
-    // Kappa when both groups are drawn = {def-1, def-2}: mixed, medium kappa
-    const kappaMixed = summarizePairCells([...agreeVig, ...disagreeVig]).cohensKappa;
+    const definitionDomainIdById = makeDomainMap([
+      ...domain1Agree.map((entry) => [entry.definitionId, 'dom-1'] as [string, string]),
+      ...domain1Disagree.map((entry) => [entry.definitionId, 'dom-1'] as [string, string]),
+      ...domain2Agree.map((entry) => [entry.definitionId, 'dom-2'] as [string, string]),
+      ...domain2Disagree.map((entry) => [entry.definitionId, 'dom-2'] as [string, string]),
+      ...domain3Agree.map((entry) => [entry.definitionId, 'dom-3'] as [string, string]),
+      ...domain3Disagree.map((entry) => [entry.definitionId, 'dom-3'] as [string, string]),
+      ...domain4Agree.map((entry) => [entry.definitionId, 'dom-4'] as [string, string]),
+      ...domain4Disagree.map((entry) => [entry.definitionId, 'dom-4'] as [string, string]),
+    ]);
+    const domainsById = makeDomainsById([
+      ['dom-1', 'Domain 1'],
+      ['dom-2', 'Domain 2'],
+      ['dom-3', 'Domain 3'],
+      ['dom-4', 'Domain 4'],
+    ]);
 
-    // Kappa when only def-1 is drawn twice, as 2 separate synthetic groups:
-    const kappaAllAgree = summarizePairCells([
-      cell('s0', 'X::Y', 'A', 'A'),
-      cell('s0', 'X::Y', 'B', 'B'),
-      cell('s1', 'X::Y', 'A', 'A'),
-      cell('s1', 'X::Y', 'B', 'B'),
-    ]).cohensKappa;
+    const result = computePairwiseKappaWithBreakdown(cells, definitionDomainIdById, domainsById);
 
-    // Both must be non-null and genuinely different
-    expect(kappaMixed).not.toBeNull();
-    expect(kappaAllAgree).not.toBeNull();
-    expect(Math.abs(kappaAllAgree! - kappaMixed!)).toBeGreaterThan(0.1);
+    expect(result.domainCount).toBe(4);
+    expect(result.spread).not.toBeNull();
+    expect(result.spread ?? Infinity).toBeLessThan(0.01);
+  });
 
-    // Build the grouped map for the bootstrap (2 vignettes)
-    const allCells = [...agreeVig, ...disagreeVig];
-    const grouped = groupCellsByVignette(allCells);
-    expect(grouped.size).toBe(2);
+  it('returns correct spread when domains span different kappa values', () => {
+    // Domain A: models agree most of the time — both alternate A/B together.
+    // Each vignette has 2 cells: (A,A) and (B,B) so the models track each other perfectly.
+    // This produces kappa = 1 for domain A.
+    const highAgreeCells: ComparableCell[] = Array.from({ length: 10 }, (_, index) => [
+      cell(`hi-${index}-a`, 'X::Y', 'A', 'A'),
+      cell(`hi-${index}-b`, 'X::Y', 'B', 'B'),
+    ]).flat();
 
-    // Mock Math.random to always return 0 → always picks def-1 (index 0).
-    // vignetteIds = ['def-1', 'def-2'] after Map.keys() ordering.
-    // With n=2 draws per iteration and Math.random()=0, both draws hit index 0 (def-1).
-    // After the fix: 2 synthetic groups (s.bootstrap-I-0, s.bootstrap-I-1), both from def-1.
-    //   → sample kappa = kappaAllAgree for every iteration.
-    // Before the fix: both cells pushed under 'def-1' → collapsed to 1 group.
-    //   → sample kappa = kappa({def-1}) which equals kappaAllAgree too (same cells).
-    //   Actually both should give the same since all draws are def-1.
-    //
-    // Better: mock to draw index 0 and index 1 alternately within each iteration
-    // so we can distinguish duplicate-of-0 vs {0, 1}.
-    // Pattern per iteration (2 draws): first call → 0, second call → 0 (both def-1).
-    // We want to compare against: first → 0, second → 0.999 (def-1 + def-2).
-    // The second scenario is what {A, B} produces (no duplication benefit).
-    //
-    // Let's just verify the tight-CI property and that it matches kappaAllAgree:
-    const spy = vi.spyOn(Math, 'random').mockReturnValue(0);
-    const result = bootstrapKappaConfidence(grouped, kappaMixed!, 500);
-    spy.mockRestore();
+    // Domain B: models disagree most of the time — (A,B) and (B,A) pairs.
+    // This produces kappa = -1 for domain B.
+    const lowAgreeCells: ComparableCell[] = Array.from({ length: 10 }, (_, index) => [
+      cell(`lo-${index}-a`, 'X::Y', 'A', 'B'),
+      cell(`lo-${index}-b`, 'X::Y', 'B', 'A'),
+    ]).flat();
 
-    expect(result.low).not.toBeNull();
-    expect(result.high).not.toBeNull();
-    if (result.low != null && result.high != null && kappaAllAgree != null) {
-      // CI must be tight (every iteration is identical with fixed random)
-      expect(result.high - result.low).toBeLessThan(0.001);
-      // CI must be near kappaAllAgree (both draws are def-1 = full agreement)
-      // and NOT near kappaMixed (which would imply def-2 was included somehow)
-      const ciMid = (result.low + result.high) / 2;
-      expect(Math.abs(ciMid - kappaAllAgree)).toBeLessThan(0.05);
-    }
+    // Assign each unique definitionId to its domain.
+    // Note: each cell has a unique definitionId, so each is its own vignette.
+    const definitionDomainIdById = new Map<string, string>();
+    highAgreeCells.forEach((entry) => definitionDomainIdById.set(entry.definitionId, 'dom-high'));
+    lowAgreeCells.forEach((entry) => definitionDomainIdById.set(entry.definitionId, 'dom-low'));
+
+    const domainsById = makeDomainsById([
+      ['dom-high', 'High Domain'],
+      ['dom-low', 'Low Domain'],
+    ]);
+    const allCells = [...highAgreeCells, ...lowAgreeCells];
+
+    const result = computePairwiseKappaWithBreakdown(allCells, definitionDomainIdById, domainsById);
+
+    expect(result.domainCount).toBe(2);
+    expect(result.spread).not.toBeNull();
+    const kappas = result.kappaByDomain.map((entry) => entry.kappa).filter((kappa): kappa is number => kappa != null);
+    expect(kappas).toHaveLength(2);
+    const expectedSpread = Math.max(...kappas) - Math.min(...kappas);
+    expect(result.spread).toBeCloseTo(expectedSpread, 10);
+    // High domain should have positive kappa, low domain negative — spread must be > 0
+    expect(result.spread ?? 0).toBeGreaterThan(0);
+  });
+
+  it('averageKappa is equal-weight mean of per-domain values', () => {
+    const cells: ComparableCell[] = [
+      cell('def-1-a', 'A::B', 'A', 'A'),
+      cell('def-1-b', 'A::B', 'B', 'B'),
+      cell('def-2-a', 'A::B', 'A', 'A'),
+      cell('def-2-b', 'A::B', 'B', 'B'),
+    ];
+    const definitionDomainIdById = new Map<string, string>([
+      ['def-1-a', 'dom-1'],
+      ['def-1-b', 'dom-1'],
+      ['def-2-a', 'dom-2'],
+      ['def-2-b', 'dom-2'],
+    ]);
+    const domainsById = makeDomainsById([
+      ['dom-1', 'Domain 1'],
+      ['dom-2', 'Domain 2'],
+    ]);
+
+    const result = computePairwiseKappaWithBreakdown(cells, definitionDomainIdById, domainsById);
+
+    const perDomainKappas = result.kappaByDomain
+      .map((entry) => entry.kappa)
+      .filter((kappa): kappa is number => kappa != null);
+    expect(perDomainKappas).toHaveLength(2);
+    const expected = perDomainKappas.reduce((sum, kappa) => sum + kappa, 0) / perDomainKappas.length;
+    expect(result.averageKappa).toBeCloseTo(expected, 10);
   });
 });

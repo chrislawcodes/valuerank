@@ -63,6 +63,20 @@ export type PairMetrics = {
   meanAbsoluteDivergence: number | null;
 };
 
+export type DomainKappaEntry = {
+  domainId: string;
+  domainName: string;
+  kappa: number | null;
+  cellCount: number;
+};
+
+export type PairwiseKappaBreakdown = {
+  averageKappa: number | null;
+  kappaByDomain: DomainKappaEntry[];
+  spread: number | null;
+  domainCount: number;
+};
+
 export function normalizeModelIds(modelIds: ReadonlyArray<string | number>): string[] {
   return [...new Set(modelIds.map((modelId) => String(modelId).trim()).filter((modelId) => modelId.length > 0))]
     .sort((left, right) => left.localeCompare(right));
@@ -363,6 +377,82 @@ export function summarizePairCells(cells: ReadonlyArray<ComparableCell>): PairMe
 }
 
 /**
+ * Computes Cohen's kappa independently for each domain that has cells for this
+ * model pair. Uses the same three-level equal-weight aggregation as
+ * summarizePairCells, but scoped to one domain at a time.
+ *
+ * @param cells - All comparable cells for the model pair (across all domains)
+ * @param definitionDomainIdById - Maps definitionId → domainId
+ * @param domainsById - Maps domainId → { id, name }
+ */
+export function computeKappaPerDomain(
+  cells: ReadonlyArray<ComparableCell>,
+  definitionDomainIdById: ReadonlyMap<string, string>,
+  domainsById: ReadonlyMap<string, { id: string; name: string }>,
+): DomainKappaEntry[] {
+  const cellsByDomain = new Map<string, ComparableCell[]>();
+  for (const cell of cells) {
+    const domainId = definitionDomainIdById.get(cell.definitionId);
+    if (domainId == null) {
+      continue;
+    }
+
+    const bucket = cellsByDomain.get(domainId) ?? [];
+    bucket.push(cell);
+    cellsByDomain.set(domainId, bucket);
+  }
+
+  const entries: DomainKappaEntry[] = [];
+  for (const [domainId, domainCells] of cellsByDomain.entries()) {
+    const domain = domainsById.get(domainId);
+    const metrics = summarizePairCells(domainCells);
+    entries.push({
+      domainId,
+      domainName: domain?.name ?? domainId,
+      kappa: metrics.cohensKappa,
+      cellCount: domainCells.length,
+    });
+  }
+
+  entries.sort((a, b) => a.domainName.localeCompare(b.domainName));
+  return entries;
+}
+
+/**
+ * Computes the per-domain kappa breakdown and derives headline statistics.
+ *
+ * averageKappa is the equal-weighted mean of per-domain kappa values (only
+ * domains with non-null kappa are included in the mean). This matches the
+ * existing summarizePairCells headline because summarizePairCells already
+ * weights domains equally via three-level aggregation.
+ *
+ * spread is max(kappa) - min(kappa) across domains. Null when fewer than 2
+ * domains have a non-null kappa.
+ */
+export function computePairwiseKappaWithBreakdown(
+  cells: ReadonlyArray<ComparableCell>,
+  definitionDomainIdById: ReadonlyMap<string, string>,
+  domainsById: ReadonlyMap<string, { id: string; name: string }>,
+): PairwiseKappaBreakdown {
+  const kappaByDomain = computeKappaPerDomain(cells, definitionDomainIdById, domainsById);
+  const domainCount = kappaByDomain.length;
+
+  const validKappas = kappaByDomain
+    .map((entry) => entry.kappa)
+    .filter((kappa): kappa is number => kappa != null && Number.isFinite(kappa));
+
+  const averageKappa = validKappas.length > 0
+    ? validKappas.reduce((sum, kappa) => sum + kappa, 0) / validKappas.length
+    : null;
+
+  const spread = validKappas.length >= 2
+    ? Math.max(...validKappas) - Math.min(...validKappas)
+    : null;
+
+  return { averageKappa, kappaByDomain, spread, domainCount };
+}
+
+/**
  * Trial consistency for a single model with three-level equal-weight
  * aggregation (cell → vignette → value-pair → headline). Each value pair
  * contributes equally to the headline regardless of how many vignettes
@@ -414,109 +504,10 @@ export function buildUnavailableModelInfo(model: ModelSummary): UnavailableModel
 }
 
 /**
- * Symmetry tolerance: if the upper-distance from the point estimate and the
- * lower-distance differ by at most this amount, the CI is considered symmetric.
- * Defined here so tests can import it.
+ * Wide-spread threshold: a per-domain kappa spread is considered "wide" when
+ * the max-minus-min range exceeds this value.
  */
-export const KAPPA_CI_SYMMETRY_TOLERANCE = 0.01;
-
-/**
- * Wide-CI threshold: a confidence interval is considered "wide" (data too thin
- * to constrain the estimate) when its width exceeds this value or when it
- * crosses zero (low < 0).
- */
-export const KAPPA_CI_WIDE_THRESHOLD = 0.30;
-
-export type KappaConfidenceInterval = {
-  /** 2.5th percentile of bootstrap distribution, or null if not computable. */
-  low: number | null;
-  /** 97.5th percentile of bootstrap distribution, or null if not computable. */
-  high: number | null;
-  /** True when |upper-distance - lower-distance| ≤ KAPPA_CI_SYMMETRY_TOLERANCE. */
-  isSymmetric: boolean;
-};
-
-/**
- * Groups a flat array of ComparableCell[] by definitionId (vignette).
- * The returned Map keys are vignette IDs; values are the cells that belong to
- * that vignette for this pair.
- */
-export function groupCellsByVignette(cells: ReadonlyArray<ComparableCell>): Map<string, ComparableCell[]> {
-  const map = new Map<string, ComparableCell[]>();
-  for (const cell of cells) {
-    const bucket = map.get(cell.definitionId) ?? [];
-    bucket.push(cell);
-    map.set(cell.definitionId, bucket);
-  }
-  return map;
-}
-
-/**
- * Bootstrap 95% confidence interval for Cohen's kappa by resampling whole
- * vignettes with replacement (1000 iterations by default).
- *
- * Resampling at the vignette level (not cell level) respects the clustering
- * structure — cells within a vignette share context and aren't independent.
- *
- * Returns { low: null, high: null, isSymmetric: true } when:
- *   - The point estimate is null (no data to resample).
- *   - There are no vignettes (empty input).
- *   - Fewer than 100 valid bootstrap samples were produced (degenerate case).
- */
-export function bootstrapKappaConfidence(
-  cellsByVignette: Map<string, ComparableCell[]>,
-  pointEstimateKappa: number | null,
-  iterations: number = 1000,
-): KappaConfidenceInterval {
-  if (pointEstimateKappa == null || cellsByVignette.size === 0) {
-    return { low: null, high: null, isSymmetric: true };
-  }
-
-  const vignetteIds = Array.from(cellsByVignette.keys());
-  const n = vignetteIds.length;
-  const kappaSamples: number[] = [];
-
-  for (let iter = 0; iter < iterations; iter += 1) {
-    // Resample vignettes WITH REPLACEMENT.
-    // Each draw gets a unique synthetic vignette ID so that duplicate draws
-    // (e.g. drawing vignette A twice) are not collapsed back into one group
-    // by summarizePairCells. Without this, drawing {A, A, B} produces the
-    // same kappa as drawing {A, B} because cells keep their original
-    // definitionId and the 3-level aggregation deduplicates them.
-    const resampledCells: ComparableCell[] = [];
-    for (let i = 0; i < n; i += 1) {
-      const idx = Math.floor(Math.random() * n);
-      const sourceVignetteId = vignetteIds[idx]!;
-      const syntheticVignetteId = `bootstrap-${iter}-${i}`;
-      const cellsForVignette = cellsByVignette.get(sourceVignetteId) ?? [];
-      for (const c of cellsForVignette) {
-        resampledCells.push({ ...c, definitionId: syntheticVignetteId });
-      }
-    }
-    const sampleKappa = summarizePairCells(resampledCells).cohensKappa;
-    if (sampleKappa != null && Number.isFinite(sampleKappa)) {
-      kappaSamples.push(sampleKappa);
-    }
-  }
-
-  // Too few valid samples to make a meaningful CI
-  if (kappaSamples.length < 100) {
-    return { low: null, high: null, isSymmetric: true };
-  }
-
-  kappaSamples.sort((a, b) => a - b);
-  const lowIdx = Math.floor(kappaSamples.length * 0.025);
-  const highIdx = Math.floor(kappaSamples.length * 0.975);
-  const low = kappaSamples[lowIdx]!;
-  const high = kappaSamples[highIdx]!;
-
-  // Symmetry check: upper-distance from point estimate vs lower-distance.
-  const upperDist = high - pointEstimateKappa;
-  const lowerDist = pointEstimateKappa - low;
-  const isSymmetric = Math.abs(upperDist - lowerDist) <= KAPPA_CI_SYMMETRY_TOLERANCE;
-
-  return { low, high, isSymmetric };
-}
+export const KAPPA_SPREAD_WIDE_THRESHOLD = 0.30;
 
 export function buildEmptyAgreementResult(
   pending = true,

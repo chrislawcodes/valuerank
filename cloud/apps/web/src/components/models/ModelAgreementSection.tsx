@@ -348,6 +348,15 @@ export function ModelAgreementSection({ modelIds, scope, domainId, signature }: 
                 <li><strong>0.8 to 1.0 — Near-perfect</strong>: the two models almost always make the same call</li>
               </ul>
             </div>
+            <div>
+              <p className="mb-1 font-semibold text-gray-800">Per-domain spread</p>
+              <p>
+                We test each value pair across multiple domains (for example, Job Choice and National Priorities).
+                Per-domain spread shows the difference between the highest and lowest per-domain kappa for a model
+                pair. A small spread (under 0.30) means the agreement is consistent across contexts. A larger spread
+                (flagged with ⚠) means the answer depends on which domain you&apos;re looking at.
+              </p>
+            </div>
             <p>
               Aggregation is equal-weighted at every level: each cell counts the same regardless of trial count, each
               vignette the same regardless of cell count, and each value pair the same regardless of vignette count.

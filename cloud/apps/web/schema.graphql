@@ -320,31 +320,14 @@ type CircumplexResult {
 }
 
 type ClusterAnalysis {
-  clusters: [DomainCluster!]!
   clusterIdByModelId: JSON
+  clusters: [DomainCluster!]!
   defaultPair: [String!]
   dendrogram: [DendrogramMerge!]
   faultLinesByPair: JSON!
   leafOrder: [String!]
   skipReason: String
   skipped: Boolean!
-}
-
-type DendrogramMerge {
-  height: Float!
-  leftMemberIds: [String!]!
-  rightMemberIds: [String!]!
-}
-
-type KappaClusterPayload {
-  clusterAnalysis: ClusterAnalysis!
-  kappaPairs: [KappaPair!]!
-}
-
-type KappaPair {
-  kappa: Float
-  modelAId: String!
-  modelBId: String!
 }
 
 type ClusterMember {
@@ -767,6 +750,12 @@ type DeleteTagResult {
   success: Boolean!
 }
 
+type DendrogramMerge {
+  height: Float!
+  leftMemberIds: [String!]!
+  rightMemberIds: [String!]!
+}
+
 """Result of deprecating a model"""
 type DeprecateModelResult {
   """The deprecated model"""
@@ -1142,6 +1131,13 @@ type DomainFindingsEligibility {
   summary: String!
 }
 
+type DomainKappaEntry {
+  cellCount: Int!
+  domainId: ID!
+  domainName: String!
+  kappa: Float
+}
+
 type DomainMutationResult {
   affectedDefinitions: Int!
   success: Boolean!
@@ -1469,6 +1465,17 @@ type JobTypeStatus {
 
   """Job type name (e.g., probe_scenario)"""
   type: String!
+}
+
+type KappaClusterPayload {
+  clusterAnalysis: ClusterAnalysis!
+  kappaPairs: [KappaPair!]!
+}
+
+type KappaPair {
+  kappa: Float
+  modelAId: String!
+  modelBId: String!
 }
 
 """
@@ -2146,10 +2153,10 @@ type PairDivergenceBreakdown {
 
 type PairwiseAgreementRow {
   cohensKappa: Float
-  cohensKappaConfidenceHigh: Float
-  cohensKappaConfidenceIsSymmetric: Boolean!
-  cohensKappaConfidenceLow: Float
+  domainCount: Int!
+  kappaByDomain: [DomainKappaEntry!]!
   kappaInterpretation: String
+  kappaSpread: Float
   meanAbsoluteDivergence: Float
   modelAId: ID!
   modelALabel: String!

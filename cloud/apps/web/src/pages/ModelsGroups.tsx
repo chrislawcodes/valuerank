@@ -360,9 +360,13 @@ export function ModelsGroups() {
       if (row.cohensKappa == null || row.totalCells === 0) continue;
       const entry: PairwiseKappaEntry = {
         kappa: row.cohensKappa,
-        confidenceLow: row.cohensKappaConfidenceLow ?? null,
-        confidenceHigh: row.cohensKappaConfidenceHigh ?? null,
-        confidenceIsSymmetric: row.cohensKappaConfidenceIsSymmetric,
+        kappaSpread: row.kappaSpread ?? null,
+        kappaByDomain: row.kappaByDomain?.map((domain) => ({
+          domainId: domain.domainId,
+          domainName: domain.domainName,
+          kappa: domain.kappa ?? null,
+          cellCount: domain.cellCount,
+        })) ?? [],
       };
       if (!map.has(row.modelAId)) map.set(row.modelAId, new Map());
       if (!map.has(row.modelBId)) map.set(row.modelBId, new Map());

@@ -38,20 +38,28 @@ export type PairMetric = {
   summaryLabel: string;
   summaryNote: string;
   summaryRows: Array<{ label: string; value: number | null }>;
-  confidenceLow?: number | null;
-  confidenceHigh?: number | null;
-  confidenceIsSymmetric?: boolean;
+  kappaSpread?: number | null;
+  kappaByDomain?: Array<{
+    domainId: string;
+    domainName: string;
+    kappa: number | null;
+    cellCount: number;
+  }>;
 };
 
 /**
- * Extended kappa entry that carries the point estimate plus bootstrap CI fields.
- * The Map passed to computePairMetric uses this shape when CI data is available.
+ * Extended kappa entry that carries the point estimate plus per-domain spread.
+ * The Map passed to computePairMetric uses this shape when breakdown data is available.
  */
 export type PairwiseKappaEntry = {
   kappa: number;
-  confidenceLow: number | null;
-  confidenceHigh: number | null;
-  confidenceIsSymmetric: boolean;
+  kappaSpread?: number | null;
+  kappaByDomain?: Array<{
+    domainId: string;
+    domainName: string;
+    kappa: number | null;
+    cellCount: number;
+  }>;
 };
 
 export const CALCULATION_METHODS: Array<{ value: CalculationMethod; label: string }> = [
@@ -287,7 +295,7 @@ export function computePairMetric(
       : typeof rawEntry === 'number' ? rawEntry
       : rawEntry.kappa;
 
-    const ciEntry: PairwiseKappaEntry | null =
+    const breakdownEntry: PairwiseKappaEntry | null =
       rawEntry != null && typeof rawEntry === 'object' ? rawEntry : null;
 
     if (kappaValue == null) {
@@ -324,9 +332,8 @@ export function computePairMetric(
         { label: "Cohen's kappa", value: clamped },
         { label: 'Distance (1 − kappa)', value: 1 - clamped },
       ],
-      confidenceLow: ciEntry?.confidenceLow ?? null,
-      confidenceHigh: ciEntry?.confidenceHigh ?? null,
-      confidenceIsSymmetric: ciEntry?.confidenceIsSymmetric ?? true,
+      kappaSpread: breakdownEntry?.kappaSpread ?? null,
+      kappaByDomain: breakdownEntry?.kappaByDomain ?? [],
     };
   }
 

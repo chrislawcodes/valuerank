@@ -11,10 +11,9 @@ type SelectedPair = {
   modelBId: string;
 };
 
-/** CI width threshold above which a row is flagged as wide/uncertain. */
-const KAPPA_CI_WIDE_THRESHOLD = 0.30;
+const KAPPA_SPREAD_WIDE_THRESHOLD = 0.30;
 
-type SortKey = 'modelA' | 'modelB' | 'cells' | 'kappa' | 'ci' | 'interpretation' | 'agreement' | 'divergence';
+type SortKey = 'modelA' | 'modelB' | 'cells' | 'kappa' | 'spread' | 'domains' | 'interpretation' | 'agreement' | 'divergence';
 type SortDirection = 'asc' | 'desc';
 
 type SortState = {
@@ -35,15 +34,14 @@ function formatKappa(value: number | null): string {
   return `${sign}${value.toFixed(2)}`;
 }
 
-function formatCIBound(value: number | null): string {
-  if (value == null || !Number.isFinite(value)) return '—';
-  const sign = value >= 0 ? '+' : '';
-  return `${sign}${value.toFixed(2)}`;
+function isSpreadWide(spread: number | null | undefined): boolean {
+  if (spread == null) return false;
+  return spread > KAPPA_SPREAD_WIDE_THRESHOLD;
 }
 
-function isCIWide(low: number | null | undefined, high: number | null | undefined): boolean {
-  if (low == null || high == null) return false;
-  return (high - low) > KAPPA_CI_WIDE_THRESHOLD || low < 0;
+function formatSpread(spread: number | null | undefined): string {
+  if (spread == null || !Number.isFinite(spread)) return '—';
+  return spread.toFixed(2);
 }
 
 function formatPercent(value: number | null): string {
@@ -84,15 +82,10 @@ function sortRows(rows: PairwiseAgreementRow[], sort: SortState): PairwiseAgreem
             ? compareNullableNumbers(left.totalCells, right.totalCells, direction)
             : sort.key === 'kappa'
               ? compareNullableNumbers(left.cohensKappa ?? null, right.cohensKappa ?? null, direction)
-              : sort.key === 'ci'
-                ? (() => {
-                  // Sort by CI lower bound first, then upper bound.
-                  const lLow = left.cohensKappaConfidenceLow ?? null;
-                  const rLow = right.cohensKappaConfidenceLow ?? null;
-                  const lowDelta = compareNullableNumbers(lLow, rLow, direction);
-                  if (lowDelta !== 0) return lowDelta;
-                  return compareNullableNumbers(left.cohensKappaConfidenceHigh ?? null, right.cohensKappaConfidenceHigh ?? null, direction);
-                })()
+              : sort.key === 'spread'
+                ? compareNullableNumbers(left.kappaSpread ?? null, right.kappaSpread ?? null, direction)
+                : sort.key === 'domains'
+                  ? compareNullableNumbers(left.domainCount, right.domainCount, direction)
                 : sort.key === 'interpretation'
                   ? compareNullableStrings(left.kappaInterpretation ?? null, right.kappaInterpretation ?? null, direction)
                   : sort.key === 'agreement'
@@ -214,7 +207,8 @@ export function PairwiseAgreementMatrixReport({ rows, selectedPair, onPairSelect
               <SortableHeader label="Model B" sortKey="modelB" sortState={sort} onSort={(key) => setSort((current) => getNextSort(current, key))} />
               <SortableHeader label="Cells" sortKey="cells" sortState={sort} onSort={(key) => setSort((current) => getNextSort(current, key))} align="right" />
               <SortableHeader label="Kappa" sortKey="kappa" sortState={sort} onSort={(key) => setSort((current) => getNextSort(current, key))} align="right" />
-              <SortableHeader label="95% CI" sortKey="ci" sortState={sort} onSort={(key) => setSort((current) => getNextSort(current, key))} align="right" />
+              <SortableHeader label="Per-domain spread" sortKey="spread" sortState={sort} onSort={(key) => setSort((current) => getNextSort(current, key))} align="right" />
+              <SortableHeader label="Domains" sortKey="domains" sortState={sort} onSort={(key) => setSort((current) => getNextSort(current, key))} align="right" />
               <SortableHeader label="Interpretation" sortKey="interpretation" sortState={sort} onSort={(key) => setSort((current) => getNextSort(current, key))} />
               <SortableHeader label="% Agreement" sortKey="agreement" sortState={sort} onSort={(key) => setSort((current) => getNextSort(current, key))} align="right" />
               <SortableHeader label="Mean Abs Divergence" sortKey="divergence" sortState={sort} onSort={(key) => setSort((current) => getNextSort(current, key))} align="right" />
@@ -242,21 +236,22 @@ export function PairwiseAgreementMatrixReport({ rows, selectedPair, onPairSelect
                     align="right"
                     className={cn(
                       'font-mono tabular-nums text-gray-800',
-                      isCIWide(row.cohensKappaConfidenceLow, row.cohensKappaConfidenceHigh) && 'bg-pink-50',
+                      isSpreadWide(row.kappaSpread) && 'bg-pink-50',
                     )}
                   >
-                    {row.cohensKappaConfidenceLow == null || row.cohensKappaConfidenceHigh == null ? (
+                    {row.domainCount < 2 ? (
                       <span className="text-gray-400">—</span>
                     ) : (
                       <span className="inline-flex items-center gap-1">
-                        <span>
-                          [{formatCIBound(row.cohensKappaConfidenceLow)}, {formatCIBound(row.cohensKappaConfidenceHigh)}]
-                        </span>
-                        {isCIWide(row.cohensKappaConfidenceLow, row.cohensKappaConfidenceHigh) && (
-                          <span aria-label="Wide confidence interval" title="Wide CI — insufficient data to constrain estimate">⚠</span>
+                        <span>{formatSpread(row.kappaSpread)}</span>
+                        {isSpreadWide(row.kappaSpread) && (
+                          <span aria-label="Wide per-domain spread" title="Wide spread — kappa varies significantly by domain">⚠</span>
                         )}
                       </span>
                     )}
+                  </TableCell>
+                  <TableCell align="right" className="font-mono tabular-nums text-gray-800">
+                    {row.domainCount}
                   </TableCell>
                   <TableCell className="text-gray-700">
                     {row.totalCells === 0 ? 'no overlap' : row.kappaInterpretation ?? '—'}

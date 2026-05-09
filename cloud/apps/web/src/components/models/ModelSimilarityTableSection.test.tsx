@@ -23,7 +23,7 @@ describe('ModelSimilarityTableSection', () => {
   it('renders kappa values when method is kappa and pairwiseKappa map is provided', () => {
     const modelA = makeModel('model-a', 'Model A', [100, 90, 80, 70, 60, 50, 40, 30, 20, 10]);
     const modelB = makeModel('model-b', 'Model B', [90, 80, 70, 60, 50, 40, 30, 20, 10, 0]);
-    const entry: PairwiseKappaEntry = { kappa: 0.75, confidenceLow: 0.60, confidenceHigh: 0.90, confidenceIsSymmetric: false };
+    const entry: PairwiseKappaEntry = { kappa: 0.75, kappaSpread: 0.30, kappaByDomain: [] };
     const pairwiseKappa = new Map([
       ['model-a', new Map([['model-b', entry]])],
       ['model-b', new Map([['model-a', entry]])],
@@ -46,7 +46,7 @@ describe('ModelSimilarityTableSection', () => {
     const modelA = makeModel('model-a', 'Model A', [100, 90, 80, 70, 60, 50, 40, 30, 20, 10]);
     const modelB = makeModel('model-b', 'Model B', [90, 80, 70, 60, 50, 40, 30, 20, 10, 0]);
     // kappa = 0.70 → distance = 0.30, similarity = 0.70
-    const entry070: PairwiseKappaEntry = { kappa: 0.70, confidenceLow: null, confidenceHigh: null, confidenceIsSymmetric: true };
+    const entry070: PairwiseKappaEntry = { kappa: 0.70, kappaSpread: null, kappaByDomain: [] };
     const pairwiseKappa = new Map([
       ['model-a', new Map([['model-b', entry070]])],
       ['model-b', new Map([['model-a', entry070]])],
@@ -142,11 +142,14 @@ describe('ModelSimilarityTableSection', () => {
     expect(drawerTable.getAllByText('10.00').length).toBeGreaterThan(0);
   });
 
-  it('renders symmetric CI as ± format for kappa method', () => {
+  it('renders 1-domain note for kappa method when only one domain is present', () => {
     const modelA = makeModel('model-a', 'Model A', [100, 90, 80, 70, 60, 50, 40, 30, 20, 10]);
     const modelB = makeModel('model-b', 'Model B', [90, 80, 70, 60, 50, 40, 30, 20, 10, 0]);
-    // kappa = 0.60, CI = [0.45, 0.75] → symmetric (width 0.30, half = 0.15)
-    const entry: PairwiseKappaEntry = { kappa: 0.60, confidenceLow: 0.45, confidenceHigh: 0.75, confidenceIsSymmetric: true };
+    const entry: PairwiseKappaEntry = {
+      kappa: 0.60,
+      kappaSpread: null,
+      kappaByDomain: [{ domainId: 'dom-1', domainName: 'Domain 1', kappa: 0.60, cellCount: 12 }],
+    };
     const pairwiseKappa = new Map([
       ['model-a', new Map([['model-b', entry]])],
       ['model-b', new Map([['model-a', entry]])],
@@ -160,16 +163,21 @@ describe('ModelSimilarityTableSection', () => {
       />,
     );
 
-    // Symmetric CI: half-width = (0.75 - 0.45) / 2 = 0.15 → "± 0.15"
-    const ciElements = screen.getAllByText(/±\s*0\.15/);
-    expect(ciElements.length).toBeGreaterThan(0);
+    const domainElements = screen.getAllByText('(1 domain)');
+    expect(domainElements.length).toBeGreaterThan(0);
   });
 
-  it('renders asymmetric CI as bracket format for kappa method', () => {
+  it('renders spread line for kappa method when multiple domains are present', () => {
     const modelA = makeModel('model-a', 'Model A', [100, 90, 80, 70, 60, 50, 40, 30, 20, 10]);
     const modelB = makeModel('model-b', 'Model B', [90, 80, 70, 60, 50, 40, 30, 20, 10, 0]);
-    // asymmetric CI
-    const entry: PairwiseKappaEntry = { kappa: 0.65, confidenceLow: 0.40, confidenceHigh: 0.80, confidenceIsSymmetric: false };
+    const entry: PairwiseKappaEntry = {
+      kappa: 0.65,
+      kappaSpread: 0.22,
+      kappaByDomain: [
+        { domainId: 'dom-1', domainName: 'Domain 1', kappa: 0.54, cellCount: 10 },
+        { domainId: 'dom-2', domainName: 'Domain 2', kappa: 0.76, cellCount: 10 },
+      ],
+    };
     const pairwiseKappa = new Map([
       ['model-a', new Map([['model-b', entry]])],
       ['model-b', new Map([['model-a', entry]])],
@@ -183,16 +191,21 @@ describe('ModelSimilarityTableSection', () => {
       />,
     );
 
-    // Asymmetric: should show [+0.40, +0.80]
-    const ciElements = screen.getAllByText(/\[.*0\.40.*0\.80.*\]/);
-    expect(ciElements.length).toBeGreaterThan(0);
+    const spreadElements = screen.getAllByText('(spread 0.22)');
+    expect(spreadElements.length).toBeGreaterThan(0);
   });
 
-  it('shows wide-CI warning for kappa cells with wide CI', () => {
+  it('shows wide-spread warning for kappa cells with wide spread', () => {
     const modelA = makeModel('model-a', 'Model A', [100, 90, 80, 70, 60, 50, 40, 30, 20, 10]);
     const modelB = makeModel('model-b', 'Model B', [90, 80, 70, 60, 50, 40, 30, 20, 10, 0]);
-    // wide CI: width = 0.80 > 0.30
-    const entry: PairwiseKappaEntry = { kappa: 0.50, confidenceLow: 0.10, confidenceHigh: 0.90, confidenceIsSymmetric: false };
+    const entry: PairwiseKappaEntry = {
+      kappa: 0.50,
+      kappaSpread: 0.80,
+      kappaByDomain: [
+        { domainId: 'dom-1', domainName: 'Domain 1', kappa: 0.10, cellCount: 10 },
+        { domainId: 'dom-2', domainName: 'Domain 2', kappa: 0.90, cellCount: 10 },
+      ],
+    };
     const pairwiseKappa = new Map([
       ['model-a', new Map([['model-b', entry]])],
       ['model-b', new Map([['model-a', entry]])],
@@ -206,7 +219,7 @@ describe('ModelSimilarityTableSection', () => {
       />,
     );
 
-    const warnings = screen.getAllByTitle('Wide CI — insufficient data to constrain estimate');
+    const warnings = screen.getAllByTitle('Kappa varies significantly by domain');
     expect(warnings.length).toBeGreaterThan(0);
   });
 });

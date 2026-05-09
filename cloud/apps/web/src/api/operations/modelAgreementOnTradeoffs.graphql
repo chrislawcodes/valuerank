@@ -38,9 +38,14 @@ query ModelAgreementOnTradeoffs(
       cohensKappa
       kappaInterpretation
       meanAbsoluteDivergence
-      cohensKappaConfidenceLow
-      cohensKappaConfidenceHigh
-      cohensKappaConfidenceIsSymmetric
+      kappaByDomain {
+        domainId
+        domainName
+        kappa
+        cellCount
+      }
+      kappaSpread
+      domainCount
     }
     trialConsistency {
       modelId

@@ -18,12 +18,11 @@ import {
 } from './ModelSimilarityMetrics';
 import { PairDetailDrawer } from './ModelSimilarityPairDetailDrawer';
 
-/** Wide-CI threshold matches the backend constant. */
-const KAPPA_CI_WIDE_THRESHOLD = 0.30;
+const KAPPA_SPREAD_WIDE_THRESHOLD = 0.30;
 
-function isCIWide(low: number | null | undefined, high: number | null | undefined): boolean {
-  if (low == null || high == null) return false;
-  return (high - low) > KAPPA_CI_WIDE_THRESHOLD || low < 0;
+function isSpreadWide(spread: number | null | undefined): boolean {
+  if (spread == null) return false;
+  return spread > KAPPA_SPREAD_WIDE_THRESHOLD;
 }
 
 type ModelSimilarityTableSectionProps = {
@@ -63,7 +62,7 @@ export function ModelSimilarityTableSection({ models, method: methodProp, pairwi
     const maxSimilarity = similarities.length > 0 ? Math.max(...similarities) : 1;
 
     return { rows, minSimilarity, maxSimilarity };
-  }, [models, method]);
+  }, [models, method, pairwiseKappa]);
   const activeMetric = useMemo(() => {
     if (activePair == null) return null;
     const left = models.find((model) => model.model === activePair.left) ?? null;
@@ -195,23 +194,18 @@ export function ModelSimilarityTableSection({ models, method: methodProp, pairwi
                     // Kappa cells don't open a detail drawer (no step-by-step data).
                     const canOpenDetail = !isKappaMethod && !isUnavailable && !isSelf;
 
-                    // CI rendering for kappa method.
-                    const ciLow = isKappaMethod ? metric?.confidenceLow : undefined;
-                    const ciHigh = isKappaMethod ? metric?.confidenceHigh : undefined;
-                    const ciIsSymmetric = isKappaMethod ? (metric?.confidenceIsSymmetric ?? true) : true;
-                    const ciIsWide = isKappaMethod && isCIWide(ciLow, ciHigh);
-                    const hasCi = ciLow != null && ciHigh != null;
+                    const kappaSpread = isKappaMethod ? metric?.kappaSpread : undefined;
+                    const domainCount = isKappaMethod
+                      ? (metric?.kappaByDomain != null ? metric.kappaByDomain.length : null)
+                      : null;
+                    const spreadIsWide = isKappaMethod && isSpreadWide(kappaSpread);
 
-                    // Build the CI second line.
-                    let ciLine: string | null = null;
-                    if (isKappaMethod && hasCi && ciLow != null && ciHigh != null) {
-                      if (ciIsSymmetric) {
-                        const halfWidth = (ciHigh - ciLow) / 2;
-                        ciLine = `± ${halfWidth.toFixed(2)}`;
-                      } else {
-                        const lowStr = ciLow >= 0 ? `+${ciLow.toFixed(2)}` : ciLow.toFixed(2);
-                        const highStr = ciHigh >= 0 ? `+${ciHigh.toFixed(2)}` : ciHigh.toFixed(2);
-                        ciLine = `[${lowStr}, ${highStr}]`;
+                    let spreadLine: string | null = null;
+                    if (isKappaMethod && domainCount != null) {
+                      if (domainCount >= 2 && kappaSpread != null && Number.isFinite(kappaSpread)) {
+                        spreadLine = `(spread ${kappaSpread.toFixed(2)})`;
+                      } else if (domainCount === 1) {
+                        spreadLine = '(1 domain)';
                       }
                     }
 
@@ -221,7 +215,7 @@ export function ModelSimilarityTableSection({ models, method: methodProp, pairwi
                         className="px-1 py-1 text-right text-gray-800"
                         style={{
                           background: cellBackground,
-                          ...(ciIsWide ? { outline: '1.5px dashed #f9a8d4', outlineOffset: '-1px' } : {}),
+                          ...(spreadIsWide ? { outline: '1.5px dashed #f9a8d4', outlineOffset: '-1px' } : {}),
                         }}
                       >
                         {isSelf ? (
@@ -243,14 +237,14 @@ export function ModelSimilarityTableSection({ models, method: methodProp, pairwi
                         ) : (
                           <span className="relative block rounded-md px-2 py-1 text-right font-mono text-gray-900">
                             <span className="block">{displayValue}</span>
-                            {ciLine != null && (
-                              <span className="block text-[10px] leading-tight text-gray-500">{ciLine}</span>
+                            {spreadLine != null && (
+                              <span className="block text-[10px] leading-tight text-gray-500">{spreadLine}</span>
                             )}
-                            {ciIsWide && (
+                            {spreadIsWide && (
                               <span
                                 className="absolute right-1 top-1 text-[9px] leading-none text-pink-500"
-                                aria-label="Wide confidence interval"
-                                title="Wide CI — insufficient data to constrain estimate"
+                                aria-label="Wide per-domain spread"
+                                title="Kappa varies significantly by domain"
                               >
                                 ⚠
                               </span>

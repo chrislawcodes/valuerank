@@ -11,15 +11,14 @@ import {
   type ValuePairDivergenceShape,
 } from '../types/model-agreement-on-tradeoffs.js';
 import {
-  bootstrapKappaConfidence,
   buildEmptyAgreementResult,
   buildEmptyPairBreakdown,
   buildPositionCells,
   buildSelectedModels,
   buildUnavailableModelInfo,
   collectComparableCells,
+  computePairwiseKappaWithBreakdown,
   computeProportionA,
-  groupCellsByVignette,
   normalizeModelIds,
   summarizePairCells,
   summarizeTrialConsistency,
@@ -44,8 +43,6 @@ const ALL_DOMAINS_SCOPE_ID = 'all-domains';
 const AGREEMENT_REFRESH_REASON = 'model-agreement-on-tradeoffs-page-load-missing';
 const DRILLDOWN_REFRESH_REASON = 'model-pair-divergence-breakdown-missing';
 const NON_BINARY_CELL_FALLBACK_COUNT = 0;
-const KAPPA_BOOTSTRAP_ITERATIONS = 1000;
-
 
 async function resolveAgreementScope(params: {
   scope: DomainAnalysisScope;
@@ -157,11 +154,14 @@ export async function resolveModelAgreementOnTradeoffs(
   const selectedModels = buildSelectedModels(selectedModelIds, labelByModelId);
   const selectedModelIdSet = new Set(selectedModels.map((model) => model.modelId));
 
-  await resolveAgreementScope({
+  const { scopeData } = await resolveAgreementScope({
     scope,
     domainId,
     signature,
   });
+  const domainsById = new Map(
+    scopeData.domains.map((domain) => [domain.id, { id: domain.id, name: domain.name }] as const),
+  );
 
   const snapshotResult = await readAgreementSnapshot({
     scope,
@@ -194,8 +194,11 @@ export async function resolveModelAgreementOnTradeoffs(
       });
       tiedCells += pairTiedCells;
       const metrics = summarizePairCells(cells);
-      const cellsByVignette = groupCellsByVignette(cells);
-      const ci = bootstrapKappaConfidence(cellsByVignette, metrics.cohensKappa, KAPPA_BOOTSTRAP_ITERATIONS);
+      const breakdown = computePairwiseKappaWithBreakdown(
+        cells,
+        scopeData.definitionDomainIdById,
+        domainsById,
+      );
 
       pairwiseAgreementMatrix.push({
         modelAId: modelA.modelId,
@@ -207,9 +210,9 @@ export async function resolveModelAgreementOnTradeoffs(
         cohensKappa: metrics.cohensKappa,
         kappaInterpretation: metrics.kappaInterpretation,
         meanAbsoluteDivergence: metrics.meanAbsoluteDivergence,
-        cohensKappaConfidenceLow: ci.low,
-        cohensKappaConfidenceHigh: ci.high,
-        cohensKappaConfidenceIsSymmetric: ci.isSymmetric,
+        kappaByDomain: breakdown.kappaByDomain,
+        kappaSpread: breakdown.spread,
+        domainCount: breakdown.domainCount,
       });
     }
   }

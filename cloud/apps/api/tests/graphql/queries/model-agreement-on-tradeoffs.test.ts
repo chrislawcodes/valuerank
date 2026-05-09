@@ -184,9 +184,14 @@ const agreementQuery = `
         cohensKappa
         kappaInterpretation
         meanAbsoluteDivergence
-        cohensKappaConfidenceLow
-        cohensKappaConfidenceHigh
-        cohensKappaConfidenceIsSymmetric
+        kappaByDomain {
+          domainId
+          domainName
+          kappa
+          cellCount
+        }
+        kappaSpread
+        domainCount
       }
       trialConsistency {
         modelId
@@ -664,28 +669,18 @@ describe('model-agreement-on-tradeoffs GraphQL queries', () => {
     expect(agreement.tiedCells).toBe(1);
   });
 
-  it('populates cohensKappaConfidenceLow/High that bracket the point estimate', async () => {
-    // Build enough vignettes that bootstrap produces a real CI (>= 100 valid samples).
-    // 20 vignettes: model-a always picks canonicalA, model-b alternates A/B.
-    const cellLevelOutcomes: Record<string, CellOutcome> = {};
-    for (let i = 1; i <= 20; i += 1) {
-      cellLevelOutcomes[`def-${i}::model-a::Achievement::Tradition::1::2`] = { aChoices: 6, bChoices: 0, neutrals: 0 };
-      // model-b alternates: even → A, odd → B
-      const bA = i % 2 === 0 ? 6 : 0;
-      const bB = i % 2 === 0 ? 0 : 6;
-      cellLevelOutcomes[`def-${i}::model-b::Achievement::Tradition::1::2`] = { aChoices: bA, bChoices: bB, neutrals: 0 };
-    }
-
-    // Also register def-1 through def-20 in the scope data (latestDefinitionIds).
-    const extendedScopeData = {
-      ...scopeData(),
-      latestDefinitionIds: Array.from({ length: 20 }, (_, i) => `def-${i + 1}`),
-    };
-    mocks.resolveDomainAnalysisScopeDefinitions.mockResolvedValue(extendedScopeData);
+  it('populates kappaByDomain, kappaSpread, and domainCount from scope data', async () => {
+    // def-1 and def-2 both belong to 'domain-1' in the default scopeData mock.
+    // With a single domain in scope, domainCount=1 and kappaSpread=null.
     mocks.readModelAgreementSnapshotStateFromSnapshot.mockResolvedValue({
-      cellLevelOutcomes: snapshot(cellLevelOutcomes),
+      cellLevelOutcomes: snapshot({
+        'def-1::model-a::Achievement::Tradition::1::2': { aChoices: 6, bChoices: 0, neutrals: 0 },
+        'def-1::model-b::Achievement::Tradition::1::2': { aChoices: 6, bChoices: 0, neutrals: 0 },
+        'def-2::model-a::Achievement::Tradition::1::2': { aChoices: 6, bChoices: 0, neutrals: 0 },
+        'def-2::model-b::Achievement::Tradition::1::2': { aChoices: 6, bChoices: 0, neutrals: 0 },
+      }),
       buildProgress: null,
-      inputHash: 'hash-ci-test',
+      inputHash: 'hash-domain-breakdown',
     });
 
     const response = await graphqlRequest(agreementQuery, {
@@ -697,24 +692,23 @@ describe('model-agreement-on-tradeoffs GraphQL queries', () => {
     expect(response.body.errors).toBeUndefined();
     const matrix = response.body.data.modelAgreementOnTradeoffs.pairwiseAgreementMatrix as Array<{
       cohensKappa: number | null;
-      cohensKappaConfidenceLow: number | null;
-      cohensKappaConfidenceHigh: number | null;
-      cohensKappaConfidenceIsSymmetric: boolean;
+      kappaByDomain: Array<{ domainId: string; domainName: string; kappa: number | null; cellCount: number }>;
+      kappaSpread: number | null;
+      domainCount: number;
     }>;
 
     expect(matrix).toHaveLength(1);
     const row = matrix[0]!;
 
-    // The CI should be populated (20 vignettes → well above 100-sample threshold).
-    expect(row.cohensKappaConfidenceLow).not.toBeNull();
-    expect(row.cohensKappaConfidenceHigh).not.toBeNull();
-    expect(typeof row.cohensKappaConfidenceIsSymmetric).toBe('boolean');
-
-    if (row.cohensKappa != null && row.cohensKappaConfidenceLow != null && row.cohensKappaConfidenceHigh != null) {
-      // CI must bracket the point estimate (within floating-point tolerance).
-      expect(row.cohensKappaConfidenceLow).toBeLessThanOrEqual(row.cohensKappa + 0.01);
-      expect(row.cohensKappaConfidenceHigh).toBeGreaterThanOrEqual(row.cohensKappa - 0.01);
-    }
+    // Single domain in scope → domainCount=1, spread=null, kappaByDomain has 1 entry.
+    expect(row.domainCount).toBe(1);
+    expect(row.kappaSpread).toBeNull();
+    expect(row.kappaByDomain).toHaveLength(1);
+    expect(row.kappaByDomain[0]).toMatchObject({
+      domainId: 'domain-1',
+      domainName: 'Domain 1',
+    });
+    expect(typeof row.kappaByDomain[0]?.cellCount).toBe('number');
   });
 
   it('equal-weights value pairs in the headline kappa (no over-tested-pair bias)', async () => {

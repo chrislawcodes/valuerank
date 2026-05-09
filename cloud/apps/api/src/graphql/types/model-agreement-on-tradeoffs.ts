@@ -11,6 +11,13 @@ export type UnavailableModelInfoShape = {
   reason: string;
 };
 
+export type DomainKappaEntryShape = {
+  domainId: string;
+  domainName: string;
+  kappa: number | null;
+  cellCount: number;
+};
+
 export type PairwiseAgreementRowShape = {
   modelAId: string;
   modelALabel: string;
@@ -21,9 +28,9 @@ export type PairwiseAgreementRowShape = {
   cohensKappa: number | null;
   kappaInterpretation: string | null;
   meanAbsoluteDivergence: number | null;
-  cohensKappaConfidenceLow: number | null;
-  cohensKappaConfidenceHigh: number | null;
-  cohensKappaConfidenceIsSymmetric: boolean;
+  kappaByDomain: DomainKappaEntryShape[];
+  kappaSpread: number | null;
+  domainCount: number;
 };
 
 export type ModelTrialConsistencyShape = {
@@ -73,6 +80,7 @@ export type PairDivergenceBreakdownShape = {
 
 const ModelInfoRef = builder.objectRef<ModelInfoShape>('ModelInfo');
 const UnavailableModelInfoRef = builder.objectRef<UnavailableModelInfoShape>('UnavailableModelInfo');
+const DomainKappaEntryRef = builder.objectRef<DomainKappaEntryShape>('DomainKappaEntry');
 const PairwiseAgreementRowRef = builder.objectRef<PairwiseAgreementRowShape>('PairwiseAgreementRow');
 const ModelTrialConsistencyRef = builder.objectRef<ModelTrialConsistencyShape>('ModelTrialConsistency');
 const ModelAgreementBuildProgressRef = builder.objectRef<ModelAgreementBuildProgressShape>('ModelAgreementBuildProgress');
@@ -95,6 +103,15 @@ builder.objectType(UnavailableModelInfoRef, {
   }),
 });
 
+builder.objectType(DomainKappaEntryRef, {
+  fields: (t) => ({
+    domainId: t.exposeID('domainId'),
+    domainName: t.exposeString('domainName'),
+    kappa: t.exposeFloat('kappa', { nullable: true }),
+    cellCount: t.exposeInt('cellCount'),
+  }),
+});
+
 builder.objectType(PairwiseAgreementRowRef, {
   fields: (t) => ({
     modelAId: t.exposeID('modelAId'),
@@ -106,9 +123,9 @@ builder.objectType(PairwiseAgreementRowRef, {
     cohensKappa: t.exposeFloat('cohensKappa', { nullable: true }),
     kappaInterpretation: t.exposeString('kappaInterpretation', { nullable: true }),
     meanAbsoluteDivergence: t.exposeFloat('meanAbsoluteDivergence', { nullable: true }),
-    cohensKappaConfidenceLow: t.exposeFloat('cohensKappaConfidenceLow', { nullable: true }),
-    cohensKappaConfidenceHigh: t.exposeFloat('cohensKappaConfidenceHigh', { nullable: true }),
-    cohensKappaConfidenceIsSymmetric: t.exposeBoolean('cohensKappaConfidenceIsSymmetric'),
+    kappaByDomain: t.expose('kappaByDomain', { type: [DomainKappaEntryRef] }),
+    kappaSpread: t.exposeFloat('kappaSpread', { nullable: true }),
+    domainCount: t.exposeInt('domainCount'),
   }),
 });
 
