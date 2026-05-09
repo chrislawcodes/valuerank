@@ -477,13 +477,21 @@ export function bootstrapKappaConfidence(
   const kappaSamples: number[] = [];
 
   for (let iter = 0; iter < iterations; iter += 1) {
-    // Resample vignettes WITH REPLACEMENT
+    // Resample vignettes WITH REPLACEMENT.
+    // Each draw gets a unique synthetic vignette ID so that duplicate draws
+    // (e.g. drawing vignette A twice) are not collapsed back into one group
+    // by summarizePairCells. Without this, drawing {A, A, B} produces the
+    // same kappa as drawing {A, B} because cells keep their original
+    // definitionId and the 3-level aggregation deduplicates them.
     const resampledCells: ComparableCell[] = [];
     for (let i = 0; i < n; i += 1) {
       const idx = Math.floor(Math.random() * n);
-      const id = vignetteIds[idx]!;
-      const cellsForVignette = cellsByVignette.get(id) ?? [];
-      resampledCells.push(...cellsForVignette);
+      const sourceVignetteId = vignetteIds[idx]!;
+      const syntheticVignetteId = `bootstrap-${iter}-${i}`;
+      const cellsForVignette = cellsByVignette.get(sourceVignetteId) ?? [];
+      for (const c of cellsForVignette) {
+        resampledCells.push({ ...c, definitionId: syntheticVignetteId });
+      }
     }
     const sampleKappa = summarizePairCells(resampledCells).cohensKappa;
     if (sampleKappa != null && Number.isFinite(sampleKappa)) {
