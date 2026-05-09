@@ -1,0 +1,10 @@
+export const item1 = 1;
+export const item2 = 2;
+export const item3 = 3;
+export const item4 = 4;
+export const item5 = 5;
+export const item6 = 6;
+export const item7 = 7;
+export const item8 = 8;
+export const item9 = 9;
+export const item10 = 10;

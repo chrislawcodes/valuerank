@@ -1,9 +1,10 @@
 /**
- * ClusterDendrogram — SVG hierarchical-clustering dendrogram.
+ * ClusterDendrogram — SVG hierarchical-clustering dendrogram, oriented
+ * horizontally so leaf labels read left-to-right without rotation.
  *
- * Leaves are arranged at y = maxHeight (bottom), internal nodes at their
- * merge height. Lines are L-shaped: horizontal at the merge height,
- * vertical down to each child.
+ * Leaves sit on the left side at x = 0 (in the inner coord system); the tree
+ * extends rightward, and the root merge lands at the far right. The X-axis
+ * encodes kappa distance; each leaf gets one row in the Y-axis.
  */
 import type React from 'react';
 
@@ -45,10 +46,12 @@ type ClusterDendrogramProps = {
   cutLineHeight?: number;
 };
 
-// SVG layout constants
-const MARGIN = { top: 20, right: 20, bottom: 80, left: 20 };
-const SVG_HEIGHT = 420;
-const LABEL_FONT_SIZE = 10;
+// SVG layout constants — horizontal orientation
+const MARGIN = { top: 16, right: 24, bottom: 36, left: 180 };
+const SVG_WIDTH = 720;
+const ROW_HEIGHT = 22;
+const MIN_INNER_HEIGHT = 160;
+const LABEL_FONT_SIZE = 11;
 const LEAF_CIRCLE_RADIUS = 3;
 
 export function ClusterDendrogram({
@@ -68,29 +71,29 @@ export function ClusterDendrogram({
   // Unique cluster IDs in a stable order for color assignment
   const clusterIds = [...new Set(Object.values(clusterIdByModelId))].sort();
 
-  // Layout dimensions
-  const innerWidth = Math.max(n * 28, 400);
-  const innerHeight = SVG_HEIGHT - MARGIN.top - MARGIN.bottom;
-  const svgWidth = innerWidth + MARGIN.left + MARGIN.right;
-  const svgHeight = SVG_HEIGHT;
+  // Layout dimensions — leaves stack vertically, distance goes horizontal
+  const innerWidth = SVG_WIDTH - MARGIN.left - MARGIN.right;
+  const innerHeight = Math.max(n * ROW_HEIGHT, MIN_INNER_HEIGHT);
+  const svgWidth = SVG_WIDTH;
+  const svgHeight = innerHeight + MARGIN.top + MARGIN.bottom;
 
-  // Compute max height for y-axis scaling
+  // Compute max height for x-axis scaling
   const maxHeight = Math.max(...merges.map((m) => m.height), 0.01);
 
-  // Map merge height to SVG y coordinate.
-  // height=0 → y = innerHeight (bottom), height=maxHeight → y = 0 (top)
-  function heightToY(h: number): number {
-    return innerHeight - (h / maxHeight) * innerHeight;
+  // Map kappa distance to SVG x coordinate.
+  // height=0 → x = 0 (leaves on the left), height=maxHeight → x = innerWidth (root on the right).
+  function heightToX(h: number): number {
+    return (h / maxHeight) * innerWidth;
   }
 
-  // Leaf x positions (evenly spaced)
-  const leafX = new Map<string, number>();
+  // Leaf y positions (evenly spaced top to bottom)
+  const leafY = new Map<string, number>();
   for (let i = 0; i < leafOrder.length; i++) {
     const modelId = leafOrder[i]!;
-    leafX.set(modelId, ((i + 0.5) / n) * innerWidth);
+    leafY.set(modelId, ((i + 0.5) / n) * innerHeight);
   }
 
-  // Build a map from sorted member ID set → merge, for bottom-up traversal
+  // Build a map from sorted member ID set → merge, for tree traversal
   function memberKey(ids: string[]): string {
     return [...ids].sort().join('|');
   }
@@ -101,18 +104,20 @@ export function ClusterDendrogram({
     mergeByKey.set(memberKey(combined), merge);
   }
 
-  // Compute the center x of a subtree (average of its leaf positions)
-  function subtreeCenterX(memberIds: string[]): number {
+  // Compute the center y of a subtree (average of its leaf positions)
+  function subtreeCenterY(memberIds: string[]): number {
     let sum = 0;
     let count = 0;
     for (const id of memberIds) {
-      const x = leafX.get(id);
-      if (x != null) { sum += x; count++; }
+      const y = leafY.get(id);
+      if (y != null) { sum += y; count++; }
     }
     return count > 0 ? sum / count : 0;
   }
 
-  // Render all L-shaped connectors recursively
+  // Render all L-shaped connectors recursively (now rotated 90° clockwise
+  // relative to a vertical layout: horizontal segments are at constant Y,
+  // vertical segments are at constant X = parent's height position).
   const lines: React.ReactElement[] = [];
 
   function renderConnectors(memberIds: string[]): void {
@@ -121,19 +126,19 @@ export function ClusterDendrogram({
     const merge = mergeByKey.get(key);
     if (merge == null) return;
 
-    const parentY = heightToY(merge.height);
-    const leftX = subtreeCenterX(merge.leftMemberIds);
-    const rightX = subtreeCenterX(merge.rightMemberIds);
+    const parentX = heightToX(merge.height);
+    const topY = subtreeCenterY(merge.leftMemberIds);
+    const bottomY = subtreeCenterY(merge.rightMemberIds);
 
-    // Left child connector
+    // Left child: horizontal from child x out to parent x at child y
     const leftChildH = merge.leftMemberIds.length > 1
       ? mergeByKey.get(memberKey(merge.leftMemberIds))?.height ?? 0
       : 0;
-    const leftChildY = heightToY(leftChildH);
+    const leftChildX = heightToX(leftChildH);
     lines.push(
       <polyline
-        key={`left-${key}`}
-        points={`${leftX},${leftChildY} ${leftX},${parentY} ${rightX},${parentY}`}
+        key={`top-${key}`}
+        points={`${leftChildX},${topY} ${parentX},${topY} ${parentX},${bottomY}`}
         fill="none"
         stroke="#6b7280"
         strokeWidth={1.5}
@@ -141,18 +146,18 @@ export function ClusterDendrogram({
       />,
     );
 
-    // Right child connector (just the vertical part down from parentY)
+    // Right child: horizontal from child x out to parent x at child y
     const rightChildH = merge.rightMemberIds.length > 1
       ? mergeByKey.get(memberKey(merge.rightMemberIds))?.height ?? 0
       : 0;
-    const rightChildY = heightToY(rightChildH);
+    const rightChildX = heightToX(rightChildH);
     lines.push(
       <line
-        key={`right-${key}`}
-        x1={rightX}
-        y1={parentY}
-        x2={rightX}
-        y2={rightChildY}
+        key={`bottom-${key}`}
+        x1={rightChildX}
+        y1={bottomY}
+        x2={parentX}
+        y2={bottomY}
         stroke="#6b7280"
         strokeWidth={1.5}
       />,
@@ -176,18 +181,17 @@ export function ClusterDendrogram({
         aria-label="Cluster dendrogram showing model merge tree by kappa distance"
       >
         <g transform={`translate(${MARGIN.left},${MARGIN.top})`}>
-          {/* Y-axis ticks */}
+          {/* X-axis ticks (along the bottom of the inner area) */}
           {[0, 0.25, 0.5, 0.75, 1.0].map((frac) => {
             const h = frac * maxHeight;
-            const y = heightToY(h);
+            const x = heightToX(h);
             return (
               <g key={frac}>
-                <line x1={-6} y1={y} x2={-2} y2={y} stroke="#9ca3af" strokeWidth={1} />
+                <line x1={x} y1={innerHeight + 2} x2={x} y2={innerHeight + 6} stroke="#9ca3af" strokeWidth={1} />
                 <text
-                  x={-8}
-                  y={y}
-                  textAnchor="end"
-                  dominantBaseline="middle"
+                  x={x}
+                  y={innerHeight + 18}
+                  textAnchor="middle"
                   fontSize={9}
                   fill="#6b7280"
                 >
@@ -197,14 +201,13 @@ export function ClusterDendrogram({
             );
           })}
 
-          {/* Y-axis label */}
+          {/* X-axis label (centered below ticks) */}
           <text
-            x={-MARGIN.left + 2}
-            y={innerHeight / 2}
+            x={innerWidth / 2}
+            y={innerHeight + 32}
             textAnchor="middle"
             fontSize={9}
             fill="#6b7280"
-            transform={`rotate(-90, ${-MARGIN.left + 2}, ${innerHeight / 2})`}
           >
             kappa distance
           </text>
@@ -212,35 +215,35 @@ export function ClusterDendrogram({
           {/* Dendrogram lines */}
           {lines}
 
-          {/* Cut line */}
+          {/* Cut line — vertical when oriented horizontally */}
           {cutLineHeight != null && (
             <line
-              x1={0}
-              y1={heightToY(cutLineHeight)}
-              x2={innerWidth}
-              y2={heightToY(cutLineHeight)}
+              x1={heightToX(cutLineHeight)}
+              y1={0}
+              x2={heightToX(cutLineHeight)}
+              y2={innerHeight}
               stroke="#0d9488"
               strokeWidth={1.5}
               strokeDasharray="5,3"
             />
           )}
 
-          {/* Leaf nodes and labels */}
+          {/* Leaf nodes and labels (on the left side, label reads naturally) */}
           {leafOrder.map((modelId) => {
-            const x = leafX.get(modelId) ?? 0;
-            const y = innerHeight;
+            const y = leafY.get(modelId) ?? 0;
+            const x = 0;
             const color = getLeafColor(clusterIdByModelId, modelId, clusterIds);
             const label = modelLabels[modelId] ?? modelId;
             return (
               <g key={modelId}>
                 <circle cx={x} cy={y} r={LEAF_CIRCLE_RADIUS} fill={color} />
                 <text
-                  x={x}
-                  y={y + LEAF_CIRCLE_RADIUS + 4}
+                  x={x - LEAF_CIRCLE_RADIUS - 4}
+                  y={y}
                   textAnchor="end"
+                  dominantBaseline="middle"
                   fontSize={LABEL_FONT_SIZE}
                   fill={color}
-                  transform={`rotate(-55, ${x}, ${y + LEAF_CIRCLE_RADIUS + 4})`}
                 >
                   {label}
                 </text>
