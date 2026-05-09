@@ -22,7 +22,7 @@ function createRow(overrides: Partial<PairwiseAgreementRow> = {}): PairwiseAgree
 }
 
 describe('PairwiseAgreementMatrixReport', () => {
-  it('renders the heatmap and table columns', () => {
+  it('renders table columns', () => {
     render(
       <PairwiseAgreementMatrixReport
         rows={[createRow()]}
@@ -53,10 +53,10 @@ describe('PairwiseAgreementMatrixReport', () => {
       />,
     );
 
-    const companionTable = container.querySelectorAll('table')[1];
+    const companionTable = container.querySelectorAll('table')[0];
     expect(companionTable).toBeDefined();
     if (companionTable == null) {
-      throw new Error('Expected the companion table to render');
+      throw new Error('Expected the table to render');
     }
     const firstBodyRow = companionTable.querySelector('tbody tr');
     expect(firstBodyRow).not.toBeNull();
