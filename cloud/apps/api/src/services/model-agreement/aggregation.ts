@@ -452,22 +452,42 @@ export function groupCellsByVignette(cells: ReadonlyArray<ComparableCell>): Map<
 }
 
 /**
+ * Yield to the Node event loop so other concurrently-issued requests can
+ * progress while a long-running CPU-bound bootstrap is in flight. Without
+ * this, the entire process blocks for tens of seconds on large all-domains
+ * scopes and other queries (e.g. domainAnalysis from the same page) time out
+ * at the proxy with a "Failed to fetch" browser error.
+ */
+function yieldToEventLoop(): Promise<void> {
+  return new Promise((resolve) => { setImmediate(resolve); });
+}
+
+// Yield every N bootstrap iterations. Tuned so a single yield is rarely more
+// than ~50ms of CPU work even on the largest realistic input (≈360 vignettes
+// × ~6 cells each), keeping concurrent fast queries responsive.
+const BOOTSTRAP_YIELD_EVERY_ITERATIONS = 25;
+
+/**
  * Bootstrap 95% confidence interval for Cohen's kappa by resampling whole
  * vignettes with replacement (1000 iterations by default).
  *
  * Resampling at the vignette level (not cell level) respects the clustering
  * structure — cells within a vignette share context and aren't independent.
  *
+ * Async to keep the Node event loop responsive — yields every
+ * BOOTSTRAP_YIELD_EVERY_ITERATIONS iterations so concurrent requests are not
+ * starved while a long bootstrap runs.
+ *
  * Returns { low: null, high: null, isSymmetric: true } when:
  *   - The point estimate is null (no data to resample).
  *   - There are no vignettes (empty input).
  *   - Fewer than 100 valid bootstrap samples were produced (degenerate case).
  */
-export function bootstrapKappaConfidence(
+export async function bootstrapKappaConfidence(
   cellsByVignette: Map<string, ComparableCell[]>,
   pointEstimateKappa: number | null,
   iterations: number = 1000,
-): KappaConfidenceInterval {
+): Promise<KappaConfidenceInterval> {
   if (pointEstimateKappa == null || cellsByVignette.size === 0) {
     return { low: null, high: null, isSymmetric: true };
   }
@@ -496,6 +516,10 @@ export function bootstrapKappaConfidence(
     const sampleKappa = summarizePairCells(resampledCells).cohensKappa;
     if (sampleKappa != null && Number.isFinite(sampleKappa)) {
       kappaSamples.push(sampleKappa);
+    }
+
+    if ((iter + 1) % BOOTSTRAP_YIELD_EVERY_ITERATIONS === 0 && iter + 1 < iterations) {
+      await yieldToEventLoop();
     }
   }
 
