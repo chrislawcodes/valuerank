@@ -104,6 +104,12 @@ function buildPairwiseWinRateModel(
   return { valueOrder: order, winRateMatrix, trialCountMatrix };
 }
 
+// A `buildProgress` snapshot whose `updatedAt` is older than this is treated
+// as a dead rebuild (e.g., the API process restarted mid-rebuild). Recent
+// progress means a rebuild is actively running and we should NOT supersede it
+// with a new synchronous rebuild — that creates a thundering-herd loop.
+const DOMAIN_ANALYSIS_BUILD_PROGRESS_FRESH_MS = 5 * 60 * 1000;
+
 function parseBuildProgress(raw: unknown): DomainAnalysisBuildProgress | null {
   if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) {
     return null;
@@ -129,6 +135,39 @@ function parseBuildProgress(raw: unknown): DomainAnalysisBuildProgress | null {
     totalRuns: progressCandidate.totalRuns,
     currentRunId: typeof progressCandidate.currentRunId === 'string' ? progressCandidate.currentRunId : null,
     updatedAt: progressCandidate.updatedAt,
+  };
+}
+
+function buildEmptyDomainAnalysisResult(params: {
+  domainId: string;
+  domainName: string;
+  activeModels: Array<{ modelId: string; displayName: string; isDefault: boolean }>;
+  generatedAt: Date;
+  cacheStatus: DomainAnalysisCacheStatus;
+  unavailableReason: string;
+}): DomainAnalysisResult {
+  return {
+    domainId: params.domainId,
+    domainName: params.domainName,
+    totalDefinitions: 0,
+    targetedDefinitions: 0,
+    coveredDefinitions: 0,
+    missingDefinitionIds: [],
+    missingDefinitions: [],
+    definitionsWithAnalysis: 0,
+    models: [],
+    unavailableModels: params.activeModels.map((model) => ({
+      model: model.modelId,
+      label: model.displayName,
+      reason: params.unavailableReason,
+    })),
+    generatedAt: params.generatedAt,
+    rankingShapeBenchmarks: { domainMeanTopGap: 0, domainStdTopGap: null, medianSpread: 0 },
+    clusterAnalysis: { clusters: [], faultLinesByPair: {}, defaultPair: null, skipped: true, skipReason: params.unavailableReason },
+    clusterAnalysisByMethod: {},
+    cacheStatus: params.cacheStatus,
+    contributionSummary: [],
+    excludedDataSummary: [],
   };
 }
 
@@ -367,29 +406,14 @@ export async function getDomainAnalysisResult(params: {
   });
 
   if (state.definitions.length === 0) {
-    return {
+    return buildEmptyDomainAnalysisResult({
       domainId: state.domain.id,
       domainName: state.domain.name,
-      totalDefinitions: 0,
-      targetedDefinitions: 0,
-      coveredDefinitions: 0,
-      missingDefinitionIds: [],
-      missingDefinitions: [],
-      definitionsWithAnalysis: 0,
-      models: [],
-      unavailableModels: activeModels.map((model) => ({
-        model: model.modelId,
-        label: model.displayName,
-        reason: 'No analyzed vignettes found in this scope.',
-      })),
+      activeModels,
       generatedAt: new Date(),
-      rankingShapeBenchmarks: { domainMeanTopGap: 0, domainStdTopGap: null, medianSpread: 0 },
-      clusterAnalysis: { clusters: [], faultLinesByPair: {}, defaultPair: null, skipped: true, skipReason: 'No vignettes found in this scope.' },
-      clusterAnalysisByMethod: {},
       cacheStatus: DOMAIN_ANALYSIS_CACHE_STATUS.FRESH,
-      contributionSummary: [],
-      excludedDataSummary: [],
-    };
+      unavailableReason: 'No analyzed vignettes found in this scope.',
+    });
   }
 
   const currentSnapshot = await getCurrentSnapshot(db, state.scope, state.domain.id, state.configSignature);
@@ -417,6 +441,32 @@ export async function getDomainAnalysisResult(params: {
       generatedAt: currentSnapshot.createdAt,
       cacheStatus: queued ? DOMAIN_ANALYSIS_CACHE_STATUS.UPDATING : DOMAIN_ANALYSIS_CACHE_STATUS.OUT_OF_DATE,
     });
+  }
+
+  // A CURRENT snapshot may exist but only contain `buildProgress` — i.e., a
+  // prior request kicked off a synchronous rebuild and that rebuild is still
+  // running (or recently died). Falling through to refreshDomainAnalysisSnapshot
+  // here would supersede the in-progress snapshot and start a NEW rebuild,
+  // creating a thundering-herd loop where every page load stomps on the
+  // previous rebuild and never finishes. Instead: if buildProgress is recent
+  // (last DOMAIN_ANALYSIS_BUILD_PROGRESS_FRESH_MS), return UPDATING and let
+  // the existing rebuild finish. Only fall through to refresh if the prior
+  // rebuild has gone stale (likely died from a process restart).
+  if (currentSnapshot != null) {
+    const buildProgress = parseBuildProgress(currentSnapshot.output);
+    if (buildProgress != null) {
+      const progressAgeMs = Date.now() - new Date(buildProgress.updatedAt).getTime();
+      if (Number.isFinite(progressAgeMs) && progressAgeMs < DOMAIN_ANALYSIS_BUILD_PROGRESS_FRESH_MS) {
+        return buildEmptyDomainAnalysisResult({
+          domainId: state.domain.id,
+          domainName: state.domain.name,
+          activeModels,
+          generatedAt: currentSnapshot.createdAt,
+          cacheStatus: DOMAIN_ANALYSIS_CACHE_STATUS.UPDATING,
+          unavailableReason: `Domain analysis is rebuilding (${buildProgress.completedRuns}/${buildProgress.totalRuns} runs processed). Refresh in a moment.`,
+        });
+      }
+    }
   }
 
   const refreshed = await refreshDomainAnalysisSnapshot({
