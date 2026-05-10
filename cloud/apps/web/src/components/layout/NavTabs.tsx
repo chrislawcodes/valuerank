@@ -46,7 +46,6 @@ const archiveMenuItems: MenuItem[] = [
   { name: 'Legacy Survey Work', path: '/archive/surveys' },
   { name: 'Legacy Survey Results', path: '/archive/survey-results' },
   { name: 'Circumplex', path: '/archive/circumplex' },
-  { name: 'Consistency', path: '/archive/consistency' },
 ];
 
 const adminSettingsMenuItems: MenuItem[] = [

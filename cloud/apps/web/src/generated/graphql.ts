@@ -333,15 +333,6 @@ export type ClusterPairFaultLines = {
   faultLines: Array<ValueFaultLine>;
 };
 
-export type Coherence = {
-  __typename?: 'Coherence';
-  coherentPairs: Scalars['Int']['output'];
-  determinatePairs: Scalars['Int']['output'];
-  indeterminatePairs: Scalars['Int']['output'];
-  perPair: Array<ConsistencyPerPair>;
-  value: Scalars['Float']['output'];
-};
-
 /** A recent job completion event */
 export type CompletionEvent = {
   __typename?: 'CompletionEvent';
@@ -362,50 +353,6 @@ export type ConfidenceValueDetailResult = {
   modelLabel: Scalars['String']['output'];
   valueKey: Scalars['String']['output'];
   vignettes: Array<DomainAnalysisVignetteDetail>;
-};
-
-export type ConsistencyPerCondition = {
-  __typename?: 'ConsistencyPerCondition';
-  matches: Scalars['Int']['output'];
-  netPressureRank: Scalars['Int']['output'];
-  scenarioId: Scalars['String']['output'];
-  trials: Scalars['Int']['output'];
-  winRate?: Maybe<Scalars['Float']['output']>;
-};
-
-export type ConsistencyPerDomain = {
-  __typename?: 'ConsistencyPerDomain';
-  ciHigh: Scalars['Float']['output'];
-  ciLow: Scalars['Float']['output'];
-  domainId: Scalars['String']['output'];
-  domainName: Scalars['String']['output'];
-  scenariosMeasured: Scalars['Int']['output'];
-  value: Scalars['Float']['output'];
-};
-
-export type ConsistencyPerPair = {
-  __typename?: 'ConsistencyPerPair';
-  coherent: Scalars['Boolean']['output'];
-  companionConditionIds: Array<Scalars['String']['output']>;
-  determinate: Scalars['Boolean']['output'];
-  domainId: Scalars['String']['output'];
-  pValue?: Maybe<Scalars['Float']['output']>;
-  perCondition: Array<ConsistencyPerCondition>;
-  primaryConditionIds: Array<Scalars['String']['output']>;
-  rho?: Maybe<Scalars['Float']['output']>;
-  targetAnalysisRunId?: Maybe<Scalars['String']['output']>;
-  targetCompanionRunId?: Maybe<Scalars['String']['output']>;
-  valueKey: Scalars['String']['output'];
-};
-
-export type ConsistencyPerScenario = {
-  __typename?: 'ConsistencyPerScenario';
-  ciHigh: Scalars['Float']['output'];
-  ciLow: Scalars['Float']['output'];
-  matches: Scalars['Int']['output'];
-  p: Scalars['Float']['output'];
-  scenarioId: Scalars['String']['output'];
-  trials: Scalars['Int']['output'];
 };
 
 /** A scenario with high disagreement across models */
@@ -1368,14 +1315,6 @@ export type ForkDefinitionInput = {
   parentId: Scalars['String']['input'];
 };
 
-export type InsufficientModel = {
-  __typename?: 'InsufficientModel';
-  label: Scalars['String']['output'];
-  modelId: Scalars['String']['output'];
-  providerName: Scalars['String']['output'];
-  reason: Scalars['String']['output'];
-};
-
 export type InsufficientPressureSensitivityModel = {
   __typename?: 'InsufficientPressureSensitivityModel';
   label: Scalars['String']['output'];
@@ -1524,16 +1463,6 @@ export type ModelAgreementResult = {
   unavailableModels: Array<UnavailableModelInfo>;
 };
 
-export type ModelConsistency = {
-  __typename?: 'ModelConsistency';
-  coherence: Coherence;
-  label: Scalars['String']['output'];
-  modelId: Scalars['String']['output'];
-  orderEffect: OrderEffect;
-  providerName: Scalars['String']['output'];
-  repeatability: Repeatability;
-};
-
 /** Cost estimate for a single model in a run */
 export type ModelCostEstimate = {
   __typename?: 'ModelCostEstimate';
@@ -1659,12 +1588,6 @@ export type ModelsConfidenceValueResult = {
   leanCount: Scalars['Int']['output'];
   strongCount: Scalars['Int']['output'];
   valueKey: Scalars['String']['output'];
-};
-
-export type ModelsConsistencyResult = {
-  __typename?: 'ModelsConsistencyResult';
-  insufficient: Array<InsufficientModel>;
-  models: Array<ModelConsistency>;
 };
 
 export type ModelsStabilityModelResult = {
@@ -2438,14 +2361,6 @@ export type MutationUpdateValueStatementArgs = {
   input: UpdateValueStatementInput;
 };
 
-export type OrderEffect = {
-  __typename?: 'OrderEffect';
-  flippedPct: Scalars['Float']['output'];
-  noisyPct: Scalars['Float']['output'];
-  notApplicable: Scalars['Boolean']['output'];
-  samePct: Scalars['Float']['output'];
-};
-
 export type PairDivergenceBreakdown = {
   __typename?: 'PairDivergenceBreakdown';
   buildProgress?: Maybe<ModelAgreementBuildProgress>;
@@ -2852,7 +2767,6 @@ export type Query = {
   modelTokenStats: Array<ModelTokenStats>;
   modelsAnalysis: ModelsAnalysisResult;
   modelsConfidence: ModelsConfidenceResult;
-  modelsConsistency: ModelsConsistencyResult;
   modelsWinRateStability: ModelsStabilityResult;
   /** List anomalies that are currently open (resolvedAt IS NULL) across all runs. Optional filters: domainId scopes to anomalies whose run belongs to a definition in that domain; type scopes to a single RunAnomalyType. */
   openRunAnomalies: Array<RunAnomaly>;
@@ -3321,14 +3235,6 @@ export type QueryModelsConfidenceArgs = {
 };
 
 
-export type QueryModelsConsistencyArgs = {
-  domainId?: InputMaybe<Scalars['ID']['input']>;
-  minScenarios?: InputMaybe<Scalars['Int']['input']>;
-  providerId?: InputMaybe<Scalars['ID']['input']>;
-  signature: Scalars['String']['input'];
-};
-
-
 export type QueryModelsWinRateStabilityArgs = {
   domainId?: InputMaybe<Scalars['ID']['input']>;
   signature?: InputMaybe<Scalars['String']['input']>;
@@ -3578,18 +3484,6 @@ export type ReliabilitySummary = {
   perModel: Scalars['JSON']['output'];
 };
 
-export type Repeatability = {
-  __typename?: 'Repeatability';
-  betweenScenarioSd: Scalars['Float']['output'];
-  ciHigh: Scalars['Float']['output'];
-  ciLow: Scalars['Float']['output'];
-  perDomain: Array<ConsistencyPerDomain>;
-  perScenario: Array<ConsistencyPerScenario>;
-  scenariosMeasured: Scalars['Int']['output'];
-  value: Scalars['Float']['output'];
-  withinScenarioSd: Scalars['Float']['output'];
-};
-
 /** Result of restarting summarization for a run */
 export type RestartSummarizationPayload = {
   __typename?: 'RestartSummarizationPayload';
@@ -3644,6 +3538,8 @@ export type Run = {
   /** True if this run is an aggregate rollup record (a saved summary derived from other runs) and does not have its own probe data. False for normal runs that produced their own transcripts. Use this to distinguish data-bearing runs from aggregates in UI / analysis. */
   isAggregate: Scalars['Boolean']['output'];
   lastAccessedAt?: Maybe<Scalars['DateTime']['output']>;
+  /** Mirrored runs in the same domain with matching signature */
+  mirroredRuns: Array<Run>;
   /** List of LLM models used in this run */
   models: Array<LlmModel>;
   /** Optional user-defined name for this run */
@@ -4928,16 +4824,6 @@ export type ModelsConfidenceQueryVariables = Exact<{
 
 export type ModelsConfidenceQuery = { __typename?: 'Query', modelsConfidence: { __typename?: 'ModelsConfidenceResult', models: Array<{ __typename?: 'ModelsConfidenceModelResult', modelId: string, label: string, overallConfidence?: number | null, overallStrongCount: number, overallLeanCount: number, values: Array<{ __typename?: 'ModelsConfidenceValueResult', valueKey: string, confidence?: number | null, strongCount: number, leanCount: number }> }> } };
 
-export type ModelsConsistencyQueryVariables = Exact<{
-  domainId?: InputMaybe<Scalars['ID']['input']>;
-  providerId?: InputMaybe<Scalars['ID']['input']>;
-  minScenarios?: InputMaybe<Scalars['Int']['input']>;
-  signature: Scalars['String']['input'];
-}>;
-
-
-export type ModelsConsistencyQuery = { __typename?: 'Query', modelsConsistency: { __typename?: 'ModelsConsistencyResult', models: Array<{ __typename?: 'ModelConsistency', modelId: string, label: string, providerName: string, repeatability: { __typename?: 'Repeatability', value: number, ciLow: number, ciHigh: number, withinScenarioSd: number, betweenScenarioSd: number, scenariosMeasured: number, perDomain: Array<{ __typename?: 'ConsistencyPerDomain', domainId: string, domainName: string, value: number, ciLow: number, ciHigh: number, scenariosMeasured: number }>, perScenario: Array<{ __typename?: 'ConsistencyPerScenario', scenarioId: string, matches: number, trials: number, p: number, ciLow: number, ciHigh: number }> }, coherence: { __typename?: 'Coherence', value: number, coherentPairs: number, determinatePairs: number, indeterminatePairs: number, perPair: Array<{ __typename?: 'ConsistencyPerPair', domainId: string, valueKey: string, rho?: number | null, pValue?: number | null, coherent: boolean, determinate: boolean, targetAnalysisRunId?: string | null, targetCompanionRunId?: string | null, primaryConditionIds: Array<string>, companionConditionIds: Array<string>, perCondition: Array<{ __typename?: 'ConsistencyPerCondition', scenarioId: string, netPressureRank: number, winRate?: number | null, matches: number, trials: number }> }> }, orderEffect: { __typename?: 'OrderEffect', samePct: number, flippedPct: number, noisyPct: number, notApplicable: boolean } }>, insufficient: Array<{ __typename?: 'InsufficientModel', modelId: string, label: string, providerName: string, reason: string }> } };
-
 export type ModelsWinRateStabilityQueryVariables = Exact<{
   signature?: InputMaybe<Scalars['String']['input']>;
   domainId?: InputMaybe<Scalars['ID']['input']>;
@@ -5003,7 +4889,7 @@ export type ResolveRunAnomalyMutation = { __typename?: 'Mutation', resolveRunAno
 
 export type RunFieldsFragment = { __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: unknown, stalledModels: Array<string>, companionRunId?: string | null, isAggregate: boolean, pairedBatchGroupId?: string | null, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, updatedAt: string, lastAccessedAt?: string | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: unknown | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, unresolvableTranscriptCount?: { __typename?: 'UnresolvableCount', total: number, byModel: Array<{ __typename?: 'UnresolvableByModel', modelId: string, count: number }> } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: unknown, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, pairedSibling?: { __typename?: 'Definition', id: string, name: string, content: unknown } | null } | null };
 
-export type RunWithTranscriptsFieldsFragment = { __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: unknown, stalledModels: Array<string>, companionRunId?: string | null, isAggregate: boolean, pairedBatchGroupId?: string | null, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, updatedAt: string, lastAccessedAt?: string | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: unknown | null, failedProbes: Array<{ __typename?: 'ProbeResult', modelId: string, errorCode?: string | null, errorMessage?: string | null }>, transcripts: Array<{ __typename?: 'Transcript', id: string, runId: string, scenarioId?: string | null, modelId: string, modelVersion?: string | null, content: unknown, decisionMetadata?: unknown | null, turnCount: number, tokenCount: number, durationMs: number, estimatedCost?: number | null, createdAt: string, lastAccessedAt?: string | null, dimensionValues?: unknown | null, decisionModelV2?: unknown | null }>, analysis?: { __typename?: 'AnalysisResult', actualCost?: { __typename?: 'ActualCost', total: number, perModel: Array<{ __typename?: 'ActualModelCost', modelId: string, inputTokens: number, outputTokens: number, cost: number, probeCount: number }> } | null } | null, recentTasks: Array<{ __typename?: 'TaskResult', scenarioId: string, modelId: string, status: string, error?: string | null, completedAt?: string | null }>, executionMetrics?: { __typename?: 'ExecutionMetrics', totalActive: number, totalQueued: number, estimatedSecondsRemaining?: number | null, totalRetries: number, providers: Array<{ __typename?: 'ProviderExecutionMetrics', provider: string, activeJobs: number, queuedJobs: number, maxParallel: number, requestsPerMinute: number, activeModelIds: Array<string>, recentCompletions: Array<{ __typename?: 'CompletionEvent', modelId: string, scenarioId: string, success: boolean, completedAt: string, durationMs: number }> }> } | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, unresolvableTranscriptCount?: { __typename?: 'UnresolvableCount', total: number, byModel: Array<{ __typename?: 'UnresolvableByModel', modelId: string, count: number }> } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: unknown, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, pairedSibling?: { __typename?: 'Definition', id: string, name: string, content: unknown } | null } | null };
+export type RunWithTranscriptsFieldsFragment = { __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: unknown, stalledModels: Array<string>, companionRunId?: string | null, isAggregate: boolean, pairedBatchGroupId?: string | null, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, updatedAt: string, lastAccessedAt?: string | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: unknown | null, failedProbes: Array<{ __typename?: 'ProbeResult', modelId: string, errorCode?: string | null, errorMessage?: string | null }>, transcripts: Array<{ __typename?: 'Transcript', id: string, runId: string, scenarioId?: string | null, modelId: string, modelVersion?: string | null, content: unknown, decisionMetadata?: unknown | null, turnCount: number, tokenCount: number, durationMs: number, estimatedCost?: number | null, createdAt: string, lastAccessedAt?: string | null, dimensionValues?: unknown | null, decisionModelV2?: unknown | null }>, analysis?: { __typename?: 'AnalysisResult', actualCost?: { __typename?: 'ActualCost', total: number, perModel: Array<{ __typename?: 'ActualModelCost', modelId: string, inputTokens: number, outputTokens: number, cost: number, probeCount: number }> } | null } | null, mirroredRuns: Array<{ __typename?: 'Run', id: string, status: string, createdAt: string, definitionId: string, config: unknown, analysisStatus?: string | null, definition?: { __typename?: 'Definition', id: string, name: string, content: unknown, domain?: { __typename?: 'Domain', name: string } | null, pairedSibling?: { __typename?: 'Definition', id: string, name: string, content: unknown } | null } | null, transcripts: Array<{ __typename?: 'Transcript', id: string, runId: string, scenarioId?: string | null, modelId: string, modelVersion?: string | null, content: unknown, decisionMetadata?: unknown | null, turnCount: number, tokenCount: number, durationMs: number, estimatedCost?: number | null, createdAt: string, lastAccessedAt?: string | null, dimensionValues?: unknown | null, decisionModelV2?: unknown | null }> }>, recentTasks: Array<{ __typename?: 'TaskResult', scenarioId: string, modelId: string, status: string, error?: string | null, completedAt?: string | null }>, executionMetrics?: { __typename?: 'ExecutionMetrics', totalActive: number, totalQueued: number, estimatedSecondsRemaining?: number | null, totalRetries: number, providers: Array<{ __typename?: 'ProviderExecutionMetrics', provider: string, activeJobs: number, queuedJobs: number, maxParallel: number, requestsPerMinute: number, activeModelIds: Array<string>, recentCompletions: Array<{ __typename?: 'CompletionEvent', modelId: string, scenarioId: string, success: boolean, completedAt: string, durationMs: number }> }> } | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, unresolvableTranscriptCount?: { __typename?: 'UnresolvableCount', total: number, byModel: Array<{ __typename?: 'UnresolvableByModel', modelId: string, count: number }> } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: unknown, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, pairedSibling?: { __typename?: 'Definition', id: string, name: string, content: unknown } | null } | null };
 
 export type RunsQueryVariables = Exact<{
   definitionId?: InputMaybe<Scalars['String']['input']>;
@@ -5051,7 +4937,7 @@ export type RunQueryVariables = Exact<{
 }>;
 
 
-export type RunQuery = { __typename?: 'Query', run?: { __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: unknown, stalledModels: Array<string>, companionRunId?: string | null, isAggregate: boolean, pairedBatchGroupId?: string | null, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, updatedAt: string, lastAccessedAt?: string | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: unknown | null, failedProbes: Array<{ __typename?: 'ProbeResult', modelId: string, errorCode?: string | null, errorMessage?: string | null }>, transcripts: Array<{ __typename?: 'Transcript', id: string, runId: string, scenarioId?: string | null, modelId: string, modelVersion?: string | null, content: unknown, decisionMetadata?: unknown | null, turnCount: number, tokenCount: number, durationMs: number, estimatedCost?: number | null, createdAt: string, lastAccessedAt?: string | null, dimensionValues?: unknown | null, decisionModelV2?: unknown | null }>, analysis?: { __typename?: 'AnalysisResult', actualCost?: { __typename?: 'ActualCost', total: number, perModel: Array<{ __typename?: 'ActualModelCost', modelId: string, inputTokens: number, outputTokens: number, cost: number, probeCount: number }> } | null } | null, recentTasks: Array<{ __typename?: 'TaskResult', scenarioId: string, modelId: string, status: string, error?: string | null, completedAt?: string | null }>, executionMetrics?: { __typename?: 'ExecutionMetrics', totalActive: number, totalQueued: number, estimatedSecondsRemaining?: number | null, totalRetries: number, providers: Array<{ __typename?: 'ProviderExecutionMetrics', provider: string, activeJobs: number, queuedJobs: number, maxParallel: number, requestsPerMinute: number, activeModelIds: Array<string>, recentCompletions: Array<{ __typename?: 'CompletionEvent', modelId: string, scenarioId: string, success: boolean, completedAt: string, durationMs: number }> }> } | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, unresolvableTranscriptCount?: { __typename?: 'UnresolvableCount', total: number, byModel: Array<{ __typename?: 'UnresolvableByModel', modelId: string, count: number }> } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: unknown, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, pairedSibling?: { __typename?: 'Definition', id: string, name: string, content: unknown } | null } | null } | null };
+export type RunQuery = { __typename?: 'Query', run?: { __typename?: 'Run', id: string, name?: string | null, definitionId: string, definitionVersion?: number | null, experimentId?: string | null, status: string, runCategory: string, config: unknown, stalledModels: Array<string>, companionRunId?: string | null, isAggregate: boolean, pairedBatchGroupId?: string | null, progress?: unknown | null, startedAt?: string | null, completedAt?: string | null, createdAt: string, updatedAt: string, lastAccessedAt?: string | null, transcriptCount: number, analysisStatus?: string | null, definitionSnapshot?: unknown | null, failedProbes: Array<{ __typename?: 'ProbeResult', modelId: string, errorCode?: string | null, errorMessage?: string | null }>, transcripts: Array<{ __typename?: 'Transcript', id: string, runId: string, scenarioId?: string | null, modelId: string, modelVersion?: string | null, content: unknown, decisionMetadata?: unknown | null, turnCount: number, tokenCount: number, durationMs: number, estimatedCost?: number | null, createdAt: string, lastAccessedAt?: string | null, dimensionValues?: unknown | null, decisionModelV2?: unknown | null }>, analysis?: { __typename?: 'AnalysisResult', actualCost?: { __typename?: 'ActualCost', total: number, perModel: Array<{ __typename?: 'ActualModelCost', modelId: string, inputTokens: number, outputTokens: number, cost: number, probeCount: number }> } | null } | null, mirroredRuns: Array<{ __typename?: 'Run', id: string, status: string, createdAt: string, definitionId: string, config: unknown, analysisStatus?: string | null, definition?: { __typename?: 'Definition', id: string, name: string, content: unknown, domain?: { __typename?: 'Domain', name: string } | null, pairedSibling?: { __typename?: 'Definition', id: string, name: string, content: unknown } | null } | null, transcripts: Array<{ __typename?: 'Transcript', id: string, runId: string, scenarioId?: string | null, modelId: string, modelVersion?: string | null, content: unknown, decisionMetadata?: unknown | null, turnCount: number, tokenCount: number, durationMs: number, estimatedCost?: number | null, createdAt: string, lastAccessedAt?: string | null, dimensionValues?: unknown | null, decisionModelV2?: unknown | null }> }>, recentTasks: Array<{ __typename?: 'TaskResult', scenarioId: string, modelId: string, status: string, error?: string | null, completedAt?: string | null }>, executionMetrics?: { __typename?: 'ExecutionMetrics', totalActive: number, totalQueued: number, estimatedSecondsRemaining?: number | null, totalRetries: number, providers: Array<{ __typename?: 'ProviderExecutionMetrics', provider: string, activeJobs: number, queuedJobs: number, maxParallel: number, requestsPerMinute: number, activeModelIds: Array<string>, recentCompletions: Array<{ __typename?: 'CompletionEvent', modelId: string, scenarioId: string, success: boolean, completedAt: string, durationMs: number }> }> } | null, runProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number, byModel?: Array<{ __typename?: 'ByModelProgress', modelId: string, completed: number, failed: number }> | null } | null, summarizeProgress?: { __typename?: 'RunProgress', total: number, completed: number, failed: number, percentComplete: number } | null, unresolvableTranscriptCount?: { __typename?: 'UnresolvableCount', total: number, byModel: Array<{ __typename?: 'UnresolvableByModel', modelId: string, count: number }> } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, definition?: { __typename?: 'Definition', id: string, name: string, version: number, content: unknown, domain?: { __typename?: 'Domain', name: string } | null, tags: Array<{ __typename?: 'Tag', id: string, name: string }>, pairedSibling?: { __typename?: 'Definition', id: string, name: string, content: unknown } | null } | null } | null };
 
 export type StartRunMutationVariables = Exact<{
   input: StartRunInput;
@@ -5508,6 +5394,44 @@ export const RunWithTranscriptsFieldsFragmentDoc = gql`
         cost
         probeCount
       }
+    }
+  }
+  mirroredRuns {
+    id
+    status
+    createdAt
+    definitionId
+    config
+    analysisStatus
+    definition {
+      id
+      name
+      content
+      domain {
+        name
+      }
+      pairedSibling {
+        id
+        name
+        content
+      }
+    }
+    transcripts {
+      id
+      runId
+      scenarioId
+      modelId
+      modelVersion
+      content
+      decisionMetadata
+      turnCount
+      tokenCount
+      durationMs
+      estimatedCost
+      createdAt
+      lastAccessedAt
+      dimensionValues
+      decisionModelV2
     }
   }
   recentTasks(limit: 10) {
@@ -7564,87 +7488,6 @@ export const ModelsConfidenceDocument = gql`
 
 export function useModelsConfidenceQuery(options?: Omit<Urql.UseQueryArgs<ModelsConfidenceQueryVariables>, 'query'>) {
   return Urql.useQuery<ModelsConfidenceQuery, ModelsConfidenceQueryVariables>({ query: ModelsConfidenceDocument, ...options });
-};
-export const ModelsConsistencyDocument = gql`
-    query ModelsConsistency($domainId: ID, $providerId: ID, $minScenarios: Int, $signature: String!) {
-  modelsConsistency(
-    domainId: $domainId
-    providerId: $providerId
-    minScenarios: $minScenarios
-    signature: $signature
-  ) {
-    models {
-      modelId
-      label
-      providerName
-      repeatability {
-        value
-        ciLow
-        ciHigh
-        withinScenarioSd
-        betweenScenarioSd
-        scenariosMeasured
-        perDomain {
-          domainId
-          domainName
-          value
-          ciLow
-          ciHigh
-          scenariosMeasured
-        }
-        perScenario {
-          scenarioId
-          matches
-          trials
-          p
-          ciLow
-          ciHigh
-        }
-      }
-      coherence {
-        value
-        coherentPairs
-        determinatePairs
-        indeterminatePairs
-        perPair {
-          domainId
-          valueKey
-          rho
-          pValue
-          coherent
-          determinate
-          targetAnalysisRunId
-          targetCompanionRunId
-          primaryConditionIds
-          companionConditionIds
-          perCondition {
-            scenarioId
-            netPressureRank
-            winRate
-            matches
-            trials
-          }
-        }
-      }
-      orderEffect {
-        samePct
-        flippedPct
-        noisyPct
-        notApplicable
-      }
-    }
-    insufficient {
-      modelId
-      label
-      providerName
-      reason
-    }
-  }
-}
-    `;
-
-export function useModelsConsistencyQuery(options: Omit<Urql.UseQueryArgs<ModelsConsistencyQueryVariables>, 'query'>) {
-  return Urql.useQuery<ModelsConsistencyQuery, ModelsConsistencyQueryVariables>({ query: ModelsConsistencyDocument, ...options });
 };
 export const ModelsWinRateStabilityDocument = gql`
     query ModelsWinRateStability($signature: String, $domainId: ID) {

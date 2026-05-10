@@ -30,6 +30,8 @@ import {
   type AggregateRunConfig,
   type AggregateRunPreparation,
 } from './aggregate-types.js';
+import { findPairedCompanion } from '../../../utils/auto-pair.js';
+import { formatRunSignature } from '../../../graphql/queries/domain-coverage-gql-types.js';
 
 const log = createLogger('analysis:aggregate');
 const AGGREGATE_CLAIM_LEASE_MS = 300_000;
@@ -288,6 +290,49 @@ export async function prepareAggregateRunSnapshot(
       ? templateConfigWithCompanion.companionRunId
       : null;
 
+  let derivedCompanionRunId: string | null = null;
+  if (targetCompanionRunId === null && templateRun.definition?.domainId != null) {
+    const templateDefinition = templateRun.definition;
+    const candidateDefinitions = await db.definition.findMany({
+      where: {
+        domainId: templateDefinition.domainId,
+        deletedAt: null,
+        id: { not: templateDefinition.id },
+      },
+      select: {
+        id: true,
+        content: true,
+      },
+    });
+    const pairedSibling = findPairedCompanion(
+      {
+        id: templateDefinition.id,
+        content: templateDefinition.content,
+      },
+      candidateDefinitions.map((definition) => ({
+        id: definition.id,
+        content: definition.content,
+      })),
+    );
+
+    if (pairedSibling != null) {
+      const signature = formatRunSignature(templateRun.config);
+      const siblingRuns = await db.run.findMany({
+        where: {
+          definitionId: pairedSibling.id,
+          status: 'COMPLETED',
+          deletedAt: null,
+        },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      });
+
+      const matchingSiblingRun = siblingRuns.find((run) => formatRunSignature(run.config) === signature);
+      derivedCompanionRunId = matchingSiblingRun?.id ?? null;
+    }
+  }
+
+  const resolvedTargetCompanionRunId = targetCompanionRunId ?? derivedCompanionRunId;
+
   let aggregateWorkerInput: AggregateWorkerInput | null = null;
 
   if (aggregateEligibility === 'eligible_same_signature_baseline') {
@@ -306,7 +351,7 @@ export async function prepareAggregateRunSnapshot(
         valueA,
         valueB,
       },
-      targetCompanionRunId,
+      targetCompanionRunId: resolvedTargetCompanionRunId,
       transcripts: aggregateWorkerTranscripts,
     };
   }

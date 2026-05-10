@@ -1,5 +1,6 @@
 import { DOMAIN_ANALYSIS_VALUE_KEYS, extractValuePair, toPascalCaseKey, type DomainAnalysisValueKey } from './domain-analysis-values.js';
 import type { CoverageWeakestCondition } from './domain-coverage-gql-types.js';
+import { formatRunSignature } from './domain-coverage-gql-types.js';
 
 export const COVERAGE_VALUE_KEYS = DOMAIN_ANALYSIS_VALUE_KEYS;
 export type CoverageValueKey = DomainAnalysisValueKey;
@@ -160,55 +161,63 @@ export function findWeakestCondition(
   };
 }
 
+function canonicalValuePairKey(components: unknown): string {
+  if (components === null || typeof components !== 'object' || Array.isArray(components)) {
+    return '';
+  }
+
+  const record = components as {
+    value_first?: { token?: unknown } | null;
+    value_second?: { token?: unknown } | null;
+  };
+  const first = typeof record.value_first?.token === 'string' ? record.value_first.token : '';
+  const second = typeof record.value_second?.token === 'string' ? record.value_second.token : '';
+  return [first, second].sort().join('::');
+}
+
 /**
- * Deduplicate a list of runs by their paired-batch group ID.
+ * Deduplicate a list of runs by their trial signature and canonical value pair.
  *
- * A-first and B-first companion definitions for the same value pair share the
- * same `jobChoiceBatchGroupId` / `pairedBatchGroupId`. When runs are collected
- * across both companion definitions and flattened into a single list, each paired
- * batch appears twice. Call this before any aggregation (trial counts, model
- * breakdowns, etc.) to ensure each batch is counted exactly once.
+ * This pools mirrored paired-vignette runs that share the same signature
+ * (`v{definitionVersion}t{temperature}`) and the same canonical pair key
+ * derived from `definitionSnapshot.components`.
  *
- * Runs without a group ID (ungrouped / unpaired) are always kept.
- *
- * If `completenessOf` is provided, ties within a group are broken by preferring
- * the complete companion. When both companions are complete (or both incomplete)
- * the survivor is the one that appears first in input order. Callers that
- * depend on deterministic survivor selection should pre-sort by `createdAt`
- * (or another stable key) before calling.
+ * If `completenessOf` is provided, ties within a key are broken by preferring
+ * the complete run. When both candidates are complete (or both incomplete),
+ * the survivor is the first one seen in input order.
  */
-export function deduplicateRunsByGroupId<T extends { config: unknown }>(
+export function deduplicateRunsBySignaturePair<T extends { config: unknown }>(
   runs: ReadonlyArray<T>,
   completenessOf?: (run: T) => boolean,
 ): T[] {
+  const seenKeys = new Map<string, T[]>();
+  for (const [index, run] of runs.entries()) {
+    const signature = formatRunSignature(run.config);
+    const config = run.config as {
+      definitionSnapshot?: {
+        components?: unknown;
+      };
+    } | null;
+    const pairKey = canonicalValuePairKey(config?.definitionSnapshot?.components);
+    const key = pairKey === '' ? `__ungrouped__:${index}` : [signature, pairKey].join('||');
+    const members = seenKeys.get(key) ?? [];
+    members.push(run);
+    seenKeys.set(key, members);
+  }
+
   if (completenessOf == null) {
-    const seenGroupIds = new Set<string>();
-    return runs.filter((run) => {
-      const groupId = getCoverageBatchGroupId(run.config);
-      if (groupId === null) return true;
-      if (seenGroupIds.has(groupId)) return false;
-      seenGroupIds.add(groupId);
-      return true;
-    });
-  }
-
-  // Two-pass: first index every run by groupId, then pick the survivor with
-  // a "prefer complete" rule. Ungrouped runs pass through.
-  const groups = new Map<string, T[]>();
-  const ungrouped: T[] = [];
-  for (const run of runs) {
-    const groupId = getCoverageBatchGroupId(run.config);
-    if (groupId === null) {
-      ungrouped.push(run);
-      continue;
+    const survivors: T[] = [];
+    for (const members of seenKeys.values()) {
+      const first = members[0];
+      if (first != null) {
+        survivors.push(first);
+      }
     }
-    const existing = groups.get(groupId) ?? [];
-    existing.push(run);
-    groups.set(groupId, existing);
+    return survivors;
   }
 
-  const survivors: T[] = [...ungrouped];
-  for (const [, members] of groups) {
+  const survivors: T[] = [];
+  for (const members of seenKeys.values()) {
     if (members.length === 0) continue;
     const complete = members.find((member) => completenessOf(member));
     survivors.push(complete ?? members[0]!);
@@ -226,8 +235,8 @@ export function computePerModelTrialCounts(
   }
 
   // Caller is responsible for deduplicating paired runs before passing them here.
-  // Use deduplicateRunsByGroupId() at the call site when collecting runs across
-  // companion definitions for the same value pair.
+  // Use deduplicateRunsBySignaturePair() at the call site when collecting runs
+  // across companion definitions for the same value pair.
   //
   // We count actual transcript rows per model rather than the planned
   // `samplesPerScenario × runs-where-model-present` value. This keeps the
@@ -262,21 +271,6 @@ export function computePerModelTrialCounts(
   return { minTrialCount, maxTrialCount, modelBreakdown };
 }
 
-export function getCoverageBatchGroupId(runConfig: unknown): string | null {
-  const config = runConfig as {
-    jobChoiceBatchGroupId?: unknown;
-    pairedBatchGroupId?: unknown;
-  } | null;
-
-  const raw = typeof config?.jobChoiceBatchGroupId === 'string'
-    ? config.jobChoiceBatchGroupId
-    : typeof config?.pairedBatchGroupId === 'string'
-      ? config.pairedBatchGroupId
-      : null;
-
-  return raw != null && raw.trim().length > 0 ? raw.trim() : null;
-}
-
 /**
  * Read the direction token off a Run's config.
  *
@@ -284,12 +278,8 @@ export function getCoverageBatchGroupId(runConfig: unknown): string | null {
  * value that assembleTemplate always renders first, set at definition-creation
  * time and immutable thereafter.
  *
- * Fallback: deprecated `jobChoiceValueFirst` field. This field was backfilled
- * with incorrect logic for older runs on B-first definitions and must not be
- * trusted as the primary signal.
- *
- * Returns null when neither source yields a non-blank string. Defensive
- * against any non-object input.
+ * Returns null when the snapshot path is missing or does not yield a
+ * non-blank string. Defensive against any non-object input.
  */
 export function getCoverageDirection(runConfig: unknown): string | null {
   if (typeof runConfig !== 'object' || runConfig === null) return null;
@@ -307,13 +297,6 @@ export function getCoverageDirection(runConfig: unknown): string | null {
         }
       }
     }
-  }
-
-  // Deprecated fallback — may be incorrect for runs backfilled before 2026-05.
-  const jcvf = config.jobChoiceValueFirst;
-  if (typeof jcvf === 'string') {
-    const trimmed = jcvf.trim();
-    return trimmed.length > 0 ? toPascalCaseKey(trimmed) : null;
   }
 
   return null;

@@ -54,7 +54,6 @@ const navItems: NavItem[] = [
       { name: 'Legacy Survey Work', path: '/archive/surveys', icon: Archive },
       { name: 'Legacy Survey Results', path: '/archive/survey-results', icon: Archive },
       { name: 'Circumplex', path: '/archive/circumplex', icon: Archive },
-      { name: 'Consistency', path: '/archive/consistency', icon: Archive },
     ],
   },
   {

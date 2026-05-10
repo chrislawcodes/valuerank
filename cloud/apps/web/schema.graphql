@@ -320,31 +320,14 @@ type CircumplexResult {
 }
 
 type ClusterAnalysis {
-  clusters: [DomainCluster!]!
   clusterIdByModelId: JSON
+  clusters: [DomainCluster!]!
   defaultPair: [String!]
   dendrogram: [DendrogramMerge!]
   faultLinesByPair: JSON!
   leafOrder: [String!]
   skipReason: String
   skipped: Boolean!
-}
-
-type DendrogramMerge {
-  height: Float!
-  leftMemberIds: [String!]!
-  rightMemberIds: [String!]!
-}
-
-type KappaClusterPayload {
-  clusterAnalysis: ClusterAnalysis!
-  kappaPairs: [KappaPair!]!
-}
-
-type KappaPair {
-  kappa: Float
-  modelAId: String!
-  modelBId: String!
 }
 
 type ClusterMember {
@@ -361,14 +344,6 @@ type ClusterPairFaultLines {
   clusterBId: String!
   distance: Float!
   faultLines: [ValueFaultLine!]!
-}
-
-type Coherence {
-  coherentPairs: Int!
-  determinatePairs: Int!
-  indeterminatePairs: Int!
-  perPair: [ConsistencyPerPair!]!
-  value: Float!
 }
 
 """A recent job completion event"""
@@ -393,46 +368,6 @@ type ConfidenceValueDetailResult {
   modelLabel: String!
   valueKey: String!
   vignettes: [DomainAnalysisVignetteDetail!]!
-}
-
-type ConsistencyPerCondition {
-  matches: Int!
-  netPressureRank: Int!
-  scenarioId: String!
-  trials: Int!
-  winRate: Float
-}
-
-type ConsistencyPerDomain {
-  ciHigh: Float!
-  ciLow: Float!
-  domainId: String!
-  domainName: String!
-  scenariosMeasured: Int!
-  value: Float!
-}
-
-type ConsistencyPerPair {
-  coherent: Boolean!
-  companionConditionIds: [String!]!
-  determinate: Boolean!
-  domainId: String!
-  pValue: Float
-  perCondition: [ConsistencyPerCondition!]!
-  primaryConditionIds: [String!]!
-  rho: Float
-  targetAnalysisRunId: String
-  targetCompanionRunId: String
-  valueKey: String!
-}
-
-type ConsistencyPerScenario {
-  ciHigh: Float!
-  ciLow: Float!
-  matches: Int!
-  p: Float!
-  scenarioId: String!
-  trials: Int!
 }
 
 """A scenario with high disagreement across models"""
@@ -765,6 +700,12 @@ type DeleteTagResult {
 
   """Whether deletion was successful"""
   success: Boolean!
+}
+
+type DendrogramMerge {
+  height: Float!
+  leftMemberIds: [String!]!
+  rightMemberIds: [String!]!
 }
 
 """Result of deprecating a model"""
@@ -1436,13 +1377,6 @@ input ForkDefinitionInput {
   parentId: String!
 }
 
-type InsufficientModel {
-  label: String!
-  modelId: String!
-  providerName: String!
-  reason: String!
-}
-
 type InsufficientPressureSensitivityModel {
   label: String!
   modelId: String!
@@ -1468,6 +1402,17 @@ type JobTypeStatus {
 
   """Job type name (e.g., probe_scenario)"""
   type: String!
+}
+
+type KappaClusterPayload {
+  clusterAnalysis: ClusterAnalysis!
+  kappaPairs: [KappaPair!]!
+}
+
+type KappaPair {
+  kappa: Float
+  modelAId: String!
+  modelBId: String!
 }
 
 """
@@ -1603,15 +1548,6 @@ type ModelAgreementResult {
   unavailableModels: [UnavailableModelInfo!]!
 }
 
-type ModelConsistency {
-  coherence: Coherence!
-  label: String!
-  modelId: String!
-  orderEffect: OrderEffect!
-  providerName: String!
-  repeatability: Repeatability!
-}
-
 """Cost estimate for a single model in a run"""
 type ModelCostEstimate {
   """Average input tokens per probe used for prediction"""
@@ -1740,11 +1676,6 @@ type ModelsConfidenceValueResult {
   leanCount: Int!
   strongCount: Int!
   valueKey: String!
-}
-
-type ModelsConsistencyResult {
-  insufficient: [InsufficientModel!]!
-  models: [ModelConsistency!]!
 }
 
 type ModelsStabilityModelResult {
@@ -2124,13 +2055,6 @@ type Mutation {
   """Update a user role. Admin only."""
   updateUserRole(input: UpdateUserRoleInput!): User!
   updateValueStatement(id: ID!, input: UpdateValueStatementInput!): ValueStatement!
-}
-
-type OrderEffect {
-  flippedPct: Float!
-  noisyPct: Float!
-  notApplicable: Boolean!
-  samePct: Float!
 }
 
 type PairDivergenceBreakdown {
@@ -2762,7 +2686,6 @@ type Query {
     signature: String
   ): ModelsAnalysisResult!
   modelsConfidence(domainId: ID, signature: String): ModelsConfidenceResult!
-  modelsConsistency(domainId: ID, minScenarios: Int, providerId: ID, signature: String!): ModelsConsistencyResult!
   modelsWinRateStability(domainId: ID, signature: String): ModelsStabilityResult!
 
   """
@@ -3090,17 +3013,6 @@ type ReliabilitySummary {
   perModel: JSON!
 }
 
-type Repeatability {
-  betweenScenarioSd: Float!
-  ciHigh: Float!
-  ciLow: Float!
-  perDomain: [ConsistencyPerDomain!]!
-  perScenario: [ConsistencyPerScenario!]!
-  scenariosMeasured: Int!
-  value: Float!
-  withinScenarioSd: Float!
-}
-
 """Result of restarting summarization for a run"""
 type RestartSummarizationPayload {
   """Number of summarization jobs queued"""
@@ -3170,6 +3082,9 @@ type Run {
   """
   isAggregate: Boolean!
   lastAccessedAt: DateTime
+
+  """Mirrored runs in the same domain with matching signature"""
+  mirroredRuns: [Run!]!
 
   """List of LLM models used in this run"""
   models: [LlmModel!]!

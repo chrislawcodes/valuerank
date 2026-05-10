@@ -1,4 +1,3 @@
-import { randomUUID } from 'crypto';
 import { db } from '@valuerank/db';
 import type { RunCategory } from '@valuerank/db';
 import { estimateCost as estimateCostService } from '../../../../services/cost/estimate.js';
@@ -81,17 +80,9 @@ export async function planLaunchSlots(params: {
   for (const group of groups) {
     let delta = 1;
     if (targetBatchCount != null && targetBatchCount > 0) {
-      if (group.pairKey !== null) {
-        const pairMin = group.definitions.reduce(
-          (min, def) => Math.min(min, existingBatchCountByDefinitionId.get(def.id) ?? 0),
-          Number.POSITIVE_INFINITY,
-        );
-        delta = Math.max(0, targetBatchCount - (Number.isFinite(pairMin) ? pairMin : 0));
-      } else {
-        const def = group.definitions[0];
-        const existing = def !== undefined ? (existingBatchCountByDefinitionId.get(def.id) ?? 0) : 0;
-        delta = Math.max(0, targetBatchCount - existing);
-      }
+      const def = group.definitions[0];
+      const existing = def !== undefined ? (existingBatchCountByDefinitionId.get(def.id) ?? 0) : 0;
+      delta = Math.max(0, targetBatchCount - existing);
     }
 
     if (delta === 0) continue;
@@ -117,24 +108,22 @@ export async function planLaunchSlots(params: {
     }
 
     for (let i = 0; i < delta; i++) {
-      if (group.pairKey !== null) {
-        const batchGroupId = randomUUID();
-        for (const def of group.definitions) {
-          const tokens = getComponentTokens(def.content);
-          launchSlots.push({
-            definition: def,
-            configExtras: {
-              jobChoiceLaunchMode: 'PAIRED_BATCH',
-              jobChoiceBatchGroupId: batchGroupId,
-              jobChoiceValueFirst: tokens?.value_first.token,
-              methodologySafe: true,
-            },
-          });
-        }
-      } else {
-        for (const def of group.definitions) {
-          launchSlots.push({ definition: def, configExtras: undefined });
-        }
+      for (const def of group.definitions) {
+        const tokens = getComponentTokens(def.content);
+        // Only stamp the paired-batch config when the definition actually has
+        // mirrored value tokens — i.e., it's a paired vignette. Non-paired
+        // definitions (no methodology components) and orphan paired vignettes
+        // launch as plain individual runs with no configExtras.
+        launchSlots.push({
+          definition: def,
+          configExtras: tokens !== null
+            ? {
+                jobChoiceLaunchMode: 'PAIRED_BATCH',
+                jobChoiceValueFirst: tokens.value_first.token,
+                methodologySafe: true,
+              }
+            : undefined,
+        });
       }
     }
   }

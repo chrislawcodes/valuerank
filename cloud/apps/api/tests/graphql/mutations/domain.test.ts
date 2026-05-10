@@ -580,13 +580,11 @@ describe('GraphQL Domain Mutations', () => {
 
       expect(callA?.configExtras?.jobChoiceLaunchMode).toBe('PAIRED_BATCH');
       expect(callB?.configExtras?.jobChoiceLaunchMode).toBe('PAIRED_BATCH');
-      expect(callA?.configExtras?.jobChoiceBatchGroupId).toBeTruthy();
-      expect(callA?.configExtras?.jobChoiceBatchGroupId).toBe(callB?.configExtras?.jobChoiceBatchGroupId);
       expect(callA?.configExtras?.jobChoiceValueFirst).toBe('career');
       expect(callB?.configExtras?.jobChoiceValueFirst).toBe('family');
     });
 
-    it('launches two distinct pairs as two batches with different batchGroupIds', async () => {
+    it('launches two distinct pairs as two independent batches', async () => {
       const domain = await db.domain.create({
         data: { name: 'Multi-Paired Test', normalizedName: `multi-paired-test-${Date.now()}` },
       });
@@ -607,14 +605,10 @@ describe('GraphQL Domain Mutations', () => {
 
       expect(startRunMock).toHaveBeenCalledTimes(4);
       const calls = startRunMock.mock.calls.map((c) => c[0]);
-      const groupId1 = calls.find((c) => c.definitionId === p1a.id)?.configExtras?.jobChoiceBatchGroupId;
-      const groupId2 = calls.find((c) => c.definitionId === p2a.id)?.configExtras?.jobChoiceBatchGroupId;
-
-      expect(groupId1).toBeTruthy();
-      expect(groupId2).toBeTruthy();
-      expect(groupId1).not.toBe(groupId2);
-      expect(calls.find((c) => c.definitionId === p1b.id)?.configExtras?.jobChoiceBatchGroupId).toBe(groupId1);
-      expect(calls.find((c) => c.definitionId === p2b.id)?.configExtras?.jobChoiceBatchGroupId).toBe(groupId2);
+      expect(calls.find((c) => c.definitionId === p1a.id)?.configExtras?.jobChoiceLaunchMode).toBe('PAIRED_BATCH');
+      expect(calls.find((c) => c.definitionId === p1b.id)?.configExtras?.jobChoiceLaunchMode).toBe('PAIRED_BATCH');
+      expect(calls.find((c) => c.definitionId === p2a.id)?.configExtras?.jobChoiceLaunchMode).toBe('PAIRED_BATCH');
+      expect(calls.find((c) => c.definitionId === p2b.id)?.configExtras?.jobChoiceLaunchMode).toBe('PAIRED_BATCH');
     });
 
     it('launches a non-paired definition as an individual run with no batch configExtras', async () => {
@@ -749,9 +743,10 @@ describe('GraphQL Domain Mutations', () => {
         ['test-domain-model-2'],
       ]);
 
-      const batchGroupIds = startRunMock.mock.calls.map((call) => call[0]?.configExtras?.jobChoiceBatchGroupId);
-      expect(batchGroupIds[0]).toBeTruthy();
-      expect(batchGroupIds[0]).toBe(batchGroupIds[1]);
+      expect(startRunMock.mock.calls.map((call) => call[0]?.configExtras?.jobChoiceLaunchMode)).toEqual([
+        'PAIRED_BATCH',
+        'PAIRED_BATCH',
+      ]);
 
       const evaluation = await db.domainEvaluation.findUnique({
         where: { id: domainEvaluationId },
@@ -859,9 +854,12 @@ describe('GraphQL Domain Mutations', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.errors).toBeUndefined();
-      expect(response.body.data.backfillDomainEvaluationModels.startedRuns).toBe(2);
-      expect(startRunMock).toHaveBeenCalledTimes(2);
-      expect(startRunMock.mock.calls.map((call) => call[0]?.definitionId).sort()).toEqual([defA.id, defB.id].sort());
+      // Wave 4: backfill is no longer pair-aware. Each definition is treated
+      // independently. defA already has model2 covered (its run config
+      // includes both models), so only defB needs the backfill.
+      expect(response.body.data.backfillDomainEvaluationModels.startedRuns).toBe(1);
+      expect(startRunMock).toHaveBeenCalledTimes(1);
+      expect(startRunMock.mock.calls[0]?.[0]?.definitionId).toBe(defB.id);
     });
 
     it('rejects backfill models that were not part of the original evaluation', async () => {

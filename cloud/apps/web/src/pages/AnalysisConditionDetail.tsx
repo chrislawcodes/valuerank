@@ -114,12 +114,23 @@ export function AnalysisConditionDetail() {
   // Companion resolution prefers the server-resolved paired sibling
   // (Definition.pairedSibling) over the legacy run-proximity heuristic. Order:
   //   1. ?companionRunId= URL hint (caller already picked a run)
-  //   2. run.companionRunId (run config has a direct link)
-  //   3. The most-recent COMPLETED run of run.definition.pairedSibling,
+  //   2. run.mirroredRuns (server-resolved same-signature companion pool)
+  //   3. run.companionRunId (legacy direct link)
+  //   4. The most-recent COMPLETED run of run.definition.pairedSibling,
   //      preferring the same aggregate kind when possible
+  const mirroredCompanionRunId = useMemo(() => {
+    const mirroredRuns = run?.mirroredRuns;
+
+    if (mirroredRuns == null || mirroredRuns.length === 0) {
+      return null;
+    }
+
+    const representative = mirroredRuns.find((candidate) => candidate.id !== run?.id) ?? mirroredRuns[0] ?? null;
+    return representative?.id ?? null;
+  }, [run?.id, run?.mirroredRuns]);
   const directCompanionRunId = run?.companionRunId ?? null;
   const pairedSiblingDefinitionId = run?.definition?.pairedSibling?.id ?? null;
-  const hasExplicitCompanionId = companionRunIdHint != null || directCompanionRunId != null;
+  const hasExplicitCompanionId = companionRunIdHint != null || mirroredCompanionRunId != null || directCompanionRunId != null;
 
   // When neither URL nor run-config gave us a companion run, look up runs of
   // the paired sibling vignette and pick a representative one.
@@ -157,7 +168,7 @@ export function AnalysisConditionDetail() {
     return sorted[0]?.id ?? null;
   }, [run?.id, run?.isAggregate, run?.tags, siblingRuns]);
 
-  const resolvedCompanionRunId = companionRunIdHint ?? directCompanionRunId ?? siblingFallbackRunId ?? null;
+  const resolvedCompanionRunId = companionRunIdHint ?? mirroredCompanionRunId ?? directCompanionRunId ?? siblingFallbackRunId ?? null;
 
   const { run: companionRun } = useRun({
     id: resolvedCompanionRunId ?? '',

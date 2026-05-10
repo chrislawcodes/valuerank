@@ -72,7 +72,6 @@ describe('NavTabs Component', () => {
     expect(screen.getByRole('link', { name: 'Models' }).parentElement?.className).toContain('border-teal-500');
     expect(screen.getByRole('link', { name: 'Model Groups' }).className).not.toContain('bg-teal-600/20');
     expect(screen.getByRole('link', { name: 'Win Rate' }).className).toContain('bg-teal-600/20');
-    expect(screen.getByRole('link', { name: 'Consistency' }).className).not.toContain('bg-teal-600/20');
     expect(screen.getByRole('link', { name: 'Circumplex' }).className).not.toContain('bg-teal-600/20');
   });
 
@@ -106,7 +105,6 @@ describe('NavTabs Component', () => {
     expect(screen.getByRole('link', { name: 'Legacy Survey Work' })).toHaveAttribute('href', '/archive/surveys');
     expect(screen.getByRole('link', { name: 'Legacy Survey Results' })).toHaveAttribute('href', '/archive/survey-results');
     expect(screen.getByRole('link', { name: 'Circumplex' })).toHaveAttribute('href', '/archive/circumplex');
-    expect(screen.getByRole('link', { name: 'Consistency' })).toHaveAttribute('href', '/archive/consistency');
   });
 
   it('highlights Archive on archive compatibility routes', async () => {

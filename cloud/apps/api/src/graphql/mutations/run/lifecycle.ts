@@ -116,14 +116,12 @@ builder.mutationField('startRun', (t) =>
 
       if (launchMode === 'PAIRED_BATCH') {
         const pair = await resolvePairedDefinition(String(input.definitionId));
-        const batchGroupId = crypto.randomUUID();
 
         const primaryRun = await startRunService({
           definitionId: pair.primary.id,
           ...sharedInput,
           configExtras: {
             jobChoiceLaunchMode: launchMode,
-            jobChoiceBatchGroupId: batchGroupId,
             jobChoiceValueFirst: pair.primaryValueFirst,
             methodologySafe: true,
           },
@@ -134,7 +132,6 @@ builder.mutationField('startRun', (t) =>
           ...sharedInput,
           configExtras: {
             jobChoiceLaunchMode: launchMode,
-            jobChoiceBatchGroupId: batchGroupId,
             jobChoiceValueFirst: pair.companionValueFirst,
             methodologySafe: true,
           },
@@ -190,7 +187,6 @@ builder.mutationField('startRun', (t) =>
           runCategory: 'PRODUCTION',
           configExtras: {
             jobChoiceLaunchMode: launchMode,
-            jobChoiceBatchGroupId: crypto.randomUUID(),
             jobChoiceValueFirst: topUpDirection,
             methodologySafe: true,
           },

@@ -5,7 +5,6 @@ import type {
   DomainEvaluationLaunchInput,
   DomainTrialRunResult,
 } from '../types.js';
-import { groupDefinitionsByPairKey } from './pair-grouping.js';
 import { resolveDefinitionsForLaunch } from './resolve-definitions.js';
 import { resolveModelsForLaunch } from './resolve-models.js';
 import { checkForActiveEquivalentRun } from './active-run-check.js';
@@ -94,13 +93,9 @@ export async function launchDomainEvaluation(input: DomainEvaluationLaunchInput)
   }
   const budgetCap = maxBudgetUsd ?? null;
 
-  const { groups: launchGroups, incompletePairKeys } = groupDefinitionsByPairKey(targetedDefinitions);
-  for (const pairKey of incompletePairKeys) {
-    log.warn(
-      { domainId, pairKey },
-      'Incomplete pair: companion definition not found. Launching as individual run.'
-    );
-  }
+  const launchGroups = targetedDefinitions.map((definition) => ({
+    definitions: [definition],
+  }));
 
   const {
     launchSlots,

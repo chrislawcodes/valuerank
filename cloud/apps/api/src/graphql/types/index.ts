@@ -30,7 +30,6 @@ import './available-model.js';
 import './models-analysis.js';
 import './models-confidence.js';
 import './confidence-value-detail.js';
-import './models-consistency.js';
 import './models-stability.js';
 import './model-agreement-on-tradeoffs.js';
 import './pressure-sensitivity.js';

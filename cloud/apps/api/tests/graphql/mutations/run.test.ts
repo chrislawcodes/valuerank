@@ -687,9 +687,6 @@ describe('GraphQL Run Mutations', () => {
       expect((bRun?.config as Record<string, unknown>).methodologySafe).toBe(true);
       expect((aRun?.config as Record<string, unknown>).jobChoiceValueFirst).toBe('career');
       expect((bRun?.config as Record<string, unknown>).jobChoiceValueFirst).toBe('family');
-      expect((aRun?.config as Record<string, unknown>).jobChoiceBatchGroupId).toBe(
-        (bRun?.config as Record<string, unknown>).jobChoiceBatchGroupId
-      );
       expect((aRun?.config as Record<string, unknown>).companionRunId).toBe(bRun?.id);
       expect((bRun?.config as Record<string, unknown>).companionRunId).toBe(aRun?.id);
       expect((aRun?.config as Record<string, unknown>).models).toEqual(['gpt-4']);
@@ -765,7 +762,6 @@ describe('GraphQL Run Mutations', () => {
       expect(result.jobCount).toBe(1);
       expect((result.run.config as Record<string, unknown>).jobChoiceLaunchMode).toBe('PAIRED_BATCH_TOPUP');
       expect((result.run.config as Record<string, unknown>).jobChoiceValueFirst).toBe('Achievement');
-      expect((result.run.config as Record<string, unknown>).jobChoiceBatchGroupId).toEqual(expect.any(String));
       expect((result.run.config as Record<string, unknown>).methodologySafe).toBe(true);
     });
 

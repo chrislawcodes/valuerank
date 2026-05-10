@@ -12,6 +12,7 @@ import { CostEstimateRef, type CostEstimateShape } from './cost-estimate.js';
 import './run-anomaly.js';
 import { RunAnomalyRef } from './refs.js';
 import { getAllMetrics, getTotals } from '../../services/rate-limiter/index.js';
+import { resolveMirroredRuns } from './run-mirrored-runs.js';
 
 // Re-export for backward compatibility
 export { RunRef, TranscriptRef, ExperimentRef };
@@ -180,6 +181,17 @@ builder.objectType(RunRef, {
           ? config.companionRunId
           : null;
       },
+    }),
+    /**
+     * All non-deleted runs in the same domain whose definition mirrors this
+     * run's value tokens and whose signature matches this run's signature.
+     * Returns an empty list when this run is not paired or when no mirrored
+     * runs exist. Implementation in `./run-mirrored-runs.ts`.
+     */
+    mirroredRuns: t.field({
+      type: [RunRef],
+      description: 'Mirrored runs in the same domain with matching signature',
+      resolve: (run) => resolveMirroredRuns(run),
     }),
     isAggregate: t.boolean({
       description:

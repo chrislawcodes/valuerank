@@ -55,7 +55,7 @@ export function useAnalysisTranscriptParams() {
     [searchParams]
   );
   const isPairedStabilityDrilldown = Boolean(
-    repeatPattern && companionRunId && searchParams.has('primaryConditionIds')
+    repeatPattern && searchParams.has('primaryConditionIds')
   );
 
   return {

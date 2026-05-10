@@ -11,7 +11,7 @@ import { useRuns } from './useRuns';
 import { useAnalysis } from './useAnalysis';
 import { useRunMutations } from './useRunMutations';
 import { useAnalysisTranscriptParams } from './useAnalysisTranscriptParams';
-import type { Transcript } from '../api/operations/runs';
+import type { Run, Transcript } from '../api/operations/runs';
 import { toManualDecisionInput } from '../utils/manualDecisionOverrideInput';
 import {
   deriveDecisionDimensionLabels,
@@ -80,16 +80,50 @@ export function useAnalysisTranscriptsData(runId: string | undefined) {
     enablePolling: false,
     analysisStatus: run?.analysisStatus ?? null,
   });
-
-  const { run: companionRun } = useRun({
+  const companionRunById = useRun({
     id: companionRunId,
-    pause: companionRunId === '',
+    pause:
+      companionRunId.length === 0
+      || (run?.mirroredRuns?.some((candidate) => candidate.id === companionRunId) ?? false),
     enablePolling: false,
-  });
+  }).run;
+  const companionRuns = useMemo(() => {
+    const mirroredRuns = run?.mirroredRuns;
+
+    if (mirroredRuns == null || mirroredRuns.length === 0) {
+      return companionRunById != null ? [companionRunById] : [];
+    }
+
+    if (companionRunId.length > 0) {
+      const selected = mirroredRuns.find((candidate) => candidate.id === companionRunId);
+      if (selected != null) {
+        return [selected];
+      }
+
+      return companionRunById != null ? [companionRunById] : [];
+    }
+
+    return mirroredRuns;
+  }, [companionRunById, companionRunId, run?.mirroredRuns]);
+  const companionRun = useMemo(() => {
+    if (companionRuns.length === 0) {
+      return null;
+    }
+
+    const representative = companionRuns.find((candidate) => candidate.id !== run?.id) ?? companionRuns[0] ?? null;
+    if (representative == null) {
+      return null;
+    }
+
+    return {
+      ...representative,
+      transcripts: companionRuns.flatMap((candidate) => candidate.transcripts ?? []),
+    } as Run;
+  }, [companionRuns, run?.id]);
 
   const { analysis: companionAnalysis } = useAnalysis({
-    runId: companionRunId,
-    pause: companionRunId === '' || !companionRun?.analysisStatus,
+    runId: companionRun?.id ?? '',
+    pause: companionRun == null || !companionRun.analysisStatus,
     enablePolling: false,
     analysisStatus: companionRun?.analysisStatus ?? null,
   });
@@ -163,7 +197,6 @@ export function useAnalysisTranscriptsData(runId: string | undefined) {
     selectedTranscriptId,
     decisionBucket,
     analysisMode: analysisMode ?? '',
-    companionRunId,
     pairedValueKey,
     pairedDecisionBucketParam,
     pairView,
