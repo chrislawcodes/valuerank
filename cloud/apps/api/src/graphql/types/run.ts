@@ -27,10 +27,6 @@ type RunConfig = {
   priority?: string;
   definitionSnapshot?: unknown;
   estimatedCosts?: CostEstimateShape;
-  companionRunId?: string | null;
-  jobChoiceBatchGroupId?: string | null;
-  /** @deprecated Use definitionSnapshot.components.value_first.token instead. */
-  jobChoiceValueFirst?: string | null;
   isAggregate?: boolean;
   sourceRunIds?: string[];
 };
@@ -172,16 +168,6 @@ builder.objectType(RunRef, {
       description: 'Workflow category assigned to the run',
     }),
     config: t.expose('config', { type: 'JSON' }),
-    companionRunId: t.string({
-      nullable: true,
-      description: 'Direct companion run ID for paired launches',
-      resolve: (run) => {
-        const config = run.config as RunConfig | null;
-        return typeof config?.companionRunId === 'string' && config.companionRunId.trim() !== ''
-          ? config.companionRunId
-          : null;
-      },
-    }),
     /**
      * All non-deleted runs in the same domain whose definition mirrors this
      * run's value tokens and whose signature matches this run's signature.
@@ -201,16 +187,6 @@ builder.objectType(RunRef, {
       resolve: (run) => {
         const config = run.config as RunConfig | null;
         return config?.isAggregate === true;
-      },
-    }),
-    pairedBatchGroupId: t.string({
-      nullable: true,
-      description: 'Shared identifier for the paired batch that this run belongs to',
-      resolve: (run) => {
-        const config = run.config as RunConfig | null;
-        return typeof config?.jobChoiceBatchGroupId === 'string' && config.jobChoiceBatchGroupId.trim() !== ''
-          ? config.jobChoiceBatchGroupId
-          : null;
       },
     }),
     definitionSnapshot: t.field({

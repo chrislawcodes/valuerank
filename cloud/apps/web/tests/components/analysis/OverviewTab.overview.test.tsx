@@ -170,41 +170,6 @@ describe('OverviewTab', () => {
     expect(winRateCells.length).toBeGreaterThan(0);
   });
 
-  it('keeps the paired comparison section visible with a single-mode note', () => {
-    render(
-      <MemoryRouter>
-        <OverviewTab
-          runId="run-1"
-          semantics={createSemantics()}
-          completedBatches={3}
-          aggregateSourceRunCount={null}
-          isAggregate={false}
-          analysisMode="single"
-          perModel={{
-            model1: {
-              sampleSize: 3,
-              values: {},
-              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
-            },
-          }}
-          visualizationData={{
-            decisionDistribution: {},
-            scenarioDimensions: {
-              s1: { Freedom: 'a1', Harmony: 'b1' },
-            },
-            modelScenarioMatrix: {
-              model1: { s1: 5 },
-            },
-          }}
-          varianceAnalysis={createVarianceAnalysis()}
-        />
-      </MemoryRouter>
-    );
-
-    expect(screen.getByText('Paired Run Comparison')).toBeInTheDocument();
-    expect(screen.getByText(/only available in Paired vignettes mode/i)).toBeInTheDocument();
-  });
-
   it('keeps one decimal for non-integer summary percentages', () => {
     const semantics = createSemantics();
     semantics.reliability.byModel.model1.directionalAgreement = 0.983333;

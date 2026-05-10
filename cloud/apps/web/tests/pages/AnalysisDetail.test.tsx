@@ -301,6 +301,10 @@ describe('AnalysisDetail', () => {
                   pair_key: 'pair-1',
                   presentation_order: 'A_first',
                 },
+                components: {
+                  value_first: { token: 'a', body: '' },
+                  value_second: { token: 'b', body: '' },
+                },
               },
             },
             createdAt: '2024-01-01T00:00:00Z',
@@ -383,6 +387,10 @@ describe('AnalysisDetail', () => {
                   pair_key: 'pair-1',
                   presentation_order: 'A_first',
                 },
+                components: {
+                  value_first: { token: 'a', body: '' },
+                  value_second: { token: 'b', body: '' },
+                },
               },
             },
             createdAt: '2024-01-01T00:00:00Z',
@@ -407,6 +415,10 @@ describe('AnalysisDetail', () => {
                   family: 'job-choice',
                   pair_key: 'pair-1',
                   presentation_order: 'B_first',
+                },
+                components: {
+                  value_first: { token: 'b', body: '' },
+                  value_second: { token: 'a', body: '' },
                 },
               },
             },
@@ -495,6 +507,10 @@ describe('AnalysisDetail', () => {
                   pair_key: 'pair-1',
                   presentation_order: 'A_first',
                 },
+                components: {
+                  value_first: { token: 'a', body: '' },
+                  value_second: { token: 'b', body: '' },
+                },
               },
             },
             createdAt: '2024-01-01T00:00:00Z',
@@ -519,6 +535,10 @@ describe('AnalysisDetail', () => {
                   family: 'job-choice',
                   pair_key: 'pair-1',
                   presentation_order: 'B_first',
+                },
+                components: {
+                  value_first: { token: 'b', body: '' },
+                  value_second: { token: 'a', body: '' },
                 },
               },
             },
@@ -635,6 +655,10 @@ describe('AnalysisDetail', () => {
                   pair_key: 'pair-1',
                   presentation_order: id === 'run-123' ? 'A_first' : 'B_first',
                 },
+                components: {
+                  value_first: { token: id === 'run-123' ? 'a' : 'b', body: '' },
+                  value_second: { token: id === 'run-123' ? 'b' : 'a', body: '' },
+                },
               },
             },
             createdAt: id === 'run-123' ? '2024-01-01T00:00:00Z' : '2024-01-01T00:01:00Z',
@@ -721,6 +745,10 @@ describe('AnalysisDetail', () => {
                   family: 'job-choice',
                   pair_key: 'pair-1',
                   presentation_order: id === 'run-123' ? 'A_first' : 'B_first',
+                },
+                components: {
+                  value_first: { token: id === 'run-123' ? 'a' : 'b', body: '' },
+                  value_second: { token: id === 'run-123' ? 'b' : 'a', body: '' },
                 },
               },
             },
@@ -834,7 +862,7 @@ describe('AnalysisDetail', () => {
       expect(screen.getByText('Trolley Problem')).toBeInTheDocument();
     });
 
-    it('shows Job Choice and paired batch labels for Job Choice analysis', () => {
+    it('shows Job Choice methodology label for Job Choice analysis', () => {
       mockUseRun.mockReturnValue({
         run: {
           id: 'run-123',
@@ -854,9 +882,7 @@ describe('AnalysisDetail', () => {
               name: 'Job Choice',
             },
           },
-          config: {
-            jobChoiceLaunchMode: 'PAIRED_BATCH',
-          },
+          config: {},
           tags: [],
         },
         loading: false,
@@ -866,7 +892,6 @@ describe('AnalysisDetail', () => {
       renderWithRouter('run-123');
 
       expect(screen.getByText('Job Choice')).toBeInTheDocument();
-      expect(screen.getByText('Paired Batch')).toBeInTheDocument();
     });
 
     it('shows Old V1 label for retained professional analysis', () => {

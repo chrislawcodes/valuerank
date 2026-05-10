@@ -3,14 +3,6 @@
 # Remove an entry when you split or shrink the file.
 # See docs/tech-debt/file-structure.md for context.
 
-# Production components / pages over 700
-cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx
-# Run GraphQL type — temporarily 704 during the paired-batch removal waves.
-# Wave 5 will delete several resolvers (pairedBatchGroupId, companionRunId,
-# the launchMode-derived fields) and shrink this back under 700. Wave 4
-# already extracted mirroredRuns into run-mirrored-runs.ts. Remove this
-# entry when Wave 5 ships.
-cloud/apps/api/src/graphql/types/run.ts
 # Clustering algorithms: UPGMA, Ward, 5 distance-matrix builders, silhouettes,
 # dendrogram helpers. All tightly coupled math — splitting adds indirection
 # without reducing complexity. Extract stat helpers when the file hits 900+.

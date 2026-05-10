@@ -107,13 +107,6 @@ describe('RunCard', () => {
     expect(screen.getByText('Batches').parentElement).toHaveTextContent('0');
   });
 
-  it('shows paired batch badge when the run belongs to a paired batch group', () => {
-    const run = createMockRun({ pairedBatchGroupId: 'group-1' });
-    render(<RunCard run={run} />);
-
-    expect(screen.getByText('Paired batch')).toBeInTheDocument();
-  });
-
   it('calls onClick when clicked', async () => {
     const user = userEvent.setup();
     const onClick = vi.fn();

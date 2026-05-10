@@ -214,7 +214,6 @@ describe('RunForm', () => {
       models: ['gpt-4'],
       samplePercentage: 100,
       samplesPerScenario: 1,
-      launchMode: 'STANDARD',
     }));
   });
 
@@ -363,53 +362,6 @@ describe('RunForm', () => {
       models: ['gpt-4', 'claude-3'],
       samplePercentage: 100,
       samplesPerScenario: 1,
-      launchMode: 'STANDARD',
-    }));
-  });
-
-  it('defaults Job Choice definitions to paired batch launch mode', async () => {
-    const user = userEvent.setup();
-    mockOnSubmit.mockResolvedValue(undefined);
-
-    render(
-      <RunForm
-        definitionId="job-choice-def-1"
-        definitionContent={{
-          schema_version: 1,
-          methodology: {
-            family: 'job-choice',
-            pair_key: 'test-pair',
-            presentation_order: 'A_first',
-          },
-          components: {
-            value_first: { token: 'freedom' },
-            value_second: { token: 'harmony' },
-          },
-          dimensions: [
-            { name: 'Freedom' },
-            { name: 'Harmony' },
-          ],
-        }}
-        scenarioCount={10}
-        onSubmit={mockOnSubmit}
-      />
-    );
-
-    expect(screen.getByText('Batch Type')).toBeInTheDocument();
-    const pairedModeButton = screen
-      .getByText('Methodology-safe default. Launches both order variants together.')
-      .closest('button');
-    expect(pairedModeButton).not.toBeNull();
-    expect(pairedModeButton).toHaveClass('border-teal-500');
-
-    await user.click(screen.getByText('OpenAI'));
-    await user.click(screen.getByText('GPT-4'));
-    await user.click(screen.getAllByRole('button', { name: 'Start Paired Batch' }).at(-1)!);
-
-    expect(mockOnSubmit).toHaveBeenCalledWith(expect.objectContaining({
-      definitionId: 'job-choice-def-1',
-      models: ['gpt-4'],
-      launchMode: 'PAIRED_BATCH',
     }));
   });
 
@@ -454,7 +406,6 @@ describe('RunForm', () => {
       samplePercentage: undefined,
       samplesPerScenario: 1,
       scenarioIds: ['scenario-1'],
-      launchMode: 'STANDARD',
       temperature: undefined,
     }));
   });

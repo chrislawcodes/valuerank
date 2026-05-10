@@ -13,7 +13,7 @@ import { Button } from '../components/ui/Button';
 import { Loading } from '../components/ui/Loading';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { AnalysisPanel } from '../components/analysis/AnalysisPanel';
-import { findCompanionPairedRun } from '../components/analysis/PairedRunComparisonCard';
+import { findCompanionPairedRun } from '../utils/legacyCompanionPairedRun';
 import { useAnalysis } from '../hooks/useAnalysis';
 import { useInfiniteRuns } from '../hooks/useInfiniteRuns';
 import { useRun } from '../hooks/useRun';
@@ -53,23 +53,6 @@ function parseCoverageCountParam(value: string | null): number | null {
 
   const parsed = Number(trimmed);
   return Number.isSafeInteger(parsed) ? parsed : null;
-}
-
-function formatLaunchModeLabel(launchMode: string | null | undefined): string | null {
-  switch (launchMode) {
-    case 'AD_HOC_BATCH':
-      return 'Ad Hoc Batch';
-    case 'PAIRED_BATCH':
-      return 'Paired Batch';
-    case 'PAIRED_BATCH_TOPUP':
-      return 'Paired batch top-up';
-    case 'STANDARD':
-    case null:
-    case undefined:
-      return null;
-    default:
-      return null;
-  }
 }
 
 function buildAnalysisDetailParams(
@@ -316,9 +299,7 @@ export function AnalysisDetail() {
     definitionContent,
     run.definition?.domain?.name ?? null,
   );
-  const runLaunchMode = run.config?.jobChoiceLaunchMode;
-  const isPairedBatch = runLaunchMode === 'PAIRED_BATCH';
-  const launchModeLabel = hasMirroredValueTokens(definitionContent) ? formatLaunchModeLabel(runLaunchMode) : null;
+  const isPairedDefinition = hasMirroredValueTokens(definitionContent);
   const handleSingleVignetteChange = (nextRunId: string) => {
     if (!nextRunId || nextRunId === run.id) {
       return;
@@ -341,7 +322,6 @@ export function AnalysisDetail() {
           definitionId={run.definition?.id}
           definitionName={run.definition?.name}
           methodologyLabel={methodologyLabel}
-          launchModeLabel={launchModeLabel}
           isAggregate={isAggregate}
           currentSignature={trialSignature}
         />
@@ -372,7 +352,7 @@ export function AnalysisDetail() {
             onSingleVignetteChange={handleSingleVignetteChange}
             companionAnalysis={analysisMode === 'paired' ? companionAnalysis : null}
             currentRun={run}
-            companionRun={isPairedBatch ? resolvedCompanionRun : null}
+            companionRun={isPairedDefinition ? resolvedCompanionRun : null}
             definitionContent={definitionContent}
             transcripts={run.transcripts}
             isOldVersion={isOldVersion}

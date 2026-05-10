@@ -27,26 +27,6 @@ import { formatTemperatureSetting } from '../../lib/temperature';
 import { getDefinitionMethodologyLabel, hasMirroredValueTokens } from '../../utils/methodology';
 import { StalledModelsBanner, UnresolvableBanner, formatRunDate, getDisplaySignature } from './RunDetailBanners';
 import { useRunDetailHandlers } from './useRunDetailHandlers';
-import type { Run } from '../../api/operations/runs';
-
-function formatLaunchModeLabel(launchMode: Run['config']['jobChoiceLaunchMode']): string | null {
-  switch (launchMode) {
-    case 'AD_HOC_BATCH':
-      return 'Ad Hoc Batch';
-    case 'PAIRED_BATCH':
-      return 'Paired Batch';
-    case 'PAIRED_BATCH_TOPUP':
-      return 'Paired batch top-up';
-    case 'STANDARD':
-    case null:
-    case undefined:
-      return null;
-    default: {
-      const _exhaustiveCheck: never = launchMode;
-      return _exhaustiveCheck;
-    }
-  }
-}
 
 export function RunDetail() {
   const navigate = useNavigate();
@@ -105,12 +85,6 @@ export function RunDetail() {
   const trialSignature = formatTrialSignature(run.definitionVersion ?? run.definition?.version ?? null, run.config?.temperature ?? null);
   const methodologyLabel = getDefinitionMethodologyLabel(run.definition?.content, run.definition?.domain?.name ?? null);
   const isPairedRun = hasMirroredValueTokens(run.definition?.content);
-  const launchModeLabel = isPairedRun ? formatLaunchModeLabel(run.config?.jobChoiceLaunchMode) : null;
-  const launchModeBadgeClass = launchModeLabel === 'Paired Batch'
-    ? 'bg-teal-100 text-teal-800'
-    : launchModeLabel === 'Paired batch top-up'
-      ? 'bg-amber-100 text-amber-800'
-      : 'bg-gray-100 text-gray-700';
 
   return (
     <div className="space-y-6">
@@ -177,11 +151,6 @@ export function RunDetail() {
                 {methodologyLabel && (
                   <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">{methodologyLabel}</span>
                 )}
-                {launchModeLabel && (
-                  <span className={`rounded-full px-2 py-1 text-xs font-medium ${launchModeBadgeClass}`}>
-                    {launchModeLabel}
-                  </span>
-                )}
               </div>
               <div className="flex items-center gap-2 mt-0.5">
                 <RunNameEditor name={run.name} formattedName={formatRunName(run)} onSave={handlers.handleSaveName} variant="subtitle" />
@@ -202,9 +171,6 @@ export function RunDetail() {
         <div className="mb-6">
           <div className="flex items-center gap-2 mb-4">
             <h3 className="text-sm font-medium text-gray-700">Progress</h3>
-            {isPairedRun && run.config?.jobChoiceLaunchMode === 'PAIRED_BATCH' && (
-              <span className="text-xs font-medium text-teal-600">· 1 of 2 vignettes</span>
-            )}
           </div>
           <RunProgress run={run} showPerModel={true} />
         </div>

@@ -46,14 +46,6 @@ export const StartRunInput = builder.inputType('StartRunInput', {
       required: false,
       description: 'Optional experiment to associate this run with',
     }),
-    launchMode: t.string({
-      required: false,
-      description: 'Launch mode hint: STANDARD, PAIRED_BATCH, PAIRED_BATCH_TOPUP, or AD_HOC_BATCH',
-    }),
-    topUpDirection: t.string({
-      required: false,
-      description: 'Direction to top up for paired-batch top-up launches',
-    }),
     scenarioIds: t.idList({
       required: false,
       description: 'Optional explicit scenario IDs to run instead of percentage sampling',

@@ -6,14 +6,12 @@
 
 import { useMemo, useRef } from 'react';
 import { CopyVisualButton } from '../../ui/CopyVisualButton';
-import { PairedRunComparisonCard } from '../PairedRunComparisonCard';
 import { resolveScenarioAttributes } from '../../../utils/decisionLabels';
 import {
   ANALYSIS_BASE_PATH,
   type AnalysisBasePath,
 } from '../../../utils/analysisRouting';
 import type { AnalysisResult, VarianceAnalysis, VisualizationData } from '../../../api/operations/analysis';
-import type { Run } from '../../../api/operations/runs';
 import type { AnalysisSemanticsView, PreferenceViewModel, ReliabilityViewModel } from '../../analysis-v2/analysisSemantics';
 import {
   buildConditionRows,
@@ -30,7 +28,6 @@ import { REPEAT_PATTERN_LABELS, SUMMARY_COLUMN_TITLES } from './OverviewTabTypes
 import {
   SummaryHeader,
   SummaryCell,
-  ModeAvailabilitySection,
   PatternMetricButton,
   PairedPatternMetricButton,
 } from './OverviewTabComponents';
@@ -50,9 +47,6 @@ export function OverviewSummaryTable({
   coveragePairedBatchCount,
   isAggregate,
   analysisMode,
-  currentRun,
-  currentAnalysis,
-  companionRun,
 }: {
   runId: string;
   analysisBasePath?: AnalysisBasePath;
@@ -68,9 +62,6 @@ export function OverviewSummaryTable({
   coveragePairedBatchCount?: number | null;
   isAggregate: boolean;
   analysisMode?: 'single' | 'paired';
-  currentRun?: Run | null;
-  currentAnalysis?: AnalysisResult | null;
-  companionRun?: Run | null;
 }) {
   const models = useMemo(() => {
     return Object.keys(semantics.preference.byModel)
@@ -301,24 +292,6 @@ export function OverviewSummaryTable({
         </table>
       </div>
 
-      <div className="border-t border-gray-200 pt-4">
-        {analysisMode === 'paired' && currentRun && currentAnalysis ? (
-          <PairedRunComparisonCard
-            currentRun={currentRun}
-            currentAnalysis={currentAnalysis}
-            companionRun={companionRun ?? null}
-            companionAnalysis={companionAnalysis ?? null}
-            analysisBasePath={analysisBasePath}
-            analysisSearch={typeof analysisSearchParams === 'string' ? analysisSearchParams : analysisSearchParams?.toString() ?? ''}
-            embedded
-          />
-        ) : (
-          <ModeAvailabilitySection
-            title="Paired Run Comparison"
-            message="This comparison is only available in Paired vignettes mode. Switch the toggle above to see both vignette orders together."
-          />
-        )}
-      </div>
     </div>
   );
 }

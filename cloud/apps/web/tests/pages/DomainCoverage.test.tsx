@@ -326,8 +326,8 @@ describe('DomainCoverage Page', () => {
       );
     });
 
-    const pairedBatchLink = await screen.findByRole('link', { name: /start paired batch/i });
-    expect(pairedBatchLink).toHaveAttribute('href', '/definitions/def-1/start-paired-batch');
+    const startTrialLink = await screen.findByRole('link', { name: /start trial/i });
+    expect(startTrialLink).toHaveAttribute('href', '/definitions/def-1');
 
     const vignetteAnalysisLink = await screen.findByRole('link', { name: /view vignette analysis/i });
     const href = vignetteAnalysisLink.getAttribute('href');

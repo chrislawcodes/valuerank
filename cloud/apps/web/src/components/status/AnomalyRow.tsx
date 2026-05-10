@@ -294,17 +294,6 @@ export function AnomalyRow({ anomaly, tone, onViewTranscript }: AnomalyRowProps)
           </div>
         );
       }
-      case 'PAIR_ASYMMETRY':
-        return (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => navigate(`/runs/${anomaly.runId}`)}
-          >
-            View pair
-          </Button>
-        );
       case 'SUMMARIZING_STALL':
       case 'MODEL_TRANSCRIPT_SHORTFALL':
       case 'SCHEDULED_COUNT_MISMATCH':

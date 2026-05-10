@@ -9,7 +9,6 @@ import request from 'supertest';
 import { createServer } from '../../../src/server.js';
 import { db } from '@valuerank/db';
 import { getAuthHeader, TEST_USER } from '../../test-utils.js';
-import { persistPairedCompanionRunIds } from '../../../src/graphql/mutations/run/lifecycle.js';
 
 // Mock PgBoss
 vi.mock('../../../src/queue/boss.js', () => ({
@@ -557,78 +556,18 @@ describe('GraphQL Run Mutations', () => {
       expect(response.body.errors[0].message).toContain('no scenarios');
     });
 
-    it('starts both companion runs for paired batch job choice launches', async () => {
-      const domain = await db.domain.create({
+    it('rejects requests that pass the removed launchMode input', async () => {
+      const definition = await db.definition.create({
         data: {
-          name: 'Job Choice Test Domain',
-          normalizedName: `job choice test domain ${Date.now()}`,
+          name: 'Definition for launchMode rejection',
+          content: { schema_version: 1, preamble: 'Test' },
         },
       });
-      createdDomainIds.push(domain.id);
-
-      const pairKey = `job-choice:test-pair:${Date.now()}`;
-      const aFirstDefinition = await db.definition.create({
-        data: {
-          domainId: domain.id,
-          name: 'Job Choice A First',
-          content: {
-            schema_version: 1,
-            methodology: {
-              family: 'job-choice',
-              response_scale: 'option_text_short',
-              pair_key: pairKey,
-            },
-            components: {
-              value_first: { token: 'career' },
-              value_second: { token: 'family' },
-            },
-          },
-        },
-      });
-      const bFirstDefinition = await db.definition.create({
-        data: {
-          domainId: domain.id,
-          name: 'Job Choice B First',
-          content: {
-            schema_version: 1,
-            methodology: {
-              family: 'job-choice',
-              response_scale: 'option_text_short',
-              pair_key: pairKey,
-            },
-            components: {
-              value_first: { token: 'family' },
-              value_second: { token: 'career' },
-            },
-          },
-        },
-      });
-      createdDefinitionIds.push(aFirstDefinition.id, bFirstDefinition.id);
-
-      await db.scenario.createMany({
-        data: [
-          { definitionId: aFirstDefinition.id, name: 'A Scenario 1', content: { test: 1 } },
-          { definitionId: aFirstDefinition.id, name: 'A Scenario 2', content: { test: 2 } },
-          { definitionId: bFirstDefinition.id, name: 'B Scenario 1', content: { test: 1 } },
-          { definitionId: bFirstDefinition.id, name: 'B Scenario 2', content: { test: 2 } },
-        ],
-      });
+      createdDefinitionIds.push(definition.id);
 
       const mutation = `
         mutation StartRun($input: StartRunInput!) {
-          startRun(input: $input) {
-            run {
-              id
-              runCategory
-              companionRunId
-              config
-              definition {
-                id
-              }
-            }
-            jobCount
-            pairedRunIds
-          }
+          startRun(input: $input) { run { id } jobCount }
         }
       `;
 
@@ -639,335 +578,19 @@ describe('GraphQL Run Mutations', () => {
           query: mutation,
           variables: {
             input: {
-              definitionId: aFirstDefinition.id,
+              definitionId: definition.id,
               models: ['gpt-4'],
               launchMode: 'PAIRED_BATCH',
             },
           },
         });
 
-      expect(response.status).toBe(200);
-      expect(response.body.errors).toBeUndefined();
-
-      const result = response.body.data.startRun;
-      createdRunIds.push(result.run.id, ...result.pairedRunIds);
-
-      expect(result.run.definition.id).toBe(aFirstDefinition.id);
-      expect(result.run.runCategory).toBe('PRODUCTION');
-      expect(result.run.companionRunId).toBe(result.pairedRunIds[0]);
-      expect(result.jobCount).toBe(4);
-      expect(result.pairedRunIds).toHaveLength(1);
-
-      const createdRuns = await db.run.findMany({
-        where: {
-          id: {
-            in: [result.run.id, result.pairedRunIds[0]],
-          },
-        },
-        select: {
-          id: true,
-          definitionId: true,
-          runCategory: true,
-          config: true,
-        },
-      });
-
-      expect(createdRuns).toHaveLength(2);
-
-      const aRun = createdRuns.find((run) => run.definitionId === aFirstDefinition.id);
-      const bRun = createdRuns.find((run) => run.definitionId === bFirstDefinition.id);
-
-      expect(aRun).toBeDefined();
-      expect(bRun).toBeDefined();
-      expect(aRun?.runCategory).toBe('PRODUCTION');
-      expect(bRun?.runCategory).toBe('PRODUCTION');
-      expect((aRun?.config as Record<string, unknown>).jobChoiceLaunchMode).toBe('PAIRED_BATCH');
-      expect((bRun?.config as Record<string, unknown>).jobChoiceLaunchMode).toBe('PAIRED_BATCH');
-      expect((aRun?.config as Record<string, unknown>).methodologySafe).toBe(true);
-      expect((bRun?.config as Record<string, unknown>).methodologySafe).toBe(true);
-      expect((aRun?.config as Record<string, unknown>).jobChoiceValueFirst).toBe('career');
-      expect((bRun?.config as Record<string, unknown>).jobChoiceValueFirst).toBe('family');
-      expect((aRun?.config as Record<string, unknown>).companionRunId).toBe(bRun?.id);
-      expect((bRun?.config as Record<string, unknown>).companionRunId).toBe(aRun?.id);
-      expect((aRun?.config as Record<string, unknown>).models).toEqual(['gpt-4']);
-      expect((bRun?.config as Record<string, unknown>).models).toEqual(['gpt-4']);
+      // GraphQL rejects unknown input fields with a 400 at the validation layer.
+      expect(response.status).toBe(400);
+      expect(response.body.errors).toBeDefined();
+      expect(response.body.errors[0].message).toContain('launchMode');
     });
 
-    it('starts a single top-up run with the lagging direction pinned', async () => {
-      const definition = await db.definition.create({
-        data: {
-          name: 'Top Up Definition',
-          content: {
-            schema_version: 1,
-            dimensions: [
-              { name: 'achievement' },
-              { name: 'power_dominance' },
-            ],
-          },
-        },
-      });
-      createdDefinitionIds.push(definition.id);
-
-      await db.scenario.create({
-        data: {
-          definitionId: definition.id,
-          name: 'Scenario 1',
-          content: { test: 1 },
-        },
-      });
-
-      const mutation = `
-        mutation StartRun($input: StartRunInput!) {
-          startRun(input: $input) {
-            run {
-              id
-              runCategory
-              companionRunId
-              config
-              definition {
-                id
-              }
-            }
-            jobCount
-            pairedRunIds
-          }
-        }
-      `;
-
-      const response = await request(app)
-        .post('/graphql')
-        .set('Authorization', getAuthHeader())
-        .send({
-          query: mutation,
-          variables: {
-            input: {
-              definitionId: definition.id,
-              models: ['gpt-4'],
-              launchMode: 'PAIRED_BATCH_TOPUP',
-              topUpDirection: 'Achievement',
-            },
-          },
-        });
-
-      expect(response.status).toBe(200);
-      expect(response.body.errors).toBeUndefined();
-
-      const result = response.body.data.startRun;
-      createdRunIds.push(result.run.id);
-
-      expect(result.run.definition.id).toBe(definition.id);
-      expect(result.run.runCategory).toBe('PRODUCTION');
-      expect(result.run.companionRunId).toBeNull();
-      expect(result.pairedRunIds).toBeNull();
-      expect(result.jobCount).toBe(1);
-      expect((result.run.config as Record<string, unknown>).jobChoiceLaunchMode).toBe('PAIRED_BATCH_TOPUP');
-      expect((result.run.config as Record<string, unknown>).jobChoiceValueFirst).toBe('Achievement');
-      expect((result.run.config as Record<string, unknown>).methodologySafe).toBe(true);
-    });
-
-    it('rejects top-up launches without a direction', async () => {
-      const definition = await db.definition.create({
-        data: {
-          name: 'Top Up Missing Direction',
-          content: {
-            schema_version: 1,
-            dimensions: [
-              { name: 'achievement' },
-              { name: 'power_dominance' },
-            ],
-          },
-        },
-      });
-      createdDefinitionIds.push(definition.id);
-
-      await db.scenario.create({
-        data: {
-          definitionId: definition.id,
-          name: 'Scenario 1',
-          content: { test: 1 },
-        },
-      });
-
-      const mutation = `
-        mutation StartRun($input: StartRunInput!) {
-          startRun(input: $input) {
-            run {
-              id
-            }
-            jobCount
-          }
-        }
-      `;
-
-      const response = await request(app)
-        .post('/graphql')
-        .set('Authorization', getAuthHeader())
-        .send({
-          query: mutation,
-          variables: {
-            input: {
-              definitionId: definition.id,
-              models: ['gpt-4'],
-              launchMode: 'PAIRED_BATCH_TOPUP',
-            },
-          },
-        });
-
-      expect(response.status).toBe(200);
-      expect(response.body.errors?.[0]?.message).toContain('topUpDirection is required');
-    });
-
-    it('rejects top-up launches for a direction not in the pair', async () => {
-      const definition = await db.definition.create({
-        data: {
-          name: 'Top Up Wrong Direction',
-          content: {
-            schema_version: 1,
-            dimensions: [
-              { name: 'achievement' },
-              { name: 'power_dominance' },
-            ],
-          },
-        },
-      });
-      createdDefinitionIds.push(definition.id);
-
-      await db.scenario.create({
-        data: {
-          definitionId: definition.id,
-          name: 'Scenario 1',
-          content: { test: 1 },
-        },
-      });
-
-      const mutation = `
-        mutation StartRun($input: StartRunInput!) {
-          startRun(input: $input) {
-            run {
-              id
-            }
-            jobCount
-          }
-        }
-      `;
-
-      const response = await request(app)
-        .post('/graphql')
-        .set('Authorization', getAuthHeader())
-        .send({
-          query: mutation,
-          variables: {
-            input: {
-              definitionId: definition.id,
-              models: ['gpt-4'],
-              launchMode: 'PAIRED_BATCH_TOPUP',
-              topUpDirection: 'Tradition',
-            },
-          },
-        });
-
-      expect(response.status).toBe(200);
-      expect(response.body.errors?.[0]?.message).toContain('must be one of');
-    });
-
-    it('rejects runCategory overrides on top-up launches', async () => {
-      const definition = await db.definition.create({
-        data: {
-          name: 'Top Up RunCategory Override',
-          content: {
-            schema_version: 1,
-            dimensions: [
-              { name: 'achievement' },
-              { name: 'power_dominance' },
-            ],
-          },
-        },
-      });
-      createdDefinitionIds.push(definition.id);
-
-      await db.scenario.create({
-        data: {
-          definitionId: definition.id,
-          name: 'Scenario 1',
-          content: { test: 1 },
-        },
-      });
-
-      const mutation = `
-        mutation StartRun($input: StartRunInput!) {
-          startRun(input: $input) {
-            run {
-              id
-            }
-            jobCount
-          }
-        }
-      `;
-
-      const response = await request(app)
-        .post('/graphql')
-        .set('Authorization', getAuthHeader())
-        .send({
-          query: mutation,
-          variables: {
-            input: {
-              definitionId: definition.id,
-              models: ['gpt-4'],
-              launchMode: 'PAIRED_BATCH_TOPUP',
-              topUpDirection: 'Achievement',
-              runCategory: 'PILOT',
-            },
-          },
-        });
-
-      expect(response.status).toBe(200);
-      expect(response.body.errors?.[0]?.message).toContain('runCategory PRODUCTION');
-    });
-
-    it('rejects overwriting an existing companion link with a different run', async () => {
-      const definition = await db.definition.create({
-        data: {
-          name: 'Test Definition for Companion Link Guard',
-          content: { schema_version: 1, preamble: 'Test' },
-        },
-      });
-      createdDefinitionIds.push(definition.id);
-
-      const primaryRun = await db.run.create({
-        data: {
-          definitionId: definition.id,
-          status: 'PENDING',
-          config: {
-            models: ['gpt-4'],
-            companionRunId: 'run-existing-companion',
-          },
-          progress: { total: 0, completed: 0, failed: 0 },
-        },
-      });
-      const companionRun = await db.run.create({
-        data: {
-          definitionId: definition.id,
-          status: 'PENDING',
-          config: {
-            models: ['gpt-4'],
-          },
-          progress: { total: 0, completed: 0, failed: 0 },
-        },
-      });
-      createdRunIds.push(primaryRun.id, companionRun.id);
-
-      await expect(
-        persistPairedCompanionRunIds(primaryRun.id, companionRun.id),
-      ).rejects.toThrow('already paired with a different companion run');
-
-      const [reloadedPrimaryRun, reloadedCompanionRun] = await Promise.all([
-        db.run.findUnique({ where: { id: primaryRun.id } }),
-        db.run.findUnique({ where: { id: companionRun.id } }),
-      ]);
-
-      expect((reloadedPrimaryRun?.config as Record<string, unknown>).companionRunId).toBe('run-existing-companion');
-      expect((reloadedCompanionRun?.config as Record<string, unknown>).companionRunId).toBeUndefined();
-    });
   });
 
   describe('updateTranscriptDecision', () => {
