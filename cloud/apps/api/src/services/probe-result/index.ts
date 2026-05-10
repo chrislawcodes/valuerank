@@ -92,39 +92,37 @@ export async function recordProbeFailure(input: RecordFailureInput): Promise<voi
     ? errorMessage.substring(0, 2000) + '...'
     : errorMessage;
 
-  try {
-    await db.probeResult.upsert({
-      where: {
-        runId_scenarioId_modelId_sampleIndex: { runId, scenarioId, modelId, sampleIndex },
-      },
-      create: {
-        runId,
-        scenarioId,
-        modelId,
-        sampleIndex,
-        status: 'FAILED',
-        errorCode,
-        errorMessage: truncatedMessage,
-        retryCount,
-        completedAt: new Date(),
-      },
-      update: {
-        status: 'FAILED',
-        errorCode,
-        errorMessage: truncatedMessage,
-        retryCount,
-        transcriptId: null,
-        durationMs: null,
-        inputTokens: null,
-        outputTokens: null,
-        completedAt: new Date(),
-      },
-    });
+  // Failures here are rethrown. The dead-letter handler relies on this row to surface
+  // expired/zombie probes through Run.failedProbes; if the upsert silently swallows,
+  // operators see "0 failed probes" while the queue actually has dead jobs.
+  await db.probeResult.upsert({
+    where: {
+      runId_scenarioId_modelId_sampleIndex: { runId, scenarioId, modelId, sampleIndex },
+    },
+    create: {
+      runId,
+      scenarioId,
+      modelId,
+      sampleIndex,
+      status: 'FAILED',
+      errorCode,
+      errorMessage: truncatedMessage,
+      retryCount,
+      completedAt: new Date(),
+    },
+    update: {
+      status: 'FAILED',
+      errorCode,
+      errorMessage: truncatedMessage,
+      retryCount,
+      transcriptId: null,
+      durationMs: null,
+      inputTokens: null,
+      outputTokens: null,
+      completedAt: new Date(),
+    },
+  });
 
-    log.debug({ runId, scenarioId, modelId, sampleIndex, errorCode }, 'Recorded probe failure');
-  } catch (err) {
-    // Log but don't fail the job - probe result recording is supplementary
-    log.error({ runId, scenarioId, modelId, sampleIndex, err }, 'Failed to record probe failure');
-  }
+  log.debug({ runId, scenarioId, modelId, sampleIndex, errorCode }, 'Recorded probe failure');
 }
 
