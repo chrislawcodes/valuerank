@@ -104,6 +104,44 @@ fragment RunWithTranscriptsFields on Run {
       }
     }
   }
+  mirroredRuns {
+    id
+    status
+    createdAt
+    definitionId
+    config
+    analysisStatus
+    definition {
+      id
+      name
+      content
+      domain {
+        name
+      }
+      pairedSibling {
+        id
+        name
+        content
+      }
+    }
+    transcripts {
+      id
+      runId
+      scenarioId
+      modelId
+      modelVersion
+      content
+      decisionMetadata
+      turnCount
+      tokenCount
+      durationMs
+      estimatedCost
+      createdAt
+      lastAccessedAt
+      dimensionValues
+      decisionModelV2
+    }
+  }
   recentTasks(limit: 10) {
     scenarioId
     modelId

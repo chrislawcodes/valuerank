@@ -6,7 +6,6 @@ import type {
   DomainTrialRunResult,
 } from '../types.js';
 import type { DefinitionRow } from './types.js';
-import { groupDefinitionsByPairKey } from './pair-grouping.js';
 import { getBackfillSnapshot } from './resolve-backfill.js';
 import { planBackfillGroups } from './plan-backfill.js';
 import { executeBackfillRuns } from './execute-runs.js';
@@ -118,10 +117,9 @@ export async function backfillDomainEvaluationModels(input: DomainEvaluationMode
       throw new ValidationError(`Selected vignettes are missing or deleted: ${missingDefinitions.join(', ')}`);
     }
 
-    const { groups: launchGroups, incompletePairKeys } = groupDefinitionsByPairKey(selectedDefinitions);
-    if (incompletePairKeys.length > 0) {
-      throw new ValidationError(`Backfill requires complete vignette pairs. Include both sides for: ${incompletePairKeys.join(', ')}`);
-    }
+    const launchGroups = selectedDefinitions.map((definition) => ({
+      definitions: [definition],
+    }));
 
     const { backfillGroups, projectedCostUsd } = await planBackfillGroups({
       groups: launchGroups,

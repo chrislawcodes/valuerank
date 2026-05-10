@@ -109,7 +109,6 @@ export function computeFilterModeFlags(args: {
   selectedTranscriptId: string;
   decisionBucket: string;
   analysisMode: string;
-  companionRunId: string;
   pairedValueKey: string;
   pairedDecisionBucketParam: string;
   pairView: string;
@@ -126,14 +125,12 @@ export function computeFilterModeFlags(args: {
     ),
     hasPairedValueFilterParams: Boolean(
       args.analysisMode === 'paired'
-      && args.companionRunId
       && args.selectedModel
       && (args.pairedValueKey || args.pairedDecisionBucketParam === 'a' || args.pairedDecisionBucketParam === 'neutral' || args.pairedDecisionBucketParam === 'b')
       && args.pairView === 'blended'
     ),
     hasPairedConditionFilterParams: Boolean(
       args.analysisMode === 'paired'
-      && args.companionRunId
       && args.selectedModel
       && args.activeRowDim
       && args.activeColDim

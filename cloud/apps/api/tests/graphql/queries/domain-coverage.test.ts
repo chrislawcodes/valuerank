@@ -1,14 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   extractValuePair,
-  getCoverageBatchGroupId,
   getCoverageBatchIncrement,
   getCoverageDirection,
   computeConditionCounts,
   selectPrimaryDefinitionCount,
   selectPrimaryDefinitionCounts,
   computePerModelTrialCounts,
-  deduplicateRunsByGroupId,
+  deduplicateRunsBySignaturePair,
 } from '../../../src/graphql/queries/domain-coverage-utils.js';
 import { isRunComplete } from '../../../src/services/run/coverage-completeness.js';
 
@@ -164,38 +163,6 @@ describe('getCoverageBatchIncrement', () => {
   });
 });
 
-describe('getCoverageBatchGroupId', () => {
-  it('prefers jobChoiceBatchGroupId when present', () => {
-    expect(
-      getCoverageBatchGroupId({
-        jobChoiceBatchGroupId: 'job-choice-group',
-        pairedBatchGroupId: 'paired-group',
-      }),
-    ).toBe('job-choice-group');
-  });
-
-  it('falls back to pairedBatchGroupId when jobChoiceBatchGroupId is absent', () => {
-    expect(
-      getCoverageBatchGroupId({
-        pairedBatchGroupId: 'paired-group',
-      }),
-    ).toBe('paired-group');
-  });
-
-  it('trims whitespace from the selected batch-group id', () => {
-    expect(
-      getCoverageBatchGroupId({
-        jobChoiceBatchGroupId: '  group-id  ',
-      }),
-    ).toBe('group-id');
-  });
-
-  it('returns null when both batch-group ids are missing or blank', () => {
-    expect(getCoverageBatchGroupId({})).toBeNull();
-    expect(getCoverageBatchGroupId({ jobChoiceBatchGroupId: '   ' })).toBeNull();
-  });
-});
-
 describe('computePerModelTrialCounts', () => {
   const labels = new Map([
     ['model-a', 'Model A'],
@@ -221,12 +188,34 @@ describe('computePerModelTrialCounts', () => {
     ]);
   });
 
-  it('counts paired runs as-is - caller must dedup via deduplicateRunsByGroupId first', () => {
+  it('counts paired runs as-is - caller must dedup via deduplicateRunsBySignaturePair first', () => {
     // computePerModelTrialCounts does NOT deduplicate. The call site is responsible.
-    // This test documents the contract: duplicate group IDs are counted twice here.
+    // This test documents the contract: duplicate signature/pair keys are counted twice here.
     const runs = [
-      { config: { jobChoiceBatchGroupId: 'group-1', samplesPerScenario: 1 }, transcripts: [{ modelId: 'model-a' }] },
-      { config: { jobChoiceBatchGroupId: 'group-1', samplesPerScenario: 1 }, transcripts: [{ modelId: 'model-a' }] },
+      {
+        config: {
+          definitionSnapshot: {
+            components: {
+              value_first: { token: 'career' },
+              value_second: { token: 'family' },
+            },
+          },
+          samplesPerScenario: 1,
+        },
+        transcripts: [{ modelId: 'model-a' }],
+      },
+      {
+        config: {
+          definitionSnapshot: {
+            components: {
+              value_first: { token: 'family' },
+              value_second: { token: 'career' },
+            },
+          },
+          samplesPerScenario: 1,
+        },
+        transcripts: [{ modelId: 'model-a' }],
+      },
     ];
     const result = computePerModelTrialCounts(runs, ['model-a'], labels);
     expect(result.minTrialCount).toBe(2); // both counted - caller didn't dedup
@@ -239,7 +228,15 @@ describe('computePerModelTrialCounts', () => {
     // intent rather than reality.
     const runs = [
       {
-        config: { jobChoiceBatchGroupId: 'g1', samplesPerScenario: 5 },
+        config: {
+          definitionSnapshot: {
+            components: {
+              value_first: { token: 'career' },
+              value_second: { token: 'family' },
+            },
+          },
+          samplesPerScenario: 5,
+        },
         // Five real transcripts -> five trials.
         transcripts: [
           { modelId: 'model-a' }, { modelId: 'model-a' }, { modelId: 'model-a' },
@@ -284,58 +281,194 @@ describe('computePerModelTrialCounts', () => {
   });
 });
 
-describe('deduplicateRunsByGroupId', () => {
-  it('removes duplicate paired runs sharing the same group ID', () => {
+describe('deduplicateRunsBySignaturePair', () => {
+  it('removes duplicate paired runs sharing the same signature and canonical pair', () => {
     const runs = [
-      { config: { jobChoiceBatchGroupId: 'group-1' }, transcripts: [] },
-      { config: { jobChoiceBatchGroupId: 'group-1' }, transcripts: [] }, // duplicate
-      { config: { jobChoiceBatchGroupId: 'group-2' }, transcripts: [] },
+      {
+        config: {
+          definitionSnapshot: {
+            components: {
+              value_first: { token: 'career' },
+              value_second: { token: 'family' },
+            },
+          },
+        },
+        transcripts: [],
+      },
+      {
+        config: {
+          definitionSnapshot: {
+            components: {
+              value_first: { token: 'family' },
+              value_second: { token: 'career' },
+            },
+          },
+        },
+        transcripts: [],
+      }, // duplicate
+      {
+        config: {
+          definitionSnapshot: {
+            components: {
+              value_first: { token: 'career' },
+              value_second: { token: 'security' },
+            },
+          },
+        },
+        transcripts: [],
+      },
     ];
-    expect(deduplicateRunsByGroupId(runs)).toHaveLength(2);
+    expect(deduplicateRunsBySignaturePair(runs)).toHaveLength(2);
   });
 
   it('keeps all ungrouped runs regardless', () => {
     const runs = [
       { config: {}, transcripts: [] },
       { config: {}, transcripts: [] },
-      { config: { jobChoiceBatchGroupId: 'group-1' }, transcripts: [] },
+      {
+        config: {
+          definitionSnapshot: {
+            components: {
+              value_first: { token: 'career' },
+              value_second: { token: 'family' },
+            },
+          },
+        },
+        transcripts: [],
+      },
     ];
-    expect(deduplicateRunsByGroupId(runs)).toHaveLength(3);
+    expect(deduplicateRunsBySignaturePair(runs)).toHaveLength(3);
   });
 
   it('handles mixed grouped and ungrouped runs', () => {
     const runs = [
-      { config: { jobChoiceBatchGroupId: 'g1' }, transcripts: [] },
-      { config: { jobChoiceBatchGroupId: 'g1' }, transcripts: [] }, // duplicate
+      {
+        config: {
+          definitionSnapshot: {
+            components: {
+              value_first: { token: 'career' },
+              value_second: { token: 'family' },
+            },
+          },
+        },
+        transcripts: [],
+      },
+      {
+        config: {
+          definitionSnapshot: {
+            components: {
+              value_first: { token: 'family' },
+              value_second: { token: 'career' },
+            },
+          },
+        },
+        transcripts: [],
+      }, // duplicate
       { config: {}, transcripts: [] }, // ungrouped - keep
-      { config: { jobChoiceBatchGroupId: 'g2' }, transcripts: [] },
+      {
+        config: {
+          definitionSnapshot: {
+            components: {
+              value_first: { token: 'career' },
+              value_second: { token: 'security' },
+            },
+          },
+        },
+        transcripts: [],
+      },
     ];
-    expect(deduplicateRunsByGroupId(runs)).toHaveLength(3);
+    expect(deduplicateRunsBySignaturePair(runs)).toHaveLength(3);
   });
 
   it('returns empty array for empty input', () => {
-    expect(deduplicateRunsByGroupId([])).toHaveLength(0);
+    expect(deduplicateRunsBySignaturePair([])).toHaveLength(0);
   });
 
   it('with completenessOf callback, prefers the complete companion within a group', () => {
     const runs = [
-      { config: { jobChoiceBatchGroupId: 'group-1' }, transcripts: [], complete: false },
-      { config: { jobChoiceBatchGroupId: 'group-1' }, transcripts: [], complete: true },
-      { config: { jobChoiceBatchGroupId: 'group-2' }, transcripts: [], complete: false },
-      { config: { jobChoiceBatchGroupId: 'group-2' }, transcripts: [], complete: false },
+      {
+        config: {
+          definitionSnapshot: {
+            components: {
+              value_first: { token: 'career' },
+              value_second: { token: 'family' },
+            },
+          },
+        },
+        transcripts: [],
+        complete: false,
+      },
+      {
+        config: {
+          definitionSnapshot: {
+            components: {
+              value_first: { token: 'family' },
+              value_second: { token: 'career' },
+            },
+          },
+        },
+        transcripts: [],
+        complete: true,
+      },
+      {
+        config: {
+          definitionSnapshot: {
+            components: {
+              value_first: { token: 'career' },
+              value_second: { token: 'security' },
+            },
+          },
+        },
+        transcripts: [],
+        complete: false,
+      },
+      {
+        config: {
+          definitionSnapshot: {
+            components: {
+              value_first: { token: 'security' },
+              value_second: { token: 'career' },
+            },
+          },
+        },
+        transcripts: [],
+        complete: false,
+      },
     ];
-    const survivors = deduplicateRunsByGroupId(runs, (run) => run.complete);
+    const survivors = deduplicateRunsBySignaturePair(runs, (run) => run.complete);
     expect(survivors).toHaveLength(2);
-    // group-1 winner is the complete one; group-2 has no complete -- first-seen wins.
-    expect(survivors.find((r) => r.config.jobChoiceBatchGroupId === 'group-1')?.complete).toBe(true);
+    // First pair winner is the complete one; the second pair has no complete -- first-seen wins.
+    expect(survivors[0]?.complete).toBe(true);
   });
 
   it('with completenessOf, both-incomplete groups keep first-seen survivor', () => {
     const runs = [
-      { config: { jobChoiceBatchGroupId: 'g1' }, transcripts: [], tag: 'first' },
-      { config: { jobChoiceBatchGroupId: 'g1' }, transcripts: [], tag: 'second' },
+      {
+        config: {
+          definitionSnapshot: {
+            components: {
+              value_first: { token: 'career' },
+              value_second: { token: 'family' },
+            },
+          },
+        },
+        transcripts: [],
+        tag: 'first',
+      },
+      {
+        config: {
+          definitionSnapshot: {
+            components: {
+              value_first: { token: 'family' },
+              value_second: { token: 'career' },
+            },
+          },
+        },
+        transcripts: [],
+        tag: 'second',
+      },
     ];
-    const survivors = deduplicateRunsByGroupId(runs, () => false);
+    const survivors = deduplicateRunsBySignaturePair(runs, () => false);
     expect(survivors).toHaveLength(1);
     expect(survivors[0]?.tag).toBe('first');
   });
@@ -344,9 +477,20 @@ describe('deduplicateRunsByGroupId', () => {
     const runs = [
       { config: {}, transcripts: [], complete: false },
       { config: {}, transcripts: [], complete: false },
-      { config: { jobChoiceBatchGroupId: 'g1' }, transcripts: [], complete: true },
+      {
+        config: {
+          definitionSnapshot: {
+            components: {
+              value_first: { token: 'career' },
+              value_second: { token: 'family' },
+            },
+          },
+        },
+        transcripts: [],
+        complete: true,
+      },
     ];
-    const survivors = deduplicateRunsByGroupId(runs, (run) => run.complete);
+    const survivors = deduplicateRunsBySignaturePair(runs, (run) => run.complete);
     expect(survivors).toHaveLength(3);
   });
 
@@ -357,12 +501,56 @@ describe('deduplicateRunsByGroupId', () => {
     // -- 5 here -- so two groups produce 10 trials total.
     const fiveTranscripts = Array.from({ length: 5 }, () => ({ modelId: 'model-a' }));
     const runs = [
-      { config: { jobChoiceBatchGroupId: 'group-1', samplesPerScenario: 5 }, transcripts: fiveTranscripts },
-      { config: { jobChoiceBatchGroupId: 'group-1', samplesPerScenario: 5 }, transcripts: fiveTranscripts },
-      { config: { jobChoiceBatchGroupId: 'group-2', samplesPerScenario: 5 }, transcripts: fiveTranscripts },
-      { config: { jobChoiceBatchGroupId: 'group-2', samplesPerScenario: 5 }, transcripts: fiveTranscripts },
+      {
+        config: {
+          definitionSnapshot: {
+            components: {
+              value_first: { token: 'career' },
+              value_second: { token: 'family' },
+            },
+          },
+          samplesPerScenario: 5,
+        },
+        transcripts: fiveTranscripts,
+      },
+      {
+        config: {
+          definitionSnapshot: {
+            components: {
+              value_first: { token: 'family' },
+              value_second: { token: 'career' },
+            },
+          },
+          samplesPerScenario: 5,
+        },
+        transcripts: fiveTranscripts,
+      },
+      {
+        config: {
+          definitionSnapshot: {
+            components: {
+              value_first: { token: 'career' },
+              value_second: { token: 'security' },
+            },
+          },
+          samplesPerScenario: 5,
+        },
+        transcripts: fiveTranscripts,
+      },
+      {
+        config: {
+          definitionSnapshot: {
+            components: {
+              value_first: { token: 'security' },
+              value_second: { token: 'career' },
+            },
+          },
+          samplesPerScenario: 5,
+        },
+        transcripts: fiveTranscripts,
+      },
     ];
-    const deduped = deduplicateRunsByGroupId(runs);
+    const deduped = deduplicateRunsBySignaturePair(runs);
     const result = computePerModelTrialCounts(deduped, ['model-a'], labels);
     expect(result.minTrialCount).toBe(10); // 2 groups x 5 transcripts each
   });
@@ -407,32 +595,6 @@ describe('getCoverageDirection', () => {
 
     it('returns null when snapshot token is whitespace-only', () => {
       expect(getCoverageDirection(makeConfig('   '))).toBeNull();
-    });
-  });
-
-  describe('fallback path — deprecated jobChoiceValueFirst', () => {
-    it('returns the trimmed string when no snapshot is present', () => {
-      expect(getCoverageDirection({ jobChoiceValueFirst: 'career' })).toBe('Career');
-    });
-
-    it('trims whitespace', () => {
-      expect(getCoverageDirection({ jobChoiceValueFirst: '  career  ' })).toBe('Career');
-    });
-
-    it('returns null for an empty string', () => {
-      expect(getCoverageDirection({ jobChoiceValueFirst: '' })).toBeNull();
-    });
-
-    it('returns null for whitespace-only', () => {
-      expect(getCoverageDirection({ jobChoiceValueFirst: '   ' })).toBeNull();
-    });
-
-    it('returns null for a non-string number value', () => {
-      expect(getCoverageDirection({ jobChoiceValueFirst: 42 })).toBeNull();
-    });
-
-    it('returns null for a non-string boolean value', () => {
-      expect(getCoverageDirection({ jobChoiceValueFirst: true })).toBeNull();
     });
   });
 
@@ -867,4 +1029,3 @@ describe('computeConditionCounts', () => {
     expect(Array.from(result.perDirection.keys())).toEqual(['vf-A', 'vf-B', 'vf-C']);
   });
 });
-

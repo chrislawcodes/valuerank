@@ -37,12 +37,7 @@ export async function planBackfillGroups(params: {
 
   for (const group of groups) {
     for (const modelId of requestedModelIds) {
-      const existingDepth = group.pairKey !== null
-        ? group.definitions.reduce(
-          (min, definition) => Math.min(min, getCoverageCount(countableCoverage, definition.id, modelId)),
-          Number.POSITIVE_INFINITY,
-        )
-        : getCoverageCount(countableCoverage, group.definitions[0]!.id, modelId);
+      const existingDepth = getCoverageCount(countableCoverage, group.definitions[0]!.id, modelId);
 
       const normalizedExistingDepth = Number.isFinite(existingDepth) ? existingDepth : 0;
       const delta = Math.max(0, effectiveTargetBatchCount - normalizedExistingDepth);
@@ -50,7 +45,6 @@ export async function planBackfillGroups(params: {
 
       for (let index = 0; index < delta; index += 1) {
         backfillGroups.push({
-          pairKey: group.pairKey,
           definitions: group.definitions,
           modelId,
         });

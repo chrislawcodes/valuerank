@@ -16,13 +16,7 @@ export type DefinitionRow = {
   content: unknown;
 };
 
-export type PairedMethodology = {
-  family: string;
-  pair_key: string;
-};
-
 export type LaunchGroup = {
-  pairKey: string | null;
   definitions: DefinitionRow[];
 };
 
@@ -42,7 +36,6 @@ export type BackfillEvaluationSnapshot = {
 };
 
 export type BackfillLaunchGroupRepetition = {
-  pairKey: string | null;
   definitions: DefinitionRow[];
   modelId: string;
 };

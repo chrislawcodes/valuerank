@@ -22,6 +22,7 @@ import type { AnalysisTab } from '../components/analysis/tabs';
 import { ANALYSIS_BASE_PATH, buildAnalysisDetailPath, isAggregateAnalysis } from '../utils/analysisRouting';
 import { getDefinitionMethodologyLabel, hasMirroredValueTokens } from '../utils/methodology';
 import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/llm';
+import type { Run } from '../api/operations/runs';
 import {
   AnalysisDetailHeader,
   COVERAGE_CONTEXT_QUERY_KEYS,
@@ -170,17 +171,25 @@ export function AnalysisDetail() {
     enablePolling: false,
     analysisStatus: run?.analysisStatus ?? null,
   });
-  const hasDirectCompanionRunId = typeof run?.companionRunId === 'string' && run.companionRunId.trim().length > 0;
-  const { run: directCompanionRun, loading: directCompanionLoading } = useRun({
-    id: run?.companionRunId ?? '',
-    pause: !hasDirectCompanionRunId,
-    enablePolling: true,
-  });
-  const directCompanionResolved = directCompanionRun?.id === run?.id ? null : directCompanionRun;
-  const shouldUseLegacyCompanionSearch = run != null && (
-    !hasDirectCompanionRunId
-    || (!directCompanionLoading && directCompanionResolved == null)
-  );
+  const pooledMirroredRun = useMemo(() => {
+    const mirroredRuns = run?.mirroredRuns;
+
+    if (mirroredRuns == null || mirroredRuns.length === 0) {
+      return null;
+    }
+
+    const representative = mirroredRuns.find((candidate) => candidate.id !== run?.id) ?? mirroredRuns[0] ?? null;
+
+    if (representative == null) {
+      return null;
+    }
+
+    return {
+      ...representative,
+      transcripts: mirroredRuns.flatMap((candidate) => candidate.transcripts ?? []),
+    } as Run;
+  }, [run?.id, run?.mirroredRuns]);
+  const shouldUseLegacyCompanionSearch = run != null && pooledMirroredRun == null;
   const legacyCompanionSearch = useInfiniteRuns({
     runCategory: run?.runCategory,
     runType: 'all',
@@ -189,6 +198,11 @@ export function AnalysisDetail() {
   const legacyCompanionRun = run == null || !shouldUseLegacyCompanionSearch
     ? null
     : findCompanionPairedRun(run, legacyCompanionSearch.runs);
+  const {
+    hasNextPage: legacyCompanionHasNextPage,
+    loadingMore: legacyCompanionLoadingMore,
+    loadMore: loadLegacyCompanionMore,
+  } = legacyCompanionSearch;
   useEffect(() => {
     if (!shouldUseLegacyCompanionSearch) {
       return;
@@ -196,18 +210,18 @@ export function AnalysisDetail() {
     if (legacyCompanionRun != null) {
       return;
     }
-    if (!legacyCompanionSearch.hasNextPage || legacyCompanionSearch.loadingMore) {
+    if (!legacyCompanionHasNextPage || legacyCompanionLoadingMore) {
       return;
     }
-    legacyCompanionSearch.loadMore();
+    loadLegacyCompanionMore();
   }, [
     legacyCompanionRun,
-    legacyCompanionSearch.hasNextPage,
-    legacyCompanionSearch.loadingMore,
-    legacyCompanionSearch.loadMore,
+    legacyCompanionHasNextPage,
+    legacyCompanionLoadingMore,
+    loadLegacyCompanionMore,
     shouldUseLegacyCompanionSearch,
   ]);
-  const companionRun = directCompanionResolved ?? legacyCompanionRun;
+  const companionRun = pooledMirroredRun ?? legacyCompanionRun;
   const { analysis: companionAnalysis } = useAnalysis({
     runId: companionRun?.id ?? '',
     pause: analysisMode !== 'paired' || companionRun == null,
@@ -218,9 +232,10 @@ export function AnalysisDetail() {
   // score both vignette orientations (the list query omits transcripts).
   const { run: companionRunWithTranscripts } = useRun({
     id: companionRun?.id ?? '',
-    pause: analysisMode !== 'paired' || companionRun == null,
+    pause: analysisMode !== 'paired' || companionRun == null || pooledMirroredRun != null,
     enablePolling: false,
   });
+  const resolvedCompanionRun = pooledMirroredRun ?? companionRunWithTranscripts ?? companionRun;
 
   // Loading state
   if (loading && !run) {
@@ -357,7 +372,7 @@ export function AnalysisDetail() {
             onSingleVignetteChange={handleSingleVignetteChange}
             companionAnalysis={analysisMode === 'paired' ? companionAnalysis : null}
             currentRun={run}
-            companionRun={isPairedBatch ? (companionRunWithTranscripts ?? companionRun) : null}
+            companionRun={isPairedBatch ? resolvedCompanionRun : null}
             definitionContent={definitionContent}
             transcripts={run.transcripts}
             isOldVersion={isOldVersion}
