@@ -123,7 +123,11 @@ describe('trigger_recovery MCP Tool [T015]', () => {
       expect(result.detected.length).toBe(0);
     });
 
-    it('does not detect PENDING runs', async () => {
+    it('detects stuck PENDING runs (defense-in-depth)', async () => {
+      // Non-empty runs are now created directly in RUNNING (start.ts), so a
+      // PENDING run with total>0 that hasn't updated in a long time is itself
+      // a bug condition. Recovery widens its WHERE clause to include PENDING
+      // so any straggler still gets surfaced instead of staying invisible.
       const definition = await createTestDefinition();
       await createTestRun(
         definition.id,
@@ -134,7 +138,7 @@ describe('trigger_recovery MCP Tool [T015]', () => {
 
       const result = await recoverOrphanedRuns();
 
-      expect(result.detected.length).toBe(0);
+      expect(result.detected.length).toBe(1);
     });
 
     it('does not detect FAILED runs', async () => {

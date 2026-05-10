@@ -251,4 +251,52 @@ describe('maybeAdvanceRunStatus', () => {
       'transcript-5',
     ]);
   });
+
+  it('completes empty (zero-probe) PENDING runs via the empty-run CAS shortcut', async () => {
+    // Empty runs are still created with status PENDING and total=0; the
+    // empty-run CAS shortcut in maybeAdvanceRunStatus is the path that takes
+    // them to COMPLETED. This test guards that path against regression.
+    runState = {
+      ...runState,
+      status: 'PENDING',
+      progress: { total: 0, completed: 0, failed: 0 },
+    };
+    transcriptState = [];
+
+    const result = await maybeAdvanceRunStatus(runState.id);
+
+    expect(result.completed).toBe(true);
+    expect(result.enteredSummarizing).toBe(false);
+    expect(runState.status).toBe('COMPLETED');
+    expect(transitionCounts.toCompleted).toBe(1);
+  });
+
+  it('does NOT silently advance a non-empty PENDING run (state is reachable only via creation bug)', async () => {
+    // Regression test for the bug fixed by setting status='RUNNING' at run
+    // creation time in start.ts. Pre-fix, non-empty runs were created PENDING
+    // and PR #745's state machine had no PENDING -> RUNNING gate, so they got
+    // stuck. The fix is at creation time (start.ts), not in
+    // maybeAdvanceRunStatus, so a run that somehow lands in PENDING with
+    // total>0 should NOT be silently advanced here -- recovery/audit/reconcile
+    // (now widened to include PENDING) are the safety nets that surface it.
+    runState = {
+      ...runState,
+      status: 'PENDING',
+      progress: { total: 5, completed: 5, failed: 0 },
+    };
+    // All transcripts already summarized — would advance to COMPLETED if a
+    // PENDING gate existed. None should.
+    transcriptState = transcriptState.map((t) => ({
+      ...t,
+      summarizedAt: new Date('2026-04-24T10:05:00.000Z'),
+    }));
+
+    const result = await maybeAdvanceRunStatus(runState.id);
+
+    expect(result.completed).toBe(false);
+    expect(result.enteredSummarizing).toBe(false);
+    expect(runState.status).toBe('PENDING');
+    expect(transitionCounts.toSummarizing).toBe(0);
+    expect(transitionCounts.toCompleted).toBe(0);
+  });
 });

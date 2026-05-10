@@ -263,14 +263,32 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
   const day = today.toLocaleDateString('en-US', { day: '2-digit' });
   const runName = `${month} ${day}-${suffix}`;
 
-  // Create run in transaction
+  // Create run in transaction.
+  //
+  // Status note: non-empty runs are created in `RUNNING` directly. Before this
+  // change, runs were created `PENDING` and relied on the probe handler to flip
+  // to `RUNNING` once the first probe completed. PR #745 (Feature 033) rewrote
+  // the state machine into derived-CAS form and removed that flip without
+  // replacing it, so non-empty runs got stuck in `PENDING` forever — and every
+  // safety net (recovery, audit, reconcile) gated on `IN ('RUNNING','SUMMARIZING','PAUSED')`,
+  // making them invisible. The #745 spec explicitly intended to keep
+  // `PENDING → RUNNING` as a non-drift-prone single-event transition, but the
+  // implementation lost it. By the time `startRun` returns, jobs are already
+  // enqueued and the run *is* running, so creating in `RUNNING` with `startedAt`
+  // set is the most direct fix.
+  //
+  // Empty runs (`totalJobs === 0`) keep `status: 'PENDING'` so the existing
+  // empty-run CAS shortcut in `progress.ts` (`PENDING + total=0 → COMPLETED`)
+  // still fires correctly.
+  const isEmptyRun = totalJobs === 0;
   const run = await db.$transaction(async (tx) => {
     const newRun = await tx.run.create({
       data: {
         name: runName,
         definitionId,
         experimentId: experimentId ?? null,
-        status: 'PENDING',
+        status: isEmptyRun ? 'PENDING' : 'RUNNING',
+        startedAt: isEmptyRun ? null : new Date(),
         runCategory: runCategory ?? 'UNKNOWN_LEGACY',
         config,
         progress: initialProgress,
