@@ -12,8 +12,7 @@ import { CostEstimateRef, type CostEstimateShape } from './cost-estimate.js';
 import './run-anomaly.js';
 import { RunAnomalyRef } from './refs.js';
 import { getAllMetrics, getTotals } from '../../services/rate-limiter/index.js';
-import { formatRunSignature } from '../queries/domain-coverage-gql-types.js';
-import { getComponentTokens } from '../../utils/auto-pair.js';
+import { resolveMirroredRuns } from './run-mirrored-runs.js';
 
 // Re-export for backward compatibility
 export { RunRef, TranscriptRef, ExperimentRef };
@@ -187,70 +186,12 @@ builder.objectType(RunRef, {
      * All non-deleted runs in the same domain whose definition mirrors this
      * run's value tokens and whose signature matches this run's signature.
      * Returns an empty list when this run is not paired or when no mirrored
-     * runs exist.
+     * runs exist. Implementation in `./run-mirrored-runs.ts`.
      */
     mirroredRuns: t.field({
       type: [RunRef],
       description: 'Mirrored runs in the same domain with matching signature',
-      resolve: async (run) => {
-        const signature = formatRunSignature(run.config);
-        const definition = await db.definition.findUnique({
-          where: { id: run.definitionId },
-          select: {
-            id: true,
-            domainId: true,
-            content: true,
-            deletedAt: true,
-          },
-        });
-        if (!definition || definition.deletedAt !== null || definition.domainId == null) {
-          return [];
-        }
-
-        const definitionTokens = getComponentTokens(definition.content);
-        if (definitionTokens == null) {
-          return [];
-        }
-
-        const candidateDefinitions = await db.definition.findMany({
-          where: {
-            domainId: definition.domainId,
-            deletedAt: null,
-            id: { not: definition.id },
-          },
-          select: {
-            id: true,
-            content: true,
-          },
-        });
-
-        const mirroredDefinitionIds = candidateDefinitions
-          .filter((candidate) => {
-            const candidateTokens = getComponentTokens(candidate.content);
-            if (candidateTokens == null) {
-              return false;
-            }
-            return (
-              definitionTokens.value_first.token === candidateTokens.value_second.token
-              && definitionTokens.value_second.token === candidateTokens.value_first.token
-            );
-          })
-          .map((candidate) => candidate.id);
-
-        if (mirroredDefinitionIds.length === 0) {
-          return [];
-        }
-
-        const mirroredRuns = await db.run.findMany({
-          where: {
-            definitionId: { in: mirroredDefinitionIds },
-            deletedAt: null,
-          },
-          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-        });
-
-        return mirroredRuns.filter((candidate) => candidate.id !== run.id && formatRunSignature(candidate.config) === signature);
-      },
+      resolve: (run) => resolveMirroredRuns(run),
     }),
     isAggregate: t.boolean({
       description:
