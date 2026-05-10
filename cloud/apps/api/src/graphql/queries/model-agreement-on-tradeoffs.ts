@@ -195,7 +195,7 @@ export async function resolveModelAgreementOnTradeoffs(
       tiedCells += pairTiedCells;
       const metrics = summarizePairCells(cells);
       const cellsByVignette = groupCellsByVignette(cells);
-      const ci = bootstrapKappaConfidence(cellsByVignette, metrics.cohensKappa, KAPPA_BOOTSTRAP_ITERATIONS);
+      const ci = await bootstrapKappaConfidence(cellsByVignette, metrics.cohensKappa, KAPPA_BOOTSTRAP_ITERATIONS);
 
       pairwiseAgreementMatrix.push({
         modelAId: modelA.modelId,
