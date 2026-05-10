@@ -58,10 +58,14 @@ export type RecoveryResult = {
 export async function detectOrphanedRuns(): Promise<OrphanedRunInfo[]> {
   const orphaned: OrphanedRunInfo[] = [];
 
-  // Find runs that might be stuck
+  // Find runs that might be stuck.
+  // PENDING is included as defense-in-depth: post-PR #745, non-empty runs are
+  // created in `RUNNING` so they should not normally appear here, but if
+  // anything ever leaves a run stuck in `PENDING` we still want recovery to
+  // catch it instead of silently ignoring the row.
   const stuckRuns = await db.run.findMany({
     where: {
-      status: { in: ['RUNNING', 'SUMMARIZING'] },
+      status: { in: ['PENDING', 'RUNNING', 'SUMMARIZING'] },
       updatedAt: {
         lt: new Date(Date.now() - STUCK_THRESHOLD_MINUTES * 60 * 1000),
       },

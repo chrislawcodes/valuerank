@@ -24,11 +24,14 @@ async function findRunsForAudit(): Promise<RunAuditSnapshot[]> {
   const windowDays = getReconcileWindowDays();
   const cutoff = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
 
+  // PENDING is included as defense-in-depth — non-empty runs are now created
+  // directly in `RUNNING` (start.ts), but a run stuck in `PENDING` (the
+  // pre-fix bug condition) should still be audited for anomalies.
   return db.run.findMany({
     where: {
       deletedAt: null,
       OR: [
-        { status: { in: ['RUNNING', 'PAUSED', 'SUMMARIZING'] } },
+        { status: { in: ['PENDING', 'RUNNING', 'PAUSED', 'SUMMARIZING'] } },
         { status: 'COMPLETED', updatedAt: { gt: cutoff } },
       ],
     },

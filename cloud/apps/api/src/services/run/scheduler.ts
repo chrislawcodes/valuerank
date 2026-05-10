@@ -130,10 +130,13 @@ async function sweepRunForTopUp(run: { id: string; config: unknown }): Promise<b
 
 async function hasRecoveryActivity(): Promise<boolean> {
   const windowDays = getReconcileWindowDays();
+  // PENDING is included as defense-in-depth — non-empty runs are now created
+  // directly in `RUNNING` (start.ts), but if anything ever leaves a run stuck
+  // in `PENDING` we still want the recovery scheduler to wake up.
   const activeRuns = await db.run.findFirst({
     where: {
       deletedAt: null,
-      status: { in: ['RUNNING', 'SUMMARIZING', 'PAUSED'] },
+      status: { in: ['PENDING', 'RUNNING', 'SUMMARIZING', 'PAUSED'] },
     },
     select: { id: true },
   });
@@ -204,11 +207,14 @@ export async function enqueueRunStateReconcileJobs(): Promise<number> {
   const jobOptions = DEFAULT_JOB_OPTIONS['run_state_reconcile'];
   const windowDays = getReconcileWindowDays();
 
+  // PENDING is included as defense-in-depth so a run stuck in PENDING (the
+  // pre-fix bug condition) is still picked up by the reconciliation sweep.
+  // Non-empty runs are now created directly in `RUNNING` (start.ts).
   const runs = await db.$queryRaw<Array<{ run_id: string }>>`
     SELECT id AS run_id
     FROM runs
     WHERE deleted_at IS NULL
-      AND status IN ('RUNNING', 'SUMMARIZING', 'PAUSED')
+      AND status IN ('PENDING', 'RUNNING', 'SUMMARIZING', 'PAUSED')
 
     UNION
 

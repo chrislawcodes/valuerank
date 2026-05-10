@@ -195,7 +195,12 @@ describe('run recovery service', () => {
       expect(orphaned.length).toBe(0);
     });
 
-    it('does not detect PENDING runs', async () => {
+    it('detects stuck PENDING runs (defense-in-depth)', async () => {
+      // Non-empty runs are now created directly in RUNNING (start.ts), so a
+      // PENDING run with total>0 that hasn't updated in a long time is itself
+      // a bug condition (the same one this commit fixes). Recovery widens its
+      // WHERE clause to include PENDING so any straggler still gets surfaced
+      // instead of staying silently invisible.
       const definition = await createTestDefinition();
       await createTestRun(
         definition.id,
@@ -205,7 +210,8 @@ describe('run recovery service', () => {
       );
 
       const orphaned = await detectOrphanedRuns();
-      expect(orphaned.length).toBe(0);
+      expect(orphaned.length).toBe(1);
+      expect(orphaned[0]?.status).toBe('PENDING');
     });
 
     it('does not detect recently updated RUNNING runs', async () => {
