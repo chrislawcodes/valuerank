@@ -213,8 +213,10 @@ describe('RunDetail', () => {
         version: 1,
         tags: [],
         content: {
-          methodology: {
-            pair_key: 'test-pair',
+          methodology: {},
+          components: {
+            value_first: { token: 'achievement', body: '' },
+            value_second: { token: 'power_dominance', body: '' },
           },
         },
       },
@@ -457,7 +459,10 @@ describe('RunDetail', () => {
         content: {
           methodology: {
             family: 'job-choice',
-            pair_key: 'test-pair',
+          },
+          components: {
+            value_first: { token: 'achievement', body: '' },
+            value_second: { token: 'power_dominance', body: '' },
           },
         },
       },
@@ -491,7 +496,10 @@ describe('RunDetail', () => {
         content: {
           methodology: {
             family: 'job-choice',
-            pair_key: 'test-pair',
+          },
+          components: {
+            value_first: { token: 'achievement', body: '' },
+            value_second: { token: 'power_dominance', body: '' },
           },
         },
         domain: {

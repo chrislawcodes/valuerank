@@ -5,7 +5,6 @@ import { getReconcileWindowDays } from '../../services/run/scheduler.js';
 import {
   detectModelTranscriptShortfall,
   detectOrphanTranscript,
-  detectPairAsymmetry,
   detectScheduledCountMismatch,
   detectStrandedTranscript,
   detectSummarizingStall,
@@ -65,15 +64,6 @@ async function inspectRun(run: RunAuditSnapshot): Promise<void> {
   }
 
   try {
-    const pair = await detectPairAsymmetry(run, 'audit');
-    if (pair !== null) {
-      addDraft(pair);
-    }
-  } catch (error) {
-    log.warn({ runId: run.id, err: error }, 'Audit pair asymmetry detection failed');
-  }
-
-  try {
     const shortfalls = await detectModelTranscriptShortfall(run, 'audit');
     for (const shortfall of shortfalls) {
       addDraft(shortfall);
@@ -93,7 +83,6 @@ async function inspectRun(run: RunAuditSnapshot): Promise<void> {
 
   const scannedTypes: AnomalyDraft['type'][] = [
     'ORPHAN_TRANSCRIPT',
-    'PAIR_ASYMMETRY',
     'MODEL_TRANSCRIPT_SHORTFALL',
     'INVALID_RESPONSE_FAILURE',
   ];

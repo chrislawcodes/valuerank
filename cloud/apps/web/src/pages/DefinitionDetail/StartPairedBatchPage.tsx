@@ -4,7 +4,7 @@
  * Dedicated page for launching a paired batch from a vignette detail page.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { computeLaunchTrialCount } from '@valuerank/shared';
@@ -17,7 +17,7 @@ import { useDefinition } from '../../hooks/useDefinition';
 import { useExpandedScenarios } from '../../hooks/useExpandedScenarios';
 import { useRunMutations } from '../../hooks/useRunMutations';
 import type { StartRunInput } from '../../api/operations/runs';
-import { getDefinitionMethodology, getDefinitionMethodologyLabel } from '../../utils/methodology';
+import { getDefinitionMethodologyLabel, hasMirroredValueTokens } from '../../utils/methodology';
 import { formatPairLabel } from '../../utils/coverageGap';
 import { VALUE_LABELS } from '../../components/domains/domainAnalysisData';
 
@@ -80,15 +80,8 @@ export function StartPairedBatchPage() {
   });
 
   const resolvedContent = definition?.resolvedContent ?? definition?.content;
-  const methodology = useMemo(
-    () => (resolvedContent ? getDefinitionMethodology(resolvedContent) : null),
-    [resolvedContent]
-  );
-  const methodologyLabel = useMemo(
-    () => getDefinitionMethodologyLabel(resolvedContent, definition?.domain?.name ?? null),
-    [definition?.domain?.name, resolvedContent]
-  );
-  const isPairedBatchEligible = methodology?.pair_key != null;
+  const methodologyLabel = getDefinitionMethodologyLabel(resolvedContent, definition?.domain?.name ?? null);
+  const isPairedBatchEligible = hasMirroredValueTokens(resolvedContent);
   const matchPairCounts = routeState?.matchPairCounts ?? null;
   const pairLabel = matchPairCounts != null
     ? formatPairLabel(matchPairCounts.valueA, matchPairCounts.valueB)

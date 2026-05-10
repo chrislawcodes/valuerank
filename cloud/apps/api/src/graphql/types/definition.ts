@@ -463,7 +463,7 @@ builder.objectType(DefinitionRef, {
       type: DefinitionRef,
       nullable: true,
       description:
-        'For paired vignettes, returns the companion vignette (same pair_key, same domain, mirrored value_first / value_second tokens). Returns null when this definition is not paired or when no companion exists. Reuses findPairedCompanion from utils/auto-pair so callers do not duplicate the companion-resolution logic.',
+        'For paired vignettes, returns the companion vignette (same domain, mirrored value_first / value_second tokens). Returns null when this definition is not paired or when no companion exists. Reuses findPairedCompanion from utils/auto-pair so callers do not duplicate the token-mirror companion logic.',
       resolve: (definition) => resolveDefinitionPairedSibling(definition),
     }),
 

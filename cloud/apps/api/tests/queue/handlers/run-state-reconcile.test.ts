@@ -10,7 +10,6 @@ const mockLogWarn = vi.hoisted(() => vi.fn());
 const mockLogError = vi.hoisted(() => vi.fn());
 const mockMaybeAdvanceRunStatus = vi.hoisted(() => vi.fn());
 const mockDetectStrandedTranscript = vi.hoisted(() => vi.fn());
-const mockDetectPairAsymmetry = vi.hoisted(() => vi.fn());
 const mockDetectModelTranscriptShortfall = vi.hoisted(() => vi.fn());
 const mockDetectScheduledCountMismatch = vi.hoisted(() => vi.fn());
 const mockDetectInvalidResponseFailures = vi.hoisted(() => vi.fn());
@@ -57,7 +56,6 @@ vi.mock('../../../src/services/run/index.js', () => ({
 
 vi.mock('../../../src/services/run/anomaly-detection.js', () => ({
   detectStrandedTranscript: mockDetectStrandedTranscript,
-  detectPairAsymmetry: mockDetectPairAsymmetry,
   detectModelTranscriptShortfall: mockDetectModelTranscriptShortfall,
   detectScheduledCountMismatch: mockDetectScheduledCountMismatch,
   detectSummarizingStall: mockDetectSummarizingStall,
@@ -94,7 +92,6 @@ describe('createRunStateReconcileHandler', () => {
     mockTranscriptFindMany.mockResolvedValue([]);
     mockRunAnomalyFindMany.mockResolvedValue([]);
     mockDetectStrandedTranscript.mockResolvedValue(null);
-    mockDetectPairAsymmetry.mockResolvedValue(null);
     mockDetectModelTranscriptShortfall.mockResolvedValue([]);
     mockDetectScheduledCountMismatch.mockResolvedValue({
       draft: null,

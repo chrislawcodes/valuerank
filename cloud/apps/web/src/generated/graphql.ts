@@ -598,7 +598,7 @@ export type Definition = {
   name: Scalars['String']['output'];
   /** Indicates which content fields are locally defined vs inherited from parent */
   overrides: DefinitionOverrides;
-  /** For paired vignettes, returns the companion vignette (same pair_key, same domain, mirrored value_first / value_second tokens). Returns null when this definition is not paired or when no companion exists. Reuses findPairedCompanion from utils/auto-pair so callers do not duplicate the companion-resolution logic. */
+  /** For paired vignettes, returns the companion vignette (same domain, mirrored value_first / value_second tokens). Returns null when this definition is not paired or when no companion exists. Reuses findPairedCompanion from utils/auto-pair so callers do not duplicate the token-mirror companion logic. */
   pairedSibling?: Maybe<Definition>;
   /** Parent definition in version tree */
   parent?: Maybe<Definition>;
@@ -1043,7 +1043,6 @@ export type DomainEvaluationLaunchableDefinition = {
   __typename?: 'DomainEvaluationLaunchableDefinition';
   definitionId: Scalars['ID']['output'];
   definitionName: Scalars['String']['output'];
-  pairKey?: Maybe<Scalars['String']['output']>;
 };
 
 export type DomainEvaluationMember = {
@@ -4245,7 +4244,7 @@ export type ActiveEvaluationsQueryVariables = Exact<{
 }>;
 
 
-export type ActiveEvaluationsQuery = { __typename?: 'Query', activeEvaluations: Array<{ __typename?: 'DomainEvaluation', id: string, domainId: string, domainNameAtLaunch: string, scopeCategory: string, status: string, createdAt: string, startedAt?: string | null, completedAt?: string | null, startedRuns: number, failedDefinitions: number, skippedForBudget: number, projectedCostUsd: number, models: Array<string>, temperature?: number | null, maxBudgetUsd?: number | null, memberCount: number, launchableDefinitionIds: Array<string>, samplePercentage?: number | null, samplesPerScenario?: number | null, targetBatchCount?: number | null, launchableDefinitions: Array<{ __typename?: 'DomainEvaluationLaunchableDefinition', definitionId: string, definitionName: string, pairKey?: string | null }>, members: Array<{ __typename?: 'DomainEvaluationMember', runId: string, definitionIdAtLaunch: string, definitionNameAtLaunch: string, domainIdAtLaunch: string, modelIds: Array<string>, createdAt: string, runStatus: string, runCategory: string, runStartedAt?: string | null, runCompletedAt?: string | null }> }> };
+export type ActiveEvaluationsQuery = { __typename?: 'Query', activeEvaluations: Array<{ __typename?: 'DomainEvaluation', id: string, domainId: string, domainNameAtLaunch: string, scopeCategory: string, status: string, createdAt: string, startedAt?: string | null, completedAt?: string | null, startedRuns: number, failedDefinitions: number, skippedForBudget: number, projectedCostUsd: number, models: Array<string>, temperature?: number | null, maxBudgetUsd?: number | null, memberCount: number, launchableDefinitionIds: Array<string>, samplePercentage?: number | null, samplesPerScenario?: number | null, targetBatchCount?: number | null, launchableDefinitions: Array<{ __typename?: 'DomainEvaluationLaunchableDefinition', definitionId: string, definitionName: string }>, members: Array<{ __typename?: 'DomainEvaluationMember', runId: string, definitionIdAtLaunch: string, definitionNameAtLaunch: string, domainIdAtLaunch: string, modelIds: Array<string>, createdAt: string, runStatus: string, runCategory: string, runStartedAt?: string | null, runCompletedAt?: string | null }> }> };
 
 export type AnalysisResultFieldsFragment = { __typename?: 'AnalysisResult', id: string, runId: string, analysisType: string, status: string, codeVersion: string, inputHash: string, createdAt: string, computedAt?: string | null, durationMs?: number | null, perModel: unknown, modelAgreement: unknown, dimensionAnalysis?: unknown | null, visualizationData?: unknown | null, varianceAnalysis?: unknown | null, methodsUsed: unknown, preferenceSummary?: { __typename?: 'PreferenceSummary', perModel: unknown } | null, reliabilitySummary?: { __typename?: 'ReliabilitySummary', perModel: unknown } | null, aggregateMetadata?: { __typename?: 'AggregateMetadata', aggregateEligibility: string, aggregateIneligibilityReason?: string | null, sourceRunCount: number, sourceRunIds: Array<string>, conditionCoverage: unknown, perModelRepeatCoverage: unknown, perModelDrift: unknown } | null, mostContestedScenarios: Array<{ __typename?: 'ContestedScenario', scenarioId: string, scenarioName: string, variance: number, modelScores: unknown }>, warnings: Array<{ __typename?: 'AnalysisWarning', code: string, message: string, recommendation: string }> };
 
@@ -4659,7 +4658,7 @@ export type DomainEvaluationQueryVariables = Exact<{
 }>;
 
 
-export type DomainEvaluationQuery = { __typename?: 'Query', domainEvaluation?: { __typename?: 'DomainEvaluation', id: string, domainId: string, domainNameAtLaunch: string, scopeCategory: string, status: string, createdAt: string, startedAt?: string | null, completedAt?: string | null, startedRuns: number, failedDefinitions: number, skippedForBudget: number, projectedCostUsd: number, models: Array<string>, temperature?: number | null, maxBudgetUsd?: number | null, memberCount: number, launchableDefinitionIds: Array<string>, samplePercentage?: number | null, samplesPerScenario?: number | null, targetBatchCount?: number | null, launchableDefinitions: Array<{ __typename?: 'DomainEvaluationLaunchableDefinition', definitionId: string, definitionName: string, pairKey?: string | null }>, members: Array<{ __typename?: 'DomainEvaluationMember', runId: string, definitionIdAtLaunch: string, definitionNameAtLaunch: string, domainIdAtLaunch: string, modelIds: Array<string>, createdAt: string, runStatus: string, runCategory: string, runStartedAt?: string | null, runCompletedAt?: string | null }> } | null };
+export type DomainEvaluationQuery = { __typename?: 'Query', domainEvaluation?: { __typename?: 'DomainEvaluation', id: string, domainId: string, domainNameAtLaunch: string, scopeCategory: string, status: string, createdAt: string, startedAt?: string | null, completedAt?: string | null, startedRuns: number, failedDefinitions: number, skippedForBudget: number, projectedCostUsd: number, models: Array<string>, temperature?: number | null, maxBudgetUsd?: number | null, memberCount: number, launchableDefinitionIds: Array<string>, samplePercentage?: number | null, samplesPerScenario?: number | null, targetBatchCount?: number | null, launchableDefinitions: Array<{ __typename?: 'DomainEvaluationLaunchableDefinition', definitionId: string, definitionName: string }>, members: Array<{ __typename?: 'DomainEvaluationMember', runId: string, definitionIdAtLaunch: string, definitionNameAtLaunch: string, domainIdAtLaunch: string, modelIds: Array<string>, createdAt: string, runStatus: string, runCategory: string, runStartedAt?: string | null, runCompletedAt?: string | null }> } | null };
 
 export type DomainEvaluationStatusQueryVariables = Exact<{
   id: Scalars['ID']['input'];
@@ -5567,7 +5566,6 @@ export const ActiveEvaluationsDocument = gql`
     launchableDefinitions {
       definitionId
       definitionName
-      pairKey
     }
     members {
       runId
@@ -6821,7 +6819,6 @@ export const DomainEvaluationDocument = gql`
     launchableDefinitions {
       definitionId
       definitionName
-      pairKey
     }
     samplePercentage
     samplesPerScenario

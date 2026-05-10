@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { db } from '@valuerank/db';
 import { NotFoundError, ValidationError } from '@valuerank/shared';
 import { builder } from '../builder.js';
@@ -141,10 +140,8 @@ builder.mutationField('ensureDomainVignettePair', (t) =>
       }
 
       // 4. Assemble expected pair content
-      const pairKey = randomUUID();
       const { contentAFirst, contentBFirst, componentsAFirst, componentsBFirst } =
         buildPairedVignetteContent(
-          pairKey,
           context.text,
           context.id,
           vf,

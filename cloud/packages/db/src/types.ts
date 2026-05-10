@@ -49,7 +49,6 @@ export type DefinitionMethodology = {
   response_scale?: 'numeric' | 'option_text' | 'value_labels';
   legacy_label?: string;
   canonical_value_order?: string[];
-  pair_key?: string;
 };
 
 /**

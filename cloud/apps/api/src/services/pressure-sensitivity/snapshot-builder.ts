@@ -3,7 +3,7 @@ import { AppError, NotFoundError } from '@valuerank/shared';
 import { runMatchesSignature } from '../../graphql/queries/domain-coverage-gql-types.js';
 import type { DefinitionDimension } from '../../graphql/queries/scenarios-utils.js';
 import type { PressureSensitivityResultShape } from '../../graphql/types/pressure-sensitivity.js';
-import { findPairedCompanion } from '../../utils/auto-pair.js';
+import { findPairedCompanion, getComponentTokens } from '../../utils/auto-pair.js';
 import { type PressureSensitivityDecisionSnapshot } from './decision-snapshot.js';
 import { computeAggregateFingerprint } from '../analysis/aggregate/aggregate-helpers.js';
 import {
@@ -259,17 +259,8 @@ export async function expandToCompanionDefinition(definitionId: string): Promise
     throw new NotFoundError('Definition', definitionId);
   }
 
-  const content = definition.content as Record<string, unknown> | null;
-  const methodology =
-    content !== null && typeof content === 'object' && !Array.isArray(content)
-      ? (content.methodology as Record<string, unknown> | null)
-      : null;
-  const pairKey =
-    methodology !== null && typeof methodology.pair_key === 'string' && methodology.pair_key.length > 0
-      ? methodology.pair_key
-      : null;
-
-  if (pairKey === null) {
+  const definitionTokens = getComponentTokens(definition.content);
+  if (definitionTokens === null) {
     return { ids: [definitionId], status: 'not_paired' };
   }
 
@@ -278,24 +269,29 @@ export async function expandToCompanionDefinition(definitionId: string): Promise
       id: { not: definitionId },
       domainId: definition.domainId,
       deletedAt: null,
-      content: {
-        path: ['methodology', 'pair_key'],
-        equals: pairKey,
-      },
     },
     select: { id: true, content: true },
   });
 
-  if (candidates.length > 1) {
+  const mirroredCandidates = candidates.filter((candidate) => {
+    const candidateTokens = getComponentTokens(candidate.content);
+    return (
+      candidateTokens !== null
+      && candidateTokens.value_first.token === definitionTokens.value_second.token
+      && candidateTokens.value_second.token === definitionTokens.value_first.token
+    );
+  });
+
+  if (mirroredCandidates.length > 1) {
     throw new AppError(
-      'Multiple companion vignettes share this pair_key',
+      'Multiple companion vignettes share mirrored value tokens in this domain',
       PAIR_KEY_COMPANION_COLLISION,
       500,
-      { pairKey, definitionId, candidateCount: candidates.length },
+      { definitionId, domainId: definition.domainId, candidateCount: mirroredCandidates.length },
     );
   }
 
-  if (candidates.length === 0) {
+  if (mirroredCandidates.length === 0) {
     return { ids: [definitionId], status: 'companion_missing' };
   }
 
@@ -309,7 +305,7 @@ export async function expandToCompanionDefinition(definitionId: string): Promise
       'Paired vignette companion mirroring failed',
       PAIR_KEY_COMPANION_MIRROR_FAILURE,
       500,
-      { pairKey, definitionId },
+      { definitionId, domainId: definition.domainId },
     );
   }
 

@@ -5,7 +5,6 @@ import { DEFAULT_JOB_OPTIONS, type RunStateReconcileJobData } from '../types.js'
 import { maybeAdvanceRunStatus } from '../../services/run/index.js';
 import {
   detectModelTranscriptShortfall,
-  detectPairAsymmetry,
   detectScheduledCountMismatch,
   detectStrandedTranscript,
   detectSummarizingStall,
@@ -256,13 +255,6 @@ export function createRunStateReconcileHandler(): PgBoss.WorkHandler<RunStateRec
 
         if (run.status === 'COMPLETED') {
           try {
-            const pair = await detectPairAsymmetry(run);
-            await syncAnomalies(runId, 'PAIR_ASYMMETRY', pair === null ? [] : [pair], 'default');
-          } catch (error) {
-            log.warn({ runId, err: error }, 'Pair asymmetry detection failed');
-          }
-
-          try {
             const shortfalls = await detectModelTranscriptShortfall(run);
             await syncAnomalies(runId, 'MODEL_TRANSCRIPT_SHORTFALL', shortfalls, 'default');
           } catch (error) {
@@ -279,13 +271,6 @@ export function createRunStateReconcileHandler(): PgBoss.WorkHandler<RunStateRec
             log.warn({ runId, err: error }, 'Invalid response failure detection failed');
           }
         } else {
-          try {
-            const pair = await detectPairAsymmetry(run);
-            await syncAnomalies(runId, 'PAIR_ASYMMETRY', pair === null ? [] : [pair], 'default');
-          } catch (error) {
-            log.warn({ runId, err: error }, 'Pair asymmetry detection failed');
-          }
-
           try {
             const stall = detectSummarizingStall(run);
             await syncAnomalies(runId, 'SUMMARIZING_STALL', stall === null ? [] : [stall], 'default');

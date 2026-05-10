@@ -26,7 +26,6 @@ export type JobChoiceTransformResult = {
 type TransformOptions = {
   /** If true, swap the token order so value B appears first. Defaults to false (A first). */
   swapped?: boolean;
-  pairKey?: string;
   contextId?: string;
 };
 
@@ -81,7 +80,6 @@ export function transformJobChoiceDefinition(
     response_scale: 'option_text',
     legacy_label: 'Old V1',
     canonical_value_order: content.dimensions.map((dimension) => dimension.name),
-    pair_key: options.pairKey,
   };
 
   return {

@@ -9,7 +9,6 @@
  *   DATABASE_URL="$DATABASE_URL" npx tsx scripts/seed-software-approach-pairs.ts            # dry-run
  *   DATABASE_URL="$DATABASE_URL" npx tsx scripts/seed-software-approach-pairs.ts --apply    # write to DB
  */
-import { randomUUID } from 'node:crypto';
 import {
   db,
   type DefinitionComponents,
@@ -81,7 +80,6 @@ function definitionName(firstToken: string, secondToken: string): string {
 }
 
 function buildPairContent(
-  pairKey: string,
   contextText: string,
   contextId: string,
   valueFirst: { token: string; body: string },
@@ -104,14 +102,14 @@ function buildPairContent(
     schema_version: 1,
     template: assembleTemplate(contextText, compA, undefined, templateConfig),
     dimensions,
-    methodology: { family: METHODOLOGY_FAMILY, response_scale: 'option_text', pair_key: pairKey },
+    methodology: { family: METHODOLOGY_FAMILY, response_scale: 'option_text' },
     components: compA,
   }, levelPreset);
   const definitionB = applyLevelPreset<PairContent>({
     schema_version: 1,
     template: assembleTemplate(contextText, compB, undefined, templateConfig),
     dimensions,
-    methodology: { family: METHODOLOGY_FAMILY, response_scale: 'option_text', pair_key: pairKey },
+    methodology: { family: METHODOLOGY_FAMILY, response_scale: 'option_text' },
     components: compB,
   }, levelPreset);
   return { definitionA, definitionB, compA, compB };
@@ -336,9 +334,7 @@ async function main(): Promise<void> {
       continue;
     }
 
-    const pairKey = randomUUID();
     const { definitionA, definitionB, compA, compB } = buildPairContent(
-      pairKey,
       context.text,
       context.id,
       { token: tokenA, body: bodyA },
@@ -371,7 +367,7 @@ async function main(): Promise<void> {
         },
       });
       const vCount = await createVignettes(tx, defA.id, defB.id, context.text, compA, compB, tokenA, tokenB, levelPreset, templateConfig);
-      log.info({ pair: name, definitionAId: defA.id, definitionBId: defB.id, pairKey, vignettes: vCount }, 'Created pair');
+      log.info({ pair: name, definitionAId: defA.id, definitionBId: defB.id, vignettes: vCount }, 'Created pair');
     }, { timeout: 30_000, maxWait: 30_000 });
 
     created += 1;

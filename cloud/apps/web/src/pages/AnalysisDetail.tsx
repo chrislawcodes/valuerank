@@ -20,7 +20,7 @@ import { useRun } from '../hooks/useRun';
 import { getRunDefinitionContent } from '../utils/runDefinitionContent';
 import type { AnalysisTab } from '../components/analysis/tabs';
 import { ANALYSIS_BASE_PATH, buildAnalysisDetailPath, isAggregateAnalysis } from '../utils/analysisRouting';
-import { getDefinitionMethodology, getDefinitionMethodologyLabel } from '../utils/methodology';
+import { getDefinitionMethodologyLabel, hasMirroredValueTokens } from '../utils/methodology';
 import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/llm';
 import {
   AnalysisDetailHeader,
@@ -301,10 +301,9 @@ export function AnalysisDetail() {
     definitionContent,
     run.definition?.domain?.name ?? null,
   );
-  const methodology = getDefinitionMethodology(definitionContent);
   const runLaunchMode = run.config?.jobChoiceLaunchMode;
   const isPairedBatch = runLaunchMode === 'PAIRED_BATCH';
-  const launchModeLabel = methodology?.pair_key != null ? formatLaunchModeLabel(runLaunchMode) : null;
+  const launchModeLabel = hasMirroredValueTokens(definitionContent) ? formatLaunchModeLabel(runLaunchMode) : null;
   const handleSingleVignetteChange = (nextRunId: string) => {
     if (!nextRunId || nextRunId === run.id) {
       return;

@@ -178,7 +178,6 @@ query DomainEvaluation($id: ID!) {
     launchableDefinitions {
       definitionId
       definitionName
-      pairKey
     }
     samplePercentage
     samplesPerScenario

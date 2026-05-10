@@ -1,8 +1,3 @@
-// Severity gates dropped to 0 per reviewer guidance (2026-04-23):
-// flag any measurable deviation; keep MIN_PROBES/AGE/STALL filters to skip
-// statistical noise and in-flight states.
-export const PAIR_ASYMMETRY_THRESHOLD_PCT = 0;
-export const PAIR_ASYMMETRY_MIN_PROBES = 10;
 export const SUMMARIZING_STALL_MINUTES = 30;
 export const MODEL_SHORTFALL_MIN_PROBES = 10;
 // Kept non-zero per adversarial review: this is the ONLY branch that detects

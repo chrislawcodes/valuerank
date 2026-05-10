@@ -3,7 +3,7 @@
  *
  * Extracted out of `definition.ts` to keep that file under the prod-warn
  * file-size threshold. Reuses `findPairedCompanion` from `utils/auto-pair`
- * so callers do not duplicate the canonical companion-resolution logic.
+ * so callers do not duplicate the canonical token-mirror companion logic.
  */
 
 import { db } from '@valuerank/db';
@@ -20,27 +20,13 @@ type DefinitionRow = Awaited<ReturnType<typeof db.definition.findFirst>>;
 export async function resolveDefinitionPairedSibling(
   definition: DefinitionInput,
 ): Promise<DefinitionRow> {
-  const contentRecord =
-    definition.content !== null && typeof definition.content === 'object' && !Array.isArray(definition.content)
-      ? (definition.content as Record<string, unknown>)
-      : null;
-  const methodology =
-    contentRecord?.methodology !== null && typeof contentRecord?.methodology === 'object' && !Array.isArray(contentRecord?.methodology)
-      ? (contentRecord.methodology as Record<string, unknown>)
-      : null;
-  const pairKey = typeof methodology?.pair_key === 'string' ? methodology.pair_key : null;
-  if (pairKey === null || pairKey.trim() === '') return null;
-
   const candidates = await db.definition.findMany({
     where: {
       id: { not: definition.id },
       domainId: definition.domainId,
       deletedAt: null,
-      content: {
-        path: ['methodology', 'pair_key'],
-        equals: pairKey,
-      },
     },
+    select: { id: true, content: true },
   });
 
   if (candidates.length === 0) return null;
@@ -51,5 +37,7 @@ export async function resolveDefinitionPairedSibling(
   );
   if (companion === null || companion === undefined) return null;
 
-  return candidates.find((row) => row.id === companion.id) ?? null;
+  return db.definition.findUnique({
+    where: { id: companion.id },
+  });
 }

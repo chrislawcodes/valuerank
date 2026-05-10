@@ -15,7 +15,7 @@ import {
   type TemplateConfig,
 } from '@valuerank/shared';
 import { applyLevelPresetToDefinitionContent } from '../../utils/definition-level-preset.js';
-import { findPairedCompanion } from '../../utils/auto-pair.js';
+import { findPairedCompanion, getComponentTokens } from '../../utils/auto-pair.js';
 
 export type PairedVignetteContent = DefinitionContentV1 & {
   components: DefinitionComponents;
@@ -65,7 +65,6 @@ export function buildPairedDefinitionName(_baseName: string, firstToken: string,
 }
 
 export function buildPairedVignetteContent(
-  pairKey: string,
   contextText: string,
   contextId: string,
   valueFirst: { token: string; body: string },
@@ -96,7 +95,6 @@ export function buildPairedVignetteContent(
     methodology: {
       family: familyName,
       response_scale: 'option_text',
-      pair_key: pairKey,
     },
     components: componentsAFirst,
   }, levelPresetVersion);
@@ -107,7 +105,6 @@ export function buildPairedVignetteContent(
     methodology: {
       family: familyName,
       response_scale: 'option_text',
-      pair_key: pairKey,
     },
     components: componentsBFirst,
   }, levelPresetVersion);
@@ -356,7 +353,12 @@ export async function resolvePairedVignette(definitionId: string) {
       ? contentRecord.methodology as Record<string, unknown>
       : null;
 
-  if (typeof methodology?.family !== 'string' || methodology.family === '' || typeof methodology.pair_key !== 'string') {
+  if (typeof methodology?.family !== 'string' || methodology.family === '') {
+    throw new ValidationError('Definition is not a paired vignette');
+  }
+
+  const primaryTokens = getComponentTokens(definition.content);
+  if (primaryTokens == null) {
     throw new ValidationError('Definition is not a paired vignette');
   }
 
@@ -365,10 +367,6 @@ export async function resolvePairedVignette(definitionId: string) {
       id: { not: definition.id },
       domainId: definition.domainId,
       deletedAt: null,
-      content: {
-        path: ['methodology', 'pair_key'],
-        equals: methodology.pair_key,
-      },
     },
     select: { id: true, name: true, content: true },
   });
@@ -385,7 +383,6 @@ export async function resolvePairedVignette(definitionId: string) {
   const definitionB = companion as { id: string; name: string; content: unknown };
 
   return {
-    pairKey: methodology.pair_key,
     definitionA: { id: definition.id, name: definition.name, content: definition.content },
     definitionB,
   };
