@@ -6,6 +6,7 @@
 
 import type { PerModelStats } from './types';
 import type { AnalysisResult, VarianceAnalysis, VisualizationData } from '../../../api/operations/analysis';
+import type { Run } from '../../../api/operations/runs';
 import {
   ANALYSIS_BASE_PATH,
   type AnalysisBasePath,
@@ -32,6 +33,7 @@ type OverviewTabProps = {
   isAggregate: boolean;
   analysisMode?: 'single' | 'paired';
   companionAnalysis?: AnalysisResult | null;
+  currentRun?: Run | null;
 };
 
 export function OverviewTab({
@@ -51,6 +53,7 @@ export function OverviewTab({
   isAggregate,
   analysisMode,
   companionAnalysis,
+  currentRun,
 }: OverviewTabProps) {
   return (
     <div className="space-y-6">
@@ -69,6 +72,7 @@ export function OverviewTab({
         coveragePairedBatchCount={coveragePairedBatchCount}
         isAggregate={isAggregate}
         analysisMode={analysisMode}
+        currentRun={currentRun}
       />
     </div>
   );

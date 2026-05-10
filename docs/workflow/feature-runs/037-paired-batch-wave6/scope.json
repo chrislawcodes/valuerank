@@ -1,0 +1,27 @@
+{
+  "paths": [
+    "cloud/apps/web/src/components/analysis/PooledVignetteMetricsCard.tsx",
+    "cloud/apps/web/src/components/analysis/tabs/OverviewSummaryTable.tsx",
+    "cloud/apps/web/src/components/analysis/tabs/OverviewTab.tsx",
+    "cloud/apps/web/src/components/analysis/AnalysisPanel.tsx",
+    "cloud/apps/web/src/api/operations/pressureSensitivity.graphql",
+    "cloud/apps/web/tests/components/analysis/PooledVignetteMetricsCard.test.tsx",
+    "cloud/apps/api/tests/services/pressure-sensitivity",
+    "cloud/scripts/job-choice-bridge-report.ts",
+    "cloud/scripts/job-choice-bridge-report-lib.ts",
+    "cloud/scripts/__tests__/job-choice-bridge-report.test.ts",
+    "docs/backend/paired-batch-run-flow.md",
+    "docs/canonical-glossary.md",
+    "docs/valuerank_prd.yaml"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/web/src/components/analysis",
+    "cloud/apps/web/tests/components/analysis",
+    "cloud/apps/api/tests/services/pressure-sensitivity",
+    "cloud/scripts",
+    "docs/backend",
+    "docs/canonical-glossary.md",
+    "docs/valuerank_prd.yaml",
+    "docs/workflow/feature-runs/037-paired-batch-wave6"
+  ]
+}

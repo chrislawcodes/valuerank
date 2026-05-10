@@ -1,0 +1,130 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": false,
+    "complete": true,
+    "question_count": 3,
+    "asked_count": 3,
+    "questions": [],
+    "assumptions": [
+      "Wave 5 is shipped (PR #1021) — Run schema cleanup, PAIR_ASYMMETRY enum removed, StartPairedBatchPage and PairedRunComparisonCard deleted.",
+      "Pooling visibility is shown to the user via the N/M count line ('Includes N runs of this vignette and M mirrored runs at signature vnewtd').",
+      "Pressure response is the user-facing metric the new card adds beyond the per-run table.",
+      "Direction-balanced math is non-negotiable — never overweight one direction's trial count over the other.",
+      "Card is paired-only (not shown for non-paired vignettes; not shown for aggregate runs; not shown when pressureSensitivity returns no models).",
+      "JSONB cleanup migration is skipped indefinitely.",
+      "legacyCompanionPairedRun.ts deletion is deferred to Wave 7 (it's load-bearing for pre-Wave-4 runs)."
+    ],
+    "summary": "Build a new pooled-vignette-metrics card to replace the deleted PairedRunComparisonCard, add a server-side methodology guard test for direction-balanced math, delete the bridge-report script and the paired-batch-run-flow doc, and clean up glossary/PRD terminology.",
+    "updated_at": 1778420000,
+    "answers": {
+      "Q1_pooling_visibility": "Visible — show the N/M split in the header.",
+      "Q2_columns": "Option B — Win rate A, Win rate B, Pressure response, Trials.",
+      "Q3_visibility": "Option A — paired-only; do not show for non-paired vignettes."
+    },
+    "non_goals": [
+      "JSONB cleanup migration (per user)",
+      "legacyCompanionPairedRun.ts deletion (deferred to Wave 7)",
+      "Bake bootstrap kappa CIs into snapshot (deferred to its own wave)",
+      "requestPolicy audit between /models and /models/win-rate"
+    ],
+    "acceptance_criteria": [
+      "New card renders for paired vignettes only",
+      "N/M count split derived client-side from useRuns + run.mirroredRuns.length (no API extension)",
+      "Pressure response null cases show tooltip with reason from API",
+      "Methodology guard test passes against current resolver, would fail on count-additive pooling",
+      "Lint, tests, builds all clean",
+      "Final greps return only documented exceptions"
+    ],
+    "unresolved": []
+  },
+  "delivery": {
+    "pr_url": "",
+    "pr_number": null,
+    "merge_sha": "",
+    "closed_at": "",
+    "operator_note": "",
+    "review_coverage_summary": {
+      "spec_lenses_run": [
+        "codex:correctness-adversarial",
+        "gemini:requirements-adversarial"
+      ],
+      "spec_lenses_skipped": [],
+      "plan_lenses_run": [],
+      "plan_lenses_skipped": [],
+      "tasks_lenses_run": [],
+      "tasks_lenses_skipped": [],
+      "diff_lenses_run": [],
+      "diff_lenses_skipped": []
+    }
+  },
+  "dirty_overrides": {},
+  "checkpoint_fallback": {},
+  "parallel_analysis": {
+    "reviewed": true,
+    "found": true,
+    "note": "Within Wave 1 (test) is independent of Wave 2 (card). Wave 3 (deletions/docs) is independent of Wave 1+2. Could parallelize via separate commits but bundling into one PR is preferred for atomic review.",
+    "updated_at": 1778420000
+  },
+  "init_head_sha": "",
+  "token_usage": [],
+  "stages": {
+    "spec": {
+      "adversarial_rounds": 1,
+      "judge_rounds": 0,
+      "judge_verdicts": [],
+      "annotations": [
+        "Codex review: reviews/codex-spec-r1.txt (6 important findings, all addressed in spec update)",
+        "Gemini review: reviews/gemini-spec-r1.txt (2 critical + 3 important findings, all addressed in spec update)"
+      ],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [],
+      "initial_sha": ""
+    },
+    "plan": {
+      "adversarial_rounds": 0,
+      "judge_rounds": 0,
+      "judge_verdicts": [],
+      "annotations": ["Plan derived from updated spec § 'Order of changes' after r1 review feedback applied."],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [],
+      "initial_sha": ""
+    },
+    "tasks": {
+      "adversarial_rounds": 0,
+      "judge_rounds": 0,
+      "judge_verdicts": [],
+      "annotations": ["Tasks derived from updated spec § 'Implementation tasks'."],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [],
+      "initial_sha": ""
+    }
+  },
+  "schema_version": 2,
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  },
+  "spec_adversarial_rounds": 1,
+  "last_action_result": {
+    "next": "begin_wave_1_implementation",
+    "reason": "spec/plan/tasks ready; Wave 5 is shipped; review feedback addressed",
+    "blockers": []
+  },
+  "plan_adversarial_rounds": 0,
+  "tasks_adversarial_rounds": 0,
+  "command_telemetry": [],
+  "invariant_warnings": []
+}

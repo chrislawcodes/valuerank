@@ -1,0 +1,52 @@
+Warning: 256-color support not detected. Using a terminal with at least 256-color support is recommended for a better visual experience.
+YOLO mode is enabled. All tool calls will be automatically approved.
+YOLO mode is enabled. All tool calls will be automatically approved.
+MCP issues detected. Run /mcp list for status.## Critical findings (would deliver something the user did not ask for)
+
+1.  **File:** `docs/tech-debt/wave6-spec.md`
+    **Section:** Task 1 — Build the replacement card -> Math rule (load-bearing)
+    **Finding:** The spec fails to enforce the user's most critical requirement. The user stated, "I want to also be clear that we shouldn't overweight trials in one order over the other," framing this as a research-integrity invariant. The spec correctly identifies that the `pressureSensitivity` resolver handles the direction-balanced math, but it **does not require a test to lock in this behavior**. A future change to the resolver could silently violate this core methodological guarantee.
+    **Recommendation:** The spec must be updated to require a new or existing server-side unit test for the `pressureSensitivity` resolver. This test must explicitly fail if the pooling logic changes from direction-balanced averaging to simple count-additive pooling (e.g., by using unbalanced trial counts in the test fixture and asserting the output reflects equal weighting).
+
+2.  **File:** `docs/tech-debt/wave6-spec.md`
+    **Section:** Task 1 — Build the replacement card -> Header
+    **Finding:** The spec requires a UI element that is not supported by the specified data source. The card's header is specified to display "Includes N runs of this vignette and M mirrored runs...". However, the `pressureSensitivity.graphql` query, which the spec names as the sole data source, already pools these runs on the server and returns only the combined result. It does not expose separate `N` and `M` counts.
+    **Recommendation:** The spec must change. Either:
+    *   (a) Modify the UI requirement to show a total count (e.g., "Includes a total of X runs from this vignette and its mirror"), which is derivable from the existing query.
+    *   (b) Acknowledge that the `pressureSensitivity` GraphQL operation and its resolver need to be extended to return the per-direction run counts, and remove the constraint "DO NOT change the `pressureSensitivity` resolver."
+
+## Important findings (gaps in requirements coverage)
+
+1.  **File:** `docs/tech-debt/wave6-spec.md`
+    **Section:** Task 1 — Build the replacement card
+    **Finding:** The spec does not address how the new card should behave for **aggregate runs**. Aggregate runs are a known concept in the project, but the spec is silent on whether the card should render for them. If a user views an aggregate run based on a paired vignette, the card's visibility rule (`hasMirroredValueTokens`) would be met, and it would render, potentially showing confusing "pooled-of-pooled" metrics without context.
+    **Recommendation:** The spec must explicitly define the card's behavior for aggregate runs. Options include: (a) hiding the card entirely for aggregate runs, or (b) showing the card but with a clear disclaimer in the header explaining that the metrics are pooled from aggregate data.
+
+2.  **File:** `docs/tech-debt/wave6-spec.md`
+    **Section:** Task 1 — Build the replacement card -> Per-model table
+    **Finding:** The spec's guidance for null `pressureResponse` is incomplete. It says to "Render `—` when null." However, the `pressureSensitivity` query provides a `reason` field explaining *why* it might be null (e.g., `'directional-thin'`). By ignoring this, the card fails to distinguish between "not enough data to compute" and a potential "computed but zero-effect" result, which is a meaningful distinction for a researcher.
+    **Recommendation:** Update the spec to require the card to use the `pressureResponse.reason` field. When `pressureResponse.value` is null, the `—` in the UI should have a tooltip explaining the reason, derived from the `reason` field.
+
+3.  **File:** `docs/tech-debt/wave6-spec.md`
+    **Section:** Task 5 — Glossary and PRD cleanup
+    **Finding:** The spec's list of terms to clean up in documentation is partially inaccurate. My review shows that `docs/canonical-glossary.md` and `docs/valuerank_prd.yaml` do not contain some of the terms listed for removal (e.g., "launch mode", "PAIR_ASYMMETRY"). The task is based on a stale understanding of those files.
+    **Recommendation:** The spec should be updated to reflect the actual contents of the files. The task should be to *verify* the terms are absent and to remove any that *are* found, rather than assuming they are all present.
+
+## Methodology integrity findings
+
+1.  **Direction-balanced math:** The spec correctly delegates this to the `pressureSensitivity` resolver, and my review of `cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts` confirms the underlying logic (`computeDirectionBalancedPairWinRates`) appears to correctly implement equal weighting. However, as noted in the critical findings, this is not protected by a specified test.
+2.  **Null handling:** As noted in important findings, the spec's handling of null pressure response is too simplistic and misses an opportunity to convey important methodological context (thin data) to the user.
+3.  **Aggregate runs:** The spec's failure to consider aggregate runs is a significant methodology gap, as it could lead to the display of confusing or misleading metrics without proper context.
+4.  **Directions measured:** The spec correctly handles the "directions measured" concern by keying off the signature. The `pressureSensitivity` query is signature-specific, so if a mirrored vignette has no runs *at that signature*, the message "Mirrored runs at signature `vnewtd` will populate..." will correctly be shown. This preserves the methodological integrity.
+
+## Things the spec correctly captures
+
+*   It correctly identifies the UI slot left by Wave 5 to place the new card.
+*   The data path for the card's core metrics (`directionBalancedWinRate`, `pressureResponse.value`, etc.) is correct; the specified fields exist on the `pressureSensitivity.graphql` query.
+*   The deletion tasks (Task 2, 3, 4) are well-defined and include appropriate confirmation steps (`grep`).
+*   The rollback plan (reverting the PR) is reasonable and correctly assesses the low impact of doing so.
+*   The handling of a mirror having no runs for a given signature is correctly specified via the "empty-mirror message."
+
+## Confidence
+
+This spec is not ready for implementation. It requires another pass to address the critical findings. The feasibility issue with the `N vs M` run counts (Critical #2) and the lack of a required test for the core math invariant (Critical #1) mean that, as written, the spec would either be impossible to implement as described or would fail to deliver on the user's core research-integrity requirement. The important findings also represent significant gaps that would lead to a less complete or confusing user experience.
