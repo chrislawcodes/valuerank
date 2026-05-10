@@ -6,8 +6,6 @@ import {
   MODEL_SHORTFALL_PEER_RATE,
   MODEL_SHORTFALL_RELATIVE_RATE,
   ORPHAN_TRANSCRIPT_MIN_AGE_SECONDS,
-  PAIR_ASYMMETRY_MIN_PROBES,
-  PAIR_ASYMMETRY_THRESHOLD_PCT,
   SUMMARIZING_STALL_MINUTES,
 } from './anomaly-thresholds.js';
 
@@ -40,7 +38,6 @@ type RunSnapshot = {
 type RunConfig = {
   models?: string[];
   samplesPerScenario?: number;
-  jobChoiceBatchGroupId?: string | null;
 };
 
 type SuccessCountRow = {
@@ -59,20 +56,7 @@ type OrphanTranscriptRow = {
   content: unknown;
 };
 
-type PairAsymmetryCandidate = {
-  id: string;
-  config: unknown;
-};
-
-type PairAsymmetryMetrics = {
-  runId: string;
-  scheduled: number;
-  successCount: number;
-  successRate: number;
-};
-
 export type AnomalyThresholds = {
-  pairAsymmetryThresholdPct?: number;
   modelShortfallAbsoluteRate?: number;
   modelShortfallRelativeRate?: number;
   modelShortfallPeerRate?: number;
@@ -103,11 +87,6 @@ function getSamplesPerScenario(config: unknown): number {
   return typeof samples === 'number' && Number.isFinite(samples) && samples > 0 ? samples : 1;
 }
 
-function getGroupId(config: unknown): string | null {
-  const groupId = parseRunConfig(config).jobChoiceBatchGroupId;
-  return typeof groupId === 'string' && groupId.trim() !== '' ? groupId : null;
-}
-
 function getProgressTotal(progress: unknown): number {
   if (progress === null || progress === undefined || typeof progress !== 'object') {
     return 0;
@@ -127,7 +106,6 @@ function isThresholdOverrides(value: AnomalyDetectionMode | AnomalyThresholds | 
 
 function hasAuditThresholdOverrides(thresholds: AnomalyThresholds | null): boolean {
   return thresholds !== null
-    && thresholds.pairAsymmetryThresholdPct === 0
     && thresholds.modelShortfallAbsoluteRate === 0
     && thresholds.modelShortfallRelativeRate === 0
     && thresholds.modelShortfallPeerRate === 0;
@@ -248,114 +226,6 @@ export async function detectOrphanTranscript(runId: string): Promise<AnomalyDraf
     subject: '',
     details: toJsonValue({
       transcriptIds: orphans.map((transcript) => transcript.id),
-    }),
-  };
-}
-
-export async function detectPairAsymmetry(
-  run: RunSnapshot,
-  options?: AnomalyDetectionMode | AnomalyThresholds,
-): Promise<AnomalyDraft | null> {
-  const detection = normalizeDetectionOptions(options);
-  const groupId = getGroupId(run.config);
-  if (groupId === null) {
-    return null;
-  }
-
-  const siblings = await db.run.findMany({
-    where: {
-      deletedAt: null,
-      id: { not: run.id },
-      config: {
-        path: ['jobChoiceBatchGroupId'],
-        equals: groupId,
-      },
-    },
-    select: {
-      id: true,
-      config: true,
-    },
-    orderBy: { updatedAt: 'asc' },
-  });
-
-  if (siblings.length === 0) {
-    return null;
-  }
-
-  const comparisonRuns: PairAsymmetryCandidate[] = [run, ...siblings];
-  const metrics = await Promise.all(
-    comparisonRuns.map(async (candidate): Promise<PairAsymmetryMetrics> => {
-      const modelCount = getModelIds(candidate.config).length;
-      const scenarioCount = await db.runScenarioSelection.count({ where: { runId: candidate.id } });
-      const samplesPerScenario = getSamplesPerScenario(candidate.config);
-      const scheduled = scenarioCount * modelCount * samplesPerScenario;
-      const successCount = await db.probeResult.count({
-        where: { runId: candidate.id, deletedAt: null, status: 'SUCCESS' },
-      });
-      return {
-        runId: candidate.id,
-        scheduled,
-        successCount,
-        successRate: scheduled === 0 ? 0 : successCount / scheduled,
-      };
-    })
-  );
-
-  const currentMetrics = metrics.find((candidate) => candidate.runId === run.id) ?? null;
-  if (currentMetrics === null) {
-    return null;
-  }
-
-  const skippedUnderSampledRunIds: string[] = [];
-  let maxDeltaPct = -1;
-  let maxDeltaSibling: PairAsymmetryMetrics | null = null;
-
-  for (const siblingMetrics of metrics) {
-    if (siblingMetrics.runId === run.id) {
-      continue;
-    }
-
-    if (currentMetrics.scheduled < PAIR_ASYMMETRY_MIN_PROBES || siblingMetrics.scheduled < PAIR_ASYMMETRY_MIN_PROBES) {
-      skippedUnderSampledRunIds.push(siblingMetrics.runId);
-      continue;
-    }
-
-    const deltaPct = Math.abs(currentMetrics.successRate - siblingMetrics.successRate) * 100;
-    if (deltaPct > maxDeltaPct) {
-      maxDeltaPct = deltaPct;
-      maxDeltaSibling = siblingMetrics;
-    }
-  }
-
-  if (maxDeltaSibling === null) {
-    return null;
-  }
-
-  const thresholdPct =
-    detection.mode === 'audit'
-      ? 0
-      : detection.thresholds?.pairAsymmetryThresholdPct ?? PAIR_ASYMMETRY_THRESHOLD_PCT;
-
-  // <= so identical rates (deltaPct === 0) don't fire when threshold is 0.
-  // At threshold=0 the detector fires on any measurable asymmetry.
-  if (maxDeltaPct <= thresholdPct) {
-    return null;
-  }
-
-  return {
-    type: 'PAIR_ASYMMETRY',
-    subject: groupId,
-    details: toJsonValue({
-      runId: run.id,
-      siblingRunId: maxDeltaSibling.runId,
-      currentSuccessRate: currentMetrics.successRate,
-      siblingSuccessRate: maxDeltaSibling.successRate,
-      scheduled: currentMetrics.scheduled,
-      siblingScheduled: maxDeltaSibling.scheduled,
-      siblingRunIds: metrics.map((candidate) => candidate.runId),
-      siblingSuccessRates: metrics.map((candidate) => candidate.successRate),
-      maxDeltaPct,
-      skippedUnderSampledRunIds,
     }),
   };
 }
@@ -510,9 +380,6 @@ export async function detectRunAnomalies(run: RunSnapshot): Promise<AnomalyDraft
 
   const orphan = await detectOrphanTranscript(run.id);
   if (orphan !== null) drafts.push(orphan);
-
-  const pair = await detectPairAsymmetry(run);
-  if (pair !== null) drafts.push(pair);
 
   const stall = detectSummarizingStall(run);
   if (stall !== null) drafts.push(stall);

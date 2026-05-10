@@ -1,40 +1,27 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
-  mockRunFindMany,
   mockRunScenarioSelectionCount,
-  mockProbeResultCount,
   mockProbeResultGroupBy,
   mockTranscriptFindMany,
-  mockRunAnomalyFindMany,
   mockQueryRaw,
 } = vi.hoisted(() => ({
-  mockRunFindMany: vi.fn(),
   mockRunScenarioSelectionCount: vi.fn(),
-  mockProbeResultCount: vi.fn(),
   mockProbeResultGroupBy: vi.fn(),
   mockTranscriptFindMany: vi.fn(),
-  mockRunAnomalyFindMany: vi.fn(),
   mockQueryRaw: vi.fn(),
 }));
 
 vi.mock('@valuerank/db', () => ({
   db: {
-    run: {
-      findMany: mockRunFindMany,
-    },
     runScenarioSelection: {
       count: mockRunScenarioSelectionCount,
     },
     probeResult: {
-      count: mockProbeResultCount,
       groupBy: mockProbeResultGroupBy,
     },
     transcript: {
       findMany: mockTranscriptFindMany,
-    },
-    runAnomaly: {
-      findMany: mockRunAnomalyFindMany,
     },
     $queryRaw: mockQueryRaw,
   },
@@ -58,7 +45,6 @@ vi.mock('@valuerank/shared', () => ({
 import {
   detectModelTranscriptShortfall,
   detectOrphanTranscript,
-  detectPairAsymmetry,
   detectScheduledCountMismatch,
   detectStrandedTranscript,
   detectSummarizingStall,
@@ -297,91 +283,6 @@ describe('run anomaly detection', () => {
     expect(auditDrafts).toEqual(defaultDrafts);
     expect(auditDrafts).toHaveLength(1);
     expect(auditDrafts[0].subject).toBe('run-1:scenario-1:model-1:0');
-  });
-
-  it('detects pair asymmetry when sibling success rates diverge enough', async () => {
-    // mockRunFindMany is called by detectPairAsymmetry with `id: { not: run.id }`,
-    // so it should return only siblings (not self).
-    mockRunFindMany.mockResolvedValue([
-      { id: 'run-2', config: { jobChoiceBatchGroupId: 'group-1', models: ['m1'], samplesPerScenario: 10 } },
-    ]);
-    mockRunScenarioSelectionCount.mockResolvedValue(1);
-    // Two candidates (self + 1 sibling). Each calls probeResult.count once.
-    // Order in Promise.all: run-1 (self, 3 successes), run-2 (sibling, 9 successes).
-    mockProbeResultCount
-      .mockResolvedValueOnce(3)
-      .mockResolvedValueOnce(9);
-
-    await expect(
-      detectPairAsymmetry({
-        id: 'run-1',
-        status: 'COMPLETED',
-        updatedAt: new Date('2026-04-23T00:00:00.000Z'),
-        config: { jobChoiceBatchGroupId: 'group-1', models: ['m1'], samplesPerScenario: 10 },
-        progress: { total: 10 },
-        deletedAt: null,
-      })
-    ).resolves.toMatchObject({
-      type: 'PAIR_ASYMMETRY',
-      subject: 'group-1',
-    });
-
-    mockRunFindMany.mockResolvedValue([
-      { id: 'run-2', config: { jobChoiceBatchGroupId: 'group-1', models: ['m1'], samplesPerScenario: 10 } },
-    ]);
-    mockProbeResultCount
-      .mockResolvedValueOnce(8)
-      .mockResolvedValueOnce(8);
-
-    await expect(
-      detectPairAsymmetry({
-        id: 'run-1',
-        status: 'COMPLETED',
-        updatedAt: new Date('2026-04-23T00:00:00.000Z'),
-        config: { jobChoiceBatchGroupId: 'group-1', models: ['m1'], samplesPerScenario: 10 },
-        progress: { total: 10 },
-        deletedAt: null,
-      })
-    ).resolves.toBeNull();
-  });
-
-  it('detects any measurable pair asymmetry in audit mode', async () => {
-    mockRunFindMany.mockResolvedValue([
-      { id: 'run-2', config: { jobChoiceBatchGroupId: 'group-1', models: ['m1'], samplesPerScenario: 10 } },
-    ]);
-    mockRunScenarioSelectionCount.mockResolvedValue(1);
-    mockProbeResultCount
-      .mockResolvedValueOnce(5)
-      .mockResolvedValueOnce(6);
-
-    await expect(
-      detectPairAsymmetry({
-        id: 'run-1',
-        status: 'COMPLETED',
-        updatedAt: new Date('2026-04-23T00:00:00.000Z'),
-        config: { jobChoiceBatchGroupId: 'group-1', models: ['m1'], samplesPerScenario: 10 },
-        progress: { total: 10 },
-        deletedAt: null,
-      }, 'audit')
-    ).resolves.toMatchObject({
-      type: 'PAIR_ASYMMETRY',
-      subject: 'group-1',
-    });
-
-    mockProbeResultCount
-      .mockResolvedValueOnce(5)
-      .mockResolvedValueOnce(5);
-
-    await expect(
-      detectPairAsymmetry({
-        id: 'run-1',
-        status: 'COMPLETED',
-        updatedAt: new Date('2026-04-23T00:00:00.000Z'),
-        config: { jobChoiceBatchGroupId: 'group-1', models: ['m1'], samplesPerScenario: 10 },
-        progress: { total: 10 },
-        deletedAt: null,
-      }, 'audit')
-    ).resolves.toBeNull();
   });
 
   it('detects summarizing stalls only after the threshold', () => {

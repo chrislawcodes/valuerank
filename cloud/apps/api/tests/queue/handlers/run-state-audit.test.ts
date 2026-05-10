@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockRunFindMany = vi.hoisted(() => vi.fn());
 const mockDetectOrphanTranscript = vi.hoisted(() => vi.fn());
-const mockDetectPairAsymmetry = vi.hoisted(() => vi.fn());
 const mockDetectModelTranscriptShortfall = vi.hoisted(() => vi.fn());
 const mockDetectStrandedTranscript = vi.hoisted(() => vi.fn());
 const mockDetectSummarizingStall = vi.hoisted(() => vi.fn());
@@ -33,7 +32,6 @@ vi.mock('../../../src/services/run/scheduler.js', () => ({
 
 vi.mock('../../../src/services/run/anomaly-detection.js', () => ({
   detectOrphanTranscript: mockDetectOrphanTranscript,
-  detectPairAsymmetry: mockDetectPairAsymmetry,
   detectModelTranscriptShortfall: mockDetectModelTranscriptShortfall,
   detectStrandedTranscript: mockDetectStrandedTranscript,
   detectSummarizingStall: mockDetectSummarizingStall,
@@ -64,7 +62,6 @@ describe('createRunStateAuditHandler', () => {
       },
     ]);
     mockDetectOrphanTranscript.mockResolvedValue(null);
-    mockDetectPairAsymmetry.mockResolvedValue(null);
     mockDetectModelTranscriptShortfall.mockResolvedValue([]);
     mockDetectStrandedTranscript.mockResolvedValue(null);
     mockDetectSummarizingStall.mockReturnValue(null);
@@ -74,11 +71,6 @@ describe('createRunStateAuditHandler', () => {
   });
 
   it('persists completed-run audit anomalies with the audit source', async () => {
-    mockDetectPairAsymmetry.mockResolvedValueOnce({
-      type: 'PAIR_ASYMMETRY',
-      subject: 'group-1',
-      details: { runId: 'run-1' },
-    });
     mockDetectModelTranscriptShortfall.mockResolvedValueOnce([
       {
         type: 'MODEL_TRANSCRIPT_SHORTFALL',
@@ -102,17 +94,6 @@ describe('createRunStateAuditHandler', () => {
     expect(mockDetectSummarizingStall).toHaveBeenCalledTimes(1);
     expect(mockDetectScheduledCountMismatch).toHaveBeenCalledTimes(1);
     expect(mockDetectInvalidResponseFailures).toHaveBeenCalledWith('run-1', 'audit');
-    expect(mockSyncAnomalies).toHaveBeenCalledWith(
-      'run-1',
-      'PAIR_ASYMMETRY',
-      [
-        expect.objectContaining({
-          type: 'PAIR_ASYMMETRY',
-          subject: 'group-1',
-        }),
-      ],
-      'audit'
-    );
     expect(mockSyncAnomalies).toHaveBeenCalledWith(
       'run-1',
       'MODEL_TRANSCRIPT_SHORTFALL',
