@@ -308,8 +308,11 @@ export async function runStartupRecovery(): Promise<RecoveryResult> {
  * This is a failsafe for when PgBoss expiration mechanisms fail or job handlers crash silently.
  */
 export async function detectAndRecoverStuckJobs(): Promise<{ recovered: number; errors: number }> {
-  // Find jobs active for > 5 minutes (user requested tight watchdog)
-  const ZOMBIE_THRESHOLD_MINUTES = 5;
+  // Active-execution timeout. Slow models (Grok, DeepSeek Reasoner, Gemini Flash) with
+  // long outputs can legitimately take >5m, so the previous 5m threshold killed many
+  // probes that would have completed. 30m is generous enough for any single LLM call
+  // and still catches truly hung handlers.
+  const ZOMBIE_THRESHOLD_MINUTES = 30;
 
   const stuckJobs = await db.$queryRaw<Array<{ id: string; name: string; run_id: string }>>`
     SELECT id, name, data->>'runId' as run_id
@@ -323,18 +326,25 @@ export async function detectAndRecoverStuckJobs(): Promise<{ recovered: number; 
     return { recovered: 0, errors: 0 };
   }
 
-  log.warn({ count: stuckJobs.length }, 'Detected zombie jobs (active > 5m)');
+  log.warn(
+    { count: stuckJobs.length, thresholdMinutes: ZOMBIE_THRESHOLD_MINUTES },
+    'Detected zombie jobs'
+  );
 
   let recovered = 0;
   let errors = 0;
+
+  const errorOutput = JSON.stringify({
+    error: `Zombie job detected and killed by watchdog (active > ${ZOMBIE_THRESHOLD_MINUTES}m)`,
+  });
 
   for (const job of stuckJobs) {
     try {
       // Force fail the job
       await db.$executeRaw`
-        UPDATE pgboss.job 
-        SET state = 'failed', 
-            output = '{"error": "Zombie job detected and killed by watchdog (active > 15m)"}',
+        UPDATE pgboss.job
+        SET state = 'failed',
+            output = ${errorOutput}::jsonb,
             completed_on = NOW()
         WHERE id = ${job.id}::uuid
       `;

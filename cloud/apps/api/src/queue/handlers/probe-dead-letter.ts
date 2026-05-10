@@ -34,8 +34,16 @@ export function createProbeDeadLetterHandler(): PgBoss.WorkHandler<ProbeDeadLett
         'Probe job failed/expired - processing dead letter'
       );
 
+      // Record the failure in ProbeResult table.
+      //
+      // Failures here are rethrown so the DLQ job goes to PgBoss "failed" state and the
+      // operator can see something went wrong. Previously this catch swallowed silently,
+      // which is why 15 zombie-killed probes on a known run never appeared in
+      // Run.failedProbes — recordProbeFailure was failing and nobody could tell.
+      //
+      // retryLimit on probe_dead_letter is 0, so a thrown error does NOT cause a retry
+      // loop; the DLQ job just fails once and stays visible.
       try {
-        // Record the failure in ProbeResult table
         await recordProbeFailure({
           runId,
           scenarioId,
@@ -46,7 +54,6 @@ export function createProbeDeadLetterHandler(): PgBoss.WorkHandler<ProbeDeadLett
           retryCount: 0,
         });
 
-        // Advance run state using derived counts
         const result = await maybeAdvanceRunStatus(runId);
 
         log.info(
@@ -54,11 +61,19 @@ export function createProbeDeadLetterHandler(): PgBoss.WorkHandler<ProbeDeadLett
           'Dead letter job processed - run progress updated'
         );
       } catch (error) {
-        // Log but don't throw - we don't want to retry dead letter jobs
         log.error(
-          { jobId, runId, scenarioId, modelId, err: error },
-          'Failed to process dead letter job'
+          {
+            jobId,
+            runId,
+            scenarioId,
+            modelId,
+            sampleIndex,
+            err: error,
+            jobData: job.data,
+          },
+          'Failed to process dead letter job — rethrowing so PgBoss marks it failed'
         );
+        throw error;
       }
     }
   };

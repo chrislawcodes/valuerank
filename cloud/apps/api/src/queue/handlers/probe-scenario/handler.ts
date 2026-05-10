@@ -226,16 +226,26 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
       // Use Python's retryable flag if available
       if (!err.retryable) {
         const errorMessage = formatWorkerErrorMessage(err);
-        // Non-retryable error - record failure and increment failed count
-        await recordProbeFailure({
-          runId,
-          scenarioId,
-          modelId,
-          sampleIndex,
-          errorCode: err.code,
-          errorMessage,
-          retryCount: 0,
-        });
+        // Non-retryable error - record failure and increment failed count.
+        // recordProbeFailure now throws on persistence error (so the DLQ handler can
+        // surface those failures), so this caller must wrap it. Keep the original
+        // probe-failed semantics: never block job completion on a metadata write.
+        try {
+          await recordProbeFailure({
+            runId,
+            scenarioId,
+            modelId,
+            sampleIndex,
+            errorCode: err.code,
+            errorMessage,
+            retryCount: 0,
+          });
+        } catch (recordErr) {
+          log.error(
+            { jobId, runId, scenarioId, modelId, err: recordErr },
+            'Failed to record probe failure — continuing'
+          );
+        }
         const advanceResult = await maybeAdvanceRunStatus(runId);
         log.error({ jobId, runId, advanceResult, error: err }, 'Probe job permanently failed');
         return; // Complete job without retrying
