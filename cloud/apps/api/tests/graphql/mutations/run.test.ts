@@ -154,7 +154,10 @@ describe('GraphQL Run Mutations', () => {
       const result = response.body.data.startRun;
       createdRunIds.push(result.run.id);
 
-      expect(result.run.status).toBe('PENDING');
+      // Non-empty runs are now created directly in RUNNING (see start.ts).
+      // PENDING is reserved for empty (zero-probe) runs that take the empty-run
+      // CAS shortcut to COMPLETED.
+      expect(result.run.status).toBe('RUNNING');
       expect(result.run.definition.id).toBe(definition.id);
       expect(result.run.definition.name).toBe('Test Definition for StartRun');
       // progress is JSON, access as object
@@ -264,7 +267,8 @@ describe('GraphQL Run Mutations', () => {
       });
 
       expect(dbRun).toBeDefined();
-      expect(dbRun?.status).toBe('PENDING');
+      // Non-empty runs are now created directly in RUNNING (see start.ts).
+      expect(dbRun?.status).toBe('RUNNING');
       expect(dbRun?.definitionId).toBe(definition.id);
 
       // Verify scenario selections

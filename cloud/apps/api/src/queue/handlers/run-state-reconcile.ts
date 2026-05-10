@@ -233,7 +233,18 @@ export function createRunStateReconcileHandler(): PgBoss.WorkHandler<RunStateRec
           log.warn({ runId, err: error }, 'Late transcript rescue failed');
         }
 
-        if (run.status === 'RUNNING' || run.status === 'SUMMARIZING' || run.status === 'PAUSED') {
+        // PENDING is included as defense-in-depth: non-empty runs are now
+        // created directly in `RUNNING` (start.ts), but if anything ever
+        // leaves a run stuck in `PENDING` we still want the reconciler to
+        // attempt status advancement (the empty-run CAS will catch zero-probe
+        // runs; non-empty PENDING runs will not advance via maybeAdvanceRunStatus
+        // today, but will still trigger anomaly detection here).
+        if (
+          run.status === 'PENDING' ||
+          run.status === 'RUNNING' ||
+          run.status === 'SUMMARIZING' ||
+          run.status === 'PAUSED'
+        ) {
           try {
             const advanceResult = await maybeAdvanceRunStatus(runId);
             log.debug({ runId, advanceResult }, 'Reconciled run state');

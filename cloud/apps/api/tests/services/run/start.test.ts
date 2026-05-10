@@ -1169,7 +1169,12 @@ describe('startRun service', () => {
   });
 
   describe('run record creation', () => {
-    it('creates run with PENDING status', async () => {
+    it('creates non-empty run with RUNNING status and startedAt set', async () => {
+      // Non-empty runs (totalJobs > 0) are created directly in RUNNING with
+      // startedAt = now. Before this fix, runs were created PENDING and
+      // relied on the probe handler to flip to RUNNING; PR #745 removed that
+      // flip without a replacement, so non-empty runs could get stuck in
+      // PENDING forever and become invisible to recovery/audit safety nets.
       const definition = await db.definition.create({
         data: {
           name: 'Status Test Definition',
@@ -1194,7 +1199,11 @@ describe('startRun service', () => {
 
       createdRunIds.push(result.run.id);
 
-      expect(result.run.status).toBe('PENDING');
+      expect(result.run.status).toBe('RUNNING');
+
+      const dbRun = await db.run.findUnique({ where: { id: result.run.id } });
+      expect(dbRun?.status).toBe('RUNNING');
+      expect(dbRun?.startedAt).not.toBeNull();
     });
 
     it('stores config with models and sampling info', async () => {
