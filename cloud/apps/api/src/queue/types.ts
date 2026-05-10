@@ -131,12 +131,13 @@ export const DEFAULT_JOB_OPTIONS: Record<JobType, JobOptions> = {
     retryLimit: 3,
     retryDelay: 5,
     retryBackoff: true,
-    // 24 hours. The zombie watchdog (services/run/recovery.ts) is the active-execution
+    // 23 hours. The zombie watchdog (services/run/recovery.ts) is the active-execution
     // timeout; this TTL just bounds how long a probe can sit in queue before PgBoss
     // expires it. Domain-level launches can submit tens of thousands of probes at once,
-    // so queue wait can legitimately exceed an hour. Anything shorter silently strands
-    // the tail.
-    expireInSeconds: 86400,
+    // so queue wait can legitimately exceed an hour. PgBoss enforces a strict <24h cap
+    // (86400 fails with "expiration cannot exceed 24 hours"), so we sit a comfortable
+    // hour under the ceiling.
+    expireInSeconds: 82800,
   },
   'top_up_probes': {
     retryLimit: 0,
@@ -201,8 +202,9 @@ export const DEFAULT_JOB_OPTIONS: Record<JobType, JobOptions> = {
   },
   'probe_dead_letter': {
     retryLimit: 0, // Don't retry dead letter jobs - just log and record
-    // 30 minutes. DLQ jobs run a single DB upsert; we keep this generous so a brief
-    // DB stall during a large fanout doesn't drop failure records on the floor.
+    // 30 minutes. DLQ jobs run a single DB upsert; keep this generous so a brief DB
+    // stall during a large fanout doesn't drop failure records on the floor. Well
+    // under the PgBoss <24h cap.
     expireInSeconds: 1800,
   },
 };
