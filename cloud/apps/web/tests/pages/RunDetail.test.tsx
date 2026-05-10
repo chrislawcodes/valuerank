@@ -200,39 +200,6 @@ describe('RunDetail', () => {
     expect(definitionElements.length).toBeGreaterThan(0);
   });
 
-  it('renders a label for paired-batch top-up runs', () => {
-    const run = createMockRun({
-      config: {
-        models: ['gpt-4', 'claude-3'],
-        samplePercentage: 100,
-        jobChoiceLaunchMode: 'PAIRED_BATCH_TOPUP',
-      },
-      definition: {
-        id: 'def-1',
-        name: 'Test Definition',
-        version: 1,
-        tags: [],
-        content: {
-          methodology: {},
-          components: {
-            value_first: { token: 'achievement', body: '' },
-            value_second: { token: 'power_dominance', body: '' },
-          },
-        },
-      },
-    });
-    vi.mocked(useRun).mockReturnValue({
-      run,
-      loading: false,
-      error: null,
-      refetch: mockRefetch,
-    });
-
-    renderWithRouter();
-
-    expect(screen.getByText('Paired batch top-up')).toBeInTheDocument();
-  });
-
   it('shows pause button for running runs', () => {
     const run = createMockRun({ status: 'RUNNING' });
     vi.mocked(useRun).mockReturnValue({
@@ -479,14 +446,12 @@ describe('RunDetail', () => {
     expect(screen.getByRole('button', { name: /adjudication csv/i })).toBeInTheDocument();
   });
 
-  it('shows Job Choice and paired batch labels for Job Choice runs', () => {
+  it('shows Job Choice methodology label for Job Choice runs', () => {
     const run = createMockRun({
       status: 'COMPLETED',
       config: {
         models: ['gpt-4', 'claude-3'],
         samplePercentage: 100,
-        jobChoiceLaunchMode: 'PAIRED_BATCH',
-        methodologySafe: true,
       },
       definition: {
         id: 'def-1',
@@ -517,7 +482,6 @@ describe('RunDetail', () => {
     renderWithRouter();
 
     expect(screen.getByText('Job Choice')).toBeInTheDocument();
-    expect(screen.getByText('Paired Batch')).toBeInTheDocument();
   });
 
   it('shows Old V1 label for retained professional runs', () => {

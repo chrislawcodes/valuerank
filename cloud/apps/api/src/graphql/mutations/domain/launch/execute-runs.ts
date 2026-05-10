@@ -1,7 +1,6 @@
 import type { db } from '@valuerank/db';
 import type { RunCategory } from '@valuerank/db';
 import { startRun as startRunService } from '../../../../services/run/index.js';
-import { getComponentTokens } from '../../../../utils/auto-pair.js';
 import { runMatchesSingleModel } from './resolve-backfill.js';
 import type {
   LaunchSlot,
@@ -48,9 +47,8 @@ export async function executeLaunchRuns(params: {
 
     const runResults = await Promise.allSettled(
       batch.map(async (slot) => {
-        const { definition, configExtras } = slot;
         return startRunService({
-          definitionId: definition.id,
+          definitionId: slot.definition.id,
           models: selectedModels,
           samplePercentage,
           samplesPerScenario,
@@ -58,7 +56,6 @@ export async function executeLaunchRuns(params: {
           priority: 'NORMAL',
           runCategory: scopeCategory,
           userId,
-          ...(configExtras !== undefined ? { configExtras } : {}),
         });
       })
     );
@@ -125,16 +122,6 @@ export async function executeBackfillRuns(params: {
 
     const runResults = await Promise.allSettled(
       group.definitions.map(async (definition) => {
-        const tokens = getComponentTokens(definition.content);
-        // Only stamp paired-batch config when the definition has mirrored value
-        // tokens. Non-paired and orphan definitions backfill without it.
-        const configExtras = tokens !== null
-          ? {
-              jobChoiceLaunchMode: 'PAIRED_BATCH' as const,
-              jobChoiceValueFirst: tokens.value_first.token,
-              methodologySafe: true,
-            }
-          : undefined;
         return startRunService({
           definitionId: definition.id,
           models: [group.modelId],
@@ -144,7 +131,6 @@ export async function executeBackfillRuns(params: {
           priority: 'NORMAL',
           runCategory: scopeCategory,
           userId,
-          ...(configExtras !== undefined ? { configExtras } : {}),
         });
       }),
     );

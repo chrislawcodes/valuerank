@@ -22,7 +22,6 @@ import { ModelsCircumplex } from './pages/ModelsCircumplex';
 import { ModelsConfidence } from './pages/ModelsConfidence';
 import { ModelsConfidenceValueDetail } from './pages/ModelsConfidenceValueDetail';
 import { DefinitionDetail } from './pages/DefinitionDetail';
-import { StartPairedBatchPage } from './pages/DefinitionDetail/StartPairedBatchPage';
 import { Runs } from './pages/Runs';
 import { RunDetail } from './pages/RunDetail';
 import { Analysis } from './pages/Analysis';
@@ -226,14 +225,6 @@ function App() {
               }
             />
             <Route
-              path="/definitions/:id/start-paired-batch"
-              element={
-                <ProtectedLayout>
-                  <StartPairedBatchPage />
-                </ProtectedLayout>
-              }
-            />
-            <Route
               path="/runs"
               element={
                 <ProtectedLayout>
@@ -378,7 +369,7 @@ function App() {
                 </ProtectedLayout>
               }
             />
-            {['/paired/new', '/paired/:id/edit', '/definitions/:id/start-paired-batch'].map((path) => (
+            {['/paired/new', '/paired/:id/edit'].map((path) => (
               <Route key={path} path={path} element={<ProtectedLayout requiredRole="ADMIN"><PairedVignetteNew /></ProtectedLayout>} />
             ))}
             <Route path="*" element={<ProtectedLayout><NotFound /></ProtectedLayout>} />

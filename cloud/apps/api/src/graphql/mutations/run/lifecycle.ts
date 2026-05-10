@@ -1,4 +1,4 @@
-import { db, resolveDefinitionContent, type RunCategory } from '@valuerank/db';
+import { db, type RunCategory } from '@valuerank/db';
 import { AuthenticationError, ValidationError } from '@valuerank/shared';
 import { builder } from '../../builder.js';
 import { RunRef } from '../../types/refs.js';
@@ -16,15 +16,7 @@ import {
 } from '../../../services/models/aliases.js';
 import { parseRunCategory } from '../../../services/run/query.js';
 import { StartRunPayload } from './payloads.js';
-import { extractValuePair } from '../../queries/domain-coverage-utils.js';
-import {
-  loadRunForResult,
-  persistPairedCompanionRunIds,
-  resolvePairedDefinition,
-} from './lifecycle-helpers.js';
-import { isRecord } from '../../../utils/isRecord.js';
-
-export { persistPairedCompanionRunIds } from './lifecycle-helpers.js';
+import { loadRunForResult } from './lifecycle-helpers.js';
 
 type StartRunArgs = {
   definitionId: string | number;
@@ -36,8 +28,6 @@ type StartRunArgs = {
   priority?: string | null;
   runCategory?: RunCategory | null;
   experimentId?: string | number | null;
-  launchMode?: string | null;
-  topUpDirection?: string | null;
   scenarioIds?: Array<string | number> | null;
 };
 
@@ -65,7 +55,20 @@ builder.mutationField('startRun', (t) =>
       }
 
       const userId = ctx.user.id;
-      const input = args.input as StartRunArgs;
+      const rawInput = args.input as StartRunArgs & {
+        launchMode?: string | null;
+        topUpDirection?: string | null;
+      };
+
+      if (rawInput.launchMode != null || rawInput.topUpDirection != null) {
+        throw new ValidationError(
+          "launchMode is no longer supported. The 'PAIRED_BATCH' / 'PAIRED_BATCH_TOPUP' / 'AD_HOC_BATCH' / 'STANDARD' modes have been removed. " +
+            "If you previously relied on launchMode='PAIRED_BATCH' to default runCategory to 'PRODUCTION', " +
+            "pass runCategory: 'PRODUCTION' explicitly. See docs/tech-debt/wave5-spec.md for migration."
+        );
+      }
+
+      const input = rawInput as StartRunArgs;
 
       ctx.log.info(
         { userId, definitionId: input.definitionId, modelCount: input.models.length },
@@ -84,7 +87,6 @@ builder.mutationField('startRun', (t) =>
       const activeModelIdSet = new Set(activeModelsForAliases.map((model) => model.modelId));
 
       const models = input.models.map((id) => resolveModelIdFromAvailable(id, activeModelIdSet) ?? id);
-      const launchMode = input.launchMode ?? 'STANDARD';
       const requestedRunCategory =
         typeof input.runCategory === 'string' && input.runCategory.trim() !== ''
           ? input.runCategory
@@ -95,132 +97,28 @@ builder.mutationField('startRun', (t) =>
           'Invalid runCategory. Expected PILOT, PRODUCTION, REPLICATION, VALIDATION, or UNKNOWN_LEGACY.'
         );
       }
-      const sharedInput = {
+
+      const result = await startRunService({
+        definitionId: String(input.definitionId),
         models,
         samplePercentage: input.samplePercentage ?? undefined,
         sampleSeed: input.sampleSeed ?? undefined,
         samplesPerScenario: input.samplesPerScenario ?? undefined,
         temperature: input.temperature ?? undefined,
         priority: input.priority ?? 'NORMAL',
-        runCategory: parsedRunCategory ?? (launchMode === 'PAIRED_BATCH' ? 'PRODUCTION' : undefined),
+        runCategory: parsedRunCategory,
         experimentId:
           input.experimentId !== undefined && input.experimentId !== null && input.experimentId !== ''
             ? String(input.experimentId)
             : undefined,
         userId,
         scenarioIds: input.scenarioIds?.map((scenarioId) => String(scenarioId)),
-      };
-
-      let result;
-      let pairedRunIds: string[] | undefined;
-
-      if (launchMode === 'PAIRED_BATCH') {
-        const pair = await resolvePairedDefinition(String(input.definitionId));
-
-        const primaryRun = await startRunService({
-          definitionId: pair.primary.id,
-          ...sharedInput,
-          configExtras: {
-            jobChoiceLaunchMode: launchMode,
-            jobChoiceValueFirst: pair.primaryValueFirst,
-            methodologySafe: true,
-          },
-        });
-
-        const companionRun = await startRunService({
-          definitionId: pair.companionId,
-          ...sharedInput,
-          configExtras: {
-            jobChoiceLaunchMode: launchMode,
-            jobChoiceValueFirst: pair.companionValueFirst,
-            methodologySafe: true,
-          },
-        });
-
-        await persistPairedCompanionRunIds(primaryRun.run.id, companionRun.run.id);
-
-        result = {
-          run: {
-            ...primaryRun.run,
-            config: {
-              ...(isRecord(primaryRun.run.config) ? primaryRun.run.config : {}),
-              companionRunId: companionRun.run.id,
-            },
-          },
-          jobCount: primaryRun.jobCount + companionRun.jobCount,
-        };
-        pairedRunIds = [companionRun.run.id];
-      } else if (launchMode === 'PAIRED_BATCH_TOPUP') {
-        const topUpDirection = typeof input.topUpDirection === 'string' ? input.topUpDirection.trim() : '';
-        if (topUpDirection.length === 0) {
-          throw new ValidationError('topUpDirection is required for paired-batch top-up launches');
-        }
-
-        if (requestedRunCategory !== undefined && parsedRunCategory !== 'PRODUCTION') {
-          throw new ValidationError('paired-batch top-up launches must use runCategory PRODUCTION');
-        }
-
-        const definitionId = String(input.definitionId);
-        const definition = await db.definition.findUnique({
-          where: { id: definitionId },
-          select: {
-            id: true,
-            deletedAt: true,
-          },
-        });
-        if (!definition || definition.deletedAt !== null) {
-          throw new ValidationError(`Definition ${definitionId} not found`);
-        }
-
-        const resolvedContent = (await resolveDefinitionContent(definition.id) as { resolvedContent: unknown }).resolvedContent;
-        const pair = extractValuePair(resolvedContent);
-        if (pair == null) {
-          throw new ValidationError('Paired-batch top-up launches require a definition with exactly two values');
-        }
-        if (topUpDirection !== pair.valueA && topUpDirection !== pair.valueB) {
-          throw new ValidationError(`topUpDirection must be one of ${pair.valueA} or ${pair.valueB}`);
-        }
-
-        result = await startRunService({
-          definitionId,
-          ...sharedInput,
-          runCategory: 'PRODUCTION',
-          configExtras: {
-            jobChoiceLaunchMode: launchMode,
-            jobChoiceValueFirst: topUpDirection,
-            methodologySafe: true,
-          },
-        });
-      } else {
-        result = await startRunService({
-          definitionId: String(input.definitionId),
-          ...sharedInput,
-          configExtras: launchMode === 'AD_HOC_BATCH'
-            ? {
-                jobChoiceLaunchMode: launchMode,
-                methodologySafe: false,
-              }
-            : undefined,
-        });
-      }
+      });
 
       ctx.log.info(
         { userId, runId: result.run.id, jobCount: result.jobCount },
         'Run started successfully'
       );
-
-      if (launchMode === 'PAIRED_BATCH_TOPUP') {
-        ctx.log.info(
-          {
-            runId: result.run.id,
-            definitionId: String(input.definitionId),
-            userId,
-            launchMode: 'PAIRED_BATCH_TOPUP',
-            topUpDirection: typeof input.topUpDirection === 'string' ? input.topUpDirection.trim() : '',
-          },
-          'Top-up run started'
-        );
-      }
 
       void createAuditLog({
         action: 'CREATE',
@@ -231,19 +129,10 @@ builder.mutationField('startRun', (t) =>
           definitionId: String(input.definitionId),
           models: input.models,
           jobCount: result.jobCount,
-          ...(launchMode === 'PAIRED_BATCH_TOPUP'
-            ? {
-                launchMode: 'PAIRED_BATCH_TOPUP',
-                topUpDirection: typeof input.topUpDirection === 'string' ? input.topUpDirection.trim() : '',
-              }
-            : {}),
         },
       });
 
-      return {
-        ...result,
-        pairedRunIds,
-      };
+      return result;
     },
   })
 );

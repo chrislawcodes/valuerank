@@ -38,7 +38,6 @@ export function CoverageCell(props: CoverageCellProps) {
     aFirstDefinitionName,
     bFirstDefinitionName,
     weakestCondition,
-    contributingDefinitionIds,
     definitionId,
     aggregateRunId,
   } = props;
@@ -210,57 +209,15 @@ export function CoverageCell(props: CoverageCellProps) {
               </Link>
             )}
 
-            {hasVignette && hasImbalance && definitionId !== null && (
-              <Link
-                to={`/definitions/${definitionId}/start-paired-batch`}
-                state={{
-                  returnLabel: 'Back to Value coverage',
-                  returnTo: `${window.location.pathname}${window.location.search}`,
-                  matchPairCounts: {
-                    pairKey: `${valueA.toLowerCase()}::${valueB.toLowerCase()}`,
-                    valueA,
-                    valueB,
-                    contributingDefinitionIds: contributingDefinitionIds.slice().sort((left, right) => left.localeCompare(right)),
-                    launchDefinitionId: definitionId,
-                    laggingDirection: aFirstBatchEquivalent <= bFirstBatchEquivalent ? valueA : valueB,
-                    before: {
-                      directionA: {
-                        name: valueA,
-                        batches: aFirstBatchEquivalent,
-                        conditions: aFirstBatchEquivalent,
-                      },
-                      directionB: {
-                        name: valueB,
-                        batches: bFirstBatchEquivalent,
-                        conditions: bFirstBatchEquivalent,
-                      },
-                    },
-                  },
-                }}
-                className="flex items-center justify-between px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-sm w-full text-left"
-                onClick={() => setIsOpen(false)}
-              >
-                <span className="flex items-center">
-                  <PlayIcon className="w-4 h-4 mr-2 text-orange-600" />
-                  Match Pair Counts
-                </span>
-                <ChevronRight className="w-4 h-4 text-gray-400" />
-              </Link>
-            )}
-
             {hasVignette && definitionId !== null && (
               <Link
-                to={`/definitions/${definitionId}/start-paired-batch`}
-                state={{
-                  returnLabel: 'Back to Value coverage',
-                  returnTo: `${window.location.pathname}${window.location.search}`,
-                }}
+                to={`/definitions/${definitionId}`}
                 className="flex items-center justify-between px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-sm w-full text-left"
                 onClick={() => setIsOpen(false)}
               >
                 <span className="flex items-center">
                   <PlayIcon className="w-4 h-4 mr-2 text-teal-600" />
-                  Start Paired Batch
+                  Start Trial
                 </span>
                 <ChevronRight className="w-4 h-4 text-gray-400" />
               </Link>

@@ -377,56 +377,6 @@ describe('DefinitionDetail', () => {
       expect(mockNavigate).toHaveBeenCalledWith('/paired/job-choice-1/edit');
     });
 
-    it('routes job-choice vignettes to the paired batch launch page', async () => {
-      const client = createMockClient({
-        definition: {
-          id: 'job-choice-2',
-          name: 'Care -> Freedom',
-          domainId: 'domain-a',
-          domainContextId: 'context-1',
-          levelPresetVersionId: null,
-          preambleVersionId: null,
-          content: {
-            schema_version: 1,
-            template: 'Choose between care and freedom',
-            dimensions: [{ name: 'care' }, { name: 'freedom' }],
-            methodology: {
-              family: 'job-choice',
-              presentation_order: 'A_first',
-              pair_key: 'pair-1',
-            },
-            components: {
-              context_id: 'context-1',
-              value_first: { token: 'care', body: 'show care' },
-              value_second: { token: 'freedom', body: 'protect freedom' },
-            },
-          },
-          parentId: null,
-          runCount: 0,
-          createdAt: '2024-01-15T10:00:00Z',
-          updatedAt: '2024-01-15T10:00:00Z',
-          tags: [],
-          parent: null,
-          children: [],
-        },
-      });
-
-      renderDefinitionDetail('job-choice-2', client);
-
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: /start paired batch/i })).toBeInTheDocument();
-      });
-
-      fireEvent.click(screen.getByRole('button', { name: /start paired batch/i }));
-
-      expect(mockNavigate).toHaveBeenCalledWith('/definitions/job-choice-2/start-paired-batch', {
-        state: {
-          returnLabel: 'Back to Vignette',
-          returnTo: '/definitions/job-choice-2',
-        },
-      });
-    });
-
     it('opens the trial modal for standard vignettes', async () => {
       const client = createMockClient({
         definition: {

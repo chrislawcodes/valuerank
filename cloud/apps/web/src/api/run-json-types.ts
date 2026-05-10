@@ -13,14 +13,10 @@ export type RunConfig = {
   sampleSeed?: number;
   temperature?: number | null;
   priority?: string;
-  companionRunId?: string | null;
-  jobChoiceLaunchMode?: 'PAIRED_BATCH' | 'PAIRED_BATCH_TOPUP' | 'AD_HOC_BATCH' | 'STANDARD' | null;
-  jobChoiceBatchGroupId?: string | null;
   /** @deprecated Use definitionSnapshot.components.value_first.token instead. */
   jobChoiceValueFirst?: string | null;
   isAggregate?: boolean;
   sourceRunIds?: string[];
-  methodologySafe?: boolean | null;
 };
 
 export type TranscriptDecisionModelV2RawEvidence = {

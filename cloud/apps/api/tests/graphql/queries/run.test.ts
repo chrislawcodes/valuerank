@@ -27,7 +27,7 @@ describe('GraphQL Run Query', () => {
         definitionId: testDefinition.id,
         status: 'COMPLETED',
         runCategory: 'PRODUCTION',
-        config: { models: ['gpt-4', 'claude-3'], samplePercentage: 50, companionRunId: 'companion-run-123' },
+        config: { models: ['gpt-4', 'claude-3'], samplePercentage: 50 },
         progress: { completed: 10, total: 10 },
         startedAt: new Date('2024-01-01T10:00:00Z'),
         completedAt: new Date('2024-01-01T10:30:00Z'),
@@ -65,7 +65,6 @@ describe('GraphQL Run Query', () => {
             status
             runCategory
             config
-            companionRunId
             progress
             startedAt
             completedAt
@@ -92,7 +91,6 @@ describe('GraphQL Run Query', () => {
         definitionId: testDefinition.id,
         status: 'COMPLETED',
         runCategory: 'PRODUCTION',
-        companionRunId: 'companion-run-123',
       });
       expect(response.body.data.run.config).toHaveProperty('models');
       expect(response.body.data.run.progress).toHaveProperty('completed', 10);

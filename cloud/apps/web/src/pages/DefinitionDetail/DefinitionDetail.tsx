@@ -186,15 +186,6 @@ export function DefinitionDetail() {
 
   const handleStartRun = () => {
     if (!definition) return;
-    if (hasMirroredValueTokens(definition.resolvedContent ?? definition.content)) {
-      navigate(`/definitions/${definition.id}/start-paired-batch`, {
-        state: {
-          returnLabel: 'Back to Vignette',
-          returnTo: `/definitions/${definition.id}`,
-        },
-      });
-      return;
-    }
     setShowRunForm(true);
   };
 

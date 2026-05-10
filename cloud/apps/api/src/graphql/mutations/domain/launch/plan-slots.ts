@@ -3,7 +3,6 @@ import type { RunCategory } from '@valuerank/db';
 import { estimateCost as estimateCostService } from '../../../../services/cost/estimate.js';
 import { normalizeModelSet } from '../types.js';
 import { parseTemperature } from '../../../../utils/temperature.js';
-import { getComponentTokens } from '../../../../utils/auto-pair.js';
 import type { DefinitionRow, LaunchGroup, LaunchSlot } from './types.js';
 
 export async function planLaunchSlots(params: {
@@ -109,21 +108,7 @@ export async function planLaunchSlots(params: {
 
     for (let i = 0; i < delta; i++) {
       for (const def of group.definitions) {
-        const tokens = getComponentTokens(def.content);
-        // Only stamp the paired-batch config when the definition actually has
-        // mirrored value tokens — i.e., it's a paired vignette. Non-paired
-        // definitions (no methodology components) and orphan paired vignettes
-        // launch as plain individual runs with no configExtras.
-        launchSlots.push({
-          definition: def,
-          configExtras: tokens !== null
-            ? {
-                jobChoiceLaunchMode: 'PAIRED_BATCH',
-                jobChoiceValueFirst: tokens.value_first.token,
-                methodologySafe: true,
-              }
-            : undefined,
-        });
+        launchSlots.push({ definition: def });
       }
     }
   }

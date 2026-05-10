@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { CoverageCell } from '../../../src/components/domains/CoverageCell';
 
 function renderCell(overrides: Partial<Parameters<typeof CoverageCell>[0]> = {}) {
@@ -36,19 +36,14 @@ function renderCell(overrides: Partial<Parameters<typeof CoverageCell>[0]> = {})
             </div>
           )}
         />
-        <Route path="/definitions/:id/start-paired-batch" element={<LocationStateProbe />} />
+        <Route path="/definitions/:id" element={<div>Definition Detail</div>} />
       </Routes>
     </MemoryRouter>,
   );
 }
 
-function LocationStateProbe() {
-  const location = useLocation();
-  return <pre data-testid="location-state">{JSON.stringify(location.state)}</pre>;
-}
-
 describe('CoverageCell', () => {
-  it('shows the direction breakdown, weakest condition, and top-up action for imbalanced cells', async () => {
+  it('shows the direction breakdown, weakest condition, and a Start Trial action', async () => {
     const user = userEvent.setup();
     renderCell();
 
@@ -63,47 +58,11 @@ describe('CoverageCell', () => {
     expect(screen.getByText('GPT-5')).toBeInTheDocument();
     expect(screen.getByText('All other conditions: 4 per model')).toBeInTheDocument();
 
-    const matchPairCountsLink = screen.getByRole('link', { name: /match pair counts/i });
-    expect(matchPairCountsLink).toHaveAttribute('href', '/definitions/def-1/start-paired-batch');
-
-    await user.click(matchPairCountsLink);
-
-    const state = JSON.parse(screen.getByTestId('location-state').textContent ?? '{}') as {
-      matchPairCounts?: {
-        pairKey: string;
-        valueA: string;
-        valueB: string;
-        launchDefinitionId: string;
-        laggingDirection: string;
-        contributingDefinitionIds: string[];
-        before: {
-          directionA: { name: string; batches: number; conditions: number };
-          directionB: { name: string; batches: number; conditions: number };
-        };
-      };
-    };
-    expect(state.matchPairCounts).toEqual(expect.objectContaining({
-      pairKey: 'achievement::power_dominance',
-      valueA: 'Achievement',
-      valueB: 'Power_Dominance',
-      launchDefinitionId: 'def-1',
-      laggingDirection: 'Achievement',
-      contributingDefinitionIds: ['def-a', 'def-b'],
-      before: expect.objectContaining({
-        directionA: expect.objectContaining({ name: 'Achievement', batches: 2, conditions: 2 }),
-        directionB: expect.objectContaining({ name: 'Power_Dominance', batches: 3, conditions: 3 }),
-      }),
-    }));
+    const startTrialLink = screen.getByRole('link', { name: /start trial/i });
+    expect(startTrialLink).toHaveAttribute('href', '/definitions/def-1');
   });
 
-  it('hides Match Pair Counts on cells with no imbalance signal, even when aggregateRunId is set', async () => {
-    // Regression for diff-review HIGH (2026-04-27): an earlier draft gated the
-    // Match Pair Counts CTA on `aggregateRunId === null`. The resolver sets
-    // `aggregateRunId` from `latestAggregateRunIdByDefinitionId ?? latestMatchingRunIdByDefinitionId`,
-    // so it is non-null on every cell with any completed run — the gate was
-    // hiding the CTA on virtually every cell with real data. The correct gate
-    // is `hasImbalance` only. So setting aggregateRunId without any imbalance
-    // signal must hide the CTA.
+  it('still renders the Start Trial action when there is no imbalance', async () => {
     const user = userEvent.setup();
     renderCell({
       aggregateRunId: 'run-1',
@@ -114,24 +73,6 @@ describe('CoverageCell', () => {
 
     await user.click(screen.getByRole('button', { name: /power versus achievement/i }));
 
-    expect(screen.getByRole('link', { name: /start paired batch/i })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /match pair counts/i })).not.toBeInTheDocument();
-  });
-
-  it('shows Match Pair Counts on imbalanced cells regardless of aggregateRunId', async () => {
-    // Companion to the test above: when the cell has an imbalance signal
-    // (mismatched a/b-first batch equivalents), the CTA must show even when
-    // aggregateRunId is non-null.
-    const user = userEvent.setup();
-    renderCell({
-      aggregateRunId: 'run-1',
-      aFirstBatchEquivalent: 1,
-      bFirstBatchEquivalent: 2,
-      weakestCondition: null,
-    });
-
-    await user.click(screen.getByRole('button', { name: /power versus achievement/i }));
-
-    expect(screen.getByRole('link', { name: /match pair counts/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /start trial/i })).toBeInTheDocument();
   });
 });

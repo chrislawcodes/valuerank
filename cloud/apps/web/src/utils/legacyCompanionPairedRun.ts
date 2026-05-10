@@ -24,16 +24,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+// Read legacy fields that still exist in production JSONB but are no longer
+// modeled in `RunConfig` after Wave 5. The properties may be present on older
+// rows; type-assert through the JSONB shape to read them safely.
+type LegacyRunConfig = {
+  jobChoiceBatchGroupId?: string | null;
+  companionRunId?: string | null;
+};
+
 function getRunConfigBatchGroupId(run: Run): string | null {
-  if (typeof run.pairedBatchGroupId === 'string' && run.pairedBatchGroupId.trim().length > 0) {
-    return run.pairedBatchGroupId;
-  }
-  const raw = run.config?.jobChoiceBatchGroupId;
+  const raw = (run.config as LegacyRunConfig | null | undefined)?.jobChoiceBatchGroupId;
   return typeof raw === 'string' && raw.trim().length > 0 ? raw : null;
 }
 
 function getRunCompanionRunId(run: Run): string | null {
-  const raw = run.companionRunId ?? run.config?.companionRunId;
+  const raw = (run.config as LegacyRunConfig | null | undefined)?.companionRunId;
   return typeof raw === 'string' && raw.trim().length > 0 ? raw : null;
 }
 

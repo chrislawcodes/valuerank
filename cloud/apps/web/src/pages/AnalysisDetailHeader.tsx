@@ -25,7 +25,6 @@ export type AnalysisDetailHeaderProps = {
   definitionId?: string | null;
   definitionName?: string | null;
   methodologyLabel?: string | null;
-  launchModeLabel?: string | null;
   isAggregate?: boolean;
   currentSignature?: string | null;
 };
@@ -35,7 +34,6 @@ export function AnalysisDetailHeader({
   definitionId,
   definitionName,
   methodologyLabel,
-  launchModeLabel,
   isAggregate,
   currentSignature,
 }: AnalysisDetailHeaderProps) {
@@ -92,17 +90,6 @@ export function AnalysisDetailHeader({
           {methodologyLabel && (
             <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">
               {methodologyLabel}
-            </span>
-          )}
-          {launchModeLabel && (
-            <span
-              className={`rounded-full px-2 py-1 text-xs font-medium ${
-                launchModeLabel === 'Paired Batch'
-                  ? 'bg-teal-100 text-teal-800'
-                  : 'bg-gray-100 text-gray-700'
-              }`}
-            >
-              {launchModeLabel}
             </span>
           )}
           <span className="mx-1">•</span>

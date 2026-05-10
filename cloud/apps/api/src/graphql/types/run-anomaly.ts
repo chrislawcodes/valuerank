@@ -2,11 +2,10 @@ import { db } from '@valuerank/db';
 import { builder } from '../builder.js';
 import { DomainRef, RunAnomalyRef, RunRef } from './refs.js';
 
-export const RunAnomalyTypeEnum: ReturnType<typeof builder.enumType<'RunAnomalyType', readonly ['STRANDED_TRANSCRIPT', 'ORPHAN_TRANSCRIPT', 'PAIR_ASYMMETRY', 'SUMMARIZING_STALL', 'MODEL_TRANSCRIPT_SHORTFALL', 'SCHEDULED_COUNT_MISMATCH', 'INVALID_RESPONSE_FAILURE']>> = builder.enumType('RunAnomalyType', {
+export const RunAnomalyTypeEnum: ReturnType<typeof builder.enumType<'RunAnomalyType', readonly ['STRANDED_TRANSCRIPT', 'ORPHAN_TRANSCRIPT', 'SUMMARIZING_STALL', 'MODEL_TRANSCRIPT_SHORTFALL', 'SCHEDULED_COUNT_MISMATCH', 'INVALID_RESPONSE_FAILURE']>> = builder.enumType('RunAnomalyType', {
   values: [
     'STRANDED_TRANSCRIPT',
     'ORPHAN_TRANSCRIPT',
-    'PAIR_ASYMMETRY',
     'SUMMARIZING_STALL',
     'MODEL_TRANSCRIPT_SHORTFALL',
     'SCHEDULED_COUNT_MISMATCH',
@@ -29,7 +28,6 @@ const RECENT_COST_SAMPLE_SIZE = 10;
 const DISPLAY_LABEL_BY_TYPE: Record<string, string> = {
   STRANDED_TRANSCRIPT: 'Stranded Transcript',
   ORPHAN_TRANSCRIPT: 'Orphan Transcript',
-  PAIR_ASYMMETRY: 'Pair Asymmetry',
   SUMMARIZING_STALL: 'Summarizing Stall',
   MODEL_TRANSCRIPT_SHORTFALL: 'Model Transcript Shortfall',
   SCHEDULED_COUNT_MISMATCH: 'Scheduled Count Mismatch',

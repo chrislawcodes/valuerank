@@ -70,7 +70,7 @@ describe('run anomaly persistence helpers', () => {
     mockAnomalyUpsert.mockResolvedValue(undefined);
 
     await upsertAnomaly('run_1', {
-      type: 'PAIR_ASYMMETRY',
+      type: 'SUMMARIZING_STALL',
       subject: 'group-1',
       details: { runId: 'run_1' },
     }, 'audit');
@@ -79,7 +79,7 @@ describe('run anomaly persistence helpers', () => {
       where: {
         runId_type_subject_source: {
           runId: 'run_1',
-          type: 'PAIR_ASYMMETRY',
+          type: 'SUMMARIZING_STALL',
           subject: 'group-1',
           source: 'audit',
         },
@@ -95,7 +95,7 @@ describe('run anomaly persistence helpers', () => {
 
     await resolveAnomaly({
       runId: 'run_1',
-      type: 'PAIR_ASYMMETRY',
+      type: 'SUMMARIZING_STALL',
       subject: 'group-1',
       source: 'audit',
     });
@@ -104,7 +104,7 @@ describe('run anomaly persistence helpers', () => {
     const args = mockAnomalyUpdateMany.mock.calls[0]?.[0];
     expect(args.where).toEqual({
       runId: 'run_1',
-      type: 'PAIR_ASYMMETRY',
+      type: 'SUMMARIZING_STALL',
       subject: 'group-1',
       source: 'audit',
       resolvedAt: null,
@@ -117,12 +117,12 @@ describe('run anomaly persistence helpers', () => {
     mockAnomalyUpsert.mockResolvedValue(undefined);
     mockAnomalyFindMany.mockResolvedValue([{ subject: 'group-1', details: null }]);
 
-    await syncAnomalies('run_1', 'PAIR_ASYMMETRY', [], 'audit');
+    await syncAnomalies('run_1', 'SUMMARIZING_STALL', [], 'audit');
 
     expect(mockAnomalyFindMany).toHaveBeenCalledWith({
       where: {
         runId: 'run_1',
-        type: 'PAIR_ASYMMETRY',
+        type: 'SUMMARIZING_STALL',
         source: 'audit',
         resolvedAt: null,
       },
@@ -132,7 +132,7 @@ describe('run anomaly persistence helpers', () => {
       expect.objectContaining({
         where: {
           runId: 'run_1',
-          type: 'PAIR_ASYMMETRY',
+          type: 'SUMMARIZING_STALL',
           subject: 'group-1',
           source: 'audit',
           resolvedAt: null,

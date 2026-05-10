@@ -14,7 +14,6 @@ import { useRunConditionGrid } from '../../hooks/useRunConditionGrid';
 import type { StartRunInput } from '../../api/operations/runs';
 import { LLM_PROVIDERS_QUERY } from '../../api/operations/llm';
 import type { LlmProvidersQueryResult } from '../../api/operations/llm';
-import { hasMirroredValueTokens } from '../../utils/methodology';
 import type { CostEstimate } from '../../api/operations/costs';
 import type { RunFormState } from './useRunForm';
 
@@ -66,8 +65,6 @@ type RunFormProps = {
   scenarioCount?: number;
   initialTemperature?: number | null;
   copyMode?: 'trial' | 'paired-batch';
-  defaultLaunchMode?: 'PAIRED_BATCH' | 'PAIRED_BATCH_TOPUP' | 'AD_HOC_BATCH';
-  launchModeLocked?: boolean;
   onStateChange?: (state: RunFormStateSnapshot) => void;
   onSubmit: (input: StartRunInput) => Promise<void>;
   onCancel?: () => void;
@@ -76,12 +73,9 @@ type RunFormProps = {
 
 export function RunForm({
   definitionId,
-  definitionContent,
   scenarioCount,
   initialTemperature = null,
   copyMode = 'trial',
-  defaultLaunchMode = 'PAIRED_BATCH',
-  launchModeLocked = false,
   onStateChange,
   onSubmit,
   onCancel,
@@ -94,7 +88,6 @@ export function RunForm({
     requestPolicy: 'cache-and-network',
   });
 
-  const isPairedDefinition = hasMirroredValueTokens(definitionContent);
   const { models, loading: loadingModels, error: modelsError } = useAvailableModels({
     onlyAvailable: false,
     requestPolicy: 'cache-and-network',
@@ -116,7 +109,6 @@ export function RunForm({
     handleSampleChange,
     handleSamplesPerScenarioChange,
     handleTemperatureChange,
-    handleLaunchModeChange,
     handleSubmit,
     handleCloseConditionModal,
     handleImmediateConditionSelect,
@@ -124,12 +116,8 @@ export function RunForm({
     definitionId,
     scenarioCount,
     initialTemperature,
-    defaultLaunchMode,
     onSubmit: async (input) => {
-      await onSubmit({
-        ...input,
-        launchMode: isPairedDefinition ? formState.launchMode : 'STANDARD',
-      });
+      await onSubmit(input);
     },
     models,
     loadingModels,
@@ -199,8 +187,6 @@ export function RunForm({
 
   const handleBudgetProceed = async () => {
     setBudgetOverdrafts([]);
-    // Re-submit using the captured form submit callback
-    // We trigger handleSubmit with a synthetic event
     const syntheticEvent = { preventDefault: () => {} } as React.FormEvent<HTMLFormElement>;
     await handleSubmit(syntheticEvent);
   };
@@ -244,61 +230,6 @@ export function RunForm({
           <p className="mt-2 text-sm text-red-600">{validationError}</p>
         )}
       </div>
-
-      {isPairedDefinition && !launchModeLocked && (
-        <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Batch Type
-            </label>
-            <div className="grid gap-3 md:grid-cols-2">
-              {[
-                {
-                  value: 'PAIRED_BATCH' as const,
-                  title: 'Start Paired Batch',
-                  description:
-                    'Methodology-safe default. Launches both order variants together.',
-                },
-                {
-                  value: 'AD_HOC_BATCH' as const,
-                  title: 'Start Ad Hoc Batch',
-                  description:
-                    'Exploratory only. Launches just this definition and should be treated as non-methodology-safe by default.',
-                },
-              ].map((option) => {
-                const selected = formState.launchMode === option.value;
-                return (
-                  // eslint-disable-next-line react/forbid-elements -- Toggle chip requires custom styling
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => handleLaunchModeChange(option.value)}
-                    disabled={isSubmitting}
-                    className={`rounded-lg border px-4 py-3 text-left transition-colors ${
-                      selected
-                        ? 'border-teal-500 bg-teal-50 text-teal-900'
-                        : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
-                    } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  >
-                    <div className="text-sm font-medium">{option.title}</div>
-                    <div className="mt-1 text-xs text-gray-500">{option.description}</div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-      {isPairedDefinition && launchModeLocked && (
-        <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Batch Type
-          </label>
-          <div className="rounded-lg border border-dashed border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            Pinned to Paired batch top-up
-          </div>
-        </div>
-      )}
 
       <div
         data-testid={copyMode === 'paired-batch' ? 'paired-batch-layout' : undefined}
@@ -368,23 +299,11 @@ export function RunForm({
           }
         >
           {isSubmitting ? (
-            isPairedDefinition
-              ? formState.launchMode === 'PAIRED_BATCH'
-                ? 'Starting Paired Batch...'
-                : formState.launchMode === 'PAIRED_BATCH_TOPUP'
-                  ? 'Starting Paired batch top-up...'
-                  : 'Starting Ad Hoc Batch...'
-              : 'Starting Trial...'
+            'Starting Trial...'
           ) : (
             <>
               <Play className="w-4 h-4 mr-2" />
-              {isPairedDefinition
-                ? formState.launchMode === 'PAIRED_BATCH'
-                  ? 'Start Paired Batch'
-                  : formState.launchMode === 'PAIRED_BATCH_TOPUP'
-                    ? 'Start Paired batch top-up'
-                    : 'Start Ad Hoc Batch'
-                : 'Start Trial'}
+              Start Trial
             </>
           )}
         </Button>

@@ -14,7 +14,6 @@ const log = createLogger('services:run:anomaly-detection');
 export type RunAnomalyType =
   | 'STRANDED_TRANSCRIPT'
   | 'ORPHAN_TRANSCRIPT'
-  | 'PAIR_ASYMMETRY'
   | 'SUMMARIZING_STALL'
   | 'MODEL_TRANSCRIPT_SHORTFALL'
   | 'SCHEDULED_COUNT_MISMATCH'

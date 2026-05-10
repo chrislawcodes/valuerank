@@ -437,27 +437,6 @@ export async function getDomainAnalysisResult(params: {
 }
 
 /**
- * Read the pre-computed per-(canonicalValueA::canonicalValueB::modelId) vote counts from
- * the current domain-analysis snapshot. Returns null if no CURRENT snapshot exists or if
- * the snapshot pre-dates v1.11.0 (i.e. does not include `valuePairModelVotes`).
- *
- * wins/(wins+losses) for a given key gives the model's preference score for canonicalValueA
- * (alphabetically first) across all definitions in this value pair, both directions combined.
- *
- * Used by the significance resolver to avoid a separate transcript scan.
- */
-export async function readValuePairModelVotesFromSnapshot(
-  scope: DomainAnalysisScope,
-  domainId: string,
-  configSignature: string,
-): Promise<Record<string, { wins: number; losses: number }> | null> {
-  const snapshot = await getCurrentSnapshot(db, scope, domainId, configSignature);
-  if (snapshot == null) return null;
-  const parsed = parseSnapshotOutput(snapshot.output);
-  return parsed?.valuePairModelVotes ?? null;
-}
-
-/**
  * Read the pre-computed per-(definitionId::modelId::canonicalA::canonicalB::ownLevel::opponentLevel)
  * cell-level outcomes from the current domain-analysis snapshot. Returns null if no CURRENT
  * snapshot exists or if the snapshot pre-dates v1.12.0 (i.e. does not include `cellLevelOutcomes`).

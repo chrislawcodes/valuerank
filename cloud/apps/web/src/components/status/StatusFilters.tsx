@@ -13,7 +13,6 @@ const ANOMALY_TYPE_OPTIONS: AnomalyTypeOption[] = [
   { value: 'INVALID_RESPONSE_FAILURE', label: 'Invalid response failure' },
   { value: 'MODEL_TRANSCRIPT_SHORTFALL', label: 'Model transcript shortfall' },
   { value: 'ORPHAN_TRANSCRIPT', label: 'Orphan transcript' },
-  { value: 'PAIR_ASYMMETRY', label: 'Pair asymmetry' },
   { value: 'SCHEDULED_COUNT_MISMATCH', label: 'Scheduled count mismatch' },
   { value: 'STRANDED_TRANSCRIPT', label: 'Stranded transcript' },
   { value: 'SUMMARIZING_STALL', label: 'Summarizing stall' },

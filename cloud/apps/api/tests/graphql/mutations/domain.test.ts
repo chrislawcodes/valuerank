@@ -578,10 +578,13 @@ describe('GraphQL Domain Mutations', () => {
       const callA = calls.find((c) => c.definitionId === defA.id);
       const callB = calls.find((c) => c.definitionId === defB.id);
 
-      expect(callA?.configExtras?.jobChoiceLaunchMode).toBe('PAIRED_BATCH');
-      expect(callB?.configExtras?.jobChoiceLaunchMode).toBe('PAIRED_BATCH');
-      expect(callA?.configExtras?.jobChoiceValueFirst).toBe('career');
-      expect(callB?.configExtras?.jobChoiceValueFirst).toBe('family');
+      // After Wave 5, paired-batch metadata is no longer written into configExtras.
+      // Both definitions still launch as independent runs; tokens come from the
+      // definition snapshot at analysis time, not the run config.
+      expect(callA).toBeDefined();
+      expect(callB).toBeDefined();
+      expect(callA?.configExtras).toBeUndefined();
+      expect(callB?.configExtras).toBeUndefined();
     });
 
     it('launches two distinct pairs as two independent batches', async () => {
@@ -605,10 +608,11 @@ describe('GraphQL Domain Mutations', () => {
 
       expect(startRunMock).toHaveBeenCalledTimes(4);
       const calls = startRunMock.mock.calls.map((c) => c[0]);
-      expect(calls.find((c) => c.definitionId === p1a.id)?.configExtras?.jobChoiceLaunchMode).toBe('PAIRED_BATCH');
-      expect(calls.find((c) => c.definitionId === p1b.id)?.configExtras?.jobChoiceLaunchMode).toBe('PAIRED_BATCH');
-      expect(calls.find((c) => c.definitionId === p2a.id)?.configExtras?.jobChoiceLaunchMode).toBe('PAIRED_BATCH');
-      expect(calls.find((c) => c.definitionId === p2b.id)?.configExtras?.jobChoiceLaunchMode).toBe('PAIRED_BATCH');
+      // After Wave 5, configExtras is undefined for all launches.
+      expect(calls.find((c) => c.definitionId === p1a.id)?.configExtras).toBeUndefined();
+      expect(calls.find((c) => c.definitionId === p1b.id)?.configExtras).toBeUndefined();
+      expect(calls.find((c) => c.definitionId === p2a.id)?.configExtras).toBeUndefined();
+      expect(calls.find((c) => c.definitionId === p2b.id)?.configExtras).toBeUndefined();
     });
 
     it('launches a non-paired definition as an individual run with no batch configExtras', async () => {
@@ -743,9 +747,10 @@ describe('GraphQL Domain Mutations', () => {
         ['test-domain-model-2'],
       ]);
 
-      expect(startRunMock.mock.calls.map((call) => call[0]?.configExtras?.jobChoiceLaunchMode)).toEqual([
-        'PAIRED_BATCH',
-        'PAIRED_BATCH',
+      // After Wave 5, configExtras is no longer written.
+      expect(startRunMock.mock.calls.map((call) => call[0]?.configExtras)).toEqual([
+        undefined,
+        undefined,
       ]);
 
       const evaluation = await db.domainEvaluation.findUnique({

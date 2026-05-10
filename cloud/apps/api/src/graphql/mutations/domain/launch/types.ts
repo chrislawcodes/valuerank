@@ -42,5 +42,4 @@ export type BackfillLaunchGroupRepetition = {
 
 export type LaunchSlot = {
   definition: DefinitionRow;
-  configExtras: Record<string, unknown> | undefined;
 };

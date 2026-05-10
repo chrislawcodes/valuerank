@@ -109,11 +109,6 @@ export function RunCard({ run, onClick }: RunCardProps) {
               <Badge variant={statusConfig.badgeVariant} size="count">
                 {getStatusLabel(run)}
               </Badge>
-              {run.pairedBatchGroupId && (
-                <Badge variant="info" size="count">
-                  Paired batch
-                </Badge>
-              )}
               {isAggregateRun && (
                 <Badge variant="info" size="count">
                   Aggregate

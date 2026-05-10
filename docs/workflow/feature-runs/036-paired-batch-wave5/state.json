@@ -1,0 +1,125 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": true,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": false,
+    "complete": true,
+    "question_count": 0,
+    "asked_count": 0,
+    "questions": [],
+    "assumptions": [
+      "Wave 4 has shipped (PR #1019 + hotfix PR #1020) — Run.mirroredRuns resolver exists, models-consistency is gone, coverage dedup is signature-based, aggregate-preparation uses pairedSibling.",
+      "Pre-flight script audit found zero non-Wave-6 callers passing launchMode — no internal callers to update.",
+      "Historical PAIR_ASYMMETRY anomaly rows are deleted (not preserved) per spec recommendation.",
+      "Public API contract change for the launchMode input is intentional: fail loudly with ValidationError rather than silent default change.",
+      "PairedRunComparisonCard is deleted in this wave; pooled-vignette-metrics replacement is deferred to Wave 6."
+    ],
+    "summary": "Mechanical removal wave: deletes the schema fields, UI affordances, and Prisma enum value that Wave 4 made obsolete. Source spec at docs/tech-debt/wave5-spec.md (already adversarially reviewed at spec level by Codex + Gemini). Lower risk than Wave 4 — analysis math is unchanged.",
+    "updated_at": 1778390400,
+    "answers": {},
+    "non_goals": [
+      "legacyCompanionPairedRun.ts deletion (Wave 6)",
+      "job-choice-bridge-report.ts deletion (Wave 6)",
+      "Pooled-vignette-metrics replacement card for the deleted PairedRunComparisonCard (Wave 6 — needs design)",
+      "Glossary and PRD updates (Wave 6)",
+      "Optional cleanup migration to strip pair_key and jobChoice* from old JSON content/config (Wave 6 — decide separately)"
+    ],
+    "acceptance_criteria": [
+      "All grep checks in wave5-spec.md § 'Final greps' return empty (excluding Wave 6 files + dist/)",
+      "Migration runs cleanly on local test DB; PAIR_ASYMMETRY row count captured for prod comparison",
+      "Full preflight passes (lint + tests + build for api/web; codegen for web; migrate dev for db)",
+      "Run.mirroredRuns resolver still works (Wave 4 functionality preserved)",
+      "No @ts-ignore, eslint-disable, or as any introduced",
+      "Web UI no longer references launchMode, companionRunId, pairedBatchGroupId, PAIR_ASYMMETRY",
+      "MCP tool outputs no longer expose pair-related fields"
+    ],
+    "unresolved": []
+  },
+  "delivery": {
+    "pr_url": "",
+    "pr_number": null,
+    "merge_sha": "",
+    "closed_at": "",
+    "operator_note": "",
+    "review_coverage_summary": {
+      "spec_lenses_run": [
+        "codex:correctness-adversarial",
+        "gemini:correctness-adversarial"
+      ],
+      "spec_lenses_skipped": [],
+      "plan_lenses_run": [],
+      "plan_lenses_skipped": [],
+      "tasks_lenses_run": [],
+      "tasks_lenses_skipped": [],
+      "diff_lenses_run": [],
+      "diff_lenses_skipped": []
+    }
+  },
+  "dirty_overrides": {},
+  "checkpoint_fallback": {},
+  "parallel_analysis": {
+    "reviewed": true,
+    "found": false,
+    "note": "Sequential per spec ordering. No safe cross-wave parallelism.",
+    "updated_at": 1778390400
+  },
+  "init_head_sha": "6b1a8064",
+  "token_usage": [],
+  "stages": {
+    "spec": {
+      "adversarial_rounds": 1,
+      "judge_rounds": 0,
+      "judge_verdicts": [],
+      "annotations": [
+        "Spec was adversarially reviewed at the docs/tech-debt/wave5-spec.md level prior to FF wrapper creation. See git log for the spec evolution."
+      ],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [],
+      "initial_sha": ""
+    },
+    "plan": {
+      "adversarial_rounds": 0,
+      "judge_rounds": 0,
+      "judge_verdicts": [],
+      "annotations": ["Plan derived from spec § 'Order of changes'. No separate review needed."],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [],
+      "initial_sha": ""
+    },
+    "tasks": {
+      "adversarial_rounds": 0,
+      "judge_rounds": 0,
+      "judge_verdicts": [],
+      "annotations": ["Tasks derived from spec § 'Implementation tasks'. Each task in the FF tasks.md cites file paths from the spec."],
+      "unresolved_concerns": [],
+      "adversarial_sha_history": [],
+      "initial_sha": ""
+    }
+  },
+  "schema_version": 2,
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  },
+  "spec_adversarial_rounds": 1,
+  "last_action_result": {
+    "next": "begin_wave_1_implementation",
+    "reason": "spec/plan/tasks ready; preflight (Wave 4 verification) passed",
+    "blockers": []
+  },
+  "plan_adversarial_rounds": 0,
+  "tasks_adversarial_rounds": 0,
+  "command_telemetry": [],
+  "invariant_warnings": []
+}

@@ -3040,9 +3040,6 @@ type Run {
 
   """Structured anomaly records for this run"""
   anomalies: [RunAnomaly!]!
-
-  """Direct companion run ID for paired launches"""
-  companionRunId: String
   completedAt: DateTime
   config: JSON!
   createdAt: DateTime!
@@ -3091,9 +3088,6 @@ type Run {
 
   """Optional user-defined name for this run"""
   name: String
-
-  """Shared identifier for the paired batch that this run belongs to"""
-  pairedBatchGroupId: String
 
   """Probe results with detailed success/failure information"""
   probeResults(
@@ -3253,7 +3247,6 @@ enum RunAnomalyType {
   INVALID_RESPONSE_FAILURE
   MODEL_TRANSCRIPT_SHORTFALL
   ORPHAN_TRANSCRIPT
-  PAIR_ASYMMETRY
   SCHEDULED_COUNT_MISMATCH
   STRANDED_TRANSCRIPT
   SUMMARIZING_STALL
@@ -3350,11 +3343,6 @@ input StartRunInput {
   """Optional experiment to associate this run with"""
   experimentId: ID
 
-  """
-  Launch mode hint: STANDARD, PAIRED_BATCH, PAIRED_BATCH_TOPUP, or AD_HOC_BATCH
-  """
-  launchMode: String
-
   """List of model IDs to evaluate (e.g., ["gpt-4", "claude-3"])"""
   models: [String!]!
 
@@ -3384,9 +3372,6 @@ input StartRunInput {
   Optional sampling temperature (0-2). If omitted, provider default is used.
   """
   temperature: Float
-
-  """Direction to top up for paired-batch top-up launches"""
-  topUpDirection: String
 }
 
 """Result of starting a new run"""
