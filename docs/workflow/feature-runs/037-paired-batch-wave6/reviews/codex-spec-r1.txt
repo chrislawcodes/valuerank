@@ -1,0 +1,200 @@
+      valueRates,
+      unscoredCount: modelUnscored,
+      pushedForEffect,
+      pushedAgainstEffect,
+      pushedEffectPairsUsed,
+      domainPressureEffects,
+    });
+  }
+
+  const measuredCount = sanityPositive + sanityFlat + sanityNegative;
+  const directionalSanityCheck: DirectionalSanityCheckShape = {
+    positivePct: measuredCount === 0 ? 0 : (sanityPositive / measuredCount) * 100,
+    flatPct: measuredCount === 0 ? 0 : (sanityFlat / measuredCount) * 100,
+    negativePct: measuredCount === 0 ? 0 : (sanityNegative / measuredCount) * 100,
+    measuredCount,
+    unmeasurableCount: sanityUnmeasurable,
+    breakdown: sanityBreakdown,
+  };
+
+  return {
+    models: outputModels.sort((a, b) => {
+      const aMean = a.pressureResponseSummary.mean;
+      const bMean = b.pressureResponseSummary.mean;
+      if (aMean === null && bMean === null) return a.label.localeCompare(b.label);
+      if (aMean === null) return 1;
+      if (bMean === null) return -1;
+      if (bMean !== aMean) return bMean - aMean;
+      return a.label.localeCompare(b.label);
+    }),
+    insufficient,
+    excludedDefinitions,
+    pressureConditionExcludedCount: totalPressureConditionExclusions(pressureConditionExclusionBreakdown),
+    pressureConditionExclusionBreakdown,
+    directionalSanityCheck,
+    transcriptCapHit,
+  };
+}
+
+exec
+/bin/zsh -lc "rg -n \"pairKeyCompanion|companion.*count|definitionsMeasured\" cloud/apps/api/src/services/pressure-sensitivity -g '"'!**/*.map'"'" in /Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4
+ succeeded in 0ms:
+cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts:571:  definitionsMeasured: ReadonlySet<string>;
+cloud/apps/api/src/services/pressure-sensitivity/snapshot-compute.ts:73:  definitionsMeasured: Set<string>;
+cloud/apps/api/src/services/pressure-sensitivity/snapshot-compute.ts:292:      definitionsMeasured: new Set(),
+cloud/apps/api/src/services/pressure-sensitivity/snapshot-compute.ts:468:    pairAcc.definitionsMeasured.add(defId);
+cloud/apps/api/src/services/pressure-sensitivity/snapshot-compute.ts:538:        definitionsMeasured: acc.definitionsMeasured,
+cloud/apps/api/src/services/pressure-sensitivity/snapshot-compute.ts:567:        definitionsMeasured: acc.definitionsMeasured.size,
+
+codex
+The main remaining ambiguity is aggregate runs. I’m pulling the exact lines where `AnalysisDetail` distinguishes aggregate from normal runs, because the spec currently doesn’t say whether the new card should appear there or not.
+exec
+/bin/zsh -lc "nl -ba cloud/apps/web/src/pages/AnalysisDetail.tsx | sed -n '292,355p'" in /Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4
+ succeeded in 0ms:
+   292	    && runDefinitionVersion !== undefined
+   293	    && latestDefinitionVersion !== null
+   294	    && latestDefinitionVersion !== undefined
+   295	    && runDefinitionVersion !== latestDefinitionVersion
+   296	  );
+   297	  const definitionContent = getRunDefinitionContent(run);
+   298	  const methodologyLabel = getDefinitionMethodologyLabel(
+   299	    definitionContent,
+   300	    run.definition?.domain?.name ?? null,
+   301	  );
+   302	  const isPairedDefinition = hasMirroredValueTokens(definitionContent);
+   303	  const handleSingleVignetteChange = (nextRunId: string) => {
+   304	    if (!nextRunId || nextRunId === run.id) {
+   305	      return;
+   306	    }
+   307	
+   308	    const next = buildAnalysisDetailParams(searchParams, activeTab, 'single', {
+   309	      preserveCoverageContext: false,
+   310	    });
+   311	    navigate({
+   312	      pathname: buildAnalysisDetailPath(ANALYSIS_BASE_PATH, nextRunId),
+   313	      search: next.toString().length > 0 ? `?${next.toString()}` : '',
+   314	    });
+   315	  };
+   316	
+   317	  return (
+   318	    <div className="space-y-6">
+   319	      <div className="flex items-center justify-between">
+   320	        <AnalysisDetailHeader
+   321	          runId={run.id}
+   322	          definitionId={run.definition?.id}
+   323	          definitionName={run.definition?.name}
+   324	          methodologyLabel={methodologyLabel}
+   325	          isAggregate={isAggregate}
+   326	          currentSignature={trialSignature}
+   327	        />
+   328	      </div>
+   329	
+   330	      {!run.analysisStatus ? (
+   331	        <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+   332	          <h3 className="text-lg font-medium text-gray-900 mb-2">
+   333	            No Analysis Available
+   334	          </h3>
+   335	          <p className="text-gray-500 mb-4">
+   336	            This trial does not have analysis data.
+   337	          </p>
+   338	        </div>
+   339	      ) : (
+   340	        <div className="space-y-4">
+   341	          <AnalysisPanel
+   342	            runId={run.id}
+   343	            analysisStatus={run.analysisStatus}
+   344	            analysisBasePath={ANALYSIS_BASE_PATH}
+   345	            analysisSearchParams={searchParams}
+   346	            analysisMode={analysisMode}
+   347	            coverageBatchCount={coverageBatchCount}
+   348	            coveragePairedBatchCount={coveragePairedBatchCount}
+   349	            onAnalysisModeChange={handleModeChange}
+   350	            activeTab={activeTab}
+   351	            onTabChange={handleTabChange}
+   352	            onSingleVignetteChange={handleSingleVignetteChange}
+   353	            companionAnalysis={analysisMode === 'paired' ? companionAnalysis : null}
+   354	            currentRun={run}
+   355	            companionRun={isPairedDefinition ? resolvedCompanionRun : null}
+
+exec
+/bin/zsh -lc 'rg -n "isAggregate" docs/tech-debt/wave6-spec.md cloud/apps/web/src/pages/AnalysisDetail.tsx cloud/apps/web/src/components/analysis/AnalysisPanel.tsx cloud/apps/web/src/components/analysis/tabs/OverviewTab.tsx' in /Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4
+ succeeded in 0ms:
+cloud/apps/web/src/components/analysis/tabs/OverviewTab.tsx:32:  isAggregate: boolean;
+cloud/apps/web/src/components/analysis/tabs/OverviewTab.tsx:51:  isAggregate,
+cloud/apps/web/src/components/analysis/tabs/OverviewTab.tsx:70:        isAggregate={isAggregate}
+cloud/apps/web/src/components/analysis/AnalysisPanel.tsx:36:  isAggregate?: boolean;
+cloud/apps/web/src/components/analysis/AnalysisPanel.tsx:63:  isAggregate,
+cloud/apps/web/src/components/analysis/AnalysisPanel.tsx:82:  const isAggregateAnalysis = isAggregate === true || analysis?.analysisType === 'AGGREGATE';
+cloud/apps/web/src/components/analysis/AnalysisPanel.tsx:108:    isAggregateAnalysis,
+cloud/apps/web/src/components/analysis/AnalysisPanel.tsx:269:          {!isAggregateAnalysis && (
+cloud/apps/web/src/components/analysis/AnalysisPanel.tsx:329:            isAggregate={isAggregateAnalysis}
+cloud/apps/web/src/pages/AnalysisDetail.tsx:22:import { ANALYSIS_BASE_PATH, buildAnalysisDetailPath, isAggregateAnalysis } from '../utils/analysisRouting';
+cloud/apps/web/src/pages/AnalysisDetail.tsx:268:  const isAggregate = isAggregateAnalysis(
+cloud/apps/web/src/pages/AnalysisDetail.tsx:325:          isAggregate={isAggregate}
+cloud/apps/web/src/pages/AnalysisDetail.tsx:359:            isAggregate={isAggregate}
+
+codex
+## Critical findings (would break production if merged)
+
+None.
+
+## Important findings (would degrade behavior or cause flaky tests)
+
+1. The spec invents a “missing signature” state that does not exist. `formatTrialSignature(null, null)` returns `v?td`, so the card can still query with a valid signature string; it should say how to handle `v?td` instead of treating it as un-derivable. See [`trial-signature.ts:9`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/packages/shared/src/trial-signature.ts#L9) and [`AnalysisDetail.tsx:287`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/web/src/pages/AnalysisDetail.tsx#L287).
+
+2. The header copy promises counts the current query does not expose. The spec says “N runs of this vignette and M mirrored runs,” but the resolver only surfaces `n` as total scored trials and `definitionsMeasured` as a unique-definition set size, not per-direction run counts. See [`wave6-spec.md:79`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/docs/tech-debt/wave6-spec.md#L79), [`snapshot-compute.ts:564`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/api/src/services/pressure-sensitivity/snapshot-compute.ts#L564), and [`snapshot-compute.ts:567`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/api/src/services/pressure-sensitivity/snapshot-compute.ts#L567).
+
+3. The visibility gate is too loose for the rule it claims to enforce. `hasMirroredValueTokens` only checks that both token strings exist, so a malformed or non-mirrored definition with two tokens will still render the card. If you want “mirrored vignette pair” only, this needs a stronger check than presence alone. See [`methodology.ts:77`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/web/src/utils/methodology.ts#L77) and [`methodology.ts:81`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/web/src/utils/methodology.ts#L81).
+
+4. Deleting `legacyCompanionPairedRun.ts` is not just removing dead code. `companionRun` feeds `singleVignetteOptions` and paired-mode transcript assembly, so pre-Wave-4 runs that lack `mirroredRuns` will lose the companion selector and flipped-context support, not merely a fallback search. See [`AnalysisDetail.tsx:175`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/web/src/pages/AnalysisDetail.tsx#L175), [`AnalysisDetail.tsx:183`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/web/src/pages/AnalysisDetail.tsx#L183), [`useAnalysisState.ts:171`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/web/src/components/analysis/useAnalysisState.ts#L171), and [`useAnalysisState.ts:184`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/web/src/components/analysis/useAnalysisState.ts#L184).
+
+5. The doc deletion scope is incomplete. The spec only checks `docs/`, but the repo still has live references to `docs/backend/paired-batch-run-flow.md` in workflow docs, so deleting the file without updating those leaves dangling links. See [`docs/workflow/feature-runs/033-run-state-reconciliation/spec.md:11`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/docs/workflow/feature-runs/033-run-state-reconciliation/spec.md#L11) and [`docs/workflow/feature-runs/033-run-state-reconciliation/decisions-to-review-before-merge.md:85`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/docs/workflow/feature-runs/033-run-state-reconciliation/decisions-to-review-before-merge.md#L85).
+
+6. Aggregate-run behavior is unspecified. `AnalysisDetail` already has explicit aggregate handling, but the spec only gates on mirrored tokens. It should say whether aggregate analyses should show this card or add an explicit `!isAggregate` check, otherwise the vignette card may appear on a run with no probes of its own. See [`AnalysisDetail.tsx:268`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/web/src/pages/AnalysisDetail.tsx#L268), [`AnalysisDetail.tsx:325`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/web/src/pages/AnalysisDetail.tsx#L325), and [`AnalysisPanel.tsx:82`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/web/src/components/analysis/AnalysisPanel.tsx#L82).
+
+## Things the spec handles correctly (verified)
+
+- The GraphQL operation already includes the fields the card needs: `definitionsMeasured`, `directionBalancedWinRate`, `directionBalancedOpponentWinRate`, `pressureResponse.value`, `n`, and `excludedDefinitions`. See [`pressureSensitivity.graphql:61`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/web/src/api/operations/pressureSensitivity.graphql#L61), [`pressureSensitivity.graphql:62`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/web/src/api/operations/pressureSensitivity.graphql#L62), [`pressureSensitivity.graphql:70`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/web/src/api/operations/pressureSensitivity.graphql#L70), and [`pressureSensitivity.graphql:99`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/web/src/api/operations/pressureSensitivity.graphql#L99).
+
+- The math claim is correct. `computeDirectionBalancedPairWinRates` averages per-vignette rates, then per-direction, then per-domain. It does not sum trials across directions and divide by total. See [`aggregation.ts:600`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts#L600) and [`aggregation.ts:669`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts#L669).
+
+- The data plumbing path is feasible. `AnalysisPanel` already has `definitionContent` and `currentRun`, and `OverviewTab` already accepts `definitionContent`, so the new card can be threaded through without changing the page shape. See [`AnalysisPanel.tsx:317`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/web/src/components/analysis/AnalysisPanel.tsx#L317) and [`OverviewTab.tsx:22`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/web/src/components/analysis/tabs/OverviewTab.tsx#L22).
+
+- The parent panel already short-circuits analysis-less states, so the new card does not need its own “run not completed” branch unless you want one for UX reasons. See [`AnalysisPanel.tsx:94`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/web/src/components/analysis/AnalysisPanel.tsx#L94) and [`AnalysisPanel.tsx:110`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/web/src/components/analysis/AnalysisPanel.tsx#L110).
+
+## Confidence
+
+The spec is close on the core data model and math, but it still needs another pass on copy accuracy, legacy-run behavior, and deletion scope. I would not treat it as ship-ready until those edge cases are tightened.
+tokens used
+148,456
+## Critical findings (would break production if merged)
+
+None.
+
+## Important findings (would degrade behavior or cause flaky tests)
+
+1. The spec invents a “missing signature” state that does not exist. `formatTrialSignature(null, null)` returns `v?td`, so the card can still query with a valid signature string; it should say how to handle `v?td` instead of treating it as un-derivable. See [`trial-signature.ts:9`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/packages/shared/src/trial-signature.ts#L9) and [`AnalysisDetail.tsx:287`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/web/src/pages/AnalysisDetail.tsx#L287).
+
+2. The header copy promises counts the current query does not expose. The spec says “N runs of this vignette and M mirrored runs,” but the resolver only surfaces `n` as total scored trials and `definitionsMeasured` as a unique-definition set size, not per-direction run counts. See [`wave6-spec.md:79`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/docs/tech-debt/wave6-spec.md#L79), [`snapshot-compute.ts:564`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/api/src/services/pressure-sensitivity/snapshot-compute.ts#L564), and [`snapshot-compute.ts:567`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/api/src/services/pressure-sensitivity/snapshot-compute.ts#L567).
+
+3. The visibility gate is too loose for the rule it claims to enforce. `hasMirroredValueTokens` only checks that both token strings exist, so a malformed or non-mirrored definition with two tokens will still render the card. If you want “mirrored vignette pair” only, this needs a stronger check than presence alone. See [`methodology.ts:77`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/web/src/utils/methodology.ts#L77) and [`methodology.ts:81`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/web/src/utils/methodology.ts#L81).
+
+4. Deleting `legacyCompanionPairedRun.ts` is not just removing dead code. `companionRun` feeds `singleVignetteOptions` and paired-mode transcript assembly, so pre-Wave-4 runs that lack `mirroredRuns` will lose the companion selector and flipped-context support, not merely a fallback search. See [`AnalysisDetail.tsx:175`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/web/src/pages/AnalysisDetail.tsx#L175), [`AnalysisDetail.tsx:183`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/web/src/pages/AnalysisDetail.tsx#L183), [`useAnalysisState.ts:171`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/web/src/components/analysis/useAnalysisState.ts#L171), and [`useAnalysisState.ts:184`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/web/src/components/analysis/useAnalysisState.ts#L184).
+
+5. The doc deletion scope is incomplete. The spec only checks `docs/`, but the repo still has live references to `docs/backend/paired-batch-run-flow.md` in workflow docs, so deleting the file without updating those leaves dangling links. See [`docs/workflow/feature-runs/033-run-state-reconciliation/spec.md:11`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/docs/workflow/feature-runs/033-run-state-reconciliation/spec.md#L11) and [`docs/workflow/feature-runs/033-run-state-reconciliation/decisions-to-review-before-merge.md:85`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/docs/workflow/feature-runs/033-run-state-reconciliation/decisions-to-review-before-merge.md#L85).
+
+6. Aggregate-run behavior is unspecified. `AnalysisDetail` already has explicit aggregate handling, but the spec only gates on mirrored tokens. It should say whether aggregate analyses should show this card or add an explicit `!isAggregate` check, otherwise the vignette card may appear on a run with no probes of its own. See [`AnalysisDetail.tsx:268`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/web/src/pages/AnalysisDetail.tsx#L268), [`AnalysisDetail.tsx:325`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/web/src/pages/AnalysisDetail.tsx#L325), and [`AnalysisPanel.tsx:82`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/web/src/components/analysis/AnalysisPanel.tsx#L82).
+
+## Things the spec handles correctly (verified)
+
+- The GraphQL operation already includes the fields the card needs: `definitionsMeasured`, `directionBalancedWinRate`, `directionBalancedOpponentWinRate`, `pressureResponse.value`, `n`, and `excludedDefinitions`. See [`pressureSensitivity.graphql:61`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/web/src/api/operations/pressureSensitivity.graphql#L61), [`pressureSensitivity.graphql:62`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/web/src/api/operations/pressureSensitivity.graphql#L62), [`pressureSensitivity.graphql:70`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/web/src/api/operations/pressureSensitivity.graphql#L70), and [`pressureSensitivity.graphql:99`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/web/src/api/operations/pressureSensitivity.graphql#L99).
+
+- The math claim is correct. `computeDirectionBalancedPairWinRates` averages per-vignette rates, then per-direction, then per-domain. It does not sum trials across directions and divide by total. See [`aggregation.ts:600`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts#L600) and [`aggregation.ts:669`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts#L669).
+
+- The data plumbing path is feasible. `AnalysisPanel` already has `definitionContent` and `currentRun`, and `OverviewTab` already accepts `definitionContent`, so the new card can be threaded through without changing the page shape. See [`AnalysisPanel.tsx:317`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/web/src/components/analysis/AnalysisPanel.tsx#L317) and [`OverviewTab.tsx:22`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/web/src/components/analysis/tabs/OverviewTab.tsx#L22).
+
+- The parent panel already short-circuits analysis-less states, so the new card does not need its own “run not completed” branch unless you want one for UX reasons. See [`AnalysisPanel.tsx:94`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/web/src/components/analysis/AnalysisPanel.tsx#L94) and [`AnalysisPanel.tsx:110`](/Users/chrislaw/valuerank/.claude/worktrees/focused-proskuriakova-7a71e4/cloud/apps/web/src/components/analysis/AnalysisPanel.tsx#L110).
+
+## Confidence
+
+The spec is close on the core data model and math, but it still needs another pass on copy accuracy, legacy-run behavior, and deletion scope. I would not treat it as ship-ready until those edge cases are tightened.

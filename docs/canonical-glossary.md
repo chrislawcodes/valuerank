@@ -113,7 +113,7 @@ Avoid confusion:
 
 ### `Run`
 
-A run is a saved record of a model evaluation or launch. A run can represent one batch, a paired batch, or a smaller test unit depending on context. A run that is fully complete — every selected model has answered every planned condition at every sample index — is also a `Batch` (see below). A run that exists but is missing transcripts in any planned slot is an `Incomplete Batch`.
+A run is a saved record of a model evaluation or launch. A run can represent one batch or a smaller test unit depending on context. A run that is fully complete — every selected model has answered every planned condition at every sample index — is also a `Batch` (see below). A run that exists but is missing transcripts in any planned slot is an `Incomplete Batch`.
 
 Example:
 
@@ -188,24 +188,22 @@ Avoid confusion:
 - an incomplete batch is a real run with real (partial) data — not a launch failure
 - a run that has no expected transcripts (e.g., never started) is neither a batch nor an incomplete batch
 
-### `Paired Batch`
+### `Mirrored Vignette Pair`
 
-A paired batch is counted whenever there is one complete A-first run and one complete B-first run that can be paired off. The Domain Overview shows `min(complete A-first, complete B-first)` for each value pair: when both directions have the same number of completed runs, that is the paired-batch count; when one direction has more, the surplus is unpaired and is **not** counted as a paired batch (the unpaired complete run still appears in `Batch` count).
+Two definitions in the same domain whose value tokens are flipped: the `value_first` of one definition equals the `value_second` of the other, and vice versa. A pair authored this way lets the system pool runs across both presentation directions when computing analysis numbers.
 
-A paired launch where one companion finishes and the other does not is a **broken pair**: the complete companion contributes 1 to `Batch`, the incomplete companion contributes 1 to `Incomplete Batch`, and the launch contributes 0 to `Paired Batch`.
+Replaced the legacy "paired batch" launch concept (removed across Waves 1–6 of the paired-batch removal cleanup). The system no longer groups runs at launch time by a shared batch-group identifier; instead, mirrored runs are discovered at analysis time by matching tokens and signature.
+
+The `Run.mirroredRuns` GraphQL resolver returns every non-deleted run of a definition's mirrored sibling at the same trial signature. The `pressureSensitivity` resolver pools both directions automatically and weights each direction equally (direction-balanced averaging — see the methodology guard test at `cloud/apps/api/tests/services/pressure-sensitivity/direction-balanced-invariant.test.ts`).
 
 Example:
 
-- “This paired batch contains one A-first batch and one B-first batch.”
+- "These two definitions are a mirrored vignette pair: one is Career → Family, the other is Family → Career."
 
 Avoid confusion:
 
-- a paired batch is two batches together, not one batch
-- use `paired batch` when you mean the matched set, not either side by itself
-
-**Note on terminology overlap:** "paired batch" is also used in the launch path to describe two runs that share a `jobChoiceBatchGroupId` because they were launched together (e.g., the anomaly detector at `cloud/apps/api/src/services/run/anomaly-detection.ts` finds "sibling runs" by group ID). That is the *launch-time* concept of a paired batch — runs that were spun up as a co-launched pair. The display-time concept above counts pairable analysis-ready data and does not require runs to share a launch group. Both senses are valid in their own contexts; the launch-time grouping still drives anomaly detection while the display-time count drives the Domain Overview hub.
-
-**Note on metric divergence within a cell:** within a single Domain Overview cell, `Paired Batch` (display-time) and the per-model trial counts operate on different subsets of the underlying runs. The trial-count path picks one survivor per `jobChoiceBatchGroupId` (the launch-time concept), so for a healthy paired launch with both companions complete, only one companion's transcripts feed the trial counts. The paired-batch count picks both. The two metrics are correct in their own terms but are not directly comparable arithmetically (e.g., 1 paired batch does not imply 2× the trial-count of an unpaired complete run).
+- mirroring is a property of the definitions, not the runs. Two runs of the same definition are not "mirrored runs"; mirrored runs come from definitions whose tokens are flipped.
+- "paired batch" used to mean a launch-time grouping of two runs that shared a batch-group identifier. That concept was removed in the Wave 1–6 cleanup. References to "paired batch" in older code or docs should be read as historical artifacts.
 
 ### `Transcript`
 

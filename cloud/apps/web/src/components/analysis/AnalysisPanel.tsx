@@ -331,6 +331,7 @@ export function AnalysisPanel({
             coverageBatchCount={coverageBatchCount}
             coveragePairedBatchCount={coveragePairedBatchCount}
             companionAnalysis={companionAnalysis}
+            currentRun={currentRun}
           />
         )}
         {activeTab === 'decisions' && filteredSemantics != null && (

@@ -31,6 +31,8 @@ import {
   PatternMetricButton,
   PairedPatternMetricButton,
 } from './OverviewTabComponents';
+import { PooledVignetteMetricsCard } from '../PooledVignetteMetricsCard';
+import type { Run } from '../../../api/operations/runs';
 
 export function OverviewSummaryTable({
   runId,
@@ -47,6 +49,7 @@ export function OverviewSummaryTable({
   coveragePairedBatchCount,
   isAggregate,
   analysisMode,
+  currentRun,
 }: {
   runId: string;
   analysisBasePath?: AnalysisBasePath;
@@ -62,6 +65,7 @@ export function OverviewSummaryTable({
   coveragePairedBatchCount?: number | null;
   isAggregate: boolean;
   analysisMode?: 'single' | 'paired';
+  currentRun?: Run | null;
 }) {
   const models = useMemo(() => {
     return Object.keys(semantics.preference.byModel)
@@ -292,6 +296,9 @@ export function OverviewSummaryTable({
         </table>
       </div>
 
+      {currentRun != null && (
+        <PooledVignetteMetricsCard currentRun={currentRun} isAggregate={isAggregate} />
+      )}
     </div>
   );
 }
