@@ -14,7 +14,7 @@ import { useRunConditionGrid } from '../../hooks/useRunConditionGrid';
 import type { StartRunInput } from '../../api/operations/runs';
 import { LLM_PROVIDERS_QUERY } from '../../api/operations/llm';
 import type { LlmProvidersQueryResult } from '../../api/operations/llm';
-import { getDefinitionMethodology } from '../../utils/methodology';
+import { hasMirroredValueTokens } from '../../utils/methodology';
 import type { CostEstimate } from '../../api/operations/costs';
 import type { RunFormState } from './useRunForm';
 
@@ -94,8 +94,7 @@ export function RunForm({
     requestPolicy: 'cache-and-network',
   });
 
-  const methodology = getDefinitionMethodology(definitionContent);
-  const isPairedDefinition = methodology?.pair_key != null;
+  const isPairedDefinition = hasMirroredValueTokens(definitionContent);
   const { models, loading: loadingModels, error: modelsError } = useAvailableModels({
     onlyAvailable: false,
     requestPolicy: 'cache-and-network',

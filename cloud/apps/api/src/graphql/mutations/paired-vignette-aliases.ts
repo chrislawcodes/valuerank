@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { db, type Prisma } from '@valuerank/db';
 import { ValidationError, type TemplateConfig } from '@valuerank/shared';
 import { builder } from '../builder.js';
@@ -40,9 +39,8 @@ builder.mutationField('createJobChoicePair', (t) =>
         sentencePrefix: resolvedInputs.domainSentencePrefix,
         labelPrefix: resolvedInputs.domainLabelPrefix,
       };
-      const pairKey = randomUUID();
       const { contentAFirst, contentBFirst, componentsAFirst, componentsBFirst } = buildPairedVignetteContent(
-        pairKey, resolvedInputs.context.text, resolvedInputs.contextId,
+        resolvedInputs.context.text, resolvedInputs.contextId,
         resolvedInputs.valueFirst, resolvedInputs.valueSecond, resolvedInputs.levelPresetVersion,
         resolvedInputs.domainNormalizedName, domainTemplateConfig,
       );
@@ -70,8 +68,8 @@ builder.mutationField('createJobChoicePair', (t) =>
         });
         return [a, b] as const;
       });
-      void createAuditLog({ action: 'CREATE', entityType: 'Definition', entityId: defA.id, userId: ctx.user?.id ?? null, metadata: { name: defA.name, pairKey } });
-      void createAuditLog({ action: 'CREATE', entityType: 'Definition', entityId: defB.id, userId: ctx.user?.id ?? null, metadata: { name: defB.name, pairKey } });
+      void createAuditLog({ action: 'CREATE', entityType: 'Definition', entityId: defA.id, userId: ctx.user?.id ?? null, metadata: { name: defA.name } });
+      void createAuditLog({ action: 'CREATE', entityType: 'Definition', entityId: defB.id, userId: ctx.user?.id ?? null, metadata: { name: defB.name } });
       return { definitionA: defA as DefinitionShape, definitionB: defB as DefinitionShape };
     },
   }),
@@ -104,7 +102,7 @@ builder.mutationField('updateJobChoicePair', (t) =>
         labelPrefix: resolvedInputs.domainLabelPrefix,
       };
       const { contentAFirst, contentBFirst, componentsAFirst, componentsBFirst } = buildPairedVignetteContent(
-        existingPair.pairKey, resolvedInputs.context.text, resolvedInputs.contextId,
+        resolvedInputs.context.text, resolvedInputs.contextId,
         resolvedInputs.valueFirst, resolvedInputs.valueSecond, resolvedInputs.levelPresetVersion,
         resolvedInputs.domainNormalizedName, domainTemplateConfig,
       );
@@ -137,8 +135,8 @@ builder.mutationField('updateJobChoicePair', (t) =>
         });
         return [defs[0], defs[1]] as const;
       });
-      void createAuditLog({ action: 'UPDATE', entityType: 'Definition', entityId: updatedA.id, userId: ctx.user?.id ?? null, metadata: { name: updatedA.name, pairKey: existingPair.pairKey, sourceDefinitionId: definitionId } });
-      void createAuditLog({ action: 'UPDATE', entityType: 'Definition', entityId: updatedB.id, userId: ctx.user?.id ?? null, metadata: { name: updatedB.name, pairKey: existingPair.pairKey, sourceDefinitionId: definitionId } });
+      void createAuditLog({ action: 'UPDATE', entityType: 'Definition', entityId: updatedA.id, userId: ctx.user?.id ?? null, metadata: { name: updatedA.name, sourceDefinitionId: definitionId } });
+      void createAuditLog({ action: 'UPDATE', entityType: 'Definition', entityId: updatedB.id, userId: ctx.user?.id ?? null, metadata: { name: updatedB.name, sourceDefinitionId: definitionId } });
       return { definitionA: updatedA as DefinitionShape, definitionB: updatedB as DefinitionShape };
     },
   }),

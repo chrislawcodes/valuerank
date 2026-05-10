@@ -193,21 +193,12 @@ describe('expandToCompanionDefinition', () => {
     });
   });
 
-  it('returns not_paired when methodology.pair_key is absent', async () => {
-    const domain = await createDomain('snapshot-builder-not-paired');
-    const input = await createDefinition({
-      domainId: domain.id,
-      name: 'Unpaired Definition',
-      firstToken: 'Achievement',
-      secondToken: 'Benevolence_Dependability',
-      presentationOrder: 'A_first',
-    });
-
-    await expect(expandToCompanionDefinition(input.id)).resolves.toEqual({
-      ids: [input.id],
-      status: 'not_paired',
-    });
-  });
+  // Wave 2: "not_paired" now means the definition has no value_first/value_second
+  // tokens at all (i.e. it's not structured as a paired vignette). The earlier
+  // condition (missing methodology.pair_key) is no longer how pairing is detected.
+  // The unreachable case where a definition lacks tokens entirely is covered by
+  // unit tests on getComponentTokens; an integration test against a malformed
+  // fixture isn't worth maintaining.
 
   it('does not cross domain boundaries when matching companions', async () => {
     const domainA = await createDomain('snapshot-builder-cross-a');
@@ -235,7 +226,12 @@ describe('expandToCompanionDefinition', () => {
     });
   });
 
-  it('throws a mirror failure when the only candidate is not a mirrored pair', async () => {
+  it('returns companion_missing when the only domain candidate is not a mirrored pair', async () => {
+    // Wave 2: with pair_key prefilter removed, a domain neighbour whose tokens
+    // do not mirror is simply not selected as a companion. Returns
+    // companion_missing rather than throwing PAIR_KEY_COMPANION_MIRROR_FAILURE
+    // (the mirror-failure throw is preserved as a defensive safety net but is
+    // unreachable in normal flow now that candidates are filtered by tokens).
     const domain = await createDomain('snapshot-builder-mirror-failure');
     const input = await createDefinition({
       domainId: domain.id,
@@ -243,7 +239,6 @@ describe('expandToCompanionDefinition', () => {
       firstToken: 'Achievement',
       secondToken: 'Benevolence_Dependability',
       presentationOrder: 'A_first',
-      pairKey: 'pair-mirror-failure',
     });
     await createDefinition({
       domainId: domain.id,
@@ -251,11 +246,11 @@ describe('expandToCompanionDefinition', () => {
       firstToken: 'Care',
       secondToken: 'Freedom',
       presentationOrder: 'A_first',
-      pairKey: 'pair-mirror-failure',
     });
 
-    await expect(expandToCompanionDefinition(input.id)).rejects.toMatchObject({
-      code: 'pair_key_companion_mirror_failure',
+    await expect(expandToCompanionDefinition(input.id)).resolves.toEqual({
+      ids: [input.id],
+      status: 'companion_missing',
     });
   });
 });

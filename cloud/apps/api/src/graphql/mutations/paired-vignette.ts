@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { db, type Prisma } from '@valuerank/db';
 import { ValidationError, type TemplateConfig } from '@valuerank/shared';
 import { builder } from '../builder.js';
@@ -44,7 +43,6 @@ builder.mutationField('createPairedVignette', (t) =>
         applyDomainDefault: true,
       });
 
-      const pairKey = randomUUID();
       const domainTemplateConfig: TemplateConfig = {
         sentencePrefix: resolvedInputs.domainSentencePrefix,
         labelPrefix: resolvedInputs.domainLabelPrefix,
@@ -55,7 +53,6 @@ builder.mutationField('createPairedVignette', (t) =>
         componentsAFirst,
         componentsBFirst,
       } = buildPairedVignetteContent(
-        pairKey,
         resolvedInputs.context.text,
         resolvedInputs.contextId,
         resolvedInputs.valueFirst,
@@ -115,7 +112,6 @@ builder.mutationField('createPairedVignette', (t) =>
         {
           definitionAId: defA.id,
           definitionBId: defB.id,
-          pairKey,
           levelPresetVersionId: resolvedInputs.resolvedLevelPresetVersionId,
           scenarioCount: resolvedInputs.levelPresetVersion != null ? 50 : 2,
         },
@@ -127,14 +123,14 @@ builder.mutationField('createPairedVignette', (t) =>
         entityType: 'Definition',
         entityId: defA.id,
         userId: ctx.user?.id ?? null,
-        metadata: { name: defA.name, pairKey },
+        metadata: { name: defA.name },
       });
       void createAuditLog({
         action: 'CREATE',
         entityType: 'Definition',
         entityId: defB.id,
         userId: ctx.user?.id ?? null,
-        metadata: { name: defB.name, pairKey },
+        metadata: { name: defB.name },
       });
 
       return {
@@ -190,7 +186,6 @@ builder.mutationField('updatePairedVignette', (t) =>
         componentsAFirst,
         componentsBFirst,
       } = buildPairedVignetteContent(
-        existingPair.pairKey,
         resolvedInputs.context.text,
         resolvedInputs.contextId,
         resolvedInputs.valueFirst,
@@ -256,14 +251,14 @@ builder.mutationField('updatePairedVignette', (t) =>
         entityType: 'Definition',
         entityId: updatedA.id,
         userId: ctx.user?.id ?? null,
-        metadata: { name: updatedA.name, pairKey: existingPair.pairKey, sourceDefinitionId: definitionId },
+        metadata: { name: updatedA.name, sourceDefinitionId: definitionId },
       });
       void createAuditLog({
         action: 'UPDATE',
         entityType: 'Definition',
         entityId: updatedB.id,
         userId: ctx.user?.id ?? null,
-        metadata: { name: updatedB.name, pairKey: existingPair.pairKey, sourceDefinitionId: definitionId },
+        metadata: { name: updatedB.name, sourceDefinitionId: definitionId },
       });
 
       ctx.log.info(
@@ -271,7 +266,6 @@ builder.mutationField('updatePairedVignette', (t) =>
           sourceDefinitionId: definitionId,
           definitionAId: updatedA.id,
           definitionBId: updatedB.id,
-          pairKey: existingPair.pairKey,
           levelPresetVersionId: resolvedInputs.resolvedLevelPresetVersionId,
           scenarioCount: resolvedInputs.levelPresetVersion != null ? 50 : 2,
         },

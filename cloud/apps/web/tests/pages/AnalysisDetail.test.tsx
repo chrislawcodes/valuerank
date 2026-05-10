@@ -797,7 +797,10 @@ describe('AnalysisDetail', () => {
             content: {
               methodology: {
                 family: 'job-choice',
-                pair_key: 'test-pair',
+              },
+              components: {
+                value_first: { token: 'achievement', body: '' },
+                value_second: { token: 'power_dominance', body: '' },
               },
             },
             domain: {

@@ -218,24 +218,6 @@ export function toShape(
   };
 }
 
-function extractPairKey(content: unknown): string | null {
-  if (content == null || typeof content !== 'object' || Array.isArray(content)) {
-    return null;
-  }
-
-  const methodology = (content as Record<string, unknown>).methodology;
-  if (methodology == null || typeof methodology !== 'object' || Array.isArray(methodology)) {
-    return null;
-  }
-
-  const record = methodology as Record<string, unknown>;
-  if (typeof record.family !== 'string' || record.family === '' || typeof record.pair_key !== 'string' || record.pair_key.trim() === '') {
-    return null;
-  }
-
-  return record.pair_key;
-}
-
 export async function resolveLaunchableDefinitions(
   launchableDefinitionIds: string[],
   members: DomainEvaluationMemberShape[],
@@ -249,7 +231,6 @@ export async function resolveLaunchableDefinitions(
     select: {
       id: true,
       name: true,
-      content: true,
     },
   });
 
@@ -258,7 +239,6 @@ export async function resolveLaunchableDefinitions(
       definition.id,
       {
         definitionName: definition.name ?? 'Untitled vignette',
-        pairKey: extractPairKey(definition.content),
       },
     ]),
   );
@@ -271,7 +251,6 @@ export async function resolveLaunchableDefinitions(
     return {
       definitionId,
       definitionName: definition?.definitionName ?? memberNameByDefinitionId.get(definitionId) ?? 'Untitled vignette',
-      pairKey: definition?.pairKey ?? null,
     };
   });
 }

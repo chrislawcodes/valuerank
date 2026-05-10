@@ -109,7 +109,6 @@ async function createJobChoiceDefinition(
   tagId: string,
   preambleVersionIdOverride: string | null,
   swapped: boolean,
-  pairKey: string,
 ): Promise<string> {
   const resolved = await resolveDefinitionContent(sourceDefinition.id);
   if (!isTransformableJobChoiceTemplate(resolved.resolvedContent.template)) {
@@ -118,7 +117,6 @@ async function createJobChoiceDefinition(
 
   const transformed = transformJobChoiceDefinition(resolved.resolvedContent, {
     swapped,
-    pairKey,
   });
   const preambleVersionId = preambleVersionIdOverride ?? sourceDefinition.preambleVersionId ?? null;
   const variantName = `${sourceDefinition.name} [Job Choice ${swapped ? 'B First' : 'A First'}]`;
@@ -182,8 +180,6 @@ async function main(): Promise<void> {
     }
 
     summary.transformable += 1;
-    const pairKey = `job-choice:${definition.id}`;
-
     for (const swapped of [false, true]) {
       const variantName = `${definition.name} [Job Choice ${swapped ? 'B First' : 'A First'}]`;
       const existing = await db.definition.findFirst({
@@ -209,7 +205,6 @@ async function main(): Promise<void> {
         jobChoiceTag.id,
         args.preambleVersionId,
         swapped,
-        pairKey,
       );
       summary.created += 1;
       log.info(

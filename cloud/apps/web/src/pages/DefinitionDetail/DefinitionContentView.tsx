@@ -6,6 +6,7 @@
 
 import type { DefinitionContent, PreambleVersion } from '../../api/operations/definitions';
 import { formatDisplayLabel } from '../../utils/displayLabels';
+import { hasMirroredValueTokens } from '../../utils/methodology';
 
 type DefinitionContentViewProps = {
   content: DefinitionContent | null | undefined;
@@ -20,7 +21,7 @@ export function DefinitionContentView({ content, preambleVersion }: DefinitionCo
   }
 
   const { preamble = '', template = '', dimensions = [] } = content;
-  const isPaired = content.methodology?.pair_key != null;
+  const isPaired = hasMirroredValueTokens(content);
   const sharedScaleSignature = dimensions[0] == null
     ? null
     : JSON.stringify({

@@ -77,7 +77,7 @@ describe('transformJobChoiceDefinition', () => {
     ]);
   });
 
-  it('preserves methodology metadata and includes default pair_key', () => {
+  it('preserves methodology metadata', () => {
     const result = transformJobChoiceDefinition(SAMPLE_CONTENT);
 
     expect(result.content.methodology).toEqual({
@@ -85,14 +85,12 @@ describe('transformJobChoiceDefinition', () => {
       response_scale: 'option_text',
       legacy_label: 'Old V1',
       canonical_value_order: ['Achievement', 'Hedonism'],
-      pair_key: undefined,
     });
   });
 
-  it('swaps value_first and value_second and applies pair_key for B_first', () => {
+  it('swaps value_first and value_second when swapped is true', () => {
     const result = transformJobChoiceDefinition(SAMPLE_CONTENT, {
       swapped: true,
-      pairKey: 'jobs-achievement-vs-hedonism',
     });
 
     expect(result.content.components?.value_first.token).toBe('hedonism');
@@ -100,13 +98,12 @@ describe('transformJobChoiceDefinition', () => {
     expect(result.content.template).toContain('One job offers [level] enjoyment in their daily experience');
     expect(result.content.template).not.toContain('[hedonism]');
     expect(result.roleTitles).toEqual(['a luxury resort reviewer', 'a sales executive']);
-    
+
     expect(result.content.methodology).toEqual({
       family: 'job-choice',
       response_scale: 'option_text',
       legacy_label: 'Old V1',
       canonical_value_order: ['Achievement', 'Hedonism'],
-      pair_key: 'jobs-achievement-vs-hedonism',
     });
   });
 

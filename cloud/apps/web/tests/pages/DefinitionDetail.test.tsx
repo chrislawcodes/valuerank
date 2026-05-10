@@ -285,7 +285,10 @@ describe('DefinitionDetail', () => {
             methodology: {
               family: 'job-choice',
               presentation_order: 'A_first',
-              pair_key: 'pair-1',
+            },
+            components: {
+              value_first: { token: 'achievement', body: '' },
+              value_second: { token: 'benevolence_dependability', body: '' },
             },
           },
           parentId: null,

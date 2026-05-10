@@ -3,7 +3,6 @@ type DefinitionMethodology = {
   response_scale?: 'numeric' | 'option_text' | 'value_labels';
   legacy_label?: string;
   canonical_value_order?: string[];
-  pair_key?: string;
 };
 
 type DecisionScaleLabel = {
@@ -75,6 +74,13 @@ function readPairedComponents(content: unknown): PairedComponents | null {
   };
 }
 
+export function hasMirroredValueTokens(content: unknown): boolean {
+  const components = readPairedComponents(content);
+  const first = toNonEmptyString(components?.value_first?.token);
+  const second = toNonEmptyString(components?.value_second?.token);
+  return first != null && second != null;
+}
+
 function readDefinitionDimensions(content: unknown): DefinitionDimension[] {
   if (!isRecord(content) || !Array.isArray(content.dimensions)) {
     return [];
@@ -114,7 +120,6 @@ export function getDefinitionMethodology(content: unknown): DefinitionMethodolog
   const family = typeof raw.family === 'string' ? raw.family : undefined;
   const responseScale = raw.response_scale;
   const legacyLabel = typeof raw.legacy_label === 'string' ? raw.legacy_label : undefined;
-  const pairKey = typeof raw.pair_key === 'string' ? raw.pair_key : undefined;
   const canonicalValueOrder = Array.isArray(raw.canonical_value_order)
     ? raw.canonical_value_order.filter((value): value is string => typeof value === 'string')
     : undefined;
@@ -127,7 +132,6 @@ export function getDefinitionMethodology(content: unknown): DefinitionMethodolog
         : undefined,
     legacy_label: legacyLabel,
     canonical_value_order: canonicalValueOrder,
-    pair_key: pairKey,
   };
 }
 
@@ -185,7 +189,7 @@ export function getDecisionMetadata(value: unknown): DecisionMetadata | null {
 
 export function isPairedMethodology(content: unknown): boolean {
   const m = getDefinitionMethodology(content);
-  return m?.family != null && m.family.length > 0 && m.pair_key != null && m.pair_key.length > 0;
+  return m?.family != null && m.family.length > 0;
 }
 
 export function getPairedOrientationLabels(content: unknown): PairedOrientationLabels {

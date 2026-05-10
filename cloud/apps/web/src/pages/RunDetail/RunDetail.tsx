@@ -24,7 +24,7 @@ import { RunNameEditor } from './RunNameEditor';
 import { AnalysisBanner } from './AnalysisBanner';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { formatTemperatureSetting } from '../../lib/temperature';
-import { getDefinitionMethodology, getDefinitionMethodologyLabel } from '../../utils/methodology';
+import { getDefinitionMethodologyLabel, hasMirroredValueTokens } from '../../utils/methodology';
 import { StalledModelsBanner, UnresolvableBanner, formatRunDate, getDisplaySignature } from './RunDetailBanners';
 import { useRunDetailHandlers } from './useRunDetailHandlers';
 import type { Run } from '../../api/operations/runs';
@@ -103,9 +103,8 @@ export function RunDetail() {
   const isPaused = run.status === 'PAUSED';
   const isTerminal = run.status === 'COMPLETED' || run.status === 'FAILED' || run.status === 'CANCELLED';
   const trialSignature = formatTrialSignature(run.definitionVersion ?? run.definition?.version ?? null, run.config?.temperature ?? null);
-  const methodology = getDefinitionMethodology(run.definition?.content);
   const methodologyLabel = getDefinitionMethodologyLabel(run.definition?.content, run.definition?.domain?.name ?? null);
-  const isPairedRun = methodology?.pair_key != null;
+  const isPairedRun = hasMirroredValueTokens(run.definition?.content);
   const launchModeLabel = isPairedRun ? formatLaunchModeLabel(run.config?.jobChoiceLaunchMode) : null;
   const launchModeBadgeClass = launchModeLabel === 'Paired Batch'
     ? 'bg-teal-100 text-teal-800'

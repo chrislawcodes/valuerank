@@ -23,7 +23,6 @@ query ActiveEvaluations($domainId: ID) {
     launchableDefinitions {
       definitionId
       definitionName
-      pairKey
     }
     members {
       runId

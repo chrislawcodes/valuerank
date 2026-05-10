@@ -38,7 +38,7 @@ import { DefinitionContentView } from './DefinitionContentView';
 import { DeleteDefinitionModal } from './DeleteDefinitionModal';
 import { RunFormModal } from './RunFormModal';
 import { UnforkDefinitionModal } from './UnforkDefinitionModal';
-import { getDefinitionMethodology, getDefinitionMethodologyLabel } from '../../utils/methodology';
+import { getDefinitionMethodologyLabel, hasMirroredValueTokens } from '../../utils/methodology';
 
 const log = createLogger('definition-detail');
 
@@ -186,7 +186,7 @@ export function DefinitionDetail() {
 
   const handleStartRun = () => {
     if (!definition) return;
-    if (methodology?.pair_key != null) {
+    if (hasMirroredValueTokens(definition.resolvedContent ?? definition.content)) {
       navigate(`/definitions/${definition.id}/start-paired-batch`, {
         state: {
           returnLabel: 'Back to Vignette',
@@ -315,11 +315,11 @@ export function DefinitionDetail() {
 
   const childCount = definition.children?.length ?? 0;
   const resolvedContent = definition.resolvedContent ?? definition.content;
-  const methodology = getDefinitionMethodology(resolvedContent);
   const methodologyLabel = getDefinitionMethodologyLabel(resolvedContent, definition.domain?.name ?? null);
-  const startLabel = methodology?.pair_key != null ? 'Start Paired Batch' : 'Start Trial';
+  const isPairedDefinition = hasMirroredValueTokens(resolvedContent);
+  const startLabel = isPairedDefinition ? 'Start Paired Batch' : 'Start Trial';
   const handleEdit = () => {
-    if (methodology?.pair_key != null) {
+    if (isPairedDefinition) {
       navigate(`/paired/${definition.id}/edit`);
       return;
     }

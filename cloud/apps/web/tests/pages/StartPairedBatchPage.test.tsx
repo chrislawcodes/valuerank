@@ -129,7 +129,10 @@ function createDefinition(overrides: Partial<Record<string, unknown>> = {}) {
       dimensions: [],
       methodology: {
         family: 'job-choice',
-        pair_key: 'test-pair',
+      },
+      components: {
+        value_first: { token: 'achievement', body: '' },
+        value_second: { token: 'power_dominance', body: '' },
       },
     },
     resolvedContent: {
@@ -138,7 +141,10 @@ function createDefinition(overrides: Partial<Record<string, unknown>> = {}) {
       dimensions: [],
       methodology: {
         family: 'job-choice',
-        pair_key: 'test-pair',
+      },
+      components: {
+        value_first: { token: 'achievement', body: '' },
+        value_second: { token: 'power_dominance', body: '' },
       },
     },
     scenarioCount: 8,

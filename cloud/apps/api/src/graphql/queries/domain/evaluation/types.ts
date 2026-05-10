@@ -19,7 +19,6 @@ export type DomainEvaluationSnapshot = {
 export type DomainEvaluationLaunchableDefinitionShape = {
   definitionId: string;
   definitionName: string;
-  pairKey: string | null;
 };
 
 export type DomainEvaluationMemberShape = {
@@ -167,7 +166,6 @@ export const DomainEvaluationLaunchableDefinitionRef = builder
     fields: (t) => ({
       definitionId: t.exposeID('definitionId'),
       definitionName: t.exposeString('definitionName'),
-      pairKey: t.exposeString('pairKey', { nullable: true }),
     }),
   });
 
