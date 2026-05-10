@@ -1,21 +1,31 @@
-# Wave 4 — Implementation Spec
+# Wave 4 — Implementation Spec (signature-based, simplified)
 
-**Status:** Draft (not yet reviewed)
+**Status:** Final draft
 **Last updated:** 2026-05-09
-**Scope:** Wave 4 of the [paired-batch removal cleanup](remove-paired-batch-concept.md). The biggest, riskiest wave.
+**Scope:** Wave 4 of the [paired-batch removal cleanup](remove-paired-batch-concept.md). The big analysis-layer rewrite.
 
 ## What this wave does
 
-Wave 4 is where the analysis layer stops depending on launch-time pair grouping. After this wave:
+Wave 4 stops the analysis layer from depending on launch-time pair grouping. The replacement primitive is **signature + value tokens**: two runs are comparable when they have the same trial signature (`v{definitionVersion}t{temperature}`) and their definitions have mirrored value tokens.
 
-- Coverage matrices derive direction and pair grouping from value tokens (already on the primary path; this wave removes the legacy fallback)
-- Models Consistency report finds order-effect partners by mirrored definitions, not `companionRunId`
-- Aggregate analysis preparation derives partners from `Definition.pairedSibling`
-- Paired-mode transcript view falls back to `Definition.pairedSibling` when `companionRunId` is absent
-- Domain launch flow stops writing `jobChoiceBatchGroupId` and stops grouping definitions by `pair_key`
-- The write paths for `jobChoiceLaunchMode` and `jobChoiceValueFirst` move out of the now-dead pair-conditional branch — every launch slot still gets these fields stamped
+After this wave:
 
-It's risky because it touches the analysis surface that produces the data the product is about. Numerical drift in coverage, pressure-sensitivity, or Models Consistency would invalidate downstream interpretation. The wave includes a snapshot-baseline + post-deploy diff regime to catch silent shifts.
+- Coverage matrices dedup by `(signature, canonical-value-pair)`. No `batchGroupId` reads.
+- Paired-mode transcript view fetches *all* mirrored runs at the same signature, not "the partner." No tie-breaking, no time windows.
+- **Models Consistency report is deleted entirely.** Archived feature.
+- Aggregate analysis preparation derives partners from `Definition.pairedSibling`. Falls back to the legacy `companionRunId` only when the template has it set.
+- Domain launch flow stops writing `jobChoiceBatchGroupId`. `jobChoiceLaunchMode` and `jobChoiceValueFirst` writes hoist out of the now-deleted pair-conditional branch.
+
+It's the analysis-rewrite wave so it carries real risk of silent numerical drift. The wave bundles a snapshot-baseline + post-deploy diff regime.
+
+## Decisions confirmed by the user before this revision
+
+| # | Decision | Rationale |
+|---|---|---|
+| 1 | When viewing analysis for run A, "find values from the opposite order" means *get all matching mirrored runs*, not pick one partner | Removes the partner concept from the data model. No tie-breaking. |
+| 2 | Always pool same-signature mirrored data | Pool across launches automatically. No per-launch grouping. |
+| 3 | Delete the Models Consistency report entirely | Already archived; removing it eliminates a major chunk of `companionRunId` consumers |
+| 4 | Models Stability's sample-count weighting (`weightedMean` in `models-stability-math.ts`) stays as-is | Intentional design choice for that report; out of scope here |
 
 ## What does NOT ship in Wave 4
 
@@ -29,24 +39,30 @@ It's risky because it touches the analysis surface that produces the data the pr
 | `PAIR_ASYMMETRY` enum value removal + Prisma migration | Wave 5 |
 | UI cleanup (`RunCard` badge, `StartPairedBatchPage` deletion, launch-mode picker) | Wave 5 |
 | `legacyCompanionPairedRun.ts` deletion | Wave 6 |
+| Dead `valuePairModelVotes` storage cleanup | Wave 5 or 6 (no consumer reads it; safe to delete) |
+
+## The comparability primitive
+
+A "mirrored run" of a given run is a run where:
+
+1. Same signature (`formatRunSignature` from [`domain-coverage-gql-types.ts:144`](../../cloud/apps/api/src/graphql/queries/domain-coverage-gql-types.ts:144))
+2. Definition has mirrored value tokens (A's `value_first.token` = B's `value_second.token` and vice versa)
+3. Same domain
+4. Not soft-deleted
+
+Multiple matches are pooled. The plural is the API.
 
 ## Pre-flight (must complete before Wave 4 PR opens)
 
 ### A. Wave 3 must be merged
 
-Confirm Wave 3 (the `detectPairAsymmetry` deletion) is on `main`.
+Confirm the Wave 3 squash commit (`9704624f`) is on `main`.
 
 ### B. Production data audit — paired definitions must have value tokens
 
-This is the hard precondition. Wave 4 starts removing the `jobChoiceValueFirst` fallback in coverage. If any production paired definition is missing value tokens, runs against it disappear from coverage matrices.
-
-Run from the repo root, against production via Railway:
-
 ```sql
 SELECT DISTINCT
-  d.id,
-  d.domain_id,
-  d.name,
+  d.id, d.domain_id, d.name,
   d.content -> 'methodology' ->> 'family' AS methodology_family,
   d.content -> 'components' -> 'value_first' ->> 'token' AS value_first_token,
   d.content -> 'components' -> 'value_second' ->> 'token' AS value_second_token
@@ -61,179 +77,215 @@ WHERE d.deleted_at IS NULL
   );
 ```
 
-**Expected: zero rows.** If any rows return: stop. Backfill the missing tokens before Wave 4 ships. There is no allowlist option.
+Expected: zero rows. If any rows return, backfill before Wave 4.
 
-Save the script as `cloud/scripts/preflight-wave4-token-audit.sql`.
+Save as `cloud/scripts/preflight-wave4-token-audit.sql`.
 
-### C. Snapshot baseline capture (one-shot)
+### C. Pre-flight: version-divergence audit (new — addresses Codex round-1 critical #2)
 
-Capture the current production output of the analysis surfaces Wave 4 changes. The post-deploy diff compares against these baselines.
+The signature-based dedup splits runs whose paired-sibling definitions have diverged versions (because signature includes `definitionVersion`). Old `batchGroupId`-based dedup merged them. Find any production paired definition pairs where versions differ:
 
-Add a script `cloud/scripts/wave4-prod-baseline.ts` that hits production GraphQL with a fixed query bundle and writes timestamped JSON to `cloud/tests/snapshot-baselines/wave4-prod-pre-deploy-${ISO_DATE}.json`. Commit the file.
+```sql
+WITH paired_pairs AS (
+  SELECT
+    d1.id AS def_a_id,
+    d1.version AS def_a_version,
+    d1.content -> 'components' -> 'value_first' ->> 'token' AS def_a_first,
+    d1.content -> 'components' -> 'value_second' ->> 'token' AS def_a_second,
+    d2.id AS def_b_id,
+    d2.version AS def_b_version
+  FROM definitions d1
+  JOIN definitions d2 ON d1.domain_id = d2.domain_id AND d1.id != d2.id
+  WHERE d1.deleted_at IS NULL
+    AND d2.deleted_at IS NULL
+    AND d1.content -> 'components' -> 'value_first' ->> 'token' = d2.content -> 'components' -> 'value_second' ->> 'token'
+    AND d1.content -> 'components' -> 'value_second' ->> 'token' = d2.content -> 'components' -> 'value_first' ->> 'token'
+)
+SELECT * FROM paired_pairs WHERE def_a_version != def_b_version;
+```
 
-**Query bundle:**
+If any rows return: those pairs will dedup as 2 units after Wave 4 (was 1). Document each in the allowed-deltas file as expected. Not a blocker — just transparency.
 
-| Query | Args | Why |
-|---|---|---|
-| `domainCoverage` | The 3 most-active domains by run count in the last 30 days | Catches coverage matrix shifts |
-| `pressureSensitivity` | The 5 most-recently-launched paired definitions | Catches pair-grouping shifts in pressure analysis |
-| `modelsConsistency` | The 3 most-active model pairs | Catches order-effect analysis shifts |
-| `runAnomaliesByType` (or equivalent) | Last 7 days | Sanity check: only `PAIR_ASYMMETRY` should drop |
-| `domainEvaluation` | The 5 most recent evaluations | Confirms launch-flow surface unaffected |
+### D. Snapshot baseline capture (one-shot)
 
-Pin the resolved entity IDs in the baseline JSON so the post-deploy verify step hits the same entities.
+Write `cloud/scripts/wave4-prod-baseline.ts` that hits production GraphQL with a fixed query bundle and writes timestamped JSON to `cloud/tests/snapshot-baselines/wave4-prod-pre-deploy-${ISO_DATE}.json`. Commit the file before opening the Wave 4 PR.
 
-### D. Equivalence tests (added in this wave's PR, not pre-flight)
+Query bundle:
+- `domainCoverage` for the 3 most-active domains (last 30 days)
+- `pressureSensitivity` for the 5 most-recently-launched paired definitions
+- `runAnomaliesByType` for the last 7 days
 
-Listed under Task 5 below — but plan the unit fixtures now so they're ready when Wave 4 starts.
+(`modelsConsistency` is deleted — not in the bundle. Wave 4 verifies the page is gone.)
+
+Pin resolved entity IDs in the baseline JSON.
 
 ## Implementation tasks
 
-Order matters. Each task assumes the previous is in place.
+Order matters.
 
-### Task 1 — Replace coverage dedup and direction lookup
+### Task 1 — Coverage dedup: `(signature, canonical-pair)` replacement
 
-**Decision: drop dedup entirely.** Each run is counted as its own coverage unit. The "paired batch as one unit" semantic was a launch-grouping artifact that we're removing.
+**File: [`cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts`](../../cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts)**
 
-Coverage matrix counts will shift on historical data: a paired-batch launch that previously counted as 1 dedup unit will now count as 2 (one per definition half). This is the **expected, documented delta** for Wave 4 and the only one that requires entries in `wave4-allowed-deltas.json`.
+Replace `deduplicateRunsByGroupId` with `deduplicateRunsBySignaturePair`:
 
-**Alternative considered: preserve historical dedup via batchGroupId + canonical-pair fallback.** Keeps historical counts byte-identical, defers the count shift to Wave 5. Rejected because (a) two-step transitions are risky, (b) the direction we're going is "no batch unit at all" — defer just postpones the same conversation.
+```
+deduplicateRunsBySignaturePair<T extends { config: unknown }>(
+  runs: T[],
+  options?: { completenessOf?: (run: T) => boolean }
+): T[]
+```
 
-**File: `cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts`**
+Dedup key per run: `(formatRunSignature(run.config), canonicalValuePairKey(run.config.definitionSnapshot.components))`.
 
-- Delete `deduplicateRunsByGroupId` (currently around lines 180–230).
-- Delete `getCoverageBatchGroupId` (currently around line 265). It only existed to serve the deleted dedup.
-- Audit every caller of `deduplicateRunsByGroupId` (`grep -rn "deduplicateRunsByGroupId" cloud/apps/api/src`). For each: replace the call with the un-deduplicated input list. The downstream aggregation (trial counts, model breakdowns) will count each run independently.
-- For coverage direction labeling around lines 280–320: the helper already reads `definitionSnapshot.components` on the primary path. Delete the `jobChoiceValueFirst` fallback. After this, direction comes from value tokens only.
+Where `canonicalValuePairKey(components)` returns `[components.value_first.token, components.value_second.token].sort().join('::')` — lex-sorted matches the analysis layer.
 
-**File: `cloud/apps/api/src/graphql/queries/domain-coverage.ts`**
+Tie-breaking: same `completenessOf` semantics as the old function.
 
-- The existing call to `getCoverageDirection(run.config)` around line 284 already routes through the helper. After Task 1's helper change, this site doesn't need editing — it just stops hitting the fallback path.
-- Verify the resolver doesn't have its own dedup logic. If it does, audit and treat the same way.
+Delete `getCoverageBatchGroupId`. Delete the `jobChoiceValueFirst` fallback in coverage direction labeling. Audit every caller of `deduplicateRunsByGroupId` and swap to the new function.
 
-### Task 2 — Repoint paired-mode transcript view to `Definition.pairedSibling`
+**Why it preserves historical counts in the common case:** both halves of a single paired-batch launch have the same `definitionVersion` (sibling definitions launched together) and same temperature, so signature matches; mirrored tokens give same canonical key. They merge as before.
 
-The transcript-comparison UI uses `Run.config.companionRunId` to find a run's pair partner. Wave 4 makes `Definition.pairedSibling` the fallback so the UI works on runs that lack a stored companion pointer.
+**Documented exception (Pre-flight C):** if any production paired definitions have divergent versions, they'll split. Listed in `wave4-allowed-deltas.json`.
 
-**File: `cloud/apps/web/src/utils/analysisTranscriptParams.ts`**
+### Task 2 — Paired-mode transcript view: fetch all mirrored runs
 
-- The `companionRunId` reads (currently around lines 112, 129, 136) stay as the primary path. Add a fallback: if `companionRunId` is absent, derive it from `definition.pairedSibling.id` (read from the run's `definition` relation, or from a sibling-resolution query).
-- The fallback path is what [AnalysisConditionDetail.test.tsx:711](../../cloud/apps/web/tests/pages/AnalysisConditionDetail.test.tsx:711) already exercises ("uses pairedSibling on the run definition to resolve the companion when companionRunId is absent"). That test stays valid.
+**Add `Run.mirroredRuns: [Run!]!` GraphQL resolver.**
 
-**File: `cloud/apps/web/src/hooks/useAnalysisTranscriptsData.ts`**
+**File: [`cloud/apps/api/src/graphql/types/run.ts`](../../cloud/apps/api/src/graphql/types/run.ts)**
 
-- Around line 56: when fetching the companion run, if `companionRunId` is empty, query the run's definition's `pairedSibling`, then load the most recent run for that sibling that matches the current run's models/config.
-- The "most recent matching run" lookup is the new piece. Add a small helper or inline query.
+```graphql
+type Run {
+  ...
+  """
+  All non-deleted runs in the same domain whose definition has mirrored
+  value tokens AND whose signature matches this run's signature. Pooled
+  for analysis-time order-effect comparison. Empty when no mirrored runs
+  exist or when this run isn't a paired-vignette run.
+  """
+  mirroredRuns: [Run!]!
+}
+```
 
-**File: `cloud/apps/web/src/hooks/useAnalysisTranscriptParams.ts`**
+Implementation:
 
-- Around line 31: same — `companionRunId` from URL stays primary, sibling-derived is fallback.
+1. Compute `signature = formatRunSignature(run.config)`.
+2. Get the run's definition's value tokens via `getComponentTokens(definition.content)`. If null, return `[]`.
+3. Find all definitions in the same domain whose tokens are mirrored.
+4. Query all runs of those definitions ordered by `createdAt DESC`, filter to runs where `formatRunSignature(config) === signature` and `deletedAt === null`. Exclude the current run id.
+5. Return the full list.
 
-**File: `cloud/apps/web/src/utils/pairedScopeAdapter.ts`**
+No tie-breaking. No "most recent" pick. Caller pools.
 
-- Audit. Likely keep — analysis-time scoping uses value tokens, not stored pair pointers.
+**Update: [`cloud/apps/web/src/api/operations/runs.graphql`](../../cloud/apps/web/src/api/operations/runs.graphql)**
 
-**File: `cloud/apps/web/src/pages/AnalysisDetail.tsx`**
+Add `mirroredRuns { id, status, ... }` to the relevant Run fragments. Run `npm run codegen --workspace @valuerank/web`.
 
-- Lines 173–175 read `run.companionRunId` directly. Replace with sibling-derived fallback.
+**Repoint paired-mode UI consumers** to read `run.mirroredRuns` (plural) instead of `run.companionRunId` (singular):
+
+- [`cloud/apps/web/src/utils/analysisTranscriptParams.ts`](../../cloud/apps/web/src/utils/analysisTranscriptParams.ts) — drop the `companionRunId` URL param as primary, keep as optional filter
+- [`cloud/apps/web/src/hooks/useAnalysisTranscriptsData.ts`](../../cloud/apps/web/src/hooks/useAnalysisTranscriptsData.ts) — fetch transcripts for ALL `mirroredRuns`, not just one companion
+- [`cloud/apps/web/src/hooks/useAnalysisTranscriptParams.ts`](../../cloud/apps/web/src/hooks/useAnalysisTranscriptParams.ts) — same
+- [`cloud/apps/web/src/utils/pairedScopeAdapter.ts`](../../cloud/apps/web/src/utils/pairedScopeAdapter.ts) — audit; should already use value tokens
+- [`cloud/apps/web/src/pages/AnalysisDetail.tsx`](../../cloud/apps/web/src/pages/AnalysisDetail.tsx) — replace `run.companionRunId` reads with `run.mirroredRuns` iteration
 
 **Tests:**
 
-- The existing test at [AnalysisConditionDetail.test.tsx:711](../../cloud/apps/web/tests/pages/AnalysisConditionDetail.test.tsx:711) already covers the absent-companionRunId path. Verify it still passes after the repoint.
-- Add a new test: "paired-mode view works on a run launched after Wave 4 (no companionRunId in config)". Assert the partner is found via pairedSibling.
+- Existing test at [`AnalysisConditionDetail.test.tsx:711`](../../cloud/apps/web/tests/pages/AnalysisConditionDetail.test.tsx:711) — adapt or delete; the "absent companionRunId" path is now the default, not a fallback.
+- New: "mirroredRuns returns all same-signature mirrored runs in domain."
+- New: "mirroredRuns returns empty for a non-paired run."
+- New: "mirroredRuns excludes deleted runs."
+- New: "mirroredRuns excludes the run itself."
 
-### Task 3 — Repoint Models Consistency to mirrored definitions
+### Task 3 — Delete Models Consistency entirely
 
-**File: `cloud/apps/api/src/graphql/queries/models-consistency.ts`**
+The whole report goes away.
 
-- Around line 44: the resolver currently joins runs by `companionRunId` to pair them for order-effect analysis. Replace with: for each candidate run, find runs in the same model + same domain whose definition is the `pairedSibling` of the current run's definition, within a recent time window (default 30 days). This window heuristic is necessary because we no longer have the explicit launch-event grouping.
+**API side:**
 
-  The window value should be configurable. Suggested constant: `MODELS_CONSISTENCY_PARTNER_WINDOW_DAYS = 30` in `cloud/apps/api/src/services/run/anomaly-thresholds.ts` or a new `models-consistency-thresholds.ts` if that file is for anomaly stuff only.
+- Delete [`cloud/apps/api/src/graphql/queries/models-consistency.ts`](../../cloud/apps/api/src/graphql/queries/models-consistency.ts)
+- Delete [`cloud/apps/api/src/services/consistency/orderEffectPairing.ts`](../../cloud/apps/api/src/services/consistency/orderEffectPairing.ts) — used only by Models Consistency. Verify with `grep -rn "orderEffectPairing\|computeOrderEffect" cloud/apps/api/src` before deleting.
+- Delete the API tests for Models Consistency (`grep -rn "modelsConsistency\b\|ModelsConsistencyResult" cloud/apps/api/tests`)
 
-- If multiple candidate partner runs match, pick the one closest in `createdAt` to the current run. Document this in a comment — it's a heuristic that replaces what was previously an exact lookup.
+**GraphQL schema:**
 
-**Tests:**
+- Remove the `modelsConsistency` query and the `ModelsConsistencyResult` (plus its sub-types) from the GraphQL schema. The schema is generated from Pothos type declarations — this means deleting the type-builder files (likely under `cloud/apps/api/src/graphql/types/` for any consistency types).
+- Run `npm run emit-schema --workspace @valuerank/api` to regenerate `cloud/apps/web/schema.graphql`. Then `npm run codegen --workspace @valuerank/web`.
 
-- Update existing tests to verify partner-finding produces same results on fixture data with `companionRunId` populated.
-- Add a new test: "partner resolved via pairedSibling when no companionRunId" — verify it picks the closest sibling run in the time window.
-- Add a corner case test: "no partner found within window returns the run as ungrouped" — should not crash.
+**Web side:**
 
-### Task 4 — Repoint aggregate analysis preparation
+- Delete [`cloud/apps/web/src/api/operations/modelsConsistency.ts`](../../cloud/apps/web/src/api/operations/modelsConsistency.ts) and the matching `.graphql` operation file.
+- Find and delete the page component (`grep -rn "ModelsConsistencyResult\|modelsConsistency" cloud/apps/web/src/pages` should locate it).
+- Delete the route from the router.
+- Remove any nav link / menu entry pointing to the page.
+- Delete the page's tests.
 
-**File: `cloud/apps/api/src/services/analysis/aggregate/aggregate-preparation.ts`**
+**Final grep should return empty:**
 
-- Around lines 284–288, the aggregate prep reads `companionRunId` from the run's template config. Replace with the same sibling-derivation pattern as Task 3 — but here, since the aggregate is per-run, just use `definition.pairedSibling` directly (no time window needed because the aggregate config's companion is whichever the user selected at aggregate-creation time).
-- If the historical aggregate template still has `companionRunId` set, keep using it (preserve historical behavior). Only fall back to pairedSibling when `companionRunId` is absent.
+```
+grep -rn "modelsConsistency\|ModelsConsistencyResult\|orderEffectPairing\|computeOrderEffect\|getCompanionRunId" cloud/ \
+  --include="*.ts" --include="*.tsx" --include="*.graphql"
+```
+
+(`getCompanionRunId` lives in `models-consistency.ts` — should disappear with it. If it's used elsewhere, audit.)
+
+### Task 4 — Aggregate-prep: derive partner from `pairedSibling`
+
+**File: [`cloud/apps/api/src/services/analysis/aggregate/aggregate-preparation.ts`](../../cloud/apps/api/src/services/analysis/aggregate/aggregate-preparation.ts)**
+
+Around lines 284–288, the aggregate prep reads `companionRunId` from the run's template config. Replace with sibling-derivation:
+
+- If `templateConfig.companionRunId` is set, use it (legacy compat — preserves historical aggregate templates).
+- Otherwise, look up the run's definition's `pairedSibling`. If a sibling exists, find the most recent run of the sibling that matches the current run's signature. That's the partner.
+- If no sibling or no matching run, no partner.
+
+This is simpler than Task 2's full pooling because aggregate-prep needs *one* partner per run (the historical template behavior), not the full pooled set.
 
 ### Task 5 — Stop writing `jobChoiceBatchGroupId`, delete pair-grouping, flatten launch groups
 
-This is the launch-flow surgery. Order within the task matters:
+This is the launch-flow surgery. Order within the task matters.
 
-**5a. Move `jobChoiceLaunchMode` and `jobChoiceValueFirst` writes out of the pair-conditional branch first.** Without this, flattening the groups (5b) makes the writes unreachable. This is the cascade hazard Codex flagged in round-2 review.
+**5a. Hoist `jobChoiceLaunchMode` and `jobChoiceValueFirst` writes out of the pair-conditional branch.** Without this, flattening (5b) makes the writes unreachable.
 
-  **File: `cloud/apps/api/src/graphql/mutations/domain/launch/plan-slots.ts`**
-  - Around line 120, the pair-conditional `if (group.pairKey !== null)` block writes both fields. Move those writes out of the conditional so every launch slot's `configExtras` gets them, regardless of grouping.
-  - Inside the conditional, only `jobChoiceBatchGroupId: batchGroupId` should remain — and that gets deleted in step 5d.
+- [`cloud/apps/api/src/graphql/mutations/domain/launch/plan-slots.ts`](../../cloud/apps/api/src/graphql/mutations/domain/launch/plan-slots.ts) (around line 120)
+- [`cloud/apps/api/src/graphql/mutations/domain/launch/execute-runs.ts`](../../cloud/apps/api/src/graphql/mutations/domain/launch/execute-runs.ts) (around line 127)
+- [`cloud/apps/api/src/graphql/mutations/run/lifecycle.ts`](../../cloud/apps/api/src/graphql/mutations/run/lifecycle.ts) (around lines 117–204)
 
-  **File: `cloud/apps/api/src/graphql/mutations/domain/launch/execute-runs.ts`**
-  - Around line 127, same pattern: lift `jobChoiceLaunchMode` and `jobChoiceValueFirst` out of the pair-conditional. Only `jobChoiceBatchGroupId` and `batchGroupId = randomUUID()` stay inside, scheduled for deletion.
+In each: move the writes for `jobChoiceLaunchMode` and `jobChoiceValueFirst` outside the `if (group.pairKey !== null)` (or equivalent) block so every launch slot's `configExtras` gets them. Inside the conditional, only `jobChoiceBatchGroupId` and the `batchGroupId = randomUUID()` generator stay (scheduled for deletion in 5d).
 
-  **File: `cloud/apps/api/src/graphql/mutations/run/lifecycle.ts`**
-  - Around lines 117–204: same hoisting. The single-run mutation has its own pair-conditional.
-
-  **Verify with tests** that runs created via every launch path still have `jobChoiceLaunchMode` and `jobChoiceValueFirst` populated. Then proceed.
+Verify with tests that runs created via every launch path still have `jobChoiceLaunchMode` and `jobChoiceValueFirst` populated.
 
 **5b. Delete `pair-grouping.ts` module.**
 
-  **File: `cloud/apps/api/src/graphql/mutations/domain/launch/pair-grouping.ts`**
-  - Delete the entire file. Both exports (`extractPairedMethodology`, `groupDefinitionsByPairKey`) go away.
+- Delete [`cloud/apps/api/src/graphql/mutations/domain/launch/pair-grouping.ts`](../../cloud/apps/api/src/graphql/mutations/domain/launch/pair-grouping.ts) entirely.
 
 **5c. Flatten launch groups in the orchestrator.**
 
-  **File: `cloud/apps/api/src/graphql/mutations/domain/launch/launch-orchestrator.ts`**
-  - Remove the `groupDefinitionsByPairKey` import (around line 8).
-  - Remove the call site (around line 97) and the `incompletePairKeys` warning loop (lines 98–103).
-  - Replace with a flat list: each targeted definition becomes its own launch group (with `pairKey: null` and `definitions: [def]`).
-
-  **File: `cloud/apps/api/src/graphql/mutations/domain/launch/types.ts`**
-  - Remove `LaunchGroup.pairKey` from the type if no longer read (verify with grep).
+- [`cloud/apps/api/src/graphql/mutations/domain/launch/launch-orchestrator.ts`](../../cloud/apps/api/src/graphql/mutations/domain/launch/launch-orchestrator.ts): remove the `groupDefinitionsByPairKey` import (around line 8), the call site (around line 97), and the `incompletePairKeys` warning loop. Each targeted definition becomes its own launch group.
+- [`cloud/apps/api/src/graphql/mutations/domain/launch/types.ts`](../../cloud/apps/api/src/graphql/mutations/domain/launch/types.ts): remove `LaunchGroup.pairKey` if no longer read.
 
 **5d. Drop `jobChoiceBatchGroupId` writes.**
 
-  **Files (all under `cloud/apps/api/src/graphql/mutations/domain/launch/`):**
-  - `plan-slots.ts`: delete `jobChoiceBatchGroupId: batchGroupId` line.
-  - `plan-backfill.ts`: same.
-  - `execute-runs.ts`: delete the `batchGroupId = randomUUID()` generator and the `jobChoiceBatchGroupId` line in `executeBackfillRuns`.
-  - `resolve-backfill.ts`: audit `runMatchesSingleModel`; remove any `batchGroupId` comparison branch.
-  - `backfill-orchestrator.ts`: drop pair-aware backfill mode; treat each definition as a single backfill target.
-
-  **File: `cloud/apps/api/src/graphql/mutations/run/lifecycle.ts`**
-  - Drop `jobChoiceBatchGroupId` writes (the `mergeBatchGroupId` calls around lines 117–204). Keep the surrounding `jobChoiceLaunchMode` branching — Wave 5 deletes that.
+- `plan-slots.ts`, `plan-backfill.ts`, `execute-runs.ts`: delete the `jobChoiceBatchGroupId` line and the `batchGroupId = randomUUID()` generator.
+- `resolve-backfill.ts`: audit `runMatchesSingleModel`; remove any `batchGroupId` comparison.
+- `backfill-orchestrator.ts`: drop pair-aware backfill mode.
+- `lifecycle.ts`: drop `jobChoiceBatchGroupId` writes (lines ~117–204). Keep the `jobChoiceLaunchMode` branching — Wave 5 deletes that.
 
 ### Task 6 — Update tests
 
-**Tests to update (existing assertions on `jobChoiceBatchGroupId` being written):**
+| File | What asserts | Action |
+|---|---|---|
+| [`run.test.ts:677`](../../cloud/apps/api/tests/graphql/mutations/run.test.ts:677) | `jobChoiceBatchGroupId` is set | Drop that assertion. Keep `jobChoiceLaunchMode`. |
+| [`domain.test.ts:577`](../../cloud/apps/api/tests/graphql/mutations/domain.test.ts:577) | Same | Same |
+| [`domain-coverage-integration.test.ts:60`](../../cloud/apps/api/tests/graphql/queries/domain-coverage-integration.test.ts:60) | Dedup-by-batchGroupId behavior | Replace with dedup-by-signature-pair assertions |
+| Any test asserting on Models Consistency | Various | Delete (Task 3) |
+| `cloud/apps/api/tests/graphql/types/run.test.ts` (extend or new) | — | Add `mirroredRuns` resolver tests (see Task 2) |
 
-- [cloud/apps/api/tests/graphql/mutations/run.test.ts:677](../../cloud/apps/api/tests/graphql/mutations/run.test.ts:677) — drop the `jobChoiceBatchGroupId` assertion. Keep the assertion that `jobChoiceLaunchMode` is set.
-- [cloud/apps/api/tests/graphql/mutations/domain.test.ts:577](../../cloud/apps/api/tests/graphql/mutations/domain.test.ts:577) — same.
-- [cloud/apps/api/tests/graphql/queries/domain-coverage-integration.test.ts:60](../../cloud/apps/api/tests/graphql/queries/domain-coverage-integration.test.ts:60) — the test asserts dedup-by-batchGroupId behavior. Replace with assertions that each run is counted independently.
+**New equivalence test:** `cloud/apps/api/tests/services/analysis/coverage-equivalence.test.ts`. On a fixture where paired runs have matching signatures and mirrored tokens, assert `deduplicateRunsBySignaturePair` produces the same dedup key set as `deduplicateRunsByGroupId` did. Document the version-divergence case as a known divergence.
 
-**Tests to add (equivalence + new behavior):**
-
-- `cloud/apps/api/tests/services/analysis/coverage-equivalence.test.ts` *(new)*:
-  - Assert `getCoverageDirection(run)` produces the same value before and after by hitting fixtures that have both `jobChoiceValueFirst` populated (legacy) and definitionSnapshot.components populated (new). Result must match.
-  - The legacy fallback removal is what's being tested. If results differ for any fixture, the historical migration is incomplete — investigate.
-- `cloud/apps/api/tests/graphql/queries/models-consistency.test.ts` (extend if exists):
-  - "Resolves partner via pairedSibling when companionRunId is absent" — exercise the new fallback path with a fixture run that lacks companionRunId.
-  - "No partner within window returns ungrouped" — corner case.
-- `cloud/apps/api/tests/services/run/anomaly-detection.test.ts`:
-  - Assert `RunAnomalyTypeEnum` still includes `'PAIR_ASYMMETRY'` (the value stays until Wave 5).
-- `cloud/apps/api/tests/graphql/queries/domain-coverage.test.ts`:
-  - Update fixtures: paired runs no longer share a batchGroupId. Assert coverage counts each run independently. Document the count change in test comments.
+No `@ts-ignore`, no `eslint-disable`, no `as any`.
 
 ### Task 7 — Verify
-
-Run from `cloud/`:
 
 ```
 npm run lint --workspace @valuerank/shared
@@ -248,86 +300,85 @@ DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank_test" \
   npm run test --workspace @valuerank/web
 npm run build --workspace @valuerank/api
 npm run build --workspace @valuerank/web
+npm run codegen --workspace @valuerank/web
 ```
 
-All must return 0 errors.
-
-**No codegen needed.** Wave 4 makes no schema changes.
+All must return 0 errors. Codegen runs because Task 2 adds `Run.mirroredRuns` and Task 3 removes `modelsConsistency`.
 
 ### Task 8 — Snapshot diff against pre-deploy baseline
-
-Run the verification script:
 
 ```
 npm run wave4:verify -- --baseline cloud/tests/snapshot-baselines/wave4-prod-pre-deploy-${ISO_DATE}.json
 ```
 
-This re-hits production, diffs against the captured baseline, and applies the allowed-deltas filter from `cloud/tests/snapshot-baselines/wave4-allowed-deltas.json`.
-
 **Allowed deltas (only these are non-failures):**
 
-- Coverage matrix counts: paired-batch dedup units may inflate to 2x where dedup previously merged halves. Document each affected matrix in the allowed-deltas file with a note.
-- `PAIR_ASYMMETRY` anomaly count delta: should be unchanged from Wave 3 baseline (no new ones since Wave 3 deleted the detector).
-- `Run.config.jobChoiceBatchGroupId` field: starts returning null on new runs. The schema field is still queryable.
+| Delta | Reason |
+|---|---|
+| Coverage matrix counts may *decrease* where the same paired pair was launched multiple times at the same signature | Signature-based dedup pools across launches (matches "look at the data directly") |
+| Coverage matrix counts may *increase* (split) for paired pairs whose sibling definitions have divergent `definitionVersion` | Documented in Pre-flight C; expected when versions diverge |
+| `Run.config.jobChoiceBatchGroupId` returns null on new runs | Wave 4 stops writing |
+| `modelsConsistency` query returns 404 | Feature deleted |
 
-Any other delta fails CI and blocks the merge.
+Any other delta fails CI.
 
 ## Order of changes
 
 | Step | What | Why this order |
 |---|---|---|
-| 1 | Pre-flight: data audit + baseline capture | Gates the wave |
-| 2 | Task 1 (coverage dedup + direction) | Readers must work on definitionSnapshot before writers stop providing the legacy field |
-| 3 | Task 2 (paired-mode UI) + Task 3 (Models Consistency) + Task 4 (aggregate-prep) | Repointing readers so they work without companionRunId. Independent of each other; can land in any order. |
-| 4 | Task 5 (launch flow) | Must come last — depends on the readers being repointed |
-| 5 | Task 6 (tests) | Mechanical follow-up |
-| 6 | Task 7 (preflight) + Task 8 (snapshot diff) | Confirms green |
+| 1 | Pre-flight: data audit + version-divergence audit + baseline capture | Gates the wave |
+| 2 | Task 2 (`mirroredRuns` resolver + codegen) | Other tasks may depend on this |
+| 3 | Task 1 (coverage dedup + direction) | Readers must work with definitionSnapshot path before legacy fallback removed |
+| 4 | Task 3 (delete Models Consistency) | Independent; can land in any order |
+| 5 | Task 4 (aggregate-prep) | Independent |
+| 6 | Task 5 (launch flow) | Last — depends on readers being repointed |
+| 7 | Task 6 (tests) | Mechanical follow-up |
+| 8 | Task 7 (preflight) + Task 8 (snapshot diff) | Confirms green |
 
-Steps 2 and 3 can ship in separate PRs if the diff gets too large. Step 4 must be last regardless.
+Steps 3 and 4 and 5 can ship in separate PRs if the diff gets too large. Step 6 (launch flow) must be last regardless. For this implementation we ship as one PR — the wave is already a defined unit.
 
 ## Constraints
 
 - DO NOT MODIFY: `CLAUDE.md`, `AGENTS.md`, `cloud/CLAUDE.md`, `cloud/AGENTS.md`, `cloud/agents.md`, `MEMORY.md`, `GEMINI.md`, `.gitignore`, `STATUS.md`, `experiments.md`, the docs in `docs/tech-debt/`, or any file outside the inventory above.
 - DO NOT use `@ts-ignore`, `eslint-disable`, or `as any`.
-- DO NOT change the GraphQL schema. No `Run.pairedBatchGroupId` removal, no `companionRunId` field removal, no enum changes. Wave 5.
-- DO NOT touch `companionRunId` writes, `jobChoiceLaunchMode` writes, `jobChoiceValueFirst` writes (other than the hoist in Task 5a). Wave 5 stops the writes.
+- DO NOT change the GraphQL schema except to ADD `Run.mirroredRuns` and REMOVE `modelsConsistency` + `ModelsConsistencyResult`. No `Run.pairedBatchGroupId` removal, no `companionRunId` removal, no enum changes — Wave 5.
+- DO NOT touch `companionRunId` writes, `jobChoiceLaunchMode` writes (other than the hoist in Task 5a), `jobChoiceValueFirst` writes (other than the hoist in Task 5a). Wave 5.
+- DO NOT touch `models-stability-math.ts`. The sample-count weighting there is intentional for that report (more data = more reliable estimate). Out of scope.
 - DO NOT delete `legacyCompanionPairedRun.ts` (Wave 6).
-- DO NOT delete `lifecycle-helpers.ts` `persistPairedCompanionRunIds`. It becomes dead code in Wave 4 (no caller after the launch-flow changes), but it stays defined until Wave 5.
-- DO NOT push or open the PR until preflight passes locally and the snapshot diff returns no disallowed deltas.
+- DO NOT delete `lifecycle-helpers.ts` `persistPairedCompanionRunIds`. Becomes dead code after Wave 4 but stays defined until Wave 5.
+- DO NOT introduce time-window heuristics. Signature + value tokens are the comparability primitive.
 
 ## Risk and rollback
 
-This is the high-risk wave. The failure modes:
-
 | Failure | Symptom | Recovery |
 |---|---|---|
-| Direction labeling wrong on historical runs | Coverage matrices show flipped direction counts | The pre-flight data audit gates this. If it returned zero, this shouldn't happen. If it does, revert. |
-| Models Consistency partner-finding picks wrong sibling | Order-effect deltas shift | The 30-day window is heuristic. If it picks a different partner than `companionRunId` did, document the delta in allowed-deltas. If shifts are large, narrow the window. |
-| Paired-mode transcript view fails to find companion | UI breaks for users running paired comparisons | The fallback test ([AnalysisConditionDetail.test.tsx:711](../../cloud/apps/web/tests/pages/AnalysisConditionDetail.test.tsx:711)) covers this. If it broke in production but not in tests, the test fixture was incomplete. |
-| Coverage counts inflate more than expected | Allowed-deltas check rejects the diff | Either accept the inflation (update allowed-deltas with a note) or revert and reconsider preserving historical dedup via batchGroupId fallback. |
+| Direction labeling wrong on historical runs | Coverage matrices show flipped direction counts | Pre-flight gates this. Should not happen. |
+| Coverage counts shift unexpectedly | Snapshot diff rejects | Inspect the specific shift. Most likely: same paired pair launched multiple times at same signature (expected delta) or version-divergent paired definitions (also expected). If the shift looks wrong, revert. |
+| Models Consistency deletion broke unexpected dependents | Build error or runtime error | Codex should catch via grep. If something slips through, revert and audit dependents more carefully. |
+| `mirroredRuns` resolver wrong | Paired-mode UI shows wrong/empty mirrored runs | Tests should catch. If post-deploy issue, the URL parameter `companionRunId` can still filter to a specific run as a fallback. |
 
-**Worst case:** `gh pr revert <wave-4-pr> --branch hotfix/wave4-revert`. Wave 3 is unaffected. Wave 5 cannot ship until Wave 4 is back in place — if revert happens, Wave 5 schema cleanup also blocks.
-
-The post-deploy snapshot diff catches these within minutes of deploy. Decision deadline: 30 minutes after CI flags a disallowed delta.
+**Worst case:** `gh pr revert <wave-4-pr> --branch hotfix/wave4-revert`. Wave 3 unaffected. Wave 5 cannot ship until Wave 4 is back in place.
 
 ## Cleanup after Wave 4 stabilizes (~7 days post-deploy)
 
 | File | Action |
 |---|---|
 | `cloud/tests/snapshot-baselines/wave4-allowed-deltas.json` | Delete |
-| `cloud/scripts/wave4-prod-baseline.ts` | Delete (script was for one-shot capture) |
+| `cloud/scripts/wave4-prod-baseline.ts` | Delete |
 | `cloud/scripts/preflight-wave4-token-audit.sql` | Move to `cloud/scripts/archive/` |
 | `cloud/tests/snapshot-baselines/wave4-prod-pre-deploy-*.json` | Move to archive |
 
-The unit-level equivalence tests (`coverage-equivalence.test.ts`) stay as permanent regression guards.
+The unit-level equivalence tests stay as permanent regression guards. `Run.mirroredRuns` resolver also stays — it's a load-bearing API field.
 
 ## Sign-off log
 
 | Phase | Approved by | Date |
 |---|---|---|
-| Spec reviewed (Gemini) — round 1 | | |
-| Spec reviewed (Codex) — round 1 | | |
-| Spec reviewed (Claude / human) | | |
+| Spec reviewed (Gemini) — round 1 | findings incorporated | 2026-05-09 |
+| Spec reviewed (Codex) — round 1 | findings incorporated | 2026-05-09 |
+| Spec simplifications (post-user-decisions) | applied | 2026-05-09 |
+| Implementation (Codex) | | |
+| Diff review (Codex round 2) | | |
 | Pre-flight data audit run | | |
 | Pre-flight baseline captured | | |
 | Wave 4 PR opened | | |
@@ -339,3 +390,5 @@ The unit-level equivalence tests (`coverage-equivalence.test.ts`) stay as perman
 
 - [Remove paired-batch concept](remove-paired-batch-concept.md) — parent planning doc
 - [Wave 3 spec](wave3-spec.md) — predecessor wave (anomaly-detector deletion)
+- [`formatTrialSignature`](../../cloud/packages/shared/src/trial-signature.ts) — canonical signature implementation
+- [`formatRunSignature` / `runMatchesSignature`](../../cloud/apps/api/src/graphql/queries/domain-coverage-gql-types.ts:144) — existing helpers Wave 4 leans on
