@@ -29,7 +29,7 @@ Three reviewers (Gemini, Codex, Claude) audited an earlier draft of this doc. Fi
 
 2. **`jobChoiceValueFirst` is read, not just stored.** [domain-coverage-utils.ts:294](../../cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:294) and [domain-coverage.ts:284](../../cloud/apps/api/src/graphql/queries/domain-coverage.ts:284) use it to count coverage by *direction* (which side of the pair a run covered). Dropping it without a backfill silently misclassifies historical runs in coverage matrices.
 
-3. **`runCategory` semantics change for callers.** [lifecycle.ts:105](../../cloud/apps/api/src/graphql/mutations/run/lifecycle.ts:105) defaults to `'PRODUCTION'` when `launchMode === 'PAIRED_BATCH'`. After Wave 4 deletes `launchMode`, callers that relied on this default silently produce runs with `'UNKNOWN_LEGACY'`. Treat as a breaking change in default behavior.
+3. **`runCategory` semantics change for callers.** [lifecycle.ts:105](../../cloud/apps/api/src/graphql/mutations/run/lifecycle.ts:105) defaults to `'PRODUCTION'` when `launchMode === 'PAIRED_BATCH'`. After Wave 5 deletes `launchMode`, callers that relied on this default silently produce runs with `'UNKNOWN_LEGACY'`. Treat as a breaking change in default behavior.
 
 4. **GraphQL operation files request fields the schema-removal step would orphan.** Codegen does not catch these — queries fail at runtime. Files to edit in lockstep with each schema change: `runs.graphql`, `pressureSensitivity.graphql`, `domains.graphql`, `active-evaluation.graphql`, `modelsConsistency.graphql`, plus `cloud/tests/snapshot-baselines/queries/pressure-sensitivity.graphql`. Listed in section B below.
 
@@ -41,7 +41,7 @@ Three reviewers (Gemini, Codex, Claude) audited an earlier draft of this doc. Fi
 
 8. **Surfaces broken on first-time domain launch.** [executeLaunchRuns](../../cloud/apps/api/src/graphql/mutations/domain/launch/execute-runs.ts:50) does not currently set `jobChoiceLaunchMode` or `jobChoiceBatchGroupId`. Any feature that reads those fields (PAIR_ASYMMETRY anomaly, coverage dedup, paired-analysis mode, Models Consistency) is silently broken for first-time domain-launched runs. The cleanup plan inherits the bug as the deletion target — but during the transition it means any new paired batch on a new domain has unreliable pair metadata, which is the basis for the methodology hold above.
 
-9. **Admin script silently breaks.** [cloud/scripts/backfill-reparse-decisions.ts](../../cloud/scripts/backfill-reparse-decisions.ts) filters historical runs by `jobChoiceLaunchMode IN ('PAIRED_BATCH', 'PAIRED_BATCH_TOPUP')`. Survives Wave 4 (the JSON value persists in old rows) but breaks if the optional Wave 5 cleanup script strips the field.
+9. **Admin script silently breaks.** [cloud/scripts/backfill-reparse-decisions.ts](../../cloud/scripts/backfill-reparse-decisions.ts) filters historical runs by `jobChoiceLaunchMode IN ('PAIRED_BATCH', 'PAIRED_BATCH_TOPUP')`. Survives Wave 5 (the JSON value persists in old rows) but breaks if the optional Wave 6 cleanup script strips the field.
 
 ## Decisions on file
 
@@ -50,7 +50,7 @@ Three reviewers (Gemini, Codex, Claude) audited an earlier draft of this doc. Fi
 | 1 | Keep "launch both halves together" UX? | **No.** Drop pair-aware launch entirely. Each definition launches as an independent run. | 2026-05-09 |
 | 2 | Keep PAIR_ASYMMETRY anomaly detector? | **No (Option A).** Delete. | 2026-05-09 |
 | 3 | Keep PAIRED_BATCH_TOPUP feature? | **No.** Delete. If one side has fewer probes, that's the run's reality. | 2026-05-09 |
-| 4 | What happens to "paired-mode" features (transcript-comparison view, Models Consistency report, aggregate-prep)? | **Repoint to `Definition.pairedSibling` (Option B).** Find the partner via mirrored value tokens at query time, drop the stored `companionRunId` pointer. Tests already exercise this fallback at [AnalysisConditionDetail.test.tsx:711](../../cloud/apps/web/tests/pages/AnalysisConditionDetail.test.tsx:711) ("uses pairedSibling on the run definition to resolve the companion when companionRunId is absent"). | 2026-05-09 |
+| 5 | What happens to "paired-mode" features (transcript-comparison view, Models Consistency report, aggregate-prep)? | **Repoint to `Definition.pairedSibling` (Option B).** Find the partner via mirrored value tokens at query time, drop the stored `companionRunId` pointer. Tests already exercise this fallback at [AnalysisConditionDetail.test.tsx:711](../../cloud/apps/web/tests/pages/AnalysisConditionDetail.test.tsx:711) ("uses pairedSibling on the run definition to resolve the companion when companionRunId is absent"). | 2026-05-09 |
 
 ## What stays vs. what goes
 
@@ -106,7 +106,7 @@ Three reviewers (Gemini, Codex, Claude) audited an earlier draft of this doc. Fi
 | `Run.config.jobChoiceLaunchMode` | Stop writing. Optional cleanup script. | JSON field — no DDL needed |
 | `Run.config.jobChoiceValueFirst` | **Read by coverage analysis** ([domain-coverage-utils.ts:294](../../cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts:294), [domain-coverage.ts:284](../../cloud/apps/api/src/graphql/queries/domain-coverage.ts:284)). Before stopping writes: rewrite coverage to compute direction from the run's definition value tokens. Then stop writing. | JSON field — no DDL — but coverage rewrite is required, not optional |
 | `Run.config.methodologySafe` | Stop writing. | JSON field — no DDL needed |
-| `Run.config.companionRunId` | Repoint readers to `Definition.pairedSibling` first (paired-mode UI, Models Consistency, aggregate-prep, the [persistPairedCompanionRunIds](../../cloud/apps/api/src/graphql/mutations/run/lifecycle-helpers.ts:48) mutation). **Then** stop writing. See Wave 3.5 below. | JSON field — no DDL — but repoint work is non-trivial |
+| `Run.config.companionRunId` | Repoint readers to `Definition.pairedSibling` first (paired-mode UI, Models Consistency, aggregate-prep, the [persistPairedCompanionRunIds](../../cloud/apps/api/src/graphql/mutations/run/lifecycle-helpers.ts:48) mutation). **Then** stop writing. See Wave 4 below. | JSON field — no DDL — but repoint work is non-trivial |
 
 No Prisma schema migrations required for the JSON fields. The `RunCategory` enum and the `run_category` column stay; they were already backfilled in [20260320150000_backfill_paired_batch_run_category](../../cloud/packages/db/prisma/migrations/20260320150000_backfill_paired_batch_run_category/migration.sql) so historical rows are already correct. New runs must continue to set `runCategory` directly.
 
@@ -117,8 +117,8 @@ No Prisma schema migrations required for the JSON fields. The `RunCategory` enum
 | `Definition.pairKey` | exposed string | Remove | 2 |
 | `Definition.pairedSibling` | resolver | **Rewrite** (current resolver hard-filters by `pair_key` first; needs to be token-only) | 2 |
 | `Run.pairedBatchGroupId` | exposed string | Remove | 3 |
-| `Run.companionRunId` | exposed string | Remove **after** Wave 3.5 repoints consumers | 4 |
-| `Run.launchMode` (on `startRun` input) | enum input | Remove or accept-and-ignore | 4 |
+| `Run.companionRunId` | exposed string | Remove **after** Wave 4 repoints consumers | 5 |
+| `Run.launchMode` (on `startRun` input) | enum input | Remove or accept-and-ignore | 5 |
 | `DomainEvaluationLaunchableDefinition.pairKey` | string | Remove | 2 |
 
 GraphQL **operation files** that select these fields — must edit in lockstep with the corresponding schema change in the same wave, otherwise codegen passes but queries fail at runtime:
@@ -129,7 +129,7 @@ GraphQL **operation files** that select these fields — must edit in lockstep w
 | [cloud/apps/web/src/api/operations/pressureSensitivity.graphql](../../cloud/apps/web/src/api/operations/pressureSensitivity.graphql) (lines 54, 121) | `pairKey` | 2 |
 | [cloud/apps/web/src/api/operations/domains.graphql](../../cloud/apps/web/src/api/operations/domains.graphql) (line 178) | `pairKey` (paired field) | 2 / 3 |
 | [cloud/apps/web/src/api/operations/active-evaluation.graphql](../../cloud/apps/web/src/api/operations/active-evaluation.graphql) (line 23) | `pairKey` (and downstream paired metadata) | 2 |
-| [cloud/apps/web/src/api/operations/modelsConsistency.graphql](../../cloud/apps/web/src/api/operations/modelsConsistency.graphql) (line 54) | (verify; consumed by [models-consistency.ts](../../cloud/apps/api/src/graphql/queries/models-consistency.ts)) | 3.5 |
+| [cloud/apps/web/src/api/operations/modelsConsistency.graphql](../../cloud/apps/web/src/api/operations/modelsConsistency.graphql) (line 54) | (verify; consumed by [models-consistency.ts](../../cloud/apps/api/src/graphql/queries/models-consistency.ts)) | 4 |
 | [cloud/tests/snapshot-baselines/queries/pressure-sensitivity.graphql](../../cloud/tests/snapshot-baselines/queries/pressure-sensitivity.graphql) (lines 39, 95) | `pairKey` | 2 |
 
 Run `npm run codegen --workspace @valuerank/web` after each schema change. Do not let the web generated types drift.
@@ -139,7 +139,7 @@ Run `npm run codegen --workspace @valuerank/web` after each schema change. Do no
 | Surface | Change | Wave |
 |---|---|---|
 | [routes/export/runs.ts:272](../../cloud/apps/api/src/routes/export/runs.ts:272) JSON export | Serializes `run.config` whole; external consumers reading `jobChoice*` or `companionRunId` from the export see a contract change. | 4 — call out in changelog/release notes |
-| `runCategory` default for `startRun` callers ([lifecycle.ts:105](../../cloud/apps/api/src/graphql/mutations/run/lifecycle.ts:105)) | After Wave 4, `parsedRunCategory ?? (launchMode === 'PAIRED_BATCH' ? 'PRODUCTION' : undefined)` becomes `parsedRunCategory ?? undefined`. Callers that relied on PAIRED_BATCH defaulting to PRODUCTION must pass `runCategory: 'PRODUCTION'` explicitly. | 4 |
+| `runCategory` default for `startRun` callers ([lifecycle.ts:105](../../cloud/apps/api/src/graphql/mutations/run/lifecycle.ts:105)) | After Wave 5, `parsedRunCategory ?? (launchMode === 'PAIRED_BATCH' ? 'PRODUCTION' : undefined)` becomes `parsedRunCategory ?? undefined`. Callers that relied on PAIRED_BATCH defaulting to PRODUCTION must pass `runCategory: 'PRODUCTION'` explicitly. | 5 |
 
 ### C. Backend services and queue handlers
 
@@ -158,9 +158,9 @@ Run `npm run codegen --workspace @valuerank/web` after each schema change. Do no
 | [run-state-audit.ts](../../cloud/apps/api/src/queue/handlers/run-state-audit.ts) | Remove `'PAIR_ASYMMETRY'` from `scannedTypes` | 3 |
 | [domain-coverage-utils.ts — `deduplicateRunsByGroupId`, `getCoverageBatchGroupId`](../../cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts) | Replace dedup-by-batchGroupId with dedup-by-mirror-pair (find each run's mirror partner, treat both as one coverage unit). Remove `getCoverageBatchGroupId`. | 3 |
 | [domain-coverage-utils.ts:294 + domain-coverage.ts:284](../../cloud/apps/api/src/graphql/queries/domain-coverage.ts:284) | Replace `config.jobChoiceValueFirst` reads with direction computed from the run's definition value tokens. Required before `jobChoiceValueFirst` writes can stop, otherwise historical-run direction labels are lost. | 3 |
-| [models-consistency.ts](../../cloud/apps/api/src/graphql/queries/models-consistency.ts) | **Repoint** to `Definition.pairedSibling` for run pairing. Currently joins runs by `companionRunId` for order-effect analysis. After Wave 3.5: find partner via mirrored definition + same model + same window. | 3.5 |
-| [aggregate-preparation.ts](../../cloud/apps/api/src/services/analysis/aggregate/aggregate-preparation.ts) | Stop reading `companionRunId` from template config. Use `pairedSibling` resolver to derive partner if needed. | 3.5 |
-| [lifecycle-helpers.ts — `persistPairedCompanionRunIds`, `mergeCompanionRunId`, `getConfiguredCompanionRunId`](../../cloud/apps/api/src/graphql/mutations/run/lifecycle-helpers.ts) | Delete after Wave 3.5 repoints consumers. The atomic mutual-pairing mutation is no longer needed once pairing is derived from value tokens. | 4 |
+| [models-consistency.ts](../../cloud/apps/api/src/graphql/queries/models-consistency.ts) | **Repoint** to `Definition.pairedSibling` for run pairing. Currently joins runs by `companionRunId` for order-effect analysis. After Wave 4: find partner via mirrored definition + same model + same window. | 4 |
+| [aggregate-preparation.ts](../../cloud/apps/api/src/services/analysis/aggregate/aggregate-preparation.ts) | Stop reading `companionRunId` from template config. Use `pairedSibling` resolver to derive partner if needed. | 4 |
+| [lifecycle-helpers.ts — `persistPairedCompanionRunIds`, `mergeCompanionRunId`, `getConfiguredCompanionRunId`](../../cloud/apps/api/src/graphql/mutations/run/lifecycle-helpers.ts) | Delete after Wave 4 repoints consumers. The atomic mutual-pairing mutation is no longer needed once pairing is derived from value tokens. | 5 |
 | [pair-grouping.ts](../../cloud/apps/api/src/graphql/mutations/domain/launch/pair-grouping.ts) — `groupDefinitionsByPairKey`, `extractPairedMethodology` | Delete entirely. Domain launch becomes "launch each definition independently." | 3 |
 | [execute-runs.ts — `executeLaunchRuns`](../../cloud/apps/api/src/graphql/mutations/domain/launch/execute-runs.ts) | Drop the `LaunchSlot.configExtras` plumbing for pair info. Each run launches without a group ID. | 3 |
 | [execute-runs.ts — `executeBackfillRuns`](../../cloud/apps/api/src/graphql/mutations/domain/launch/execute-runs.ts) | Drop the `jobChoiceLaunchMode: 'PAIRED_BATCH'` and `batchGroupId` stamping (line ~143) | 3 |
@@ -169,34 +169,34 @@ Run `npm run codegen --workspace @valuerank/web` after each schema change. Do no
 | [resolve-backfill.ts](../../cloud/apps/api/src/graphql/mutations/domain/launch/resolve-backfill.ts) | Audit `runMatchesSingleModel`; remove pair-aware branches | 3 |
 | [backfill-orchestrator.ts](../../cloud/apps/api/src/graphql/mutations/domain/launch/backfill-orchestrator.ts) | Drop pair-aware backfill mode | 3 |
 | [launch-orchestrator.ts](../../cloud/apps/api/src/graphql/mutations/domain/launch/launch-orchestrator.ts) | Drop the `groupDefinitionsByPairKey` call (lines ~97–103) and the `incompletePairKeys` warning | 3 |
-| [run/lifecycle.ts](../../cloud/apps/api/src/graphql/mutations/run/lifecycle.ts) | Remove the `launchMode` input handling (lines 87, 105, 117–204). Single mutation path: launch this definition. | 4 |
+| [run/lifecycle.ts](../../cloud/apps/api/src/graphql/mutations/run/lifecycle.ts) | Remove the `launchMode` input handling (lines 87, 105, 117–204). Single mutation path: launch this definition. | 5 |
 | [paired-vignette-helpers.ts](../../cloud/apps/api/src/graphql/mutations/paired-vignette-helpers.ts) | Audit; likely retained for paired-authoring helpers, drop any `pair_key` reads | 2 |
-| [start.ts](../../cloud/apps/api/src/services/run/start.ts) | Audit `configExtras` flow; remove pair fields from sanitization | 4 |
+| [start.ts](../../cloud/apps/api/src/services/run/start.ts) | Audit `configExtras` flow; remove pair fields from sanitization | 5 |
 | [active-run-check.ts](../../cloud/apps/api/src/graphql/mutations/domain/launch/active-run-check.ts) | No change (already uses `definitionId`) | — |
-| Top-up handler — `PAIRED_BATCH_TOPUP` paths in [top-up-probes.ts](../../cloud/apps/api/src/queue/handlers/top-up-probes.ts) | Delete the pair-aware top-up. Keep generic top-up for individual runs. | 4 |
+| Top-up handler — `PAIRED_BATCH_TOPUP` paths in [top-up-probes.ts](../../cloud/apps/api/src/queue/handlers/top-up-probes.ts) | Delete the pair-aware top-up. Keep generic top-up for individual runs. | 5 |
 
 ### D. Web (UI)
 
 | File | Change | Wave |
 |---|---|---|
-| [legacyCompanionPairedRun.ts](../../cloud/apps/web/src/utils/legacyCompanionPairedRun.ts) | Delete (already `@deprecated` tombstone) | 5 |
+| [legacyCompanionPairedRun.ts](../../cloud/apps/web/src/utils/legacyCompanionPairedRun.ts) | Delete (already `@deprecated` tombstone) | 6 |
 | [methodology.ts](../../cloud/apps/web/src/utils/methodology.ts) | Drop `pair_key` parsing, the `methodology.pair_key` field, the `pair_key` validity helper | 2 |
 | [DefinitionDetail.tsx:187](../../cloud/apps/web/src/pages/DefinitionDetail/DefinitionDetail.tsx:187) | Drop `pair_key`-based routing to the paired-batch start page | 2 |
 | [DefinitionContentView.tsx:23](../../cloud/apps/web/src/pages/DefinitionDetail/DefinitionContentView.tsx:23) | Drop `pair_key`-based shared-scale collapse logic; use mirrored value tokens to detect pair-membership instead | 2 |
-| [AnalysisDetailHeader.tsx](../../cloud/apps/web/src/pages/AnalysisDetailHeader.tsx) | Audit; remove pair-batch references | 4 |
-| [AnalysisDetail.tsx:173,175,305](../../cloud/apps/web/src/pages/AnalysisDetail.tsx:173) | Replace `run.companionRunId` reads with `Definition.pairedSibling` lookups (or sibling-run derived from server) | 3.5 |
-| **Paired-mode transcript view stack** — [analysisTranscriptParams.ts](../../cloud/apps/web/src/utils/analysisTranscriptParams.ts), [useAnalysisTranscriptsData.ts](../../cloud/apps/web/src/hooks/useAnalysisTranscriptsData.ts), [useAnalysisTranscriptParams.ts](../../cloud/apps/web/src/hooks/useAnalysisTranscriptParams.ts), [pairedScopeAdapter.ts](../../cloud/apps/web/src/utils/pairedScopeAdapter.ts) | Repoint all `companionRunId` reads to derive partner from `Definition.pairedSibling`. Keep the URL parameter `mode=paired&companionRunId=Y` working as a transitional input but compute it from the sibling resolver if missing. ~76 references across web. | 3.5 |
-| Paired-analysis tests — [AnalysisTranscripts.test.tsx](../../cloud/apps/web/tests/pages/AnalysisTranscripts.test.tsx), [AnalysisConditionDetail.test.tsx](../../cloud/apps/web/tests/pages/AnalysisConditionDetail.test.tsx) | Update fixtures to assert sibling-derived companion (the test at AnalysisConditionDetail.test.tsx:711 already covers the absent-companionRunId fallback path) | 3.5 |
+| [AnalysisDetailHeader.tsx](../../cloud/apps/web/src/pages/AnalysisDetailHeader.tsx) | Audit; remove pair-batch references | 5 |
+| [AnalysisDetail.tsx:173,175,305](../../cloud/apps/web/src/pages/AnalysisDetail.tsx:173) | Replace `run.companionRunId` reads with `Definition.pairedSibling` lookups (or sibling-run derived from server) | 4 |
+| **Paired-mode transcript view stack** — [analysisTranscriptParams.ts](../../cloud/apps/web/src/utils/analysisTranscriptParams.ts), [useAnalysisTranscriptsData.ts](../../cloud/apps/web/src/hooks/useAnalysisTranscriptsData.ts), [useAnalysisTranscriptParams.ts](../../cloud/apps/web/src/hooks/useAnalysisTranscriptParams.ts), [pairedScopeAdapter.ts](../../cloud/apps/web/src/utils/pairedScopeAdapter.ts) | Repoint all `companionRunId` reads to derive partner from `Definition.pairedSibling`. Keep the URL parameter `mode=paired&companionRunId=Y` working as a transitional input but compute it from the sibling resolver if missing. ~76 references across web. | 4 |
+| Paired-analysis tests — [AnalysisTranscripts.test.tsx](../../cloud/apps/web/tests/pages/AnalysisTranscripts.test.tsx), [AnalysisConditionDetail.test.tsx](../../cloud/apps/web/tests/pages/AnalysisConditionDetail.test.tsx) | Update fixtures to assert sibling-derived companion (the test at AnalysisConditionDetail.test.tsx:711 already covers the absent-companionRunId fallback path) | 4 |
 | [PressureSensitivityDetail.tsx](../../cloud/apps/web/src/components/models/PressureSensitivityDetail.tsx), [PressureSensitivitySanityCheck.tsx](../../cloud/apps/web/src/components/models/PressureSensitivitySanityCheck.tsx) and their tests | These display constructed `pairKey` values from the analysis API response — the field name overlaps but the values are local sort keys. Verify after Wave 2's GraphQL changes that these still receive the constructed string, not the deleted UUID. | 2 (verify) |
-| [run-json-types.ts](../../cloud/apps/web/src/api/run-json-types.ts) | Drop `jobChoiceLaunchMode`, `jobChoiceBatchGroupId` from `RunConfig` types | 4 |
-| [pairedScopeAdapter.ts](../../cloud/apps/web/src/utils/pairedScopeAdapter.ts) | Audit. Likely keep for analysis-level pair scoping (which uses value tokens), drop any reads of stored pair fields | 4 |
-| [StartPairedBatchPage.tsx](../../cloud/apps/web/src/pages/DefinitionDetail/StartPairedBatchPage.tsx) | Delete or rename to a generic "StartBatchPage" without launch-mode | 4 |
-| [RunForm.tsx](../../cloud/apps/web/src/components/runs/RunForm.tsx), [useRunForm.ts](../../cloud/apps/web/src/components/runs/useRunForm.ts) | Drop `launchMode` state, the picker, and the conditional rendering tied to `PAIRED_BATCH` | 4 |
-| [RunDetail.tsx](../../cloud/apps/web/src/pages/RunDetail/RunDetail.tsx) | Drop `launchMode`-derived labels and the "Start topup batch" button (lines ~32–40, 109, 206) | 4 |
-| [AnalysisDetail.tsx](../../cloud/apps/web/src/pages/AnalysisDetail.tsx) | Drop the `PAIRED_BATCH`-conditional subtitle / interpretation logic (lines ~59–65, 305–306) | 4 |
-| [PairedRunComparisonCard.tsx](../../cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx) | Rewrite: find partner via `Definition.pairedSibling` resolver, drop `batchGroupId` lookup | 4 |
-| [RunCard.tsx](../../cloud/apps/web/src/components/runs/RunCard.tsx) | Drop the paired-batch badge (line ~112) | 4 |
-| Domain trial launch UI under [components/domains/domainTrials/](../../cloud/apps/web/src/components/domains/domainTrials/) | Audit `launch-state.ts` and related — remove pair-aware launch paths | 4 |
+| [run-json-types.ts](../../cloud/apps/web/src/api/run-json-types.ts) | Drop `jobChoiceLaunchMode`, `jobChoiceBatchGroupId` from `RunConfig` types | 5 |
+| [pairedScopeAdapter.ts](../../cloud/apps/web/src/utils/pairedScopeAdapter.ts) | Audit. Likely keep for analysis-level pair scoping (which uses value tokens), drop any reads of stored pair fields | 5 |
+| [StartPairedBatchPage.tsx](../../cloud/apps/web/src/pages/DefinitionDetail/StartPairedBatchPage.tsx) | Delete or rename to a generic "StartBatchPage" without launch-mode | 5 |
+| [RunForm.tsx](../../cloud/apps/web/src/components/runs/RunForm.tsx), [useRunForm.ts](../../cloud/apps/web/src/components/runs/useRunForm.ts) | Drop `launchMode` state, the picker, and the conditional rendering tied to `PAIRED_BATCH` | 5 |
+| [RunDetail.tsx](../../cloud/apps/web/src/pages/RunDetail/RunDetail.tsx) | Drop `launchMode`-derived labels and the "Start topup batch" button (lines ~32–40, 109, 206) | 5 |
+| [AnalysisDetail.tsx](../../cloud/apps/web/src/pages/AnalysisDetail.tsx) | Drop the `PAIRED_BATCH`-conditional subtitle / interpretation logic (lines ~59–65, 305–306) | 5 |
+| [PairedRunComparisonCard.tsx](../../cloud/apps/web/src/components/analysis/PairedRunComparisonCard.tsx) | Rewrite: find partner via `Definition.pairedSibling` resolver, drop `batchGroupId` lookup | 5 |
+| [RunCard.tsx](../../cloud/apps/web/src/components/runs/RunCard.tsx) | Drop the paired-batch badge (line ~112) | 5 |
+| Domain trial launch UI under [components/domains/domainTrials/](../../cloud/apps/web/src/components/domains/domainTrials/) | Audit `launch-state.ts` and related — remove pair-aware launch paths | 5 |
 | `cloud/apps/web/src/generated/graphql.ts` | Regenerated by codegen — never edit by hand | — |
 
 ### E. Tests
@@ -205,10 +205,10 @@ Run `npm run codegen --workspace @valuerank/web` after each schema change. Do no
 |---|---|---|
 | [auto-pair.test.ts](../../cloud/apps/api/tests/utils/auto-pair.test.ts) | Keep | — |
 | [paired-vignette.test.ts](../../cloud/apps/web/src/api/operations/paired-vignette.ts) tests | Audit | 2 |
-| [pairedScopeAdapter.test.ts](../../cloud/apps/web/tests/utils/pairedScopeAdapter.test.ts) | Audit | 4 |
-| [job-choice-bridge-report.test.ts](../../cloud/scripts/__tests__/job-choice-bridge-report.test.ts) | Delete with the script | 5 |
+| [pairedScopeAdapter.test.ts](../../cloud/apps/web/tests/utils/pairedScopeAdapter.test.ts) | Audit | 5 |
+| [job-choice-bridge-report.test.ts](../../cloud/scripts/__tests__/job-choice-bridge-report.test.ts) | Delete with the script | 6 |
 | Anomaly tests covering `PAIR_ASYMMETRY` | Delete | 3 |
-| Run lifecycle tests asserting `launchMode` | Update or delete | 4 |
+| Run lifecycle tests asserting `launchMode` | Update or delete | 5 |
 | Domain coverage tests asserting dedup-by-batchGroupId | Rewrite to assert dedup-by-mirror-pair | 3 |
 | Snapshot baselines in `cloud/tests/snapshot-baselines/` referencing `pairKey` | Refresh with new query shape | per wave |
 
@@ -217,16 +217,16 @@ Run `npm run codegen --workspace @valuerank/web` after each schema change. Do no
 | File | Change | Wave |
 |---|---|---|
 | `cloud/scripts/seed-*-pairs.ts` | Stop generating `pair_key` UUIDs | 2 |
-| [job-choice-bridge-report.ts](../../cloud/scripts/job-choice-bridge-report.ts) | Delete (legacy bridge report; reads `launchMode` from old runs) | 5 |
-| [backfill-reparse-decisions.ts](../../cloud/scripts/backfill-reparse-decisions.ts) | Filters by `jobChoiceLaunchMode IN ('PAIRED_BATCH','PAIRED_BATCH_TOPUP')`. Survives Wave 4 (the JSON value persists) but breaks if the optional Wave 5 cleanup script strips fields. If we want this script preserved, replace its filter with a definition-based one before Wave 5 cleanup ships. | 5 (decide before cleanup migration) |
-| MCP tools under `cloud/apps/api/src/mcp/tools/` | Audit each: `get-run-results.ts`, `get-run-summary.ts`, others — remove pair fields from outputs | 4 |
+| [job-choice-bridge-report.ts](../../cloud/scripts/job-choice-bridge-report.ts) | Delete (legacy bridge report; reads `launchMode` from old runs) | 6 |
+| [backfill-reparse-decisions.ts](../../cloud/scripts/backfill-reparse-decisions.ts) | Filters by `jobChoiceLaunchMode IN ('PAIRED_BATCH','PAIRED_BATCH_TOPUP')`. Survives Wave 5 (the JSON value persists) but breaks if the optional Wave 6 cleanup script strips fields. If we want this script preserved, replace its filter with a definition-based one before Wave 6 cleanup ships. | 6 (decide before cleanup migration) |
+| MCP tools under `cloud/apps/api/src/mcp/tools/` | Audit each: `get-run-results.ts`, `get-run-summary.ts`, others — remove pair fields from outputs | 5 |
 | Optional cleanup migration script: strip `pair_key` from `Definition.content.methodology` and `jobChoice*` from `Run.config` | Decide whether to ship | post-5 |
 
 ### G. Documentation
 
 | Doc | Change |
 |---|---|
-| [docs/backend/paired-batch-run-flow.md](../backend/paired-batch-run-flow.md) | Delete after Wave 4 ships |
+| [docs/backend/paired-batch-run-flow.md](../backend/paired-batch-run-flow.md) | Delete after Wave 5 ships |
 | [docs/canonical-glossary.md](../canonical-glossary.md) | Remove "paired batch" entry; update "vignette" entry to mention mirrored-token pairing |
 | [docs/valuerank_prd.yaml](../valuerank_prd.yaml) | Remove paired-batch flow description |
 | [docs/tech-debt/dedup-inventory.md](dedup-inventory.md) | Add a back-reference to this doc |
@@ -259,42 +259,56 @@ The cheapest deletion. Only one read site (`pressure-sensitivity` prefilter) plu
 
 **Risk:** Low. The token-mirror logic already exists; we're just removing a redundant pre-filter.
 
-### Wave 3 — Drop `jobChoiceBatchGroupId` and PAIR_ASYMMETRY
+### Wave 3 — Delete the PAIR_ASYMMETRY detector
 
-The biggest wave. Closes out the launch-time grouping concept and the analyses that depended on it.
+A small, low-risk wave. Stops generating new pair-asymmetry anomalies. Existing rows in the database are preserved as historical record.
+
+See [wave3-spec.md](wave3-spec.md) for the implementation spec.
 
 **Ships:**
-- Delete `detectPairAsymmetry` (or rewrite per Decision 2)
-- Drop `PAIR_ASYMMETRY` from anomaly enum, label map, audit, reconcile
-- Replace `deduplicateRunsByGroupId` and `getCoverageBatchGroupId` with mirror-pair dedup
+- Delete `detectPairAsymmetry` function and threshold constants (`PAIR_ASYMMETRY_THRESHOLD_PCT`, `PAIR_ASYMMETRY_MIN_PROBES`)
+- Remove its 2 reconciler call sites
+- Remove `'PAIR_ASYMMETRY'` from `scannedTypes` in `run-state-audit.ts` (preserves existing anomalies)
+- Pre-flight: production data audit (gates Wave 4)
+- Pre-flight: snapshot current `PAIR_ASYMMETRY` anomaly count for post-deploy verification
+- Update affected tests
+
+**Does NOT ship in Wave 3** (deferred to Wave 4 after round-2 review):
+- Stop writing `jobChoiceBatchGroupId` in launch flows — coupled with the dedup rewrite
+- Delete `pair-grouping.ts` and flatten launch groups — would break `jobChoiceLaunchMode` writes
+- Replace coverage dedup
+- Schema changes
+- `'PAIR_ASYMMETRY'` enum value removal — Wave 5
+
+**Risk:** Low. The detector is the one piece that's truly independent.
+
+### Wave 4 — Repoint analysis to mirrored value tokens, drop launch-time grouping
+
+The biggest wave. Closes out the launch-time grouping concept *and* the analyses that depended on it. They have to ship together because the dedup rewrite and the writes-stop are coupled — stopping writes alone would silently 2x coverage counts on new runs, rewriting dedup alone would dedup runs that no longer share a group.
+
+**Ships:**
+- Replace `deduplicateRunsByGroupId` and `getCoverageBatchGroupId` with mirror-pair dedup (canonical-pair-key + sorted definition IDs from `definitionSnapshot`)
+- Coverage helper drops the legacy `jobChoiceValueFirst` fallback (the primary path already reads `definitionSnapshot.components`)
 - Drop `pair-grouping.ts` and the `incompletePairKeys` warning
-- Domain launch (`executeLaunchRuns`, `executeBackfillRuns`, `plan-slots`, `plan-backfill`, `backfill-orchestrator`) stops writing `batchGroupId` and `launchMode: 'PAIRED_BATCH'`
-- GraphQL schema: remove `Run.pairedBatchGroupId`, `Run.companionRunId`
-- Codegen run
-
-**Risk:** Medium. Coverage dedup needs careful rewrite — historical data still has `batchGroupId`, and the new dedup must produce equivalent counts on old data so reports don't shift.
-
-### Wave 3.5 — Repoint paired-mode features to `Definition.pairedSibling`
-
-Sibling-derive the companion at query time so we can drop the explicit pointers in Wave 4 without losing features.
-
-**Ships:**
+- Domain launch (`executeLaunchRuns`, `executeBackfillRuns`, `plan-slots`, `plan-backfill`, `backfill-orchestrator`) stops writing `jobChoiceBatchGroupId`. **Keeps writing `jobChoiceLaunchMode` and `jobChoiceValueFirst`** by moving those writes out of the now-deleted `if (group.pairKey !== null)` branch — they apply to every launch slot regardless of grouping
 - Paired-mode transcript view stack (`analysisTranscriptParams.ts`, `useAnalysisTranscriptsData.ts`, `useAnalysisTranscriptParams.ts`, `pairedScopeAdapter.ts`, `AnalysisDetail.tsx`) reads partner from `Definition.pairedSibling` when `companionRunId` is absent (the test fallback at [AnalysisConditionDetail.test.tsx:711](../../cloud/apps/web/tests/pages/AnalysisConditionDetail.test.tsx:711) already exercises this)
 - `models-consistency.ts` order-effect analysis joins runs via mirrored definitions instead of `companionRunId`
 - `aggregate-preparation.ts` derives partner from `pairedSibling` instead of reading `companionRunId`
 - `lifecycle-helpers.ts` `persistPairedCompanionRunIds` is no longer called from any new launch path (still defined but dead)
-- Tests updated to assert sibling-derived companion behavior
+- Tests updated
+
+**Verification plan:** baseline production reports before, snapshot-diff against allowed-deltas list after. The Wave 4 test plan should be drafted as part of the Wave 4 PR.
 
 **Risk:** High. This is the riskiest wave — it touches the analysis surface that produces the data the product is about. Verify against historical runs in staging before shipping.
 
-### Wave 4 — Drop `jobChoiceLaunchMode`, `companionRunId`, and PAIRED_BATCH_TOPUP
+### Wave 5 — Drop `jobChoiceLaunchMode`, `companionRunId`, and PAIRED_BATCH_TOPUP
 
 UI cleanup plus the top-up logic plus the now-orphaned companion pointer.
 
 **Ships:**
 - Delete the top-up handler's `PAIRED_BATCH_TOPUP` paths
 - Drop the `launchMode` input from `startRun`
-- GraphQL schema: remove `Run.companionRunId` (Wave 3.5 already moved consumers off it)
+- GraphQL schema: remove `Run.companionRunId` (Wave 4 already moved consumers off it)
 - Delete `lifecycle-helpers.ts` `persistPairedCompanionRunIds`, `mergeCompanionRunId`, `getConfiguredCompanionRunId` (now-dead)
 - Web: drop `StartPairedBatchPage`, the launch-mode picker, `RunForm`/`useRunForm` mode handling, the topup button on `RunDetail`, the badge on `RunCard`
 - Web: rewrite `PairedRunComparisonCard` to use `pairedSibling` resolver
@@ -306,7 +320,7 @@ UI cleanup plus the top-up logic plus the now-orphaned companion pointer.
 
 **Risk:** Medium. UI surface area is wide; needs preview-server verification on each page that referenced launch mode.
 
-### Wave 5 — Tombstones and historical cleanup
+### Wave 6 — Tombstones and historical cleanup
 
 **Ships:**
 - Delete `legacyCompanionPairedRun.ts`
@@ -329,7 +343,7 @@ UI cleanup plus the top-up logic plus the now-orphaned companion pointer.
 
 ## Open questions
 
-- **Cleanup migration:** ship the optional JSON-stripping script in Wave 5, or leave stale fields in old rows forever? Default: leave them. Re-evaluate if any future feature is confused by them.
+- **Cleanup migration:** ship the optional JSON-stripping script in Wave 6, or leave stale fields in old rows forever? Default: leave them. Re-evaluate if any future feature is confused by them.
 - **Pair-asymmetry replacement signal:** if anyone misses the detector after Wave 3, what's the right replacement report? (Likely a per-definition cross-mirror success-rate comparison surfaced in the analysis page, not as an anomaly.)
 
 ## Sign-off log
@@ -339,12 +353,12 @@ UI cleanup plus the top-up logic plus the now-orphaned companion pointer.
 | 1 (this doc) | | | |
 | 2 | | | |
 | 3 | | | |
-| 3.5 | | | high-risk: paired-mode analysis repoint |
-| 4 | | | |
+| 4 | | | high-risk: paired-mode analysis repoint |
 | 5 | | | |
+| 6 | | | |
 
 ## Related
 
 - [Run-state PENDING fix (PR #1017)](https://github.com/chrislawcodes/valuerank/pull/1017) — closed the PENDING → RUNNING gap; informs Wave 3's launch-flow rewrite
-- [docs/backend/paired-batch-run-flow.md](../backend/paired-batch-run-flow.md) — the legacy flow trace; obsolete after Wave 4
+- [docs/backend/paired-batch-run-flow.md](../backend/paired-batch-run-flow.md) — the legacy flow trace; obsolete after Wave 5
 - [docs/tech-debt/dedup-inventory.md](dedup-inventory.md) — the canonical dedup catalog
