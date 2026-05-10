@@ -184,10 +184,38 @@ export async function resolveDomainAnalysisScopeDefinitions(params: {
   domainId: string;
 }): Promise<DomainAnalysisScopeDefinitionSet> {
   if (params.scope === 'ALL_DOMAINS') {
-    const domains = await db.domain.findMany({
+    const allDomains = await db.domain.findMany({
       select: { id: true, name: true, defaultModelIds: true },
       orderBy: [{ name: 'asc' }, { id: 'asc' }],
     });
+
+    // Filter to "populated" domains — those with at least one completed run.
+    // Empty domains (created but never trialled) contribute zero data to
+    // all-domains analysis, but their domain IDs would otherwise enter the
+    // snapshot inputHash and invalidate the cache every time a new domain is
+    // created. Filtering them here keeps the cache stable through new
+    // domains until those domains have actual data.
+    const populatedDomainRows = allDomains.length === 0
+      ? []
+      : await db.domain.findMany({
+          where: {
+            id: { in: allDomains.map((domain) => domain.id) },
+            definitions: {
+              some: {
+                deletedAt: null,
+                runs: {
+                  some: {
+                    status: 'COMPLETED',
+                    deletedAt: null,
+                  },
+                },
+              },
+            },
+          },
+          select: { id: true },
+        });
+    const populatedDomainIds = new Set(populatedDomainRows.map((domain) => domain.id));
+    const domains = allDomains.filter((domain) => populatedDomainIds.has(domain.id));
 
     const definitions = domains.length === 0
       ? []
