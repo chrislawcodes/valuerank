@@ -35,4 +35,5 @@ export { preferDefaultSignature, type AvailableSignature } from './signature-pre
 export { computeLaunchTrialCount, type LaunchTrialCountInput } from './launch-trial-count.js';
 export { SCHWARTZ_CIRCULAR_ORDER, circularDistance, theoreticalAngleDeg, type ValueKey as SchwartzValueKey } from './schwartz.js';
 export * from './assemble-template.js';
+export * from './paired-definition.js';
 export * from './value-statements.js';

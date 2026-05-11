@@ -18,7 +18,7 @@ import type { TrialConfigSummary, TrialSignatureBreakdown } from '../dataloaders
 import {
   applyLevelPresetToDefinitionContent,
 } from '../../utils/definition-level-preset.js';
-import { normalizePairedDefinitionContent } from '../../utils/paired-definition.js';
+import { normalizePairedDefinitionContent } from '@valuerank/shared';
 import { resolveDefinitionPairedSibling } from './definition-paired-sibling.js';
 
 // Re-export for backward compatibility
