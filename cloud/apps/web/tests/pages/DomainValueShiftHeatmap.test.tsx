@@ -433,8 +433,9 @@ describe('DomainValueShiftHeatmap page', () => {
 
     renderPage();
 
-    await screen.findByRole('button', { name: /Sort by City Planning descending/i });
-    await user.click(screen.getByRole('button', { name: /Sort by City Planning descending/i }));
+    const cityPlanningHeader = await screen.findByRole('button', { name: /Sort by City Planning descending/i });
+    expect(cityPlanningHeader).toHaveClass('items-start');
+    await user.click(cityPlanningHeader);
 
     const firstDataRow = screen.getAllByRole('row')[1];
     expect(firstDataRow).toBeDefined();

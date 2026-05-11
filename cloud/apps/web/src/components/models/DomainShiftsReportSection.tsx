@@ -96,7 +96,7 @@ function SortableHeader({
         size="sm"
         onClick={() => onSort(getNextDomainShiftSort(sort, sortKey))}
         className={cn(
-          'w-full gap-1 rounded-none bg-transparent px-0 py-0 min-h-0 text-[11px] font-semibold uppercase tracking-wide text-gray-500 shadow-none transition-colors hover:bg-transparent hover:text-gray-900 focus:ring-0 focus:ring-offset-0',
+          'w-full min-w-0 items-start gap-1 rounded-none bg-transparent px-0 py-0 min-h-0 text-[11px] font-semibold uppercase tracking-wide text-gray-500 shadow-none transition-colors hover:bg-transparent hover:text-gray-900 focus:ring-0 focus:ring-offset-0',
           align === 'left' && 'justify-start text-left',
           align === 'center' && 'justify-center text-center',
           align === 'right' && 'justify-end text-right',
@@ -104,9 +104,9 @@ function SortableHeader({
         )}
         aria-label={`Sort by ${label} ${nextDirection}`}
       >
-        <span className="whitespace-nowrap">{label}</span>
+        <span className="min-w-0 whitespace-normal break-words leading-tight">{label}</span>
         {isActive && (
-          <span aria-hidden="true" className="text-[11px] leading-none text-gray-400">
+          <span aria-hidden="true" className="shrink-0 pt-0.5 text-[11px] leading-none text-gray-400">
             {sort.direction === 'desc' ? '↑' : '↓'}
           </span>
         )}
