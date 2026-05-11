@@ -101,6 +101,8 @@ query PressureSensitivity(
       name
       reason
     }
+    cacheStatus
+    generatedAt
     pressureConditionExcludedCount
     pressureConditionExclusionBreakdown {
       sourceRunMapping

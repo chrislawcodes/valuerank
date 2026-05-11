@@ -27,6 +27,7 @@ import { PressureSensitivityCrossValueMap } from '../components/models/PressureS
 import { PressureSensitivitySanityCheck } from '../components/models/PressureSensitivitySanityCheck';
 import { PressureSensitivityLimitations } from '../components/models/PressureSensitivityLimitations';
 import { formatQueryError } from '../utils/urqlError';
+import { getCacheStatusCopy } from '../utils/domainAnalysisUtils';
 
 const DEFAULT_SIGNATURE = 'vnewtd';
 
@@ -189,6 +190,17 @@ export function PressureSensitivity() {
   const transcriptCapHit = data?.pressureSensitivity.transcriptCapHit ?? false;
   const pressureConditionExcludedCount = data?.pressureSensitivity.pressureConditionExcludedCount ?? 0;
 
+  const cacheStatus = data?.pressureSensitivity.cacheStatus ?? undefined;
+  const generatedAt = data?.pressureSensitivity.generatedAt ?? undefined;
+  const transcriptCount = useMemo(
+    () => Math.round(models.reduce((sum, m) => sum + m.valuePairs.reduce((s, p) => s + p.n, 0), 0) / 2),
+    [models],
+  );
+  const cacheStatusCopy = useMemo(
+    () => getCacheStatusCopy(cacheStatus as 'FRESH' | 'UPDATING' | 'OUT_OF_DATE' | undefined, generatedAt, transcriptCount),
+    [cacheStatus, generatedAt, transcriptCount],
+  );
+
   const loading =
     (domainsLoading && domains.length === 0)
     || llmModelsLoading
@@ -305,6 +317,15 @@ export function PressureSensitivity() {
           onChange: handleModelSelectionChange,
         }}
       />
+
+      {cacheStatusCopy != null && (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+          <span className={`inline-flex rounded-full border px-2.5 py-1 font-semibold ${cacheStatusCopy.badgeClassName}`}>
+            {cacheStatusCopy.badgeLabel}
+          </span>
+          <span>{cacheStatusCopy.detail}</span>
+        </div>
+      )}
 
       {transcriptCapHit && (
         <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
