@@ -199,10 +199,10 @@ export function PressureSensitivity() {
   const emptyState = models.length === 0 && insufficient.length === 0;
   const allInsufficient = models.length === 0 && insufficient.length > 0;
 
-  const domainOptions = useMemo(
-    () => [{ value: 'all', label: 'All domains' }, ...domains.map((d) => ({ value: d.id, label: d.name }))],
-    [domains],
-  );
+  const selectedDomainIds = hasExplicitDomain ? [urlDomainId!] : [];
+  const domainSummary = hasExplicitDomain
+    ? (domains.find((d) => d.id === urlDomainId)?.name ?? urlDomainId ?? 'Unknown')
+    : 'All Domains';
   const signatureOptions = useMemo(
     () => availableSignatures.map((signature) => ({ value: signature, label: formatPressureSensitivitySignatureLabel(signature) })),
     [availableSignatures],
@@ -272,9 +272,19 @@ export function PressureSensitivity() {
       <AnalysisContextBar
         domain={{
           label: 'Domain',
-          value: urlDomainId ?? 'all',
-          onChange: (value) => handleDomainChange(value === 'all' ? null : value),
-          options: domainOptions,
+          multi: true,
+          singleSelect: true,
+          summary: domainSummary,
+          selectedIds: selectedDomainIds,
+          options: domains.map((d) => ({ value: d.id, label: d.name })),
+          actions: [
+            {
+              label: 'All Domains',
+              isActive: !hasExplicitDomain,
+              onClick: () => handleDomainChange(null),
+            },
+          ],
+          onChange: (ids) => { handleDomainChange(ids[0] ?? null); },
           disabled: domainsLoading || (domains.length === 0 && !hasExplicitDomain),
         }}
         signature={{

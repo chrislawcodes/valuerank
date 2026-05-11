@@ -81,12 +81,22 @@ function buildModelEntries(
 export function ModelsGroups() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { domains, queryLoading: domainsLoading, error: domainsError } = useDomains();
-  const initialDomainId = searchParams.get('domainId') ?? '';
-  const [selectedScope, setSelectedScope] = useState<'DOMAIN' | 'ALL_DOMAINS'>(
-    searchParams.get('scope') === ALL_DOMAINS_SCOPE || initialDomainId.trim() === '' ? 'ALL_DOMAINS' : 'DOMAIN',
-  );
-  const [selectedDomainId, setSelectedDomainId] = useState<string>(initialDomainId);
+  const [selectedDomainIds, setSelectedDomainIds] = useState<string[]>(() => {
+    const domainIdsParam = searchParams.get('domainIds');
+    if (domainIdsParam != null && domainIdsParam !== '') {
+      return domainIdsParam.split(',').filter((id) => id !== '');
+    }
+    const legacyDomainId = searchParams.get('domainId') ?? '';
+    const legacyScope = searchParams.get('scope') ?? '';
+    if (legacyScope === ALL_DOMAINS_SCOPE || legacyDomainId === '') return [];
+    return [legacyDomainId];
+  });
   const [selectedSignature, setSelectedSignature] = useState<string>(searchParams.get('signature') ?? '');
+
+  const effectiveDomainId = selectedDomainIds.length === 1 ? (selectedDomainIds[0] ?? '') : '';
+  const isAllDomains = selectedDomainIds.length !== 1;
+  const effectiveScope: 'DOMAIN' | 'ALL_DOMAINS' = isAllDomains ? 'ALL_DOMAINS' : 'DOMAIN';
+  const queryDomainId = effectiveDomainId !== '' ? effectiveDomainId : (domains[0]?.id ?? '');
   const [selectedModelIds, setSelectedModelIds] = useState<string[] | null>(null);
   const [useLegacyQuery, setUseLegacyQuery] = useState(false);
   const [clusteringMethod, setClusteringMethod] = useState<'upgma' | 'ward'>('ward');
@@ -102,10 +112,10 @@ export function ModelsGroups() {
   >({
     query: DOMAIN_AVAILABLE_SIGNATURES_QUERY,
     variables: {
-      domainId: selectedDomainId === '' ? domains[0]?.id ?? '' : selectedDomainId,
-      scope: selectedScope === 'ALL_DOMAINS' ? ALL_DOMAINS_SCOPE : undefined,
+      domainId: queryDomainId,
+      scope: isAllDomains ? ALL_DOMAINS_SCOPE : undefined,
     },
-    pause: selectedDomainId === '',
+    pause: queryDomainId === '',
     requestPolicy: 'network-only',
   });
 
@@ -121,10 +131,11 @@ export function ModelsGroups() {
   }, [signatureData]);
 
   useEffect(() => {
-    if (domains.length === 0) return;
-    if (selectedDomainId !== '' && domains.some((domain) => domain.id === selectedDomainId)) return;
-    setSelectedDomainId(domains[0]?.id ?? '');
-  }, [domains, selectedDomainId]);
+    if (domains.length === 0 || selectedDomainIds.length === 0) return;
+    const validIds = selectedDomainIds.filter((id) => domains.some((d) => d.id === id));
+    if (validIds.length === selectedDomainIds.length) return;
+    setSelectedDomainIds(validIds);
+  }, [domains, selectedDomainIds]);
 
   useEffect(() => {
     if (signatureOptions.length === 0) {
@@ -136,33 +147,34 @@ export function ModelsGroups() {
   }, [selectedSignature, signatureOptions]);
 
   useEffect(() => {
-    const currentScope = searchParams.get('scope') === ALL_DOMAINS_SCOPE ? 'ALL_DOMAINS' : 'DOMAIN';
-    const nextDomainId = selectedDomainId !== '' ? selectedDomainId : (domains[0]?.id ?? '');
-    if (nextDomainId === '' && selectedScope === 'DOMAIN') return;
-    if (
-      searchParams.get('domainId') === nextDomainId
-      && (searchParams.get('signature') ?? '') === selectedSignature
-      && currentScope === selectedScope
-    ) return;
     const next = new URLSearchParams(searchParams);
-    if (nextDomainId !== '') next.set('domainId', nextDomainId);
-    else next.delete('domainId');
-    if (selectedScope === 'ALL_DOMAINS') next.set('scope', ALL_DOMAINS_SCOPE);
-    else next.delete('scope');
+    if (selectedDomainIds.length === 0) {
+      next.delete('domainId');
+      next.delete('domainIds');
+    } else if (selectedDomainIds.length === 1) {
+      next.set('domainId', selectedDomainIds[0]!);
+      next.delete('domainIds');
+    } else {
+      next.set('domainIds', selectedDomainIds.join(','));
+      next.delete('domainId');
+    }
+    next.delete('scope');
     if (selectedSignature === '') next.delete('signature');
     else next.set('signature', selectedSignature);
-    setSearchParams(next, { replace: true });
-  }, [domains, searchParams, selectedDomainId, selectedSignature, selectedScope, setSearchParams]);
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, selectedDomainIds, selectedSignature, setSearchParams]);
 
-  const activeUseLegacyQuery = useLegacyQuery && selectedScope !== 'ALL_DOMAINS';
+  const activeUseLegacyQuery = useLegacyQuery && !isAllDomains;
   const [{ data: scoredData, fetching: scoredFetching, error: scoredError }] = useQuery<DomainAnalysisQueryResult, DomainAnalysisQueryVariables>({
     query: DOMAIN_ANALYSIS_QUERY,
     variables: {
-      domainId: selectedDomainId === '' ? domains[0]?.id ?? '' : selectedDomainId,
-      scope: selectedScope === 'ALL_DOMAINS' ? ALL_DOMAINS_SCOPE : undefined,
+      domainId: queryDomainId,
+      scope: isAllDomains ? ALL_DOMAINS_SCOPE : undefined,
       signature: selectedSignature === '' ? undefined : selectedSignature,
     },
-    pause: selectedDomainId === '' || activeUseLegacyQuery,
+    pause: queryDomainId === '' || activeUseLegacyQuery,
     requestPolicy: 'network-only',
   });
   const [{ data: modelsAnalysisData, fetching: modelsAnalysisFetching, error: modelsAnalysisError }] = useQuery<
@@ -171,10 +183,10 @@ export function ModelsGroups() {
   >({
     query: MODELS_ANALYSIS_QUERY,
     variables: {
-      ...(selectedScope === 'DOMAIN' && selectedDomainId !== '' ? { domainId: selectedDomainId } : {}),
+      ...(!isAllDomains && effectiveDomainId !== '' ? { domainId: effectiveDomainId } : {}),
       ...(selectedSignature !== '' ? { signature: selectedSignature } : {}),
     },
-    pause: selectedScope === 'DOMAIN' && selectedDomainId === '',
+    pause: !isAllDomains && effectiveDomainId === '',
     requestPolicy: 'network-only',
   });
   const [{ data: llmModelsData, error: llmModelsError }] = useQuery<LlmModelsQueryResult>({
@@ -184,8 +196,8 @@ export function ModelsGroups() {
   });
   const [{ data: legacyData, fetching: legacyFetching, error: legacyError }] = useQuery<DomainAnalysisQueryResult, { domainId: string }>({
     query: DOMAIN_ANALYSIS_QUERY_LEGACY,
-    variables: { domainId: selectedDomainId },
-    pause: selectedDomainId === '' || !activeUseLegacyQuery,
+    variables: { domainId: effectiveDomainId },
+    pause: effectiveDomainId === '' || !activeUseLegacyQuery,
     requestPolicy: 'network-only',
   });
 
@@ -194,8 +206,8 @@ export function ModelsGroups() {
     const isFieldError = message.includes('Unknown argument "signature"')
       || message.includes('Cannot query field')
       || message.includes('Unknown field');
-    if (isFieldError && !useLegacyQuery && selectedScope !== 'ALL_DOMAINS') setUseLegacyQuery(true);
-  }, [scoredError, selectedScope, useLegacyQuery]);
+    if (isFieldError && !useLegacyQuery && !isAllDomains) setUseLegacyQuery(true);
+  }, [scoredError, isAllDomains, useLegacyQuery]);
 
   // Auto-default similarity method to 'kappa' when switching to kappa-agreement data source,
   // unless the user has already made an explicit choice.
@@ -231,8 +243,8 @@ export function ModelsGroups() {
     query: ModelAgreementClusterAnalysisDocument,
     variables: {
       modelIds: visibleModelIds,
-      ...(selectedScope === 'DOMAIN' && selectedDomainId !== '' ? { domainId: selectedDomainId } : {}),
-      scope: selectedScope,
+      ...(!isAllDomains && effectiveDomainId !== '' ? { domainId: effectiveDomainId } : {}),
+      scope: effectiveScope,
       signature: selectedSignature,
       method: clusteringMethod,
     },
@@ -240,7 +252,7 @@ export function ModelsGroups() {
       !isKappaClusterMode
       || selectedSignature === ''
       || visibleModelIds.length < 3
-      || (selectedScope === 'DOMAIN' && selectedDomainId === '')
+      || (!isAllDomains && effectiveDomainId === '')
       || llmModelsData == null,
     requestPolicy: 'cache-and-network',
   });
@@ -280,9 +292,18 @@ export function ModelsGroups() {
     () => getCacheStatusCopy(data?.domainAnalysis.cacheStatus, data?.domainAnalysis.generatedAt, transcriptCount),
     [data?.domainAnalysis.cacheStatus, data?.domainAnalysis.generatedAt, transcriptCount],
   );
+  const domainSummary = useMemo(() => {
+    if (isAllDomains) return 'All Domains';
+    if (selectedDomainIds.length === 1) {
+      const id = selectedDomainIds[0];
+      return domains.find((d) => d.id === id)?.name ?? id ?? 'Unknown';
+    }
+    return `${selectedDomainIds.length} domains`;
+  }, [domains, isAllDomains, selectedDomainIds]);
+
   const showPageLoader = domainsLoading
-    || (selectedDomainId !== '' && data?.domainAnalysis == null && fetching && error == null)
-    || (selectedDomainId !== '' && modelsAnalysisData == null && modelsAnalysisFetching && modelsAnalysisError == null)
+    || (queryDomainId !== '' && data?.domainAnalysis == null && fetching && error == null)
+    || (queryDomainId !== '' && modelsAnalysisData == null && modelsAnalysisFetching && modelsAnalysisError == null)
     || (signatureData == null && signaturesLoading && signaturesError == null)
     || (llmModelsData == null && llmModelsError == null);
   const models = useMemo(
@@ -301,30 +322,29 @@ export function ModelsGroups() {
     () => (visibleModelIds.length === 0 ? [] : models.filter((model) => visibleModelIds.includes(model.model))),
     [models, visibleModelIds],
   );
-  const isAllDomains = selectedScope === 'ALL_DOMAINS';
   const pageErrorMessage = domainsError != null
     ? formatQueryError('Model Groups domains query', domainsError, {
-      scope: selectedScope,
-      domainId: selectedDomainId === '' ? '(auto)' : selectedDomainId,
+      scope: effectiveScope,
+      domainId: queryDomainId === '' ? '(auto)' : queryDomainId,
     })
     : signaturesError != null
       ? formatQueryError('Model Groups available signatures query', signaturesError, {
-        domainId: selectedDomainId === '' ? domains[0]?.id ?? '' : selectedDomainId,
-        scope: selectedScope,
+        domainId: queryDomainId,
+        scope: effectiveScope,
       })
       : error != null
         ? formatQueryError(
           activeUseLegacyQuery ? 'Model Groups legacy domain analysis query' : 'Model Groups domain analysis query',
           error,
           {
-            domainId: selectedDomainId === '' ? domains[0]?.id ?? '' : selectedDomainId,
-            scope: selectedScope,
+            domainId: queryDomainId === '' ? '(auto)' : queryDomainId,
+            scope: effectiveScope,
             signature: selectedSignature === '' ? '(none)' : selectedSignature,
           },
         )
         : modelsAnalysisError != null
           ? formatQueryError('Model Groups models analysis query', modelsAnalysisError, {
-            domainId: selectedScope === 'DOMAIN' && selectedDomainId !== '' ? selectedDomainId : ALL_DOMAINS_SCOPE,
+            domainId: !isAllDomains && effectiveDomainId !== '' ? effectiveDomainId : ALL_DOMAINS_SCOPE,
             signature: selectedSignature === '' ? '(none)' : selectedSignature,
           })
           : llmModelsError != null
@@ -335,7 +355,7 @@ export function ModelsGroups() {
   const showAgreementSection =
     selectedSignature !== ''
     && visibleModelIds.length >= 2
-    && !(selectedScope === 'DOMAIN' && selectedDomainId === '')
+    && !(!isAllDomains && effectiveDomainId === '')
     && llmModelsData != null;
 
   // Fire the agreement query here too so we can extract the kappa matrix for
@@ -344,8 +364,8 @@ export function ModelsGroups() {
   const [{ data: agreementData }] = useModelAgreementOnTradeoffsQuery({
     variables: {
       modelIds: visibleModelIds,
-      domainId: selectedScope === 'DOMAIN' && selectedDomainId !== '' ? selectedDomainId : undefined,
-      scope: selectedScope,
+      domainId: !isAllDomains && effectiveDomainId !== '' ? effectiveDomainId : undefined,
+      scope: effectiveScope,
       signature: selectedSignature,
     },
     requestPolicy: 'cache-and-network',
@@ -387,20 +407,19 @@ export function ModelsGroups() {
       <AnalysisContextBar
         domain={{
           label: 'Domain',
-          value: isAllDomains ? ALL_DOMAINS_SCOPE : selectedDomainId,
-          options: [
-            { value: ALL_DOMAINS_SCOPE, label: 'All domains' },
-            ...domains.map((domain) => ({ value: domain.id, label: domain.name })),
+          multi: true,
+          summary: domainSummary,
+          selectedIds: selectedDomainIds,
+          options: domains.map((d) => ({ value: d.id, label: d.name })),
+          actions: [
+            {
+              label: 'All Domains',
+              isActive: isAllDomains,
+              onClick: () => setSelectedDomainIds([]),
+            },
           ],
-          onChange: (value) => {
-            if (value === ALL_DOMAINS_SCOPE) {
-              setSelectedScope('ALL_DOMAINS');
-              return;
-            }
-            setSelectedScope('DOMAIN');
-            setSelectedDomainId(value);
-          },
-          disabled: domainsLoading || (domains.length === 0 && !isAllDomains),
+          onChange: (ids) => { setSelectedDomainIds(ids); },
+          disabled: domainsLoading || domains.length === 0,
         }}
         signature={{
           label: 'Signature',
@@ -469,8 +488,8 @@ export function ModelsGroups() {
           {showAgreementSection ? (
             <ModelAgreementSection
               modelIds={visibleModelIds}
-              scope={selectedScope}
-              domainId={selectedScope === 'DOMAIN' && selectedDomainId !== '' ? selectedDomainId : null}
+              scope={effectiveScope}
+              domainId={!isAllDomains && effectiveDomainId !== '' ? effectiveDomainId : null}
               signature={selectedSignature}
             />
           ) : null}

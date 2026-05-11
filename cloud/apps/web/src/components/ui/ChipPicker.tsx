@@ -26,6 +26,8 @@ type ChipPickerProps = {
   disabled?: boolean;
   ariaLabel: string;
   emptyMessage?: string;
+  /** When true, clicking a chip selects only that item; clicking the active chip does nothing. */
+  singleSelect?: boolean;
 };
 
 export function ChipPicker({
@@ -37,6 +39,7 @@ export function ChipPicker({
   disabled,
   ariaLabel,
   emptyMessage = 'No options available.',
+  singleSelect = false,
 }: ChipPickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const triggerRef = useRef<HTMLDivElement>(null);
@@ -64,6 +67,10 @@ export function ChipPicker({
   }, [isOpen]);
 
   const handleToggle = (value: string) => {
+    if (singleSelect) {
+      if (!selectedIds.includes(value)) onChange([value]);
+      return;
+    }
     const next = selectedIds.includes(value)
       ? selectedIds.filter((id) => id !== value)
       : [...selectedIds, value];

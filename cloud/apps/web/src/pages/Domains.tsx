@@ -178,14 +178,16 @@ export function Domains() {
       <AnalysisContextBar
         domain={{
           label: 'Domain',
-          value: resolvedDomainId,
-          options:
-            domains.length === 0
-              ? [{ value: '', label: 'No domains available', disabled: true }]
-              : domains.map((domain) => ({ value: domain.id, label: domain.name })),
-          onChange: (value) => {
-            setSelectedFolder(value);
-            localStorage.setItem(LAST_DOMAIN_KEY, value);
+          multi: true,
+          singleSelect: true,
+          summary: domains.find((d) => d.id === resolvedDomainId)?.name ?? resolvedDomainId,
+          selectedIds: resolvedDomainId !== '' ? [resolvedDomainId] : [],
+          options: domains.map((d) => ({ value: d.id, label: d.name })),
+          onChange: (ids) => {
+            const id = ids[0];
+            if (id == null) return;
+            setSelectedFolder(id);
+            localStorage.setItem(LAST_DOMAIN_KEY, id);
           },
           disabled: domainLoading || domains.length === 0,
         }}

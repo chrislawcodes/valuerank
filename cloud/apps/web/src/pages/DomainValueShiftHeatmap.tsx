@@ -287,10 +287,10 @@ export function DomainValueShiftHeatmap() {
     || (fetching && data == null)
     || (selectedModelIds == null && !noActiveModels);
 
-  const domainOptions = useMemo(
-    () => [{ value: 'all', label: 'All domains' }, ...domains.map((domain) => ({ value: domain.id, label: domain.name }))],
-    [domains],
-  );
+  const selectedDomainIds = selectedDomainId != null ? [selectedDomainId] : [];
+  const domainSummary = selectedDomainId != null
+    ? (domains.find((d) => d.id === selectedDomainId)?.name ?? selectedDomainId)
+    : 'All Domains';
   const selectedModelCount = selectedModelIds?.length ?? defaultModelIds.length;
 
   if (domainsError != null || signatureError != null || llmModelsError != null || error != null) {
@@ -335,9 +335,19 @@ export function DomainValueShiftHeatmap() {
       <AnalysisContextBar
         domain={{
           label: 'Domain',
-          value: selectedDomainId ?? 'all',
-          onChange: (value) => setSelectedDomainId(value === 'all' ? null : value),
-          options: domainOptions,
+          multi: true,
+          singleSelect: true,
+          summary: domainSummary,
+          selectedIds: selectedDomainIds,
+          options: domains.map((d) => ({ value: d.id, label: d.name })),
+          actions: [
+            {
+              label: 'All Domains',
+              isActive: selectedDomainId == null,
+              onClick: () => setSelectedDomainId(null),
+            },
+          ],
+          onChange: (ids) => { setSelectedDomainId(ids[0] ?? null); },
           disabled: domainsLoading && domains.length === 0,
         }}
         signature={{
