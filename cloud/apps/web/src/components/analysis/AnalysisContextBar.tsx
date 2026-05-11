@@ -15,6 +15,7 @@ type ModelOption = Option & {
 
 type DomainSingleProp = {
   label?: string;
+  multi?: never;
   value: string;
   options: Option[];
   onChange: (value: string) => void;
@@ -23,6 +24,7 @@ type DomainSingleProp = {
 
 type DomainMultiProp = {
   label?: string;
+  multi: true;
   summary: string;
   selectedIds: string[];
   options: ChipPickerOption[];
@@ -32,7 +34,7 @@ type DomainMultiProp = {
 };
 
 function isMultiDomain(domain: DomainSingleProp | DomainMultiProp): domain is DomainMultiProp {
-  return 'selectedIds' in domain;
+  return domain.multi === true;
 }
 
 type AnalysisContextBarProps = {

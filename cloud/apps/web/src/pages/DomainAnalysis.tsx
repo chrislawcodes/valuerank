@@ -418,6 +418,7 @@ export function DomainAnalysis() {
       <AnalysisContextBar
         domain={{
           label: 'Domain',
+          multi: true,
           summary: domainSummary,
           selectedIds: selectedDomainIds,
           options: domains.map((d) => ({ value: d.id, label: d.name })),
