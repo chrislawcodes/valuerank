@@ -79,8 +79,6 @@ export function getMetricUnavailableReason(model: ReliabilityViewModel): string 
 
 export function getOverviewUnavailableMessage(
   semantics: AnalysisSemanticsView,
-  analysisMode?: 'single' | 'paired',
-  hasCompanionAnalysis?: boolean,
 ): string | null {
   if (semantics.preference.rowAvailability.status === 'unavailable') {
     return semantics.preference.rowAvailability.message;
@@ -90,12 +88,8 @@ export function getOverviewUnavailableMessage(
     return null;
   }
 
-  if (
-    analysisMode === 'paired'
-    && hasCompanionAnalysis
-    && semantics.reliability.rowAvailability.reason === 'no-repeat-coverage'
-  ) {
-    return 'This paired view has no repeated measurements per condition, so baseline reliability is unavailable. Pooling both vignette orders does not add repeat coverage.';
+  if (semantics.reliability.rowAvailability.reason === 'no-repeat-coverage') {
+    return null;
   }
 
   return semantics.reliability.rowAvailability.message;

@@ -206,7 +206,7 @@ describe('OverviewTab', () => {
     expect(screen.getByText('98.3%')).toBeInTheDocument();
   });
 
-  it('uses paired-specific no-repeat wording in overview summary', () => {
+  it('does not show a no-repeat warning in paired-mode overview', () => {
     const semantics = createSemantics();
     semantics.reliability.rowAvailability = {
       status: 'unavailable',
@@ -259,7 +259,68 @@ describe('OverviewTab', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByText(/pooling both vignette orders does not add repeat coverage/i)).toBeInTheDocument();
+    expect(screen.getByText('Overview Summary')).toBeInTheDocument();
+    expect(
+      screen.queryByText(/baseline reliability is unavailable/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it('does not show a no-repeat warning in single-mode overview', () => {
+    const semantics = createSemantics();
+    semantics.reliability.rowAvailability = {
+      status: 'unavailable',
+      reason: 'no-repeat-coverage',
+      message:
+        'This model has one sample per condition, so baseline reliability is unavailable. Recomputing the same run without repeated samples will not populate this section.',
+    };
+    semantics.reliability.byModel.model1 = {
+      ...semantics.reliability.byModel.model1,
+      availability: semantics.reliability.rowAvailability,
+      baselineReliability: null,
+      baselineNoise: null,
+      directionalAgreement: null,
+      neutralShare: null,
+      coverageCount: 0,
+      uniqueScenarios: 0,
+      repeatCoverageShare: null,
+      contributingRunCount: null,
+      weightedOverallSignedCenterSd: null,
+    };
+
+    render(
+      <MemoryRouter>
+        <OverviewTab
+          runId="run-1"
+          semantics={semantics}
+          completedBatches={3}
+          aggregateSourceRunCount={null}
+          isAggregate={false}
+          analysisMode="single"
+          perModel={{
+            model1: {
+              sampleSize: 3,
+              values: {},
+              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
+            },
+          }}
+          visualizationData={{
+            decisionDistribution: {},
+            scenarioDimensions: {
+              s1: { Freedom: 'a1', Harmony: 'b1' },
+            },
+            modelScenarioMatrix: {
+              model1: { s1: 5 },
+            },
+          }}
+          varianceAnalysis={createVarianceAnalysis()}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('Overview Summary')).toBeInTheDocument();
+    expect(
+      screen.queryByText(/baseline reliability is unavailable/i),
+    ).not.toBeInTheDocument();
   });
 
   it('shows the custom header tooltip on focus', async () => {
