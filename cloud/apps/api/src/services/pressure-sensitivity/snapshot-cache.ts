@@ -132,6 +132,8 @@ async function buildCompanionFailureResult(
       breakdown: [],
     },
     transcriptCapHit: false,
+    cacheStatus: null,
+    generatedAt: null,
   };
 }
 
@@ -207,7 +209,11 @@ export async function getPressureSensitivityResult(params: {
       { definitionId: params.definitionId, runCount: state.eligibleRuns.length, durationMs },
       'Vignette-paired pressure sensitivity computed',
     );
-    return filterResult(output, params.modelIds, params.providerId);
+    return filterResult(
+      { ...output, cacheStatus: 'FRESH', generatedAt: new Date().toISOString() },
+      params.modelIds,
+      params.providerId,
+    );
   }
 
   const state = await preparePressureSensitivityState({
@@ -232,16 +238,24 @@ export async function getPressureSensitivityResult(params: {
     if (parsed != null) {
       if (currentSnapshot.inputHash === state.inputHash) {
         log.info({ assumptionKey, signature: params.signature }, 'Pressure sensitivity snapshot FRESH');
-        return filterResult(parsed, params.modelIds, params.providerId);
+        return filterResult(
+          { ...parsed, cacheStatus: 'FRESH', generatedAt: currentSnapshot.createdAt.toISOString() },
+          params.modelIds,
+          params.providerId,
+        );
       }
 
-      await queuePressureSensitivityRefresh({
+      const queued = await queuePressureSensitivityRefresh({
         domainId: params.domainId,
         signature: params.signature,
         reason: 'page-load-stale',
       });
       log.info({ assumptionKey, signature: params.signature }, 'Pressure sensitivity snapshot STALE — returning cached, rebuild queued');
-      return filterResult(parsed, params.modelIds, params.providerId);
+      return filterResult(
+        { ...parsed, cacheStatus: queued ? 'UPDATING' : 'OUT_OF_DATE', generatedAt: currentSnapshot.createdAt.toISOString() },
+        params.modelIds,
+        params.providerId,
+      );
     }
   }
 
@@ -253,5 +267,9 @@ export async function getPressureSensitivityResult(params: {
     inputHash: state.inputHash,
     output,
   });
-  return filterResult(output, params.modelIds, params.providerId);
+  return filterResult(
+    { ...output, cacheStatus: 'FRESH', generatedAt: new Date().toISOString() },
+    params.modelIds,
+    params.providerId,
+  );
 }

@@ -125,6 +125,8 @@ export type DirectionalSanityCheckShape = {
   breakdown: DirectionalSanityCheckEntryShape[];
 };
 
+export type PressureSensitivityCacheStatus = 'FRESH' | 'UPDATING' | 'OUT_OF_DATE';
+
 export type PressureSensitivityResultShape = {
   models: PressureSensitivityModelShape[];
   insufficient: InsufficientPressureSensitivityModelShape[];
@@ -133,6 +135,8 @@ export type PressureSensitivityResultShape = {
   pressureConditionExclusionBreakdown: PressureConditionExclusionBreakdownShape;
   directionalSanityCheck: DirectionalSanityCheckShape;
   transcriptCapHit: boolean;
+  cacheStatus?: PressureSensitivityCacheStatus | null;
+  generatedAt?: string | null;
 };
 
 export type PressureConditionExclusionBreakdownShape = {
@@ -353,5 +357,7 @@ builder.objectType(PressureSensitivityResultRef, {
     }),
     directionalSanityCheck: t.expose('directionalSanityCheck', { type: DirectionalSanityCheckRef }),
     transcriptCapHit: t.exposeBoolean('transcriptCapHit'),
+    cacheStatus: t.exposeString('cacheStatus', { nullable: true }),
+    generatedAt: t.exposeString('generatedAt', { nullable: true }),
   }),
 });
