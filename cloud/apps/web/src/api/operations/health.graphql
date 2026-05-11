@@ -19,6 +19,7 @@ query SystemHealth($refresh: Boolean) {
       activeJobs
       pendingJobs
       completedLast24h
+      completedLast30m
       failedLast24h
       successRate
       jobTypes {

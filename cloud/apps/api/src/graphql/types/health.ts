@@ -88,6 +88,7 @@ export const QueueHealthType = builder.objectRef<{
   activeJobs: number;
   pendingJobs: number;
   completedLast24h: number;
+  completedLast30m: number;
   failedLast24h: number;
   successRate: number | null;
   error: string | null;
@@ -119,6 +120,9 @@ export const QueueHealthType = builder.objectRef<{
     }),
     completedLast24h: t.exposeInt('completedLast24h', {
       description: 'Jobs completed in the last 24 hours',
+    }),
+    completedLast30m: t.exposeInt('completedLast30m', {
+      description: 'Jobs completed in the last 30 minutes (rolling window)',
     }),
     failedLast24h: t.exposeInt('failedLast24h', {
       description: 'Jobs failed in the last 24 hours',
@@ -210,6 +214,7 @@ export const SystemHealthType = builder.objectRef<{
     activeJobs: number;
     pendingJobs: number;
     completedLast24h: number;
+    completedLast30m: number;
     failedLast24h: number;
     successRate: number | null;
     error: string | null;

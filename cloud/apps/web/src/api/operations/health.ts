@@ -32,6 +32,7 @@ export type QueueHealth = {
   activeJobs: number;
   pendingJobs: number;
   completedLast24h: number;
+  completedLast30m: number;
   failedLast24h: number;
   successRate: number | null;
   jobTypes: JobTypeStatus[];
