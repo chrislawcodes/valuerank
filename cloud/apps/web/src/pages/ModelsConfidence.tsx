@@ -67,13 +67,10 @@ export function ModelsConfidence() {
     }
   }, [selectedSignature, signatureParam, availableSignatures.length, setSearchParams]);
 
-  const domainOptions = useMemo(
-    () => [
-      { value: '', label: 'All domains' },
-      ...domains.map((d) => ({ value: d.id, label: d.name })),
-    ],
-    [domains],
-  );
+  const selectedDomainIds = selectedDomainId != null ? [selectedDomainId] : [];
+  const domainSummary = selectedDomainId != null
+    ? (domains.find((d) => d.id === selectedDomainId)?.name ?? selectedDomainId)
+    : 'All Domains';
 
   const [{ data, fetching, error }] = useQuery<ModelsConfidenceQueryResult, ModelsConfidenceQueryVariables>({
     query: MODELS_CONFIDENCE_QUERY,
@@ -160,9 +157,19 @@ export function ModelsConfidence() {
       <AnalysisContextBar
         domain={{
           label: 'Domain',
-          value: selectedDomainId ?? '',
-          onChange: (value) => setSelectedDomainId(value === '' ? null : value),
-          options: domainOptions,
+          multi: true,
+          singleSelect: true,
+          summary: domainSummary,
+          selectedIds: selectedDomainIds,
+          options: domains.map((d) => ({ value: d.id, label: d.name })),
+          actions: [
+            {
+              label: 'All Domains',
+              isActive: selectedDomainId == null,
+              onClick: () => setSelectedDomainId(null),
+            },
+          ],
+          onChange: (ids) => { setSelectedDomainId(ids[0] ?? null); },
         }}
         signature={{
           label: 'Signature',

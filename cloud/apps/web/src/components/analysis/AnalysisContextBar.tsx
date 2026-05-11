@@ -31,6 +31,7 @@ type DomainMultiProp = {
   onChange: (ids: string[]) => void;
   actions?: ChipPickerAction[];
   disabled?: boolean;
+  singleSelect?: boolean;
 };
 
 function isMultiDomain(domain: DomainSingleProp | DomainMultiProp): domain is DomainMultiProp {
@@ -110,6 +111,7 @@ export function AnalysisContextBar({
               onChange={domain.onChange}
               actions={domain.actions}
               disabled={domain.disabled}
+              singleSelect={domain.singleSelect}
               emptyMessage="No domains available."
             />
           ) : (

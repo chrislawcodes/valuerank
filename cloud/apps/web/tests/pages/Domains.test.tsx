@@ -130,7 +130,7 @@ describe('Domains page', () => {
     renderDomainsPage();
 
     await user.click(screen.getByRole('button', { name: /domain: domain a/i }));
-    await user.click(screen.getByRole('option', { name: 'Domain B' }));
+    await user.click(screen.getByRole('button', { name: 'Domain B' }));
 
     expect(screen.getByRole('link', { name: /add paired batches for all vignettes/i }))
       .toHaveAttribute('href', '/domains/start/domain-b');
