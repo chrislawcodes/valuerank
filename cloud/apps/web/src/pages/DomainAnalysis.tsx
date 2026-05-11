@@ -290,12 +290,14 @@ export function DomainAnalysis() {
   useEffect(() => {
     if (!initializedModelSelection.current) return;
     setSelectedModelIds((current) => {
-      if (current.length === 0) return current;
+      if (current.length === 0) return current; // User explicitly cleared — preserve
       const validIds = new Set(models.map((model) => model.model));
       const next = current.filter((id) => validIds.has(id));
-      return next.length === current.length ? current : next;
+      if (next.length > 0) return next.length === current.length ? current : next;
+      // All prior selections are gone — domain/scope changed. Re-initialize to default.
+      return defaultSelection;
     });
-  }, [models]);
+  }, [models, defaultSelection]);
 
   const modelOptions = useMemo(
     () => models.map((model) => ({
