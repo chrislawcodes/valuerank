@@ -1,9 +1,7 @@
-import type { ReactNode } from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { useMemo } from 'react';
 import { cn } from '../../lib/utils';
-import { Button } from '../ui/Button';
-import { Select, selectTriggerVariants } from '../ui/Select';
+import { Select } from '../ui/Select';
+import { ChipPicker, type ChipPickerAction, type ChipPickerOption } from '../ui/ChipPicker';
 
 type Option = {
   value: string;
@@ -15,14 +13,30 @@ type ModelOption = Option & {
   isDefault?: boolean;
 };
 
+type DomainSingleProp = {
+  label?: string;
+  value: string;
+  options: Option[];
+  onChange: (value: string) => void;
+  disabled?: boolean;
+};
+
+type DomainMultiProp = {
+  label?: string;
+  summary: string;
+  selectedIds: string[];
+  options: ChipPickerOption[];
+  onChange: (ids: string[]) => void;
+  actions?: ChipPickerAction[];
+  disabled?: boolean;
+};
+
+function isMultiDomain(domain: DomainSingleProp | DomainMultiProp): domain is DomainMultiProp {
+  return 'selectedIds' in domain;
+}
+
 type AnalysisContextBarProps = {
-  domain: {
-    label?: string;
-    value: string;
-    options: Option[];
-    onChange: (value: string) => void;
-    disabled?: boolean;
-  };
+  domain: DomainSingleProp | DomainMultiProp;
   signature: {
     label?: string;
     value: string;
@@ -51,7 +65,7 @@ function ContextField({
   className,
 }: {
   label: string;
-  children: ReactNode;
+  children: React.ReactNode;
   className?: string;
 }) {
   return (
@@ -81,56 +95,32 @@ export function AnalysisContextBar({
           ? 'All models'
           : `${currentModelIds.length} of ${availableModelIds.length} selected`;
 
-  const [isOpen, setIsOpen] = useState(false);
-  const modelPickerRef = useRef<HTMLDivElement>(null);
-  const modelMenuRef = useRef<HTMLDivElement>(null);
-
-  const handleToggleModel = (modelId: string) => {
-    if (models == null) return;
-    const next = currentModelIds.includes(modelId)
-      ? currentModelIds.filter((id) => id !== modelId)
-      : [...currentModelIds, modelId];
-    models.onChange(next);
-  };
-
-  useEffect(() => {
-    if (!isOpen || models == null) return;
-
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target as Node;
-      if (modelPickerRef.current?.contains(target) || modelMenuRef.current?.contains(target)) {
-        return;
-      }
-      setIsOpen(false);
-    };
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setIsOpen(false);
-      }
-    };
-
-    document.addEventListener('pointerdown', handlePointerDown);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isOpen]);
-
   return (
     <section className={cn('sticky top-14 z-40 overflow-visible border-b border-gray-200 bg-[#FDFBF7]/95 backdrop-blur', className)}>
       <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-3 gap-y-2 overflow-visible px-4 py-3">
         <ContextField label={domain.label ?? 'Domain'} className="flex-1 min-w-[14rem]">
-          <Select
-            ariaLabel={domain.label ?? 'Domain'}
-            value={domain.value}
-            onChange={domain.onChange}
-            options={domain.options}
-            disabled={domain.disabled}
-            size="sm"
-            className="w-full min-w-0"
-          />
+          {isMultiDomain(domain) ? (
+            <ChipPicker
+              ariaLabel={domain.label ?? 'Domain'}
+              summary={domain.summary}
+              selectedIds={domain.selectedIds}
+              options={domain.options}
+              onChange={domain.onChange}
+              actions={domain.actions}
+              disabled={domain.disabled}
+              emptyMessage="No domains available."
+            />
+          ) : (
+            <Select
+              ariaLabel={domain.label ?? 'Domain'}
+              value={domain.value}
+              onChange={domain.onChange}
+              options={domain.options}
+              disabled={domain.disabled}
+              size="sm"
+              className="w-full min-w-0"
+            />
+          )}
         </ContextField>
 
         <ContextField label={signature.label ?? 'Signature'} className="flex-1 min-w-[14rem]">
@@ -148,85 +138,27 @@ export function AnalysisContextBar({
         {models != null && (
           <div className="ml-auto flex min-w-[14rem] flex-1 items-center gap-2">
             <span className="shrink-0 text-sm font-medium text-gray-700">{models.label ?? 'Models'}</span>
-            <div ref={modelPickerRef} className="relative min-w-0 flex-1">
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() => setIsOpen((value) => !value)}
-                aria-expanded={isOpen}
-                aria-haspopup="listbox"
-                aria-label={`${models.label ?? 'Models'}: ${modelSummary}`}
-                className={cn(
-                  selectTriggerVariants({ size: 'sm' }),
-                  'w-full min-w-0 justify-between text-left focus:ring-teal-500 focus:border-teal-500 focus:ring-offset-0',
-                  availableModelIds.length === 0 && 'text-gray-400',
-                )}
-              >
-                <span className="min-w-0 flex-1 truncate">{modelSummary}</span>
-                <ChevronDown className={cn('ml-2 h-4 w-4 shrink-0 text-gray-400 transition-transform', isOpen && 'rotate-180')} />
-              </Button>
-
-              {isOpen && (
-                <div
-                  ref={modelMenuRef}
-                  className="absolute right-0 top-full z-50 mt-2 w-[min(32rem,calc(100vw-2rem))] rounded-lg border border-gray-200 bg-white p-3 shadow-xl"
-                >
-                  <div className="flex flex-wrap gap-1.5 pb-2 mb-2 border-b border-gray-200">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => models.onChange([...models.defaultModelIds])}
-                      className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors min-h-0 ${
-                        isDefaultSelection
-                          ? 'border-teal-600 bg-teal-600 text-white hover:bg-teal-700'
-                          : 'border-gray-300 bg-white text-gray-700 hover:border-teal-400 hover:text-teal-700 hover:bg-white'
-                      }`}
-                    >
-                      Default Models
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => models.onChange([])}
-                      disabled={currentModelIds.length === 0}
-                      className="rounded-full border border-gray-300 bg-white px-3 py-1 text-xs font-medium text-gray-700 transition-colors min-h-0 hover:border-teal-400 hover:text-teal-700 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Clear all
-                    </Button>
-                  </div>
-
-                  <div className="flex flex-wrap gap-1.5">
-                    {models.options.map((model) => {
-                      const isSelected = currentModelIds.includes(model.value);
-                      return (
-                        <Button
-                          key={model.value}
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleToggleModel(model.value)}
-                          className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors min-h-0 ${
-                            isSelected
-                              ? 'border-teal-600 bg-teal-600 text-white hover:bg-teal-700'
-                              : 'border-gray-300 bg-white text-gray-700 hover:border-teal-400 hover:text-teal-700 hover:bg-white'
-                          }`}
-                          title={model.label}
-                        >
-                          {model.label}
-                        </Button>
-                      );
-                    })}
-                  </div>
-
-                  {models.options.length === 0 ? (
-                    <p className="text-xs text-gray-500">No active models are available yet.</p>
-                  ) : null}
-                </div>
-              )}
-            </div>
+            <ChipPicker
+              ariaLabel={models.label ?? 'Models'}
+              summary={modelSummary}
+              selectedIds={currentModelIds}
+              options={models.options}
+              onChange={models.onChange}
+              actions={[
+                {
+                  label: 'Default Models',
+                  isActive: isDefaultSelection,
+                  onClick: () => models.onChange([...models.defaultModelIds]),
+                },
+                {
+                  label: 'Clear all',
+                  isActive: false,
+                  onClick: () => models.onChange([]),
+                  disabled: currentModelIds.length === 0,
+                },
+              ]}
+              emptyMessage="No active models are available yet."
+            />
           </div>
         )}
       </div>

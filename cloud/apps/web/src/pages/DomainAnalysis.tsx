@@ -70,15 +70,26 @@ export function DomainAnalysis() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { domains, queryLoading: domainsLoading, error: domainsError } = useDomains();
-  const initialDomainId = searchParams.get('domainId') ?? '';
-  const [selectedScope, setSelectedScope] = useState<'DOMAIN' | 'ALL_DOMAINS'>(
-    searchParams.get('scope') === ALL_DOMAINS_SCOPE || initialDomainId.trim() === '' ? 'ALL_DOMAINS' : 'DOMAIN',
-  );
-  const [selectedDomainId, setSelectedDomainId] = useState<string>(initialDomainId);
+  const [selectedDomainIds, setSelectedDomainIds] = useState<string[]>(() => {
+    const domainIdsParam = searchParams.get('domainIds');
+    if (domainIdsParam != null && domainIdsParam !== '') {
+      return domainIdsParam.split(',').filter((id) => id !== '');
+    }
+    const legacyDomainId = searchParams.get('domainId') ?? '';
+    const legacyScope = searchParams.get('scope') ?? '';
+    if (legacyScope === ALL_DOMAINS_SCOPE || legacyDomainId === '') {
+      return [];
+    }
+    return [legacyDomainId];
+  });
   const [selectedSignature, setSelectedSignature] = useState<string>(searchParams.get('signature') ?? '');
   const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
   const initializedModelSelection = useRef(false);
   const [useLegacyQuery, setUseLegacyQuery] = useState(false);
+
+  const effectiveDomainId = selectedDomainIds.length === 1 ? (selectedDomainIds[0] ?? '') : '';
+  const isAllDomains = selectedDomainIds.length !== 1;
+  const queryDomainId = effectiveDomainId !== '' ? effectiveDomainId : (domains[0]?.id ?? '');
   const [exportLoading, setExportLoading] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [refreshNotice, setRefreshNotice] = useState<string | null>(null);
@@ -90,10 +101,10 @@ export function DomainAnalysis() {
   >({
     query: DOMAIN_AVAILABLE_SIGNATURES_QUERY,
     variables: {
-      domainId: selectedDomainId === '' ? domains[0]?.id ?? '' : selectedDomainId,
-      scope: selectedScope === 'ALL_DOMAINS' ? ALL_DOMAINS_SCOPE : undefined,
+      domainId: queryDomainId,
+      scope: isAllDomains ? ALL_DOMAINS_SCOPE : undefined,
     },
-    pause: selectedDomainId === '',
+    pause: queryDomainId === '',
     requestPolicy: 'cache-and-network',
   });
 
@@ -109,10 +120,13 @@ export function DomainAnalysis() {
   }, [signatureData]);
 
   useEffect(() => {
-    if (domains.length === 0) return;
-    if (selectedDomainId !== '' && domains.some((d) => d.id === selectedDomainId)) return;
-    setSelectedDomainId(domains[0]?.id ?? '');
-  }, [domains, selectedDomainId]);
+    if (domains.length === 0 || selectedDomainIds.length === 0) return;
+    const validIds = new Set(domains.map((d) => d.id));
+    const next = selectedDomainIds.filter((id) => validIds.has(id));
+    if (next.length !== selectedDomainIds.length) {
+      setSelectedDomainIds(next);
+    }
+  }, [domains, selectedDomainIds]);
 
   useEffect(() => {
     if (signatureOptions.length === 0) { setSelectedSignature(''); return; }
@@ -120,50 +134,52 @@ export function DomainAnalysis() {
     setSelectedSignature(signatureOptions[0]?.signature ?? '');
   }, [selectedSignature, signatureOptions]);
 
-  useEffect(() => { setExportError(null); }, [selectedDomainId, selectedSignature]);
+  useEffect(() => { setExportError(null); }, [effectiveDomainId, selectedSignature]);
 
   useEffect(() => {
     setRefreshNotice(null);
     setRefreshError(null);
-  }, [selectedDomainId, selectedSignature]);
+  }, [effectiveDomainId, selectedSignature]);
 
   useEffect(() => {
-    const currentScope = searchParams.get('scope') === ALL_DOMAINS_SCOPE ? 'ALL_DOMAINS' : 'DOMAIN';
-    const nextDomainId = selectedDomainId !== '' ? selectedDomainId : (domains[0]?.id ?? '');
-    if (nextDomainId === '' && selectedScope === 'DOMAIN') return;
-    if (
-      searchParams.get('domainId') === nextDomainId
-      && (searchParams.get('signature') ?? '') === selectedSignature
-      && currentScope === selectedScope
-    ) return;
     const next = new URLSearchParams(searchParams);
-    if (nextDomainId !== '') next.set('domainId', nextDomainId);
-    else next.delete('domainId');
-    if (selectedScope === 'ALL_DOMAINS') next.set('scope', ALL_DOMAINS_SCOPE);
-    else next.delete('scope');
+    if (selectedDomainIds.length === 0) {
+      next.delete('domainId');
+      next.delete('domainIds');
+      next.delete('scope');
+    } else if (selectedDomainIds.length === 1) {
+      next.set('domainId', selectedDomainIds[0]!);
+      next.delete('domainIds');
+      next.delete('scope');
+    } else {
+      next.set('domainIds', selectedDomainIds.join(','));
+      next.delete('domainId');
+      next.delete('scope');
+    }
     if (selectedSignature === '') next.delete('signature');
     else next.set('signature', selectedSignature);
+    if (next.toString() === searchParams.toString()) return;
     setSearchParams(next, { replace: true });
-  }, [domains, searchParams, selectedDomainId, selectedSignature, selectedScope, setSearchParams]);
+  }, [selectedDomainIds, selectedSignature, searchParams, setSearchParams]);
 
-  const activeUseLegacyQuery = useLegacyQuery && selectedScope !== 'ALL_DOMAINS';
+  const activeUseLegacyQuery = useLegacyQuery && !isAllDomains;
   const [
     { data: scoredData, fetching: scoredFetching, error: scoredError },
     reexecuteScoredQuery,
   ] = useQuery<DomainAnalysisQueryResult, DomainAnalysisQueryVariables>({
     query: DOMAIN_ANALYSIS_QUERY,
     variables: {
-      domainId: selectedDomainId === '' ? domains[0]?.id ?? '' : selectedDomainId,
-      scope: selectedScope === 'ALL_DOMAINS' ? ALL_DOMAINS_SCOPE : undefined,
+      domainId: queryDomainId,
+      scope: isAllDomains ? ALL_DOMAINS_SCOPE : undefined,
       signature: selectedSignature === '' ? undefined : selectedSignature,
     },
-    pause: selectedDomainId === '' || activeUseLegacyQuery,
+    pause: queryDomainId === '' || activeUseLegacyQuery,
     requestPolicy: 'cache-and-network',
   });
   const [{ data: legacyData, fetching: legacyFetching, error: legacyError }] = useQuery<DomainAnalysisQueryResult, { domainId: string }>({
     query: DOMAIN_ANALYSIS_QUERY_LEGACY,
-    variables: { domainId: selectedDomainId },
-    pause: selectedDomainId === '' || !activeUseLegacyQuery,
+    variables: { domainId: effectiveDomainId },
+    pause: effectiveDomainId === '' || !activeUseLegacyQuery,
     requestPolicy: 'cache-and-network',
   });
   const [{ data: modelsAnalysisData, fetching: modelsAnalysisFetching, error: modelsAnalysisError }] = useQuery<
@@ -172,10 +188,10 @@ export function DomainAnalysis() {
   >({
     query: MODELS_ANALYSIS_QUERY,
     variables: {
-      ...(selectedScope === 'DOMAIN' && selectedDomainId !== '' ? { domainId: selectedDomainId } : {}),
+      ...(effectiveDomainId !== '' ? { domainId: effectiveDomainId } : {}),
       ...(selectedSignature !== '' ? { signature: selectedSignature } : {}),
     },
-    pause: selectedScope === 'DOMAIN' && selectedDomainId === '',
+    pause: !isAllDomains && effectiveDomainId === '',
     requestPolicy: 'cache-and-network',
   });
   const [{ data: llmModelsData }] = useQuery<LlmModelsQueryResult>({
@@ -189,10 +205,10 @@ export function DomainAnalysis() {
   >({
     query: MODELS_STABILITY_QUERY,
     variables: {
-      ...(selectedScope === 'DOMAIN' && selectedDomainId !== '' ? { domainId: selectedDomainId } : {}),
+      ...(effectiveDomainId !== '' ? { domainId: effectiveDomainId } : {}),
       ...(selectedSignature !== '' ? { signature: selectedSignature } : {}),
     },
-    pause: selectedScope === 'DOMAIN' && selectedDomainId === '',
+    pause: !isAllDomains && effectiveDomainId === '',
     requestPolicy: 'cache-and-network',
   });
   const [{ fetching: refreshFetching }, refreshDomainAnalysis] = useMutation<
@@ -205,8 +221,8 @@ export function DomainAnalysis() {
     const isFieldError = message.includes('Unknown argument "signature"')
       || message.includes('Cannot query field')
       || message.includes('Unknown field');
-    if (isFieldError && !useLegacyQuery && selectedScope !== 'ALL_DOMAINS') setUseLegacyQuery(true);
-  }, [scoredError, selectedScope, useLegacyQuery]);
+    if (isFieldError && !useLegacyQuery && !isAllDomains) setUseLegacyQuery(true);
+  }, [scoredError, isAllDomains, useLegacyQuery]);
 
   const data = activeUseLegacyQuery ? legacyData : scoredData;
   const fetching = activeUseLegacyQuery ? legacyFetching : scoredFetching;
@@ -219,8 +235,7 @@ export function DomainAnalysis() {
     () => getCacheStatusCopy(data?.domainAnalysis.cacheStatus, data?.domainAnalysis.generatedAt, transcriptCount),
     [data?.domainAnalysis.cacheStatus, data?.domainAnalysis.generatedAt, transcriptCount],
   );
-  const showPageLoader = domainsLoading || (selectedDomainId !== '' && data?.domainAnalysis == null && fetching);
-  const isAllDomains = selectedScope === 'ALL_DOMAINS';
+  const showPageLoader = domainsLoading || (queryDomainId !== '' && data?.domainAnalysis == null && fetching);
 
   const models = useMemo<ModelEntry[]>(() => {
     const sourceModels = data?.domainAnalysis.models ?? [];
@@ -312,8 +327,19 @@ export function DomainAnalysis() {
     () => filterSelectedModels(models, selectedModelIds, (model) => model.model),
     [models, selectedModelIds],
   );
+
+  const domainSummary = useMemo(() => {
+    if (selectedDomainIds.length === 0 || selectedDomainIds.length === domains.length) {
+      return 'All Domains';
+    }
+    if (selectedDomainIds.length === 1) {
+      const found = domains.find((d) => d.id === selectedDomainIds[0]);
+      return found?.name ?? selectedDomainIds[0] ?? 'Unknown';
+    }
+    return `${selectedDomainIds.length} of ${domains.length} domains`;
+  }, [selectedDomainIds, domains]);
   const selectedModelId = selectedModelIds.length === 1 ? (selectedModelIds[0] ?? null) : null;
-  const selectedDomainIdForDrawer = !isAllDomains && selectedDomainId !== '' ? selectedDomainId : null;
+  const selectedDomainIdForDrawer = effectiveDomainId !== '' ? effectiveDomainId : null;
   const selectedSignatureForDrawer = selectedSignature !== '' ? selectedSignature : null;
 
   useEffect(() => {
@@ -336,14 +362,14 @@ export function DomainAnalysis() {
   );
 
   const handleExport = async () => {
-    if (selectedDomainId === '' || isAllDomains) return;
+    if (effectiveDomainId === '') return;
     setExportLoading(true);
     setExportError(null);
     try {
-      await exportDomainTranscriptsAsCSV(selectedDomainId, selectedSignature !== '' ? selectedSignature : undefined);
+      await exportDomainTranscriptsAsCSV(effectiveDomainId, selectedSignature !== '' ? selectedSignature : undefined);
     } catch (err) {
       setExportError(formatQueryError('Export domain transcripts', err, {
-        domainId: selectedDomainId,
+        domainId: effectiveDomainId,
         signature: selectedSignature === '' ? '(none)' : selectedSignature,
       }));
     } finally {
@@ -352,19 +378,19 @@ export function DomainAnalysis() {
   };
 
   const handleRefreshAnalysis = async () => {
-    if (selectedDomainId === '' || isAllDomains) return;
+    if (effectiveDomainId === '') return;
     setRefreshNotice(null);
     setRefreshError(null);
 
     const result = await refreshDomainAnalysis({
-      domainId: selectedDomainId,
+      domainId: effectiveDomainId,
       signature: selectedSignature === '' ? undefined : selectedSignature,
     });
 
     if (result.error != null) {
       setRefreshError(
         formatQueryError('Refresh domain analysis mutation', result.error, {
-          domainId: selectedDomainId,
+          domainId: effectiveDomainId,
           signature: selectedSignature === '' ? '(none)' : selectedSignature,
         }),
       );
@@ -376,7 +402,7 @@ export function DomainAnalysis() {
   };
 
   const handleRunMissingVignettes = () => {
-    if (selectedDomainId === '' || allMissingDefinitionIds.length === 0 || isAllDomains) return;
+    if (effectiveDomainId === '' || allMissingDefinitionIds.length === 0) return;
     const query = new URLSearchParams();
     query.set('definitionIds', allMissingDefinitionIds.join(','));
     if (selectedSignature !== '') {
@@ -384,7 +410,7 @@ export function DomainAnalysis() {
       const t = parseTemperatureFromSignature(selectedSignature);
       if (t !== null) query.set('temperature', String(t));
     }
-    navigate(`/domains/status/${selectedDomainId}?${query.toString()}`);
+    navigate(`/domains/status/${effectiveDomainId}?${query.toString()}`);
   };
 
   return (
@@ -392,20 +418,18 @@ export function DomainAnalysis() {
       <AnalysisContextBar
         domain={{
           label: 'Domain',
-          value: isAllDomains ? ALL_DOMAINS_SCOPE : selectedDomainId,
-          options: [
-            { value: ALL_DOMAINS_SCOPE, label: 'All domains' },
-            ...domains.map((domain) => ({ value: domain.id, label: domain.name })),
+          summary: domainSummary,
+          selectedIds: selectedDomainIds,
+          options: domains.map((d) => ({ value: d.id, label: d.name })),
+          actions: [
+            {
+              label: 'All Domains',
+              isActive: selectedDomainIds.length === 0 || selectedDomainIds.length === domains.length,
+              onClick: () => setSelectedDomainIds([]),
+            },
           ],
-          onChange: (value) => {
-            if (value === ALL_DOMAINS_SCOPE) {
-              setSelectedScope('ALL_DOMAINS');
-              return;
-            }
-            setSelectedScope('DOMAIN');
-            setSelectedDomainId(value);
-          },
-          disabled: domainsLoading || (domains.length === 0 && !isAllDomains),
+          onChange: setSelectedDomainIds,
+          disabled: domainsLoading,
         }}
         signature={{
           label: 'Signature',
@@ -434,7 +458,7 @@ export function DomainAnalysis() {
       </div>
 
       {exportError !== null && <p className="mt-1 text-xs text-amber-700">{exportError}</p>}
-      {data?.domainAnalysis != null && missingDefinitionCount > 0 && !isAllDomains && (
+      {data?.domainAnalysis != null && missingDefinitionCount > 0 && effectiveDomainId !== '' && (
         <div className="mt-2 space-y-1 text-xs text-gray-500">
           <>
             <div className="flex flex-wrap items-center gap-2">
@@ -461,7 +485,7 @@ export function DomainAnalysis() {
               {cacheStatusCopy.badgeLabel}
             </span>
             <span>{cacheStatusCopy.detail}</span>
-            {!activeUseLegacyQuery && !isAllDomains && (
+            {!activeUseLegacyQuery && effectiveDomainId !== '' && (
               <Button
                 type="button"
                 variant="secondary"
@@ -478,8 +502,8 @@ export function DomainAnalysis() {
               variant="secondary"
               size="sm"
               onClick={handleExport}
-              disabled={selectedDomainId === '' || exportLoading || isAllDomains}
-              title={isAllDomains ? 'CSV export is unavailable in All domains mode' : undefined}
+              disabled={effectiveDomainId === '' || exportLoading}
+              title={effectiveDomainId === '' ? 'CSV export is unavailable in All domains mode' : undefined}
             >
               {exportLoading ? 'Exporting…' : 'Export CSV'}
             </Button>
@@ -493,14 +517,14 @@ export function DomainAnalysis() {
         <ErrorMessage
           message={`Failed to load win rate page: ${
             domainsError != null
-              ? formatQueryError('Win rate domains query', domainsError, { domainId: selectedDomainId })
+              ? formatQueryError('Win rate domains query', domainsError, { domainId: effectiveDomainId })
               : signaturesError != null
                 ? formatQueryError('Win rate signatures query', signaturesError, {
-                  domainId: selectedDomainId,
+                  domainId: effectiveDomainId,
                   signature: selectedSignature === '' ? '(none)' : selectedSignature,
                 })
                 : formatQueryError('Win rate analysis query', error, {
-                  domainId: selectedDomainId,
+                  domainId: effectiveDomainId,
                   signature: selectedSignature === '' ? '(none)' : selectedSignature,
                 })
           }`}
@@ -513,7 +537,7 @@ export function DomainAnalysis() {
         <>
           <ValuePrioritiesSection
             models={selectedModels}
-            selectedDomainId={selectedDomainId}
+            selectedDomainId={effectiveDomainId}
             selectedSignature={selectedSignature === '' ? null : selectedSignature}
             isReadOnly={isAllDomains}
             showStabilityDots
@@ -536,7 +560,7 @@ export function DomainAnalysis() {
             fetching={modelsAnalysisFetching}
             errorMessage={modelsAnalysisError != null
               ? formatQueryError('Win rate domain shifts query', modelsAnalysisError, {
-                domainId: selectedDomainId,
+                domainId: effectiveDomainId,
                 signature: selectedSignature === '' ? '(none)' : selectedSignature,
               })
               : null}
@@ -547,7 +571,7 @@ export function DomainAnalysis() {
             fetching={modelsStabilityFetching}
             errorMessage={modelsStabilityError != null
               ? formatQueryError('Win rate consistency query', modelsStabilityError, {
-                domainId: selectedDomainId,
+                domainId: effectiveDomainId,
                 signature: selectedSignature === '' ? '(none)' : selectedSignature,
               })
               : null}
