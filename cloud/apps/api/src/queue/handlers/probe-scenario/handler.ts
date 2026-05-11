@@ -34,6 +34,19 @@ const log = createLogger('queue:probe-scenario');
 // Retry limit from job options (default 3)
 const RETRY_LIMIT = DEFAULT_JOB_OPTIONS['probe_scenario'].retryLimit ?? 3;
 
+function computeQueueWaitMs(enqueuedAt: string | null | undefined, nowMs: number): number | null {
+  if (typeof enqueuedAt !== 'string' || enqueuedAt.trim() === '') {
+    return null;
+  }
+
+  const queuedAtMs = Date.parse(enqueuedAt);
+  if (Number.isNaN(queuedAtMs)) {
+    return null;
+  }
+
+  return Math.max(0, nowMs - queuedAtMs);
+}
+
 async function enqueueSummarizeTranscriptSingleton(runId: string, transcriptId: string): Promise<void> {
   const { getBoss } = await import('../../boss.js');
   const { DEFAULT_JOB_OPTIONS: jobOptions } = await import('../../types.js');
@@ -44,6 +57,7 @@ async function enqueueSummarizeTranscriptSingleton(runId: string, transcriptId: 
     {
       runId,
       transcriptId,
+      enqueuedAt: new Date().toISOString(),
     },
     {
       ...jobOptions['summarize_transcript'],
@@ -61,6 +75,8 @@ async function enqueueSummarizeTranscriptSingleton(runId: string, transcriptId: 
 async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<void> {
   const { runId, scenarioId, modelId, sampleIndex = 0, config } = job.data;
   const jobId = job.id;
+  const jobStartMs = Date.now();
+  const queueWaitMs = computeQueueWaitMs(job.data.enqueuedAt, jobStartMs);
   const probeResultKey = {
     runId_scenarioId_modelId_sampleIndex: {
       runId,
@@ -71,7 +87,17 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
   };
 
   log.info(
-    { jobId, runId, scenarioId, modelId, sampleIndex, config },
+    {
+      phase: 'probe:received',
+      jobId,
+      runId,
+      scenarioId,
+      modelId,
+      sampleIndex,
+      queueWaitMs,
+      enqueuedAt: job.data.enqueuedAt ?? null,
+      config,
+    },
     'Processing probe_scenario job'
   );
 
@@ -106,14 +132,24 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
       typeof existingProbeResult.transcriptId === 'string' &&
       existingProbeResult.transcriptId !== ''
     ) {
-      log.info(
-        { jobId, runId, scenarioId, modelId, sampleIndex, transcriptId: existingProbeResult.transcriptId },
-        'Skipping probe job - result already succeeded'
-      );
       if (job.data.manualReprobe !== true) {
         await enqueueTopUpProbesSingleton(runId);
       }
       await maybeAdvanceRunStatus(runId);
+      log.info(
+        {
+          phase: 'probe:skip:already-succeeded',
+          jobId,
+          runId,
+          scenarioId,
+          modelId,
+          sampleIndex,
+          queueWaitMs,
+          totalDurationMs: Date.now() - jobStartMs,
+          transcriptId: existingProbeResult.transcriptId,
+        },
+        'Skipping probe job - result already succeeded'
+      );
       return;
     }
 
@@ -124,14 +160,24 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
       existingProbeResult.status === 'FAILED' &&
       currentRetryCount > 0
     ) {
-      log.info(
-        { jobId, runId, scenarioId, modelId, sampleIndex, currentRetryCount },
-        'Skipping probe job - already terminal failed'
-      );
       if (job.data.manualReprobe !== true) {
         await enqueueTopUpProbesSingleton(runId);
       }
       await maybeAdvanceRunStatus(runId);
+      log.info(
+        {
+          phase: 'probe:skip:already-failed',
+          jobId,
+          runId,
+          scenarioId,
+          modelId,
+          sampleIndex,
+          queueWaitMs,
+          totalDurationMs: Date.now() - jobStartMs,
+          retryCount: currentRetryCount,
+        },
+        'Skipping probe job - already terminal failed'
+      );
       return;
     }
 
@@ -154,6 +200,7 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
     });
 
     if (existingTranscript !== null) {
+      const persistStartMs = Date.now();
       const tokenUsage = extractStoredTranscriptTokenUsage(
         existingTranscript.content,
         existingTranscript.tokenCount
@@ -164,11 +211,13 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
         scenarioId,
         modelId,
         sampleIndex,
+        queuedAt: job.data.enqueuedAt ?? null,
         transcriptId: existingTranscript.id,
         durationMs: existingTranscript.durationMs,
         inputTokens: tokenUsage.inputTokens,
         outputTokens: tokenUsage.outputTokens,
       });
+      const persistDurationMs = Date.now() - persistStartMs;
 
       const advanceResult = await maybeAdvanceRunStatus(runId);
       const currentRun = await db.run.findUnique({
@@ -179,7 +228,19 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
         await enqueueSummarizeTranscriptSingleton(runId, existingTranscript.id);
       }
       log.info(
-        { jobId, runId, scenarioId, modelId, sampleIndex, transcriptId: existingTranscript.id, advanceResult },
+        {
+          phase: 'probe:persist:recovered',
+          jobId,
+          runId,
+          scenarioId,
+          modelId,
+          sampleIndex,
+          queueWaitMs,
+          persistDurationMs,
+          totalDurationMs: Date.now() - jobStartMs,
+          transcriptId: existingTranscript.id,
+          advanceResult,
+        },
         'Recovered probe result from existing transcript'
       );
       return;
@@ -202,7 +263,19 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
       config
     );
 
-    log.debug({ jobId, workerInput }, 'Calling Python probe worker');
+    const workerStartMs = Date.now();
+    log.info(
+      {
+        phase: 'probe:worker:start',
+        jobId,
+        runId,
+        scenarioId,
+        modelId,
+        sampleIndex,
+        queueWaitMs,
+      },
+      'Calling Python probe worker'
+    );
 
     // Execute Python probe worker
     const result = await spawnPython<ProbeWorkerInput, ProbeWorkerOutput>(
@@ -210,10 +283,25 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
       workerInput,
       { cwd: path.resolve(process.cwd(), '../..') } // cloud/ directory
     );
+    const workerDurationMs = Date.now() - workerStartMs;
 
     // Handle spawn failure
     if (!result.success) {
-      log.error({ jobId, runId, error: result.error, stderr: result.stderr }, 'Python spawn failed');
+      log.error(
+        {
+          phase: 'probe:worker:spawn-failed',
+          jobId,
+          runId,
+          scenarioId,
+          modelId,
+          sampleIndex,
+          queueWaitMs,
+          workerDurationMs,
+          error: result.error,
+          stderr: result.stderr,
+        },
+        'Python spawn failed'
+      );
       throw new Error(`Python worker failed: ${result.error}`);
     }
 
@@ -221,7 +309,20 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
     const output = result.data;
     if (!output.success) {
       const err = output.error;
-      log.warn({ jobId, runId, error: err }, 'Probe worker returned error');
+      log.warn(
+        {
+          phase: 'probe:worker:failed',
+          jobId,
+          runId,
+          scenarioId,
+          modelId,
+          sampleIndex,
+          queueWaitMs,
+          workerDurationMs,
+          error: err,
+        },
+        'Probe worker returned error'
+      );
 
       // Use Python's retryable flag if available
       if (!err.retryable) {
@@ -231,23 +332,67 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
         // surface those failures), so this caller must wrap it. Keep the original
         // probe-failed semantics: never block job completion on a metadata write.
         try {
+          const persistStartMs = Date.now();
           await recordProbeFailure({
             runId,
             scenarioId,
             modelId,
             sampleIndex,
+            queuedAt: job.data.enqueuedAt ?? null,
             errorCode: err.code,
             errorMessage,
             retryCount: 0,
           });
+          const persistDurationMs = Date.now() - persistStartMs;
+          log.info(
+            {
+              phase: 'probe:persist:failure',
+              jobId,
+              runId,
+              scenarioId,
+              modelId,
+              sampleIndex,
+              queueWaitMs,
+              workerDurationMs,
+              persistDurationMs,
+              totalDurationMs: Date.now() - jobStartMs,
+              errorCode: err.code,
+            },
+            'Recorded probe failure'
+          );
         } catch (recordErr) {
           log.error(
-            { jobId, runId, scenarioId, modelId, err: recordErr },
+            {
+              phase: 'probe:persist:failure',
+              jobId,
+              runId,
+              scenarioId,
+              modelId,
+              sampleIndex,
+              queueWaitMs,
+              workerDurationMs,
+              error: recordErr,
+            },
             'Failed to record probe failure — continuing'
           );
         }
         const advanceResult = await maybeAdvanceRunStatus(runId);
-        log.error({ jobId, runId, advanceResult, error: err }, 'Probe job permanently failed');
+        log.error(
+          {
+            phase: 'probe:complete:failed',
+            jobId,
+            runId,
+            scenarioId,
+            modelId,
+            sampleIndex,
+            queueWaitMs,
+            workerDurationMs,
+            totalDurationMs: Date.now() - jobStartMs,
+            advanceResult,
+            error: err,
+          },
+          'Probe job permanently failed'
+        );
         return; // Complete job without retrying
       }
 
@@ -320,16 +465,19 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
     const completedAt = new Date(output.transcript.completedAt);
     const durationMs = completedAt.getTime() - startedAt.getTime();
 
+    const persistStartMs = Date.now();
     await recordProbeSuccess({
       runId,
       scenarioId,
       modelId,
       sampleIndex,
+      queuedAt: job.data.enqueuedAt ?? null,
       transcriptId: transcriptRecord.id,
       durationMs,
       inputTokens: output.transcript.totalInputTokens,
       outputTokens: output.transcript.totalOutputTokens,
     });
+    const persistDurationMs = Date.now() - persistStartMs;
 
     const advanceResult = await maybeAdvanceRunStatus(runId);
     const currentRun = await db.run.findUnique({
@@ -356,7 +504,7 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
       const boss = getBoss();
       await boss.send(
         'summarize_transcript',
-        { runId, transcriptId: transcriptRecord.id, anomalyId },
+        { runId, transcriptId: transcriptRecord.id, anomalyId, enqueuedAt: new Date().toISOString() },
         { ...jobOptions['summarize_transcript'], singletonKey: transcriptRecord.id },
       );
       await setReprobeStage(anomalyId, 'summarizing', { transcriptId: transcriptRecord.id });
@@ -364,7 +512,21 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
     }
 
     log.info(
-      { jobId, runId, scenarioId, modelId, sampleIndex, transcriptId: transcriptRecord.id, advanceResult, turns: output.transcript.turns.length },
+      {
+        phase: 'probe:complete',
+        jobId,
+        runId,
+        scenarioId,
+        modelId,
+        sampleIndex,
+        transcriptId: transcriptRecord.id,
+        queueWaitMs,
+        workerDurationMs,
+        persistDurationMs,
+        totalDurationMs: Date.now() - jobStartMs,
+        advanceResult,
+        turns: output.transcript.turns.length,
+      },
       'Probe job completed'
     );
   } catch (error) {
@@ -375,7 +537,7 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
 
     const retryCount = (job as unknown as { retrycount?: number }).retrycount ?? 0;
     const terminal = await handleJobError(
-      error, jobId, runId, scenarioId, modelId, sampleIndex, retryCount, RETRY_LIMIT, probeResultKey
+      error, jobId, runId, scenarioId, modelId, sampleIndex, retryCount, RETRY_LIMIT, job.data.enqueuedAt, probeResultKey
     );
     if (terminal) {
       return;

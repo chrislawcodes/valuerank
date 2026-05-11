@@ -31,6 +31,7 @@ import {
   persistCachedSummary,
   persistSummarizeFailure,
   persistSuccessfulSummary,
+  type SummarizeTimingInfo,
 } from './summarize-persistence.js';
 import { isRecord } from '../../utils/isRecord.js';
 
@@ -38,6 +39,19 @@ const log = createLogger('queue:summarize-transcript');
 let batchCounter = 0;
 const _RETRY_LIMIT = 3;
 const PYTHON_WORKER_PATH = 'workers/summarize.py';
+
+function computeQueueWaitMs(enqueuedAt: string | null | undefined, nowMs: number): number | null {
+  if (typeof enqueuedAt !== 'string' || enqueuedAt.trim() === '') {
+    return null;
+  }
+
+  const queuedAtMs = Date.parse(enqueuedAt);
+  if (Number.isNaN(queuedAtMs)) {
+    return null;
+  }
+
+  return Math.max(0, nowMs - queuedAtMs);
+}
 
 type SummarizeWorkerInput = {
   transcriptId: string;
@@ -101,8 +115,8 @@ type PreparedSummarizeJob = {
 
 type ResolveSummarizeJobResult =
   | { kind: 'missing' }
-  | { kind: 'cache-hit' }
-  | { kind: 'skipped' }
+  | { kind: 'cache-hit'; resolveDurationMs: number }
+  | { kind: 'skipped'; resolveDurationMs: number }
   | { kind: 'pending'; job: PreparedSummarizeJob };
 
 function getProviderNameFromModelId(modelId: string, fallbackProvider: string): string {
@@ -186,13 +200,24 @@ async function resolveSummarizeJob(
   job: PgBoss.Job<SummarizeTranscriptJobData>,
   infraModel: InfraModelConfig,
 ): Promise<ResolveSummarizeJobResult> {
+  const resolveStart = Date.now();
   const { db } = await import('@valuerank/db');
   const { transcriptId, summaryModelId } = job.data;
   const modelId = summaryModelId ?? `${infraModel.providerName}:${infraModel.modelId}`;
   const providerName = getProviderNameFromModelId(modelId, infraModel.providerName);
+  const queueWaitMs = computeQueueWaitMs(job.data.enqueuedAt, resolveStart);
 
   log.info(
-    { jobId: job.id, runId: job.data.runId, transcriptId, modelId },
+    {
+      phase: 'summarize:received',
+      jobId: job.id,
+      runId: job.data.runId,
+      transcriptId,
+      modelId,
+      providerName,
+      queueWaitMs,
+      enqueuedAt: job.data.enqueuedAt ?? null,
+    },
     'Processing summarize_transcript job'
   );
 
@@ -216,24 +241,73 @@ async function resolveSummarizeJob(
     : null;
   const parserVersion = config.SUMMARIZE_PARSER_VERSION;
   const forceSummarize = job.data.forceSummarize === true;
+  const resolveDurationMs = () => Date.now() - resolveStart;
 
   if (!forceSummarize && summaryCache && isCacheRecordMatch(summaryCache, responseSha256, parserVersion, modelId)) {
-    log.info({ jobId: job.id, transcriptId, modelId }, 'Transcript summary cache hit');
+    log.info(
+      {
+        phase: 'summarize:cache-hit',
+        jobId: job.id,
+        runId: job.data.runId,
+        transcriptId,
+        modelId,
+        providerName,
+        queueWaitMs,
+        resolveDurationMs: resolveDurationMs(),
+      },
+      'Transcript summary cache hit'
+    );
 
     if (!isTerminal) {
-      await persistCachedSummary(job, transcript, summaryCache, responseSha256, parserVersion, modelId);
+      await persistCachedSummary(
+        job,
+        transcript,
+        summaryCache,
+        responseSha256,
+        parserVersion,
+        modelId,
+        {
+          queuedAt: job.data.enqueuedAt ?? null,
+          queueWaitMs,
+          durationMs: resolveDurationMs(),
+        },
+      );
     }
 
-    return { kind: 'cache-hit' };
+    return { kind: 'cache-hit', resolveDurationMs: resolveDurationMs() };
   }
 
   if (!forceSummarize && !hasSummaryCacheField && isTerminal) {
-    log.info({ jobId: job.id, transcriptId }, 'Transcript already summarized, skipping');
-    return { kind: 'skipped' };
+    log.info(
+      {
+        phase: 'summarize:skip:already-terminal',
+        jobId: job.id,
+        runId: job.data.runId,
+        transcriptId,
+        modelId,
+        providerName,
+        queueWaitMs,
+        resolveDurationMs: resolveDurationMs(),
+      },
+      'Transcript already summarized, skipping'
+    );
+    return { kind: 'skipped', resolveDurationMs: resolveDurationMs() };
   }
 
   if (!forceSummarize && hasSummaryCacheField) {
-    log.info({ jobId: job.id, transcriptId, modelId }, 'Transcript summary cache miss, re-summarizing');
+    log.info(
+      {
+        phase: 'summarize:cache-miss',
+        jobId: job.id,
+        runId: job.data.runId,
+        transcriptId,
+        modelId,
+        providerName,
+        queueWaitMs,
+        resolveDurationMs: resolveDurationMs(),
+      },
+      'Transcript summary cache miss, re-summarizing'
+    );
   }
 
   return {
@@ -260,6 +334,7 @@ async function processSummarizeBatchGroup(
     return null;
   }
 
+  const groupStartTime = Date.now();
   const firstJob = pendingJobs[0];
   if (!firstJob) {
     return new Error('Python worker batch received no pending jobs');
@@ -275,18 +350,20 @@ async function processSummarizeBatchGroup(
     })),
   };
 
-  log.debug(
+  log.info(
     {
+      phase: 'summarize:worker:queued',
       batchId,
       groupIndex,
-      modelId,
       providerName,
+      modelId,
       transcriptIds: pendingJobs.map((pendingJob) => pendingJob.transcriptId),
     },
-    'Calling Python summarize worker for batch'
+    'Queued summarize worker batch'
   );
 
   const handleBatchFailure = async (error: Error): Promise<Error | null> => {
+    const durationMs = Date.now() - groupStartTime;
     let retryableError: Error | null = null;
     const transientFailure = {
       message: error.message,
@@ -300,6 +377,11 @@ async function processSummarizeBatchGroup(
         pendingJob.job,
         pendingJob.transcript,
         transientFailure,
+        {
+          queuedAt: pendingJob.job.data.enqueuedAt ?? null,
+          queueWaitMs: computeQueueWaitMs(pendingJob.job.data.enqueuedAt, Date.now()),
+          durationMs,
+        },
       );
 
       if (shouldRetry && retryableError === null) {
@@ -311,6 +393,7 @@ async function processSummarizeBatchGroup(
   };
 
   let result: SpawnPythonResult<SummarizeWorkerResponse> | null = null;
+  const limiterWaitStartMs = Date.now();
   try {
     result = await rateLimitSchedule(
       providerName,
@@ -318,16 +401,50 @@ async function processSummarizeBatchGroup(
       firstJob.job.data.runId,
       modelId,
       firstJob.transcriptId,
-      () => spawnPython<SummarizeWorkerBatchInput, SummarizeWorkerResponse>(
-        PYTHON_WORKER_PATH,
-        workerInput,
-        { cwd: path.resolve(process.cwd(), '../..') }
-      ),
+      async () => {
+        const workerStartMs = Date.now();
+        const limiterWaitMs = workerStartMs - limiterWaitStartMs;
+        log.info(
+          {
+            phase: 'summarize:worker:start',
+            batchId,
+            groupIndex,
+            providerName,
+            modelId,
+            transcriptIds: pendingJobs.map((pendingJob) => pendingJob.transcriptId),
+            queueWaitMs: pendingJobs.map((pendingJob) => computeQueueWaitMs(pendingJob.job.data.enqueuedAt, workerStartMs)),
+            limiterWaitMs,
+          },
+          'Calling Python summarize worker for batch'
+        );
+
+        const workerResult = await spawnPython<SummarizeWorkerBatchInput, SummarizeWorkerResponse>(
+          PYTHON_WORKER_PATH,
+          workerInput,
+          { cwd: path.resolve(process.cwd(), '../..') }
+        );
+
+        log.info(
+          {
+            phase: 'summarize:worker:end',
+            batchId,
+            groupIndex,
+            providerName,
+            modelId,
+            transcriptIds: pendingJobs.map((pendingJob) => pendingJob.transcriptId),
+            limiterWaitMs,
+            workerDurationMs: Date.now() - workerStartMs,
+          },
+          'Python summarize worker completed'
+        );
+
+        return workerResult;
+      },
       scheduleOptions,
     );
   } catch (error) {
     log.error(
-      { batchId, groupIndex, modelId, providerName, err: error },
+      { phase: 'summarize:worker:spawn-failed', batchId, groupIndex, modelId, providerName, err: error },
       'Python spawn failed'
     );
     return handleBatchFailure(error instanceof Error ? error : new Error(String(error)));
@@ -338,7 +455,10 @@ async function processSummarizeBatchGroup(
   }
 
   if (!result.success) {
-    log.error({ batchId, groupIndex, modelId, providerName, error: result.error, stderr: result.stderr }, 'Python spawn failed');
+    log.error(
+      { phase: 'summarize:worker:spawn-failed', batchId, groupIndex, modelId, providerName, error: result.error, stderr: result.stderr },
+      'Python spawn failed'
+    );
     return handleBatchFailure(new Error(`Python worker failed: ${result.error}`));
   }
 
@@ -401,6 +521,11 @@ async function processSummarizeBatchGroup(
         pendingJob.transcript,
         summaryResult.summary,
       );
+      const summarizeTiming: SummarizeTimingInfo = {
+        queuedAt: pendingJob.job.data.enqueuedAt ?? null,
+        queueWaitMs: computeQueueWaitMs(pendingJob.job.data.enqueuedAt, Date.now()),
+        durationMs: Date.now() - groupStartTime,
+      };
       await persistSuccessfulSummary(
         pendingJob.job,
         pendingJob.transcript,
@@ -409,6 +534,7 @@ async function processSummarizeBatchGroup(
         pendingJob.modelId,
         canonicalDecision,
         summaryResult.summary,
+        summarizeTiming,
       );
       continue;
     }
@@ -417,6 +543,11 @@ async function processSummarizeBatchGroup(
       pendingJob.job,
       pendingJob.transcript,
       summaryResult.error,
+      {
+        queuedAt: pendingJob.job.data.enqueuedAt ?? null,
+        queueWaitMs: computeQueueWaitMs(pendingJob.job.data.enqueuedAt, Date.now()),
+        durationMs: Date.now() - groupStartTime,
+      },
     );
 
     if (shouldRetry && retryableError === null) {

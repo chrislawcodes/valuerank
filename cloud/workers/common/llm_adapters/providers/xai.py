@@ -3,12 +3,13 @@ xAI Grok API adapter (OpenAI-compatible).
 """
 
 from dataclasses import dataclass
+import time
 from typing import Any, Optional
 
 from ...config import get_config
 from ...errors import ErrorCode, LLMError
 from ...logging import get_logger
-from ..base import BaseLLMAdapter, post_json, raise_if_empty_content
+from ..base import BaseLLMAdapter, build_timing_summary, post_json, raise_if_empty_content
 from ..config_utils import get_config_value, resolve_max_tokens, resolve_temperature
 from ..constants import DEFAULT_TIMEOUT, normalize_finish_reason
 from ..types import LLMResponse
@@ -88,7 +89,9 @@ class XAIAdapter(BaseLLMAdapter):
 
         effective_timeout = timeout if timeout is not None else self.timeout
         log.debug("Calling xAI API", model=model, max_tokens=resolved_max_tokens)
+        request_started_at = time.perf_counter()
         data = post_json(self.base_url, headers, payload, timeout=effective_timeout)
+        request_finished_at = time.perf_counter()
 
         try:
             choice = data["choices"][0]
@@ -99,9 +102,15 @@ class XAIAdapter(BaseLLMAdapter):
 
             # Capture provider metadata (OpenAI-compatible format)
             raw_finish_reason = choice.get("finish_reason")
+            response_finished_at = time.perf_counter()
             provider_metadata = {
                 "provider": "xai",
                 "finishReason": normalize_finish_reason("xai", raw_finish_reason),
+                "timing": build_timing_summary(
+                    request_started_at,
+                    request_finished_at,
+                    response_finished_at,
+                ),
                 "raw": {
                     "id": data.get("id"),
                     "finish_reason": raw_finish_reason,

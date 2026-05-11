@@ -27,6 +27,7 @@ export type ProbeScenarioJobData = {
   modelId: string;
   modelVersion?: string;
   sampleIndex: number; // Index within sample set (0 to N-1) for multi-sample runs
+  enqueuedAt?: string;
   config: {
     temperature?: number;
     seed?: number;
@@ -49,6 +50,7 @@ export type SummarizeTranscriptJobData = {
   summaryModelId?: string; // Optional: defaults to configured summary model
   forceSummarize?: boolean; // Optional: bypasses cache and summarization short-circuits
   anomalyId?: string; // Set by reprobe pipeline to track stage progression
+  enqueuedAt?: string;
 };
 
 export type AnalyzeBasicJobData = {

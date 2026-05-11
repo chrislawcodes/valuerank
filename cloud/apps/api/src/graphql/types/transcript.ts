@@ -25,6 +25,31 @@ builder.objectType(TranscriptRef, {
     turnCount: t.exposeInt('turnCount'),
     tokenCount: t.exposeInt('tokenCount'),
     durationMs: t.exposeInt('durationMs'),
+    summarizeQueuedAt: t.expose('summarizeQueuedAt', {
+      type: 'DateTime',
+      nullable: true,
+      description: 'When the summarize job was enqueued',
+    }),
+    summarizeDurationMs: t.exposeInt('summarizeDurationMs', {
+      nullable: true,
+      description: 'Time spent processing the summarize job',
+    }),
+    summarizeQueueWaitMs: t.int({
+      nullable: true,
+      description: 'Time spent waiting in the queue before summarization completed',
+      resolve: (transcript) => {
+        if (transcript.summarizeQueuedAt === null || transcript.summarizeQueuedAt === undefined) {
+          return null;
+        }
+
+        const completedAt = transcript.summarizedAt ?? transcript.summarizeFailedAt;
+        if (completedAt === null || completedAt === undefined) {
+          return null;
+        }
+
+        return completedAt.getTime() - transcript.summarizeQueuedAt.getTime();
+      },
+    }),
     decisionMetadata: t.expose('decisionMetadata', {
       type: 'JSON',
       nullable: true,

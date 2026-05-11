@@ -15,6 +15,16 @@ export {
 export type { ProgressData } from './progress.js';
 export { computeRunProgress } from './derived-progress.js';
 export type { RunProgress } from './derived-progress.js';
+export { getRunExecutionBottleneck, getRunModelExecutionBottlenecks } from './bottleneck.js';
+export type {
+  RunExecutionBottleneck,
+  ModelExecutionBottleneck,
+  StageSummary,
+  TimingSummary,
+  BottleneckStage,
+  BottleneckAction,
+  BottleneckConfidence,
+} from './bottleneck.js';
 
 export {
   pauseRun,

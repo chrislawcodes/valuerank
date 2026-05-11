@@ -24,6 +24,11 @@ builder.objectType(ProbeResultRef, {
     status: t.exposeString('status', {
       description: 'SUCCESS or FAILED',
     }),
+    queuedAt: t.expose('queuedAt', {
+      type: 'DateTime',
+      nullable: true,
+      description: 'When the probe job was enqueued',
+    }),
     // Success fields
     transcriptId: t.exposeString('transcriptId', {
       nullable: true,
@@ -56,6 +61,17 @@ builder.objectType(ProbeResultRef, {
     // Timestamps
     createdAt: t.expose('createdAt', { type: 'DateTime' }),
     completedAt: t.expose('completedAt', { type: 'DateTime', nullable: true }),
+    queueWaitMs: t.int({
+      nullable: true,
+      description: 'Time spent waiting in the queue before the probe result was recorded',
+      resolve: (probeResult) => {
+        if (probeResult.queuedAt === null || probeResult.queuedAt === undefined) {
+          return null;
+        }
+        const completedAt = probeResult.completedAt ?? probeResult.createdAt;
+        return completedAt.getTime() - probeResult.queuedAt.getTime();
+      },
+    }),
   }),
 });
 

@@ -17,6 +17,7 @@ const errorScript = join(testDir, 'error.py');
 const slowScript = join(testDir, 'slow.py');
 const invalidJsonScript = join(testDir, 'invalid_json.py');
 const stderrScript = join(testDir, 'stderr.py');
+const structuredLogScript = join(testDir, 'structured_log.py');
 
 describe('spawnPython', () => {
   beforeAll(() => {
@@ -86,6 +87,19 @@ sys.stderr.write("Warning: something happened\\n")
 print(json.dumps({"success": True}))
 `.trim()
     );
+
+    // Create structured log script - emits JSON logs to stderr and succeeds
+    writeFileSync(
+      structuredLogScript,
+      `
+import sys
+import json
+
+data = json.load(sys.stdin)
+print(json.dumps({"level": "info", "time": 123, "context": "probe", "msg": "Worker log", "turn": 1}), file=sys.stderr)
+print(json.dumps({"success": True}))
+`.trim()
+    );
   });
 
   describe('successful execution', () => {
@@ -121,6 +135,15 @@ print(json.dumps({"success": True}))
 
     it('handles stderr output but still succeeds', async () => {
       const result = await spawnPython(stderrScript, { test: true });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data).toEqual({ success: true });
+      }
+    });
+
+    it('handles structured worker logs but still succeeds', async () => {
+      const result = await spawnPython(structuredLogScript, { test: true });
 
       expect(result.success).toBe(true);
       if (result.success) {

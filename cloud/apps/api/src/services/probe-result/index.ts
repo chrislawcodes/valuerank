@@ -18,6 +18,7 @@ export type RecordSuccessInput = {
   scenarioId: string;
   modelId: string;
   sampleIndex?: number; // Index within sample set for multi-sample runs (0 to N-1), defaults to 0
+  queuedAt?: string | null;
   transcriptId: string;
   durationMs: number;
   inputTokens: number;
@@ -32,6 +33,7 @@ export type RecordFailureInput = {
   scenarioId: string;
   modelId: string;
   sampleIndex?: number; // Index within sample set for multi-sample runs (0 to N-1), defaults to 0
+  queuedAt?: string | null;
   errorCode: string;
   errorMessage: string;
   retryCount?: number;
@@ -42,7 +44,7 @@ export type RecordFailureInput = {
  * Creates or updates the probe_results record for this run/scenario/model/sampleIndex combination.
  */
 export async function recordProbeSuccess(input: RecordSuccessInput): Promise<void> {
-  const { runId, scenarioId, modelId, sampleIndex = 0, transcriptId, durationMs, inputTokens, outputTokens } = input;
+  const { runId, scenarioId, modelId, sampleIndex = 0, queuedAt, transcriptId, durationMs, inputTokens, outputTokens } = input;
 
   try {
     await db.probeResult.upsert({
@@ -59,6 +61,7 @@ export async function recordProbeSuccess(input: RecordSuccessInput): Promise<voi
         durationMs,
         inputTokens,
         outputTokens,
+        queuedAt: queuedAt != null ? new Date(queuedAt) : null,
         completedAt: new Date(),
       },
       update: {
@@ -69,6 +72,7 @@ export async function recordProbeSuccess(input: RecordSuccessInput): Promise<voi
         outputTokens,
         errorCode: null,
         errorMessage: null,
+        queuedAt: queuedAt != null ? new Date(queuedAt) : undefined,
         completedAt: new Date(),
       },
     });
@@ -85,7 +89,7 @@ export async function recordProbeSuccess(input: RecordSuccessInput): Promise<voi
  * Creates or updates the probe_results record with error details.
  */
 export async function recordProbeFailure(input: RecordFailureInput): Promise<void> {
-  const { runId, scenarioId, modelId, sampleIndex = 0, errorCode, errorMessage, retryCount = 0 } = input;
+  const { runId, scenarioId, modelId, sampleIndex = 0, queuedAt, errorCode, errorMessage, retryCount = 0 } = input;
 
   // Truncate error message if too long (to avoid DB issues)
   const truncatedMessage = errorMessage.length > 2000
@@ -108,6 +112,7 @@ export async function recordProbeFailure(input: RecordFailureInput): Promise<voi
       errorCode,
       errorMessage: truncatedMessage,
       retryCount,
+      queuedAt: queuedAt != null ? new Date(queuedAt) : null,
       completedAt: new Date(),
     },
     update: {
@@ -119,10 +124,10 @@ export async function recordProbeFailure(input: RecordFailureInput): Promise<voi
       durationMs: null,
       inputTokens: null,
       outputTokens: null,
+      queuedAt: queuedAt != null ? new Date(queuedAt) : undefined,
       completedAt: new Date(),
     },
   });
 
   log.debug({ runId, scenarioId, modelId, sampleIndex, errorCode }, 'Recorded probe failure');
 }
-
