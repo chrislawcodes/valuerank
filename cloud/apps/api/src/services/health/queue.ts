@@ -25,6 +25,7 @@ export type QueueHealthStatus = {
   activeJobs: number;
   pendingJobs: number;
   completedLast24h: number;
+  completedLast30m: number;
   failedLast24h: number;
   successRate: number | null; // null if no jobs completed
   jobTypes: JobTypeStatus[];
@@ -45,6 +46,7 @@ export async function getQueueHealth(): Promise<QueueHealthStatus> {
     const activeJobs = status.totals.active;
     const pendingJobs = status.totals.pending;
     const completedLast24h = status.totals.completed;
+    const completedLast30m = status.completedLast30m;
     const failedLast24h = status.totals.failed;
 
     // Calculate success rate (completed / (completed + failed))
@@ -73,6 +75,7 @@ export async function getQueueHealth(): Promise<QueueHealthStatus> {
       activeJobs,
       pendingJobs,
       completedLast24h,
+      completedLast30m,
       failedLast24h,
       successRate,
       jobTypes: status.jobTypes,
@@ -88,6 +91,7 @@ export async function getQueueHealth(): Promise<QueueHealthStatus> {
       activeJobs: 0,
       pendingJobs: 0,
       completedLast24h: 0,
+      completedLast30m: 0,
       failedLast24h: 0,
       successRate: null,
       jobTypes: [],

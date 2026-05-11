@@ -27,6 +27,7 @@ export type QueueStatus = {
   isRunning: boolean;
   isPaused: boolean;
   jobTypes: JobTypeStatus[];
+  completedLast30m: number;
   totals: {
     pending: number;
     active: number;
@@ -52,6 +53,16 @@ export async function getQueueStatus(): Promise<QueueStatus> {
       FROM pgboss.job
       WHERE (${ACTIVE_PROBE_QUEUE_SQL} OR name IN ('summarize_transcript', 'analyze_basic', 'analyze_deep', 'expand_scenarios'))
       GROUP BY name, state
+    `;
+
+    const completedLast30mResult = await db.$queryRaw<Array<{
+      count: bigint;
+    }>>`
+      SELECT COUNT(*) as count
+      FROM pgboss.job
+      WHERE state = 'completed'
+        AND completedon >= NOW() - INTERVAL '30 minutes'
+        AND (${ACTIVE_PROBE_QUEUE_SQL} OR name IN ('summarize_transcript', 'analyze_basic', 'analyze_deep', 'expand_scenarios'))
     `;
 
     // Note: PgBoss v10+ no longer uses a separate archive table.
@@ -121,6 +132,7 @@ export async function getQueueStatus(): Promise<QueueStatus> {
       isRunning: state.isRunning,
       isPaused: state.isPaused,
       jobTypes,
+      completedLast30m: Number(completedLast30mResult[0]?.count ?? 0n),
       totals,
     };
   } catch (error) {
@@ -138,6 +150,7 @@ export async function getQueueStatus(): Promise<QueueStatus> {
         { type: 'analyze_deep', pending: 0, active: 0, completed: 0, failed: 0 },
         { type: 'expand_scenarios', pending: 0, active: 0, completed: 0, failed: 0 },
       ],
+      completedLast30m: 0,
       totals: { pending: 0, active: 0, completed: 0, failed: 0 },
     };
   }

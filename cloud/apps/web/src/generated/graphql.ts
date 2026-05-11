@@ -3393,6 +3393,8 @@ export type QueueHealth = {
   checkedAt: Scalars['DateTime']['output'];
   /** Jobs completed in the last 24 hours */
   completedLast24h: Scalars['Int']['output'];
+  /** Jobs completed in the last 30 minutes (rolling window) */
+  completedLast30m: Scalars['Int']['output'];
   /** Error message if queue health check failed */
   error?: Maybe<Scalars['String']['output']>;
   /** Jobs failed in the last 24 hours */
@@ -4634,7 +4636,7 @@ export type SystemHealthQueryVariables = Exact<{
 }>;
 
 
-export type SystemHealthQuery = { __typename?: 'Query', systemHealth: { __typename?: 'SystemHealth', providers: { __typename?: 'ProviderHealth', checkedAt: string, providers: Array<{ __typename?: 'ProviderHealthStatus', id: string, name: string, configured: boolean, connected: boolean, error?: string | null, remainingBudgetUsd?: number | null, lastChecked?: string | null }> }, queue: { __typename?: 'QueueHealth', isHealthy: boolean, isRunning: boolean, isPaused: boolean, activeJobs: number, pendingJobs: number, completedLast24h: number, failedLast24h: number, successRate?: number | null, error?: string | null, checkedAt: string, jobTypes?: Array<{ __typename?: 'JobTypeStatus', type: string, pending: number, active: number, completed: number, failed: number }> | null }, worker: { __typename?: 'WorkerHealth', isHealthy: boolean, pythonVersion?: string | null, packages: unknown, apiKeys: unknown, warnings: Array<string>, error?: string | null, checkedAt: string } } };
+export type SystemHealthQuery = { __typename?: 'Query', systemHealth: { __typename?: 'SystemHealth', providers: { __typename?: 'ProviderHealth', checkedAt: string, providers: Array<{ __typename?: 'ProviderHealthStatus', id: string, name: string, configured: boolean, connected: boolean, error?: string | null, remainingBudgetUsd?: number | null, lastChecked?: string | null }> }, queue: { __typename?: 'QueueHealth', isHealthy: boolean, isRunning: boolean, isPaused: boolean, activeJobs: number, pendingJobs: number, completedLast24h: number, completedLast30m: number, failedLast24h: number, successRate?: number | null, error?: string | null, checkedAt: string, jobTypes?: Array<{ __typename?: 'JobTypeStatus', type: string, pending: number, active: number, completed: number, failed: number }> | null }, worker: { __typename?: 'WorkerHealth', isHealthy: boolean, pythonVersion?: string | null, packages: unknown, apiKeys: unknown, warnings: Array<string>, error?: string | null, checkedAt: string } } };
 
 export type GetLevelPresetsQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -7018,6 +7020,7 @@ export const SystemHealthDocument = gql`
       activeJobs
       pendingJobs
       completedLast24h
+      completedLast30m
       failedLast24h
       successRate
       jobTypes {
