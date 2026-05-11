@@ -3,12 +3,13 @@ Google Gemini API adapter.
 """
 
 from dataclasses import dataclass
+import time
 from typing import Any, Optional
 
 from ...config import get_config
 from ...errors import ErrorCode, LLMError
 from ...logging import get_logger
-from ..base import BaseLLMAdapter, post_json
+from ..base import BaseLLMAdapter, build_timing_summary, post_json
 from ..config_utils import get_config_value, resolve_max_tokens, resolve_temperature
 from ..constants import DEFAULT_TIMEOUT, normalize_finish_reason
 from ..types import LLMResponse
@@ -116,7 +117,9 @@ class GeminiAdapter(BaseLLMAdapter):
 
         effective_timeout = timeout if timeout is not None else self.timeout
         log.debug("Calling Gemini API", model=model, max_tokens=resolved_max_tokens)
+        request_started_at = time.perf_counter()
         data = post_json(url, headers, payload, timeout=effective_timeout)
+        request_finished_at = time.perf_counter()
 
         try:
             # Check for prompt-level blocking first
@@ -125,9 +128,15 @@ class GeminiAdapter(BaseLLMAdapter):
 
             if prompt_block_reason:
                 # Prompt was blocked - no candidates will be returned
+                response_finished_at = time.perf_counter()
                 provider_metadata = {
                     "provider": "google",
                     "finishReason": normalize_finish_reason("google", prompt_block_reason),
+                    "timing": build_timing_summary(
+                        request_started_at,
+                        request_finished_at,
+                        response_finished_at,
+                    ),
                     "raw": {
                         "promptFeedback": prompt_feedback,
                         "candidates": [],
@@ -155,9 +164,15 @@ class GeminiAdapter(BaseLLMAdapter):
             candidates = data.get("candidates", [])
             if not candidates:
                 # No candidates but no block reason - unexpected
+                response_finished_at = time.perf_counter()
                 provider_metadata = {
                     "provider": "google",
                     "finishReason": "unknown",
+                    "timing": build_timing_summary(
+                        request_started_at,
+                        request_finished_at,
+                        response_finished_at,
+                    ),
                     "raw": {
                         "promptFeedback": prompt_feedback,
                         "candidates": [],
@@ -189,9 +204,15 @@ class GeminiAdapter(BaseLLMAdapter):
             thoughts_tokens = usage.get("thoughtsTokenCount")
 
             # Build comprehensive provider metadata
+            response_finished_at = time.perf_counter()
             provider_metadata = {
                 "provider": "google",
                 "finishReason": normalize_finish_reason("google", raw_finish_reason),
+                "timing": build_timing_summary(
+                    request_started_at,
+                    request_finished_at,
+                    response_finished_at,
+                ),
                 "raw": {
                     "finishReason": raw_finish_reason,
                     "safetyRatings": safety_ratings,

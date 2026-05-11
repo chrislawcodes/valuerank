@@ -49,6 +49,7 @@ async function queueSummarizeJobs(runId: string): Promise<void> {
       {
         runId,
         transcriptId: transcript.id,
+        enqueuedAt: new Date().toISOString(),
       },
       {
         ...jobOptions,

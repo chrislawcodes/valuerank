@@ -271,6 +271,7 @@ export async function restartSummarization(
       {
         runId,
         transcriptId: transcript.id,
+        enqueuedAt: new Date().toISOString(),
         ...(force ? { forceSummarize: true } : {}),
       },
       {

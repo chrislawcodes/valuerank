@@ -5,7 +5,8 @@ import { UserRef } from './user.js';
 import { RunProgress, TaskResult } from './run-progress.js';
 import { ExecutionMetrics } from './execution-metrics.js';
 import { ProbeResultRef, ProbeResultModelSummary } from './probe-result.js';
-import { calculatePercentComplete, computeRunProgress } from '../../services/run/index.js';
+import { ModelExecutionBottleneckRef, RunExecutionBottleneckRef } from './run-execution-bottleneck.js';
+import { calculatePercentComplete, computeRunProgress, getRunExecutionBottleneck, getRunModelExecutionBottlenecks } from '../../services/run/index.js';
 import { ACTIVE_PROBE_QUEUE_SQL } from '../../services/queue/probe-queues.js';
 import { AnalysisResultRef } from './analysis.js';
 import { CostEstimateRef, type CostEstimateShape } from './cost-estimate.js';
@@ -571,6 +572,20 @@ builder.objectType(RunRef, {
           totalRetries,
         };
       },
+    }),
+
+    executionBottleneck: t.field({
+      type: RunExecutionBottleneckRef,
+      description:
+        'Derived bottleneck diagnosis for probe and summarize work, useful for deciding whether to increase parallelism or investigate worker latency',
+      resolve: async (run) => getRunExecutionBottleneck(run.id),
+    }),
+
+    modelExecutionBottlenecks: t.field({
+      type: [ModelExecutionBottleneckRef],
+      description:
+        'Derived bottleneck diagnosis broken down by model, useful for identifying a specific model that is causing slowdowns or failures',
+      resolve: async (run) => getRunModelExecutionBottlenecks(run.id),
     }),
 
     // Probe results - detailed success/failure info for each model/scenario with pagination

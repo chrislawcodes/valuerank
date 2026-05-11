@@ -67,6 +67,7 @@ Error:
 
 import json
 import sys
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -131,6 +132,41 @@ def _ensure_non_empty_response(response: LLMResponse, *, model_id: str, turn_lab
             f"refusing to write empty transcript"
         ),
         code=ErrorCode.INVALID_RESPONSE,
+    )
+
+
+def _log_turn_timing(
+    *,
+    run_id: str,
+    scenario_id: str,
+    model_id: str,
+    turn_number: int,
+    turn_label: str,
+    response: LLMResponse,
+    turn_started_at: float,
+) -> None:
+    """Emit a compact per-turn timing summary for worker diagnostics."""
+    metadata = response.provider_metadata or {}
+    timing = metadata.get("timing")
+    if not isinstance(timing, dict):
+        return
+
+    log.info(
+        "Probe turn completed",
+        runId=run_id,
+        scenarioId=scenario_id,
+        modelId=model_id,
+        turnNumber=turn_number,
+        promptLabel=turn_label,
+        provider=metadata.get("provider"),
+        finishReason=metadata.get("finishReason"),
+        requestMs=timing.get("requestMs"),
+        parseMs=timing.get("parseMs"),
+        totalMs=timing.get("totalMs"),
+        turnDurationMs=int(round((time.perf_counter() - turn_started_at) * 1000)),
+        inputTokens=response.input_tokens,
+        outputTokens=response.output_tokens,
+        reasoningTokens=response.reasoning_tokens,
     )
 
 
@@ -295,6 +331,7 @@ def run_probe(data: dict[str, Any]) -> dict[str, Any]:
     try:
         # Turn 1: Initial prompt
         log.debug("Executing turn 1", modelId=model_id)
+        turn_started_at = time.perf_counter()
         generate_kwargs: dict[str, Any] = {
             "max_tokens": max_tokens,
             "model_config": model_config,
@@ -310,6 +347,15 @@ def run_probe(data: dict[str, Any]) -> dict[str, Any]:
             **generate_kwargs,
         )
         _ensure_non_empty_response(response, model_id=model_id, turn_label="scenario_prompt")
+        _log_turn_timing(
+            run_id=run_id,
+            scenario_id=scenario_id,
+            model_id=model_id,
+            turn_number=1,
+            turn_label="scenario_prompt",
+            response=response,
+            turn_started_at=turn_started_at,
+        )
 
         turn = Turn(
             turn_number=1,
@@ -341,12 +387,22 @@ def run_probe(data: dict[str, Any]) -> dict[str, Any]:
             # Add followup to conversation
             messages.append({"role": "user", "content": followup_prompt})
 
+            turn_started_at = time.perf_counter()
             response = generate(
                 model_id,
                 messages,
                 **generate_kwargs,
             )
             _ensure_non_empty_response(response, model_id=model_id, turn_label=followup_label)
+            _log_turn_timing(
+                run_id=run_id,
+                scenario_id=scenario_id,
+                model_id=model_id,
+                turn_number=turn_num,
+                turn_label=followup_label,
+                response=response,
+                turn_started_at=turn_started_at,
+            )
 
             turn = Turn(
                 turn_number=turn_num,

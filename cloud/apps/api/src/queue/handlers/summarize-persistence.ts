@@ -15,6 +15,22 @@ import { isRecord } from '../../utils/isRecord.js';
 
 const log = createLogger('queue:summarize-transcript');
 
+export type SummarizeTimingInfo = {
+  queuedAt?: string | null;
+  queueWaitMs?: number | null;
+  durationMs?: number | null;
+};
+
+function buildSummarizeTimingUpdate(timing?: SummarizeTimingInfo): {
+  summarizeQueuedAt?: Date;
+  summarizeDurationMs?: number;
+} {
+  return {
+    summarizeQueuedAt: timing?.queuedAt != null ? new Date(timing.queuedAt) : undefined,
+    summarizeDurationMs: timing?.durationMs ?? undefined,
+  };
+}
+
 export function buildSummaryCacheRecord(
   summary: {
     decisionText: string | null;
@@ -148,6 +164,7 @@ export async function persistCachedSummary(
   responseSha256: string | null,
   parserVersion: string,
   modelId: string,
+  timing?: SummarizeTimingInfo,
 ): Promise<void> {
   const rawDecisionEvidence = buildRawDecisionEvidence(summaryCache.summary.decisionMetadata);
   const persistedSummaryCache = responseSha256
@@ -163,6 +180,7 @@ export async function persistCachedSummary(
       )
     : null;
 
+  const updateStartMs = Date.now();
   await db.transcript.update({
     where: { id: transcript.id },
     data: {
@@ -174,10 +192,38 @@ export async function persistCachedSummary(
       ),
       summarizeFailedAt: null,
       summarizedAt: new Date(),
+      ...buildSummarizeTimingUpdate(timing),
     },
   });
+  const updateDurationMs = Date.now() - updateStartMs;
 
+  log.info(
+    {
+      phase: 'summarize:persist:cached',
+      jobId: job.id,
+      runId: job.data.runId,
+      transcriptId: transcript.id,
+      queueWaitMs: timing?.queueWaitMs ?? null,
+      workerDurationMs: timing?.durationMs ?? null,
+      updateDurationMs,
+    },
+    'Persisted cached transcript summary'
+  );
+
+  const sideEffectsStartMs = Date.now();
   await refreshPostSummarySideEffects(job.data.runId, transcript.id);
+  log.info(
+    {
+      phase: 'summarize:persist:side-effects',
+      jobId: job.id,
+      runId: job.data.runId,
+      transcriptId: transcript.id,
+      queueWaitMs: timing?.queueWaitMs ?? null,
+      workerDurationMs: timing?.durationMs ?? null,
+      sideEffectsDurationMs: Date.now() - sideEffectsStartMs,
+    },
+    'Completed post-summary side effects'
+  );
 }
 
 export async function persistSuccessfulSummary(
@@ -188,6 +234,7 @@ export async function persistSuccessfulSummary(
   modelId: string,
   canonicalDecision: WinnerFirstSummaryCache | null,
   summary: { decisionText: string | null; decisionMetadata?: unknown },
+  timing?: SummarizeTimingInfo,
 ): Promise<void> {
   const rawDecisionEvidence = buildRawDecisionEvidence(summary.decisionMetadata);
   const freshSummaryCache = responseSha256
@@ -202,6 +249,7 @@ export async function persistSuccessfulSummary(
       )
     : null;
 
+  const updateStartMs = Date.now();
   await db.transcript.update({
     where: { id: transcript.id },
     data: {
@@ -213,18 +261,45 @@ export async function persistSuccessfulSummary(
       ),
       summarizeFailedAt: null,
       summarizedAt: new Date(),
+      ...buildSummarizeTimingUpdate(timing),
     },
   });
+  const updateDurationMs = Date.now() - updateStartMs;
 
-  log.info({ jobId: job.id, transcriptId: transcript.id }, 'Transcript summarized');
+  log.info(
+    {
+      phase: 'summarize:persist:success',
+      jobId: job.id,
+      runId: job.data.runId,
+      transcriptId: transcript.id,
+      queueWaitMs: timing?.queueWaitMs ?? null,
+      workerDurationMs: timing?.durationMs ?? null,
+      updateDurationMs,
+    },
+    'Transcript summarized'
+  );
 
+  const sideEffectsStartMs = Date.now();
   await refreshPostSummarySideEffects(job.data.runId, transcript.id);
+  log.info(
+    {
+      phase: 'summarize:persist:side-effects',
+      jobId: job.id,
+      runId: job.data.runId,
+      transcriptId: transcript.id,
+      queueWaitMs: timing?.queueWaitMs ?? null,
+      workerDurationMs: timing?.durationMs ?? null,
+      sideEffectsDurationMs: Date.now() - sideEffectsStartMs,
+    },
+    'Completed post-summary side effects'
+  );
 }
 
 export async function persistSummarizeFailure(
   job: { id: string; data: SummarizeTranscriptJobData; retrycount?: number },
   transcript: { id: string },
   error: { message: string; code: string; retryable: boolean; details?: unknown },
+  timing?: SummarizeTimingInfo,
 ): Promise<boolean> {
   const retryCount = job.retrycount ?? 0;
   const maxRetriesReached = retryCount >= (DEFAULT_JOB_OPTIONS['summarize_transcript'].retryLimit ?? 3);
@@ -242,14 +317,33 @@ export async function persistSummarizeFailure(
     ? `Summary failed after ${retryCount} retries: ${error.message}`
     : `Summary failed: ${error.message}`;
 
+  const updateStartMs = Date.now();
   await db.transcript.update({
     where: { id: transcript.id },
     data: {
       decisionText: failureText,
       decisionMetadata: Prisma.DbNull,
       summarizeFailedAt: new Date(),
+      ...buildSummarizeTimingUpdate(timing),
     },
   });
+  const updateDurationMs = Date.now() - updateStartMs;
+
+  log.warn(
+    {
+      phase: 'summarize:persist:failure',
+      jobId: job.id,
+      runId: job.data.runId,
+      transcriptId: transcript.id,
+      queueWaitMs: timing?.queueWaitMs ?? null,
+      workerDurationMs: timing?.durationMs ?? null,
+      updateDurationMs,
+      retryCount,
+      maxRetriesReached,
+      error,
+    },
+    'Persisted failed transcript summary'
+  );
 
   await maybeAdvanceRunStatus(job.data.runId);
   return false;

@@ -149,13 +149,24 @@ export async function handleJobError(
   sampleIndex: number,
   retryCount: number,
   retryLimit: number,
+  queuedAt: string | null | undefined,
   _probeResultKey: ProbeResultKey
 ): Promise<boolean> {
   const retryable = isRetryableError(error);
   const maxRetriesReached = retryCount >= retryLimit;
+  const queueWaitMs = (() => {
+    if (typeof queuedAt !== 'string' || queuedAt.trim() === '') {
+      return null;
+    }
+    const queuedAtMs = Date.parse(queuedAt);
+    if (Number.isNaN(queuedAtMs)) {
+      return null;
+    }
+    return Math.max(0, Date.now() - queuedAtMs);
+  })();
 
   log.warn(
-    { jobId, runId, scenarioId, modelId, retryable, retryCount, maxRetriesReached, err: error },
+    { phase: 'probe:error', jobId, runId, scenarioId, modelId, queueWaitMs, retryable, retryCount, maxRetriesReached, err: error },
     'Probe job error'
   );
 
@@ -168,6 +179,7 @@ export async function handleJobError(
         scenarioId,
         modelId,
         sampleIndex,
+        queuedAt: queuedAt ?? null,
         errorCode,
         errorMessage,
         retryCount,
@@ -175,12 +187,12 @@ export async function handleJobError(
       const result = await maybeAdvanceRunStatus(runId);
       await enqueueTopUpProbesSingleton(runId);
       log.error(
-        { jobId, runId, scenarioId, modelId, result, retryCount, err: error },
+        { phase: 'probe:complete:failed', jobId, runId, scenarioId, modelId, queueWaitMs, result, retryCount, err: error },
         'Probe job permanently failed'
       );
     } catch (progressError) {
       log.error(
-        { jobId, runId, err: progressError },
+        { phase: 'probe:complete:failed', jobId, runId, queueWaitMs, err: progressError },
         'Failed to update progress after job failure'
       );
     }
@@ -188,7 +200,7 @@ export async function handleJobError(
   }
 
   log.info(
-    { jobId, runId, retryCount, retriesRemaining: retryLimit - retryCount },
+    { phase: 'probe:retry', jobId, runId, queueWaitMs, retryCount, retriesRemaining: retryLimit - retryCount },
     'Job will be retried'
   );
   return false; // caller should rethrow

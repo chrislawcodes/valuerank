@@ -42,6 +42,16 @@ export type ProgressUpdate = {
   message: string;
 };
 
+type PythonLogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error';
+
+type PythonStructuredLog = {
+  level: string;
+  msg: string;
+  context?: string;
+  time?: number;
+  [key: string]: unknown;
+};
+
 /**
  * Try to parse a line as a progress update JSON.
  * Returns null if the line is not a valid progress update.
@@ -61,6 +71,62 @@ function tryParseProgress(line: string): ProgressUpdate | null {
   }
 
   return null;
+}
+
+function tryParsePythonLog(line: string): PythonStructuredLog | null {
+  if (!line.trim().startsWith('{')) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(line.trim()) as unknown;
+    if (
+      typeof parsed === 'object'
+      && parsed !== null
+      && typeof (parsed as Record<string, unknown>).level === 'string'
+      && typeof (parsed as Record<string, unknown>).msg === 'string'
+    ) {
+      return parsed as PythonStructuredLog;
+    }
+  } catch {
+    // Not valid JSON, ignore
+  }
+
+  return null;
+}
+
+function forwardPythonLog(script: string, entry: PythonStructuredLog): void {
+  const level = entry.level.toLowerCase();
+  if (level === 'trace' || level === 'debug') {
+    return;
+  }
+  const details = {
+    script,
+    pythonContext: entry.context,
+    pythonTimeMs: entry.time,
+    ...Object.fromEntries(
+      Object.entries(entry).filter(([key]) => !['level', 'msg', 'context', 'time'].includes(key))
+    ),
+  };
+
+  switch (level as PythonLogLevel) {
+    case 'trace':
+      log.trace(details, entry.msg);
+      break;
+    case 'debug':
+      log.debug(details, entry.msg);
+      break;
+    case 'warn':
+      log.warn(details, entry.msg);
+      break;
+    case 'error':
+      log.error(details, entry.msg);
+      break;
+    case 'info':
+    default:
+      log.info(details, entry.msg);
+      break;
+  }
 }
 
 /**
@@ -123,27 +189,29 @@ export async function spawnPython<TInput, TOutput>(
       stdout += data.toString();
     });
 
-    // Collect stderr and parse progress updates
+    // Collect stderr and parse structured worker logs / progress updates
     pythonProcess.stderr.on('data', (data: Buffer) => {
       const chunk = data.toString();
       stderr += chunk;
+      stderrBuffer += chunk;
 
-      // Only process if we have a progress callback
-      if (onProgress) {
-        stderrBuffer += chunk;
+      // Process complete lines immediately so worker logs are available even on success.
+      const lines = stderrBuffer.split('\n');
+      const lastLine = lines.pop();
+      stderrBuffer = typeof lastLine === 'string' ? lastLine : '';
 
-        // Process complete lines
-        const lines = stderrBuffer.split('\n');
-        const lastLine = lines.pop();
-        stderrBuffer = typeof lastLine === 'string' ? lastLine : '';
+      for (const line of lines) {
+        const progress = tryParseProgress(line);
+        if (progress && onProgress) {
+          Promise.resolve(onProgress(progress)).catch((err: unknown) => {
+            log.warn({ err: err instanceof Error ? err : new Error(String(err)) }, 'Progress callback failed');
+          });
+          continue;
+        }
 
-        for (const line of lines) {
-          const progress = tryParseProgress(line);
-          if (progress) {
-            Promise.resolve(onProgress(progress)).catch((err: unknown) => {
-              log.warn({ err: err instanceof Error ? err : new Error(String(err)) }, 'Progress callback failed');
-            });
-          }
+        const pythonLog = tryParsePythonLog(line);
+        if (pythonLog) {
+          forwardPythonLog(script, pythonLog);
         }
       }
     });
@@ -163,12 +231,17 @@ export async function spawnPython<TInput, TOutput>(
       if (resolved) return;
 
       // Process any remaining buffered stderr
-      if (onProgress && stderrBuffer) {
+      if (stderrBuffer) {
         const progress = tryParseProgress(stderrBuffer);
-        if (progress) {
+        if (progress && onProgress) {
           Promise.resolve(onProgress(progress)).catch((err: unknown) => {
             log.warn({ err: err instanceof Error ? err : new Error(String(err)) }, 'Progress callback failed');
           });
+        } else {
+          const pythonLog = tryParsePythonLog(stderrBuffer);
+          if (pythonLog) {
+            forwardPythonLog(script, pythonLog);
+          }
         }
       }
 

@@ -65,6 +65,7 @@ export async function requeueMissingProbes(
         scenarioId,
         modelId,
         sampleIndex,
+        enqueuedAt: new Date().toISOString(),
         config: {
           maxTurns: 10,
         },
@@ -106,6 +107,7 @@ export async function queueSummarizeJobsForRecovery(runId: string): Promise<numb
     await boss.send('summarize_transcript', {
       runId,
       transcriptId: transcript.id,
+      enqueuedAt: new Date().toISOString(),
     }, {
       ...jobOptions,
       singletonKey: transcript.id,

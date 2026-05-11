@@ -202,6 +202,19 @@ def get_current_request_metadata() -> Optional[dict[str, Any]]:
     return dict(metadata)
 
 
+def build_timing_summary(
+    request_started_at: float,
+    request_finished_at: float,
+    response_finished_at: float,
+) -> dict[str, int]:
+    """Build a compact timing summary for an LLM request lifecycle."""
+    return {
+        "requestMs": max(0, int(round((request_finished_at - request_started_at) * 1000))),
+        "parseMs": max(0, int(round((response_finished_at - request_finished_at) * 1000))),
+        "totalMs": max(0, int(round((response_finished_at - request_started_at) * 1000))),
+    }
+
+
 def _is_unsupported_temperature_response(
     status_code: int,
     response_text: str,

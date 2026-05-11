@@ -535,6 +535,8 @@ model Transcript {
   // the single source of truth (PR #713, commit f86c2579).
   decisionText       String?   @map("decision_text")     // LLM-generated summary
   decisionMetadata   Json?     @map("decision_metadata") @db.JsonB
+  summarizeQueuedAt  DateTime? @map("summarize_queued_at")
+  summarizeDurationMs Int?     @map("summarize_duration_ms")
   summarizedAt       DateTime? @map("summarized_at")     // When summary was generated
   summarizeFailedAt  DateTime?  @map("summarize_failed_at")
   costDebitedAt      DateTime?  @map("cost_debited_at")
@@ -654,6 +656,7 @@ model ProbeResult {
   errorMessage String?          @map("error_message")
   retryCount   Int              @default(0) @map("retry_count")
   // Timestamps
+  queuedAt     DateTime?        @map("queued_at")
   createdAt    DateTime         @default(now()) @map("created_at")
   completedAt  DateTime?        @map("completed_at")
   deletedAt    DateTime?        @map("deleted_at")

@@ -55,15 +55,18 @@ describe('createProbeDeadLetterHandler', () => {
     await handler([makeJob()]);
 
     expect(recordProbeFailure).toHaveBeenCalledTimes(1);
-    expect(recordProbeFailure).toHaveBeenCalledWith({
-      runId: 'run-123',
-      scenarioId: 'scenario-abc',
-      modelId: 'gpt-5.1',
-      sampleIndex: 0,
-      errorCode: 'JOB_EXPIRED',
-      errorMessage: expect.stringContaining('dead letter'),
-      retryCount: 0,
-    });
+    expect(recordProbeFailure).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: 'run-123',
+        scenarioId: 'scenario-abc',
+        modelId: 'gpt-5.1',
+        sampleIndex: 0,
+        queuedAt: null,
+        errorCode: 'JOB_EXPIRED',
+        errorMessage: expect.stringContaining('dead letter'),
+        retryCount: 0,
+      })
+    );
     expect(maybeAdvanceRunStatus).toHaveBeenCalledWith('run-123');
   });
 

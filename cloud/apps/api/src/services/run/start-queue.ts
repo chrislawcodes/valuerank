@@ -61,6 +61,7 @@ export async function enqueueRunJobs(input: EnqueueRunJobsInput): Promise<string
           scenarioId: item.scenarioId,
           modelId: item.modelId,
           sampleIndex: i,
+          enqueuedAt: new Date().toISOString(),
           config: {
             maxTurns: 10,
             ...(temperature !== undefined && temperature !== null ? { temperature } : {}),

@@ -28,9 +28,19 @@ export function createProbeDeadLetterHandler(): PgBoss.WorkHandler<ProbeDeadLett
     for (const job of jobs) {
       const { runId, scenarioId, modelId, sampleIndex = 0 } = job.data;
       const jobId = job.id;
+      const queueWaitMs = (() => {
+        if (typeof job.data.enqueuedAt !== 'string' || job.data.enqueuedAt.trim() === '') {
+          return null;
+        }
+        const queuedAtMs = Date.parse(job.data.enqueuedAt);
+        if (Number.isNaN(queuedAtMs)) {
+          return null;
+        }
+        return Math.max(0, Date.now() - queuedAtMs);
+      })();
 
       log.error(
-        { jobId, runId, scenarioId, modelId, sampleIndex },
+        { phase: 'probe:dead-letter', jobId, runId, scenarioId, modelId, sampleIndex, queueWaitMs },
         'Probe job failed/expired - processing dead letter'
       );
 
@@ -49,6 +59,7 @@ export function createProbeDeadLetterHandler(): PgBoss.WorkHandler<ProbeDeadLett
           scenarioId,
           modelId,
           sampleIndex,
+          queuedAt: job.data.enqueuedAt ?? null,
           errorCode: 'JOB_EXPIRED',
           errorMessage: 'Job expired or failed without completing - moved to dead letter queue',
           retryCount: 0,
@@ -57,17 +68,19 @@ export function createProbeDeadLetterHandler(): PgBoss.WorkHandler<ProbeDeadLett
         const result = await maybeAdvanceRunStatus(runId);
 
         log.info(
-          { jobId, runId, scenarioId, modelId, sampleIndex, result },
+          { phase: 'probe:dead-letter:complete', jobId, runId, scenarioId, modelId, sampleIndex, queueWaitMs, result },
           'Dead letter job processed - run progress updated'
         );
       } catch (error) {
         log.error(
           {
+            phase: 'probe:dead-letter:failed',
             jobId,
             runId,
             scenarioId,
             modelId,
             sampleIndex,
+            queueWaitMs,
             err: error,
             jobData: job.data,
           },
