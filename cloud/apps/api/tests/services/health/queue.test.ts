@@ -39,6 +39,7 @@ describe('Queue Health Service', () => {
           { type: 'expand_scenarios', pending: 0, active: 0, completed: 50, failed: 1 },
         ],
         totals: { pending: 5, active: 2, completed: 150, failed: 4 },
+        completedLast30m: 12,
       });
 
       const result = await getQueueHealth();
@@ -49,6 +50,7 @@ describe('Queue Health Service', () => {
       expect(result.pendingJobs).toBe(5);
       expect(result.activeJobs).toBe(2);
       expect(result.completedLast24h).toBe(150);
+      expect(result.completedLast30m).toBe(12);
       expect(result.failedLast24h).toBe(4);
       expect(result.jobTypes).toHaveLength(2);
       expect(result.checkedAt).toBeInstanceOf(Date);
@@ -60,6 +62,7 @@ describe('Queue Health Service', () => {
         isPaused: false,
         jobTypes: [],
         totals: { pending: 0, active: 0, completed: 90, failed: 10 },
+        completedLast30m: 0,
       });
 
       const result = await getQueueHealth();
@@ -74,6 +77,7 @@ describe('Queue Health Service', () => {
         isPaused: false,
         jobTypes: [],
         totals: { pending: 0, active: 0, completed: 0, failed: 0 },
+        completedLast30m: 0,
       });
 
       const result = await getQueueHealth();
@@ -87,6 +91,7 @@ describe('Queue Health Service', () => {
         isPaused: false,
         jobTypes: [],
         totals: { pending: 0, active: 0, completed: 0, failed: 0 },
+        completedLast30m: 0,
       });
 
       const result = await getQueueHealth();
@@ -101,6 +106,7 @@ describe('Queue Health Service', () => {
         isPaused: true,
         jobTypes: [],
         totals: { pending: 10, active: 0, completed: 50, failed: 2 },
+        completedLast30m: 3,
       });
 
       const result = await getQueueHealth();

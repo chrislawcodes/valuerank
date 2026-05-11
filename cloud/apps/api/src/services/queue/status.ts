@@ -132,7 +132,7 @@ export async function getQueueStatus(): Promise<QueueStatus> {
       isRunning: state.isRunning,
       isPaused: state.isPaused,
       jobTypes,
-      completedLast30m: Number(completedLast30mResult[0]?.count ?? 0n),
+      completedLast30m: Number(completedLast30mResult?.[0]?.count ?? 0n),
       totals,
     };
   } catch (error) {
