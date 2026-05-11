@@ -125,8 +125,6 @@ export function OverviewSummaryTable({
   const isPooledAcrossRuns = repeatPatternSources.length > 1;
   const summaryUnavailableMessage = getOverviewUnavailableMessage(
     semantics,
-    analysisMode,
-    companionAnalysis != null,
   );
 
   const helperText = coverageBatchCount !== null && coverageBatchCount !== undefined
