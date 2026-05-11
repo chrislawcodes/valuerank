@@ -61,7 +61,7 @@ export async function getQueueStatus(): Promise<QueueStatus> {
       SELECT COUNT(*) as count
       FROM pgboss.job
       WHERE state = 'completed'
-        AND completedon >= NOW() - INTERVAL '30 minutes'
+        AND completed_on >= NOW() - INTERVAL '30 minutes'
         AND (${ACTIVE_PROBE_QUEUE_SQL} OR name IN ('summarize_transcript', 'analyze_basic', 'analyze_deep', 'expand_scenarios'))
     `;
 
