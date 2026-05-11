@@ -98,9 +98,12 @@ export function getPairedFamilyConfig(family: string): PairedFamilyConfig | unde
 function extractPairedIntro(template: string, family: string): string | null {
   const prefix = getPairedFamilyConfig(family)?.sentencePrefix;
   if (prefix == null) return null;
+  const legacyPrefix = prefix.replace(/\[level\]\s*/g, '').trim();
   const markerIndex = template.indexOf(prefix);
-  if (markerIndex < 0) return null;
-  return markerIndex === 0 ? '' : template.slice(0, markerIndex).trimEnd();
+  const legacyMarkerIndex =
+    markerIndex >= 0 ? markerIndex : (legacyPrefix.length > 0 ? template.indexOf(legacyPrefix) : -1);
+  if (legacyMarkerIndex < 0) return null;
+  return legacyMarkerIndex === 0 ? '' : template.slice(0, legacyMarkerIndex).trimEnd();
 }
 
 export function normalizePairedComponents(
