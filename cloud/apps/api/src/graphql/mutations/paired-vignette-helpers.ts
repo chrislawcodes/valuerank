@@ -8,9 +8,8 @@ import {
 import {
   AppError,
   assembleTemplate,
-  getJobChoiceValueStatementBody,
-  getSoftwareApproachValueStatementBody,
   NotFoundError,
+  normalizePairedComponents,
   ValidationError,
   type TemplateConfig,
 } from '@valuerank/shared';
@@ -299,16 +298,24 @@ export async function resolvePairedVignetteInputs(input: {
     }
   }
 
-  const bodyLookup = domain.normalizedName === 'software-approach-choice'
-    ? getSoftwareApproachValueStatementBody
-    : getJobChoiceValueStatementBody;
+  const normalizedComponents = normalizePairedComponents({
+    context_id: null,
+    value_first: {
+      token: valueFirst.token,
+      body: valueFirst.body,
+    },
+    value_second: {
+      token: valueSecond.token,
+      body: valueSecond.body,
+    },
+  }, domain.normalizedName);
   const normalizedValueFirst = {
     ...valueFirst,
-    body: bodyLookup(valueFirst.token) ?? valueFirst.body,
+    body: normalizedComponents.value_first.body,
   };
   const normalizedValueSecond = {
     ...valueSecond,
-    body: bodyLookup(valueSecond.token) ?? valueSecond.body,
+    body: normalizedComponents.value_second.body,
   };
 
   return {

@@ -161,6 +161,89 @@ describe('GraphQL Paired Vignette Mutations', () => {
     expect(bContent.template).not.toContain('freedom');
   });
 
+  it('uses library title-choice wording when creating a library paired vignette', async () => {
+    const domain = await db.domain.create({
+      data: {
+        name: 'Library Books Title Choice',
+        normalizedName: 'library-books-genre-choice',
+        sentencePrefix: 'One title offers readers [level] insight about',
+        labelPrefix: 'the title that offers readers insight about',
+      },
+    });
+    createdDomainIds.push(domain.id);
+
+    const context = await db.domainContext.create({
+      data: {
+        domainId: domain.id,
+        text: 'You are a librarian choosing between two titles to feature in your library\'s collection.',
+      },
+    });
+    createdContextIds.push(context.id);
+
+    const selfDirection = await db.valueStatement.create({
+      data: {
+        domainId: domain.id,
+        token: 'self_direction_action',
+        body: 'living life on their own terms because of how it relates to independent choice in goals and actions',
+      },
+    });
+    const powerDominance = await db.valueStatement.create({
+      data: {
+        domainId: domain.id,
+        token: 'power_dominance',
+        body: 'how power over others is gained and exercised because of how it relates to control over people and the decisions that affect them',
+      },
+    });
+    createdValueIds.push(selfDirection.id, powerDominance.id);
+
+    const createResponse = await request(app)
+      .post('/graphql')
+      .set('Authorization', getAuthHeader())
+      .send({
+        query: CREATE_PAIRED_VIGNETTE_MUTATION,
+        variables: {
+          input: {
+            name: 'Freedom vs Power',
+            domainId: domain.id,
+            contextId: context.id,
+            valueFirstId: selfDirection.id,
+            valueSecondId: powerDominance.id,
+          },
+        },
+      });
+
+    expect(createResponse.status).toBe(200);
+    expect(createResponse.body.errors).toBeUndefined();
+
+    const definitionAId = createResponse.body.data.createPairedVignette.definitionA.id as string;
+    const definitionBId = createResponse.body.data.createPairedVignette.definitionB.id as string;
+    createdDefinitionIds.push(definitionAId, definitionBId);
+
+    const definitions = await db.definition.findMany({
+      where: { id: { in: [definitionAId, definitionBId] } },
+      orderBy: { id: 'asc' },
+    });
+    expect(definitions).toHaveLength(2);
+
+    const definitionA = definitions.find((definition) => definition.id === definitionAId);
+    const definitionB = definitions.find((definition) => definition.id === definitionBId);
+    expect(definitionA).toBeDefined();
+    expect(definitionB).toBeDefined();
+
+    const aContent = definitionA!.content as Record<string, unknown>;
+    const bContent = definitionB!.content as Record<string, unknown>;
+
+    expect(String(aContent.template)).toContain('living life on their own terms');
+    expect(String(aContent.template)).toContain('how power over others is gained and exercised');
+    expect(String(aContent.template)).not.toContain('freedom in how they work');
+    expect(String(aContent.template)).not.toContain('authority over others');
+    expect((aContent.components as Record<string, { body: string }>).value_first.body).toContain('living life on their own terms');
+    expect((aContent.components as Record<string, { body: string }>).value_second.body).toContain('how power over others is gained and exercised');
+
+    expect(String(bContent.template)).toContain('how power over others is gained and exercised');
+    expect(String(bContent.template)).toContain('living life on their own terms');
+  });
+
   it('replaces existing scenarios when a pair is updated to use a level preset', async () => {
     const domain = await db.domain.create({
       data: { name: 'Scenario Replacement Domain', normalizedName: `scenario-replacement-domain-${Date.now()}` },

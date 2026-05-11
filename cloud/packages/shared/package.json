@@ -25,6 +25,10 @@
     "./canonical-dimensions": {
       "import": "./dist/canonical-dimensions.js",
       "types": "./dist/canonical-dimensions.d.ts"
+    },
+    "./paired-definition": {
+      "import": "./dist/paired-definition.js",
+      "types": "./dist/paired-definition.d.ts"
     }
   },
   "scripts": {
