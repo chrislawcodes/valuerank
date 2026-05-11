@@ -10,10 +10,6 @@ const FAMILY_NAMES = [
   'library-books-genre-choice',
   'national-priorities',
   'neighborhood-choice',
-  'invasion-motivation-choice',
-  'foreign-policy-choice',
-  'college-activity-choice',
-  'retirement-activity-choice',
 ] as const;
 
 const BASE_CONTENT = {

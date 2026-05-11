@@ -1,13 +1,8 @@
 import { assembleTemplate, type TemplateConfig } from './assemble-template.js';
 import {
-  getCollegeActivityValueStatementBody,
-  getForeignPolicyValueStatementBody,
-  getInvasionMotivationValueStatementBody,
   getJobChoiceValueStatementBody,
-  getLibraryValueStatementBody,
   getNationalPrioritiesValueStatementBody,
   getNeighborhoodValueStatementBody,
-  getRetirementActivityValueStatementBody,
   getSoftwareApproachValueStatementBody,
 } from './value-statements.js';
 
@@ -37,52 +32,63 @@ export type PairedFamilyConfig = TemplateConfig & {
   bodyLookup: BodyLookup;
 };
 
+function createPairedFamilyConfig(
+  sentencePrefix: string,
+  labelPrefix: string,
+  bodyLookup: BodyLookup,
+): PairedFamilyConfig {
+  return {
+    sentencePrefix,
+    labelPrefix,
+    bodyLookup,
+  };
+}
+
+const LIBRARY_VALUE_STATEMENTS = [
+  {
+    token: 'self_direction_action',
+    body: 'living life on their own terms because of how it relates to independent choice in goals and actions',
+  },
+  {
+    token: 'power_dominance',
+    body: 'how power over others is gained and exercised because of how it relates to control over people and the decisions that affect them',
+  },
+] as const;
+
+const LIBRARY_VALUE_STATEMENT_MAP = new Map<string, string>(
+  LIBRARY_VALUE_STATEMENTS.map(({ token, body }) => [token, body]),
+);
+
+function getLibraryValueStatementBody(token: string): string | undefined {
+  return LIBRARY_VALUE_STATEMENT_MAP.get(token);
+}
+
 const PAIRED_FAMILY_CONFIG_BY_FAMILY: Record<string, PairedFamilyConfig> = {
-  'job-choice': {
-    sentencePrefix: 'One job offers [level]',
-    labelPrefix: 'taking the job with',
-    bodyLookup: getJobChoiceValueStatementBody,
-  },
-  'software-approach-choice': {
-    sentencePrefix: 'One approach provides [level]',
-    labelPrefix: 'choosing the approach relating to',
-    bodyLookup: getSoftwareApproachValueStatementBody,
-  },
-  'library-books-genre-choice': {
-    sentencePrefix: 'One title offers readers [level] insight about',
-    labelPrefix: 'the title that offers readers insight about',
-    bodyLookup: getLibraryValueStatementBody,
-  },
-  'national-priorities': {
-    sentencePrefix: 'One program provides citizens with [level]',
-    labelPrefix: 'the program that provides citizens with',
-    bodyLookup: getNationalPrioritiesValueStatementBody,
-  },
-  'neighborhood-choice': {
-    sentencePrefix: 'One neighborhood offers [level]',
-    labelPrefix: 'choosing the neighborhood with',
-    bodyLookup: getNeighborhoodValueStatementBody,
-  },
-  'invasion-motivation-choice': {
-    sentencePrefix: 'Taking control of the neighboring country would provide [level]',
-    labelPrefix: 'the motivation that would provide',
-    bodyLookup: getInvasionMotivationValueStatementBody,
-  },
-  'foreign-policy-choice': {
-    sentencePrefix: 'One proposal offers [level]',
-    labelPrefix: 'the proposal that offers',
-    bodyLookup: getForeignPolicyValueStatementBody,
-  },
-  'college-activity-choice': {
-    sentencePrefix: 'One activity offers [level]',
-    labelPrefix: 'the activity that offers',
-    bodyLookup: getCollegeActivityValueStatementBody,
-  },
-  'retirement-activity-choice': {
-    sentencePrefix: 'One activity offers [level]',
-    labelPrefix: 'the activity that offers',
-    bodyLookup: getRetirementActivityValueStatementBody,
-  },
+  'job-choice': createPairedFamilyConfig(
+    'One job offers [level]',
+    'taking the job with',
+    getJobChoiceValueStatementBody,
+  ),
+  'software-approach-choice': createPairedFamilyConfig(
+    'One approach provides [level]',
+    'choosing the approach relating to',
+    getSoftwareApproachValueStatementBody,
+  ),
+  'library-books-genre-choice': createPairedFamilyConfig(
+    'One title offers readers [level] insight about',
+    'the title that offers readers insight about',
+    getLibraryValueStatementBody,
+  ),
+  'national-priorities': createPairedFamilyConfig(
+    'One program provides citizens with [level]',
+    'the program that provides citizens with',
+    getNationalPrioritiesValueStatementBody,
+  ),
+  'neighborhood-choice': createPairedFamilyConfig(
+    'One neighborhood offers [level]',
+    'choosing the neighborhood with',
+    getNeighborhoodValueStatementBody,
+  ),
 };
 
 export function getPairedFamilyConfig(family: string): PairedFamilyConfig | undefined {
