@@ -11,9 +11,16 @@ export const DISPLAY_METRICS: Array<{ value: DisplayMetric; label: string }> = [
 export function getMetricValue(
   model: ModelEntry,
   valueKey: ValueKey,
-  metric: DisplayMetric
+  metric: DisplayMetric,
+  winRateMode: 'all' | 'exc-neutral' = 'all'
 ): number | null {
-  return metric === 'winRate' ? (model.winRates?.[valueKey] ?? null) : model.values[valueKey];
+  if (metric === 'winRate') {
+    if (winRateMode === 'exc-neutral') {
+      return model.winRatesExcNeutral?.[valueKey] ?? null;
+    }
+    return model.winRates?.[valueKey] ?? null;
+  }
+  return model.values[valueKey] ?? null;
 }
 
 export function formatMetricValue(value: number | null, metric: DisplayMetric): string {

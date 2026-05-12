@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { HelpCircle, X } from 'lucide-react';
-import { type ModelEntry } from '../../data/domainAnalysisData';
+import { VALUES, type ModelEntry } from '../../data/domainAnalysisData';
 import { Button } from '../ui/Button';
 import { ValuePrioritiesHelpPanel } from './ValuePrioritiesHelpPanel';
 import { ValuePrioritiesTable } from './ValuePrioritiesTable';
@@ -12,6 +12,7 @@ type ValuePrioritiesSectionProps = {
   selectedSignature: string | null;
   isReadOnly?: boolean;
   showStabilityDots?: boolean;
+  winRateMode?: 'all' | 'exc-neutral';
 };
 
 export function ValuePrioritiesSection({
@@ -20,9 +21,13 @@ export function ValuePrioritiesSection({
   selectedSignature,
   isReadOnly = false,
   showStabilityDots = false,
+  winRateMode = 'all',
 }: ValuePrioritiesSectionProps) {
   const [showSectionHelp, setShowSectionHelp] = useState(false);
   const [displayMetric, setDisplayMetric] = useState<DisplayMetric>('winRate');
+  const hasExcNeutralData =
+    winRateMode === 'exc-neutral' &&
+    models.some((m) => VALUES.some((v) => m.winRatesExcNeutral?.[v] != null));
 
   return (
     <section className="rounded-lg border border-gray-200 bg-white p-4">
@@ -44,6 +49,11 @@ export function ValuePrioritiesSection({
           {showSectionHelp && <ValuePrioritiesHelpPanel />}
         </div>
         <div className="flex flex-col items-start gap-2 md:items-end">
+          {winRateMode === 'exc-neutral' && !hasExcNeutralData && (
+            <p className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-700">
+              Exc. neutral data not yet available — showing all responses.
+            </p>
+          )}
           <div className="flex items-center gap-2">
             <span className="text-xs font-medium text-gray-500">Cell metric</span>
             <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
@@ -76,6 +86,7 @@ export function ValuePrioritiesSection({
         isReadOnly={isReadOnly}
         showStabilityDots={showStabilityDots}
         displayMetric={displayMetric}
+        winRateMode={winRateMode}
       />
     </section>
   );

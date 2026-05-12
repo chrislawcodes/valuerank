@@ -264,6 +264,16 @@ export function DomainAnalysis() {
         new Map(model.values.map((value) => [value.valueKey, value.stabilityScore] as const)),
       ]),
     );
+    const excNeutralByModel = new Map<string, Map<string, number | null>>(
+      sourceModels.map((model) => [
+        model.model,
+        new Map(
+          model.values
+            .filter((e) => e.winRateExcNeutral !== undefined)
+            .map((e) => [e.valueKey, e.winRateExcNeutral ?? null] as const),
+        ),
+      ]),
+    );
 
     return sourceModels.map((model) => {
       const valueMap = new Map(model.values.map((e) => [e.valueKey, e.score]));
@@ -271,6 +281,7 @@ export function DomainAnalysis() {
         e.valueKey,
         pooledWinRatesByModel.get(model.model)?.get(e.valueKey) ?? null,
       ] as const));
+      const excNeutralMap = excNeutralByModel.get(model.model);
       const values = VALUES.reduce<Record<ValueKey, number>>((acc, valueKey) => {
         acc[valueKey] = valueMap.get(valueKey) ?? 0;
         return acc;
@@ -279,6 +290,13 @@ export function DomainAnalysis() {
         acc[valueKey] = winRateMap.get(valueKey) ?? null;
         return acc;
       }, {} as Record<ValueKey, number | null>);
+      const winRatesExcNeutral =
+        excNeutralMap != null && excNeutralMap.size > 0
+          ? VALUES.reduce<Record<ValueKey, number | null>>((acc, valueKey) => {
+              acc[valueKey] = excNeutralMap.get(valueKey) ?? null;
+              return acc;
+            }, {} as Record<ValueKey, number | null>)
+          : undefined;
       const stabilityScores = VALUES.reduce<Record<ValueKey, number | null>>((acc, valueKey) => {
         acc[valueKey] = stabilityScoresByModel.get(model.model)?.get(valueKey) ?? null;
         return acc;
@@ -289,6 +307,7 @@ export function DomainAnalysis() {
         label: model.label,
         values,
         winRates,
+        winRatesExcNeutral,
         stabilityScores,
         // `totalComparisons` counts each transcript once per value in the pair.
         // Divide by 2 to get the unique trial total for this model row.
@@ -556,9 +575,11 @@ export function DomainAnalysis() {
             selectedSignature={selectedSignature === '' ? null : selectedSignature}
             isReadOnly={isAllDomains}
             showStabilityDots
+            winRateMode={winRateMode}
           />
           <DominanceSection
             models={selectedModels}
+            winRateMode={winRateMode}
           />
           <PairwiseWinRateMatrix
             models={visiblePairwiseModels}
@@ -566,6 +587,7 @@ export function DomainAnalysis() {
             domainId={selectedDomainIdForDrawer}
             signature={selectedSignatureForDrawer}
             onCellClick={(row, column) => setOpenPair({ row, column })}
+            winRateMode={winRateMode}
           />
 
           <DomainShiftsReportSection
@@ -579,6 +601,7 @@ export function DomainAnalysis() {
                 signature: selectedSignature === '' ? '(none)' : selectedSignature,
               })
               : null}
+            winRateMode={winRateMode}
           />
           <WinRateStabilitySection
             models={visibleStabilityModels}

@@ -49,6 +49,8 @@ const ALL_DOMAINS_SCOPE = 'all-domains';
 function buildModelEntries(
   models: DomainAnalysisModel[],
   modelsAnalysisModels: ModelsAnalysisModelResult[] = [],
+  winRateMode: 'all' | 'exc-neutral' = 'all',
+  dataSource: 'log-odds' | 'win-rate' | 'kappa-agreement' = 'log-odds',
 ): ModelEntry[] {
   const pooledWinRatesByModel = new Map<string, Map<string, number | null>>(
     modelsAnalysisModels.map((model) => [
@@ -56,16 +58,28 @@ function buildModelEntries(
       new Map(model.values.map((value) => [value.valueKey, value.pooledWinRate])),
     ]),
   );
+  const pooledExcNeutralByModel = new Map<string, Map<string, number | null>>(
+    modelsAnalysisModels.map((model) => [
+      model.modelId,
+      new Map(model.values.map((value) => [value.valueKey, value.pooledWinRateExcNeutral])),
+    ]),
+  );
 
   return models.map((model) => {
     const valueMap = new Map(model.values.map((value) => [value.valueKey, value.score] as const));
     const winRateMap = pooledWinRatesByModel.get(model.model);
+    const excNeutralMap = pooledExcNeutralByModel.get(model.model);
+    const useExcNeutral = winRateMode === 'exc-neutral' && dataSource === 'win-rate';
     const values = VALUES.reduce<Record<ValueKey, number>>((acc, valueKey) => {
       acc[valueKey] = valueMap.get(valueKey) ?? 0;
       return acc;
     }, {} as Record<ValueKey, number>);
     const winRates = VALUES.reduce<Record<ValueKey, number | null>>((acc, valueKey) => {
-      acc[valueKey] = winRateMap?.get(valueKey) ?? null;
+      if (useExcNeutral) {
+        acc[valueKey] = excNeutralMap?.get(valueKey) ?? winRateMap?.get(valueKey) ?? null;
+      } else {
+        acc[valueKey] = winRateMap?.get(valueKey) ?? null;
+      }
       return acc;
     }, {} as Record<ValueKey, number | null>);
 
@@ -320,8 +334,14 @@ export function ModelsGroups() {
     || (signatureData == null && signaturesLoading && signaturesError == null)
     || (llmModelsData == null && llmModelsError == null);
   const models = useMemo(
-    () => buildModelEntries(data?.domainAnalysis.models ?? [], modelsAnalysisData?.modelsAnalysis.models ?? []),
-    [data?.domainAnalysis.models, modelsAnalysisData?.modelsAnalysis.models],
+    () =>
+      buildModelEntries(
+        data?.domainAnalysis.models ?? [],
+        modelsAnalysisData?.modelsAnalysis.models ?? [],
+        winRateMode,
+        dataSource,
+      ),
+    [data?.domainAnalysis.models, dataSource, modelsAnalysisData?.modelsAnalysis.models, winRateMode],
   );
   const modelOptions = useMemo(
     () => activeModels.map((model) => ({
