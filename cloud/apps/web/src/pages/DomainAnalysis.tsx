@@ -232,9 +232,21 @@ export function DomainAnalysis() {
     [data?.domainAnalysis.models, selectedModelIds],
   );
   const cacheStatusCopy = useMemo(
-    () => getCacheStatusCopy(data?.domainAnalysis.cacheStatus, data?.domainAnalysis.generatedAt, transcriptCount),
-    [data?.domainAnalysis.cacheStatus, data?.domainAnalysis.generatedAt, transcriptCount],
+    () => getCacheStatusCopy(
+      data?.domainAnalysis.cacheStatus,
+      data?.domainAnalysis.generatedAt,
+      transcriptCount,
+      data?.domainAnalysis.refreshProgress,
+    ),
+    [data?.domainAnalysis.cacheStatus, data?.domainAnalysis.generatedAt, data?.domainAnalysis.refreshProgress, transcriptCount],
   );
+
+  const isUpdating = data?.domainAnalysis.cacheStatus === 'UPDATING';
+  useEffect(() => {
+    if (!isUpdating) return;
+    const id = setInterval(() => { reexecuteScoredQuery({ requestPolicy: 'network-only' }); }, 20_000);
+    return () => { clearInterval(id); };
+  }, [isUpdating, reexecuteScoredQuery]);
   const showPageLoader = domainsLoading || (queryDomainId !== '' && data?.domainAnalysis == null && fetching);
 
   const models = useMemo<ModelEntry[]>(() => {

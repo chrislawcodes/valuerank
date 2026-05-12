@@ -145,6 +145,7 @@ function buildEmptyDomainAnalysisResult(params: {
   generatedAt: Date;
   cacheStatus: DomainAnalysisCacheStatus;
   unavailableReason: string;
+  refreshProgress?: { completedRuns: number; totalRuns: number } | null;
 }): DomainAnalysisResult {
   return {
     domainId: params.domainId,
@@ -168,6 +169,7 @@ function buildEmptyDomainAnalysisResult(params: {
     cacheStatus: params.cacheStatus,
     contributionSummary: [],
     excludedDataSummary: [],
+    refreshProgress: params.refreshProgress ?? null,
   };
 }
 
@@ -270,6 +272,7 @@ function buildDomainAnalysisResultFromSnapshot(params: {
     cacheStatus: params.cacheStatus,
     contributionSummary: params.snapshot.contributionSummary ?? [],
     excludedDataSummary: params.snapshot.excludedDataSummary ?? [],
+    refreshProgress: null,
   };
 }
 
@@ -464,6 +467,7 @@ export async function getDomainAnalysisResult(params: {
           generatedAt: currentSnapshot.createdAt,
           cacheStatus: DOMAIN_ANALYSIS_CACHE_STATUS.UPDATING,
           unavailableReason: `Domain analysis is rebuilding (${buildProgress.completedRuns}/${buildProgress.totalRuns} runs processed). Refresh in a moment.`,
+          refreshProgress: { completedRuns: buildProgress.completedRuns, totalRuns: buildProgress.totalRuns },
         });
       }
     }

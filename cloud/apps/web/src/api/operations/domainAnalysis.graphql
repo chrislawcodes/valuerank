@@ -30,6 +30,10 @@ query DomainAnalysis($domainId: ID!, $scope: String, $signature: String) {
     definitionsWithAnalysis
     cacheStatus
     generatedAt
+    refreshProgress {
+      completedRuns
+      totalRuns
+    }
     models {
       model
       label

@@ -784,6 +784,12 @@ export type DomainAnalysisPairVignetteDetail = {
   winRateCI95Low?: Maybe<Scalars['Float']['output']>;
 };
 
+export type DomainAnalysisRefreshProgress = {
+  __typename?: 'DomainAnalysisRefreshProgress';
+  completedRuns: Scalars['Int']['output'];
+  totalRuns: Scalars['Int']['output'];
+};
+
 export type DomainAnalysisRefreshResult = {
   __typename?: 'DomainAnalysisRefreshResult';
   message: Scalars['String']['output'];
@@ -807,6 +813,7 @@ export type DomainAnalysisResult = {
   missingDefinitions: Array<DomainAnalysisMissingDefinition>;
   models: Array<DomainAnalysisModel>;
   rankingShapeBenchmarks: RankingShapeBenchmarks;
+  refreshProgress?: Maybe<DomainAnalysisRefreshProgress>;
   targetedDefinitions: Scalars['Int']['output'];
   totalDefinitions: Scalars['Int']['output'];
   unavailableModels: Array<DomainAnalysisUnavailableModel>;
@@ -1490,6 +1497,29 @@ export type ModelCostEstimate = {
   scenarioCount: Scalars['Int']['output'];
   /** Total cost (inputCost + outputCost) in USD */
   totalCost: Scalars['Float']['output'];
+};
+
+/** Derived bottleneck diagnosis for a specific model within a run */
+export type ModelExecutionBottleneck = {
+  __typename?: 'ModelExecutionBottleneck';
+  /** Recommended tuning action for this model */
+  action: Scalars['String']['output'];
+  /** Confidence in the diagnosis */
+  confidence: Scalars['String']['output'];
+  /** Human-readable model name if available */
+  displayName?: Maybe<Scalars['String']['output']>;
+  /** Model identifier */
+  modelId: Scalars['String']['output'];
+  /** Dominant timing pressure for this model in milliseconds */
+  pressureMs: Scalars['Int']['output'];
+  probe: StageSummary;
+  /** Provider name if available */
+  providerName?: Maybe<Scalars['String']['output']>;
+  /** Human-readable recommendation */
+  recommendation: Scalars['String']['output'];
+  /** Likely bottleneck stage for this model */
+  stage: Scalars['String']['output'];
+  summarize: StageSummary;
 };
 
 export type ModelInfo = {
@@ -2548,6 +2578,10 @@ export type ProbeResult = {
   modelId: Scalars['String']['output'];
   /** Output tokens generated (for cost tracking) */
   outputTokens?: Maybe<Scalars['Int']['output']>;
+  /** Time spent waiting in the queue before the probe result was recorded */
+  queueWaitMs?: Maybe<Scalars['Int']['output']>;
+  /** When the probe job was enqueued */
+  queuedAt?: Maybe<Scalars['DateTime']['output']>;
   /** Number of retries attempted before final result */
   retryCount: Scalars['Int']['output'];
   runId: Scalars['String']['output'];
@@ -3530,6 +3564,8 @@ export type Run = {
   deletedBy?: Maybe<User>;
   /** Estimated cost calculated when run was created. Stored in run config for historical reference. */
   estimatedCosts?: Maybe<CostEstimate>;
+  /** Derived bottleneck diagnosis for probe and summarize work, useful for deciding whether to increase parallelism or investigate worker latency */
+  executionBottleneck: RunExecutionBottleneck;
   /** Real-time execution metrics for monitoring parallel processing (only available during RUNNING state) */
   executionMetrics?: Maybe<ExecutionMetrics>;
   experiment?: Maybe<Experiment>;
@@ -3542,6 +3578,8 @@ export type Run = {
   lastAccessedAt?: Maybe<Scalars['DateTime']['output']>;
   /** Mirrored runs in the same domain with matching signature */
   mirroredRuns: Array<Run>;
+  /** Derived bottleneck diagnosis broken down by model, useful for identifying a specific model that is causing slowdowns or failures */
+  modelExecutionBottlenecks: Array<ModelExecutionBottleneck>;
   /** List of LLM models used in this run */
   models: Array<LlmModel>;
   /** Optional user-defined name for this run */
@@ -3673,6 +3711,21 @@ export type RunConditionGridCell = {
   trialCount: Scalars['Int']['output'];
 };
 
+/** Derived bottleneck diagnosis for probe and summarize work on a run */
+export type RunExecutionBottleneck = {
+  __typename?: 'RunExecutionBottleneck';
+  /** Recommended tuning action */
+  action: Scalars['String']['output'];
+  /** Confidence in the diagnosis */
+  confidence: Scalars['String']['output'];
+  probe: StageSummary;
+  /** Human-readable recommendation */
+  recommendation: Scalars['String']['output'];
+  /** Likely bottleneck stage */
+  stage: Scalars['String']['output'];
+  summarize: StageSummary;
+};
+
 /** Priority level for run execution (affects job queue ordering) */
 export type RunPriority =
   | 'HIGH'
@@ -3735,6 +3788,17 @@ export type SetDefaultModelResult = {
   model: LlmModel;
   /** Always null when multiple defaults are allowed */
   previousDefault?: Maybe<LlmModel>;
+};
+
+/** Timing summary for one run stage */
+export type StageSummary = {
+  __typename?: 'StageSummary';
+  execution: TimingSummary;
+  /** Number of failed rows in this stage */
+  failedCount: Scalars['Int']['output'];
+  queueWait: TimingSummary;
+  /** Total rows considered for this stage */
+  totalCount: Scalars['Int']['output'];
 };
 
 /** Input for starting a new evaluation run */
@@ -3839,6 +3903,19 @@ export type TaskStatus =
   | 'PENDING'
   | 'RUNNING';
 
+/** Timing statistics for a set of queue wait or execution samples */
+export type TimingSummary = {
+  __typename?: 'TimingSummary';
+  /** Average duration in milliseconds */
+  averageMs?: Maybe<Scalars['Int']['output']>;
+  /** Maximum duration in milliseconds */
+  maxMs?: Maybe<Scalars['Int']['output']>;
+  /** 95th percentile duration in milliseconds */
+  p95Ms?: Maybe<Scalars['Int']['output']>;
+  /** Number of timing samples included in the summary */
+  sampleCount: Scalars['Int']['output'];
+};
+
 /** A transcript from a model conversation during a run */
 export type Transcript = {
   __typename?: 'Transcript';
@@ -3866,6 +3943,12 @@ export type Transcript = {
   sampleIndex: Scalars['Int']['output'];
   scenario?: Maybe<Scenario>;
   scenarioId?: Maybe<Scalars['String']['output']>;
+  /** Time spent processing the summarize job */
+  summarizeDurationMs?: Maybe<Scalars['Int']['output']>;
+  /** Time spent waiting in the queue before summarization completed */
+  summarizeQueueWaitMs?: Maybe<Scalars['Int']['output']>;
+  /** When the summarize job was enqueued */
+  summarizeQueuedAt?: Maybe<Scalars['DateTime']['output']>;
   tokenCount: Scalars['Int']['output'];
   turnCount: Scalars['Int']['output'];
 };
@@ -4373,7 +4456,7 @@ export type DomainAnalysisQueryVariables = Exact<{
 }>;
 
 
-export type DomainAnalysisQuery = { __typename?: 'Query', domainAnalysis: { __typename?: 'DomainAnalysisResult', domainId: string, domainName: string, totalDefinitions: number, targetedDefinitions: number, coveredDefinitions: number, missingDefinitionIds: Array<string>, definitionsWithAnalysis: number, cacheStatus: string, generatedAt: string, clusterAnalysisByMethod: unknown, contributionSummary: Array<{ __typename?: 'DomainAnalysisContributionSummary', domainId: string, domainName: string, rawTrialCount: number, share: number }>, excludedDataSummary: Array<{ __typename?: 'DomainAnalysisExcludedDataSummary', domainId: string, domainName: string, reasonCode: string, count: number }>, missingDefinitions: Array<{ __typename?: 'DomainAnalysisMissingDefinition', definitionId: string, definitionName: string, reasonCode: string, reasonLabel: string, missingAllModels: boolean, missingModelIds: Array<string>, missingModelLabels: Array<string> }>, models: Array<{ __typename?: 'DomainAnalysisModel', model: string, label: string, values: Array<{ __typename?: 'DomainAnalysisValueScore', valueKey: string, score: number, prioritized: number, deprioritized: number, neutral: number, totalComparisons: number }>, rankingShape: { __typename?: 'RankingShape', topStructure: string, bottomStructure: string, topGap: number, bottomGap: number, spread: number, steepness: number, dominanceZScore?: number | null }, pairwiseWinRateModel?: { __typename?: 'PairwiseWinRateModel', valueOrder: Array<string>, winRateMatrix: Array<Array<number | null>>, trialCountMatrix: Array<Array<number>> } | null }>, unavailableModels: Array<{ __typename?: 'DomainAnalysisUnavailableModel', model: string, label: string, reason: string }>, rankingShapeBenchmarks: { __typename?: 'RankingShapeBenchmarks', domainMeanTopGap: number, domainStdTopGap?: number | null, medianSpread: number }, clusterAnalysis: { __typename?: 'ClusterAnalysis', skipped: boolean, skipReason?: string | null, defaultPair?: Array<string> | null, faultLinesByPair: unknown, clusters: Array<{ __typename?: 'DomainCluster', id: string, name: string, definingValues: Array<string>, centroid: unknown, members: Array<{ __typename?: 'ClusterMember', model: string, label: string, silhouetteScore: number, isOutlier: boolean, nearestClusterIds?: Array<string> | null, distancesToNearestClusters?: Array<number> | null }> }> } } };
+export type DomainAnalysisQuery = { __typename?: 'Query', domainAnalysis: { __typename?: 'DomainAnalysisResult', domainId: string, domainName: string, totalDefinitions: number, targetedDefinitions: number, coveredDefinitions: number, missingDefinitionIds: Array<string>, definitionsWithAnalysis: number, cacheStatus: string, generatedAt: string, clusterAnalysisByMethod: unknown, contributionSummary: Array<{ __typename?: 'DomainAnalysisContributionSummary', domainId: string, domainName: string, rawTrialCount: number, share: number }>, excludedDataSummary: Array<{ __typename?: 'DomainAnalysisExcludedDataSummary', domainId: string, domainName: string, reasonCode: string, count: number }>, missingDefinitions: Array<{ __typename?: 'DomainAnalysisMissingDefinition', definitionId: string, definitionName: string, reasonCode: string, reasonLabel: string, missingAllModels: boolean, missingModelIds: Array<string>, missingModelLabels: Array<string> }>, refreshProgress?: { __typename?: 'DomainAnalysisRefreshProgress', completedRuns: number, totalRuns: number } | null, models: Array<{ __typename?: 'DomainAnalysisModel', model: string, label: string, values: Array<{ __typename?: 'DomainAnalysisValueScore', valueKey: string, score: number, prioritized: number, deprioritized: number, neutral: number, totalComparisons: number }>, rankingShape: { __typename?: 'RankingShape', topStructure: string, bottomStructure: string, topGap: number, bottomGap: number, spread: number, steepness: number, dominanceZScore?: number | null }, pairwiseWinRateModel?: { __typename?: 'PairwiseWinRateModel', valueOrder: Array<string>, winRateMatrix: Array<Array<number | null>>, trialCountMatrix: Array<Array<number>> } | null }>, unavailableModels: Array<{ __typename?: 'DomainAnalysisUnavailableModel', model: string, label: string, reason: string }>, rankingShapeBenchmarks: { __typename?: 'RankingShapeBenchmarks', domainMeanTopGap: number, domainStdTopGap?: number | null, medianSpread: number }, clusterAnalysis: { __typename?: 'ClusterAnalysis', skipped: boolean, skipReason?: string | null, defaultPair?: Array<string> | null, faultLinesByPair: unknown, clusters: Array<{ __typename?: 'DomainCluster', id: string, name: string, definingValues: Array<string>, centroid: unknown, members: Array<{ __typename?: 'ClusterMember', model: string, label: string, silhouetteScore: number, isOutlier: boolean, nearestClusterIds?: Array<string> | null, distancesToNearestClusters?: Array<number> | null }> }> } } };
 
 export type RefreshDomainAnalysisMutationVariables = Exact<{
   domainId: Scalars['ID']['input'];
@@ -6170,6 +6253,10 @@ export const DomainAnalysisDocument = gql`
     definitionsWithAnalysis
     cacheStatus
     generatedAt
+    refreshProgress {
+      completedRuns
+      totalRuns
+    }
     models {
       model
       label
