@@ -83,7 +83,7 @@ async function enqueueSummarizeTranscriptJob(runId: string, transcriptId: string
   const boss = bossModule.getBoss();
   await boss.send(
     'summarize_transcript',
-    { runId, transcriptId, enqueuedAt: new Date().toISOString() },
+    { runId, transcriptId },
     {
       ...DEFAULT_JOB_OPTIONS['summarize_transcript'],
       singletonKey: transcriptId,
