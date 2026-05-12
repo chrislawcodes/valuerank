@@ -852,6 +852,11 @@ type DomainAnalysisPairVignetteDetail {
   winRateCI95Low: Float
 }
 
+type DomainAnalysisRefreshProgress {
+  completedRuns: Int!
+  totalRuns: Int!
+}
+
 type DomainAnalysisRefreshResult {
   message: String!
   mode: String!
@@ -873,6 +878,7 @@ type DomainAnalysisResult {
   missingDefinitions: [DomainAnalysisMissingDefinition!]!
   models: [DomainAnalysisModel!]!
   rankingShapeBenchmarks: RankingShapeBenchmarks!
+  refreshProgress: DomainAnalysisRefreshProgress
   targetedDefinitions: Int!
   totalDefinitions: Int!
   unavailableModels: [DomainAnalysisUnavailableModel!]!
@@ -1587,6 +1593,35 @@ type ModelCostEstimate {
   totalCost: Float!
 }
 
+"""Derived bottleneck diagnosis for a specific model within a run"""
+type ModelExecutionBottleneck {
+  """Recommended tuning action for this model"""
+  action: String!
+
+  """Confidence in the diagnosis"""
+  confidence: String!
+
+  """Human-readable model name if available"""
+  displayName: String
+
+  """Model identifier"""
+  modelId: String!
+
+  """Dominant timing pressure for this model in milliseconds"""
+  pressureMs: Int!
+  probe: StageSummary!
+
+  """Provider name if available"""
+  providerName: String
+
+  """Human-readable recommendation"""
+  recommendation: String!
+
+  """Likely bottleneck stage for this model"""
+  stage: String!
+  summarize: StageSummary!
+}
+
 type ModelInfo {
   label: String!
   modelId: ID!
@@ -2236,6 +2271,12 @@ type ProbeResult {
 
   """Output tokens generated (for cost tracking)"""
   outputTokens: Int
+
+  """Time spent waiting in the queue before the probe result was recorded"""
+  queueWaitMs: Int
+
+  """When the probe job was enqueued"""
+  queuedAt: DateTime
 
   """Number of retries attempted before final result"""
   retryCount: Int!
@@ -2910,6 +2951,9 @@ type QueueHealth {
   """Jobs completed in the last 24 hours"""
   completedLast24h: Int!
 
+  """Jobs completed in the last 30 minutes (rolling window)"""
+  completedLast30m: Int!
+
   """Error message if queue health check failed"""
   error: String
 
@@ -3064,6 +3108,11 @@ type Run {
   estimatedCosts: CostEstimate
 
   """
+  Derived bottleneck diagnosis for probe and summarize work, useful for deciding whether to increase parallelism or investigate worker latency
+  """
+  executionBottleneck: RunExecutionBottleneck!
+
+  """
   Real-time execution metrics for monitoring parallel processing (only available during RUNNING state)
   """
   executionMetrics: ExecutionMetrics
@@ -3082,6 +3131,11 @@ type Run {
 
   """Mirrored runs in the same domain with matching signature"""
   mirroredRuns: [Run!]!
+
+  """
+  Derived bottleneck diagnosis broken down by model, useful for identifying a specific model that is causing slowdowns or failures
+  """
+  modelExecutionBottlenecks: [ModelExecutionBottleneck!]!
 
   """List of LLM models used in this run"""
   models: [LlmModel!]!
@@ -3268,6 +3322,23 @@ type RunConditionGridCell {
   trialCount: Int!
 }
 
+"""Derived bottleneck diagnosis for probe and summarize work on a run"""
+type RunExecutionBottleneck {
+  """Recommended tuning action"""
+  action: String!
+
+  """Confidence in the diagnosis"""
+  confidence: String!
+  probe: StageSummary!
+
+  """Human-readable recommendation"""
+  recommendation: String!
+
+  """Likely bottleneck stage"""
+  stage: String!
+  summarize: StageSummary!
+}
+
 """Priority level for run execution (affects job queue ordering)"""
 enum RunPriority {
   HIGH
@@ -3333,6 +3404,18 @@ type SetDefaultModelResult {
 
   """Always null when multiple defaults are allowed"""
   previousDefault: LlmModel
+}
+
+"""Timing summary for one run stage"""
+type StageSummary {
+  execution: TimingSummary!
+
+  """Number of failed rows in this stage"""
+  failedCount: Int!
+  queueWait: TimingSummary!
+
+  """Total rows considered for this stage"""
+  totalCount: Int!
 }
 
 """Input for starting a new evaluation run"""
@@ -3461,6 +3544,21 @@ enum TaskStatus {
   RUNNING
 }
 
+"""Timing statistics for a set of queue wait or execution samples"""
+type TimingSummary {
+  """Average duration in milliseconds"""
+  averageMs: Int
+
+  """Maximum duration in milliseconds"""
+  maxMs: Int
+
+  """95th percentile duration in milliseconds"""
+  p95Ms: Int
+
+  """Number of timing samples included in the summary"""
+  sampleCount: Int!
+}
+
 """A transcript from a model conversation during a run"""
 type Transcript {
   content: JSON!
@@ -3499,6 +3597,15 @@ type Transcript {
   sampleIndex: Int!
   scenario: Scenario
   scenarioId: String
+
+  """Time spent processing the summarize job"""
+  summarizeDurationMs: Int
+
+  """Time spent waiting in the queue before summarization completed"""
+  summarizeQueueWaitMs: Int
+
+  """When the summarize job was enqueued"""
+  summarizeQueuedAt: DateTime
   tokenCount: Int!
   turnCount: Int!
 }

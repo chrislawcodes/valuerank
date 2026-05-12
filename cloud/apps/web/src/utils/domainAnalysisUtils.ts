@@ -68,6 +68,7 @@ export function getCacheStatusCopy(
   cacheStatus: 'FRESH' | 'UPDATING' | 'OUT_OF_DATE' | undefined,
   generatedAt: string | undefined,
   transcriptCount: number,
+  refreshProgress?: { completedRuns: number; totalRuns: number } | null,
 ): {
   badgeLabel: string;
   badgeClassName: string;
@@ -86,10 +87,13 @@ export function getCacheStatusCopy(
   }
 
   if (cacheStatus === 'UPDATING') {
+    const progressLabel = refreshProgress != null
+      ? `${refreshProgress.completedRuns} of ${refreshProgress.totalRuns} runs refreshed.`
+      : 'A refresh is running in the background.';
     return {
       badgeLabel: 'Cached',
       badgeClassName: 'border-amber-200 bg-amber-50 text-amber-800',
-      detail: `Showing saved results from ${generatedLabel}. ${transcriptLabel} A refresh is running in the background.`,
+      detail: `Showing saved results from ${generatedLabel}. ${transcriptLabel} ${progressLabel}`,
     };
   }
 

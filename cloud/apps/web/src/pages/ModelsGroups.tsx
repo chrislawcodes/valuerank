@@ -167,7 +167,7 @@ export function ModelsGroups() {
   }, [searchParams, selectedDomainIds, selectedSignature, setSearchParams]);
 
   const activeUseLegacyQuery = useLegacyQuery && !isAllDomains;
-  const [{ data: scoredData, fetching: scoredFetching, error: scoredError }] = useQuery<DomainAnalysisQueryResult, DomainAnalysisQueryVariables>({
+  const [{ data: scoredData, fetching: scoredFetching, error: scoredError }, reexecuteScoredQuery] = useQuery<DomainAnalysisQueryResult, DomainAnalysisQueryVariables>({
     query: DOMAIN_ANALYSIS_QUERY,
     variables: {
       domainId: queryDomainId,
@@ -289,9 +289,21 @@ export function ModelsGroups() {
     [data?.domainAnalysis.models, visibleModelIds],
   );
   const cacheStatusCopy = useMemo(
-    () => getCacheStatusCopy(data?.domainAnalysis.cacheStatus, data?.domainAnalysis.generatedAt, transcriptCount),
-    [data?.domainAnalysis.cacheStatus, data?.domainAnalysis.generatedAt, transcriptCount],
+    () => getCacheStatusCopy(
+      data?.domainAnalysis.cacheStatus,
+      data?.domainAnalysis.generatedAt,
+      transcriptCount,
+      data?.domainAnalysis.refreshProgress,
+    ),
+    [data?.domainAnalysis.cacheStatus, data?.domainAnalysis.generatedAt, data?.domainAnalysis.refreshProgress, transcriptCount],
   );
+
+  const isUpdating = data?.domainAnalysis.cacheStatus === 'UPDATING';
+  useEffect(() => {
+    if (!isUpdating) return;
+    const id = setInterval(() => { reexecuteScoredQuery({ requestPolicy: 'network-only' }); }, 20_000);
+    return () => { clearInterval(id); };
+  }, [isUpdating, reexecuteScoredQuery]);
   const domainSummary = useMemo(() => {
     if (isAllDomains) return 'All Domains';
     if (selectedDomainIds.length === 1) {

@@ -142,6 +142,7 @@ export type DomainAnalysisResult = {
   definitionsWithAnalysis: number;
   cacheStatus: 'FRESH' | 'UPDATING' | 'OUT_OF_DATE';
   generatedAt: string;
+  refreshProgress: { completedRuns: number; totalRuns: number } | null;
   models: DomainAnalysisModel[];
   unavailableModels: DomainAnalysisUnavailableModel[];
   rankingShapeBenchmarks?: RankingShapeBenchmarks;

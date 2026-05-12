@@ -65,6 +65,11 @@ export type DomainAnalysisModel = {
 
 export type DomainAnalysisCacheStatus = 'FRESH' | 'UPDATING' | 'OUT_OF_DATE';
 
+export type DomainAnalysisRefreshProgress = {
+  completedRuns: number;
+  totalRuns: number;
+};
+
 export type DomainAnalysisResult = {
   domainId: string;
   domainName: string;
@@ -83,8 +88,10 @@ export type DomainAnalysisResult = {
   rankingShapeBenchmarks: RankingShapeBenchmarks;
   clusterAnalysis: ClusterAnalysis;
   clusterAnalysisByMethod: Record<string, ClusterAnalysis>;
+  refreshProgress: DomainAnalysisRefreshProgress | null;
 };
 
+export const DomainAnalysisRefreshProgressRef = builder.objectRef<DomainAnalysisRefreshProgress>('DomainAnalysisRefreshProgress');
 export const RankingShapeRef = builder.objectRef<RankingShape>('RankingShape');
 export const RankingShapeBenchmarksRef = builder.objectRef<RankingShapeBenchmarks>('RankingShapeBenchmarks');
 export const ClusterMemberRef = builder.objectRef<ClusterMember>('ClusterMember');
@@ -350,6 +357,11 @@ builder.objectType(DomainAnalysisResultRef, {
       type: 'DateTime',
       resolve: (parent) => parent.generatedAt,
     }),
+    refreshProgress: t.field({
+      type: DomainAnalysisRefreshProgressRef,
+      nullable: true,
+      resolve: (parent) => parent.refreshProgress,
+    }),
     rankingShapeBenchmarks: t.field({
       type: RankingShapeBenchmarksRef,
       resolve: (parent) => parent.rankingShapeBenchmarks,
@@ -359,6 +371,13 @@ builder.objectType(DomainAnalysisResultRef, {
       resolve: (parent) => parent.clusterAnalysis,
     }),
     clusterAnalysisByMethod: t.expose('clusterAnalysisByMethod', { type: 'JSON' }),
+  }),
+});
+
+builder.objectType(DomainAnalysisRefreshProgressRef, {
+  fields: (t) => ({
+    completedRuns: t.exposeInt('completedRuns'),
+    totalRuns: t.exposeInt('totalRuns'),
   }),
 });
 
