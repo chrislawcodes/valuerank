@@ -205,7 +205,7 @@ function buildDomainAnalysisResultFromSnapshot(params: {
         deprioritized: counts.deprioritized,
         neutral: counts.neutral,
         totalComparisons: wins + losses + counts.neutral,
-        winRateExcNeutral: excNeutralDenom > 0 ? wins / excNeutralDenom : null,
+        winRateExcNeutral: excNeutralDenom > 0 ? (wins / excNeutralDenom) * 100 : null,
       };
     });
 
