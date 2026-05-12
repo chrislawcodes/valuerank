@@ -95,6 +95,7 @@ export function DomainAnalysis() {
   const [refreshNotice, setRefreshNotice] = useState<string | null>(null);
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [openPair, setOpenPair] = useState<{ row: ValueKey; column: ValueKey } | null>(null);
+  const [winRateMode, setWinRateMode] = useState<'all' | 'exc-neutral'>('all');
 
   const [{ data: signatureData, fetching: signaturesLoading, error: signaturesError }] = useQuery<
     DomainAvailableSignaturesQueryResult, DomainAvailableSignaturesQueryVariables
@@ -464,6 +465,7 @@ export function DomainAnalysis() {
           options: modelOptions,
           onChange: setSelectedModelIds,
         }}
+        winRateMode={{ value: winRateMode, onChange: setWinRateMode }}
       />
 
       <div className="space-y-2">

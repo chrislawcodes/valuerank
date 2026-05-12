@@ -105,6 +105,7 @@ export function ModelsGroups() {
   // Track whether the user has explicitly chosen a similarity method.
   // When false, switching data source to kappa-agreement auto-defaults to 'kappa'.
   const [similarityMethodExplicit, setSimilarityMethodExplicit] = useState(false);
+  const [winRateMode, setWinRateMode] = useState<'all' | 'exc-neutral'>('all');
 
   const [{ data: signatureData, fetching: signaturesLoading, error: signaturesError }] = useQuery<
     DomainAvailableSignaturesQueryResult,
@@ -452,6 +453,11 @@ export function ModelsGroups() {
           defaultModelIds,
           options: modelOptions,
           onChange: setSelectedModelIds,
+        }}
+        winRateMode={{
+          value: winRateMode,
+          onChange: setWinRateMode,
+          disabled: dataSource !== 'win-rate',
         }}
       />
 

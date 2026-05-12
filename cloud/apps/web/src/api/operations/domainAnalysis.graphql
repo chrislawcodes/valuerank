@@ -44,6 +44,7 @@ query DomainAnalysis($domainId: ID!, $scope: String, $signature: String) {
         deprioritized
         neutral
         totalComparisons
+        winRateExcNeutral
       }
       rankingShape {
         topStructure
@@ -57,6 +58,7 @@ query DomainAnalysis($domainId: ID!, $scope: String, $signature: String) {
       pairwiseWinRateModel {
         valueOrder
         winRateMatrix
+        winRateExcNeutralMatrix
         trialCountMatrix
       }
     }

@@ -6,11 +6,13 @@ export type ModelsAnalysisDomainBreakdown = {
   /** Vignette count. Null for snapshots built before v1.2.0 (rebuilds on next domain page load). */
   evidenceWeight: number | null;
   winRate: number;
+  winRateExcNeutral: number | null;
 };
 
 export type ModelsAnalysisValueResult = {
   valueKey: string;
   pooledWinRate: number | null;
+  pooledWinRateExcNeutral: number | null;
   stabilityScore: number | null;
   eligibleDomainCount: number;
   domains: ModelsAnalysisDomainBreakdown[];
@@ -42,12 +44,14 @@ export const MODELS_ANALYSIS_QUERY = gql`
         values {
           valueKey
           pooledWinRate
+          pooledWinRateExcNeutral
           stabilityScore
           eligibleDomainCount
           domains {
             domainId
             domainName
             winRate
+            winRateExcNeutral
             evidenceWeight
           }
         }
