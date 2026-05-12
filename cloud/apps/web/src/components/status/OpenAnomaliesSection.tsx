@@ -98,11 +98,6 @@ export function OpenAnomaliesSection({
   const isInitialLoading = result.fetching && result.data == null;
   const isRefreshing = result.fetching && result.data != null;
 
-  // Collapse when we know there are no anomalies and no error to display.
-  if (!isInitialLoading && result.error == null && !hasAnomalies) {
-    return null;
-  }
-
   // Track in-flight state via a ref so the interval callback always sees the latest
   // value without restarting on every render. This prevents overlapping fetches if
   // the network is slow enough that one request hasn't returned by the next tick.
@@ -132,6 +127,11 @@ export function OpenAnomaliesSection({
     }
     reexecuteRunQuery({ requestPolicy: 'cache-and-network' });
   }, [reexecuteRunQuery, selectedTranscriptTarget]);
+
+  // Collapse when we know there are no anomalies and no error to display.
+  if (!isInitialLoading && result.error == null && !hasAnomalies) {
+    return null;
+  }
 
   const sectionToneClasses = hasAnomalies
     ? 'rounded-lg border border-amber-300 bg-amber-50'
