@@ -22,6 +22,7 @@ type WinRateStabilitySectionProps = {
   skippedVignettes: ModelsStabilitySkippedVignette[];
   fetching: boolean;
   errorMessage: string | null;
+  winRateMode?: 'all' | 'exc-neutral';
 };
 
 function pct(value: number | null | undefined): string {
@@ -129,6 +130,7 @@ export function WinRateStabilitySection({
   skippedVignettes,
   fetching,
   errorMessage,
+  winRateMode,
 }: WinRateStabilitySectionProps) {
   const [sort, setSort] = useState<Sort>(DEFAULT_SORT);
   const sorted = useMemo(() => sortModels(models, sort), [models, sort]);
@@ -154,6 +156,11 @@ export function WinRateStabilitySection({
           agreement; Soft Lean = moderate agreement with a clear lean; Torn = mixed or near-neutral; Unstable = wide
           swing across conditions.
         </p>
+        {winRateMode === 'exc-neutral' && (
+          <p className="text-sm text-amber-700">
+            Consistency metrics include neutral outcomes and are not affected by the Exc. neutral mode.
+          </p>
+        )}
       </div>
 
       {skippedVignettes.length > 0 && (
