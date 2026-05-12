@@ -52,6 +52,7 @@ export type KappaClusterPayload = {
 export type PairwiseWinRateModel = {
   valueOrder: string[];
   winRateMatrix: Array<Array<number | null>>;
+  winRateExcNeutralMatrix: Array<Array<number | null>>;
   trialCountMatrix: number[][];
 };
 
@@ -248,6 +249,11 @@ builder.objectType(DomainAnalysisValueScoreRef, {
     deprioritized: t.exposeFloat('deprioritized'),
     neutral: t.exposeFloat('neutral'),
     totalComparisons: t.exposeFloat('totalComparisons'),
+    winRateExcNeutral: t.field({
+      type: 'Float',
+      nullable: true,
+      resolve: (parent) => parent.winRateExcNeutral,
+    }),
   }),
 });
 
@@ -257,6 +263,11 @@ builder.objectType(PairwiseWinRateModelRef, {
     winRateMatrix: t.field({
       type: [t.listRef('Float', { nullable: true })],
       resolve: (parent) => parent.winRateMatrix,
+    }),
+    winRateExcNeutralMatrix: t.field({
+      type: [t.listRef('Float', { nullable: true })],
+      nullable: true,
+      resolve: (parent) => parent.winRateExcNeutralMatrix,
     }),
     trialCountMatrix: t.field({
       type: [t.listRef('Int')],

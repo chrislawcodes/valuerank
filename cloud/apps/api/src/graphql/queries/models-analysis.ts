@@ -25,6 +25,7 @@ function buildEmptyValueResult(valueKey: DomainAnalysisValueKey): ModelsAnalysis
   return {
     valueKey,
     pooledWinRate: null,
+    pooledWinRateExcNeutral: null,
     stabilityScore: null,
     eligibleDomainCount: 0,
     domains: [],
@@ -39,9 +40,16 @@ function hasCanonicalEvidenceWeight(
 
 function buildValueResult(valueKey: DomainAnalysisValueKey, domains: DomainContribution[]): ModelsAnalysisValueResultShape {
   const eligibleDomains = domains.filter(hasCanonicalEvidenceWeight);
+  const eligibleExcNeutral = eligibleDomains.filter((d) => d.winRateExcNeutral != null);
+  const pooledWinRateExcNeutral = eligibleExcNeutral.length > 0
+    ? computePooledWinRate(
+        eligibleExcNeutral.map((d) => ({ evidenceWeight: d.evidenceWeight, winRate: d.winRateExcNeutral! })),
+      )
+    : null;
   return {
     valueKey,
     pooledWinRate: computePooledWinRate(eligibleDomains),
+    pooledWinRateExcNeutral,
     stabilityScore: computeStabilityScore(eligibleDomains),
     eligibleDomainCount: eligibleDomains.length,
     domains: eligibleDomains,
@@ -138,6 +146,7 @@ builder.queryField('modelsAnalysis', (t) =>
                 domainName: parsed.domainName,
                 evidenceWeight: vigCount,
                 winRate: precomputedWinRate,
+                winRateExcNeutral: model.valueWinRatesExcNeutral?.[valueKey] ?? null,
               });
             } else if ((model.counts[valueKey]?.prioritized ?? 0) + (model.counts[valueKey]?.deprioritized ?? 0) + (model.counts[valueKey]?.neutral ?? 0) > 0) {
               ctx.log.warn(

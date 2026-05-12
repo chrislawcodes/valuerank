@@ -79,12 +79,19 @@ function buildPairwiseWinRateModel(
   const order = [...SCHWARTZ_CIRCULAR_ORDER];
   const n = order.length;
   const winRateMatrix: Array<Array<number | null>> = [];
+  const winRateExcNeutralMatrix: Array<Array<number | null>> = [];
   const trialCountMatrix: number[][] = [];
   for (let i = 0; i < n; i++) {
     const winRateRow: Array<number | null> = [];
+    const excNeutralWinRateRow: Array<number | null> = [];
     const trialRow: number[] = [];
     for (let j = 0; j < n; j++) {
-      if (i === j) { winRateRow.push(null); trialRow.push(0); continue; }
+      if (i === j) {
+        winRateRow.push(null);
+        excNeutralWinRateRow.push(null);
+        trialRow.push(0);
+        continue;
+      }
       const keyI = order[i] as string;
       const keyJ = order[j] as string;
       const winsIJ = pairwiseWins[keyI]?.[keyJ] ?? 0;
@@ -96,12 +103,15 @@ function buildPairwiseWinRateModel(
         : 0;
       const total = winsIJ + winsJI + neutralsIJ;
       winRateRow.push(total > 0 ? winsIJ / total : null);
+      const excNeutralTotal = winsIJ + winsJI;
+      excNeutralWinRateRow.push(excNeutralTotal > 0 ? winsIJ / excNeutralTotal : null);
       trialRow.push(total);
     }
     winRateMatrix.push(winRateRow);
+    winRateExcNeutralMatrix.push(excNeutralWinRateRow);
     trialCountMatrix.push(trialRow);
   }
-  return { valueOrder: order, winRateMatrix, trialCountMatrix };
+  return { valueOrder: order, winRateMatrix, winRateExcNeutralMatrix, trialCountMatrix };
 }
 
 // A `buildProgress` snapshot whose `updatedAt` is older than this is treated
@@ -187,6 +197,7 @@ function buildDomainAnalysisResultFromSnapshot(params: {
       const counts = model.counts[valueKey] ?? { prioritized: 0, deprioritized: 0, neutral: 0 };
       const wins = counts.prioritized;
       const losses = counts.deprioritized;
+      const excNeutralDenom = wins + losses;
       return {
         valueKey,
         score: computeSmoothedLogOddsScore(wins, losses),
@@ -194,6 +205,7 @@ function buildDomainAnalysisResultFromSnapshot(params: {
         deprioritized: counts.deprioritized,
         neutral: counts.neutral,
         totalComparisons: wins + losses + counts.neutral,
+        winRateExcNeutral: excNeutralDenom > 0 ? wins / excNeutralDenom : null,
       };
     });
 

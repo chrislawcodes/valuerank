@@ -72,6 +72,7 @@ export type DomainAnalysisValueScore = {
   deprioritized: number;
   neutral: number;
   totalComparisons: number;
+  winRateExcNeutral: number | null;
 };
 
 export type DomainAnalysisUnavailableModel = {

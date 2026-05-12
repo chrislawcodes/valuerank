@@ -247,3 +247,6 @@ describe('computeCellWeightedDomainRates exc-neutral rates', () => {
     expect(result.models[0]?.valueWinRates[FIRST_VALUE]).toBe(result.excNeutralValueWinRatesByModel.get('m1')?.[FIRST_VALUE]);
   });
 });
+
+// GraphQL resolver coverage for `pooledWinRateExcNeutral` and `winRateExcNeutral`
+// is handled by integration tests that exercise the models-analysis query.
