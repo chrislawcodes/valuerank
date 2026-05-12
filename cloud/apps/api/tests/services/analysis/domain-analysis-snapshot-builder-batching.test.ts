@@ -87,7 +87,7 @@ describe('buildSnapshotOutput batching', () => {
     });
 
     const onProgress = vi.fn();
-    await buildSnapshotOutput({
+    const { output } = await buildSnapshotOutput({
       scope: 'ALL_DOMAINS',
       domain: { id: 'all-domains', name: 'All domains', defaultModelIds: [] },
       domains: [],
@@ -113,6 +113,8 @@ describe('buildSnapshotOutput batching', () => {
     }, {
       onProgress,
     });
+
+    expect(output).toBeDefined();
 
     expect(transcriptFindMany).toHaveBeenCalledTimes(3);
     expect(transcriptFindMany).toHaveBeenNthCalledWith(1, expect.objectContaining({

@@ -40,6 +40,7 @@ export type DomainAnalysisSnapshotModel = {
   // Equal-weight per-vignette win rates (0–100) and vignette counts per value key.
   // Optional for backward compatibility with snapshots built before v1.3.0.
   valueWinRates?: Record<string, number>;
+  valueWinRatesExcNeutral?: Record<string, number>;
   vignetteCount?: Record<string, number>;
 };
 

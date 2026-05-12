@@ -201,3 +201,49 @@ describe('computeCellWeightedDomainRates', () => {
     expect(result.models[0]?.pairwiseWins[SECOND_VALUE]?.[FIRST_VALUE]).toBe(2);
   });
 });
+
+describe('computeCellWeightedDomainRates exc-neutral rates', () => {
+  it('computes exc-neutral rates from decisive responses only', () => {
+    const cellMap = new Map<string, CellCounts>([
+      [buildCellKey({ definitionId: 'def1', modelId: 'm1', valueKey: FIRST_VALUE, ownLevel: 1, opponentLevel: 2 }), buildCounts(3, 2, 5)],
+    ]);
+
+    const result = computeCellWeightedDomainRates({
+      cellMap,
+      filteredSourceRunDefinitionById: new Map([['run-1', 'def1']]),
+      definitionValuePairById: new Map([['def1', { valueA: FIRST_VALUE, valueB: SECOND_VALUE }]]),
+    });
+
+    expect(result.excNeutralValueWinRatesByModel.get('m1')?.[FIRST_VALUE]).toBeCloseTo(60, 5);
+  });
+
+  it('omits values with no decisive responses from exc-neutral rates', () => {
+    const cellMap = new Map<string, CellCounts>([
+      [buildCellKey({ definitionId: 'def1', modelId: 'm1', valueKey: FIRST_VALUE, ownLevel: 1, opponentLevel: 2 }), buildCounts(0, 0, 5)],
+    ]);
+
+    const result = computeCellWeightedDomainRates({
+      cellMap,
+      filteredSourceRunDefinitionById: new Map([['run-1', 'def1']]),
+      definitionValuePairById: new Map([['def1', { valueA: FIRST_VALUE, valueB: SECOND_VALUE }]]),
+    });
+
+    const excNeutralRates = result.excNeutralValueWinRatesByModel.get('m1') ?? {};
+    expect(excNeutralRates[FIRST_VALUE]).toBeUndefined();
+    expect(Object.keys(excNeutralRates)).toHaveLength(0);
+  });
+
+  it('matches standard win rates when there are no neutral responses', () => {
+    const cellMap = new Map<string, CellCounts>([
+      [buildCellKey({ definitionId: 'def1', modelId: 'm1', valueKey: FIRST_VALUE, ownLevel: 1, opponentLevel: 2 }), buildCounts(3, 2, 0)],
+    ]);
+
+    const result = computeCellWeightedDomainRates({
+      cellMap,
+      filteredSourceRunDefinitionById: new Map([['run-1', 'def1']]),
+      definitionValuePairById: new Map([['def1', { valueA: FIRST_VALUE, valueB: SECOND_VALUE }]]),
+    });
+
+    expect(result.models[0]?.valueWinRates[FIRST_VALUE]).toBe(result.excNeutralValueWinRatesByModel.get('m1')?.[FIRST_VALUE]);
+  });
+});

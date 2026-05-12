@@ -1,0 +1,50 @@
+{
+  "feature_slug": "win-rate-exc-neutral",
+  "stage": "spec",
+  "artifact_path": "docs/workflow/feature-runs/win-rate-exc-neutral/spec.md",
+  "git_base_ref": "",
+  "allowed_dirty_paths": [],
+  "required_reviews": [
+    {
+      "reviewer": "codex",
+      "lens": "feasibility-adversarial",
+      "stage": "spec",
+      "path": "docs/workflow/feature-runs/win-rate-exc-neutral/reviews/spec.codex.feasibility-adversarial.review.md",
+      "context_paths": [
+        "cloud/apps/api/src/services/analysis/domain-analysis-cache-types.ts",
+        "cloud/apps/api/src/services/analysis/domain-analysis-snapshot-builder.ts",
+        "cloud/apps/api/src/services/analysis/value-win-rate-aggregation.ts",
+        "cloud/apps/api/src/services/analysis/domain-analysis-cache.ts",
+        "cloud/apps/api/src/graphql/queries/models-analysis.ts",
+        "cloud/apps/web/src/components/analysis/AnalysisContextBar.tsx",
+        "cloud/apps/web/src/api/operations/domainAnalysis.ts",
+        "cloud/apps/web/src/api/operations/modelsAnalysis.ts",
+        "cloud/apps/web/src/pages/DomainAnalysis.tsx",
+        "cloud/apps/web/src/components/domains/ValuePrioritiesSection.tsx"
+      ],
+      "model": "gpt-5.4-mini"
+    },
+    {
+      "reviewer": "gemini",
+      "lens": "requirements-adversarial",
+      "stage": "spec",
+      "path": "docs/workflow/feature-runs/win-rate-exc-neutral/reviews/spec.gemini.requirements-adversarial.review.md",
+      "context_paths": [
+        "cloud/apps/api/src/services/analysis/domain-analysis-cache-types.ts",
+        "cloud/apps/api/src/services/analysis/domain-analysis-snapshot-builder.ts",
+        "cloud/apps/api/src/services/analysis/value-win-rate-aggregation.ts",
+        "cloud/apps/api/src/services/analysis/domain-analysis-cache.ts",
+        "cloud/apps/api/src/graphql/queries/models-analysis.ts",
+        "cloud/apps/web/src/components/analysis/AnalysisContextBar.tsx",
+        "cloud/apps/web/src/api/operations/domainAnalysis.ts",
+        "cloud/apps/web/src/api/operations/modelsAnalysis.ts",
+        "cloud/apps/web/src/pages/DomainAnalysis.tsx",
+        "cloud/apps/web/src/components/domains/ValuePrioritiesSection.tsx"
+      ],
+      "model": "gemini-2.5-pro"
+    }
+  ],
+  "max_artifact_chars": 50000,
+  "max_context_chars": 60000,
+  "max_total_chars": 250000
+}

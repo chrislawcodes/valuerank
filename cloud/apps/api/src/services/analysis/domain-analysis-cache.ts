@@ -357,7 +357,7 @@ export async function refreshDomainAnalysisSnapshot(params: {
   });
 
   try {
-    const output = await buildSnapshotOutput(state, {
+    const { output, excNeutralValueWinRatesByModel } = await buildSnapshotOutput(state, {
       onProgress: async (buildProgress) => {
         await db.assumptionAnalysisSnapshot.update({
           where: { id: progressSnapshot.id },
@@ -377,8 +377,24 @@ export async function refreshDomainAnalysisSnapshot(params: {
       },
     });
 
+    // Phase 2: write exc-neutral rates to the snapshot, conditional on it still being CURRENT.
+    const mergedModels = output.models.map((m) => {
+      const excNeutralRates = excNeutralValueWinRatesByModel.get(m.model);
+      if (excNeutralRates == null || Object.keys(excNeutralRates).length === 0) return m;
+      return { ...m, valueWinRatesExcNeutral: excNeutralRates };
+    });
+    const mergedOutput = { ...output, models: mergedModels };
+    const phase2Result = await db.assumptionAnalysisSnapshot.updateMany({
+      where: { id: progressSnapshot.id, status: 'CURRENT' },
+      data: { output: mergedOutput },
+    });
+    if (phase2Result.count === 0) {
+      log.info({ snapshotId: progressSnapshot.id }, 'Phase 2 exc-neutral write skipped — snapshot superseded');
+    }
+    const finalSnapshot = phase2Result.count > 0 ? { ...snapshot, output: mergedOutput } : snapshot;
+
     return {
-      snapshot,
+      snapshot: finalSnapshot,
       selectedSignature: state.selectedSignature,
       configSignature: state.configSignature,
     };

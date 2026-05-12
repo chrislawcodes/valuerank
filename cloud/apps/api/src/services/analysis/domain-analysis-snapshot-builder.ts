@@ -128,7 +128,7 @@ export async function buildSnapshotOutput(
   options?: {
     onProgress?: (progress: DomainAnalysisBuildProgress) => Promise<void> | void;
   },
-): Promise<DomainAnalysisSnapshotOutput> {
+): Promise<{ output: DomainAnalysisSnapshotOutput; excNeutralValueWinRatesByModel: Map<string, Record<string, number>> }> {
   const valuePairByDefinition = await resolveValuePairsInChunks(state.latestDefinitionIds);
 
   const TRANSCRIPT_BATCH_SIZE = 500;
@@ -252,7 +252,7 @@ export async function buildSnapshotOutput(
     };
   }
 
-  const { models, analyzedDefinitionIds } = computeCellWeightedDomainRates({
+  const { models, analyzedDefinitionIds, excNeutralValueWinRatesByModel } = computeCellWeightedDomainRates({
     cellMap,
     filteredSourceRunDefinitionById: state.resolvedSignatureRuns.filteredSourceRunDefinitionById,
     definitionValuePairById: valuePairByDefinition,
@@ -279,7 +279,7 @@ export async function buildSnapshotOutput(
       };
     });
 
-  return {
+  const output: DomainAnalysisSnapshotOutput = {
     domainId: state.domain.id,
     domainName: state.domain.name,
     scope: state.scope,
@@ -293,6 +293,7 @@ export async function buildSnapshotOutput(
     excludedDataSummary: [],
     cellLevelOutcomes,
   };
+  return { output, excNeutralValueWinRatesByModel };
 }
 
 export async function writeSnapshot(params: {

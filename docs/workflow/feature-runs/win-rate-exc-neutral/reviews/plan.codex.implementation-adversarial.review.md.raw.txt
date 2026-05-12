@@ -1,0 +1,10 @@
+## Findings
+- [MEDIUM] [UNVERIFIED] The plan allows mixed standard/exc-neutral values in the same screen during cache migration. It says the frontend can fall back to standard values when `winRateExcNeutral` is null, while only showing a header chip when `pooledWinRateExcNeutral` is null across all visible models. That means a partially rebuilt dataset can silently mix two different definitions of “win rate” in one report, which makes the toggle state ambiguous and the numbers hard to compare.
+- [MEDIUM] [UNVERIFIED] The exc-neutral aggregation is not proven correct at every rollup level. The plan reuses the existing `aggregateValueWinRates` hierarchy and only changes the leaf rate from `computePairwiseWinRate(wins, losses, neutrals)` to `computePairwiseWinRate(wins, losses, 0)`. If the hierarchy weights children using any denominator that still includes neutrals, the parent rollups will not truly exclude neutrals even though the leaf rates do.
+- [MEDIUM] [UNVERIFIED] Phase 2 persistence can fail permanently without recovery. Using `updateMany({ id, status: 'CURRENT' })` and treating `count === 0` as a harmless supersede case means any transient status change or concurrent writer can leave a snapshot with only the standard output and no `valueWinRatesExcNeutral`, with no retry, backfill, or repair path. That turns a race into a lasting partial cache.
+- [LOW] [UNVERIFIED] Returning both `winRateMatrix` and `winRateExcNeutralMatrix` in every GraphQL response adds avoidable payload and resolver cost. For large pairwise matrices, this doubles work even when the client only needs one mode at a time.
+
+## Residual Risks
+- Even if the implementation is correct, users will still see a rebuild window where exc-neutral values are missing or inconsistent until old snapshots refresh.
+- Older snapshots with no neutral data will intentionally produce identical standard and exc-neutral results, which may look like a broken toggle unless the UI explains it clearly.
+- If any downstream sort, rank, or clustering logic still uses the standard metric while the display switches to exc-neutral, the page can show one mode while ordering by another.
