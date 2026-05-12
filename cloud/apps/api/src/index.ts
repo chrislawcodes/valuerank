@@ -2,6 +2,7 @@ import { createServer } from './server.js';
 import { config } from './config.js';
 import { createLogger } from '@valuerank/shared';
 import { startOrchestrator, stopOrchestrator } from './queue/index.js';
+import { queueStaleAnalysesOnStartup } from './services/analysis/domain-analysis-cache.js';
 
 const log = createLogger('api');
 
@@ -19,6 +20,10 @@ async function main() {
   try {
     await startOrchestrator();
     log.info('Queue orchestrator started');
+    // Non-blocking: queue refreshes for any domain whose snapshot is stale
+    queueStaleAnalysesOnStartup().catch((err: unknown) => {
+      log.error({ err }, 'Startup stale analysis check failed');
+    });
   } catch (err) {
     log.error({ err }, 'Failed to start queue orchestrator');
     // Continue running - queue can be started later

@@ -533,6 +533,50 @@ export async function getDomainAnalysisResult(params: {
 }
 
 /**
+ * On startup, queue background refreshes for any domain whose analysis snapshot is stale.
+ * Runs non-blocking after the queue orchestrator is ready. Skips domains with no snapshot
+ * (built on first page load) and domains whose rebuild is already in progress.
+ */
+export async function queueStaleAnalysesOnStartup(): Promise<void> {
+  const domains = await db.domain.findMany({
+    select: { id: true },
+  });
+
+  let queued = 0;
+  for (const domain of domains) {
+    try {
+      const state = await prepareDomainAnalysisState({
+        scope: 'DOMAIN',
+        domainId: domain.id,
+        requestedSignature: null,
+      });
+
+      if (state.definitions.length === 0) continue;
+
+      const currentSnapshot = await getCurrentSnapshot(db, state.scope, domain.id, state.configSignature);
+      if (currentSnapshot == null) continue;
+
+      const parsedCurrent = parseSnapshotOutput(currentSnapshot.output);
+      if (parsedCurrent == null) continue; // rebuild already in progress
+
+      if (currentSnapshot.inputHash === state.inputHash) continue; // already fresh
+
+      const didQueue = await queueDomainAnalysisRefresh({
+        scope: state.scope,
+        domainId: domain.id,
+        signature: state.selectedSignature,
+        reason: 'startup-stale',
+      });
+      if (didQueue) queued += 1;
+    } catch (err) {
+      log.warn({ err, domainId: domain.id }, 'startup stale check failed for domain');
+    }
+  }
+
+  log.info({ queued, total: domains.length }, 'Startup domain analysis stale check complete');
+}
+
+/**
  * Read the pre-computed per-(definitionId::modelId::canonicalA::canonicalB::ownLevel::opponentLevel)
  * cell-level outcomes from the current domain-analysis snapshot. Returns null if no CURRENT
  * snapshot exists or if the snapshot pre-dates v1.12.0 (i.e. does not include `cellLevelOutcomes`).
