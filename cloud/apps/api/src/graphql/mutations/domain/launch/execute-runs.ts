@@ -18,29 +18,51 @@ const backpressureLog = createLogger('domain-launch:backpressure');
 // Domain-level launches (e.g. "Run all 90 definitions") used to dump every probe job
 // for every run into PgBoss in a 3-second window. With 8 models × 200 probes × 90 runs
 // that is ~144k jobs hitting a 150-slot worker pool — most of the tail expired before
-// any worker reached it. We keep the existing batching at 25 runs per pass and add a
-// poll between batches that waits for the probe queue to drop below ~2x total
-// parallelism before submitting the next batch.
-const BACKPRESSURE_PROBE_THRESHOLD = 300;
-const BACKPRESSURE_POLL_MS = 5000;
-const BACKPRESSURE_MAX_WAIT_MS = 5 * 60 * 1000;
+// any worker reached it. We keep the existing batching at 25 runs per pass and check
+// queue depth before every batch — including the first — so a launch fired on top of
+// an already-saturated queue waits rather than piling on. The pg-boss query reads
+// physical queue depth across all sources, so PAC backfills and direct `startRun`
+// calls also count against the budget.
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  if (value === undefined) return fallback;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
 
-async function waitForProbeQueueCapacity(): Promise<void> {
+export const BACKPRESSURE_PROBE_THRESHOLD = parsePositiveInt(
+  process.env.DOMAIN_LAUNCH_BACKPRESSURE_THRESHOLD,
+  300,
+);
+export const BACKPRESSURE_POLL_MS = parsePositiveInt(
+  process.env.DOMAIN_LAUNCH_BACKPRESSURE_POLL_MS,
+  5_000,
+);
+export const BACKPRESSURE_MAX_WAIT_MS = parsePositiveInt(
+  process.env.DOMAIN_LAUNCH_BACKPRESSURE_MAX_WAIT_MS,
+  5 * 60 * 1000,
+);
+
+export type ProbeQueueCapacityResult =
+  | { ok: true; inFlight: number }
+  | { ok: false; reason: 'timeout'; lastInFlight: number; waitedMs: number };
+
+export async function waitForProbeQueueCapacity(): Promise<ProbeQueueCapacityResult> {
   // In test or pre-boot contexts there is no PgBoss instance — skip without blocking.
-  if (!isBossRunning()) return;
+  if (!isBossRunning()) return { ok: true, inFlight: 0 };
   const boss = getBoss();
   const startedAt = Date.now();
+  let lastInFlight = 0;
   while (Date.now() - startedAt < BACKPRESSURE_MAX_WAIT_MS) {
     const queues = await boss.getQueues();
-    const inFlight = queues
+    lastInFlight = queues
       .filter((q) => isActiveProbeQueueName(q.name))
       .reduce((sum, q) => sum + q.activeCount + q.queuedCount, 0);
-    if (inFlight < BACKPRESSURE_PROBE_THRESHOLD) {
-      return;
+    if (lastInFlight < BACKPRESSURE_PROBE_THRESHOLD) {
+      return { ok: true, inFlight: lastInFlight };
     }
     backpressureLog.info(
       {
-        inFlightProbes: inFlight,
+        inFlightProbes: lastInFlight,
         threshold: BACKPRESSURE_PROBE_THRESHOLD,
         waitedMs: Date.now() - startedAt,
       },
@@ -48,13 +70,16 @@ async function waitForProbeQueueCapacity(): Promise<void> {
     );
     await new Promise((resolve) => setTimeout(resolve, BACKPRESSURE_POLL_MS));
   }
+  const waitedMs = Date.now() - startedAt;
   backpressureLog.warn(
     {
       thresholdJobs: BACKPRESSURE_PROBE_THRESHOLD,
       maxWaitMs: BACKPRESSURE_MAX_WAIT_MS,
+      lastInFlight,
     },
-    'Domain launch backpressure timed out — proceeding to next batch anyway'
+    'Domain launch backpressure timed out — aborting remaining batches'
   );
+  return { ok: false, reason: 'timeout', lastInFlight, waitedMs };
 }
 
 type PrismaTransactionClient = Parameters<Parameters<typeof db.$transaction>[0]>[0];
@@ -92,8 +117,25 @@ export async function executeLaunchRuns(params: {
       continue;
     }
 
-    if (offset > 0) {
-      await waitForProbeQueueCapacity();
+    const capacity = await waitForProbeQueueCapacity();
+    if (!capacity.ok) {
+      const aborted = launchSlots.slice(offset);
+      failedDefinitions += aborted.length;
+      for (const slot of aborted) {
+        log.error(
+          {
+            domainId,
+            definitionId: slot.definition.id,
+            scopeCategory,
+            lastInFlight: capacity.lastInFlight,
+            threshold: BACKPRESSURE_PROBE_THRESHOLD,
+            waitedMs: capacity.waitedMs,
+            error: 'probe queue backpressure timeout',
+          },
+          'Aborted domain evaluation member run due to backpressure timeout'
+        );
+      }
+      break;
     }
 
     const runResults = await Promise.allSettled(
@@ -153,12 +195,44 @@ export async function executeBackfillRuns(params: {
   let failedDefinitions = 0;
   const runs: DomainTrialRunEntry[] = [];
 
-  let groupIndex = 0;
+  let aborted = false;
   for (const group of backfillGroups) {
-    if (groupIndex > 0) {
-      await waitForProbeQueueCapacity();
+    if (aborted) {
+      failedDefinitions += group.definitions.length;
+      for (const definition of group.definitions) {
+        log.error(
+          {
+            domainEvaluationId,
+            definitionId: definition.id,
+            modelId: group.modelId,
+            error: 'probe queue backpressure timeout',
+          },
+          'Aborted evaluation model backfill run due to backpressure timeout',
+        );
+      }
+      continue;
     }
-    groupIndex += 1;
+
+    const capacity = await waitForProbeQueueCapacity();
+    if (!capacity.ok) {
+      aborted = true;
+      failedDefinitions += group.definitions.length;
+      for (const definition of group.definitions) {
+        log.error(
+          {
+            domainEvaluationId,
+            definitionId: definition.id,
+            modelId: group.modelId,
+            lastInFlight: capacity.lastInFlight,
+            threshold: BACKPRESSURE_PROBE_THRESHOLD,
+            waitedMs: capacity.waitedMs,
+            error: 'probe queue backpressure timeout',
+          },
+          'Aborted evaluation model backfill run due to backpressure timeout',
+        );
+      }
+      continue;
+    }
     const activeEquivalentRuns = await tx.run.findMany({
       where: {
         definitionId: { in: group.definitions.map((definition) => definition.id) },
