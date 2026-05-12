@@ -84,13 +84,14 @@ builder.mutationField('reprobeAnomalySlot', (t) =>
       if (anomaly.resolvedAt !== null) {
         throw new ReprobeError('Anomaly is already resolved; cannot re-probe', 'ANOMALY_NOT_OPEN');
       }
-      if (anomaly.type !== 'INVALID_RESPONSE_FAILURE') {
-        throw new ReprobeError(`Anomaly type ${anomaly.type} is not reprobable in v1`, 'ANOMALY_NOT_REPROBABLE');
+      const REPROBABLE_MUTATION_TYPES = new Set(['INVALID_RESPONSE_FAILURE', 'STRANDED_TRANSCRIPT']);
+      if (!REPROBABLE_MUTATION_TYPES.has(anomaly.type)) {
+        throw new ReprobeError(`Anomaly type ${anomaly.type} is not reprobable`, 'ANOMALY_NOT_REPROBABLE');
       }
 
       const run = await db.run.findUnique({
         where: { id: anomaly.runId },
-        select: { id: true, status: true },
+        select: { id: true, status: true, config: true },
       });
       if (run === null) {
         throw new NotFoundError('Run', anomaly.runId);
@@ -103,6 +104,132 @@ builder.mutationField('reprobeAnomalySlot', (t) =>
       if (currentAttempts >= REPROBE_LIMIT) {
         throw new ReprobeError(`Re-probe limit of ${REPROBE_LIMIT} reached for this slot`, 'REPROBE_LIMIT_EXCEEDED');
       }
+
+      // ── STRANDED_TRANSCRIPT gap-fill path ───────────────────────────────────
+      if (anomaly.type === 'STRANDED_TRANSCRIPT') {
+        const runCfg = (run.config != null && typeof run.config === 'object' && !Array.isArray(run.config))
+          ? (run.config as Record<string, unknown>)
+          : {};
+        const configModels = Array.isArray(runCfg.models) ? (runCfg.models as string[]) : [];
+        const samplesPerScenario =
+          typeof runCfg.samplesPerScenario === 'number' && runCfg.samplesPerScenario > 0
+            ? runCfg.samplesPerScenario
+            : 1;
+
+        if (configModels.length === 0) {
+          throw new ReprobeError('Run config has no models', 'ANOMALY_NOT_REPROBABLE');
+        }
+
+        const scenarioSelections = await db.runScenarioSelection.findMany({
+          where: { runId: run.id },
+          select: { scenarioId: true },
+        });
+        const selectedScenarioIds = scenarioSelections.map((s) => s.scenarioId);
+        if (selectedScenarioIds.length === 0) {
+          throw new ReprobeError('Run has no scenario selections', 'ANOMALY_NOT_REPROBABLE');
+        }
+
+        const existingResults = await db.probeResult.findMany({
+          where: { runId: run.id },
+          select: { scenarioId: true, modelId: true, sampleIndex: true },
+        });
+        const existingKeys = new Set(
+          existingResults.map((r) => `${r.scenarioId}:${r.modelId}:${r.sampleIndex}`)
+        );
+
+        const missingSlots: Array<{ scenarioId: string; modelId: string; sampleIndex: number }> = [];
+        for (const modelId of configModels) {
+          for (const scenarioId of selectedScenarioIds) {
+            for (let si = 0; si < samplesPerScenario; si++) {
+              if (!existingKeys.has(`${scenarioId}:${modelId}:${si}`)) {
+                missingSlots.push({ scenarioId, modelId, sampleIndex: si });
+              }
+            }
+          }
+        }
+
+        if (missingSlots.length === 0) {
+          return db.runAnomaly.update({
+            where: { id: anomalyId },
+            data: { resolvedAt: new Date() },
+          });
+        }
+
+        const gapUpdated = await db.$transaction(async (tx) => {
+          await tx.$executeRaw`SELECT id FROM run_anomalies WHERE id = ${anomalyId} FOR UPDATE`;
+
+          const locked = await tx.runAnomaly.findUnique({ where: { id: anomalyId } });
+          if (locked === null) throw new NotFoundError('RunAnomaly', anomalyId);
+          if (locked.resolvedAt !== null) {
+            throw new ReprobeError('Anomaly was resolved by another process during re-probe', 'ANOMALY_NOT_OPEN');
+          }
+          const lockedAttempts = readReprobeAttempts(locked.details);
+          if (lockedAttempts >= REPROBE_LIMIT) {
+            throw new ReprobeError(`Re-probe limit of ${REPROBE_LIMIT} reached`, 'REPROBE_LIMIT_EXCEEDED');
+          }
+
+          // Re-open run and expand progress.total to cover the gap-fill probes.
+          // Uses to_jsonb() so the stored value stays a JSON number, not a string.
+          await tx.$executeRaw`
+            UPDATE runs
+            SET progress     = jsonb_set(
+                                 progress,
+                                 '{total}',
+                                 to_jsonb(COALESCE((progress->>'total')::int, 0) + ${missingSlots.length}::int)
+                               ),
+                status       = 'RUNNING',
+                completed_at = NULL
+            WHERE id = ${run.id}
+              AND status NOT IN ('FAILED', 'CANCELLED')
+          `;
+
+          return tx.runAnomaly.update({
+            where: { id: anomalyId },
+            data: {
+              resolvedAt: null,
+              details: buildIncrementedDetails(locked.details, lockedAttempts),
+              lastSeenAt: new Date(),
+            },
+          });
+        });
+
+        // Enqueue a probe job for each missing slot (post-commit).
+        // No anomalyId: the normal run state machine (RUNNING → SUMMARIZING → COMPLETED)
+        // handles summarization once all probes complete.
+        const boss = getBoss();
+        const jobOptions = DEFAULT_JOB_OPTIONS['probe_scenario'];
+        let enqueueErrors = 0;
+        for (const slot of missingSlots) {
+          const queueName = await getQueueNameForModel(slot.modelId);
+          const singletonKey = `${run.id}:${slot.scenarioId}:${slot.modelId}:${slot.sampleIndex}`;
+          try {
+            await boss.send(
+              queueName,
+              {
+                runId: run.id,
+                scenarioId: slot.scenarioId,
+                modelId: slot.modelId,
+                sampleIndex: slot.sampleIndex,
+                enqueuedAt: new Date().toISOString(),
+                config: { maxTurns: 10 },
+              },
+              { ...jobOptions, singletonKey },
+            );
+          } catch (error) {
+            enqueueErrors++;
+          }
+        }
+
+        if (enqueueErrors > 0 && enqueueErrors === missingSlots.length) {
+          throw new ReprobeError(
+            `All ${missingSlots.length} gap-fill probe enqueues failed after DB commit`,
+            'REPROBE_ENQUEUE_FAILED',
+          );
+        }
+
+        return gapUpdated;
+      }
+      // ── end STRANDED_TRANSCRIPT path ─────────────────────────────────────────
 
       const slot = parseSlotSubject(anomaly.subject);
       if (slot === null) {

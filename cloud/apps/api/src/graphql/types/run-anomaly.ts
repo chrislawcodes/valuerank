@@ -35,7 +35,7 @@ const DISPLAY_LABEL_BY_TYPE: Record<string, string> = {
 };
 
 const SLOT_KEYED_TYPES = new Set(['INVALID_RESPONSE_FAILURE']);
-const REPROBABLE_TYPES = new Set(['INVALID_RESPONSE_FAILURE']);
+const REPROBABLE_TYPES = new Set(['INVALID_RESPONSE_FAILURE', 'STRANDED_TRANSCRIPT']);
 const TRANSCRIPT_KEYED_TYPES = new Set(['STRANDED_TRANSCRIPT', 'ORPHAN_TRANSCRIPT']);
 
 function readReprobeAttempts(details: unknown): number {
