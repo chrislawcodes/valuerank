@@ -460,18 +460,23 @@ export async function getDomainAnalysisResult(params: {
   }
 
   if (currentSnapshot != null && parsedCurrent != null) {
+    const totalRuns = state.resolvedSignatureRuns.filteredSourceRunIds.length;
     const queued = await queueDomainAnalysisRefresh({
       scope: state.scope,
       domainId: state.domain.id,
       signature: state.selectedSignature,
       reason: 'page-load-stale',
     });
-    return buildDomainAnalysisResultFromSnapshot({
+    const result = buildDomainAnalysisResultFromSnapshot({
       snapshot: parsedCurrent,
       activeModels,
       generatedAt: currentSnapshot.createdAt,
       cacheStatus: queued ? DOMAIN_ANALYSIS_CACHE_STATUS.UPDATING : DOMAIN_ANALYSIS_CACHE_STATUS.OUT_OF_DATE,
     });
+    if (queued) {
+      result.refreshProgress = { completedRuns: 0, totalRuns };
+    }
+    return result;
   }
 
   // A CURRENT snapshot may exist but only contain `buildProgress` — i.e., a
