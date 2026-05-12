@@ -98,6 +98,11 @@ export function OpenAnomaliesSection({
   const isInitialLoading = result.fetching && result.data == null;
   const isRefreshing = result.fetching && result.data != null;
 
+  // Collapse when we know there are no anomalies and no error to display.
+  if (!isInitialLoading && result.error == null && !hasAnomalies) {
+    return null;
+  }
+
   // Track in-flight state via a ref so the interval callback always sees the latest
   // value without restarting on every render. This prevents overlapping fetches if
   // the network is slow enough that one request hasn't returned by the next tick.
@@ -141,9 +146,6 @@ export function OpenAnomaliesSection({
               <h2 className={`text-lg font-medium ${hasAnomalies ? 'text-amber-900' : 'text-gray-900'}`}>
                 {formatRunAnomalyCount(openAnomalies.length)}
               </h2>
-              <p className={`text-sm ${hasAnomalies ? 'text-amber-800' : 'text-gray-500'}`}>
-                Open run anomalies across all domains.
-              </p>
             </div>
             <div className="flex items-center gap-2">
               {isRefreshing && (
