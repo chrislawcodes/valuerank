@@ -1,5 +1,6 @@
-import { db } from '@valuerank/db';
-import { getMissingReasonLabel, resolveSignatureRuns, resolveValuePairsInChunks } from '../../graphql/queries/domain/shared.js';
+import { db, resolveDefinitionContent } from '@valuerank/db';
+import { getMissingReasonLabel, resolveSignatureRuns } from '../../graphql/queries/domain/shared.js';
+import { extractValuePair, type DomainAnalysisValuePair } from '../../graphql/queries/domain-analysis-values.js';
 import { computeAggregateFingerprint } from './aggregate/aggregate-helpers.js';
 import {
   DOMAIN_ANALYSIS_ASSUMPTION_PREFIX,
@@ -16,6 +17,9 @@ import { computeCellWeightedDomainRates } from './domain-analysis-cell-win-rates
 import { accumulateTranscriptCells, type CellCounts } from './transcript-cell-accumulator.js';
 import { type DomainAnalysisScope } from './domain-analysis-scope.js';
 import { resolveDomainAnalysisScopeDefinitions } from './domain-analysis-scope-loader.js';
+import { buildPressureSensitivityDecisionSnapshot } from '../pressure-sensitivity/decision-snapshot.js';
+
+const DEFINITION_SNAPSHOT_RESOLVE_CHUNK_SIZE = 20;
 
 export function buildAssumptionKey(scope: DomainAnalysisScope, domainId: string): string {
   return scope === 'ALL_DOMAINS'
@@ -129,7 +133,71 @@ export async function buildSnapshotOutput(
     onProgress?: (progress: DomainAnalysisBuildProgress) => Promise<void> | void;
   },
 ): Promise<{ output: DomainAnalysisSnapshotOutput; excNeutralValueWinRatesByModel: Map<string, Record<string, number>> }> {
-  const valuePairByDefinition = await resolveValuePairsInChunks(state.latestDefinitionIds);
+  type TranscriptBatchRow = {
+    id: string;
+    runId: string;
+    modelId: string;
+    decisionMetadata: unknown;
+    deletedAt: Date | null;
+    scenario: {
+      id: string;
+      content: unknown;
+      orientationFlipped: boolean;
+      deletedAt: Date | null;
+    } | null;
+  };
+
+  const valuePairByDefinition = new Map<string, DomainAnalysisValuePair>();
+  const definitionDecisionSnapshotById = new Map<string, unknown>();
+  for (let offset = 0; offset < state.latestDefinitionIds.length; offset += DEFINITION_SNAPSHOT_RESOLVE_CHUNK_SIZE) {
+    const batch = state.latestDefinitionIds.slice(offset, offset + DEFINITION_SNAPSHOT_RESOLVE_CHUNK_SIZE);
+    const settled = await Promise.allSettled(
+      batch.map(async (definitionId) => {
+        const resolved = await resolveDefinitionContent(definitionId);
+        return {
+          definitionId,
+          valuePair: extractValuePair(resolved.resolvedContent),
+          decisionSnapshot: buildPressureSensitivityDecisionSnapshot(resolved.resolvedContent),
+        };
+      }),
+    );
+
+    for (const result of settled) {
+      if (result.status !== 'fulfilled') {
+        continue;
+      }
+      if (result.value.valuePair != null) {
+        valuePairByDefinition.set(result.value.definitionId, result.value.valuePair);
+      }
+      if (result.value.decisionSnapshot != null) {
+        definitionDecisionSnapshotById.set(result.value.definitionId, result.value.decisionSnapshot);
+      }
+    }
+  }
+  const definitionsMissingDecisionSnapshot = new Set(
+    state.latestDefinitionIds.filter((definitionId) => !definitionDecisionSnapshotById.has(definitionId)),
+  );
+  for (const [runId, definitionId] of state.resolvedSignatureRuns.filteredSourceRunDefinitionById.entries()) {
+    if (!definitionsMissingDecisionSnapshot.has(definitionId)) {
+      continue;
+    }
+    const fallbackSnapshot = await db.transcript.findFirst({
+      where: {
+        runId,
+        deletedAt: null,
+      },
+      select: {
+        definitionSnapshot: true,
+      },
+      orderBy: {
+        id: 'asc',
+      },
+    });
+    if (fallbackSnapshot?.definitionSnapshot != null) {
+      definitionDecisionSnapshotById.set(definitionId, fallbackSnapshot.definitionSnapshot);
+      definitionsMissingDecisionSnapshot.delete(definitionId);
+    }
+  }
 
   const TRANSCRIPT_BATCH_SIZE = 500;
   const cellMap = new Map<string, CellCounts>();
@@ -140,11 +208,11 @@ export async function buildSnapshotOutput(
     // Keep each transcript read bounded so large domains do not exhaust memory
     // or the Prisma bridge. Aggregate each batch into the shared cell map.
     for (const runId of state.resolvedSignatureRuns.filteredSourceRunIds) {
-      let offset = 0;
-      let fetchedCount = TRANSCRIPT_BATCH_SIZE;
+      let cursorTranscriptId: string | null = null;
+      let hasMore = true;
 
-      while (fetchedCount >= TRANSCRIPT_BATCH_SIZE) {
-        const batch = await db.transcript.findMany({
+      while (hasMore) {
+        const batch = (await db.transcript.findMany({
           where: {
             runId,
             deletedAt: null,
@@ -154,7 +222,6 @@ export async function buildSnapshotOutput(
             runId: true,
             modelId: true,
             decisionMetadata: true,
-            definitionSnapshot: true,
             deletedAt: true,
             scenario: {
               select: {
@@ -167,15 +234,20 @@ export async function buildSnapshotOutput(
           },
           orderBy: { id: 'asc' },
           take: TRANSCRIPT_BATCH_SIZE,
-          skip: offset,
-        });
+          ...(cursorTranscriptId != null
+            ? {
+                cursor: { id: cursorTranscriptId },
+                skip: 1,
+              }
+            : {}),
+        })) as TranscriptBatchRow[];
 
-        fetchedCount = batch.length;
-        if (fetchedCount === 0) break;
+        if (batch.length === 0) break;
 
         const batchCellMap = accumulateTranscriptCells({
           transcripts: batch,
           filteredSourceRunDefinitionById: state.resolvedSignatureRuns.filteredSourceRunDefinitionById,
+          decisionSnapshotByDefinitionId: definitionDecisionSnapshotById,
         });
 
         for (const [key, counts] of batchCellMap.entries()) {
@@ -186,7 +258,10 @@ export async function buildSnapshotOutput(
           cellMap.set(key, existing);
         }
 
-        offset += fetchedCount;
+        cursorTranscriptId = batch[batch.length - 1]?.id ?? null;
+        if (batch.length < TRANSCRIPT_BATCH_SIZE) {
+          hasMore = false;
+        }
       }
 
       completedRuns += 1;
