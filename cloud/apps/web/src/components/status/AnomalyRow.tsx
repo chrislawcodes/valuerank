@@ -41,6 +41,14 @@ function extractTranscriptId(details: unknown): string | null {
   return typeof transcriptId === 'string' && transcriptId.trim() !== '' ? transcriptId : null;
 }
 
+function extractFirstTranscriptId(details: unknown): string | null {
+  if (!isRecord(details)) return null;
+  const ids = details.transcriptIds;
+  if (!Array.isArray(ids) || ids.length === 0) return null;
+  const first = ids[0];
+  return typeof first === 'string' && first.trim() !== '' ? first : null;
+}
+
 function formatStrengthLevel(value: string): string {
   const lower = value.toLowerCase();
   const num = LEVEL_WORD_TO_NUMBER[lower];
@@ -96,7 +104,10 @@ export function AnomalyRow({ anomaly, tone, onViewTranscript }: AnomalyRowProps)
       // where details.transcriptId still points to the original transcript.
       return anomaly.activeTranscriptId ?? extractTranscriptId(anomaly.details);
     }
-    if (anomaly.type === 'STRANDED_TRANSCRIPT' || anomaly.type === 'ORPHAN_TRANSCRIPT') {
+    if (anomaly.type === 'STRANDED_TRANSCRIPT') {
+      return extractFirstTranscriptId(anomaly.details) ?? anomaly.subject;
+    }
+    if (anomaly.type === 'ORPHAN_TRANSCRIPT') {
       return anomaly.subject;
     }
     return null;
