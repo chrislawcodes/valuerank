@@ -1,12 +1,14 @@
 query ModelAgreementOnTradeoffs(
   $modelIds: [ID!]!
   $domainId: ID
+  $domainIds: [ID!]
   $scope: String!
   $signature: String!
 ) {
   modelAgreementOnTradeoffs(
     modelIds: $modelIds
     domainId: $domainId
+    domainIds: $domainIds
     scope: $scope
     signature: $signature
   ) {
@@ -56,6 +58,7 @@ query ModelPairDivergenceBreakdown(
   $modelAId: ID!
   $modelBId: ID!
   $domainId: ID
+  $domainIds: [ID!]
   $scope: String!
   $signature: String!
 ) {
@@ -63,6 +66,7 @@ query ModelPairDivergenceBreakdown(
     modelAId: $modelAId
     modelBId: $modelBId
     domainId: $domainId
+    domainIds: $domainIds
     scope: $scope
     signature: $signature
   ) {

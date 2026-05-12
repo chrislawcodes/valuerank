@@ -15,8 +15,9 @@ const DRILLDOWN_POLL_INTERVAL_MS = 5000;
 
 type Props = {
   selectedPair: SelectedPair | null;
-  scope: 'DOMAIN' | 'ALL_DOMAINS';
+  scope: 'DOMAIN' | 'ALL_DOMAINS' | 'DOMAIN_SET';
   domainId: string | null;
+  domainIds?: string[] | null;
   signature: string;
 };
 
@@ -65,12 +66,13 @@ function getProgressPercent(progress: {
   return Math.min(100, Math.round((Math.min(progress.completedRuns, progress.totalRuns) / progress.totalRuns) * 100));
 }
 
-export function PairwiseDivergenceDrilldownReport({ selectedPair, scope, domainId, signature }: Props) {
+export function PairwiseDivergenceDrilldownReport({ selectedPair, scope, domainId, domainIds, signature }: Props) {
   const [{ data, fetching, error }, reexecuteQuery] = useModelPairDivergenceBreakdownQuery({
     variables: {
       modelAId: selectedPair?.modelAId ?? '',
       modelBId: selectedPair?.modelBId ?? '',
       domainId: domainId ?? undefined,
+      domainIds: domainIds ?? undefined,
       scope,
       signature,
     },

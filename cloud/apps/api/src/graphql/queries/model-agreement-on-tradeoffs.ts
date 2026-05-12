@@ -37,10 +37,13 @@ import {
   queueDomainAnalysisRefresh,
   readModelAgreementSnapshotStateFromSnapshot,
 } from '../../services/analysis/domain-analysis-cache.js';
-import type { DomainAnalysisScope } from '../../services/analysis/domain-analysis-scope.js';
+import {
+  normalizeDomainIds,
+  resolveDomainAnalysisSelection,
+  type DomainAnalysisScope,
+} from '../../services/analysis/domain-analysis-scope.js';
 import type { Context } from '../context.js';
 
-const ALL_DOMAINS_SCOPE_ID = 'all-domains';
 const AGREEMENT_REFRESH_REASON = 'model-agreement-on-tradeoffs-page-load-missing';
 const DRILLDOWN_REFRESH_REASON = 'model-pair-divergence-breakdown-missing';
 const NON_BINARY_CELL_FALLBACK_COUNT = 0;
@@ -49,7 +52,8 @@ const KAPPA_BOOTSTRAP_ITERATIONS = 1000;
 
 async function resolveAgreementScope(params: {
   scope: DomainAnalysisScope;
-  domainId: string | null;
+  domainId: string;
+  domainIds: string[];
   signature: string;
 }): Promise<{
   scopeData: Awaited<ReturnType<typeof resolveDomainAnalysisScopeDefinitions>>;
@@ -57,7 +61,8 @@ async function resolveAgreementScope(params: {
 }> {
   const scopeData = await resolveDomainAnalysisScopeDefinitions({
     scope: params.scope,
-    domainId: params.domainId ?? ALL_DOMAINS_SCOPE_ID,
+    domainId: params.domainId,
+    domainIds: params.domainIds,
   });
   const resolvedSignatureRuns = await resolveSignatureRuns(
     scopeData.latestDefinitionIds,
@@ -74,7 +79,8 @@ async function resolveAgreementScope(params: {
 
 async function readAgreementSnapshot(params: {
   scope: DomainAnalysisScope;
-  domainId: string | null;
+  domainId: string;
+  domainIds: string[];
   signature: string;
   refreshReason: string;
   ctx: Context;
@@ -90,7 +96,7 @@ async function readAgreementSnapshot(params: {
 }> {
   const snapshotState = await readModelAgreementSnapshotStateFromSnapshot(
     params.scope,
-    params.domainId ?? ALL_DOMAINS_SCOPE_ID,
+    params.domainId,
     params.signature,
   );
   if (snapshotState != null) {
@@ -103,18 +109,19 @@ async function readAgreementSnapshot(params: {
 
   const queued = await queueDomainAnalysisRefresh({
     scope: params.scope,
-    domainId: params.domainId ?? ALL_DOMAINS_SCOPE_ID,
+    domainId: params.domainId,
+    domainIds: params.domainIds,
     signature: params.signature,
     reason: params.refreshReason,
   });
   if (queued) {
     params.ctx.log.info(
-      { scope: params.scope, domainId: params.domainId, signature: params.signature },
+      { scope: params.scope, domainId: params.domainId, domainIds: params.domainIds, signature: params.signature },
       'Model agreement snapshot not ready - rebuild queued, returning pending',
     );
   } else {
     params.ctx.log.warn(
-      { scope: params.scope, domainId: params.domainId, signature: params.signature },
+      { scope: params.scope, domainId: params.domainId, domainIds: params.domainIds, signature: params.signature },
       'Model agreement snapshot not ready and rebuild could not be queued',
     );
   }
@@ -126,21 +133,27 @@ export async function resolveModelAgreementOnTradeoffs(
   args: {
     modelIds: ReadonlyArray<string | number>;
     domainId?: string | number | null;
+    domainIds?: ReadonlyArray<string | number> | null;
     scope: string;
     signature: string;
   },
   ctx: Context,
 ): Promise<ModelAgreementResultShape> {
   const scopeValue = String(args.scope);
-  if (scopeValue !== 'DOMAIN' && scopeValue !== 'ALL_DOMAINS') {
+  if (scopeValue !== 'DOMAIN' && scopeValue !== 'ALL_DOMAINS' && scopeValue !== 'DOMAIN_SET') {
     throw new ValidationError(`Unsupported scope: ${scopeValue}`);
   }
-  const scope: DomainAnalysisScope = scopeValue;
-
+  const domainIds = normalizeDomainIds((args.domainIds ?? []).map(String));
   const domainId = args.domainId != null ? String(args.domainId).trim() : null;
-  if (scope === 'DOMAIN' && (domainId == null || domainId.length === 0)) {
+  const selection = resolveDomainAnalysisSelection({
+    scope: scopeValue,
+    domainId,
+    domainIds,
+  });
+  if (scopeValue === 'DOMAIN' && selection.scope !== 'DOMAIN') {
     throw new ValidationError('domainId is required when scope is DOMAIN');
   }
+  const scope: DomainAnalysisScope = selection.scope;
 
   const signature = String(args.signature).trim();
   if (signature.length === 0) {
@@ -159,13 +172,15 @@ export async function resolveModelAgreementOnTradeoffs(
 
   await resolveAgreementScope({
     scope,
-    domainId,
+    domainId: selection.domainId,
+    domainIds: selection.domainIds,
     signature,
   });
 
   const snapshotResult = await readAgreementSnapshot({
     scope,
-    domainId,
+    domainId: selection.domainId,
+    domainIds: selection.domainIds,
     signature,
     refreshReason: AGREEMENT_REFRESH_REASON,
     ctx,
@@ -246,7 +261,8 @@ export async function resolveModelAgreementOnTradeoffs(
   ctx.log.debug(
     {
       scope,
-      domainId,
+      domainId: selection.domainId,
+      domainIds: selection.domainIds,
       signature,
       selectedModelCount: selectedModels.length,
       availableModelCount: availableModels.length,
@@ -273,21 +289,27 @@ export async function resolveModelPairDivergenceBreakdown(
     modelAId: string | number;
     modelBId: string | number;
     domainId?: string | number | null;
+    domainIds?: ReadonlyArray<string | number> | null;
     scope: string;
     signature: string;
   },
   ctx: Context,
 ): Promise<PairDivergenceBreakdownShape> {
   const scopeValue = String(args.scope);
-  if (scopeValue !== 'DOMAIN' && scopeValue !== 'ALL_DOMAINS') {
+  if (scopeValue !== 'DOMAIN' && scopeValue !== 'ALL_DOMAINS' && scopeValue !== 'DOMAIN_SET') {
     throw new ValidationError(`Unsupported scope: ${scopeValue}`);
   }
-  const scope: DomainAnalysisScope = scopeValue;
-
+  const domainIds = normalizeDomainIds((args.domainIds ?? []).map(String));
   const domainId = args.domainId != null ? String(args.domainId).trim() : null;
-  if (scope === 'DOMAIN' && (domainId == null || domainId.length === 0)) {
+  const selection = resolveDomainAnalysisSelection({
+    scope: scopeValue,
+    domainId,
+    domainIds,
+  });
+  if (scopeValue === 'DOMAIN' && selection.scope !== 'DOMAIN') {
     throw new ValidationError('domainId is required when scope is DOMAIN');
   }
+  const scope: DomainAnalysisScope = selection.scope;
 
   const signature = String(args.signature).trim();
   if (signature.length === 0) {
@@ -310,13 +332,15 @@ export async function resolveModelPairDivergenceBreakdown(
 
   await resolveAgreementScope({
     scope,
-    domainId,
+    domainId: selection.domainId,
+    domainIds: selection.domainIds,
     signature,
   });
 
   const snapshotResult = await readAgreementSnapshot({
     scope,
-    domainId,
+    domainId: selection.domainId,
+    domainIds: selection.domainIds,
     signature,
     refreshReason: DRILLDOWN_REFRESH_REASON,
     ctx,
@@ -405,7 +429,8 @@ export async function resolveModelPairDivergenceBreakdown(
   ctx.log.debug(
     {
       scope,
-      domainId,
+      domainId: selection.domainId,
+      domainIds: selection.domainIds,
       signature,
       modelAId,
       modelBId,
@@ -431,6 +456,7 @@ builder.queryField('modelAgreementOnTradeoffs', (t) =>
     args: {
       modelIds: t.arg.idList({ required: true }),
       domainId: t.arg.id({ required: false }),
+      domainIds: t.arg.idList({ required: false }),
       scope: t.arg.string({ required: true }),
       signature: t.arg.string({ required: true }),
     },
@@ -445,6 +471,7 @@ builder.queryField('modelPairDivergenceBreakdown', (t) =>
       modelAId: t.arg.id({ required: true }),
       modelBId: t.arg.id({ required: true }),
       domainId: t.arg.id({ required: false }),
+      domainIds: t.arg.idList({ required: false }),
       scope: t.arg.string({ required: true }),
       signature: t.arg.string({ required: true }),
     },

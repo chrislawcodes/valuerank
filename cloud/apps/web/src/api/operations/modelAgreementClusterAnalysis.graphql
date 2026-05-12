@@ -1,6 +1,7 @@
 query ModelAgreementClusterAnalysis(
   $modelIds: [ID!]!
   $domainId: ID
+  $domainIds: [ID!]
   $scope: String!
   $signature: String!
   $method: String!
@@ -8,6 +9,7 @@ query ModelAgreementClusterAnalysis(
   modelAgreementClusterAnalysis(
     modelIds: $modelIds
     domainId: $domainId
+    domainIds: $domainIds
     scope: $scope
     signature: $signature
     method: $method

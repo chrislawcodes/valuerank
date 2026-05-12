@@ -2,15 +2,28 @@ import { isVnewSignature, parseVnewTemperature } from '@valuerank/shared/trial-s
 import { DOMAIN_ANALYSIS_ASSUMPTION_PREFIX } from '../../services/analysis/domain-analysis-cache-types.js';
 
 const ALL_DOMAINS_ASSUMPTION_KEY = `${DOMAIN_ANALYSIS_ASSUMPTION_PREFIX}:all-domains`;
+const DOMAIN_SET_ASSUMPTION_KEY_PREFIX = `${DOMAIN_ANALYSIS_ASSUMPTION_PREFIX}:domain-set:`;
 
 export type ModelsAnalysisSnapshotCandidate = {
   assumptionKey: string;
   configSignature: string;
 };
 
+export type ModelsAnalysisSnapshotSelection = {
+  scope: 'DOMAIN' | 'ALL_DOMAINS' | 'DOMAIN_SET';
+  assumptionKey: string;
+};
+
 function isDomainSnapshot(snapshot: ModelsAnalysisSnapshotCandidate): boolean {
   return snapshot.assumptionKey.startsWith(`${DOMAIN_ANALYSIS_ASSUMPTION_PREFIX}:`)
     && snapshot.assumptionKey !== ALL_DOMAINS_ASSUMPTION_KEY;
+}
+
+function isSelectedDomainSnapshot(snapshot: ModelsAnalysisSnapshotCandidate, selection: ModelsAnalysisSnapshotSelection): boolean {
+  if (selection.scope === 'ALL_DOMAINS') {
+    return isDomainSnapshot(snapshot) && !snapshot.assumptionKey.startsWith(DOMAIN_SET_ASSUMPTION_KEY_PREFIX);
+  }
+  return snapshot.assumptionKey === selection.assumptionKey;
 }
 
 function getSignaturePreference(signature: string): number {
@@ -32,11 +45,12 @@ function getSignaturePreference(signature: string): number {
 export function selectModelsAnalysisSnapshots<T extends ModelsAnalysisSnapshotCandidate>(
   snapshots: T[],
   requestedSignature: string | null,
+  selection: ModelsAnalysisSnapshotSelection,
 ): T[] {
   const selectedByAssumptionKey = new Map<string, T>();
 
   for (const snapshot of snapshots) {
-    if (!isDomainSnapshot(snapshot)) continue;
+    if (!isSelectedDomainSnapshot(snapshot, selection)) continue;
 
     const current = selectedByAssumptionKey.get(snapshot.assumptionKey);
     if (current == null) {

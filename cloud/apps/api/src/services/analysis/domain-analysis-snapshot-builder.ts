@@ -21,10 +21,10 @@ import { buildPressureSensitivityDecisionSnapshot } from '../pressure-sensitivit
 
 const DEFINITION_SNAPSHOT_RESOLVE_CHUNK_SIZE = 20;
 
-export function buildAssumptionKey(scope: DomainAnalysisScope, domainId: string): string {
+export function buildAssumptionKey(scope: DomainAnalysisScope, scopeId: string): string {
   return scope === 'ALL_DOMAINS'
     ? `${DOMAIN_ANALYSIS_ASSUMPTION_PREFIX}:all-domains`
-    : `${DOMAIN_ANALYSIS_ASSUMPTION_PREFIX}:${domainId}`;
+    : `${DOMAIN_ANALYSIS_ASSUMPTION_PREFIX}:${scopeId}`;
 }
 
 export function normalizeSignature(signature: string | null): string {
@@ -75,11 +75,13 @@ export function computeInputHash(params: {
 export async function prepareDomainAnalysisState(params: {
   scope: DomainAnalysisScope;
   domainId: string;
+  domainIds?: string[];
   requestedSignature: string | null;
 }): Promise<DomainAnalysisPreparedState> {
   const scopeData = await resolveDomainAnalysisScopeDefinitions({
     scope: params.scope,
     domainId: params.domainId,
+    domainIds: params.domainIds,
   });
 
   const defaultModelIds = scopeData.scope === 'ALL_DOMAINS' ? [] : scopeData.domain.defaultModelIds;
@@ -104,7 +106,7 @@ export async function prepareDomainAnalysisState(params: {
 
   const inputHash = computeInputHash({
     scope: scopeData.scope,
-    domainIds: scopeData.domains.map((domain) => domain.id),
+    domainIds: scopeData.domainIds,
     signature: configSignature,
     latestDefinitions: scopeData.latestDefinitions,
     fingerprints: fingerprintRows,
@@ -113,6 +115,7 @@ export async function prepareDomainAnalysisState(params: {
   return {
     scope: scopeData.scope,
     domain: scopeData.domain,
+    domainIds: scopeData.domainIds,
     domains: scopeData.domains,
     definitions: scopeData.definitions,
     latestDefinitions: scopeData.latestDefinitions,

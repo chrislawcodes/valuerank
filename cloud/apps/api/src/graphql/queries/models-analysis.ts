@@ -12,6 +12,11 @@ import {
   type ModelsAnalysisModelResultShape,
   type ModelsAnalysisValueResultShape,
 } from '../types/models-analysis.js';
+import {
+  buildDomainAnalysisDomainSetId,
+  normalizeDomainIds,
+  resolveDomainAnalysisSelection,
+} from '../../services/analysis/domain-analysis-scope.js';
 
 type DomainContribution = ModelsAnalysisDomainBreakdownShape;
 type ModelsAnalysisSnapshotRow = {
@@ -64,6 +69,10 @@ builder.queryField('modelsAnalysis', (t) =>
         required: false,
         description: 'Optional domain ID to scope the matrix to a single domain',
       }),
+      domainIds: t.arg.idList({
+        required: false,
+        description: 'Optional domain IDs to scope the matrix to a selected domain set',
+      }),
       signature: t.arg.string({
         required: false,
         description: 'Optional batch signature to filter snapshots (e.g. vnewtd, vnewt0)',
@@ -71,7 +80,15 @@ builder.queryField('modelsAnalysis', (t) =>
     },
     resolve: async (_root, args, ctx) => {
       const domainId = args.domainId != null ? String(args.domainId) : null;
+      const domainIds = normalizeDomainIds(args.domainIds?.map(String) ?? null);
       const signature = args.signature != null ? String(args.signature) : null;
+      const selection = resolveDomainAnalysisSelection({
+        domainId,
+        domainIds,
+      });
+      const selectionAssumptionKey = selection.scope === 'DOMAIN_SET'
+        ? buildAssumptionKey('DOMAIN_SET', buildDomainAnalysisDomainSetId(selection.domainIds))
+        : buildAssumptionKey('DOMAIN', selection.domainId);
       const activeModels = await getModelsFromDatabase({
         activeOnly: true,
         availableOnly: false,
@@ -79,11 +96,11 @@ builder.queryField('modelsAnalysis', (t) =>
 
       const snapshots = await db.assumptionAnalysisSnapshot.findMany({
         where: {
-          assumptionKey: domainId != null
-            ? buildAssumptionKey('DOMAIN', domainId)
-            : {
+          assumptionKey: selection.scope === 'ALL_DOMAINS'
+            ? {
                 startsWith: `${DOMAIN_ANALYSIS_ASSUMPTION_PREFIX}:`,
-              },
+              }
+            : selectionAssumptionKey,
           analysisType: DOMAIN_ANALYSIS_SNAPSHOT_TYPE,
           ...(signature != null ? { configSignature: signature } : {}),
           status: 'CURRENT',
@@ -104,6 +121,10 @@ builder.queryField('modelsAnalysis', (t) =>
       const selectedSnapshots = selectModelsAnalysisSnapshots(
         snapshots as ModelsAnalysisSnapshotRow[],
         signature,
+        {
+          scope: selection.scope,
+          assumptionKey: selectionAssumptionKey,
+        },
       );
 
       const activeModelById = new Map(activeModels.map((model) => [model.modelId, model.displayName] as const));

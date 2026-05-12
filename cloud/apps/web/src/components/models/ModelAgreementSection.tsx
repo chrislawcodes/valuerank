@@ -13,8 +13,9 @@ type PairwiseAgreementRow = ModelAgreementOnTradeoffsQuery['modelAgreementOnTrad
 
 type Props = {
   modelIds: string[];
-  scope: 'DOMAIN' | 'ALL_DOMAINS';
+  scope: 'DOMAIN' | 'ALL_DOMAINS' | 'DOMAIN_SET';
   domainId: string | null;
+  domainIds?: string[] | null;
   signature: string;
 };
 
@@ -155,11 +156,12 @@ function BuildStatusCard({
   );
 }
 
-export function ModelAgreementSection({ modelIds, scope, domainId, signature }: Props): JSX.Element {
+export function ModelAgreementSection({ modelIds, scope, domainId, domainIds, signature }: Props): JSX.Element {
   const [{ data, fetching, error }, reexecuteQuery] = useModelAgreementOnTradeoffsQuery({
     variables: {
       modelIds,
       domainId: domainId ?? undefined,
+      domainIds: domainIds ?? undefined,
       scope,
       signature,
     },
@@ -377,6 +379,7 @@ export function ModelAgreementSection({ modelIds, scope, domainId, signature }: 
         selectedPair={selectedPair}
         scope={scope}
         domainId={domainId}
+        domainIds={domainIds}
         signature={signature}
       />
     </section>

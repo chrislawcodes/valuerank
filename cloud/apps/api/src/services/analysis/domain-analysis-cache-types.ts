@@ -98,6 +98,7 @@ export type AnalysisOutputRow = {
 export type DomainAnalysisPreparedState = {
   scope: DomainAnalysisScope;
   domain: { id: string; name: string; defaultModelIds: string[] };
+  domainIds: string[];
   domains: Array<{ id: string; name: string; defaultModelIds: string[] }>;
   definitions: DefinitionRow[];
   latestDefinitions: DefinitionRow[];

@@ -17,7 +17,10 @@ describe('selectModelsAnalysisSnapshots', () => {
     const selected = selectModelsAnalysisSnapshots([
       snapshot('new-t0', 'domain-analysis:job-choice', 'vnewt0'),
       snapshot('older-default', 'domain-analysis:job-choice', 'vnewtd'),
-    ], null);
+    ], null, {
+      scope: 'ALL_DOMAINS',
+      assumptionKey: 'domain-analysis:all-domains',
+    });
 
     expect(selected).toEqual([
       snapshot('older-default', 'domain-analysis:job-choice', 'vnewtd'),
@@ -28,7 +31,10 @@ describe('selectModelsAnalysisSnapshots', () => {
     const selected = selectModelsAnalysisSnapshots([
       snapshot('new-default', 'domain-analysis:job-choice', 'vnewtd'),
       snapshot('older-default', 'domain-analysis:job-choice', 'vnewtd'),
-    ], 'vnewtd');
+    ], 'vnewtd', {
+      scope: 'ALL_DOMAINS',
+      assumptionKey: 'domain-analysis:all-domains',
+    });
 
     expect(selected).toEqual([
       snapshot('new-default', 'domain-analysis:job-choice', 'vnewtd'),
@@ -39,10 +45,42 @@ describe('selectModelsAnalysisSnapshots', () => {
     const selected = selectModelsAnalysisSnapshots([
       snapshot('all-domains', 'domain-analysis:all-domains', 'vnewt0'),
       snapshot('job-choice', 'domain-analysis:job-choice', 'vnewt0'),
-    ], null);
+    ], null, {
+      scope: 'ALL_DOMAINS',
+      assumptionKey: 'domain-analysis:all-domains',
+    });
 
     expect(selected).toEqual([
       snapshot('job-choice', 'domain-analysis:job-choice', 'vnewt0'),
+    ]);
+  });
+
+  it('does not treat selected-domain-set snapshots as all-domain report columns', () => {
+    const selected = selectModelsAnalysisSnapshots([
+      snapshot('domain-set', 'domain-analysis:domain-set:abc123', 'vnewtd'),
+      snapshot('job-choice', 'domain-analysis:job-choice', 'vnewtd'),
+    ], null, {
+      scope: 'ALL_DOMAINS',
+      assumptionKey: 'domain-analysis:all-domains',
+    });
+
+    expect(selected).toEqual([
+      snapshot('job-choice', 'domain-analysis:job-choice', 'vnewtd'),
+    ]);
+  });
+
+  it('selects exactly the requested selected-domain-set snapshot', () => {
+    const selected = selectModelsAnalysisSnapshots([
+      snapshot('domain-set-a', 'domain-analysis:domain-set:abc123', 'vnewtd'),
+      snapshot('domain-set-b', 'domain-analysis:domain-set:def456', 'vnewtd'),
+      snapshot('job-choice', 'domain-analysis:job-choice', 'vnewtd'),
+    ], null, {
+      scope: 'DOMAIN_SET',
+      assumptionKey: 'domain-analysis:domain-set:abc123',
+    });
+
+    expect(selected).toEqual([
+      snapshot('domain-set-a', 'domain-analysis:domain-set:abc123', 'vnewtd'),
     ]);
   });
 });
