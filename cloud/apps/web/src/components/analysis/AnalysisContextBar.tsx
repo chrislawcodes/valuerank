@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { cn } from '../../lib/utils';
+import { Button } from '../ui/Button';
 import { Select } from '../ui/Select';
 import { ChipPicker, type ChipPickerAction, type ChipPickerOption } from '../ui/ChipPicker';
 
@@ -176,22 +177,24 @@ export function AnalysisContextBar({
           <ContextField label="Win rate">
             <div className="flex gap-1">
               {(['all', 'exc-neutral'] as const).map((mode) => (
-                <button
+                <Button
                   key={mode}
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   onClick={() => { if (winRateMode.disabled !== true) winRateMode.onChange(mode); }}
                   disabled={winRateMode.disabled === true}
                   title={winRateMode.disabled === true ? 'Only applies when data source is Win Rate' : undefined}
                   className={cn(
                     'rounded px-2 py-0.5 text-sm font-medium transition-colors',
                     winRateMode.value === mode
-                      ? 'bg-blue-600 text-white'
+                      ? 'bg-blue-600 text-white hover:bg-blue-700'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200',
                     winRateMode.disabled === true && 'cursor-not-allowed opacity-50',
                   )}
                 >
                   {mode === 'all' ? 'All responses' : 'Exc. neutral'}
-                </button>
+                </Button>
               ))}
             </div>
           </ContextField>
