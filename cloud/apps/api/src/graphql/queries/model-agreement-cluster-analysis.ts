@@ -22,10 +22,13 @@ import {
   queueDomainAnalysisRefresh,
   readModelAgreementSnapshotStateFromSnapshot,
 } from '../../services/analysis/domain-analysis-cache.js';
-import type { DomainAnalysisScope } from '../../services/analysis/domain-analysis-scope.js';
+import {
+  normalizeDomainIds,
+  resolveDomainAnalysisSelection,
+  type DomainAnalysisScope,
+} from '../../services/analysis/domain-analysis-scope.js';
 import type { Context } from '../context.js';
 
-const ALL_DOMAINS_SCOPE_ID = 'all-domains';
 const REFRESH_REASON = 'model-agreement-cluster-analysis-page-load-missing';
 
 function emptyPayload(reason: string): KappaClusterPayload {
@@ -43,12 +46,14 @@ function emptyPayload(reason: string): KappaClusterPayload {
 
 async function resolveScope(params: {
   scope: DomainAnalysisScope;
-  domainId: string | null;
+  domainId: string;
+  domainIds: string[];
   signature: string;
 }): Promise<void> {
   const scopeData = await resolveDomainAnalysisScopeDefinitions({
     scope: params.scope,
-    domainId: params.domainId ?? ALL_DOMAINS_SCOPE_ID,
+    domainId: params.domainId,
+    domainIds: params.domainIds,
   });
   const resolvedSignatureRuns = await resolveSignatureRuns(
     scopeData.latestDefinitionIds,
@@ -62,13 +67,14 @@ async function resolveScope(params: {
 
 async function readAgreementSnapshot(params: {
   scope: DomainAnalysisScope;
-  domainId: string | null;
+  domainId: string;
+  domainIds: string[];
   signature: string;
   ctx: Context;
 }): Promise<Awaited<ReturnType<typeof readModelAgreementSnapshotStateFromSnapshot>>> {
   const snapshotState = await readModelAgreementSnapshotStateFromSnapshot(
     params.scope,
-    params.domainId ?? ALL_DOMAINS_SCOPE_ID,
+    params.domainId,
     params.signature,
   );
   if (snapshotState != null) {
@@ -77,12 +83,13 @@ async function readAgreementSnapshot(params: {
 
   await queueDomainAnalysisRefresh({
     scope: params.scope,
-    domainId: params.domainId ?? ALL_DOMAINS_SCOPE_ID,
+    domainId: params.domainId,
+    domainIds: params.domainIds,
     signature: params.signature,
     reason: REFRESH_REASON,
   });
   params.ctx.log.info(
-    { scope: params.scope, domainId: params.domainId, signature: params.signature },
+    { scope: params.scope, domainId: params.domainId, domainIds: params.domainIds, signature: params.signature },
     'Kappa cluster analysis snapshot not ready — rebuild queued, returning pending',
   );
   return null;
@@ -119,6 +126,7 @@ export async function resolveModelAgreementClusterAnalysis(
   args: {
     modelIds: ReadonlyArray<string | number>;
     domainId?: string | number | null | undefined;
+    domainIds?: ReadonlyArray<string | number> | null;
     scope: string;
     signature: string;
     method: string;
@@ -126,15 +134,20 @@ export async function resolveModelAgreementClusterAnalysis(
   ctx: Context,
 ): Promise<KappaClusterPayload> {
   const scopeValue = String(args.scope);
-  if (scopeValue !== 'DOMAIN' && scopeValue !== 'ALL_DOMAINS') {
+  if (scopeValue !== 'DOMAIN' && scopeValue !== 'ALL_DOMAINS' && scopeValue !== 'DOMAIN_SET') {
     throw new ValidationError(`Unsupported scope: ${scopeValue}`);
   }
-  const scope: DomainAnalysisScope = scopeValue;
-
+  const domainIds = normalizeDomainIds((args.domainIds ?? []).map(String));
   const domainId = args.domainId != null ? String(args.domainId).trim() : null;
-  if (scope === 'DOMAIN' && (domainId == null || domainId.length === 0)) {
+  const selection = resolveDomainAnalysisSelection({
+    scope: scopeValue,
+    domainId,
+    domainIds,
+  });
+  if (scopeValue === 'DOMAIN' && selection.scope !== 'DOMAIN') {
     throw new ValidationError('domainId is required when scope is DOMAIN');
   }
+  const scope: DomainAnalysisScope = selection.scope;
 
   const signature = String(args.signature).trim();
   if (signature.length === 0) {
@@ -157,9 +170,20 @@ export async function resolveModelAgreementClusterAnalysis(
   const selectedModels = buildSelectedModels(selectedModelIds, labelByModelId);
   const selectedModelIdSet = new Set(selectedModels.map((model) => model.modelId));
 
-  await resolveScope({ scope, domainId, signature });
+  await resolveScope({
+    scope,
+    domainId: selection.domainId,
+    domainIds: selection.domainIds,
+    signature,
+  });
 
-  const snapshotState = await readAgreementSnapshot({ scope, domainId, signature, ctx });
+  const snapshotState = await readAgreementSnapshot({
+    scope,
+    domainId: selection.domainId,
+    domainIds: selection.domainIds,
+    signature,
+    ctx,
+  });
   if (snapshotState == null) {
     return emptyPayload('Kappa cluster analysis is rebuilding — try again in a moment.');
   }
@@ -179,7 +203,8 @@ export async function resolveModelAgreementClusterAnalysis(
   // tends to value. Falls back to zeros if a model is missing from the result.
   const domainAnalysis = await getDomainAnalysisResult({
     scope,
-    domainId: domainId ?? ALL_DOMAINS_SCOPE_ID,
+    domainId: selection.domainId,
+    domainIds: selection.domainIds,
     requestedSignature: signature,
   });
   const scoresByModelId = new Map<string, Record<string, number>>();
@@ -229,6 +254,7 @@ builder.queryField('modelAgreementClusterAnalysis', (t) =>
     args: {
       modelIds: t.arg.idList({ required: true }),
       domainId: t.arg.id({ required: false }),
+      domainIds: t.arg.idList({ required: false }),
       scope: t.arg.string({ required: true }),
       signature: t.arg.string({ required: true }),
       method: t.arg.string({ required: true }),

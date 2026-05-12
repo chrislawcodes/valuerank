@@ -5,12 +5,18 @@ import {
   refreshDomainAnalysisSnapshot,
 } from '../../../services/analysis/domain-analysis-cache.js';
 import { DomainAnalysisRefreshResultRef } from './types.js';
+import {
+  normalizeDomainIds,
+  resolveDomainAnalysisSelection,
+} from '../../../services/analysis/domain-analysis-scope.js';
 
 builder.mutationField('refreshDomainAnalysis', (t) =>
   t.field({
     type: DomainAnalysisRefreshResultRef,
     args: {
-      domainId: t.arg.id({ required: true }),
+      domainId: t.arg.id({ required: false }),
+      domainIds: t.arg.idList({ required: false }),
+      scope: t.arg.string({ required: false }),
       signature: t.arg.string({ required: false }),
     },
     resolve: async (_root, args, ctx) => {
@@ -18,14 +24,21 @@ builder.mutationField('refreshDomainAnalysis', (t) =>
         throw new AuthenticationError('Authentication required');
       }
 
-      const domainId = String(args.domainId);
+      const domainId = args.domainId != null ? String(args.domainId) : null;
+      const domainIds = normalizeDomainIds(args.domainIds?.map(String) ?? null);
+      const selection = resolveDomainAnalysisSelection({
+        scope: args.scope,
+        domainId,
+        domainIds,
+      });
       const signature = typeof args.signature === 'string' && args.signature.trim() !== ''
         ? args.signature.trim()
         : null;
 
       const queued = await queueDomainAnalysisRefresh({
-        scope: 'DOMAIN',
-        domainId,
+        scope: selection.scope,
+        domainId: selection.domainId,
+        domainIds: selection.domainIds,
         signature,
         reason: 'manual-refresh',
       });
@@ -39,8 +52,9 @@ builder.mutationField('refreshDomainAnalysis', (t) =>
       }
 
       await refreshDomainAnalysisSnapshot({
-        scope: 'DOMAIN',
-        domainId,
+        scope: selection.scope,
+        domainId: selection.domainId,
+        domainIds: selection.domainIds,
         requestedSignature: signature,
       });
       return {

@@ -52,6 +52,20 @@ import {
 import { formatQueryError } from '../utils/urqlError';
 
 const ALL_DOMAINS_SCOPE = 'all-domains';
+type DomainSelectionScope = 'DOMAIN' | 'ALL_DOMAINS' | 'DOMAIN_SET';
+
+function normalizeDomainIds(domainIds: readonly string[]): string[] {
+  return Array.from(new Set(domainIds.map((id) => id.trim()).filter((id) => id !== ''))).sort((a, b) => a.localeCompare(b));
+}
+
+function getDomainSelectionScope(domainIds: readonly string[]): DomainSelectionScope {
+  if (domainIds.length === 0) return 'ALL_DOMAINS';
+  return domainIds.length === 1 ? 'DOMAIN' : 'DOMAIN_SET';
+}
+
+function getDomainAnalysisScopeParam(scope: DomainSelectionScope): string | undefined {
+  return scope === 'ALL_DOMAINS' ? ALL_DOMAINS_SCOPE : undefined;
+}
 
 export function filterSelectedModels<T>(
   models: T[],
@@ -87,9 +101,10 @@ export function DomainAnalysis() {
   const initializedModelSelection = useRef(false);
   const [useLegacyQuery, setUseLegacyQuery] = useState(false);
 
-  const effectiveDomainId = selectedDomainIds.length === 1 ? (selectedDomainIds[0] ?? '') : '';
-  const isAllDomains = selectedDomainIds.length !== 1;
-  const queryDomainId = effectiveDomainId !== '' ? effectiveDomainId : (domains[0]?.id ?? '');
+  const normalizedSelectedDomainIds = useMemo(() => normalizeDomainIds(selectedDomainIds), [selectedDomainIds]);
+  const selectionScope = useMemo(() => getDomainSelectionScope(normalizedSelectedDomainIds), [normalizedSelectedDomainIds]);
+  const effectiveDomainId = normalizedSelectedDomainIds.length === 1 ? (normalizedSelectedDomainIds[0] ?? '') : '';
+  const isDomainSet = selectionScope === 'DOMAIN_SET';
   const [exportLoading, setExportLoading] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [refreshNotice, setRefreshNotice] = useState<string | null>(null);
@@ -102,10 +117,11 @@ export function DomainAnalysis() {
   >({
     query: DOMAIN_AVAILABLE_SIGNATURES_QUERY,
     variables: {
-      domainId: queryDomainId,
-      scope: isAllDomains ? ALL_DOMAINS_SCOPE : undefined,
+      domainId: effectiveDomainId !== '' ? effectiveDomainId : undefined,
+      domainIds: isDomainSet ? normalizedSelectedDomainIds : undefined,
+      scope: getDomainAnalysisScopeParam(selectionScope),
     },
-    pause: queryDomainId === '',
+    pause: domainsLoading,
     requestPolicy: 'cache-and-network',
   });
 
@@ -121,13 +137,13 @@ export function DomainAnalysis() {
   }, [signatureData]);
 
   useEffect(() => {
-    if (domains.length === 0 || selectedDomainIds.length === 0) return;
+    if (domains.length === 0 || normalizedSelectedDomainIds.length === 0) return;
     const validIds = new Set(domains.map((d) => d.id));
-    const next = selectedDomainIds.filter((id) => validIds.has(id));
-    if (next.length !== selectedDomainIds.length) {
+    const next = normalizedSelectedDomainIds.filter((id) => validIds.has(id));
+    if (next.length !== normalizedSelectedDomainIds.length) {
       setSelectedDomainIds(next);
     }
-  }, [domains, selectedDomainIds]);
+  }, [domains, normalizedSelectedDomainIds]);
 
   useEffect(() => {
     if (signatureOptions.length === 0) { setSelectedSignature(''); return; }
@@ -144,16 +160,16 @@ export function DomainAnalysis() {
 
   useEffect(() => {
     const next = new URLSearchParams(searchParams);
-    if (selectedDomainIds.length === 0) {
+    if (normalizedSelectedDomainIds.length === 0) {
       next.delete('domainId');
       next.delete('domainIds');
       next.delete('scope');
-    } else if (selectedDomainIds.length === 1) {
-      next.set('domainId', selectedDomainIds[0]!);
+    } else if (normalizedSelectedDomainIds.length === 1) {
+      next.set('domainId', normalizedSelectedDomainIds[0]!);
       next.delete('domainIds');
       next.delete('scope');
     } else {
-      next.set('domainIds', selectedDomainIds.join(','));
+      next.set('domainIds', normalizedSelectedDomainIds.join(','));
       next.delete('domainId');
       next.delete('scope');
     }
@@ -161,20 +177,21 @@ export function DomainAnalysis() {
     else next.set('signature', selectedSignature);
     if (next.toString() === searchParams.toString()) return;
     setSearchParams(next, { replace: true });
-  }, [selectedDomainIds, selectedSignature, searchParams, setSearchParams]);
+  }, [normalizedSelectedDomainIds, selectedSignature, searchParams, setSearchParams]);
 
-  const activeUseLegacyQuery = useLegacyQuery && !isAllDomains;
+  const activeUseLegacyQuery = useLegacyQuery && effectiveDomainId !== '';
   const [
     { data: scoredData, fetching: scoredFetching, error: scoredError },
     reexecuteScoredQuery,
   ] = useQuery<DomainAnalysisQueryResult, DomainAnalysisQueryVariables>({
     query: DOMAIN_ANALYSIS_QUERY,
     variables: {
-      domainId: queryDomainId,
-      scope: isAllDomains ? ALL_DOMAINS_SCOPE : undefined,
+      domainId: effectiveDomainId !== '' ? effectiveDomainId : undefined,
+      domainIds: isDomainSet ? normalizedSelectedDomainIds : undefined,
+      scope: getDomainAnalysisScopeParam(selectionScope),
       signature: selectedSignature === '' ? undefined : selectedSignature,
     },
-    pause: queryDomainId === '' || activeUseLegacyQuery,
+    pause: domainsLoading || activeUseLegacyQuery,
     requestPolicy: 'cache-and-network',
   });
   const [{ data: legacyData, fetching: legacyFetching, error: legacyError }] = useQuery<DomainAnalysisQueryResult, { domainId: string }>({
@@ -190,9 +207,10 @@ export function DomainAnalysis() {
     query: MODELS_ANALYSIS_QUERY,
     variables: {
       ...(effectiveDomainId !== '' ? { domainId: effectiveDomainId } : {}),
+      ...(isDomainSet ? { domainIds: normalizedSelectedDomainIds } : {}),
       ...(selectedSignature !== '' ? { signature: selectedSignature } : {}),
     },
-    pause: !isAllDomains && effectiveDomainId === '',
+    pause: domainsLoading,
     requestPolicy: 'cache-and-network',
   });
   const [{ data: llmModelsData }] = useQuery<LlmModelsQueryResult>({
@@ -207,9 +225,10 @@ export function DomainAnalysis() {
     query: MODELS_STABILITY_QUERY,
     variables: {
       ...(effectiveDomainId !== '' ? { domainId: effectiveDomainId } : {}),
+      ...(isDomainSet ? { domainIds: normalizedSelectedDomainIds } : {}),
       ...(selectedSignature !== '' ? { signature: selectedSignature } : {}),
     },
-    pause: !isAllDomains && effectiveDomainId === '',
+    pause: domainsLoading,
     requestPolicy: 'cache-and-network',
   });
   const [{ fetching: refreshFetching }, refreshDomainAnalysis] = useMutation<
@@ -222,8 +241,8 @@ export function DomainAnalysis() {
     const isFieldError = message.includes('Unknown argument "signature"')
       || message.includes('Cannot query field')
       || message.includes('Unknown field');
-    if (isFieldError && !useLegacyQuery && !isAllDomains) setUseLegacyQuery(true);
-  }, [scoredError, isAllDomains, useLegacyQuery]);
+    if (isFieldError && !useLegacyQuery && effectiveDomainId !== '') setUseLegacyQuery(true);
+  }, [effectiveDomainId, scoredError, useLegacyQuery]);
 
   const data = activeUseLegacyQuery ? legacyData : scoredData;
   const fetching = activeUseLegacyQuery ? legacyFetching : scoredFetching;
@@ -248,7 +267,7 @@ export function DomainAnalysis() {
     const id = setInterval(() => { reexecuteScoredQuery({ requestPolicy: 'network-only' }); }, 20_000);
     return () => { clearInterval(id); };
   }, [isUpdating, reexecuteScoredQuery]);
-  const showPageLoader = domainsLoading || (queryDomainId !== '' && data?.domainAnalysis == null && fetching);
+  const showPageLoader = domainsLoading || (data?.domainAnalysis == null && fetching);
 
   const models = useMemo<ModelEntry[]>(() => {
     const sourceModels = data?.domainAnalysis.models ?? [];
@@ -361,15 +380,15 @@ export function DomainAnalysis() {
   );
 
   const domainSummary = useMemo(() => {
-    if (selectedDomainIds.length === 0 || selectedDomainIds.length === domains.length) {
+    if (normalizedSelectedDomainIds.length === 0 || normalizedSelectedDomainIds.length === domains.length) {
       return 'All Domains';
     }
-    if (selectedDomainIds.length === 1) {
-      const found = domains.find((d) => d.id === selectedDomainIds[0]);
-      return found?.name ?? selectedDomainIds[0] ?? 'Unknown';
+    if (normalizedSelectedDomainIds.length === 1) {
+      const found = domains.find((d) => d.id === normalizedSelectedDomainIds[0]);
+      return found?.name ?? normalizedSelectedDomainIds[0] ?? 'Unknown';
     }
-    return `${selectedDomainIds.length} of ${domains.length} domains`;
-  }, [selectedDomainIds, domains]);
+    return `${normalizedSelectedDomainIds.length} of ${domains.length} domains`;
+  }, [normalizedSelectedDomainIds, domains]);
   const selectedModelId = selectedModelIds.length === 1 ? (selectedModelIds[0] ?? null) : null;
   const selectedDomainIdForDrawer = effectiveDomainId !== '' ? effectiveDomainId : null;
   const selectedSignatureForDrawer = selectedSignature !== '' ? selectedSignature : null;
@@ -452,16 +471,16 @@ export function DomainAnalysis() {
           label: 'Domain',
           multi: true,
           summary: domainSummary,
-          selectedIds: selectedDomainIds,
+          selectedIds: normalizedSelectedDomainIds,
           options: domains.map((d) => ({ value: d.id, label: d.name })),
           actions: [
             {
               label: 'All Domains',
-              isActive: selectedDomainIds.length === 0 || selectedDomainIds.length === domains.length,
+              isActive: normalizedSelectedDomainIds.length === 0 || normalizedSelectedDomainIds.length === domains.length,
               onClick: () => setSelectedDomainIds([]),
             },
           ],
-          onChange: setSelectedDomainIds,
+          onChange: (ids) => setSelectedDomainIds(normalizeDomainIds(ids)),
           disabled: domainsLoading,
         }}
         signature={{
@@ -573,7 +592,7 @@ export function DomainAnalysis() {
             models={selectedModels}
             selectedDomainId={effectiveDomainId}
             selectedSignature={selectedSignature === '' ? null : selectedSignature}
-            isReadOnly={isAllDomains}
+            isReadOnly={effectiveDomainId === ''}
             showStabilityDots
             winRateMode={winRateMode}
           />

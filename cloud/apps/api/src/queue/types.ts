@@ -87,8 +87,9 @@ export type AggregateAnalysisJobData = {
 };
 
 export type RefreshDomainAnalysisSnapshotJobData = {
-  scope: 'DOMAIN' | 'ALL_DOMAINS';
+  scope: 'DOMAIN' | 'ALL_DOMAINS' | 'DOMAIN_SET';
   domainId: string;
+  domainIds?: string[];
   signature: string | null;
   reason: string;
 };

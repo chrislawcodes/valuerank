@@ -2172,7 +2172,9 @@ export type MutationRecoverRunArgs = {
 
 
 export type MutationRefreshDomainAnalysisArgs = {
-  domainId: Scalars['ID']['input'];
+  domainId?: InputMaybe<Scalars['ID']['input']>;
+  domainIds?: InputMaybe<Array<Scalars['ID']['input']>>;
+  scope?: InputMaybe<Scalars['String']['input']>;
   signature?: InputMaybe<Scalars['String']['input']>;
 };
 
@@ -2425,7 +2427,7 @@ export type PairwiseWinRateModel = {
   __typename?: 'PairwiseWinRateModel';
   trialCountMatrix: Array<Array<Scalars['Int']['output']>>;
   valueOrder: Array<Scalars['String']['output']>;
-  winRateExcNeutralMatrix: Array<Array<Maybe<Scalars['Float']['output']>>>;
+  winRateExcNeutralMatrix?: Maybe<Array<Array<Maybe<Scalars['Float']['output']>>>>;
   winRateMatrix: Array<Array<Maybe<Scalars['Float']['output']>>>;
 };
 
@@ -3041,7 +3043,8 @@ export type QueryDomainArgs = {
 
 
 export type QueryDomainAnalysisArgs = {
-  domainId: Scalars['ID']['input'];
+  domainId?: InputMaybe<Scalars['ID']['input']>;
+  domainIds?: InputMaybe<Array<Scalars['ID']['input']>>;
   scope?: InputMaybe<Scalars['String']['input']>;
   signature?: InputMaybe<Scalars['String']['input']>;
 };
@@ -3076,7 +3079,8 @@ export type QueryDomainAnalysisValueDetailArgs = {
 
 
 export type QueryDomainAvailableSignaturesArgs = {
-  domainId: Scalars['ID']['input'];
+  domainId?: InputMaybe<Scalars['ID']['input']>;
+  domainIds?: InputMaybe<Array<Scalars['ID']['input']>>;
   scope?: InputMaybe<Scalars['String']['input']>;
 };
 
@@ -3234,6 +3238,7 @@ export type QueryLlmProvidersArgs = {
 
 export type QueryModelAgreementClusterAnalysisArgs = {
   domainId?: InputMaybe<Scalars['ID']['input']>;
+  domainIds?: InputMaybe<Array<Scalars['ID']['input']>>;
   method: Scalars['String']['input'];
   modelIds: Array<Scalars['ID']['input']>;
   scope: Scalars['String']['input'];
@@ -3243,6 +3248,7 @@ export type QueryModelAgreementClusterAnalysisArgs = {
 
 export type QueryModelAgreementOnTradeoffsArgs = {
   domainId?: InputMaybe<Scalars['ID']['input']>;
+  domainIds?: InputMaybe<Array<Scalars['ID']['input']>>;
   modelIds: Array<Scalars['ID']['input']>;
   scope: Scalars['String']['input'];
   signature: Scalars['String']['input'];
@@ -3251,6 +3257,7 @@ export type QueryModelAgreementOnTradeoffsArgs = {
 
 export type QueryModelPairDivergenceBreakdownArgs = {
   domainId?: InputMaybe<Scalars['ID']['input']>;
+  domainIds?: InputMaybe<Array<Scalars['ID']['input']>>;
   modelAId: Scalars['ID']['input'];
   modelBId: Scalars['ID']['input'];
   scope: Scalars['String']['input'];
@@ -3265,6 +3272,7 @@ export type QueryModelTokenStatsArgs = {
 
 export type QueryModelsAnalysisArgs = {
   domainId?: InputMaybe<Scalars['ID']['input']>;
+  domainIds?: InputMaybe<Array<Scalars['ID']['input']>>;
   signature?: InputMaybe<Scalars['String']['input']>;
 };
 
@@ -3277,6 +3285,7 @@ export type QueryModelsConfidenceArgs = {
 
 export type QueryModelsWinRateStabilityArgs = {
   domainId?: InputMaybe<Scalars['ID']['input']>;
+  domainIds?: InputMaybe<Array<Scalars['ID']['input']>>;
   signature?: InputMaybe<Scalars['String']['input']>;
 };
 
@@ -4454,16 +4463,19 @@ export type DeleteDomainContextMutationVariables = Exact<{
 export type DeleteDomainContextMutation = { __typename?: 'Mutation', deleteDomainContext: boolean };
 
 export type DomainAnalysisQueryVariables = Exact<{
-  domainId: Scalars['ID']['input'];
+  domainId?: InputMaybe<Scalars['ID']['input']>;
+  domainIds?: InputMaybe<Array<Scalars['ID']['input']> | Scalars['ID']['input']>;
   scope?: InputMaybe<Scalars['String']['input']>;
   signature?: InputMaybe<Scalars['String']['input']>;
 }>;
 
 
-export type DomainAnalysisQuery = { __typename?: 'Query', domainAnalysis: { __typename?: 'DomainAnalysisResult', domainId: string, domainName: string, totalDefinitions: number, targetedDefinitions: number, coveredDefinitions: number, missingDefinitionIds: Array<string>, definitionsWithAnalysis: number, cacheStatus: string, generatedAt: string, clusterAnalysisByMethod: unknown, contributionSummary: Array<{ __typename?: 'DomainAnalysisContributionSummary', domainId: string, domainName: string, rawTrialCount: number, share: number }>, excludedDataSummary: Array<{ __typename?: 'DomainAnalysisExcludedDataSummary', domainId: string, domainName: string, reasonCode: string, count: number }>, missingDefinitions: Array<{ __typename?: 'DomainAnalysisMissingDefinition', definitionId: string, definitionName: string, reasonCode: string, reasonLabel: string, missingAllModels: boolean, missingModelIds: Array<string>, missingModelLabels: Array<string> }>, refreshProgress?: { __typename?: 'DomainAnalysisRefreshProgress', completedRuns: number, totalRuns: number } | null, models: Array<{ __typename?: 'DomainAnalysisModel', model: string, label: string, values: Array<{ __typename?: 'DomainAnalysisValueScore', valueKey: string, score: number, prioritized: number, deprioritized: number, neutral: number, totalComparisons: number, winRateExcNeutral?: number | null }>, rankingShape: { __typename?: 'RankingShape', topStructure: string, bottomStructure: string, topGap: number, bottomGap: number, spread: number, steepness: number, dominanceZScore?: number | null }, pairwiseWinRateModel?: { __typename?: 'PairwiseWinRateModel', valueOrder: Array<string>, winRateMatrix: Array<Array<number | null>>, winRateExcNeutralMatrix: Array<Array<number | null>>, trialCountMatrix: Array<Array<number>> } | null }>, unavailableModels: Array<{ __typename?: 'DomainAnalysisUnavailableModel', model: string, label: string, reason: string }>, rankingShapeBenchmarks: { __typename?: 'RankingShapeBenchmarks', domainMeanTopGap: number, domainStdTopGap?: number | null, medianSpread: number }, clusterAnalysis: { __typename?: 'ClusterAnalysis', skipped: boolean, skipReason?: string | null, defaultPair?: Array<string> | null, faultLinesByPair: unknown, clusters: Array<{ __typename?: 'DomainCluster', id: string, name: string, definingValues: Array<string>, centroid: unknown, members: Array<{ __typename?: 'ClusterMember', model: string, label: string, silhouetteScore: number, isOutlier: boolean, nearestClusterIds?: Array<string> | null, distancesToNearestClusters?: Array<number> | null }> }> } } };
+export type DomainAnalysisQuery = { __typename?: 'Query', domainAnalysis: { __typename?: 'DomainAnalysisResult', domainId: string, domainName: string, totalDefinitions: number, targetedDefinitions: number, coveredDefinitions: number, missingDefinitionIds: Array<string>, definitionsWithAnalysis: number, cacheStatus: string, generatedAt: string, clusterAnalysisByMethod: unknown, contributionSummary: Array<{ __typename?: 'DomainAnalysisContributionSummary', domainId: string, domainName: string, rawTrialCount: number, share: number }>, excludedDataSummary: Array<{ __typename?: 'DomainAnalysisExcludedDataSummary', domainId: string, domainName: string, reasonCode: string, count: number }>, missingDefinitions: Array<{ __typename?: 'DomainAnalysisMissingDefinition', definitionId: string, definitionName: string, reasonCode: string, reasonLabel: string, missingAllModels: boolean, missingModelIds: Array<string>, missingModelLabels: Array<string> }>, refreshProgress?: { __typename?: 'DomainAnalysisRefreshProgress', completedRuns: number, totalRuns: number } | null, models: Array<{ __typename?: 'DomainAnalysisModel', model: string, label: string, values: Array<{ __typename?: 'DomainAnalysisValueScore', valueKey: string, score: number, prioritized: number, deprioritized: number, neutral: number, totalComparisons: number, winRateExcNeutral?: number | null }>, rankingShape: { __typename?: 'RankingShape', topStructure: string, bottomStructure: string, topGap: number, bottomGap: number, spread: number, steepness: number, dominanceZScore?: number | null }, pairwiseWinRateModel?: { __typename?: 'PairwiseWinRateModel', valueOrder: Array<string>, winRateMatrix: Array<Array<number | null>>, winRateExcNeutralMatrix?: Array<Array<number | null>> | null, trialCountMatrix: Array<Array<number>> } | null }>, unavailableModels: Array<{ __typename?: 'DomainAnalysisUnavailableModel', model: string, label: string, reason: string }>, rankingShapeBenchmarks: { __typename?: 'RankingShapeBenchmarks', domainMeanTopGap: number, domainStdTopGap?: number | null, medianSpread: number }, clusterAnalysis: { __typename?: 'ClusterAnalysis', skipped: boolean, skipReason?: string | null, defaultPair?: Array<string> | null, faultLinesByPair: unknown, clusters: Array<{ __typename?: 'DomainCluster', id: string, name: string, definingValues: Array<string>, centroid: unknown, members: Array<{ __typename?: 'ClusterMember', model: string, label: string, silhouetteScore: number, isOutlier: boolean, nearestClusterIds?: Array<string> | null, distancesToNearestClusters?: Array<number> | null }> }> } } };
 
 export type RefreshDomainAnalysisMutationVariables = Exact<{
-  domainId: Scalars['ID']['input'];
+  domainId?: InputMaybe<Scalars['ID']['input']>;
+  domainIds?: InputMaybe<Array<Scalars['ID']['input']> | Scalars['ID']['input']>;
+  scope?: InputMaybe<Scalars['String']['input']>;
   signature?: InputMaybe<Scalars['String']['input']>;
 }>;
 
@@ -4512,7 +4524,8 @@ export type DomainAnalysisConditionTranscriptsQueryVariables = Exact<{
 export type DomainAnalysisConditionTranscriptsQuery = { __typename?: 'Query', domainAnalysisConditionTranscripts: Array<{ __typename?: 'DomainAnalysisConditionTranscript', id: string, runId: string, scenarioId?: string | null, modelId: string, decisionModelV2?: unknown | null, turnCount: number, tokenCount: number, durationMs: number, createdAt: string, content: unknown }> };
 
 export type DomainAvailableSignaturesQueryVariables = Exact<{
-  domainId: Scalars['ID']['input'];
+  domainId?: InputMaybe<Scalars['ID']['input']>;
+  domainIds?: InputMaybe<Array<Scalars['ID']['input']> | Scalars['ID']['input']>;
   scope?: InputMaybe<Scalars['String']['input']>;
 }>;
 
@@ -4856,6 +4869,7 @@ export type SetProviderBalanceMutation = { __typename?: 'Mutation', setProviderB
 export type ModelAgreementClusterAnalysisQueryVariables = Exact<{
   modelIds: Array<Scalars['ID']['input']> | Scalars['ID']['input'];
   domainId?: InputMaybe<Scalars['ID']['input']>;
+  domainIds?: InputMaybe<Array<Scalars['ID']['input']> | Scalars['ID']['input']>;
   scope: Scalars['String']['input'];
   signature: Scalars['String']['input'];
   method: Scalars['String']['input'];
@@ -4867,6 +4881,7 @@ export type ModelAgreementClusterAnalysisQuery = { __typename?: 'Query', modelAg
 export type ModelAgreementOnTradeoffsQueryVariables = Exact<{
   modelIds: Array<Scalars['ID']['input']> | Scalars['ID']['input'];
   domainId?: InputMaybe<Scalars['ID']['input']>;
+  domainIds?: InputMaybe<Array<Scalars['ID']['input']> | Scalars['ID']['input']>;
   scope: Scalars['String']['input'];
   signature: Scalars['String']['input'];
 }>;
@@ -4878,6 +4893,7 @@ export type ModelPairDivergenceBreakdownQueryVariables = Exact<{
   modelAId: Scalars['ID']['input'];
   modelBId: Scalars['ID']['input'];
   domainId?: InputMaybe<Scalars['ID']['input']>;
+  domainIds?: InputMaybe<Array<Scalars['ID']['input']> | Scalars['ID']['input']>;
   scope: Scalars['String']['input'];
   signature: Scalars['String']['input'];
 }>;
@@ -4892,11 +4908,12 @@ export type AvailableModelsQuery = { __typename?: 'Query', availableModels: Arra
 
 export type ModelsAnalysisQueryVariables = Exact<{
   domainId?: InputMaybe<Scalars['ID']['input']>;
+  domainIds?: InputMaybe<Array<Scalars['ID']['input']> | Scalars['ID']['input']>;
   signature?: InputMaybe<Scalars['String']['input']>;
 }>;
 
 
-export type ModelsAnalysisQuery = { __typename?: 'Query', modelsAnalysis: { __typename?: 'ModelsAnalysisResult', models: Array<{ __typename?: 'ModelsAnalysisModelResult', modelId: string, label: string, values: Array<{ __typename?: 'ModelsAnalysisValueResult', valueKey: string, pooledWinRate?: number | null, stabilityScore?: number | null, eligibleDomainCount: number, domains: Array<{ __typename?: 'ModelsAnalysisDomainBreakdown', domainId: string, domainName: string, winRate: number, evidenceWeight?: number | null }> }> }> } };
+export type ModelsAnalysisQuery = { __typename?: 'Query', modelsAnalysis: { __typename?: 'ModelsAnalysisResult', models: Array<{ __typename?: 'ModelsAnalysisModelResult', modelId: string, label: string, values: Array<{ __typename?: 'ModelsAnalysisValueResult', valueKey: string, pooledWinRate?: number | null, pooledWinRateExcNeutral?: number | null, stabilityScore?: number | null, eligibleDomainCount: number, domains: Array<{ __typename?: 'ModelsAnalysisDomainBreakdown', domainId: string, domainName: string, winRate: number, winRateExcNeutral?: number | null, evidenceWeight?: number | null }> }> }> } };
 
 export type ModelsConfidenceQueryVariables = Exact<{
   signature?: InputMaybe<Scalars['String']['input']>;
@@ -4909,6 +4926,7 @@ export type ModelsConfidenceQuery = { __typename?: 'Query', modelsConfidence: { 
 export type ModelsWinRateStabilityQueryVariables = Exact<{
   signature?: InputMaybe<Scalars['String']['input']>;
   domainId?: InputMaybe<Scalars['ID']['input']>;
+  domainIds?: InputMaybe<Array<Scalars['ID']['input']> | Scalars['ID']['input']>;
 }>;
 
 
@@ -6225,8 +6243,13 @@ export function useDeleteDomainContextMutation() {
   return Urql.useMutation<DeleteDomainContextMutation, DeleteDomainContextMutationVariables>(DeleteDomainContextDocument);
 };
 export const DomainAnalysisDocument = gql`
-    query DomainAnalysis($domainId: ID!, $scope: String, $signature: String) {
-  domainAnalysis(domainId: $domainId, scope: $scope, signature: $signature) {
+    query DomainAnalysis($domainId: ID, $domainIds: [ID!], $scope: String, $signature: String) {
+  domainAnalysis(
+    domainId: $domainId
+    domainIds: $domainIds
+    scope: $scope
+    signature: $signature
+  ) {
     domainId
     domainName
     contributionSummary {
@@ -6324,12 +6347,17 @@ export const DomainAnalysisDocument = gql`
 }
     `;
 
-export function useDomainAnalysisQuery(options: Omit<Urql.UseQueryArgs<DomainAnalysisQueryVariables>, 'query'>) {
+export function useDomainAnalysisQuery(options?: Omit<Urql.UseQueryArgs<DomainAnalysisQueryVariables>, 'query'>) {
   return Urql.useQuery<DomainAnalysisQuery, DomainAnalysisQueryVariables>({ query: DomainAnalysisDocument, ...options });
 };
 export const RefreshDomainAnalysisDocument = gql`
-    mutation RefreshDomainAnalysis($domainId: ID!, $signature: String) {
-  refreshDomainAnalysis(domainId: $domainId, signature: $signature) {
+    mutation RefreshDomainAnalysis($domainId: ID, $domainIds: [ID!], $scope: String, $signature: String) {
+  refreshDomainAnalysis(
+    domainId: $domainId
+    domainIds: $domainIds
+    scope: $scope
+    signature: $signature
+  ) {
     success
     mode
     message
@@ -6499,8 +6527,12 @@ export function useDomainAnalysisConditionTranscriptsQuery(options: Omit<Urql.Us
   return Urql.useQuery<DomainAnalysisConditionTranscriptsQuery, DomainAnalysisConditionTranscriptsQueryVariables>({ query: DomainAnalysisConditionTranscriptsDocument, ...options });
 };
 export const DomainAvailableSignaturesDocument = gql`
-    query DomainAvailableSignatures($domainId: ID!, $scope: String) {
-  domainAvailableSignatures(domainId: $domainId, scope: $scope) {
+    query DomainAvailableSignatures($domainId: ID, $domainIds: [ID!], $scope: String) {
+  domainAvailableSignatures(
+    domainId: $domainId
+    domainIds: $domainIds
+    scope: $scope
+  ) {
     signature
     label
     isVirtual
@@ -6509,7 +6541,7 @@ export const DomainAvailableSignaturesDocument = gql`
 }
     `;
 
-export function useDomainAvailableSignaturesQuery(options: Omit<Urql.UseQueryArgs<DomainAvailableSignaturesQueryVariables>, 'query'>) {
+export function useDomainAvailableSignaturesQuery(options?: Omit<Urql.UseQueryArgs<DomainAvailableSignaturesQueryVariables>, 'query'>) {
   return Urql.useQuery<DomainAvailableSignaturesQuery, DomainAvailableSignaturesQueryVariables>({ query: DomainAvailableSignaturesDocument, ...options });
 };
 export const DomainFindingsEligibilityDocument = gql`
@@ -7379,10 +7411,11 @@ export function useSetProviderBalanceMutation() {
   return Urql.useMutation<SetProviderBalanceMutation, SetProviderBalanceMutationVariables>(SetProviderBalanceDocument);
 };
 export const ModelAgreementClusterAnalysisDocument = gql`
-    query ModelAgreementClusterAnalysis($modelIds: [ID!]!, $domainId: ID, $scope: String!, $signature: String!, $method: String!) {
+    query ModelAgreementClusterAnalysis($modelIds: [ID!]!, $domainId: ID, $domainIds: [ID!], $scope: String!, $signature: String!, $method: String!) {
   modelAgreementClusterAnalysis(
     modelIds: $modelIds
     domainId: $domainId
+    domainIds: $domainIds
     scope: $scope
     signature: $signature
     method: $method
@@ -7422,10 +7455,11 @@ export function useModelAgreementClusterAnalysisQuery(options: Omit<Urql.UseQuer
   return Urql.useQuery<ModelAgreementClusterAnalysisQuery, ModelAgreementClusterAnalysisQueryVariables>({ query: ModelAgreementClusterAnalysisDocument, ...options });
 };
 export const ModelAgreementOnTradeoffsDocument = gql`
-    query ModelAgreementOnTradeoffs($modelIds: [ID!]!, $domainId: ID, $scope: String!, $signature: String!) {
+    query ModelAgreementOnTradeoffs($modelIds: [ID!]!, $domainId: ID, $domainIds: [ID!], $scope: String!, $signature: String!) {
   modelAgreementOnTradeoffs(
     modelIds: $modelIds
     domainId: $domainId
+    domainIds: $domainIds
     scope: $scope
     signature: $signature
   ) {
@@ -7476,11 +7510,12 @@ export function useModelAgreementOnTradeoffsQuery(options: Omit<Urql.UseQueryArg
   return Urql.useQuery<ModelAgreementOnTradeoffsQuery, ModelAgreementOnTradeoffsQueryVariables>({ query: ModelAgreementOnTradeoffsDocument, ...options });
 };
 export const ModelPairDivergenceBreakdownDocument = gql`
-    query ModelPairDivergenceBreakdown($modelAId: ID!, $modelBId: ID!, $domainId: ID, $scope: String!, $signature: String!) {
+    query ModelPairDivergenceBreakdown($modelAId: ID!, $modelBId: ID!, $domainId: ID, $domainIds: [ID!], $scope: String!, $signature: String!) {
   modelPairDivergenceBreakdown(
     modelAId: $modelAId
     modelBId: $modelBId
     domainId: $domainId
+    domainIds: $domainIds
     scope: $scope
     signature: $signature
   ) {
@@ -7528,20 +7563,26 @@ export function useAvailableModelsQuery(options?: Omit<Urql.UseQueryArgs<Availab
   return Urql.useQuery<AvailableModelsQuery, AvailableModelsQueryVariables>({ query: AvailableModelsDocument, ...options });
 };
 export const ModelsAnalysisDocument = gql`
-    query ModelsAnalysis($domainId: ID, $signature: String) {
-  modelsAnalysis(domainId: $domainId, signature: $signature) {
+    query ModelsAnalysis($domainId: ID, $domainIds: [ID!], $signature: String) {
+  modelsAnalysis(
+    domainId: $domainId
+    domainIds: $domainIds
+    signature: $signature
+  ) {
     models {
       modelId
       label
       values {
         valueKey
         pooledWinRate
+        pooledWinRateExcNeutral
         stabilityScore
         eligibleDomainCount
         domains {
           domainId
           domainName
           winRate
+          winRateExcNeutral
           evidenceWeight
         }
       }
@@ -7577,8 +7618,12 @@ export function useModelsConfidenceQuery(options?: Omit<Urql.UseQueryArgs<Models
   return Urql.useQuery<ModelsConfidenceQuery, ModelsConfidenceQueryVariables>({ query: ModelsConfidenceDocument, ...options });
 };
 export const ModelsWinRateStabilityDocument = gql`
-    query ModelsWinRateStability($signature: String, $domainId: ID) {
-  modelsWinRateStability(signature: $signature, domainId: $domainId) {
+    query ModelsWinRateStability($signature: String, $domainId: ID, $domainIds: [ID!]) {
+  modelsWinRateStability(
+    signature: $signature
+    domainId: $domainId
+    domainIds: $domainIds
+  ) {
     models {
       modelId
       label

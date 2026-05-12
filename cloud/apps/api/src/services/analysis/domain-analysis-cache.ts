@@ -291,6 +291,7 @@ function buildDomainAnalysisResultFromSnapshot(params: {
 export async function queueDomainAnalysisRefresh(params: {
   scope: DomainAnalysisScope;
   domainId: string;
+  domainIds?: string[];
   signature: string | null;
   reason: string;
 }): Promise<boolean> {
@@ -306,6 +307,7 @@ export async function queueDomainAnalysisRefresh(params: {
     {
       scope: params.scope,
       domainId: params.domainId,
+      domainIds: params.domainIds,
       signature: params.signature,
       reason: params.reason,
     },
@@ -320,11 +322,13 @@ export async function queueDomainAnalysisRefresh(params: {
 export async function refreshDomainAnalysisSnapshot(params: {
   scope: DomainAnalysisScope;
   domainId: string;
+  domainIds?: string[];
   requestedSignature: string | null;
 }) {
   const state = await prepareDomainAnalysisState({
     scope: params.scope,
     domainId: params.domainId,
+    domainIds: params.domainIds,
     requestedSignature: params.requestedSignature,
   });
   const totalRuns = state.resolvedSignatureRuns.filteredSourceRunIds.length;
@@ -354,6 +358,7 @@ export async function refreshDomainAnalysisSnapshot(params: {
       config: {
         scope: state.scope,
         domainId: state.domain.id,
+        domainIds: state.domainIds,
         signature: state.configSignature,
       },
       output: {
@@ -424,11 +429,13 @@ export async function refreshDomainAnalysisSnapshot(params: {
 export async function getDomainAnalysisResult(params: {
   scope: DomainAnalysisScope;
   domainId: string;
+  domainIds?: string[];
   requestedSignature: string | null;
 }): Promise<DomainAnalysisResult> {
   const state = await prepareDomainAnalysisState({
     scope: params.scope,
     domainId: params.domainId,
+    domainIds: params.domainIds,
     requestedSignature: params.requestedSignature,
   });
   const activeModels = await db.llmModel.findMany({
@@ -464,6 +471,7 @@ export async function getDomainAnalysisResult(params: {
     const queued = await queueDomainAnalysisRefresh({
       scope: state.scope,
       domainId: state.domain.id,
+      domainIds: state.domainIds,
       signature: state.selectedSignature,
       reason: 'page-load-stale',
     });
@@ -509,6 +517,7 @@ export async function getDomainAnalysisResult(params: {
   const refreshed = await refreshDomainAnalysisSnapshot({
     scope: state.scope,
     domainId: state.domain.id,
+    domainIds: state.domainIds,
     requestedSignature: state.selectedSignature,
   });
   const parsedFresh = parseSnapshotOutput(refreshed.snapshot.output);

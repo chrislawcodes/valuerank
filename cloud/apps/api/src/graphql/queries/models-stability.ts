@@ -5,6 +5,8 @@ import { normalizeAnalysisArtifacts } from '../../services/analysis/normalize-an
 import { builder } from '../builder.js';
 import { ModelsStabilityResultRef, type ModelsStabilityResultShape } from '../types/models-stability.js';
 import { formatRunSignature, runMatchesSignature } from './domain-coverage-gql-types.js';
+import { normalizeDomainIds, resolveDomainAnalysisSelection } from '../../services/analysis/domain-analysis-scope.js';
+import { resolveDomainAnalysisScopeDefinitions } from '../../services/analysis/domain-analysis-scope-loader.js';
 import {
   resolveDimensionKeys,
   buildConditionGroups,
@@ -74,10 +76,18 @@ builder.queryField('modelsWinRateStability', (t) =>
     args: {
       signature: t.arg.string({ required: false }),
       domainId: t.arg.id({ required: false }),
+      domainIds: t.arg.idList({ required: false }),
     },
     resolve: async (_root, args) => {
       const signature = args.signature != null ? String(args.signature) : null;
       const domainId = args.domainId != null ? String(args.domainId) : null;
+      const domainIds = normalizeDomainIds(args.domainIds?.map(String) ?? null);
+      const selection = resolveDomainAnalysisSelection({ domainId, domainIds });
+      const scopeData = await resolveDomainAnalysisScopeDefinitions({
+        scope: selection.scope,
+        domainId: selection.domainId,
+        domainIds: selection.domainIds,
+      });
 
       const activeModels = await getModelsFromDatabase({ activeOnly: true, availableOnly: false });
 
@@ -86,7 +96,7 @@ builder.queryField('modelsWinRateStability', (t) =>
           status: 'COMPLETED',
           deletedAt: null,
           tags: { some: { tag: { name: 'Aggregate' } } },
-          ...(domainId != null ? { definition: { domainId } } : {}),
+          ...(scopeData.domains.length > 0 ? { definition: { domainId: { in: scopeData.domains.map((domain) => domain.id) } } } : {}),
         },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         select: {

@@ -13,7 +13,7 @@ import {
 } from './planning-utils.js';
 import { resolveRunAnalysisStatuses } from '../../../services/run/analysis-status.js';
 import { buildDomainEstimate } from './planning-estimate.js';
-import { parseDomainAnalysisScope } from '../../../services/analysis/domain-analysis-scope.js';
+import { normalizeDomainIds, resolveDomainAnalysisSelection } from '../../../services/analysis/domain-analysis-scope.js';
 import { resolveDomainAnalysisScopeDefinitions } from '../../../services/analysis/domain-analysis-scope-loader.js';
 
 builder.queryField('domainTrialsPlan', (t) =>
@@ -204,16 +204,26 @@ builder.queryField('domainAvailableSignatures', (t) =>
   t.field({
     type: [DomainAvailableSignatureRef],
     args: {
-      domainId: t.arg.id({ required: true }),
+      domainId: t.arg.id({ required: false }),
+      domainIds: t.arg.idList({ required: false }),
       scope: t.arg.string({ required: false }),
     },
     resolve: async (_root, args, ctx) => {
       if (!ctx.user) {
         throw new AuthenticationError('Authentication required');
       }
-      const domainId = String(args.domainId);
-      const scope = parseDomainAnalysisScope(args.scope);
-      const scopeData = await resolveDomainAnalysisScopeDefinitions({ scope, domainId });
+      const domainId = args.domainId != null ? String(args.domainId) : null;
+      const domainIds = normalizeDomainIds(args.domainIds?.map(String) ?? null);
+      const selection = resolveDomainAnalysisSelection({
+        scope: args.scope,
+        domainId,
+        domainIds,
+      });
+      const scopeData = await resolveDomainAnalysisScopeDefinitions({
+        scope: selection.scope,
+        domainId: selection.domainId,
+        domainIds: selection.domainIds,
+      });
       if (scopeData.latestDefinitionIds.length === 0) return [];
 
       const runs = await db.run.findMany({

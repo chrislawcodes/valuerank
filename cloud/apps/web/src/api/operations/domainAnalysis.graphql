@@ -1,5 +1,5 @@
-query DomainAnalysis($domainId: ID!, $scope: String, $signature: String) {
-  domainAnalysis(domainId: $domainId, scope: $scope, signature: $signature) {
+query DomainAnalysis($domainId: ID, $domainIds: [ID!], $scope: String, $signature: String) {
+  domainAnalysis(domainId: $domainId, domainIds: $domainIds, scope: $scope, signature: $signature) {
     domainId
     domainName
     contributionSummary {
@@ -96,8 +96,8 @@ query DomainAnalysis($domainId: ID!, $scope: String, $signature: String) {
   }
 }
 
-mutation RefreshDomainAnalysis($domainId: ID!, $signature: String) {
-  refreshDomainAnalysis(domainId: $domainId, signature: $signature) {
+mutation RefreshDomainAnalysis($domainId: ID, $domainIds: [ID!], $scope: String, $signature: String) {
+  refreshDomainAnalysis(domainId: $domainId, domainIds: $domainIds, scope: $scope, signature: $signature) {
     success
     mode
     message
@@ -251,8 +251,8 @@ query DomainAnalysisConditionTranscripts(
   }
 }
 
-query DomainAvailableSignatures($domainId: ID!, $scope: String) {
-  domainAvailableSignatures(domainId: $domainId, scope: $scope) {
+query DomainAvailableSignatures($domainId: ID, $domainIds: [ID!], $scope: String) {
+  domainAvailableSignatures(domainId: $domainId, domainIds: $domainIds, scope: $scope) {
     signature
     label
     isVirtual

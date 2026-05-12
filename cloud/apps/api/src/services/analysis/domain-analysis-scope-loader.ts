@@ -5,12 +5,15 @@ import type { AnalysisOutputRow, DomainAnalysisContributionSummary, DomainAnalys
 import {
   type DomainAnalysisScope,
   DOMAIN_ANALYSIS_ALL_DOMAINS_SCOPE,
+  buildDomainAnalysisDomainSetId,
+  normalizeDomainIds,
 } from './domain-analysis-scope.js';
 import type { DomainAnalysisValuePair } from '../../graphql/queries/domain-analysis-values.js';
 
 export type DomainAnalysisScopeDefinitionSet = {
   scope: DomainAnalysisScope;
   domain: { id: string; name: string; defaultModelIds: string[] };
+  domainIds: string[];
   domains: Array<{ id: string; name: string; defaultModelIds: string[] }>;
   definitions: Array<{
     id: string;
@@ -182,8 +185,11 @@ export function buildContributionAndExcludedSummary(params: {
 export async function resolveDomainAnalysisScopeDefinitions(params: {
   scope: DomainAnalysisScope;
   domainId: string;
+  domainIds?: string[];
 }): Promise<DomainAnalysisScopeDefinitionSet> {
-  if (params.scope === 'ALL_DOMAINS') {
+  const selectedDomainIds = normalizeDomainIds(params.domainIds);
+
+  if (params.scope === 'ALL_DOMAINS' && selectedDomainIds.length === 0) {
     const allDomains = await db.domain.findMany({
       select: { id: true, name: true, defaultModelIds: true },
       orderBy: [{ name: 'asc' }, { id: 'asc' }],
@@ -262,6 +268,80 @@ export async function resolveDomainAnalysisScopeDefinitions(params: {
     return {
       scope: 'ALL_DOMAINS',
       domain: { id: DOMAIN_ANALYSIS_ALL_DOMAINS_SCOPE, name: 'All domains', defaultModelIds: [] },
+      domainIds: domains.map((domain) => domain.id),
+      domains,
+      definitions,
+      latestDefinitions,
+      latestDefinitionIds,
+      definitionNameById,
+      definitionDomainIdById,
+    };
+  }
+
+  if (selectedDomainIds.length >= 2 || params.scope === 'DOMAIN_SET') {
+    const selectedDomains = await db.domain.findMany({
+      where: { id: { in: selectedDomainIds } },
+      select: { id: true, name: true, defaultModelIds: true },
+      orderBy: [{ name: 'asc' }, { id: 'asc' }],
+    });
+
+    const domainsById = new Map(selectedDomains.map((domain) => [domain.id, domain]));
+    const domains = selectedDomainIds
+      .map((domainId) => domainsById.get(domainId))
+      .filter((domain): domain is { id: string; name: string; defaultModelIds: string[] } => domain != null);
+    if (domains.length !== selectedDomainIds.length) {
+      const missingDomainId = selectedDomainIds.find((domainId) => !domainsById.has(domainId)) ?? params.domainId;
+      throw new NotFoundError('Domain', missingDomainId);
+    }
+
+    const definitions = await db.definition.findMany({
+      where: { domainId: { in: domains.map((domain) => domain.id) }, deletedAt: null },
+      select: {
+        id: true,
+        domainId: true,
+        name: true,
+        parentId: true,
+        version: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    const definitionsById = await hydrateDefinitionAncestors(definitions);
+    const latestDefinitions = selectLatestDefinitionPerLineage(definitions, definitionsById).filter((definition) => definition.domainId != null) as Array<{
+      id: string;
+      domainId: string;
+      name: string;
+      parentId: string | null;
+      version: number;
+      createdAt: Date;
+      updatedAt: Date;
+    }>;
+    const latestDefinitionIds = latestDefinitions.map((definition) => definition.id);
+    const definitionNameById = new Map<string, string>(
+      definitions.map((definition) => [definition.id, definition.name ?? definition.id]),
+    );
+    const definitionsWithDomainId = definitions.filter((definition) => definition.domainId != null) as Array<{
+      id: string;
+      domainId: string;
+      name: string;
+      parentId: string | null;
+      version: number;
+      createdAt: Date;
+      updatedAt: Date;
+    }>;
+    const definitionDomainIdById = new Map<string, string>(
+      definitionsWithDomainId.map((definition) => [definition.id, definition.domainId]),
+    );
+
+    return {
+      scope: 'DOMAIN_SET',
+      domain: {
+        id: buildDomainAnalysisDomainSetId(selectedDomainIds),
+        name: 'Selected domains',
+        defaultModelIds: [],
+      },
+      domainIds: selectedDomainIds,
       domains,
       definitions,
       latestDefinitions,
@@ -322,6 +402,7 @@ export async function resolveDomainAnalysisScopeDefinitions(params: {
   return {
     scope: 'DOMAIN',
     domain,
+    domainIds: [domain.id],
     domains: [domain],
     definitions,
     latestDefinitions,
