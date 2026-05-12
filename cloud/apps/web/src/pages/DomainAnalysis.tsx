@@ -632,6 +632,7 @@ export function DomainAnalysis() {
                 signature: selectedSignature === '' ? '(none)' : selectedSignature,
               })
               : null}
+            winRateMode={winRateMode}
           />
         </>
       )}
