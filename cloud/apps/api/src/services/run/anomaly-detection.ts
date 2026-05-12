@@ -17,7 +17,8 @@ export type RunAnomalyType =
   | 'SUMMARIZING_STALL'
   | 'MODEL_TRANSCRIPT_SHORTFALL'
   | 'SCHEDULED_COUNT_MISMATCH'
-  | 'INVALID_RESPONSE_FAILURE';
+  | 'INVALID_RESPONSE_FAILURE'
+  | 'RESUMMARIZE_FAILED';
 
 export type AnomalyDraft = {
   type: RunAnomalyType;
@@ -390,6 +391,25 @@ export async function detectRunAnomalies(run: RunSnapshot): Promise<AnomalyDraft
 
   log.debug({ runId: run.id, anomalyCount: drafts.length }, 'Detected run anomalies');
   return drafts;
+}
+
+export async function detectResummarizeFailed(runId: string): Promise<AnomalyDraft[]> {
+  const transcripts = await db.transcript.findMany({
+    where: {
+      runId,
+      deletedAt: null,
+      summarizedAt: null,
+      summarizeFailedAt: { not: null },
+    },
+    select: { id: true, summarizeFailedAt: true },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  return transcripts.map((transcript) => ({
+    type: 'RESUMMARIZE_FAILED' as const,
+    subject: transcript.id,
+    details: toJsonValue({ summarizeFailedAt: transcript.summarizeFailedAt?.toISOString() }),
+  }));
 }
 
 export type { RunSnapshot };

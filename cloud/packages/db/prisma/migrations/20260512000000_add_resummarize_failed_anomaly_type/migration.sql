@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "RunAnomalyType" ADD VALUE 'RESUMMARIZE_FAILED';

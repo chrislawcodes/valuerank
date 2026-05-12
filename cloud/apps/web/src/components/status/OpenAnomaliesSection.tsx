@@ -32,6 +32,7 @@ const VALID_ANOMALY_TYPES: RunAnomalyType[] = [
   'INVALID_RESPONSE_FAILURE',
   'MODEL_TRANSCRIPT_SHORTFALL',
   'ORPHAN_TRANSCRIPT',
+  'RESUMMARIZE_FAILED',
   'SCHEDULED_COUNT_MISMATCH',
   'STRANDED_TRANSCRIPT',
   'SUMMARIZING_STALL',
@@ -128,11 +129,6 @@ export function OpenAnomaliesSection({
     reexecuteRunQuery({ requestPolicy: 'cache-and-network' });
   }, [reexecuteRunQuery, selectedTranscriptTarget]);
 
-  // Collapse when we know there are no anomalies and no error to display.
-  if (!isInitialLoading && result.error == null && !hasAnomalies) {
-    return null;
-  }
-
   const sectionToneClasses = hasAnomalies
     ? 'rounded-lg border border-amber-300 bg-amber-50'
     : 'rounded-lg border border-gray-200 bg-white';
@@ -146,6 +142,9 @@ export function OpenAnomaliesSection({
               <h2 className={`text-lg font-medium ${hasAnomalies ? 'text-amber-900' : 'text-gray-900'}`}>
                 {formatRunAnomalyCount(openAnomalies.length)}
               </h2>
+              <p className={`text-sm ${hasAnomalies ? 'text-amber-800' : 'text-gray-500'}`}>
+                Open run anomalies across all domains.
+              </p>
             </div>
             <div className="flex items-center gap-2">
               {isRefreshing && (
