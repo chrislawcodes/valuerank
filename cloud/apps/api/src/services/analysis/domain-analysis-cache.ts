@@ -539,7 +539,6 @@ export async function getDomainAnalysisResult(params: {
  */
 export async function queueStaleAnalysesOnStartup(): Promise<void> {
   const domains = await db.domain.findMany({
-    where: { deletedAt: null },
     select: { id: true },
   });
 
