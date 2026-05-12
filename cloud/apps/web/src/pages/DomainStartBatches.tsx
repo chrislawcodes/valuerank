@@ -240,7 +240,7 @@ export function DomainStartBatches() {
       return;
     }
 
-    const result = await startDomainEvaluation({
+    void startDomainEvaluation({
       domainId,
       scopeCategory,
       temperature: useDefaultTemperature || !hasValidTemperature ? undefined : parsedTemperature,
@@ -250,23 +250,8 @@ export function DomainStartBatches() {
       targetBatchCount: selectedTargetBatchCount,
     });
 
-    if (result.error) {
-      setRunError(result.error.message);
-      return;
-    }
-
-    const payload = result.data?.startDomainEvaluation;
-    if (!payload) {
-      setRunError('Failed to start paired batches.');
-      return;
-    }
-    if (payload.blockedByActiveLaunch) {
-      setRunError('An equivalent active launch is already running for this domain.');
-      return;
-    }
-
     setShowLaunchConfirm(false);
-    navigate(`/domains/status/${domainId}?evaluationId=${payload.domainEvaluationId}`);
+    navigate(`/domains/status/${domainId}`);
   };
 
   // --- Render ---
