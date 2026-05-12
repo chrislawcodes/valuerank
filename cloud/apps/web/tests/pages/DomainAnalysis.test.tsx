@@ -252,8 +252,10 @@ describe('DomainAnalysis', () => {
     await waitFor(() => {
       expect(useQueryMock).toHaveBeenCalledWith(
         expect.objectContaining({
+          query: DOMAIN_ANALYSIS_QUERY,
           variables: expect.objectContaining({
-            domainId: 'domain-a',
+            domainId: undefined,
+            domainIds: undefined,
             scope: 'all-domains',
             signature: 'vnewtd',
           }),
