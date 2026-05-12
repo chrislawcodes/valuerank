@@ -196,6 +196,34 @@ describe('accumulateTranscriptCells', () => {
     expect(cellMap.size).toBe(0);
   });
 
+  it('reads decisionSnapshot when definitionSnapshot is omitted', () => {
+    const transcript = buildTranscript({
+      runId: 'run-1',
+      definitionSnapshot: undefined,
+      decisionSnapshot: buildDefinitionSnapshot(FIRST_VALUE, SECOND_VALUE),
+    });
+    const cellMap = accumulateTranscriptCells({
+      transcripts: [transcript],
+      filteredSourceRunDefinitionById: new Map([['run-1', 'def1']]),
+    });
+
+    expect(cellMap.size).toBe(2);
+    expect(cellMap.get(encodeCellKey({
+      definitionId: 'def1',
+      modelId: 'm1',
+      valueKey: FIRST_VALUE,
+      ownLevel: 1,
+      opponentLevel: 2,
+    }))).toEqual({ wins: 1, losses: 0, neutrals: 0 });
+    expect(cellMap.get(encodeCellKey({
+      definitionId: 'def1',
+      modelId: 'm1',
+      valueKey: SECOND_VALUE,
+      ownLevel: 2,
+      opponentLevel: 1,
+    }))).toEqual({ wins: 0, losses: 1, neutrals: 0 });
+  });
+
   it('reads dimension_values (snake_case) when dimensionValues is absent — production scenario format', () => {
     const transcript = buildTranscript({
       runId: 'run-1',

@@ -65,7 +65,8 @@ export type TranscriptForAccumulation = {
   runId: string;
   modelId: string;
   decisionMetadata: unknown;
-  definitionSnapshot: unknown;
+  decisionSnapshot?: unknown;
+  definitionSnapshot?: unknown;
   deletedAt: Date | null;
   scenario: {
     id: string;
@@ -148,6 +149,7 @@ function addCellCounts(cellMap: Map<string, CellCounts>, key: string, outcome: A
 export function accumulateTranscriptCells(params: {
   transcripts: TranscriptForAccumulation[];
   filteredSourceRunDefinitionById: Map<string, string>;
+  decisionSnapshotByDefinitionId?: ReadonlyMap<string, unknown>;
 }): Map<string, CellCounts> {
   const cellMap = new Map<string, CellCounts>();
 
@@ -159,12 +161,13 @@ export function accumulateTranscriptCells(params: {
       const definitionId = params.filteredSourceRunDefinitionById.get(transcript.runId);
       if (definitionId === undefined) continue;
 
-      const valuePair = getSnapshotValuePair(transcript.definitionSnapshot);
+      const definitionSnapshot = params.decisionSnapshotByDefinitionId?.get(definitionId) ?? transcript.decisionSnapshot ?? transcript.definitionSnapshot;
+      const valuePair = getSnapshotValuePair(definitionSnapshot);
       if (valuePair == null) continue;
       const [firstValueToken, secondValueToken] = valuePair;
       if (!isDomainAnalysisValueKey(firstValueToken) || !isDomainAnalysisValueKey(secondValueToken)) continue;
 
-      const dimensions = getDefinitionDimensions(transcript.definitionSnapshot, firstValueToken, secondValueToken);
+      const dimensions = getDefinitionDimensions(definitionSnapshot, firstValueToken, secondValueToken);
       if (dimensions == null || dimensions.ownDimension == null || dimensions.opponentDimension == null) continue;
 
       const ownLookup = buildSafeLevelLookup(dimensions.ownDimension);
@@ -189,7 +192,7 @@ export function accumulateTranscriptCells(params: {
 
       const resolved = resolveTranscriptDecisionModel({
         decisionMetadata: transcript.decisionMetadata,
-        definitionSnapshot: transcript.definitionSnapshot,
+        definitionSnapshot,
         orientationFlipped: transcript.scenario.orientationFlipped,
         pairOverride: { valueA: firstValueToken, valueB: secondValueToken },
       });
