@@ -11,6 +11,7 @@ import { useDominanceGraph } from './useDominanceGraph';
 
 type DominanceSectionProps = {
   models: ModelEntry[];
+  winRateMode?: 'all' | 'exc-neutral';
 };
 
 const THEME_COLORS: DominanceSectionThemeColors = {
@@ -31,7 +32,7 @@ const THEME_COLORS: DominanceSectionThemeColors = {
   idleRingColor: '#38bdf8',
 };
 
-export function DominanceSection({ models }: DominanceSectionProps) {
+export function DominanceSection({ models, winRateMode = 'all' }: DominanceSectionProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const [focusedValue, setFocusedValue] = useState<ValueKey | null>(null);
   const [hoveredValue, setHoveredValue] = useState<ValueKey | null>(null);
@@ -47,8 +48,18 @@ export function DominanceSection({ models }: DominanceSectionProps) {
     return () => mediaQuery.removeEventListener('change', updatePreference);
   }, []);
 
+  const effectiveModels = useMemo<ModelEntry[]>(() => {
+    if (winRateMode !== 'exc-neutral') return models;
+    return models.map((m) => ({
+      ...m,
+      winRates: Object.fromEntries(
+        VALUES.map((v) => [v, m.winRatesExcNeutral?.[v] ?? m.winRates?.[v] ?? null]),
+      ) as Record<ValueKey, number | null>,
+    }));
+  }, [models, winRateMode]);
+
   const allModelsEntry = useMemo<ModelEntry>(() => {
-    const modelsWithRates = models.filter((m) =>
+    const modelsWithRates = effectiveModels.filter((m) =>
       VALUES.some((v) => m.winRates?.[v] != null),
     );
     const count = Math.max(modelsWithRates.length, 1);
@@ -72,14 +83,14 @@ export function DominanceSection({ models }: DominanceSectionProps) {
       values: avgValues,
       winRates: avgWinRates,
     };
-  }, [models]);
+  }, [effectiveModels]);
 
   const modelById = useMemo(
     () => new Map<string, ModelEntry>([
-      ...models.map((m): [string, ModelEntry] => [m.model, m]),
+      ...effectiveModels.map((m): [string, ModelEntry] => [m.model, m]),
       ['__all__', allModelsEntry],
     ]),
-    [models, allModelsEntry],
+    [allModelsEntry, effectiveModels],
   );
 
   const selectedModel = modelById.get('__all__');
@@ -93,7 +104,7 @@ export function DominanceSection({ models }: DominanceSectionProps) {
     priorityValueRange,
   } = useDominanceGraph({
     focusedValue,
-    models,
+    models: effectiveModels,
     selectedModel,
   });
 
@@ -109,7 +120,7 @@ export function DominanceSection({ models }: DominanceSectionProps) {
         <CopyVisualButton targetRef={chartRef} label="ranking and cycles chart" />
       </div>
 
-      {models.length === 0 && (
+      {effectiveModels.length === 0 && (
         <p className={`mb-3 text-xs ${THEME_COLORS.panelMutedText}`}>
           No analyzed model data is available for this domain yet.
         </p>

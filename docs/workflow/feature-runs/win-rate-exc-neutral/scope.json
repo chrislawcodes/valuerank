@@ -1,0 +1,17 @@
+{
+  "paths": [
+    "cloud/apps/api/src/graphql",
+    "cloud/apps/api/src/services/analysis",
+    "cloud/apps/web/src/api/operations",
+    "cloud/apps/web/src/components/analysis",
+    "cloud/apps/web/src/pages"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/api/src/graphql",
+    "cloud/apps/api/src/services/analysis",
+    "cloud/apps/web/src/api/operations",
+    "cloud/apps/web/src/components/analysis",
+    "cloud/apps/web/src/pages",
+    "docs/workflow/feature-runs/win-rate-exc-neutral"
+  ]
+}

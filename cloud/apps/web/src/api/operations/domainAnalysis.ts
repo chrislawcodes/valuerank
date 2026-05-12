@@ -35,6 +35,7 @@ export type DomainAnalysisValueScore = {
   deprioritized: number;
   neutral: number;
   totalComparisons: number;
+  winRateExcNeutral: number | null;
 };
 
 export type TopStructureLabel = 'strong_leader' | 'tied_leaders' | 'even_spread';

@@ -7,6 +7,7 @@ import { getHeatmapColor } from './domainAnalysisColors';
 type PairwiseWinRateModelData = {
   valueOrder: Array<string>;
   winRateMatrix: Array<Array<number | null>>;
+  winRateExcNeutralMatrix?: Array<Array<number | null>> | null;
   trialCountMatrix: Array<Array<number>>;
 };
 
@@ -62,6 +63,7 @@ type PairwiseWinRateMatrixProps = {
   domainId: string | null;
   signature: string | null;
   onCellClick: (rowValueKey: ValueKey, columnValueKey: ValueKey) => void;
+  winRateMode?: 'all' | 'exc-neutral';
 };
 
 export function PairwiseWinRateMatrix({
@@ -70,6 +72,7 @@ export function PairwiseWinRateMatrix({
   domainId,
   signature,
   onCellClick,
+  winRateMode = 'all',
 }: PairwiseWinRateMatrixProps) {
   const tableRef = useRef<HTMLDivElement>(null);
 
@@ -91,16 +94,22 @@ export function PairwiseWinRateMatrix({
 
   const averagedMatrix = useMemo<(number | null)[][]>(() => {
     if (modelsWithData.length === 0 || firstModel == null) return [];
+    const useExcNeutral = winRateMode === 'exc-neutral';
     const n = firstModel.pairwiseWinRateModel.valueOrder.length;
     return Array.from({ length: n }, (_, r) =>
       Array.from({ length: n }, (_, c) => {
         const rates = modelsWithData
-          .map((m) => m.pairwiseWinRateModel.winRateMatrix[r]?.[c] ?? null)
+          .map((m) => {
+            if (useExcNeutral && m.pairwiseWinRateModel.winRateExcNeutralMatrix != null) {
+              return m.pairwiseWinRateModel.winRateExcNeutralMatrix[r]?.[c] ?? null;
+            }
+            return m.pairwiseWinRateModel.winRateMatrix[r]?.[c] ?? null;
+          })
           .filter((v): v is number => v != null);
         return rates.length > 0 ? rates.reduce((a, b) => a + b, 0) / rates.length : null;
       }),
     );
-  }, [modelsWithData, firstModel]);
+  }, [modelsWithData, firstModel, winRateMode]);
 
   const totalTrialMatrix = useMemo<number[][]>(() => {
     if (modelsWithData.length === 0 || firstModel == null) return [];

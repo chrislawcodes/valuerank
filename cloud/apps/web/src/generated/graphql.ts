@@ -853,6 +853,7 @@ export type DomainAnalysisValueScore = {
   score: Scalars['Float']['output'];
   totalComparisons: Scalars['Float']['output'];
   valueKey: Scalars['String']['output'];
+  winRateExcNeutral?: Maybe<Scalars['Float']['output']>;
 };
 
 export type DomainAnalysisVignetteDetail = {
@@ -1568,6 +1569,7 @@ export type ModelsAnalysisDomainBreakdown = {
   domainName: Scalars['String']['output'];
   evidenceWeight?: Maybe<Scalars['Int']['output']>;
   winRate: Scalars['Float']['output'];
+  winRateExcNeutral?: Maybe<Scalars['Float']['output']>;
 };
 
 /** A model row in the models analysis matrix */
@@ -1590,6 +1592,7 @@ export type ModelsAnalysisValueResult = {
   domains: Array<ModelsAnalysisDomainBreakdown>;
   eligibleDomainCount: Scalars['Int']['output'];
   pooledWinRate?: Maybe<Scalars['Float']['output']>;
+  pooledWinRateExcNeutral?: Maybe<Scalars['Float']['output']>;
   stabilityScore?: Maybe<Scalars['Float']['output']>;
   valueKey: Scalars['String']['output'];
 };
@@ -2422,6 +2425,7 @@ export type PairwiseWinRateModel = {
   __typename?: 'PairwiseWinRateModel';
   trialCountMatrix: Array<Array<Scalars['Int']['output']>>;
   valueOrder: Array<Scalars['String']['output']>;
+  winRateExcNeutralMatrix: Array<Array<Maybe<Scalars['Float']['output']>>>;
   winRateMatrix: Array<Array<Maybe<Scalars['Float']['output']>>>;
 };
 
@@ -2508,10 +2512,10 @@ export type PressureSensitivityModel = {
 
 export type PressureSensitivityResult = {
   __typename?: 'PressureSensitivityResult';
-  cacheStatus?: string | null;
+  cacheStatus?: Maybe<Scalars['String']['output']>;
   directionalSanityCheck: DirectionalSanityCheck;
   excludedDefinitions: Array<ExcludedDefinition>;
-  generatedAt?: string | null;
+  generatedAt?: Maybe<Scalars['String']['output']>;
   insufficient: Array<InsufficientPressureSensitivityModel>;
   models: Array<PressureSensitivityModel>;
   pressureConditionExcludedCount: Scalars['Int']['output'];
@@ -4456,7 +4460,7 @@ export type DomainAnalysisQueryVariables = Exact<{
 }>;
 
 
-export type DomainAnalysisQuery = { __typename?: 'Query', domainAnalysis: { __typename?: 'DomainAnalysisResult', domainId: string, domainName: string, totalDefinitions: number, targetedDefinitions: number, coveredDefinitions: number, missingDefinitionIds: Array<string>, definitionsWithAnalysis: number, cacheStatus: string, generatedAt: string, clusterAnalysisByMethod: unknown, contributionSummary: Array<{ __typename?: 'DomainAnalysisContributionSummary', domainId: string, domainName: string, rawTrialCount: number, share: number }>, excludedDataSummary: Array<{ __typename?: 'DomainAnalysisExcludedDataSummary', domainId: string, domainName: string, reasonCode: string, count: number }>, missingDefinitions: Array<{ __typename?: 'DomainAnalysisMissingDefinition', definitionId: string, definitionName: string, reasonCode: string, reasonLabel: string, missingAllModels: boolean, missingModelIds: Array<string>, missingModelLabels: Array<string> }>, refreshProgress?: { __typename?: 'DomainAnalysisRefreshProgress', completedRuns: number, totalRuns: number } | null, models: Array<{ __typename?: 'DomainAnalysisModel', model: string, label: string, values: Array<{ __typename?: 'DomainAnalysisValueScore', valueKey: string, score: number, prioritized: number, deprioritized: number, neutral: number, totalComparisons: number }>, rankingShape: { __typename?: 'RankingShape', topStructure: string, bottomStructure: string, topGap: number, bottomGap: number, spread: number, steepness: number, dominanceZScore?: number | null }, pairwiseWinRateModel?: { __typename?: 'PairwiseWinRateModel', valueOrder: Array<string>, winRateMatrix: Array<Array<number | null>>, trialCountMatrix: Array<Array<number>> } | null }>, unavailableModels: Array<{ __typename?: 'DomainAnalysisUnavailableModel', model: string, label: string, reason: string }>, rankingShapeBenchmarks: { __typename?: 'RankingShapeBenchmarks', domainMeanTopGap: number, domainStdTopGap?: number | null, medianSpread: number }, clusterAnalysis: { __typename?: 'ClusterAnalysis', skipped: boolean, skipReason?: string | null, defaultPair?: Array<string> | null, faultLinesByPair: unknown, clusters: Array<{ __typename?: 'DomainCluster', id: string, name: string, definingValues: Array<string>, centroid: unknown, members: Array<{ __typename?: 'ClusterMember', model: string, label: string, silhouetteScore: number, isOutlier: boolean, nearestClusterIds?: Array<string> | null, distancesToNearestClusters?: Array<number> | null }> }> } } };
+export type DomainAnalysisQuery = { __typename?: 'Query', domainAnalysis: { __typename?: 'DomainAnalysisResult', domainId: string, domainName: string, totalDefinitions: number, targetedDefinitions: number, coveredDefinitions: number, missingDefinitionIds: Array<string>, definitionsWithAnalysis: number, cacheStatus: string, generatedAt: string, clusterAnalysisByMethod: unknown, contributionSummary: Array<{ __typename?: 'DomainAnalysisContributionSummary', domainId: string, domainName: string, rawTrialCount: number, share: number }>, excludedDataSummary: Array<{ __typename?: 'DomainAnalysisExcludedDataSummary', domainId: string, domainName: string, reasonCode: string, count: number }>, missingDefinitions: Array<{ __typename?: 'DomainAnalysisMissingDefinition', definitionId: string, definitionName: string, reasonCode: string, reasonLabel: string, missingAllModels: boolean, missingModelIds: Array<string>, missingModelLabels: Array<string> }>, refreshProgress?: { __typename?: 'DomainAnalysisRefreshProgress', completedRuns: number, totalRuns: number } | null, models: Array<{ __typename?: 'DomainAnalysisModel', model: string, label: string, values: Array<{ __typename?: 'DomainAnalysisValueScore', valueKey: string, score: number, prioritized: number, deprioritized: number, neutral: number, totalComparisons: number, winRateExcNeutral?: number | null }>, rankingShape: { __typename?: 'RankingShape', topStructure: string, bottomStructure: string, topGap: number, bottomGap: number, spread: number, steepness: number, dominanceZScore?: number | null }, pairwiseWinRateModel?: { __typename?: 'PairwiseWinRateModel', valueOrder: Array<string>, winRateMatrix: Array<Array<number | null>>, winRateExcNeutralMatrix: Array<Array<number | null>>, trialCountMatrix: Array<Array<number>> } | null }>, unavailableModels: Array<{ __typename?: 'DomainAnalysisUnavailableModel', model: string, label: string, reason: string }>, rankingShapeBenchmarks: { __typename?: 'RankingShapeBenchmarks', domainMeanTopGap: number, domainStdTopGap?: number | null, medianSpread: number }, clusterAnalysis: { __typename?: 'ClusterAnalysis', skipped: boolean, skipReason?: string | null, defaultPair?: Array<string> | null, faultLinesByPair: unknown, clusters: Array<{ __typename?: 'DomainCluster', id: string, name: string, definingValues: Array<string>, centroid: unknown, members: Array<{ __typename?: 'ClusterMember', model: string, label: string, silhouetteScore: number, isOutlier: boolean, nearestClusterIds?: Array<string> | null, distancesToNearestClusters?: Array<number> | null }> }> } } };
 
 export type RefreshDomainAnalysisMutationVariables = Exact<{
   domainId: Scalars['ID']['input'];
@@ -6267,6 +6271,7 @@ export const DomainAnalysisDocument = gql`
         deprioritized
         neutral
         totalComparisons
+        winRateExcNeutral
       }
       rankingShape {
         topStructure
@@ -6280,6 +6285,7 @@ export const DomainAnalysisDocument = gql`
       pairwiseWinRateModel {
         valueOrder
         winRateMatrix
+        winRateExcNeutralMatrix
         trialCountMatrix
       }
     }
@@ -7751,6 +7757,8 @@ export const PressureSensitivityDocument = gql`
       name
       reason
     }
+    cacheStatus
+    generatedAt
     pressureConditionExcludedCount
     pressureConditionExclusionBreakdown {
       sourceRunMapping

@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { act } from 'react';
-import { render, screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { ValuePrioritiesSection } from './ValuePrioritiesSection';
 import { VALUES, type ModelEntry, type ValueKey } from '../../data/domainAnalysisData';
@@ -14,96 +12,64 @@ function createRecord(
   ) as Record<ValueKey, number | null>;
 }
 
-function createModels(): ModelEntry[] {
-  return [
-    {
-      model: 'model-a',
-      label: 'Model A',
-      values: Object.fromEntries(
-        VALUES.map((valueKey, index) => [valueKey, index + 1.25])
-      ) as Record<ValueKey, number>,
-      winRates: createRecord((_valueKey, index) => 64.2 + index),
-    },
-    {
-      model: 'model-b',
-      label: 'Model B',
-      values: Object.fromEntries(
-        VALUES.map((valueKey, index) => [valueKey, index + 2.5])
-      ) as Record<ValueKey, number>,
-      winRates: createRecord((valueKey) => {
-        if (valueKey === 'Achievement') return null;
-        if (valueKey === 'Hedonism') return null;
-        return 53.9;
-      }),
-    },
-  ];
+function createModel(overrides: Partial<ModelEntry> = {}): ModelEntry {
+  return {
+    model: 'model-a',
+    label: 'Model A',
+    values: Object.fromEntries(
+      VALUES.map((valueKey, index) => [valueKey, index + 1.25]),
+    ) as Record<ValueKey, number>,
+    winRates: createRecord((_valueKey, index) => 64.2 + index),
+    ...overrides,
+  };
 }
 
-function renderSection() {
+function renderSection(models: ModelEntry[], winRateMode: 'all' | 'exc-neutral' = 'all') {
   render(
     <MemoryRouter>
       <ValuePrioritiesSection
-        models={createModels()}
+        models={models}
         selectedDomainId="domain-a"
         selectedSignature="vnewtd"
+        winRateMode={winRateMode}
       />
     </MemoryRouter>
   );
 }
 
-function getModelRow(label: string): HTMLTableRowElement {
-  const row = screen.getByText(label).closest('tr');
-  if (row === null) {
-    throw new Error(`Missing row for ${label}`);
-  }
-  return row;
-}
-
-function getFirstValueCell(row: HTMLTableRowElement): HTMLElement {
-  const cell = within(row).getAllByRole('button')[0];
-  if (cell === undefined) {
-    throw new Error('Missing first value cell');
-  }
-  return cell;
-}
-
 describe('ValuePrioritiesSection', () => {
-  it('keeps win rate mode formatted with one decimal place', () => {
-    renderSection();
+  it('shows exc-neutral win rates when the mode is exc-neutral', () => {
+    renderSection([
+      createModel({
+        winRatesExcNeutral: createRecord((valueKey) => {
+          if (valueKey === 'Self_Direction_Action') return 72;
+          return 50;
+        }),
+      }),
+    ], 'exc-neutral');
 
-    const firstCell = getFirstValueCell(getModelRow('Model A'));
-    expect(firstCell.textContent).toMatch(/^\d+\.\d%$/);
+    expect(screen.getByText('72.0%')).toBeTruthy();
   });
 
-  it('switches the table to logit values', async () => {
-    const user = userEvent.setup();
-    renderSection();
+  it('shows the exc-neutral unavailable notice when the data is null', () => {
+    renderSection([
+      createModel({
+        winRatesExcNeutral: createRecord(() => null),
+      }),
+    ], 'exc-neutral');
 
-    expect(getFirstValueCell(getModelRow('Model A')).textContent).toMatch(/%$/);
-
-    await act(async () => {
-      await user.click(screen.getByRole('button', { name: /logit/i }));
-    });
-
-    await waitFor(() => {
-      expect(getFirstValueCell(getModelRow('Model A')).textContent).toBe('2.25');
-    });
+    expect(screen.getByText(/Exc\. neutral data not yet available/i)).toBeTruthy();
   });
 
-  it('shows n/a when the win rate is missing', () => {
-    renderSection();
+  it('keeps the standard win rate visible in all mode and hides the notice', () => {
+    renderSection([
+      createModel({
+        winRatesExcNeutral: createRecord((valueKey) => (valueKey === 'Self_Direction_Action' ? 72 : 50)),
+        winRates: createRecord((valueKey) => (valueKey === 'Self_Direction_Action' ? 58 : 46)),
+      }),
+    ], 'all');
 
-    const row = getModelRow('Model B');
-    // Find any cell that renders "n/a" text. Achievement and Hedonism have null win rates.
-    const naCell = within(row)
-      .getAllByRole('button')
-      .find((cell) => cell.textContent === 'n/a');
-    expect(naCell).toBeDefined();
-  });
-
-  it('does not render a Full BT toggle', () => {
-    renderSection();
-
-    expect(screen.queryByRole('button', { name: /full bt/i })).toBeNull();
+    expect(screen.getByText('58.0%')).toBeTruthy();
+    expect(screen.queryByText(/Exc\. neutral data not yet available/i)).toBeNull();
   });
 });

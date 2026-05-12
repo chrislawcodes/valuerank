@@ -5,7 +5,7 @@ import {
 } from '../../graphql/queries/domain-analysis-values.js';
 import type { DomainAnalysisValueCounts } from '../../graphql/queries/domain/shared.js';
 import { decodeCellKey, type CellCounts } from './transcript-cell-accumulator.js';
-import { aggregateValueWinRates } from './value-win-rate-aggregation.js';
+import { aggregateValueWinRates, type ValueRateInput } from './value-win-rate-aggregation.js';
 
 const SNAPSHOT_DOMAIN_ID = '__snapshot_domain__';
 
@@ -92,11 +92,13 @@ export function computeCellWeightedDomainRates(params: {
   cellMap: Map<string, CellCounts>;
   filteredSourceRunDefinitionById: Map<string, string>;
   definitionValuePairById: Map<string, { valueA: DomainAnalysisValueKey; valueB: DomainAnalysisValueKey; valueFirst?: DomainAnalysisValueKey }>;
-}): { models: CellWeightedDomainModel[]; analyzedDefinitionIds: Set<string> } {
+}): { models: CellWeightedDomainModel[]; analyzedDefinitionIds: Set<string>; excNeutralValueWinRatesByModel: Map<string, Record<string, number>> } {
   const countsByModel = new Map<string, Map<DomainAnalysisValueKey, DomainAnalysisValueCounts>>();
   const pairwiseWinsByModel = new Map<string, Map<DomainAnalysisValueKey, Map<DomainAnalysisValueKey, number>>>();
   const pairwiseNeutralsByModel = new Map<string, Map<DomainAnalysisValueKey, Map<DomainAnalysisValueKey, number>>>();
   const ratesByModelDefinitionValue = new Map<string, Map<string, Map<DomainAnalysisValueKey, number[]>>>();
+  const excNeutralRatesByModelDefinitionValue = new Map<string, Map<string, Map<DomainAnalysisValueKey, number[]>>>();
+  const excNeutralValueWinRatesByModel = new Map<string, Record<string, number>>();
   const analyzedDefinitionIds = new Set<string>();
   const modelsById = new Set<string>();
 
@@ -117,6 +119,23 @@ export function computeCellWeightedDomainRates(params: {
 
     const rate = computePairwiseWinRate(counts.wins, counts.losses, counts.neutrals);
     if (rate === null) continue;
+
+    const excNeutralRate = computePairwiseWinRate(counts.wins, counts.losses, 0);
+    if (excNeutralRate !== null) {
+      const excNeutralModelRates = excNeutralRatesByModelDefinitionValue.get(decoded.modelId)
+        ?? new Map<string, Map<DomainAnalysisValueKey, number[]>>();
+      if (!excNeutralRatesByModelDefinitionValue.has(decoded.modelId)) {
+        excNeutralRatesByModelDefinitionValue.set(decoded.modelId, excNeutralModelRates);
+      }
+      const excNeutralValueRates = excNeutralModelRates.get(decoded.definitionId)
+        ?? new Map<DomainAnalysisValueKey, number[]>();
+      if (!excNeutralModelRates.has(decoded.definitionId)) {
+        excNeutralModelRates.set(decoded.definitionId, excNeutralValueRates);
+      }
+      const excRates = excNeutralValueRates.get(decoded.valueKey) ?? [];
+      excRates.push(excNeutralRate);
+      excNeutralValueRates.set(decoded.valueKey, excRates);
+    }
 
     analyzedDefinitionIds.add(decoded.definitionId);
 
@@ -150,7 +169,7 @@ export function computeCellWeightedDomainRates(params: {
     .map((modelId) => {
       const valueCounts = countsByModel.get(modelId) ?? new Map<DomainAnalysisValueKey, DomainAnalysisValueCounts>();
       const modelDefinitionRates = ratesByModelDefinitionValue.get(modelId) ?? new Map<string, Map<DomainAnalysisValueKey, number[]>>();
-      const inputs = [];
+      const inputs: ValueRateInput[] = [];
 
       for (const [definitionId, valueRatesByDefinition] of modelDefinitionRates.entries()) {
         const pair = params.definitionValuePairById.get(definitionId);
@@ -184,6 +203,28 @@ export function computeCellWeightedDomainRates(params: {
         );
       }
 
+      const excNeutralModelRateMap = excNeutralRatesByModelDefinitionValue.get(modelId)
+        ?? new Map<string, Map<DomainAnalysisValueKey, number[]>>();
+      const excNeutralInputs: ValueRateInput[] = [];
+      for (const [definitionId, valueRatesByDefinition] of excNeutralModelRateMap.entries()) {
+        const pair = params.definitionValuePairById.get(definitionId);
+        if (pair == null) continue;
+        const pairKey = `${pair.valueA}::${pair.valueB}`;
+        const directionKey: DomainAnalysisValueKey = pair.valueFirst ?? pair.valueA;
+        for (const [valueKey, rates] of valueRatesByDefinition.entries()) {
+          if (rates.length === 0) continue;
+          const vignetteRate = rates.reduce((sum, r) => sum + r, 0) / rates.length;
+          excNeutralInputs.push({ domainId: SNAPSHOT_DOMAIN_ID, definitionId, valueKey, pairKey, directionKey, vignetteRate });
+        }
+      }
+      const aggregatedExcNeutralRates = aggregateValueWinRates(excNeutralInputs);
+      const excNeutralValueWinRates: Record<string, number> = {};
+      for (const [valueKey, result] of aggregatedExcNeutralRates.entries()) {
+        if (result.crossDomainRate == null) continue;
+        excNeutralValueWinRates[valueKey] = result.crossDomainRate * 100;
+      }
+      excNeutralValueWinRatesByModel.set(modelId, excNeutralValueWinRates);
+
       return {
         model: modelId,
         counts: toCountsRecord(valueCounts),
@@ -195,5 +236,5 @@ export function computeCellWeightedDomainRates(params: {
     })
     .sort((left, right) => left.model.localeCompare(right.model));
 
-  return { models, analyzedDefinitionIds };
+  return { models, analyzedDefinitionIds, excNeutralValueWinRatesByModel };
 }

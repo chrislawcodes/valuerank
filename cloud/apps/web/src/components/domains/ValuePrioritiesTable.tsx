@@ -53,6 +53,7 @@ type ValuePrioritiesTableProps = {
   isReadOnly?: boolean;
   showStabilityDots?: boolean;
   displayMetric: DisplayMetric;
+  winRateMode?: 'all' | 'exc-neutral';
 };
 
 function hasGroupStartBorder(value: ValueKey): boolean {
@@ -78,6 +79,7 @@ export function ValuePrioritiesTable({
   isReadOnly = false,
   showStabilityDots = false,
   displayMetric,
+  winRateMode = 'all',
 }: ValuePrioritiesTableProps) {
   const navigate = useNavigate();
   const detailedTableRef = useRef<HTMLDivElement>(null);
@@ -97,35 +99,35 @@ export function ValuePrioritiesTable({
     } else {
       const valueKey = sortState.key;
       nextModels.sort((a, b) => {
-        const aVal = getMetricValue(a, valueKey, displayMetric) ?? -Infinity;
-        const bVal = getMetricValue(b, valueKey, displayMetric) ?? -Infinity;
+        const aVal = getMetricValue(a, valueKey, displayMetric, winRateMode) ?? -Infinity;
+        const bVal = getMetricValue(b, valueKey, displayMetric, winRateMode) ?? -Infinity;
         return sortState.direction === 'asc' ? aVal - bVal : bVal - aVal;
       });
     }
     return nextModels;
-  }, [displayMetric, models, sortState]);
+  }, [displayMetric, models, sortState, winRateMode]);
 
   const valueRange = useMemo(() => {
     const values = models
-      .flatMap((model) => COLUMN_VALUES.map((value) => getMetricValue(model, value, displayMetric)))
+      .flatMap((model) =>
+        COLUMN_VALUES.map((value) => getMetricValue(model, value, displayMetric, winRateMode))
+      )
       .filter((value): value is number => value != null);
 
     if (values.length === 0) return { min: 0, max: 1 };
     return { min: Math.min(...values), max: Math.max(...values) };
-  }, [displayMetric, models]);
+  }, [displayMetric, models, winRateMode]);
 
-  const avgMetricValues = useMemo(
-    () =>
-      Object.fromEntries(
-        COLUMN_VALUES.map((value) => {
-          const vals = models
-            .map((m) => getMetricValue(m, value, displayMetric))
-            .filter((v): v is number => v !== null);
-          return [value, vals.length > 0 ? vals.reduce((s, v) => s + v, 0) / vals.length : null];
-        })
-      ) as Record<ValueKey, number | null>,
-    [displayMetric, models]
-  );
+  const avgMetricValues = useMemo(() => {
+    return Object.fromEntries(
+      COLUMN_VALUES.map((value) => {
+        const vals = models
+          .map((m) => getMetricValue(m, value, displayMetric, winRateMode))
+          .filter((v): v is number => v !== null);
+        return [value, vals.length > 0 ? vals.reduce((s, v) => s + v, 0) / vals.length : null];
+      })
+    ) as Record<ValueKey, number | null>;
+  }, [displayMetric, models, winRateMode]);
 
   useLayoutEffect(() => {
     const updateSplitPosition = () => {
@@ -307,7 +309,7 @@ export function ValuePrioritiesTable({
                   <div className="font-medium text-gray-900">{model.label}</div>
                 </td>
                 {COLUMN_VALUES.map((value) => {
-                  const cellValue = getMetricValue(model, value, displayMetric);
+                  const cellValue = getMetricValue(model, value, displayMetric, winRateMode);
                   const stabilityScore = model.stabilityScores?.[value] ?? null;
                   const background =
                     cellValue === null

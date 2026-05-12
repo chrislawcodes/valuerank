@@ -1,28 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { PairwiseWinRateMatrix, type PairwiseMatrixModel } from './PairwiseWinRateMatrix';
 
-function buildModel(): PairwiseMatrixModel {
-  const valueOrder = [
-    'Universalism_Nature',
-    'Benevolence_Dependability',
-    'Tradition',
-    'Conformity_Interpersonal',
-    'Security_Personal',
-    'Power_Dominance',
-    'Achievement',
-    'Hedonism',
-    'Stimulation',
-    'Self_Direction_Action',
+function buildModel(overrides?: Partial<NonNullable<PairwiseMatrixModel['pairwiseWinRateModel']>>): PairwiseMatrixModel {
+  const valueOrder = ['Self_Direction_Action', 'Universalism_Nature'];
+  const winRateMatrix = [
+    [null, 0.3],
+    [0.7, null],
   ];
-
-  const winRateMatrix = valueOrder.map((_rowKey, rowIndex) =>
-    valueOrder.map((_colKey, colIndex) => (rowIndex === colIndex ? null : 0.5))
-  );
-
-  const trialCountMatrix = valueOrder.map((_rowKey, rowIndex) =>
-    valueOrder.map((_colKey, colIndex) => (rowIndex === colIndex ? 0 : 12))
-  );
+  const trialCountMatrix = [
+    [0, 10],
+    [10, 0],
+  ];
 
   return {
     model: 'model-a',
@@ -31,12 +20,36 @@ function buildModel(): PairwiseMatrixModel {
       valueOrder,
       winRateMatrix,
       trialCountMatrix,
+      ...overrides,
     },
   };
 }
 
 describe('PairwiseWinRateMatrix', () => {
-  it('renders win rates with one decimal place', () => {
+  it('uses the exc-neutral matrix when exc-neutral mode is enabled', () => {
+    render(
+      <PairwiseWinRateMatrix
+        models={[
+          buildModel({
+            winRateExcNeutralMatrix: [
+              [null, 0.6],
+              [0.4, null],
+            ],
+          }),
+        ]}
+        selectedModelId={null}
+        domainId={null}
+        signature={null}
+        onCellClick={vi.fn()}
+        winRateMode="exc-neutral"
+      />,
+    );
+
+    expect(screen.getByText('60.0%')).toBeTruthy();
+    expect(screen.getByText('40.0%')).toBeTruthy();
+  });
+
+  it('falls back to the standard matrix when exc-neutral data is missing', () => {
     render(
       <PairwiseWinRateMatrix
         models={[buildModel()]}
@@ -44,11 +57,11 @@ describe('PairwiseWinRateMatrix', () => {
         domainId={null}
         signature={null}
         onCellClick={vi.fn()}
+        winRateMode="exc-neutral"
       />,
     );
 
-    const table = screen.getByRole('table');
-    expect(within(table).getAllByText('50.0%').length).toBeGreaterThan(0);
-    expect(within(table).queryByText('50%')).toBeNull();
+    expect(screen.getByText('30.0%')).toBeTruthy();
+    expect(screen.getByText('70.0%')).toBeTruthy();
   });
 });

@@ -915,6 +915,7 @@ type DomainAnalysisValueScore {
   score: Float!
   totalComparisons: Float!
   valueKey: String!
+  winRateExcNeutral: Float
 }
 
 type DomainAnalysisVignetteDetail {
@@ -1667,6 +1668,7 @@ type ModelsAnalysisDomainBreakdown {
   domainName: String!
   evidenceWeight: Int
   winRate: Float!
+  winRateExcNeutral: Float
 }
 
 """A model row in the models analysis matrix"""
@@ -1686,6 +1688,7 @@ type ModelsAnalysisValueResult {
   domains: [ModelsAnalysisDomainBreakdown!]!
   eligibleDomainCount: Int!
   pooledWinRate: Float
+  pooledWinRateExcNeutral: Float
   stabilityScore: Float
   valueKey: String!
 }
@@ -2120,6 +2123,7 @@ type PairwiseAgreementRow {
 type PairwiseWinRateModel {
   trialCountMatrix: [[Int!]!]!
   valueOrder: [String!]!
+  winRateExcNeutralMatrix: [[Float]!]!
   winRateMatrix: [[Float]!]!
 }
 
@@ -2200,8 +2204,10 @@ type PressureSensitivityModel {
 }
 
 type PressureSensitivityResult {
+  cacheStatus: String
   directionalSanityCheck: DirectionalSanityCheck!
   excludedDefinitions: [ExcludedDefinition!]!
+  generatedAt: String
   insufficient: [InsufficientPressureSensitivityModel!]!
   models: [PressureSensitivityModel!]!
   pressureConditionExcludedCount: Int!

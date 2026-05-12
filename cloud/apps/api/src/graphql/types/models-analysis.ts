@@ -6,11 +6,13 @@ export type ModelsAnalysisDomainBreakdownShape = {
   /** Vignette count from v1.2.0+ snapshots. Null for older snapshots that predate this field. */
   evidenceWeight: number | null;
   winRate: number;
+  winRateExcNeutral: number | null;
 };
 
 export type ModelsAnalysisValueResultShape = {
   valueKey: string;
   pooledWinRate: number | null;
+  pooledWinRateExcNeutral: number | null;
   stabilityScore: number | null;
   eligibleDomainCount: number;
   domains: ModelsAnalysisDomainBreakdownShape[];
@@ -45,6 +47,11 @@ builder.objectType(ModelsAnalysisDomainBreakdownRef, {
     domainName: t.exposeString('domainName'),
     evidenceWeight: t.exposeInt('evidenceWeight', { nullable: true }),
     winRate: t.exposeFloat('winRate'),
+    winRateExcNeutral: t.field({
+      type: 'Float',
+      nullable: true,
+      resolve: (d) => d.winRateExcNeutral,
+    }),
   }),
 });
 
@@ -56,6 +63,11 @@ builder.objectType(ModelsAnalysisValueResultRef, {
       type: 'Float',
       nullable: true,
       resolve: (value) => value.pooledWinRate,
+    }),
+    pooledWinRateExcNeutral: t.field({
+      type: 'Float',
+      nullable: true,
+      resolve: (value) => value.pooledWinRateExcNeutral,
     }),
     stabilityScore: t.field({
       type: 'Float',

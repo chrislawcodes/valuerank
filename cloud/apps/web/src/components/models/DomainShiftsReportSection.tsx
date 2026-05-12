@@ -25,6 +25,7 @@ type DomainShiftsReportSectionProps = {
   defaultModelIds: string[];
   fetching?: boolean;
   errorMessage?: string | null;
+  winRateMode?: 'all' | 'exc-neutral';
 };
 
 function getCellToneClass(shift: number): string {
@@ -183,6 +184,7 @@ export function DomainShiftsReportSection({
   defaultModelIds,
   fetching = false,
   errorMessage = null,
+  winRateMode = 'all',
 }: DomainShiftsReportSectionProps) {
   const [displayMode, setDisplayMode] = useState<DomainShiftDisplayMode>('shift');
   const [sort, setSort] = useState<DomainShiftSort>(DEFAULT_DOMAIN_SHIFT_SORT);
@@ -190,9 +192,25 @@ export function DomainShiftsReportSection({
 
   const selectedModelIdSet = useMemo(() => new Set(selectedModelIds), [selectedModelIds]);
   const defaultModelIdSet = useMemo(() => new Set(defaultModelIds), [defaultModelIds]);
+  const effectiveModels = useMemo<ModelsAnalysisModelResult[]>(() => {
+    if (winRateMode !== 'exc-neutral') return models;
+    return models.map((model) => ({
+      ...model,
+      values: model.values.map((value) => ({
+        ...value,
+        domains: value.domains.map((domain) => ({
+          ...domain,
+          winRate: domain.winRateExcNeutral ?? domain.winRate,
+        })),
+      })),
+    }));
+  }, [models, winRateMode]);
   const selectedModels = useMemo(
-    () => (selectedModelIds.length === 0 ? [] : models.filter((model) => selectedModelIdSet.has(model.modelId))),
-    [models, selectedModelIds.length, selectedModelIdSet],
+    () =>
+      (selectedModelIds.length === 0
+        ? []
+        : effectiveModels.filter((model) => selectedModelIdSet.has(model.modelId))),
+    [effectiveModels, selectedModelIds.length, selectedModelIdSet],
   );
   const isDefaultSelection = useMemo(() => (
     selectedModels.length > 0
@@ -213,11 +231,11 @@ export function DomainShiftsReportSection({
     return <ErrorMessage message={`Failed to load domain shifts: ${errorMessage}`} />;
   }
 
-  if (fetching && models.length === 0) {
+  if (fetching && effectiveModels.length === 0) {
     return <Loading size="lg" text="Loading domain shifts..." />;
   }
 
-  if (models.length === 0) {
+  if (effectiveModels.length === 0) {
     return (
       <section className="rounded-xl border border-amber-200 bg-amber-50 p-6">
         <h2 className="text-base font-semibold text-amber-950">No active models are available yet</h2>
