@@ -308,11 +308,12 @@ export async function runStartupRecovery(): Promise<RecoveryResult> {
  * This is a failsafe for when PgBoss expiration mechanisms fail or job handlers crash silently.
  */
 export async function detectAndRecoverStuckJobs(): Promise<{ recovered: number; errors: number }> {
-  // Active-execution timeout. Slow models (Grok, DeepSeek Reasoner, Gemini Flash) with
-  // long outputs can legitimately take >5m, so the previous 5m threshold killed many
-  // probes that would have completed. 30m is generous enough for any single LLM call
-  // and still catches truly hung handlers.
-  const ZOMBIE_THRESHOLD_MINUTES = 30;
+  // Active-execution timeout. The Python process timeout is 300s (5m), so no legitimate
+  // probe can run longer than that. We add a 2-minute buffer (for SIGTERM cleanup and
+  // pgboss write) to arrive at 7m. This is a 4x improvement over the previous 30m
+  // threshold while still giving the longest real calls (deepseek-reasoner p99 ~51s,
+  // max ~299s) room to complete before the watchdog fires.
+  const ZOMBIE_THRESHOLD_MINUTES = 7;
 
   const stuckJobs = await db.$queryRaw<Array<{ id: string; name: string; run_id: string }>>`
     SELECT id, name, data->>'runId' as run_id
