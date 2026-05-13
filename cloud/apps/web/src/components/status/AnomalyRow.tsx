@@ -107,7 +107,7 @@ export function AnomalyRow({ anomaly, tone, onViewTranscript }: AnomalyRowProps)
     if (anomaly.type === 'STRANDED_TRANSCRIPT') {
       return extractFirstTranscriptId(anomaly.details) ?? anomaly.subject;
     }
-    if (anomaly.type === 'ORPHAN_TRANSCRIPT') {
+    if (anomaly.type === 'ORPHAN_TRANSCRIPT' || anomaly.type === 'RESUMMARIZE_FAILED') {
       return anomaly.subject;
     }
     return null;
@@ -223,7 +223,7 @@ export function AnomalyRow({ anomaly, tone, onViewTranscript }: AnomalyRowProps)
       );
     }
 
-    if (anomaly.type === 'STRANDED_TRANSCRIPT' || anomaly.type === 'ORPHAN_TRANSCRIPT') {
+    if (anomaly.type === 'STRANDED_TRANSCRIPT' || anomaly.type === 'ORPHAN_TRANSCRIPT' || anomaly.type === 'RESUMMARIZE_FAILED') {
       return (
         <Button
           type="button"

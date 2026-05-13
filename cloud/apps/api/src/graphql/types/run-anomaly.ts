@@ -2,7 +2,7 @@ import { db } from '@valuerank/db';
 import { builder } from '../builder.js';
 import { DomainRef, RunAnomalyRef, RunRef } from './refs.js';
 
-export const RunAnomalyTypeEnum: ReturnType<typeof builder.enumType<'RunAnomalyType', readonly ['STRANDED_TRANSCRIPT', 'ORPHAN_TRANSCRIPT', 'SUMMARIZING_STALL', 'MODEL_TRANSCRIPT_SHORTFALL', 'SCHEDULED_COUNT_MISMATCH', 'INVALID_RESPONSE_FAILURE']>> = builder.enumType('RunAnomalyType', {
+export const RunAnomalyTypeEnum: ReturnType<typeof builder.enumType<'RunAnomalyType', readonly ['STRANDED_TRANSCRIPT', 'ORPHAN_TRANSCRIPT', 'SUMMARIZING_STALL', 'MODEL_TRANSCRIPT_SHORTFALL', 'SCHEDULED_COUNT_MISMATCH', 'INVALID_RESPONSE_FAILURE', 'RESUMMARIZE_FAILED']>> = builder.enumType('RunAnomalyType', {
   values: [
     'STRANDED_TRANSCRIPT',
     'ORPHAN_TRANSCRIPT',
@@ -10,6 +10,7 @@ export const RunAnomalyTypeEnum: ReturnType<typeof builder.enumType<'RunAnomalyT
     'MODEL_TRANSCRIPT_SHORTFALL',
     'SCHEDULED_COUNT_MISMATCH',
     'INVALID_RESPONSE_FAILURE',
+    'RESUMMARIZE_FAILED',
   ] as const,
   description: 'Structured anomaly type for run state reconciliation',
 });
@@ -32,11 +33,12 @@ const DISPLAY_LABEL_BY_TYPE: Record<string, string> = {
   MODEL_TRANSCRIPT_SHORTFALL: 'Model Transcript Shortfall',
   SCHEDULED_COUNT_MISMATCH: 'Scheduled Count Mismatch',
   INVALID_RESPONSE_FAILURE: 'Invalid Response',
+  RESUMMARIZE_FAILED: 'Re-summarize Failed',
 };
 
 const SLOT_KEYED_TYPES = new Set(['INVALID_RESPONSE_FAILURE']);
 const REPROBABLE_TYPES = new Set(['INVALID_RESPONSE_FAILURE', 'STRANDED_TRANSCRIPT']);
-const TRANSCRIPT_KEYED_TYPES = new Set(['STRANDED_TRANSCRIPT', 'ORPHAN_TRANSCRIPT']);
+const TRANSCRIPT_KEYED_TYPES = new Set(['STRANDED_TRANSCRIPT', 'ORPHAN_TRANSCRIPT', 'RESUMMARIZE_FAILED']);
 
 function readReprobeAttempts(details: unknown): number {
   if (details == null || typeof details !== 'object' || Array.isArray(details)) {

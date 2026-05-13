@@ -5,6 +5,7 @@ import { DEFAULT_JOB_OPTIONS, type RunStateReconcileJobData } from '../types.js'
 import { maybeAdvanceRunStatus } from '../../services/run/index.js';
 import {
   detectModelTranscriptShortfall,
+  detectResummarizeFailed,
   detectScheduledCountMismatch,
   detectStrandedTranscript,
   detectSummarizingStall,
@@ -230,6 +231,13 @@ export function createRunStateReconcileHandler(): PgBoss.WorkHandler<RunStateRec
           }
         } catch (error) {
           log.warn({ runId, err: error }, 'Late transcript rescue failed');
+        }
+
+        try {
+          const resummarizeFailed = await detectResummarizeFailed(runId);
+          await syncAnomalies(runId, 'RESUMMARIZE_FAILED', resummarizeFailed, 'default');
+        } catch (error) {
+          log.warn({ runId, err: error }, 'Re-summarize failure detection failed');
         }
 
         // PENDING is included as defense-in-depth: non-empty runs are now
