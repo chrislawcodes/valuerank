@@ -14,9 +14,7 @@ import { computeClusterAnalysis, computeAllClusterAnalyses } from '../../graphql
 import type {
   DomainAnalysisModel,
   DomainAnalysisResult,
-  PairwiseWinRateModel,
 } from '../../graphql/queries/domain/types.js';
-import { SCHWARTZ_CIRCULAR_ORDER } from '@valuerank/shared/schwartz';
 import {
   DOMAIN_ANALYSIS_CACHE_STATUS,
   DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION,
@@ -24,9 +22,9 @@ import {
   type DomainAnalysisCacheStatus,
   type DomainAnalysisBuildProgress,
   type DomainAnalysisSnapshotOutput,
-  type DomainAnalysisSnapshotModel,
   type SnapshotClient,
 } from './domain-analysis-cache-types.js';
+import { extractWinRates, buildPairwiseWinRateModel } from './domain-analysis-result-builders.js';
 import {
   buildAssumptionKey,
   normalizeSignature,
@@ -55,64 +53,6 @@ async function getCurrentSnapshot(
     },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
   });
-}
-
-function extractWinRates(snapshotModel: DomainAnalysisSnapshotModel, valueKeys: readonly string[]): Record<string, number | null> {
-  const result: Record<string, number | null> = {};
-  for (const vk of valueKeys) {
-    if (snapshotModel.valueWinRates != null && snapshotModel.valueWinRates[vk] != null) {
-      // valueWinRates is stored on a 0–100 scale; normalize to [0, 1]
-      result[vk] = (snapshotModel.valueWinRates[vk] ?? 0) / 100;
-    } else {
-      const counts = snapshotModel.counts[vk];
-      if (counts == null) { result[vk] = null; continue; }
-      const total = counts.prioritized + counts.deprioritized + counts.neutral;
-      result[vk] = total > 0 ? counts.prioritized / total : null;
-    }
-  }
-  return result;
-}
-
-function buildPairwiseWinRateModel(
-  pairwiseWins: Record<string, Record<string, number>>,
-  pairwiseNeutrals?: Record<string, Record<string, number>>,
-): PairwiseWinRateModel {
-  const order = [...SCHWARTZ_CIRCULAR_ORDER];
-  const n = order.length;
-  const winRateMatrix: Array<Array<number | null>> = [];
-  const winRateExcNeutralMatrix: Array<Array<number | null>> = [];
-  const trialCountMatrix: number[][] = [];
-  for (let i = 0; i < n; i++) {
-    const winRateRow: Array<number | null> = [];
-    const excNeutralWinRateRow: Array<number | null> = [];
-    const trialRow: number[] = [];
-    for (let j = 0; j < n; j++) {
-      if (i === j) {
-        winRateRow.push(null);
-        excNeutralWinRateRow.push(null);
-        trialRow.push(0);
-        continue;
-      }
-      const keyI = order[i] as string;
-      const keyJ = order[j] as string;
-      const winsIJ = pairwiseWins[keyI]?.[keyJ] ?? 0;
-      const winsJI = pairwiseWins[keyJ]?.[keyI] ?? 0;
-      // Neutrals are stored from the valueA side only: keyI vs keyJ → neutrals[keyI][keyJ] when keyI < keyJ alphabetically is NOT guaranteed,
-      // so check both directions and take whichever has data.
-      const neutralsIJ = pairwiseNeutrals != null
-        ? (pairwiseNeutrals[keyI]?.[keyJ] ?? pairwiseNeutrals[keyJ]?.[keyI] ?? 0)
-        : 0;
-      const total = winsIJ + winsJI + neutralsIJ;
-      winRateRow.push(total > 0 ? winsIJ / total : null);
-      const excNeutralTotal = winsIJ + winsJI;
-      excNeutralWinRateRow.push(excNeutralTotal > 0 ? winsIJ / excNeutralTotal : null);
-      trialRow.push(total);
-    }
-    winRateMatrix.push(winRateRow);
-    winRateExcNeutralMatrix.push(excNeutralWinRateRow);
-    trialCountMatrix.push(trialRow);
-  }
-  return { valueOrder: order, winRateMatrix, winRateExcNeutralMatrix, trialCountMatrix };
 }
 
 // A `buildProgress` snapshot whose `updatedAt` is older than this is treated
@@ -309,6 +249,31 @@ export async function queueDomainAnalysisRefresh(params: {
 
   const boss = getBoss();
   const normalizedSignature = normalizeSignature(params.signature);
+  const singletonKey = `domain-analysis:${params.scope}:${params.scope === 'ALL_DOMAINS' ? DOMAIN_ANALYSIS_ALL_DOMAINS_SCOPE : params.domainId}:${normalizedSignature}`;
+
+  // Thundering-herd defense: pg-boss's singletonKey only blocks duplicates
+  // while the existing job is in `created` state. Once a job goes `active`,
+  // the singleton lock is released and every page load during the build
+  // window queues another duplicate. Check explicitly for any in-flight job
+  // with this singletonKey (created/active/retry) and skip if found.
+  const inFlight = await db.$queryRaw<Array<{ id: string }>>`
+    SELECT id FROM pgboss.job
+    WHERE name = 'refresh_domain_analysis_snapshot'
+      AND singletonkey = ${singletonKey}
+      AND state IN ('created', 'active', 'retry')
+    LIMIT 1
+  `;
+  if (inFlight.length > 0) {
+    log.debug({
+      scope: params.scope,
+      domainId: params.domainId,
+      signature: params.signature,
+      reason: params.reason,
+      existingJobId: inFlight[0]?.id,
+    }, 'Domain analysis refresh skipped — in-flight job already exists');
+    return false;
+  }
+
   // For ALL_DOMAINS scope, do NOT pass domainIds. The scope resolver routes any
   // call with `domainIds.length >= 2` to the DOMAIN_SET branch, which would
   // write the snapshot under `domain-analysis:domain-set:<hash>` instead of
@@ -325,7 +290,7 @@ export async function queueDomainAnalysisRefresh(params: {
     },
     {
       ...DEFAULT_JOB_OPTIONS.refresh_domain_analysis_snapshot,
-      singletonKey: `domain-analysis:${params.scope}:${params.scope === 'ALL_DOMAINS' ? DOMAIN_ANALYSIS_ALL_DOMAINS_SCOPE : params.domainId}:${normalizedSignature}`,
+      singletonKey,
     },
   );
   return true;
@@ -356,6 +321,37 @@ export async function refreshDomainAnalysisSnapshot(params: {
     inputHash: state.inputHash,
     totalSourceRuns: state.resolvedSignatureRuns.filteredSourceRunIds.length,
   }, 'refreshDomainAnalysisSnapshot: prepare complete');
+
+  // Thundering-herd defense: if the CURRENT snapshot already has the same
+  // inputHash as what we just computed, the snapshot is already fresh — skip
+  // the expensive rebuild entirely. This covers the case where multiple jobs
+  // were queued, the first one wrote a fresh snapshot, and now subsequent
+  // jobs would just re-do the same work and supersede that snapshot for no
+  // reason.
+  const existingFresh = await db.assumptionAnalysisSnapshot.findFirst({
+    where: {
+      assumptionKey: buildAssumptionKey(state.scope, state.domain.id),
+      analysisType: DOMAIN_ANALYSIS_SNAPSHOT_TYPE,
+      status: 'CURRENT',
+      deletedAt: null,
+      configSignature: state.configSignature,
+      inputHash: state.inputHash,
+    },
+  });
+  if (existingFresh != null) {
+    log.info({
+      scope: params.scope,
+      domainId: params.domainId,
+      snapshotId: existingFresh.id,
+      snapshotAgeMs: Date.now() - existingFresh.createdAt.getTime(),
+      totalRefreshDurationMs: Date.now() - refreshStartedAt,
+    }, 'refreshDomainAnalysisSnapshot: skipped — fresh snapshot already exists');
+    return {
+      snapshot: existingFresh,
+      selectedSignature: state.selectedSignature,
+      configSignature: state.configSignature,
+    } as const;
+  }
 
   const totalRuns = state.resolvedSignatureRuns.filteredSourceRunIds.length;
   const supersedeStartedAt = Date.now();
