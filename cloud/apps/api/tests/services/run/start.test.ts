@@ -636,9 +636,11 @@ describe('startRun service', () => {
         createdRunIds.push(failedRun.id);
       }
       expect(failedRun?.status).toBe('FAILED');
-      // insert called once (bulk), send called once per job (2 jobs) in retry.
-      expect(mockBoss.insert).toHaveBeenCalledTimes(1);
-      expect(mockBoss.send).toHaveBeenCalledTimes(2);
+      // startRun retries enqueueRunJobs once on RUN_INIT_FAILED.
+      // Each attempt = 1 bulk insert + 1 send per job (2 jobs).
+      // So both attempts total: insert ×2, send ×4.
+      expect(mockBoss.insert).toHaveBeenCalledTimes(2);
+      expect(mockBoss.send).toHaveBeenCalledTimes(4);
     });
   });
 
