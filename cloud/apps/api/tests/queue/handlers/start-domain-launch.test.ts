@@ -383,7 +383,8 @@ describe('start-domain-launch handler', () => {
   });
 
   it('fails the evaluation after repeated queue inspection errors', async () => {
-    vi.useFakeTimers();
+    // Real DB setup must complete BEFORE switching to fake timers, otherwise
+    // Prisma's internal timers freeze and the test hangs.
     const domain = await makeDomain();
     const definitions = await makeDefinitions(domain.id, 1);
     const evaluation = await makeEvaluation({
@@ -397,8 +398,10 @@ describe('start-domain-launch handler', () => {
     });
     getBossMock.mockReturnValue({ getQueues: getQueuesMock });
 
+    vi.useFakeTimers();
     const promise = handler({ domainEvaluationId: evaluation.id });
     await vi.runAllTimersAsync();
+    vi.useRealTimers();
 
     await expect(promise).rejects.toThrow(
       'Probe queue inspection failed 5 consecutive times; refusing to launch against potentially unhealthy queue',
@@ -421,5 +424,5 @@ describe('start-domain-launch handler', () => {
 
     const runRows = await db.domainEvaluationRun.findMany({ where: { domainEvaluationId: evaluation.id } });
     expect(runRows).toHaveLength(0);
-  });
+  }, 30_000);
 });
