@@ -140,12 +140,12 @@ function buildDomainAnalysisResultFromSnapshot(params: {
       const losses = counts.deprioritized;
       const excNeutralDenom = wins + losses;
       const winRatePct = model.valueWinRates?.[valueKey];
-      if (winRatePct != null && (winRatePct <= 0 || winRatePct >= 100)) {
-        log.warn({ modelId: model.model, valueKey, winRatePct }, 'Extreme win rate (0% or 100%) produces ±Infinity logit score');
-      }
+      // Extreme win rates (0% or 100%) yield ±Infinity from log-odds, which
+      // GraphQL cannot serialize. Fall back to smoothed log-odds.
+      const isExtreme = winRatePct != null && (winRatePct <= 0 || winRatePct >= 100);
       return {
         valueKey,
-        score: winRatePct != null
+        score: winRatePct != null && !isExtreme
           ? computeLogOddsFromWinRate(winRatePct)
           : computeSmoothedLogOddsScore(wins, losses),
         prioritized: counts.prioritized,
