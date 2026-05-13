@@ -201,7 +201,7 @@ export const DEFAULT_JOB_OPTIONS: Record<JobType, JobOptions> = {
     retryLimit: 2,
     retryDelay: 10,
     retryBackoff: true,
-    expireInSeconds: 300, // 5 minutes
+    expireInSeconds: 1200, // 20 minutes - rebuild for ALL_DOMAINS scope can be slow
   },
   'refresh_pressure_sensitivity_snapshot': {
     retryLimit: 2,
