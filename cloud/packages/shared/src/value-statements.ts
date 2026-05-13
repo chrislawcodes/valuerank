@@ -714,3 +714,58 @@ export { PARTNER_CHOICE_VALUE_STATEMENTS };
 export function getPartnerChoiceValueStatementBody(token: string): string | undefined {
   return PARTNER_CHOICE_VALUE_STATEMENT_MAP.get(token);
 }
+
+// ---------------------------------------------------------------------------
+
+const PARTNER_CHOICE_FEMALE_VALUE_STATEMENTS = [
+  {
+    token: 'self_direction_action',
+    body: 'freedom in pursuing her own goals because of how they relate to independent choice in goals and actions',
+  },
+  {
+    token: 'power_dominance',
+    body: "power over how she's perceived and treated by the people around her because of how they relate to control over people and the decisions that affect them",
+  },
+  {
+    token: 'security_personal',
+    body: 'steadiness and reassurance in her life because of how they relate to stability, safety, and predictability',
+  },
+  {
+    token: 'conformity_interpersonal',
+    body: 'harmony with her family and the people close to her because of how they relate to maintaining smooth interactions with the people around them',
+  },
+  {
+    token: 'tradition',
+    body: 'connection to her heritage and the ways of life passed down to her because of how they relate to long-standing customs and inherited ways of doing things',
+  },
+  {
+    token: 'stimulation',
+    body: 'excitement and novelty in her life because of how they relate to change, challenge, and unpredictability',
+  },
+  {
+    token: 'benevolence_dependability',
+    body: 'support in keeping her commitments to the people who rely on her because of how they relate to being someone others can rely on to carry through on shared responsibilities',
+  },
+  {
+    token: 'universalism_nature',
+    body: 'connection to the natural world in her life because of how they relate to care for nature and the environment',
+  },
+  {
+    token: 'achievement',
+    body: 'recognition of her drive and accomplishments because of how they relate to success through strong performance',
+  },
+  {
+    token: 'hedonism',
+    body: 'fun and ease in her daily life because of how they relate to pleasure and comfort in everyday life',
+  },
+] as const;
+
+const PARTNER_CHOICE_FEMALE_VALUE_STATEMENT_MAP = new Map<string, string>(
+  PARTNER_CHOICE_FEMALE_VALUE_STATEMENTS.map(({ token, body }) => [token, body]),
+);
+
+export { PARTNER_CHOICE_FEMALE_VALUE_STATEMENTS };
+
+export function getPartnerChoiceFemaleValueStatementBody(token: string): string | undefined {
+  return PARTNER_CHOICE_FEMALE_VALUE_STATEMENT_MAP.get(token);
+}
