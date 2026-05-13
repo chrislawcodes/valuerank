@@ -324,26 +324,37 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
   log.info({ runId: run.id, totalJobs }, 'Run created, queuing jobs');
 
   let jobIds: string[];
+  const enqueueArgs = {
+    runId: run.id,
+    jobPlan,
+    priority,
+    temperature,
+    totalJobs,
+  };
+
   try {
-    jobIds = await enqueueRunJobs({
-      runId: run.id,
-      jobPlan,
-      priority,
-      temperature,
-      totalJobs,
-    });
+    jobIds = await enqueueRunJobs(enqueueArgs);
   } catch (error) {
     if (error instanceof AppError && error.code === 'RUN_INIT_FAILED') {
-      await db.run.update({
-        where: { id: run.id },
-        data: {
-          status: 'FAILED',
-          completedAt: new Date(),
-          stalledModels: [],
-        },
-      });
+      await new Promise((r) => setTimeout(r, 2000));
+
+      try {
+        jobIds = await enqueueRunJobs(enqueueArgs);
+        log.warn({ runId: run.id }, 'Recovered from RUN_INIT_FAILED on retry');
+      } catch (retryError) {
+        await db.run.update({
+          where: { id: run.id },
+          data: {
+            status: 'FAILED',
+            completedAt: new Date(),
+            stalledModels: [],
+          },
+        });
+        throw retryError;
+      }
+    } else {
+      throw error;
     }
-    throw error;
   }
 
   log.info(
