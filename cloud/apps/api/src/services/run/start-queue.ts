@@ -162,6 +162,14 @@ export async function enqueueRunJobs(input: EnqueueRunJobsInput): Promise<string
     // The orphan-recovery service (services/run/recovery.ts) will detect
     // missing probes via findMissingProbes and re-queue them. Do not
     // throw or mark the run FAILED; let the partial launch proceed.
+    //
+    // Recovery timeline note: detectOrphanedRuns requires pending+active
+    // jobs to be zero. So this run is not immediately recoverable — it
+    // becomes recoverable only after the partially-queued probes drain.
+    // Drain typically completes in minutes; recovery then runs on its
+    // 5-minute schedule and tops up missing probes. Net effect:
+    // partial-enqueue runs self-heal in roughly (drain + 5min) instead
+    // of failing terminally.
     log.warn(
       {
         runId,

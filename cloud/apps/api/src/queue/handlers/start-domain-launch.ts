@@ -19,11 +19,20 @@ import {
 } from './start-domain-launch-snapshot.js';
 const log = createLogger('queue:start-domain-launch');
 // Per-definition launch timeout. startRunService normally returns in
-// < 2 seconds; 90s is generous headroom for normal load. If pgboss
-// stalls inside bulkEnqueueJobs and a single launch hangs longer
-// than this, we move on to the next definition rather than blocking
-// the entire domain evaluation.
-const LAUNCH_TIMEOUT_MS = 90_000;
+// < 2 seconds; 180s is generous headroom for high-concurrency launches
+// where bulkEnqueueJobs can take several seconds against a hot pgboss.
+// If a single launch hangs longer than this, we move on to the next
+// definition rather than blocking the entire domain evaluation.
+//
+// Known limitation: the in-flight startRunService promise is NOT
+// cancelled on timeout (Prisma transactions cannot be cleanly aborted).
+// If startRunService eventually completes after the timeout, it may
+// create a Run record with no corresponding DomainEvaluationRun row.
+// A future handler restart will then treat that definition as
+// unlaunched and create a duplicate. Operators can clean up orphan
+// runs post-hoc; this trade-off is preferred over blocking the
+// entire evaluation indefinitely.
+const LAUNCH_TIMEOUT_MS = 180_000;
 
 async function flushProgress(params: {
   domainEvaluationId: string;
@@ -401,8 +410,10 @@ export function createStartDomainLaunchHandler(): (data: StartDomainLaunchJobDat
               domainEvaluationId,
               definitionId,
               error,
+              errorMessage: error instanceof Error ? error.message : String(error),
+              errorName: error instanceof Error ? error.name : undefined,
             },
-            error instanceof Error ? error.message : 'Failed to start domain evaluation member run'
+            'Failed to start domain evaluation member run'
           );
         }
 
