@@ -7,6 +7,7 @@ import {
 } from '../../graphql/queries/domain-analysis-values.js';
 import {
   computeSmoothedLogOddsScore,
+  computeLogOddsFromWinRate,
 } from '../../graphql/queries/domain/shared.js';
 import { computeRankingShapes } from '../../graphql/queries/domain-shape.js';
 import { computeClusterAnalysis, computeAllClusterAnalyses } from '../../graphql/queries/domain-clustering.js';
@@ -198,9 +199,18 @@ function buildDomainAnalysisResultFromSnapshot(params: {
       const wins = counts.prioritized;
       const losses = counts.deprioritized;
       const excNeutralDenom = wins + losses;
+      const winRatePct = model.valueWinRates?.[valueKey];
+      if (winRatePct != null && (winRatePct <= 0 || winRatePct >= 100)) {
+        log.warn(
+          { modelId: model.model, valueKey, winRatePct },
+          'Extreme win rate (0% or 100%) produces ±Infinity logit score',
+        );
+      }
       return {
         valueKey,
-        score: computeSmoothedLogOddsScore(wins, losses),
+        score: winRatePct != null
+          ? computeLogOddsFromWinRate(winRatePct)
+          : computeSmoothedLogOddsScore(wins, losses),
         prioritized: counts.prioritized,
         deprioritized: counts.deprioritized,
         neutral: counts.neutral,

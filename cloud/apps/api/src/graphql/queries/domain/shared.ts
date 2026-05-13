@@ -31,7 +31,7 @@ export type {
 
 export { formatVnewLabel, formatVnewSignature };
 export { aggregateValueCountsFromTranscripts, incrementPairwiseWin, isDomainAnalysisValueKey } from './domain-analysis-aggregation.js';
-export { computeSmoothedLogOddsScore } from './domain-analysis-scoring.js';
+export { computeSmoothedLogOddsScore, computeLogOddsFromWinRate } from './domain-analysis-scoring.js';
 export type {
   DomainAnalysisConditionDetail,
   DomainAnalysisConditionTranscript,
