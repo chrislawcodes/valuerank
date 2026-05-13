@@ -16,6 +16,11 @@ cloud/apps/api/src/graphql/queries/pressure-sensitivity.ts
 # Extract stat helpers into stat-math.ts when convenient.
 cloud/apps/api/src/services/pressure-sensitivity/aggregation.ts
 
+# Value statements: one data entry per domain per token (10 tokens × N domains).
+# File grows linearly with domain count — single responsibility, no split point.
+# Revisit when a domain's statements warrant a dedicated module.
+cloud/packages/shared/src/value-statements.ts
+
 # Large test files over 1200
 cloud/apps/api/tests/services/run/start.test.ts
 cloud/apps/api/tests/graphql/queries/definition.test.ts

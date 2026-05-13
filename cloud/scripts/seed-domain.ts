@@ -30,6 +30,7 @@ import {
   NATIONAL_PRIORITIES_VALUE_STATEMENTS,
   NEIGHBORHOOD_VALUE_STATEMENTS,
   PARENTING_ACTIVITY_VALUE_STATEMENTS,
+  PARTNER_CHOICE_VALUE_STATEMENTS,
   PRODUCT_CHOICE_VALUE_STATEMENTS,
   RETIREMENT_ACTIVITY_VALUE_STATEMENTS,
   SOFTWARE_APPROACH_VALUE_STATEMENTS,
@@ -54,6 +55,15 @@ type DomainConfig = {
 };
 
 const DOMAIN_REGISTRY: Record<string, DomainConfig> = {
+  'partner-choice-male': {
+    name: 'Partner Choice (Male)',
+    normalizedName: 'partner-choice-male',
+    sentencePrefix: 'One partner offers [level]',
+    labelPrefix: 'the partner that offers',
+    contextText:
+      'You are a matchmaker advising a man choosing between two potential partners. Both are equally attracted to him and available for a relationship, but the experiences they offer him differ.',
+    valueStatements: PARTNER_CHOICE_VALUE_STATEMENTS,
+  },
   'medical-treatment-choice': {
     name: 'Medical Treatment Choice',
     normalizedName: 'medical-treatment-choice',
