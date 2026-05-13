@@ -3,14 +3,13 @@ import { ValidationError } from '@valuerank/shared';
 import { createAuditLog } from '../../../../services/audit/index.js';
 import type {
   DomainEvaluationLaunchInput,
+  DomainTrialRunEntry,
   DomainTrialRunResult,
 } from '../types.js';
 import { resolveDefinitionsForLaunch } from './resolve-definitions.js';
 import { resolveModelsForLaunch } from './resolve-models.js';
 import { checkForActiveEquivalentRun } from './active-run-check.js';
 import { planLaunchSlots } from './plan-slots.js';
-import { executeLaunchRuns } from './execute-runs.js';
-import { recordLaunchResults } from './record-results.js';
 
 export async function launchDomainEvaluation(input: DomainEvaluationLaunchInput): Promise<DomainTrialRunResult> {
   const {
@@ -24,7 +23,6 @@ export async function launchDomainEvaluation(input: DomainEvaluationLaunchInput)
     samplesPerScenario,
     targetBatchCount = null,
     userId,
-    log,
     auditOperationType,
   } = input;
 
@@ -98,11 +96,9 @@ export async function launchDomainEvaluation(input: DomainEvaluationLaunchInput)
   }));
 
   const {
-    launchSlots,
     launchableDefinitions,
     projectedCostUsd,
     skippedForBudget,
-    estimatedCostByDefinitionId,
   } = await planLaunchSlots({
     groups: launchGroups,
     selectedModels,
@@ -147,43 +143,22 @@ export async function launchDomainEvaluation(input: DomainEvaluationLaunchInput)
     domainEvaluationId = evaluation.id;
   }
 
-  const { startedRuns, failedDefinitions, runs } = await executeLaunchRuns({
-    launchSlots,
-    selectedModels,
-    samplePercentage,
-    samplesPerScenario,
-    temperature,
-    scopeCategory,
-    userId,
-    log,
-    domainId,
-  });
+  const startedRuns = 0;
+  const failedDefinitions = 0;
+  const runs: DomainTrialRunEntry[] = [];
 
   if (domainEvaluationId !== null) {
-    await recordLaunchResults({
-      domainEvaluationId,
-      runs,
-      launchableDefinitions,
-      domainId,
-      startedRuns,
-      failedDefinitions,
-      allDefinitions,
-      targetedDefinitions,
-      latestDefinitionIds,
-      definitionIds,
-      projectedCostUsd,
-      skippedForBudget,
-      estimatedCostByDefinitionId,
-      selectedModels,
-      temperature,
-      budgetCap,
-      samplePercentage,
-      samplesPerScenario,
-      targetBatchCount,
-      modelIds,
-      defaultModels,
-      scopeCategory,
-    });
+    const { getBoss } = await import('../../../../queue/boss.js');
+    const { DEFAULT_JOB_OPTIONS } = await import('../../../../queue/types.js');
+    const boss = getBoss();
+    await boss.send(
+      'start_domain_launch',
+      { domainEvaluationId },
+      {
+        ...DEFAULT_JOB_OPTIONS['start_domain_launch'],
+        singletonKey: domainEvaluationId,
+      },
+    );
   }
 
   await createAuditLog({
@@ -195,6 +170,7 @@ export async function launchDomainEvaluation(input: DomainEvaluationLaunchInput)
       operationType: auditOperationType,
       domainName: domain.name,
       scopeCategory,
+      async: true,
       totalDefinitions: allDefinitions.length,
       targetedDefinitions: targetedDefinitions.length,
       requestedDefinitionIds: definitionIds,
@@ -216,7 +192,7 @@ export async function launchDomainEvaluation(input: DomainEvaluationLaunchInput)
   return {
     domainEvaluationId,
     scopeCategory,
-    success: failedDefinitions === 0,
+    success: domainEvaluationId !== null,
     totalDefinitions: allDefinitions.length,
     targetedDefinitions: targetedDefinitions.length,
     startedRuns,
