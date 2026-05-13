@@ -1,6 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '@valuerank/db';
-import { TEST_USER } from '../../../test-utils.js';
+import { TEST_USER } from '../../test-utils.js';
 
 const getBossMock = vi.hoisted(() => vi.fn());
 const startRunMock = vi.hoisted(() => vi.fn());
@@ -12,7 +12,13 @@ const loggerMock = vi.hoisted(() => ({
 
 vi.mock('../../../src/queue/boss.js', () => ({ getBoss: getBossMock }));
 vi.mock('../../../src/services/run/index.js', () => ({ startRun: startRunMock }));
-vi.mock('@valuerank/shared', () => ({ createLogger: vi.fn(() => loggerMock) }));
+vi.mock('@valuerank/shared', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@valuerank/shared')>();
+  return {
+    ...actual,
+    createLogger: vi.fn(() => loggerMock),
+  };
+});
 
 import { createStartDomainLaunchHandler } from '../../../src/queue/handlers/start-domain-launch.js';
 
