@@ -1,6 +1,6 @@
 import { type Prisma, type RunCategory } from '@valuerank/db';
 
-export const BACKPRESSURE_THRESHOLD = 300;
+export const BACKPRESSURE_THRESHOLD = 2000;
 export const BACKPRESSURE_POLL_MS = 5_000;
 export const INTER_LAUNCH_DELAY_MS = 1_000;
 export const FLUSH_EVERY = 5;
