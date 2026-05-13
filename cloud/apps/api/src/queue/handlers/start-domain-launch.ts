@@ -16,7 +16,7 @@ import {
   buildSnapshotUpdate,
   parseLaunchSnapshot,
   type LaunchSnapshot,
-} from './start-domain-launch-helpers.js';
+} from './start-domain-launch-snapshot.js';
 const log = createLogger('queue:start-domain-launch');
 
 async function flushProgress(params: {

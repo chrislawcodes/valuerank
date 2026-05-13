@@ -55,6 +55,7 @@ describe('start-domain-launch handler', () => {
   });
 
   beforeEach(() => {
+    vi.restoreAllMocks();
     vi.clearAllMocks();
     getBossMock.mockReturnValue({ getQueues: vi.fn().mockResolvedValue([]) });
     startRunMock.mockImplementation(async (input: StartRunInput) => {
