@@ -323,11 +323,15 @@ export async function refreshDomainAnalysisSnapshot(params: {
   }, 'refreshDomainAnalysisSnapshot: prepare complete');
 
   // Thundering-herd defense: if the CURRENT snapshot already has the same
-  // inputHash as what we just computed, the snapshot is already fresh — skip
-  // the expensive rebuild entirely. This covers the case where multiple jobs
-  // were queued, the first one wrote a fresh snapshot, and now subsequent
-  // jobs would just re-do the same work and supersede that snapshot for no
-  // reason.
+  // inputHash as what we just computed AND has a fully-built output (not just
+  // buildProgress), skip the expensive rebuild entirely. This covers the case
+  // where multiple jobs were queued, the first one wrote a fresh snapshot,
+  // and now subsequent jobs would just re-do the same work.
+  //
+  // IMPORTANT: we only return early if `parseSnapshotOutput` succeeds — a
+  // snapshot whose output is still `{ buildProgress: ... }` (i.e., another
+  // rebuild is mid-flight) is NOT useable by the caller and would surface as
+  // "snapshot could not be parsed after refresh".
   const existingFresh = await db.assumptionAnalysisSnapshot.findFirst({
     where: {
       assumptionKey: buildAssumptionKey(state.scope, state.domain.id),
@@ -338,7 +342,7 @@ export async function refreshDomainAnalysisSnapshot(params: {
       inputHash: state.inputHash,
     },
   });
-  if (existingFresh != null) {
+  if (existingFresh != null && parseSnapshotOutput(existingFresh.output) != null) {
     log.info({
       scope: params.scope,
       domainId: params.domainId,
