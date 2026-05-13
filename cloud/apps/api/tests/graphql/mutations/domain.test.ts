@@ -5,8 +5,25 @@ import { createServer } from '../../../src/server.js';
 import { getAuthHeader, TEST_USER } from '../../test-utils.js';
 import { startRun } from '../../../src/services/run/index.js';
 
+const bossSendMock = vi.hoisted(() => vi.fn());
+
 vi.mock('../../../src/services/run/index.js', () => ({
   startRun: vi.fn(),
+}));
+
+vi.mock('../../../src/queue/boss.js', () => ({
+  getBoss: vi.fn(() => ({
+    send: bossSendMock,
+  })),
+  createBoss: vi.fn(() => ({
+    send: bossSendMock,
+    start: vi.fn().mockResolvedValue(undefined),
+    stop: vi.fn().mockResolvedValue(undefined),
+    on: vi.fn(),
+  })),
+  startBoss: vi.fn().mockResolvedValue(undefined),
+  stopBoss: vi.fn().mockResolvedValue(undefined),
+  isBossRunning: vi.fn().mockReturnValue(false),
 }));
 
 const app = createServer();
@@ -157,6 +174,8 @@ describe('GraphQL Domain Mutations', () => {
       update: { status: 'ACTIVE', isDefault: false },
     });
 
+    bossSendMock.mockResolvedValue('mock-job-id');
+
     startRunMock.mockImplementation(async (input) => {
       const run = await db.run.create({
         data: {
@@ -200,8 +219,88 @@ describe('GraphQL Domain Mutations', () => {
     });
   });
 
+  async function seedEvaluationMembers(params: {
+    domainEvaluationId: string;
+    domainId: string;
+    entries: Array<{
+      definitionId: string;
+      models: string[];
+      runCategory?: 'PILOT' | 'PRODUCTION' | 'REPLICATION' | 'VALIDATION' | 'UNKNOWN_LEGACY';
+    }>;
+  }): Promise<string[]> {
+    const runIds: string[] = [];
+    const evaluation = await db.domainEvaluation.findUnique({
+      where: { id: params.domainEvaluationId },
+      select: { configSnapshot: true },
+    });
+    const existingSnapshot =
+      evaluation?.configSnapshot != null && typeof evaluation.configSnapshot === 'object' && !Array.isArray(evaluation.configSnapshot)
+        ? evaluation.configSnapshot as Record<string, unknown>
+        : {};
+
+    for (const entry of params.entries) {
+      const run = await db.run.create({
+        data: {
+          definitionId: entry.definitionId,
+          status: 'RUNNING',
+          runCategory: entry.runCategory ?? 'PRODUCTION',
+          config: {
+            models: entry.models,
+            temperature: null,
+            samplePercentage: 100,
+            samplesPerScenario: 1,
+          },
+          progress: { total: 1, completed: 0, failed: 0 },
+          createdByUserId: TEST_USER.id,
+        },
+      });
+      runIds.push(run.id);
+
+      const definition = await db.definition.findUnique({
+        where: { id: entry.definitionId },
+        select: { name: true },
+      });
+
+      await db.domainEvaluationRun.create({
+        data: {
+          domainEvaluationId: params.domainEvaluationId,
+          runId: run.id,
+          definitionIdAtLaunch: entry.definitionId,
+          definitionNameAtLaunch: definition?.name ?? 'Untitled vignette',
+          domainIdAtLaunch: params.domainId,
+        },
+      });
+    }
+
+    await db.domainEvaluation.update({
+      where: { id: params.domainEvaluationId },
+      data: {
+        status: 'RUNNING',
+        startedAt: new Date(),
+        configSnapshot: {
+          ...existingSnapshot,
+          startedRuns: params.entries.length,
+          failedDefinitions: 0,
+        },
+      },
+    });
+
+    return runIds;
+  }
+
+  function expectDomainLaunchQueued(domainEvaluationId: string): void {
+    expect(bossSendMock).toHaveBeenCalledWith(
+      'start_domain_launch',
+      { domainEvaluationId },
+      expect.objectContaining({
+        singletonKey: domainEvaluationId,
+      }),
+    );
+  }
+
   afterEach(async () => {
     startRunMock.mockClear();
+    bossSendMock.mockClear();
     if (createdDefinitionIds.length > 0) {
       await db.definition.deleteMany({ where: { id: { in: createdDefinitionIds } } });
       createdDefinitionIds.length = 0;
@@ -281,16 +380,11 @@ describe('GraphQL Domain Mutations', () => {
     expect(response.body.data.runTrialsForDomain.domainEvaluationId).toBeTruthy();
     expect(response.body.data.runTrialsForDomain.scopeCategory).toBe('PRODUCTION');
     expect(response.body.data.runTrialsForDomain.targetedDefinitions).toBe(2);
-    expect(response.body.data.runTrialsForDomain.startedRuns).toBe(2);
-    expect(startRunMock).toHaveBeenCalledTimes(2);
-
-    const startedDefinitionIds = startRunMock.mock.calls.map((call) => call[0]?.definitionId);
-    expect(startedDefinitionIds).toContain(latest.id);
-    expect(startedDefinitionIds).toContain(secondLineage.id);
-    expect(startedDefinitionIds).not.toContain(root.id);
-    expect(startedDefinitionIds).not.toContain(mid.id);
+    expect(response.body.data.runTrialsForDomain.startedRuns).toBe(0);
+    expect(startRunMock).not.toHaveBeenCalled();
 
     const domainEvaluationId = response.body.data.runTrialsForDomain.domainEvaluationId as string;
+    expectDomainLaunchQueued(domainEvaluationId);
     const evaluation = await db.domainEvaluation.findUnique({
       where: { id: domainEvaluationId },
       include: { members: true },
@@ -299,8 +393,8 @@ describe('GraphQL Domain Mutations', () => {
     expect(evaluation).not.toBeNull();
     expect(evaluation?.domainId).toBe(domain.id);
     expect(evaluation?.scopeCategory).toBe('PRODUCTION');
-    expect(evaluation?.members).toHaveLength(2);
-    expect(evaluation?.members.map((member) => member.definitionIdAtLaunch).sort()).toEqual(
+    expect(evaluation?.members).toHaveLength(0);
+    expect((evaluation?.configSnapshot as { launchableDefinitionIds?: string[] } | null)?.launchableDefinitionIds?.sort()).toEqual(
       [latest.id, secondLineage.id].sort(),
     );
   });
@@ -344,11 +438,11 @@ describe('GraphQL Domain Mutations', () => {
     expect(response.body.data.runTrialsForDomain.domainEvaluationId).toBeTruthy();
     expect(response.body.data.runTrialsForDomain.scopeCategory).toBe('PRODUCTION');
     expect(response.body.data.runTrialsForDomain.targetedDefinitions).toBe(1);
-    expect(response.body.data.runTrialsForDomain.startedRuns).toBe(1);
-    expect(startRunMock).toHaveBeenCalledTimes(1);
-    expect(startRunMock.mock.calls[0]?.[0]?.definitionId).toBe(foreignDefinition.id);
+    expect(response.body.data.runTrialsForDomain.startedRuns).toBe(0);
+    expect(startRunMock).not.toHaveBeenCalled();
 
     const domainEvaluationId = response.body.data.runTrialsForDomain.domainEvaluationId as string;
+    expectDomainLaunchQueued(domainEvaluationId);
     const evaluation = await db.domainEvaluation.findUnique({
       where: { id: domainEvaluationId },
       include: { members: true },
@@ -356,8 +450,8 @@ describe('GraphQL Domain Mutations', () => {
 
     expect(evaluation).not.toBeNull();
     expect(evaluation?.createdByUserId).toBe(TEST_USER.id);
-    expect(evaluation?.members).toHaveLength(1);
-    expect(evaluation?.members[0]?.definitionIdAtLaunch).toBe(foreignDefinition.id);
+    expect(evaluation?.members).toHaveLength(0);
+    expect((evaluation?.configSnapshot as { launchableDefinitionIds?: string[] } | null)?.launchableDefinitionIds).toEqual([foreignDefinition.id]);
   });
 
   it('starts a scoped domain evaluation with explicit run parameters', async () => {
@@ -397,16 +491,11 @@ describe('GraphQL Domain Mutations', () => {
     expect(response.body.data.startDomainEvaluation.domainEvaluationId).toBeTruthy();
     expect(response.body.data.startDomainEvaluation.scopeCategory).toBe('PILOT');
     expect(response.body.data.startDomainEvaluation.targetedDefinitions).toBe(1);
-    expect(response.body.data.startDomainEvaluation.startedRuns).toBe(1);
-    expect(startRunMock).toHaveBeenCalledTimes(1);
-
-    const startArgs = startRunMock.mock.calls[0]?.[0];
-    expect(startArgs?.runCategory).toBe('PILOT');
-    expect(startArgs?.models).toEqual(['test-domain-model']);
-    expect(startArgs?.samplePercentage).toBe(50);
-    expect(startArgs?.samplesPerScenario).toBe(2);
+    expect(response.body.data.startDomainEvaluation.startedRuns).toBe(0);
+    expect(startRunMock).not.toHaveBeenCalled();
 
     const domainEvaluationId = response.body.data.startDomainEvaluation.domainEvaluationId as string;
+    expectDomainLaunchQueued(domainEvaluationId);
     const evaluation = await db.domainEvaluation.findUnique({
       where: { id: domainEvaluationId },
       include: { members: { include: { run: true } } },
@@ -414,8 +503,7 @@ describe('GraphQL Domain Mutations', () => {
 
     expect(evaluation).not.toBeNull();
     expect(evaluation?.scopeCategory).toBe('PILOT');
-    expect(evaluation?.members).toHaveLength(1);
-    expect(evaluation?.members[0]?.run.runCategory).toBe('PILOT');
+    expect(evaluation?.members).toHaveLength(0);
     expect(evaluation?.configSnapshot).toMatchObject({
       samplePercentage: 50,
       samplesPerScenario: 2,
@@ -474,9 +562,9 @@ describe('GraphQL Domain Mutations', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.errors).toBeUndefined();
-    expect(response.body.data.startDomainEvaluation.startedRuns).toBe(1);
-    expect(startRunMock).toHaveBeenCalledTimes(1);
-    expect(startRunMock.mock.calls[0]?.[0]?.runCategory).toBe('PILOT');
+    expect(response.body.data.startDomainEvaluation.startedRuns).toBe(0);
+    expect(startRunMock).not.toHaveBeenCalled();
+    expectDomainLaunchQueued(response.body.data.startDomainEvaluation.domainEvaluationId as string);
   });
 
   it('preserves the selected scope category when retrying a domain trial cell', async () => {
@@ -571,20 +659,18 @@ describe('GraphQL Domain Mutations', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.errors).toBeUndefined();
-      expect(response.body.data.startDomainEvaluation.startedRuns).toBe(2);
-      expect(startRunMock).toHaveBeenCalledTimes(2);
+      expect(response.body.data.startDomainEvaluation.startedRuns).toBe(0);
+      expect(startRunMock).not.toHaveBeenCalled();
 
-      const calls = startRunMock.mock.calls.map((call) => call[0]);
-      const callA = calls.find((c) => c.definitionId === defA.id);
-      const callB = calls.find((c) => c.definitionId === defB.id);
-
-      // After Wave 5, paired-batch metadata is no longer written into configExtras.
-      // Both definitions still launch as independent runs; tokens come from the
-      // definition snapshot at analysis time, not the run config.
-      expect(callA).toBeDefined();
-      expect(callB).toBeDefined();
-      expect(callA?.configExtras).toBeUndefined();
-      expect(callB?.configExtras).toBeUndefined();
+      const domainEvaluationId = response.body.data.startDomainEvaluation.domainEvaluationId as string;
+      expectDomainLaunchQueued(domainEvaluationId);
+      const evaluation = await db.domainEvaluation.findUnique({
+        where: { id: domainEvaluationId },
+        select: { configSnapshot: true },
+      });
+      expect((evaluation?.configSnapshot as { launchableDefinitionIds?: string[] } | null)?.launchableDefinitionIds?.sort()).toEqual(
+        [defA.id, defB.id].sort(),
+      );
     });
 
     it('launches two distinct pairs as two independent batches', async () => {
@@ -606,13 +692,17 @@ describe('GraphQL Domain Mutations', () => {
         .set('Authorization', getAuthHeader())
         .send({ query: START_DOMAIN_EVALUATION_MUTATION, variables: { domainId: domain.id } });
 
-      expect(startRunMock).toHaveBeenCalledTimes(4);
-      const calls = startRunMock.mock.calls.map((c) => c[0]);
-      // After Wave 5, configExtras is undefined for all launches.
-      expect(calls.find((c) => c.definitionId === p1a.id)?.configExtras).toBeUndefined();
-      expect(calls.find((c) => c.definitionId === p1b.id)?.configExtras).toBeUndefined();
-      expect(calls.find((c) => c.definitionId === p2a.id)?.configExtras).toBeUndefined();
-      expect(calls.find((c) => c.definitionId === p2b.id)?.configExtras).toBeUndefined();
+      expect(startRunMock).not.toHaveBeenCalled();
+      expect(bossSendMock).toHaveBeenCalledTimes(1);
+
+      const domainEvaluationId = bossSendMock.mock.calls[0]?.[1]?.domainEvaluationId as string;
+      const evaluation = await db.domainEvaluation.findUnique({
+        where: { id: domainEvaluationId },
+        select: { configSnapshot: true },
+      });
+      expect((evaluation?.configSnapshot as { launchableDefinitionIds?: string[] } | null)?.launchableDefinitionIds?.sort()).toEqual(
+        [p1a.id, p1b.id, p2a.id, p2b.id].sort(),
+      );
     });
 
     it('launches a non-paired definition as an individual run with no batch configExtras', async () => {
@@ -630,10 +720,15 @@ describe('GraphQL Domain Mutations', () => {
         .set('Authorization', getAuthHeader())
         .send({ query: START_DOMAIN_EVALUATION_MUTATION, variables: { domainId: domain.id } });
 
-      expect(startRunMock).toHaveBeenCalledTimes(1);
-      const call = startRunMock.mock.calls[0]?.[0];
-      expect(call?.definitionId).toBe(def.id);
-      expect(call?.configExtras).toBeUndefined();
+      expect(startRunMock).not.toHaveBeenCalled();
+      expect(bossSendMock).toHaveBeenCalledTimes(1);
+
+      const domainEvaluationId = bossSendMock.mock.calls[0]?.[1]?.domainEvaluationId as string;
+      const evaluation = await db.domainEvaluation.findUnique({
+        where: { id: domainEvaluationId },
+        select: { configSnapshot: true },
+      });
+      expect((evaluation?.configSnapshot as { launchableDefinitionIds?: string[] } | null)?.launchableDefinitionIds).toEqual([def.id]);
     });
 
     it('launches an incomplete pair as an individual run with no batch configExtras', async () => {
@@ -657,10 +752,15 @@ describe('GraphQL Domain Mutations', () => {
         .set('Authorization', getAuthHeader())
         .send({ query: START_DOMAIN_EVALUATION_MUTATION, variables: { domainId: domain.id } });
 
-      expect(startRunMock).toHaveBeenCalledTimes(1);
-      const call = startRunMock.mock.calls[0]?.[0];
-      expect(call?.definitionId).toBe(def.id);
-      expect(call?.configExtras).toBeUndefined();
+      expect(startRunMock).not.toHaveBeenCalled();
+      expect(bossSendMock).toHaveBeenCalledTimes(1);
+
+      const domainEvaluationId = bossSendMock.mock.calls[0]?.[1]?.domainEvaluationId as string;
+      const evaluation = await db.domainEvaluation.findUnique({
+        where: { id: domainEvaluationId },
+        select: { configSnapshot: true },
+      });
+      expect((evaluation?.configSnapshot as { launchableDefinitionIds?: string[] } | null)?.launchableDefinitionIds).toEqual([def.id]);
     });
 
     it('attaches missing model backfill runs to the existing evaluation', async () => {
@@ -710,18 +810,15 @@ describe('GraphQL Domain Mutations', () => {
       expect(launchResponse.status).toBe(200);
       expect(launchResponse.body.errors).toBeUndefined();
       const domainEvaluationId = launchResponse.body.data.startDomainEvaluation.domainEvaluationId as string;
-      expect(startRunMock).toHaveBeenCalledTimes(2);
-
-      await db.run.updateMany({
-        where: { id: { in: launchResponse.body.data.startDomainEvaluation.runs.map((run: { runId: string }) => run.runId) } },
-        data: {
-          config: {
-            models: ['test-domain-model'],
-            temperature: null,
-            samplePercentage: 100,
-            samplesPerScenario: 1,
-          },
-        },
+      expect(startRunMock).not.toHaveBeenCalled();
+      expectDomainLaunchQueued(domainEvaluationId);
+      await seedEvaluationMembers({
+        domainEvaluationId,
+        domainId: domain.id,
+        entries: [
+          { definitionId: defA.id, models: ['test-domain-model'] },
+          { definitionId: defB.id, models: ['test-domain-model'] },
+        ],
       });
 
       startRunMock.mockClear();
@@ -810,39 +907,15 @@ describe('GraphQL Domain Mutations', () => {
       expect(launchResponse.status).toBe(200);
       expect(launchResponse.body.errors).toBeUndefined();
       const domainEvaluationId = launchResponse.body.data.startDomainEvaluation.domainEvaluationId as string;
-
-      const launchedRunIds = launchResponse.body.data.startDomainEvaluation.runs.map((run: { runId: string }) => run.runId);
-      const evaluationRuns = await db.run.findMany({
-        where: { id: { in: launchedRunIds } },
-        orderBy: { definitionId: 'asc' },
-      });
-      const runForA = evaluationRuns.find((run) => run.definitionId === defA.id);
-      const runForB = evaluationRuns.find((run) => run.definitionId === defB.id);
-
-      expect(runForA).toBeTruthy();
-      expect(runForB).toBeTruthy();
-
-      await db.run.update({
-        where: { id: runForA!.id },
-        data: {
-          config: {
-            models: ['test-domain-model', 'test-domain-model-2'],
-            temperature: null,
-            samplePercentage: 100,
-            samplesPerScenario: 1,
-          },
-        },
-      });
-      await db.run.update({
-        where: { id: runForB!.id },
-        data: {
-          config: {
-            models: ['test-domain-model'],
-            temperature: null,
-            samplePercentage: 100,
-            samplesPerScenario: 1,
-          },
-        },
+      expect(startRunMock).not.toHaveBeenCalled();
+      expectDomainLaunchQueued(domainEvaluationId);
+      await seedEvaluationMembers({
+        domainEvaluationId,
+        domainId: domain.id,
+        entries: [
+          { definitionId: defA.id, models: ['test-domain-model', 'test-domain-model-2'] },
+          { definitionId: defB.id, models: ['test-domain-model'] },
+        ],
       });
 
       startRunMock.mockClear();
@@ -914,6 +987,8 @@ describe('GraphQL Domain Mutations', () => {
       expect(launchResponse.status).toBe(200);
       expect(launchResponse.body.errors).toBeUndefined();
       const domainEvaluationId = launchResponse.body.data.startDomainEvaluation.domainEvaluationId as string;
+      expect(startRunMock).not.toHaveBeenCalled();
+      expectDomainLaunchQueued(domainEvaluationId);
 
       startRunMock.mockClear();
       const response = await request(app)

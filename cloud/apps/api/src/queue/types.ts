@@ -18,7 +18,8 @@ export type JobType =
   | 'analysis_result_janitor'
   | 'aggregate_analysis'
   | 'refresh_domain_analysis_snapshot'
-  | 'refresh_pressure_sensitivity_snapshot';
+  | 'refresh_pressure_sensitivity_snapshot'
+  | 'start_domain_launch';
 
 // Job data interfaces
 export type ProbeScenarioJobData = {
@@ -100,6 +101,10 @@ export type RefreshPressureSensitivitySnapshotJobData = {
   reason: string;
 };
 
+export type StartDomainLaunchJobData = {
+  domainEvaluationId: string;
+};
+
 // Dead letter job data - same as probe scenario but handled separately for failed/expired jobs
 export type ProbeDeadLetterJobData = ProbeScenarioJobData;
 
@@ -116,7 +121,8 @@ export type JobData =
   | AnalysisResultJanitorJobData
   | AggregateAnalysisJobData
   | RefreshDomainAnalysisSnapshotJobData
-  | RefreshPressureSensitivitySnapshotJobData;
+  | RefreshPressureSensitivitySnapshotJobData
+  | StartDomainLaunchJobData;
 
 // Job options interface
 export type JobOptions = {
@@ -202,6 +208,10 @@ export const DEFAULT_JOB_OPTIONS: Record<JobType, JobOptions> = {
     retryDelay: 10,
     retryBackoff: true,
     expireInSeconds: 600, // 10 minutes — PS computation is heavier than domain analysis
+  },
+  'start_domain_launch': {
+    retryLimit: 0, // Idempotency check inside handler covers re-entry
+    expireInSeconds: 7200, // 2 hours — enough to launch a 200-definition domain
   },
   'probe_dead_letter': {
     retryLimit: 0, // Don't retry dead letter jobs - just log and record

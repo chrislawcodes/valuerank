@@ -18,6 +18,7 @@ import type {
   AggregateAnalysisJobData,
   RefreshDomainAnalysisSnapshotJobData,
   RefreshPressureSensitivitySnapshotJobData,
+  StartDomainLaunchJobData,
 } from '../types.js';
 import { createProbeScenarioHandler } from './probe-scenario/index.js';
 import { createSummarizeTranscriptHandler } from './summarize-transcript.js';
@@ -31,6 +32,7 @@ import { createAnalysisResultJanitorHandler } from './analysis-result-janitor.js
 import { createAggregateAnalysisHandler } from './aggregate-analysis.js';
 import { createRefreshDomainAnalysisSnapshotHandler } from './refresh-domain-analysis-snapshot.js';
 import { createRefreshPressureSensitivitySnapshotHandler } from './refresh-pressure-sensitivity-snapshot.js';
+import { createStartDomainLaunchHandler } from './start-domain-launch.js';
 
 // Re-export job data types for handlers
 export type {
@@ -46,6 +48,7 @@ export type {
   AggregateAnalysisJobData,
   RefreshDomainAnalysisSnapshotJobData,
   RefreshPressureSensitivitySnapshotJobData,
+  StartDomainLaunchJobData,
 };
 
 // Dead letter queue name for probe jobs
@@ -176,6 +179,23 @@ export const handlerRegistrations: HandlerRegistration[] = [
         'refresh_pressure_sensitivity_snapshot',
         { batchSize },
         createRefreshPressureSensitivitySnapshotHandler()
+      );
+    },
+  },
+  {
+    name: 'start_domain_launch',
+    register: async (boss, _batchSize) => {
+      const handler = createStartDomainLaunchHandler();
+      await boss.work<StartDomainLaunchJobData>(
+        'start_domain_launch',
+        // Multiple handlers can run in parallel — each one paces itself
+        // against the probe queue. batchSize=1 keeps retry semantics clean.
+        { batchSize: 1 },
+        async (jobs) => {
+          for (const job of jobs) {
+            await handler(job.data);
+          }
+        }
       );
     },
   },
