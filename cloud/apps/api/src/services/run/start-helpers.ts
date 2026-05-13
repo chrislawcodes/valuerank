@@ -111,6 +111,10 @@ export async function bulkEnqueueJobs(
     try {
       const ids = await boss.insert(queueName, insertPayloads);
       if (ids === null || ids.length === 0) {
+        log.error(
+          { queueName, jobCount: queueJobs.length },
+          'boss.insert returned null or empty — no jobs queued',
+        );
         failures.push(
           ...queueJobs.map((job) => ({ job, error: 'bulk insert returned no ids' })),
         );
@@ -130,10 +134,16 @@ export async function bulkEnqueueJobs(
         }
       }
     } catch (err) {
+      const errMessage = err instanceof Error ? err.message : String(err);
+      const errStack = err instanceof Error ? err.stack : undefined;
+      log.error(
+        { queueName, jobCount: queueJobs.length, err: errMessage, stack: errStack },
+        'boss.insert threw',
+      );
       failures.push(
         ...queueJobs.map((job) => ({
           job,
-          error: err instanceof Error ? err.message : String(err),
+          error: errMessage,
         })),
       );
     }

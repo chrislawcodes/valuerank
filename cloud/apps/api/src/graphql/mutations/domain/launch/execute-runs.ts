@@ -110,6 +110,7 @@ export async function executeLaunchRuns(params: {
   let startedRuns = 0;
   let failedDefinitions = 0;
   const runs: DomainTrialRunEntry[] = [];
+  type StartRunResult = Awaited<ReturnType<typeof startRunService>>;
 
   for (let offset = 0; offset < launchSlots.length; offset += 25) {
     const batch = launchSlots.slice(offset, offset + 25);
@@ -138,9 +139,11 @@ export async function executeLaunchRuns(params: {
       break;
     }
 
-    const runResults = await Promise.allSettled(
-      batch.map(async (slot) => {
-        return startRunService({
+    const runResults: Array<{ slot: LaunchSlot; result: PromiseSettledResult<StartRunResult> }> = [];
+    for (let i = 0; i < batch.length; i += 1) {
+      const slot = batch[i]!;
+      try {
+        const value = await startRunService({
           definitionId: slot.definition.id,
           models: selectedModels,
           samplePercentage,
@@ -150,10 +153,17 @@ export async function executeLaunchRuns(params: {
           runCategory: scopeCategory,
           userId,
         });
-      })
-    );
+        runResults.push({ slot, result: { status: 'fulfilled', value } });
+      } catch (reason) {
+        runResults.push({ slot, result: { status: 'rejected', reason } });
+      }
 
-    runResults.forEach((result, index) => {
+      if (i < batch.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+    }
+
+    runResults.forEach(({ slot, result }) => {
       if (result.status === 'fulfilled') {
         startedRuns += 1;
         runs.push({
@@ -164,11 +174,10 @@ export async function executeLaunchRuns(params: {
         return;
       }
       failedDefinitions += 1;
-      const failedSlot = batch[index];
       log.error(
         {
           domainId,
-          definitionId: failedSlot?.definition.id ?? null,
+          definitionId: slot.definition.id,
           error: result.reason instanceof Error ? result.reason.message : String(result.reason),
           scopeCategory,
         },
@@ -250,9 +259,15 @@ export async function executeBackfillRuns(params: {
       continue;
     }
 
-    const runResults = await Promise.allSettled(
-      group.definitions.map(async (definition) => {
-        return startRunService({
+    type StartRunResult = Awaited<ReturnType<typeof startRunService>>;
+    const runResults: Array<{
+      definition: BackfillLaunchGroupRepetition['definitions'][number];
+      result: PromiseSettledResult<StartRunResult>;
+    }> = [];
+    for (let i = 0; i < group.definitions.length; i += 1) {
+      const definition = group.definitions[i]!;
+      try {
+        const value = await startRunService({
           definitionId: definition.id,
           models: [group.modelId],
           samplePercentage: snapshot.samplePercentage,
@@ -262,10 +277,17 @@ export async function executeBackfillRuns(params: {
           runCategory: scopeCategory,
           userId,
         });
-      }),
-    );
+        runResults.push({ definition, result: { status: 'fulfilled', value } });
+      } catch (reason) {
+        runResults.push({ definition, result: { status: 'rejected', reason } });
+      }
 
-    runResults.forEach((result, index) => {
+      if (i < group.definitions.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+    }
+
+    runResults.forEach(({ definition, result }) => {
       if (result.status === 'fulfilled') {
         startedRuns += 1;
         runs.push({
@@ -277,11 +299,10 @@ export async function executeBackfillRuns(params: {
       }
 
       failedDefinitions += 1;
-      const failedDefinition = group.definitions[index];
       log.error(
         {
           domainEvaluationId,
-          definitionId: failedDefinition?.id ?? null,
+          definitionId: definition.id,
           modelId: group.modelId,
           error: result.reason instanceof Error ? result.reason.message : String(result.reason),
         },
