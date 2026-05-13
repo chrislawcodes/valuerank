@@ -211,7 +211,9 @@ export const DEFAULT_JOB_OPTIONS: Record<JobType, JobOptions> = {
   },
   'start_domain_launch': {
     retryLimit: 0, // Idempotency check inside handler covers re-entry
-    expireInSeconds: 7200, // 2 hours — enough to launch a 200-definition domain
+    expireInSeconds: 82800, // 23 hours. PgBoss caps expiration at <24h.
+    // A domain launch can legitimately wait this long if probe queues stay
+    // saturated. Matches the probe_scenario TTL choice.
   },
   'probe_dead_letter': {
     retryLimit: 0, // Don't retry dead letter jobs - just log and record

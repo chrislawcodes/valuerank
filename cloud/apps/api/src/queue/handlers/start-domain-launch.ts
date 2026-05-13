@@ -27,6 +27,8 @@ async function flushProgress(params: {
   snapshot: LaunchSnapshot;
   startedRuns: number;
   failedDefinitions: number;
+  baselineStartedRuns: number;
+  baselineFailedDefinitions: number;
   status?: 'RUNNING' | 'FAILED';
   completedAt?: Date | null;
 }): Promise<void> {
@@ -38,6 +40,8 @@ async function flushProgress(params: {
     snapshot,
     startedRuns,
     failedDefinitions,
+    baselineStartedRuns,
+    baselineFailedDefinitions,
     status,
     completedAt,
   } = params;
@@ -60,7 +64,11 @@ async function flushProgress(params: {
       data: {
         ...(status === undefined ? {} : { status }),
         ...(completedAt === undefined ? {} : { completedAt }),
-        configSnapshot: buildSnapshotUpdate(snapshot.raw, startedRuns, failedDefinitions),
+        configSnapshot: buildSnapshotUpdate(
+          snapshot.raw,
+          baselineStartedRuns + startedRuns,
+          baselineFailedDefinitions + failedDefinitions,
+        ),
       },
     });
   });
@@ -71,8 +79,17 @@ async function markEvaluationFailed(params: {
   snapshot: LaunchSnapshot | null;
   startedRuns: number;
   failedDefinitions: number;
+  baselineStartedRuns: number;
+  baselineFailedDefinitions: number;
 }): Promise<void> {
-  const { domainEvaluationId, snapshot, startedRuns, failedDefinitions } = params;
+  const {
+    domainEvaluationId,
+    snapshot,
+    startedRuns,
+    failedDefinitions,
+    baselineStartedRuns,
+    baselineFailedDefinitions,
+  } = params;
   await db.domainEvaluation.update({
     where: { id: domainEvaluationId },
     data: {
@@ -80,9 +97,53 @@ async function markEvaluationFailed(params: {
       completedAt: new Date(),
       ...(snapshot === null
         ? {}
-        : { configSnapshot: buildSnapshotUpdate(snapshot.raw, startedRuns, failedDefinitions) }),
+        : {
+            configSnapshot: buildSnapshotUpdate(
+              snapshot.raw,
+              baselineStartedRuns + startedRuns,
+              baselineFailedDefinitions + failedDefinitions,
+            ),
+          }),
     },
   });
+}
+
+type SnapshotCounters = {
+  startedRuns: number;
+  failedDefinitions: number;
+};
+
+function readSnapshotCounters(configSnapshot: unknown): SnapshotCounters {
+  if (configSnapshot == null || typeof configSnapshot !== 'object' || Array.isArray(configSnapshot)) {
+    return {
+      startedRuns: 0,
+      failedDefinitions: 0,
+    };
+  }
+
+  const snapshot = configSnapshot as Record<string, unknown>;
+  return {
+    startedRuns:
+      typeof snapshot.startedRuns === 'number' && Number.isFinite(snapshot.startedRuns)
+        ? snapshot.startedRuns
+        : 0,
+    failedDefinitions:
+      typeof snapshot.failedDefinitions === 'number' && Number.isFinite(snapshot.failedDefinitions)
+        ? snapshot.failedDefinitions
+        : 0,
+  };
+}
+
+class ProbeQueueUnhealthyError extends Error {
+  readonly consecutiveErrors: number;
+  readonly lastError: unknown;
+
+  constructor(consecutiveErrors: number, lastError: unknown) {
+    super('Probe queue inspection failed 5 consecutive times; refusing to launch against potentially unhealthy queue');
+    this.name = 'ProbeQueueUnhealthyError';
+    this.consecutiveErrors = consecutiveErrors;
+    this.lastError = lastError;
+  }
 }
 
 async function waitForProbeQueueCapacity(
@@ -133,16 +194,7 @@ async function waitForProbeQueueCapacity(
         'Failed to inspect probe queue depth while pacing domain launch'
       );
       if (consecutiveFailures >= MAX_CONSECUTIVE_QUEUE_ERRORS) {
-        log.warn(
-          {
-            domainEvaluationId,
-            definitionId,
-            consecutiveFailures,
-          },
-          'Proceeding with domain launch after repeated probe queue inspection failures'
-        );
-        waitingForCapacity = false;
-        continue;
+        throw new ProbeQueueUnhealthyError(consecutiveFailures, error);
       }
     }
 
@@ -155,6 +207,8 @@ async function waitForProbeQueueCapacity(
 export function createStartDomainLaunchHandler(): (data: StartDomainLaunchJobData) => Promise<void> {
   return async ({ domainEvaluationId }) => {
     let snapshot: LaunchSnapshot | null = null;
+    let baselineStartedRuns = 0;
+    let baselineFailedDefinitions = 0;
     let startedRuns = 0;
     let failedDefinitions = 0;
 
@@ -192,6 +246,10 @@ export function createStartDomainLaunchHandler(): (data: StartDomainLaunchJobDat
         return;
       }
 
+      const initialCounters = readSnapshotCounters(evaluation.configSnapshot);
+      baselineStartedRuns = initialCounters.startedRuns;
+      baselineFailedDefinitions = initialCounters.failedDefinitions;
+
       const claim = await db.domainEvaluation.updateMany({
         where: {
           id: domainEvaluationId,
@@ -224,6 +282,8 @@ export function createStartDomainLaunchHandler(): (data: StartDomainLaunchJobDat
           snapshot,
           startedRuns,
           failedDefinitions,
+          baselineStartedRuns,
+          baselineFailedDefinitions,
         });
         return;
       }
@@ -240,6 +300,11 @@ export function createStartDomainLaunchHandler(): (data: StartDomainLaunchJobDat
       const definitionNameById = new Map(
         definitions.map((definition) => [definition.id, definition.name ?? 'Untitled vignette']),
       );
+      const existingRuns = await db.domainEvaluationRun.findMany({
+        where: { domainEvaluationId },
+        select: { definitionIdAtLaunch: true },
+      });
+      const alreadyLaunched = new Set(existingRuns.map((run) => run.definitionIdAtLaunch));
 
       log.info(
         {
@@ -252,8 +317,29 @@ export function createStartDomainLaunchHandler(): (data: StartDomainLaunchJobDat
       const boss = getBoss();
       const pendingRuns: DomainTrialRunEntry[] = [];
 
+      if (baselineStartedRuns >= snapshot.launchableDefinitionIds.length) {
+        await db.domainEvaluation.update({
+          where: { id: domainEvaluationId },
+          data: {
+            status: 'COMPLETED',
+            completedAt: new Date(),
+            configSnapshot: buildSnapshotUpdate(
+              snapshot.raw,
+              baselineStartedRuns,
+              baselineFailedDefinitions,
+            ),
+          },
+        });
+        return;
+      }
+
       for (let index = 0; index < snapshot.launchableDefinitionIds.length; index += 1) {
         const definitionId = snapshot.launchableDefinitionIds[index]!;
+        if (alreadyLaunched.has(definitionId)) {
+          // Resumed run — this definition was launched on a prior handler attempt.
+          // Don't re-launch (would create a duplicate Run).
+          continue;
+        }
         await waitForProbeQueueCapacity(boss, domainEvaluationId, definitionId);
 
         try {
@@ -294,6 +380,8 @@ export function createStartDomainLaunchHandler(): (data: StartDomainLaunchJobDat
             snapshot,
             startedRuns,
             failedDefinitions,
+            baselineStartedRuns,
+            baselineFailedDefinitions,
           });
           pendingRuns.length = 0;
         }
@@ -303,8 +391,9 @@ export function createStartDomainLaunchHandler(): (data: StartDomainLaunchJobDat
         }
       }
 
-      const finalStatus = startedRuns > 0 ? 'RUNNING' : 'FAILED';
-      const completedAt = startedRuns > 0 ? null : new Date();
+      const totalStartedRuns = baselineStartedRuns + startedRuns;
+      const finalStatus = totalStartedRuns > 0 ? 'RUNNING' : 'FAILED';
+      const completedAt = totalStartedRuns > 0 ? null : new Date();
       await flushProgress({
         domainEvaluationId,
         pendingRuns,
@@ -313,6 +402,8 @@ export function createStartDomainLaunchHandler(): (data: StartDomainLaunchJobDat
         snapshot,
         startedRuns,
         failedDefinitions,
+        baselineStartedRuns,
+        baselineFailedDefinitions,
         status: finalStatus,
         completedAt,
       });
@@ -327,6 +418,36 @@ export function createStartDomainLaunchHandler(): (data: StartDomainLaunchJobDat
         'Finished asynchronous domain evaluation launch'
       );
     } catch (error) {
+      if (error instanceof ProbeQueueUnhealthyError) {
+        log.error(
+          {
+            domainEvaluationId,
+            consecutiveErrors: error.consecutiveErrors,
+            lastError: error.lastError,
+          },
+          'Probe queue inspection failed 5 consecutive times; refusing to launch against potentially unhealthy queue'
+        );
+        try {
+          await markEvaluationFailed({
+            domainEvaluationId,
+            snapshot,
+            startedRuns,
+            failedDefinitions,
+            baselineStartedRuns,
+            baselineFailedDefinitions,
+          });
+        } catch (markFailedError) {
+          log.error(
+            {
+              domainEvaluationId,
+              err: markFailedError,
+            },
+            'Failed to mark domain evaluation launch as failed after probe queue health error'
+          );
+        }
+        throw error;
+      }
+
       log.error({ domainEvaluationId, error }, 'Domain launch handler failed unexpectedly');
       try {
         await markEvaluationFailed({
@@ -334,6 +455,8 @@ export function createStartDomainLaunchHandler(): (data: StartDomainLaunchJobDat
           snapshot,
           startedRuns,
           failedDefinitions,
+          baselineStartedRuns,
+          baselineFailedDefinitions,
         });
       } catch (markFailedError) {
         log.error(
