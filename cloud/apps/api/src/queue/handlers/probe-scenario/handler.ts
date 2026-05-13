@@ -457,7 +457,7 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
         definitionSnapshot: scenario.definition.content as Prisma.InputJsonValue,
         costSnapshot,
       }, tx);
-    });
+    }, { timeout: 30000 });
 
     // Record probe success in results table
     // Calculate duration from timestamps
