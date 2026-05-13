@@ -18,6 +18,12 @@ import {
   type LaunchSnapshot,
 } from './start-domain-launch-snapshot.js';
 const log = createLogger('queue:start-domain-launch');
+// Per-definition launch timeout. startRunService normally returns in
+// < 2 seconds; 90s is generous headroom for normal load. If pgboss
+// stalls inside bulkEnqueueJobs and a single launch hangs longer
+// than this, we move on to the next definition rather than blocking
+// the entire domain evaluation.
+const LAUNCH_TIMEOUT_MS = 90_000;
 
 async function flushProgress(params: {
   domainEvaluationId: string;
@@ -143,6 +149,35 @@ class ProbeQueueUnhealthyError extends Error {
     this.name = 'ProbeQueueUnhealthyError';
     this.consecutiveErrors = consecutiveErrors;
     this.lastError = lastError;
+  }
+}
+
+class LaunchTimeoutError extends Error {
+  constructor(definitionId: string, ms: number) {
+    super(`startRunService timed out after ${ms}ms for definition ${definitionId}`);
+    this.name = 'LaunchTimeoutError';
+  }
+}
+
+async function startRunWithTimeout(
+  args: Parameters<typeof startRunService>[0],
+  timeoutMs: number,
+): Promise<Awaited<ReturnType<typeof startRunService>>> {
+  let timeoutHandle: NodeJS.Timeout | undefined;
+  try {
+    // We do not cancel the in-flight promise here; Prisma transactions cannot
+    // be cancelled cleanly, so a timed-out launch may still create an orphan run.
+    return await Promise.race([
+      startRunService(args),
+      new Promise<never>((_, reject) => {
+        timeoutHandle = setTimeout(
+          () => reject(new LaunchTimeoutError(args.definitionId, timeoutMs)),
+          timeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
   }
 }
 
@@ -343,7 +378,7 @@ export function createStartDomainLaunchHandler(): (data: StartDomainLaunchJobDat
         await waitForProbeQueueCapacity(boss, domainEvaluationId, definitionId);
 
         try {
-          const result = await startRunService({
+          const result = await startRunWithTimeout({
             definitionId,
             models: snapshot.models,
             samplePercentage: snapshot.samplePercentage,
@@ -352,7 +387,7 @@ export function createStartDomainLaunchHandler(): (data: StartDomainLaunchJobDat
             priority: 'NORMAL',
             runCategory: snapshot.scopeCategory,
             userId: evaluation.createdByUserId,
-          });
+          }, LAUNCH_TIMEOUT_MS);
           pendingRuns.push({
             definitionId,
             runId: result.run.id,
@@ -367,7 +402,7 @@ export function createStartDomainLaunchHandler(): (data: StartDomainLaunchJobDat
               definitionId,
               error,
             },
-            'Failed to start domain evaluation member run'
+            error instanceof Error ? error.message : 'Failed to start domain evaluation member run'
           );
         }
 

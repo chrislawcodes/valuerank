@@ -349,6 +349,78 @@ describe('start-domain-launch handler', () => {
     expect(runRows).toHaveLength(2);
   });
 
+  it('treats startRunService timeout as a launch failure and continues', async () => {
+    const domain = await makeDomain();
+    const definitions = await makeDefinitions(domain.id, 3);
+    const evaluation = await makeEvaluation({
+      domainId: domain.id,
+      domainNameAtLaunch: domain.name,
+      launchableDefinitionIds: definitions.map((definition) => definition.id),
+    });
+
+    // First two launches succeed. The middle one hangs past the timeout.
+    let callIndex = 0;
+    startRunMock.mockImplementation(async (input: StartRunInput) => {
+      const current = callIndex++;
+      if (current === 1) {
+        await new Promise((resolve) => setTimeout(resolve, 5 * 60 * 1000));
+      }
+      const run = await db.run.create({
+        data: {
+          definitionId: input.definitionId,
+          status: 'RUNNING',
+          runCategory: input.runCategory,
+          config: {
+            models: input.models,
+            temperature: input.temperature ?? null,
+            samplePercentage: input.samplePercentage,
+            samplesPerScenario: input.samplesPerScenario,
+          },
+          progress: { total: 1, completed: 0, failed: 0 },
+          createdByUserId: input.userId,
+        },
+      });
+      createdRunIds.push(run.id);
+      return {
+        run: {
+          id: run.id,
+          definitionId: run.definitionId,
+          status: run.status,
+          config: run.config,
+          progress: run.progress,
+          createdAt: run.createdAt,
+        },
+      };
+    });
+
+    vi.useFakeTimers();
+    try {
+      const promise = handler({ domainEvaluationId: evaluation.id });
+      await vi.advanceTimersByTimeAsync(120_000);
+      await vi.runAllTimersAsync();
+      await promise;
+    } finally {
+      vi.useRealTimers();
+    }
+
+    const updated = await readEvaluation(evaluation.id);
+    expect(updated?.configSnapshot).toMatchObject({
+      startedRuns: 2,
+      failedDefinitions: 1,
+    });
+
+    const runRows = await db.domainEvaluationRun.findMany({ where: { domainEvaluationId: evaluation.id } });
+    expect(runRows).toHaveLength(2);
+
+    expect(loggerMock.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        domainEvaluationId: evaluation.id,
+        definitionId: definitions[1]!.id,
+      }),
+      expect.stringMatching(/timed out|timeout/i),
+    );
+  }, 30_000);
+
   it('resumes without relaunching already-started definitions', async () => {
     const domain = await makeDomain();
     const definitions = await makeDefinitions(domain.id, 3);
