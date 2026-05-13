@@ -349,6 +349,81 @@ describe('start-domain-launch handler', () => {
     expect(runRows).toHaveLength(2);
   });
 
+  it('treats startRunService timeout as a launch failure and continues', async () => {
+    // We exercise the handler's catch-and-continue behavior on a timeout
+    // error rather than firing the actual Promise.race timeout. Fake-timer
+    // tests fight Prisma's internal I/O timers, leading to hangs in CI
+    // (see test-output history). The Promise.race + setTimeout helper is
+    // small and standard; the value here is verifying the handler skips
+    // the timed-out definition and continues the loop.
+    const domain = await makeDomain();
+    const definitions = await makeDefinitions(domain.id, 3);
+    const evaluation = await makeEvaluation({
+      domainId: domain.id,
+      domainNameAtLaunch: domain.name,
+      launchableDefinitionIds: definitions.map((definition) => definition.id),
+    });
+
+    let callIndex = 0;
+    startRunMock.mockImplementation(async (input: StartRunInput) => {
+      const current = callIndex++;
+      if (current === 1) {
+        // Simulate the timeout being raised by startRunWithTimeout.
+        const err = new Error(
+          `startRunService timed out after 180000ms for definition ${input.definitionId}`,
+        );
+        err.name = 'LaunchTimeoutError';
+        throw err;
+      }
+      const run = await db.run.create({
+        data: {
+          definitionId: input.definitionId,
+          status: 'RUNNING',
+          runCategory: input.runCategory,
+          config: {
+            models: input.models,
+            temperature: input.temperature ?? null,
+            samplePercentage: input.samplePercentage,
+            samplesPerScenario: input.samplesPerScenario,
+          },
+          progress: { total: 1, completed: 0, failed: 0 },
+          createdByUserId: input.userId,
+        },
+      });
+      createdRunIds.push(run.id);
+      return {
+        run: {
+          id: run.id,
+          definitionId: run.definitionId,
+          status: run.status,
+          config: run.config,
+          progress: run.progress,
+          createdAt: run.createdAt,
+        },
+      };
+    });
+
+    await handler({ domainEvaluationId: evaluation.id });
+
+    const updated = await readEvaluation(evaluation.id);
+    expect(updated?.configSnapshot).toMatchObject({
+      startedRuns: 2,
+      failedDefinitions: 1,
+    });
+
+    const runRows = await db.domainEvaluationRun.findMany({ where: { domainEvaluationId: evaluation.id } });
+    expect(runRows).toHaveLength(2);
+
+    const timeoutLogCall = loggerMock.error.mock.calls.find(
+      (call) => (call[0] as { definitionId?: string })?.definitionId === definitions[1]!.id,
+    );
+    expect(timeoutLogCall).toBeDefined();
+    const [payload, message] = timeoutLogCall!;
+    expect(message).toBe('Failed to start domain evaluation member run');
+    expect((payload as { errorName?: string }).errorName).toBe('LaunchTimeoutError');
+    expect((payload as { errorMessage?: string }).errorMessage).toMatch(/timed out|timeout/i);
+  });
+
   it('resumes without relaunching already-started definitions', async () => {
     const domain = await makeDomain();
     const definitions = await makeDefinitions(domain.id, 3);

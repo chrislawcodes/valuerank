@@ -642,6 +642,37 @@ describe('startRun service', () => {
       expect(mockBoss.insert).toHaveBeenCalledTimes(2);
       expect(mockBoss.send).toHaveBeenCalledTimes(4);
     });
+
+    it('accepts partial enqueue success without marking the run FAILED', async () => {
+      const definition = await db.definition.create({
+        data: {
+          name: 'Partial Enqueue Definition',
+          content: { schema_version: 1, preamble: 'Test' },
+        },
+      });
+      createdDefinitionIds.push(definition.id);
+
+      await db.scenario.createMany({
+        data: [
+          { definitionId: definition.id, name: 'S1', content: { test: 1 } },
+          { definitionId: definition.id, name: 'S2', content: { test: 2 } },
+        ],
+      });
+
+      mockBoss.insert.mockResolvedValueOnce(['job-1']);
+      mockBoss.send.mockResolvedValueOnce(null);
+
+      const result = await startRun({
+        definitionId: definition.id,
+        models: ['gpt-4'],
+        userId: testUserId,
+      });
+      createdRunIds.push(result.run.id);
+
+      const startedRun = await db.run.findUnique({ where: { id: result.run.id } });
+      expect(startedRun?.status).toBe('RUNNING');
+      expect(result.jobCount).toBe(2);
+    });
   });
 
   describe('sampling with deterministic seed', () => {

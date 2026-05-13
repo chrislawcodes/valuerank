@@ -131,17 +131,18 @@ export async function enqueueRunJobs(input: EnqueueRunJobsInput): Promise<string
     remainingFailures = retryPass.failures;
   }
 
-  if (remainingFailures.length > 0 || jobIds.length !== expectedInitialCount) {
+  if (jobIds.length === 0) {
+    // Total enqueue failure — nothing got queued. Run cannot proceed.
     const failureReason = remainingFailures.length > 0
       ? `${remainingFailures.length} jobs failed to enqueue after retry`
-      : `Expected ${expectedInitialCount} jobs but only ${jobIds.length} were enqueued`;
+      : 'No jobs were enqueued';
 
     log.error(
       {
         runId,
         totalJobs,
         expectedInitialCount,
-        enqueuedJobs: jobIds.length,
+        enqueuedJobs: 0,
         remainingFailures: remainingFailures.slice(0, 10).map((failure) => ({
           queueName: failure.job.queueName,
           modelId: failure.job.data.modelId,
@@ -154,6 +155,38 @@ export async function enqueueRunJobs(input: EnqueueRunJobsInput): Promise<string
     );
 
     throw new AppError(`Run initialization failed: ${failureReason}`, 'RUN_INIT_FAILED');
+  }
+
+  if (jobIds.length < expectedInitialCount) {
+    // Partial enqueue — some jobs queued and may already be executing.
+    // The orphan-recovery service (services/run/recovery.ts) will detect
+    // missing probes via findMissingProbes and re-queue them. Do not
+    // throw or mark the run FAILED; let the partial launch proceed.
+    //
+    // Recovery timeline note: detectOrphanedRuns requires pending+active
+    // jobs to be zero. So this run is not immediately recoverable — it
+    // becomes recoverable only after the partially-queued probes drain.
+    // Drain typically completes in minutes; recovery then runs on its
+    // 5-minute schedule and tops up missing probes. Net effect:
+    // partial-enqueue runs self-heal in roughly (drain + 5min) instead
+    // of failing terminally.
+    log.warn(
+      {
+        runId,
+        totalJobs,
+        expectedInitialCount,
+        enqueuedJobs: jobIds.length,
+        missingCount: expectedInitialCount - jobIds.length,
+        remainingFailures: remainingFailures.slice(0, 10).map((failure) => ({
+          queueName: failure.job.queueName,
+          modelId: failure.job.data.modelId,
+          scenarioId: failure.job.data.scenarioId,
+          sampleIndex: failure.job.data.sampleIndex,
+          error: failure.error,
+        })),
+      },
+      'Partial enqueue success — accepting partial launch; orphan recovery will top up missing probes'
+    );
   }
 
   return jobIds;
