@@ -302,12 +302,17 @@ export async function queueDomainAnalysisRefresh(params: {
 
   const boss = getBoss();
   const normalizedSignature = normalizeSignature(params.signature);
+  // For ALL_DOMAINS scope, do NOT pass domainIds. The scope resolver routes any
+  // call with `domainIds.length >= 2` to the DOMAIN_SET branch, which would
+  // write the snapshot under `domain-analysis:domain-set:<hash>` instead of
+  // `domain-analysis:all-domains` — silently breaking the all-domains cache.
+  const domainIdsForJob = params.scope === 'ALL_DOMAINS' ? undefined : params.domainIds;
   await boss.send(
     'refresh_domain_analysis_snapshot',
     {
       scope: params.scope,
       domainId: params.domainId,
-      domainIds: params.domainIds,
+      domainIds: domainIdsForJob,
       signature: params.signature,
       reason: params.reason,
     },
@@ -577,7 +582,8 @@ export async function getDomainAnalysisResult(params: {
   const refreshed = await refreshDomainAnalysisSnapshot({
     scope: state.scope,
     domainId: state.domain.id,
-    domainIds: state.domainIds,
+    // For ALL_DOMAINS, don't pass domainIds — see queueDomainAnalysisRefresh comment.
+    domainIds: state.scope === 'ALL_DOMAINS' ? undefined : state.domainIds,
     requestedSignature: state.selectedSignature,
   });
   const parsedFresh = parseSnapshotOutput(refreshed.snapshot.output);
