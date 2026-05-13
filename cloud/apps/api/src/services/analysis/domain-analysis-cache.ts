@@ -325,14 +325,29 @@ export async function refreshDomainAnalysisSnapshot(params: {
   domainIds?: string[];
   requestedSignature: string | null;
 }) {
+  const refreshStartedAt = Date.now();
+  log.info({ scope: params.scope, domainId: params.domainId, requestedSignature: params.requestedSignature }, 'refreshDomainAnalysisSnapshot: start');
+
+  const prepareStartedAt = Date.now();
   const state = await prepareDomainAnalysisState({
     scope: params.scope,
     domainId: params.domainId,
     domainIds: params.domainIds,
     requestedSignature: params.requestedSignature,
   });
+  const prepareDurationMs = Date.now() - prepareStartedAt;
+  log.info({
+    scope: params.scope,
+    domainId: params.domainId,
+    prepareDurationMs,
+    configSignature: state.configSignature,
+    inputHash: state.inputHash,
+    totalSourceRuns: state.resolvedSignatureRuns.filteredSourceRunIds.length,
+  }, 'refreshDomainAnalysisSnapshot: prepare complete');
+
   const totalRuns = state.resolvedSignatureRuns.filteredSourceRunIds.length;
-  await db.assumptionAnalysisSnapshot.updateMany({
+  const supersedeStartedAt = Date.now();
+  const supersedeResult = await db.assumptionAnalysisSnapshot.updateMany({
     where: {
       assumptionKey: buildAssumptionKey(state.scope, state.domain.id),
       analysisType: DOMAIN_ANALYSIS_SNAPSHOT_TYPE,
@@ -347,6 +362,12 @@ export async function refreshDomainAnalysisSnapshot(params: {
       status: 'SUPERSEDED',
     },
   });
+  log.info({
+    scope: params.scope,
+    domainId: params.domainId,
+    durationMs: Date.now() - supersedeStartedAt,
+    supersededCount: supersedeResult.count,
+  }, 'refreshDomainAnalysisSnapshot: supersede done');
 
   const progressSnapshot = await db.assumptionAnalysisSnapshot.create({
     data: {
@@ -372,8 +393,14 @@ export async function refreshDomainAnalysisSnapshot(params: {
       status: 'CURRENT',
     },
   });
+  log.info({
+    scope: params.scope,
+    domainId: params.domainId,
+    progressSnapshotId: progressSnapshot.id,
+  }, 'refreshDomainAnalysisSnapshot: progress snapshot created');
 
   try {
+    const buildStartedAt = Date.now();
     const { output, excNeutralValueWinRatesByModel } = await buildSnapshotOutput(state, {
       onProgress: async (buildProgress) => {
         await db.assumptionAnalysisSnapshot.update({
@@ -386,6 +413,27 @@ export async function refreshDomainAnalysisSnapshot(params: {
         });
       },
     });
+    const buildDurationMs = Date.now() - buildStartedAt;
+    log.info({
+      scope: params.scope,
+      domainId: params.domainId,
+      progressSnapshotId: progressSnapshot.id,
+      buildDurationMs,
+    }, 'refreshDomainAnalysisSnapshot: buildSnapshotOutput complete');
+
+    // Check if we got superseded during build (thundering herd detection)
+    const preWriteCheck = await db.assumptionAnalysisSnapshot.findUnique({
+      where: { id: progressSnapshot.id },
+      select: { status: true },
+    });
+    if (preWriteCheck?.status !== 'CURRENT') {
+      log.warn({
+        scope: params.scope,
+        domainId: params.domainId,
+        progressSnapshotId: progressSnapshot.id,
+        actualStatus: preWriteCheck?.status,
+      }, 'refreshDomainAnalysisSnapshot: progress snapshot was superseded during build (thundering herd)');
+    }
 
     const snapshot = await db.assumptionAnalysisSnapshot.update({
       where: { id: progressSnapshot.id },
@@ -406,7 +454,19 @@ export async function refreshDomainAnalysisSnapshot(params: {
       data: { output: mergedOutput },
     });
     if (phase2Result.count === 0) {
-      log.info({ snapshotId: progressSnapshot.id }, 'Phase 2 exc-neutral write skipped — snapshot superseded');
+      log.warn({
+        scope: params.scope,
+        domainId: params.domainId,
+        snapshotId: progressSnapshot.id,
+        totalRefreshDurationMs: Date.now() - refreshStartedAt,
+      }, 'Phase 2 exc-neutral write skipped — snapshot superseded');
+    } else {
+      log.info({
+        scope: params.scope,
+        domainId: params.domainId,
+        snapshotId: progressSnapshot.id,
+        totalRefreshDurationMs: Date.now() - refreshStartedAt,
+      }, 'refreshDomainAnalysisSnapshot: phase 2 write succeeded');
     }
     const finalSnapshot = phase2Result.count > 0 ? { ...snapshot, output: mergedOutput } : snapshot;
 

@@ -1,7 +1,10 @@
 import { db, resolveDefinitionContent } from '@valuerank/db';
+import { createLogger } from '@valuerank/shared';
 import { getMissingReasonLabel, resolveSignatureRuns } from '../../graphql/queries/domain/shared.js';
 import { extractValuePair, type DomainAnalysisValuePair } from '../../graphql/queries/domain-analysis-values.js';
 import { computeAggregateFingerprint } from './aggregate/aggregate-helpers.js';
+
+const log = createLogger('analysis:snapshot-builder');
 import {
   DOMAIN_ANALYSIS_ASSUMPTION_PREFIX,
   DOMAIN_ANALYSIS_NONE_SIGNATURE,
@@ -78,17 +81,38 @@ export async function prepareDomainAnalysisState(params: {
   domainIds?: string[];
   requestedSignature: string | null;
 }): Promise<DomainAnalysisPreparedState> {
+  const prepareStartedAt = Date.now();
+  log.info({ scope: params.scope, domainId: params.domainId, requestedSignature: params.requestedSignature }, 'prepareDomainAnalysisState: start');
+
+  const scopeStartedAt = Date.now();
   const scopeData = await resolveDomainAnalysisScopeDefinitions({
     scope: params.scope,
     domainId: params.domainId,
     domainIds: params.domainIds,
   });
+  log.info({
+    scope: params.scope,
+    domainId: params.domainId,
+    durationMs: Date.now() - scopeStartedAt,
+    definitionCount: scopeData.latestDefinitionIds.length,
+  }, 'prepareDomainAnalysisState: resolveDomainAnalysisScopeDefinitions done');
 
   const defaultModelIds = scopeData.scope === 'ALL_DOMAINS' ? [] : scopeData.domain.defaultModelIds;
+
+  const sigRunsStartedAt = Date.now();
   const resolvedSignatureRuns = await resolveSignatureRuns(scopeData.latestDefinitionIds, params.requestedSignature, defaultModelIds);
+  log.info({
+    scope: params.scope,
+    domainId: params.domainId,
+    durationMs: Date.now() - sigRunsStartedAt,
+    filteredSourceRunCount: resolvedSignatureRuns.filteredSourceRunIds.length,
+    selectedSignature: resolvedSignatureRuns.selectedSignature,
+  }, 'prepareDomainAnalysisState: resolveSignatureRuns done');
+
   const selectedSignature = resolvedSignatureRuns.selectedSignature;
   const configSignature = normalizeSignature(selectedSignature);
 
+  const fingerprintStartedAt = Date.now();
   const fingerprintRows = resolvedSignatureRuns.filteredSourceRunIds.length === 0
     ? []
     : await db.analysisResult.findMany({
@@ -103,7 +127,14 @@ export async function prepareDomainAnalysisState(params: {
           inputHash: true,
         },
       });
+  log.info({
+    scope: params.scope,
+    domainId: params.domainId,
+    durationMs: Date.now() - fingerprintStartedAt,
+    fingerprintRowCount: fingerprintRows.length,
+  }, 'prepareDomainAnalysisState: analysisResult.findMany done');
 
+  const hashStartedAt = Date.now();
   const inputHash = computeInputHash({
     scope: scopeData.scope,
     domainIds: scopeData.domainIds,
@@ -111,6 +142,13 @@ export async function prepareDomainAnalysisState(params: {
     latestDefinitions: scopeData.latestDefinitions,
     fingerprints: fingerprintRows,
   });
+  log.info({
+    scope: params.scope,
+    domainId: params.domainId,
+    durationMs: Date.now() - hashStartedAt,
+    inputHash,
+    totalPrepareDurationMs: Date.now() - prepareStartedAt,
+  }, 'prepareDomainAnalysisState: complete');
 
   return {
     scope: scopeData.scope,
