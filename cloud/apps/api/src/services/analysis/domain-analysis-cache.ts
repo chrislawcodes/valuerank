@@ -309,6 +309,31 @@ export async function queueDomainAnalysisRefresh(params: {
 
   const boss = getBoss();
   const normalizedSignature = normalizeSignature(params.signature);
+  const singletonKey = `domain-analysis:${params.scope}:${params.scope === 'ALL_DOMAINS' ? DOMAIN_ANALYSIS_ALL_DOMAINS_SCOPE : params.domainId}:${normalizedSignature}`;
+
+  // Thundering-herd defense: pg-boss's singletonKey only blocks duplicates
+  // while the existing job is in `created` state. Once a job goes `active`,
+  // the singleton lock is released and every page load during the build
+  // window queues another duplicate. Check explicitly for any in-flight job
+  // with this singletonKey (created/active/retry) and skip if found.
+  const inFlight = await db.$queryRaw<Array<{ id: string }>>`
+    SELECT id FROM pgboss.job
+    WHERE name = 'refresh_domain_analysis_snapshot'
+      AND singletonkey = ${singletonKey}
+      AND state IN ('created', 'active', 'retry')
+    LIMIT 1
+  `;
+  if (inFlight.length > 0) {
+    log.debug({
+      scope: params.scope,
+      domainId: params.domainId,
+      signature: params.signature,
+      reason: params.reason,
+      existingJobId: inFlight[0]?.id,
+    }, 'Domain analysis refresh skipped — in-flight job already exists');
+    return false;
+  }
+
   // For ALL_DOMAINS scope, do NOT pass domainIds. The scope resolver routes any
   // call with `domainIds.length >= 2` to the DOMAIN_SET branch, which would
   // write the snapshot under `domain-analysis:domain-set:<hash>` instead of
@@ -325,7 +350,7 @@ export async function queueDomainAnalysisRefresh(params: {
     },
     {
       ...DEFAULT_JOB_OPTIONS.refresh_domain_analysis_snapshot,
-      singletonKey: `domain-analysis:${params.scope}:${params.scope === 'ALL_DOMAINS' ? DOMAIN_ANALYSIS_ALL_DOMAINS_SCOPE : params.domainId}:${normalizedSignature}`,
+      singletonKey,
     },
   );
   return true;
@@ -356,6 +381,37 @@ export async function refreshDomainAnalysisSnapshot(params: {
     inputHash: state.inputHash,
     totalSourceRuns: state.resolvedSignatureRuns.filteredSourceRunIds.length,
   }, 'refreshDomainAnalysisSnapshot: prepare complete');
+
+  // Thundering-herd defense: if the CURRENT snapshot already has the same
+  // inputHash as what we just computed, the snapshot is already fresh — skip
+  // the expensive rebuild entirely. This covers the case where multiple jobs
+  // were queued, the first one wrote a fresh snapshot, and now subsequent
+  // jobs would just re-do the same work and supersede that snapshot for no
+  // reason.
+  const existingFresh = await db.assumptionAnalysisSnapshot.findFirst({
+    where: {
+      assumptionKey: buildAssumptionKey(state.scope, state.domain.id),
+      analysisType: DOMAIN_ANALYSIS_SNAPSHOT_TYPE,
+      status: 'CURRENT',
+      deletedAt: null,
+      configSignature: state.configSignature,
+      inputHash: state.inputHash,
+    },
+  });
+  if (existingFresh != null) {
+    log.info({
+      scope: params.scope,
+      domainId: params.domainId,
+      snapshotId: existingFresh.id,
+      snapshotAgeMs: Date.now() - existingFresh.createdAt.getTime(),
+      totalRefreshDurationMs: Date.now() - refreshStartedAt,
+    }, 'refreshDomainAnalysisSnapshot: skipped — fresh snapshot already exists');
+    return {
+      snapshot: existingFresh,
+      selectedSignature: state.selectedSignature,
+      configSignature: state.configSignature,
+    } as const;
+  }
 
   const totalRuns = state.resolvedSignatureRuns.filteredSourceRunIds.length;
   const supersedeStartedAt = Date.now();
