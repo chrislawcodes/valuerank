@@ -201,10 +201,7 @@ function buildDomainAnalysisResultFromSnapshot(params: {
       const excNeutralDenom = wins + losses;
       const winRatePct = model.valueWinRates?.[valueKey];
       if (winRatePct != null && (winRatePct <= 0 || winRatePct >= 100)) {
-        log.warn(
-          { modelId: model.model, valueKey, winRatePct },
-          'Extreme win rate (0% or 100%) produces ±Infinity logit score',
-        );
+        log.warn({ modelId: model.model, valueKey, winRatePct }, 'Extreme win rate (0% or 100%) produces ±Infinity logit score');
       }
       return {
         valueKey,
