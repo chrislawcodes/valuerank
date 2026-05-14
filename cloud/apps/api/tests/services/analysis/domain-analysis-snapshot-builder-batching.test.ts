@@ -102,19 +102,20 @@ describe('buildSnapshotOutput batching', () => {
     });
   });
 
-  it('pages transcripts in bounded batches per run', async () => {
-    transcriptFindMany.mockImplementation(async (args: { where?: { runId?: string }; cursor?: { id?: string | null }; skip?: number }) => {
-      const runId = args.where?.runId;
+  it('paginates transcripts in bounded batches across chunked runs', async () => {
+    // With TRANSCRIPT_BATCH_SIZE=1000 and RUN_ID_CHUNK_SIZE=200, both runs
+    // share a single chunked query. 1100 total transcripts (600 in run-1,
+    // 500 in run-2) require two cursor-paginated pages within that chunk.
+    transcriptFindMany.mockImplementation(async (args: { where?: { runId?: { in?: string[] } | string }; cursor?: { id?: string | null }; skip?: number; take?: number }) => {
       const cursorId = args.cursor?.id;
-
-      if (runId === 'run-1' && cursorId == null) {
-        return Array.from({ length: 500 }, (_, index) => makeTranscript(runId, index));
+      if (cursorId == null) {
+        return [
+          ...Array.from({ length: 600 }, (_, index) => makeTranscript('run-1', index)),
+          ...Array.from({ length: 400 }, (_, index) => makeTranscript('run-2', index)),
+        ];
       }
-      if (runId === 'run-1' && cursorId === 'run-1-transcript-499') {
-        return [makeTranscript(runId, 500)];
-      }
-      if (runId === 'run-2' && cursorId == null) {
-        return [makeTranscript(runId, 0)];
+      if (cursorId === 'run-2-transcript-399') {
+        return Array.from({ length: 100 }, (_, index) => makeTranscript('run-2', 400 + index));
       }
       return [];
     });
@@ -149,28 +150,26 @@ describe('buildSnapshotOutput batching', () => {
 
     expect(output).toBeDefined();
 
-    expect(transcriptFindMany).toHaveBeenCalledTimes(3);
+    expect(transcriptFindMany).toHaveBeenCalledTimes(2);
     expect(transcriptFindMany).toHaveBeenNthCalledWith(1, expect.objectContaining({
-      where: { runId: 'run-1', deletedAt: null },
-      take: 500,
+      where: { runId: { in: ['run-1', 'run-2'] }, deletedAt: null },
+      take: 1000,
     }));
     expect(transcriptFindMany.mock.calls[0]?.[0]?.select).not.toHaveProperty('definitionSnapshot');
     expect(transcriptFindMany).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      where: { runId: 'run-1', deletedAt: null },
-      take: 500,
-      cursor: { id: 'run-1-transcript-499' },
+      where: { runId: { in: ['run-1', 'run-2'] }, deletedAt: null },
+      take: 1000,
+      cursor: { id: 'run-2-transcript-399' },
       skip: 1,
     }));
-    expect(transcriptFindMany).toHaveBeenNthCalledWith(3, expect.objectContaining({
-      where: { runId: 'run-2', deletedAt: null },
-      take: 500,
-    }));
 
+    // Progress fires once per page now (was once per run). completedRuns is
+    // a soft estimate based on distinct runIds seen so far across batches.
     expect(onProgress).toHaveBeenCalledTimes(2);
     expect(onProgress).toHaveBeenNthCalledWith(1, expect.objectContaining({
-      completedRuns: 1,
+      completedRuns: 2,
       totalRuns: 2,
-      currentRunId: 'run-1',
+      currentRunId: 'run-2',
     }));
     expect(onProgress).toHaveBeenNthCalledWith(2, expect.objectContaining({
       completedRuns: 2,
