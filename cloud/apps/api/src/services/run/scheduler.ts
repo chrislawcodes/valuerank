@@ -386,6 +386,39 @@ async function registerAnalysisResultJanitorSchedule(): Promise<void> {
   }
 }
 
+async function registerDomainAnalysisWarmingSchedule(): Promise<void> {
+  try {
+    const boss = getBoss();
+    // pg-boss disambiguates multiple schedules of the same job name via the
+    // ScheduleOptions `key`. Use it for both unschedule and schedule so a
+    // re-deploy replaces the existing entry rather than stacking duplicates.
+    await boss
+      .unschedule('refresh_domain_analysis_snapshot', 'warm_all_domains')
+      .catch(() => undefined);
+    // Hourly warm of the all-domains snapshot so users never trigger a cold rebuild.
+    // Payload shape matches queueDomainAnalysisRefresh() for the ALL_DOMAINS scope:
+    // domainIds is omitted (the scope resolver routes that case to ALL_DOMAINS;
+    // passing >=2 domainIds would silently land in the DOMAIN_SET branch).
+    await boss.schedule(
+      'refresh_domain_analysis_snapshot',
+      '15 * * * *',
+      {
+        scope: 'ALL_DOMAINS',
+        domainId: 'all-domains',
+        signature: null,
+        reason: 'scheduled_warm',
+      },
+      { key: 'warm_all_domains', singletonKey: 'warm_all_domains' },
+    );
+    log.info(
+      { jobType: 'refresh_domain_analysis_snapshot', cron: '15 * * * *', scope: 'ALL_DOMAINS' },
+      'Registered domain-analysis warming schedule',
+    );
+  } catch (error) {
+    log.error({ error }, 'Failed to register domain-analysis warming schedule');
+  }
+}
+
 /**
  * Stops only the recovery interval (not the activity tracking).
  */
@@ -441,6 +474,7 @@ export async function startRecoveryScheduler(): Promise<void> {
 
   await registerRunStateAuditSchedule();
   await registerAnalysisResultJanitorSchedule();
+  await registerDomainAnalysisWarmingSchedule();
 
   // Run startup recovery first
   let hasActiveRuns = false;
