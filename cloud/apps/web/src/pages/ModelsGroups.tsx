@@ -147,7 +147,7 @@ export function ModelsGroups() {
       scope: getDomainAnalysisScopeParam(effectiveScope),
     },
     pause: domainsLoading,
-    requestPolicy: 'network-only',
+    requestPolicy: 'cache-and-network',
   });
 
   const signatureOptions = useMemo<DomainAvailableSignature[]>(() => {
@@ -208,7 +208,7 @@ export function ModelsGroups() {
       signature: selectedSignature === '' ? undefined : selectedSignature,
     },
     pause: domainsLoading || activeUseLegacyQuery,
-    requestPolicy: 'network-only',
+    requestPolicy: 'cache-and-network',
   });
   const [{ data: modelsAnalysisData, fetching: modelsAnalysisFetching, error: modelsAnalysisError }] = useQuery<
     ModelsAnalysisQueryResult,
@@ -221,18 +221,18 @@ export function ModelsGroups() {
       ...(selectedSignature !== '' ? { signature: selectedSignature } : {}),
     },
     pause: domainsLoading,
-    requestPolicy: 'network-only',
+    requestPolicy: 'cache-and-network',
   });
   const [{ data: llmModelsData, error: llmModelsError }] = useQuery<LlmModelsQueryResult>({
     query: LLM_MODELS_QUERY,
     variables: { status: 'ACTIVE' },
-    requestPolicy: 'network-only',
+    requestPolicy: 'cache-and-network',
   });
   const [{ data: legacyData, fetching: legacyFetching, error: legacyError }] = useQuery<DomainAnalysisQueryResult, { domainId: string }>({
     query: DOMAIN_ANALYSIS_QUERY_LEGACY,
     variables: { domainId: effectiveDomainId },
     pause: effectiveDomainId === '' || !activeUseLegacyQuery,
-    requestPolicy: 'network-only',
+    requestPolicy: 'cache-and-network',
   });
 
   useEffect(() => {
