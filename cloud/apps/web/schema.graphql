@@ -1718,6 +1718,7 @@ type ModelsConfidenceValueResult {
 
 type ModelsStabilityModelResult {
   avgDirectionalAgreement: Float
+  avgExactAgreement: Float
   label: String!
   modelId: String!
   qualifyingVignetteCount: Int!
@@ -1741,6 +1742,7 @@ type ModelsStabilitySkippedVignette {
 
 type ModelsStabilityVignetteResult {
   avgDirectionalAgreement: Float
+  avgExactAgreement: Float
   classifiedConditionCount: Int!
   definitionId: String!
   softLeanShare: Float!

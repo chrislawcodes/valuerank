@@ -1626,6 +1626,7 @@ export type ModelsConfidenceValueResult = {
 export type ModelsStabilityModelResult = {
   __typename?: 'ModelsStabilityModelResult';
   avgDirectionalAgreement?: Maybe<Scalars['Float']['output']>;
+  avgExactAgreement?: Maybe<Scalars['Float']['output']>;
   label: Scalars['String']['output'];
   modelId: Scalars['String']['output'];
   qualifyingVignetteCount: Scalars['Int']['output'];
@@ -1652,6 +1653,7 @@ export type ModelsStabilitySkippedVignette = {
 export type ModelsStabilityVignetteResult = {
   __typename?: 'ModelsStabilityVignetteResult';
   avgDirectionalAgreement?: Maybe<Scalars['Float']['output']>;
+  avgExactAgreement?: Maybe<Scalars['Float']['output']>;
   classifiedConditionCount: Scalars['Int']['output'];
   definitionId: Scalars['String']['output'];
   softLeanShare: Scalars['Float']['output'];
@@ -3702,7 +3704,6 @@ export type RunAnomalyType =
   | 'INVALID_RESPONSE_FAILURE'
   | 'MODEL_TRANSCRIPT_SHORTFALL'
   | 'ORPHAN_TRANSCRIPT'
-  | 'RESUMMARIZE_FAILED'
   | 'SCHEDULED_COUNT_MISMATCH'
   | 'STRANDED_TRANSCRIPT'
   | 'SUMMARIZING_STALL';
@@ -4931,7 +4932,7 @@ export type ModelsWinRateStabilityQueryVariables = Exact<{
 }>;
 
 
-export type ModelsWinRateStabilityQuery = { __typename?: 'Query', modelsWinRateStability: { __typename?: 'ModelsStabilityResult', models: Array<{ __typename?: 'ModelsStabilityModelResult', modelId: string, label: string, qualifyingVignetteCount: number, avgDirectionalAgreement?: number | null, stableShare?: number | null, softLeanShare?: number | null, tornShare?: number | null, unstableShare?: number | null }>, skippedVignettes: Array<{ __typename?: 'ModelsStabilitySkippedVignette', definitionId: string, vignetteName: string, reason: string }> } };
+export type ModelsWinRateStabilityQuery = { __typename?: 'Query', modelsWinRateStability: { __typename?: 'ModelsStabilityResult', models: Array<{ __typename?: 'ModelsStabilityModelResult', modelId: string, label: string, qualifyingVignetteCount: number, avgDirectionalAgreement?: number | null, avgExactAgreement?: number | null }>, skippedVignettes: Array<{ __typename?: 'ModelsStabilitySkippedVignette', definitionId: string, vignetteName: string, reason: string }> } };
 
 export type CreatePairedVignetteMutationVariables = Exact<{
   input: CreatePairedVignetteInput;
@@ -7630,10 +7631,7 @@ export const ModelsWinRateStabilityDocument = gql`
       label
       qualifyingVignetteCount
       avgDirectionalAgreement
-      stableShare
-      softLeanShare
-      tornShare
-      unstableShare
+      avgExactAgreement
     }
     skippedVignettes {
       definitionId

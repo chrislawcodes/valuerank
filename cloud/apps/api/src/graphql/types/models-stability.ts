@@ -15,6 +15,7 @@ export type ModelsStabilityVignetteResultShape = {
   tornShare: number;
   unstableShare: number;
   avgDirectionalAgreement: number | null;
+  avgExactAgreement: number | null;
 };
 
 export type ModelsStabilityModelResultShape = {
@@ -22,6 +23,7 @@ export type ModelsStabilityModelResultShape = {
   label: string;
   qualifyingVignetteCount: number;
   avgDirectionalAgreement: number | null;
+  avgExactAgreement: number | null;
   stableShare: number | null;
   softLeanShare: number | null;
   tornShare: number | null;
@@ -57,6 +59,7 @@ builder.objectType(ModelsStabilityVignetteResultRef, {
     tornShare: t.exposeFloat('tornShare'),
     unstableShare: t.exposeFloat('unstableShare'),
     avgDirectionalAgreement: t.exposeFloat('avgDirectionalAgreement', { nullable: true }),
+    avgExactAgreement: t.exposeFloat('avgExactAgreement', { nullable: true }),
   }),
 });
 
@@ -66,6 +69,7 @@ builder.objectType(ModelsStabilityModelResultRef, {
     label: t.exposeString('label'),
     qualifyingVignetteCount: t.exposeInt('qualifyingVignetteCount'),
     avgDirectionalAgreement: t.exposeFloat('avgDirectionalAgreement', { nullable: true }),
+    avgExactAgreement: t.exposeFloat('avgExactAgreement', { nullable: true }),
     stableShare: t.exposeFloat('stableShare', { nullable: true }),
     softLeanShare: t.exposeFloat('softLeanShare', { nullable: true }),
     tornShare: t.exposeFloat('tornShare', { nullable: true }),

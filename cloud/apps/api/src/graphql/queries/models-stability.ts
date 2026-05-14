@@ -214,6 +214,7 @@ builder.queryField('modelsWinRateStability', (t) =>
           label: model.displayName,
           qualifyingVignetteCount: entries.length,
           avgDirectionalAgreement: avg?.avgDirectionalAgreement ?? null,
+          avgExactAgreement: avg?.avgExactAgreement ?? null,
           stableShare: avg?.stableShare ?? null,
           softLeanShare: avg?.softLeanShare ?? null,
           tornShare: avg?.tornShare ?? null,
@@ -227,6 +228,7 @@ builder.queryField('modelsWinRateStability', (t) =>
             tornShare: entry.stats.tornShare,
             unstableShare: entry.stats.unstableShare,
             avgDirectionalAgreement: entry.stats.avgDirectionalAgreement,
+            avgExactAgreement: entry.stats.avgExactAgreement,
           })),
         };
       });

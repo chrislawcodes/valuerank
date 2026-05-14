@@ -98,12 +98,23 @@ export function weightedMean(
   return weightedSum / totalWeight;
 }
 
+function computeExactAgreement(directionCounts: Record<string, number> | undefined | null): number | null {
+  if (directionCounts == null) return null;
+  const vals = Object.values(directionCounts);
+  if (vals.length === 0) return null;
+  const total = vals.reduce((sum, c) => sum + c, 0);
+  if (total === 0) return null;
+  const modal = Math.max(...vals);
+  return modal / total;
+}
+
 export type ConditionStats = {
   directionalAgreement: number;
   medianSignedDistance: number;
   neutralShare: number;
   maxRange: number;
   totalSamples: number;
+  exactAgreement: number | null;
 };
 
 export function aggregateConditionStats(
@@ -136,7 +147,12 @@ export function aggregateConditionStats(
 
   const maxRange = eligible.reduce((max, s) => Math.max(max, s.range ?? 0), 0);
 
-  return { directionalAgreement, medianSignedDistance, neutralShare, maxRange, totalSamples };
+  const exactAgreementEntries = eligible
+    .map((s) => ({ sampleCount: s.sampleCount, value: computeExactAgreement(s.directionCounts) }))
+    .filter((e): e is { sampleCount: number; value: number } => e.value != null);
+  const exactAgreement = weightedMean(exactAgreementEntries);
+
+  return { directionalAgreement, medianSignedDistance, neutralShare, maxRange, totalSamples, exactAgreement };
 }
 
 export type VignetteStabilityStats = {
@@ -146,6 +162,7 @@ export type VignetteStabilityStats = {
   tornShare: number;
   unstableShare: number;
   avgDirectionalAgreement: number | null;
+  avgExactAgreement: number | null;
 };
 
 export function computeVignetteStability(
@@ -157,6 +174,7 @@ export function computeVignetteStability(
   let torn = 0;
   let unstable = 0;
   const agreementValues: Array<{ value: number; weight: number }> = [];
+  const exactValues: Array<{ sampleCount: number; value: number }> = [];
 
   for (const [, scenarioIds] of conditionGroups) {
     const stats = aggregateConditionStats(scenarioIds, perScenario);
@@ -177,6 +195,9 @@ export function computeVignetteStability(
     else if (pattern === 'noisy') unstable++;
 
     agreementValues.push({ value: stats.directionalAgreement, weight: stats.totalSamples });
+    if (stats.exactAgreement != null) {
+      exactValues.push({ sampleCount: stats.totalSamples, value: stats.exactAgreement });
+    }
   }
 
   const classifiedCount = stable + softLean + torn + unstable;
@@ -185,6 +206,7 @@ export function computeVignetteStability(
   const avgDirectionalAgreement = weightedMean(
     agreementValues.map((v) => ({ sampleCount: v.weight, value: v.value })),
   );
+  const avgExactAgreement = weightedMean(exactValues);
 
   return {
     classifiedCount,
@@ -193,6 +215,7 @@ export function computeVignetteStability(
     tornShare: torn / classifiedCount,
     unstableShare: unstable / classifiedCount,
     avgDirectionalAgreement,
+    avgExactAgreement,
   };
 }
 
@@ -204,6 +227,7 @@ export function averageVignetteStability(
   tornShare: number;
   unstableShare: number;
   avgDirectionalAgreement: number | null;
+  avgExactAgreement: number | null;
 } | null {
   if (vignetteStats.length === 0) return null;
 
@@ -220,11 +244,21 @@ export function averageVignetteStability(
       ? agreements.reduce((a, b) => a + b, 0) / agreements.length
       : null;
 
+  const exactAgreements = vignetteStats
+    .filter((s) => s.avgExactAgreement != null)
+    .map((s) => s.avgExactAgreement as number);
+
+  const avgExactAgreement =
+    exactAgreements.length > 0
+      ? exactAgreements.reduce((a, b) => a + b, 0) / exactAgreements.length
+      : null;
+
   return {
     stableShare: sum('stableShare') / n,
     softLeanShare: sum('softLeanShare') / n,
     tornShare: sum('tornShare') / n,
     unstableShare: sum('unstableShare') / n,
     avgDirectionalAgreement,
+    avgExactAgreement,
   };
 }
