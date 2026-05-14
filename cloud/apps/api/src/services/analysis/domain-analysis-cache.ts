@@ -33,7 +33,7 @@ import {
   buildSnapshotOutput,
 } from './domain-analysis-snapshot-builder.js';
 import type { DomainAnalysisScope } from './domain-analysis-scope.js';
-import { DOMAIN_ANALYSIS_ALL_DOMAINS_SCOPE } from './domain-analysis-scope.js';
+import { DOMAIN_ANALYSIS_ALL_DOMAINS_SCOPE, buildDomainAnalysisDomainSetId, normalizeDomainIds } from './domain-analysis-scope.js';
 
 const log = createLogger('analysis:domain-cache');
 
@@ -586,6 +586,32 @@ export async function getDomainAnalysisResult(params: {
     }
   }
 
+  // For multi-domain scopes (DOMAIN_SET, ALL_DOMAINS) with no usable snapshot:
+  // queue async and return UPDATING immediately so the client can poll and show
+  // X/Y progress. A synchronous rebuild here would block the HTTP response for
+  // the full rebuild duration (can be minutes for large sets).
+  if (params.scope !== 'DOMAIN') {
+    const totalRuns = state.resolvedSignatureRuns.filteredSourceRunIds.length;
+    const queued = await queueDomainAnalysisRefresh({
+      scope: state.scope,
+      domainId: state.domain.id,
+      domainIds: state.scope === 'ALL_DOMAINS' ? undefined : state.domainIds,
+      signature: state.selectedSignature,
+      reason: 'cache-miss',
+    });
+    if (queued) {
+      return buildEmptyDomainAnalysisResult({
+        domainId: state.domain.id,
+        domainName: state.domain.name,
+        activeModels,
+        generatedAt: new Date(),
+        cacheStatus: DOMAIN_ANALYSIS_CACHE_STATUS.UPDATING,
+        unavailableReason: 'Building analysis for this domain combination. Refresh in a moment.',
+        refreshProgress: { completedRuns: 0, totalRuns },
+      });
+    }
+  }
+
   const refreshed = await refreshDomainAnalysisSnapshot({
     scope: state.scope,
     domainId: state.domain.id,
@@ -606,47 +632,76 @@ export async function getDomainAnalysisResult(params: {
 }
 
 /**
- * On startup, queue background refreshes for any domain whose analysis snapshot is stale.
- * Runs non-blocking after the queue orchestrator is ready. Skips domains with no snapshot
- * (built on first page load) and domains whose rebuild is already in progress.
+ * On startup, queue background refreshes for priority analysis combinations that are
+ * stale or have never been built. Priority set:
+ *   1. ALL_DOMAINS
+ *   2. Every individual domain
+ *   3. All domains minus "Motivation for Invasion Choice" (the most-used domain set)
+ *
+ * Runs non-blocking after the queue orchestrator is ready.
+ * Skips any combination whose rebuild is already in progress.
  */
 export async function queueStaleAnalysesOnStartup(): Promise<void> {
   const domains = await db.domain.findMany({
-    select: { id: true },
+    select: { id: true, name: true },
   });
 
   let queued = 0;
-  for (const domain of domains) {
+
+  // Helper: check one combination and queue a refresh if stale or never built.
+  async function checkAndQueue(
+    scope: DomainAnalysisScope,
+    domainId: string,
+    domainIds: string[] | undefined,
+    logContext: Record<string, unknown>,
+  ): Promise<void> {
     try {
       const state = await prepareDomainAnalysisState({
-        scope: 'DOMAIN',
-        domainId: domain.id,
+        scope,
+        domainId,
+        domainIds,
         requestedSignature: null,
       });
 
-      if (state.definitions.length === 0) continue;
+      if (state.definitions.length === 0) return;
 
-      const currentSnapshot = await getCurrentSnapshot(db, state.scope, domain.id, state.configSignature);
-      if (currentSnapshot == null) continue;
+      const currentSnapshot = await getCurrentSnapshot(db, state.scope, domainId, state.configSignature);
+      const parsedCurrent = currentSnapshot != null ? parseSnapshotOutput(currentSnapshot.output) : null;
 
-      const parsedCurrent = parseSnapshotOutput(currentSnapshot.output);
-      if (parsedCurrent == null) continue; // rebuild already in progress
+      if (parsedCurrent == null && currentSnapshot != null) return; // rebuild already in progress
 
-      if (currentSnapshot.inputHash === state.inputHash) continue; // already fresh
+      if (currentSnapshot != null && currentSnapshot.inputHash === state.inputHash) return; // already fresh
 
       const didQueue = await queueDomainAnalysisRefresh({
         scope: state.scope,
-        domainId: domain.id,
+        domainId,
+        domainIds: scope === 'ALL_DOMAINS' ? undefined : domainIds,
         signature: state.selectedSignature,
-        reason: 'startup-stale',
+        reason: currentSnapshot == null ? 'startup-never-built' : 'startup-stale',
       });
       if (didQueue) queued += 1;
     } catch (err) {
-      log.warn({ err, domainId: domain.id }, 'startup stale check failed for domain');
+      log.warn({ err, ...logContext }, 'startup stale check failed');
     }
   }
 
-  log.info({ queued, total: domains.length }, 'Startup domain analysis stale check complete');
+  // 1. ALL_DOMAINS
+  await checkAndQueue('ALL_DOMAINS', DOMAIN_ANALYSIS_ALL_DOMAINS_SCOPE, undefined, { scope: 'ALL_DOMAINS' });
+
+  // 2. Individual domains
+  for (const domain of domains) {
+    await checkAndQueue('DOMAIN', domain.id, undefined, { scope: 'DOMAIN', domainId: domain.id });
+  }
+
+  // 3. All domains minus "Motivation for Invasion Choice" (most-used multi-domain combination)
+  const motivationDomain = domains.find((d) => d.name.includes('Motivation for Invasion'));
+  if (motivationDomain != null) {
+    const domainSetIds = normalizeDomainIds(domains.filter((d) => d.id !== motivationDomain.id).map((d) => d.id));
+    const domainSetId = buildDomainAnalysisDomainSetId(domainSetIds);
+    await checkAndQueue('DOMAIN_SET', domainSetId, domainSetIds, { scope: 'DOMAIN_SET', size: domainSetIds.length });
+  }
+
+  log.info({ queued }, 'Startup priority domain analysis check complete');
 }
 
 /**
