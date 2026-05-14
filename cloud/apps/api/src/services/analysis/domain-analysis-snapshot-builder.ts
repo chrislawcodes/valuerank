@@ -240,22 +240,35 @@ export async function buildSnapshotOutput(
     }
   }
 
-  const TRANSCRIPT_BATCH_SIZE = 500;
+  const TRANSCRIPT_BATCH_SIZE = 1000;
+  const RUN_ID_CHUNK_SIZE = 200;
   const cellMap = new Map<string, CellCounts>();
   const totalRuns = state.resolvedSignatureRuns.filteredSourceRunIds.length;
-  let completedRuns = 0;
+  // completedRuns is a soft estimate: a runId is counted as soon as we see any
+  // transcript for it in a cross-run batch, not when all its transcripts are done.
+  const seenRunIds = new Set<string>();
 
   if (state.resolvedSignatureRuns.filteredSourceRunIds.length > 0) {
-    // Keep each transcript read bounded so large domains do not exhaust memory
-    // or the Prisma bridge. Aggregate each batch into the shared cell map.
-    for (const runId of state.resolvedSignatureRuns.filteredSourceRunIds) {
+    // Batch transcript reads across multiple runs per query so that a domain
+    // with thousands of small runs does not pay one round-trip per run. Each
+    // chunk of run IDs is cursor-paginated to keep memory bounded.
+    for (
+      let chunkStart = 0;
+      chunkStart < state.resolvedSignatureRuns.filteredSourceRunIds.length;
+      chunkStart += RUN_ID_CHUNK_SIZE
+    ) {
+      const runIdChunk = state.resolvedSignatureRuns.filteredSourceRunIds.slice(
+        chunkStart,
+        chunkStart + RUN_ID_CHUNK_SIZE,
+      );
+
       let cursorTranscriptId: string | null = null;
       let hasMore = true;
 
       while (hasMore) {
         const batch = (await db.transcript.findMany({
           where: {
-            runId,
+            runId: { in: runIdChunk },
             deletedAt: null,
           },
           select: {
@@ -299,20 +312,24 @@ export async function buildSnapshotOutput(
           cellMap.set(key, existing);
         }
 
-        cursorTranscriptId = batch[batch.length - 1]?.id ?? null;
+        for (const transcript of batch) {
+          seenRunIds.add(transcript.runId);
+        }
+
+        const lastRow = batch[batch.length - 1];
+        cursorTranscriptId = lastRow?.id ?? null;
         if (batch.length < TRANSCRIPT_BATCH_SIZE) {
           hasMore = false;
         }
-      }
 
-      completedRuns += 1;
-      if (options?.onProgress != null) {
-        await options.onProgress({
-          completedRuns,
-          totalRuns,
-          currentRunId: runId,
-          updatedAt: new Date().toISOString(),
-        });
+        if (options?.onProgress != null) {
+          await options.onProgress({
+            completedRuns: seenRunIds.size,
+            totalRuns,
+            currentRunId: lastRow?.runId ?? runIdChunk[runIdChunk.length - 1] ?? '',
+            updatedAt: new Date().toISOString(),
+          });
+        }
       }
     }
   }
