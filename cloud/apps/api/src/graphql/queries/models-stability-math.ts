@@ -157,6 +157,7 @@ export function aggregateConditionStats(
 
 export type VignetteStabilityStats = {
   classifiedCount: number;
+  totalTranscriptCount: number;
   stableShare: number;
   softLeanShare: number;
   tornShare: number;
@@ -173,6 +174,7 @@ export function computeVignetteStability(
   let softLean = 0;
   let torn = 0;
   let unstable = 0;
+  let totalTranscriptCount = 0;
   const agreementValues: Array<{ value: number; weight: number }> = [];
   const exactValues: Array<{ sampleCount: number; value: number }> = [];
 
@@ -194,6 +196,7 @@ export function computeVignetteStability(
     else if (pattern === 'torn') torn++;
     else if (pattern === 'noisy') unstable++;
 
+    totalTranscriptCount += stats.totalSamples;
     agreementValues.push({ value: stats.directionalAgreement, weight: stats.totalSamples });
     if (stats.exactAgreement != null) {
       exactValues.push({ sampleCount: stats.totalSamples, value: stats.exactAgreement });
@@ -210,6 +213,7 @@ export function computeVignetteStability(
 
   return {
     classifiedCount,
+    totalTranscriptCount,
     stableShare: stable / classifiedCount,
     softLeanShare: softLean / classifiedCount,
     tornShare: torn / classifiedCount,

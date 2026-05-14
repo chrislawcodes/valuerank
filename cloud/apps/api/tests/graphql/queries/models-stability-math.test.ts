@@ -426,6 +426,7 @@ describe('averageVignetteStability', () => {
       averageVignetteStability([
         {
           classifiedCount: 10,
+          totalTranscriptCount: 50,
           stableShare: 1,
           softLeanShare: 0,
           tornShare: 0,
@@ -435,6 +436,7 @@ describe('averageVignetteStability', () => {
         },
         {
           classifiedCount: 2,
+          totalTranscriptCount: 10,
           stableShare: 0,
           softLeanShare: 1,
           tornShare: 0,
@@ -458,6 +460,7 @@ describe('averageVignetteStability', () => {
       averageVignetteStability([
         {
           classifiedCount: 10,
+          totalTranscriptCount: 50,
           stableShare: 1,
           softLeanShare: 0,
           tornShare: 0,
@@ -467,6 +470,7 @@ describe('averageVignetteStability', () => {
         },
         {
           classifiedCount: 2,
+          totalTranscriptCount: 10,
           stableShare: 0,
           softLeanShare: 1,
           tornShare: 0,

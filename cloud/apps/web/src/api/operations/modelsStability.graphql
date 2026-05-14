@@ -3,7 +3,7 @@ query ModelsWinRateStability($signature: String, $domainId: ID, $domainIds: [ID!
     models {
       modelId
       label
-      qualifyingVignetteCount
+      totalTranscriptCount
       avgDirectionalAgreement
       avgExactAgreement
     }
