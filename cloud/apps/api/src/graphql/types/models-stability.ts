@@ -22,6 +22,7 @@ export type ModelsStabilityModelResultShape = {
   modelId: string;
   label: string;
   qualifyingVignetteCount: number;
+  totalTranscriptCount: number;
   avgDirectionalAgreement: number | null;
   avgExactAgreement: number | null;
   stableShare: number | null;
@@ -68,6 +69,7 @@ builder.objectType(ModelsStabilityModelResultRef, {
     modelId: t.exposeString('modelId'),
     label: t.exposeString('label'),
     qualifyingVignetteCount: t.exposeInt('qualifyingVignetteCount'),
+    totalTranscriptCount: t.exposeInt('totalTranscriptCount'),
     avgDirectionalAgreement: t.exposeFloat('avgDirectionalAgreement', { nullable: true }),
     avgExactAgreement: t.exposeFloat('avgExactAgreement', { nullable: true }),
     stableShare: t.exposeFloat('stableShare', { nullable: true }),

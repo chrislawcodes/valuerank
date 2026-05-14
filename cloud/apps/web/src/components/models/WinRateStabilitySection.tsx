@@ -6,7 +6,7 @@ import { Loading } from '../ui/Loading';
 
 type SortKey =
   | 'label'
-  | 'qualifyingVignetteCount'
+  | 'totalTranscriptCount'
   | 'avgDirectionalAgreement'
   | 'avgExactAgreement';
 type SortDir = 'asc' | 'desc';
@@ -30,7 +30,7 @@ function pct(value: number | null | undefined): string {
 function getSortValue(model: ModelsStabilityModelResult, key: SortKey): string | number | null {
   switch (key) {
     case 'label': return model.label;
-    case 'qualifyingVignetteCount': return model.qualifyingVignetteCount;
+    case 'totalTranscriptCount': return model.totalTranscriptCount;
     case 'avgDirectionalAgreement': return model.avgDirectionalAgreement ?? null;
     case 'avgExactAgreement': return model.avgExactAgreement ?? null;
   }
@@ -164,41 +164,29 @@ export function WinRateStabilitySection({
                 onSort={setSort}
               />
               <ColHeader
-                label="Vignettes (N)"
-                tooltip="Number of qualifying vignettes with sufficient repeat data"
-                sortKey="qualifyingVignetteCount"
+                label="Transcripts (N)"
+                tooltip="Total transcripts analyzed across qualifying conditions"
+                sortKey="totalTranscriptCount"
                 sort={sort}
                 onSort={setSort}
               />
             </tr>
           </thead>
           <tbody>
-            {sorted.map((model) => {
-              const hasData = model.qualifyingVignetteCount > 0;
-              const isLowN = hasData && model.qualifyingVignetteCount < 5;
-              return (
-                <tr key={model.modelId} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="whitespace-nowrap px-2 py-2 font-medium text-gray-900">{model.label}</td>
-                  <td className="px-2 py-2 text-right font-mono text-gray-700">
-                    {pct(model.avgDirectionalAgreement)}
-                  </td>
-                  <td className="px-2 py-2 text-right font-mono text-gray-700">
-                    {pct(model.avgExactAgreement)}
-                  </td>
-                  <td className="px-2 py-2 text-right font-mono text-gray-700">
-                    {model.qualifyingVignetteCount}
-                    {isLowN && (
-                      <span
-                        className="ml-1.5 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-sans text-amber-800"
-                        title="Low vignette count — results may be unreliable"
-                      >
-                        Low N
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
+            {sorted.map((model) => (
+              <tr key={model.modelId} className="border-b border-gray-100 hover:bg-gray-50">
+                <td className="whitespace-nowrap px-2 py-2 font-medium text-gray-900">{model.label}</td>
+                <td className="px-2 py-2 text-right font-mono text-gray-700">
+                  {pct(model.avgDirectionalAgreement)}
+                </td>
+                <td className="px-2 py-2 text-right font-mono text-gray-700">
+                  {pct(model.avgExactAgreement)}
+                </td>
+                <td className="px-2 py-2 text-right font-mono text-gray-700">
+                  {model.totalTranscriptCount}
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>

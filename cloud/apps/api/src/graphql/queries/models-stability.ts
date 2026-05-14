@@ -213,6 +213,7 @@ builder.queryField('modelsWinRateStability', (t) =>
           modelId: model.modelId,
           label: model.displayName,
           qualifyingVignetteCount: entries.length,
+          totalTranscriptCount: entries.reduce((sum, e) => sum + e.stats.totalTranscriptCount, 0),
           avgDirectionalAgreement: avg?.avgDirectionalAgreement ?? null,
           avgExactAgreement: avg?.avgExactAgreement ?? null,
           stableShare: avg?.stableShare ?? null,

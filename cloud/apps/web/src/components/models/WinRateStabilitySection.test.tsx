@@ -6,21 +6,21 @@ import type { ModelsStabilityModelResult, ModelsStabilitySkippedVignette } from 
 
 function makeModel(overrides: Partial<ModelsStabilityModelResult> & { modelId: string; label: string }): ModelsStabilityModelResult {
   return {
-    qualifyingVignetteCount: 10,
+    totalTranscriptCount: 40,
     avgDirectionalAgreement: 0.75,
     avgExactAgreement: 0.60,
     ...overrides,
   };
 }
 
-const MODEL_A = makeModel({ modelId: 'model-a', label: 'Model A', avgDirectionalAgreement: 0.8, qualifyingVignetteCount: 10 });
-const MODEL_B = makeModel({ modelId: 'model-b', label: 'Model B', avgDirectionalAgreement: 0.3, qualifyingVignetteCount: 6 });
+const MODEL_A = makeModel({ modelId: 'model-a', label: 'Model A', avgDirectionalAgreement: 0.8, totalTranscriptCount: 40 });
+const MODEL_B = makeModel({ modelId: 'model-b', label: 'Model B', avgDirectionalAgreement: 0.3, totalTranscriptCount: 24 });
 const MODEL_C = makeModel({
   modelId: 'model-c',
   label: 'Model C',
   avgDirectionalAgreement: null,
   avgExactAgreement: null,
-  qualifyingVignetteCount: 0,
+  totalTranscriptCount: 0,
 });
 
 describe('WinRateStabilitySection', () => {
@@ -35,7 +35,7 @@ describe('WinRateStabilitySection', () => {
     );
 
     expect(screen.getByRole('heading', { name: /response consistency by model/i })).toBeTruthy();
-    expect(screen.getAllByText(/vignettes \(n\)/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/transcripts \(n\)/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/direction agree/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/exact agree/i).length).toBeGreaterThan(0);
   });
@@ -74,32 +74,6 @@ describe('WinRateStabilitySection', () => {
       />,
     );
     expect(screen.getByText(/something went wrong/i)).toBeTruthy();
-  });
-
-  it('shows Low N badge for models with fewer than 5 qualifying vignettes', () => {
-    const lowNModel = makeModel({ modelId: 'low', label: 'Low N Model', qualifyingVignetteCount: 3 });
-    render(
-      <WinRateStabilitySection
-        models={[lowNModel, MODEL_A]}
-        skippedVignettes={[]}
-        fetching={false}
-        errorMessage={null}
-      />,
-    );
-    expect(screen.getByText('Low N')).toBeTruthy();
-    expect(screen.queryAllByText('Low N').length).toBe(1);
-  });
-
-  it('does not show Low N badge for models with 0 qualifying vignettes', () => {
-    render(
-      <WinRateStabilitySection
-        models={[MODEL_C]}
-        skippedVignettes={[]}
-        fetching={false}
-        errorMessage={null}
-      />,
-    );
-    expect(screen.queryByText('Low N')).toBeNull();
   });
 
   it('renders skipped vignettes warning block when skips are present', () => {

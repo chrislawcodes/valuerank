@@ -1722,6 +1722,7 @@ type ModelsStabilityModelResult {
   label: String!
   modelId: String!
   qualifyingVignetteCount: Int!
+  totalTranscriptCount: Int!
   softLeanShare: Float
   stableShare: Float
   tornShare: Float
