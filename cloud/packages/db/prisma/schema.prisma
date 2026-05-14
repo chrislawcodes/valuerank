@@ -553,6 +553,7 @@ model Transcript {
   @@index([deletedAt])
   @@index([sampleIndex])
   @@index([runId, summarizedAt])
+  @@index([runId, deletedAt, id])
   // NOTE: This table also has a partial unique index that is not declared
   // here because Prisma 5.7 does not support partial unique indexes in
   // schema.prisma syntax (no WHERE clause on @@unique). The index lives in:
