@@ -21,7 +21,8 @@ Files in scope:
 - [x] In `clusterVisualizationUtils.ts`, add a pure helper `meanInternalKappa(memberModelIds, visibleModelIdSet, pairwiseKappaMap)` with this exact precedence: (1) one member → not-computable `singleton`; (2) any member not in `visibleModelIdSet` → not-computable `members-outside-selection`; (3) any member pair missing from `pairwiseKappaMap` → not-computable `no-shared-scenarios` (any missing pair, not only all); (4) otherwise → `value` with the unweighted mean over every member pair (denominator is the full pair count). Reuse the same model-id space `pairwiseKappaMap` is keyed by.
 - [x] In `cloud/apps/web/tests/components/clusterVisualizationUtils.test.ts`, add unit tests for the helper: all-pairs-present 3-model cluster returns the correct mean (denominator = 3 pairs); singleton → `singleton`; a member outside the visible set → `members-outside-selection`; one member pair missing → `no-shared-scenarios` (not a partial mean); precedence singleton + member-outside-selection → `singleton`; precedence member-outside-selection + a missing pair → `members-outside-selection`.
 - [x] From `cloud/`, run `npm run lint --workspace @valuerank/web` and `npm run build --workspace @valuerank/web` and the focused test for `clusterVisualizationUtils.test.ts`; fix all errors. Do not use `any` or `@ts-ignore`. Commit the slice.
-- [CHECKPOINT]
+
+> Note: Codex implemented Slice 1 and Slice 2 in a single dispatch (commit `20754ac`), so the mid-file `[CHECKPOINT]` boundary was removed — the feature is one implementation slice with a single diff checkpoint at the end. The slice structure below is kept for traceability.
 
 ## Slice 2: Thread data, render the overlay, extend the help panel
 
