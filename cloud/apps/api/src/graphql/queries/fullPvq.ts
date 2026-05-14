@@ -264,7 +264,7 @@ builder.queryField('fullPvqResults', (t) =>
         return { models: [], categories: [] };
       }
 
-      const plan = experiment.analysisPlan as FullPvqAnalysisPlan;
+      const plan = experiment.analysisPlan;
       if (plan.straightDefinitionId === undefined || plan.desireDefinitionId === undefined) {
         return { models: [], categories: [] };
       }

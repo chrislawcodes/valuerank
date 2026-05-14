@@ -31,6 +31,9 @@ import { AnalysisConditionDetail } from './pages/AnalysisConditionDetail';
 import { AnalysisTranscripts } from './pages/AnalysisTranscripts';
 import { Survey } from './pages/Survey';
 import { SurveyResults } from './pages/SurveyResults';
+import { FullPvqSurvey } from './pages/FullPvqSurvey';
+import { FullPvqResults } from './pages/FullPvqResults';
+import { FullPvqCellDetail } from './pages/FullPvqCellDetail';
 import { SettingsAccount } from './pages/SettingsAccount';
 import { SettingsSystemHealth } from './pages/SettingsSystemHealth';
 import { SettingsModels } from './pages/SettingsModels';
@@ -294,6 +297,30 @@ function App() {
               element={
                 <ProtectedLayout requiredRole="ADMIN">
                   <SurveyResults />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/archive/full-pvq"
+              element={
+                <ProtectedLayout requiredRole="ADMIN">
+                  <FullPvqSurvey />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/archive/full-pvq-results"
+              element={
+                <ProtectedLayout requiredRole="ADMIN">
+                  <FullPvqResults />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/archive/full-pvq-cell"
+              element={
+                <ProtectedLayout requiredRole="ADMIN">
+                  <FullPvqCellDetail />
                 </ProtectedLayout>
               }
             />

@@ -1,8 +1,9 @@
-import { db, Prisma } from '@valuerank/db';
-import { ValidationError } from '@valuerank/shared';
+import { db } from '@valuerank/db';
+import type { Prisma } from '@valuerank/db';
+import { AuthenticationError, NotFoundError, ValidationError } from '@valuerank/shared';
 import { builder } from '../builder.js';
 import type { Context } from '../context.js';
-import { ExperimentRef } from '../types/refs.js';
+import { startRun as startRunService } from '../../services/run/index.js';
 import { PVQ_QUESTIONS, type PvqQuestion } from '../../utils/pvq-questions.js';
 
 type FullPvqFraming = 'straight' | 'desire_for_human';
@@ -13,6 +14,20 @@ type FullPvqAnalysisPlan = {
   straightDefinitionId?: string;
   desireDefinitionId?: string;
   deletedAt?: string;
+};
+
+type FullPvqStartRunResultShape = {
+  runId: string;
+  jobCount: number;
+};
+
+type FullPvqCreateResultShape = {
+  id: string;
+  name: string;
+  createdAt: Date;
+  straightTrialCount: number;
+  desireTrialCount: number;
+  analysisPlan: unknown;
 };
 
 function getFullPvqAnalysisPlan(analysisPlan: unknown): FullPvqAnalysisPlan | null {
@@ -27,6 +42,24 @@ function getFullPvqAnalysisPlan(analysisPlan: unknown): FullPvqAnalysisPlan | nu
 
   return plan as FullPvqAnalysisPlan;
 }
+
+const FullPvqStartRunResultRef = builder.objectRef<FullPvqStartRunResultShape>('FullPvqStartRunResult').implement({
+  fields: (t) => ({
+    runId: t.exposeID('runId'),
+    jobCount: t.exposeInt('jobCount'),
+  }),
+});
+
+const FullPvqCreateResultRef = builder.objectRef<FullPvqCreateResultShape>('FullPvqCreateResult').implement({
+  fields: (t) => ({
+    id: t.exposeID('id'),
+    name: t.exposeString('name'),
+    createdAt: t.field({ type: 'DateTime', resolve: (parent) => parent.createdAt }),
+    straightTrialCount: t.exposeInt('straightTrialCount'),
+    desireTrialCount: t.exposeInt('desireTrialCount'),
+    analysisPlan: t.expose('analysisPlan', { type: 'JSON', nullable: true }),
+  }),
+});
 
 function buildIntro(framing: FullPvqFraming): string {
   if (framing === 'desire_for_human') {
@@ -132,7 +165,7 @@ async function softDeleteFullPvqSurvey(experimentId: string, ctx: Pick<Context, 
 
 builder.mutationField('createFullPvq', (t) =>
   t.field({
-    type: ExperimentRef,
+    type: FullPvqCreateResultRef,
     description: 'Create a full PVQ survey with straight and desire-for-human framings.',
     args: {
       name: t.arg.string({ required: true }),
@@ -216,7 +249,14 @@ builder.mutationField('createFullPvq', (t) =>
       });
 
       ctx.log.info({ surveyId: result.id }, 'Full PVQ survey created');
-      return result;
+      return {
+        id: result.id,
+        name: result.name,
+        createdAt: result.createdAt,
+        straightTrialCount: 0,
+        desireTrialCount: 0,
+        analysisPlan: result.analysisPlan,
+      };
     },
   })
 );
@@ -237,6 +277,61 @@ builder.mutationField('deleteFullPvq', (t) =>
 
       await softDeleteFullPvqSurvey(surveyId, ctx);
       return true;
+    },
+  })
+);
+
+builder.mutationField('startFullPvqRun', (t) =>
+  t.field({
+    type: FullPvqStartRunResultRef,
+    description: 'Start a full PVQ run for one survey framing.',
+    args: {
+      surveyId: t.arg.id({ required: true }),
+      framing: t.arg.string({ required: true }),
+      models: t.arg.stringList({ required: true }),
+      samplesPerScenario: t.arg.int({ required: false }),
+    },
+    resolve: async (_root, args, ctx) => {
+      if (ctx.user === null || ctx.user === undefined) {
+        throw new AuthenticationError('Authentication required');
+      }
+
+      const framing = String(args.framing);
+      if (framing !== 'straight' && framing !== 'desire_for_human') {
+        throw new ValidationError('Invalid framing. Expected straight or desire_for_human.');
+      }
+
+      const surveyId = String(args.surveyId);
+      const experiment = await db.experiment.findUnique({ where: { id: surveyId } });
+      if (experiment === null) {
+        throw new NotFoundError('Survey', surveyId);
+      }
+
+      const plan = getFullPvqAnalysisPlan(experiment.analysisPlan);
+      if (plan === null || (plan.deletedAt !== null && plan.deletedAt !== undefined)) {
+        throw new NotFoundError('Survey', surveyId);
+      }
+
+      const definitionId = framing === 'straight' ? plan.straightDefinitionId : plan.desireDefinitionId;
+      if (definitionId === null || definitionId === undefined || definitionId === '') {
+        throw new ValidationError('Survey is not fully configured');
+      }
+
+      const result = await startRunService({
+        definitionId,
+        models: args.models.map(String),
+        samplesPerScenario: args.samplesPerScenario ?? 1,
+        experimentId: surveyId,
+        userId: ctx.user.id,
+        configExtras: { fullPvqFraming: framing },
+      });
+
+      ctx.log.info({ surveyId, framing, runId: result.run.id }, 'Full PVQ run started');
+
+      return {
+        runId: result.run.id,
+        jobCount: result.jobCount,
+      };
     },
   })
 );

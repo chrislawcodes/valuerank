@@ -45,6 +45,8 @@ const archiveMenuItems: MenuItem[] = [
   { name: 'Overview', path: '/archive', aliases: [] as string[] },
   { name: 'Legacy Survey Work', path: '/archive/surveys' },
   { name: 'Legacy Survey Results', path: '/archive/survey-results' },
+  { name: 'Full PVQ', path: '/archive/full-pvq' },
+  { name: 'Full PVQ Results', path: '/archive/full-pvq-results' },
   { name: 'Circumplex', path: '/archive/circumplex' },
 ];
 
