@@ -329,7 +329,7 @@ export function PressureSensitivity() {
 
       {transcriptCapHit && (
         <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-          Coverage warning: this report scanned the maximum 500,000 transcripts and stopped before reaching the end of the data. Win rates and CIs may be biased toward earlier transcripts in the corpus.
+          Coverage warning: this report scanned the maximum 1,000,000 transcripts and stopped before reaching the end of the data. Win rates and CIs may be biased toward earlier transcripts in the corpus.
           {pressureConditionExcludedCount > 0 && (
             <>{' '}Together with the {pressureConditionExcludedCount} excluded pressure condition{pressureConditionExcludedCount === 1 ? '' : 's'}, these limits are a lower bound on pressure sensitivity — the true effect could be larger.</>
           )}
