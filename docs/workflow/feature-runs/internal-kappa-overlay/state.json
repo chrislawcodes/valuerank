@@ -652,6 +652,114 @@
       "files_written": 2,
       "subprocess_invocations": 14,
       "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "diff",
+      "ts": "2026-05-14T15:57:45Z",
+      "wall_seconds": 0.291,
+      "input_bytes_read": 89352,
+      "output_bytes_written": 54714,
+      "files_read": 6,
+      "files_written": 2,
+      "subprocess_invocations": 14,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "diff",
+      "ts": "2026-05-14T15:57:52Z",
+      "wall_seconds": 0.294,
+      "input_bytes_read": 90294,
+      "output_bytes_written": 55342,
+      "files_read": 6,
+      "files_written": 2,
+      "subprocess_invocations": 14,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "diff",
+      "ts": "2026-05-14T15:58:04Z",
+      "wall_seconds": 0.285,
+      "input_bytes_read": 91236,
+      "output_bytes_written": 55970,
+      "files_read": 6,
+      "files_written": 2,
+      "subprocess_invocations": 14,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "diff",
+      "ts": "2026-05-14T15:58:12Z",
+      "wall_seconds": 0.294,
+      "input_bytes_read": 92178,
+      "output_bytes_written": 56598,
+      "files_read": 6,
+      "files_written": 2,
+      "subprocess_invocations": 14,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "diff",
+      "ts": "2026-05-14T15:58:40Z",
+      "wall_seconds": 0.3,
+      "input_bytes_read": 93120,
+      "output_bytes_written": 57226,
+      "files_read": 6,
+      "files_written": 2,
+      "subprocess_invocations": 14,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "diff",
+      "ts": "2026-05-14T16:00:38Z",
+      "wall_seconds": 0.245,
+      "input_bytes_read": 124009,
+      "output_bytes_written": 86671,
+      "files_read": 9,
+      "files_written": 3,
+      "subprocess_invocations": 12,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "diff",
+      "ts": "2026-05-14T16:01:01Z",
+      "wall_seconds": 0.249,
+      "input_bytes_read": 95717,
+      "output_bytes_written": 58272,
+      "files_read": 8,
+      "files_written": 2,
+      "subprocess_invocations": 12,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "diff",
+      "ts": "2026-05-14T16:02:17Z",
+      "wall_seconds": 0.278,
+      "input_bytes_read": 96659,
+      "output_bytes_written": 58900,
+      "files_read": 8,
+      "files_written": 2,
+      "subprocess_invocations": 12,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "diff",
+      "ts": "2026-05-14T16:04:13Z",
+      "wall_seconds": 0.644,
+      "input_bytes_read": 323754,
+      "output_bytes_written": 179915,
+      "files_read": 23,
+      "files_written": 7,
+      "subprocess_invocations": 36,
+      "ttl_crossed": false
     }
   ],
   "stages": {
@@ -686,9 +794,10 @@
       "initial_sha": "3146be0a91706f40fc1fd56b53a7e5fc84c8342bc3c8dea5111104ac3daa113d"
     },
     "diff": {
-      "adversarial_rounds": 1,
+      "adversarial_rounds": 2,
       "annotations": [],
       "adversarial_sha_history": [
+        "bfcee5048645775cf5f09d0371f21b2e74de86a8c07b85b2ff4c7d60746a507a",
         "bfcee5048645775cf5f09d0371f21b2e74de86a8c07b85b2ff4c7d60746a507a"
       ],
       "initial_sha": "bfcee5048645775cf5f09d0371f21b2e74de86a8c07b85b2ff4c7d60746a507a",
@@ -699,8 +808,8 @@
   "schema_version": 2,
   "checkpoint_progress": {
     "index": 1,
-    "markers_sha": "ef206e3e31827e11a33d832b06a342e2c90a0d62945a1f341902cfaeba42a3c5",
-    "last_diff_head_sha": "02967ae8eac4dc1c22fbaf33927bf759f0a25179"
+    "markers_sha": "3bef0a0f52da4b6dc2780ec3745d90442f5c28c177507f7a2a9104dc0d884685",
+    "last_diff_head_sha": "3db4fa06760bb7816a8e1923b5afc095754a3fca"
   },
   "spec_adversarial_rounds": 0,
   "annotations": [
@@ -726,10 +835,16 @@
   "plan_adversarial_rounds": 0,
   "tasks_adversarial_rounds": 1,
   "last_action_result": {
-    "next": "dispatch_next_slice_to_codex",
+    "next": "deliver",
     "reason": "diff checkpoint completed",
     "blockers": []
   },
-  "diff_adversarial_rounds": 1,
-  "dirty_overrides": {}
+  "diff_adversarial_rounds": 2,
+  "dirty_overrides": {
+    "allowed_dirty_paths": [
+      "docs/workflow/feature-runs/internal-kappa-overlay"
+    ],
+    "used": true,
+    "updated_at": 1778774653
+  }
 }

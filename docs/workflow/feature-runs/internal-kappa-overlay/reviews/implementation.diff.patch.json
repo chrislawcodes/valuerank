@@ -1,12 +1,14 @@
 {
   "repo_root": ".",
-  "git_head_sha": "02967ae8eac4dc1c22fbaf33927bf759f0a25179",
+  "git_head_sha": "3db4fa06760bb7816a8e1923b5afc095754a3fca",
   "git_base_ref": "origin/main",
   "git_base_sha": "063e448dc4a83f6b92b19fbae7231485ca4e6f76",
   "paths": [
     "cloud/apps/web"
   ],
-  "allowed_dirty_paths": [],
+  "allowed_dirty_paths": [
+    "docs/workflow/feature-runs/internal-kappa-overlay"
+  ],
   "untracked_files_included": [],
   "artifact_path": "docs/workflow/feature-runs/internal-kappa-overlay/reviews/implementation.diff.patch",
   "allow_empty_diff": false

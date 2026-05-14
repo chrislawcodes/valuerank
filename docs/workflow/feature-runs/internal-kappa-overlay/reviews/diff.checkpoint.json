@@ -3,7 +3,9 @@
   "stage": "diff",
   "artifact_path": "docs/workflow/feature-runs/internal-kappa-overlay/reviews/implementation.diff.patch",
   "git_base_ref": "origin/main",
-  "allowed_dirty_paths": [],
+  "allowed_dirty_paths": [
+    "docs/workflow/feature-runs/internal-kappa-overlay"
+  ],
   "required_reviews": [],
   "max_artifact_chars": 50000,
   "max_context_chars": 60000,
