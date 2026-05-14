@@ -37,6 +37,7 @@
 
 | Feature | Branch | Status | Notes |
 |---------|--------|--------|-------|
+| **internal-kappa-overlay / model-groups-v2** | `claude/distracted-goodall-27c98d` | 🟢 Done | PR #1088 squash-merged 2026-05-14 (SHA `5dd006ec`). New **Model Groups V2** page (`/models/v2`, in the Models nav) — same as `/models` plus a per-cluster internal-agreement overlay: mean pairwise Cohen's kappa, warning style below 0.4, explained "—" placeholders for singleton / out-of-selection / no-shared-scenarios clusters. The overlay is an opt-in `showInternalAgreement` prop on `ModelGroupsSection`; the original `/models` page renders with it off and is unchanged — verified by the untouched pre-existing tests still passing and the "Verify report snapshots vs production" CI check. Built via Feature Factory (spec/plan/tasks adversarially reviewed by Codex + Gemini); the V1/V2 split was a Direct Path follow-up. Artifacts under `docs/workflow/feature-runs/internal-kappa-overlay/`. |
 | **model-groups-fast-fail-debug** | `codex/model-groups-fast-fail-debug` | 🟢 Done locally | Model Groups and the related model report screens now surface traceable GraphQL errors with query/context details, so debugging is immediate. Added regression tests for the fatal paths and verified the web build. |
 | **forest-plot-pairwise-drawer** | `—` | 🟢 Done locally | Pairwise Win Rate Matrix cells now open a right-side drawer for single-model, single-domain, signed selections. The drawer fetches pair detail data, renders a forest plot with split-by-direction toggle, summary band, I² label, inline expansion for averaged rows, and loading/error/empty states. Focused web test added; local web lint, full vitest, and build checks pass. |
 | **model-grouping-pairwise-significance-tasks** | `—` | 🟢 Done locally | Added the implementation task list for the bottom-of-page `/models` pairwise significance report, with backend-owned paired permutation tests, page-scope wiring, and heatmap/table UI slices. |
@@ -99,6 +100,7 @@ Once the above are resolved:
 ### Analysis Reports
 - [x] Pairwise Win Rate Matrix now opens a pair-detail drawer with a forest plot, split-by-direction toggle, summary band, I² label, and inline row expansion for framing comparisons.
 - [x] Model Groups page now includes a win-rate similarity table with method toggles for weighted Euclidean, cosine, Spearman, and Kendall, plus a distance/similarity view toggle and per-pair detail drawer.
+- [x] New **Model Groups V2** page (`/models/v2`) adds a per-cluster internal-agreement overlay (mean pairwise Cohen's kappa) so models can be compared by behavior, not just by value profile. The original `/models` page is unchanged and stays as the comparison baseline.
 - [x] Win Rate page now includes the Domain Shifts report at the bottom of `/models/win-rate`; focused tests and web preflight pass.
 - [x] Domain Shifts readability controls added locally: cells can toggle between shift and raw win rate, and table columns are sortable.
 - [x] Domain Shifts model picker now groups default models first and separates non-default models with `---` before alphabetical non-default options.
