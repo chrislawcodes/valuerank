@@ -42,7 +42,8 @@ class RunInvariantChecksTests(unittest.TestCase):
 
     def test_contradiction_appends_warning_and_prints_to_stderr(self) -> None:
         state = _state_with_advance("spec")
-        appended = FI.run_invariant_checks(state, "auto-reconcile", "repair_spec_checkpoint")
+        # recommended_next_action emits run_<stage>_checkpoint (not repair_).
+        appended = FI.run_invariant_checks(state, "auto-reconcile", "run_spec_checkpoint")
 
         self.assertEqual(len(appended), 1)
         self.assertEqual(appended[0]["stage"], "spec")
@@ -58,7 +59,7 @@ class RunInvariantChecksTests(unittest.TestCase):
         state = _state_with_advance("spec")
         FI.set_json_mode(True)
         try:
-            FI.run_invariant_checks(state, "checkpoint", "repair_spec_checkpoint")
+            FI.run_invariant_checks(state, "checkpoint", "run_spec_checkpoint")
         finally:
             FI.set_json_mode(False)
 
@@ -86,8 +87,9 @@ class RunInvariantChecksTests(unittest.TestCase):
             },
             "invariant_warnings": [],
         }
-        appended = FI.run_invariant_checks(state, "auto-reconcile", "repair_spec_checkpoint")
-        # Only the spec stage's advance contradicts repair_spec_checkpoint.
+        # run_spec_checkpoint contradicts spec's advance but not plan's.
+        appended = FI.run_invariant_checks(state, "auto-reconcile", "run_spec_checkpoint")
+        # Only the spec stage's advance contradicts run_spec_checkpoint.
         self.assertEqual(len(appended), 1)
         self.assertEqual(appended[0]["stage"], "spec")
 
@@ -99,7 +101,7 @@ class RunInvariantChecksTests(unittest.TestCase):
         appended = FI.run_invariant_checks(
             state,
             "auto-reconcile",
-            "repair_spec_checkpoint",
+            "run_spec_checkpoint",
             invariants=(raising_check,),
         )
         self.assertEqual(len(appended), 1)
@@ -111,7 +113,7 @@ class RunInvariantChecksTests(unittest.TestCase):
             "invariant_warnings": [],
         }
         for _ in range(FI._INVARIANT_WARNINGS_CAP + 10):
-            FI.run_invariant_checks(state, "auto-reconcile", "repair_spec_checkpoint")
+            FI.run_invariant_checks(state, "auto-reconcile", "run_spec_checkpoint")
         self.assertEqual(len(state["invariant_warnings"]), FI._INVARIANT_WARNINGS_CAP)
 
     def test_non_dict_state_is_no_op(self) -> None:
@@ -128,21 +130,57 @@ class CheckJudgeAdvanceFunctionTests(unittest.TestCase):
                 "tasks": {"judge_next_action": ""},
             }
         }
-        findings = FI.check_judge_advance_vs_recommended(state, "repair_plan_checkpoint")
+        # recommended_next_action emits run_plan_checkpoint (not repair_plan_checkpoint).
+        findings = FI.check_judge_advance_vs_recommended(state, "run_plan_checkpoint")
         self.assertEqual(len(findings), 1)
         self.assertEqual(findings[0]["stage"], "plan")
 
-    def test_non_repair_action_is_fine(self) -> None:
+    def test_non_checkpoint_action_is_fine(self) -> None:
         state = {"stages": {"spec": {"judge_next_action": "advance"}}}
         findings = FI.check_judge_advance_vs_recommended(state, "author_plan")
         self.assertEqual(findings, [])
 
-    def test_repair_for_different_stage_is_not_a_contradiction_for_this_stage(
+    def test_checkpoint_for_different_stage_is_not_a_contradiction_for_this_stage(
         self,
     ) -> None:
         state = {"stages": {"spec": {"judge_next_action": "advance"}}}
-        findings = FI.check_judge_advance_vs_recommended(state, "repair_plan_checkpoint")
+        # run_plan_checkpoint only contradicts a plan advance, not a spec advance.
+        findings = FI.check_judge_advance_vs_recommended(state, "run_plan_checkpoint")
         self.assertEqual(findings, [])
+
+    def test_run_checkpoint_action_fires_for_all_checkpoint_stages(self) -> None:
+        """FR-010 regression: recommended_next_action emits run_<stage>_checkpoint.
+
+        This test proves the invariant fires for every stage's checkpoint action
+        string as actually emitted by recommended_next_action — not the old dead
+        'repair_<stage>_checkpoint' strings that never matched.
+        """
+        checkpoint_stages = ("spec", "plan", "tasks", "diff", "closeout")
+        for stage in checkpoint_stages:
+            with self.subTest(stage=stage):
+                state = {"stages": {stage: {"judge_next_action": "advance"}}}
+                action = f"run_{stage}_checkpoint"
+                findings = FI.check_judge_advance_vs_recommended(state, action)
+                self.assertEqual(
+                    len(findings),
+                    1,
+                    f"expected 1 contradiction for stage={stage} action={action}, got {findings}",
+                )
+                self.assertEqual(findings[0]["stage"], stage)
+
+    def test_old_repair_prefix_does_not_fire(self) -> None:
+        """Confirm the old dead string 'repair_<stage>_checkpoint' no longer triggers.
+
+        recommended_next_action never emitted this prefix; matching it was a bug.
+        After the fix the invariant correctly ignores it (it is not a real action).
+        """
+        state = {"stages": {"spec": {"judge_next_action": "advance"}}}
+        findings = FI.check_judge_advance_vs_recommended(state, "repair_spec_checkpoint")
+        self.assertEqual(
+            findings,
+            [],
+            "repair_ prefix is not a real recommended_next_action output; should not fire",
+        )
 
 
 if __name__ == "__main__":

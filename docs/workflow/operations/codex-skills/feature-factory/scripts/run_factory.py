@@ -232,7 +232,11 @@ def build_parser() -> argparse.ArgumentParser:
     checkpoint_parser.add_argument("--allow-dirty-path", action="append", default=[])
     checkpoint_parser.add_argument("--max-artifact-chars", type=int, default=50000)
     checkpoint_parser.add_argument("--max-context-chars", type=int, default=60000)
-    checkpoint_parser.add_argument("--max-total-chars", type=int, default=250000)
+    # Reconciled from 250000 to match run_codex_review.py's own default of 200000.
+    # Both values were wider than the 120s Codex timeout can reliably process (avg
+    # spec-stage prompts: 58k chars, up to 200k+; 33% timeout rate at 250k cap).
+    # Spec-stage reviews get a tighter 50k per-review cap via factory_review_specs.py.
+    checkpoint_parser.add_argument("--max-total-chars", type=int, default=200000)
     checkpoint_parser.add_argument("--gemini-timeout-seconds", type=int, default=120)
     checkpoint_parser.add_argument("--gemini-retries", type=int, default=1)
     checkpoint_parser.add_argument("--repair-timeout-seconds", type=int, default=300)

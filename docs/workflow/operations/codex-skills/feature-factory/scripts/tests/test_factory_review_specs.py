@@ -290,6 +290,44 @@ class RequiredReviewSelectionTests(unittest.TestCase):
             ],
         )
 
+    def test_spec_stage_codex_review_has_50k_max_total_chars_cap(self) -> None:
+        """Fix 1: spec-stage feasibility-adversarial Codex review must carry a 50k cap.
+
+        At the old 250k cap, 33% of spec-stage Codex reviews timed out against the
+        120s subprocess ceiling.  The per-review max_total_chars field lets
+        repair_review_checkpoint.py and factory_review.py apply the tighter cap
+        without touching the checkpoint manifest structure.
+        """
+        reviews = FRS.required_reviews("spec", False, False, False, [])
+        codex_reviews = [r for r in reviews if r["reviewer"] == "codex"]
+        self.assertEqual(len(codex_reviews), 1, "expected exactly 1 Codex review for spec stage")
+        codex_review = codex_reviews[0]
+        self.assertIn(
+            "max_total_chars",
+            codex_review,
+            "spec-stage Codex review must carry a max_total_chars cap",
+        )
+        self.assertEqual(
+            int(codex_review["max_total_chars"]),
+            50000,
+            "spec-stage Codex cap must be 50000",
+        )
+
+    def test_non_spec_stages_do_not_carry_per_review_max_total_chars(self) -> None:
+        """Fix 1: non-spec Codex reviews must NOT carry a per-review cap.
+
+        Plan-stage implementation reviews average ~10k chars and never time out;
+        forcing a 50k cap on them adds no value and could confuse operators.
+        """
+        plan_reviews = FRS.required_reviews("plan", False, False, False, [])
+        for review in plan_reviews:
+            if review["reviewer"] == "codex":
+                self.assertNotIn(
+                    "max_total_chars",
+                    review,
+                    f"plan-stage Codex review {review['lens']} must not carry max_total_chars",
+                )
+
 
 class ActionableFindingShapesManifestTests(unittest.TestCase):
     def test_shapes_manifest_present(self) -> None:

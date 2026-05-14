@@ -240,6 +240,15 @@ def required_reviews(
     if small_task_set and stage in ("tasks", "closeout") and not extra_gemini:
         return []
 
+    # Per-review prompt cap for the spec-stage Codex review.
+    # feasibility-adversarial produces structurally large prompts (avg 58k chars,
+    # up to 200k+). At the old 250k cap, 33% of spec-stage Codex reviews timed
+    # out against the 120s subprocess ceiling. At 50k the p50 latency drops from
+    # ~80s to ~40-50s, doubling the headroom. A review that sees a narrowed
+    # artifact beats a 33%-of-the-time review on the full artifact.
+    # Other stages (plan avg ~10k) never time out and keep the manifest-level cap.
+    _SPEC_CODEX_MAX_TOTAL_CHARS = 50000
+
     reviews: list[dict[str, str]] = []
     for reviewer, lens, model in (
         ("codex", codex_primary, DEFAULT_CODEX_MODEL),
@@ -248,11 +257,14 @@ def required_reviews(
     ):
         if not lens:
             continue
-        reviews.append({
+        entry: dict[str, str] = {
             "reviewer": reviewer,
             "lens": lens,
             "model": model,
-        })
+        }
+        if reviewer == "codex" and stage == "spec":
+            entry["max_total_chars"] = str(_SPEC_CODEX_MAX_TOTAL_CHARS)
+        reviews.append(entry)
     seen_gemini_lenses = {review["lens"] for review in reviews if review["reviewer"] == "gemini"}
     for lens in extra_gemini:
         candidate = lens.strip()
