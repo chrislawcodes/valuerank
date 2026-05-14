@@ -465,6 +465,24 @@
       "agent_id": null,
       "artifact_sha_at_time": "189227d452afc5a71ad6b8a9081b91e69a5e4c8ce9239577ebf3aa70278d9b83",
       "parse_error": "no Gemini token stats found in stdout"
+    },
+    {
+      "stage": "tasks",
+      "round": 1,
+      "activity_type": "implementation",
+      "model": "gpt-5.4-mini",
+      "lens": null,
+      "prompt_chars": 37487,
+      "prompt_cap": null,
+      "input_tokens": 342529,
+      "output_tokens": 0,
+      "cost_usd_estimate": 0.342529,
+      "timestamp": "2026-05-14T15:48:53.151426Z",
+      "started_at": "2026-05-14T15:37:48.446756Z",
+      "ended_at": "2026-05-14T15:48:53.151426Z",
+      "duration_seconds": 664.701205,
+      "agent_id": null,
+      "artifact_sha_at_time": "3146be0a91706f40fc1fd56b53a7e5fc84c8342bc3c8dea5111104ac3daa113d"
     }
   ],
   "command_telemetry": [

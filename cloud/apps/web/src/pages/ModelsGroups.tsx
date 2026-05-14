@@ -415,7 +415,7 @@ export function ModelsGroups() {
   // Fire the agreement query here too so we can extract the kappa matrix for
   // the similarity table. Urql will deduplicate/cache against the same query
   // fired inside ModelAgreementSection.
-  const [{ data: agreementData, fetching: agreementFetching, error: agreementError }] = useModelAgreementOnTradeoffsQuery({
+  const [{ data: agreementData, fetching: agreementFetching }] = useModelAgreementOnTradeoffsQuery({
     variables: {
       modelIds: visibleModelIds,
       domainId: effectiveDomainId !== '' ? effectiveDomainId : undefined,
@@ -427,8 +427,12 @@ export function ModelsGroups() {
     pause: !showAgreementSection,
   });
 
+  // Build the map from whatever agreement data is available — including stale
+  // data urql keeps during a background refetch. Do NOT gate on `fetching` or
+  // `error`: a present map must stay usable during a refetch (see plan
+  // Architecture Choice 2). `fetching`/`error` only feed `agreementStatus`.
   const pairwiseKappaMap = useMemo(() => {
-    if (!showAgreementSection || agreementFetching || agreementError != null) return undefined;
+    if (!showAgreementSection) return undefined;
     const rows = agreementData?.modelAgreementOnTradeoffs?.pairwiseAgreementMatrix;
     if (rows == null || rows.length === 0) return undefined;
     const map = new Map<string, Map<string, PairwiseKappaEntry>>();
@@ -446,12 +450,14 @@ export function ModelsGroups() {
       map.get(row.modelBId)!.set(row.modelAId, entry);
     }
     return map.size === 0 ? undefined : map;
-  }, [agreementData, agreementError, agreementFetching, showAgreementSection]);
+  }, [agreementData, showAgreementSection]);
 
   const agreementStatus: AgreementStatus = useMemo(() => {
     if (pairwiseKappaMap != null) return 'ready';
     if (agreementFetching) return 'loading';
     if (visibleModelIds.length < 2) return 'needs-more-models';
+    // No map, not fetching, enough models selected: errored, no signature,
+    // or an empty result. All read to the user as "no agreement data".
     return 'unavailable';
   }, [agreementFetching, pairwiseKappaMap, visibleModelIds.length]);
 
