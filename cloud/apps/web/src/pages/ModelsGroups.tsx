@@ -34,6 +34,7 @@ import { ModelAnalysisSettingsBar } from '../components/models/ModelAnalysisSett
 import { ModelSimilarityTableSection } from '../components/models/ModelSimilarityTableSection';
 import { ModelAgreementSection } from '../components/models/ModelAgreementSection';
 import { type CalculationMethod, type PairwiseKappaEntry } from '../components/models/ModelSimilarityMetrics';
+import { type AgreementStatus } from '../components/domains/clusterVisualizationUtils';
 import { useDomains } from '../hooks/useDomains';
 import { VALUES, type ModelEntry, type ValueKey } from '../data/domainAnalysisData';
 import { formatQueryError } from '../utils/urqlError';
@@ -414,7 +415,7 @@ export function ModelsGroups() {
   // Fire the agreement query here too so we can extract the kappa matrix for
   // the similarity table. Urql will deduplicate/cache against the same query
   // fired inside ModelAgreementSection.
-  const [{ data: agreementData }] = useModelAgreementOnTradeoffsQuery({
+  const [{ data: agreementData, fetching: agreementFetching, error: agreementError }] = useModelAgreementOnTradeoffsQuery({
     variables: {
       modelIds: visibleModelIds,
       domainId: effectiveDomainId !== '' ? effectiveDomainId : undefined,
@@ -427,6 +428,7 @@ export function ModelsGroups() {
   });
 
   const pairwiseKappaMap = useMemo(() => {
+    if (!showAgreementSection || agreementFetching || agreementError != null) return undefined;
     const rows = agreementData?.modelAgreementOnTradeoffs?.pairwiseAgreementMatrix;
     if (rows == null || rows.length === 0) return undefined;
     const map = new Map<string, Map<string, PairwiseKappaEntry>>();
@@ -444,7 +446,14 @@ export function ModelsGroups() {
       map.get(row.modelBId)!.set(row.modelAId, entry);
     }
     return map.size === 0 ? undefined : map;
-  }, [agreementData]);
+  }, [agreementData, agreementError, agreementFetching, showAgreementSection]);
+
+  const agreementStatus: AgreementStatus = useMemo(() => {
+    if (pairwiseKappaMap != null) return 'ready';
+    if (agreementFetching) return 'loading';
+    if (visibleModelIds.length < 2) return 'needs-more-models';
+    return 'unavailable';
+  }, [agreementFetching, pairwiseKappaMap, visibleModelIds.length]);
 
   if (pageErrorMessage != null) {
     return (
@@ -533,6 +542,8 @@ export function ModelsGroups() {
             kappaClusterIdByModelId={kappaClusterIdByModelId}
             kappaClusterLoading={kappaClusterFetching}
             kappaClusterError={kappaClusterError?.message ?? null}
+            pairwiseKappaMap={pairwiseKappaMap}
+            agreementStatus={agreementStatus}
             dataSource={dataSource}
             distanceMethod={similarityMethod}
             models={filteredModels}
