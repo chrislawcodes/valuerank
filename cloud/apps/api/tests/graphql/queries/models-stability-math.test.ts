@@ -209,6 +209,7 @@ describe('aggregateConditionStats', () => {
       neutralShare: 0.2,
       maxRange: 4,
       totalSamples: 3,
+      exactAgreement: null,
     });
   });
 
@@ -249,6 +250,7 @@ describe('aggregateConditionStats', () => {
       neutralShare: Number(((0.1 * 2 + 0.3 * 4) / 6).toFixed(2)),
       maxRange: 5,
       totalSamples: 6,
+      exactAgreement: null,
     });
   });
 
@@ -429,6 +431,7 @@ describe('averageVignetteStability', () => {
           tornShare: 0,
           unstableShare: 0,
           avgDirectionalAgreement: 0.9,
+          avgExactAgreement: null,
         },
         {
           classifiedCount: 2,
@@ -437,6 +440,7 @@ describe('averageVignetteStability', () => {
           tornShare: 0,
           unstableShare: 0,
           avgDirectionalAgreement: 0.5,
+          avgExactAgreement: null,
         },
       ]),
     ).toEqual({
@@ -445,6 +449,7 @@ describe('averageVignetteStability', () => {
       tornShare: 0,
       unstableShare: 0,
       avgDirectionalAgreement: 0.7,
+      avgExactAgreement: null,
     });
   });
 
@@ -458,6 +463,7 @@ describe('averageVignetteStability', () => {
           tornShare: 0,
           unstableShare: 0,
           avgDirectionalAgreement: 1,
+          avgExactAgreement: null,
         },
         {
           classifiedCount: 2,
@@ -466,6 +472,7 @@ describe('averageVignetteStability', () => {
           tornShare: 0,
           unstableShare: 0,
           avgDirectionalAgreement: 0,
+          avgExactAgreement: null,
         },
       ]),
     ).toEqual({
@@ -474,6 +481,7 @@ describe('averageVignetteStability', () => {
       tornShare: 0,
       unstableShare: 0,
       avgDirectionalAgreement: 0.5,
+      avgExactAgreement: null,
     });
   });
 });
