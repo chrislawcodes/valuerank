@@ -1323,6 +1323,76 @@ export type ForkDefinitionInput = {
   parentId: Scalars['String']['input'];
 };
 
+export type FullPvqCategoryResult = {
+  __typename?: 'FullPvqCategoryResult';
+  name: Scalars['String']['output'];
+  scores: Array<FullPvqModelScore>;
+};
+
+export type FullPvqCreateResult = {
+  __typename?: 'FullPvqCreateResult';
+  analysisPlan?: Maybe<Scalars['JSON']['output']>;
+  createdAt: Scalars['DateTime']['output'];
+  desireTrialCount: Scalars['Int']['output'];
+  id: Scalars['ID']['output'];
+  name: Scalars['String']['output'];
+  straightTrialCount: Scalars['Int']['output'];
+};
+
+export type FullPvqModelScore = {
+  __typename?: 'FullPvqModelScore';
+  mean?: Maybe<Scalars['Float']['output']>;
+  modelId: Scalars['String']['output'];
+  refusedCount: Scalars['Int']['output'];
+  trialCount: Scalars['Int']['output'];
+};
+
+export type FullPvqResultModel = {
+  __typename?: 'FullPvqResultModel';
+  displayName: Scalars['String']['output'];
+  modelId: Scalars['String']['output'];
+};
+
+export type FullPvqResults = {
+  __typename?: 'FullPvqResults';
+  categories: Array<FullPvqCategoryResult>;
+  models: Array<FullPvqResultModel>;
+};
+
+export type FullPvqStartRunResult = {
+  __typename?: 'FullPvqStartRunResult';
+  jobCount: Scalars['Int']['output'];
+  runId: Scalars['ID']['output'];
+};
+
+export type FullPvqSurvey = {
+  __typename?: 'FullPvqSurvey';
+  analysisPlan?: Maybe<Scalars['JSON']['output']>;
+  createdAt: Scalars['DateTime']['output'];
+  desireTrialCount: Scalars['Int']['output'];
+  id: Scalars['ID']['output'];
+  name: Scalars['String']['output'];
+  straightTrialCount: Scalars['Int']['output'];
+};
+
+export type FullPvqTrialCategoryScore = {
+  __typename?: 'FullPvqTrialCategoryScore';
+  questionId: Scalars['String']['output'];
+  score?: Maybe<Scalars['Int']['output']>;
+};
+
+export type FullPvqTrialDetail = {
+  __typename?: 'FullPvqTrialDetail';
+  categoryMean?: Maybe<Scalars['Float']['output']>;
+  categoryScores: Array<FullPvqTrialCategoryScore>;
+  createdAt: Scalars['DateTime']['output'];
+  displayName: Scalars['String']['output'];
+  modelId: Scalars['String']['output'];
+  parseWarnings: Array<Scalars['String']['output']>;
+  refused: Scalars['Boolean']['output'];
+  transcriptId: Scalars['String']['output'];
+};
+
 export type InsufficientPressureSensitivityModel = {
   __typename?: 'InsufficientPressureSensitivityModel';
   label: Scalars['String']['output'];
@@ -1715,6 +1785,8 @@ export type Mutation = {
   createDefinition: Definition;
   createDomain: Domain;
   createDomainContext: DomainContext;
+  /** Create a full PVQ survey with straight and desire-for-human framings. */
+  createFullPvq: FullPvqCreateResult;
   /** @deprecated Renamed to createPairedVignette */
   createJobChoicePair: CreatePairedVignetteResult;
   createLevelPreset: LevelPreset;
@@ -1734,6 +1806,8 @@ export type Mutation = {
   deleteDefinition: DeleteDefinitionResult;
   deleteDomain: DomainMutationResult;
   deleteDomainContext: Scalars['Boolean']['output'];
+  /** Soft delete a full PVQ survey and its backing definitions. */
+  deleteFullPvq: Scalars['Boolean']['output'];
   deleteLevelPreset: DeleteLevelPresetResult;
   /** Delete a preamble */
   deletePreamble: Preamble;
@@ -1876,6 +1950,8 @@ export type Mutation = {
   /** Set the budget balance for a provider (null disables budget tracking) */
   setProviderBalance: LlmProvider;
   startDomainEvaluation: DomainTrialRunResult;
+  /** Start a full PVQ run for one survey framing. */
+  startFullPvqRun: FullPvqStartRunResult;
   /**
    *
    *       Start a new evaluation run.
@@ -2030,6 +2106,11 @@ export type MutationCreateDomainContextArgs = {
 };
 
 
+export type MutationCreateFullPvqArgs = {
+  name: Scalars['String']['input'];
+};
+
+
 export type MutationCreateJobChoicePairArgs = {
   input: CreatePairedVignetteInput;
 };
@@ -2091,6 +2172,11 @@ export type MutationDeleteDomainArgs = {
 
 
 export type MutationDeleteDomainContextArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
+export type MutationDeleteFullPvqArgs = {
   id: Scalars['ID']['input'];
 };
 
@@ -2286,6 +2372,14 @@ export type MutationStartDomainEvaluationArgs = {
   scopeCategory?: InputMaybe<Scalars['String']['input']>;
   targetBatchCount?: InputMaybe<Scalars['Int']['input']>;
   temperature?: InputMaybe<Scalars['Float']['input']>;
+};
+
+
+export type MutationStartFullPvqRunArgs = {
+  framing: Scalars['String']['input'];
+  models: Array<Scalars['String']['input']>;
+  samplesPerScenario?: InputMaybe<Scalars['Int']['input']>;
+  surveyId: Scalars['ID']['input'];
 };
 
 
@@ -2782,6 +2876,14 @@ export type Query = {
   /** Estimate cost for a potential run before starting it. Returns per-model breakdown with token predictions based on historical data. */
   estimateCost: CostEstimate;
   estimateDomainEvaluationCost: DomainEvaluationCostEstimate;
+  /** Compute Schwartz averages for one full PVQ framing. */
+  fullPvqResults: FullPvqResults;
+  /** Fetch a single full PVQ survey by experiment ID. */
+  fullPvqSurvey?: Maybe<FullPvqSurvey>;
+  /** List full PVQ surveys stored as full_pvq experiments. */
+  fullPvqSurveys: Array<FullPvqSurvey>;
+  /** Fetch per-trial PVQ detail for one model and Schwartz category. */
+  fullPvqTrialDetail: Array<FullPvqTrialDetail>;
   /** Get the configured infrastructure model for a specific purpose (e.g., "scenario_expansion") */
   infraModel?: Maybe<LlmModel>;
   /** Get a specific level preset by ID */
@@ -3197,6 +3299,25 @@ export type QueryEstimateDomainEvaluationCostArgs = {
   samplesPerScenario?: InputMaybe<Scalars['Int']['input']>;
   scopeCategory?: InputMaybe<Scalars['String']['input']>;
   temperature?: InputMaybe<Scalars['Float']['input']>;
+};
+
+
+export type QueryFullPvqResultsArgs = {
+  framing: Scalars['String']['input'];
+  surveyId: Scalars['ID']['input'];
+};
+
+
+export type QueryFullPvqSurveyArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
+export type QueryFullPvqTrialDetailArgs = {
+  category: Scalars['String']['input'];
+  framing: Scalars['String']['input'];
+  modelId: Scalars['String']['input'];
+  surveyId: Scalars['ID']['input'];
 };
 
 
@@ -4738,6 +4859,60 @@ export type EnsureDomainVignettePairMutationVariables = Exact<{
 
 
 export type EnsureDomainVignettePairMutation = { __typename?: 'Mutation', ensureDomainVignettePair: { __typename?: 'EnsureDomainVignettePairResult', status: VignettePairStatus, definitionAId?: string | null, definitionBId?: string | null } };
+
+export type FullPvqSurveysQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type FullPvqSurveysQuery = { __typename?: 'Query', fullPvqSurveys: Array<{ __typename?: 'FullPvqSurvey', id: string, name: string, createdAt: string, straightTrialCount: number, desireTrialCount: number, analysisPlan?: unknown | null }> };
+
+export type FullPvqSurveyQueryVariables = Exact<{
+  id: Scalars['ID']['input'];
+}>;
+
+
+export type FullPvqSurveyQuery = { __typename?: 'Query', fullPvqSurvey?: { __typename?: 'FullPvqSurvey', id: string, name: string, createdAt: string, straightTrialCount: number, desireTrialCount: number, analysisPlan?: unknown | null } | null };
+
+export type CreateFullPvqMutationVariables = Exact<{
+  name: Scalars['String']['input'];
+}>;
+
+
+export type CreateFullPvqMutation = { __typename?: 'Mutation', createFullPvq: { __typename?: 'FullPvqCreateResult', id: string, name: string, createdAt: string, straightTrialCount: number, desireTrialCount: number, analysisPlan?: unknown | null } };
+
+export type DeleteFullPvqMutationVariables = Exact<{
+  id: Scalars['ID']['input'];
+}>;
+
+
+export type DeleteFullPvqMutation = { __typename?: 'Mutation', deleteFullPvq: boolean };
+
+export type StartFullPvqRunMutationVariables = Exact<{
+  surveyId: Scalars['ID']['input'];
+  framing: Scalars['String']['input'];
+  models: Array<Scalars['String']['input']> | Scalars['String']['input'];
+  samplesPerScenario?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type StartFullPvqRunMutation = { __typename?: 'Mutation', startFullPvqRun: { __typename?: 'FullPvqStartRunResult', runId: string, jobCount: number } };
+
+export type FullPvqResultsQueryVariables = Exact<{
+  surveyId: Scalars['ID']['input'];
+  framing: Scalars['String']['input'];
+}>;
+
+
+export type FullPvqResultsQuery = { __typename?: 'Query', fullPvqResults: { __typename?: 'FullPvqResults', models: Array<{ __typename?: 'FullPvqResultModel', modelId: string, displayName: string }>, categories: Array<{ __typename?: 'FullPvqCategoryResult', name: string, scores: Array<{ __typename?: 'FullPvqModelScore', modelId: string, mean?: number | null, trialCount: number, refusedCount: number }> }> } };
+
+export type FullPvqTrialDetailQueryVariables = Exact<{
+  surveyId: Scalars['ID']['input'];
+  framing: Scalars['String']['input'];
+  category: Scalars['String']['input'];
+  modelId: Scalars['String']['input'];
+}>;
+
+
+export type FullPvqTrialDetailQuery = { __typename?: 'Query', fullPvqTrialDetail: Array<{ __typename?: 'FullPvqTrialDetail', transcriptId: string, modelId: string, displayName: string, createdAt: string, refused: boolean, parseWarnings: Array<string>, categoryMean?: number | null, categoryScores: Array<{ __typename?: 'FullPvqTrialCategoryScore', questionId: string, score?: number | null }> }> };
 
 export type SystemHealthQueryVariables = Exact<{
   refresh?: InputMaybe<Scalars['Boolean']['input']>;
@@ -7130,6 +7305,129 @@ export const EnsureDomainVignettePairDocument = gql`
 
 export function useEnsureDomainVignettePairMutation() {
   return Urql.useMutation<EnsureDomainVignettePairMutation, EnsureDomainVignettePairMutationVariables>(EnsureDomainVignettePairDocument);
+};
+export const FullPvqSurveysDocument = gql`
+    query FullPvqSurveys {
+  fullPvqSurveys {
+    id
+    name
+    createdAt
+    straightTrialCount
+    desireTrialCount
+    analysisPlan
+  }
+}
+    `;
+
+export function useFullPvqSurveysQuery(options?: Omit<Urql.UseQueryArgs<FullPvqSurveysQueryVariables>, 'query'>) {
+  return Urql.useQuery<FullPvqSurveysQuery, FullPvqSurveysQueryVariables>({ query: FullPvqSurveysDocument, ...options });
+};
+export const FullPvqSurveyDocument = gql`
+    query FullPvqSurvey($id: ID!) {
+  fullPvqSurvey(id: $id) {
+    id
+    name
+    createdAt
+    straightTrialCount
+    desireTrialCount
+    analysisPlan
+  }
+}
+    `;
+
+export function useFullPvqSurveyQuery(options: Omit<Urql.UseQueryArgs<FullPvqSurveyQueryVariables>, 'query'>) {
+  return Urql.useQuery<FullPvqSurveyQuery, FullPvqSurveyQueryVariables>({ query: FullPvqSurveyDocument, ...options });
+};
+export const CreateFullPvqDocument = gql`
+    mutation CreateFullPvq($name: String!) {
+  createFullPvq(name: $name) {
+    id
+    name
+    createdAt
+    straightTrialCount
+    desireTrialCount
+    analysisPlan
+  }
+}
+    `;
+
+export function useCreateFullPvqMutation() {
+  return Urql.useMutation<CreateFullPvqMutation, CreateFullPvqMutationVariables>(CreateFullPvqDocument);
+};
+export const DeleteFullPvqDocument = gql`
+    mutation DeleteFullPvq($id: ID!) {
+  deleteFullPvq(id: $id)
+}
+    `;
+
+export function useDeleteFullPvqMutation() {
+  return Urql.useMutation<DeleteFullPvqMutation, DeleteFullPvqMutationVariables>(DeleteFullPvqDocument);
+};
+export const StartFullPvqRunDocument = gql`
+    mutation StartFullPvqRun($surveyId: ID!, $framing: String!, $models: [String!]!, $samplesPerScenario: Int) {
+  startFullPvqRun(
+    surveyId: $surveyId
+    framing: $framing
+    models: $models
+    samplesPerScenario: $samplesPerScenario
+  ) {
+    runId
+    jobCount
+  }
+}
+    `;
+
+export function useStartFullPvqRunMutation() {
+  return Urql.useMutation<StartFullPvqRunMutation, StartFullPvqRunMutationVariables>(StartFullPvqRunDocument);
+};
+export const FullPvqResultsDocument = gql`
+    query FullPvqResults($surveyId: ID!, $framing: String!) {
+  fullPvqResults(surveyId: $surveyId, framing: $framing) {
+    models {
+      modelId
+      displayName
+    }
+    categories {
+      name
+      scores {
+        modelId
+        mean
+        trialCount
+        refusedCount
+      }
+    }
+  }
+}
+    `;
+
+export function useFullPvqResultsQuery(options: Omit<Urql.UseQueryArgs<FullPvqResultsQueryVariables>, 'query'>) {
+  return Urql.useQuery<FullPvqResultsQuery, FullPvqResultsQueryVariables>({ query: FullPvqResultsDocument, ...options });
+};
+export const FullPvqTrialDetailDocument = gql`
+    query FullPvqTrialDetail($surveyId: ID!, $framing: String!, $category: String!, $modelId: String!) {
+  fullPvqTrialDetail(
+    surveyId: $surveyId
+    framing: $framing
+    category: $category
+    modelId: $modelId
+  ) {
+    transcriptId
+    modelId
+    displayName
+    createdAt
+    refused
+    parseWarnings
+    categoryScores {
+      questionId
+      score
+    }
+    categoryMean
+  }
+}
+    `;
+
+export function useFullPvqTrialDetailQuery(options: Omit<Urql.UseQueryArgs<FullPvqTrialDetailQueryVariables>, 'query'>) {
+  return Urql.useQuery<FullPvqTrialDetailQuery, FullPvqTrialDetailQueryVariables>({ query: FullPvqTrialDetailDocument, ...options });
 };
 export const SystemHealthDocument = gql`
     query SystemHealth($refresh: Boolean) {

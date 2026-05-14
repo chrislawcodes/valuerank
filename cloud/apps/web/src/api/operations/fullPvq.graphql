@@ -1,0 +1,77 @@
+query FullPvqSurveys {
+  fullPvqSurveys {
+    id
+    name
+    createdAt
+    straightTrialCount
+    desireTrialCount
+    analysisPlan
+  }
+}
+
+query FullPvqSurvey($id: ID!) {
+  fullPvqSurvey(id: $id) {
+    id
+    name
+    createdAt
+    straightTrialCount
+    desireTrialCount
+    analysisPlan
+  }
+}
+
+mutation CreateFullPvq($name: String!) {
+  createFullPvq(name: $name) {
+    id
+    name
+    createdAt
+    straightTrialCount
+    desireTrialCount
+    analysisPlan
+  }
+}
+
+mutation DeleteFullPvq($id: ID!) {
+  deleteFullPvq(id: $id)
+}
+
+mutation StartFullPvqRun($surveyId: ID!, $framing: String!, $models: [String!]!, $samplesPerScenario: Int) {
+  startFullPvqRun(surveyId: $surveyId, framing: $framing, models: $models, samplesPerScenario: $samplesPerScenario) {
+    runId
+    jobCount
+  }
+}
+
+query FullPvqResults($surveyId: ID!, $framing: String!) {
+  fullPvqResults(surveyId: $surveyId, framing: $framing) {
+    models {
+      modelId
+      displayName
+    }
+    categories {
+      name
+      scores {
+        modelId
+        mean
+        trialCount
+        refusedCount
+      }
+    }
+  }
+}
+
+query FullPvqTrialDetail($surveyId: ID!, $framing: String!, $category: String!, $modelId: String!) {
+  fullPvqTrialDetail(surveyId: $surveyId, framing: $framing, category: $category, modelId: $modelId) {
+    transcriptId
+    modelId
+    displayName
+    createdAt
+    refused
+    parseWarnings
+    categoryScores {
+      questionId
+      score
+    }
+    categoryMean
+  }
+}

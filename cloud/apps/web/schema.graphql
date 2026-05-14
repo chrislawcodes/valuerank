@@ -1384,6 +1384,67 @@ input ForkDefinitionInput {
   parentId: String!
 }
 
+type FullPvqCategoryResult {
+  name: String!
+  scores: [FullPvqModelScore!]!
+}
+
+type FullPvqCreateResult {
+  analysisPlan: JSON
+  createdAt: DateTime!
+  desireTrialCount: Int!
+  id: ID!
+  name: String!
+  straightTrialCount: Int!
+}
+
+type FullPvqModelScore {
+  mean: Float
+  modelId: String!
+  refusedCount: Int!
+  trialCount: Int!
+}
+
+type FullPvqResultModel {
+  displayName: String!
+  modelId: String!
+}
+
+type FullPvqResults {
+  categories: [FullPvqCategoryResult!]!
+  models: [FullPvqResultModel!]!
+}
+
+type FullPvqStartRunResult {
+  jobCount: Int!
+  runId: ID!
+}
+
+type FullPvqSurvey {
+  analysisPlan: JSON
+  createdAt: DateTime!
+  desireTrialCount: Int!
+  id: ID!
+  name: String!
+  straightTrialCount: Int!
+}
+
+type FullPvqTrialCategoryScore {
+  questionId: String!
+  score: Int
+}
+
+type FullPvqTrialDetail {
+  categoryMean: Float
+  categoryScores: [FullPvqTrialCategoryScore!]!
+  createdAt: DateTime!
+  displayName: String!
+  modelId: String!
+  parseWarnings: [String!]!
+  refused: Boolean!
+  transcriptId: String!
+}
+
 type InsufficientPressureSensitivityModel {
   label: String!
   modelId: String!
@@ -1806,6 +1867,9 @@ type Mutation {
   createDefinition(input: CreateDefinitionInput!): Definition!
   createDomain(name: String!): Domain!
   createDomainContext(input: CreateDomainContextInput!): DomainContext!
+
+  """Create a full PVQ survey with straight and desire-for-human framings."""
+  createFullPvq(name: String!): FullPvqCreateResult!
   createJobChoicePair(input: CreatePairedVignetteInput!): CreatePairedVignetteResult! @deprecated(reason: "Renamed to createPairedVignette")
   createLevelPreset(l1: String!, l2: String!, l3: String!, l4: String!, l5: String!, name: String!): LevelPreset!
 
@@ -1840,6 +1904,9 @@ type Mutation {
   ): DeleteDefinitionResult!
   deleteDomain(id: ID!): DomainMutationResult!
   deleteDomainContext(id: ID!): Boolean!
+
+  """Soft delete a full PVQ survey and its backing definitions."""
+  deleteFullPvq(id: ID!): Boolean!
   deleteLevelPreset(id: ID!): DeleteLevelPresetResult!
 
   """Delete a preamble"""
@@ -1987,6 +2054,9 @@ type Mutation {
     providerId: String!
   ): LlmProvider!
   startDomainEvaluation(definitionIds: [ID!], domainId: ID!, maxBudgetUsd: Float, modelIds: [String!], samplePercentage: Int, samplesPerScenario: Int, scopeCategory: String, targetBatchCount: Int, temperature: Float): DomainTrialRunResult!
+
+  """Start a full PVQ run for one survey framing."""
+  startFullPvqRun(framing: String!, models: [String!]!, samplesPerScenario: Int, surveyId: ID!): FullPvqStartRunResult!
 
   "\n      Start a new evaluation run.\n\n      Creates a run record and queues probe_scenario jobs for each model-scenario combination.\n      Requires authentication.\n\n      Returns the created run and the number of jobs queued.\n    "
   startRun(
@@ -2655,6 +2725,18 @@ type Query {
     samplesPerScenario: Int = 1
   ): CostEstimate!
   estimateDomainEvaluationCost(definitionIds: [ID!], domainId: ID!, modelIds: [String!], samplePercentage: Int, samplesPerScenario: Int, scopeCategory: String, temperature: Float): DomainEvaluationCostEstimate!
+
+  """Compute Schwartz averages for one full PVQ framing."""
+  fullPvqResults(framing: String!, surveyId: ID!): FullPvqResults!
+
+  """Fetch a single full PVQ survey by experiment ID."""
+  fullPvqSurvey(id: ID!): FullPvqSurvey
+
+  """List full PVQ surveys stored as full_pvq experiments."""
+  fullPvqSurveys: [FullPvqSurvey!]!
+
+  """Fetch per-trial PVQ detail for one model and Schwartz category."""
+  fullPvqTrialDetail(category: String!, framing: String!, modelId: String!, surveyId: ID!): [FullPvqTrialDetail!]!
 
   """
   Get the configured infrastructure model for a specific purpose (e.g., "scenario_expansion")
