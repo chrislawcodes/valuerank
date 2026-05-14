@@ -318,7 +318,7 @@ describe('PressureSensitivity page', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText(/Coverage warning: this report scanned the maximum 500,000 transcripts/)).toBeDefined();
+    expect(screen.getByText(/Coverage warning: this report scanned the maximum 1,000,000 transcripts/)).toBeDefined();
   });
 
   it('hides the transcript cap banner when the backend does not flag it', () => {
@@ -331,7 +331,7 @@ describe('PressureSensitivity page', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.queryByText(/Coverage warning: this report scanned the maximum 500,000 transcripts/)).toBeNull();
+    expect(screen.queryByText(/Coverage warning: this report scanned the maximum 1,000,000 transcripts/)).toBeNull();
   });
 
   it('renders the exclusion warning when pressureConditionExcludedCount is nonzero', () => {
