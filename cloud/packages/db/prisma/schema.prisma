@@ -789,6 +789,7 @@ model AssumptionAnalysisSnapshot {
   @@index([status])
   @@index([deletedAt])
   @@index([assumptionKey, analysisType, inputHash, status])
+  @@index([assumptionKey, analysisType, status, deletedAt, configSignature], map: "assumption_snapshots_models_analysis_idx")
   @@map("assumption_analysis_snapshots")
 }
 
