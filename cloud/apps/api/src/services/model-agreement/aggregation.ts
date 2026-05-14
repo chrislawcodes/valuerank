@@ -384,18 +384,14 @@ export function summarizeTrialConsistency(params: {
       continue;
     }
 
-    const totalTrials = outcome.aChoices + outcome.bChoices;
+    const totalTrials = outcome.aChoices + outcome.bChoices + outcome.neutrals;
     if (totalTrials < MIN_TRIALS_FOR_CONSISTENCY) {
       continue;
     }
 
-    const proportionA = computeProportionA(outcome);
-    if (proportionA == null) {
-      continue;
-    }
-
+    const modal = Math.max(outcome.aChoices, outcome.bChoices, outcome.neutrals);
     const valuePairKey = `${position.canonicalA}::${position.canonicalB}`;
-    pushNested(consistency, valuePairKey, position.definitionId, Math.max(proportionA, 1 - proportionA));
+    pushNested(consistency, valuePairKey, position.definitionId, modal / totalTrials);
     cellsObserved += 1;
   }
 
