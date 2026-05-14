@@ -1,0 +1,19 @@
+{
+  "paths": [
+    "cloud/apps/api/src/graphql/mutations/fullPvq.ts",
+    "cloud/apps/api/src/graphql/queries/fullPvq.ts",
+    "cloud/apps/web/src/api/operations/fullPvq.ts",
+    "cloud/apps/web/src/pages/FullPvqCellDetail.tsx",
+    "cloud/apps/web/src/pages/FullPvqResults.tsx",
+    "cloud/apps/web/src/pages/FullPvqSurvey.tsx"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/api/src/graphql/mutations/fullPvq.ts",
+    "cloud/apps/api/src/graphql/queries/fullPvq.ts",
+    "cloud/apps/web/src/api/operations/fullPvq.ts",
+    "cloud/apps/web/src/pages/FullPvqCellDetail.tsx",
+    "cloud/apps/web/src/pages/FullPvqResults.tsx",
+    "cloud/apps/web/src/pages/FullPvqSurvey.tsx",
+    "docs/workflow/feature-runs/full-pvq-survey"
+  ]
+}
