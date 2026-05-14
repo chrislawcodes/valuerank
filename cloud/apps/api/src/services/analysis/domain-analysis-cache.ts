@@ -590,26 +590,27 @@ export async function getDomainAnalysisResult(params: {
   // queue async and return UPDATING immediately so the client can poll and show
   // X/Y progress. A synchronous rebuild here would block the HTTP response for
   // the full rebuild duration (can be minutes for large sets).
+  // Crucially: even if queueing fails (job already in flight), still return
+  // UPDATING — never fall through to synchronous refreshDomainAnalysisSnapshot
+  // for multi-domain scopes.
   if (params.scope !== 'DOMAIN') {
     const totalRuns = state.resolvedSignatureRuns.filteredSourceRunIds.length;
-    const queued = await queueDomainAnalysisRefresh({
+    await queueDomainAnalysisRefresh({
       scope: state.scope,
       domainId: state.domain.id,
       domainIds: state.scope === 'ALL_DOMAINS' ? undefined : state.domainIds,
       signature: state.selectedSignature,
       reason: 'cache-miss',
     });
-    if (queued) {
-      return buildEmptyDomainAnalysisResult({
-        domainId: state.domain.id,
-        domainName: state.domain.name,
-        activeModels,
-        generatedAt: new Date(),
-        cacheStatus: DOMAIN_ANALYSIS_CACHE_STATUS.UPDATING,
-        unavailableReason: 'Building analysis for this domain combination. Refresh in a moment.',
-        refreshProgress: { completedRuns: 0, totalRuns },
-      });
-    }
+    return buildEmptyDomainAnalysisResult({
+      domainId: state.domain.id,
+      domainName: state.domain.name,
+      activeModels,
+      generatedAt: new Date(),
+      cacheStatus: DOMAIN_ANALYSIS_CACHE_STATUS.UPDATING,
+      unavailableReason: 'Building analysis for this domain combination. Refresh in a moment.',
+      refreshProgress: { completedRuns: 0, totalRuns },
+    });
   }
 
   const refreshed = await refreshDomainAnalysisSnapshot({
