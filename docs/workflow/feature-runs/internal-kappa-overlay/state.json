@@ -45,7 +45,6 @@
     "unresolved": []
   },
   "delivery": {},
-  "dirty_overrides": {},
   "checkpoint_fallback": {},
   "parallel_analysis": {
     "reviewed": true,
@@ -617,6 +616,18 @@
       "files_written": 5,
       "subprocess_invocations": 22,
       "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "diff",
+      "ts": "2026-05-14T15:55:39Z",
+      "wall_seconds": 0.671,
+      "input_bytes_read": 282557,
+      "output_bytes_written": 154147,
+      "files_read": 19,
+      "files_written": 7,
+      "subprocess_invocations": 36,
+      "ttl_crossed": false
     }
   ],
   "stages": {
@@ -649,14 +660,22 @@
         "3146be0a91706f40fc1fd56b53a7e5fc84c8342bc3c8dea5111104ac3daa113d"
       ],
       "initial_sha": "3146be0a91706f40fc1fd56b53a7e5fc84c8342bc3c8dea5111104ac3daa113d"
+    },
+    "diff": {
+      "adversarial_rounds": 1,
+      "annotations": [],
+      "adversarial_sha_history": [
+        "bfcee5048645775cf5f09d0371f21b2e74de86a8c07b85b2ff4c7d60746a507a"
+      ],
+      "initial_sha": "bfcee5048645775cf5f09d0371f21b2e74de86a8c07b85b2ff4c7d60746a507a"
     }
   },
   "invariant_warnings": [],
   "schema_version": 2,
   "checkpoint_progress": {
-    "index": 0,
-    "markers_sha": "",
-    "last_diff_head_sha": ""
+    "index": 1,
+    "markers_sha": "ef206e3e31827e11a33d832b06a342e2c90a0d62945a1f341902cfaeba42a3c5",
+    "last_diff_head_sha": "02967ae8eac4dc1c22fbaf33927bf759f0a25179"
   },
   "spec_adversarial_rounds": 0,
   "annotations": [
@@ -677,7 +696,9 @@
   "tasks_adversarial_rounds": 1,
   "last_action_result": {
     "next": "dispatch_next_slice_to_codex",
-    "reason": "tasks checkpoint completed",
+    "reason": "diff checkpoint completed",
     "blockers": []
-  }
+  },
+  "diff_adversarial_rounds": 1,
+  "dirty_overrides": {}
 }
