@@ -12,7 +12,7 @@ import {
   PRESSURE_SENSITIVITY_ASSUMPTION_PREFIX,
 } from './snapshot-types.js';
 
-const TRANSCRIPT_FETCH_LIMIT = 500_000;
+const TRANSCRIPT_FETCH_LIMIT = 1_000_000;
 
 export const PAIR_KEY_COMPANION_COLLISION = 'pair_key_companion_collision';
 export const PAIR_KEY_COMPANION_MIRROR_FAILURE = 'pair_key_companion_mirror_failure';
