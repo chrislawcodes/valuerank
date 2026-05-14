@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery } from 'urql';
+import { Loader2 } from 'lucide-react';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Loading } from '../components/ui/Loading';
 import { AnalysisContextBar } from '../components/analysis/AnalysisContextBar';
@@ -482,6 +483,7 @@ export function DomainAnalysis() {
           ],
           onChange: (ids) => setSelectedDomainIds(normalizeDomainIds(ids)),
           disabled: domainsLoading,
+          loading: fetching,
         }}
         signature={{
           label: 'Signature',
@@ -505,6 +507,21 @@ export function DomainAnalysis() {
         }}
         winRateMode={{ value: winRateMode, onChange: setWinRateMode }}
       />
+
+      {!showPageLoader && ((fetching && data?.domainAnalysis != null) || isUpdating) && (
+        <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
+          <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />
+          <span>
+            {'Rebuilding report'}
+            {data?.domainAnalysis.refreshProgress != null && (
+              <> — {data.domainAnalysis.refreshProgress.completedRuns} of {data.domainAnalysis.refreshProgress.totalRuns} processed</>
+            )}
+            {(data?.domainAnalysis.contributionSummary.length ?? 0) > 0 && (
+              <> — showing {data?.domainAnalysis.contributionSummary.length} domain{data?.domainAnalysis.contributionSummary.length === 1 ? '' : 's'} until it&apos;s complete</>
+            )}
+          </span>
+        </div>
+      )}
 
       <div className="space-y-2">
         <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Win Rate</h1>
