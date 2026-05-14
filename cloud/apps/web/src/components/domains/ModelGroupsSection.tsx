@@ -60,6 +60,11 @@ type ModelGroupsSectionProps = {
   kappaClusterError?: string | null;
   pairwiseKappaMap?: PairwiseKappaMap | null;
   agreementStatus?: AgreementStatus;
+  /**
+   * Opt-in flag for the internal-agreement overlay. Off by default so the
+   * original Model Groups page renders unchanged; the V2 page passes `true`.
+   */
+  showInternalAgreement?: boolean;
   dataSource?: ClusterDataSource;
   distanceMethod?: CalculationMethod;
   models: ModelEntry[];
@@ -165,6 +170,7 @@ export function ModelGroupsSection({
   kappaClusterError = null,
   pairwiseKappaMap = null,
   agreementStatus = 'unavailable',
+  showInternalAgreement = false,
   dataSource = 'log-odds',
   distanceMethod,
   models,
@@ -261,7 +267,11 @@ export function ModelGroupsSection({
     return result;
   }, [clusters, pairwiseKappaMap, visibleModelIdSet]);
 
-  const showInternalAgreement = (dataSource === 'log-odds' || dataSource === 'win-rate') && groupDisplayMode === 'groups';
+  // Gate the overlay on the opt-in prop AND the modes where it makes sense.
+  // V1 leaves `showInternalAgreement` false, so V1 never renders the overlay.
+  const renderOverlay = showInternalAgreement
+    && (dataSource === 'log-odds' || dataSource === 'win-rate')
+    && groupDisplayMode === 'groups';
 
   const copyLabel = `${groupDisplayMode} model groups ${
     viewMode === 'dot' ? 'dot map' : viewMode === 'bar' ? 'bar chart' : 'radar chart'
@@ -428,23 +438,25 @@ export function ModelGroupsSection({
               Analysis settings bar above and affect both model reports.
             </p>
           </div>
-          <div>
-            <p className="mb-1 font-semibold text-gray-800">What is internal agreement?</p>
-            <p>
-              Internal agreement checks whether the models in a cluster actually made the same choices on
-              the same prompts. It is the average Cohen&apos;s kappa across the pairs of models in the
-              group, so it tells you about behavior, not just whether their value profiles look similar.
-            </p>
-            <p className="mt-1">
-              A low value means the cluster may look alike on paper but behave differently. The warning
-              style marks clusters below {LOW_AGREEMENT_THRESHOLD.toFixed(1)}, which is the fair-agreement
-              boundary we use here.
-            </p>
-            <p className="mt-1">
-              This number is computed for the currently selected signature, so it can change when the
-              signature picker changes.
-            </p>
-          </div>
+          {showInternalAgreement && (
+            <div>
+              <p className="mb-1 font-semibold text-gray-800">What is internal agreement?</p>
+              <p>
+                Internal agreement checks whether the models in a cluster actually made the same choices on
+                the same prompts. It is the average Cohen&apos;s kappa across the pairs of models in the
+                group, so it tells you about behavior, not just whether their value profiles look similar.
+              </p>
+              <p className="mt-1">
+                A low value means the cluster may look alike on paper but behave differently. The warning
+                style marks clusters below {LOW_AGREEMENT_THRESHOLD.toFixed(1)}, which is the fair-agreement
+                boundary we use here.
+              </p>
+              <p className="mt-1">
+                This number is computed for the currently selected signature, so it can change when the
+                signature picker changes.
+              </p>
+            </div>
+          )}
         </div>
       )}
 
@@ -500,7 +512,7 @@ export function ModelGroupsSection({
                 const memberLabels = getGroupLabel(cluster);
                 const isActive = activeGroupIds.includes(cluster.id);
                 const internalAgreement = internalKappaByClusterId?.get(cluster.id) ?? null;
-                const internalAgreementDisplay = showInternalAgreement
+                const internalAgreementDisplay = renderOverlay
                   ? getInternalAgreementDisplay(internalAgreement, agreementStatus)
                   : null;
 

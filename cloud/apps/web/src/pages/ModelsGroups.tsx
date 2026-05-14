@@ -107,7 +107,13 @@ function buildModelEntries(
   });
 }
 
-export function ModelsGroups() {
+/**
+ * Shared Model Groups page body. The original page (`ModelsGroups`, route
+ * `/models`) renders it with `showInternalAgreement={false}` — unchanged
+ * behavior. The V2 page (`ModelsGroupsV2`, route `/models/v2`) renders it with
+ * `showInternalAgreement` on so the two can be compared in production.
+ */
+export function ModelGroupsView({ showInternalAgreement }: { showInternalAgreement: boolean }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const { domains, queryLoading: domainsLoading, error: domainsError } = useDomains();
   const [selectedDomainIds, setSelectedDomainIds] = useState<string[]>(() => {
@@ -550,6 +556,7 @@ export function ModelsGroups() {
             kappaClusterError={kappaClusterError?.message ?? null}
             pairwiseKappaMap={pairwiseKappaMap}
             agreementStatus={agreementStatus}
+            showInternalAgreement={showInternalAgreement}
             dataSource={dataSource}
             distanceMethod={similarityMethod}
             models={filteredModels}
@@ -574,4 +581,12 @@ export function ModelsGroups() {
       )}
     </div>
   );
+}
+
+/**
+ * Model Groups page (route `/models`). Comparison baseline — renders the shared
+ * view with the internal-agreement overlay off, so its behavior is unchanged.
+ */
+export function ModelsGroups() {
+  return <ModelGroupsView showInternalAgreement={false} />;
 }

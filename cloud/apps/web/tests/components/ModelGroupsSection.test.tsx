@@ -303,6 +303,7 @@ describe('ModelGroupsSection', () => {
   it('shows internal agreement values and warning styling for fully covered clusters', () => {
     render(
       <ModelGroupsSection
+        showInternalAgreement
         clusterAnalysisByMethod={{
           'log-odds-euclidean-upgma': agreementClusterAnalysis,
           'log-odds-euclidean-ward': agreementClusterAnalysis,
@@ -334,6 +335,7 @@ describe('ModelGroupsSection', () => {
   it('shows a singleton placeholder with an explanatory tooltip', () => {
     render(
       <ModelGroupsSection
+        showInternalAgreement
         clusterAnalysisByMethod={{
           'log-odds-euclidean-upgma': populatedClusterAnalysis,
           'log-odds-euclidean-ward': populatedClusterAnalysis,
@@ -354,6 +356,7 @@ describe('ModelGroupsSection', () => {
   it('shows a placeholder when a cluster includes members outside the current selection', () => {
     render(
       <ModelGroupsSection
+        showInternalAgreement
         clusterAnalysisByMethod={{
           'log-odds-euclidean-upgma': supersetClusterAnalysis,
           'log-odds-euclidean-ward': supersetClusterAnalysis,
@@ -376,6 +379,7 @@ describe('ModelGroupsSection', () => {
   it('shows a placeholder when member pairs have no shared scenarios', () => {
     render(
       <ModelGroupsSection
+        showInternalAgreement
         clusterAnalysisByMethod={{
           'log-odds-euclidean-upgma': noSharedScenarioClusterAnalysis,
           'log-odds-euclidean-ward': noSharedScenarioClusterAnalysis,
@@ -397,6 +401,7 @@ describe('ModelGroupsSection', () => {
   it('shows loading placeholder text while the agreement map is absent', () => {
     render(
       <ModelGroupsSection
+        showInternalAgreement
         clusterAnalysisByMethod={{
           'log-odds-euclidean-upgma': populatedClusterAnalysis,
           'log-odds-euclidean-ward': populatedClusterAnalysis,
@@ -414,6 +419,7 @@ describe('ModelGroupsSection', () => {
   it('shows a needs-more-models placeholder while the agreement map is absent', () => {
     render(
       <ModelGroupsSection
+        showInternalAgreement
         clusterAnalysisByMethod={{
           'log-odds-euclidean-upgma': populatedClusterAnalysis,
           'log-odds-euclidean-ward': populatedClusterAnalysis,
@@ -431,6 +437,7 @@ describe('ModelGroupsSection', () => {
   it('shows an unavailable placeholder while the agreement map is absent', () => {
     render(
       <ModelGroupsSection
+        showInternalAgreement
         clusterAnalysisByMethod={{
           'log-odds-euclidean-upgma': populatedClusterAnalysis,
           'log-odds-euclidean-ward': populatedClusterAnalysis,
@@ -448,6 +455,7 @@ describe('ModelGroupsSection', () => {
   it('does not show the overlay in kappa-agreement mode', () => {
     render(
       <ModelGroupsSection
+        showInternalAgreement
         clusterAnalysisByMethod={{
           'kappa-agreement-euclidean-upgma': agreementClusterAnalysis,
           'kappa-agreement-euclidean-ward': agreementClusterAnalysis,
@@ -471,6 +479,7 @@ describe('ModelGroupsSection', () => {
   it('does not show the overlay in individual mode', () => {
     render(
       <ModelGroupsSection
+        showInternalAgreement
         clusterAnalysisByMethod={{
           'log-odds-euclidean-upgma': agreementClusterAnalysis,
           'log-odds-euclidean-ward': agreementClusterAnalysis,
@@ -494,6 +503,7 @@ describe('ModelGroupsSection', () => {
   it('shows the internal agreement explanation in the help panel', () => {
     render(
       <ModelGroupsSection
+        showInternalAgreement
         clusterAnalysisByMethod={{
           'log-odds-euclidean-upgma': agreementClusterAnalysis,
           'log-odds-euclidean-ward': agreementClusterAnalysis,
