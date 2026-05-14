@@ -628,6 +628,30 @@
       "files_written": 7,
       "subprocess_invocations": 36,
       "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "diff",
+      "ts": "2026-05-14T15:57:10Z",
+      "wall_seconds": 0.273,
+      "input_bytes_read": 87468,
+      "output_bytes_written": 53458,
+      "files_read": 6,
+      "files_written": 2,
+      "subprocess_invocations": 14,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "diff",
+      "ts": "2026-05-14T15:57:17Z",
+      "wall_seconds": 0.265,
+      "input_bytes_read": 88410,
+      "output_bytes_written": 54086,
+      "files_read": 6,
+      "files_written": 2,
+      "subprocess_invocations": 14,
+      "ttl_crossed": false
     }
   ],
   "stages": {
@@ -667,7 +691,8 @@
       "adversarial_sha_history": [
         "bfcee5048645775cf5f09d0371f21b2e74de86a8c07b85b2ff4c7d60746a507a"
       ],
-      "initial_sha": "bfcee5048645775cf5f09d0371f21b2e74de86a8c07b85b2ff4c7d60746a507a"
+      "initial_sha": "bfcee5048645775cf5f09d0371f21b2e74de86a8c07b85b2ff4c7d60746a507a",
+      "judge_next_action": "advance"
     }
   },
   "invariant_warnings": [],
@@ -690,6 +715,12 @@
       "ts": "20260514T153018_947756Z",
       "reason": "Plan reviewed and reconciled. Codex implementation-adversarial review completed with 3 findings (1 HIGH, 2 MEDIUM) \u2014 all addressed in plan.md (pair-level full-coverage rule, overlay rendered outside the card button for a11y, explicit status-derivation priority). Gemini testability-adversarial review could not run \u2014 Google-side 429 'no capacity for gemini-2.5-pro' across runner + direct retries \u2014 reconciled as deferred per the infra-failure path; can re-run when capacity returns. Advancing per operator direction; no findings outstanding.",
       "head_sha": "063e448dc4a83f6b92b19fbae7231485ca4e6f76"
+    },
+    {
+      "stage": "diff",
+      "ts": "20260514T155646_758013Z",
+      "reason": "Codex implemented both slices in one dispatch (commit 20754ac). The diff checkpoint at slice index 0 covered the full combined diff through commit 02967ae8 (helper + types + wiring + rendering + tests + the orchestrator stale-refetch fix). No slice-2 work remains and there is no incremental slice-2 diff to review. Preflight passed: 0 lint errors, 1466 web tests pass, build succeeds. Advancing diff stage.",
+      "head_sha": "373f0fd6a056a6aa74a58e2fc02e02c8dc6083cc"
     }
   ],
   "plan_adversarial_rounds": 0,
