@@ -1,5 +1,6 @@
 import { type DomainCluster } from '../../api/operations/domainAnalysis';
 import { VALUE_LABELS, VALUES, type ModelEntry, type ValueKey } from '../../data/domainAnalysisData';
+import { type PairwiseKappaEntry } from '../models/ModelSimilarityMetrics';
 
 export const CLUSTER_SCORE_MIN = -3.25;
 export const CLUSTER_SCORE_MAX = 3.25;
@@ -12,6 +13,19 @@ export const DOT_BAR_CLUSTER_SCORE_RANGE = DOT_BAR_CLUSTER_SCORE_MAX - DOT_BAR_C
 export const DOT_BAR_WIN_RATE_MIN = 0;
 export const DOT_BAR_WIN_RATE_MAX = 1;
 export const WIN_RATE_MIDPOINT = 0.5;
+
+export type AgreementStatus = 'loading' | 'needs-more-models' | 'unavailable' | 'ready';
+
+export type InternalKappaNotComputableReason =
+  | 'singleton'
+  | 'members-outside-selection'
+  | 'no-shared-scenarios';
+
+export type InternalKappaResult =
+  | { kind: 'value'; mean: number }
+  | { kind: 'not-computable'; reason: InternalKappaNotComputableReason };
+
+export type PairwiseKappaMap = Map<string, Map<string, number | PairwiseKappaEntry>>;
 
 export const CLUSTER_VISUAL_COLORS = [
   '#2563eb',
@@ -121,4 +135,56 @@ export function isClusterScoreClipped(
   max = CLUSTER_SCORE_MAX,
 ): boolean {
   return score < min || score > max;
+}
+
+function getPairwiseKappaValue(entry: number | PairwiseKappaEntry): number {
+  return typeof entry === 'number' ? entry : entry.kappa;
+}
+
+function lookupPairwiseKappa(
+  pairwiseKappaMap: PairwiseKappaMap,
+  leftModelId: string,
+  rightModelId: string,
+): number | null {
+  const forward = pairwiseKappaMap.get(leftModelId)?.get(rightModelId);
+  if (forward != null) return getPairwiseKappaValue(forward);
+  const reverse = pairwiseKappaMap.get(rightModelId)?.get(leftModelId);
+  if (reverse != null) return getPairwiseKappaValue(reverse);
+  return null;
+}
+
+export function meanInternalKappa(
+  memberModelIds: readonly string[],
+  visibleModelIdSet: ReadonlySet<string>,
+  pairwiseKappaMap: PairwiseKappaMap,
+): InternalKappaResult {
+  if (memberModelIds.length <= 1) {
+    return { kind: 'not-computable', reason: 'singleton' };
+  }
+
+  for (const memberModelId of memberModelIds) {
+    if (!visibleModelIdSet.has(memberModelId)) {
+      return { kind: 'not-computable', reason: 'members-outside-selection' };
+    }
+  }
+
+  const pairwiseValues: number[] = [];
+  for (let leftIndex = 0; leftIndex < memberModelIds.length - 1; leftIndex += 1) {
+    const leftModelId = memberModelIds[leftIndex]!;
+    for (let rightIndex = leftIndex + 1; rightIndex < memberModelIds.length; rightIndex += 1) {
+      const rightModelId = memberModelIds[rightIndex]!;
+      const pairwiseKappa = lookupPairwiseKappa(pairwiseKappaMap, leftModelId, rightModelId);
+      if (pairwiseKappa == null) {
+        return { kind: 'not-computable', reason: 'no-shared-scenarios' };
+      }
+      pairwiseValues.push(pairwiseKappa);
+    }
+  }
+
+  if (pairwiseValues.length === 0) {
+    return { kind: 'not-computable', reason: 'no-shared-scenarios' };
+  }
+
+  const mean = pairwiseValues.reduce((sum, value) => sum + value, 0) / pairwiseValues.length;
+  return { kind: 'value', mean };
 }

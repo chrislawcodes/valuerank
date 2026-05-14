@@ -1,0 +1,1539 @@
+Reading additional input from stdin...
+OpenAI Codex v0.130.0
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/distracted-goodall-27c98d
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019e26ee-066b-7951-b6d4-272248c89a2f
+--------
+user
+Review this spec artifact using a feasibility-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+Code context files are provided above. Before asserting any finding, check whether it is confirmed or refuted by the provided code. Each finding must include an evidence tag:
+  [CODE-CONFIRMED] — the code directly supports this finding
+  [CODE-REFUTED] — the code contradicts this finding (do not include as a finding)
+  [UNVERIFIED] — relevant code was not provided; treat as lower confidence
+Only assign HIGH severity to CODE-CONFIRMED findings.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Context: ModelsGroups.tsx
+import { useEffect, useMemo, useState } from 'react';
+import { useQuery } from 'urql';
+import { useSearchParams } from 'react-router-dom';
+import { AnalysisContextBar } from '../components/analysis/AnalysisContextBar';
+import { ErrorMessage } from '../components/ui/ErrorMessage';
+import { Loading } from '../components/ui/Loading';
+import {
+  DOMAIN_ANALYSIS_QUERY,
+  DOMAIN_ANALYSIS_QUERY_LEGACY,
+  DOMAIN_AVAILABLE_SIGNATURES_QUERY,
+  type DomainAnalysisQueryResult,
+  type DomainAnalysisQueryVariables,
+  type DomainAnalysisModel,
+  type DomainAvailableSignature,
+  type DomainAvailableSignaturesQueryResult,
+  type DomainAvailableSignaturesQueryVariables,
+} from '../api/operations/domainAnalysis';
+import {
+  MODELS_ANALYSIS_QUERY,
+  type ModelsAnalysisModelResult,
+  type ModelsAnalysisQueryResult,
+  type ModelsAnalysisQueryVariables,
+} from '../api/operations/modelsAnalysis';
+import { LLM_MODELS_QUERY, type LlmModelsQueryResult } from '../api/operations/llm';
+import { type ClusterAnalysis } from '../api/operations/domainAnalysis';
+import {
+  ModelAgreementClusterAnalysisDocument,
+  type ModelAgreementClusterAnalysisQuery,
+  type ModelAgreementClusterAnalysisQueryVariables,
+  useModelAgreementOnTradeoffsQuery,
+} from '../generated/graphql';
+import { ModelGroupsSection } from '../components/domains/ModelGroupsSection';
+import { ModelAnalysisSettingsBar } from '../components/models/ModelAnalysisSettingsBar';
+import { ModelSimilarityTableSection } from '../components/models/ModelSimilarityTableSection';
+import { ModelAgreementSection } from '../components/models/ModelAgreementSection';
+import { type CalculationMethod, type PairwiseKappaEntry } from '../components/models/ModelSimilarityMetrics';
+import { useDomains } from '../hooks/useDomains';
+import { VALUES, type ModelEntry, type ValueKey } from '../data/domainAnalysisData';
+import { formatQueryError } from '../utils/urqlError';
+import {
+  countAnalyzedTranscripts,
+  formatSignatureOptionLabel,
+  getCacheStatusCopy,
+  getSignaturePriority,
+} from '../utils/domainAnalysisUtils';
+
+const ALL_DOMAINS_SCOPE = 'all-domains';
+type DomainSelectionScope = 'DOMAIN' | 'ALL_DOMAINS' | 'DOMAIN_SET';
+
+function normalizeDomainIds(domainIds: readonly string[]): string[] {
+  return Array.from(new Set(domainIds.map((id) => id.trim()).filter((id) => id !== ''))).sort((a, b) => a.localeCompare(b));
+}
+
+function getDomainSelectionScope(domainIds: readonly string[]): DomainSelectionScope {
+  if (domainIds.length === 0) return 'ALL_DOMAINS';
+  return domainIds.length === 1 ? 'DOMAIN' : 'DOMAIN_SET';
+}
+
+function getDomainAnalysisScopeParam(scope: DomainSelectionScope): string | undefined {
+  return scope === 'ALL_DOMAINS' ? ALL_DOMAINS_SCOPE : undefined;
+}
+
+function buildModelEntries(
+  models: DomainAnalysisModel[],
+  modelsAnalysisModels: ModelsAnalysisModelResult[] = [],
+  winRateMode: 'all' | 'exc-neutral' = 'all',
+  dataSource: 'log-odds' | 'win-rate' | 'kappa-agreement' = 'log-odds',
+): ModelEntry[] {
+  const pooledWinRatesByModel = new Map<string, Map<string, number | null>>(
+    modelsAnalysisModels.map((model) => [
+      model.modelId,
+      new Map(model.values.map((value) => [value.valueKey, value.pooledWinRate])),
+    ]),
+  );
+  const pooledExcNeutralByModel = new Map<string, Map<string, number | null>>(
+    modelsAnalysisModels.map((model) => [
+      model.modelId,
+      new Map(model.values.map((value) => [value.valueKey, value.pooledWinRateExcNeutral])),
+    ]),
+  );
+
+  return models.map((model) => {
+    const valueMap = new Map(model.values.map((value) => [value.valueKey, value.score] as const));
+    const winRateMap = pooledWinRatesByModel.get(model.model);
+    const excNeutralMap = pooledExcNeutralByModel.get(model.model);
+    const useExcNeutral = winRateMode === 'exc-neutral' && dataSource === 'win-rate';
+    const values = VALUES.reduce<Record<ValueKey, number>>((acc, valueKey) => {
+      acc[valueKey] = valueMap.get(valueKey) ?? 0;
+      return acc;
+    }, {} as Record<ValueKey, number>);
+    const winRates = VALUES.reduce<Record<ValueKey, number | null>>((acc, valueKey) => {
+      if (useExcNeutral) {
+        acc[valueKey] = excNeutralMap?.get(valueKey) ?? winRateMap?.get(valueKey) ?? null;
+      } else {
+        acc[valueKey] = winRateMap?.get(valueKey) ?? null;
+      }
+      return acc;
+    }, {} as Record<ValueKey, number | null>);
+
+    return {
+      model: model.model,
+      label: model.label,
+      values,
+      winRates,
+    };
+  });
+}
+
+export function ModelsGroups() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { domains, queryLoading: domainsLoading, error: domainsError } = useDomains();
+  const [selectedDomainIds, setSelectedDomainIds] = useState<string[]>(() => {
+    const domainIdsParam = searchParams.get('domainIds');
+    if (domainIdsParam != null && domainIdsParam !== '') {
+      return domainIdsParam.split(',').filter((id) => id !== '');
+    }
+    const legacyDomainId = searchParams.get('domainId') ?? '';
+    const legacyScope = searchParams.get('scope') ?? '';
+    if (legacyScope === ALL_DOMAINS_SCOPE || legacyDomainId === '') return [];
+    return [legacyDomainId];
+  });
+  const [selectedSignature, setSelectedSignature] = useState<string>(searchParams.get('signature') ?? '');
+
+  const normalizedSelectedDomainIds = useMemo(() => normalizeDomainIds(selectedDomainIds), [selectedDomainIds]);
+  const effectiveScope = useMemo(() => getDomainSelectionScope(normalizedSelectedDomainIds), [normalizedSelectedDomainIds]);
+  const effectiveDomainId = normalizedSelectedDomainIds.length === 1 ? (normalizedSelectedDomainIds[0] ?? '') : '';
+  const isAllDomains = effectiveScope === 'ALL_DOMAINS';
+  const isDomainSet = effectiveScope === 'DOMAIN_SET';
+  const [selectedModelIds, setSelectedModelIds] = useState<string[] | null>(null);
+  const [useLegacyQuery, setUseLegacyQuery] = useState(false);
+  const [clusteringMethod, setClusteringMethod] = useState<'upgma' | 'ward'>('ward');
+  const [dataSource, setDataSource] = useState<'log-odds' | 'win-rate' | 'kappa-agreement'>('log-odds');
+  const [similarityMethod, setSimilarityMethod] = useState<CalculationMethod>('weighted-euclidean');
+  // Track whether the user has explicitly chosen a similarity method.
+  // When false, switching data source to kappa-agreement auto-defaults to 'kappa'.
+  const [similarityMethodExplicit, setSimilarityMethodExplicit] = useState(false);
+  const [winRateMode, setWinRateMode] = useState<'all' | 'exc-neutral'>('all');
+
+  const [{ data: signatureData, fetching: signaturesLoading, error: signaturesError }] = useQuery<
+    DomainAvailableSignaturesQueryResult,
+    DomainAvailableSignaturesQueryVariables
+  >({
+    query: DOMAIN_AVAILABLE_SIGNATURES_QUERY,
+    variables: {
+      domainId: effectiveDomainId !== '' ? effectiveDomainId : undefined,
+      domainIds: isDomainSet ? normalizedSelectedDomainIds : undefined,
+      scope: getDomainAnalysisScopeParam(effectiveScope),
+    },
+    pause: domainsLoading,
+    requestPolicy: 'cache-and-network',
+  });
+
+  const signatureOptions = useMemo<DomainAvailableSignature[]>(() => {
+    const options = signatureData?.domainAvailableSignatures ?? [];
+    return options
+      .map((option, index) => ({ option, index }))
+      .sort((a, b) => {
+        const priority = getSignaturePriority(a.option) - getSignaturePriority(b.option);
+        return priority !== 0 ? priority : a.index - b.index;
+      })
+      .map(({ option }) => option);
+  }, [signatureData]);
+
+  useEffect(() => {
+    if (domains.length === 0 || normalizedSelectedDomainIds.length === 0) return;
+    const domainIdSet = new Set(domains.map((domain) => domain.id));
+    const validIds = normalizedSelectedDomainIds.filter((id) => domainIdSet.has(id));
+    if (validIds.length === normalizedSelectedDomainIds.length) return;
+    setSelectedDomainIds(validIds);
+  }, [domains, normalizedSelectedDomainIds]);
+
+  useEffect(() => {
+    if (signatureOptions.length === 0) {
+      setSelectedSignature('');
+      return;
+    }
+    if (selectedSignature !== '' && signatureOptions.some((option) => option.signature === selectedSignature)) return;
+    setSelectedSignature(signatureOptions[0]?.signature ?? '');
+  }, [selectedSignature, signatureOptions]);
+
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    if (normalizedSelectedDomainIds.length === 0) {
+      next.delete('domainId');
+      next.delete('domainIds');
+    } else if (normalizedSelectedDomainIds.length === 1) {
+      next.set('domainId', normalizedSelectedDomainIds[0]!);
+      next.delete('domainIds');
+    } else {
+      next.set('domainIds', normalizedSelectedDomainIds.join(','));
+      next.delete('domainId');
+    }
+    next.delete('scope');
+    if (selectedSignature === '') next.delete('signature');
+    else next.set('signature', selectedSignature);
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, normalizedSelectedDomainIds, selectedSignature, setSearchParams]);
+
+  const activeUseLegacyQuery = useLegacyQuery && effectiveDomainId !== '';
+  const [{ data: scoredData, fetching: scoredFetching, error: scoredError }, reexecuteScoredQuery] = useQuery<DomainAnalysisQueryResult, DomainAnalysisQueryVariables>({
+    query: DOMAIN_ANALYSIS_QUERY,
+    variables: {
+      domainId: effectiveDomainId !== '' ? effectiveDomainId : undefined,
+      domainIds: isDomainSet ? normalizedSelectedDomainIds : undefined,
+      scope: getDomainAnalysisScopeParam(effectiveScope),
+      signature: selectedSignature === '' ? undefined : selectedSignature,
+    },
+    pause: domainsLoading || activeUseLegacyQuery,
+    requestPolicy: 'cache-and-network',
+  });
+  const [{ data: modelsAnalysisData, fetching: modelsAnalysisFetching, error: modelsAnalysisError }] = useQuery<
+    ModelsAnalysisQueryResult,
+    ModelsAnalysisQueryVariables
+  >({
+    query: MODELS_ANALYSIS_QUERY,
+    variables: {
+      ...(effectiveDomainId !== '' ? { domainId: effectiveDomainId } : {}),
+      ...(isDomainSet ? { domainIds: normalizedSelectedDomainIds } : {}),
+      ...(selectedSignature !== '' ? { signature: selectedSignature } : {}),
+    },
+    pause: domainsLoading,
+    requestPolicy: 'cache-and-network',
+  });
+  const [{ data: llmModelsData, error: llmModelsError }] = useQuery<LlmModelsQueryResult>({
+    query: LLM_MODELS_QUERY,
+    variables: { status: 'ACTIVE' },
+    requestPolicy: 'cache-and-network',
+  });
+  const [{ data: legacyData, fetching: legacyFetching, error: legacyError }] = useQuery<DomainAnalysisQueryResult, { domainId: string }>({
+    query: DOMAIN_ANALYSIS_QUERY_LEGACY,
+    variables: { domainId: effectiveDomainId },
+    pause: effectiveDomainId === '' || !activeUseLegacyQuery,
+    requestPolicy: 'cache-and-network',
+  });
+
+  useEffect(() => {
+    const message = scoredError?.message ?? '';
+    const isFieldError = message.includes('Unknown argument "signature"')
+      || message.includes('Cannot query field')
+      || message.includes('Unknown field');
+    if (isFieldError && !useLegacyQuery && effectiveDomainId !== '') setUseLegacyQuery(true);
+  }, [effectiveDomainId, scoredError, useLegacyQuery]);
+
+  // Auto-default similarity method to 'kappa' when switching to kappa-agreement data source,
+  // unless the user has already made an explicit choice.
+  useEffect(() => {
+    if (dataSource === 'kappa-agreement' && !similarityMethodExplicit) {
+      setSimilarityMethod('kappa');
+    }
+  }, [dataSource, similarityMethodExplicit]);
+
+  const data = activeUseLegacyQuery ? legacyData : scoredData;
+  const fetching = activeUseLegacyQuery ? legacyFetching : scoredFetching;
+  const error = activeUseLegacyQuery ? legacyError : scoredError;
+  const activeModels = useMemo(
+    () => (llmModelsData?.llmModels ?? []).filter((model) => model.status === 'ACTIVE'),
+    [llmModelsData],
+  );
+  const defaultModelIds = useMemo(
+    () => activeModels.filter((model) => model.isDefault).map((model) => model.modelId),
+    [activeModels],
+  );
+  useEffect(() => {
+    if (selectedModelIds === null && defaultModelIds.length > 0) {
+      setSelectedModelIds(defaultModelIds);
+    }
+  }, [defaultModelIds, selectedModelIds]);
+  const visibleModelIds = selectedModelIds ?? defaultModelIds;
+
+  const isKappaClusterMode = dataSource === 'kappa-agreement';
+  const [{ data: kappaClusterData, fetching: kappaClusterFetching, error: kappaClusterError }] = useQuery<
+    ModelAgreementClusterAnalysisQuery,
+    ModelAgreementClusterAnalysisQueryVariables
+  >({
+    query: ModelAgreementClusterAnalysisDocument,
+    variables: {
+      modelIds: visibleModelIds,
+      ...(effectiveDomainId !== '' ? { domainId: effectiveDomainId } : {}),
+      ...(isDomainSet ? { domainIds: normalizedSelectedDomainIds } : {}),
+      scope: effectiveScope,
+      signature: selectedSignature,
+      method: clusteringMethod,
+    },
+    pause:
+      !isKappaClusterMode
+      || selectedSignature === ''
+      || visibleModelIds.length < 3
+      || domainsLoading
+      || llmModelsData == null,
+    requestPolicy: 'cache-and-network',
+  });
+
+  // Bridge codegen's optional-nullable fields to ClusterAnalysis's strict-nullable fields.
+  const kappaClusterAnalysis = useMemo<ClusterAnalysis | null>(() => {
+    const raw = kappaClusterData?.modelAgreementClusterAnalysis?.clusterAnalysis;
+    if (raw == null) return null;
+    return {
+      skipped: raw.skipped,
+      skipReason: raw.skipReason ?? null,
+      defaultPair: raw.defaultPair ?? null,
+      clusters: raw.clusters as ClusterAnalysis['clusters'],
+      faultLinesByPair: (raw.faultLinesByPair ?? {}) as ClusterAnalysis['faultLinesByPair'],
+    };
+  }, [kappaClusterData]);
+
+  const kappaDendrogram = useMemo(() => {
+    return kappaClusterData?.modelAgreementClusterAnalysis?.clusterAnalysis?.dendrogram ?? null;
+  }, [kappaClusterData]);
+
+  const kappaLeafOrder = useMemo(() => {
+    return kappaClusterData?.modelAgreementClusterAnalysis?.clusterAnalysis?.leafOrder ?? null;
+  }, [kappaClusterData]);
+
+  const kappaClusterIdByModelId = useMemo(() => {
+    const raw = kappaClusterData?.modelAgreementClusterAnalysis?.clusterAnalysis?.clusterIdByModelId;
+    if (raw == null) return null;
+    return raw as Record<string, string>;
+  }, [kappaClusterData]);
+
+  const transcriptCount = useMemo(
+    () => countAnalyzedTranscripts(data?.domainAnalysis.models ?? [], visibleModelIds),
+    [data?.domainAnalysis.models, visibleModelIds],
+  );
+  const cacheStatusCopy = useMemo(
+    () => getCacheStatusCopy(
+      data?.domainAnalysis.cacheStatus,
+      data?.domainAnalysis.generatedAt,
+      transcriptCount,
+      data?.domainAnalysis.refreshProgress,
+    ),
+    [data?.domainAnalysis.cacheStatus, data?.domainAnalysis.generatedAt, data?.domainAnalysis.refreshProgress, transcriptCount],
+  );
+
+  const isUpdating = data?.domainAnalysis.cacheStatus === 'UPDATING';
+  useEffect(() => {
+    if (!isUpdating) return;
+    const id = setInterval(() => { reexecuteScoredQuery({ requestPolicy: 'network-only' }); }, 20_000);
+    return () => { clearInterval(id); };
+  }, [isUpdating, reexecuteScoredQuery]);
+  const domainSummary = useMemo(() => {
+    if (isAllDomains) return 'All Domains';
+    if (normalizedSelectedDomainIds.length === 1) {
+      const id = normalizedSelectedDomainIds[0];
+      return domains.find((d) => d.id === id)?.name ?? id ?? 'Unknown';
+    }
+    return `${normalizedSelectedDomainIds.length} domains`;
+  }, [domains, isAllDomains, normalizedSelectedDomainIds]);
+
+  const showPageLoader = domainsLoading
+    || (data?.domainAnalysis == null && fetching && error == null)
+    || (modelsAnalysisData == null && modelsAnalysisFetching && modelsAnalysisError == null)
+    || (signatureData == null && signaturesLoading && signaturesError == null)
+    || (llmModelsData == null && llmModelsError == null);
+  const models = useMemo(
+    () =>
+      buildModelEntries(
+        data?.domainAnalysis.models ?? [],
+        modelsAnalysisData?.modelsAnalysis.models ?? [],
+        winRateMode,
+        dataSource,
+      ),
+    [data?.domainAnalysis.models, dataSource, modelsAnalysisData?.modelsAnalysis.models, winRateMode],
+  );
+  const modelOptions = useMemo(
+    () => activeModels.map((model) => ({
+      value: model.modelId,
+      label: model.displayName,
+      isDefault: defaultModelIds.includes(model.modelId),
+    })),
+    [activeModels, defaultModelIds],
+  );
+  const filteredModels = useMemo(
+    () => (visibleModelIds.length === 0 ? [] : models.filter((model) => visibleModelIds.includes(model.model))),
+    [models, visibleModelIds],
+  );
+  const pageErrorMessage = domainsError != null
+    ? formatQueryError('Model Groups domains query', domainsError, {
+      scope: effectiveScope,
+      domainId: effectiveDomainId === '' ? '(none)' : effectiveDomainId,
+    })
+    : signaturesError != null
+      ? formatQueryError('Model Groups available signatures query', signaturesError, {
+        domainId: effectiveDomainId === '' ? '(none)' : effectiveDomainId,
+        scope: effectiveScope,
+      })
+      : error != null
+        ? formatQueryError(
+          activeUseLegacyQuery ? 'Model Groups legacy domain analysis query' : 'Model Groups domain analysis query',
+          error,
+          {
+            domainId: effectiveDomainId === '' ? '(none)' : effectiveDomainId,
+            scope: effectiveScope,
+            signature: selectedSignature === '' ? '(none)' : selectedSignature,
+          },
+        )
+        : modelsAnalysisError != null
+          ? formatQueryError('Model Groups models analysis query', modelsAnalysisError, {
+            domainId: effectiveDomainId !== '' ? effectiveDomainId : ALL_DOMAINS_SCOPE,
+            signature: selectedSignature === '' ? '(none)' : selectedSignature,
+          })
+          : llmModelsError != null
+            ? formatQueryError('Model Groups active LLM models query', llmModelsError, {
+              status: 'ACTIVE',
+            })
+            : null;
+  const showAgreementSection =
+    selectedSignature !== ''
+    && visibleModelIds.length >= 2
+    && !domainsLoading
+    && llmModelsData != null;
+
+  // Fire the agreement query here too so we can extract the kappa matrix for
+  // the similarity table. Urql will deduplicate/cache against the same query
+  // fired inside ModelAgreementSection.
+  const [{ data: agreementData }] = useModelAgreementOnTradeoffsQuery({
+    variables: {
+      modelIds: visibleModelIds,
+      domainId: effectiveDomainId !== '' ? effectiveDomainId : undefined,
+      domainIds: isDomainSet ? normalizedSelectedDomainIds : undefined,
+      scope: effectiveScope,
+      signature: selectedSignature,
+    },
+    requestPolicy: 'cache-and-network',
+    pause: !showAgreementSection,
+  });
+
+  const pairwiseKappaMap = useMemo(() => {
+    const rows = agreementData?.modelAgreementOnTradeoffs?.pairwiseAgreementMatrix;
+    if (rows == null || rows.length === 0) return undefined;
+    const map = new Map<string, Map<string, PairwiseKappaEntry>>();
+    for (const row of rows) {
+      if (row.cohensKappa == null || row.totalCells === 0) continue;
+      const entry: PairwiseKappaEntry = {
+        kappa: row.cohensKappa,
+        confidenceLow: row.cohensKappaConfidenceLow ?? null,
+        confidenceHigh: row.cohensKappaConfidenceHigh ?? null,
+        confidenceIsSymmetric: row.cohensKappaConfidenceIsSymmetric,
+      };
+      if (!map.has(row.modelAId)) map.set(row.modelAId, new Map());
+      if (!map.has(row.modelBId)) map.set(row.modelBId, new Map());
+      map.get(row.modelAId)!.set(row.modelBId, entry);
+      map.get(row.modelBId)!.set(row.modelAId, entry);
+    }
+    return map.size === 0 ? undefined : map;
+  }, [agreementData]);
+
+  if (pageErrorMessage != null) {
+    return (
+      <div className="space-y-6">
+        <ErrorMessage
+          message={`Failed to load model groups report: ${pageErrorMessage}`}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <AnalysisContextBar
+        domain={{
+          label: 'Domain',
+          multi: true,
+          summary: domainSummary,
+          selectedIds: normalizedSelectedDomainIds,
+          options: domains.map((d) => ({ value: d.id, label: d.name })),
+          actions: [
+            {
+              label: 'All Domains',
+              isActive: isAllDomains,
+              onClick: () => setSelectedDomainIds([]),
+            },
+          ],
+          onChange: (ids) => { setSelectedDomainIds(normalizeDomainIds(ids)); },
+          disabled: domainsLoading || domains.length === 0,
+        }}
+        signature={{
+          label: 'Signature',
+          value: selectedSignature,
+          options:
+            signatureOptions.length === 0
+              ? [{ value: '', label: 'No signatures with completed runs', disabled: true }]
+              : signatureOptions.map((option) => ({
+                value: option.signature,
+                label: formatSignatureOptionLabel(option),
+              })),
+          onChange: (value) => setSelectedSignature(value),
+          disabled: signaturesLoading || signatureOptions.length === 0,
+        }}
+        models={{
+          label: 'Models',
+          selectedModelIds,
+          defaultModelIds,
+          options: modelOptions,
+          onChange: setSelectedModelIds,
+        }}
+        winRateMode={{
+          value: winRateMode,
+          onChange: setWinRateMode,
+          disabled: dataSource !== 'win-rate',
+        }}
+      />
+
+      {cacheStatusCopy != null && (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+          <span className={`inline-flex rounded-full border px-2.5 py-1 font-semibold ${cacheStatusCopy.badgeClassName}`}>
+            {cacheStatusCopy.badgeLabel}
+          </span>
+          <span>{cacheStatusCopy.detail}</span>
+        </div>
+      )}
+
+      <ModelAnalysisSettingsBar
+        dataSource={dataSource}
+        onDataSourceChange={setDataSource}
+        similarityMethod={similarityMethod}
+        onSimilarityMethodChange={(method) => {
+          setSimilarityMethodExplicit(true);
+          setSimilarityMethod(method);
+        }}
+      />
+
+      {showPageLoader ? (
+        <Loading size="lg" text="Loading model groups..." />
+      ) : (
+        <div className="space-y-6">
+          <ModelGroupsSection
+            clusterAnalysisByMethod={data?.domainAnalysis.clusterAnalysisByMethod}
+            kappaClusterAnalysis={kappaClusterAnalysis}
+            kappaDendrogram={kappaDendrogram}
+            kappaLeafOrder={kappaLeafOrder}
+            kappaClusterIdByModelId={kappaClusterIdByModelId}
+            kappaClusterLoading={kappaClusterFetching}
+            kappaClusterError={kappaClusterError?.message ?? null}
+            dataSource={dataSource}
+            distanceMethod={similarityMethod}
+            models={filteredModels}
+            clusteringMethod={clusteringMethod}
+            onClusteringMethodChange={setClusteringMethod}
+          />
+          <ModelSimilarityTableSection
+            models={filteredModels}
+            method={similarityMethod}
+            pairwiseKappa={pairwiseKappaMap}
+          />
+          {showAgreementSection ? (
+            <ModelAgreementSection
+              modelIds={visibleModelIds}
+              scope={effectiveScope}
+              domainId={effectiveDomainId !== '' ? effectiveDomainId : null}
+              domainIds={isDomainSet ? normalizedSelectedDomainIds : null}
+              signature={selectedSignature}
+            />
+          ) : null}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+Context: ModelGroupsSection.tsx
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { HelpCircle, X } from 'lucide-react';
+import { Button } from '../ui/Button';
+import { CopyVisualButton } from '../ui/CopyVisualButton';
+import { type ClusterAnalysis, type DomainCluster } from '../../api/operations/domainAnalysis';
+import { type ModelEntry } from '../../data/domainAnalysisData';
+import { type CalculationMethod } from '../models/ModelSimilarityMetrics';
+import { ClusterBarPlot } from './ClusterBarPlot';
+import { ClusterDotPlot } from './ClusterDotPlot';
+import { ClusterRadarChart } from './ClusterRadarChart';
+import { buildIndividualClusters, getClusterMemberLabelText } from './clusterVisualizationUtils';
+import { ClusterDendrogram, type DendrogramMerge } from './ClusterDendrogram';
+
+const LEGEND_COLORS = [
+  { border: 'border-blue-500', text: 'text-blue-700', light: 'bg-blue-50', color: '#2563eb' },
+  { border: 'border-amber-500', text: 'text-amber-700', light: 'bg-amber-50', color: '#d97706' },
+  { border: 'border-emerald-500', text: 'text-emerald-700', light: 'bg-emerald-50', color: '#059669' },
+  { border: 'border-rose-500', text: 'text-rose-700', light: 'bg-rose-50', color: '#e11d48' },
+  { border: 'border-violet-500', text: 'text-violet-700', light: 'bg-violet-50', color: '#7c3aed' },
+  { border: 'border-sky-500', text: 'text-sky-700', light: 'bg-sky-50', color: '#0ea5e9' },
+  { border: 'border-orange-500', text: 'text-orange-700', light: 'bg-orange-50', color: '#ea580c' },
+  { border: 'border-lime-500', text: 'text-lime-700', light: 'bg-lime-50', color: '#65a30d' },
+  { border: 'border-fuchsia-500', text: 'text-fuchsia-700', light: 'bg-fuchsia-50', color: '#d946ef' },
+  { border: 'border-indigo-500', text: 'text-indigo-700', light: 'bg-indigo-50', color: '#4f46e5' },
+  { border: 'border-teal-500', text: 'text-teal-700', light: 'bg-teal-50', color: '#14b8a6' },
+  { border: 'border-yellow-500', text: 'text-yellow-700', light: 'bg-yellow-50', color: '#ca8a04' },
+] as const;
+
+type ClusteringLinkage = 'upgma' | 'ward';
+type ClusterDataSource = 'log-odds' | 'win-rate' | 'kappa-agreement';
+
+const LINKAGE_OPTIONS: Array<{ value: ClusteringLinkage; label: string }> = [
+  { value: 'upgma', label: 'UPGMA' },
+  { value: 'ward', label: 'Ward' },
+];
+
+type ModelGroupsSectionProps = {
+  clusterAnalysisByMethod?: Record<string, ClusterAnalysis>;
+  /**
+   * When dataSource === 'kappa-agreement', this prop supplies the cluster
+   * analysis derived from pairwise Cohen's kappa instead of the precomputed
+   * `clusterAnalysisByMethod` map (which only covers score-based variants).
+   */
+  kappaClusterAnalysis?: ClusterAnalysis | null;
+  /** Dendrogram merges from the kappa cluster payload (kappa mode only). */
+  kappaDendrogram?: DendrogramMerge[] | null;
+  /** Leaf order for the kappa dendrogram/heatmap. */
+  kappaLeafOrder?: string[] | null;
+  /** Flat per-model cluster ID map (kappa mode only). */
+  kappaClusterIdByModelId?: Record<string, string> | null;
+  kappaClusterLoading?: boolean;
+  kappaClusterError?: string | null;
+  dataSource?: ClusterDataSource;
+  distanceMethod?: CalculationMethod;
+  models: ModelEntry[];
+  selectedModelId?: string | null;
+  clusteringMethod?: ClusteringLinkage;
+  onClusteringMethodChange?: (method: ClusteringLinkage) => void;
+};
+
+type ClusterViewMode = 'dot' | 'bar' | 'radar';
+type GroupDisplayMode = 'groups' | 'individual';
+
+const CLUSTER_VIEW_OPTIONS: Array<{ value: ClusterViewMode; label: string }> = [
+  { value: 'radar', label: 'Radar' },
+  { value: 'dot', label: 'Dot map' },
+  { value: 'bar', label: 'Bar' },
+];
+
+const GROUP_DISPLAY_OPTIONS: Array<{ value: GroupDisplayMode; label: string }> = [
+  { value: 'groups', label: 'Groups' },
+  { value: 'individual', label: 'Individual' },
+];
+
+// The similarity table uses 'weighted-euclidean'; backend distance key uses 'euclidean'
+function toBackendDistanceMethod(method: CalculationMethod | undefined): string {
+  if (method == null || method === 'weighted-euclidean') return 'euclidean';
+  return method;
+}
+
+function getLegendColor(index: number) {
+  return LEGEND_COLORS[index % LEGEND_COLORS.length]!;
+}
+
+function getGroupLabel(cluster: DomainCluster): string {
+  return getClusterMemberLabelText(cluster);
+}
+
+export function ModelGroupsSection({
+  clusterAnalysisByMethod,
+  kappaClusterAnalysis = null,
+  kappaDendrogram = null,
+  kappaLeafOrder = null,
+  kappaClusterIdByModelId = null,
+  kappaClusterLoading = false,
+  kappaClusterError = null,
+  dataSource = 'log-odds',
+  distanceMethod,
+  models,
+  selectedModelId = null,
+  clusteringMethod = 'ward',
+  onClusteringMethodChange,
+}: ModelGroupsSectionProps) {
+  const summaryTableRef = useRef<HTMLDivElement>(null);
+  const [showModelGroupsHelp, setShowModelGroupsHelp] = useState(false);
+  const [viewMode, setViewMode] = useState<ClusterViewMode>('dot');
+  const [groupDisplayMode, setGroupDisplayMode] = useState<GroupDisplayMode>('groups');
+  const [activeGroupIds, setActiveGroupIds] = useState<string[]>([]);
+
+  const backendKey = `${dataSource}-${toBackendDistanceMethod(distanceMethod)}-${clusteringMethod}`;
+  const activeClusterAnalysis = dataSource === 'kappa-agreement'
+    ? kappaClusterAnalysis
+    : (clusterAnalysisByMethod?.[backendKey] ?? null);
+
+  // Derive the dendrogram cut-line height from where the algorithm decided
+  // to split. With N models there are N-1 merges. If the algorithm produced
+  // K clusters, the first N-K merges happened *within* clusters and the rest
+  // happened *between* clusters. The cut line sits at the midpoint between
+  // the last within-cluster merge and the first between-cluster merge.
+  const kappaCutLineHeight = useMemo<number | null>(() => {
+    if (kappaDendrogram == null || kappaDendrogram.length === 0) return null;
+    const clusterCount = kappaClusterAnalysis?.clusters.length ?? 0;
+    const totalMerges = kappaDendrogram.length;
+    const withinClusterMergeCount = totalMerges - clusterCount + 1;
+    if (withinClusterMergeCount <= 0 || withinClusterMergeCount > totalMerges) return null;
+    const lastWithin = kappaDendrogram[withinClusterMergeCount - 1]?.height;
+    const firstBetween = kappaDendrogram[withinClusterMergeCount]?.height;
+    if (lastWithin == null || firstBetween == null) return null;
+    return (lastWithin + firstBetween) / 2;
+  }, [kappaDendrogram, kappaClusterAnalysis]);
+
+  const hasGroupedClusters = activeClusterAnalysis != null && !activeClusterAnalysis.skipped;
+  const groupedClusters = useMemo(() => activeClusterAnalysis?.clusters ?? [], [activeClusterAnalysis]);
+  const individualClusters = useMemo(() => buildIndividualClusters(models), [models]);
+
+  const sourceClusters = useMemo(
+    () => (groupDisplayMode === 'individual' ? individualClusters : groupedClusters),
+    [groupDisplayMode, groupedClusters, individualClusters],
+  );
+
+  const clusters = useMemo(
+    () => {
+      if (selectedModelId == null) return sourceClusters;
+      return sourceClusters.filter((cluster) => cluster.members.some((member) => member.model === selectedModelId));
+    },
+    [selectedModelId, sourceClusters],
+  );
+
+  useEffect(() => {
+    setActiveGroupIds((current) => {
+      const next = current.filter((id) => clusters.some((cluster) => cluster.id === id));
+      if (next.length === current.length && next.every((id, index) => id === current[index])) {
+        return current;
+      }
+      return next;
+    });
+  }, [clusters]);
+
+  const toggleGroupSelection = (clusterId: string) => {
+    setActiveGroupIds((current) => {
+      if (groupDisplayMode === 'individual') {
+        return current.includes(clusterId)
+          ? current.filter((id) => id !== clusterId)
+          : [...current, clusterId];
+      }
+
+      return current.length === 1 && current[0] === clusterId ? [] : [clusterId];
+    });
+  };
+
+  const modelLabels = useMemo<Record<string, string>>(() => {
+    const result: Record<string, string> = {};
+    for (const model of models) {
+      result[model.model] = model.label;
+    }
+    return result;
+  }, [models]);
+
+  const copyLabel = `${groupDisplayMode} model groups ${
+    viewMode === 'dot' ? 'dot map' : viewMode === 'bar' ? 'bar chart' : 'radar chart'
+  }`;
+
+  const showKappaLoader = dataSource === 'kappa-agreement' && kappaClusterAnalysis == null && kappaClusterLoading && kappaClusterError == null;
+  const showKappaError = dataSource === 'kappa-agreement' && kappaClusterError != null;
+
+  return (
+    <section className="rounded-lg border border-gray-200 bg-white p-4">
+      {dataSource === 'kappa-agreement' ? (
+        <p className="mb-3 rounded-md border border-teal-200 bg-teal-50 px-3 py-2 text-xs text-teal-900">
+          Models are grouped by behavioral agreement (Cohen&apos;s kappa on shared scenarios). Per-cluster centroids and
+          fault lines are still labeled with each group&apos;s average log-odds value scores.
+        </p>
+      ) : null}
+      {showKappaError ? (
+        <p className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-900">
+          Could not load kappa-based clustering: {kappaClusterError}
+        </p>
+      ) : null}
+      {showKappaLoader ? (
+        <p className="mb-3 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-700">
+          Loading kappa-based clustering…
+        </p>
+      ) : null}
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <h2 className="text-base font-medium text-gray-900">Model Clusters</h2>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowModelGroupsHelp((v) => !v)}
+            className="h-8 w-8 text-gray-500 hover:text-gray-700"
+            aria-label={showModelGroupsHelp ? 'Hide model groups explanation' : 'Show model groups explanation'}
+          >
+            {showModelGroupsHelp ? <X className="h-8 w-8" /> : <HelpCircle className="h-8 w-8" />}
+          </Button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
+            {GROUP_DISPLAY_OPTIONS.map((option) => {
+              const active = groupDisplayMode === option.value;
+              return (
+                <Button
+                  key={option.value}
+                  type="button"
+                  variant={active ? 'primary' : 'ghost'}
+                  size="sm"
+                  onClick={() => setGroupDisplayMode(option.value)}
+                  className={`rounded-md px-3 py-1 text-xs font-medium min-h-0 ${
+                    active ? 'bg-teal-600 text-white hover:bg-teal-700' : 'text-gray-600 hover:bg-white hover:text-gray-900'
+                  }`}
+                >
+                  {option.label}
+                </Button>
+              );
+            })}
+          </div>
+
+          {groupDisplayMode === 'groups' && (
+            <>
+              {onClusteringMethodChange != null && (
+                <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
+                  {LINKAGE_OPTIONS.map((option) => {
+                    const active = clusteringMethod === option.value;
+                    return (
+                      <Button
+                        key={option.value}
+                        type="button"
+                        variant={active ? 'primary' : 'ghost'}
+                        size="sm"
+                        onClick={() => onClusteringMethodChange(option.value)}
+                        className={`rounded-md px-3 py-1 text-xs font-medium min-h-0 ${
+                          active ? 'bg-teal-600 text-white hover:bg-teal-700' : 'text-gray-600 hover:bg-white hover:text-gray-900'
+                        }`}
+                      >
+                        {option.label}
+                      </Button>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          )}
+
+          {dataSource !== 'kappa-agreement' && (
+            <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
+              {CLUSTER_VIEW_OPTIONS.map((option) => {
+                const active = viewMode === option.value;
+                return (
+                  <Button
+                    key={option.value}
+                    type="button"
+                    variant={active ? 'primary' : 'ghost'}
+                    size="sm"
+                    onClick={() => setViewMode(option.value)}
+                    className={`rounded-md px-3 py-1 text-xs font-medium min-h-0 ${
+                      active ? 'bg-teal-600 text-white hover:bg-teal-700' : 'text-gray-600 hover:bg-white hover:text-gray-900'
+                    }`}
+                  >
+                    {option.label}
+                  </Button>
+                );
+              })}
+            </div>
+          )}
+
+          <CopyVisualButton targetRef={summaryTableRef} label={copyLabel} />
+        </div>
+      </div>
+
+      {showModelGroupsHelp && (
+        <div className="mb-4 space-y-3 rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs text-gray-700">
+          <div>
+            <p className="mb-1 font-semibold text-gray-800">What is a log-odds score?</p>
+            <p>
+              When we compare two values - like Achievement vs. Hedonism - a model has to pick one. We count
+              how many times it picks each, then compute: score = log((wins + 1) / (losses + 1)).
+            </p>
+            <p className="mt-1">
+              <strong>Zero</strong> means the model chose each value equally often. {' '}
+              <strong>Positive</strong> means it chose this value more often than not. {' '}
+              <strong>Negative</strong> means it avoided this value.
+            </p>
+            <p className="mt-1">
+              Why not just use a percentage? Percentages distort differences at the extremes. A model that
+              wins 95% of the time is far stronger than one that wins 90%, but the gap looks small (5 points).
+              Log-odds shows this difference properly. The +1 in the formula also prevents extreme results
+              when a value was only tested a few times.
+            </p>
+          </div>
+          <div>
+            <p className="mb-1 font-semibold text-gray-800">Why do we adjust each model&apos;s scores?</p>
+            <p>
+              Before grouping, we subtract each model&apos;s own average score from all 10 of its scores.
+              This is called mean-centering.
+            </p>
+            <p className="mt-1">
+              Some models have higher scores across many values simply because they have strong preferences
+              in general. We don&apos;t want that to drive the grouping. After mean-centering, a positive
+              score means &ldquo;this value is above this model&apos;s own average&rdquo; - not just
+              &ldquo;this model scores high overall.&rdquo;
+            </p>
+            <p className="mt-1">
+              Steps: (1) compute log-odds for all 10 values, (2) average those 10 numbers, (3) subtract the
+              average from each score. Now we&apos;re comparing the shape of each model&apos;s profile -
+              which values it ranks above or below its own typical level.
+            </p>
+          </div>
+          <div>
+            <p className="mb-1 font-semibold text-gray-800">How are the groups formed?</p>
+            <p>
+              We use hierarchical clustering. Start with every model alone, find the two most similar
+              models and merge them, repeat until we have up to 4 groups.
+            </p>
+            <p className="mt-1">
+              <strong>Linkage</strong> controls how cluster distance is measured: UPGMA averages distances
+              across all member pairs; Ward minimizes within-cluster variance.
+            </p>
+            <p className="mt-1">
+              The <strong>data source</strong> and <strong>similarity method</strong> are set in the
+              Analysis settings bar above and affect both model reports.
+            </p>
+          </div>
+        </div>
+      )}
+
+      <div ref={summaryTableRef}>
+        {groupDisplayMode === 'groups' && !hasGroupedClusters ? (
+          <div className="space-y-1 text-xs text-gray-500 italic">
+            <p>Cluster analysis not available.</p>
+            {activeClusterAnalysis?.skipReason != null && <p>{activeClusterAnalysis.skipReason}</p>}
+          </div>
+        ) : groupDisplayMode === 'individual' && models.length === 0 ? (
+          <div className="space-y-1 text-xs text-gray-500 italic">
+            <p>No model data available.</p>
+          </div>
+        ) : (
+          <>
+            {dataSource === 'kappa-agreement' && groupDisplayMode === 'groups' ? (
+              // In kappa mode, show the dendrogram
+              <div className="space-y-6">
+                {kappaDendrogram != null && kappaLeafOrder != null ? (
+                  <div>
+                    <p className="mb-2 text-xs font-semibold text-gray-700">Merge tree (dendrogram)</p>
+                    <ClusterDendrogram
+                      merges={kappaDendrogram}
+                      leafOrder={kappaLeafOrder}
+                      modelLabels={modelLabels}
+                      clusterIdByModelId={kappaClusterIdByModelId ?? {}}
+                      cutLineHeight={kappaCutLineHeight ?? undefined}
+                    />
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              // Score modes: show the existing value-profile chart
+              (() => {
+                // Plot dataSource only controls how centroids are scaled. Under
+                // 'kappa-agreement' the grouping is by kappa but centroids are
+                // still log-odds, so the plots use 'log-odds' for scaling.
+                const plotDataSource: 'log-odds' | 'win-rate' =
+                  dataSource === 'win-rate' && groupDisplayMode === 'groups' ? 'win-rate' : 'log-odds';
+                return (
+                  <>
+                    {viewMode === 'dot' && <ClusterDotPlot clusters={clusters} activeGroupIds={activeGroupIds} dataSource={plotDataSource} />}
+                    {viewMode === 'bar' && <ClusterBarPlot clusters={clusters} activeGroupIds={activeGroupIds} dataSource={plotDataSource} />}
+                    {viewMode === 'radar' && <ClusterRadarChart clusters={clusters} activeGroupIds={activeGroupIds} dataSource={plotDataSource} />}
+                  </>
+                );
+              })()
+            )}
+
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+              {clusters.map((cluster, index) => {
+                const style = getLegendColor(index);
+                const memberLabels = getGroupLabel(cluster);
+                const isActive = activeGroupIds.includes(cluster.id);
+
+                return (
+                  <Button
+                    key={cluster.id}
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => toggleGroupSelection(cluster.id)}
+                    aria-pressed={isActive}
+                    title={memberLabels}
+                    className={`rounded-lg border p-3 text-left transition ${
+                      isActive
+                        ? `${style.border} ${style.light} ring-2 ring-teal-400 shadow-[0_0_0_1px_rgba(13,148,136,0.25),0_0_16px_rgba(45,212,191,0.35)]`
+                        : 'border-gray-200 bg-white hover:border-teal-300 hover:shadow-sm'
+                    }`}
+                  >
+                    <div className="flex items-start gap-2">
+                      <span
+                        className={`mt-1 h-3 w-3 shrink-0 rounded-full transition ${
+                          isActive ? 'scale-125' : ''
+                        }`}
+                        style={{
+                          backgroundColor: style.color,
+                          boxShadow: isActive ? '0 0 0 1px rgba(255,255,255,0.85), 0 0 12px rgba(45,212,191,0.55)' : undefined,
+                        }}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className={`text-sm font-semibold leading-snug ${style.text} whitespace-normal break-words`}>
+                          {memberLabels}
+                        </p>
+                      </div>
+                    </div>
+                  </Button>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
+
+Context: clusterVisualizationUtils.ts
+import { type DomainCluster } from '../../api/operations/domainAnalysis';
+import { VALUE_LABELS, VALUES, type ModelEntry, type ValueKey } from '../../data/domainAnalysisData';
+
+export const CLUSTER_SCORE_MIN = -3.25;
+export const CLUSTER_SCORE_MAX = 3.25;
+export const CLUSTER_SCORE_RANGE = CLUSTER_SCORE_MAX - CLUSTER_SCORE_MIN;
+
+export const DOT_BAR_CLUSTER_SCORE_MIN = -2.5;
+export const DOT_BAR_CLUSTER_SCORE_MAX = 2.5;
+export const DOT_BAR_CLUSTER_SCORE_RANGE = DOT_BAR_CLUSTER_SCORE_MAX - DOT_BAR_CLUSTER_SCORE_MIN;
+
+export const DOT_BAR_WIN_RATE_MIN = 0;
+export const DOT_BAR_WIN_RATE_MAX = 1;
+export const WIN_RATE_MIDPOINT = 0.5;
+
+export const CLUSTER_VISUAL_COLORS = [
+  '#2563eb',
+  '#d97706',
+  '#059669',
+  '#e11d48',
+  '#7c3aed',
+  '#0ea5e9',
+  '#ea580c',
+  '#65a30d',
+  '#d946ef',
+  '#4f46e5',
+  '#14b8a6',
+  '#ca8a04',
+] as const;
+
+const VALUE_INDEX = new Map(VALUES.map((valueKey, index) => [valueKey, index] as const));
+
+function averageScore(clusters: DomainCluster[], valueKey: ValueKey): number {
+  if (clusters.length === 0) return 0;
+  return clusters.reduce((sum, cluster) => sum + (cluster.centroid[valueKey] ?? 0), 0) / clusters.length;
+}
+
+export function getClusterValueOrder(clusters: DomainCluster[]): ValueKey[] {
+  const averages = new Map<ValueKey, number>();
+  for (const valueKey of VALUES) {
+    averages.set(valueKey, averageScore(clusters, valueKey));
+  }
+
+  return [...VALUES].sort((left, right) => {
+    const avgDiff = (averages.get(right) ?? 0) - (averages.get(left) ?? 0);
+    if (Math.abs(avgDiff) > 1e-9) return avgDiff;
+
+    const labelDiff = (VALUE_LABELS[left] ?? left).localeCompare(VALUE_LABELS[right] ?? right);
+    if (labelDiff !== 0) return labelDiff;
+
+    return (VALUE_INDEX.get(left) ?? 0) - (VALUE_INDEX.get(right) ?? 0);
+  });
+}
+
+export function getClusterMemberLabels(cluster: DomainCluster): string[] {
+  return cluster.members.map((member) => member.label);
+}
+
+export function getClusterMemberLabelText(cluster: DomainCluster): string {
+  return getClusterMemberLabels(cluster).join(', ');
+}
+
+export function buildIndividualClusters(models: ModelEntry[]): DomainCluster[] {
+  return models.map((model) => ({
+    id: model.model,
+    name: model.label,
+    definingValues: [],
+    centroid: model.values,
+    members: [
+      {
+        model: model.model,
+        label: model.label,
+        silhouetteScore: 1,
+        isOutlier: false,
+        nearestClusterIds: null,
+        distancesToNearestClusters: null,
+      },
+    ],
+  }));
+}
+
+export function getClusterVisualColor(index: number): string {
+  return CLUSTER_VISUAL_COLORS[index % CLUSTER_VISUAL_COLORS.length]!;
+}
+
+export function formatClusterScoreLabel(score: number): string {
+  return score > 0 ? `+${score.toFixed(2)}` : score.toFixed(2);
+}
+
+export function formatWinRateLabel(rate: number): string {
+  return `${(rate * 100).toFixed(1)}%`;
+}
+
+export function clampClusterScore(score: number, min = CLUSTER_SCORE_MIN, max = CLUSTER_SCORE_MAX): number {
+  return Math.max(min, Math.min(max, score));
+}
+
+export function getClusterScorePosition(
+  score: number,
+  min = CLUSTER_SCORE_MIN,
+  max = CLUSTER_SCORE_MAX,
+): number {
+  const clamped = clampClusterScore(score, min, max);
+  const range = max - min;
+  return ((clamped - min) / range) * 100;
+}
+
+export function getClusterHeatmapScale(
+  score: number,
+  min = CLUSTER_SCORE_MIN,
+  max = CLUSTER_SCORE_MAX,
+): number {
+  const clamped = clampClusterScore(score, min, max);
+  const range = max - min;
+  return ((clamped - min) / range) * 2 - 1;
+}
+
+export function isClusterScoreClipped(
+  score: number,
+  min = CLUSTER_SCORE_MIN,
+  max = CLUSTER_SCORE_MAX,
+): boolean {
+  return score < min || score > max;
+}
+
+
+Context: ModelGroupsSection.test.tsx
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { ModelGroupsSection } from '../../src/components/domains/ModelGroupsSection';
+import type { ClusterAnalysis } from '../../src/api/operations/domainAnalysis';
+import { DOMAIN_ANALYSIS_MODELS } from '../../src/data/domainAnalysisData';
+
+const skippedClusterAnalysis: ClusterAnalysis = {
+  skipped: true,
+  skipReason: 'Not enough models',
+  defaultPair: null,
+  clusters: [],
+  faultLinesByPair: {},
+};
+
+const populatedClusterAnalysis: ClusterAnalysis = {
+  skipped: false,
+  skipReason: null,
+  defaultPair: null,
+  clusters: [
+    {
+      id: 'cluster-1',
+      name: '',
+      definingValues: [],
+      centroid: {
+        Achievement: 1.6,
+        Benevolence: -0.1,
+        Universalism_Nature: 0.7,
+      },
+      members: [
+        {
+          model: 'model-a',
+          label: 'Model A',
+          silhouetteScore: 0.52,
+          isOutlier: false,
+          nearestClusterIds: null,
+          distancesToNearestClusters: null,
+        },
+      ],
+    },
+    {
+      id: 'cluster-2',
+      name: '',
+      definingValues: [],
+      centroid: {
+        Achievement: 0.6,
+        Benevolence: 1.2,
+        Universalism_Nature: -0.4,
+      },
+      members: [
+        {
+          model: 'model-b',
+          label: 'Model B',
+          silhouetteScore: 0.41,
+          isOutlier: false,
+          nearestClusterIds: null,
+          distancesToNearestClusters: null,
+        },
+      ],
+    },
+  ],
+  faultLinesByPair: {},
+};
+
+const populatedModels = DOMAIN_ANALYSIS_MODELS.slice(0, 2);
+
+describe('ModelGroupsSection', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('renders the plain model groups heading without numbering', () => {
+    render(
+      <ModelGroupsSection
+        clusterAnalysisByMethod={{
+          'log-odds-euclidean-upgma': skippedClusterAnalysis,
+          'log-odds-euclidean-ward': skippedClusterAnalysis,
+        }}
+        models={populatedModels}
+      />,
+    );
+
+    expect(screen.getByRole('heading', { name: 'Model Clusters' })).toBeInTheDocument();
+    expect(screen.getByText(/cluster analysis not available/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^1\./i)).not.toBeInTheDocument();
+  });
+
+  it('offers group and individual views without heatmap', () => {
+    const onClusteringMethodChange = vi.fn();
+
+    render(
+      <ModelGroupsSection
+        clusterAnalysisByMethod={{
+          'log-odds-euclidean-upgma': populatedClusterAnalysis,
+          'log-odds-euclidean-ward': populatedClusterAnalysis,
+        }}
+        models={populatedModels}
+        onClusteringMethodChange={onClusteringMethodChange}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Groups' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Individual' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Bar' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Heatmap' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Linkage')).toBeNull();
+    expect(screen.queryByText('Data')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Ward' })).toHaveClass('bg-teal-600');
+    expect(screen.getByRole('button', { name: 'UPGMA' })).not.toHaveClass('bg-teal-600');
+
+    fireEvent.click(screen.getByRole('button', { name: 'UPGMA' }));
+    expect(onClusteringMethodChange).toHaveBeenCalledWith('upgma');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Individual' }));
+
+    expect(screen.getByRole('button', { name: 'Claude Sonnet 4.5' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'DeepSeek Chat' })).toBeInTheDocument();
+  });
+
+  it('lights up the selected legend item and fades the others', () => {
+    const { container } = render(
+      <ModelGroupsSection
+        clusterAnalysisByMethod={{
+          'log-odds-euclidean-upgma': populatedClusterAnalysis,
+          'log-odds-euclidean-ward': populatedClusterAnalysis,
+        }}
+        models={populatedModels}
+      />,
+    );
+
+    const legendButton = screen.getByRole('button', { name: 'Model A' });
+    fireEvent.click(legendButton);
+
+    const activeDot = container.querySelector('[data-value-key="Achievement"][data-cluster-id="cluster-1"]');
+    const inactiveDot = container.querySelector('[data-value-key="Achievement"][data-cluster-id="cluster-2"]');
+    expect(activeDot).not.toBeNull();
+    expect(inactiveDot).not.toBeNull();
+    expect(activeDot).toHaveStyle({ opacity: '1' });
+    expect(inactiveDot).toHaveStyle({ opacity: '0.2' });
+  });
+
+  it('allows multi-select in individual mode', () => {
+    const { container } = render(
+      <ModelGroupsSection
+        clusterAnalysisByMethod={{
+          'log-odds-euclidean-upgma': populatedClusterAnalysis,
+          'log-odds-euclidean-ward': populatedClusterAnalysis,
+        }}
+        models={populatedModels}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Individual' }));
+
+    const firstModel = populatedModels[0];
+    const secondModel = populatedModels[1];
+    expect(firstModel).toBeDefined();
+    expect(secondModel).toBeDefined();
+
+    const firstButton = screen.getByRole('button', { name: firstModel?.label ?? '' });
+    const secondButton = screen.getByRole('button', { name: secondModel?.label ?? '' });
+
+    fireEvent.click(firstButton);
+    fireEvent.click(secondButton);
+
+    expect(firstButton).toHaveAttribute('aria-pressed', 'true');
+    expect(secondButton).toHaveAttribute('aria-pressed', 'true');
+
+    const firstDot = container.querySelector(`[data-value-key="Achievement"][data-cluster-id="${firstModel?.model}"]`);
+    const secondDot = container.querySelector(`[data-value-key="Achievement"][data-cluster-id="${secondModel?.model}"]`);
+    expect(firstDot).not.toBeNull();
+    expect(secondDot).not.toBeNull();
+    expect(firstDot as Element).toHaveStyle({ opacity: '1' });
+    expect(secondDot as Element).toHaveStyle({ opacity: '1' });
+  });
+
+  it('shows a value tooltip with color rows and logit values on bar hover', () => {
+    vi.useFakeTimers();
+
+    const { container } = render(
+      <ModelGroupsSection
+        clusterAnalysisByMethod={{
+          'log-odds-euclidean-upgma': populatedClusterAnalysis,
+          'log-odds-euclidean-ward': populatedClusterAnalysis,
+        }}
+        models={populatedModels}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Bar' }));
+
+    const targetBar = container.querySelector('[data-value-key="Achievement"][data-cluster-id="cluster-1"]');
+    expect(targetBar).not.toBeNull();
+
+    fireEvent.mouseEnter(targetBar as Element);
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+
+    const tooltip = screen.getByRole('tooltip');
+    expect(tooltip).toHaveTextContent('Achievement');
+    expect(tooltip).toHaveTextContent('+1.60');
+    expect(tooltip).toHaveTextContent('+0.60');
+    expect(tooltip.querySelectorAll('[aria-hidden="true"]')).toHaveLength(2);
+
+    fireEvent.mouseLeave(targetBar as Element);
+    expect(screen.queryByRole('tooltip')).toBeNull();
+  });
+
+  it('shows the Schwartz category ring in radar view', () => {
+    render(
+      <ModelGroupsSection
+        clusterAnalysisByMethod={{
+          'log-odds-euclidean-upgma': populatedClusterAnalysis,
+          'log-odds-euclidean-ward': populatedClusterAnalysis,
+        }}
+        models={populatedModels}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Radar' }));
+
+    expect(screen.getByRole('img', { name: /cluster radar chart ordered by favorability with schwartz category ring/i })).toBeInTheDocument();
+    expect(screen.getByText('Self-Transcendence')).toBeInTheDocument();
+    expect(screen.getByText('Conservation')).toBeInTheDocument();
+    expect(screen.getByText('Self-Enhancement')).toBeInTheDocument();
+    expect(screen.getByText('Openness to Change')).toBeInTheDocument();
+    expect(screen.getByText('Universalism')).toHaveAttribute('text-anchor', 'start');
+    expect(screen.queryByText(/Cluster:/i)).not.toBeInTheDocument();
+  });
+});
+
+
+Artifact: spec.md
+# Internal-Kappa Diagnostic Overlay for Model Groups
+
+## Summary
+
+On the Model Groups page (`/models/groups`), models are grouped into clusters by their log-odds value profiles — a summary of *what each model values*. That summary can hide real behavioral disagreement: two models can have nearly identical value profiles yet still make different choices on individual tradeoff prompts.
+
+This feature adds a diagnostic overlay. When models are grouped by value profile (log-odds or win-rate data source), each cluster card shows the **mean pairwise Cohen's kappa** across its members — a measure of *whether the models actually behave alike*. When that internal agreement is low, the value is shown in a warning style, flagging a cluster that "looks alike on paper but behaves differently."
+
+This slice is **web-only**. The pairwise Cohen's kappa matrix is already loaded on the page — `ModelsGroups.tsx` builds `pairwiseKappaMap` from the `modelAgreementOnTradeoffs` query — but it is currently passed only to the similarity table, not to the cluster component. The work is to thread that data into `ModelGroupsSection`, compute a per-cluster mean, and render it. No analysis math, backend contract, GraphQL schema, codegen, or migration changes.
+
+## Goals
+
+- Pass the already-loaded `pairwiseKappaMap` from `ModelsGroups.tsx` into `ModelGroupsSection`.
+- For each cluster, compute the unweighted mean of pairwise Cohen's kappa across all member pairs.
+- Show that mean internal kappa on each cluster card when grouped by value profile.
+- Render the value in a warning style when it is below the low-agreement threshold.
+- Show a neutral placeholder (not a warning) when internal kappa cannot be computed.
+- Extend the Model Groups help panel to explain what internal kappa means and how to read the warning.
+- Keep the page working with no API, GraphQL, codegen, or migration changes.
+
+## Non-Goals
+
+- No reverse overlay — showing value-profile spread per kappa cluster when grouped in `kappa-agreement` mode is a separate follow-up.
+- No internal-agreement score for ad-hoc groups created by multi-selecting models in `individual` display mode. The overlay is for the pre-computed clusters only; an ad-hoc-group agreement score is a reasonable but separate follow-up.
+- No API-side caching of internal kappa in `clusterAnalysisByMethod`; this stays a client-side computation unless per-render cost later becomes a measured problem.
+- No changes to the clustering algorithm, linkage options (UPGMA / Ward), distance methods, or the data-source set.
+- No new GraphQL fields, schema changes, codegen runs, or database migration.
+- No changes to the dot map, bar chart, radar chart, or dendrogram visualizations themselves.
+- No changes to the Model Groups page outside the cluster cards and help panel.
+
+## Required Changes
+
+### Threading the kappa data
+
+- `ModelsGroups.tsx` already builds `pairwiseKappaMap` (a model-by-model lookup of pairwise Cohen's kappa) from the `modelAgreementOnTradeoffs` query and passes it to `ModelSimilarityTableSection`.
+- Pass the same `pairwiseKappaMap` into `<ModelGroupsSection>` as a new optional prop.
+- Also pass the agreement query's **status** into `<ModelGroupsSection>` as a prop. A bare "fetching" boolean is not enough: the `modelAgreementOnTradeoffs` query in `ModelsGroups.tsx` also has a **paused** state (it is paused via `pause: !showAgreementSection` when the signature is empty or fewer than two models are visible) and an **error** state. All three — paused, fetching, errored — leave `pairwiseKappaMap` undefined, and the component must not mislabel "not requested" or "failed" as ordinary "no data."
+- This requires widening the existing query destructuring. The hook is currently read as `const [{ data: agreementData }] = useModelAgreementOnTradeoffsQuery(...)`, which discards `fetching` and `error`. That destructuring must be widened to also read `fetching` and `error`, and the parent must account for the paused state (`!showAgreementSection`) when deriving the status. This is a small, expected refactor in `ModelsGroups.tsx` — not a scope expansion.
+- The parent derives a single status value with four cases and passes it down:
+  - `loading` — the query is fetching;
+  - `needs-more-models` — the query is paused because fewer than two models are visible (e.g. the user used "Clear all" on the Models filter). This is a common, user-caused state and must be distinguishable from a real data problem — its tooltip is actionable ("select at least two models to see internal agreement").
+  - `unavailable` — the query errored, has no signature selected, or returned an empty result. This bucket is intentionally cause-agnostic: from the user's point of view the view simply has no agreement data, and the rare "every model pair shares zero scenarios" result is honestly described the same way. Its tooltip is "no agreement data for this view."
+  - `ready` — `pairwiseKappaMap` is present.
+- `ModelGroupsSection` must accept both the map and the status without requiring them — if the map is absent, the component still renders (see "Loading and missing data"); the status only changes the placeholder's tooltip text.
+
+### Cluster scope vs. kappa scope
+
+- `pairwiseKappaMap` is built from the `modelAgreementOnTradeoffs` query, which is scoped to the **visible model set** (`visibleModelIds` in `ModelsGroups.tsx`).
+- The cluster cards, however, render from `clusterAnalysisByMethod`, which is **not** scoped to the visible model set — it comes from the domain-analysis query. A cluster can therefore contain members that were never part of the kappa query.
+- `ModelGroupsSection` already receives the visible model set as its `models` prop. Use it: a cluster is **fully covered** only if every one of its members appears in the `models` prop.
+- If a cluster has any member outside the visible model set, its internal kappa is **not** fully computable — that cluster shows the neutral placeholder, **not** a partial mean. A mean computed over only the visible subset would be silently misleading, because the displayed number would not represent the cluster the card describes.
+
+### Computing mean internal kappa
+
+- The overlay value is computed only for **fully covered** clusters (all members present in the `models` prop).
+- For a fully covered cluster, take every unordered pair of member models and look up that pair's Cohen's kappa in `pairwiseKappaMap`.
+- The cluster's internal kappa is the **unweighted mean** of all member-pair kappa values that are present.
+- The denominator is the count of member pairs that **have** a kappa value — not the total count of member pairs in the cluster. Dividing by the total count would treat missing pairs as zero by the back door and understate agreement.
+- Even among fully covered members, a pair may still be absent from `pairwiseKappaMap` if the two models share no scenarios. Such pairs are **excluded from the mean** — they do not count as zero. Given the high prompt overlap in ValueRank runs this is expected to be rare, but it must still be handled.
+- A cluster with **one member** has no member pairs and therefore no internal kappa.
+- A cluster where **no member pair** has a computable kappa also has no internal kappa.
+- The computation should be memoized so it only recomputes when the clusters, the visible model set, or the kappa map change.
+- If a small helper is useful, it may live in `clusterVisualizationUtils.ts` ("mean pairwise kappa over a list of member model ids"); this is optional and a judgment call for the plan.
+
+### Rendering on cluster cards
+
+- The overlay renders only when **both** of these are true:
+  - the data source is `log-odds` or `win-rate` (not `kappa-agreement` — the overlay would be circular there, since the clusters are already built from kappa);
+  - the display mode is `groups` (not `individual` — individual mode has no multi-model clusters).
+- When it renders, each cluster card shows its mean internal kappa as a short labeled value (for example, an "internal agreement" line with the kappa value).
+- When the cluster's mean internal kappa is **below 0.4**, the value is shown in a visually distinct warning treatment (warning/amber styling consistent with how the page already shows low-emphasis warnings). At or above 0.4 it uses normal styling.
+- When the cluster has no computable internal kappa — a singleton cluster, a cluster with any member outside the visible model set, or a cluster where no member pair has a kappa value — the card shows a neutral placeholder — an em dash — in normal styling, **not** a warning. An uncomputable cluster is not a "bad" cluster; it is just one the metric does not apply to.
+- The placeholder must carry an explanatory affordance — at minimum a `title` tooltip on the overlay line — so it does not read as a bug. Without it, a user sees a card labeled with several model names but a non-informative "—" and reasonably assumes something is broken. The tooltip text must state *why* the value is unavailable and distinguish the reasons:
+  - **singleton cluster** — "only one model — no pair to compare";
+  - **members outside the current selection** — "this cluster includes models outside the current view — internal agreement is only computed for models in the current selection." Note: do **not** promise a specific fix such as "adjust the Models filter." The Models picker is built only from ACTIVE models, so a cluster member that is deprecated/inactive cannot be added through that control at all — an actionable-sounding message would point some users at an impossible fix. The wording must be true whether or not the missing model is selectable.
+  - **no shared scenarios** — "these models share no scenarios";
+  - plus the page-level statuses from "Loading and missing data" — `loading`, `needs-more-models`, and `unavailable` tooltips — when the whole map is absent.
+- When a cluster matches more than one non-computable case, the tooltip uses a fixed precedence: **(1) singleton**, then **(2) members outside the current selection**, then **(3) no shared scenarios**. Singleton wins because it is the most fundamental reason — a one-model cluster has no internal agreement to compute even if the user widens the model selection, so the members-outside-selection message would be misleading.
+- The kappa value should be shown with a small fixed precision (two decimal places).
+- Adding the line must not break the existing cluster-card layout, selection behavior (`aria-pressed`, click to toggle), or color-dot styling.
+- The cluster card is a single `<Button>` whose **accessible name is currently derived from its text content** (the member labels). Existing tests assert exact button names (e.g. `Model A`, `Claude Sonnet 4.5`). Adding the overlay text inside the button would change that accessible name and break those tests and screen-reader behavior. The implementation must keep the button's accessible name exactly the member-label text — by rendering the overlay outside the button, hiding it from the accessible name, or pinning the name with an explicit `aria-label`. The existing button-name tests must still pass unchanged.
+
+### Threshold
+
+- The low-agreement threshold is a fixed **0.4** — the Landis & Koch boundary below which agreement is considered "fair" or worse.
+- The threshold is a single named constant in `ModelGroupsSection.tsx`. It is not user-configurable in this slice.
+
+### Loading and missing data
+
+- The `pairwiseKappaMap` comes from a different query (`modelAgreementOnTradeoffs`) than the cluster analysis. The two can settle at different times.
+- To avoid layout shift ("pop-in"), the overlay line is **always rendered** in `log-odds`/`win-rate` + `groups` mode, including while `pairwiseKappaMap` is still loading. While the map is absent or empty, the line shows the neutral em-dash placeholder; once the map arrives, the line fills in with the computed value on the next render. The card's height does not change between the two states.
+- All placeholder states look the same (an em dash); only the `title` tooltip differs. When the map is absent the tooltip reflects the page-level status prop — `loading` ("agreement data is loading…"), `needs-more-models` ("select at least two models to see internal agreement"), or `unavailable` ("no agreement data for this view"). When the map is present, the tooltip reflects the per-cluster reason (singleton, members outside selection, no shared scenarios).
+- There must be no error when the map is absent.
+
+### Help panel
+
+- The Model Groups help panel (the expandable explanation block in `ModelGroupsSection.tsx`) gains a short new subsection.
+- It should explain, in plain language: internal kappa measures whether the models in a cluster actually made the same choices on the same prompts (not just whether they have similar value profiles); a low value means the cluster looks alike on paper but behaves differently; the warning style marks clusters below the 0.4 "fair agreement" line.
+- The copy must describe the metric honestly for what it is: the **average Cohen's kappa across the model pairs in the cluster**. It must not imply a single holistic whole-group inter-rater statistic (such as Fleiss' kappa) — that would require raw per-prompt ratings the web client does not have. "Average agreement across the pairs of models in the group" is the accurate framing.
+- The copy must also state that internal kappa is computed for the **currently selected signature** and will change when the signature picker changes. It is not a signature-independent property of the cluster — the same cluster can show different internal agreement under different signatures.
+- Keep the tone and reading level consistent with the existing help-panel copy.
+
+## Likely Files
+
+- `cloud/apps/web/src/pages/ModelsGroups.tsx` — thread `pairwiseKappaMap` into `<ModelGroupsSection>`.
+- `cloud/apps/web/src/components/domains/ModelGroupsSection.tsx` — new prop, per-cluster mean-kappa memo, cluster-card rendering, threshold constant, help-panel copy.
+- `cloud/apps/web/src/components/domains/clusterVisualizationUtils.ts` — optional helper for mean pairwise kappa over a member list.
+- `cloud/apps/web/tests/components/ModelGroupsSection.test.tsx` — component tests for the overlay (create if it does not already exist).
+
+## Acceptance Criteria
+
+- In `log-odds` or `win-rate` data-source mode with `groups` display mode, every cluster card shows its mean internal Cohen's kappa.
+- The mean is the unweighted average of member-pair kappa values, excluding pairs with no computable kappa.
+- A cluster whose mean internal kappa is below 0.4 shows that value in a distinct warning style; at or above 0.4 it uses normal styling.
+- A singleton cluster shows a neutral em-dash placeholder in normal styling, not a warning.
+- A cluster containing any member outside the visible model set shows the neutral em-dash placeholder — not a partial mean and not a warning.
+- A cluster where no member pair has a computable kappa shows a neutral em-dash placeholder in normal styling, not a warning.
+- The em-dash placeholder carries a `title` affordance explaining why the value is unavailable, with text that distinguishes the singleton, members-outside-selection, and no-shared-scenarios cases.
+- The agreement query's status (`loading` / `needs-more-models` / `unavailable` / `ready`) is passed into `ModelGroupsSection`; while the map is absent the placeholder tooltip reflects that status — distinguishing a still-loading view, a "select at least two models" state, and a view with no agreement data.
+- When a cluster matches multiple non-computable cases, the tooltip follows the fixed precedence singleton → members-outside-selection → no-shared-scenarios.
+- In `kappa-agreement` data-source mode, no internal-kappa overlay is shown on any card.
+- In `individual` display mode, no internal-kappa overlay is shown.
+- While `pairwiseKappaMap` is unavailable, the overlay line still renders (showing the em-dash placeholder) so there is no layout shift when the data later arrives; there are no errors.
+- The Model Groups help panel includes a subsection explaining internal kappa and the warning style.
+- Existing cluster-card behavior — selection toggle, `aria-pressed`, color dots, member labels, the dot/bar/radar/dendrogram views — is unchanged.
+- The cluster card button's accessible name is unchanged after the overlay is added — it remains exactly the member-label text, and the existing button-name tests pass without modification.
+- No API, GraphQL schema, codegen, or migration changes are made.
+- `npm run lint --workspace @valuerank/web`, `npm run test --workspace @valuerank/web`, and `npm run build --workspace @valuerank/web` all pass.
+
+## Risks
+
+- **Query timing.** `pairwiseKappaMap` and the cluster analysis come from separate queries. If the overlay is not guarded for the absent/empty case, the cluster cards could error or flash. Mitigation: explicit "render without overlay when the map is absent" path, covered by a test.
+- **Cluster scope exceeds kappa scope.** Clusters come from the domain-analysis query (not model-scoped); `pairwiseKappaMap` comes from a query scoped to the visible model set. A naive mean would be computed over a partial member set and silently mislead. Mitigation: the spec requires full visible-set coverage before showing a numeric value; partially covered clusters show the placeholder. verification: a component test with a cluster whose members are a superset of the `models` prop asserts the em-dash placeholder renders, not a number.
+- **Key-shape mismatch.** `pairwiseKappaMap` is keyed by model id; `DomainCluster.members[].model` must use the same id space. If they diverge, every lookup silently misses and every cluster shows the placeholder. verification: in a component test, assert a known multi-model cluster with seeded kappa values renders the computed mean, not the placeholder — a wrong key shape makes this test fail.
+- **Threshold interpretation.** 0.4 is a defensible standard cutoff but still a judgment call; a poorly chosen threshold could over- or under-flag. Mitigation: single named constant, easy to tune; the help panel states the threshold explicitly so the meaning is transparent to the reader.
+- **Visual noise.** Adding a line to every cluster card could clutter the compact card layout. Mitigation: keep the overlay to one short labeled line; reuse existing warning styling rather than inventing a new visual treatment.
+- **Low coverage in narrow selections.** Clusters come from the domain-analysis query and can contain more models than the user's current selection. In narrow selections many clusters will be "not fully covered" and show the em-dash placeholder, reducing how much the overlay actually tells the user. This is correct behavior — an honest placeholder beats a misleading partial number — but if it also happens in the *default* model selection the feature delivers little. verification: during implementation, load a real domain in the default model selection and count how many clusters are fully covered; if it is near zero, raise it before merge — the overlay may need the kappa query widened to the clustered model set (currently a non-goal) to be useful.
+- **Signature-scoped metric.** The internal kappa value depends on the selected signature; switching signatures changes it. Mitigation: the help panel states this explicitly so the number is not misread as a stable cluster property.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m checking the spec against the supplied code and looking for places where the requested behavior would collide with the current component shape or leave a gap. The main things I’m validating are query status handling, cluster coverage rules, and whether the overlay can be rendered without breaking the button semantics the tests depend on.

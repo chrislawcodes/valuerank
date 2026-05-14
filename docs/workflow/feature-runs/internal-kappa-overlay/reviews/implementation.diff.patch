@@ -1,0 +1,822 @@
+diff --git a/cloud/apps/web/src/components/domains/ModelGroupsSection.tsx b/cloud/apps/web/src/components/domains/ModelGroupsSection.tsx
+index b52e698c..c5c8073b 100644
+--- a/cloud/apps/web/src/components/domains/ModelGroupsSection.tsx
++++ b/cloud/apps/web/src/components/domains/ModelGroupsSection.tsx
+@@ -8,7 +8,14 @@ import { type CalculationMethod } from '../models/ModelSimilarityMetrics';
+ import { ClusterBarPlot } from './ClusterBarPlot';
+ import { ClusterDotPlot } from './ClusterDotPlot';
+ import { ClusterRadarChart } from './ClusterRadarChart';
+-import { buildIndividualClusters, getClusterMemberLabelText } from './clusterVisualizationUtils';
++import {
++  type AgreementStatus,
++  type InternalKappaResult,
++  type PairwiseKappaMap,
++  buildIndividualClusters,
++  getClusterMemberLabelText,
++  meanInternalKappa,
++} from './clusterVisualizationUtils';
+ import { ClusterDendrogram, type DendrogramMerge } from './ClusterDendrogram';
+ 
+ const LEGEND_COLORS = [
+@@ -28,6 +35,7 @@ const LEGEND_COLORS = [
+ 
+ type ClusteringLinkage = 'upgma' | 'ward';
+ type ClusterDataSource = 'log-odds' | 'win-rate' | 'kappa-agreement';
++const LOW_AGREEMENT_THRESHOLD = 0.4;
+ 
+ const LINKAGE_OPTIONS: Array<{ value: ClusteringLinkage; label: string }> = [
+   { value: 'upgma', label: 'UPGMA' },
+@@ -50,6 +58,8 @@ type ModelGroupsSectionProps = {
+   kappaClusterIdByModelId?: Record<string, string> | null;
+   kappaClusterLoading?: boolean;
+   kappaClusterError?: string | null;
++  pairwiseKappaMap?: PairwiseKappaMap | null;
++  agreementStatus?: AgreementStatus;
+   dataSource?: ClusterDataSource;
+   distanceMethod?: CalculationMethod;
+   models: ModelEntry[];
+@@ -86,6 +96,65 @@ function getGroupLabel(cluster: DomainCluster): string {
+   return getClusterMemberLabelText(cluster);
+ }
+ 
++function formatKappaValue(value: number): string {
++  return value > 0 ? `+${value.toFixed(2)}` : value.toFixed(2);
++}
++
++function getInternalAgreementPlaceholderTooltip(status: AgreementStatus): string {
++  switch (status) {
++    case 'loading':
++      return 'agreement data is loading…';
++    case 'needs-more-models':
++      return 'select at least two models to see internal agreement';
++    case 'unavailable':
++    case 'ready':
++      return 'no agreement data for this view';
++  }
++}
++
++function getInternalAgreementTooltip(result: InternalKappaResult, status: AgreementStatus): string {
++  if (result.kind === 'value') {
++    const formatted = formatKappaValue(result.mean);
++    return result.mean < LOW_AGREEMENT_THRESHOLD
++      ? `Internal agreement: ${formatted}. Low agreement.`
++      : `Internal agreement: ${formatted}`;
++  }
++
++  const reasonText = result.reason === 'singleton'
++    ? 'only one model — no pair to compare'
++    : result.reason === 'members-outside-selection'
++      ? 'this cluster includes models outside the current view — internal agreement is only computed for models in the current selection.'
++      : 'these models share no scenarios';
++
++  return status === 'ready'
++    ? `Internal agreement: —. ${reasonText}`
++    : `Internal agreement: —. ${getInternalAgreementPlaceholderTooltip(status)}`;
++}
++
++function getInternalAgreementDisplay(
++  result: InternalKappaResult | null,
++  status: AgreementStatus,
++): { text: string; title: string; isWarning: boolean } {
++  if (result == null) {
++    const title = `Internal agreement: —. ${getInternalAgreementPlaceholderTooltip(status)}`;
++    return { text: '—', title, isWarning: false };
++  }
++
++  if (result.kind === 'value') {
++    return {
++      text: formatKappaValue(result.mean),
++      title: getInternalAgreementTooltip(result, status),
++      isWarning: result.mean < LOW_AGREEMENT_THRESHOLD,
++    };
++  }
++
++  return {
++    text: '—',
++    title: getInternalAgreementTooltip(result, status),
++    isWarning: false,
++  };
++}
++
+ export function ModelGroupsSection({
+   clusterAnalysisByMethod,
+   kappaClusterAnalysis = null,
+@@ -94,6 +163,8 @@ export function ModelGroupsSection({
+   kappaClusterIdByModelId = null,
+   kappaClusterLoading = false,
+   kappaClusterError = null,
++  pairwiseKappaMap = null,
++  agreementStatus = 'unavailable',
+   dataSource = 'log-odds',
+   distanceMethod,
+   models,
+@@ -132,6 +203,7 @@ export function ModelGroupsSection({
+   const hasGroupedClusters = activeClusterAnalysis != null && !activeClusterAnalysis.skipped;
+   const groupedClusters = useMemo(() => activeClusterAnalysis?.clusters ?? [], [activeClusterAnalysis]);
+   const individualClusters = useMemo(() => buildIndividualClusters(models), [models]);
++  const visibleModelIdSet = useMemo(() => new Set(models.map((model) => model.model)), [models]);
+ 
+   const sourceClusters = useMemo(
+     () => (groupDisplayMode === 'individual' ? individualClusters : groupedClusters),
+@@ -176,6 +248,21 @@ export function ModelGroupsSection({
+     return result;
+   }, [models]);
+ 
++  const internalKappaByClusterId = useMemo(() => {
++    if (pairwiseKappaMap == null) return null;
++    const result = new Map<string, InternalKappaResult>();
++    for (const cluster of clusters) {
++      result.set(cluster.id, meanInternalKappa(
++        cluster.members.map((member) => member.model),
++        visibleModelIdSet,
++        pairwiseKappaMap,
++      ));
++    }
++    return result;
++  }, [clusters, pairwiseKappaMap, visibleModelIdSet]);
++
++  const showInternalAgreement = (dataSource === 'log-odds' || dataSource === 'win-rate') && groupDisplayMode === 'groups';
++
+   const copyLabel = `${groupDisplayMode} model groups ${
+     viewMode === 'dot' ? 'dot map' : viewMode === 'bar' ? 'bar chart' : 'radar chart'
+   }`;
+@@ -341,6 +428,23 @@ export function ModelGroupsSection({
+               Analysis settings bar above and affect both model reports.
+             </p>
+           </div>
++          <div>
++            <p className="mb-1 font-semibold text-gray-800">What is internal agreement?</p>
++            <p>
++              Internal agreement checks whether the models in a cluster actually made the same choices on
++              the same prompts. It is the average Cohen&apos;s kappa across the pairs of models in the
++              group, so it tells you about behavior, not just whether their value profiles look similar.
++            </p>
++            <p className="mt-1">
++              A low value means the cluster may look alike on paper but behave differently. The warning
++              style marks clusters below {LOW_AGREEMENT_THRESHOLD.toFixed(1)}, which is the fair-agreement
++              boundary we use here.
++            </p>
++            <p className="mt-1">
++              This number is computed for the currently selected signature, so it can change when the
++              signature picker changes.
++            </p>
++          </div>
+         </div>
+       )}
+ 
+@@ -395,39 +499,56 @@ export function ModelGroupsSection({
+                 const style = getLegendColor(index);
+                 const memberLabels = getGroupLabel(cluster);
+                 const isActive = activeGroupIds.includes(cluster.id);
++                const internalAgreement = internalKappaByClusterId?.get(cluster.id) ?? null;
++                const internalAgreementDisplay = showInternalAgreement
++                  ? getInternalAgreementDisplay(internalAgreement, agreementStatus)
++                  : null;
+ 
+                 return (
+-                  <Button
+-                    key={cluster.id}
+-                    type="button"
+-                    variant="ghost"
+-                    size="sm"
+-                    onClick={() => toggleGroupSelection(cluster.id)}
+-                    aria-pressed={isActive}
+-                    title={memberLabels}
+-                    className={`rounded-lg border p-3 text-left transition ${
+-                      isActive
+-                        ? `${style.border} ${style.light} ring-2 ring-teal-400 shadow-[0_0_0_1px_rgba(13,148,136,0.25),0_0_16px_rgba(45,212,191,0.35)]`
+-                        : 'border-gray-200 bg-white hover:border-teal-300 hover:shadow-sm'
+-                    }`}
+-                  >
+-                    <div className="flex items-start gap-2">
+-                      <span
+-                        className={`mt-1 h-3 w-3 shrink-0 rounded-full transition ${
+-                          isActive ? 'scale-125' : ''
+-                        }`}
+-                        style={{
+-                          backgroundColor: style.color,
+-                          boxShadow: isActive ? '0 0 0 1px rgba(255,255,255,0.85), 0 0 12px rgba(45,212,191,0.55)' : undefined,
+-                        }}
+-                      />
+-                      <div className="min-w-0 flex-1">
+-                        <p className={`text-sm font-semibold leading-snug ${style.text} whitespace-normal break-words`}>
+-                          {memberLabels}
+-                        </p>
++                  <div key={cluster.id} className="flex flex-col gap-1">
++                    <Button
++                      type="button"
++                      variant="ghost"
++                      size="sm"
++                      onClick={() => toggleGroupSelection(cluster.id)}
++                      aria-pressed={isActive}
++                      title={memberLabels}
++                      className={`w-full rounded-lg border p-3 text-left transition ${
++                        isActive
++                          ? `${style.border} ${style.light} ring-2 ring-teal-400 shadow-[0_0_0_1px_rgba(13,148,136,0.25),0_0_16px_rgba(45,212,191,0.35)]`
++                          : 'border-gray-200 bg-white hover:border-teal-300 hover:shadow-sm'
++                      }`}
++                    >
++                      <div className="flex items-start gap-2">
++                        <span
++                          className={`mt-1 h-3 w-3 shrink-0 rounded-full transition ${
++                            isActive ? 'scale-125' : ''
++                          }`}
++                          style={{
++                            backgroundColor: style.color,
++                            boxShadow: isActive ? '0 0 0 1px rgba(255,255,255,0.85), 0 0 12px rgba(45,212,191,0.55)' : undefined,
++                          }}
++                        />
++                        <div className="min-w-0 flex-1">
++                          <p className={`text-sm font-semibold leading-snug ${style.text} whitespace-normal break-words`}>
++                            {memberLabels}
++                          </p>
++                        </div>
+                       </div>
+-                    </div>
+-                  </Button>
++                    </Button>
++                    {internalAgreementDisplay != null && (
++                      <p
++                        className={`px-3 text-[11px] leading-4 ${
++                          internalAgreementDisplay.isWarning ? 'font-medium text-amber-700' : 'text-gray-500'
++                        }`}
++                        title={internalAgreementDisplay.title}
++                        aria-label={internalAgreementDisplay.title}
++                      >
++                        <span className="font-medium">Internal agreement:</span>{' '}
++                        <span>{internalAgreementDisplay.text}</span>
++                      </p>
++                    )}
++                  </div>
+                 );
+               })}
+             </div>
+diff --git a/cloud/apps/web/src/components/domains/clusterVisualizationUtils.ts b/cloud/apps/web/src/components/domains/clusterVisualizationUtils.ts
+index 525dc5b4..c0c0393d 100644
+--- a/cloud/apps/web/src/components/domains/clusterVisualizationUtils.ts
++++ b/cloud/apps/web/src/components/domains/clusterVisualizationUtils.ts
+@@ -1,5 +1,6 @@
+ import { type DomainCluster } from '../../api/operations/domainAnalysis';
+ import { VALUE_LABELS, VALUES, type ModelEntry, type ValueKey } from '../../data/domainAnalysisData';
++import { type PairwiseKappaEntry } from '../models/ModelSimilarityMetrics';
+ 
+ export const CLUSTER_SCORE_MIN = -3.25;
+ export const CLUSTER_SCORE_MAX = 3.25;
+@@ -13,6 +14,19 @@ export const DOT_BAR_WIN_RATE_MIN = 0;
+ export const DOT_BAR_WIN_RATE_MAX = 1;
+ export const WIN_RATE_MIDPOINT = 0.5;
+ 
++export type AgreementStatus = 'loading' | 'needs-more-models' | 'unavailable' | 'ready';
++
++export type InternalKappaNotComputableReason =
++  | 'singleton'
++  | 'members-outside-selection'
++  | 'no-shared-scenarios';
++
++export type InternalKappaResult =
++  | { kind: 'value'; mean: number }
++  | { kind: 'not-computable'; reason: InternalKappaNotComputableReason };
++
++export type PairwiseKappaMap = Map<string, Map<string, number | PairwiseKappaEntry>>;
++
+ export const CLUSTER_VISUAL_COLORS = [
+   '#2563eb',
+   '#d97706',
+@@ -122,3 +136,55 @@ export function isClusterScoreClipped(
+ ): boolean {
+   return score < min || score > max;
+ }
++
++function getPairwiseKappaValue(entry: number | PairwiseKappaEntry): number {
++  return typeof entry === 'number' ? entry : entry.kappa;
++}
++
++function lookupPairwiseKappa(
++  pairwiseKappaMap: PairwiseKappaMap,
++  leftModelId: string,
++  rightModelId: string,
++): number | null {
++  const forward = pairwiseKappaMap.get(leftModelId)?.get(rightModelId);
++  if (forward != null) return getPairwiseKappaValue(forward);
++  const reverse = pairwiseKappaMap.get(rightModelId)?.get(leftModelId);
++  if (reverse != null) return getPairwiseKappaValue(reverse);
++  return null;
++}
++
++export function meanInternalKappa(
++  memberModelIds: readonly string[],
++  visibleModelIdSet: ReadonlySet<string>,
++  pairwiseKappaMap: PairwiseKappaMap,
++): InternalKappaResult {
++  if (memberModelIds.length <= 1) {
++    return { kind: 'not-computable', reason: 'singleton' };
++  }
++
++  for (const memberModelId of memberModelIds) {
++    if (!visibleModelIdSet.has(memberModelId)) {
++      return { kind: 'not-computable', reason: 'members-outside-selection' };
++    }
++  }
++
++  const pairwiseValues: number[] = [];
++  for (let leftIndex = 0; leftIndex < memberModelIds.length - 1; leftIndex += 1) {
++    const leftModelId = memberModelIds[leftIndex]!;
++    for (let rightIndex = leftIndex + 1; rightIndex < memberModelIds.length; rightIndex += 1) {
++      const rightModelId = memberModelIds[rightIndex]!;
++      const pairwiseKappa = lookupPairwiseKappa(pairwiseKappaMap, leftModelId, rightModelId);
++      if (pairwiseKappa == null) {
++        return { kind: 'not-computable', reason: 'no-shared-scenarios' };
++      }
++      pairwiseValues.push(pairwiseKappa);
++    }
++  }
++
++  if (pairwiseValues.length === 0) {
++    return { kind: 'not-computable', reason: 'no-shared-scenarios' };
++  }
++
++  const mean = pairwiseValues.reduce((sum, value) => sum + value, 0) / pairwiseValues.length;
++  return { kind: 'value', mean };
++}
+diff --git a/cloud/apps/web/src/pages/ModelsGroups.tsx b/cloud/apps/web/src/pages/ModelsGroups.tsx
+index a69e8171..2f074346 100644
+--- a/cloud/apps/web/src/pages/ModelsGroups.tsx
++++ b/cloud/apps/web/src/pages/ModelsGroups.tsx
+@@ -34,6 +34,7 @@ import { ModelAnalysisSettingsBar } from '../components/models/ModelAnalysisSett
+ import { ModelSimilarityTableSection } from '../components/models/ModelSimilarityTableSection';
+ import { ModelAgreementSection } from '../components/models/ModelAgreementSection';
+ import { type CalculationMethod, type PairwiseKappaEntry } from '../components/models/ModelSimilarityMetrics';
++import { type AgreementStatus } from '../components/domains/clusterVisualizationUtils';
+ import { useDomains } from '../hooks/useDomains';
+ import { VALUES, type ModelEntry, type ValueKey } from '../data/domainAnalysisData';
+ import { formatQueryError } from '../utils/urqlError';
+@@ -414,7 +415,7 @@ export function ModelsGroups() {
+   // Fire the agreement query here too so we can extract the kappa matrix for
+   // the similarity table. Urql will deduplicate/cache against the same query
+   // fired inside ModelAgreementSection.
+-  const [{ data: agreementData }] = useModelAgreementOnTradeoffsQuery({
++  const [{ data: agreementData, fetching: agreementFetching }] = useModelAgreementOnTradeoffsQuery({
+     variables: {
+       modelIds: visibleModelIds,
+       domainId: effectiveDomainId !== '' ? effectiveDomainId : undefined,
+@@ -426,7 +427,12 @@ export function ModelsGroups() {
+     pause: !showAgreementSection,
+   });
+ 
++  // Build the map from whatever agreement data is available — including stale
++  // data urql keeps during a background refetch. Do NOT gate on `fetching` or
++  // `error`: a present map must stay usable during a refetch (see plan
++  // Architecture Choice 2). `fetching`/`error` only feed `agreementStatus`.
+   const pairwiseKappaMap = useMemo(() => {
++    if (!showAgreementSection) return undefined;
+     const rows = agreementData?.modelAgreementOnTradeoffs?.pairwiseAgreementMatrix;
+     if (rows == null || rows.length === 0) return undefined;
+     const map = new Map<string, Map<string, PairwiseKappaEntry>>();
+@@ -444,7 +450,16 @@ export function ModelsGroups() {
+       map.get(row.modelBId)!.set(row.modelAId, entry);
+     }
+     return map.size === 0 ? undefined : map;
+-  }, [agreementData]);
++  }, [agreementData, showAgreementSection]);
++
++  const agreementStatus: AgreementStatus = useMemo(() => {
++    if (pairwiseKappaMap != null) return 'ready';
++    if (agreementFetching) return 'loading';
++    if (visibleModelIds.length < 2) return 'needs-more-models';
++    // No map, not fetching, enough models selected: errored, no signature,
++    // or an empty result. All read to the user as "no agreement data".
++    return 'unavailable';
++  }, [agreementFetching, pairwiseKappaMap, visibleModelIds.length]);
+ 
+   if (pageErrorMessage != null) {
+     return (
+@@ -533,6 +548,8 @@ export function ModelsGroups() {
+             kappaClusterIdByModelId={kappaClusterIdByModelId}
+             kappaClusterLoading={kappaClusterFetching}
+             kappaClusterError={kappaClusterError?.message ?? null}
++            pairwiseKappaMap={pairwiseKappaMap}
++            agreementStatus={agreementStatus}
+             dataSource={dataSource}
+             distanceMethod={similarityMethod}
+             models={filteredModels}
+diff --git a/cloud/apps/web/tests/components/ModelGroupsSection.test.tsx b/cloud/apps/web/tests/components/ModelGroupsSection.test.tsx
+index a99b79ce..adf80a82 100644
+--- a/cloud/apps/web/tests/components/ModelGroupsSection.test.tsx
++++ b/cloud/apps/web/tests/components/ModelGroupsSection.test.tsx
+@@ -1,7 +1,8 @@
+ import { afterEach, describe, expect, it, vi } from 'vitest';
+ import { act, fireEvent, render, screen } from '@testing-library/react';
+ import { ModelGroupsSection } from '../../src/components/domains/ModelGroupsSection';
+-import type { ClusterAnalysis } from '../../src/api/operations/domainAnalysis';
++import type { ClusterAnalysis, DomainCluster } from '../../src/api/operations/domainAnalysis';
++import type { PairwiseKappaMap } from '../../src/components/domains/clusterVisualizationUtils';
+ import { DOMAIN_ANALYSIS_MODELS } from '../../src/data/domainAnalysisData';
+ 
+ const skippedClusterAnalysis: ClusterAnalysis = {
+@@ -62,6 +63,99 @@ const populatedClusterAnalysis: ClusterAnalysis = {
+ };
+ 
+ const populatedModels = DOMAIN_ANALYSIS_MODELS.slice(0, 2);
++const agreementModels = DOMAIN_ANALYSIS_MODELS.slice(0, 5);
++
++function buildClusterAnalysis(clusters: DomainCluster[]): ClusterAnalysis {
++  return {
++    skipped: false,
++    skipReason: null,
++    defaultPair: null,
++    clusters,
++    faultLinesByPair: {},
++  };
++}
++
++function createCluster(
++  id: string,
++  members: Array<{ model: string; label: string }>,
++  centroid: Record<string, number>,
++): DomainCluster {
++  return {
++    id,
++    name: '',
++    definingValues: [],
++    centroid,
++    members: members.map((member) => ({
++      model: member.model,
++      label: member.label,
++      silhouetteScore: 0.5,
++      isOutlier: false,
++      nearestClusterIds: null,
++      distancesToNearestClusters: null,
++    })),
++  };
++}
++
++function buildPairwiseKappaMap(entries: Array<[string, string, number]>): PairwiseKappaMap {
++  const map: PairwiseKappaMap = new Map();
++
++  for (const [leftModelId, rightModelId, kappa] of entries) {
++    if (!map.has(leftModelId)) map.set(leftModelId, new Map());
++    if (!map.has(rightModelId)) map.set(rightModelId, new Map());
++    map.get(leftModelId)!.set(rightModelId, kappa);
++    map.get(rightModelId)!.set(leftModelId, kappa);
++  }
++
++  return map;
++}
++
++function buildPairwiseKappaObjectMap(entries: Array<[string, string, number]>): PairwiseKappaMap {
++  const map: PairwiseKappaMap = new Map();
++
++  for (const [leftModelId, rightModelId, kappa] of entries) {
++    const entry = {
++      kappa,
++      confidenceLow: null,
++      confidenceHigh: null,
++      confidenceIsSymmetric: true,
++    };
++    if (!map.has(leftModelId)) map.set(leftModelId, new Map());
++    if (!map.has(rightModelId)) map.set(rightModelId, new Map());
++    map.get(leftModelId)!.set(rightModelId, entry);
++    map.get(rightModelId)!.set(leftModelId, entry);
++  }
++
++  return map;
++}
++
++const agreementClusterAnalysis = buildClusterAnalysis([
++  createCluster(
++    'cluster-1',
++    agreementModels.slice(0, 3).map((model) => ({ model: model.model, label: model.label })),
++    { Achievement: 1.6, Benevolence: -0.1, Universalism_Nature: 0.7 },
++  ),
++  createCluster(
++    'cluster-2',
++    agreementModels.slice(3, 5).map((model) => ({ model: model.model, label: model.label })),
++    { Achievement: 0.6, Benevolence: 1.2, Universalism_Nature: -0.4 },
++  ),
++]);
++
++const supersetClusterAnalysis = buildClusterAnalysis([
++  createCluster(
++    'cluster-superset',
++    agreementModels.slice(0, 3).map((model) => ({ model: model.model, label: model.label })),
++    { Achievement: 0.8, Benevolence: 0.2, Universalism_Nature: 0.4 },
++  ),
++]);
++
++const noSharedScenarioClusterAnalysis = buildClusterAnalysis([
++  createCluster(
++    'cluster-no-shared',
++    agreementModels.slice(0, 3).map((model) => ({ model: model.model, label: model.label })),
++    { Achievement: 0.9, Benevolence: 0.4, Universalism_Nature: 0.2 },
++  ),
++]);
+ 
+ describe('ModelGroupsSection', () => {
+   afterEach(() => {
+@@ -206,6 +300,215 @@ describe('ModelGroupsSection', () => {
+     expect(screen.queryByRole('tooltip')).toBeNull();
+   });
+ 
++  it('shows internal agreement values and warning styling for fully covered clusters', () => {
++    render(
++      <ModelGroupsSection
++        clusterAnalysisByMethod={{
++          'log-odds-euclidean-upgma': agreementClusterAnalysis,
++          'log-odds-euclidean-ward': agreementClusterAnalysis,
++        }}
++        models={agreementModels}
++        pairwiseKappaMap={buildPairwiseKappaObjectMap([
++          ['claude-sonnet-4-5', 'deepseek-chat', 0.2],
++          ['claude-sonnet-4-5', 'deepseek-reasoner', 0.3],
++          ['deepseek-chat', 'deepseek-reasoner', 0.4],
++          ['gemini-2.5-flash', 'gemini-2.5-pro', 0.55],
++        ])}
++        agreementStatus="ready"
++      />,
++    );
++
++    expect(screen.getByRole('button', {
++      name: 'Claude Sonnet 4.5, DeepSeek Chat, DeepSeek Reasoner',
++    })).toBeInTheDocument();
++
++    const warningLine = screen.getByLabelText('Internal agreement: +0.30. Low agreement.');
++    expect(warningLine).toHaveTextContent('Internal agreement: +0.30');
++    expect(warningLine).toHaveClass('text-amber-700');
++
++    const normalLine = screen.getByLabelText('Internal agreement: +0.55');
++    expect(normalLine).toHaveTextContent('Internal agreement: +0.55');
++    expect(normalLine).toHaveClass('text-gray-500');
++  });
++
++  it('shows a singleton placeholder with an explanatory tooltip', () => {
++    render(
++      <ModelGroupsSection
++        clusterAnalysisByMethod={{
++          'log-odds-euclidean-upgma': populatedClusterAnalysis,
++          'log-odds-euclidean-ward': populatedClusterAnalysis,
++        }}
++        models={populatedModels}
++        pairwiseKappaMap={buildPairwiseKappaMap([
++          ['model-a', 'model-b', 0.5],
++        ])}
++        agreementStatus="ready"
++      />,
++    );
++
++    const singletonLine = screen.getAllByLabelText(/only one model — no pair to compare/i)[0];
++    expect(singletonLine).toHaveTextContent('—');
++    expect(singletonLine).toHaveClass('text-gray-500');
++  });
++
++  it('shows a placeholder when a cluster includes members outside the current selection', () => {
++    render(
++      <ModelGroupsSection
++        clusterAnalysisByMethod={{
++          'log-odds-euclidean-upgma': supersetClusterAnalysis,
++          'log-odds-euclidean-ward': supersetClusterAnalysis,
++        }}
++        models={agreementModels.slice(0, 2)}
++        pairwiseKappaMap={buildPairwiseKappaMap([
++          ['claude-sonnet-4-5', 'deepseek-chat', 0.2],
++          ['claude-sonnet-4-5', 'deepseek-reasoner', 0.3],
++          ['deepseek-chat', 'deepseek-reasoner', 0.4],
++        ])}
++        agreementStatus="ready"
++      />,
++    );
++
++    const outsideSelectionLine = screen.getByLabelText(/outside the current view/i);
++    expect(outsideSelectionLine).toHaveTextContent('—');
++    expect(outsideSelectionLine).toHaveClass('text-gray-500');
++  });
++
++  it('shows a placeholder when member pairs have no shared scenarios', () => {
++    render(
++      <ModelGroupsSection
++        clusterAnalysisByMethod={{
++          'log-odds-euclidean-upgma': noSharedScenarioClusterAnalysis,
++          'log-odds-euclidean-ward': noSharedScenarioClusterAnalysis,
++        }}
++        models={agreementModels.slice(0, 3)}
++        pairwiseKappaMap={buildPairwiseKappaMap([
++          ['claude-sonnet-4-5', 'deepseek-chat', 0.2],
++          ['claude-sonnet-4-5', 'deepseek-reasoner', 0.3],
++        ])}
++        agreementStatus="ready"
++      />,
++    );
++
++    const noSharedLine = screen.getByLabelText(/share no scenarios/i);
++    expect(noSharedLine).toHaveTextContent('—');
++    expect(noSharedLine).toHaveClass('text-gray-500');
++  });
++
++  it('shows loading placeholder text while the agreement map is absent', () => {
++    render(
++      <ModelGroupsSection
++        clusterAnalysisByMethod={{
++          'log-odds-euclidean-upgma': populatedClusterAnalysis,
++          'log-odds-euclidean-ward': populatedClusterAnalysis,
++        }}
++        models={populatedModels}
++        agreementStatus="loading"
++      />,
++    );
++
++    const loadingLine = screen.getAllByLabelText(/agreement data is loading/i)[0];
++    expect(loadingLine).toHaveTextContent('—');
++    expect(loadingLine).toHaveClass('text-gray-500');
++  });
++
++  it('shows a needs-more-models placeholder while the agreement map is absent', () => {
++    render(
++      <ModelGroupsSection
++        clusterAnalysisByMethod={{
++          'log-odds-euclidean-upgma': populatedClusterAnalysis,
++          'log-odds-euclidean-ward': populatedClusterAnalysis,
++        }}
++        models={populatedModels}
++        agreementStatus="needs-more-models"
++      />,
++    );
++
++    const needsMoreModelsLine = screen.getAllByLabelText(/select at least two models to see internal agreement/i)[0];
++    expect(needsMoreModelsLine).toHaveTextContent('—');
++    expect(needsMoreModelsLine).toHaveClass('text-gray-500');
++  });
++
++  it('shows an unavailable placeholder while the agreement map is absent', () => {
++    render(
++      <ModelGroupsSection
++        clusterAnalysisByMethod={{
++          'log-odds-euclidean-upgma': populatedClusterAnalysis,
++          'log-odds-euclidean-ward': populatedClusterAnalysis,
++        }}
++        models={populatedModels}
++        agreementStatus="unavailable"
++      />,
++    );
++
++    const unavailableLine = screen.getAllByLabelText(/no agreement data for this view/i)[0];
++    expect(unavailableLine).toHaveTextContent('—');
++    expect(unavailableLine).toHaveClass('text-gray-500');
++  });
++
++  it('does not show the overlay in kappa-agreement mode', () => {
++    render(
++      <ModelGroupsSection
++        clusterAnalysisByMethod={{
++          'kappa-agreement-euclidean-upgma': agreementClusterAnalysis,
++          'kappa-agreement-euclidean-ward': agreementClusterAnalysis,
++        }}
++        kappaClusterAnalysis={agreementClusterAnalysis}
++        models={agreementModels}
++        dataSource="kappa-agreement"
++        pairwiseKappaMap={buildPairwiseKappaMap([
++          ['claude-sonnet-4-5', 'deepseek-chat', 0.2],
++          ['claude-sonnet-4-5', 'deepseek-reasoner', 0.3],
++          ['deepseek-chat', 'deepseek-reasoner', 0.4],
++          ['gemini-2.5-flash', 'gemini-2.5-pro', 0.55],
++        ])}
++        agreementStatus="ready"
++      />,
++    );
++
++    expect(screen.queryByLabelText(/internal agreement/i)).not.toBeInTheDocument();
++  });
++
++  it('does not show the overlay in individual mode', () => {
++    render(
++      <ModelGroupsSection
++        clusterAnalysisByMethod={{
++          'log-odds-euclidean-upgma': agreementClusterAnalysis,
++          'log-odds-euclidean-ward': agreementClusterAnalysis,
++        }}
++        models={agreementModels}
++        pairwiseKappaMap={buildPairwiseKappaMap([
++          ['claude-sonnet-4-5', 'deepseek-chat', 0.2],
++          ['claude-sonnet-4-5', 'deepseek-reasoner', 0.3],
++          ['deepseek-chat', 'deepseek-reasoner', 0.4],
++          ['gemini-2.5-flash', 'gemini-2.5-pro', 0.55],
++        ])}
++        agreementStatus="ready"
++      />,
++    );
++
++    fireEvent.click(screen.getByRole('button', { name: 'Individual' }));
++
++    expect(screen.queryByLabelText(/internal agreement/i)).not.toBeInTheDocument();
++  });
++
++  it('shows the internal agreement explanation in the help panel', () => {
++    render(
++      <ModelGroupsSection
++        clusterAnalysisByMethod={{
++          'log-odds-euclidean-upgma': agreementClusterAnalysis,
++          'log-odds-euclidean-ward': agreementClusterAnalysis,
++        }}
++        models={agreementModels}
++      />,
++    );
++
++    fireEvent.click(screen.getByRole('button', { name: 'Show model groups explanation' }));
++
++    expect(screen.getByText(/average Cohen's kappa across the pairs of models in the group/i)).toBeInTheDocument();
++    expect(screen.getByText(/currently selected signature/i)).toBeInTheDocument();
++    expect(screen.getByText(/below 0.4/i)).toBeInTheDocument();
++  });
++
+   it('shows the Schwartz category ring in radar view', () => {
+     render(
+       <ModelGroupsSection
+diff --git a/cloud/apps/web/tests/components/clusterVisualizationUtils.test.ts b/cloud/apps/web/tests/components/clusterVisualizationUtils.test.ts
+new file mode 100644
+index 00000000..0172e135
+--- /dev/null
++++ b/cloud/apps/web/tests/components/clusterVisualizationUtils.test.ts
+@@ -0,0 +1,85 @@
++import { describe, expect, it } from 'vitest';
++import { meanInternalKappa } from '../../src/components/domains/clusterVisualizationUtils';
++import type { PairwiseKappaMap } from '../../src/components/domains/clusterVisualizationUtils';
++
++function buildPairwiseKappaMap(entries: Array<[string, string, number]>): PairwiseKappaMap {
++  const map: PairwiseKappaMap = new Map();
++
++  for (const [leftModelId, rightModelId, kappa] of entries) {
++    if (!map.has(leftModelId)) map.set(leftModelId, new Map());
++    if (!map.has(rightModelId)) map.set(rightModelId, new Map());
++    map.get(leftModelId)!.set(rightModelId, kappa);
++    map.get(rightModelId)!.set(leftModelId, kappa);
++  }
++
++  return map;
++}
++
++describe('meanInternalKappa', () => {
++  it('computes the mean over all member pairs when every pair is present', () => {
++    const result = meanInternalKappa(
++      ['model-a', 'model-b', 'model-c'],
++      new Set(['model-a', 'model-b', 'model-c']),
++      buildPairwiseKappaMap([
++        ['model-a', 'model-b', 0.2],
++        ['model-a', 'model-c', 0.4],
++        ['model-b', 'model-c', 0.6],
++      ]),
++    );
++
++    expect(result.kind).toBe('value');
++    if (result.kind === 'value') {
++      expect(result.mean).toBeCloseTo(0.4, 10);
++    }
++  });
++
++  it('returns singleton when the cluster has one member', () => {
++    const result = meanInternalKappa(['model-a'], new Set(['model-a']), new Map());
++
++    expect(result).toEqual({ kind: 'not-computable', reason: 'singleton' });
++  });
++
++  it('returns members-outside-selection when a member is missing from the visible set', () => {
++    const result = meanInternalKappa(
++      ['model-a', 'model-b'],
++      new Set(['model-a']),
++      buildPairwiseKappaMap([
++        ['model-a', 'model-b', 0.5],
++      ]),
++    );
++
++    expect(result).toEqual({ kind: 'not-computable', reason: 'members-outside-selection' });
++  });
++
++  it('returns no-shared-scenarios when any member pair has no computable kappa', () => {
++    const result = meanInternalKappa(
++      ['model-a', 'model-b', 'model-c'],
++      new Set(['model-a', 'model-b', 'model-c']),
++      buildPairwiseKappaMap([
++        ['model-a', 'model-b', 0.2],
++        ['model-a', 'model-c', 0.4],
++      ]),
++    );
++
++    expect(result).toEqual({ kind: 'not-computable', reason: 'no-shared-scenarios' });
++  });
++
++  it('prefers singleton over members-outside-selection', () => {
++    const result = meanInternalKappa(['model-a'], new Set(), new Map());
++
++    expect(result).toEqual({ kind: 'not-computable', reason: 'singleton' });
++  });
++
++  it('prefers members-outside-selection over no-shared-scenarios', () => {
++    const result = meanInternalKappa(
++      ['model-a', 'model-b', 'model-c'],
++      new Set(['model-a', 'model-b']),
++      buildPairwiseKappaMap([
++        ['model-a', 'model-b', 0.2],
++        ['model-a', 'model-c', 0.4],
++      ]),
++    );
++
++    expect(result).toEqual({ kind: 'not-computable', reason: 'members-outside-selection' });
++  });
++});

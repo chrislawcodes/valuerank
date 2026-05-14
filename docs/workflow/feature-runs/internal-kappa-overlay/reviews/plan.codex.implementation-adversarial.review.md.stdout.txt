@@ -1,0 +1,8 @@
+## Findings
+- **HIGH:** The plan will render a numeric cluster agreement from any non-empty subset of pairwise kappas. That means a cluster can show a precise mean even when most member pairs are missing, which is a false sense of completeness for a summary metric. This should be treated as partial data, or it should stay in the placeholder state until coverage is complete.
+- **MEDIUM:** The placeholder explanation is not reliably accessible. The plan depends on `title` for the reason text and `aria-label` to preserve the button name, but `title` is not dependable for screen readers and `aria-label` will override visible text in the accessible name. Users who do not hover may not get the explanation at all.
+- **MEDIUM [UNVERIFIED]:** The status derivation assumes `fetching` and `error` are enough to classify the agreement query. If the GraphQL client keeps stale `data` around during a refetch or after a partial error, the UI could flip to `unavailable` and hide a still-usable map. That policy needs to be explicit.
+
+## Residual Risks
+- The overlay still depends on default-view model coverage being decent. If the visible set is sparse, most cards may still fall back to placeholders and the feature will add little value.
+- The `0.4` cutoff is still a judgment call. The plan makes it easy to change, but it does not validate that threshold for this product.

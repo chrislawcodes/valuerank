@@ -34,6 +34,7 @@ import { ModelAnalysisSettingsBar } from '../components/models/ModelAnalysisSett
 import { ModelSimilarityTableSection } from '../components/models/ModelSimilarityTableSection';
 import { ModelAgreementSection } from '../components/models/ModelAgreementSection';
 import { type CalculationMethod, type PairwiseKappaEntry } from '../components/models/ModelSimilarityMetrics';
+import { type AgreementStatus } from '../components/domains/clusterVisualizationUtils';
 import { useDomains } from '../hooks/useDomains';
 import { VALUES, type ModelEntry, type ValueKey } from '../data/domainAnalysisData';
 import { formatQueryError } from '../utils/urqlError';
@@ -106,7 +107,13 @@ function buildModelEntries(
   });
 }
 
-export function ModelsGroups() {
+/**
+ * Shared Model Groups page body. The original page (`ModelsGroups`, route
+ * `/models`) renders it with `showInternalAgreement={false}` — unchanged
+ * behavior. The V2 page (`ModelsGroupsV2`, route `/models/v2`) renders it with
+ * `showInternalAgreement` on so the two can be compared in production.
+ */
+export function ModelGroupsView({ showInternalAgreement }: { showInternalAgreement: boolean }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const { domains, queryLoading: domainsLoading, error: domainsError } = useDomains();
   const [selectedDomainIds, setSelectedDomainIds] = useState<string[]>(() => {
@@ -414,7 +421,7 @@ export function ModelsGroups() {
   // Fire the agreement query here too so we can extract the kappa matrix for
   // the similarity table. Urql will deduplicate/cache against the same query
   // fired inside ModelAgreementSection.
-  const [{ data: agreementData }] = useModelAgreementOnTradeoffsQuery({
+  const [{ data: agreementData, fetching: agreementFetching }] = useModelAgreementOnTradeoffsQuery({
     variables: {
       modelIds: visibleModelIds,
       domainId: effectiveDomainId !== '' ? effectiveDomainId : undefined,
@@ -426,7 +433,12 @@ export function ModelsGroups() {
     pause: !showAgreementSection,
   });
 
+  // Build the map from whatever agreement data is available — including stale
+  // data urql keeps during a background refetch. Do NOT gate on `fetching` or
+  // `error`: a present map must stay usable during a refetch (see plan
+  // Architecture Choice 2). `fetching`/`error` only feed `agreementStatus`.
   const pairwiseKappaMap = useMemo(() => {
+    if (!showAgreementSection) return undefined;
     const rows = agreementData?.modelAgreementOnTradeoffs?.pairwiseAgreementMatrix;
     if (rows == null || rows.length === 0) return undefined;
     const map = new Map<string, Map<string, PairwiseKappaEntry>>();
@@ -444,7 +456,16 @@ export function ModelsGroups() {
       map.get(row.modelBId)!.set(row.modelAId, entry);
     }
     return map.size === 0 ? undefined : map;
-  }, [agreementData]);
+  }, [agreementData, showAgreementSection]);
+
+  const agreementStatus: AgreementStatus = useMemo(() => {
+    if (pairwiseKappaMap != null) return 'ready';
+    if (agreementFetching) return 'loading';
+    if (visibleModelIds.length < 2) return 'needs-more-models';
+    // No map, not fetching, enough models selected: errored, no signature,
+    // or an empty result. All read to the user as "no agreement data".
+    return 'unavailable';
+  }, [agreementFetching, pairwiseKappaMap, visibleModelIds.length]);
 
   if (pageErrorMessage != null) {
     return (
@@ -533,6 +554,9 @@ export function ModelsGroups() {
             kappaClusterIdByModelId={kappaClusterIdByModelId}
             kappaClusterLoading={kappaClusterFetching}
             kappaClusterError={kappaClusterError?.message ?? null}
+            pairwiseKappaMap={pairwiseKappaMap}
+            agreementStatus={agreementStatus}
+            showInternalAgreement={showInternalAgreement}
             dataSource={dataSource}
             distanceMethod={similarityMethod}
             models={filteredModels}
@@ -557,4 +581,12 @@ export function ModelsGroups() {
       )}
     </div>
   );
+}
+
+/**
+ * Model Groups page (route `/models`). Comparison baseline — renders the shared
+ * view with the internal-agreement overlay off, so its behavior is unchanged.
+ */
+export function ModelsGroups() {
+  return <ModelGroupsView showInternalAgreement={false} />;
 }

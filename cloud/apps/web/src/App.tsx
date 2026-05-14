@@ -17,6 +17,7 @@ import { DomainAnalysis } from './pages/DomainAnalysis';
 import { DomainCoverage } from './pages/DomainCoverage';
 import { DomainAnalysisValueDetail } from './pages/DomainAnalysisValueDetail';
 import { ModelsGroups } from './pages/ModelsGroups';
+import { ModelsGroupsV2 } from './pages/ModelsGroupsV2';
 import { PressureSensitivity } from './pages/PressureSensitivity';
 import { ModelsCircumplex } from './pages/ModelsCircumplex';
 import { ModelsConfidence } from './pages/ModelsConfidence';
@@ -172,6 +173,14 @@ function App() {
               element={
                 <ProtectedLayout>
                   <ModelsGroups />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/models/v2"
+              element={
+                <ProtectedLayout>
+                  <ModelsGroupsV2 />
                 </ProtectedLayout>
               }
             />

@@ -8,7 +8,14 @@ import { type CalculationMethod } from '../models/ModelSimilarityMetrics';
 import { ClusterBarPlot } from './ClusterBarPlot';
 import { ClusterDotPlot } from './ClusterDotPlot';
 import { ClusterRadarChart } from './ClusterRadarChart';
-import { buildIndividualClusters, getClusterMemberLabelText } from './clusterVisualizationUtils';
+import {
+  type AgreementStatus,
+  type InternalKappaResult,
+  type PairwiseKappaMap,
+  buildIndividualClusters,
+  getClusterMemberLabelText,
+  meanInternalKappa,
+} from './clusterVisualizationUtils';
 import { ClusterDendrogram, type DendrogramMerge } from './ClusterDendrogram';
 
 const LEGEND_COLORS = [
@@ -28,6 +35,7 @@ const LEGEND_COLORS = [
 
 type ClusteringLinkage = 'upgma' | 'ward';
 type ClusterDataSource = 'log-odds' | 'win-rate' | 'kappa-agreement';
+const LOW_AGREEMENT_THRESHOLD = 0.4;
 
 const LINKAGE_OPTIONS: Array<{ value: ClusteringLinkage; label: string }> = [
   { value: 'upgma', label: 'UPGMA' },
@@ -50,6 +58,13 @@ type ModelGroupsSectionProps = {
   kappaClusterIdByModelId?: Record<string, string> | null;
   kappaClusterLoading?: boolean;
   kappaClusterError?: string | null;
+  pairwiseKappaMap?: PairwiseKappaMap | null;
+  agreementStatus?: AgreementStatus;
+  /**
+   * Opt-in flag for the internal-agreement overlay. Off by default so the
+   * original Model Groups page renders unchanged; the V2 page passes `true`.
+   */
+  showInternalAgreement?: boolean;
   dataSource?: ClusterDataSource;
   distanceMethod?: CalculationMethod;
   models: ModelEntry[];
@@ -86,6 +101,65 @@ function getGroupLabel(cluster: DomainCluster): string {
   return getClusterMemberLabelText(cluster);
 }
 
+function formatKappaValue(value: number): string {
+  return value > 0 ? `+${value.toFixed(2)}` : value.toFixed(2);
+}
+
+function getInternalAgreementPlaceholderTooltip(status: AgreementStatus): string {
+  switch (status) {
+    case 'loading':
+      return 'agreement data is loading…';
+    case 'needs-more-models':
+      return 'select at least two models to see internal agreement';
+    case 'unavailable':
+    case 'ready':
+      return 'no agreement data for this view';
+  }
+}
+
+function getInternalAgreementTooltip(result: InternalKappaResult, status: AgreementStatus): string {
+  if (result.kind === 'value') {
+    const formatted = formatKappaValue(result.mean);
+    return result.mean < LOW_AGREEMENT_THRESHOLD
+      ? `Internal agreement: ${formatted}. Low agreement.`
+      : `Internal agreement: ${formatted}`;
+  }
+
+  const reasonText = result.reason === 'singleton'
+    ? 'only one model — no pair to compare'
+    : result.reason === 'members-outside-selection'
+      ? 'this cluster includes models outside the current view — internal agreement is only computed for models in the current selection.'
+      : 'these models share no scenarios';
+
+  return status === 'ready'
+    ? `Internal agreement: —. ${reasonText}`
+    : `Internal agreement: —. ${getInternalAgreementPlaceholderTooltip(status)}`;
+}
+
+function getInternalAgreementDisplay(
+  result: InternalKappaResult | null,
+  status: AgreementStatus,
+): { text: string; title: string; isWarning: boolean } {
+  if (result == null) {
+    const title = `Internal agreement: —. ${getInternalAgreementPlaceholderTooltip(status)}`;
+    return { text: '—', title, isWarning: false };
+  }
+
+  if (result.kind === 'value') {
+    return {
+      text: formatKappaValue(result.mean),
+      title: getInternalAgreementTooltip(result, status),
+      isWarning: result.mean < LOW_AGREEMENT_THRESHOLD,
+    };
+  }
+
+  return {
+    text: '—',
+    title: getInternalAgreementTooltip(result, status),
+    isWarning: false,
+  };
+}
+
 export function ModelGroupsSection({
   clusterAnalysisByMethod,
   kappaClusterAnalysis = null,
@@ -94,6 +168,9 @@ export function ModelGroupsSection({
   kappaClusterIdByModelId = null,
   kappaClusterLoading = false,
   kappaClusterError = null,
+  pairwiseKappaMap = null,
+  agreementStatus = 'unavailable',
+  showInternalAgreement = false,
   dataSource = 'log-odds',
   distanceMethod,
   models,
@@ -132,6 +209,7 @@ export function ModelGroupsSection({
   const hasGroupedClusters = activeClusterAnalysis != null && !activeClusterAnalysis.skipped;
   const groupedClusters = useMemo(() => activeClusterAnalysis?.clusters ?? [], [activeClusterAnalysis]);
   const individualClusters = useMemo(() => buildIndividualClusters(models), [models]);
+  const visibleModelIdSet = useMemo(() => new Set(models.map((model) => model.model)), [models]);
 
   const sourceClusters = useMemo(
     () => (groupDisplayMode === 'individual' ? individualClusters : groupedClusters),
@@ -175,6 +253,25 @@ export function ModelGroupsSection({
     }
     return result;
   }, [models]);
+
+  const internalKappaByClusterId = useMemo(() => {
+    if (pairwiseKappaMap == null) return null;
+    const result = new Map<string, InternalKappaResult>();
+    for (const cluster of clusters) {
+      result.set(cluster.id, meanInternalKappa(
+        cluster.members.map((member) => member.model),
+        visibleModelIdSet,
+        pairwiseKappaMap,
+      ));
+    }
+    return result;
+  }, [clusters, pairwiseKappaMap, visibleModelIdSet]);
+
+  // Gate the overlay on the opt-in prop AND the modes where it makes sense.
+  // V1 leaves `showInternalAgreement` false, so V1 never renders the overlay.
+  const renderOverlay = showInternalAgreement
+    && (dataSource === 'log-odds' || dataSource === 'win-rate')
+    && groupDisplayMode === 'groups';
 
   const copyLabel = `${groupDisplayMode} model groups ${
     viewMode === 'dot' ? 'dot map' : viewMode === 'bar' ? 'bar chart' : 'radar chart'
@@ -341,6 +438,25 @@ export function ModelGroupsSection({
               Analysis settings bar above and affect both model reports.
             </p>
           </div>
+          {showInternalAgreement && (
+            <div>
+              <p className="mb-1 font-semibold text-gray-800">What is internal agreement?</p>
+              <p>
+                Internal agreement checks whether the models in a cluster actually made the same choices on
+                the same prompts. It is the average Cohen&apos;s kappa across the pairs of models in the
+                group, so it tells you about behavior, not just whether their value profiles look similar.
+              </p>
+              <p className="mt-1">
+                A low value means the cluster may look alike on paper but behave differently. The warning
+                style marks clusters below {LOW_AGREEMENT_THRESHOLD.toFixed(1)}, which is the fair-agreement
+                boundary we use here.
+              </p>
+              <p className="mt-1">
+                This number is computed for the currently selected signature, so it can change when the
+                signature picker changes.
+              </p>
+            </div>
+          )}
         </div>
       )}
 
@@ -395,39 +511,56 @@ export function ModelGroupsSection({
                 const style = getLegendColor(index);
                 const memberLabels = getGroupLabel(cluster);
                 const isActive = activeGroupIds.includes(cluster.id);
+                const internalAgreement = internalKappaByClusterId?.get(cluster.id) ?? null;
+                const internalAgreementDisplay = renderOverlay
+                  ? getInternalAgreementDisplay(internalAgreement, agreementStatus)
+                  : null;
 
                 return (
-                  <Button
-                    key={cluster.id}
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => toggleGroupSelection(cluster.id)}
-                    aria-pressed={isActive}
-                    title={memberLabels}
-                    className={`rounded-lg border p-3 text-left transition ${
-                      isActive
-                        ? `${style.border} ${style.light} ring-2 ring-teal-400 shadow-[0_0_0_1px_rgba(13,148,136,0.25),0_0_16px_rgba(45,212,191,0.35)]`
-                        : 'border-gray-200 bg-white hover:border-teal-300 hover:shadow-sm'
-                    }`}
-                  >
-                    <div className="flex items-start gap-2">
-                      <span
-                        className={`mt-1 h-3 w-3 shrink-0 rounded-full transition ${
-                          isActive ? 'scale-125' : ''
-                        }`}
-                        style={{
-                          backgroundColor: style.color,
-                          boxShadow: isActive ? '0 0 0 1px rgba(255,255,255,0.85), 0 0 12px rgba(45,212,191,0.55)' : undefined,
-                        }}
-                      />
-                      <div className="min-w-0 flex-1">
-                        <p className={`text-sm font-semibold leading-snug ${style.text} whitespace-normal break-words`}>
-                          {memberLabels}
-                        </p>
+                  <div key={cluster.id} className="flex flex-col gap-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => toggleGroupSelection(cluster.id)}
+                      aria-pressed={isActive}
+                      title={memberLabels}
+                      className={`w-full rounded-lg border p-3 text-left transition ${
+                        isActive
+                          ? `${style.border} ${style.light} ring-2 ring-teal-400 shadow-[0_0_0_1px_rgba(13,148,136,0.25),0_0_16px_rgba(45,212,191,0.35)]`
+                          : 'border-gray-200 bg-white hover:border-teal-300 hover:shadow-sm'
+                      }`}
+                    >
+                      <div className="flex items-start gap-2">
+                        <span
+                          className={`mt-1 h-3 w-3 shrink-0 rounded-full transition ${
+                            isActive ? 'scale-125' : ''
+                          }`}
+                          style={{
+                            backgroundColor: style.color,
+                            boxShadow: isActive ? '0 0 0 1px rgba(255,255,255,0.85), 0 0 12px rgba(45,212,191,0.55)' : undefined,
+                          }}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className={`text-sm font-semibold leading-snug ${style.text} whitespace-normal break-words`}>
+                            {memberLabels}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  </Button>
+                    </Button>
+                    {internalAgreementDisplay != null && (
+                      <p
+                        className={`px-3 text-[11px] leading-4 ${
+                          internalAgreementDisplay.isWarning ? 'font-medium text-amber-700' : 'text-gray-500'
+                        }`}
+                        title={internalAgreementDisplay.title}
+                        aria-label={internalAgreementDisplay.title}
+                      >
+                        <span className="font-medium">Internal agreement:</span>{' '}
+                        <span>{internalAgreementDisplay.text}</span>
+                      </p>
+                    )}
+                  </div>
                 );
               })}
             </div>

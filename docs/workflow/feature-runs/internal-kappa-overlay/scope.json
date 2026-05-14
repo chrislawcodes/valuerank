@@ -1,0 +1,9 @@
+{
+  "paths": [
+    "cloud/apps/web"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/web",
+    "docs/workflow/feature-runs/internal-kappa-overlay"
+  ]
+}
