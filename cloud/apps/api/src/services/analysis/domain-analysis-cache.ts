@@ -33,7 +33,7 @@ import {
   buildSnapshotOutput,
 } from './domain-analysis-snapshot-builder.js';
 import type { DomainAnalysisScope } from './domain-analysis-scope.js';
-import { DOMAIN_ANALYSIS_ALL_DOMAINS_SCOPE } from './domain-analysis-scope.js';
+import { DOMAIN_ANALYSIS_ALL_DOMAINS_SCOPE, buildDomainAnalysisDomainSetId, normalizeDomainIds } from './domain-analysis-scope.js';
 
 const log = createLogger('analysis:domain-cache');
 
