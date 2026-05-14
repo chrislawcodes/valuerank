@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Loader2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Button } from './Button';
 import { selectTriggerVariants } from './Select';
@@ -28,6 +28,7 @@ type ChipPickerProps = {
   emptyMessage?: string;
   /** When true, clicking a chip selects only that item; clicking the active chip does nothing. */
   singleSelect?: boolean;
+  loading?: boolean;
 };
 
 export function ChipPicker({
@@ -40,6 +41,7 @@ export function ChipPicker({
   ariaLabel,
   emptyMessage = 'No options available.',
   singleSelect = false,
+  loading = false,
 }: ChipPickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const triggerRef = useRef<HTMLDivElement>(null);
@@ -95,7 +97,10 @@ export function ChipPicker({
         )}
       >
         <span className="min-w-0 flex-1 truncate">{summary}</span>
-        <ChevronDown className={cn('ml-2 h-4 w-4 shrink-0 text-gray-400 transition-transform', isOpen && 'rotate-180')} />
+        {loading
+          ? <Loader2 className="ml-2 h-4 w-4 shrink-0 animate-spin text-gray-400" aria-hidden="true" />
+          : <ChevronDown className={cn('ml-2 h-4 w-4 shrink-0 text-gray-400 transition-transform', isOpen && 'rotate-180')} />
+        }
       </Button>
 
       {isOpen && (
