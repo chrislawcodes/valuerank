@@ -259,7 +259,7 @@ export async function queueDomainAnalysisRefresh(params: {
   const inFlight = await db.$queryRaw<Array<{ id: string }>>`
     SELECT id FROM pgboss.job
     WHERE name = 'refresh_domain_analysis_snapshot'
-      AND singletonkey = ${singletonKey}
+      AND singleton_key = ${singletonKey}
       AND state IN ('created', 'active', 'retry')
     LIMIT 1
   `;
