@@ -105,7 +105,7 @@ export function NavTabs() {
     : domainMenuItems.filter((item) => !isMenuGroupItem(item) && item.path !== '/domains/manage');
   const isDomainsActive = visibleDomainMenuItems.some((item) => isMenuItemActive(item));
   const isModelsActive = modelsMenuItems.some((item) => isMenuItemActive(item));
-  const isArchiveActive = isAdmin && archiveMenuItems.some((item) => isMenuItemActive(item));
+  const isArchiveActive = archiveMenuItems.some((item) => isMenuItemActive(item));
   const visibleSettingsMenuItems = isAdmin ? adminSettingsMenuItems : [];
   const isSettingsActive = visibleSettingsMenuItems.some((item) => isMenuItemActive(item));
 
@@ -246,7 +246,7 @@ export function NavTabs() {
           {renderMenu(modelsMenuRef, 'Models', '/models', Cpu, modelsMenuItems, isModelsActive, isModelsMenuOpen, setIsModelsMenuOpen)}
           {renderMenu(domainMenuRef, 'Domains', '/domains', FolderTree, visibleDomainMenuItems, isDomainsActive, isDomainsMenuOpen, setIsDomainsMenuOpen)}
           {renderMenu(vignettesMenuRef, 'Vignettes', '/definitions', Library, vignettesMenuItems, isVignettesActive, isVignettesMenuOpen, setIsVignettesMenuOpen)}
-          {isAdmin ? renderMenu(archiveMenuRef, 'Archive', '/archive', Archive, archiveMenuItems, isArchiveActive, isArchiveMenuOpen, setIsArchiveMenuOpen) : null}
+          {renderMenu(archiveMenuRef, 'Archive', '/archive', Archive, archiveMenuItems, isArchiveActive, isArchiveMenuOpen, setIsArchiveMenuOpen)}
           {isAdmin ? renderMenu(settingsMenuRef, 'Settings', '/settings/account', Settings, visibleSettingsMenuItems, isSettingsActive, isSettingsMenuOpen, setIsSettingsMenuOpen) : null}
 
           {utilityTabs.map((tab) => {
