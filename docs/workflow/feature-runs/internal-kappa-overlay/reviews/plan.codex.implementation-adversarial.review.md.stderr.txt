@@ -1,0 +1,147 @@
+Reading additional input from stdin...
+OpenAI Codex v0.130.0
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/distracted-goodall-27c98d
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019e2701-8e8b-7332-b0f6-513aabcceaab
+--------
+user
+Review this plan artifact using a implementation-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+No code context files were provided. Flag any finding that depends on an assumption about the existing codebase as [UNVERIFIED] and limit it to MEDIUM severity or lower.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: plan.md
+# Plan
+
+## Summary
+
+Add a per-cluster internal-agreement overlay to the Model Groups page. When models are grouped by value profile (log-odds / win-rate), each cluster card shows the mean pairwise Cohen's kappa across its members, with a warning style below 0.4 and an explained placeholder when the value is not computable.
+
+The work is web-only and uses data already loaded on the page. It splits into two slices at a clean interface boundary:
+
+1. A pure, unit-tested computation helper plus the shared status type.
+2. The wiring (`ModelsGroups.tsx` threads data + status) and rendering (`ModelGroupsSection.tsx` renders the overlay and help copy).
+
+No API, GraphQL, codegen, or migration changes.
+
+## Architecture Choices
+
+### 1. Keep the computation client-side and pure
+
+The pairwise Cohen's kappa matrix is already built in `ModelsGroups.tsx` (`pairwiseKappaMap`, from the `modelAgreementOnTradeoffs` query). The mean-internal-kappa computation is a pure function over that map plus a cluster's member ids and the visible-model set. It lives in `clusterVisualizationUtils.ts` so it can be unit-tested in isolation, and `ModelGroupsSection` just memoizes a call to it.
+
+### 2. The parent owns query state; the child is presentational
+
+The agreement query's `loading` / `needs-more-models` / `unavailable` / `ready` status is derived in `ModelsGroups.tsx`, which already owns `fetching`, `error`, and the pause condition (`showAgreementSection`). `ModelGroupsSection` receives a single resolved status value plus the map. The child never re-derives query state — it only renders. This keeps the child a pure consumer and puts the one required refactor (widening the `useModelAgreementOnTradeoffsQuery` destructuring) in the one place that already has the query.
+
+### 3. Full-coverage rule, not partial means
+
+A cluster's internal kappa is computed only when every member is in the visible model set (the `models` prop). A partial mean over the visible subset would not represent the cluster the card describes, so partially covered clusters show the explained placeholder instead. This is the central correctness safeguard.
+
+### 4. The overlay must not change the cluster card button's accessible name
+
+The cluster card is a single `<Button>` whose accessible name currently comes from its text content (the member labels), and existing tests assert exact button names. The implementation pins the button's accessible name with an explicit `aria-label` equal to the member-label text, so adding visible overlay content inside the button does not change its name. The overlay's own `title` tooltip remains available to assistive tech.
+
+### 5. Always render the overlay line to avoid pop-in
+
+In log-odds/win-rate + groups mode the overlay line is always present, showing the em-dash placeholder while the map is absent and filling in when it arrives. The card height does not change between states.
+
+## Proposed Implementation Slices
+
+### Slice 1: Mean-internal-kappa helper and agreement-status type
+
+Files:
+
+- `cloud/apps/web/src/components/domains/clusterVisualizationUtils.ts`
+- `cloud/apps/web/tests/components/clusterVisualizationUtils.test.ts` (create if absent)
+
+Work:
+
+- add an exported `AgreementStatus` type: `'loading' | 'needs-more-models' | 'unavailable' | 'ready'`
+- add a pure helper that, given a cluster's member model ids, the visible model-id set, and `pairwiseKappaMap`, returns either the computed mean or a discriminated not-computable result with a `reason` of `'singleton' | 'members-outside-selection' | 'no-shared-scenarios'`
+- helper rules, in this precedence order: one member -> `singleton`; any member not in the visible set -> `members-outside-selection`; otherwise mean over the member pairs present in the map, with the denominator equal to the count of pairs that have a kappa value (not total pairs); zero valid pairs -> `no-shared-scenarios`
+- unit tests: fully-covered multi-model cluster returns the correct mean; singleton; a member outside the visible set; no-shared-scenarios; precedence (singleton + outside-selection resolves to `singleton`); denominator excludes missing pairs (a 3-member cluster with one missing pair averages the two present pairs)
+
+Expected size: ~100-140 lines changed
+
+[CHECKPOINT]
+
+### Slice 2: Thread data, render the overlay, extend the help panel
+
+Files:
+
+- `cloud/apps/web/src/pages/ModelsGroups.tsx`
+- `cloud/apps/web/src/components/domains/ModelGroupsSection.tsx`
+- `cloud/apps/web/tests/components/ModelGroupsSection.test.tsx`
+
+Work:
+
+- `ModelsGroups.tsx`: widen the `useModelAgreementOnTradeoffsQuery` destructuring to also read `fetching` and `error`; derive the four-case `AgreementStatus` from `fetching` / `error` / `showAgreementSection` / `pairwiseKappaMap` presence; pass `pairwiseKappaMap` and the derived status into `<ModelGroupsSection>`
+- `ModelGroupsSection.tsx`: accept the two new optional props; add a single named `LOW_AGREEMENT_THRESHOLD = 0.4` constant; memoize per-cluster internal kappa via the Slice 1 helper (memo deps: clusters, `models` prop, `pairwiseKappaMap`); render the overlay line on each cluster card only in log-odds/win-rate + groups mode; show the value with two-decimal precision, warning style below 0.4, normal style at or above; show the em-dash placeholder otherwise with a `title` tooltip following the precedence (singleton -> members-outside-selection -> no-shared-scenarios) when the map is present, and the page-level status text (`loading` / `needs-more-models` / `unavailable`) when the map is absent; pin the card button's accessible name with `aria-label`; add the help-panel subsection describing the metric honestly (average of pairwise kappa, signature-scoped, 0.4 line)
+- tests: value renders for a fully-covered cluster; warning style below threshold; placeholder + correct tooltip for singleton, members-outside-selection, no-shared-scenarios; no overlay in `kappa-agreement` mode; no overlay in `individual` mode; placeholder renders (no error) while the map is absent; existing cluster-card button-name tests still pass unchanged
+
+Expected size: ~160-220 lines changed
+
+[CHECKPOINT]
+
+## Testing Plan
+
+For each slice:
+
+- run the focused web tests for the files touched by that slice
+- run `npm run lint --workspace @valuerank/web`
+- run `npm run build --workspace @valuerank/web`
+
+For the final combined diff:
+
+- run `npm run test --workspace @valuerank/web`
+- run `npm run lint --workspace @valuerank/web` and `npm run build --workspace @valuerank/web`
+- perform the coverage verification described in Risks below, on a real domain in the default model selection
+
+## Risks and Mitigations
+
+| Risk | Mitigation | Verification |
+|---|---|---|
+| **Cluster scope exceeds kappa scope.** Clusters come from the domain-analysis query (not model-scoped); `pairwiseKappaMap` is scoped to the visible model set. A naive mean would be silently partial. | Full-coverage rule — a numeric value renders only when every cluster member is in the `models` prop; otherwise the placeholder. | verification: a Slice 2 component test with a cluster whose members are a superset of the `models` prop asserts the em-dash placeholder renders, not a number. |
+| **Key-shape mismatch.** `pairwiseKappaMap` is keyed by model id; `DomainCluster.members[].model` must use the same id space, or every lookup silently misses. | Use the same id field both sides already use elsewhere on the page. | verification: a Slice 2 component test seeds a known multi-model cluster with kappa values and asserts the computed mean renders — a wrong key shape makes this test fail. |
+| **Low coverage in the default view.** If default-view clusters routinely contain non-default or deprecated models, most cards show the placeholder and the overlay is uninformative. | Correct behavior is preferred over a misleading number; but the feature's value depends on coverage being decent in the common case. | verification: during Slice 2 implementation, load a real domain in the default model selection and count how many clusters are fully covered. If it is near zero, raise it before merge — the overlay may need the kappa query widened to the clustered model set (currently a non-goal). |
+| **Accessible name regression.** Adding overlay text inside the cluster-card `<Button>` would change its accessible name and break existing button-name tests. | Pin the button's accessible name with an explicit `aria-label` equal to the member-label text. | verification: the existing `ModelGroupsSection.test.tsx` button-name assertions must pass unchanged after Slice 2. |
+| **Threshold fitness.** 0.4 is a defensible but general cutoff that may over- or under-flag for ValueRank's behavior patterns. | Single named constant, trivial to tune; the help panel states the threshold explicitly so the meaning is transparent. | verification: confirm `LOW_AGREEMENT_THRESHOLD` is a single named constant referenced everywhere the warning style is applied — grep for the literal `0.4` in the component to ensure no second hard-coded copy. |
+
+## Acceptance Notes
+
+- In log-odds or win-rate mode with groups display, each cluster card shows its mean internal Cohen's kappa, warning-styled below 0.4.
+- Singleton clusters, clusters with members outside the visible set, and clusters with no shared-scenario pairs show an explained em-dash placeholder, not a warning.
+- No overlay in `kappa-agreement` data-source mode or in `individual` display mode.
+- The placeholder tooltip distinguishes loading, needs-more-models, unavailable, and the three per-cluster reasons.
+- The help panel explains the metric honestly (average of pairwise kappa, signature-scoped, 0.4 line).
+- Existing cluster-card behavior and button accessible names are unchanged.
+- No API, GraphQL schema, codegen, or migration changes; web lint, test, and build pass.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+## Findings
+- **HIGH:** The plan will render a numeric cluster agreement from any non-empty subset of pairwise kappas. That means a cluster can show a precise mean even when most member pairs are missing, which is a false sense of completeness for a summary metric. This should be treated as partial data, or it should stay in the placeholder state until coverage is complete.
+- **MEDIUM:** The placeholder explanation is not reliably accessible. The plan depends on `title` for the reason text and `aria-label` to preserve the button name, but `title` is not dependable for screen readers and `aria-label` will override visible text in the accessible name. Users who do not hover may not get the explanation at all.
+- **MEDIUM [UNVERIFIED]:** The status derivation assumes `fetching` and `error` are enough to classify the agreement query. If the GraphQL client keeps stale `data` around during a refetch or after a partial error, the UI could flip to `unavailable` and hide a still-usable map. That policy needs to be explicit.
+
+## Residual Risks
+- The overlay still depends on default-view model coverage being decent. If the visible set is sparse, most cards may still fall back to placeholders and the feature will add little value.
+- The `0.4` cutoff is still a judgment call. The plan makes it easy to change, but it does not validate that threshold for this product.
+tokens used
+16,032

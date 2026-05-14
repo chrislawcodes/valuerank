@@ -1,0 +1,16 @@
+DEFERRED — review did not run.
+
+The Gemini testability-adversarial review of plan.md could not be produced.
+Every attempt — the runner checkpoint, a direct run at 600s timeout with 2
+retries, and the Gemini CLI's own 10 internal retries — returned:
+
+  429 "No capacity available for model gemini-2.5-pro on the server"
+
+This is a Google-side capacity outage, not a review timeout and not a review
+disagreement. No findings were produced.
+
+Disposition: reconciled as `deferred` per the infra-failure path. The Codex
+implementation-adversarial plan review completed and is reconciled with all
+three findings addressed. The plan's test plan is additionally exercised at
+each slice's diff checkpoint. The plan-stage testability review can be re-run
+when Gemini API capacity returns.
