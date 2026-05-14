@@ -219,7 +219,10 @@ export function DomainAnalysis() {
     variables: { status: 'ACTIVE' },
     requestPolicy: 'cache-and-network',
   });
-  const [{ data: modelsStabilityData, fetching: modelsStabilityFetching, error: modelsStabilityError }] = useQuery<
+  const [
+    { data: modelsStabilityData, fetching: modelsStabilityFetching, error: modelsStabilityError },
+    reexecuteStabilityQuery,
+  ] = useQuery<
     ModelsStabilityQueryResult,
     ModelsStabilityQueryVariables
   >({
@@ -268,6 +271,13 @@ export function DomainAnalysis() {
     const id = setInterval(() => { reexecuteScoredQuery({ requestPolicy: 'network-only' }); }, 20_000);
     return () => { clearInterval(id); };
   }, [isUpdating, reexecuteScoredQuery]);
+
+  const isStabilityUpdating = modelsStabilityData?.modelsWinRateStability.cacheStatus === 'UPDATING';
+  useEffect(() => {
+    if (!isStabilityUpdating) return;
+    const id = setInterval(() => { reexecuteStabilityQuery({ requestPolicy: 'network-only' }); }, 20_000);
+    return () => { clearInterval(id); };
+  }, [isStabilityUpdating, reexecuteStabilityQuery]);
   const showPageLoader = domainsLoading || (data?.domainAnalysis == null && fetching);
 
   const models = useMemo<ModelEntry[]>(() => {
@@ -650,6 +660,7 @@ export function DomainAnalysis() {
               })
               : null}
             winRateMode={winRateMode}
+            cacheStatus={modelsStabilityData?.modelsWinRateStability.cacheStatus}
           />
         </>
       )}

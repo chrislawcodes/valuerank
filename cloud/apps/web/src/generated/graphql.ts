@@ -1630,16 +1630,18 @@ export type ModelsStabilityModelResult = {
   label: Scalars['String']['output'];
   modelId: Scalars['String']['output'];
   qualifyingVignetteCount: Scalars['Int']['output'];
-  totalTranscriptCount: Scalars['Int']['output'];
   softLeanShare?: Maybe<Scalars['Float']['output']>;
   stableShare?: Maybe<Scalars['Float']['output']>;
   tornShare?: Maybe<Scalars['Float']['output']>;
+  totalTranscriptCount: Scalars['Int']['output'];
   unstableShare?: Maybe<Scalars['Float']['output']>;
   vignettes: Array<ModelsStabilityVignetteResult>;
 };
 
 export type ModelsStabilityResult = {
   __typename?: 'ModelsStabilityResult';
+  cacheStatus?: Maybe<Scalars['String']['output']>;
+  generatedAt?: Maybe<Scalars['String']['output']>;
   models: Array<ModelsStabilityModelResult>;
   skippedVignettes: Array<ModelsStabilitySkippedVignette>;
 };
@@ -4934,7 +4936,7 @@ export type ModelsWinRateStabilityQueryVariables = Exact<{
 }>;
 
 
-export type ModelsWinRateStabilityQuery = { __typename?: 'Query', modelsWinRateStability: { __typename?: 'ModelsStabilityResult', models: Array<{ __typename?: 'ModelsStabilityModelResult', modelId: string, label: string, totalTranscriptCount: number, avgDirectionalAgreement?: number | null, avgExactAgreement?: number | null }>, skippedVignettes: Array<{ __typename?: 'ModelsStabilitySkippedVignette', definitionId: string, vignetteName: string, reason: string }> } };
+export type ModelsWinRateStabilityQuery = { __typename?: 'Query', modelsWinRateStability: { __typename?: 'ModelsStabilityResult', cacheStatus?: string | null, generatedAt?: string | null, models: Array<{ __typename?: 'ModelsStabilityModelResult', modelId: string, label: string, totalTranscriptCount: number, avgDirectionalAgreement?: number | null, avgExactAgreement?: number | null }>, skippedVignettes: Array<{ __typename?: 'ModelsStabilitySkippedVignette', definitionId: string, vignetteName: string, reason: string }> } };
 
 export type CreatePairedVignetteMutationVariables = Exact<{
   input: CreatePairedVignetteInput;
@@ -7628,6 +7630,8 @@ export const ModelsWinRateStabilityDocument = gql`
     domainId: $domainId
     domainIds: $domainIds
   ) {
+    cacheStatus
+    generatedAt
     models {
       modelId
       label

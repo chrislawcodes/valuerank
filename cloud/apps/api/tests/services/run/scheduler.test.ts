@@ -119,16 +119,17 @@ describe('getReconcileWindowDays', () => {
     expect(mockLogWarn).not.toHaveBeenCalled();
   });
 
-  it('registers the daily audit, janitor, and domain-analysis warming schedules on startup', async () => {
+  it('registers the daily audit, janitor, and analysis warming schedules on startup', async () => {
     const { startRecoveryScheduler } = await loadScheduler();
 
     await startRecoveryScheduler();
 
-    expect(mockBossUnschedule).toHaveBeenCalledTimes(3);
+    expect(mockBossUnschedule).toHaveBeenCalledTimes(4);
     expect(mockBossUnschedule).toHaveBeenCalledWith('analysis_result_janitor');
     expect(mockBossUnschedule).toHaveBeenCalledWith('run_state_audit');
     expect(mockBossUnschedule).toHaveBeenCalledWith('refresh_domain_analysis_snapshot', 'warm_all_domains');
-    expect(mockBossSchedule).toHaveBeenCalledTimes(3);
+    expect(mockBossUnschedule).toHaveBeenCalledWith('refresh_win_rate_stability_snapshot', 'warm_all_domains');
+    expect(mockBossSchedule).toHaveBeenCalledTimes(4);
     expect(mockBossSchedule).toHaveBeenCalledWith('run_state_audit', '0 9 * * *', {});
     expect(mockBossSchedule).toHaveBeenCalledWith('analysis_result_janitor', '0 10 * * *', {});
     expect(mockBossSchedule).toHaveBeenCalledWith(
@@ -137,6 +138,17 @@ describe('getReconcileWindowDays', () => {
       {
         scope: 'ALL_DOMAINS',
         domainId: 'all-domains',
+        signature: null,
+        reason: 'scheduled_warm',
+      },
+      { key: 'warm_all_domains', singletonKey: 'warm_all_domains' },
+    );
+    expect(mockBossSchedule).toHaveBeenCalledWith(
+      'refresh_win_rate_stability_snapshot',
+      '25 * * * *',
+      {
+        domainId: null,
+        domainIds: null,
         signature: null,
         reason: 'scheduled_warm',
       },
@@ -163,6 +175,14 @@ describe('getReconcileWindowDays', () => {
         scope: 'ALL_DOMAINS',
       }),
       'Registered domain-analysis warming schedule'
+    );
+    expect(mockLogInfo).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobType: 'refresh_win_rate_stability_snapshot',
+        cron: '25 * * * *',
+        scope: 'ALL_DOMAINS',
+      }),
+      'Registered win-rate-stability warming schedule'
     );
   });
 

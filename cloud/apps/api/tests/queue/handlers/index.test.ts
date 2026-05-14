@@ -52,9 +52,10 @@ describe('Handler Registration', () => {
       expect(jobTypes).toContain('aggregate_analysis');
       expect(jobTypes).toContain('refresh_domain_analysis_snapshot');
       expect(jobTypes).toContain('refresh_pressure_sensitivity_snapshot');
+      expect(jobTypes).toContain('refresh_win_rate_stability_snapshot');
       expect(jobTypes).toContain('top_up_probes');
       expect(jobTypes).toContain('start_domain_launch');
-      expect(jobTypes).toHaveLength(14);
+      expect(jobTypes).toHaveLength(15);
     });
   });
 
@@ -105,7 +106,7 @@ describe('Handler Registration', () => {
 
       // Should still work
       const jobTypes = getJobTypes();
-      expect(jobTypes).toHaveLength(14);
+      expect(jobTypes).toHaveLength(15);
     });
   });
 

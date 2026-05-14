@@ -19,6 +19,7 @@ export type JobType =
   | 'aggregate_analysis'
   | 'refresh_domain_analysis_snapshot'
   | 'refresh_pressure_sensitivity_snapshot'
+  | 'refresh_win_rate_stability_snapshot'
   | 'start_domain_launch';
 
 // Job data interfaces
@@ -101,6 +102,13 @@ export type RefreshPressureSensitivitySnapshotJobData = {
   reason: string;
 };
 
+export type RefreshWinRateStabilitySnapshotJobData = {
+  domainId: string | null;
+  domainIds: string[] | null;
+  signature: string | null;
+  reason: string;
+};
+
 export type StartDomainLaunchJobData = {
   domainEvaluationId: string;
 };
@@ -122,6 +130,7 @@ export type JobData =
   | AggregateAnalysisJobData
   | RefreshDomainAnalysisSnapshotJobData
   | RefreshPressureSensitivitySnapshotJobData
+  | RefreshWinRateStabilitySnapshotJobData
   | StartDomainLaunchJobData;
 
 // Job options interface
@@ -208,6 +217,12 @@ export const DEFAULT_JOB_OPTIONS: Record<JobType, JobOptions> = {
     retryDelay: 10,
     retryBackoff: true,
     expireInSeconds: 600, // 10 minutes — PS computation is heavier than domain analysis
+  },
+  'refresh_win_rate_stability_snapshot': {
+    retryLimit: 2,
+    retryDelay: 10,
+    retryBackoff: true,
+    expireInSeconds: 600, // 10 minutes — bounded by aggregate-run output reads
   },
   'start_domain_launch': {
     retryLimit: 0, // Idempotency check inside handler covers re-entry
