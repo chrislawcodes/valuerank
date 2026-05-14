@@ -53,6 +53,7 @@ Canonical source: `docs/canonical-glossary.md`
 - Before building a new component, service, or utility that may already exist, check `docs/tech-debt/dedup-inventory.md` — the curated catalog of known duplicate-module clusters with severity × lift triage. New duplicates discovered during work should be added there as new `DEDUP-N` entries (in the same PR that finds them).
 - One feature per branch. Do not stack new work on top of an open feature PR unless the human asks.
 - Fix the root cause when CI fails. Do not retry blindly.
+- In Feature Factory, "reconcile the findings" means address them in the artifact (spec/plan/tasks), then move on — NOT re-run the review until it comes back clean. The review round is capped; re-running to chase a clean result wastes the cap and the wall clock.
 
 ## Read First
 

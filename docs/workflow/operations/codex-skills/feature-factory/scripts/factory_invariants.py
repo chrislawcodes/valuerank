@@ -45,10 +45,17 @@ def _append_warning(state: dict, entry: dict) -> None:
 
 
 def _is_repair_action_for_stage(action: str, stage: str) -> bool:
-    """Return True if *action* is a repair action targeting *stage*."""
+    """Return True if *action* is a checkpoint action targeting *stage*.
+
+    recommended_next_action (factory_next_action.py) emits ``run_<stage>_checkpoint``
+    (e.g. ``run_plan_checkpoint``) — NOT ``repair_<stage>_checkpoint``.  The old
+    ``repair_`` prefix was a dead string that never matched, so FR-010 had never
+    fired for the most common failure mode (runner argues with itself).  Corrected
+    to match the strings that recommended_next_action actually emits.
+    """
     if not isinstance(action, str) or not action:
         return False
-    return action == f"repair_{stage}_checkpoint"
+    return action == f"run_{stage}_checkpoint"
 
 
 def check_judge_advance_vs_recommended(

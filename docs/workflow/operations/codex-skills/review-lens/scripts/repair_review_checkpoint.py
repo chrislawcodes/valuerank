@@ -172,8 +172,12 @@ def run_codex(
         cmd.extend(["--max-artifact-chars", str(checkpoint["max_artifact_chars"])])
     if checkpoint.get("max_context_chars"):
         cmd.extend(["--max-context-chars", str(checkpoint["max_context_chars"])])
-    if checkpoint.get("max_total_chars"):
-        cmd.extend(["--max-total-chars", str(checkpoint["max_total_chars"])])
+    # Per-review spec cap takes precedence over the manifest-level cap when set.
+    # This allows stage-specific overrides (e.g. spec-stage 50k cap) without
+    # changing the checkpoint manifest structure used by the rest of the pipeline.
+    effective_max_total_chars = spec.get("max_total_chars") or checkpoint.get("max_total_chars")
+    if effective_max_total_chars:
+        cmd.extend(["--max-total-chars", str(effective_max_total_chars)])
     if workspace_dir:
         cmd.extend(["--workspace-dir", str(workspace_dir)])
     subprocess.run(cmd, check=True, text=True, timeout=210)

@@ -38,9 +38,9 @@ class CharBudgetDefaultsTests(unittest.TestCase):
         args = self._parse(["checkpoint", "--slug", "x", "--stage", "spec"])
         self.assertEqual(args.max_context_chars, 60000)
 
-    def test_default_max_total_chars_is_250000(self) -> None:
+    def test_default_max_total_chars_is_200000(self) -> None:
         args = self._parse(["checkpoint", "--slug", "x", "--stage", "spec"])
-        self.assertEqual(args.max_total_chars, 250000)
+        self.assertEqual(args.max_total_chars, 200000)
 
     def test_explicit_value_overrides_default(self) -> None:
         args = self._parse([
